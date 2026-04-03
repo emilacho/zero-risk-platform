@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 
 // GET /api/content — List all content
 export async function GET() {
+  const supabase = getSupabase()
   const { data, error } = await supabase
     .from('content')
     .select('*')
@@ -14,6 +15,7 @@ export async function GET() {
 
 // POST /api/content — Create content
 export async function POST(request: Request) {
+  const supabase = getSupabase()
   const body = await request.json()
 
   const { data, error } = await supabase
