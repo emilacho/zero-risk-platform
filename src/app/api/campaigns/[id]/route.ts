@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
+import { isValidUUID, pickFields, CAMPAIGN_FIELDS } from '@/lib/validation'
 
 // GET /api/campaigns/[id] — get single campaign
 export async function GET(
@@ -7,6 +8,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    if (!isValidUUID(params.id)) {
+      return NextResponse.json({ error: 'ID inválido' }, { status: 400 })
+    }
+
     const supabase = getSupabase()
     const { data, error } = await supabase
       .from('campaigns')
@@ -30,12 +35,21 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    if (!isValidUUID(params.id)) {
+      return NextResponse.json({ error: 'ID inválido' }, { status: 400 })
+    }
+
     const supabase = getSupabase()
     const body = await request.json()
+    const safeBody = pickFields(body, [...CAMPAIGN_FIELDS])
+
+    if (Object.keys(safeBody).length === 0) {
+      return NextResponse.json({ error: 'No hay campos válidos para actualizar' }, { status: 400 })
+    }
 
     const { data, error } = await supabase
       .from('campaigns')
-      .update({ ...body, updated_at: new Date().toISOString() })
+      .update({ ...safeBody, updated_at: new Date().toISOString() })
       .eq('id', params.id)
       .select()
       .single()
@@ -56,6 +70,10 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    if (!isValidUUID(params.id)) {
+      return NextResponse.json({ error: 'ID inválido' }, { status: 400 })
+    }
+
     const supabase = getSupabase()
     const { error } = await supabase
       .from('campaigns')
