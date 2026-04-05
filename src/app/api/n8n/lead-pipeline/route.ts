@@ -104,6 +104,15 @@ Responde: {"classification":"caliente|tibio|frio","score":1-100,"reason":"...","
       : classification.classification === 'tibio' ? 'contacted'
       : 'new'
 
+    // Build enriched notes with classification + extra data
+    const enrichedNotes = [
+      leadData.notes,
+      `[RUFLO] ${classification.classification.toUpperCase()} (${classification.score}/100): ${classification.reason}`,
+      leadData.company ? `Empresa: ${leadData.company}` : null,
+      leadData.city ? `Ciudad: ${leadData.city}` : null,
+      leadData.product_interest ? `Interés: ${leadData.product_interest}` : null,
+    ].filter(Boolean).join(' | ')
+
     const { data: savedLead, error: leadError } = await supabase
       .from('leads')
       .insert({
@@ -113,18 +122,8 @@ Responde: {"classification":"caliente|tibio|frio","score":1-100,"reason":"...","
         source: leadData.source,
         status: leadStatus,
         assigned_to: classification.classification === 'caliente' ? 'xavier' : null,
-        notes: leadData.notes,
+        notes: enrichedNotes,
         campaign_id: leadData.campaign_id,
-        metadata: {
-          ...leadData.metadata,
-          company: leadData.company,
-          city: leadData.city,
-          product_interest: leadData.product_interest,
-          classification: classification.classification,
-          score: classification.score,
-          reason: classification.reason,
-          classified_at: new Date().toISOString(),
-        },
       })
       .select()
       .single()
