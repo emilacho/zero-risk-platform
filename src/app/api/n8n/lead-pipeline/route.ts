@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
-import { sanitizeString, isValidEmail } from '@/lib/validation'
+import { sanitizeString, isValidEmail, isValidUUID } from '@/lib/validation'
 
 // POST /api/n8n/lead-pipeline
 // Endpoint que n8n llama para procesar un lead completo
@@ -33,7 +33,9 @@ export async function POST(request: Request) {
       phone: sanitizeString(body.phone || body.phone_number, 20),
       source: sanitizeString(body.source || body.utm_source, 50) || 'organic',
       notes: sanitizeString(body.notes || body.message || body.comments, 500),
-      campaign_id: body.campaign_id || body.ad_campaign_id || null,
+      campaign_id: (body.campaign_id && isValidUUID(body.campaign_id)) ? body.campaign_id
+        : (body.ad_campaign_id && isValidUUID(body.ad_campaign_id)) ? body.ad_campaign_id
+        : null,
       company: sanitizeString(body.company || body.empresa, 200),
       city: sanitizeString(body.city || body.ciudad, 100),
       product_interest: sanitizeString(body.product_interest || body.producto, 200),
