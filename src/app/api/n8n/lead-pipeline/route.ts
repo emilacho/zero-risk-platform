@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString, isValidEmail, isValidUUID } from '@/lib/validation'
 
 // POST /api/n8n/lead-pipeline
@@ -100,7 +100,7 @@ Responde: {"classification":"caliente|tibio|frio","score":1-100,"reason":"...","
     }
 
     // Step 2: Save lead to Supabase
-    const supabase = getSupabase()
+    const supabase = getSupabaseAdmin()
 
     const leadStatus = classification.classification === 'caliente' ? 'qualified'
       : classification.classification === 'tibio' ? 'contacted'
