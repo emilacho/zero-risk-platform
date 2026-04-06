@@ -1,5 +1,5 @@
 // Zero Risk V2 — Core Types
-// Matches schema V2 (8 tables)
+// Matches schema V2 (8 tables + 5 agency tables)
 
 export interface Campaign {
   id: string
@@ -96,4 +96,58 @@ export interface Settings {
   value: string
   category: 'general' | 'api_keys' | 'notifications' | 'agents'
   updated_at: string
+}
+
+// === AGENCY TABLES (Sesión 8) ===
+
+export interface Department {
+  id: string
+  name: string
+  display_name: string
+  description: string | null
+  status: 'active' | 'planned' | 'inactive'
+  created_at: string
+  updated_at: string
+}
+
+export interface Agent {
+  id: string
+  name: string
+  display_name: string
+  role: 'gerente_general' | 'jefe_departamento' | 'empleado' | 'transversal'
+  department_id: string | null
+  reports_to: string | null
+  identity_source: string
+  identity_content: string
+  model: 'claude-haiku' | 'claude-sonnet' | 'claude-opus'
+  status: 'active' | 'inactive' | 'pending'
+  created_at: string
+  updated_at: string
+}
+
+export interface AgentSkill {
+  id: string
+  skill_name: string
+  skill_source: string
+  skill_content: string
+  category: string | null
+  version: string
+  created_at: string
+}
+
+export interface AgentSkillAssignment {
+  id: string
+  agent_id: string
+  skill_id: string
+  priority: number
+}
+
+export interface AgentTool {
+  id: string
+  agent_id: string
+  tool_name: string
+  tool_type: 'composio' | 'api_direct' | 'internal'
+  config: Record<string, unknown>
+  status: 'active' | 'pending' | 'error'
+  created_at: string
 }
