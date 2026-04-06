@@ -20,8 +20,8 @@ import { sanitizeString } from '@/lib/validation'
 // Model mapping
 const MODEL_MAP: Record<string, string> = {
   'claude-haiku': 'claude-haiku-4-5-20251001',
-  'claude-sonnet': 'claude-sonnet-4-5-20250514',
-  'claude-opus': 'claude-opus-4-0-20250115',
+  'claude-sonnet': 'claude-sonnet-4-6-20250514',
+  'claude-opus': 'claude-opus-4-6-20250514',
 }
 
 export async function POST(request: Request) {
