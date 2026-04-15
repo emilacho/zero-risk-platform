@@ -1,0 +1,141 @@
+{
+  "name": "Zero Risk — HITL Pause Reminder (Every 2h)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Every 2 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/hitl/pending",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-pending",
+      "name": "Fetch Pending HITL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter HITL items older than 4 hours\nconst items = $input.first().json.items || $input.first().json.pipeline_qa || [];\nconst fourHoursAgo = Date.now() - 4 * 3600 * 1000;\nconst stale = items.filter(i => {\n  const createdAt = new Date(i.created_at || i.paused_at || 0).getTime();\n  return createdAt > 0 && createdAt < fourHoursAgo;\n});\nreturn [{\n  json: {\n    stale_count: stale.length,\n    stale_items: stale.slice(0, 10),  // cap at 10 to keep Slack msg short\n    total_pending: items.length,\n    oldest_hours: stale.length ? Math.floor((Date.now() - new Date(stale[0].created_at || stale[0].paused_at).getTime()) / 3600000) : 0\n  }\n}];"
+      },
+      "id": "filter-stale",
+      "name": "Filter Stale (>4h)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.stale_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-stale",
+      "name": "Any Stale?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"⏰ HITL Reminder — {{ $json.stale_count }} approvals pendientes >4h (oldest: {{ $json.oldest_hours }}h). Total queue: {{ $json.total_pending }}.\\nRevisa: {{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/dashboard/inbox\"\n}",
+        "options": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 220]
+    },
+    {
+      "parameters": {},
+      "id": "noop-none",
+      "name": "Nothing Stale",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1200, 400]
+    }
+  ],
+  "connections": {
+    "Every 2 Hours": {
+      "main": [[{ "node": "Fetch Pending HITL", "type": "main", "index": 0 }]]
+    },
+    "Fetch Pending HITL": {
+      "main": [[{ "node": "Filter Stale (>4h)", "type": "main", "index": 0 }]]
+    },
+    "Filter Stale (>4h)": {
+      "main": [[{ "node": "Any Stale?", "type": "main", "index": 0 }]]
+    },
+    "Any Stale?": {
+      "main": [
+        [{ "node": "Notify Slack", "type": "main", "index": 0 }],
+        [{ "node": "Nothing Stale", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "pilar-4", "id": "6" },
+    { "name": "cron", "id": "3" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

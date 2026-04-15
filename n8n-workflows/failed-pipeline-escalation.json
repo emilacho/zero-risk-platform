@@ -1,0 +1,138 @@
+{
+  "name": "Zero Risk — Failed Pipeline Escalation (Every 15m)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/pipeline/status?status=failed&since=15m&escalated=false",
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-failed",
+      "name": "Fetch Failed Pipelines",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Expect { pipelines: [ {id, client_id, objective, failed_at, error, failed_step} ... ] }\nconst data = $input.first().json;\nconst pipelines = data.pipelines || data.items || [];\nreturn pipelines.length\n  ? [{ json: { count: pipelines.length, pipelines } }]\n  : [{ json: { count: 0, pipelines: [] } }];"
+      },
+      "id": "normalize",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-any",
+      "name": "Any Failures?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🚨 *{{ $json.count }} pipeline(s) fallaron en los últimos 15 min*\\n{{ $json.pipelines.map(p => `• ${p.id} — step ${p.failed_step || '?'} — ${(p.error || 'unknown').slice(0,120)}`).join('\\n') }}\\n\\nRevisa: {{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/dashboard/inbox\"\n}",
+        "options": {}
+      },
+      "id": "notify-slack",
+      "name": "Alert Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/mc-sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.MC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"pipeline_failures_escalated\",\n  \"count\": {{ $json.count }},\n  \"pipeline_ids\": {{ JSON.stringify($json.pipelines.map(p => p.id)) }}\n}",
+        "options": {}
+      },
+      "id": "mc-log",
+      "name": "Log to Mission Control",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 220]
+    },
+    {
+      "parameters": {},
+      "id": "noop-none",
+      "name": "All Clear",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1200, 400]
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": { "main": [[{ "node": "Fetch Failed Pipelines", "type": "main", "index": 0 }]] },
+    "Fetch Failed Pipelines": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
+    "Normalize": { "main": [[{ "node": "Any Failures?", "type": "main", "index": 0 }]] },
+    "Any Failures?": {
+      "main": [
+        [{ "node": "Alert Slack", "type": "main", "index": 0 }],
+        [{ "node": "All Clear", "type": "main", "index": 0 }]
+      ]
+    },
+    "Alert Slack": { "main": [[{ "node": "Log to Mission Control", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "pilar-4", "id": "6" },
+    { "name": "alerting", "id": "8" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

@@ -1,0 +1,226 @@
+{
+  "name": "Zero Risk — Meta-Agent Weekly Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Every Monday 9am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/analytics/meta-agent-run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"run_type\": \"weekly\",\n  \"days\": 7,\n  \"max_outcomes\": 100\n}",
+        "options": {
+          "timeout": 120000,
+          "fullResponse": true
+        }
+      },
+      "id": "trigger-meta-agent",
+      "name": "Trigger Meta-Agent Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-success",
+              "leftValue": "={{ $json.body.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-success",
+      "name": "Analysis Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/mc-sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.MC_API_KEY || '39d0f6f9cae9932ab62b4d0d02f73308' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"action\": \"health_check\"\n}",
+        "options": {}
+      },
+      "id": "notify-mc-success",
+      "name": "Log Success to MC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🔴 Meta-Agent cron failed. Error: {{ $node['Trigger Meta-Agent Analysis'].json.body.error || 'Unknown error' }}. Check /api/analytics/meta-agent-run for details.\"\n}",
+        "options": {}
+      },
+      "id": "notify-slack-failure",
+      "name": "Alert Slack on Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 420]
+    },
+    {
+      "parameters": {},
+      "id": "noop-end",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1200, 300]
+    }
+  ],
+  "connections": {
+    "Every Monday 9am": {
+      "main": [
+        [
+          {
+            "node": "Trigger Meta-Agent Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Meta-Agent Analysis": {
+      "main": [
+        [
+          {
+            "node": "Analysis Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analysis Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Log Success to MC",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Slack on Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Success to MC": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Slack on Failure": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "zero-risk",
+      "id": "1"
+    },
+    {
+      "name": "pilar-5",
+      "id": "2"
+    },
+    {
+      "name": "cron",
+      "id": "3"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-14T17:00:00.000Z",
+  "versionId": "1"
+}

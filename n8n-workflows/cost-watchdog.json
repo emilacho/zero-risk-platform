@@ -1,0 +1,134 @@
+{
+  "name": "Zero Risk — Cost Watchdog (Hourly)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 * * * *" }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Hourly",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/analytics/performance?days=1&group_by=client",
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-spend",
+      "name": "Fetch Today Spend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check total + per-client caps defined via env vars.\n// DAILY_CAP_USD default 50; per-client cap via PER_CLIENT_CAP_USD default 20.\nconst data = $input.first().json;\nconst totalUsd = data.total_cost_usd ?? 0;\nconst perClient = data.by_client || [];\nconst globalCap = parseFloat(process.env.DAILY_CAP_USD || '50');\nconst clientCap = parseFloat(process.env.PER_CLIENT_CAP_USD || '20');\nconst breaches = [];\nif (totalUsd >= globalCap) {\n  breaches.push({ type: 'global', usd: totalUsd, cap: globalCap });\n}\nfor (const c of perClient) {\n  if ((c.cost_usd ?? 0) >= clientCap) {\n    breaches.push({ type: 'client', client_id: c.client_id, name: c.name, usd: c.cost_usd, cap: clientCap });\n  }\n}\nreturn [{ json: { total_usd: totalUsd, breaches, breach_count: breaches.length } }];"
+      },
+      "id": "check-caps",
+      "name": "Evaluate Caps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.breach_count }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ]
+        }
+      },
+      "id": "any-breach",
+      "name": "Any Breach?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"💸 *COST WATCHDOG ALERT*\\nTotal hoy: ${{ $json.total_usd }}\\nBreaches: {{ $json.breach_count }}\\n{{ $json.breaches.map(b => b.type === 'global' ? `• 🔴 GLOBAL CAP: $${b.usd}/$${b.cap}` : `• ⚠️ ${b.name || b.client_id}: $${b.usd}/$${b.cap}`).join('\\n') }}\"\n}",
+        "options": {}
+      },
+      "id": "alert",
+      "name": "Alert Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/mc-sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.MC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"cost_cap_breached\",\n  \"breaches\": {{ JSON.stringify($json.breaches) }},\n  \"total_usd\": {{ $json.total_usd }}\n}",
+        "options": {}
+      },
+      "id": "mc-log",
+      "name": "Log to Mission Control",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 220]
+    },
+    {
+      "parameters": {},
+      "id": "ok",
+      "name": "Within Budget",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1200, 400]
+    }
+  ],
+  "connections": {
+    "Hourly": { "main": [[{ "node": "Fetch Today Spend", "type": "main", "index": 0 }]] },
+    "Fetch Today Spend": { "main": [[{ "node": "Evaluate Caps", "type": "main", "index": 0 }]] },
+    "Evaluate Caps": { "main": [[{ "node": "Any Breach?", "type": "main", "index": 0 }]] },
+    "Any Breach?": {
+      "main": [
+        [{ "node": "Alert Slack", "type": "main", "index": 0 }],
+        [{ "node": "Within Budget", "type": "main", "index": 0 }]
+      ]
+    },
+    "Alert Slack": { "main": [[{ "node": "Log to Mission Control", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "observability", "id": "7" },
+    { "name": "cost-control", "id": "12" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

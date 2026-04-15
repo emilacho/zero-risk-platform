@@ -1,0 +1,129 @@
+{
+  "name": "Zero Risk — Lead → Campaign Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/new-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "GHL Webhook: New Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "zero-risk-new-lead"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/pipeline/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.body.client_id || $env.DEFAULT_CLIENT_ID }}\",\n  \"objective\": \"Campaign for new lead: {{ $json.body.contact_name || $json.body.email || 'Unknown' }}\",\n  \"brief\": {\n    \"lead_name\": \"{{ $json.body.contact_name }}\",\n    \"lead_email\": \"{{ $json.body.email }}\",\n    \"lead_source\": \"{{ $json.body.source || 'ghl_webhook' }}\",\n    \"lead_industry\": \"{{ $json.body.industry || '' }}\",\n    \"campaign_type\": \"{{ $json.body.campaign_type || 'full_pipeline' }}\"\n  },\n  \"created_by\": \"n8n-lead-webhook\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "start-pipeline",
+      "name": "Start Campaign Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🚀 New lead pipeline started!\\nLead: {{ $node['GHL Webhook: New Lead'].json.body.contact_name || 'Unknown' }}\\nPipeline: {{ $json.body.pipeline_id || 'started' }}\\nStatus: {{ $json.body.status || 'unknown' }}\"\n}",
+        "options": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"pipeline_id\": \"{{ $node['Start Campaign Pipeline'].json.body.pipeline_id || 'queued' }}\",\n  \"message\": \"Pipeline started for lead\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-webhook",
+      "name": "Respond to GHL",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 300]
+    }
+  ],
+  "connections": {
+    "GHL Webhook: New Lead": {
+      "main": [
+        [
+          {
+            "node": "Start Campaign Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Campaign Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Slack": {
+      "main": [
+        [
+          {
+            "node": "Respond to GHL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "pilar-3", "id": "4" },
+    { "name": "leads", "id": "5" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

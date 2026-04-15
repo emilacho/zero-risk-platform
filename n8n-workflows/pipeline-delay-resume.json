@@ -1,0 +1,156 @@
+{
+  "name": "Zero Risk — Pipeline Delay Resume (Hourly)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Hourly Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/pipeline/resume-delayed",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "check-delays",
+      "name": "Check & Resume Delayed Pipelines",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.resumed }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        }
+      },
+      "id": "check-resumed",
+      "name": "Any Resumed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"⏰ Pipeline delay resume: {{ $node['Check & Resume Delayed Pipelines'].json.resumed }} pipeline(s) resumed after optimization delay.\\nPipeline IDs: {{ $node['Check & Resume Delayed Pipelines'].json.pipelines }}\"\n}",
+        "options": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack (Resumed)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 240]
+    },
+    {
+      "parameters": {},
+      "id": "no-op",
+      "name": "No Pipelines Ready",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [960, 400]
+    }
+  ],
+  "connections": {
+    "Hourly Check": {
+      "main": [
+        [
+          {
+            "node": "Check & Resume Delayed Pipelines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check & Resume Delayed Pipelines": {
+      "main": [
+        [
+          {
+            "node": "Any Resumed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Resumed?": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack (Resumed)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Pipelines Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "pilar-3", "id": "4" },
+    { "name": "delay-resume", "id": "6" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

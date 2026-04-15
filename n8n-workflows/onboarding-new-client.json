@@ -1,0 +1,100 @@
+{
+  "name": "Zero Risk — Onboarding New Client (Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/onboard-client",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: New Client",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "zero-risk-onboard-client"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate minimum required fields before invoking the orchestrator.\nconst b = $input.first().json.body || $input.first().json;\nconst missing = [];\nif (!b.name) missing.push('name');\nif (!b.website && !b.domain) missing.push('website');\nif (!b.industry) missing.push('industry');\nif (missing.length) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\nreturn [{ json: b }];"
+      },
+      "id": "validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/onboarding",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"company_name\": \"{{ $json.name }}\",\n  \"website\": \"{{ $json.website || $json.domain }}\",\n  \"industry\": \"{{ $json.industry }}\",\n  \"contact_email\": \"{{ $json.email || '' }}\",\n  \"contact_phone\": \"{{ $json.phone || '' }}\",\n  \"source\": \"{{ $json.source || 'n8n_webhook' }}\",\n  \"notes\": \"{{ $json.notes || '' }}\"\n}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "start-onboarding",
+      "name": "Start Onboarding (Auto-Discovery)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🆕 Nuevo cliente onboarding iniciado\\n• Empresa: {{ $node['Validate Input'].json.name }}\\n• Industria: {{ $node['Validate Input'].json.industry }}\\n• Sitio: {{ $node['Validate Input'].json.website || $node['Validate Input'].json.domain }}\\n• Onboarding ID: {{ $json.id || 'pendiente' }}\\n\\n🔗 Review: {{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/dashboard/inbox?tab=onboarding\"\n}",
+        "options": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"onboarding_id\": \"{{ $node['Start Onboarding (Auto-Discovery)'].json.id || 'queued' }}\",\n  \"message\": \"Onboarding started for {{ $node['Validate Input'].json.name }}\"\n}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1200, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: New Client": { "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]] },
+    "Validate Input": { "main": [[{ "node": "Start Onboarding (Auto-Discovery)", "type": "main", "index": 0 }]] },
+    "Start Onboarding (Auto-Discovery)": { "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]] },
+    "Notify Slack": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "pilar-6", "id": "9" },
+    { "name": "onboarding", "id": "10" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

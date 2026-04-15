@@ -1,0 +1,120 @@
+{
+  "name": "Zero Risk — Daily Ops Digest (9am)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 9am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/analytics/performance?days=1",
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-perf",
+      "name": "Fetch Yesterday Performance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 220]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/hitl/pending",
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-hitl",
+      "name": "Fetch HITL Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 380]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge",
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compose digest from both sources\nconst perf = $input.all()[0]?.json || {};\nconst hitl = $input.all()[1]?.json || {};\nconst pipelines = perf.pipelines_completed ?? perf.total_pipelines ?? 0;\nconst pipelinesFailed = perf.pipelines_failed ?? 0;\nconst costUsd = (perf.total_cost_usd ?? 0).toFixed(2);\nconst avgSteps = perf.avg_steps_per_pipeline ?? 0;\nconst hitlPending = (hitl.items || hitl.pipeline_qa || []).length;\nconst topAgent = perf.top_agent || 'n/a';\n\nconst lines = [\n  `🌅 *Zero Risk — Daily Digest*`,\n  ``,\n  `📊 *Yesterday*`,\n  `• Pipelines completed: ${pipelines}`,\n  `• Pipelines failed: ${pipelinesFailed}`,\n  `• Coste total: $${costUsd} USD`,\n  `• Avg steps/pipeline: ${avgSteps}`,\n  `• Top agent: ${topAgent}`,\n  ``,\n  `👥 *HITL Queue*`,\n  `• Approvals pendientes: ${hitlPending}`,\n  ``,\n  `🔗 Inbox: ${process.env.ZERO_RISK_API_URL || 'http://localhost:3000'}/dashboard/inbox`,\n  `🔗 Mission Control: http://localhost:3001`,\n];\n\nreturn [{ json: { text: lines.join('\\n') } }];"
+      },
+      "id": "compose",
+      "name": "Compose Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"text\": \"{{ $json.text }}\" }",
+        "options": {}
+      },
+      "id": "post-slack",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300]
+    }
+  ],
+  "connections": {
+    "Daily 9am": {
+      "main": [[
+        { "node": "Fetch Yesterday Performance", "type": "main", "index": 0 },
+        { "node": "Fetch HITL Queue", "type": "main", "index": 0 }
+      ]]
+    },
+    "Fetch Yesterday Performance": {
+      "main": [[{ "node": "Merge Data", "type": "main", "index": 0 }]]
+    },
+    "Fetch HITL Queue": {
+      "main": [[{ "node": "Merge Data", "type": "main", "index": 1 }]]
+    },
+    "Merge Data": {
+      "main": [[{ "node": "Compose Digest", "type": "main", "index": 0 }]]
+    },
+    "Compose Digest": {
+      "main": [[{ "node": "Post to Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "observability", "id": "7" },
+    { "name": "cron", "id": "3" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}
