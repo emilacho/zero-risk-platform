@@ -1,0 +1,154 @@
+{
+  "name": "Zero Risk — Multi-Platform Review Monitor & Response (Daily 8am)",
+  "nodes": [
+    { "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }] } }, "id": "cron", "name": "Daily 8am", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [200, 380] },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/clients?status=active&include=review_profiles",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch", "name": "Fetch Clients", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [420, 380]
+    },
+    { "parameters": { "fieldToSplitOut": "clients", "options": {} }, "id": "split", "name": "Split", "type": "n8n-nodes-base.splitOut", "typeVersion": 1, "position": [640, 380] },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/compass~google-maps-reviews-scraper/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"placeIds\": [\"{{ $json.review_profiles.google_place_id }}\"], \"reviewsSort\": \"newest\", \"maxReviews\": 30 }",
+        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "google", "name": "Google Reviews", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apify~yelp-reviews-scraper/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"businessUrls\": [\"{{ $json.review_profiles.yelp_url }}\"], \"maxReviews\": 20 }",
+        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "yelp", "name": "Yelp Reviews", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 260]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.trustpilot.com/v1/business-units/{{ $json.review_profiles.trustpilot_id }}/reviews?orderBy=createdat.desc&perPage=20",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "apikey", "value": "={{ $env.TRUSTPILOT_API_KEY }}" }] },
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "trustpilot", "name": "Trustpilot", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apify~g2-reviews-scraper/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"productSlug\": \"{{ $json.review_profiles.g2_slug }}\", \"maxReviews\": 20 }",
+        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "g2", "name": "G2", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apify~glassdoor-reviews-scraper/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"companyUrls\": [\"{{ $json.review_profiles.glassdoor_url }}\"], \"maxReviews\": 15 }",
+        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "glassdoor", "name": "Glassdoor", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 620]
+    },
+    { "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} }, "id": "merge", "name": "Merge Platforms", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [1160, 380] },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all();\nconst client = $node['split'].json;\nconst reviews = [];\nconst sources = ['google','yelp','trustpilot','g2','glassdoor'];\nfor (let i = 0; i < all.length; i++) {\n  const data = Array.isArray(all[i].json) ? all[i].json : (all[i].json?.reviews || all[i].json?.data || []);\n  for (const r of data) {\n    reviews.push({\n      source: sources[i],\n      review_id: r.id || r.reviewId || r.review_id || `${sources[i]}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,\n      rating: r.stars || r.rating || r.score || null,\n      text: (r.text || r.comment || r.reviewText || r.body || '').slice(0, 2000),\n      author: r.author || r.reviewer || r.user?.name || 'Anonymous',\n      date: r.publishedAt || r.date || r.createdAt || new Date().toISOString(),\n      url: r.url || r.link || null\n    });\n  }\n}\nconst since = new Date(Date.now() - 24*60*60*1000);\nconst recent = reviews.filter(r => new Date(r.date) > since);\nreturn recent.map(r => ({ json: { ...r, client_id: client.id, client_name: client.name } }));"
+      },
+      "id": "normalize", "name": "Normalize + Filter 24h", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1420, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"review_responder\",\n  \"model\": \"claude-haiku-4-5\",\n  \"task\": \"Classify review sentiment (positive/neutral/negative), extract themes, and draft a brand-voice response. Review: [{{ $json.rating }}★] {{ $json.text }} — by {{ $json.author }} on {{ $json.source }}. If rating < 3, produce 2 response variants and flag for HITL. If >= 4, produce a short thank-you response. Return JSON: { sentiment, themes[], urgency, draft_response, requires_hitl }.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "classify", "name": "Classify + Draft (Haiku)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1680, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [{ "leftValue": "={{ $json.requires_hitl }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }]
+        }
+      },
+      "id": "hitl-check", "name": "Needs HITL?", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [1940, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"negative_review\",\n  \"client_id\": \"{{ $node['normalize'].json.client_id }}\",\n  \"priority\": \"critical\",\n  \"summary\": \"Negative {{ $node['normalize'].json.rating }}★ review on {{ $node['normalize'].json.source }}\",\n  \"payload\": {{ JSON.stringify($json) }}\n}",
+        "options": {}
+      },
+      "id": "hitl", "name": "HITL Queue (Critical)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2200, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/reviews/auto-respond",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"source\": \"{{ $node['normalize'].json.source }}\",\n  \"review_id\": \"{{ $node['normalize'].json.review_id }}\",\n  \"response\": {{ JSON.stringify($json.draft_response) }},\n  \"client_id\": \"{{ $node['normalize'].json.client_id }}\"\n}",
+        "options": {}
+      },
+      "id": "auto", "name": "Auto-Respond (Positive)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2200, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/reviews/persist",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"review\": {{ JSON.stringify($node['normalize'].json) }}, \"analysis\": {{ JSON.stringify($node['classify'].json) }} }",
+        "options": {}
+      },
+      "id": "persist", "name": "Persist Metric", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2460, 380]
+    }
+  ],
+  "connections": {
+    "Daily 8am": { "main": [[{ "node": "Fetch Clients", "type": "main", "index": 0 }]] },
+    "Fetch Clients": { "main": [[{ "node": "Split", "type": "main", "index": 0 }]] },
+    "Split": { "main": [[{ "node": "Google Reviews", "type": "main", "index": 0 }, { "node": "Yelp Reviews", "type": "main", "index": 0 }, { "node": "Trustpilot", "type": "main", "index": 0 }, { "node": "G2", "type": "main", "index": 0 }, { "node": "Glassdoor", "type": "main", "index": 0 }]] },
+    "Google Reviews": { "main": [[{ "node": "Merge Platforms", "type": "main", "index": 0 }]] },
+    "Yelp Reviews": { "main": [[{ "node": "Merge Platforms", "type": "main", "index": 1 }]] },
+    "Trustpilot": { "main": [[{ "node": "Merge Platforms", "type": "main", "index": 2 }]] },
+    "G2": { "main": [[{ "node": "Merge Platforms", "type": "main", "index": 3 }]] },
+    "Glassdoor": { "main": [[{ "node": "Merge Platforms", "type": "main", "index": 4 }]] },
+    "Merge Platforms": { "main": [[{ "node": "Normalize + Filter 24h", "type": "main", "index": 0 }]] },
+    "Normalize + Filter 24h": { "main": [[{ "node": "Classify + Draft (Haiku)", "type": "main", "index": 0 }]] },
+    "Classify + Draft (Haiku)": { "main": [[{ "node": "Needs HITL?", "type": "main", "index": 0 }]] },
+    "Needs HITL?": { "main": [[{ "node": "HITL Queue (Critical)", "type": "main", "index": 0 }], [{ "node": "Auto-Respond (Positive)", "type": "main", "index": 0 }]] },
+    "HITL Queue (Critical)": { "main": [[{ "node": "Persist Metric", "type": "main", "index": 0 }]] },
+    "Auto-Respond (Positive)": { "main": [[{ "node": "Persist Metric", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": [{ "name": "zero-risk", "id": "1" }, { "name": "tier-2", "id": "14" }, { "name": "reputation", "id": "20" }, { "name": "pilar-5", "id": "6" }],
+  "triggerCount": 1, "versionId": "1"
+}

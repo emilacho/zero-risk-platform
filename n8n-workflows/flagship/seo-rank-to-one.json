@@ -1,0 +1,470 @@
+{
+  "name": "Zero Risk — FLAGSHIP: SEO Rank-to-#1 (Single-Prompt Engagement)",
+  "meta": {
+    "description": "End-to-end SEO engagement from a single webhook POST. 6 parallel sub-workflows feeding 5 Claude sub-agents (Competitive Intel, Content Strategy, Technical SEO, GEO Optimization, Backlink Acquisition) synthesized by an Opus orchestrator into a complete ranking playbook. Covers E-E-A-T, topical authority, semantic SEO, Core Web Vitals, schema automation, AI Overview / GEO optimization, backlink prospecting, and 30-day rank tracking.",
+    "trigger_payload_example": {
+      "domain": "clientX.com",
+      "target_keyword": "industrial safety ecuador",
+      "secondary_keywords": ["seguridad industrial quito", "OSHA compliance ecuador"],
+      "locale": { "country": "Ecuador", "language": "es" },
+      "competitors": ["competitor1.com", "competitor2.com"],
+      "vertical": "industrial-safety-b2b",
+      "client_id": "uuid",
+      "tracking_duration_days": 90
+    },
+    "expected_duration_minutes": 25,
+    "cost_usd_per_run": "9-14 initial + ~$1.80/month ongoing rank tracking"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/seo-rank-one",
+        "responseMode": "responseNode",
+        "options": { "rawBody": false }
+      },
+      "id": "webhook",
+      "name": "Webhook: SEO Engagement",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 600],
+      "webhookId": "zero-risk-seo-rank-one"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate & normalize the input payload.\nconst b = $input.first().json.body || $input.first().json;\nconst required = ['domain','target_keyword','client_id'];\nfor (const f of required) if (!b[f]) throw new Error(`Missing required field: ${f}`);\nconst normalized = {\n  task_id: `seo_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,\n  domain: b.domain.replace(/^https?:\\/\\//, '').replace(/\\/$/, ''),\n  target_keyword: b.target_keyword,\n  secondary_keywords: (b.secondary_keywords || []).slice(0, 20),\n  locale: b.locale || { country: 'US', language: 'en' },\n  competitors: (b.competitors || []).slice(0, 5),\n  vertical: b.vertical || 'general',\n  client_id: b.client_id,\n  tracking_duration_days: b.tracking_duration_days || 90,\n  started_at: new Date().toISOString()\n};\nreturn [{ json: normalized }];"
+      },
+      "id": "validate",
+      "name": "Validate & Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [340, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/seo-engagements",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ...$json, status: 'running' }) }}",
+        "options": {}
+      },
+      "id": "persist-start",
+      "name": "Persist Engagement Start",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/client-brain/rag-search",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"query\": \"brand voice, ICP, unique value proposition, forbidden words, prior SEO work\",\n  \"k\": 20\n}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "client-brain",
+      "name": "Query Client Brain (RAG)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [780, 600]
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/serp/google/organic/live/advanced",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=[{\n  \"keyword\": \"{{ $node['Validate & Normalize'].json.target_keyword }}\",\n  \"location_name\": \"{{ $node['Validate & Normalize'].json.locale.country }}\",\n  \"language_code\": \"{{ $node['Validate & Normalize'].json.locale.language }}\",\n  \"depth\": 100,\n  \"device\": \"desktop\",\n  \"people_also_ask_click_depth\": 4,\n  \"load_async_ai_overview\": true\n}]",
+        "options": { "timeout": 60000 }
+      },
+      "id": "serp-primary",
+      "name": "DataForSEO SERP (primary kw)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=[{\n  \"keywords\": {{ JSON.stringify([$node['Validate & Normalize'].json.target_keyword, ...$node['Validate & Normalize'].json.secondary_keywords]) }},\n  \"location_name\": \"{{ $node['Validate & Normalize'].json.locale.country }}\",\n  \"language_code\": \"{{ $node['Validate & Normalize'].json.locale.language }}\"\n}]",
+        "options": { "timeout": 30000 }
+      },
+      "id": "kw-volume",
+      "name": "DataForSEO KW Volume + CPC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/backlinks/summary/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=[{\n  \"target\": \"{{ $node['Validate & Normalize'].json.domain }}\",\n  \"include_subdomains\": true,\n  \"backlinks_status_type\": \"live\"\n}]",
+        "options": { "timeout": 60000 }
+      },
+      "id": "backlinks-client",
+      "name": "Client Backlink Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 520]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/crawl",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.FIRECRAWL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"https://{{ $node['Validate & Normalize'].json.domain }}\",\n  \"limit\": 500,\n  \"scrapeOptions\": {\n    \"formats\": [\"markdown\", \"html\", \"links\"],\n    \"onlyMainContent\": false,\n    \"includeTags\": [\"meta\", \"title\", \"h1\", \"h2\", \"h3\", \"script[type='application/ld+json']\", \"link[rel='canonical']\", \"link[rel='alternate']\"]\n  }\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "firecrawl",
+      "name": "Firecrawl Full Site",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 680]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://{{ $node['Validate & Normalize'].json.domain }}&strategy=mobile&category=performance&category=accessibility&category=best-practices&category=seo&key={{ $env.GOOGLE_PSI_KEY }}",
+        "options": { "timeout": 90000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "psi-mobile",
+      "name": "PageSpeed Insights (Mobile)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 840]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://{{ $node['Validate & Normalize'].json.domain }}&strategy=desktop&category=performance&category=seo&key={{ $env.GOOGLE_PSI_KEY }}",
+        "options": { "timeout": 90000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "psi-desktop",
+      "name": "PageSpeed Insights (Desktop)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 1000]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://searchconsole.googleapis.com/v1/urlTestingTools/mobileFriendlyTest:run",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "Authorization", "value": "=Bearer {{ $env.GOOGLE_OAUTH_TOKEN }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"https://{{ $node['Validate & Normalize'].json.domain }}\",\n  \"requestScreenshot\": false\n}",
+        "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "mobile-friendly",
+      "name": "Mobile-Friendly Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 1160]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all raw data into a single object for agent consumption.\nconst $n = (k) => $node[k]?.json ?? {};\nconst norm = $n['Validate & Normalize');\nconst serp = $n['DataForSEO SERP (primary kw)');\nconst vol = $n['DataForSEO KW Volume + CPC');\nconst blClient = $n['Client Backlink Profile');\nconst fc = $n['Firecrawl Full Site');\nconst psiMobile = $n['PageSpeed Insights (Mobile)');\nconst psiDesktop = $n['PageSpeed Insights (Desktop)');\nconst mf = $n['Mobile-Friendly Test');\nconst brain = $n['Query Client Brain (RAG)');\n\n// Extract SERP features\nconst serpResult = serp?.tasks?.[0]?.result?.[0] ?? {};\nconst top10 = (serpResult.items || []).filter(i => i.type === 'organic').slice(0, 10);\nconst featuredSnippet = (serpResult.items || []).find(i => i.type === 'featured_snippet');\nconst peopleAlsoAsk = (serpResult.items || []).find(i => i.type === 'people_also_ask')?.items || [];\nconst aiOverview = (serpResult.items || []).find(i => i.type === 'ai_overview');\nconst localPack = (serpResult.items || []).find(i => i.type === 'local_pack');\nconst relatedSearches = serpResult.related_searches || [];\n\n// Extract CWV\nconst cwvMobile = psiMobile?.lighthouseResult?.audits || {};\nconst lcp = cwvMobile['largest-contentful-paint']?.numericValue;\nconst inp = cwvMobile['interactive']?.numericValue; // proxy\nconst cls = cwvMobile['cumulative-layout-shift']?.numericValue;\nconst perfScore = psiMobile?.lighthouseResult?.categories?.performance?.score;\nconst seoScore = psiMobile?.lighthouseResult?.categories?.seo?.score;\n\n// Extract crawl summary\nconst pages = fc?.data || [];\nconst schemaPages = pages.filter(p => (p.html || '').includes('application/ld+json'));\nconst missingTitle = pages.filter(p => !p.metadata?.title).length;\nconst missingMeta = pages.filter(p => !p.metadata?.description).length;\n\nreturn [{ json: {\n  ...norm,\n  serp: {\n    top10: top10.map(r => ({ rank: r.rank_absolute, url: r.url, title: r.title, description: r.description, domain: r.domain })),\n    featured_snippet: featuredSnippet ? { source: featuredSnippet.url, text: featuredSnippet.description } : null,\n    people_also_ask: peopleAlsoAsk.map(q => q.title).slice(0, 10),\n    ai_overview_present: !!aiOverview,\n    ai_overview_references: aiOverview?.references || [],\n    local_pack_present: !!localPack,\n    related_searches: relatedSearches.slice(0, 20)\n  },\n  keywords: (vol?.tasks?.[0]?.result || []).map(k => ({\n    keyword: k.keyword, search_volume: k.search_volume, cpc: k.cpc, competition: k.competition_level\n  })),\n  backlinks_summary: {\n    total: blClient?.tasks?.[0]?.result?.[0]?.backlinks ?? 0,\n    referring_domains: blClient?.tasks?.[0]?.result?.[0]?.referring_domains ?? 0,\n    rank: blClient?.tasks?.[0]?.result?.[0]?.rank ?? 0\n  },\n  technical: {\n    pages_crawled: pages.length,\n    pages_with_schema: schemaPages.length,\n    pages_missing_title: missingTitle,\n    pages_missing_meta_desc: missingMeta,\n    lcp_ms: lcp,\n    inp_ms: inp,\n    cls: cls,\n    perf_score: perfScore,\n    seo_score: seoScore,\n    mobile_friendly: mf?.mobileFriendliness === 'MOBILE_FRIENDLY'\n  },\n  homepage_html: pages.find(p => /^https?:\\/\\/[^/]+\\/?$/.test(p.metadata?.sourceURL || ''))?.html || null,\n  crawl_sample: pages.slice(0, 25).map(p => ({ url: p.metadata?.sourceURL, title: p.metadata?.title, description: p.metadata?.description })),\n  client_brain: brain\n} }];"
+      },
+      "id": "aggregate-raw",
+      "name": "Aggregate Raw Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 680]
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"competitive_intelligence\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"SEO competitive gap analysis. Target: {{ $json.target_keyword }} in {{ $json.locale.country }}. Our domain: {{ $json.domain }}. Top-10 SERP competitors: {{ JSON.stringify($json.serp.top10) }}. Featured snippet winner: {{ JSON.stringify($json.serp.featured_snippet) }}. PAA: {{ JSON.stringify($json.serp.people_also_ask) }}. AI Overview present: {{ $json.serp.ai_overview_present }}. Produce (1) competitor content depth matrix (word count, heading depth, schema types, entity density per top-5), (2) content gaps we can uniquely own, (3) ranked backlink target list from competitors' referring domains (use DataForSEO backlinks/competitors endpoint for top 3). Output strict JSON {matrix, gaps, backlink_targets}.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify({ serp: $json.serp, competitors: $json.competitors, domain: $json.domain }) }}\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "agent-ci",
+      "name": "Agent: Competitive Intelligence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"content_strategist\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Topical authority architecture. Target keyword: {{ $json.target_keyword }}. Secondary: {{ JSON.stringify($json.secondary_keywords) }}. PAA questions: {{ JSON.stringify($json.serp.people_also_ask) }}. Related searches: {{ JSON.stringify($json.serp.related_searches) }}. Client Brain: {{ JSON.stringify($json.client_brain) }}. Produce: (a) 1 pillar page outline (3000-5000w target, H2-H4 tree, entity list, internal link plan, target featured snippet format), (b) 12-18 spoke articles each with title / target kw / intent type / word count / internal link back to pillar, (c) cluster map showing topical coverage versus top-5 competitors, (d) E-E-A-T signals plan (author bios, original research, citations, expert quotes), (e) semantic entity list (from Google NLP / Claude) that must appear. Output strict JSON {pillar, spokes[], cluster_map, eeat_plan, entities[]}.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify({ serp: $json.serp, keywords: $json.keywords, vertical: $json.vertical }) }}\n}",
+        "options": { "timeout": 240000 }
+      },
+      "id": "agent-content",
+      "name": "Agent: Content Strategy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"technical_seo\",\n  \"model\": \"claude-haiku-4-5\",\n  \"task\": \"Technical SEO remediation plan. Crawl summary: {{ JSON.stringify($json.technical) }}. Sample pages: {{ JSON.stringify($json.crawl_sample) }}. Homepage HTML excerpt (first 20000 chars): {{ ($json.homepage_html || '').slice(0, 20000) }}. Produce (1) prioritized issue list with fix recipes (canonical errors, indexable status, hreflang, duplicate content, pagination, JS rendering), (2) Core Web Vitals fix roadmap (LCP target <2.5s, INP <200ms, CLS <0.1) — specific techniques per page template, (3) complete JSON-LD schema package: Organization, WebSite with SearchAction, BreadcrumbList, Article/BlogPosting, FAQPage, HowTo, LocalBusiness (if applicable), Product (if applicable), Service (if applicable) — return valid JSON-LD ready to paste, (4) internal link audit (orphan pages, over-linked, anchor diversity), (5) sitemap + robots.txt recommendations including GPTBot/ClaudeBot/PerplexityBot policies. Output strict JSON {issues[], cwv_plan, schema_package{}, internal_links_audit, sitemap_robots}.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify({ technical: $json.technical, crawl_sample: $json.crawl_sample }) }}\n}",
+        "options": { "timeout": 240000 }
+      },
+      "id": "agent-tech",
+      "name": "Agent: Technical SEO",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"geo_optimization\",\n  \"model\": \"claude-haiku-4-5\",\n  \"task\": \"Generative Engine Optimization (GEO) for ChatGPT, Perplexity, Google AI Overview, Claude. Target keyword: {{ $json.target_keyword }}. AI Overview already present in SERP: {{ $json.serp.ai_overview_present }}. Current AI Overview references: {{ JSON.stringify($json.serp.ai_overview_references) }}. Top-10 organic: {{ JSON.stringify($json.serp.top10) }}. Produce (1) llms.txt file content (full spec, including about, key-pages, contact, preferred content), (2) fact-density checklist for cluster content (primary stats, original data, citations, expert quotes — min counts), (3) citation-worthy content blocks template (definition box, quick-answer summary at top of page, TL;DR, statistics list), (4) robots.txt policies for GPTBot/ClaudeBot/PerplexityBot/Google-Extended/CCBot — recommend allow with crawl-delay, (5) structured data density plan (Claim, FAQ with short answers 30-80 words each, HowTo steps with specific numbers), (6) brand SERP (knowledge panel) optimization. Output strict JSON {llms_txt, fact_density, content_blocks, robots_policy, schema_density, brand_serp}.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify({ serp: $json.serp, vertical: $json.vertical }) }}\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "agent-geo",
+      "name": "Agent: GEO Optimization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 800]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"backlink_strategist\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Backlink acquisition roadmap. Current backlink profile: {{ JSON.stringify($json.backlinks_summary) }}. Top-10 SERP competitors: {{ JSON.stringify($json.serp.top10) }}. Vertical: {{ $json.vertical }}. Locale: {{ $json.locale.country }}. Produce (1) 50 ranked link prospects (name, domain, DR estimate, topical relevance, angle) sourced from: competitor referring domains, unlinked brand mentions, HARO/Connectively categories, industry directories, niche publications, podcast guest opportunities, (2) 4 outreach email templates (guest post pitch / broken-link / HARO response / podcast pitch / unlinked mention claim) personalized to vertical, (3) digital PR campaign ideas (3 newsworthy data studies we can produce), (4) internal link boost plan (pages on client site that should link to new pillar content), (5) anchor text distribution targets. Output strict JSON {prospects[], templates{}, pr_ideas[], internal_boost, anchor_distribution}.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify({ backlinks: $json.backlinks_summary, competitors: $json.competitors, vertical: $json.vertical }) }}\n}",
+        "options": { "timeout": 240000 }
+      },
+      "id": "agent-links",
+      "name": "Agent: Backlink Strategist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 1000]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Combine all 5 agent outputs into a single payload for the Orchestrator.\nconst parse = (v) => {\n  if (!v) return null;\n  if (typeof v === 'string') { try { return JSON.parse(v); } catch { return v; } }\n  if (v.response) { try { return JSON.parse(v.response); } catch { return v.response; } }\n  return v;\n};\nconst base = $node['Aggregate Raw Data'].json;\nreturn [{ json: {\n  ...base,\n  agent_outputs: {\n    competitive_intelligence: parse($node['Agent: Competitive Intelligence'].json),\n    content_strategy: parse($node['Agent: Content Strategy'].json),\n    technical_seo: parse($node['Agent: Technical SEO'].json),\n    geo_optimization: parse($node['Agent: GEO Optimization'].json),\n    backlink_strategy: parse($node['Agent: Backlink Strategist'].json)\n  }\n} }];"
+      },
+      "id": "merge-agents",
+      "name": "Merge Agent Outputs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1860, 600]
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"seo_orchestrator\",\n  \"model\": \"claude-opus-4-6\",\n  \"task\": \"Synthesize 5 sub-agent outputs into a single, executable 90-day SEO playbook to rank {{ $json.domain }} #1 for {{ $json.target_keyword }} in {{ $json.locale.country }}. Inputs include competitive matrix, content cluster plan, technical remediation, GEO optimization, and backlink acquisition plan. Produce a final document with: (1) Executive summary (what wins this keyword, what ranks today, realistic timeline given current backlink gap {{ $json.backlinks_summary.referring_domains }} refdomains), (2) Week-by-week 12-week execution calendar with owner per task (content/dev/outreach/PR), (3) KPI dashboard spec (primary kw rank, secondary kw ranks, organic traffic, AI Overview citation presence, featured snippet capture, # referring domains gained, CWV scores), (4) Risk register (algorithm update, competitor retaliation, link velocity spike flags), (5) Budget breakdown (content: $X, tools: $Y, PR: $Z), (6) Critical path diagram — what must happen in what order. Be brutally realistic about timelines: if the domain has {{ $json.backlinks_summary.referring_domains }} referring domains versus competitors with thousands, say so and recommend long-tail intermediate wins first. Output strict JSON {exec_summary, calendar_12w[], kpi_dashboard, risks[], budget, critical_path}.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json.agent_outputs) }}\n}",
+        "options": { "timeout": 300000 }
+      },
+      "id": "orchestrator",
+      "name": "Orchestrator: Opus Synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 600]
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/seo-engagements/{{ $node['Validate & Normalize'].json.task_id }}/deliverables",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"playbook\": {{ JSON.stringify($json) }},\n  \"agent_outputs\": {{ JSON.stringify($node['Merge Agent Outputs'].json.agent_outputs) }},\n  \"raw_data\": {{ JSON.stringify($node['Aggregate Raw Data'].json) }}\n}",
+        "options": {}
+      },
+      "id": "persist-deliverables",
+      "name": "Persist Deliverables",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2460, 480]
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/rank-tracking/initialize",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['Validate & Normalize'].json.client_id }}\",\n  \"domain\": \"{{ $node['Validate & Normalize'].json.domain }}\",\n  \"keywords\": {{ JSON.stringify([$node['Validate & Normalize'].json.target_keyword, ...$node['Validate & Normalize'].json.secondary_keywords]) }},\n  \"locale\": {{ JSON.stringify($node['Validate & Normalize'].json.locale) }},\n  \"duration_days\": {{ $node['Validate & Normalize'].json.tracking_duration_days }},\n  \"frequency\": \"daily\",\n  \"track_serp_features\": [\"featured_snippet\", \"ai_overview\", \"people_also_ask\", \"local_pack\", \"image_pack\", \"video_carousel\"]\n}",
+        "options": {}
+      },
+      "id": "init-tracking",
+      "name": "Initialize Rank Tracking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2460, 680]
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['Validate & Normalize'].json.client_id }}\",\n  \"type\": \"seo_playbook_review\",\n  \"title\": \"SEO Playbook — {{ $node['Validate & Normalize'].json.domain }} / {{ $node['Validate & Normalize'].json.target_keyword }}\",\n  \"priority\": \"high\",\n  \"metadata\": {\n    \"task_id\": \"{{ $node['Validate & Normalize'].json.task_id }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "hitl",
+      "name": "Queue HITL Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2460, 880]
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🎯 *SEO Rank-to-#1 Playbook ready*\\n• Domain: {{ $node['Validate & Normalize'].json.domain }}\\n• Target: `{{ $node['Validate & Normalize'].json.target_keyword }}`\\n• Country: {{ $node['Validate & Normalize'].json.locale.country }}\\n• Top-1 currently: {{ $node['Aggregate Raw Data'].json.serp.top10[0]?.domain || 'n/a' }}\\n• AI Overview: {{ $node['Aggregate Raw Data'].json.serp.ai_overview_present ? 'present 🤖' : 'absent' }}\\n• Client refdomains: {{ $node['Aggregate Raw Data'].json.backlinks_summary.referring_domains }}\\n→ Review playbook in Mission Control (HITL queued)\"\n}",
+        "options": {}
+      },
+      "id": "slack",
+      "name": "Slack Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2700, 600]
+    },
+
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"task_id\": \"{{ $node['Validate & Normalize'].json.task_id }}\",\n  \"domain\": \"{{ $node['Validate & Normalize'].json.domain }}\",\n  \"target_keyword\": \"{{ $node['Validate & Normalize'].json.target_keyword }}\",\n  \"status\": \"playbook_ready_for_review\",\n  \"deliverable_url\": \"{{ $env.ZERO_RISK_API_URL }}/dashboard/seo/{{ $node['Validate & Normalize'].json.task_id }}\",\n  \"rank_tracking\": \"initialized\"\n}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2940, 600]
+    }
+  ],
+  "connections": {
+    "Webhook: SEO Engagement": { "main": [[{ "node": "Validate & Normalize", "type": "main", "index": 0 }]] },
+    "Validate & Normalize": { "main": [[{ "node": "Persist Engagement Start", "type": "main", "index": 0 }]] },
+    "Persist Engagement Start": { "main": [[{ "node": "Query Client Brain (RAG)", "type": "main", "index": 0 }]] },
+    "Query Client Brain (RAG)": {
+      "main": [[
+        { "node": "DataForSEO SERP (primary kw)", "type": "main", "index": 0 },
+        { "node": "DataForSEO KW Volume + CPC", "type": "main", "index": 0 },
+        { "node": "Client Backlink Profile", "type": "main", "index": 0 },
+        { "node": "Firecrawl Full Site", "type": "main", "index": 0 },
+        { "node": "PageSpeed Insights (Mobile)", "type": "main", "index": 0 },
+        { "node": "PageSpeed Insights (Desktop)", "type": "main", "index": 0 },
+        { "node": "Mobile-Friendly Test", "type": "main", "index": 0 }
+      ]]
+    },
+    "DataForSEO SERP (primary kw)": { "main": [[{ "node": "Aggregate Raw Data", "type": "main", "index": 0 }]] },
+    "DataForSEO KW Volume + CPC": { "main": [[{ "node": "Aggregate Raw Data", "type": "main", "index": 0 }]] },
+    "Client Backlink Profile": { "main": [[{ "node": "Aggregate Raw Data", "type": "main", "index": 0 }]] },
+    "Firecrawl Full Site": { "main": [[{ "node": "Aggregate Raw Data", "type": "main", "index": 0 }]] },
+    "PageSpeed Insights (Mobile)": { "main": [[{ "node": "Aggregate Raw Data", "type": "main", "index": 0 }]] },
+    "PageSpeed Insights (Desktop)": { "main": [[{ "node": "Aggregate Raw Data", "type": "main", "index": 0 }]] },
+    "Mobile-Friendly Test": { "main": [[{ "node": "Aggregate Raw Data", "type": "main", "index": 0 }]] },
+    "Aggregate Raw Data": {
+      "main": [[
+        { "node": "Agent: Competitive Intelligence", "type": "main", "index": 0 },
+        { "node": "Agent: Content Strategy", "type": "main", "index": 0 },
+        { "node": "Agent: Technical SEO", "type": "main", "index": 0 },
+        { "node": "Agent: GEO Optimization", "type": "main", "index": 0 },
+        { "node": "Agent: Backlink Strategist", "type": "main", "index": 0 }
+      ]]
+    },
+    "Agent: Competitive Intelligence": { "main": [[{ "node": "Merge Agent Outputs", "type": "main", "index": 0 }]] },
+    "Agent: Content Strategy": { "main": [[{ "node": "Merge Agent Outputs", "type": "main", "index": 0 }]] },
+    "Agent: Technical SEO": { "main": [[{ "node": "Merge Agent Outputs", "type": "main", "index": 0 }]] },
+    "Agent: GEO Optimization": { "main": [[{ "node": "Merge Agent Outputs", "type": "main", "index": 0 }]] },
+    "Agent: Backlink Strategist": { "main": [[{ "node": "Merge Agent Outputs", "type": "main", "index": 0 }]] },
+    "Merge Agent Outputs": { "main": [[{ "node": "Orchestrator: Opus Synthesis", "type": "main", "index": 0 }]] },
+    "Orchestrator: Opus Synthesis": {
+      "main": [[
+        { "node": "Persist Deliverables", "type": "main", "index": 0 },
+        { "node": "Initialize Rank Tracking", "type": "main", "index": 0 },
+        { "node": "Queue HITL Review", "type": "main", "index": 0 }
+      ]]
+    },
+    "Persist Deliverables": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
+    "Initialize Rank Tracking": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
+    "Queue HITL Review": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
+    "Slack Notify": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "timezone": "America/Guayaquil" },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "flagship", "id": "20" },
+    { "name": "seo", "id": "21" },
+    { "name": "rank-to-one", "id": "22" },
+    { "name": "pilar-3", "id": "4" },
+    { "name": "pilar-5", "id": "6" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

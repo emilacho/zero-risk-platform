@@ -1,0 +1,268 @@
+{
+  "name": "Zero Risk — Content Team Orchestrator (7 Sub-Agents)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/content-brief",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: Content Brief",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.campaign_theme) throw new Error('client_id and campaign_theme required');\nreturn [{ json: {\n  task_id: `content_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,\n  client_id: b.client_id,\n  campaign_theme: b.campaign_theme,\n  channels: b.channels || ['blog','email','meta_ads','linkedin','instagram','tiktok'],\n  tone: b.tone || null,\n  duration_days: b.duration_days || 30,\n  kpi: b.kpi || 'leads',\n  deliverables: b.deliverables || { blogs: 4, emails: 6, meta_ads: 10, social_posts: 20, images: 20, videos: 4 },\n  started_at: new Date().toISOString()\n} }];"
+      },
+      "id": "validate",
+      "name": "Validate Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/client-brain/rag-search",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"query\": \"Brand voice, ICP, positioning, unique value props, recent winners for theme: {{ $json.campaign_theme }}\",\n  \"k\": 25\n}",
+        "options": {}
+      },
+      "id": "brain",
+      "name": "Client Brain RAG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"campaign_brief\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Build master campaign brief for theme '{{ $node['Validate Brief'].json.campaign_theme }}' (client {{ $node['Validate Brief'].json.client_id }}, {{ $node['Validate Brief'].json.duration_days }}d, KPI {{ $node['Validate Brief'].json.kpi }}). Deliver: narrative spine, message matrix per channel, funnel mapping TOFU/MOFU/BOFU, audience segments, hero CTA, content calendar skeleton week-by-week. Use brand voice from context.\",\n  \"client_id\": \"{{ $node['Validate Brief'].json.client_id }}\",\n  \"extra\": { \"brief\": {{ JSON.stringify($node['Validate Brief'].json) }}, \"brain\": {{ JSON.stringify($json) }} }\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "brief-agent",
+      "name": "Agent: Campaign Brief (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"content_creator\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Produce {{ $node['Validate Brief'].json.deliverables.blogs }} SEO-optimized blog posts (1500-2200 words each) for theme '{{ $node['Validate Brief'].json.campaign_theme }}'. Each with: H1, meta description, H2/H3 outline, full body, internal links, FAQ schema block, target keyword + 3 LSI, reading level 8-9. Also output {{ $node['Validate Brief'].json.deliverables.social_posts }} social posts (LinkedIn long-form 1200c, Instagram caption 150c, TikTok hook 80c, X thread 6 tweets).\",\n  \"client_id\": \"{{ $node['Validate Brief'].json.client_id }}\",\n  \"extra\": { \"brief\": {{ JSON.stringify($node['brief-agent'].json) }} }\n}",
+        "options": { "timeout": 300000 }
+      },
+      "id": "creator",
+      "name": "Agent: Content Creator (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"copywriter\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Write {{ $node['Validate Brief'].json.deliverables.meta_ads }} Meta Ads sets for theme '{{ $node['Validate Brief'].json.campaign_theme }}'. Each set = 3 headlines (30c) + 5 primary texts (125c) + 2 descriptions (27c) + CTA + target angle (pain/desire/proof/novelty/authority). Apply direct-response principles (Halbert/Sugarman). Output also 8 Google RSA (15 headlines / 4 descriptions).\",\n  \"client_id\": \"{{ $node['Validate Brief'].json.client_id }}\",\n  \"extra\": { \"brief\": {{ JSON.stringify($node['brief-agent'].json) }} }\n}",
+        "options": { "timeout": 240000 }
+      },
+      "id": "copy",
+      "name": "Agent: Copywriter (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design {{ $node['Validate Brief'].json.deliverables.emails }}-email nurture + broadcast series for theme '{{ $node['Validate Brief'].json.campaign_theme }}'. For each email: subject A/B (40c + 50c), preheader (90c), full MJML-ready HTML body, plain-text fallback, send time, segment, goal. Include 1 re-engagement and 1 cart/interest recovery if applicable.\",\n  \"client_id\": \"{{ $node['Validate Brief'].json.client_id }}\",\n  \"extra\": { \"brief\": {{ JSON.stringify($node['brief-agent'].json) }} }\n}",
+        "options": { "timeout": 240000 }
+      },
+      "id": "email",
+      "name": "Agent: Email Marketer (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"media_buyer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Build media plan across Meta, Google, LinkedIn, TikTok for theme '{{ $node['Validate Brief'].json.campaign_theme }}'. Output: channel-by-channel budget split (% and $), audience definitions (saved/custom/lookalike), bid strategy, placements, flight schedule, expected CPM/CPC/CPL ranges with sourcing, kill-switch rules, scale-up rules.\",\n  \"client_id\": \"{{ $node['Validate Brief'].json.client_id }}\",\n  \"extra\": { \"brief\": {{ JSON.stringify($node['brief-agent'].json) }} }\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "media",
+      "name": "Agent: Media Buyer (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 540]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"brand_strategist\",\n  \"model\": \"claude-opus-4-6\",\n  \"task\": \"Review outputs from Content Creator, Copywriter, Email Marketer, and Media Buyer for brand alignment. Enforce voice consistency, positioning fidelity, and narrative coherence. Return: approval status per asset, surgical edits where misaligned, and a 'north-star' one-pager summarizing campaign identity.\",\n  \"client_id\": \"{{ $node['Validate Brief'].json.client_id }}\",\n  \"extra\": { \"creator\": {{ JSON.stringify($node['creator'].json) }}, \"copy\": {{ JSON.stringify($node['copy'].json) }}, \"email\": {{ JSON.stringify($node['email'].json) }}, \"media\": {{ JSON.stringify($node['media'].json) }} }\n}",
+        "options": { "timeout": 240000 }
+      },
+      "id": "brand",
+      "name": "Agent: Brand Strategist (Opus)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1480, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ideogram.ai/v1/ideogram-v3/generate",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Api-Key", "value": "={{ $env.IDEOGRAM_API_KEY }}" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prompt\": \"{{ $node['brief-agent'].json.response || $node['brief-agent'].json.output || '' }} — hero image for campaign {{ $node['Validate Brief'].json.campaign_theme }}, brand aligned, ultra-realistic, 16:9\",\n  \"aspect_ratio\": \"16x9\",\n  \"num_images\": {{ $node['Validate Brief'].json.deliverables.images }},\n  \"style_type\": \"AUTO\"\n}",
+        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "images",
+      "name": "Ideogram v3 Batch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1480, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.higgsfield.ai/v1/seedance/generate",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.HIGGSFIELD_API_KEY }}" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prompt\": \"Hero video for campaign {{ $node['Validate Brief'].json.campaign_theme }}\",\n  \"model\": \"seedance-2.0\",\n  \"duration_seconds\": 15,\n  \"num_videos\": {{ $node['Validate Brief'].json.deliverables.videos }},\n  \"aspect_ratio\": \"9:16\"\n}",
+        "options": { "timeout": 300000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "videos",
+      "name": "Higgsfield Seedance Videos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1480, 580]
+    },
+    {
+      "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} },
+      "id": "merge",
+      "name": "Merge All Assets",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1780, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"orchestrator\",\n  \"model\": \"claude-opus-4-6\",\n  \"task\": \"Assemble final content package and {{ $node['Validate Brief'].json.duration_days }}-day publishing calendar. Produce: day-by-day schedule with asset IDs, channel sequencing (awareness → consideration → conversion), cross-channel retargeting plan, measurement plan (UTMs, GA4 events, pixel events), and QA checklist.\",\n  \"client_id\": \"{{ $node['Validate Brief'].json.client_id }}\",\n  \"extra\": { \"merged\": {{ JSON.stringify($json) }} }\n}",
+        "options": { "timeout": 240000 }
+      },
+      "id": "orchestrate",
+      "name": "Orchestrate Calendar (Opus)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2040, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/content-packages",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"task_id\": \"{{ $node['Validate Brief'].json.task_id }}\",\n  \"client_id\": \"{{ $node['Validate Brief'].json.client_id }}\",\n  \"status\": \"pending_review\",\n  \"assets\": {{ JSON.stringify($node['merge'].json) }},\n  \"calendar\": {{ JSON.stringify($json) }}\n}",
+        "options": {}
+      },
+      "id": "persist",
+      "name": "Persist Package",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2280, 340]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"content_package_review\",\n  \"client_id\": \"{{ $node['Validate Brief'].json.client_id }}\",\n  \"task_id\": \"{{ $node['Validate Brief'].json.task_id }}\",\n  \"priority\": \"high\",\n  \"summary\": \"Content package ready: {{ $node['Validate Brief'].json.deliverables.blogs }} blogs, {{ $node['Validate Brief'].json.deliverables.emails }} emails, {{ $node['Validate Brief'].json.deliverables.meta_ads }} ad sets, {{ $node['Validate Brief'].json.deliverables.social_posts }} social posts, {{ $node['Validate Brief'].json.deliverables.images }} images, {{ $node['Validate Brief'].json.deliverables.videos }} videos.\"\n}",
+        "options": {}
+      },
+      "id": "hitl",
+      "name": "Queue HITL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2280, 540]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ { task_id: $node['Validate Brief'].json.task_id, status: 'queued_for_review' } }}", "options": {} },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2540, 440]
+    }
+  ],
+  "connections": {
+    "Webhook: Content Brief": { "main": [[{ "node": "Validate Brief", "type": "main", "index": 0 }]] },
+    "Validate Brief": { "main": [[{ "node": "Client Brain RAG", "type": "main", "index": 0 }]] },
+    "Client Brain RAG": { "main": [[{ "node": "Agent: Campaign Brief (Sonnet)", "type": "main", "index": 0 }]] },
+    "Agent: Campaign Brief (Sonnet)": { "main": [[{ "node": "Agent: Content Creator (Sonnet)", "type": "main", "index": 0 }, { "node": "Agent: Copywriter (Sonnet)", "type": "main", "index": 0 }, { "node": "Agent: Email Marketer (Sonnet)", "type": "main", "index": 0 }, { "node": "Agent: Media Buyer (Sonnet)", "type": "main", "index": 0 }, { "node": "Ideogram v3 Batch", "type": "main", "index": 0 }, { "node": "Higgsfield Seedance Videos", "type": "main", "index": 0 }]] },
+    "Agent: Content Creator (Sonnet)": { "main": [[{ "node": "Agent: Brand Strategist (Opus)", "type": "main", "index": 0 }]] },
+    "Agent: Copywriter (Sonnet)": { "main": [[{ "node": "Agent: Brand Strategist (Opus)", "type": "main", "index": 0 }]] },
+    "Agent: Email Marketer (Sonnet)": { "main": [[{ "node": "Agent: Brand Strategist (Opus)", "type": "main", "index": 0 }]] },
+    "Agent: Media Buyer (Sonnet)": { "main": [[{ "node": "Agent: Brand Strategist (Opus)", "type": "main", "index": 0 }]] },
+    "Agent: Brand Strategist (Opus)": { "main": [[{ "node": "Merge All Assets", "type": "main", "index": 0 }]] },
+    "Ideogram v3 Batch": { "main": [[{ "node": "Merge All Assets", "type": "main", "index": 1 }]] },
+    "Higgsfield Seedance Videos": { "main": [[{ "node": "Merge All Assets", "type": "main", "index": 2 }]] },
+    "Merge All Assets": { "main": [[{ "node": "Orchestrate Calendar (Opus)", "type": "main", "index": 0 }]] },
+    "Orchestrate Calendar (Opus)": { "main": [[{ "node": "Persist Package", "type": "main", "index": 0 }, { "node": "Queue HITL", "type": "main", "index": 0 }]] },
+    "Persist Package": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": [{ "name": "zero-risk", "id": "1" }, { "name": "tier-2", "id": "14" }, { "name": "content-team", "id": "17" }, { "name": "pilar-3", "id": "4" }],
+  "triggerCount": 1,
+  "versionId": "1"
+}

@@ -1,0 +1,157 @@
+{
+  "name": "Zero Risk — Landing Page CRO Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/cro-audit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: CRO Audit",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 340]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.url) throw new Error('client_id and url required');\nreturn [{ json: { task_id: `cro_${Date.now()}`, client_id: b.client_id, url: b.url, goal: b.goal || 'lead_submit', current_cvr: b.current_cvr || null, traffic_monthly: b.traffic_monthly || null } }];"
+      },
+      "id": "validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 340]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/scrape",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.FIRECRAWL_API_KEY }}" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"{{ $json.url }}\",\n  \"formats\": [\"markdown\", \"html\", \"screenshot@fullPage\"],\n  \"onlyMainContent\": false,\n  \"waitFor\": 2500\n}",
+        "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "scrape",
+      "name": "Firecrawl Scrape",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 220]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={{ encodeURIComponent($json.url) }}&strategy=mobile&category=performance&category=accessibility&category=best-practices&key={{ $env.GOOGLE_PSI_KEY }}",
+        "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "psi",
+      "name": "PageSpeed Insights",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 360]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/clarity/session-stats?url={{ encodeURIComponent($node['validate'].json.url) }}&days=30",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "clarity",
+      "name": "Clarity Heatmap Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 500]
+    },
+    { "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} }, "id": "merge-audit", "name": "Merge Audit Data", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [960, 360] },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"cro_strategist\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Audit landing page {{ $node['validate'].json.url }} for conversion. Identify friction (hero clarity, above-fold CTA, social proof placement, form length, trust signals, CWV impact on bounce, mobile UX issues). Return prioritized issue list with expected lift, then 3 distinct optimization strategies: (A) copy + layout rework, (B) social proof + trust stack, (C) interactive / quiz-led. Each strategy must specify hero headline, subhead, CTA text, sections, and what to remove. Include estimated sample size to detect 15% lift at current traffic.\",\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"extra\": { \"page\": {{ JSON.stringify($json) }} }\n}",
+        "options": { "timeout": 240000 }
+      },
+      "id": "cro-agent",
+      "name": "CRO Strategist (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1240, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/stitch/generate-variants",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"base_url\": \"{{ $node['validate'].json.url }}\",\n  \"strategies\": {{ JSON.stringify($json) }},\n  \"framework\": \"21st.dev\",\n  \"num_variants\": 3\n}",
+        "options": { "timeout": 300000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "stitch",
+      "name": "Google Stitch + 21st.dev Variants",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1520, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/growthbook/experiments",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"CRO_{{ $node['validate'].json.task_id }}\",\n  \"url_pattern\": \"{{ $node['validate'].json.url }}\",\n  \"variants\": {{ JSON.stringify($json.variants || []) }},\n  \"traffic_split\": \"equal\",\n  \"primary_metric\": \"{{ $node['validate'].json.goal }}\",\n  \"minimum_sample\": 1500,\n  \"bandit\": true,\n  \"deploy\": \"staged\"\n}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "experiment",
+      "name": "Launch A/B/n Experiment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"cro_experiment_review\",\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"task_id\": \"{{ $node['validate'].json.task_id }}\",\n  \"priority\": \"medium\",\n  \"summary\": \"CRO audit for {{ $node['validate'].json.url }} complete — 3 variants staged, awaiting approval to go live.\"\n}",
+        "options": {}
+      },
+      "id": "hitl",
+      "name": "Queue HITL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2080, 360]
+    },
+    { "parameters": { "respondWith": "json", "responseBody": "={{ { task_id: $node['validate'].json.task_id, status: 'staged' } }}", "options": {} }, "id": "respond", "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [2340, 360] }
+  ],
+  "connections": {
+    "Webhook: CRO Audit": { "main": [[{ "node": "Validate", "type": "main", "index": 0 }]] },
+    "Validate": { "main": [[{ "node": "Firecrawl Scrape", "type": "main", "index": 0 }, { "node": "PageSpeed Insights", "type": "main", "index": 0 }, { "node": "Clarity Heatmap Stats", "type": "main", "index": 0 }]] },
+    "Firecrawl Scrape": { "main": [[{ "node": "Merge Audit Data", "type": "main", "index": 0 }]] },
+    "PageSpeed Insights": { "main": [[{ "node": "Merge Audit Data", "type": "main", "index": 1 }]] },
+    "Clarity Heatmap Stats": { "main": [[{ "node": "Merge Audit Data", "type": "main", "index": 2 }]] },
+    "Merge Audit Data": { "main": [[{ "node": "CRO Strategist (Sonnet)", "type": "main", "index": 0 }]] },
+    "CRO Strategist (Sonnet)": { "main": [[{ "node": "Google Stitch + 21st.dev Variants", "type": "main", "index": 0 }]] },
+    "Google Stitch + 21st.dev Variants": { "main": [[{ "node": "Launch A/B/n Experiment", "type": "main", "index": 0 }]] },
+    "Launch A/B/n Experiment": { "main": [[{ "node": "Queue HITL", "type": "main", "index": 0 }]] },
+    "Queue HITL": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": [{ "name": "zero-risk", "id": "1" }, { "name": "tier-2", "id": "14" }, { "name": "cro", "id": "19" }, { "name": "pilar-3", "id": "4" }],
+  "triggerCount": 1,
+  "versionId": "1"
+}

@@ -1,0 +1,75 @@
+{
+  "name": "Zero Risk — Social Multi-Platform Publisher",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "zero-risk/social-publish", "responseMode": "responseNode", "options": {} },
+      "id": "webhook", "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [200, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.content_brief) throw new Error('client_id and content_brief required');\nconst platforms = b.platforms || ['meta_facebook','meta_instagram','linkedin','x','tiktok','threads'];\nreturn [{ json: { task_id: `social_${Date.now()}`, client_id: b.client_id, content_brief: b.content_brief, platforms, schedule_at: b.schedule_at || null } }];"
+      },
+      "id": "validate", "name": "Validate", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [420, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"social_adapter\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Adapt content brief for platforms {{ JSON.stringify($json.platforms) }}. Respect limits: LinkedIn (3000c, professional, first-person), Instagram (caption 2200c+hashtags, hook in first 125c), X (280c, thread up to 8), TikTok (caption 300c + hook 3s script), Threads (500c, casual), Facebook (500c, community tone). Return JSON per platform with: caption, hashtags, mentions, media_prompt (for Ideogram), video_prompt (for Higgsfield if applicable), post_type, suggested_time (platform-optimal).\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": { \"brief\": {{ JSON.stringify($json.content_brief) }} }\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "adapt", "name": "Adapt Per Platform (Sonnet)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [680, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ideogram.ai/v1/ideogram-v3/generate",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Api-Key", "value": "={{ $env.IDEOGRAM_API_KEY }}" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"prompt\": \"Social assets for {{ $node['validate'].json.content_brief.theme || 'campaign' }}\", \"aspect_ratio\": \"1x1\", \"num_images\": {{ $node['validate'].json.platforms.length }} }",
+        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "assets", "name": "Generate Assets (Ideogram)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [940, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"type\": \"social_batch_review\", \"client_id\": \"{{ $node['validate'].json.client_id }}\", \"priority\": \"medium\", \"payload\": { \"adapted\": {{ JSON.stringify($node['adapt'].json) }}, \"assets\": {{ JSON.stringify($node['assets'].json) }} } }",
+        "options": {}
+      },
+      "id": "hitl", "name": "HITL Review", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [940, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/social/schedule-batch",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"task_id\": \"{{ $node['validate'].json.task_id }}\",\n  \"platforms\": {{ JSON.stringify($node['validate'].json.platforms) }},\n  \"content\": {{ JSON.stringify($node['adapt'].json) }},\n  \"assets\": {{ JSON.stringify($node['assets'].json) }},\n  \"schedule_at\": \"{{ $node['validate'].json.schedule_at }}\",\n  \"mode\": \"pending_hitl\"\n}",
+        "options": {}
+      },
+      "id": "schedule", "name": "Schedule Batch (pending)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1200, 380]
+    },
+    { "parameters": { "respondWith": "json", "responseBody": "={{ { task_id: $node['validate'].json.task_id, status: 'staged' } }}", "options": {} }, "id": "respond", "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [1460, 380] }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Validate", "type": "main", "index": 0 }]] },
+    "Validate": { "main": [[{ "node": "Adapt Per Platform (Sonnet)", "type": "main", "index": 0 }]] },
+    "Adapt Per Platform (Sonnet)": { "main": [[{ "node": "Generate Assets (Ideogram)", "type": "main", "index": 0 }, { "node": "HITL Review", "type": "main", "index": 0 }]] },
+    "Generate Assets (Ideogram)": { "main": [[{ "node": "Schedule Batch (pending)", "type": "main", "index": 0 }]] },
+    "HITL Review": { "main": [[{ "node": "Schedule Batch (pending)", "type": "main", "index": 0 }]] },
+    "Schedule Batch (pending)": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": [{ "name": "zero-risk", "id": "1" }, { "name": "tier-2", "id": "14" }, { "name": "social", "id": "22" }, { "name": "pilar-3", "id": "4" }],
+  "triggerCount": 1, "versionId": "1"
+}

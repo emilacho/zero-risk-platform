@@ -1,0 +1,120 @@
+{
+  "name": "Zero Risk — Competitive Intelligence 5-Layer Deep Scan",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "zero-risk/ci-deep-scan", "responseMode": "responseNode", "options": {} },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.competitor_name) throw new Error('client_id and competitor_name required');\nreturn [{ json: {\n  task_id: `ci_${Date.now()}`,\n  client_id: b.client_id,\n  competitor_name: b.competitor_name,\n  competitor_domain: b.competitor_domain || null,\n  competitor_meta_id: b.competitor_meta_id || null,\n  competitor_linkedin: b.competitor_linkedin || null,\n  industry: b.industry || null\n} }];"
+      },
+      "id": "validate", "name": "Validate", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [440, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apify~facebook-ads-library-scraper/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}&timeout=120",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"searchTerms\": [\"{{ $json.competitor_name }}\"], \"adActiveStatus\": \"all\", \"countryCode\": \"US\", \"maxItems\": 50 }",
+        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "layer1-meta", "name": "L1: Meta Ad Library", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [720, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/dataforseo_labs/google/competitors_domain/live",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Basic {{ $env.DATAFORSEO_AUTH }}" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "=[{ \"target\": \"{{ $json.competitor_domain }}\", \"location_code\": 2840, \"language_code\": \"en\", \"limit\": 100 }]",
+        "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "layer2-seo", "name": "L2: DataForSEO Competitors", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [720, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apify~linkedin-company-scraper/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"companies\": [\"{{ $json.competitor_linkedin }}\"], \"maxPosts\": 30 }",
+        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "layer3-social", "name": "L3: LinkedIn + Social", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [720, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/crawl",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.FIRECRAWL_API_KEY }}" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"url\": \"https://{{ $json.competitor_domain }}\", \"limit\": 80, \"scrapeOptions\": { \"formats\": [\"markdown\"], \"onlyMainContent\": true } }",
+        "options": { "timeout": 300000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "layer4-site", "name": "L4: Website Full Crawl", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [720, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/news",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "X-API-KEY", "value": "={{ $env.SERPER_API_KEY }}" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"q\": \"\\\"{{ $json.competitor_name }}\\\"\", \"tbs\": \"qdr:m\", \"num\": 30 }",
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "layer5-pr", "name": "L5: PR + News", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [720, 620]
+    },
+    { "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} }, "id": "merge", "name": "Merge 5 Layers", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [1000, 380] },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"competitive_strategist\",\n  \"model\": \"claude-opus-4-6\",\n  \"task\": \"Synthesize 5-layer CI on {{ $node['validate'].json.competitor_name }} for client {{ $node['validate'].json.client_id }}. Layers: (1) Paid Ads — creative themes, hooks, offers, spend estimates. (2) SEO — top organic keywords, content gaps, ranking domains. (3) Social — cadence, formats, top performing posts, employee advocacy. (4) Website — value prop evolution, pricing, funnel design, CRO patterns. (5) PR/News — announcements, funding, leadership, sentiment.\\n\\nDeliver: strategic threat assessment, exploitable weaknesses, counter-moves our client should make this quarter, and a 'steal-this' list of tactical wins. Be specific, quote examples.\",\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": { "timeout": 300000 }
+      },
+      "id": "strategist", "name": "Competitive Strategist (Opus)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1280, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/competitors/deep-report",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"task_id\": \"{{ $node['validate'].json.task_id }}\",\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"competitor_name\": \"{{ $node['validate'].json.competitor_name }}\",\n  \"raw\": {{ JSON.stringify($node['merge'].json) }},\n  \"synthesis\": {{ JSON.stringify($json) }}\n}",
+        "options": {}
+      },
+      "id": "persist", "name": "Persist Deep Report", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1560, 380]
+    },
+    { "parameters": { "respondWith": "json", "responseBody": "={{ { task_id: $node['validate'].json.task_id, status: 'complete' } }}", "options": {} }, "id": "respond", "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [1820, 380] }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Validate", "type": "main", "index": 0 }]] },
+    "Validate": { "main": [[{ "node": "L1: Meta Ad Library", "type": "main", "index": 0 }, { "node": "L2: DataForSEO Competitors", "type": "main", "index": 0 }, { "node": "L3: LinkedIn + Social", "type": "main", "index": 0 }, { "node": "L4: Website Full Crawl", "type": "main", "index": 0 }, { "node": "L5: PR + News", "type": "main", "index": 0 }]] },
+    "L1: Meta Ad Library": { "main": [[{ "node": "Merge 5 Layers", "type": "main", "index": 0 }]] },
+    "L2: DataForSEO Competitors": { "main": [[{ "node": "Merge 5 Layers", "type": "main", "index": 1 }]] },
+    "L3: LinkedIn + Social": { "main": [[{ "node": "Merge 5 Layers", "type": "main", "index": 2 }]] },
+    "L4: Website Full Crawl": { "main": [[{ "node": "Merge 5 Layers", "type": "main", "index": 3 }]] },
+    "L5: PR + News": { "main": [[{ "node": "Merge 5 Layers", "type": "main", "index": 4 }]] },
+    "Merge 5 Layers": { "main": [[{ "node": "Competitive Strategist (Opus)", "type": "main", "index": 0 }]] },
+    "Competitive Strategist (Opus)": { "main": [[{ "node": "Persist Deep Report", "type": "main", "index": 0 }]] },
+    "Persist Deep Report": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": [{ "name": "zero-risk", "id": "1" }, { "name": "tier-2", "id": "14" }, { "name": "competitive-intel", "id": "16" }, { "name": "pilar-5", "id": "6" }],
+  "triggerCount": 1, "versionId": "1"
+}

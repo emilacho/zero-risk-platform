@@ -1,0 +1,109 @@
+{
+  "name": "Zero Risk — Email Campaign Orchestrator",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "zero-risk/email-campaign", "responseMode": "responseNode", "options": {} },
+      "id": "webhook", "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [200, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.ghl_segment_id || !b.campaign_goal) throw new Error('client_id, ghl_segment_id, campaign_goal required');\nreturn [{ json: { task_id: `email_${Date.now()}`, client_id: b.client_id, ghl_segment_id: b.ghl_segment_id, campaign_goal: b.campaign_goal, num_emails: b.num_emails || 5, cadence_days: b.cadence_days || 3, from_name: b.from_name || null, from_email: b.from_email || null } }];"
+      },
+      "id": "validate", "name": "Validate", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [420, 360]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://services.leadconnectorhq.com/contacts/?locationId={{ $env.GHL_LOCATION_ID }}&segmentId={{ $json.ghl_segment_id }}&limit=500",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.GHL_ACCESS_TOKEN }}" }, { "name": "Version", "value": "2021-07-28" }] },
+        "options": { "timeout": 60000 }
+      },
+      "id": "segment", "name": "GHL Segment Fetch", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [680, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/client-brain/rag-search",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"client_id\": \"{{ $node['validate'].json.client_id }}\", \"query\": \"Brand voice, ICP, past high-performing emails, goal: {{ $node['validate'].json.campaign_goal }}\", \"k\": 20 }",
+        "options": {}
+      },
+      "id": "brain", "name": "Client Brain RAG", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [680, 480]
+    },
+    { "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} }, "id": "merge-ctx", "name": "Merge Context", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [960, 360] },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design {{ $node['validate'].json.num_emails }}-email series for goal '{{ $node['validate'].json.campaign_goal }}'. Per email: subject A/B (40c, 50c), preheader (90c), MJML body, plain-text, send_delay_days (from {{ $node['validate'].json.cadence_days }}d cadence), segment_rule (engaged/unengaged/opened_not_clicked). Build hero visual prompt for Ideogram per email. Include merge fields {{first_name}}, {{company}}.\",\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": { "timeout": 300000 }
+      },
+      "id": "compose", "name": "Compose Series (Sonnet)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1220, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ideogram.ai/v1/ideogram-v3/generate",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Api-Key", "value": "={{ $env.IDEOGRAM_API_KEY }}" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"prompt\": \"Email hero images for {{ $node['validate'].json.campaign_goal }} series\", \"aspect_ratio\": \"16x9\", \"num_images\": {{ $node['validate'].json.num_emails }} }",
+        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "heroes", "name": "Ideogram Heroes", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1500, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"email_series_review\",\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"priority\": \"high\",\n  \"summary\": \"Email series ({{ $node['validate'].json.num_emails }} emails) ready — goal {{ $node['validate'].json.campaign_goal }}\",\n  \"payload\": {{ JSON.stringify({ series: $node['compose'].json, heroes: $node['heroes'].json, segment: $node['segment'].json }) }}\n}",
+        "options": {}
+      },
+      "id": "hitl", "name": "Queue HITL", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1760, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.mailgun.net/v3/{{ $env.MAILGUN_DOMAIN }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [] },
+        "sendBody": true, "contentType": "multipart-form-data",
+        "bodyParameters": { "parameters": [
+          { "name": "from", "value": "={{ $node['validate'].json.from_name || 'Zero Risk' }} <{{ $node['validate'].json.from_email || 'no-reply@' + $env.MAILGUN_DOMAIN }}>" },
+          { "name": "to", "value": "={{ $json.contacts?.map(c => c.email).join(',') }}" },
+          { "name": "subject", "value": "={{ $json.email?.subject_a }}" },
+          { "name": "html", "value": "={{ $json.email?.html }}" },
+          { "name": "text", "value": "={{ $json.email?.plain_text }}" },
+          { "name": "o:tag", "value": "={{ $node['validate'].json.task_id }}" },
+          { "name": "o:deliverytime", "value": "={{ $json.email?.send_at }}" }
+        ]},
+        "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "send", "name": "Mailgun Batch Send (post-HITL)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2020, 480]
+    },
+    { "parameters": { "respondWith": "json", "responseBody": "={{ { task_id: $node['validate'].json.task_id, status: 'queued_for_review' } }}", "options": {} }, "id": "respond", "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [2020, 240] }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Validate", "type": "main", "index": 0 }]] },
+    "Validate": { "main": [[{ "node": "GHL Segment Fetch", "type": "main", "index": 0 }, { "node": "Client Brain RAG", "type": "main", "index": 0 }]] },
+    "GHL Segment Fetch": { "main": [[{ "node": "Merge Context", "type": "main", "index": 0 }]] },
+    "Client Brain RAG": { "main": [[{ "node": "Merge Context", "type": "main", "index": 1 }]] },
+    "Merge Context": { "main": [[{ "node": "Compose Series (Sonnet)", "type": "main", "index": 0 }]] },
+    "Compose Series (Sonnet)": { "main": [[{ "node": "Ideogram Heroes", "type": "main", "index": 0 }, { "node": "Queue HITL", "type": "main", "index": 0 }]] },
+    "Queue HITL": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": [{ "name": "zero-risk", "id": "1" }, { "name": "tier-2", "id": "14" }, { "name": "email", "id": "21" }, { "name": "pilar-3", "id": "4" }],
+  "triggerCount": 1, "versionId": "1"
+}

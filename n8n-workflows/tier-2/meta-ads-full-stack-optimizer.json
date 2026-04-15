@@ -1,0 +1,129 @@
+{
+  "name": "Zero Risk — Meta Ads Full-Stack Optimizer (Daily 3am)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 3 * * *" }] } },
+      "id": "cron",
+      "name": "Daily 3am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/meta-ads/campaigns?status=ACTIVE&days=7",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch",
+      "name": "Fetch Active Campaigns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 320]
+    },
+    { "parameters": { "fieldToSplitOut": "campaigns", "options": {} }, "id": "split", "name": "Split", "type": "n8n-nodes-base.splitOut", "typeVersion": 1, "position": [660, 320] },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v21.0/{{ $json.campaign_id }}/insights?fields=impressions,clicks,spend,cpc,ctr,actions,action_values,cost_per_action_type,frequency,reach,video_thruplay_watched_actions&date_preset=last_7d&level=ad&access_token={{ $env.META_ACCESS_TOKEN }}",
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "insights",
+      "name": "Meta Insights (ad-level)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ins = $json.data || [];\nconst campaign = $node['split'].json;\nlet flagged = [];\nlet winners = [];\nfor (const ad of ins) {\n  const spend = parseFloat(ad.spend || 0);\n  const clicks = parseInt(ad.clicks || 0);\n  const leads = (ad.actions || []).find(a => a.action_type === 'lead')?.value || 0;\n  const purch = (ad.actions || []).find(a => a.action_type === 'purchase')?.value || 0;\n  const rev = (ad.action_values || []).find(a => a.action_type === 'purchase')?.value || 0;\n  const cpl = leads > 0 ? spend / parseInt(leads) : null;\n  const roas = spend > 0 ? parseFloat(rev) / spend : 0;\n  const freq = parseFloat(ad.frequency || 0);\n  const ctr = parseFloat(ad.ctr || 0);\n  const threshold_cpl = campaign.target_cpl || 50;\n  const isUnder = (cpl !== null && cpl > threshold_cpl * 1.5) || (roas > 0 && roas < 1.5) || freq > 3.5 || ctr < 0.7;\n  const isWinner = (roas > 3 || (cpl !== null && cpl < threshold_cpl * 0.6)) && spend > 20;\n  const row = { ad_id: ad.ad_id, spend, cpl, roas, freq, ctr, leads: parseInt(leads), purchases: parseInt(purch), revenue: parseFloat(rev) };\n  if (isUnder) flagged.push(row); else if (isWinner) winners.push(row);\n}\nreturn [{ json: { campaign_id: campaign.campaign_id, campaign_name: campaign.campaign_name, client_id: campaign.client_id, flagged, winners, total_ads: ins.length } }];"
+      },
+      "id": "classify",
+      "name": "Classify Ads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"meta_agent\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Meta Ads full diagnostic for campaign {{ $json.campaign_name }}. Flagged ads: {{ JSON.stringify($json.flagged) }}. Winners: {{ JSON.stringify($json.winners) }}. For each flagged, identify root cause (creative fatigue/audience mismatch/landing misalignment/bid). Generate 5 fresh creative concepts (hooks 3s, body, CTA) ready for Ideogram+Copywriter. Propose A/B test matrix (2x2 or bandit), budget rebalancing (pause/shift/scale), audience expansions (lookalike seeds). Output structured JSON.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "diagnose",
+      "name": "Diagnose + Plan (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [{ "leftValue": "={{ $node['classify'].json.flagged.length }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }]
+        }
+      },
+      "id": "has-flagged",
+      "name": "Has Underperformers?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1660, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/meta-ads/apply-optimization",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"campaign_id\": \"{{ $node['classify'].json.campaign_id }}\",\n  \"client_id\": \"{{ $node['classify'].json.client_id }}\",\n  \"plan\": {{ JSON.stringify($json) }},\n  \"mode\": \"dry_run_then_hitl\"\n}",
+        "options": {}
+      },
+      "id": "apply",
+      "name": "Stage Optimization (HITL-gated)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"meta_ads_optimization\",\n  \"client_id\": \"{{ $node['classify'].json.client_id }}\",\n  \"priority\": \"high\",\n  \"summary\": \"Campaign {{ $node['classify'].json.campaign_name }}: {{ $node['classify'].json.flagged.length }} underperformers, {{ $node['classify'].json.winners.length }} winners. Plan staged for approval.\",\n  \"payload\": {{ JSON.stringify($json) }}\n}",
+        "options": {}
+      },
+      "id": "hitl",
+      "name": "Queue HITL Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2180, 200]
+    },
+    { "parameters": {}, "id": "noop", "name": "All Healthy", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1920, 440] }
+  ],
+  "connections": {
+    "Daily 3am": { "main": [[{ "node": "Fetch Active Campaigns", "type": "main", "index": 0 }]] },
+    "Fetch Active Campaigns": { "main": [[{ "node": "Split", "type": "main", "index": 0 }]] },
+    "Split": { "main": [[{ "node": "Meta Insights (ad-level)", "type": "main", "index": 0 }]] },
+    "Meta Insights (ad-level)": { "main": [[{ "node": "Classify Ads", "type": "main", "index": 0 }]] },
+    "Classify Ads": { "main": [[{ "node": "Diagnose + Plan (Sonnet)", "type": "main", "index": 0 }]] },
+    "Diagnose + Plan (Sonnet)": { "main": [[{ "node": "Has Underperformers?", "type": "main", "index": 0 }]] },
+    "Has Underperformers?": { "main": [[{ "node": "Stage Optimization (HITL-gated)", "type": "main", "index": 0 }], [{ "node": "All Healthy", "type": "main", "index": 0 }]] },
+    "Stage Optimization (HITL-gated)": { "main": [[{ "node": "Queue HITL Approval", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": [{ "name": "zero-risk", "id": "1" }, { "name": "tier-2", "id": "14" }, { "name": "meta-ads", "id": "18" }, { "name": "pilar-5", "id": "6" }],
+  "triggerCount": 1,
+  "versionId": "1"
+}

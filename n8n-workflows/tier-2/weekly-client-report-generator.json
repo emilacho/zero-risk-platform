@@ -1,0 +1,158 @@
+{
+  "name": "Zero Risk — Weekly Client Report Generator (Mondays 9am)",
+  "nodes": [
+    { "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 9 * * 1" }] } }, "id": "cron", "name": "Monday 9am", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [200, 380] },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/clients?status=active",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "options": {}
+      },
+      "id": "fetch", "name": "Fetch Active Clients", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [420, 380]
+    },
+    { "parameters": { "fieldToSplitOut": "clients", "options": {} }, "id": "split", "name": "Split", "type": "n8n-nodes-base.splitOut", "typeVersion": 1, "position": [660, 380] },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/ghl/summary?client_id={{ $json.id }}&days=7",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "ghl", "name": "GHL Summary", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 120]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v21.0/{{ $json.meta_ad_account_id }}/insights?fields=spend,impressions,clicks,ctr,cpc,actions,action_values&date_preset=last_7d&access_token={{ $env.META_ACCESS_TOKEN }}",
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "meta", "name": "Meta Ads 7d", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://analyticsdata.googleapis.com/v1beta/properties/{{ $json.ga4_property_id }}:runReport",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.GOOGLE_ACCESS_TOKEN }}" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"dateRanges\": [{ \"startDate\": \"7daysAgo\", \"endDate\": \"today\" }], \"metrics\": [{ \"name\": \"sessions\" }, { \"name\": \"totalUsers\" }, { \"name\": \"conversions\" }, { \"name\": \"engagementRate\" }], \"dimensions\": [{ \"name\": \"sessionDefaultChannelGroup\" }] }",
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "ga4", "name": "GA4 Report", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 360]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.mailgun.net/v3/{{ $env.MAILGUN_DOMAIN }}/stats/total?event=delivered&event=opened&event=clicked&duration=7d",
+        "authentication": "genericCredentialType", "genericAuthType": "httpBasicAuth",
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "mailgun", "name": "Mailgun Stats", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 480]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/reviews/weekly-summary?client_id={{ $json.id }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "reviews", "name": "Reviews Weekly", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/social/weekly-metrics?client_id={{ $json.id }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "social", "name": "Social Weekly", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 720]
+    },
+    { "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} }, "id": "merge", "name": "Merge Data", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [1180, 420] },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"client_analyst\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Produce executive weekly report for client {{ $node['split'].json.name }}. Structure: (1) TL;DR — 3 headline numbers with WoW delta. (2) Channel performance — Meta, SEO/Organic, Email, Social — each with metric table + plain-English 'what it means'. (3) Pipeline — new leads, qualified, opps, closed won $, pipeline $. (4) Reputation snapshot. (5) Wins — 3 highlights. (6) Risks — 3 flags with mitigation. (7) Next week plan — 5 concrete actions we will take. White-label tone (no agency jargon, no 'we used Claude').\",\n  \"client_id\": \"{{ $node['split'].json.id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": { "timeout": 240000 }
+      },
+      "id": "analyst", "name": "Analyst Agent (Sonnet)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1440, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/reports/render-pdf",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['split'].json.id }}\",\n  \"client_name\": \"{{ $node['split'].json.name }}\",\n  \"week_ending\": \"{{ $now.toISO() }}\",\n  \"content\": {{ JSON.stringify($json) }},\n  \"white_label\": true,\n  \"template\": \"executive_weekly\"\n}",
+        "options": { "timeout": 90000 }
+      },
+      "id": "pdf", "name": "Render PDF (Puppeteer)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1700, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/reports/publish-notion",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"client_id\": \"{{ $node['split'].json.id }}\", \"content\": {{ JSON.stringify($node['analyst'].json) }} }",
+        "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "notion", "name": "Publish Notion Page", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1700, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.mailgun.net/v3/{{ $env.MAILGUN_DOMAIN }}/messages",
+        "authentication": "genericCredentialType", "genericAuthType": "httpBasicAuth",
+        "sendBody": true, "contentType": "multipart-form-data",
+        "bodyParameters": { "parameters": [
+          { "name": "from", "value": "={{ $node['split'].json.report_from_name || 'Your Account Team' }} <reports@{{ $env.MAILGUN_DOMAIN }}>" },
+          { "name": "to", "value": "={{ $node['split'].json.report_recipients }}" },
+          { "name": "subject", "value": "=Weekly Report — {{ $node['split'].json.name }} ({{ $now.toFormat('LLL dd') }})" },
+          { "name": "html", "value": "={{ $node['analyst'].json.html || $node['analyst'].json.response }}" },
+          { "name": "attachment", "value": "={{ $json.pdf_url }}" }
+        ]},
+        "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "email", "name": "Deliver via Mailgun", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1960, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/reports/persist",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"client_id\": \"{{ $node['split'].json.id }}\", \"content\": {{ JSON.stringify($node['analyst'].json) }}, \"pdf_url\": \"{{ $node['pdf'].json.pdf_url }}\", \"notion_url\": \"{{ $node['notion'].json.url }}\", \"delivered_at\": \"{{ $now.toISO() }}\" }",
+        "options": {}
+      },
+      "id": "persist", "name": "Persist Report", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2220, 400]
+    }
+  ],
+  "connections": {
+    "Monday 9am": { "main": [[{ "node": "Fetch Active Clients", "type": "main", "index": 0 }]] },
+    "Fetch Active Clients": { "main": [[{ "node": "Split", "type": "main", "index": 0 }]] },
+    "Split": { "main": [[{ "node": "GHL Summary", "type": "main", "index": 0 }, { "node": "Meta Ads 7d", "type": "main", "index": 0 }, { "node": "GA4 Report", "type": "main", "index": 0 }, { "node": "Mailgun Stats", "type": "main", "index": 0 }, { "node": "Reviews Weekly", "type": "main", "index": 0 }, { "node": "Social Weekly", "type": "main", "index": 0 }]] },
+    "GHL Summary": { "main": [[{ "node": "Merge Data", "type": "main", "index": 0 }]] },
+    "Meta Ads 7d": { "main": [[{ "node": "Merge Data", "type": "main", "index": 1 }]] },
+    "GA4 Report": { "main": [[{ "node": "Merge Data", "type": "main", "index": 2 }]] },
+    "Mailgun Stats": { "main": [[{ "node": "Merge Data", "type": "main", "index": 3 }]] },
+    "Reviews Weekly": { "main": [[{ "node": "Merge Data", "type": "main", "index": 4 }]] },
+    "Social Weekly": { "main": [[{ "node": "Merge Data", "type": "main", "index": 5 }]] },
+    "Merge Data": { "main": [[{ "node": "Analyst Agent (Sonnet)", "type": "main", "index": 0 }]] },
+    "Analyst Agent (Sonnet)": { "main": [[{ "node": "Render PDF (Puppeteer)", "type": "main", "index": 0 }, { "node": "Publish Notion Page", "type": "main", "index": 0 }]] },
+    "Render PDF (Puppeteer)": { "main": [[{ "node": "Deliver via Mailgun", "type": "main", "index": 0 }]] },
+    "Publish Notion Page": { "main": [[{ "node": "Deliver via Mailgun", "type": "main", "index": 0 }]] },
+    "Deliver via Mailgun": { "main": [[{ "node": "Persist Report", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": [{ "name": "zero-risk", "id": "1" }, { "name": "tier-2", "id": "14" }, { "name": "reporting", "id": "23" }, { "name": "pilar-5", "id": "6" }],
+  "triggerCount": 1, "versionId": "1"
+}
