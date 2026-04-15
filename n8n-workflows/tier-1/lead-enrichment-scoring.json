@@ -1,0 +1,199 @@
+{
+  "name": "Zero Risk — Lead Enrichment & Scoring (Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/lead-enrich",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: GHL New Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 320],
+      "webhookId": "zero-risk-lead-enrich"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.email) throw new Error('Missing email');\nreturn [{ json: { email: b.email, name: b.name || '', company: b.company || '', phone: b.phone || '', source: b.source || 'ghl', contact_id: b.contact_id || b.id || null } }];"
+      },
+      "id": "validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apollo.io/v1/people/match?email={{ encodeURIComponent($json.email) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Api-Key", "value": "={{ $env.APOLLO_API_KEY }}" },
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": { "timeout": 20000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "apollo",
+      "name": "Apollo Enrich",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-KEY", "value": "={{ $env.SERPER_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"q\": \"site:linkedin.com/in \\\"{{ $node['Validate'].json.name }}\\\" \\\"{{ $node['Validate'].json.company }}\\\"\",\n  \"num\": 3\n}",
+        "options": { "timeout": 15000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "serper",
+      "name": "Serper LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $node['Validate'].json;\nconst apollo = $node['Apollo Enrich'].json?.person || {};\nconst serper = $node['Serper LinkedIn'].json?.organic || [];\n\nconst industry = apollo.organization?.industry || '';\nconst companySize = apollo.organization?.estimated_num_employees || 0;\nconst title = (apollo.title || '').toLowerCase();\nconst linkedIn = apollo.linkedin_url || (serper[0]?.link?.includes('linkedin.com/in') ? serper[0].link : '');\nconst domain = (lead.email.split('@')[1] || '').toLowerCase();\nconst freeMail = ['gmail.com','yahoo.com','hotmail.com','outlook.com','icloud.com'].includes(domain);\n\nlet score = 0;\nconst factors = [];\n// ICP size match (placeholder: 50-500 employees)\nif (companySize >= 50 && companySize <= 500) { score += 30; factors.push('icp_size'); }\n// Industry placeholder — real match should come from client ICP config\nif (industry) { score += 25; factors.push('industry_known'); }\n// Senior title\nif (/director|vp|chief|head|founder|ceo|cto|cmo|owner/.test(title)) { score += 20; factors.push('senior_title'); }\n// LinkedIn validated\nif (linkedIn) { score += 15; factors.push('linkedin_ok'); }\n// Corporate email\nif (!freeMail) { score += 10; factors.push('corp_email'); }\n\nconst bucket = score >= 70 ? 'hot' : score >= 40 ? 'nurture' : 'cold';\n\nreturn [{ json: {\n  ...lead,\n  enrichment: { industry, company_size: companySize, title: apollo.title || '', linkedin: linkedIn, seniority: apollo.seniority || null },\n  score,\n  bucket,\n  factors\n} }];"
+      },
+      "id": "score",
+      "name": "Score Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 320]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.bucket }}", "rightValue": "hot", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "hot" },
+            { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.bucket }}", "rightValue": "nurture", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "nurture" },
+            { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.bucket }}", "rightValue": "cold", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "cold" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "router",
+      "name": "Route by Bucket",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1160, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/pipeline/start",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"lead\": {{ JSON.stringify($json) }},\n  \"priority\": \"hot\"\n}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "pipeline-hot",
+      "name": "Start Pipeline (Hot)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/ghl/tag",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"tag\": \"nurture\"\n}",
+        "options": {}
+      },
+      "id": "ghl-nurture",
+      "name": "GHL Tag: Nurture",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/ghl/tag",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"tag\": \"cold\"\n}",
+        "options": {}
+      },
+      "id": "ghl-cold",
+      "name": "GHL Tag: Cold",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 460]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🎯 Lead scored\\n• Email: {{ $node['Score Lead'].json.email }}\\n• Score: {{ $node['Score Lead'].json.score }} ({{ $node['Score Lead'].json.bucket }})\\n• Company: {{ $node['Score Lead'].json.company }}\\n• Title: {{ $node['Score Lead'].json.enrichment.title }}\"\n}",
+        "options": {}
+      },
+      "id": "slack",
+      "name": "Slack Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1640, 320]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"score\": {{ $node['Score Lead'].json.score }},\n  \"bucket\": \"{{ $node['Score Lead'].json.bucket }}\"\n}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1880, 320]
+    }
+  ],
+  "connections": {
+    "Webhook: GHL New Lead": { "main": [[{ "node": "Validate", "type": "main", "index": 0 }]] },
+    "Validate": { "main": [[{ "node": "Apollo Enrich", "type": "main", "index": 0 }, { "node": "Serper LinkedIn", "type": "main", "index": 0 }]] },
+    "Apollo Enrich": { "main": [[{ "node": "Score Lead", "type": "main", "index": 0 }]] },
+    "Serper LinkedIn": { "main": [[{ "node": "Score Lead", "type": "main", "index": 0 }]] },
+    "Score Lead": { "main": [[{ "node": "Route by Bucket", "type": "main", "index": 0 }]] },
+    "Route by Bucket": {
+      "main": [
+        [{ "node": "Start Pipeline (Hot)", "type": "main", "index": 0 }],
+        [{ "node": "GHL Tag: Nurture", "type": "main", "index": 0 }],
+        [{ "node": "GHL Tag: Cold", "type": "main", "index": 0 }]
+      ]
+    },
+    "Start Pipeline (Hot)": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
+    "GHL Tag: Nurture": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
+    "GHL Tag: Cold": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
+    "Slack Notify": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": [{ "name": "zero-risk", "id": "1" }, { "name": "pilar-3", "id": "4" }, { "name": "tier-1", "id": "13" }],
+  "triggerCount": 1,
+  "versionId": "1"
+}
