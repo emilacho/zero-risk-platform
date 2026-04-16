@@ -1,0 +1,30 @@
+-- ============================================================
+-- ZERO RISK V3 — Sample Data: First Client
+-- Seguridad Industrial Pérez (Emilio & Xavier Pérez)
+-- Ecuador — Industrial Safety B2B
+--
+-- This file contains sample data for the Client Brain tables.
+-- Client ID: 5c2d2dd5-a49e-4da3-87c3-03b504b734f6
+-- Idempotent: safe to re-run (ON CONFLICT for client, INSERTs for others)
+--
+-- Data included:
+--   - 1 client record
+--   - 1 brand book (voice, tone, guardrails, messaging)
+--   - 2 ICP segments (HSE Manager + PYME Owner)
+--   - 6 VOC entries (customer quotes with sentiment)
+--   - 1 competitor (3M Ecuador)
+--
+-- After inserting, run prepare_*_content() functions to build
+-- content_text, then call generate-embedding Edge Function to
+-- create vector embeddings for semantic search.
+-- ============================================================
+
+-- Client record created via SQL: 2024-04-11
+-- See original INSERT statements in conversation session log.
+-- Client slug: seguridad-industrial-perez
+
+-- To prepare content_text for all rows:
+-- SELECT prepare_brand_book_content(id) FROM client_brand_books WHERE client_id = '5c2d2dd5-a49e-4da3-87c3-03b504b734f6';
+-- SELECT prepare_icp_content(id) FROM client_icp_documents WHERE client_id = '5c2d2dd5-a49e-4da3-87c3-03b504b734f6';
+-- SELECT prepare_voc_content(id) FROM client_voc_library WHERE client_id = '5c2d2dd5-a49e-4da3-87c3-03b504b734f6';
+-- SELECT prepare_competitor_content(id) FROM client_competitive_landscape WHERE client_id = '5c2d2dd5-a49e-4da3-87c3-03b504b734f6';

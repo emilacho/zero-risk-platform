@@ -59,10 +59,18 @@ export interface AgentRunResult {
 
 // ---------- Model mapping ----------
 
+// Accepts both the legacy short keys (used by the `agents` table) and the
+// full model IDs stored in `managed_agents_registry.default_model` (which is
+// constrained by CHECK to {claude-haiku-4-5, claude-sonnet-4-6, claude-opus-4-6}).
 const MODEL_MAP: Record<string, string> = {
+  // legacy short keys
   'claude-haiku': 'claude-haiku-4-5-20251001',
   'claude-sonnet': 'claude-sonnet-4-6',
   'claude-opus': 'claude-opus-4-6',
+  // registry full names
+  'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
+  'claude-sonnet-4-6': 'claude-sonnet-4-6',
+  'claude-opus-4-6': 'claude-opus-4-6',
 }
 
 // Precios (USD / 1M tokens) Sonnet 4.6 — ajustar por modelo si hace falta
@@ -84,26 +92,77 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   const startedAt = Date.now()
   const supabase = getSupabaseAdmin()
 
-  // 1. Cargar identidad + skills desde Supabase (misma lógica que runner antiguo).
-  const { data: agentCfg, error: agentErr } = await supabase
+  // 0. Resolve alias → canonical slug via managed_agents_registry.
+  //    n8n workflows may send legacy snake_case slugs (e.g. "backlink_strategist");
+  //    the registry maps them to the canonical kebab-case slug
+  //    (e.g. "seo-backlink-strategist").
+  //    The registry is the source of truth for identity_md (production-safe,
+  //    no filesystem reads on Vercel).
+  let canonicalSlug = input.agentName
+  let registryRow: {
+    slug: string
+    display_name: string
+    default_model: string
+    identity_md: string | null
+  } | null = null
+  {
+    const { data: regRows } = await supabase
+      .from('managed_agents_registry')
+      .select('slug, display_name, default_model, identity_md, aliases')
+      .eq('status', 'active')
+      .or(`slug.eq.${input.agentName},aliases.cs.{"${input.agentName}"}`)
+      .limit(1)
+    const row = regRows?.[0]
+    if (row) {
+      canonicalSlug = row.slug
+      registryRow = {
+        slug: row.slug,
+        display_name: row.display_name,
+        default_model: row.default_model,
+        identity_md: row.identity_md ?? null,
+      }
+    }
+  }
+
+  // 1. Try the legacy `agents` table (still authoritative for the 27 agents
+  //    seeded in V1/V2 with proper identity_content + skills wiring).
+  let { data: agentCfg } = await supabase
     .from('agents')
     .select('*')
-    .eq('name', input.agentName)
-    .single()
+    .eq('name', canonicalSlug)
+    .maybeSingle()
 
-  if (agentErr || !agentCfg) {
-    return fail(`Agent "${input.agentName}" not found`, startedAt)
+  // 1b. Fallback: synthesize a minimal config from the registry row.
+  //     identity_md must be populated by `scripts/sync-registry-identities.ts`
+  //     before deploying — otherwise we error out cleanly.
+  if (!agentCfg && registryRow?.identity_md) {
+    agentCfg = {
+      id: null,
+      name: registryRow.slug,
+      display_name: registryRow.display_name,
+      identity_content: registryRow.identity_md,
+      model: registryRow.default_model,
+    }
+  }
+
+  if (!agentCfg) {
+    const hint = registryRow
+      ? `registry row exists but identity_md is empty — run scripts/sync-registry-identities.ts`
+      : `slug not found in registry`
+    return fail(`Agent "${input.agentName}" (resolved to "${canonicalSlug}") not loadable: ${hint}`, startedAt)
   }
 
   if (!agentCfg.identity_content || agentCfg.identity_content.startsWith('Loaded from filesystem')) {
-    return fail(`Agent "${input.agentName}" has no identity_content loaded`, startedAt)
+    return fail(`Agent "${canonicalSlug}" has no identity_content loaded`, startedAt)
   }
 
-  const { data: skillRows } = await supabase
-    .from('agent_skill_assignments')
-    .select('priority, agent_skills(skill_name, skill_content)')
-    .eq('agent_id', agentCfg.id)
-    .order('priority', { ascending: true })
+  const { data: skillRows } = agentCfg.id
+    ? await supabase
+        .from('agent_skill_assignments')
+        .select('priority, agent_skills(skill_name, skill_content)')
+        .eq('agent_id', agentCfg.id)
+        .order('priority', { ascending: true })
+    : { data: [] as Array<{ priority: number; agent_skills: { skill_name: string; skill_content: string } | { skill_name: string; skill_content: string }[] }> }
 
   const skills: { name: string; content: string }[] = []
   for (const sa of skillRows ?? []) {
@@ -149,7 +208,13 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
             args: [
               require('path').resolve(process.cwd(), 'src/lib/mcp/client-brain-server.js'),
             ],
-            env: { CLIENT_ID: input.clientId },
+            env: {
+              CLIENT_ID: input.clientId,
+              SUPABASE_URL: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+              SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+              // Inherit PATH for node resolution
+              PATH: process.env.PATH || '',
+            },
           },
         }
       : {},
@@ -188,7 +253,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   supabase
     .from('agents_log')
     .insert({
-      agent_name: input.agentName,
+      agent_name: canonicalSlug,
       action: 'agent_sdk_run',
       input: {
         task: input.task.substring(0, 200),
@@ -208,8 +273,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       duration_ms: durationMs,
       cost: costUsd,
     })
-    .then(() => {})
-    .catch(() => {})
+    .then(() => { /* best-effort log */ })
 
   return {
     success: true,

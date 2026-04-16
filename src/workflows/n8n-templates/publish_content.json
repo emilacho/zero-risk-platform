@@ -1,0 +1,145 @@
+{
+  "name": "Zero Risk — Publish Content (Pipeline Step 6)",
+  "description": "Mechanical workflow: receives approved content from pipeline HITL step, publishes to configured channels. Triggered by webhook from Pipeline Orchestrator.",
+  "version": "1.0",
+  "trigger": "webhook",
+  "nodes": [
+    {
+      "id": "webhook_trigger",
+      "type": "webhook",
+      "name": "Pipeline Webhook",
+      "config": {
+        "path": "/publish-content",
+        "method": "POST",
+        "authentication": "headerAuth",
+        "notes": "Receives: { pipeline_id, client_id, step_name, content, objective }"
+      }
+    },
+    {
+      "id": "parse_content",
+      "type": "code",
+      "name": "Parse & Route Content",
+      "config": {
+        "language": "javascript",
+        "code": "// Parse the approved content and determine which channels to publish to\nconst input = $input.first().json;\nconst content = input.content || '';\nconst channels = [];\n\n// Detect content types from the combined agent outputs\nif (content.includes('## social-media-strategist') || content.includes('## content-creator')) {\n  channels.push('social');\n}\nif (content.includes('## email-marketer')) {\n  channels.push('email');\n}\nif (content.includes('## media-buyer')) {\n  channels.push('meta_ads');\n}\nif (content.includes('## web-designer')) {\n  channels.push('landing_page');\n}\n\nreturn [{ json: { ...input, channels, channel_count: channels.length } }];"
+      }
+    },
+    {
+      "id": "switch_channels",
+      "type": "switch",
+      "name": "Route by Channel",
+      "config": {
+        "rules": [
+          { "value": "social", "output": "social_publish" },
+          { "value": "email", "output": "email_send" },
+          { "value": "meta_ads", "output": "meta_ads_create" },
+          { "value": "landing_page", "output": "landing_deploy" }
+        ],
+        "notes": "Each channel gets its own sub-workflow branch"
+      }
+    },
+    {
+      "id": "social_publish",
+      "type": "httpRequest",
+      "name": "Publish to Social (Metricool API)",
+      "config": {
+        "url": "https://app.metricool.com/api/v1/posts",
+        "method": "POST",
+        "authentication": "headerAuth",
+        "headers": { "Authorization": "Bearer {{$env.METRICOOL_API_KEY}}" },
+        "notes": "Metricool API for multi-platform social posting"
+      }
+    },
+    {
+      "id": "email_send",
+      "type": "httpRequest",
+      "name": "Send Email (Mailgun)",
+      "config": {
+        "url": "https://api.mailgun.net/v3/{{$env.MAILGUN_DOMAIN}}/messages",
+        "method": "POST",
+        "authentication": "basicAuth",
+        "notes": "Mailgun API — 98.6% deliverability"
+      }
+    },
+    {
+      "id": "meta_ads_create",
+      "type": "httpRequest",
+      "name": "Create Meta Ad (Marketing API)",
+      "config": {
+        "url": "https://graph.facebook.com/v21.0/act_{{$env.META_AD_ACCOUNT_ID}}/ads",
+        "method": "POST",
+        "headers": { "Authorization": "Bearer {{$env.META_SYSTEM_USER_TOKEN}}" },
+        "notes": "Facebook Marketing API v21.0 — direct via System User Token"
+      }
+    },
+    {
+      "id": "landing_deploy",
+      "type": "httpRequest",
+      "name": "Deploy Landing (Vercel API)",
+      "config": {
+        "url": "https://api.vercel.com/v13/deployments",
+        "method": "POST",
+        "headers": { "Authorization": "Bearer {{$env.VERCEL_TOKEN}}" },
+        "notes": "Trigger Vercel deployment for new landing page"
+      }
+    },
+    {
+      "id": "log_to_supabase",
+      "type": "httpRequest",
+      "name": "Log Publication Results",
+      "config": {
+        "url": "{{$env.SUPABASE_URL}}/rest/v1/client_historical_outputs",
+        "method": "POST",
+        "headers": {
+          "apikey": "{{$env.SUPABASE_SERVICE_KEY}}",
+          "Authorization": "Bearer {{$env.SUPABASE_SERVICE_KEY}}",
+          "Content-Type": "application/json"
+        },
+        "notes": "Store publication record in Client Brain historical_outputs"
+      }
+    },
+    {
+      "id": "notify_slack",
+      "type": "httpRequest",
+      "name": "Notify Slack #zr-publications",
+      "config": {
+        "url": "{{$env.SLACK_WEBHOOK_PUBLICATIONS}}",
+        "method": "POST",
+        "body": {
+          "text": "📢 Content published for pipeline {{pipeline_id}}: {{channels}} channels"
+        }
+      }
+    },
+    {
+      "id": "respond_webhook",
+      "type": "respondToWebhook",
+      "name": "Return Result",
+      "config": {
+        "responseCode": 200,
+        "responseBody": "{ \"success\": true, \"message\": \"Content published\", \"channels\": \"{{channels}}\" }"
+      }
+    }
+  ],
+  "connections": {
+    "webhook_trigger": ["parse_content"],
+    "parse_content": ["switch_channels"],
+    "switch_channels": ["social_publish", "email_send", "meta_ads_create", "landing_deploy"],
+    "social_publish": ["log_to_supabase"],
+    "email_send": ["log_to_supabase"],
+    "meta_ads_create": ["log_to_supabase"],
+    "landing_deploy": ["log_to_supabase"],
+    "log_to_supabase": ["notify_slack"],
+    "notify_slack": ["respond_webhook"]
+  },
+  "env_vars_required": [
+    "METRICOOL_API_KEY",
+    "MAILGUN_DOMAIN",
+    "MAILGUN_API_KEY",
+    "META_AD_ACCOUNT_ID",
+    "META_SYSTEM_USER_TOKEN",
+    "VERCEL_TOKEN",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_KEY",
+    "SLACK_WEBHOOK_PUBLICATIONS"
+  ]
+}

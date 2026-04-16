@@ -1,0 +1,82 @@
+{
+  "name": "Zero Risk — Chief of Staff Daily Briefing",
+  "description": "Cron workflow: runs daily at 7AM CET. Gathers pipeline status, pending HITLs, costs, and sends briefing to Emilio via Slack.",
+  "version": "1.0",
+  "trigger": "cron",
+  "nodes": [
+    {
+      "id": "cron_trigger",
+      "type": "cron",
+      "name": "Daily 7AM CET",
+      "config": {
+        "expression": "0 7 * * *",
+        "timezone": "Europe/Zurich"
+      }
+    },
+    {
+      "id": "get_active_pipelines",
+      "type": "httpRequest",
+      "name": "Get Active Pipelines",
+      "config": {
+        "url": "{{$env.BASE_URL}}/api/pipeline/status",
+        "method": "GET",
+        "notes": "Returns all recent pipelines with status"
+      }
+    },
+    {
+      "id": "get_pending_hitl",
+      "type": "httpRequest",
+      "name": "Get Pending HITL Items",
+      "config": {
+        "url": "{{$env.BASE_URL}}/api/hitl/pending",
+        "method": "GET"
+      }
+    },
+    {
+      "id": "get_costs_24h",
+      "type": "httpRequest",
+      "name": "Get 24h Costs from Supabase",
+      "config": {
+        "url": "{{$env.SUPABASE_URL}}/rest/v1/rpc/get_daily_costs",
+        "method": "POST",
+        "headers": {
+          "apikey": "{{$env.SUPABASE_SERVICE_KEY}}",
+          "Authorization": "Bearer {{$env.SUPABASE_SERVICE_KEY}}"
+        },
+        "notes": "Custom RPC function that sums pipeline costs for last 24h"
+      }
+    },
+    {
+      "id": "build_briefing",
+      "type": "code",
+      "name": "Build Briefing Message",
+      "config": {
+        "language": "javascript",
+        "code": "const pipelines = $node.get_active_pipelines.json.pipelines || [];\nconst hitl = $node.get_pending_hitl.json;\nconst costs = $node.get_costs_24h.json;\n\nconst running = pipelines.filter(p => p.status === 'running').length;\nconst paused = pipelines.filter(p => p.status === 'paused_hitl').length;\nconst completed = pipelines.filter(p => p.status === 'completed').length;\n\nlet msg = '☀️ *Buenos días, Emilio — Zero Risk Daily Briefing*\\n\\n';\nmsg += `📊 *Pipelines:* ${running} activos, ${paused} esperando HITL, ${completed} completados (24h)\\n`;\nmsg += `💰 *Costos 24h:* $${(costs?.total_cost || 0).toFixed(2)} (${costs?.total_tokens || 0} tokens)\\n`;\n\nif (hitl.pending_count > 0) {\n  msg += `\\n⚠️ *${hitl.pending_count} items esperando tu aprobación:*\\n`;\n  for (const item of hitl.items.slice(0, 5)) {\n    msg += `  • ${item.step_name} — ${item.client} — ${item.objective.substring(0, 50)}\\n`;\n  }\n}\n\nif (running === 0 && paused === 0 && hitl.pending_count === 0) {\n  msg += '\\n✅ Todo en orden. No hay acciones pendientes.';\n}\n\nreturn [{ json: { text: msg } }];"
+      }
+    },
+    {
+      "id": "send_slack",
+      "type": "httpRequest",
+      "name": "Send to Slack #zr-briefing",
+      "config": {
+        "url": "{{$env.SLACK_WEBHOOK_BRIEFING}}",
+        "method": "POST",
+        "body": "{{$node.build_briefing.json}}"
+      }
+    }
+  ],
+  "connections": {
+    "cron_trigger": ["get_active_pipelines", "get_pending_hitl", "get_costs_24h"],
+    "get_active_pipelines": ["build_briefing"],
+    "get_pending_hitl": ["build_briefing"],
+    "get_costs_24h": ["build_briefing"],
+    "build_briefing": ["send_slack"]
+  },
+  "env_vars_required": [
+    "BASE_URL",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_KEY",
+    "SLACK_WEBHOOK_BRIEFING"
+  ]
+}

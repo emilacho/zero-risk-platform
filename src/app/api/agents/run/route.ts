@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString } from '@/lib/validation'
+import { buildAgentContext } from '@/lib/client-brain'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -10,11 +11,14 @@ import { sanitizeString } from '@/lib/validation'
 //   task: "Instrucción para el agente"
 //   context?: {
 //     chain?: Array<{ agent: string, output: string }>  // outputs previos en la pipeline
-//     skills_filter?: string[]  // solo cargar estos skills (reduce tokens)
-//     client_industry?: string  // industria del cliente actual
+//     client_id?: string          // UUID → activa Client Brain RAG (guardrails + semantic search)
+//     rag_query?: string          // query específico para RAG (default: usa task)
+//     rag_match_count?: number    // resultados RAG a traer (default: 5)
+//     skills_filter?: string[]    // solo cargar estos skills (reduce tokens)
+//     client_industry?: string    // industria del cliente actual
 //     extra?: Record<string, unknown>
 //   }
-//   caller?: "n8n" | "jarvis" | "api"
+//   caller?: "n8n" | "pipeline" | "api"
 // }
 
 // Model mapping
@@ -49,25 +53,78 @@ export async function POST(request: Request) {
       )
     }
 
-    // --- Load agent from Supabase (única fuente de verdad) ---
+    // --- Load agent from Supabase (registry + legacy table) ---
     const supabase = getSupabaseAdmin()
 
-    const { data: agentConfig, error: agentError } = await supabase
+    // 0. Resolve alias → canonical slug via managed_agents_registry.
+    //    n8n workflows may send legacy snake_case slugs (e.g. "backlink_strategist");
+    //    the registry maps them to the canonical kebab-case slug.
+    //    Registry is the source of truth for identity_md (production-safe).
+    let canonicalSlug = agentName
+    let registryRow: {
+      slug: string
+      display_name: string
+      default_model: string
+      identity_md: string | null
+    } | null = null
+    {
+      const { data: regRows } = await supabase
+        .from('managed_agents_registry')
+        .select('slug, display_name, default_model, identity_md, aliases')
+        .eq('status', 'active')
+        .or(`slug.eq.${agentName},aliases.cs.{"${agentName}"}`)
+        .limit(1)
+      const row = regRows?.[0]
+      if (row) {
+        canonicalSlug = row.slug
+        registryRow = {
+          slug: row.slug,
+          display_name: row.display_name,
+          default_model: row.default_model,
+          identity_md: row.identity_md ?? null,
+        }
+      }
+    }
+
+    // 1. Try the legacy `agents` table first (has skills wiring).
+    let agentConfig = (await supabase
       .from('agents')
       .select('*')
-      .eq('name', agentName)
-      .single()
+      .eq('name', canonicalSlug)
+      .maybeSingle()).data as Record<string, unknown> | null
 
-    if (agentError || !agentConfig) {
+    // 1b. Fallback: synthesize config from managed_agents_registry.
+    if (!agentConfig && registryRow?.identity_md) {
+      agentConfig = {
+        id: null,
+        name: registryRow.slug,
+        display_name: registryRow.display_name,
+        identity_content: registryRow.identity_md,
+        model: registryRow.default_model,
+      }
+    }
+
+    // 1c. Override identity_content from registry if legacy table has stale data.
+    if (agentConfig && registryRow?.identity_md) {
+      const legacyContent = agentConfig.identity_content as string | null
+      if (!legacyContent || legacyContent.startsWith('Loaded from filesystem')) {
+        agentConfig.identity_content = registryRow.identity_md
+      }
+    }
+
+    if (!agentConfig) {
+      const hint = registryRow
+        ? `registry row exists but identity_md is empty — run scripts/sync-registry-identities.ts`
+        : `slug not found in agents table or managed_agents_registry`
       return NextResponse.json(
-        { error: `Agent "${agentName}" not found in database` },
+        { error: `Agent "${agentName}" (resolved to "${canonicalSlug}") not loadable: ${hint}` },
         { status: 404 }
       )
     }
 
-    if (!agentConfig.identity_content || agentConfig.identity_content.startsWith('Loaded from filesystem')) {
+    if (!agentConfig.identity_content || (agentConfig.identity_content as string).startsWith('Loaded from filesystem')) {
       return NextResponse.json(
-        { error: `Agent "${agentName}" has no identity content loaded. Run migration script first.` },
+        { error: `Agent "${canonicalSlug}" has no identity content loaded. Run migration script first.` },
         { status: 500 }
       )
     }
@@ -75,19 +132,20 @@ export async function POST(request: Request) {
     // --- Load skills (con skills_filter si se proporciona) ---
     const skillsFilter: string[] | undefined = context.skills_filter
 
-    let skillsQuery = supabase
-      .from('agent_skill_assignments')
-      .select(`
-        priority,
-        agent_skills (
-          skill_name,
-          skill_content
-        )
-      `)
-      .eq('agent_id', agentConfig.id)
-      .order('priority', { ascending: true })
-
-    const { data: skillAssignments } = await skillsQuery
+    // Skills only available if agent comes from legacy table (has id)
+    const { data: skillAssignments } = agentConfig.id
+      ? await supabase
+          .from('agent_skill_assignments')
+          .select(`
+            priority,
+            agent_skills (
+              skill_name,
+              skill_content
+            )
+          `)
+          .eq('agent_id', agentConfig.id as string)
+          .order('priority', { ascending: true })
+      : { data: [] as unknown[] }
 
     // Falla 3: skills_filter — solo cargar los skills que n8n indica como relevantes
     interface SkillRecord {
@@ -119,12 +177,32 @@ export async function POST(request: Request) {
 
     // --- Build system prompt ---
     const systemParts: string[] = [
-      `# Tu Identidad\n${agentConfig.identity_content}`,
+      `# Tu Identidad\n${agentConfig.identity_content as string}`,
     ]
 
     // Agregar skills cargados
     for (const skill of loadedSkills) {
       systemParts.push(`\n# Skill: ${skill.name}\n${skill.content}`)
+    }
+
+    // --- Client Brain RAG context (guardrails + semantic search) ---
+    if (context.client_id) {
+      try {
+        const ragQuery = context.rag_query || task  // orchestrator can pass targeted query
+        const brainContext = await buildAgentContext({
+          client_id: context.client_id,
+          query: ragQuery.substring(0, 500),  // limit query length
+          match_count: context.rag_match_count || 5,
+        })
+        if (brainContext) {
+          systemParts.push(`\n# Client Brain — Conocimiento del Cliente`)
+          systemParts.push(brainContext)
+        }
+      } catch (ragError) {
+        // RAG failure should not block agent execution
+        console.warn(`Client Brain RAG failed for client ${context.client_id}:`, ragError)
+        systemParts.push(`\n# Client Brain — Nota: búsqueda semántica no disponible (fallback sin contexto)`)
+      }
     }
 
     // Contexto de operación (agnóstico de industria)
@@ -151,8 +229,15 @@ export async function POST(request: Request) {
     const systemPrompt = systemParts.join('\n')
 
     // --- Call Claude API ---
-    const modelKey = agentConfig.model || 'claude-sonnet'
-    const modelId = MODEL_MAP[modelKey] || MODEL_MAP['claude-sonnet']
+    const modelKey = (agentConfig.model as string) || 'claude-sonnet'
+    // Support both legacy short keys and registry full names
+    const FULL_MODEL_MAP: Record<string, string> = {
+      ...MODEL_MAP,
+      'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
+      'claude-sonnet-4-6': 'claude-sonnet-4-6',
+      'claude-opus-4-6': 'claude-opus-4-6',
+    }
+    const modelId = FULL_MODEL_MAP[modelKey] || MODEL_MAP['claude-sonnet']
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -190,7 +275,7 @@ export async function POST(request: Request) {
     // --- Log execution ---
     try {
       await supabase.from('agents_log').insert({
-        agent_name: agentName,
+        agent_name: canonicalSlug,
         action: 'agents_run',
         input: {
           task: task.substring(0, 200),
@@ -198,6 +283,7 @@ export async function POST(request: Request) {
           skills_loaded: loadedSkills.map(s => s.name),
           skills_filtered: !!skillsFilter,
           chain_length: context.chain?.length || 0,
+          client_brain_enabled: !!context.client_id,
         },
         output: {
           response_length: responseText.length,
@@ -215,8 +301,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      agent: agentName,
-      display_name: agentConfig.display_name,
+      agent: canonicalSlug,
+      display_name: (agentConfig.display_name as string) || canonicalSlug,
       model: modelId,
       response: responseText,
       tokens_used: tokensUsed,
@@ -243,7 +329,10 @@ export async function GET() {
       agent: 'string (required) — nombre del agente e.g. "content-creator"',
       task: 'string (required) — la tarea a ejecutar',
       context: {
-        chain: 'Array<{ agent, output }> (optional) — outputs previos en la pipeline n8n',
+        chain: 'Array<{ agent, output }> (optional) — outputs previos en la pipeline',
+        client_id: 'string (optional) — UUID del cliente → activa Client Brain RAG',
+        rag_query: 'string (optional) — query específico para búsqueda semántica (default: task)',
+        rag_match_count: 'number (optional) — cuántos resultados RAG traer (default: 5)',
         skills_filter: 'string[] (optional) — solo cargar estos skills (reduce tokens)',
         client_industry: 'string (optional) — industria del cliente actual',
         extra: 'object (optional) — contexto adicional',

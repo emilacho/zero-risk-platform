@@ -1,0 +1,121 @@
+{
+  "name": "Zero Risk — Lead Capture → CRM → Notify",
+  "description": "Mechanical workflow: when a lead submits a form on landing page, create contact in GoHighLevel CRM, add to nurturing pipeline, notify Xavier on Slack.",
+  "version": "1.0",
+  "trigger": "webhook",
+  "nodes": [
+    {
+      "id": "webhook_trigger",
+      "type": "webhook",
+      "name": "Landing Page Form Webhook",
+      "config": {
+        "path": "/lead-capture",
+        "method": "POST",
+        "notes": "Receives: { name, email, phone, company, source, landing_page_url }"
+      }
+    },
+    {
+      "id": "create_ghl_contact",
+      "type": "httpRequest",
+      "name": "Create GoHighLevel Contact",
+      "config": {
+        "url": "https://rest.gohighlevel.com/v1/contacts/",
+        "method": "POST",
+        "headers": { "Authorization": "Bearer {{$env.GHL_API_KEY}}" },
+        "body": {
+          "firstName": "{{$json.name.split(' ')[0]}}",
+          "lastName": "{{$json.name.split(' ').slice(1).join(' ')}}",
+          "email": "{{$json.email}}",
+          "phone": "{{$json.phone}}",
+          "companyName": "{{$json.company}}",
+          "source": "{{$json.source || 'landing_page'}}",
+          "tags": ["nuevo_lead", "zero_risk_pipeline"]
+        }
+      }
+    },
+    {
+      "id": "add_to_pipeline",
+      "type": "httpRequest",
+      "name": "Add to Nurturing Pipeline",
+      "config": {
+        "url": "https://rest.gohighlevel.com/v1/pipelines/{{$env.GHL_PIPELINE_ID}}/opportunities",
+        "method": "POST",
+        "headers": { "Authorization": "Bearer {{$env.GHL_API_KEY}}" },
+        "body": {
+          "title": "{{$json.company}} - {{$json.name}}",
+          "stageId": "{{$env.GHL_STAGE_NEW_LEAD}}",
+          "contactId": "{{$node.create_ghl_contact.json.contact.id}}",
+          "monetaryValue": 0
+        }
+      }
+    },
+    {
+      "id": "log_to_supabase",
+      "type": "httpRequest",
+      "name": "Log Lead in Supabase",
+      "config": {
+        "url": "{{$env.SUPABASE_URL}}/rest/v1/leads",
+        "method": "POST",
+        "headers": {
+          "apikey": "{{$env.SUPABASE_SERVICE_KEY}}",
+          "Authorization": "Bearer {{$env.SUPABASE_SERVICE_KEY}}"
+        },
+        "body": {
+          "name": "{{$json.name}}",
+          "email": "{{$json.email}}",
+          "phone": "{{$json.phone}}",
+          "company": "{{$json.company}}",
+          "source": "{{$json.source}}",
+          "ghl_contact_id": "{{$node.create_ghl_contact.json.contact.id}}",
+          "status": "new"
+        }
+      }
+    },
+    {
+      "id": "notify_slack",
+      "type": "httpRequest",
+      "name": "Notify Xavier on Slack",
+      "config": {
+        "url": "{{$env.SLACK_WEBHOOK_LEADS}}",
+        "method": "POST",
+        "body": {
+          "text": "🔔 Nuevo lead: *{{$json.name}}* de {{$json.company}}\nEmail: {{$json.email}} | Tel: {{$json.phone}}\nFuente: {{$json.source}}\nCRM: Agregado a pipeline de nurturing"
+        }
+      }
+    },
+    {
+      "id": "send_welcome_email",
+      "type": "httpRequest",
+      "name": "Send Welcome Email (Mailgun)",
+      "config": {
+        "url": "https://api.mailgun.net/v3/{{$env.MAILGUN_DOMAIN}}/messages",
+        "method": "POST",
+        "authentication": "basicAuth",
+        "body": {
+          "from": "Zero Risk <info@{{$env.MAILGUN_DOMAIN}}>",
+          "to": "{{$json.email}}",
+          "subject": "Gracias por su interés — Zero Risk",
+          "template": "welcome_lead",
+          "v:name": "{{$json.name.split(' ')[0]}}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "webhook_trigger": ["create_ghl_contact"],
+    "create_ghl_contact": ["add_to_pipeline", "log_to_supabase"],
+    "add_to_pipeline": ["notify_slack"],
+    "log_to_supabase": [],
+    "notify_slack": ["send_welcome_email"]
+  },
+  "env_vars_required": [
+    "GHL_API_KEY",
+    "GHL_PIPELINE_ID",
+    "GHL_STAGE_NEW_LEAD",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_KEY",
+    "SLACK_WEBHOOK_LEADS",
+    "MAILGUN_DOMAIN",
+    "MAILGUN_API_KEY"
+  ]
+}

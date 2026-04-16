@@ -1,0 +1,38 @@
+{
+  "name": "query_client_brain",
+  "description": "Search the Client Brain knowledge base using semantic similarity. Returns the most relevant context chunks from across all brain sections (brand book, ICP profiles, voice-of-customer quotes, competitive landscape, and historical outputs). Use this tool BEFORE generating any content to ground your output in the client's real data. You can filter which sections to search based on your task.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "client_id": {
+        "type": "string",
+        "description": "UUID of the client to search. Provided in your task context."
+      },
+      "query": {
+        "type": "string",
+        "description": "Natural language query describing what context you need. Be specific. Examples: 'What is the brand voice and tone?', 'Who is the primary target audience?', 'What have competitors been doing in social media?', 'What similar content have we published before?'"
+      },
+      "sections": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "brand_books",
+            "icp_documents",
+            "voc_library",
+            "competitive_landscape",
+            "historical_outputs"
+          ]
+        },
+        "description": "Which brain sections to search. Defaults to all 5 if omitted. Filter to relevant sections for faster, more focused results. brand_books = voice/tone/guardrails, icp_documents = audience profiles, voc_library = real customer quotes, competitive_landscape = competitor intelligence, historical_outputs = past agency work for deduplication."
+      },
+      "match_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 25,
+        "description": "Number of results to return. Default: 10. Use fewer (3-5) for focused tasks, more (15-20) for broad research."
+      }
+    },
+    "required": ["client_id", "query"]
+  }
+}

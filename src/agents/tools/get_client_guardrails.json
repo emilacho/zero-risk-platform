@@ -1,0 +1,14 @@
+{
+  "name": "get_client_guardrails",
+  "description": "Retrieve the pre-generation guardrails for a client. Returns forbidden words (never use), required terminology (always prefer), voice description, competitor mentions policy, and compliance notes. This tool is called AUTOMATICALLY by the orchestrator before content generation — you don't need to call it manually unless you need to check a specific guardrail mid-task.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "client_id": {
+        "type": "string",
+        "description": "UUID of the client whose guardrails to fetch."
+      }
+    },
+    "required": ["client_id"]
+  }
+}
