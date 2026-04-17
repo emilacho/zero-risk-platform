@@ -73,8 +73,11 @@ export async function POST() {
         ? agent.identity_content.substring(0, 2000)
         : `Zero Risk agent: ${agent.display_name || agent.name}. Role: ${agent.role || mcRole}.`
 
+      // MC requires lowercase alphanumeric with hyphens only
+      const mcId = agent.name.replace(/_/g, '-')
+
       const mcAgent = {
-        id: agent.name,
+        id: mcId,
         name: agent.display_name || agent.name,
         role: mcRole,
         instructions: [
@@ -85,16 +88,15 @@ export async function POST() {
         ].filter(Boolean).join('\n'),
         capabilities,
         linkedSkills: [],
+        masterPassword: process.env.MC_MASTER_PASSWORD || '',
       }
 
       try {
         const mcBaseUrl = process.env.MC_BASE_URL || 'http://127.0.0.1:3001'
-        const mcApiKey = process.env.MC_API_TOKEN || ''
         const response = await fetch(`${mcBaseUrl}/api/agents`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': mcApiKey,
           },
           body: JSON.stringify(mcAgent),
         })
