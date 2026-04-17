@@ -2,10 +2,12 @@
  * ZERO RISK V3 — Mission Control Bridge
  * Syncs pipeline data from Supabase → Mission Control dashboard.
  *
- * Mission Control (MeisnerDan/mission-control) runs on localhost:3001
- * and stores data in local JSON files. This bridge pushes pipeline
- * events to MC via its REST API so Emilio can visualize and control
- * the pipeline from MC's UI.
+ * Mission Control (MeisnerDan/mission-control) deployed on Railway:
+ *   Production: https://zero-risk-mission-control-production.up.railway.app
+ *   Local dev:  http://127.0.0.1:3001 (fallback when MC_BASE_URL not set)
+ *
+ * This bridge pushes pipeline events to MC via its REST API so Emilio
+ * can visualize and control the pipeline from MC's UI.
  *
  * Sync directions:
  *   Supabase → MC: pipeline steps → tasks, HITL pauses → inbox
@@ -668,7 +670,7 @@ export class MissionControlBridge {
 
   async isAvailable(): Promise<boolean> {
     try {
-      const response = await this.mcFetch('/api/context', { method: 'GET' })
+      const response = await this.mcFetch('/api/tasks?limit=1', { method: 'GET' })
       return response.ok
     } catch {
       return false

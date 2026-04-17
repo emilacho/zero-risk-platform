@@ -40,7 +40,7 @@ export async function POST() {
     const mcOnline = await mc.isAvailable()
     if (!mcOnline) {
       return NextResponse.json(
-        { error: 'Mission Control is offline', hint: 'Start MC on localhost:3001' },
+        { error: 'Mission Control is offline', hint: 'Check MC_BASE_URL env var or Railway deployment' },
         { status: 503 }
       )
     }

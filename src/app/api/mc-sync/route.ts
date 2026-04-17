@@ -41,7 +41,7 @@ export async function POST(request: Request) {
         {
           error: 'Mission Control is not reachable',
           mc_url: process.env.MC_BASE_URL || 'http://localhost:3001',
-          hint: 'Make sure Mission Control is running: npx next dev --hostname 127.0.0.1 --port 3001',
+          hint: 'Check MC_BASE_URL env var points to Railway deployment (https://zero-risk-mission-control-production.up.railway.app)',
         },
         { status: 503 }
       )
