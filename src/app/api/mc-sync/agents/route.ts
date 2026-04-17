@@ -74,6 +74,7 @@ export async function POST() {
         : `Zero Risk agent: ${agent.display_name || agent.name}. Role: ${agent.role || mcRole}.`
 
       const mcAgent = {
+        id: agent.name,
         name: agent.display_name || agent.name,
         role: mcRole,
         instructions: [
