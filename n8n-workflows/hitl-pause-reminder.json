@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/hitl/pending",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/pending",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -92,7 +92,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"⏰ HITL Reminder — {{ $json.stale_count }} approvals pendientes >4h (oldest: {{ $json.oldest_hours }}h). Total queue: {{ $json.total_pending }}.\\nRevisa: {{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/dashboard/inbox\"\n}",
+        "jsonBody": "={\n  \"text\": \"⏰ HITL Reminder — {{ $json.stale_count }} approvals pendientes >4h (oldest: {{ $json.oldest_hours }}h). Total queue: {{ $json.total_pending }}.\\nRevisa: {{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/dashboard/inbox\"\n}",
         "options": {}
       },
       "id": "notify-slack",

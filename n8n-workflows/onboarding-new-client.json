@@ -28,7 +28,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/onboarding",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/onboarding",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -58,7 +58,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"🆕 Nuevo cliente onboarding iniciado\\n• Empresa: {{ $node['Validate Input'].json.name }}\\n• Industria: {{ $node['Validate Input'].json.industry }}\\n• Sitio: {{ $node['Validate Input'].json.website || $node['Validate Input'].json.domain }}\\n• Onboarding ID: {{ $json.id || 'pendiente' }}\\n\\n🔗 Review: {{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/dashboard/inbox?tab=onboarding\"\n}",
+        "jsonBody": "={\n  \"text\": \"🆕 Nuevo cliente onboarding iniciado\\n• Empresa: {{ $node['Validate Input'].json.name }}\\n• Industria: {{ $node['Validate Input'].json.industry }}\\n• Sitio: {{ $node['Validate Input'].json.website || $node['Validate Input'].json.domain }}\\n• Onboarding ID: {{ $json.id || 'pendiente' }}\\n\\n🔗 Review: {{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/dashboard/inbox?tab=onboarding\"\n}",
         "options": {}
       },
       "id": "notify-slack",

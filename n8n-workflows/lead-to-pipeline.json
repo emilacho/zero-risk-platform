@@ -18,7 +18,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/pipeline/run",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/pipeline/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

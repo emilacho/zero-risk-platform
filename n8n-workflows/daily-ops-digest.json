@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/analytics/performance?days=1",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/analytics/performance?days=1",
         "options": { "timeout": 30000 }
       },
       "id": "fetch-perf",
@@ -33,7 +33,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/hitl/pending",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/pending",
         "options": { "timeout": 30000 }
       },
       "id": "fetch-hitl",
@@ -56,7 +56,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Compose digest from both sources\nconst perf = $input.all()[0]?.json || {};\nconst hitl = $input.all()[1]?.json || {};\nconst pipelines = perf.pipelines_completed ?? perf.total_pipelines ?? 0;\nconst pipelinesFailed = perf.pipelines_failed ?? 0;\nconst costUsd = (perf.total_cost_usd ?? 0).toFixed(2);\nconst avgSteps = perf.avg_steps_per_pipeline ?? 0;\nconst hitlPending = (hitl.items || hitl.pipeline_qa || []).length;\nconst topAgent = perf.top_agent || 'n/a';\n\nconst lines = [\n  `🌅 *Zero Risk — Daily Digest*`,\n  ``,\n  `📊 *Yesterday*`,\n  `• Pipelines completed: ${pipelines}`,\n  `• Pipelines failed: ${pipelinesFailed}`,\n  `• Coste total: $${costUsd} USD`,\n  `• Avg steps/pipeline: ${avgSteps}`,\n  `• Top agent: ${topAgent}`,\n  ``,\n  `👥 *HITL Queue*`,\n  `• Approvals pendientes: ${hitlPending}`,\n  ``,\n  `🔗 Inbox: ${process.env.ZERO_RISK_API_URL || 'http://localhost:3000'}/dashboard/inbox`,\n  `🔗 Mission Control: http://localhost:3001`,\n];\n\nreturn [{ json: { text: lines.join('\\n') } }];"
+        "jsCode": "// Compose digest from both sources\nconst perf = $input.all()[0]?.json || {};\nconst hitl = $input.all()[1]?.json || {};\nconst pipelines = perf.pipelines_completed ?? perf.total_pipelines ?? 0;\nconst pipelinesFailed = perf.pipelines_failed ?? 0;\nconst costUsd = (perf.total_cost_usd ?? 0).toFixed(2);\nconst avgSteps = perf.avg_steps_per_pipeline ?? 0;\nconst hitlPending = (hitl.items || hitl.pipeline_qa || []).length;\nconst topAgent = perf.top_agent || 'n/a';\n\nconst lines = [\n  `🌅 *Zero Risk — Daily Digest*`,\n  ``,\n  `📊 *Yesterday*`,\n  `• Pipelines completed: ${pipelines}`,\n  `• Pipelines failed: ${pipelinesFailed}`,\n  `• Coste total: $${costUsd} USD`,\n  `• Avg steps/pipeline: ${avgSteps}`,\n  `• Top agent: ${topAgent}`,\n  ``,\n  `👥 *HITL Queue*`,\n  `• Approvals pendientes: ${hitlPending}`,\n  ``,\n  `🔗 Inbox: ${process.env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app'}/dashboard/inbox`,\n  `🔗 Mission Control: https://zero-risk-platform.vercel.app`,\n];\n\nreturn [{ json: { text: lines.join('\\n') } }];"
       },
       "id": "compose",
       "name": "Compose Digest",

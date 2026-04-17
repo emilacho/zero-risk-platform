@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/campaigns?status=active",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/campaigns?status=active",
         "options": { "timeout": 30000 }
       },
       "id": "fetch-campaigns",
@@ -43,7 +43,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/analytics/campaign-results",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/analytics/campaign-results",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

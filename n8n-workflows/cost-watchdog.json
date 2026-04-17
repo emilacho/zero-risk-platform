@@ -18,7 +18,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/analytics/performance?days=1&group_by=client",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/analytics/performance?days=1&group_by=client",
         "options": { "timeout": 30000 }
       },
       "id": "fetch-spend",
@@ -80,7 +80,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/mc-sync",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/mc-sync",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

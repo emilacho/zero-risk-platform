@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/pipeline/status?status=failed&since=15m&escalated=false",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/pipeline/status?status=failed&since=15m&escalated=false",
         "options": { "timeout": 30000 }
       },
       "id": "fetch-failed",
@@ -72,7 +72,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"🚨 *{{ $json.count }} pipeline(s) fallaron en los últimos 15 min*\\n{{ $json.pipelines.map(p => `• ${p.id} — step ${p.failed_step || '?'} — ${(p.error || 'unknown').slice(0,120)}`).join('\\n') }}\\n\\nRevisa: {{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/dashboard/inbox\"\n}",
+        "jsonBody": "={\n  \"text\": \"🚨 *{{ $json.count }} pipeline(s) fallaron en los últimos 15 min*\\n{{ $json.pipelines.map(p => `• ${p.id} — step ${p.failed_step || '?'} — ${(p.error || 'unknown').slice(0,120)}`).join('\\n') }}\\n\\nRevisa: {{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/dashboard/inbox\"\n}",
         "options": {}
       },
       "id": "notify-slack",
@@ -84,7 +84,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'http://localhost:3000' }}/api/mc-sync",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/mc-sync",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
