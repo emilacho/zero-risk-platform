@@ -30,6 +30,19 @@ const VALID_PHASES = new Set([
 ])
 const VALID_STATUS = new Set(['active', 'retrying', 'blocked_hitl', 'completed', 'failed'])
 
+// Normalize common aliases from research-generated workflows
+const STATUS_ALIASES: Record<string, string> = {
+  initiated: 'active',
+  started: 'active',
+  running: 'active',
+  in_progress: 'active',
+  pending: 'active',
+  blocked: 'blocked_hitl',
+  done: 'completed',
+  success: 'completed',
+  error: 'failed',
+}
+
 export async function POST(request: NextRequest) {
   const auth = checkInternalKey(request)
   if (!auth.ok) {
@@ -41,7 +54,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
   }
 
-  const { request_id, client_id, current_phase, status, retry_count } = body
+  const { request_id, client_id, current_phase, retry_count } = body
+  let status = body.status
   if (!request_id || !current_phase) {
     return NextResponse.json(
       { error: 'missing_fields', required: ['request_id', 'current_phase'] },
@@ -51,8 +65,16 @@ export async function POST(request: NextRequest) {
   if (!VALID_PHASES.has(current_phase)) {
     return NextResponse.json({ error: 'invalid_phase', got: current_phase }, { status: 400 })
   }
+  // Apply aliases before validating
+  if (status && typeof status === 'string') {
+    const normalized = STATUS_ALIASES[status.toLowerCase()] || status
+    status = normalized
+  }
   if (status && !VALID_STATUS.has(status)) {
-    return NextResponse.json({ error: 'invalid_status', got: status }, { status: 400 })
+    return NextResponse.json(
+      { error: 'invalid_status', got: status, accepted: Array.from(VALID_STATUS), aliases: Object.keys(STATUS_ALIASES) },
+      { status: 400 }
+    )
   }
 
   const supabase = getSupabaseAdmin()
