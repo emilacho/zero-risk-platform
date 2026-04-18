@@ -1,0 +1,23 @@
+{
+  "name": "Zero Risk \u2014 Phase Gate Evidence Collector (Webhook)",
+  "description": "Called by NEXUS orchestrator after each phase. Validates phase output against success criteria. Performs structural validation (required fields present), semantic validation (calls editor-en-jefe agent to check brand alignment + Schwartz copywriting principles), gathers evidence (screenshots via web_fetch for landing pages + competitive context). Returns verdict: PASS | RETRY | FAIL with detailed evidence. Writes audit trail to phase_gate_audits table. Used by NEXUS workflow to gate phase advancement.",
+  "trigger": "Webhook POST /webhook/evidence-collector with { phase_name, phase_output, success_criteria }",
+  "agents_invoked": [
+    "editor-en-jefe"
+  ],
+  "dependencies": {
+    "api_endpoints": [
+      "POST /api/agents/run (editor-en-jefe)",
+      "GET (web_fetch for competitive context)",
+      "POST /api/phase-gate/audit"
+    ],
+    "supabase_tables": [
+      "phase_gate_audits (phase, verdict, evidence, created_at)"
+    ]
+  },
+  "kpis": [
+    "Phase gate pass rate (% of phases passing first try)",
+    "Evidence validation accuracy (false positives/negatives)",
+    "QA cycle time (validation latency)"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "Zero Risk \u2014 Agent Outcomes Stream Writer (Webhook)",
+  "description": "Called at completion of every /api/agents/run invocation. Receives { agent_slug, task_id, input, output, tokens_used, latency_ms, success, error }. Normalizes and writes to agent_outcomes Supabase table for meta-learning feedback loop. If success=false, triggers failed-pipeline-escalation. Emits metrics to PostHog for real-time monitoring. Updates agent performance aggregates. Fast (<100ms round-trip), fire-and-forget.",
+  "trigger": "Webhook POST /webhook/outcomes-writer with agent execution result",
+  "agents_invoked": [],
+  "dependencies": {
+    "api_endpoints": [
+      "POST /api/agent-outcomes/write (Supabase)",
+      "POST /api/metrics/emit (PostHog)"
+    ],
+    "supabase_tables": [
+      "agent_outcomes (agent_slug, task_id, input, output, tokens_used, latency_ms, success, error, created_at)"
+    ]
+  },
+  "kpis": [
+    "Outcomes captured per day",
+    "Coverage (% of agent runs captured)",
+    "Write latency (p50, p95, p99)"
+  ]
+}

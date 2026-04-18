@@ -1,0 +1,25 @@
+{
+  "name": "Zero Risk \u2014 RUFLO Smart Router (Webhook)",
+  "description": "Entry point for all incoming requests. Invokes RUFLO orchestrator-classifier to determine request type (depth-first | breadth-first | straightforward), spawns appropriate agent chain, logs routing decision, returns async request_id for tracking. Validates client context from Client Brain before routing.",
+  "trigger": "Webhook POST /webhook/router-entry with { client_id, request, context_type }",
+  "agents_invoked": [
+    "ruflo"
+  ],
+  "dependencies": {
+    "api_endpoints": [
+      "POST /api/agents/run (ruflo)",
+      "GET /api/client-brain/{client_id}",
+      "POST /api/agent-routing/log"
+    ],
+    "supabase_tables": [
+      "agent_routing_log (request_id, client_id, classification, assigned_agents, status)",
+      "agent_requests (request_id, client_id, original_request, status)"
+    ]
+  },
+  "kpis": [
+    "Request classification accuracy (depth vs breadth vs straightforward)",
+    "Average routing latency (<2s for straightforward, <5s for complex)",
+    "HITL escalation rate from RUFLO",
+    "Agent chain execution success rate by classification type"
+  ]
+}

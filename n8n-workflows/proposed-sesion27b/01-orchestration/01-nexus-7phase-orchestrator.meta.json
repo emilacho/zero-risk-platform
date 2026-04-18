@@ -1,0 +1,34 @@
+{
+  "name": "Zero Risk \u2014 NEXUS 7-Phase Campaign Orchestrator (Webhook)",
+  "description": "Entry point for campaign requests. Orchestrates full NEXUS pipeline: DISCOVER \u2192 STRATEGIZE \u2192 SCAFFOLD \u2192 BUILD \u2192 HARDEN \u2192 LAUNCH \u2192 OPERATE. Each phase invokes jefe-marketing agent, validates output via Evidence Collector, retries up to 3x on failure, escalates to HITL on 4th failure. Writes phase state to Supabase campaign_pipeline_state. Publishes phase-complete events for Mission Control consumption.",
+  "trigger": "Webhook POST /webhook/campaign-orchestrator with { client_id, campaign_brief, priority }",
+  "agents_invoked": [
+    "jefe-marketing",
+    "editor-en-jefe",
+    "evidence-collector (internal function)"
+  ],
+  "dependencies": {
+    "api_endpoints": [
+      "POST /api/agents/run (jefe-marketing)",
+      "POST /api/evidence/validate (Evidence Collector)",
+      "POST /api/campaign-pipeline/state (persist phase state)",
+      "POST /api/mc-sync (notify Mission Control)"
+    ],
+    "supabase_tables": [
+      "campaign_pipeline_state (phase, status, output, retry_count, created_at)",
+      "agent_outcomes (for jefe-marketing invocations)"
+    ],
+    "env_vars": [
+      "ZERO_RISK_API_URL",
+      "SLACK_WEBHOOK_URL",
+      "MC_API_TOKEN"
+    ]
+  },
+  "kpis": [
+    "Phase completion rate (% of campaigns reaching OPERATE)",
+    "Phase retry frequency (avg retries per phase)",
+    "HITL escalation rate",
+    "Time-per-phase (deadline tracking)",
+    "Evidence validation pass rate"
+  ]
+}
