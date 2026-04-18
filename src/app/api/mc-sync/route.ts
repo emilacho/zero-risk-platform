@@ -22,6 +22,19 @@ export async function POST(request: Request) {
     const action = body.action || 'sync_pipeline'
     const pipelineId = body.pipeline_id
 
+    // Soft-handle NEXUS/research-workflow actions (no sync needed, just ack)
+    const NOTIFY_ACTIONS = new Set(['phase_complete', 'phase_started', 'phase_failed', 'pipeline_complete', 'pipeline_failed'])
+    if (NOTIFY_ACTIONS.has(action)) {
+      // Fire-and-forget ack: these come from n8n workflows to inform MC of pipeline progress.
+      // We don't strictly need to sync; just log and 200.
+      return NextResponse.json({
+        ok: true,
+        action,
+        acknowledged: true,
+        note: 'notification acknowledged, no sync performed',
+      })
+    }
+
     const supabase = getSupabaseAdmin()
     const mc = new MissionControlBridge()
 
