@@ -124,9 +124,14 @@ export async function POST(request: NextRequest) {
     phase_outputs: mergedPhaseOutputs,
     metadata: mergedMetadata,
   }
-  // client_id only on insert (preserve existing otherwise)
-  if (!existing && client_id) row.client_id = client_id
-  if (client_id && existing?.client_id !== client_id) row.client_id = client_id // allow intentional update
+  // Always include client_id when present in body OR from existing row.
+  // Upsert with onConflict sends the row as both INSERT + UPDATE candidate;
+  // if we omit client_id, the UPDATE path can try to set NULL and violate NOT NULL.
+  if (client_id) {
+    row.client_id = client_id
+  } else if (existing?.client_id) {
+    row.client_id = existing.client_id
+  }
 
   // retry_count: only set if explicitly provided OR on insert
   if (typeof retry_count === 'number') row.retry_count = retry_count
