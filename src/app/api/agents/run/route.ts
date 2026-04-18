@@ -34,13 +34,29 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const agentName = sanitizeString(body.agent, 50)
-    const task = sanitizeString(body.task, 5000)
-    const context = body.context || {}
+    // Tolerate multiple task field names (research-generated workflows use task_type,
+    // request_text, routing_instructions, etc). Fall back through common variants
+    // so we never silently get an empty task.
+    const taskCandidates = [
+      body.task,
+      body.task_type,
+      body.request_text,
+      body.routing_instructions,
+      body.instruction,
+      body.prompt,
+    ].filter(v => typeof v === 'string' && v.trim().length > 0)
+    const taskRaw = taskCandidates[0] || ''
+    const task = sanitizeString(taskRaw, 5000)
+    const context = body.context || body.client_brain || {}
     const caller = sanitizeString(body.caller, 20) || 'api'
 
     if (!agentName || !task) {
       return NextResponse.json(
-        { error: 'Missing required fields: agent, task' },
+        {
+          error: 'Missing required fields: agent, task',
+          received_keys: Object.keys(body || {}),
+          hint: 'Provide one of: task, task_type, request_text, routing_instructions, instruction, prompt',
+        },
         { status: 400 }
       )
     }
