@@ -95,8 +95,8 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('[agent-outcomes/write] insert error:', error.message)
-      return NextResponse.json({ ok: false, reason: 'db_error' })
+      console.error('[agent-outcomes/write] insert error:', error.message, error.details, error.hint)
+      return NextResponse.json({ ok: false, reason: 'db_error', detail: error.message, hint: error.hint, code: error.code })
     }
 
     return NextResponse.json({ ok: true, id: data.id })
