@@ -45,15 +45,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, reason: 'missing_agent_slug' })
   }
 
-  // Truncate large payloads to keep writes fast
+  // Truncate large payloads to keep writes fast.
+  // input/output columns are JSONB — coerce plain strings into { text } objects
+  // so Postgres JSONB accepts them (raw strings aren't valid JSON).
   const clip = (v: unknown) => {
-    if (typeof v === 'string') return v.slice(0, 10000)
-    if (v && typeof v === 'object') {
+    if (v == null) return null
+    if (typeof v === 'string') {
+      const s = v.slice(0, 10000)
+      // Try to parse as JSON; if it already was JSON, use that.
+      try {
+        const parsed = JSON.parse(s)
+        return parsed
+      } catch {
+        // Not JSON — wrap as { text }
+        return { text: s }
+      }
+    }
+    if (typeof v === 'object') {
       const s = JSON.stringify(v)
       if (s.length <= 20000) return v
       return { _truncated: true, preview: s.slice(0, 20000) }
     }
-    return v
+    return { value: v }
   }
 
   const row = {
