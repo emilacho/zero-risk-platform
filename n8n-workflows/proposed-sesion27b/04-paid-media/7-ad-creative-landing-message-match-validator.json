@@ -1,0 +1,214 @@
+{
+  "name": "Zero Risk — Ad Creative → Landing Message Match Validator (Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/message-match-audit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: Creative or Landing Change",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || (!b.creative_id && !b.landing_url)) throw new Error('client_id + (creative_id OR landing_url) required');\nreturn [{ json: {\n  audit_id: `mma_${Date.now()}`,\n  client_id: b.client_id,\n  campaign_id: b.campaign_id,\n  creative_id: b.creative_id || null,\n  landing_url: b.landing_url || null,\n  change_type: b.creative_id ? 'creative' : 'landing'\n} }];"
+      },
+      "id": "validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/meta-ads/creative?creative_id={{ $json.creative_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 20000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "fetch-creative",
+      "name": "Fetch Creative (if applicable)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/scrape",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "=Bearer {{ $env.FIRECRAWL_API_KEY }}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"{{ $json.landing_url }}\",\n  \"formats\": [\"markdown\"],\n  \"waitFor\": 1000\n}",
+        "options": {"timeout": 30000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "scrape-landing",
+      "name": "Scrape Landing (if applicable)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 440]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge",
+      "name": "Merge Content",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [920, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"editor_en_jefe\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Message-match audit for campaign {{ $json.campaign_id }}. Creative (changed: {{ $json.change_type === 'creative' ? 'yes' : 'no' }}): {{ $json.creative_headline || 'N/A' }}. Landing (changed: {{ $json.change_type === 'landing' ? 'yes' : 'no' }}): {{ $json.landing_headline || 'N/A' }}. Audit using Eugene Schwartz positioning layers: (1) Awareness stage match (unaware→aware→solution-aware→most-aware), (2) Objection handling (are concerns surfaced and addressed before landing?), (3) Value prop continuity (consistent across creative→landing message flow), (4) Psychological sequencing (visual hierarchy, proof stacking, urgency cues). Score message-match 0-100. Flag mismatches >30pct gap. If mismatch: recommend specific copy/positioning changes, list missing objection handling, identify value prop breakage points. Return as structured JSON with match_score, flags, and specific recommendations.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": {"timeout": 180000}
+      },
+      "id": "editor-audit",
+      "name": "Editor en Jefe (Sonnet) - Schwartz Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "typeValidation": "strict"},
+          "conditions": [
+            {"leftValue": "={{ $json.match_score }}", "rightValue": 70, "operator": {"type": "number", "operation": "lt"}}
+          ]
+        }
+      },
+      "id": "is-mismatch",
+      "name": "Mismatch >30pct gap?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1440, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/campaigns/block-launch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"reason\": \"message_match_violation\",\n  \"match_score\": {{ $json.match_score }},\n  \"blocked_by\": \"editor_en_jefe\",\n  \"required_actions\": {{ JSON.stringify($json.required_actions || []) }}\n}",
+        "options": {}
+      },
+      "id": "block-launch",
+      "name": "BLOCK Launch + Escalate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🛑 Message Match Violation: {{ $json.campaign_id }}\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*MESSAGE MATCH VIOLATION DETECTED*\\nCampaign: {{ $json.campaign_id }}\\nMatch Score: {{ $json.match_score }}/100\\n\\nRequired Actions:\\n{{ $json.required_actions.map(a => `• ${a}`).join('\\\\n') }}\\n\\nAd launch BLOCKED pending fixes.\"\n      }\n    }\n  ]\n}",
+        "options": {"timeout": 10000}
+      },
+      "id": "slack-block",
+      "name": "Slack Alert (BLOCKED)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 380]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "respondWith": "json",
+        "responseBody": "={{ { audit_id: $json.audit_id, match_score: $json.match_score, status: 'blocked_launch', reason: $json.reason } }}",
+        "options": {}
+      },
+      "id": "respond-blocked",
+      "name": "Respond (Blocked)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1920, 290]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "respondWith": "json",
+        "responseBody": "={{ { audit_id: $json.audit_id, match_score: $json.match_score, status: 'approved', reason: 'message_alignment_verified' } }}",
+        "options": {}
+      },
+      "id": "respond-approved",
+      "name": "Respond (Approved)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1920, 440]
+    }
+  ],
+  "connections": {
+    "Webhook: Creative or Landing Change": {
+      "main": [[{"node": "Validate Input", "type": "main", "index": 0}]]
+    },
+    "Validate Input": {
+      "main": [[{"node": "Fetch Creative (if applicable)", "type": "main", "index": 0}, {"node": "Scrape Landing (if applicable)", "type": "main", "index": 0}]]
+    },
+    "Fetch Creative (if applicable)": {
+      "main": [[{"node": "Merge Content", "type": "main", "index": 0}]]
+    },
+    "Scrape Landing (if applicable)": {
+      "main": [[{"node": "Merge Content", "type": "main", "index": 1}]]
+    },
+    "Merge Content": {
+      "main": [[{"node": "Editor en Jefe (Sonnet) - Schwartz Audit", "type": "main", "index": 0}]]
+    },
+    "Editor en Jefe (Sonnet) - Schwartz Audit": {
+      "main": [[{"node": "Mismatch >30pct gap?", "type": "main", "index": 0}]]
+    },
+    "Mismatch >30pct gap?": {
+      "main": [
+        [{"node": "BLOCK Launch + Escalate", "type": "main", "index": 0}, {"node": "Slack Alert (BLOCKED)", "type": "main", "index": 0}, {"node": "Respond (Blocked)", "type": "main", "index": 0}],
+        [{"node": "Respond (Approved)", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "tags": [
+    {"name": "zero-risk", "id": "1"},
+    {"name": "cluster-4", "id": "2"},
+    {"name": "paid-media", "id": "3"},
+    {"name": "qc", "id": "4"},
+    {"name": "tier-1", "id": "5"}
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

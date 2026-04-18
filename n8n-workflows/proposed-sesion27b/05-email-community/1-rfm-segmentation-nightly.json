@@ -1,0 +1,226 @@
+{
+  "name": "Zero Risk — RFM Segmentation Nightly (Daily 2am)",
+  "description": "Calculates Recency/Frequency/Monetary scores (5x5 matrix) for all contacts per client. Flags segment transitions and updates Supabase.",
+  "tags": [
+    {"name": "zero-risk"},
+    {"name": "cluster-5"},
+    {"name": "email-community"},
+    {"name": "rfm-segmentation"}
+  ],
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron",
+      "name": "Daily 2am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/clients?status=active&limit=100",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-clients",
+      "name": "Fetch Active Clients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "clients",
+        "options": {}
+      },
+      "id": "split-clients",
+      "name": "Split per Client",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://services.leadconnectorhq.com/contacts/?locationId={{ $json.ghl_location_id }}&limit=500&cursor=",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GHL_API_KEY }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "ghl-fetch-contacts",
+      "name": "GHL: Fetch Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [820, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const contacts = $input.first().json.contacts || [];\nconst now = new Date();\nconst segments = {};\n\nfor (const c of contacts) {\n  const lastEngagementDate = new Date(c.lastEngagementAt || c.createdAt || now);\n  const daysSinceEngagement = Math.floor((now - lastEngagementDate) / (1000 * 60 * 60 * 24));\n  \n  let recency = '12m+';\n  if (daysSinceEngagement <= 30) recency = '0-30d';\n  else if (daysSinceEngagement <= 90) recency = '30-90d';\n  else if (daysSinceEngagement <= 180) recency = '90-180d';\n  else if (daysSinceEngagement <= 365) recency = '180-365d';\n  \n  const frequency = (c.emailOpenCount || 0) + (c.emailClickCount || 0);\n  let freqBucket = 'low';\n  if (frequency >= 10) freqBucket = 'high';\n  else if (frequency >= 5) freqBucket = 'medium';\n  \n  const monetary = parseFloat(c.totalSpent || 0);\n  let monetaryBucket = 'low';\n  if (monetary >= 1000) monetaryBucket = 'high';\n  else if (monetary >= 100) monetaryBucket = 'medium';\n  \n  const segment = `${recency}_${freqBucket}_${monetaryBucket}`;\n  \n  segments[segment] = (segments[segment] || 0) + 1;\n}\n\nreturn [{\n  json: {\n    client_id: $node['split-clients'].json.id,\n    contact_count: contacts.length,\n    rfm_distribution: segments,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "calculate-rfm",
+      "name": "Calculate RFM 5x5",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/rfm-segments/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"rfm_matrix\": {{ JSON.stringify($json.rfm_distribution) }},\n  \"contact_count\": {{ $json.contact_count }},\n  \"calculated_at\": \"{{ $json.timestamp }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "persist-rfm",
+      "name": "Persist to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 300]
+    },
+    {
+      "parameters": {
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"RFM Segmentation Complete: {{ $json.client_id }} | {{ $json.contact_count }} contacts | Distribution: {{ Object.keys($json.rfm_distribution).length }} segments\"\n}",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}"
+      },
+      "id": "slack-notify",
+      "name": "Slack: Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 300]
+    }
+  ],
+  "connections": {
+    "Daily 2am": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Active Clients": {
+      "main": [
+        [
+          {
+            "node": "Split per Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split per Client": {
+      "main": [
+        [
+          {
+            "node": "GHL: Fetch Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Fetch Contacts": {
+      "main": [
+        [
+          {
+            "node": "Calculate RFM 5x5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate RFM 5x5": {
+      "main": [
+        [
+          {
+            "node": "Persist to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Slack: Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

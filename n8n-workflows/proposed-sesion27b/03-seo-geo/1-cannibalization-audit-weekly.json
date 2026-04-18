@@ -1,0 +1,249 @@
+{
+  "name": "Zero Risk \u2014 SEO Cannibalization Audit Weekly",
+  "meta": {
+    "description": "Weekly audit for keyword cannibalization across all active clients. Pulls GSC query-page mappings (last 30d), detects 2+ pages ranking same primary keyword, calculates overlap score, flags conflicts, calls SEO Specialist agent with matrix, writes to Supabase.",
+    "trigger_type": "cron",
+    "cron_schedule": "0 2 * * 0",
+    "expected_duration_minutes": 20,
+    "cost_usd_per_run": "2-4",
+    "tags": [
+      {
+        "name": "zero-risk"
+      },
+      {
+        "name": "cluster-3"
+      },
+      {
+        "name": "seo"
+      },
+      {
+        "name": "weekly"
+      },
+      {
+        "name": "guardrail"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "0 2 * * 0"
+      },
+      "id": "trigger-cron",
+      "name": "Trigger: Sundays 2am UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = await fetch('https://zero-risk-platform.vercel.app/api/clients?active=true', {headers:{'x-api-key':'key'}}); return [{json:{clients: await resp.json() || []}}];"
+      },
+      "id": "load-clients",
+      "name": "Load Active Clients",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "split-clients",
+      "name": "Split Into Each Client",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/webmasters/v3/sites/https%3A%2F%2F{{ encodeURIComponent($json.domain) }}%2F/searchanalytics/query?startDate=2026-03-19&endDate=2026-04-18&dimensions=query,page&rowLimit=1000",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "gsc-data",
+      "name": "GSC Query-Page Mapping (last 30d)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const gscData = $input.first().json?.rows || []; const queryPageMap = {}; gscData.forEach(row => { const q = row.keys[0]; if (!queryPageMap[q]) queryPageMap[q] = []; queryPageMap[q].push({page: row.keys[1], clicks: row.clicks}); }); const conflicts = Object.entries(queryPageMap).filter(([_, pages]) => pages.length > 1).map(([query, pages]) => ({query, pages_count: pages.length})); return [{json:{client_id: $json.client_id, domain: $json.domain, conflict_count: conflicts.length, severity: conflicts.filter(c => c.pages_count >= 3).length > 0 ? 'high' : 'low', conflicts}}];"
+      },
+      "id": "detect-cannibalization",
+      "name": "Detect Cannibalization",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "type": "when",
+        "value1": "={{ $json.conflict_count }}",
+        "value2": 0,
+        "operation": "greaterThan"
+      },
+      "id": "if-conflicts",
+      "name": "IF conflicts > 0",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://zero-risk-platform.vercel.app/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "=key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"agent\":\"seo-specialist\",\"model\":\"claude-sonnet-4-6\",\"task\":\"Cannibalization remediation for {{ $json.domain }}\",\"client_id\":\"{{ $json.client_id }}\"}"
+      },
+      "id": "agent-seo-specialist",
+      "name": "Agent: SEO Specialist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1480,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://zero-risk-platform.vercel.app/api/cannibalization-audits",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "=key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"client_id\":\"{{ $json.client_id }}\",\"domain\":\"{{ $json.domain }}\",\"conflict_count\":{{ $json.conflict_count }},\"severity\":\"{{ $json.severity }}\"}"
+      },
+      "id": "persist-audit",
+      "name": "Persist to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1700,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "trigger-cron": {
+      "main": [
+        [
+          {
+            "node": "load-clients"
+          }
+        ]
+      ]
+    },
+    "load-clients": {
+      "main": [
+        [
+          {
+            "node": "split-clients"
+          }
+        ]
+      ]
+    },
+    "split-clients": {
+      "main": [
+        [
+          {
+            "node": "gsc-data"
+          }
+        ]
+      ]
+    },
+    "gsc-data": {
+      "main": [
+        [
+          {
+            "node": "detect-cannibalization"
+          }
+        ]
+      ]
+    },
+    "detect-cannibalization": {
+      "main": [
+        [
+          {
+            "node": "if-conflicts"
+          }
+        ]
+      ]
+    },
+    "if-conflicts": {
+      "main": [
+        [
+          {
+            "node": "agent-seo-specialist"
+          }
+        ],
+        [
+          {
+            "node": "persist-audit"
+          }
+        ]
+      ]
+    },
+    "agent-seo-specialist": {
+      "main": [
+        [
+          {
+            "node": "persist-audit"
+          }
+        ]
+      ]
+    }
+  }
+}

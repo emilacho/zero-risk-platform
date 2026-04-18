@@ -1,0 +1,422 @@
+{
+  "name": "Zero Risk \u2014 Content Repurposing 1\u2192N (Webhook or Cron)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/content-repurpose",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: Pillar Content",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.pillar_id) throw new Error('client_id and pillar_id required');\nreturn [{ json: {\n  task_id: `repurpose_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,\n  client_id: b.client_id,\n  pillar_id: b.pillar_id,\n  pillar_type: b.pillar_type || 'blog_post',\n  platforms: b.platforms || ['linkedin', 'twitter', 'instagram', 'tiktok', 'email', 'video_script'],\n  content_url: b.content_url || null,\n  auto_publish: b.auto_publish || false,\n  started_at: new Date().toISOString()\n} }];"
+      },
+      "id": "validate",
+      "name": "Code: Validate Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/content/fetch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"pillar_id\": \"{{ $json.pillar_id }}\",\n  \"pillar_type\": \"{{ $json.pillar_type }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-pillar",
+      "name": "Fetch: Pillar Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/client-brain/rag-search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"query\": \"Brand voice, tone per platform, content style, key messages, repurposing performance\",\n  \"k\": 20\n}",
+        "options": {}
+      },
+      "id": "brain",
+      "name": "Client Brain: Style Guide",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"content_creator\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Repurpose pillar content into {{ $json.platforms.length }} platform-specific formats: {{ $json.platforms.map(p => { switch(p) { case 'linkedin': return '(1) LinkedIn 1200-1500c'; case 'twitter': return '(2) Twitter thread 6-8 tweets'; case 'instagram': return '(3) Instagram 150-200c'; case 'tiktok': return '(4) TikTok 60-90s script'; case 'email': return '(5) Email 300-400c'; case 'video_script': return '(6) Video 30-60s'; default: return p; } }).join('; ') }}. Each variant adapts tone to platform while preserving core message. Output JSON with platform-keyed variants.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": { \"pillar\": {{ JSON.stringify($node['fetch-pillar'].json) }}, \"brand_context\": {{ JSON.stringify($node['brain'].json) }} }\n}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "content-creator-agent",
+      "name": "Agent: Content Creator (Repurpose)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/content-queue/store",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"source_pillar_id\": \"{{ $json.pillar_id }}\",\n  \"repurposing_task_id\": \"{{ $json.task_id }}\",\n  \"variants\": {{ JSON.stringify($node['content-creator-agent'].json.variants) }},\n  \"queue_status\": \"awaiting_approval\",\n  \"auto_publish\": {{ $json.auto_publish }},\n  \"created_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "store-queue",
+      "name": "Store: Repurposing Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.auto_publish }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "check-auto-publish",
+      "name": "If: Auto-Publish Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"growth_hacker\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Publish repurposed content via GHL Social + Metricool. Variants: {{ JSON.stringify($node['content-creator-agent'].json.variants) }}. For each platform call appropriate API, schedule optimal times. Return: { published_count, platform_results }.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": { \"variants\": {{ JSON.stringify($node['content-creator-agent'].json.variants) }}, \"auto_schedule\": true }\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "auto-publish-agent",
+      "name": "Agent: Growth Hacker (Publish)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/outcomes/record",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"task_type\": \"content_repurposing\",\n  \"agent\": \"content_creator\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"input\": { \"pillar_id\": \"{{ $json.pillar_id }}\", \"pillar_type\": \"{{ $json.pillar_type }}\", \"target_platforms\": {{ JSON.stringify($json.platforms) }} },\n  \"output\": { \"task_id\": \"{{ $json.task_id }}\", \"variant_count\": {{ Object.keys($node['content-creator-agent'].json.variants).length }}, \"published\": {{ $json.auto_publish }} },\n  \"status\": \"completed\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "record-outcome",
+      "name": "Record: Outcome",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"\u2705 Content Repurposed 1\u2192{{ Object.keys($node['content-creator-agent'].json.variants).length }}: Task {{ $json.task_id }}. Platforms: {{ $json.platforms.join(', ') }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Content Repurposing Complete*\\\\nTask: {{ $json.task_id }}\\\\nSource: {{ $json.pillar_type }}\\\\nVariants: {{ Object.keys($node['content-creator-agent'].json.variants).length }}\\\\nPlatforms: {{ $json.platforms.join(', ') }}\\\\nStatus: {{ $json.auto_publish ? 'Published' : 'Queued for approval' }}\" } }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "notify-slack",
+      "name": "Slack: Notify Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { message: 'Auto-publish disabled. Content queued for manual approval.' } }];"
+      },
+      "id": "no-op",
+      "name": "No-Op: Manual Approval Path",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "webhook": {
+      "main": [
+        [
+          {
+            "node": "validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate": {
+      "main": [
+        [
+          {
+            "node": "fetch-pillar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-pillar": {
+      "main": [
+        [
+          {
+            "node": "brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "brain": {
+      "main": [
+        [
+          {
+            "node": "content-creator-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "content-creator-agent": {
+      "main": [
+        [
+          {
+            "node": "store-queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "store-queue": {
+      "main": [
+        [
+          {
+            "node": "check-auto-publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-auto-publish": {
+      "main": [
+        [
+          {
+            "node": "auto-publish-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "no-op",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "auto-publish-agent": {
+      "main": [
+        [
+          {
+            "node": "record-outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "record-outcome": {
+      "main": [
+        [
+          {
+            "node": "notify-slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "timezone": "UTC"
+  },
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-2"
+    },
+    {
+      "name": "creative"
+    },
+    {
+      "name": "content"
+    },
+    {
+      "name": "repurposing"
+    }
+  ]
+}

@@ -1,0 +1,215 @@
+{
+  "name": "Zero Risk — TikTok + LinkedIn Unified Manager (Daily 5am)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 5 * * *"}]
+        }
+      },
+      "id": "cron",
+      "name": "Daily 5am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/tiktok-ads/campaigns?status=ACTIVE&days=7",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 30000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "tiktok-fetch",
+      "name": "Fetch TikTok Campaigns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/linkedin-ads/campaigns?status=ACTIVE&days=7",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 30000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "linkedin-fetch",
+      "name": "Fetch LinkedIn Campaigns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 440]
+    },
+    {
+      "parameters": {"fieldToSplitOut": "campaigns", "options": {}},
+      "id": "tiktok-split",
+      "name": "Split TikTok",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [700, 200]
+    },
+    {
+      "parameters": {"fieldToSplitOut": "campaigns", "options": {}},
+      "id": "linkedin-split",
+      "name": "Split LinkedIn",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [700, 440]
+    },
+    {
+      "parameters": {
+        "jsCode": "const platform = $input.first().json.platform || 'tiktok';\nif (platform === 'tiktok') {\n  const camp = $node['tiktok-split'].json;\n  return [{ json: {...camp, platform: 'tiktok'} }];\n} else {\n  const camp = $node['linkedin-split'].json;\n  return [{ json: {...camp, platform: 'linkedin'} }];\n}"
+      },
+      "id": "identify-platform",
+      "name": "Identify Platform",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/{{ $json.platform }}-ads/campaign-stats?campaign_id={{ $json.id }}&days=7&fields=spend,clicks,conversions,conversion_value,ctr,impression_share,engagement_rate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 30000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "perf",
+      "name": "Get Platform Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const camp = $node['identify-platform'].json;\nconst perf = $json;\nconst platform = camp.platform;\n\nconst spend = parseFloat(perf.spend || 0);\nconst clicks = parseInt(perf.clicks || 0);\nconst conversions = parseInt(perf.conversions || 0);\nconst convValue = parseFloat(perf.conversion_value || 0);\nconst ctr = parseFloat(perf.ctr || 0);\nconst engagementRate = parseFloat(perf.engagement_rate || 0);\n\nconst roas = spend > 0 ? convValue / spend : 0;\nconst cpa = conversions > 0 ? spend / conversions : null;\nconst cpc = clicks > 0 ? spend / clicks : null;\n\nlet platformMetrics = {};\nlet healthIssues = [];\n\nif (platform === 'tiktok') {\n  const hookRate = perf.hook_rate || 0;\n  const completionRate = perf.completion_rate || 0;\n  const isFatigued = hookRate < 0.3 || completionRate < 0.25;\n  const isLowEngagement = engagementRate < 1.0;\n  platformMetrics = { hook_rate: (hookRate * 100).toFixed(1) + '%', completion_rate: (completionRate * 100).toFixed(1) + '%', engagement_rate: (engagementRate * 100).toFixed(2) + '%' };\n  if (isFatigued) healthIssues.push({type: 'creative_fatigue_tiktok', severity: 'high'});\n  if (isLowEngagement) healthIssues.push({type: 'low_engagement', severity: 'medium'});\n} else if (platform === 'linkedin') {\n  const accountBased = perf.account_based_targeting === true;\n  const matchedAudienceSize = perf.matched_audience_size || 0;\n  const lowReach = matchedAudienceSize < 5000;\n  platformMetrics = { account_based: accountBased, matched_audience: matchedAudienceSize };\n  if (lowReach) healthIssues.push({type: 'low_matched_audience', severity: 'medium'});\n}\n\nreturn [{ json: {\n  campaign_id: camp.id,\n  campaign_name: camp.name,\n  client_id: camp.client_id,\n  platform,\n  date: new Date().toISOString().slice(0, 10),\n  spend: Math.round(spend * 100) / 100,\n  conversions,\n  conversion_value: Math.round(convValue * 100) / 100,\n  roas: Math.round(roas * 100) / 100,\n  cpa: cpa ? Math.round(cpa * 100) / 100 : null,\n  cpc: cpc ? Math.round(cpc * 100) / 100 : null,\n  ctr: Math.round(ctr * 1000) / 10,\n  engagement_rate: (engagementRate * 100).toFixed(2) + '%',\n  platform_metrics: platformMetrics,\n  health_issues: healthIssues,\n  is_healthy: healthIssues.length === 0\n} }];"
+      },
+      "id": "analyze",
+      "name": "Analyze Platform-Specific Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1380, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"media_buyer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"{{ $json.platform | upper }} campaign optimization for {{ $json.campaign_name }}. ROAS: {{ $json.roas }}x, CPA: ${{ $json.cpa }}, Engagement: {{ $json.engagement_rate }}. Platform metrics: {{ JSON.stringify($json.platform_metrics) }}. Health issues ({{ $json.health_issues.length }}): {{ JSON.stringify($json.health_issues) }}. For TikTok: focus on hook rate (<3s), completion rate (watch-to-end), creative fatigue detection (different from Meta), audience refresh strategy. For LinkedIn: focus on matched audiences (ABM precision), account-based campaign health, decision-maker targeting signals. Produce: (1) Platform-specific diagnosis, (2) Creative refresh roadmap (TikTok needs hook-first concepts, LinkedIn needs thought-leader positioning), (3) Audience expansion plan, (4) Budget shift recommendations (vs. Meta/Google), (5) A/B testing matrix. Return as structured JSON.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": {"timeout": 180000}
+      },
+      "id": "media-buyer-alt",
+      "name": "Media Buyer (Sonnet) - Alt Platform",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1620, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "typeValidation": "strict"},
+          "conditions": [
+            {"leftValue": "={{ $json.is_healthy }}", "rightValue": true, "operator": {"type": "boolean", "operation": "notEquals"}}
+          ]
+        }
+      },
+      "id": "has-issues",
+      "name": "Has Issues?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1860, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"alt_platform_optimization\",\n  \"platform\": \"{{ $json.platform }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"priority\": \"medium\",\n  \"summary\": \"{{ $json.platform | upper }} {{ $json.campaign_name }}: {{ $json.health_issues.length }} issues (ROAS={{ $json.roas }}x). Media Buyer plan staged.\",\n  \"payload\": {{ JSON.stringify($json) }}\n}",
+        "options": {}
+      },
+      "id": "hitl",
+      "name": "Queue HITL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2100, 200]
+    },
+    {
+      "parameters": {},
+      "id": "noop",
+      "name": "Healthy",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2100, 440]
+    }
+  ],
+  "connections": {
+    "Daily 5am": {
+      "main": [
+        [{"node": "Fetch TikTok Campaigns", "type": "main", "index": 0}, {"node": "Fetch LinkedIn Campaigns", "type": "main", "index": 0}]
+      ]
+    },
+    "Fetch TikTok Campaigns": {
+      "main": [[{"node": "Split TikTok", "type": "main", "index": 0}]]
+    },
+    "Fetch LinkedIn Campaigns": {
+      "main": [[{"node": "Split LinkedIn", "type": "main", "index": 0}]]
+    },
+    "Split TikTok": {
+      "main": [[{"node": "Identify Platform", "type": "main", "index": 0}]]
+    },
+    "Split LinkedIn": {
+      "main": [[{"node": "Identify Platform", "type": "main", "index": 0}]]
+    },
+    "Identify Platform": {
+      "main": [[{"node": "Get Platform Stats", "type": "main", "index": 0}]]
+    },
+    "Get Platform Stats": {
+      "main": [[{"node": "Analyze Platform-Specific Health", "type": "main", "index": 0}]]
+    },
+    "Analyze Platform-Specific Health": {
+      "main": [[{"node": "Media Buyer (Sonnet) - Alt Platform", "type": "main", "index": 0}]]
+    },
+    "Media Buyer (Sonnet) - Alt Platform": {
+      "main": [[{"node": "Has Issues?", "type": "main", "index": 0}]]
+    },
+    "Has Issues?": {
+      "main": [
+        [{"node": "Queue HITL", "type": "main", "index": 0}],
+        [{"node": "Healthy", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "tags": [
+    {"name": "zero-risk", "id": "1"},
+    {"name": "cluster-4", "id": "2"},
+    {"name": "paid-media", "id": "3"},
+    {"name": "alt-platforms", "id": "4"},
+    {"name": "tier-2", "id": "5"}
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

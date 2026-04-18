@@ -1,0 +1,336 @@
+{
+  "name": "Zero Risk \u2014 Cost Watchdog Multi-Service v2 (Cron Hourly)",
+  "description": "Tracks Anthropic, OpenAI, Apify costs. Anomaly detection (200%+), per-client attribution.",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "hourly",
+      "name": "Hourly",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.anthropic.com/v1/usage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.CLAUDE_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "fetch-anthropic",
+      "name": "Fetch Anthropic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.openai.com/v1/dashboard/billing/usage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.OPENAI_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "fetch-openai",
+      "name": "Fetch OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/users/me",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.APIFY_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "fetch-apify",
+      "name": "Fetch Apify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const anthropic = $input.all()[0]?.json || {}; const openai = $input.all()[1]?.json || {}; const apify = $input.all()[2]?.json || {}; const anthropicUsd = parseFloat(anthropic.usage?.total_balance_usd || 0); const openaiUsd = parseFloat((openai.total_usage || 0) / 100); const apifyUsd = parseFloat(apify.profile?.consumedUsageUsd || 0); return [{json: {anthropic_usd: anthropicUsd, openai_usd: openaiUsd, apify_usd: apifyUsd, total_hourly_usd: anthropicUsd + openaiUsd + apifyUsd, timestamp: new Date().toISOString()}}];"
+      },
+      "id": "aggregate",
+      "name": "Aggregate Costs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/cost-usage?hours=24&granularity=hourly",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "fetch-history",
+      "name": "Fetch 24h History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const current = $input.all()[0]?.json; const history = $input.all()[1]?.json?.hourly_costs || []; const currentUsd = current.total_hourly_usd || 0; const avgUsd = history.length > 0 ? history.reduce((s, h) => s + h.cost_usd, 0) / history.length : 0; const isAnomaly = currentUsd > (avgUsd * 2.0) && currentUsd > 0.10; return [{json: {current_usd: currentUsd, avg_24h_usd: avgUsd.toFixed(4), is_anomaly: isAnomaly, anomaly_pct: ((currentUsd / avgUsd - 1) * 100).toFixed(1), timestamp: current.timestamp}}];"
+      },
+      "id": "detect-anomaly",
+      "name": "Detect Anomalies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.is_anomaly }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "anomaly-check",
+      "name": "Anomaly?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={'channel': '#finops', 'text': 'Cost Anomaly'}"
+      },
+      "id": "slack-alert",
+      "name": "Alert Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "normal",
+      "name": "Normal",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Hourly": {
+      "main": [
+        [
+          {
+            "node": "Fetch Anthropic",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch OpenAI",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Apify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Anthropic": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Costs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Costs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Apify": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Costs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Costs": {
+      "main": [
+        [
+          {
+            "node": "Fetch 24h History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch 24h History": {
+      "main": [
+        [
+          {
+            "node": "Detect Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Anomalies": {
+      "main": [
+        [
+          {
+            "node": "Anomaly?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anomaly?": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-7"
+    },
+    {
+      "name": "ops-monitoring"
+    }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

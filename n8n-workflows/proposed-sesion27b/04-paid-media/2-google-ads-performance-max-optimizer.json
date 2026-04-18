@@ -1,0 +1,206 @@
+{
+  "name": "Zero Risk — Google Ads Performance Max Optimizer (Daily 4am)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 4 * * *"}]
+        }
+      },
+      "id": "cron",
+      "name": "Daily 4am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/google-ads/pmax-campaigns?status=ENABLED&days=7",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 30000}
+      },
+      "id": "fetch-pmax",
+      "name": "Fetch Performance Max Campaigns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 320]
+    },
+    {
+      "parameters": {"fieldToSplitOut": "campaigns", "options": {}},
+      "id": "split",
+      "name": "Split Campaigns",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [660, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/google-ads/campaign-performance?campaign_id={{ $json.id }}&days=7&fields=cost,conversions,conversion_value,ctr,impression_share,search_impression_share,avg_cpc",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 30000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "perf",
+      "name": "Get Campaign Performance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 240]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/google-ads/asset-group-health?campaign_id={{ $json.id }}&days=7",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 30000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "assets",
+      "name": "Get Asset Group Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 380]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1140, 310]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all();\nconst perf = all[0]?.json || {};\nconst assets = all[1]?.json || {};\nconst campaign = $node['split'].json;\n\nconst cost = parseFloat(perf.cost || 0);\nconst conversions = parseInt(perf.conversions || 0);\nconst convValue = parseFloat(perf.conversion_value || 0);\nconst ctr = parseFloat(perf.ctr || 0);\nconst impressionShare = parseFloat(perf.impression_share || 0);\nconst avgCpc = parseFloat(perf.avg_cpc || 0);\n\nconst roas = cost > 0 ? convValue / cost : 0;\nconst cpa = conversions > 0 ? cost / conversions : null;\nconst bidMaturity = campaign.bid_strategy_type === 'MAXIMIZE_CONVERSION_VALUE' ? 'advanced' : (campaign.bid_strategy_type === 'TARGET_ROAS' ? 'target' : 'basic');\n\nconst assetHealthScore = assets.asset_group || {};\nconst textAssetQuality = assetHealthScore.text_assets?.filter(a => a.pinned === false).length || 0;\nconst imageAssetQuality = assetHealthScore.image_assets?.filter(a => a.enabled === true).length || 0;\nconst videoAssetQuality = assetHealthScore.video_assets?.filter(a => a.enabled === true).length || 0;\n\nconst lowImpShare = impressionShare < 0.7;\nconst lowCtr = ctr < 1.0;\nconst budgetConstrained = impressionShare > 0.8 && (perf.budget_limit_reached === true);\nconst poorAssetMix = textAssetQuality < 3 || imageAssetQuality < 2;\n\nconst issues = [];\nif (lowImpShare) issues.push({issue: 'low_impression_share', severity: 'medium', value: (impressionShare * 100).toFixed(1) + '%'});\nif (lowCtr) issues.push({issue: 'low_ctr', severity: 'low', value: ctr.toFixed(2) + '%'});\nif (budgetConstrained) issues.push({issue: 'budget_constrained', severity: 'high', value: 'yes'});\nif (poorAssetMix) issues.push({issue: 'insufficient_assets', severity: 'high', value: `text=${textAssetQuality}, img=${imageAssetQuality}, vid=${videoAssetQuality}`});\n\nreturn [{ json: {\n  campaign_id: campaign.id,\n  campaign_name: campaign.name,\n  client_id: campaign.client_id,\n  date: new Date().toISOString().slice(0, 10),\n  cost: Math.round(cost * 100) / 100,\n  conversions,\n  conversion_value: Math.round(convValue * 100) / 100,\n  roas: Math.round(roas * 100) / 100,\n  cpa: cpa ? Math.round(cpa * 100) / 100 : null,\n  ctr: Math.round(ctr * 1000) / 10,\n  impression_share: (impressionShare * 100).toFixed(1),\n  avg_cpc: Math.round(avgCpc * 100) / 100,\n  bid_maturity: bidMaturity,\n  asset_health: {\n    text_assets: textAssetQuality,\n    image_assets: imageAssetQuality,\n    video_assets: videoAssetQuality\n  },\n  health_issues: issues,\n  is_healthy: issues.length === 0\n} }];"
+      },
+      "id": "analyze",
+      "name": "Analyze PMax Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1380, 310]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"media_buyer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Google Ads Performance Max optimization for {{ $json.campaign_name }}. Current ROAS: {{ $json.roas }}x, CPA: ${{ $json.cpa }}. Impression Share: {{ $json.impression_share }}%, Bid Maturity: {{ $json.bid_maturity }}. Asset Health Issues ({{ $json.health_issues.length }}): {{ JSON.stringify($json.health_issues.slice(0,3)) }}. Asset Mix: {{ $json.asset_health.text_assets }} text, {{ $json.asset_health.image_assets }} images, {{ $json.asset_health.video_assets }} videos. Produce: (1) Asset group strength assessment (which assets underperform), (2) Recommendation for bid strategy maturity progression, (3) Audience signal optimization plan, (4) Budget pacing check (if impression_share near 100%, recommend increase), (5) Creative brief for asset expansion (missing asset types), (6) A/B testing roadmap for PMax (audience signals, creative refresh). Return as structured JSON.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": {"timeout": 180000}
+      },
+      "id": "media-buyer-pmax",
+      "name": "Media Buyer (Sonnet) - PMax Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1620, 310]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "typeValidation": "strict"},
+          "conditions": [
+            {"leftValue": "={{ $json.is_healthy }}", "rightValue": true, "operator": {"type": "boolean", "operation": "notEquals"}}
+          ]
+        }
+      },
+      "id": "has-issues",
+      "name": "Has Issues?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1860, 310]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"google_ads_pmax_optimization\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"priority\": \"medium\",\n  \"summary\": \"Google Performance Max {{ $json.campaign_name }}: {{ $json.health_issues.length }} health issues detected (impression_share={{ $json.impression_share }}%, bid_maturity={{ $json.bid_maturity }}). Media Buyer recommendations staged.\",\n  \"payload\": {{ JSON.stringify($json) }}\n}",
+        "options": {}
+      },
+      "id": "hitl",
+      "name": "Queue HITL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2100, 200]
+    },
+    {
+      "parameters": {},
+      "id": "noop",
+      "name": "Healthy",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2100, 420]
+    }
+  ],
+  "connections": {
+    "Daily 4am": {
+      "main": [[{"node": "Fetch Performance Max Campaigns", "type": "main", "index": 0}]]
+    },
+    "Fetch Performance Max Campaigns": {
+      "main": [[{"node": "Split Campaigns", "type": "main", "index": 0}]]
+    },
+    "Split Campaigns": {
+      "main": [
+        [{"node": "Get Campaign Performance", "type": "main", "index": 0}, {"node": "Get Asset Group Health", "type": "main", "index": 0}]
+      ]
+    },
+    "Get Campaign Performance": {
+      "main": [[{"node": "Merge", "type": "main", "index": 0}]]
+    },
+    "Get Asset Group Health": {
+      "main": [[{"node": "Merge", "type": "main", "index": 1}]]
+    },
+    "Merge": {
+      "main": [[{"node": "Analyze PMax Health", "type": "main", "index": 0}]]
+    },
+    "Analyze PMax Health": {
+      "main": [[{"node": "Media Buyer (Sonnet) - PMax Plan", "type": "main", "index": 0}]]
+    },
+    "Media Buyer (Sonnet) - PMax Plan": {
+      "main": [[{"node": "Has Issues?", "type": "main", "index": 0}]]
+    },
+    "Has Issues?": {
+      "main": [
+        [{"node": "Queue HITL", "type": "main", "index": 0}],
+        [{"node": "Healthy", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "tags": [
+    {"name": "zero-risk", "id": "1"},
+    {"name": "cluster-4", "id": "2"},
+    {"name": "paid-media", "id": "3"},
+    {"name": "google-ads", "id": "4"},
+    {"name": "tier-2", "id": "5"}
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

@@ -1,0 +1,153 @@
+{
+  "name": "Zero Risk — UptimeRobot Webhook Handler (Webhook)",
+  "description": "Receives UptimeRobot alerts (down/up), routes by monitor, escalates, calculates MTBF, writes to uptime_incidents table.",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "uptimerobot-alerts"
+      },
+      "id": "webhook-trigger",
+      "name": "UptimeRobot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse UptimeRobot alert and extract service name + status\nconst payload = $input.first().json;\nconst status = payload.alert_type_id; // 1=down, 2=up\nconst monitorName = payload.monitor_friendly_name || 'Unknown';\nconst monitorUrl = payload.monitor_url || '';\nconst downtimeSeconds = payload.alert_details?.downtime_seconds || 0;\nconst timestamp = new Date().toISOString();\n\nlet serviceType = 'unknown';\nlet slackChannel = '#ops-alerts';\n\nif (monitorName.includes('Vercel') || monitorName.includes('Platform')) {\n  serviceType = 'Zero Risk Platform (Vercel)';\n  slackChannel = '#ops-critical';\n} else if (monitorName.includes('Mission Control') || monitorName.includes('Railway')) {\n  serviceType = 'Mission Control (Railway)';\n  slackChannel = '#ops-critical';\n} else if (monitorName.includes('n8n')) {\n  serviceType = 'n8n Cloud';\n  slackChannel = '#ops-alerts';\n} else if (monitorName.includes('Supabase')) {\n  serviceType = 'Supabase (DB)';\n  slackChannel = '#ops-critical';\n}\n\nconst isDown = status === 1;\nconst emoji = isDown ? '🔴' : '🟢';\n\nreturn [{\n  json: {\n    monitor_name: monitorName,\n    service_type: serviceType,\n    monitor_url: monitorUrl,\n    is_down: isDown,\n    status_emoji: emoji,\n    slack_channel: slackChannel,\n    timestamp,\n    downtime_seconds: downtimeSeconds,\n    raw_payload: payload\n  }\n}];"
+      },
+      "id": "parse-alert",
+      "name": "Parse Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.is_down }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "is-down",
+      "name": "Is Service Down?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"{{ $json.slack_channel }}\",\n  \"text\": \"{{ $json.status_emoji }} *{{ $json.service_type }}*\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"{{ $json.status_emoji }} *{{ $json.service_type }} DOWN*\\n_{{ $json.monitor_name }}_\\nDetected: {{ $json.timestamp }}\" }\n    },\n    {\n      \"type\": \"actions\",\n      \"elements\": [\n        { \"type\": \"button\", \"text\": { \"type\": \"plain_text\", \"text\": \"View Monitor\" }, \"url\": \"{{ $json.monitor_url }}\" }\n      ]\n    }\n  ]\n}"
+      },
+      "id": "down-slack-alert",
+      "name": "DOWN: Alert Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/mc-sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.MC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"create_task\",\n  \"task\": {\n    \"title\": \"INCIDENT: {{ $json.service_type }} DOWN\",\n    \"description\": \"Service detected DOWN at {{ $json.timestamp }}. Monitor: {{ $json.monitor_name }}. Check UptimeRobot and service status page.\",\n    \"assignee\": \"Emilio\",\n    \"priority\": \"critical\",\n    \"tags\": [\"uptime\", \"incident\", \"auto-created\"]\n  }\n}",
+        "options": {}
+      },
+      "id": "down-mc-task",
+      "name": "DOWN: Create MC Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"{{ $json.slack_channel }}\",\n  \"text\": \"{{ $json.status_emoji }} *{{ $json.service_type }} RECOVERED*\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"{{ $json.status_emoji }} *{{ $json.service_type }} UP*\\n_Recovered at {{ $json.timestamp }}_\\nDowntime: {{ Math.floor($json.downtime_seconds / 60) }} minutes\" }\n    }\n  ]\n}"
+      },
+      "id": "up-slack-notify",
+      "name": "UP: Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 450]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/uptime-incidents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.MC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"service_type\": \"{{ $json.service_type }}\",\n  \"monitor_name\": \"{{ $json.monitor_name }}\",\n  \"status\": \"{{ $json.is_down ? 'down' : 'recovered' }}\",\n  \"incident_timestamp\": \"{{ $json.timestamp }}\",\n  \"downtime_seconds\": {{ $json.downtime_seconds }},\n  \"detected_at\": \"{{ $json.timestamp }}\"\n}",
+        "options": {}
+      },
+      "id": "log-incident",
+      "name": "Log to uptime_incidents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 350]
+    }
+  ],
+  "connections": {
+    "UptimeRobot Webhook": { "main": [[{ "node": "Parse Alert", "type": "main", "index": 0 }]] },
+    "Parse Alert": { "main": [[{ "node": "Is Service Down?", "type": "main", "index": 0 }]] },
+    "Is Service Down?": {
+      "main": [
+        [{ "node": "DOWN: Alert Slack", "type": "main", "index": 0 }],
+        [{ "node": "UP: Notify Slack", "type": "main", "index": 0 }]
+      ]
+    },
+    "DOWN: Alert Slack": { "main": [[{ "node": "DOWN: Create MC Task", "type": "main", "index": 0 }]] },
+    "DOWN: Create MC Task": { "main": [[{ "node": "Log to uptime_incidents", "type": "main", "index": 0 }]] },
+    "UP: Notify Slack": { "main": [[{ "node": "Log to uptime_incidents", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk" },
+    { "name": "cluster-7" },
+    { "name": "ops-monitoring" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

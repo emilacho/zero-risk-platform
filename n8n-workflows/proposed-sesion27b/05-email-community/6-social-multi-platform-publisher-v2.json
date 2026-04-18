@@ -1,0 +1,483 @@
+{
+  "name": "Zero Risk — Social Multi-Platform Publisher v2 (Hourly + Webhook)",
+  "description": "Publishes content to LinkedIn/Twitter/IG/TikTok with platform-specific adaptation. Includes employee advocacy + B2B social selling.",
+  "tags": [
+    {"name": "zero-risk"},
+    {"name": "cluster-5"},
+    {"name": "email-community"},
+    {"name": "social-publishing"}
+  ],
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron",
+      "name": "Hourly Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/social-content",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: Content Post",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 500]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/social-queue?status=pending&limit=5",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-queue",
+      "name": "Fetch Pending Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "queue",
+        "options": {}
+      },
+      "id": "split-content",
+      "name": "Split per Content",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pillar = $json.pillar_topic || 'General';\nconst baseText = $json.caption || $json.text || '';\nconst platforms = ['linkedin', 'twitter', 'instagram', 'tiktok'];\nconst adaptations = {};\n\nfor (const platform of platforms) {\n  let adapted = baseText;\n  const platformLimits = { linkedin: 3000, twitter: 280, instagram: 2200, tiktok: 2200 };\n  \n  if (platform === 'linkedin') {\n    adapted = adapted.length > 300 ? adapted.substring(0, 300) + '...' : adapted;\n    adapted += `\\n\\n#${pillar.replace(/\\s+/g, '')} #B2B #ThoughtLeadership`;\n  } else if (platform === 'twitter') {\n    adapted = adapted.substring(0, 250);\n    adapted += ` #${pillar.replace(/\\s+/g, '')}`;\n  } else if (platform === 'instagram') {\n    adapted = adapted.substring(0, 2000);\n    adapted += `\\n\\n#${pillar.replace(/\\s+/g, '')} #marketing #community`;\n  } else if (platform === 'tiktok') {\n    adapted = adapted.substring(0, 2000);\n    adapted = adapted.toLowerCase();\n    adapted += ` #${pillar.toLowerCase().replace(/\\s+/g, '')} #trending`;\n  }\n  \n  adaptations[platform] = adapted;\n}\n\nreturn [{ json: { ...adaptations, original: baseText, platforms_ready: platforms } }];"
+      },
+      "id": "adapt-platforms",
+      "name": "Adapt per Platform",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [820, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const platforms = $json.platforms_ready || ['linkedin', 'twitter', 'instagram', 'tiktok'];\nreturn platforms.map(p => ({ json: { platform: p, content: $json[p], media_url: $json.media_url } }));"
+      },
+      "id": "split-platforms",
+      "name": "Split per Platform",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1020, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.linkedin.com/v2/ugcPosts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINKEDIN_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"author\": \"urn:li:person:{{ $env.LINKEDIN_PERSON_ID }}\",\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.UGCContent\": {\n      \"shareContent\": {\n        \"shareCommentary\": { \"text\": \"{{ $json.content }}\" },\n        \"shareMediaCategory\": \"IMAGE\",\n        \"media\": [{ \"status\": \"READY\", \"description\": { \"text\": \"Content\" }, \"media\": \"urn:li:digitalmediaAsset:{{ $env.LINKEDIN_ASSET_ID }}\" }]\n      }\n    }\n  },\n  \"visibility\": { \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\" }\n}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "publish-linkedin",
+      "name": "Publish LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.twitter.com/2/tweets",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.TWITTER_BEARER_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"text\": \"{{ $json.content }}\" }",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "publish-twitter",
+      "name": "Publish Twitter/X",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.instagram.com/{{ $env.INSTAGRAM_BUSINESS_ACCOUNT_ID }}/media",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.INSTAGRAM_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"image_url\": \"{{ $json.media_url }}\", \"caption\": \"{{ $json.content }}\" }",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "publish-instagram",
+      "name": "Publish Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://open.tiktokapis.com/v1/post/publish/action/publish/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.TIKTOK_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"video_url\": \"{{ $json.media_url }}\", \"text\": \"{{ $json.content }}\" }",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "publish-tiktok",
+      "name": "Publish TikTok",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.platform }}",
+              "rightValue": "linkedin",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "route-linkedin",
+      "name": "Is LinkedIn?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.platform }}",
+              "rightValue": "twitter",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "route-twitter",
+      "name": "Is Twitter?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.platform }}",
+              "rightValue": "instagram",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "route-instagram",
+      "name": "Is Instagram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 460]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/social-queue/update",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"id\": \"{{ $node['split-content'].json.id }}\",\n  \"platform\": \"{{ $json.platform }}\",\n  \"status\": \"published\",\n  \"post_id\": \"{{ $json.id || 'unknown' }}\",\n  \"published_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "log-publish",
+      "name": "Log Published",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 300]
+    }
+  ],
+  "connections": {
+    "Hourly Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Content": {
+      "main": [
+        [
+          {
+            "node": "Split per Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split per Content": {
+      "main": [
+        [
+          {
+            "node": "Adapt per Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adapt per Platform": {
+      "main": [
+        [
+          {
+            "node": "Split per Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split per Platform": {
+      "main": [
+        [
+          {
+            "node": "Is LinkedIn?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is LinkedIn?": {
+      "main": [
+        [
+          {
+            "node": "Publish LinkedIn",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Twitter?",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Is Twitter?": {
+      "main": [
+        [
+          {
+            "node": "Publish Twitter/X",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Instagram?",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Is Instagram?": {
+      "main": [
+        [
+          {
+            "node": "Publish Instagram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Publish TikTok",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Publish LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Log Published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish Twitter/X": {
+      "main": [
+        [
+          {
+            "node": "Log Published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish Instagram": {
+      "main": [
+        [
+          {
+            "node": "Log Published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish TikTok": {
+      "main": [
+        [
+          {
+            "node": "Log Published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

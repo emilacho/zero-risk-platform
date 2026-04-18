@@ -1,0 +1,270 @@
+{
+  "name": "Zero Risk — Influencer Authenticity Gate (Webhook)",
+  "description": "Pre-outreach influencer vetting: bot score <5%, no growth anomalies, no engagement pods. Calls HypeAuditor API or alternatives.",
+  "tags": [
+    {"name": "zero-risk"},
+    {"name": "cluster-5"},
+    {"name": "email-community"},
+    {"name": "influencer-vetting"}
+  ],
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/influencer-vet",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: Influencer Handle",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.influencer_handle || !b.platform) throw new Error('client_id, influencer_handle, platform required');\nreturn [{ json: { client_id: b.client_id, influencer_handle: b.influencer_handle, platform: b.platform, campaign_budget_usd: b.campaign_budget_usd || 5000 } }];"
+      },
+      "id": "validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.hypeauditor.com/v1/influencer-by-social-url",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HYPEAUDITOR_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"url\": \"https://{{ $json.platform }}.com/{{ $json.influencer_handle }}\", \"platform\": \"{{ $json.platform }}\" }",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-hypeauditor",
+      "name": "HypeAuditor: Profile Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst checks = {\n  bot_score: data.bot_score || 10,\n  has_bot_flag: (data.bot_score || 10) > 5,\n  growth_anomaly: false,\n  engagement_pod_risk: false,\n  fake_score: 0\n};\n\nif (data.follower_growth_24h > 15 || data.engagement_rate > 25) {\n  checks.growth_anomaly = true;\n}\n\nif (data.engagement_by_comment_type) {\n  const genericCommentRatio = (data.engagement_by_comment_type?.generic || 0) / ((data.engagement_by_comment_type?.total || 1));\n  if (genericCommentRatio > 0.5) checks.engagement_pod_risk = true;\n}\n\nconst penalties = {\n  bot_score: checks.bot_score,\n  growth_anomaly: checks.growth_anomaly ? 30 : 0,\n  engagement_pods: checks.engagement_pod_risk ? 20 : 0\n};\nchecks.fake_score = penalties.bot_score + penalties.growth_anomaly + penalties.engagement_pods;\n\nconst passed = !checks.has_bot_flag && !checks.growth_anomaly && !checks.engagement_pod_risk;\n\nreturn [{ json: { authenticity: checks, passed, recommendation: passed ? 'APPROVE' : 'REJECT' } }];"
+      },
+      "id": "check-authenticity",
+      "name": "Check Authenticity Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [820, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.passed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      },
+      "id": "is-approved",
+      "name": "Authenticity Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1020, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/influencer-list/approve",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"influencer_handle\": \"{{ $node['validate'].json.influencer_handle }}\",\n  \"platform\": \"{{ $node['validate'].json.platform }}\",\n  \"authenticity_scorecard\": {{ JSON.stringify($node['check-authenticity'].json.authenticity) }},\n  \"status\": \"approved\",\n  \"approved_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "approve-influencer",
+      "name": "Add to Approved List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/influencer-rejections/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"influencer_handle\": \"{{ $node['validate'].json.influencer_handle }}\",\n  \"platform\": \"{{ $node['validate'].json.platform }}\",\n  \"failure_reason\": \"{{ $json.authenticity.has_bot_flag ? 'Bot score > 5%' : ($json.authenticity.growth_anomaly ? 'Growth anomaly detected' : 'Engagement pod signals') }}\",\n  \"fake_score\": {{ $json.authenticity.fake_score }},\n  \"rejected_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "reject-influencer",
+      "name": "Log Rejection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 460]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { influencer_handle: $node['validate'].json.influencer_handle, status: 'approved', recommendation: $node['check-authenticity'].json.recommendation } }}",
+        "options": {}
+      },
+      "id": "respond-approve",
+      "name": "Respond: APPROVED",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1420, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { influencer_handle: $node['validate'].json.influencer_handle, status: 'rejected', reason: $json.authenticity.has_bot_flag ? 'Bot activity detected' : ($json.authenticity.growth_anomaly ? 'Growth manipulation' : 'Engagement pod involvement'), fake_score: $json.authenticity.fake_score } }}",
+        "options": {}
+      },
+      "id": "respond-reject",
+      "name": "Respond: REJECTED",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1420, 400]
+    }
+  ],
+  "connections": {
+    "Webhook: Influencer Handle": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "HypeAuditor: Profile Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HypeAuditor: Profile Data": {
+      "main": [
+        [
+          {
+            "node": "Check Authenticity Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Authenticity Signals": {
+      "main": [
+        [
+          {
+            "node": "Authenticity Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticity Passed?": {
+      "main": [
+        [
+          {
+            "node": "Add to Approved List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Rejection",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Add to Approved List": {
+      "main": [
+        [
+          {
+            "node": "Respond: APPROVED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Rejection": {
+      "main": [
+        [
+          {
+            "node": "Respond: REJECTED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

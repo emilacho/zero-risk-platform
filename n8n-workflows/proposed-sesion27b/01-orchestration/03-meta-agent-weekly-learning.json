@@ -1,0 +1,372 @@
+{
+  "name": "Zero Risk \u2014 Meta-Agent Weekly Learning Cycle (Cron Monday 9am)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "cron-monday",
+      "name": "Every Monday 9am CET",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/analytics/agent-outcomes?days=7&limit=500",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "fetch-outcomes",
+      "name": "Fetch Agent Outcomes (Last 7 Days)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/analytics/performance-metrics?days=7&limit=500",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "fetch-metrics",
+      "name": "Fetch Performance Metrics (Last 7 Days)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const outcomes = $node['Fetch Agent Outcomes (Last 7 Days)'].json.outcomes || [];\nconst metrics = $node['Fetch Performance Metrics (Last 7 Days)'].json.metrics || [];\nconst by_agent = {};\noutcomes.forEach(o => {\n  if (!by_agent[o.agent_slug]) {\n    by_agent[o.agent_slug] = {\n      total_tasks: 0,\n      successful_tasks: 0,\n      failed_tasks: 0,\n      total_tokens: 0,\n      total_latency_ms: 0,\n      failures: []\n    };\n  }\n  by_agent[o.agent_slug].total_tasks += 1;\n  if (o.success) {\n    by_agent[o.agent_slug].successful_tasks += 1;\n  } else {\n    by_agent[o.agent_slug].failed_tasks += 1;\n    by_agent[o.agent_slug].failures.push(o.error || 'unknown');\n  }\n  by_agent[o.agent_slug].total_tokens += o.tokens_used || 0;\n  by_agent[o.agent_slug].total_latency_ms += o.latency_ms || 0;\n});\nconst agent_stats = Object.entries(by_agent).map(([agent_slug, data]) => ({\n  agent_slug,\n  success_rate: (data.successful_tasks / data.total_tasks * 100).toFixed(2) + '%',\n  task_count: data.total_tasks,\n  avg_tokens_per_task: (data.total_tokens / data.total_tasks).toFixed(0),\n  avg_latency_ms: (data.total_latency_ms / data.total_tasks).toFixed(0),\n  failure_rate: (data.failed_tasks / data.total_tasks * 100).toFixed(2) + '%',\n  top_errors: data.failures.slice(0, 3)\n}));\nconst top_agents = agent_stats.sort((a, b) => parseFloat(b.success_rate) - parseFloat(a.success_rate)).slice(0, 5);\nconst struggling_agents = agent_stats.sort((a, b) => parseFloat(a.success_rate) - parseFloat(b.success_rate)).slice(0, 3);\nreturn [{\n  json: {\n    analysis_week: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0],\n    total_tasks: outcomes.length,\n    total_unique_agents: Object.keys(by_agent).length,\n    overall_success_rate: (outcomes.filter(o => o.success).length / outcomes.length * 100).toFixed(2) + '%',\n    all_agents_stats: agent_stats,\n    top_performing_agents: top_agents,\n    struggling_agents: struggling_agents,\n    total_tokens_week: outcomes.reduce((s, o) => s + (o.tokens_used || 0), 0),\n    analysis_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "aggregate-data",
+      "name": "Aggregate Outcomes & Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-internal-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"optimization-agent\",\n  \"task_type\": \"meta_learning_cycle\",\n  \"analysis_week\": \"{{ $json.analysis_week }}\",\n  \"agent_performance\": \"{{ JSON.stringify($json.all_agents_stats) }}\",\n  \"top_performers\": \"{{ JSON.stringify($json.top_performing_agents) }}\",\n  \"struggling_agents\": \"{{ JSON.stringify($json.struggling_agents) }}\",\n  \"overall_metrics\": {\n    \"total_tasks\": {{ $json.total_tasks }},\n    \"total_unique_agents\": {{ $json.total_unique_agents }},\n    \"overall_success_rate\": \"{{ $json.overall_success_rate }}\",\n    \"total_tokens_consumed\": {{ $json.total_tokens_week }}\n  },\n  \"instruction\": \"Analyze weekly agent performance. Return: top_3_findings, identity_improvement_proposals (agent_slug, weakness, proposed_update, expected_impact), recommendations, feedback_for_jefe_marketing.\"\n}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "invoke-meta-agent",
+      "name": "Invoke Optimization Agent (Meta-Learning)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const meta_output = $node['Invoke Optimization Agent (Meta-Learning)'].json;\nif (!meta_output.success) {\n  throw new Error('Meta-agent analysis failed: ' + (meta_output.error || 'unknown'));\n}\nconst proposals = (meta_output.identity_improvement_proposals || []).map((p, idx) => ({\n  proposal_id: `imp-${new Date().getTime()}-${idx}`,\n  agent_slug: p.agent_slug,\n  improvement_rationale: p.proposed_identity_update,\n  expected_impact: p.expected_impact,\n  priority: p.expected_impact === 'high' ? 'critical' : p.expected_impact === 'medium' ? 'high' : 'medium',\n  proposed_by: 'meta-agent-cycle',\n  created_at: new Date().toISOString(),\n  status: 'pending_review'\n}));\nreturn [{\n  json: {\n    analysis_result: meta_output,\n    improvement_proposals: proposals,\n    top_findings: meta_output.top_3_findings || [],\n    jefe_feedback: meta_output.feedback_for_jefe_marketing || 'No specific feedback'\n  }\n}];"
+      },
+      "id": "extract-proposals",
+      "name": "Extract Improvement Proposals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "parameters": [
+          {
+            "name": "proposal",
+            "value": "=proposal"
+          }
+        ],
+        "options": {}
+      },
+      "id": "split-proposals",
+      "name": "Split Proposals for Queueing",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/identity-improvements/queue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"proposal_id\": \"{{ $json.proposal_id }}\",\n  \"agent_slug\": \"{{ $json.agent_slug }}\",\n  \"improvement_rationale\": \"{{ $json.improvement_rationale }}\",\n  \"expected_impact\": \"{{ $json.expected_impact }}\",\n  \"priority\": \"{{ $json.priority }}\",\n  \"proposed_by\": \"{{ $json.proposed_by }}\",\n  \"status\": \"{{ $json.status }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "queue-improvements",
+      "name": "Queue Improvement Proposals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"\ud83d\udcca *Weekly Meta-Agent Learning Cycle Complete*\\n\\n*Analysis Period:* {{ $json.analysis_week }}\\n*Total Tasks Analyzed:* {{ $json.total_tasks }}\\n*Overall Success Rate:* {{ $json.overall_success_rate }}\\n*Unique Agents:* {{ $json.total_unique_agents }}\\n\\n*Top 3 Findings:*\\n{{ $json.top_findings.map((f, i) => '\\\\n' + (i+1) + '. ' + f).join('') }}\\n\\n*Improvement Proposals Queued:* {{ ($json.improvement_proposals || []).length }}\",\n  \"channel\": \"#agency-ops\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "notify-slack-digest",
+      "name": "Publish Weekly Digest to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/mc-sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.MC_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"meta_learning_complete\",\n  \"week\": \"{{ $json.analysis_week }}\",\n  \"tasks_analyzed\": {{ $json.total_tasks }},\n  \"success_rate\": \"{{ $json.overall_success_rate }}\",\n  \"proposals_queued\": {{ ($json.improvement_proposals || []).length }},\n  \"timestamp\": \"{{ now().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "notify-mc",
+      "name": "Notify Mission Control",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "end-success",
+      "name": "Cycle Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Every Monday 9am CET": {
+      "main": [
+        [
+          {
+            "node": "Fetch Agent Outcomes (Last 7 Days)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Agent Outcomes (Last 7 Days)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Performance Metrics (Last 7 Days)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Performance Metrics (Last 7 Days)": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Outcomes & Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Outcomes & Metrics": {
+      "main": [
+        [
+          {
+            "node": "Invoke Optimization Agent (Meta-Learning)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoke Optimization Agent (Meta-Learning)": {
+      "main": [
+        [
+          {
+            "node": "Extract Improvement Proposals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Improvement Proposals": {
+      "main": [
+        [
+          {
+            "node": "Split Proposals for Queueing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Proposals for Queueing": {
+      "main": [
+        [
+          {
+            "node": "Queue Improvement Proposals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Improvement Proposals": {
+      "main": [
+        [
+          {
+            "node": "Publish Weekly Digest to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish Weekly Digest to Slack": {
+      "main": [
+        [
+          {
+            "node": "Notify Mission Control",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Mission Control": {
+      "main": [
+        [
+          {
+            "node": "Cycle Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-1-orchestration"
+    },
+    {
+      "name": "meta-learning"
+    },
+    {
+      "name": "cron"
+    }
+  ]
+}

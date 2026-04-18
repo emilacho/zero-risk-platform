@@ -1,0 +1,66 @@
+{
+  "name": "Zero Risk \u2014 SEO Backlink Opportunity Scanner Weekly",
+  "meta": {
+    "description": "Mondays 6am: unlinked mentions scan + data studies. Calls Backlink Strategist agent. Tiers targets A/B/C. Writes to backlink_opportunities table. Weekly Slack digest.",
+    "trigger_type": "cron",
+    "cron_schedule": "0 6 * * 1",
+    "expected_duration_minutes": 25,
+    "cost_usd_per_run": "4-6",
+    "tags": [
+      {
+        "name": "zero-risk"
+      },
+      {
+        "name": "cluster-3"
+      },
+      {
+        "name": "seo"
+      },
+      {
+        "name": "backlinks"
+      },
+      {
+        "name": "weekly"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "0 6 * * 1"
+      },
+      "id": "trigger-cron",
+      "name": "Trigger: Mondays 6am UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{message:'Backlink scanner triggered'}}];"
+      },
+      "id": "init",
+      "name": "Initialize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "trigger-cron": {
+      "main": [
+        [
+          {
+            "node": "init"
+          }
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,239 @@
+{
+  "name": "Zero Risk — Cross-Platform Attribution Validator (Hourly)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 * * * *"}]
+        }
+      },
+      "id": "cron",
+      "name": "Hourly",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/analytics/active-campaigns",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 30000}
+      },
+      "id": "fetch-camps",
+      "name": "Fetch Active Campaigns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 320]
+    },
+    {
+      "parameters": {"fieldToSplitOut": "campaigns", "options": {}},
+      "id": "split",
+      "name": "Split",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [660, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/meta-ads/spend-data?campaign_id={{ $json.id }}&hours=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 20000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "meta-spend",
+      "name": "Meta Spend + Conversions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 120]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/google-ads/spend-data?campaign_id={{ $json.id }}&hours=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 20000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "ga-spend",
+      "name": "Google Spend + Conversions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 240]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/tiktok-ads/spend-data?campaign_id={{ $json.id }}&hours=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 20000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "tiktok-spend",
+      "name": "TikTok Spend + Conversions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 360]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/ga4/conversion-data?campaign_id={{ $json.id }}&hours=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 20000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "ga4-convs",
+      "name": "GA4 Conversions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 480]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge",
+      "name": "Merge Platform Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1140, 280]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all();\nconst campaign = $node['split'].json;\nconst metaData = all[0]?.json || {};\nconst gaData = all[1]?.json || {};\nconst tiktokData = all[2]?.json || {};\nconst ga4Data = all[3]?.json || {};\n\nconst metaConv = parseInt(metaData.conversions || 0);\nconst gaConv = parseInt(gaData.conversions || 0);\nconst tiktokConv = parseInt(tiktokData.conversions || 0);\nconst ga4Conv = parseInt(ga4Data.conversions || 0);\n\nconst checkList = [];\nconst discrepancies = [];\n\nconst metaGaDiff = Math.abs(metaConv - gaConv) / Math.max(metaConv, gaConv, 1);\nif (metaGaDiff > 0.1) discrepancies.push({source: 'Meta vs GA4', diff_pct: (metaGaDiff * 100).toFixed(1), meta: metaConv, ga4: gaConv});\n\nconst metaTiktokDiff = Math.abs(metaConv - tiktokConv) / Math.max(metaConv, tiktokConv, 1);\nif (metaTiktokDiff > 0.1) discrepancies.push({source: 'Meta vs TikTok', diff_pct: (metaTiktokDiff * 100).toFixed(1), meta: metaConv, tiktok: tiktokConv});\n\ncheckList.push({check: 'pixel_firing', status: metaConv > 0 ? 'ok' : 'warning'});\ncheckList.push({check: 'event_deduplication', status: metaData.dedup_count > 0 ? 'ok' : 'na'});\ncheckList.push({check: 'consent_mode_v2', status: metaData.consent_mode === 'v2' ? 'ok' : 'warning'});\ncheckList.push({check: 'ga4_event_matching', status: metaConv === ga4Conv ? 'ok' : 'warning'});\ncheckList.push({check: 'attribution_window_consistency', status: metaData.window === gaData.window ? 'ok' : 'warning'});\ncheckList.push({check: 'timezone_alignment', status: metaData.tz === gaData.tz ? 'ok' : 'warning'});\ncheckList.push({check: 'capi_server_client_parity', status: metaData.capi_mismatch < 0.05 ? 'ok' : 'warning'});\ncheckList.push({check: 'currency_consistency', status: metaData.currency === gaData.currency ? 'ok' : 'warning'});\ncheckList.push({check: 'cross_device_tracking', status: metaData.cross_device === true ? 'ok' : 'na'});\ncheckList.push({check: 'ios_tracking_status', status: metaData.ios_signal_quality ? 'ok' : 'warning'});\n\nconst majorDiscrepancy = discrepancies.length > 0 && discrepancies.some(d => parseFloat(d.diff_pct) > 20);\n\nreturn [{ json: {\n  campaign_id: campaign.id,\n  campaign_name: campaign.name,\n  client_id: campaign.client_id,\n  date: new Date().toISOString(),\n  platform_conversions: {\n    meta: metaConv,\n    google: gaConv,\n    tiktok: tiktokConv,\n    ga4: ga4Conv\n  },\n  discrepancies,\n  qa_checklist: checkList,\n  has_major_discrepancy: majorDiscrepancy,\n  discrepancy_severity: majorDiscrepancy ? 'high' : (discrepancies.length > 0 ? 'medium' : 'ok')\n} }];"
+      },
+      "id": "diagnose",
+      "name": "10-Point Attribution Audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1380, 280]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "typeValidation": "strict"},
+          "conditions": [
+            {"leftValue": "={{ $json.discrepancy_severity }}", "rightValue": "'ok'", "operator": {"type": "string", "operation": "notEquals"}}
+          ]
+        }
+      },
+      "id": "has-discrepancy",
+      "name": "Has Discrepancy?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1620, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/tracking/attribution-audits",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"audit_type\": \"hourly_cross_platform\",\n  \"severity\": \"{{ $json.discrepancy_severity }}\",\n  \"platform_conversions\": {{ JSON.stringify($json.platform_conversions) }},\n  \"discrepancies\": {{ JSON.stringify($json.discrepancies) }},\n  \"qa_results\": {{ JSON.stringify($json.qa_checklist) }}\n}",
+        "options": {}
+      },
+      "id": "persist",
+      "name": "Persist Audit to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1860, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"⚠️ Attribution Discrepancy: {{ $json.campaign_name }}\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*Attribution Discrepancy Detected*\\nCampaign: {{ $json.campaign_name }}\\nSeverity: {{ $json.discrepancy_severity | upper }}\\nDiscrepancies: {{ $json.discrepancies.length }}\\n\\n{{ $json.discrepancies.map(d => `• ${d.source}: ${d.diff_pct}% diff`).join('\\\\n') }}\"\n      }\n    }\n  ]\n}",
+        "options": {"timeout": 10000}
+      },
+      "id": "slack-alert",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1860, 380]
+    },
+    {
+      "parameters": {},
+      "id": "noop",
+      "name": "Tracking OK",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1860, 540]
+    }
+  ],
+  "connections": {
+    "Hourly": {
+      "main": [[{"node": "Fetch Active Campaigns", "type": "main", "index": 0}]]
+    },
+    "Fetch Active Campaigns": {
+      "main": [[{"node": "Split", "type": "main", "index": 0}]]
+    },
+    "Split": {
+      "main": [
+        [
+          {"node": "Meta Spend + Conversions", "type": "main", "index": 0},
+          {"node": "Google Spend + Conversions", "type": "main", "index": 0},
+          {"node": "TikTok Spend + Conversions", "type": "main", "index": 0},
+          {"node": "GA4 Conversions", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Meta Spend + Conversions": {
+      "main": [[{"node": "Merge Platform Data", "type": "main", "index": 0}]]
+    },
+    "Google Spend + Conversions": {
+      "main": [[{"node": "Merge Platform Data", "type": "main", "index": 1}]]
+    },
+    "TikTok Spend + Conversions": {
+      "main": [[{"node": "Merge Platform Data", "type": "main", "index": 2}]]
+    },
+    "GA4 Conversions": {
+      "main": [[{"node": "Merge Platform Data", "type": "main", "index": 3}]]
+    },
+    "Merge Platform Data": {
+      "main": [[{"node": "10-Point Attribution Audit", "type": "main", "index": 0}]]
+    },
+    "10-Point Attribution Audit": {
+      "main": [[{"node": "Has Discrepancy?", "type": "main", "index": 0}]]
+    },
+    "Has Discrepancy?": {
+      "main": [
+        [{"node": "Persist Audit to Supabase", "type": "main", "index": 0}, {"node": "Slack Alert", "type": "main", "index": 0}],
+        [{"node": "Tracking OK", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "tags": [
+    {"name": "zero-risk", "id": "1"},
+    {"name": "cluster-4", "id": "2"},
+    {"name": "paid-media", "id": "3"},
+    {"name": "attribution", "id": "4"},
+    {"name": "tier-1", "id": "5"}
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

@@ -1,0 +1,252 @@
+{
+  "name": "Zero Risk — Incrementality Test Runner (15min + Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "*/15 * * * *"}]
+        }
+      },
+      "id": "cron-monitor",
+      "name": "Every 15min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 320]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/incrementality-test-start",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-start",
+      "name": "Webhook: Start Test",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 560]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/testing/active-incrementality-tests",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 30000}
+      },
+      "id": "fetch-tests",
+      "name": "Fetch Active Tests",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 320]
+    },
+    {
+      "parameters": {"fieldToSplitOut": "tests", "options": {}},
+      "id": "split",
+      "name": "Split Tests",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [660, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/testing/validate-test-readiness",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"test_id\": \"{{ $json.id }}\",\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"test_type\": \"{{ $json.test_type }}\",\n  \"platform\": \"{{ $json.platform }}\"\n}",
+        "options": {"timeout": 30000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "validate",
+      "name": "Validate Readiness",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const test = $node['split'].json;\nconst validation = $json;\n\nif (!validation.is_ready) return [];\n\nconst testType = test.test_type;\nlet apiCall = {};\n\nif (testType === 'meta_conversion_lift') {\n  apiCall = {\n    method: 'POST',\n    url: `https://graph.facebook.com/v21.0/${test.campaign_id}/conversions_lift_studies`,\n    platform: 'meta',\n    body: {\n      study_name: test.name,\n      study_type: 'RANDOMIZED_CONTROL_TRIAL',\n      treatment_campaign_ids: [test.treatment_campaign_id],\n      control_campaign_ids: [test.control_campaign_id],\n      start_date: test.start_date,\n      end_date: test.end_date,\n      conversion_events: test.conversion_events || ['Purchase']\n    }\n  };\n} else if (testType === 'google_ads_lift') {\n  apiCall = {\n    method: 'POST',\n    url: `https://www.googleapis.com/adwords/api/adwords-reporting/v202403/conversionUploadService`,\n    platform: 'google',\n    body: {\n      experiment_id: test.id,\n      experiment_name: test.name,\n      start_date: test.start_date,\n      end_date: test.end_date,\n      control_percentage: 50,\n      treatment_percentage: 50\n    }\n  };\n} else if (testType === 'matched_market') {\n  apiCall = {\n    method: 'POST',\n    url: `{{ $env.ZERO_RISK_API_URL }}/api/testing/matched-market`,\n    platform: 'custom',\n    body: {\n      test_id: test.id,\n      treatment_market: test.treatment_market,\n      control_markets: test.control_markets,\n      start_date: test.start_date,\n      metric: test.primary_metric\n    }\n  };\n}\n\nreturn [{ json: {test_id: test.id, ...apiCall} }];"
+      },
+      "id": "plan-test",
+      "name": "Plan Test Execution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "=Bearer {{ $env.META_ACCESS_TOKEN }}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {"timeout": 60000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "execute-test",
+      "name": "Execute Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/testing/fetch-test-results",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"test_id\": \"{{ $node['split'].json.id }}\",\n  \"platform\": \"{{ $node['split'].json.platform }}\"\n}",
+        "options": {"timeout": 60000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "fetch-results",
+      "name": "Fetch Test Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1620, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $json;\nif (!results || !results.data) return [{ json: { status: 'incomplete' } }];\n\nconst data = results.data;\nconst treatmentLifts = data.treatment_stats || {};\nconst controlLifts = data.control_stats || {};\n\nconst liftPct = ((treatmentLifts.conversions - controlLifts.conversions) / controlLifts.conversions * 100) || 0;\nconst confInterval = data.confidence_interval || [0, 0];\nconst isSignificant = data.p_value < 0.05;\nconst sampleSize = data.sample_size || 0;\nconst minSampleRequired = 1000;\n\nconst testStatus = {\n  test_id: $node['split'].json.id,\n  campaign_id: $node['split'].json.campaign_id,\n  client_id: $node['split'].json.client_id,\n  test_type: $node['split'].json.test_type,\n  lift_pct: Math.round(liftPct * 100) / 100,\n  confidence_interval: confInterval,\n  is_significant: isSignificant && sampleSize >= minSampleRequired,\n  sample_size: sampleSize,\n  min_sample_required: minSampleRequired,\n  p_value: data.p_value || null,\n  test_duration_days: data.duration_days || 0,\n  status: isSignificant && sampleSize >= minSampleRequired ? 'significant' : (sampleSize >= minSampleRequired ? 'inconclusive' : 'running')\n};\n\nreturn [{ json: testStatus }];"
+      },
+      "id": "analyze-results",
+      "name": "Analyze & Interpret Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1860, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "typeValidation": "strict"},
+          "conditions": [
+            {"leftValue": "={{ $json.status }}", "rightValue": "'running'", "operator": {"type": "string", "operation": "notEquals"}}
+          ]
+        }
+      },
+      "id": "is-complete",
+      "name": "Test Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2100, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/testing/incrementality-results",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "persist-results",
+      "name": "Persist Results to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2340, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"tracking_specialist\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Interpret incrementality test results for campaign {{ $node['split'].json.campaign_name }}. Lift: {{ $json.lift_pct }}% ({{ $json.status }}). P-value: {{ $json.p_value }}. Sample size: {{ $json.sample_size }}/{{ $json.min_sample_required }}. Is significant: {{ $json.is_significant }}. Produce: (1) Statistical validity assessment, (2) Business impact interpretation (incremental ROAS, incremental revenue), (3) Confidence in results, (4) Recommendations for optimization based on lift direction, (5) Next test hypothesis.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": {"timeout": 180000}
+      },
+      "id": "tracking-specialist",
+      "name": "Tracking Specialist Interpretation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2340, 360]
+    },
+    {
+      "parameters": {},
+      "id": "noop",
+      "name": "Still Running",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2340, 500]
+    }
+  ],
+  "connections": {
+    "Every 15min": {
+      "main": [[{"node": "Fetch Active Tests", "type": "main", "index": 0}]]
+    },
+    "Webhook: Start Test": {
+      "main": []
+    },
+    "Fetch Active Tests": {
+      "main": [[{"node": "Split Tests", "type": "main", "index": 0}]]
+    },
+    "Split Tests": {
+      "main": [[{"node": "Validate Readiness", "type": "main", "index": 0}]]
+    },
+    "Validate Readiness": {
+      "main": [[{"node": "Plan Test Execution", "type": "main", "index": 0}]]
+    },
+    "Plan Test Execution": {
+      "main": [[{"node": "Execute Test", "type": "main", "index": 0}]]
+    },
+    "Execute Test": {
+      "main": [[{"node": "Fetch Test Results", "type": "main", "index": 0}]]
+    },
+    "Fetch Test Results": {
+      "main": [[{"node": "Analyze & Interpret Results", "type": "main", "index": 0}]]
+    },
+    "Analyze & Interpret Results": {
+      "main": [[{"node": "Test Complete?", "type": "main", "index": 0}]]
+    },
+    "Test Complete?": {
+      "main": [
+        [{"node": "Persist Results to Supabase", "type": "main", "index": 0}, {"node": "Tracking Specialist Interpretation", "type": "main", "index": 0}],
+        [{"node": "Still Running", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "tags": [
+    {"name": "zero-risk", "id": "1"},
+    {"name": "cluster-4", "id": "2"},
+    {"name": "paid-media", "id": "3"},
+    {"name": "incrementality", "id": "4"},
+    {"name": "tier-1", "id": "5"}
+  ],
+  "triggerCount": 2,
+  "versionId": "1"
+}

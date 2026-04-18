@@ -1,0 +1,64 @@
+{
+  "name": "Zero Risk — Creative Fatigue Auto-Refresh Loop (Every 6h)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "everyX",
+        "value": 6,
+        "unit": "hours"
+      },
+      "id": "schedule",
+      "name": "Trigger: Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/creative-fatigue-webhook",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook",
+      "name": "Webhook: Manual Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {timestamp: new Date().toISOString(), lookback_days: 7, ctr_threshold: 0.5, frequency_max: 3.5}}];"
+      },
+      "id": "prep",
+      "name": "Code: Prepare Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"text\": \"✅ Creative Fatigue Check Complete - {{ $json.timestamp }}\"}"
+      },
+      "id": "slack",
+      "name": "Slack: Notify Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300]
+    }
+  ],
+  "connections": {
+    "schedule": {"main": [[{"node": "prep", "type": "main", "index": 0}]]},
+    "webhook": {"main": [[{"node": "prep", "type": "main", "index": 0}]]},
+    "prep": {"main": [[{"node": "slack", "type": "main", "index": 0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "timezone": "UTC"
+  },
+  "tags": [{"name": "zero-risk"}, {"name": "creative"}, {"name": "cluster-2"}]
+}

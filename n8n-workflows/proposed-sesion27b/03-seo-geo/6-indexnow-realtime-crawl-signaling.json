@@ -1,0 +1,133 @@
+{
+  "name": "Zero Risk \u2014 IndexNow + Real-Time Crawl Signaling",
+  "meta": {
+    "description": "Webhook triggered on content publish. Submits URL(s) to IndexNow (Microsoft/Bing native). Submits to Google Search Console Indexing API. Validates LLM crawler access (GPTBot, PerplexityBot, Gemini-Crawler). Writes indexation events to log.",
+    "trigger_type": "webhook",
+    "webhook_path": "zero-risk/indexnow-signal",
+    "expected_duration_minutes": 5,
+    "cost_usd_per_run": "0.00 (free APIs)",
+    "tags": [
+      {
+        "name": "zero-risk"
+      },
+      {
+        "name": "cluster-3"
+      },
+      {
+        "name": "seo"
+      },
+      {
+        "name": "indexing"
+      },
+      {
+        "name": "real-time"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/indexnow-signal",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "webhook",
+      "name": "Webhook: Content Published",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        400
+      ],
+      "webhookId": "zero-risk-indexnow-signal"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json; const urls = Array.isArray(b.urls) ? b.urls : [b.urls]; return [{json:{domain:b.domain.replace(/^https?:\\/\\//,''), urls:urls.slice(0,10), client_id:b.client_id}}];"
+      },
+      "id": "validate",
+      "name": "Validate URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.indexnow.org/indexnow",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"host\":\"{{ $json.domain }}\",\"key\":\"key\",\"urlList\":{{ JSON.stringify($json.urls) }}}"
+      },
+      "id": "indexnow-submit",
+      "name": "Submit to IndexNow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://www.googleapis.com/indexing/v3/urlNotifications:publish",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer token"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"url\":\"{{ $json.urls[0] }}\",\"type\":\"URL_UPDATED\"}"
+      },
+      "id": "gsc-indexing",
+      "name": "Submit to Google Search Console",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "webhook": {
+      "main": [
+        [
+          {
+            "node": "validate"
+          }
+        ]
+      ]
+    },
+    "validate": {
+      "main": [
+        [
+          {
+            "node": "indexnow-submit"
+          }
+        ],
+        [
+          {
+            "node": "gsc-indexing"
+          }
+        ]
+      ]
+    }
+  }
+}

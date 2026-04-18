@@ -1,0 +1,243 @@
+{
+  "name": "Zero Risk \u2014 GEO Content Freshness Cron",
+  "meta": {
+    "description": "Biweekly: scans content inventory for GEO-relevant pages >90 days old. Checks citations. Flags pages losing citations for refresh. Calls GEO Optimization agent. Queues refresh tasks to Supabase.",
+    "trigger_type": "cron",
+    "cron_schedule": "0 3 * * 1",
+    "expected_duration_minutes": 25,
+    "cost_usd_per_run": "3-5",
+    "tags": [
+      {
+        "name": "zero-risk"
+      },
+      {
+        "name": "cluster-3"
+      },
+      {
+        "name": "seo"
+      },
+      {
+        "name": "geo"
+      },
+      {
+        "name": "biweekly"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "0 3 * * 1"
+      },
+      "id": "trigger-cron",
+      "name": "Trigger: Mondays 3am UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = await fetch('https://zero-risk-platform.vercel.app/api/stale-geo-content', {headers:{'x-api-key':'key'}}); return [{json:{pages: await resp.json() || []}}];"
+      },
+      "id": "query-stale-content",
+      "name": "Query Stale GEO Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "split-pages",
+      "name": "Split Into Each Page",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-page",
+      "name": "Fetch Page Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json?.body || ''; const citations = (html.match(/href=['\"]https:\\/\\/(perplexity|chatgpt|google)\\.com/gi) || []).length; const hasStats = /\\d+%|\\$\\d+|study|research/i.test(html); return [{json:{page_id:$json.id, url:$json.url, citation_count:citations, has_stats:hasStats, refresh_needed: citations < 2 || !hasStats}}];"
+      },
+      "id": "analyze-citations",
+      "name": "Analyze Citations & Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "type": "when",
+        "value1": "={{ $json.refresh_needed }}",
+        "value2": true,
+        "operation": "equals"
+      },
+      "id": "if-refresh-needed",
+      "name": "IF refresh_needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://zero-risk-platform.vercel.app/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "=key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"agent\":\"seo-geo-optimization\",\"model\":\"claude-sonnet-4-6\",\"task\":\"GEO freshness for {{ $json.url }}\",\"client_id\":\"{{ $json.client_id }}\"}"
+      },
+      "id": "agent-geo",
+      "name": "Agent: GEO Optimization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://zero-risk-platform.vercel.app/api/content-refresh-queue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "=key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"page_id\":\"{{ $json.page_id }}\",\"url\":\"{{ $json.url }}\",\"reason\":\"geo-freshness\"}"
+      },
+      "id": "queue-refresh",
+      "name": "Queue Refresh Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1700,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "trigger-cron": {
+      "main": [
+        [
+          {
+            "node": "query-stale-content"
+          }
+        ]
+      ]
+    },
+    "query-stale-content": {
+      "main": [
+        [
+          {
+            "node": "split-pages"
+          }
+        ]
+      ]
+    },
+    "split-pages": {
+      "main": [
+        [
+          {
+            "node": "fetch-page"
+          }
+        ]
+      ]
+    },
+    "fetch-page": {
+      "main": [
+        [
+          {
+            "node": "analyze-citations"
+          }
+        ]
+      ]
+    },
+    "analyze-citations": {
+      "main": [
+        [
+          {
+            "node": "if-refresh-needed"
+          }
+        ]
+      ]
+    },
+    "if-refresh-needed": {
+      "main": [
+        [
+          {
+            "node": "agent-geo"
+          }
+        ],
+        []
+      ]
+    },
+    "agent-geo": {
+      "main": [
+        [
+          {
+            "node": "queue-refresh"
+          }
+        ]
+      ]
+    }
+  }
+}

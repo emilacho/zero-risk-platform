@@ -1,0 +1,255 @@
+{
+  "name": "Zero Risk — Sentry Alert Router (Webhook)",
+  "description": "Receives Sentry issue webhooks, classifies severity (P0/P1/P2), routes to Slack/MC/email, deduplicates, and writes to error_events table.",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "sentry-alerts"
+      },
+      "id": "webhook-trigger",
+      "name": "Sentry Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Classify Sentry issue severity based on error type and environment\nconst payload = $input.first().json;\nconst event = payload.data?.event || {};\nconst issue = payload.data?.issue || {};\nconst environment = event.environment || 'production';\nconst exceptionType = event.tags?.find(t => t[0] === 'exception')?.['1'] || '';\nconst level = event.level || 'error';\nconst isProduction = environment === 'production';\nconst is500Error = exceptionType.includes('500') || level === 'fatal';\nconst isAuthFailure = exceptionType.includes('AuthError') || exceptionType.includes('Unauthorized');\nconst isClientFacingRegression = exceptionType.includes('TypeError') || exceptionType.includes('ReferenceError');\n\nlet severity = 'P2'; // default\nlet shouldAlert = false;\n\nif (isProduction) {\n  if (is500Error || isAuthFailure) {\n    severity = 'P0';\n    shouldAlert = true;\n  } else if (isClientFacingRegression) {\n    severity = 'P1';\n    shouldAlert = true;\n  }\n} else {\n  severity = 'P2';\n}\n\nreturn [{\n  json: {\n    issue_id: issue.id,\n    issue_title: issue.title,\n    fingerprint: issue.metadata?.value || issue.id,\n    severity,\n    environment,\n    exception_type: exceptionType,\n    level,\n    timestamp: event.timestamp,\n    url: issue.permalink,\n    should_alert: shouldAlert,\n    message: event.message || issue.title,\n    raw_payload: payload\n  }\n}];"
+      },
+      "id": "classify-severity",
+      "name": "Classify Severity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/error-events?fingerprint={{ $json.fingerprint }}&last_hours=1&limit=1",
+        "options": { "timeout": 10000 }
+      },
+      "id": "check-duplicate",
+      "name": "Check Recent Duplicate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ]
+        }
+      },
+      "id": "is-duplicate",
+      "name": "Is Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "P0",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "is-p0",
+      "name": "Is P0?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "P1",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "is-p1",
+      "name": "Is P1?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#ops-critical\",\n  \"text\": \"🔴 P0 ERROR — {{ $json.issue_title }}\",\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": { \"type\": \"plain_text\", \"text\": \"🔴 PRODUCTION P0 ALERT\" }\n    },\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        { \"type\": \"mrkdwn\", \"text\": \"*Error:*\\n{{ $json.issue_title }}\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*Type:*\\n{{ $json.exception_type }}\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*Environment:*\\n{{ $json.environment }}\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*Time:*\\n{{ $json.timestamp }}\" }\n      ]\n    },\n    {\n      \"type\": \"actions\",\n      \"elements\": [\n        { \"type\": \"button\", \"text\": { \"type\": \"plain_text\", \"text\": \"View in Sentry\" }, \"url\": \"{{ $json.url }}\" }\n      ]\n    }\n  ]\n}"
+      },
+      "id": "p0-slack-critical",
+      "name": "P0: Slack #ops-critical",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/mc-sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.MC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"create_task\",\n  \"task\": {\n    \"title\": \"P0: {{ $json.issue_title }}\",\n    \"description\": \"Sentry P0 alert — {{ $json.exception_type }} in {{ $json.environment }}. Sentry URL: {{ $json.url }}\",\n    \"assignee\": \"Emilio\",\n    \"priority\": \"critical\",\n    \"tags\": [\"sentry\", \"p0\", \"auto-created\"]\n  }\n}",
+        "options": {}
+      },
+      "id": "p0-mc-task",
+      "name": "P0: Create MC Task (Emilio)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#ops-alerts\",\n  \"text\": \"⚠️ P1 ERROR — {{ $json.issue_title }}\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"⚠️ *P1 Client-Facing Regression*\\n{{ $json.issue_title }}\\n<{{ $json.url }}|View>\" }\n    }\n  ]\n}"
+      },
+      "id": "p1-slack-alert",
+      "name": "P1: Slack #ops-alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/mc-sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.MC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"create_task\",\n  \"task\": {\n    \"title\": \"P1: {{ $json.issue_title }}\",\n    \"description\": \"Sentry P1 alert — client regression. {{ $json.exception_type }}. Sentry: {{ $json.url }}\",\n    \"assignee\": \"Editor en Jefe\",\n    \"priority\": \"high\",\n    \"tags\": [\"sentry\", \"p1\", \"auto-created\"]\n  }\n}",
+        "options": {}
+      },
+      "id": "p1-mc-task",
+      "name": "P1: Create MC Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 560]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/error-events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.MC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"issue_id\": \"{{ $json.issue_id }}\",\n  \"fingerprint\": \"{{ $json.fingerprint }}\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"environment\": \"{{ $json.environment }}\",\n  \"title\": \"{{ $json.issue_title }}\",\n  \"message\": \"{{ $json.message }}\",\n  \"exception_type\": \"{{ $json.exception_type }}\",\n  \"url\": \"{{ $json.url }}\",\n  \"occurred_at\": \"{{ $json.timestamp }}\",\n  \"is_duplicate\": false,\n  \"raw_sentry_url\": \"{{ $json.url }}\"\n}",
+        "options": {}
+      },
+      "id": "log-error-event",
+      "name": "Log to error_events Table",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 300]
+    },
+    {
+      "parameters": {},
+      "id": "duplicate-skip",
+      "name": "Skip (Duplicate)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1200, 580]
+    },
+    {
+      "parameters": {},
+      "id": "p2-log-only",
+      "name": "P2: Log Only (Digest)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1680, 500]
+    }
+  ],
+  "connections": {
+    "Sentry Webhook": { "main": [[{ "node": "Classify Severity", "type": "main", "index": 0 }]] },
+    "Classify Severity": { "main": [[{ "node": "Check Recent Duplicate", "type": "main", "index": 0 }]] },
+    "Check Recent Duplicate": { "main": [[{ "node": "Is Duplicate?", "type": "main", "index": 0 }]] },
+    "Is Duplicate?": {
+      "main": [
+        [{ "node": "Is P0?", "type": "main", "index": 0 }],
+        [{ "node": "Duplicate Skip", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is P0?": {
+      "main": [
+        [{ "node": "P0: Slack #ops-critical", "type": "main", "index": 0 }],
+        [{ "node": "Is P1?", "type": "main", "index": 0 }]
+      ]
+    },
+    "P0: Slack #ops-critical": { "main": [[{ "node": "P0: Create MC Task (Emilio)", "type": "main", "index": 0 }]] },
+    "P0: Create MC Task (Emilio)": { "main": [[{ "node": "Log to error_events Table", "type": "main", "index": 0 }]] },
+    "Is P1?": {
+      "main": [
+        [{ "node": "P1: Slack #ops-alerts", "type": "main", "index": 0 }],
+        [{ "node": "P2: Log Only (Digest)", "type": "main", "index": 0 }]
+      ]
+    },
+    "P1: Slack #ops-alerts": { "main": [[{ "node": "P1: Create MC Task", "type": "main", "index": 0 }]] },
+    "P1: Create MC Task": { "main": [[{ "node": "Log to error_events Table", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk" },
+    { "name": "cluster-7" },
+    { "name": "ops-monitoring" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

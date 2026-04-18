@@ -1,0 +1,382 @@
+{
+  "name": "Zero Risk — QBR Generator Quarterly (1st of Quarter 4am)",
+  "description": "Quarterly Business Review generation for Tier 1 & 2 clients. Pulls 90d campaign outcomes, KPIs vs targets, competitive benchmarks. Calls Reporting Agent with SCQA + McKinsey pyramid. Generates draft in Notion. HITL gate: Emilio approval before delivery.",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 4 1 1,4,7,10 *"
+            }
+          ]
+        }
+      },
+      "id": "cron-quarter-start",
+      "name": "1st of Quarter at 4am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/clients?status=active&engagement_tier=Tier 1,Tier 2",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-tier-1-2",
+      "name": "Fetch Tier 1 & 2 Clients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "clients",
+        "options": {}
+      },
+      "id": "split-clients-qbr",
+      "name": "Split Clients",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/analytics/campaign-results?client_id={{ $json.id }}&days=90",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-90d-outcomes",
+      "name": "Fetch 90d Campaign Outcomes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 100]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/clients/kpi-targets?client_id={{ $json.id }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-kpi-targets",
+      "name": "Fetch KPI Targets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 220]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/analytics/benchmarks?client_id={{ $json.id }}&industry={{ $json.industry }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-benchmarks",
+      "name": "Fetch Competitive Benchmarks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 340]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-qbr-data",
+      "name": "Merge QBR Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent_id\": \"reporting-agent\",\n  \"task\": \"Generate QBR narrative with SCQA + McKinsey pyramid for {{ $json.client_name }} (Tier {{ $json.engagement_tier }}). Last 90d outcomes: ROAS={{ $json.roas }}, leads={{ $json.leads_generated }}, pipeline_value={{ $json.pipeline_value }}. Targets: ROAS_target={{ $json.kpi_roas_target }}, leads_target={{ $json.kpi_leads_target }}. Industry benchmarks: median_roas={{ $json.benchmark_median_roas }}, 75th_percentile={{ $json.benchmark_75th_roas }}. Include executive brief (SCQA), KPI dashboard, channel breakdown, benchmarking, recommendations.\",\n  \"context\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "call-reporting-agent",
+      "name": "Call Reporting Agent: Generate QBR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/notion/create-qbr-page",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_name\": \"{{ $json.client_name }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"quarter\": \"Q{{ Math.ceil(new Date().getMonth() / 3) }}\",\n  \"year\": \"{{ new Date().getFullYear() }}\",\n  \"qbr_content\": \"{{ $node['Call Reporting Agent: Generate QBR'].json.result }}\",\n  \"status\": \"draft\",\n  \"requires_approval\": true,\n  \"parent_page_id\": \"{{ $env.NOTION_PARENT_PAGE_ID }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "create-notion-draft",
+      "name": "Create Notion QBR Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/hitl/submit-approval",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.MC_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"qbr_delivery\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"client_name\": \"{{ $json.client_name }}\",\n  \"notion_page_id\": \"{{ $node['Create Notion QBR Draft'].json.page_id }}\",\n  \"notion_page_url\": \"{{ $node['Create Notion QBR Draft'].json.page_url }}\",\n  \"quarter\": \"Q{{ Math.ceil(new Date().getMonth() / 3) }} {{ new Date().getFullYear() }}\",\n  \"awaiting_approval\": true,\n  \"sla_hours\": 4\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "submit-hitl-gate",
+      "name": "Submit HITL Gate: Emilio Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1840, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"📊 *QBR DRAFT READY FOR APPROVAL*\\n• Client: {{ $json.client_name }} ({{ $json.engagement_tier }})\\n• Quarter: Q{{ Math.ceil(new Date().getMonth() / 3) }} {{ new Date().getFullYear() }}\\n• Notion: <{{ $node['Create Notion QBR Draft'].json.page_url }}|Review Draft>\\n\\n→ Emilio: 4h approval SLA in Mission Control\"\n}",
+        "options": {}
+      },
+      "id": "alert-hitl-slack",
+      "name": "Alert Slack: HITL Gate Opened",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2080, 300]
+    }
+  ],
+  "connections": {
+    "1st of Quarter at 4am": {
+      "main": [
+        [
+          {
+            "node": "Fetch Tier 1 & 2 Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Tier 1 & 2 Clients": {
+      "main": [
+        [
+          {
+            "node": "Split Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Clients": {
+      "main": [
+        [
+          {
+            "node": "Fetch 90d Campaign Outcomes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch KPI Targets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Competitive Benchmarks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch 90d Campaign Outcomes": {
+      "main": [
+        [
+          {
+            "node": "Merge QBR Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch KPI Targets": {
+      "main": [
+        [
+          {
+            "node": "Merge QBR Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Competitive Benchmarks": {
+      "main": [
+        [
+          {
+            "node": "Merge QBR Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge QBR Data": {
+      "main": [
+        [
+          {
+            "node": "Call Reporting Agent: Generate QBR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Reporting Agent: Generate QBR": {
+      "main": [
+        [
+          {
+            "node": "Create Notion QBR Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Notion QBR Draft": {
+      "main": [
+        [
+          {
+            "node": "Submit HITL Gate: Emilio Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit HITL Gate: Emilio Approval": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack: HITL Gate Opened",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-6"
+    },
+    {
+      "name": "client-success"
+    },
+    {
+      "name": "qbr"
+    }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

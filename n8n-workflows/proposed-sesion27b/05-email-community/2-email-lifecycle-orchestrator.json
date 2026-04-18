@@ -1,0 +1,518 @@
+{
+  "name": "Zero Risk — Email Lifecycle Orchestrator (Webhook-Driven)",
+  "description": "Routes contacts through 5-flow lifecycle: welcome, abandoned cart, post-purchase, browse abandonment, winback. Calls Email Marketer agent for copy with Schwedelson patterns.",
+  "tags": [
+    {"name": "zero-risk"},
+    {"name": "cluster-5"},
+    {"name": "email-community"},
+    {"name": "lifecycle-email"}
+  ],
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/email-lifecycle",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: Lifecycle Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nconst validEvents = ['contact_created', 'cart_abandoned', 'purchase_completed', 'browse_abandoned', 'inactivity_180d'];\nif (!validEvents.includes(b.event_type) || !b.client_id || !b.contact_id) throw new Error('Invalid event_type, client_id, or contact_id');\nreturn [{ json: { event_type: b.event_type, client_id: b.client_id, contact_id: b.contact_id, contact_email: b.contact_email, extra: b } }];"
+      },
+      "id": "validate",
+      "name": "Validate Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.event_type }}",
+              "rightValue": "contact_created",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "route-welcome",
+      "name": "Event = contact_created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [620, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.event_type }}",
+              "rightValue": "cart_abandoned",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "route-cart",
+      "name": "Event = cart_abandoned?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [620, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.event_type }}",
+              "rightValue": "purchase_completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "route-postpurchase",
+      "name": "Event = purchase_completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [620, 520]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.event_type }}",
+              "rightValue": "browse_abandoned",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "route-browse",
+      "name": "Event = browse_abandoned?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [620, 680]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.event_type }}",
+              "rightValue": "inactivity_180d",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "route-winback",
+      "name": "Event = inactivity_180d?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [620, 840]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Welcome Series (3 emails, 1-7 day cadence). Use Jay Schwedelson patterns: numerals in subject (+19%), 3-word short format (+25%), emoji testing (+17%). Return 3 emails: { subject_a, subject_b, preview_text, mjml_body, plain_text, send_day }. Personalize with {{first_name}}.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "compose-welcome",
+      "name": "Compose Welcome (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Abandoned Cart Sequence (3 emails: 2h, 24h, 72h). Email 1: functional reminder, 2: social proof + scarcity, 3: last chance + incentive. Use Schwedelson downplay-urgency pattern. Return { subject, preview, html, plain_text, send_delay_hours }.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "compose-cart",
+      "name": "Compose Abandoned Cart (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Post-Purchase Nurture (3 emails: day 0, +14, +30). Email 1: thank you + usage guide, Email 2: case study/upsell, Email 3: satisfaction check. Return { subject, preview, html, send_day }. Apply numerals and short-format subject patterns.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "compose-postpurchase",
+      "name": "Compose Post-Purchase (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 520]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Browse Abandonment Sequence (2 emails: 24h, 72h). Show viewed products, scarcity/social proof, incentive. Return { subject, preview, html, send_hours }.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "compose-browse",
+      "name": "Compose Browse Abandonment (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 680]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Winback/Re-engagement (3 emails: acknowledge lapse, new offer, survey/exit). Escalate incentive across 3 emails. Return { subject, preview, html, send_days }. Apply downplay-urgency pattern.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "compose-winback",
+      "name": "Compose Winback (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 840]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/email-sequences/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"sequence_type\": \"{{ $json.event_type }}\",\n  \"sequence_data\": {},\n  \"created_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "log-sequence",
+      "name": "Log Sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 360]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { task_id: `email_${Date.now()}`, status: 'queued', event_type: $json.event_type } }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1200, 200]
+    }
+  ],
+  "connections": {
+    "Webhook: Lifecycle Event": {
+      "main": [
+        [
+          {
+            "node": "Validate Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Event": {
+      "main": [
+        [
+          {
+            "node": "Event = contact_created?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Event = cart_abandoned?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Event = purchase_completed?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Event = browse_abandoned?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Event = inactivity_180d?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event = contact_created?": {
+      "main": [
+        [
+          {
+            "node": "Compose Welcome (Sonnet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event = cart_abandoned?": {
+      "main": [
+        [
+          {
+            "node": "Compose Abandoned Cart (Sonnet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event = purchase_completed?": {
+      "main": [
+        [
+          {
+            "node": "Compose Post-Purchase (Sonnet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event = browse_abandoned?": {
+      "main": [
+        [
+          {
+            "node": "Compose Browse Abandonment (Sonnet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event = inactivity_180d?": {
+      "main": [
+        [
+          {
+            "node": "Compose Winback (Sonnet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Welcome (Sonnet)": {
+      "main": [
+        [
+          {
+            "node": "Log Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Abandoned Cart (Sonnet)": {
+      "main": [
+        [
+          {
+            "node": "Log Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Post-Purchase (Sonnet)": {
+      "main": [
+        [
+          {
+            "node": "Log Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Browse Abandonment (Sonnet)": {
+      "main": [
+        [
+          {
+            "node": "Log Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Winback (Sonnet)": {
+      "main": [
+        [
+          {
+            "node": "Log Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Sequence": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

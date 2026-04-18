@@ -1,0 +1,284 @@
+{
+  "name": "Zero Risk \u2014 Landing Page A/B Deployer (Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/landing-ab-deploy",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: A/B Deploy Brief",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.variant_a_code || !b.variant_b_code) throw new Error('client_id, variant_a_code, variant_b_code required');\nreturn [{ json: {\n  task_id: `ab_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,\n  client_id: b.client_id,\n  variant_a_code: b.variant_a_code,\n  variant_b_code: b.variant_b_code,\n  traffic_split: b.traffic_split || 0.5,\n  kpi: b.kpi || 'conversion_rate',\n  sample_size_target: b.sample_size_target || 1000,\n  auto_promote_threshold: b.auto_promote_threshold || 0.85,\n  duration_days: b.duration_days || 14,\n  started_at: new Date().toISOString()\n} }];"
+      },
+      "id": "validate",
+      "name": "Code: Validate Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.VERCEL_API_URL || 'https://api.vercel.com' }}/v13/deployments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.VERCEL_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $json.client_id }}-variant-a-{{ $json.task_id }}\",\n  \"project\": \"zero-risk-platform\",\n  \"env\": { \"VARIANT\": \"a\", \"AB_TEST_ID\": \"{{ $json.task_id }}\" },\n  \"source\": \"{{ $json.variant_a_code }}\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "deploy-variant-a",
+      "name": "Vercel: Deploy Variant A",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.VERCEL_API_URL || 'https://api.vercel.com' }}/v13/deployments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.VERCEL_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $json.client_id }}-variant-b-{{ $json.task_id }}\",\n  \"project\": \"zero-risk-platform\",\n  \"env\": { \"VARIANT\": \"b\", \"AB_TEST_ID\": \"{{ $json.task_id }}\" },\n  \"source\": \"{{ $json.variant_b_code }}\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "deploy-variant-b",
+      "name": "Vercel: Deploy Variant B",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.POSTHOG_API_URL || 'https://api.posthog.com' }}/api/experiments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.POSTHOG_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $json.task_id }} - {{ $json.client_id }} A/B Test\",\n  \"description\": \"Landing page variant testing for {{ $json.client_id }}. KPI: {{ $json.kpi }}\",\n  \"feature_flag_key\": \"ab_test_{{ $json.task_id }}\",\n  \"experiment_type\": \"feature_flag\",\n  \"variants\": [\n    { \"key\": \"control\", \"name\": \"Variant A\", \"rollout_percentage\": {{ ($json.traffic_split * 100) }} },\n    { \"key\": \"test\", \"name\": \"Variant B\", \"rollout_percentage\": {{ ((1 - $json.traffic_split) * 100) }} }\n  ],\n  \"metrics\": [{ \"key\": \"{{ $json.kpi }}\", \"name\": \"Primary KPI\" }],\n  \"minimum_sample_size\": {{ $json.sample_size_target }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "posthog-experiment",
+      "name": "PostHog: Create Experiment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/experiments/meta",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"experiment_id\": \"{{ $json.task_id }}\",\n  \"posthog_flag_key\": \"ab_test_{{ $json.task_id }}\",\n  \"variant_a_url\": \"{{ $node['deploy-variant-a'].json.url }}\",\n  \"variant_b_url\": \"{{ $node['deploy-variant-b'].json.url }}\",\n  \"traffic_split\": {{ $json.traffic_split }},\n  \"kpi\": \"{{ $json.kpi }}\",\n  \"sample_size_target\": {{ $json.sample_size_target }},\n  \"auto_promote_threshold\": {{ $json.auto_promote_threshold }},\n  \"duration_days\": {{ $json.duration_days }},\n  \"status\": \"active\",\n  \"started_at\": \"{{ $json.started_at }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "store-experiment-meta",
+      "name": "Store: Experiment Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"\ud83d\udd04 A/B Test Deployed: {{ $json.task_id }}. Variant A: {{ $node['deploy-variant-a'].json.url }}. Variant B: {{ $node['deploy-variant-b'].json.url }}. Traffic split: {{ ($json.traffic_split * 100).toFixed(0) }}%.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Landing Page A/B Test Live*\\\\nTest ID: {{ $json.task_id }}\\\\nVariant A: <{{ $node['deploy-variant-a'].json.url }}|View>\\\\nVariant B: <{{ $node['deploy-variant-b'].json.url }}|View>\\\\nTraffic: A={{ ($json.traffic_split * 100).toFixed(0) }}% / B={{ ((1 - $json.traffic_split) * 100).toFixed(0) }}%\\\\nKPI: {{ $json.kpi }}\\\\nDuration: {{ $json.duration_days }} days\" } }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "notify-slack-deploy",
+      "name": "Slack: Notify Deployment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "webhook": {
+      "main": [
+        [
+          {
+            "node": "validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate": {
+      "main": [
+        [
+          {
+            "node": "deploy-variant-a",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "deploy-variant-b",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "deploy-variant-a": {
+      "main": [
+        [
+          {
+            "node": "posthog-experiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "deploy-variant-b": {
+      "main": [
+        [
+          {
+            "node": "posthog-experiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "posthog-experiment": {
+      "main": [
+        [
+          {
+            "node": "store-experiment-meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "store-experiment-meta": {
+      "main": [
+        [
+          {
+            "node": "notify-slack-deploy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "timezone": "UTC"
+  },
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-2"
+    },
+    {
+      "name": "creative"
+    },
+    {
+      "name": "ab-testing"
+    },
+    {
+      "name": "landing-pages"
+    }
+  ]
+}

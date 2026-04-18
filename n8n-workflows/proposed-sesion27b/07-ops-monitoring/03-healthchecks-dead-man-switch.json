@@ -1,0 +1,200 @@
+{
+  "name": "Zero Risk \u2014 Healthchecks Ping Monitor (Cron Hourly)",
+  "description": "Monitors critical workflow pings to healthchecks.io. Alerts if any check fails (dead-man switch).",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "hourly-cron",
+      "name": "Hourly Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://healthchecks.io/api/v3/checks/?status=",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.HEALTHCHECK_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "fetch-checks",
+      "name": "Fetch All Checks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst checks = resp.results || [];\nconst downChecks = checks.filter(c => c.status !== 'up');\nconst criticalNames = ['Pipeline Delay Resume', 'Cost Watchdog', 'HITL Reminder', 'Daily Ops Digest', 'Meta-Agent Weekly'];\nconst criticalDown = downChecks.filter(c => criticalNames.some(name => c.name.includes(name)));\nreturn [{ json: { total_checks: checks.length, down_count: downChecks.length, critical_down_count: criticalDown.length, critical_down: criticalDown.map(c => ({name: c.name, status: c.status, last_ping: c.last_ping})), has_critical_failure: criticalDown.length > 0 }}];"
+      },
+      "id": "analyze-checks",
+      "name": "Analyze Check Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_critical_failure }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "critical-failure",
+      "name": "Critical Failure?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={'channel': '#ops-critical', 'text': '\ud83d\udc80 DEADMAN ALERT: {{ $json.critical_down_count }} Workflows Down'}"
+      },
+      "id": "critical-slack",
+      "name": "Alert Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        220
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "healthy",
+      "name": "All Healthy",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Hourly Check": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Checks": {
+      "main": [
+        [
+          {
+            "node": "Analyze Check Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Check Status": {
+      "main": [
+        [
+          {
+            "node": "Critical Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Failure?": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All Healthy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-7"
+    },
+    {
+      "name": "ops-monitoring"
+    }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

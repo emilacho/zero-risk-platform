@@ -1,0 +1,243 @@
+{
+  "name": "Zero Risk \u2014 Agent Latency + Error Rate Monitor (Cron 10min)",
+  "description": "Monitors P50/P95/P99 latency per agent, error rates, flags regressions (>60s P95 or >5% error rate).",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/10 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "every-10min",
+      "name": "Every 10min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agent-outcomes?minutes=10&group_by=agent_slug",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "fetch-outcomes",
+      "name": "Fetch Last 10min",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const outcomes = $input.first().json.outcomes || []; const byAgent = {}; for (const o of outcomes) { const slug = o.agent_slug || 'unknown'; if (!byAgent[slug]) byAgent[slug] = {latencies: [], outcomes: []}; byAgent[slug].latencies.push(o.latency_ms || 0); byAgent[slug].outcomes.push(o.success); } const agents = Object.entries(byAgent).map(([slug, data]) => { const l = data.latencies.sort((a,b)=>a-b); const successes = data.outcomes.filter(s=>s===true).length; const errorRate = ((data.outcomes.length - successes) / data.outcomes.length * 100).toFixed(2); return {agent_slug: slug, p50_ms: l[Math.floor(l.length*0.5)], p95_ms: l[Math.floor(l.length*0.95)], p99_ms: l[Math.floor(l.length*0.99)], error_rate_pct: errorRate, timestamp: new Date().toISOString()}; }); return [{json: {agents: agents, timestamp: new Date().toISOString()}}];"
+      },
+      "id": "calculate-stats",
+      "name": "Calculate Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agent-health-metrics?minutes=30",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "fetch-history",
+      "name": "Fetch 30min History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const current = $input.all()[0]?.json?.agents || []; const history = $input.all()[1]?.json?.metrics || []; const issues = []; for (const agent of current) { if (agent.p95_ms > 60000) issues.push({agent: agent.agent_slug, type: 'latency', value: agent.p95_ms}); if (parseFloat(agent.error_rate_pct) > 5.0) issues.push({agent: agent.agent_slug, type: 'error_rate', value: agent.error_rate_pct}); } return [{json: {issues: issues, has_issues: issues.length > 0, agents_monitored: current.length, timestamp: new Date().toISOString(), metrics: current}}];"
+      },
+      "id": "detect-regressions",
+      "name": "Detect Regressions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_issues }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "has-issues",
+      "name": "Has Issues?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={'channel': '#agents-health', 'text': 'Agent Health Issues'}"
+      },
+      "id": "slack-alert",
+      "name": "Alert Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "healthy-skip",
+      "name": "Healthy",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Every 10min": {
+      "main": [
+        [
+          {
+            "node": "Fetch Last 10min",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Last 10min": {
+      "main": [
+        [
+          {
+            "node": "Calculate Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Stats": {
+      "main": [
+        [
+          {
+            "node": "Fetch 30min History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch 30min History": {
+      "main": [
+        [
+          {
+            "node": "Detect Regressions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Regressions": {
+      "main": [
+        [
+          {
+            "node": "Has Issues?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Issues?": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Healthy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-7"
+    },
+    {
+      "name": "ops-monitoring"
+    }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

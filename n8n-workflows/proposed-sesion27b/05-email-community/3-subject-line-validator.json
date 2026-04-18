@@ -1,0 +1,249 @@
+{
+  "name": "Zero Risk — Subject Line A/B + A/A Validator",
+  "description": "Validates subject lines against Schwedelson patterns (numerals, 3-word short, emoji) and runs A/A control test before split-testing.",
+  "tags": [
+    {"name": "zero-risk"},
+    {"name": "cluster-5"},
+    {"name": "email-community"},
+    {"name": "subject-line-testing"}
+  ],
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/subject-line-validate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: Subject Lines",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.subject_a || !b.segment_size) throw new Error('client_id, subject_a, segment_size required');\nreturn [{ json: { client_id: b.client_id, subject_a: b.subject_a, subject_b: b.subject_b || null, is_ab_test: !!b.subject_b, segment_size: b.segment_size } }];"
+      },
+      "id": "validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sub = $json.subject_a;\nconst checks = {\n  has_numeral: /\\d+/.test(sub),\n  is_short_3word: sub.split(' ').length <= 3,\n  has_emoji: /\\p{Emoji}/u.test(sub),\n  downplays_urgency: !/urgent|last chance|limited time/i.test(sub),\n  character_count: sub.length,\n  preview_score: 0\n};\nchecks.preview_score = (checks.has_numeral ? 19 : 0) + (checks.is_short_3word ? 25 : 0) + (checks.has_emoji ? 17 : 0) + (checks.downplays_urgency ? 20 : 0);\nreturn [{ json: { validation: checks, recommendation: checks.preview_score >= 60 ? 'STRONG' : (checks.preview_score >= 40 ? 'GOOD' : 'REVIEW') } }];"
+      },
+      "id": "schwedelson-validation",
+      "name": "Schwedelson Patterns Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const segmentSize = $node['validate'].json.segment_size;\nconst mde = 0.10;\nconst alpha = 0.05;\nconst beta = 0.20;\nconst z_alpha = 1.96;\nconst z_beta = 0.84;\nconst effect_size = Math.sqrt((mde * mde) / (1 - mde));\nconst n_per_arm = Math.ceil((2 * Math.pow((z_alpha + z_beta), 2) * (Math.pow(0.5, 2) + Math.pow(0.5, 2))) / Math.pow(effect_size, 2));\nconst total_required = n_per_arm * 2;\nconst is_powered = segmentSize >= total_required;\nreturn [{ json: { sample_size_per_arm: n_per_arm, total_required, segment_size: segmentSize, is_powered, power_quality: is_powered ? 'ADEQUATE' : `UNDERPOWERED (need ${total_required}, have ${segmentSize})` } }];"
+      },
+      "id": "sample-size-calc",
+      "name": "Sample Size Calculator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [820, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/subject-line-tests/aa-control",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"subject_line\": \"{{ $node['validate'].json.subject_a }}\",\n  \"test_group_size\": {{ Math.floor($node['sample-size-calc'].json.segment_size / 4) }},\n  \"variance_threshold\": 0.05\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "run-aa-test",
+      "name": "Run A/A Control Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.variance_detected }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      },
+      "id": "aa-biased",
+      "name": "A/A Control Biased?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1220, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/subject-line-tests/create",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"subject_a\": \"{{ $node['validate'].json.subject_a }}\",\n  \"subject_b\": \"{{ $node['validate'].json.subject_b }}\",\n  \"sample_per_arm\": {{ $node['sample-size-calc'].json.sample_size_per_arm }},\n  \"schwedelson_validation\": {{ JSON.stringify($node['schwedelson-validation'].json.validation) }},\n  \"aa_control_passed\": {{ JSON.stringify($node['run-aa-test'].json) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "create-test",
+      "name": "Create Test Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 240]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { test_id: $node['create-test'].json.id, status: 'ready', validation_score: $node['schwedelson-validation'].json.preview_score, power_status: $node['sample-size-calc'].json.power_quality } }}",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond: Test Ready",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1420, 120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'error', reason: 'A/A control test detected segment bias. Abort test and resegment contacts.' } }}",
+        "options": {}
+      },
+      "id": "respond-abort",
+      "name": "Respond: Abort (A/A Bias)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1420, 360]
+    }
+  ],
+  "connections": {
+    "Webhook: Subject Lines": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Schwedelson Patterns Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schwedelson Patterns Check": {
+      "main": [
+        [
+          {
+            "node": "Sample Size Calculator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample Size Calculator": {
+      "main": [
+        [
+          {
+            "node": "Run A/A Control Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run A/A Control Test": {
+      "main": [
+        [
+          {
+            "node": "A/A Control Biased?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A/A Control Biased?": {
+      "main": [
+        [
+          {
+            "node": "Create Test Plan",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond: Abort (A/A Bias)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create Test Plan": {
+      "main": [
+        [
+          {
+            "node": "Respond: Test Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

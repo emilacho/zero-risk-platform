@@ -1,0 +1,433 @@
+{
+  "name": "Zero Risk — Weekly Client Report Generator v2 (Mondays 8am)",
+  "description": "Weekly reports for all active clients. Pulls multi-channel data (Meta/Google/TikTok/LinkedIn Ads, GA4, PostHog, GHL pipeline). Calls Reporting Agent with SCQA + McKinsey pyramid. Includes executive brief, KPI dashboard, channel breakdown, benchmarks, recommendations. HITL approval gate (Emilio). Once approved, delivers via Notion + email + Slack.",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "cron-monday-8am",
+      "name": "Mondays 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/clients?status=active",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-all-clients",
+      "name": "Fetch All Active Clients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "clients",
+        "options": {}
+      },
+      "id": "split-clients-report",
+      "name": "Split Clients",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v21.0/{{ $json.meta_ad_account_id }}/insights?fields=spend,impressions,clicks,ctr,cpc,actions,action_values&date_preset=last_7d&access_token={{ $env.META_ACCESS_TOKEN }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-meta-7d",
+      "name": "Meta Ads (7d)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://analyticsdata.googleapis.com/v1beta/properties/{{ $json.ga4_property_id }}:runReport",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GOOGLE_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"dateRanges\": [{ \"startDate\": \"7daysAgo\", \"endDate\": \"today\" }],\n  \"metrics\": [{ \"name\": \"sessions\" }, { \"name\": \"totalUsers\" }, { \"name\": \"conversions\" }, { \"name\": \"engagementRate\" }],\n  \"dimensions\": [{ \"name\": \"sessionDefaultChannelGroup\" }]\n}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-ga4-7d",
+      "name": "GA4 (7d)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 220]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/ghl/pipeline-summary?client_id={{ $json.id }}&days=7",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-ghl-pipeline",
+      "name": "GHL Pipeline (7d)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 340]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/posthog/events?client_id={{ $json.id }}&days=7&event_count=true",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-posthog-events",
+      "name": "PostHog Events (7d)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 460]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-report-data",
+      "name": "Merge Report Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent_id\": \"reporting-agent\",\n  \"task\": \"Generate comprehensive weekly report for {{ $json.client_name }} ({{ $json.engagement_tier }}). Use SCQA narrative + McKinsey pyramid structure. Meta Ads: spend={{ $json.meta_spend || 0 }}, impressions={{ $json.meta_impressions || 0 }}, actions={{ $json.meta_actions || 0 }}. GA4: sessions={{ $json.ga4_sessions || 0 }}, conversions={{ $json.ga4_conversions || 0 }}, engagement={{ $json.ga4_engagement_rate || 0 }}%. GHL Pipeline: leads={{ $json.ghl_new_leads || 0 }}, pipeline_value={{ $json.ghl_pipeline_value || 0 }}, closed={{ $json.ghl_closed_value || 0 }}. Include: executive brief (1 page SCQA), KPI dashboard with trend arrows, channel breakdown, stat significance testing, competitive benchmarks (show percentile), prioritized recommendations ranked by impact×feasibility.\",\n  \"context\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "call-reporting-agent",
+      "name": "Call Reporting Agent: Generate Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.ZERO_RISK_API_URL }}/api/notion/create-weekly-report",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_name\": \"{{ $json.client_name }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"week_ending\": \"{{ new Date().toISOString().split('T')[0] }}\",\n  \"report_content\": \"{{ $node['Call Reporting Agent: Generate Report'].json.result }}\",\n  \"status\": \"draft_for_approval\",\n  \"parent_page_id\": \"{{ $env.NOTION_PARENT_PAGE_ID }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "create-notion-report",
+      "name": "Create Notion Report Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/hitl/submit-approval",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.MC_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"weekly_report_delivery\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"client_name\": \"{{ $json.client_name }}\",\n  \"week_ending\": \"{{ new Date().toISOString().split('T')[0] }}\",\n  \"notion_page_id\": \"{{ $node['Create Notion Report Draft'].json.page_id }}\",\n  \"notion_page_url\": \"{{ $node['Create Notion Report Draft'].json.page_url }}\",\n  \"awaiting_approval\": true,\n  \"sla_hours\": 4\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "submit-report-hitl",
+      "name": "Submit HITL Gate: Weekly Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1840, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"📊 *WEEKLY REPORT DRAFT READY*\\n• Client: {{ $json.client_name }}\\n• Week ending: {{ new Date().toISOString().split('T')[0] }}\\n• Notion: <{{ $node['Create Notion Report Draft'].json.page_url }}|Review>\\n\\n→ Emilio: 4h approval SLA. Once approved, auto-delivers via email + Notion\\n→ Check Mission Control HITL inbox\"\n}",
+        "options": {}
+      },
+      "id": "alert-hitl-report",
+      "name": "Alert Slack: HITL Gate Opened",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2080, 300]
+    }
+  ],
+  "connections": {
+    "Mondays 8am": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Active Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Active Clients": {
+      "main": [
+        [
+          {
+            "node": "Split Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Clients": {
+      "main": [
+        [
+          {
+            "node": "Meta Ads (7d)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GA4 (7d)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GHL Pipeline (7d)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PostHog Events (7d)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meta Ads (7d)": {
+      "main": [
+        [
+          {
+            "node": "Merge Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GA4 (7d)": {
+      "main": [
+        [
+          {
+            "node": "Merge Report Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "GHL Pipeline (7d)": {
+      "main": [
+        [
+          {
+            "node": "Merge Report Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "PostHog Events (7d)": {
+      "main": [
+        [
+          {
+            "node": "Merge Report Data",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge Report Data": {
+      "main": [
+        [
+          {
+            "node": "Call Reporting Agent: Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Reporting Agent: Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Create Notion Report Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Notion Report Draft": {
+      "main": [
+        [
+          {
+            "node": "Submit HITL Gate: Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit HITL Gate: Weekly Report": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack: HITL Gate Opened",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-6"
+    },
+    {
+      "name": "client-success"
+    },
+    {
+      "name": "reporting"
+    }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

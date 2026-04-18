@@ -1,0 +1,571 @@
+{
+  "name": "Zero Risk \u2014 HITL Inbox Processor (Every 15 Minutes)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-15min",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/pending?status=pending&limit=100",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-pending",
+      "name": "Fetch Pending HITL Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.first().json.items || $input.first().json.pending || [];\nconst now = Date.now();\nconst categorized = {\n  fresh: [],\n  stale: [],\n  very_stale: [],\n  critical: [],\n  expired: []\n};\nconst thresholds = {\n  fresh: 30 * 60 * 1000,\n  stale: 4 * 60 * 60 * 1000,\n  very_stale: 24 * 60 * 60 * 1000,\n  critical: 72 * 60 * 60 * 1000\n};\nitems.forEach(item => {\n  const age_ms = now - new Date(item.created_at || item.paused_at || 0).getTime();\n  const age_min = age_ms / (60 * 1000);\n  if (age_ms > thresholds.critical) {\n    categorized.expired.push({...item, age_minutes: age_min, action: 'auto_expire'});\n  } else if (age_ms > thresholds.very_stale) {\n    categorized.critical.push({...item, age_minutes: age_min, action: 'critical_escalate'});\n  } else if (age_ms > thresholds.stale) {\n    categorized.very_stale.push({...item, age_minutes: age_min, action: 'renotify'});\n  } else if (age_ms > thresholds.fresh) {\n    categorized.stale.push({...item, age_minutes: age_min, action: 'monitor'});\n  } else {\n    categorized.fresh.push({...item, age_minutes: age_min, action: 'none'});\n  }\n});\nreturn [{\n  json: {\n    cycle_id: `hitl-${Date.now()}`,\n    total_pending: items.length,\n    categorized,\n    items_to_expire: categorized.expired.length,\n    items_to_escalate: categorized.critical.length,\n    items_to_renotify: categorized.very_stale.length,\n    cycle_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "categorize-items",
+      "name": "Categorize Items by Age",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.items_to_expire }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-expired",
+      "name": "Any Expired Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "parameters": [
+          {
+            "name": "item",
+            "value": "=item"
+          }
+        ],
+        "options": {}
+      },
+      "id": "split-expired",
+      "name": "Split Expired Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        900,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/expire",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"item_id\": \"{{ $json.item_id }}\",\n  \"approval_type\": \"{{ $json.approval_type }}\",\n  \"age_minutes\": {{ $json.age_minutes | round() }},\n  \"escalation_path\": \"{{ $json.escalation_path || 'general-manager' }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "expire-item",
+      "name": "Expire Item & Escalate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.items_to_escalate }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-critical",
+      "name": "Any Critical Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "parameters": [
+          {
+            "name": "item",
+            "value": "=item"
+          }
+        ],
+        "options": {}
+      },
+      "id": "split-critical",
+      "name": "Split Critical Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        900,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"\u26a0\ufe0f *HITL Critical Escalation*\\n\\n*Item:* {{ $json.item_id }}\\n*Type:* {{ $json.approval_type }}\\n*Age:* {{ ($json.age_minutes / 60).toFixed(1) }}h\\n*Approver:* {{ $json.required_approver }}\\n\\nAction: escalating to {{ $json.escalation_path || 'general-manager' }}\",\n  \"channel\": \"#ops-alerts\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "alert-critical",
+      "name": "Alert Slack (Critical)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.items_to_renotify }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-renotify",
+      "name": "Any Stale Items to Renotify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "parameters": [
+          {
+            "name": "item",
+            "value": "=item"
+          }
+        ],
+        "options": {}
+      },
+      "id": "split-renotify",
+      "name": "Split Stale Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        900,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"\ud83d\udd14 *HITL Approval Reminder*\\n\\n*Item:* {{ $json.item_id }}\\n*Type:* {{ $json.approval_type }}\\n*Pending Since:* {{ ($json.age_minutes / 60).toFixed(1) }}h ago\\n\\nPlease review in Mission Control \u2192 inbox\",\n  \"channel\": \"@{{ $json.required_approver }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "dm-approver",
+      "name": "DM Approver (Renotify)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/metrics",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cycle_id\": \"{{ $json.cycle_id }}\",\n  \"queue_depth\": {{ $json.total_pending }},\n  \"items_expired\": {{ $json.items_to_expire }},\n  \"items_escalated\": {{ $json.items_to_escalate }},\n  \"items_renotified\": {{ $json.items_to_renotify }},\n  \"cycle_timestamp\": \"{{ $json.cycle_timestamp }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "log-metrics",
+      "name": "Log Cycle Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/mc-sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.MC_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"hitl_cycle_complete\",\n  \"cycle_id\": \"{{ $json.cycle_id }}\",\n  \"queue_depth\": {{ $json.total_pending }},\n  \"items_processed\": {{ $json.items_to_expire + $json.items_to_escalate + $json.items_to_renotify }},\n  \"timestamp\": \"{{ now().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "notify-mc",
+      "name": "Notify Mission Control",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "end",
+      "name": "Cycle Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending HITL Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending HITL Items": {
+      "main": [
+        [
+          {
+            "node": "Categorize Items by Age",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Items by Age": {
+      "main": [
+        [
+          {
+            "node": "Any Expired Items?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Any Critical Items?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Any Stale Items to Renotify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Expired Items?": {
+      "main": [
+        [
+          {
+            "node": "Split Expired Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Cycle Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Expired Items": {
+      "main": [
+        [
+          {
+            "node": "Expire Item & Escalate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expire Item & Escalate": {
+      "main": [
+        [
+          {
+            "node": "Log Cycle Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Critical Items?": {
+      "main": [
+        [
+          {
+            "node": "Split Critical Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Cycle Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Critical Items": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack (Critical)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Slack (Critical)": {
+      "main": [
+        [
+          {
+            "node": "Log Cycle Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Stale Items to Renotify?": {
+      "main": [
+        [
+          {
+            "node": "Split Stale Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Cycle Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Stale Items": {
+      "main": [
+        [
+          {
+            "node": "DM Approver (Renotify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DM Approver (Renotify)": {
+      "main": [
+        [
+          {
+            "node": "Log Cycle Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Cycle Metrics": {
+      "main": [
+        [
+          {
+            "node": "Notify Mission Control",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Mission Control": {
+      "main": [
+        [
+          {
+            "node": "Cycle Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-1-orchestration"
+    },
+    {
+      "name": "hitl"
+    },
+    {
+      "name": "cron"
+    }
+  ]
+}

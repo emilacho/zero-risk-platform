@@ -1,0 +1,242 @@
+{
+  "name": "Zero Risk — Landing Page CRO Optimizer v2 (Weekly Sundays 7am)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 7 * * 0"}]
+        }
+      },
+      "id": "cron",
+      "name": "Weekly Sundays 7am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/campaigns/active-landing-pages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 30000}
+      },
+      "id": "fetch-pages",
+      "name": "Fetch Active Landing Pages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 320]
+    },
+    {
+      "parameters": {"fieldToSplitOut": "pages", "options": {}},
+      "id": "split",
+      "name": "Split Pages",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [660, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/scrape",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "=Bearer {{ $env.FIRECRAWL_API_KEY }}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"{{ $json.url }}\",\n  \"formats\": [\"markdown\", \"html\", \"screenshot@fullPage\"],\n  \"onlyMainContent\": false,\n  \"waitFor\": 2500\n}",
+        "options": {"timeout": 60000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "scrape",
+      "name": "Firecrawl Scrape",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={{ encodeURIComponent($json.url) }}&strategy=mobile&category=performance&category=accessibility&category=best-practices&key={{ $env.GOOGLE_PSI_KEY }}",
+        "options": {"timeout": 60000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "psi",
+      "name": "PageSpeed Insights",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 340]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/analytics/page-conversion-metrics?url={{ encodeURIComponent($json.url) }}&days=30",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}]
+        },
+        "options": {"timeout": 30000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "ga4-metrics",
+      "name": "GA4 Conversion Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 480]
+    },
+    {
+      "parameters": {"mode": "combine", "combineBy": "combineByPosition", "options": {}},
+      "id": "merge",
+      "name": "Merge Audit Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1140, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all();\nconst page = $node['split'].json;\nconst scrapeData = all[0]?.json || {};\nconst psiData = all[1]?.json?.lighthouseResult || {};\nconst ga4Data = all[2]?.json || {};\nconst perfScore = psiData.categories?.performance?.score || 0;\nconst conversions = parseInt(ga4Data.conversions || 0);\nconst traffic = parseInt(ga4Data.sessions || 0);\nconst cvr = traffic > 0 ? (conversions / traffic * 100) : 0;\nconst bounceRate = parseFloat(ga4Data.bounce_rate || 0);\nconst issues = [];\nif (perfScore < 0.75) issues.push({issue: 'poor_performance'});\nif (bounceRate > 0.5) issues.push({issue: 'high_bounce_rate'});\nif (cvr < 0.02) issues.push({issue: 'low_cvr'});\nreturn [{ json: {\n  url: page.url,\n  campaign_id: page.campaign_id,\n  client_id: page.client_id,\n  conversions,\n  traffic,\n  cvr: (cvr * 100).toFixed(2),\n  bounce_rate: bounceRate,\n  perf_score: Math.round(perfScore * 100),\n  issues: issues,\n  is_healthy: issues.length === 0\n} }];"
+      },
+      "id": "analyze",
+      "name": "Analyze Page Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1380, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"cro_specialist\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"CRO audit for {{ $json.url }}. CVR: {{ $json.cvr }}%, Bounce: {{ ($json.bounce_rate * 100).toFixed(1) }}%. Issues: {{ $json.issues.map(i => i.issue).join(', ') }}. Produce: (1) ICE prioritization matrix (Impact x Confidence x Ease), (2) GoodUI 10-principle checklist (form field reduction = top abandonment), (3) 3 optimization strategies, (4) Sample size calculation for 15pct lift.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "options": {"timeout": 240000}
+      },
+      "id": "cro-specialist",
+      "name": "CRO Specialist (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1620, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/stitch/generate-variants",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"base_url\": \"{{ $json.url }}\",\n  \"strategies\": {{ JSON.stringify($json.strategies) }},\n  \"num_variants\": 3\n}",
+        "options": {"timeout": 300000, "response": {"response": {"neverError": true}}}
+      },
+      "id": "stitch",
+      "name": "Google Stitch Variants",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1860, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/testing/cro-experiment",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"url\": \"{{ $json.url }}\",\n  \"variants\": {{ JSON.stringify($json.variants || []) }},\n  \"bandit\": true,\n  \"deploy\": \"staged\"\n}",
+        "options": {"timeout": 60000}
+      },
+      "id": "experiment",
+      "name": "Launch Experiment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2100, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"cro_audit\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"priority\": \"medium\",\n  \"summary\": \"CRO audit: {{ $json.url }} - CVR {{ $json.cvr }}%. 3 variants staged.\"\n}",
+        "options": {}
+      },
+      "id": "hitl",
+      "name": "Queue HITL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2340, 320]
+    }
+  ],
+  "connections": {
+    "Weekly Sundays 7am": {
+      "main": [[{"node": "Fetch Active Landing Pages", "type": "main", "index": 0}]]
+    },
+    "Fetch Active Landing Pages": {
+      "main": [[{"node": "Split Pages", "type": "main", "index": 0}]]
+    },
+    "Split Pages": {
+      "main": [[{"node": "Firecrawl Scrape", "type": "main", "index": 0}, {"node": "PageSpeed Insights", "type": "main", "index": 0}, {"node": "GA4 Conversion Metrics", "type": "main", "index": 0}]]
+    },
+    "Firecrawl Scrape": {
+      "main": [[{"node": "Merge Audit Data", "type": "main", "index": 0}]]
+    },
+    "PageSpeed Insights": {
+      "main": [[{"node": "Merge Audit Data", "type": "main", "index": 1}]]
+    },
+    "GA4 Conversion Metrics": {
+      "main": [[{"node": "Merge Audit Data", "type": "main", "index": 2}]]
+    },
+    "Merge Audit Data": {
+      "main": [[{"node": "Analyze Page Health", "type": "main", "index": 0}]]
+    },
+    "Analyze Page Health": {
+      "main": [[{"node": "CRO Specialist (Sonnet)", "type": "main", "index": 0}]]
+    },
+    "CRO Specialist (Sonnet)": {
+      "main": [[{"node": "Google Stitch Variants", "type": "main", "index": 0}]]
+    },
+    "Google Stitch Variants": {
+      "main": [[{"node": "Launch Experiment", "type": "main", "index": 0}]]
+    },
+    "Launch Experiment": {
+      "main": [[{"node": "Queue HITL", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "tags": [
+    {"name": "zero-risk", "id": "1"},
+    {"name": "cluster-4", "id": "2"},
+    {"name": "paid-media", "id": "3"},
+    {"name": "cro", "id": "4"},
+    {"name": "tier-2", "id": "5"}
+  ],
+  "triggerCount": 1,
+  "versionId": "2"
+}

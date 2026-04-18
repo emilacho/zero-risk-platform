@@ -1,0 +1,442 @@
+{
+  "name": "Zero Risk \u2014 Video Pipeline: Seedance \u2192 FFmpeg \u2192 Multi-Platform Export (Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/video-generate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: Video Brief",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.video_brief) throw new Error('client_id and video_brief required');\nif (!b.target_platforms || b.target_platforms.length === 0) {\n  b.target_platforms = ['instagram_reels', 'tiktok', 'youtube_shorts'];\n}\nreturn [{ json: {\n  task_id: `video_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,\n  client_id: b.client_id,\n  video_brief: b.video_brief,\n  style: b.style || 'dynamic',\n  target_platforms: b.target_platforms,\n  duration_s: b.duration_s || 15,\n  aspect_ratio: b.aspect_ratio || '9:16',\n  reference_image: b.reference_image || null,\n  brand_assets_url: b.brand_assets_url || null,\n  started_at: new Date().toISOString()\n} }];"
+      },
+      "id": "validate",
+      "name": "Code: Validate Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/client-brain/rag-search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"query\": \"Brand guidelines, visual identity, video production style, color palette, tone, messaging\",\n  \"k\": 20\n}",
+        "options": {}
+      },
+      "id": "brain",
+      "name": "Client Brain: Style Guides",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"video_editor\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Produce video production brief for: {{ $json.video_brief }} ({{ $json.duration_s }}s, {{ $json.aspect_ratio }}, style: {{ $json.style }}). Deliver: storyboard (5-6 scenes), Seedance 2.0 prompt, color grading notes, audio specs, subtitle script, multi-platform export specs.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": { \"brief\": {{ JSON.stringify($json) }}, \"brand_context\": {{ JSON.stringify($node['brain'].json) }} }\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "video-editor-agent",
+      "name": "Agent: Video Editor (Script \u2192 Storyboard)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.HIGGSFIELD_API_URL || 'https://api.higgsfield.ai/v1/generate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.HIGGSFIELD_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"seedance-2.0\",\n  \"prompt\": \"{{ $node['video-editor-agent'].json.seedance_prompt }}\",\n  \"duration\": {{ $json.duration_s }},\n  \"aspect_ratio\": \"{{ $json.aspect_ratio }}\",\n  \"reference_image\": \"{{ $json.reference_image }}\",\n  \"style\": \"{{ $json.style }}\",\n  \"quality\": \"720p\"\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "seedance-generate",
+      "name": "Higgsfield Seedance 2.0: Generate Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/storage/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"bucket\": \"video_assets\",\n  \"path\": \"{{ $json.client_id }}/generated/{{ $json.task_id }}/{{ $json.task_id }}_base.mp4\",\n  \"file_url\": \"{{ $json.video_url }}\",\n  \"metadata\": { \"prompt\": \"{{ $node['video-editor-agent'].json.seedance_prompt }}\", \"model\": \"seedance-2.0\", \"duration\": {{ $json.duration_s }}, \"aspect_ratio\": \"{{ $json.aspect_ratio }}\" }\n}",
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "id": "upload-base-video",
+      "name": "Upload: Base Video \u2192 Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.openai.com/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.OPENAI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "form",
+        "formData": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "file",
+              "value": "@{{ $json.video_url }}"
+            },
+            {
+              "name": "response_format",
+              "value": "vtt"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "whisper-api",
+      "name": "OpenAI Whisper: Auto-Subtitle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const platforms = $json.target_platforms || [];\nconst specs = {\n  tiktok: { aspect: '9:16', res: '1080x1920', bitrate: '4M', fps: 30 },\n  instagram_reels: { aspect: '9:16', res: '1080x1920', bitrate: '5M', fps: 30 },\n  youtube_shorts: { aspect: '9:16', res: '1080x1920', bitrate: '5M', fps: 30 },\n  youtube: { aspect: '16:9', res: '1920x1080', bitrate: '8M', fps: 30 }\n};\nconst exports = platforms.map(p => {\n  const s = specs[p] || specs.instagram_reels;\n  return {\n    platform: p,\n    aspect_ratio: s.aspect,\n    resolution: s.res,\n    bitrate: s.bitrate,\n    fps: s.fps,\n    ffmpeg_cmd: `ffmpeg -i input.mp4 -vf scale=${s.res} -b:v ${s.bitrate} -r ${s.fps} output_${p}.mp4`,\n    subtitles: $node['whisper-api'].json.content\n  };\n});\nreturn [{ json: { exports_config: exports } }];"
+      },
+      "id": "platform-specs",
+      "name": "Code: Platform Export Specs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/video/transcode",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"task_id\": \"{{ $json.task_id }}\",\n  \"input_url\": \"{{ $json.video_url }}\",\n  \"exports\": {{ JSON.stringify($node['platform-specs'].json.exports_config) }},\n  \"add_subtitles\": true,\n  \"subtitle_vtt\": \"{{ $node['whisper-api'].json.content }}\"\n}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "transcode-all",
+      "name": "FFmpeg: Transcode All Platforms",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/outcomes/record",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"task_type\": \"video_generation\",\n  \"agent\": \"video_editor\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"input\": { \"brief\": \"{{ $json.video_brief }}\", \"duration_s\": {{ $json.duration_s }}, \"platforms\": {{ JSON.stringify($json.target_platforms) }} },\n  \"output\": { \"task_id\": \"{{ $json.task_id }}\", \"video_urls\": {{ JSON.stringify($node['transcode-all'].json.export_urls) }} },\n  \"status\": \"completed\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "record-outcome",
+      "name": "Record: Outcome",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"\u2705 Video Pipeline Complete: Task {{ $json.task_id }}. Platforms: {{ $json.target_platforms.join(', ') }}. All exports ready.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Video Generation Complete*\\\\nTask: {{ $json.task_id }}\\\\nPlatforms: {{ $json.target_platforms.join(', ') }}\\\\nDuration: {{ $json.duration_s }}s\\\\nStatus: All transcodes done\" } }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "notify-slack",
+      "name": "Slack: Notify Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2100,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "webhook": {
+      "main": [
+        [
+          {
+            "node": "validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate": {
+      "main": [
+        [
+          {
+            "node": "brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "brain": {
+      "main": [
+        [
+          {
+            "node": "video-editor-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "video-editor-agent": {
+      "main": [
+        [
+          {
+            "node": "seedance-generate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "seedance-generate": {
+      "main": [
+        [
+          {
+            "node": "upload-base-video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "upload-base-video": {
+      "main": [
+        [
+          {
+            "node": "whisper-api",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "whisper-api": {
+      "main": [
+        [
+          {
+            "node": "platform-specs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "platform-specs": {
+      "main": [
+        [
+          {
+            "node": "transcode-all",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "transcode-all": {
+      "main": [
+        [
+          {
+            "node": "record-outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "record-outcome": {
+      "main": [
+        [
+          {
+            "node": "notify-slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "timezone": "UTC"
+  },
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-2"
+    },
+    {
+      "name": "creative"
+    },
+    {
+      "name": "video"
+    },
+    {
+      "name": "seedance"
+    }
+  ]
+}

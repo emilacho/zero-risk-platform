@@ -1,0 +1,266 @@
+{
+  "name": "Zero Risk — RUFLO Smart Router (Webhook)",
+  "description": "Entry point for all incoming requests. Invokes RUFLO orchestrator-classifier to determine request type (depth-first | breadth-first | straightforward), spawns appropriate agent chain, logs routing decision, returns async request_id for tracking. Validates client context from Client Brain before routing.",
+  "trigger": "Webhook POST /webhook/router-entry with { client_id, request, context_type }",
+  "agents_invoked": ["ruflo"],
+  "dependencies": {
+    "api_endpoints": [
+      "POST /api/agents/run (ruflo)",
+      "GET /api/client-brain/{client_id}",
+      "POST /api/agent-routing/log"
+    ],
+    "supabase_tables": [
+      "agent_routing_log (request_id, client_id, classification, assigned_agents, status)",
+      "agent_requests (request_id, client_id, original_request, status)"
+    ]
+  },
+  "kpis": [
+    "Request classification accuracy (depth vs breadth vs straightforward)",
+    "Average routing latency (<2s for straightforward, <5s for complex)",
+    "HITL escalation rate from RUFLO",
+    "Agent chain execution success rate by classification type"
+  ],
+  "json": {
+    "name": "Zero Risk — RUFLO Smart Router (Webhook)",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "router-entry",
+          "responseMode": "onReceived",
+          "options": {}
+        },
+        "id": "webhook-in",
+        "name": "Router Webhook Entry",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [100, 100],
+        "webhookId": "unique-webhook-router-1"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Validate and normalize incoming router request\nconst { client_id, request, context_type } = $input.first().json.body;\n\nif (!client_id || !request) {\n  throw new Error('Missing required: client_id, request');\n}\n\nconst request_id = `route-${client_id}-${Date.now()}`;\n\nreturn [{\n  json: {\n    request_id,\n    client_id,\n    request: request.slice(0, 5000), // cap request size\n    context_type: context_type || 'general',\n    received_at: new Date().toISOString(),\n    status: 'received'\n  }\n}];"
+        },
+        "id": "normalize-request",
+        "name": "Normalize & Validate Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [300, 100]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/client-brain/{{ $json.client_id }}?sections=client_brand_books,client_icp_documents,client_service_capabilities",
+          "options": {"timeout": 15000}
+        },
+        "id": "load-client-brain",
+        "name": "Load Client Context (Client Brain)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [500, 100]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {"name": "Content-Type", "value": "application/json"},
+              {"name": "x-internal-key", "value": "={{ $env.INTERNAL_API_KEY }}"}
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"agent\": \"ruflo\",\n  \"task_type\": \"classify_and_decompose\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"request_text\": \"{{ $json.request }}\",\n  \"context_type\": \"{{ $json.context_type }}\",\n  \"client_brain\": \"{{ $node['Load Client Context (Client Brain)'].json }}\",\n  \"routing_instructions\": \"Classify this request as: depth-first (multiple perspectives on same issue), breadth-first (distinct independent sub-questions), or straightforward (focused, well-defined). Return structured JSON with: classification_type, task_breakdown (ordered list), assigned_agents (sequence with dependencies), success_criteria, estimated_complexity (low|medium|high|critical).\"\n}",
+          "options": {"timeout": 120000}
+        },
+        "id": "invoke-ruflo",
+        "name": "Invoke RUFLO Classifier",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [700, 100]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Extract routing decision from RUFLO response\nconst ruflo_response = $node['Invoke RUFLO Classifier'].json;\n\nif (!ruflo_response.success) {\n  throw new Error('RUFLO classification failed: ' + (ruflo_response.error || 'unknown'));\n}\n\nconst routing = {\n  request_id: $json.request_id,\n  client_id: $json.client_id,\n  classification_type: ruflo_response.classification_type,\n  task_breakdown: ruflo_response.task_breakdown || [],\n  assigned_agents: ruflo_response.assigned_agents || [],\n  success_criteria: ruflo_response.success_criteria || [],\n  estimated_complexity: ruflo_response.estimated_complexity,\n  confidence: ruflo_response.confidence || 0.85,\n  should_escalate_hitl: ruflo_response.should_escalate_hitl || false,\n  escalation_reason: ruflo_response.escalation_reason || null,\n  routed_at: new Date().toISOString()\n};\n\nreturn [{ json: routing }];"
+        },
+        "id": "extract-routing",
+        "name": "Extract Routing Decision",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [900, 100]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {"caseSensitive": true, "typeValidation": "strict"},
+            "conditions": [
+              {
+                "leftValue": "={{ $json.should_escalate_hitl }}",
+                "rightValue": true,
+                "operator": {"type": "boolean", "operation": "true"}
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "id": "check-escalate",
+        "name": "Should Escalate to HITL?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [1100, 100]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {"name": "Content-Type", "value": "application/json"}
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"approval_type\": \"routing_classification\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"classification_type\": \"{{ $json.classification_type }}\",\n  \"context\": {\n    \"original_request\": \"{{ $json.request | slice(0, 500) }}\",\n    \"ruflo_confidence\": \"{{ $json.confidence }}\",\n    \"escalation_reason\": \"{{ $json.escalation_reason }}\"\n  },\n  \"required_approver\": \"ruflo\",\n  \"expires_in_hours\": 2\n}",
+          "options": {"timeout": 15000}
+        },
+        "id": "escalate-hitl",
+        "name": "Queue for HITL Review (High Risk)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1300, 180]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {"name": "Content-Type", "value": "application/json"}
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"text\": \"⚠️ *RUFLO Classification Escalated to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Classification:* {{ $json.classification_type }} (confidence: {{ ($json.confidence * 100).toFixed(0) }}%)\\n*Reason:* {{ $json.escalation_reason }}\\n\\nReview in Mission Control → dashboard/inbox\"\n}",
+          "options": {"timeout": 15000}
+        },
+        "id": "notify-escalation",
+        "name": "Notify Slack (Escalation)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1500, 180]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agent-routing/log",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {"name": "Content-Type", "value": "application/json"}
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"classification_type\": \"{{ $json.classification_type }}\",\n  \"assigned_agents\": \"{{ JSON.stringify($json.assigned_agents) }}\",\n  \"complexity\": \"{{ $json.estimated_complexity }}\",\n  \"confidence\": {{ $json.confidence }},\n  \"status\": \"{{ $json.should_escalate_hitl ? 'escalated' : 'routed' }}\",\n  \"routed_at\": \"{{ $json.routed_at }}\"\n}",
+          "options": {"timeout": 15000}
+        },
+        "id": "log-routing",
+        "name": "Log Routing Decision",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1300, 100]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/mc-sync",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {"name": "Content-Type", "value": "application/json"},
+              {"name": "x-api-key", "value": "={{ $env.MC_API_TOKEN }}"}
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"action\": \"routing_decision\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"classification\": \"{{ $json.classification_type }}\",\n  \"agents_assigned\": {{ ($json.assigned_agents || []).length }},\n  \"timestamp\": \"{{ now().toISOString() }}\"\n}",
+          "options": {"timeout": 15000}
+        },
+        "id": "notify-mc",
+        "name": "Notify Mission Control",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1500, 100]
+      },
+      {
+        "parameters": {},
+        "id": "end-normal",
+        "name": "Normal Routing (End)",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [1700, 100]
+      },
+      {
+        "parameters": {},
+        "id": "end-escalated",
+        "name": "Escalated (End)",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [1700, 180]
+      }
+    ],
+    "connections": {
+      "webhook-in": {
+        "main": [[{"node": "normalize-request", "type": "main", "index": 0}]]
+      },
+      "normalize-request": {
+        "main": [[{"node": "load-client-brain", "type": "main", "index": 0}]]
+      },
+      "load-client-brain": {
+        "main": [[{"node": "invoke-ruflo", "type": "main", "index": 0}]]
+      },
+      "invoke-ruflo": {
+        "main": [[{"node": "extract-routing", "type": "main", "index": 0}]]
+      },
+      "extract-routing": {
+        "main": [[{"node": "check-escalate", "type": "main", "index": 0}]]
+      },
+      "check-escalate": {
+        "main": [
+          [{"node": "log-routing", "type": "main", "index": 0}],
+          [{"node": "escalate-hitl", "type": "main", "index": 0}]
+        ]
+      },
+      "log-routing": {
+        "main": [[{"node": "notify-mc", "type": "main", "index": 0}]]
+      },
+      "notify-mc": {
+        "main": [[{"node": "end-normal", "type": "main", "index": 0}]]
+      },
+      "escalate-hitl": {
+        "main": [[{"node": "notify-escalation", "type": "main", "index": 0}]]
+      },
+      "notify-escalation": {
+        "main": [[{"node": "end-escalated", "type": "main", "index": 0}]]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "saveManualExecutions": true,
+      "callerPolicy": "workflowsFromSameOwner",
+      "errorWorkflow": ""
+    },
+    "staticData": null,
+    "tags": [
+      {"name": "zero-risk", "id": "1"},
+      {"name": "cluster-1-orchestration", "id": "2"},
+      {"name": "routing", "id": "3"}
+    ],
+    "triggerCount": 1,
+    "updatedAt": "2026-04-18T00:00:00.000Z",
+    "versionId": "1"
+  }
+}

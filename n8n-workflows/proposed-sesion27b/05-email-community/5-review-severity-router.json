@@ -1,0 +1,402 @@
+{
+  "name": "Zero Risk — Review Severity Tier Router (Real-time)",
+  "description": "Routes new reviews (Google/Trustpilot/App Store) into Tier 1 (legal/safety → immediate HITL), Tier 2 (service failure → 4h SLA), Tier 3 (routine → auto-reply).",
+  "tags": [
+    {"name": "zero-risk"},
+    {"name": "cluster-5"},
+    {"name": "email-community"},
+    {"name": "review-management"}
+  ],
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/review-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: Review Posted",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.review_text || !b.platform) throw new Error('client_id, review_text, platform required');\nreturn [{ json: { client_id: b.client_id, review_id: b.review_id || `${b.platform}_${Date.now()}`, platform: b.platform, rating: b.rating || 3, text: b.review_text, author: b.author || 'Anonymous', url: b.url || null } }];"
+      },
+      "id": "validate",
+      "name": "Validate Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.text.toLowerCase();\nconst tier1Keywords = ['injury', 'death', 'lawsuit', 'fraud', 'discrimination', 'legal action', 'financial loss', 'scam', 'breach'];\nconst tier2Keywords = ['broken', 'defective', 'late delivery', 'rude staff', 'poor service', 'refund denied', 'billing error'];\n\nconst hasTier1 = tier1Keywords.some(kw => text.includes(kw));\nconst hasTier2 = !hasTier1 && tier2Keywords.some(kw => text.includes(kw));\nconst sentiment = $json.rating <= 2 ? 'negative' : ($json.rating === 3 ? 'neutral' : 'positive');\n\nlet tier = 'TIER_3_ROUTINE';\nif (hasTier1) tier = 'TIER_1_LEGAL_SAFETY';\nelse if (hasTier2 || $json.rating <= 2) tier = 'TIER_2_SERVICE_FAILURE';\n\nreturn [{ json: { severity_tier: tier, sentiment, requires_hitl: hasTier1, response_sla_hours: hasTier1 ? 0 : (hasTier2 ? 4 : 24) } }];"
+      },
+      "id": "classify-tier",
+      "name": "Classify Severity Tier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.severity_tier }}",
+              "rightValue": "TIER_1_LEGAL_SAFETY",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "is-tier1",
+      "name": "Is Tier 1?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [820, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.severity_tier }}",
+              "rightValue": "TIER_2_SERVICE_FAILURE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "is-tier2",
+      "name": "Is Tier 2?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [820, 520]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🚨 TIER 1 LEGAL/SAFETY ALERT\",\n  \"attachments\": [{\n    \"color\": \"danger\",\n    \"fields\": [{\n      \"title\": \"Platform\",\n      \"value\": \"{{ $node['validate'].json.platform }}\"\n    }, {\n      \"title\": \"Rating\",\n      \"value\": \"{{ $node['validate'].json.rating }}⭐\"\n    }, {\n      \"title\": \"Review\",\n      \"value\": \"{{ $node['validate'].json.text }}\"\n    }, {\n      \"title\": \"Action\",\n      \"value\": \"IMMEDIATE HITL REQUIRED — No auto-response. Route to legal team.\"\n    }]\n  }]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "slack-tier1",
+      "name": "Slack: Tier 1 Alert (No Auto-Response)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"review_responder\",\n  \"model\": \"claude-haiku-4-5\",\n  \"task\": \"Draft 2 response variants for negative review ({{ $node['validate'].json.rating }}⭐) using Birdeye 4-step (Apologize→Acknowledge→Act→Follow-up). Review: {{ $node['validate'].json.text }}. Both variants for HITL approval. JSON: { variant_1, variant_2, recommended_action }.\",\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"extra\": {{ JSON.stringify($node['validate'].json) }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "draft-tier2",
+      "name": "Draft Tier 2 Response (Haiku)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/review-responses/queue-hitl",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"review_id\": \"{{ $node['validate'].json.review_id }}\",\n  \"platform\": \"{{ $node['validate'].json.platform }}\",\n  \"severity_tier\": \"{{ $node['classify-tier'].json.severity_tier }}\",\n  \"response_variants\": {{ JSON.stringify($node['draft-tier2'].json) }},\n  \"sla_hours\": {{ $node['classify-tier'].json.response_sla_hours }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "queue-tier2-hitl",
+      "name": "Queue Tier 2 for HITL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "const templates = {\n  google: 'Thank you for your feedback! We appreciate you taking the time to share your experience. We value your business and look forward to serving you again.',\n  trustpilot: 'Thank you for your review. Your feedback helps us improve. We appreciate your support.',\n  appstore: 'Thanks for the review! We appreciate your feedback and look forward to your next visit.',\n  playstore: 'Thank you for reviewing our app. Your feedback helps us improve. We appreciate your support.'\n};\nreturn [{ json: { auto_response: templates[$node['validate'].json.platform] || templates.google } }];"
+      },
+      "id": "template-tier3",
+      "name": "Select Tier 3 Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 580]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GHL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"review_response\",\n  \"contactId\": \"{{ $node['validate'].json.author }}\",\n  \"message\": \"{{ $json.auto_response }}\",\n  \"platform\": \"{{ $node['validate'].json.platform }}\"\n}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "post-tier3",
+      "name": "Post Tier 3 Auto-Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 580]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/review-metrics/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"review_id\": \"{{ $node['validate'].json.review_id }}\",\n  \"platform\": \"{{ $node['validate'].json.platform }}\",\n  \"rating\": {{ $node['validate'].json.rating }},\n  \"severity_tier\": \"{{ $node['classify-tier'].json.severity_tier }}\",\n  \"sentiment\": \"{{ $node['classify-tier'].json.sentiment }}\",\n  \"posted_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "log-metric",
+      "name": "Log Review Metric",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 360]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { review_id: $node['validate'].json.review_id, tier: $node['classify-tier'].json.severity_tier, status: 'processed' } }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1420, 240]
+    }
+  ],
+  "connections": {
+    "Webhook: Review Posted": {
+      "main": [
+        [
+          {
+            "node": "Validate Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Review": {
+      "main": [
+        [
+          {
+            "node": "Classify Severity Tier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Severity Tier": {
+      "main": [
+        [
+          {
+            "node": "Is Tier 1?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Tier 1?": {
+      "main": [
+        [
+          {
+            "node": "Slack: Tier 1 Alert (No Auto-Response)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Tier 2?",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Is Tier 2?": {
+      "main": [
+        [
+          {
+            "node": "Draft Tier 2 Response (Haiku)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Select Tier 3 Template",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Slack: Tier 1 Alert (No Auto-Response)": {
+      "main": [
+        [
+          {
+            "node": "Log Review Metric",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Tier 2 Response (Haiku)": {
+      "main": [
+        [
+          {
+            "node": "Queue Tier 2 for HITL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Tier 2 for HITL": {
+      "main": [
+        [
+          {
+            "node": "Log Review Metric",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Tier 3 Template": {
+      "main": [
+        [
+          {
+            "node": "Post Tier 3 Auto-Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Tier 3 Auto-Response": {
+      "main": [
+        [
+          {
+            "node": "Log Review Metric",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Review Metric": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

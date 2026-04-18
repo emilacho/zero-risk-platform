@@ -1,0 +1,176 @@
+{
+  "name": "Zero Risk \u2014 SEO Rank-to-#1 v2 UPGRADED",
+  "meta": {
+    "description": "Webhook-triggered end-to-end SEO engagement. UPGRADED: mandatory cannibalization check (blocks pipeline if conflicts), sub-agent output validation (Anthropic orchestrator), critical-path dependency mapping, GEO layer in parallel.",
+    "trigger_type": "webhook",
+    "webhook_path": "zero-risk/seo-rank-one-v2",
+    "expected_duration_minutes": 30,
+    "cost_usd_per_run": "12-18",
+    "tags": [
+      {
+        "name": "zero-risk"
+      },
+      {
+        "name": "cluster-3"
+      },
+      {
+        "name": "seo"
+      },
+      {
+        "name": "flagship"
+      },
+      {
+        "name": "upgrade"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/seo-rank-one-v2",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "webhook",
+      "name": "Webhook: SEO Engagement v2",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        120,
+        600
+      ],
+      "webhookId": "zero-risk-seo-rank-one-v2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json; const required = ['domain','target_keyword','client_id']; for (const f of required) if (!b[f]) throw new Error('Missing: ' + f); return [{json:{task_id:'seo_' + Date.now(), domain:b.domain.replace(/^https?:\\/\\//,''), target_keyword:b.target_keyword, client_id:b.client_id}}];"
+      },
+      "id": "validate",
+      "name": "Validate & Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://zero-risk-platform.vercel.app/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "=key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"agent\":\"seo-specialist\",\"model\":\"claude-sonnet-4-6\",\"task\":\"Cannibalization check for {{ $json.domain }}\",\"client_id\":\"{{ $json.client_id }}\"}"
+      },
+      "id": "guard-cannibalization",
+      "name": "GUARD: Cannibalization Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "type": "when",
+        "value1": "={{ $node['GUARD: Cannibalization Check'].json.output.block_reason || false }}",
+        "value2": false,
+        "operation": "equals"
+      },
+      "id": "if-no-cannibalization",
+      "name": "IF no cannibalization conflicts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        800,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://zero-risk-platform.vercel.app/api/seo-engagements",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "=key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"task_id\":\"{{ $json.task_id }}\",\"status\":\"running\"}"
+      },
+      "id": "persist-start",
+      "name": "Persist Engagement Start",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "webhook": {
+      "main": [
+        [
+          {
+            "node": "validate"
+          }
+        ]
+      ]
+    },
+    "validate": {
+      "main": [
+        [
+          {
+            "node": "guard-cannibalization"
+          }
+        ]
+      ]
+    },
+    "guard-cannibalization": {
+      "main": [
+        [
+          {
+            "node": "if-no-cannibalization"
+          }
+        ]
+      ]
+    },
+    "if-no-cannibalization": {
+      "main": [
+        [
+          {
+            "node": "persist-start"
+          }
+        ],
+        []
+      ]
+    }
+  }
+}

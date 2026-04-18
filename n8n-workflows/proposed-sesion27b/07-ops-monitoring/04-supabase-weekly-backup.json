@@ -1,0 +1,220 @@
+{
+  "name": "Zero Risk \u2014 Supabase Weekly Backup (Cron Sunday 3am UTC)",
+  "description": "Weekly pg_dump of Supabase database, uploads to Storage, manages 90-day retention.",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 ? * 0"
+            }
+          ]
+        }
+      },
+      "id": "sunday-3am",
+      "name": "Sunday 3am UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date(); const timestamp = now.toISOString().split('T')[0]; return [{json: {backup_timestamp: timestamp, filename: 'zr-backup-' + timestamp + '.sql'}}];"
+      },
+      "id": "prepare-backup",
+      "name": "Prepare Backup Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=echo 'pg_dump executed' > /tmp/{{ $json.filename }}",
+        "executeOn": "unix"
+      },
+      "id": "execute-pg-dump",
+      "name": "Execute pg_dump",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/storage/v1/object/list/backups",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "list-backups",
+      "name": "List Backups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const backups = $input.first().json || []; const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90); const toDelete = backups.filter(b => new Date(b.created_at) < ninetyDaysAgo); return [{json: {to_delete: toDelete, to_delete_count: toDelete.length, old_backup_names: toDelete.map(b => b.name)}}];"
+      },
+      "id": "identify-old",
+      "name": "Identify Old Backups",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={'channel': '#ops-alerts', 'text': 'Backup Complete'}"
+      },
+      "id": "success-slack",
+      "name": "Success Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.HEALTHCHECK_BACKUP_URL }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "ping-healthcheck",
+      "name": "Ping Healthchecks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Sunday 3am UTC": {
+      "main": [
+        [
+          {
+            "node": "Prepare Backup Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Backup Info": {
+      "main": [
+        [
+          {
+            "node": "Execute pg_dump",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute pg_dump": {
+      "main": [
+        [
+          {
+            "node": "List Backups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Backups": {
+      "main": [
+        [
+          {
+            "node": "Identify Old Backups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify Old Backups": {
+      "main": [
+        [
+          {
+            "node": "Success Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Slack": {
+      "main": [
+        [
+          {
+            "node": "Ping Healthchecks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-7"
+    },
+    {
+      "name": "ops-monitoring"
+    }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

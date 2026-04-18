@@ -1,0 +1,365 @@
+{
+  "name": "Zero Risk \u2014 RSA 15-Headline Variant Generator (Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/rsa-generate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook: RSA Brief",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.client_id || !b.campaign_brief) throw new Error('client_id and campaign_brief required');\nreturn [{ json: {\n  task_id: `rsa_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,\n  client_id: b.client_id,\n  campaign_brief: b.campaign_brief,\n  brand_voice: b.brand_voice || null,\n  existing_headlines: b.existing_headlines || [],\n  keyword: b.keyword || null,\n  platform: b.platform || 'google_ads',\n  started_at: new Date().toISOString()\n} }];"
+      },
+      "id": "validate",
+      "name": "Code: Validate Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/client-brain/rag-search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"query\": \"Brand voice, messaging tone, unique value propositions, differentiation, keywords, past RSA performance\",\n  \"k\": 15\n}",
+        "options": {}
+      },
+      "id": "brain",
+      "name": "Client Brain: Brand Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"creative_director\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Generate RSA 15-headline matrix for campaign: {{ $json.campaign_brief }} (keyword: {{ $json.keyword }}). Structure: 5 headlines grouped as {brand, benefit, feature, CTA, social_proof}. Requirements: max 30 chars each, every combo must make grammatical/logical sense, orthogonal (no semantic overlap), apply Schwartz emotional triggers, avoid competitor language, align brand voice. Exclude headlines similar to: {{ JSON.stringify($json.existing_headlines) }}. Output JSON with headline_matrix[5][3], validation_notes, estimated CTR vs existing.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": { \"brief\": {{ JSON.stringify($json) }}, \"brand\": {{ JSON.stringify($node['brain'].json) }} }\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "creative-director",
+      "name": "Agent: Creative Director (RSA Gen)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const headlines = $node['creative-director'].json.headline_matrix || [];\nconst errors = [];\nconst validations = {\n  char_count_violations: [],\n  duplicate_headlines: [],\n  matrix_coherence: 'pass'\n};\nheadlines.forEach((h, i) => {\n  if (h.length > 30) {\n    validations.char_count_violations.push({ index: i, headline: h, length: h.length });\n  }\n});\nconst unique = new Set(headlines);\nif (unique.size !== headlines.length) {\n  validations.duplicate_headlines = headlines.filter((h, i) => headlines.indexOf(h) !== i);\n}\nif (validations.char_count_violations.length > 0) {\n  errors.push('Character count violations detected');\n}\nif (validations.duplicate_headlines.length > 0) {\n  errors.push('Duplicate headlines detected');\n}\nreturn [{ json: {\n  validation_passed: errors.length === 0,\n  errors: errors,\n  details: validations,\n  headline_count: headlines.length,\n  headlines: headlines\n} }];"
+      },
+      "id": "validate-matrix",
+      "name": "Code: Validate RSA Matrix",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.validation_passed }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "check-valid",
+      "name": "If: Validation Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/headlines/library",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"campaign_id\": \"{{ $json.campaign_brief }}\",\n  \"headline_set\": {\n    \"set_id\": \"{{ $json.task_id }}\",\n    \"headlines\": {{ JSON.stringify($json.headlines) }},\n    \"category_breakdown\": \"5 headlines x 3 groupings\",\n    \"validation_status\": \"passed\",\n    \"created_at\": \"{{ new Date().toISOString() }}\"\n  },\n  \"keyword\": \"{{ $node['validate'].json.keyword }}\",\n  \"platform\": \"{{ $node['validate'].json.platform }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "store-headline-set",
+      "name": "Store: RSA Headline Library",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/outcomes/record",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"task_type\": \"rsa_generation\",\n  \"agent\": \"creative_director\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"input\": { \"brief\": \"{{ $json.campaign_brief }}\", \"keyword\": \"{{ $json.keyword }}\" },\n  \"output\": { \"set_id\": \"{{ $json.task_id }}\", \"headline_count\": {{ $json.headline_count }}, \"validation\": \"passed\" },\n  \"status\": \"completed\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "record-outcome",
+      "name": "Record: Outcome",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"\u2705 RSA 15-Headline Set Generated: {{ $json.task_id }}. Headlines ready for {{ $node['validate'].json.platform }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*RSA Headline Matrix Generated*\\\\nSet ID: {{ $json.task_id }}\\\\nCount: {{ $json.headline_count }}\\\\nValidation: PASSED\\\\nStatus: Ready for {{ $node['validate'].json.platform }}\" } }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "notify-slack",
+      "name": "Slack: Notify Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1700,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"\u26a0\ufe0f RSA Validation Failed: {{ $json.task_id }}. Errors: {{ JSON.stringify($json.errors) }}\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*RSA Validation Error*\\\\nSet ID: {{ $json.task_id }}\\\\nErrors: {{ $json.errors.join(', ') }}\" } }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "notify-failure",
+      "name": "Slack: Notify Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "webhook": {
+      "main": [
+        [
+          {
+            "node": "validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate": {
+      "main": [
+        [
+          {
+            "node": "brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "brain": {
+      "main": [
+        [
+          {
+            "node": "creative-director",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "creative-director": {
+      "main": [
+        [
+          {
+            "node": "validate-matrix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate-matrix": {
+      "main": [
+        [
+          {
+            "node": "check-valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-valid": {
+      "main": [
+        [
+          {
+            "node": "store-headline-set",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "notify-failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "store-headline-set": {
+      "main": [
+        [
+          {
+            "node": "record-outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "record-outcome": {
+      "main": [
+        [
+          {
+            "node": "notify-slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "timezone": "UTC"
+  },
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "cluster-2"
+    },
+    {
+      "name": "creative"
+    },
+    {
+      "name": "rsa"
+    },
+    {
+      "name": "google-ads"
+    }
+  ]
+}
