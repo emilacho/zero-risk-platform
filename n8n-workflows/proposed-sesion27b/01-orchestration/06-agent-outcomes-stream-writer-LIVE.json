@@ -1,0 +1,284 @@
+{
+  "name": "ZR — Agent Outcomes Writer (Cluster 1)",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "outcomes-writer",
+        "responseMode": "immediately",
+        "options": {}
+      },
+      "id": "webhook-in",
+      "name": "Outcomes Webhook Entry",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        100
+      ],
+      "webhookId": "unique-webhook-outcomes-1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize outcome data\nconst body = $input.first().json.body;\nconst { agent_slug, task_id, input_text, output_text, tokens_used, latency_ms, success, error } = body;\n\nif (!agent_slug || !task_id) {\n  throw new Error('Missing required: agent_slug, task_id');\n}\n\nconst outcome = {\n  agent_slug,\n  task_id,\n  input: input_text || input || '',\n  output: output_text || output || '',\n  tokens_used: tokens_used || 0,\n  latency_ms: latency_ms || 0,\n  success: success !== undefined ? success : true,\n  error: error || null,\n  created_at: new Date().toISOString(),\n  captured_at: new Date().getTime()\n};\n\nreturn [{ json: outcome }];"
+      },
+      "id": "normalize",
+      "name": "Normalize Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agent-outcomes/write",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent_slug\": \"{{ $json.agent_slug }}\",\n  \"task_id\": \"{{ $json.task_id }}\",\n  \"input\": \"{{ $json.input | slice(0, 2000) }}\",\n  \"output\": \"{{ $json.output | slice(0, 2000) }}\",\n  \"tokens_used\": {{ $json.tokens_used }},\n  \"latency_ms\": {{ $json.latency_ms }},\n  \"success\": {{ $json.success }},\n  \"error\": \"{{ $json.error }}\",\n  \"created_at\": \"{{ $json.created_at }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "write-supabase",
+      "name": "Write to Supabase agent_outcomes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.posthog.com/capture/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"api_key\": \"{{ $env.POSTHOG_API_KEY }}\",\n  \"event\": \"agent_outcome\",\n  \"properties\": {\n    \"agent_slug\": \"{{ $json.agent_slug }}\",\n    \"task_id\": \"{{ $json.task_id }}\",\n    \"success\": {{ $json.success }},\n    \"tokens_used\": {{ $json.tokens_used }},\n    \"latency_ms\": {{ $json.latency_ms }}\n  },\n  \"timestamp\": \"{{ $json.created_at }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "emit-posthog",
+      "name": "Emit to PostHog Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        60
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.success }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-failed",
+      "name": "Agent Execution Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"❌ *Agent Execution Failed*\\n\\n*Agent:* {{ $json.agent_slug }}\\n*Task:* {{ $json.task_id }}\\n*Error:* {{ ($json.error || 'unknown').slice(0, 150) }}\\n*Latency:* {{ $json.latency_ms }}ms\\n\\nReview in logs.\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "alert-failure",
+      "name": "Alert Slack (Failure)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        180
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {},
+      "id": "end-success",
+      "name": "Success (End)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "end-failure",
+      "name": "Failure Logged (End)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        180
+      ]
+    }
+  ],
+  "connections": {
+    "Outcomes Webhook Entry": {
+      "main": [
+        [
+          {
+            "node": "Normalize Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Outcome": {
+      "main": [
+        [
+          {
+            "node": "Write to Supabase agent_outcomes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Supabase agent_outcomes": {
+      "main": [
+        [
+          {
+            "node": "Emit to PostHog Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Agent Execution Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit to PostHog Analytics": {
+      "main": [
+        [
+          {
+            "node": "End Success (End)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Execution Failed?": {
+      "main": [
+        [
+          {
+            "node": "Alert Failure",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "End Success (End)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Failure": {
+      "main": [
+        [
+          {
+            "node": "Failure Logged (End)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": false,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "zero-risk",
+      "id": "1"
+    },
+    {
+      "name": "cluster-1-orchestration",
+      "id": "2"
+    },
+    {
+      "name": "metrics",
+      "id": "3"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-18T00:00:00.000Z",
+  "versionId": "1"
+}
