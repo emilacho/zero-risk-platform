@@ -148,7 +148,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'db_error', detail: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, state: data })
+  // Also spread `data` at the top level so downstream n8n nodes can read
+  // `$json.current_phase`, `$json.request_id`, etc. directly after calling
+  // this endpoint (instead of having to dig into `$json.state.*`). This is
+  // the canonical shape expected by the NEXUS workflow's Execute Phase /
+  // Advance / Persist nodes. Backwards-compatible with `$json.state.*`.
+  return NextResponse.json({ ok: true, state: data, ...(data || {}) })
 }
 
 export async function GET(request: NextRequest) {
