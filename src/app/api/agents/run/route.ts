@@ -321,6 +321,10 @@ export async function POST(request: Request) {
       display_name: (agentConfig.display_name as string) || canonicalSlug,
       model: modelId,
       response: responseText,
+      // Aliases so downstream consumers (n8n workflows) can read the content
+      // without knowing the canonical key name. All three point to the same string.
+      output: responseText,
+      result: responseText,
       tokens_used: tokensUsed,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
