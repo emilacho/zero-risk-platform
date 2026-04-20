@@ -25,18 +25,34 @@ export async function POST(request: Request) {
     typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
   const SMOKE_CLIENT_UUID = '00000000-0000-0000-0000-000000000000'
 
-  const normalized = rowsIn.map(r => ({
-    client_id: isUuid(r.client_id) ? r.client_id : SMOKE_CLIENT_UUID,
-    platform: r.platform || 'stub',
-    external_id: r.external_id || r.review_id || `stub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    rating: typeof r.rating === 'number' ? Math.round(r.rating) : 0,
-    title: r.title || null,
-    body: r.body || r.review_text || null,
-    author: r.author || r.author_name || null,
-    sentiment: r.sentiment || null,
-    status: r.status || 'unprocessed',
-    raw: r.raw || r.data || r,
-  }))
+  // Table check constraints:
+  //   platform  ∈ google|trustpilot|meta|tripadvisor|yelp
+  //   rating    1..5
+  //   sentiment ∈ positive|neutral|negative (nullable)
+  //   status    ∈ new|awaiting_review|responded|escalated|ignored
+  const ALLOWED_PLATFORMS = new Set(['google','trustpilot','meta','tripadvisor','yelp'])
+  const ALLOWED_SENTIMENTS = new Set(['positive','neutral','negative'])
+  const ALLOWED_STATUS = new Set(['new','awaiting_review','responded','escalated','ignored'])
+
+  const normalized = rowsIn.map(r => {
+    const rawRating = typeof r.rating === 'number' ? Math.round(r.rating) : 3
+    const rating = Math.max(1, Math.min(5, rawRating))
+    const platform = ALLOWED_PLATFORMS.has(r.platform) ? r.platform : 'google'
+    const sentiment = ALLOWED_SENTIMENTS.has(r.sentiment) ? r.sentiment : null
+    const status = ALLOWED_STATUS.has(r.status) ? r.status : 'new'
+    return {
+      client_id: isUuid(r.client_id) ? r.client_id : SMOKE_CLIENT_UUID,
+      platform,
+      external_id: r.external_id || r.review_id || `stub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      rating,
+      title: r.title || null,
+      body: r.body || r.review_text || null,
+      author: r.author || r.author_name || null,
+      sentiment,
+      status,
+      raw: r.raw || r.data || r,
+    }
+  })
 
   const supabase = getSupabaseAdmin()
   const { error, data } = await supabase
