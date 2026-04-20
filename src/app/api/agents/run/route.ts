@@ -244,6 +244,53 @@ export async function POST(request: Request) {
 
     const systemPrompt = systemParts.join('\n')
 
+    // --- SMOKE TEST MOCK MODE ---
+    // When the caller is obviously a smoke test — identified by any of:
+    //   - header  x-smoke-test: 1
+    //   - context.smoke_test === true  or  context.test_run === true
+    //   - client_id starts with "smoke-" (default from harness fixtures)
+    // we skip the Claude call entirely and return a deterministic mock response.
+    // This keeps workflow smoke validation cost at $0 while still exercising
+    // every HTTP hop, n8n connection graph, and Supabase write in the pipeline.
+    const smokeHeader = request.headers.get('x-smoke-test') === '1'
+    const clientId = String((context.client_id ?? body.client_id ?? '') || '')
+    const isSmokeTest =
+      smokeHeader ||
+      context.smoke_test === true ||
+      context.test_run === true ||
+      clientId.startsWith('smoke-') ||
+      clientId === 'smoke-test'
+
+    if (isSmokeTest) {
+      const mockText = `[smoke mock] ${canonicalSlug} responded. task=${(task || '').slice(0, 60)}`
+      return NextResponse.json({
+        success: true,
+        agent: canonicalSlug,
+        display_name: (agentConfig.display_name as string) || canonicalSlug,
+        model: 'mock',
+        response: mockText,
+        output: mockText,
+        result: mockText,
+        tokens_used: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        duration_ms: 0,
+        cost_usd: 0,
+        skills_loaded: [],
+        mock: true,
+        // Common shapes various workflows expect inside the response:
+        issues: [],
+        verdict: 'PASS',
+        severity: 'low',
+        classification_type: 'straightforward',
+        success_criteria: [],
+        assigned_agents: [canonicalSlug],
+        task_breakdown: [],
+        variants: [],
+        editor_review: { verdict: 'PASS', issues: [] },
+      })
+    }
+
     // --- Call Claude API ---
     // Model resolution: context.model_override > registry model > sonnet fallback
     // model_override lets smoke tests force Haiku (4x cheaper) without editing the registry.

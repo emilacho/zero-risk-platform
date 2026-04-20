@@ -138,7 +138,7 @@ export function findWebhookPath(wf) {
 
 // Test a single workflow. If the workflow has a webhook trigger, fire it;
 // otherwise skip with "NO_WEBHOOK" status (cron-only workflows).
-export async function testWorkflow(entry, { pollMs = 3000, maxWaitMs = 150000 } = {}) {
+export async function testWorkflow(entry, { pollMs = 3000, maxWaitMs = 60000 } = {}) {
   const ep = endpoints()
   const t0 = Date.now()
   const detail = await fetchWorkflowDetail(entry.id)
@@ -165,14 +165,18 @@ export async function testWorkflow(entry, { pollMs = 3000, maxWaitMs = 150000 } 
       note: 'workflow deactivated — activate before testing',
     }
   }
-  // Fire webhook. Timeout generous because workflows in responseMode=lastNode
-  // block until the whole chain completes (multi-Claude-call workflows can hit 30-60s).
+  // Fire webhook. Cap at 60s — workflows that take longer will be polled via the
+  // executions API instead (cheaper than holding a webhook connection open).
+  // Long-running multi-Claude workflows = too expensive in smoke test context.
   const payload = pickPayload(entry.name)
   const fireRes = await fetchJson(ep.n8n + '/webhook/' + wh.path, {
     method: wh.method,
-    headers: { 'Content-Type': 'application/json' },
+    // x-smoke-test tells /api/agents/run to return mock responses (zero cost).
+    // Workflows' HTTP nodes don't natively forward this header, BUT our default
+    // fixtures prefix client_id with "smoke-" which is also detected as smoke mode.
+    headers: { 'Content-Type': 'application/json', 'x-smoke-test': '1' },
     body: JSON.stringify(payload),
-    timeoutMs: 90000,
+    timeoutMs: 60000,
   })
   if (!fireRes.ok) {
     const detail = fireRes.text
