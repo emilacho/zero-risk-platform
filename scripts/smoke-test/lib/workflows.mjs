@@ -165,13 +165,14 @@ export async function testWorkflow(entry, { pollMs = 3000, maxWaitMs = 150000 } 
       note: 'workflow deactivated — activate before testing',
     }
   }
-  // Fire webhook
+  // Fire webhook. Timeout generous because workflows in responseMode=lastNode
+  // block until the whole chain completes (multi-Claude-call workflows can hit 30-60s).
   const payload = pickPayload(entry.name)
   const fireRes = await fetchJson(ep.n8n + '/webhook/' + wh.path, {
     method: wh.method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-    timeoutMs: 15000,
+    timeoutMs: 90000,
   })
   if (!fireRes.ok) {
     const detail = fireRes.text

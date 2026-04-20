@@ -23,10 +23,28 @@ export async function POST(request: Request) {
     const pipelineId = body.pipeline_id
 
     // Soft-handle NEXUS/research-workflow actions (no sync needed, just ack)
-    const NOTIFY_ACTIONS = new Set(['phase_complete', 'phase_started', 'phase_failed', 'pipeline_complete', 'pipeline_failed'])
+    const NOTIFY_ACTIONS = new Set([
+      'phase_complete', 'phase_started', 'phase_failed',
+      'pipeline_complete', 'pipeline_failed',
+      // Task creation notifications — Sentry/UptimeRobot/Ops workflows
+      'create_task', 'routing_decision', 'task_assigned', 'incident_logged',
+    ])
     if (NOTIFY_ACTIONS.has(action)) {
-      // Fire-and-forget ack: these come from n8n workflows to inform MC of pipeline progress.
-      // We don't strictly need to sync; just log and 200.
+      // Fire-and-forget ack: these come from n8n workflows to inform MC of progress/tasks.
+      // When a `task` object is included we log it for audit; otherwise bare ack.
+      if (body.task || body.incident) {
+        try {
+          const supabase = getSupabaseAdmin()
+          await supabase.from('error_events').insert({
+            source: body.action || 'mc-sync',
+            severity: body.task?.priority === 'critical' ? 'P0' : 'P2',
+            title: body.task?.title || body.incident?.title || `mc-sync:${action}`,
+            data: body,
+          })
+        } catch {
+          // log-only; don't block the caller
+        }
+      }
       return NextResponse.json({
         ok: true,
         action,
