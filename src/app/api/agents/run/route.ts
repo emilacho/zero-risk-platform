@@ -263,13 +263,23 @@ export async function POST(request: Request) {
 
     if (isSmokeTest) {
       const mockText = `[smoke mock] ${canonicalSlug} responded. task=${(task || '').slice(0, 60)}`
-      // Echo back ALL top-level fields from the original request body (except agent/task)
-      // so downstream $json.X references in workflow templates keep resolving.
-      // Then layer in mock output fields that different workflows consume.
-      const echoedBody = { ...body }
-      delete (echoedBody as Record<string, unknown>).agent
-      delete (echoedBody as Record<string, unknown>).task
-      delete (echoedBody as Record<string, unknown>).context
+      // Flatten every place a workflow might have stuffed input data (body top-level,
+      // context, extra, extra.brief) so that `$json.X` still resolves downstream in
+      // any of the 45 workflows we test.
+      const echoedBody: Record<string, unknown> = {}
+      const mergeScalars = (src: unknown) => {
+        if (!src || typeof src !== 'object') return
+        for (const [k, v] of Object.entries(src as Record<string, unknown>)) {
+          if (k === 'agent' || k === 'task' || k === 'task_type' || k === 'context') continue
+          if (echoedBody[k] !== undefined) continue
+          echoedBody[k] = v
+        }
+      }
+      mergeScalars(body)
+      mergeScalars(context)
+      mergeScalars((body as Record<string, unknown>).extra)
+      mergeScalars(((body as Record<string, unknown>).extra as Record<string, unknown> | undefined)?.brief)
+      mergeScalars(((body as Record<string, unknown>).extra as Record<string, unknown> | undefined)?.payload)
 
       return NextResponse.json({
         // Echo passes through user-provided fields (duration_s, client_id, campaign_brief, etc.)
