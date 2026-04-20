@@ -263,7 +263,18 @@ export async function POST(request: Request) {
 
     if (isSmokeTest) {
       const mockText = `[smoke mock] ${canonicalSlug} responded. task=${(task || '').slice(0, 60)}`
+      // Echo back ALL top-level fields from the original request body (except agent/task)
+      // so downstream $json.X references in workflow templates keep resolving.
+      // Then layer in mock output fields that different workflows consume.
+      const echoedBody = { ...body }
+      delete (echoedBody as Record<string, unknown>).agent
+      delete (echoedBody as Record<string, unknown>).task
+      delete (echoedBody as Record<string, unknown>).context
+
       return NextResponse.json({
+        // Echo passes through user-provided fields (duration_s, client_id, campaign_brief, etc.)
+        ...echoedBody,
+        // Claude-style response envelope
         success: true,
         agent: canonicalSlug,
         display_name: (agentConfig.display_name as string) || canonicalSlug,
@@ -278,7 +289,7 @@ export async function POST(request: Request) {
         cost_usd: 0,
         skills_loaded: [],
         mock: true,
-        // Common shapes various workflows expect inside the response:
+        // Structured fields some workflows downstream read directly from .json:
         issues: [],
         verdict: 'PASS',
         severity: 'low',
@@ -288,6 +299,20 @@ export async function POST(request: Request) {
         task_breakdown: [],
         variants: [],
         editor_review: { verdict: 'PASS', issues: [] },
+        // Video Pipeline / Creative Director fields:
+        seedance_prompt: mockText,
+        storyboard: [],
+        scenes: [],
+        script: mockText,
+        // RSA / Headlines fields:
+        headlines: ['[smoke] A', '[smoke] B', '[smoke] C'],
+        descriptions: ['[smoke] desc'],
+        // Review / Moderation fields:
+        rating: 3,
+        sentiment: 'neutral',
+        // Routing fields (RUFLO):
+        complexity: 'low',
+        route: 'direct',
       })
     }
 
