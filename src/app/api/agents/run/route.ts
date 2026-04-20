@@ -245,15 +245,22 @@ export async function POST(request: Request) {
     const systemPrompt = systemParts.join('\n')
 
     // --- Call Claude API ---
-    const modelKey = (agentConfig.model as string) || 'claude-sonnet'
-    // Support both legacy short keys and registry full names
+    // Model resolution: context.model_override > registry model > sonnet fallback
+    // model_override lets smoke tests force Haiku (4x cheaper) without editing the registry.
+    const modelKey = (context.model_override as string) || (agentConfig.model as string) || 'claude-sonnet'
     const FULL_MODEL_MAP: Record<string, string> = {
       ...MODEL_MAP,
       'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
+      'claude-haiku-4-5-20251001': 'claude-haiku-4-5-20251001',
       'claude-sonnet-4-6': 'claude-sonnet-4-6',
       'claude-opus-4-6': 'claude-opus-4-6',
     }
     const modelId = FULL_MODEL_MAP[modelKey] || MODEL_MAP['claude-sonnet']
+
+    // max_tokens cap: context can lower it (smoke tests should cap around 50-200).
+    // Never exceed 4096 to avoid runaway cost from a misbehaving agent.
+    const requestedMaxTokens = typeof context.max_tokens === 'number' ? context.max_tokens : 4096
+    const maxTokens = Math.max(1, Math.min(4096, requestedMaxTokens))
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -264,7 +271,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model: modelId,
-        max_tokens: 4096,
+        max_tokens: maxTokens,
         system: systemPrompt,
         messages: [{
           role: 'user',

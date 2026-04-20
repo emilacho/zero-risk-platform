@@ -1,0 +1,200 @@
+{
+  "agent:account-manager": {
+    "status": "PASS",
+    "ms": 4556,
+    "output_len": 51,
+    "ts": 1776704584968
+  },
+  "agent:backlink-strategist": {
+    "status": "PASS",
+    "ms": 4886,
+    "output_len": 93,
+    "ts": 1776704585373
+  },
+  "agent:campaign-brief-agent": {
+    "status": "PASS",
+    "ms": 5492,
+    "output_len": 84,
+    "ts": 1776704585982
+  },
+  "agent:brand-strategist": {
+    "status": "PASS",
+    "ms": 6244,
+    "output_len": 184,
+    "ts": 1776704586733
+  },
+  "agent:community-manager": {
+    "status": "PASS",
+    "ms": 6941,
+    "output_len": 998,
+    "ts": 1776704587433
+  },
+  "agent:content-creator": {
+    "status": "PASS",
+    "ms": 2467,
+    "output_len": 7,
+    "ts": 1776704587439
+  },
+  "agent:creative-director": {
+    "status": "PASS",
+    "ms": 2777,
+    "output_len": 6,
+    "ts": 1776704588764
+  },
+  "agent:content-strategist": {
+    "status": "PASS",
+    "ms": 3430,
+    "output_len": 102,
+    "ts": 1776704588807
+  },
+  "agent:cro-specialist": {
+    "status": "PASS",
+    "ms": 2946,
+    "output_len": 7,
+    "ts": 1776704589683
+  },
+  "agent:editor-en-jefe": {
+    "status": "PASS",
+    "ms": 2249,
+    "output_len": 64,
+    "ts": 1776704589692
+  },
+  "agent:customer-research": {
+    "status": "PASS",
+    "ms": 2539,
+    "output_len": 61,
+    "ts": 1776704589975
+  },
+  "agent:competitive-intelligence-agent": {
+    "status": "PASS",
+    "ms": 10161,
+    "output_len": 804,
+    "ts": 1776704590653
+  },
+  "agent:influencer-manager": {
+    "status": "PASS",
+    "ms": 2093,
+    "output_len": 50,
+    "ts": 1776704591788
+  },
+  "agent:jefe-client-success": {
+    "status": "PASS",
+    "ms": 1853,
+    "output_len": 4,
+    "ts": 1776704591832
+  },
+  "agent:email-marketer": {
+    "status": "PASS",
+    "ms": 3112,
+    "output_len": 66,
+    "ts": 1776704591879
+  },
+  "agent:growth-hacker": {
+    "status": "PASS",
+    "ms": 2511,
+    "output_len": 7,
+    "ts": 1776704592198
+  },
+  "agent:jefe-marketing": {
+    "status": "PASS",
+    "ms": 2149,
+    "output_len": 4,
+    "ts": 1776704592807
+  },
+  "agent:geo-optimization": {
+    "status": "PASS",
+    "ms": 4181,
+    "output_len": 967,
+    "ts": 1776704592992
+  },
+  "agent:media-buyer": {
+    "status": "PASS",
+    "ms": 1822,
+    "output_len": 7,
+    "ts": 1776704593657
+  },
+  "agent:optimization-agent": {
+    "status": "PASS",
+    "ms": 2413,
+    "output_len": 70,
+    "ts": 1776704594615
+  },
+  "agent:onboarding-specialist": {
+    "status": "PASS",
+    "ms": 3618,
+    "output_len": 75,
+    "ts": 1776704595500
+  },
+  "agent:ruflo": {
+    "status": "PASS",
+    "ms": 1846,
+    "output_len": 253,
+    "ts": 1776704595508
+  },
+  "agent:reporting-agent": {
+    "status": "PASS",
+    "ms": 2999,
+    "output_len": 99,
+    "ts": 1776704595817
+  },
+  "agent:market-research": {
+    "status": "PASS",
+    "ms": 4630,
+    "output_len": 59,
+    "ts": 1776704596421
+  },
+  "agent:review-responder": {
+    "status": "PASS",
+    "ms": 4251,
+    "output_len": 1087,
+    "ts": 1776704597247
+  },
+  "agent:sales-enablement": {
+    "status": "PASS",
+    "ms": 3047,
+    "output_len": 7,
+    "ts": 1776704597665
+  },
+  "agent:seo-orchestrator": {
+    "status": "PASS",
+    "ms": 3213,
+    "output_len": 156,
+    "ts": 1776704598717
+  },
+  "agent:social-media-strategist": {
+    "status": "PASS",
+    "ms": 3627,
+    "output_len": 521,
+    "ts": 1776704599448
+  },
+  "agent:seo-specialist": {
+    "status": "PASS",
+    "ms": 4391,
+    "output_len": 4,
+    "ts": 1776704599903
+  },
+  "agent:video-editor": {
+    "status": "PASS",
+    "ms": 2444,
+    "output_len": 48,
+    "ts": 1776704600114
+  },
+  "agent:web-designer": {
+    "status": "PASS",
+    "ms": 2177,
+    "output_len": 32,
+    "ts": 1776704600898
+  },
+  "agent:technical-seo": {
+    "status": "PASS",
+    "ms": 4775,
+    "output_len": 975,
+    "ts": 1776704601200
+  },
+  "agent:tracking-specialist": {
+    "status": "PASS",
+    "ms": 5430,
+    "output_len": 1018,
+    "ts": 1776704602680
+  }
+}

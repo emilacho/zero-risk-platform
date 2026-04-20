@@ -1,0 +1,9 @@
+={
+  "agent": "editor-en-jefe",
+  "task_type": "phase_gate_qc",
+  "phase": "{{ $json.phase_name }}",
+  "phase_output": {{ JSON.stringify($json.phase_output || '') }},
+  "success_criteria": {{ JSON.stringify(typeof $json.success_criteria === 'string' ? $json.success_criteria : JSON.stringify($json.success_criteria || [])) }},
+  "client_id": "{{ $json.client_id }}",
+  "request_id": "{{ $json.request_id }}"
+}

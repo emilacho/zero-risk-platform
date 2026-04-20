@@ -1,0 +1,13 @@
+={
+  "validation_id": "{{ $node['Normalize Request'].json.validation_id }}",
+  "phase": "{{ $node['Normalize Request'].json.phase_name }}",
+  "verdict": "{{ $node['Extract Validation Verdict'].json.verdict }}",
+  "severity": "{{ $node['Extract Validation Verdict'].json.severity }}",
+  "structural_issues": {{ JSON.stringify($node['Structural Validation (Fields)'].json.structural_issues || []) }},
+  "semantic_issues": {{ JSON.stringify($node['Extract Validation Verdict'].json.issues || []) }},
+  "all_issues_count": {{ ($node['Structural Validation (Fields)'].json.structural_issues || []).length + ($node['Extract Validation Verdict'].json.issues || []).length }},
+  "rationale": {{ JSON.stringify($node['Extract Validation Verdict'].json.rationale || '') }},
+  "validated_at": "{{ new Date().toISOString() }}",
+  "client_id": "{{ $node['Normalize Request'].json.client_id }}",
+  "request_id": "{{ $node['Normalize Request'].json.request_id }}"
+}
