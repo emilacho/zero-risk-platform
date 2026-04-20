@@ -17,17 +17,25 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const rowsIn = Array.isArray(body) ? body : Array.isArray(body?.rows) ? body.rows : [body]
 
-  // Lenient: accept what the workflow sends, fill in defaults for missing fields.
-  // Real upsert requires (platform, external_id) — if missing we generate placeholder.
+  // Match the actual review_metrics schema:
+  // client_id(uuid), platform, external_id, rating(int), title, body, author,
+  // published_at, sentiment, response, responded_at, status, raw(jsonb)
+  // Smoke tests pass text client_ids like 'smoke-test' — coerce to a sentinel uuid.
+  const isUuid = (s: unknown): s is string =>
+    typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+  const SMOKE_CLIENT_UUID = '00000000-0000-0000-0000-000000000000'
+
   const normalized = rowsIn.map(r => ({
-    client_id: r.client_id || 'unknown',
+    client_id: isUuid(r.client_id) ? r.client_id : SMOKE_CLIENT_UUID,
     platform: r.platform || 'stub',
     external_id: r.external_id || r.review_id || `stub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    rating: typeof r.rating === 'number' ? r.rating : 0,
-    review_text: r.review_text || '',
-    author_name: r.author_name || 'unknown',
+    rating: typeof r.rating === 'number' ? Math.round(r.rating) : 0,
+    title: r.title || null,
+    body: r.body || r.review_text || null,
+    author: r.author || r.author_name || null,
+    sentiment: r.sentiment || null,
     status: r.status || 'unprocessed',
-    ...(r.data ? { data: r.data } : {}),
+    raw: r.raw || r.data || r,
   }))
 
   const supabase = getSupabaseAdmin()
