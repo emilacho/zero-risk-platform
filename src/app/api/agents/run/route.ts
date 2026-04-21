@@ -267,9 +267,17 @@ export async function POST(request: Request) {
       // context, extra, extra.brief) so that `$json.X` still resolves downstream in
       // any of the 45 workflows we test.
       const echoedBody: Record<string, unknown> = {}
+      // mergeScalars accepts object OR JSON string (workflows often pass
+      // `"brief": "{{ JSON.stringify($json) }}"` which arrives as a string).
       const mergeScalars = (src: unknown) => {
-        if (!src || typeof src !== 'object') return
-        for (const [k, v] of Object.entries(src as Record<string, unknown>)) {
+        let obj: Record<string, unknown> | null = null
+        if (src && typeof src === 'object') {
+          obj = src as Record<string, unknown>
+        } else if (typeof src === 'string' && src.startsWith('{')) {
+          try { const parsed = JSON.parse(src); if (parsed && typeof parsed === 'object') obj = parsed } catch {}
+        }
+        if (!obj) return
+        for (const [k, v] of Object.entries(obj)) {
           if (k === 'agent' || k === 'task' || k === 'task_type' || k === 'context') continue
           if (echoedBody[k] !== undefined) continue
           echoedBody[k] = v
@@ -277,9 +285,13 @@ export async function POST(request: Request) {
       }
       mergeScalars(body)
       mergeScalars(context)
-      mergeScalars((body as Record<string, unknown>).extra)
-      mergeScalars(((body as Record<string, unknown>).extra as Record<string, unknown> | undefined)?.brief)
-      mergeScalars(((body as Record<string, unknown>).extra as Record<string, unknown> | undefined)?.payload)
+      const bodyRec = body as Record<string, unknown>
+      mergeScalars(bodyRec.extra)
+      const extra = bodyRec.extra as Record<string, unknown> | undefined
+      mergeScalars(extra?.brief)
+      mergeScalars(extra?.payload)
+      mergeScalars(extra?.input)
+      mergeScalars(extra?.request)
 
       return NextResponse.json({
         // Echo passes through user-provided fields (duration_s, client_id, campaign_brief, etc.)
