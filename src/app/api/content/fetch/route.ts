@@ -27,8 +27,10 @@ export async function POST(request: Request) {
     })
   } catch {}
 
-  // Return mock pillar content
+  // Echo any non-consumed input fields so downstream nodes can still read $json.X
+  const { client_id: _c, pillar_id: _p, ...rest } = body
   return NextResponse.json({
+    ...rest,
     ok: true,
     client_id,
     pillar_id: pillar_id || 'mock-pillar',

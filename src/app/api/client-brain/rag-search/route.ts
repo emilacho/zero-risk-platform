@@ -32,7 +32,11 @@ export async function POST(request: Request) {
     })
   } catch {}
 
+  // Echo all input body fields so downstream n8n nodes can still read
+  // $json.X for any field the workflow originally sent. Keeps the chain intact.
+  const { client_id: _c, query: _q, snapshot_type: _s, k: _k, ...rest } = body
   return NextResponse.json({
+    ...rest,                      // echoed original body fields
     ok: true,
     client_id,
     query,
