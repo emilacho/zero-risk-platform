@@ -335,6 +335,15 @@ export async function POST(request: Request) {
         // Routing fields (RUFLO):
         complexity: 'low',
         route: 'direct',
+        // Ad Creative / Message-Match Validator fields — default to high match
+        // so smoke tests deterministically hit the approved branch.
+        match_score: 85,
+        required_actions: [],
+        flags: [],
+        // Community / Subject-line fields
+        publish_urgency: 'low',
+        authenticity_score: 85,
+        authenticity_verdict: 'authentic',
       })
     }
 
