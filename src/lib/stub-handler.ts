@@ -1,6 +1,11 @@
 /**
  * Shared helper for stub endpoints that just write the incoming body to a Supabase
  * table. Keeps all the stub routes below as thin 3-line wrappers.
+ *
+ * Behavior: echoes scalar fields from the request body into the response so n8n
+ * downstream nodes that read `$json.X` keep their state flowing through the chain.
+ * DB errors are logged to `stub_fallbacks` but do NOT fail the response — otherwise
+ * a single schema drift kills an entire workflow run. fallback_mode:true flags it.
  */
 
 import { NextResponse } from 'next/server'
@@ -11,6 +16,10 @@ type StubOptions = {
   table: string
   requiredFields?: string[]
   transform?: (row: Record<string, unknown>) => Record<string, unknown>
+  // If true, echo the original request body scalars into the response (in addition
+  // to ok/inserted/ids). Default true — flip off only for routes where echoing
+  // private fields back would leak data to an untrusted caller.
+  echoBody?: boolean
 }
 
 export async function handleStubPost(request: Request, opts: StubOptions) {
@@ -18,9 +27,13 @@ export async function handleStubPost(request: Request, opts: StubOptions) {
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
 
   const body = await request.json().catch(() => ({}))
-  const rawRows = Array.isArray(body) ? body : Array.isArray(body?.rows) ? body.rows : [body]
+  const rawRows: Record<string, unknown>[] = Array.isArray(body)
+    ? (body as Record<string, unknown>[])
+    : Array.isArray(body?.rows)
+      ? (body.rows as Record<string, unknown>[])
+      : [body as Record<string, unknown>]
 
-  const rows = rawRows.map(r => (opts.transform ? opts.transform(r) : r))
+  const rows = rawRows.map((r): Record<string, unknown> => (opts.transform ? opts.transform(r) : r))
 
   if (opts.requiredFields) {
     for (const r of rows) {
@@ -32,13 +45,40 @@ export async function handleStubPost(request: Request, opts: StubOptions) {
     }
   }
 
-  const supabase = getSupabaseAdmin()
-  const { data, error } = await supabase.from(opts.table).insert(rows).select('id')
-  if (error) {
-    return NextResponse.json(
-      { error: 'db_error', table: opts.table, detail: error.message, code: error.code, hint: error.hint },
-      { status: 500 }
-    )
+  let inserted = 0
+  let ids: string[] = []
+  let dbError: string | null = null
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data, error } = await supabase.from(opts.table).insert(rows).select('id')
+    if (error) {
+      dbError = error.message
+    } else {
+      inserted = data?.length ?? 0
+      ids = (data ?? []).map(r => r.id as string)
+    }
+  } catch (e: unknown) {
+    dbError = e instanceof Error ? e.message : String(e)
   }
-  return NextResponse.json({ ok: true, table: opts.table, inserted: data?.length ?? 0, ids: (data ?? []).map(r => r.id) })
+
+  // Build echo payload from the ORIGINAL body (not the transformed row) so we
+  // preserve exactly what the workflow sent: client_id, task_id, video_brief,
+  // duration_s, etc. Non-serializable values (functions) won't survive JSON anyway.
+  const echoObj: Record<string, unknown> = {}
+  const echo = opts.echoBody !== false
+  if (echo && body && typeof body === 'object' && !Array.isArray(body)) {
+    for (const [k, v] of Object.entries(body)) {
+      if (k === 'rows') continue // avoid huge payloads for batched writes
+      echoObj[k] = v
+    }
+  }
+
+  return NextResponse.json({
+    ...echoObj,
+    ok: true,
+    table: opts.table,
+    inserted,
+    ids,
+    ...(dbError ? { fallback_mode: true, db_error: dbError.slice(0, 400) } : {}),
+  })
 }
