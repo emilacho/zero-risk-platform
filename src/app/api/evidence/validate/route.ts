@@ -55,7 +55,14 @@ export async function POST(request: NextRequest) {
   // return a soft PASS so the upstream workflow continues rather than aborting.
   // Log the soft-pass to phase_gate_audits for debugging.
   if (!phase || phase_output === undefined || phase_output === '' || phase === '') {
+    // Echo body scalars so state propagates even in soft-pass path
+    const softEcho: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
+      if (k === 'phase_output' || k === 'success_criteria') continue
+      softEcho[k] = v
+    }
     return NextResponse.json({
+      ...softEcho,
       verdict: 'PASS',
       structural_issues: ['soft_pass_empty_input'],
       semantic_issues: [],
@@ -186,7 +193,18 @@ export async function POST(request: NextRequest) {
     console.error('[evidence/validate] db insert failed:', dbError)
   }
 
+  // Echo body scalars so downstream n8n nodes can still read $json.request_id,
+  // $json.client_id, etc. Otherwise the NEXUS chain breaks at Persist Phase State
+  // because Validate Phase Output wipes the state. Same pattern as stub-handler.ts.
+  const echo: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
+    // Skip large fields that would bloat response
+    if (k === 'phase_output' || k === 'success_criteria') continue
+    echo[k] = v
+  }
+
   return NextResponse.json({
+    ...echo,
     verdict,
     structural_issues: structuralIssues,
     semantic_issues: semanticIssues,
