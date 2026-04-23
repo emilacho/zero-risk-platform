@@ -32,9 +32,9 @@ const DEFAULT_PAYLOAD = {
   'Video Pipeline': { client_id: 'smoke-test', video_brief: 'smoke test video brief 30s', duration_s: 30 },
   'RSA': { client_id: 'smoke-test', campaign_brief: 'smoke test SEM campaign', target_keywords: ['smoke'] },
   'Landing Page A/B': { client_id: 'smoke-test', variant_a_code: '<div>A</div>', variant_b_code: '<div>B</div>', url: 'https://example.com/smoke' },
-  'Content Repurposing': { client_id: 'smoke-test', pillar_id: 'smoke-pillar', source_content: 'smoke test content' },
+  'Content Repurposing': { client_id: 'smoke-test', pillar_id: 'smoke-pillar', pillar_type: 'blog_post', task_id: 'smoke-crp-' + Date.now(), platforms: ['linkedin', 'twitter', 'instagram'], content_url: 'https://example.com/pillar', auto_publish: false, source_content: 'smoke test content' },
   'Creative Fatigue': { client_id: 'smoke-test' },
-  'Ad Creative': { client_id: 'smoke-test', creative_id: 'smoke-creative', landing_url: 'https://example.com' },
+  'Ad Creative': { client_id: 'smoke-test', audit_id: 'smoke-audit-' + Date.now(), campaign_id: 'smoke-campaign-001', creative_id: 'smoke-creative', landing_url: 'https://example.com', change_type: 'new_launch' },
 
   // Cluster 3 — SEO/GEO
   'SEO Rank-to-#1': { client_id: 'smoke-test', target_keyword: 'smoke', url: 'https://example.com' },

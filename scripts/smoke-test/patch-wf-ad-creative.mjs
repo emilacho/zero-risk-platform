@@ -61,7 +61,7 @@ const FIXED_PARAMS = {
     ]},
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "agent": "editor_en_jefe",\n  "model": "claude-sonnet-4-6",\n  "task": {{ JSON.stringify('Message-match audit for campaign ' + (${VI}.campaign_id || 'unknown') + '. Apply Schwartz positioning layers and score 0-100. If >30pt mismatch, flag and recommend copy/positioning fixes. Return JSON: { match_score, flags, required_actions }.') }},\n  "client_id": "{{ ${VI}.client_id }}",\n  "audit_id": "{{ ${VI}.audit_id }}",\n  "campaign_id": {{ JSON.stringify(${VI}.campaign_id) }},\n  "creative_id": {{ JSON.stringify(${VI}.creative_id) }},\n  "landing_url": {{ JSON.stringify(${VI}.landing_url) }},\n  "change_type": {{ JSON.stringify(${VI}.change_type) }},\n  "context": { "smoke_test": {{ (${VI}.client_id || "").startsWith("smoke-") }} },\n  "extra": { "validate_input": {{ JSON.stringify(${VI}) }}, "merged_content": {{ JSON.stringify($json) }} }\n}`,
+    jsonBody: `={\n  "agent": "editor_en_jefe",\n  "model": "claude-sonnet-4-6",\n  "task": {{ JSON.stringify('Message-match audit for campaign ' + (${VI}.campaign_id || 'unknown') + '. Apply Schwartz positioning layers and score 0-100. If >30pt mismatch, flag and recommend copy/positioning fixes. Return JSON: { match_score, flags, required_actions }.') }},\n  "client_id": "{{ ${VI}.client_id || '' }}",\n  "audit_id": "{{ ${VI}.audit_id || '' }}",\n  "campaign_id": {{ JSON.stringify(${VI}.campaign_id ?? null) }},\n  "creative_id": {{ JSON.stringify(${VI}.creative_id ?? null) }},\n  "landing_url": {{ JSON.stringify(${VI}.landing_url ?? null) }},\n  "change_type": {{ JSON.stringify(${VI}.change_type ?? null) }},\n  "context": { "smoke_test": {{ (${VI}.client_id || "").startsWith("smoke-") }} },\n  "extra": { "validate_input": {{ JSON.stringify(${VI} ?? {}) }}, "merged_content": {{ JSON.stringify($json ?? {}) }} }\n}`,
     options: { timeout: 180000 },
   },
   'Mismatch >30pct gap?': {
@@ -86,7 +86,7 @@ const FIXED_PARAMS = {
     ]},
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "campaign_id": {{ JSON.stringify(${VI}.campaign_id) }},\n  "client_id": "{{ ${VI}.client_id }}",\n  "audit_id": "{{ ${VI}.audit_id }}",\n  "reason": "message_match_violation",\n  "match_score": {{ Number(${EDITOR}.match_score) || 0 }},\n  "blocked_by": "editor_en_jefe",\n  "required_actions": {{ JSON.stringify(${EDITOR}.required_actions || []) }}\n}`,
+    jsonBody: `={\n  "campaign_id": {{ JSON.stringify(${VI}.campaign_id ?? null) }},\n  "client_id": "{{ ${VI}.client_id || '' }}",\n  "audit_id": "{{ ${VI}.audit_id || '' }}",\n  "reason": "message_match_violation",\n  "match_score": {{ Number(${EDITOR}.match_score) || 0 }},\n  "blocked_by": "editor_en_jefe",\n  "required_actions": {{ JSON.stringify(${EDITOR}.required_actions || []) }}\n}`,
     options: { timeout: 30000 },
   },
   'Slack Alert (BLOCKED)': {

@@ -33,7 +33,7 @@ const FIXED_PARAMS = {
     ]},
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "client_id": "{{ ${VB}.client_id }}",\n  "pillar_id": "{{ ${VB}.pillar_id }}",\n  "pillar_type": "{{ ${VB}.pillar_type }}",\n  "task_id": "{{ ${VB}.task_id }}",\n  "platforms": {{ JSON.stringify(${VB}.platforms) }},\n  "content_url": {{ JSON.stringify(${VB}.content_url) }},\n  "auto_publish": {{ ${VB}.auto_publish }}\n}`,
+    jsonBody: `={\n  "client_id": "{{ ${VB}.client_id || '' }}",\n  "pillar_id": "{{ ${VB}.pillar_id || '' }}",\n  "pillar_type": "{{ ${VB}.pillar_type || '' }}",\n  "task_id": "{{ ${VB}.task_id || '' }}",\n  "platforms": {{ JSON.stringify(${VB}.platforms ?? []) }},\n  "content_url": {{ JSON.stringify(${VB}.content_url ?? null) }},\n  "auto_publish": {{ Boolean(${VB}.auto_publish) }}\n}`,
     options: { timeout: 30000 },
   },
   'Client Brain: Style Guide': {
@@ -46,7 +46,7 @@ const FIXED_PARAMS = {
     ]},
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "client_id": "{{ ${VB}.client_id }}",\n  "query": "Brand voice, tone per platform, content style, key messages, repurposing performance",\n  "k": 20,\n  "pillar_id": "{{ ${VB}.pillar_id }}",\n  "task_id": "{{ ${VB}.task_id }}"\n}`,
+    jsonBody: `={\n  "client_id": "{{ ${VB}.client_id || '' }}",\n  "query": "Brand voice, tone per platform, content style, key messages, repurposing performance",\n  "k": 20,\n  "pillar_id": "{{ ${VB}.pillar_id || '' }}",\n  "task_id": "{{ ${VB}.task_id || '' }}"\n}`,
     options: {},
   },
   'Agent: Content Creator (Repurpose)': {
@@ -60,7 +60,7 @@ const FIXED_PARAMS = {
     ]},
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "agent": "content_creator",\n  "model": "claude-sonnet-4-6",\n  "task": {{ JSON.stringify('Repurpose pillar content into ' + ((${VB}.platforms || []).length) + ' platform-specific formats: ' + (${VB}.platforms || []).join(', ') + '. Each variant adapts tone to platform while preserving core message. Output JSON with platform-keyed variants object.') }},\n  "client_id": "{{ ${VB}.client_id }}",\n  "task_id": "{{ ${VB}.task_id }}",\n  "pillar_id": "{{ ${VB}.pillar_id }}",\n  "platforms": {{ JSON.stringify(${VB}.platforms) }},\n  "context": { "smoke_test": {{ (${VB}.client_id || "").startsWith("smoke-") }} },\n  "extra": { "pillar": {{ JSON.stringify(${PILLAR}) }}, "brand_context": {{ JSON.stringify(${BRAIN}) }}, "brief": {{ JSON.stringify(${VB}) }} }\n}`,
+    jsonBody: `={\n  "agent": "content_creator",\n  "model": "claude-sonnet-4-6",\n  "task": {{ JSON.stringify('Repurpose pillar content into ' + ((${VB}.platforms || []).length) + ' platform-specific formats: ' + (${VB}.platforms || []).join(', ') + '. Each variant adapts tone to platform while preserving core message. Output JSON with platform-keyed variants object.') }},\n  "client_id": "{{ ${VB}.client_id || '' }}",\n  "task_id": "{{ ${VB}.task_id || '' }}",\n  "pillar_id": "{{ ${VB}.pillar_id || '' }}",\n  "platforms": {{ JSON.stringify(${VB}.platforms ?? []) }},\n  "context": { "smoke_test": {{ (${VB}.client_id || "").startsWith("smoke-") }} },\n  "extra": { "pillar": {{ JSON.stringify(${PILLAR} ?? {}) }}, "brand_context": {{ JSON.stringify(${BRAIN} ?? {}) }}, "brief": {{ JSON.stringify(${VB} ?? {}) }} }\n}`,
     options: { timeout: 180000 },
   },
   'Store: Repurposing Queue': {
@@ -73,7 +73,7 @@ const FIXED_PARAMS = {
     ]},
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "client_id": "{{ ${VB}.client_id }}",\n  "source_pillar_id": "{{ ${VB}.pillar_id }}",\n  "repurposing_task_id": "{{ ${VB}.task_id }}",\n  "task_id": "{{ ${VB}.task_id }}",\n  "variants": {{ JSON.stringify(${AGENT}.variants || {}) }},\n  "queue_status": "awaiting_approval",\n  "auto_publish": {{ ${VB}.auto_publish }},\n  "platforms": {{ JSON.stringify(${VB}.platforms) }},\n  "pillar_type": "{{ ${VB}.pillar_type }}",\n  "created_at": "{{ new Date().toISOString() }}"\n}`,
+    jsonBody: `={\n  "client_id": "{{ ${VB}.client_id || '' }}",\n  "source_pillar_id": "{{ ${VB}.pillar_id || '' }}",\n  "repurposing_task_id": "{{ ${VB}.task_id || '' }}",\n  "task_id": "{{ ${VB}.task_id || '' }}",\n  "variants": {{ JSON.stringify(${AGENT}.variants || {}) }},\n  "queue_status": "awaiting_approval",\n  "auto_publish": {{ Boolean(${VB}.auto_publish) }},\n  "platforms": {{ JSON.stringify(${VB}.platforms ?? []) }},\n  "pillar_type": "{{ ${VB}.pillar_type || '' }}",\n  "created_at": "{{ new Date().toISOString() }}"\n}`,
     options: { timeout: 30000 },
   },
   'Agent: Growth Hacker (Publish)': {
@@ -87,7 +87,7 @@ const FIXED_PARAMS = {
     ]},
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "agent": "growth_hacker",\n  "model": "claude-sonnet-4-6",\n  "task": {{ JSON.stringify('Publish repurposed content via GHL Social + Metricool. Target platforms: ' + ((${VB}.platforms || []).join(', '))) }},\n  "client_id": "{{ ${VB}.client_id }}",\n  "task_id": "{{ ${VB}.task_id }}",\n  "context": { "smoke_test": {{ (${VB}.client_id || "").startsWith("smoke-") }} },\n  "extra": { "variants": {{ JSON.stringify(${AGENT}.variants || {}) }}, "auto_schedule": true, "brief": {{ JSON.stringify(${VB}) }} }\n}`,
+    jsonBody: `={\n  "agent": "growth_hacker",\n  "model": "claude-sonnet-4-6",\n  "task": {{ JSON.stringify('Publish repurposed content via GHL Social + Metricool. Target platforms: ' + ((${VB}.platforms || []).join(', '))) }},\n  "client_id": "{{ ${VB}.client_id || '' }}",\n  "task_id": "{{ ${VB}.task_id || '' }}",\n  "context": { "smoke_test": {{ (${VB}.client_id || "").startsWith("smoke-") }} },\n  "extra": { "variants": {{ JSON.stringify(${AGENT}.variants || {}) }}, "auto_schedule": true, "brief": {{ JSON.stringify(${VB} ?? {}) }} }\n}`,
     options: { timeout: 120000 },
   },
   'Record: Outcome': {
@@ -100,7 +100,7 @@ const FIXED_PARAMS = {
     ]},
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "task_type": "content_repurposing",\n  "agent_slug": "content_creator",\n  "client_id": "{{ ${VB}.client_id }}",\n  "task_id": "{{ ${VB}.task_id }}",\n  "task_input": {{ JSON.stringify('pillar_id=' + ${VB}.pillar_id + ' type=' + ${VB}.pillar_type) }},\n  "output_summary": {{ JSON.stringify('Repurposed into ' + ((Object.keys(${AGENT}.variants || {})).length) + ' variants across ' + ((${VB}.platforms || []).length) + ' platforms') }},\n  "success": true,\n  "duration_ms": 0,\n  "cost_usd": 0,\n  "platforms": {{ JSON.stringify(${VB}.platforms) }},\n  "auto_publish": {{ ${VB}.auto_publish }}\n}`,
+    jsonBody: `={\n  "task_type": "content_repurposing",\n  "agent_slug": "content_creator",\n  "client_id": "{{ ${VB}.client_id || '' }}",\n  "task_id": "{{ ${VB}.task_id || '' }}",\n  "task_input": {{ JSON.stringify('pillar_id=' + (${VB}.pillar_id || '') + ' type=' + (${VB}.pillar_type || '')) }},\n  "output_summary": {{ JSON.stringify('Repurposed into ' + ((Object.keys(${AGENT}.variants || {})).length) + ' variants across ' + ((${VB}.platforms || []).length) + ' platforms') }},\n  "success": true,\n  "duration_ms": 0,\n  "cost_usd": 0,\n  "platforms": {{ JSON.stringify(${VB}.platforms ?? []) }},\n  "auto_publish": {{ Boolean(${VB}.auto_publish) }}\n}`,
     options: { timeout: 30000 },
   },
   'Slack: Notify Team': {
@@ -109,7 +109,7 @@ const FIXED_PARAMS = {
     sendHeaders: false,
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "text": {{ JSON.stringify('Content Repurposed 1->' + ((Object.keys(${AGENT}.variants || {})).length) + ': Task ' + ${VB}.task_id + '. Platforms: ' + ((${VB}.platforms || []).join(', '))) }},\n  "blocks": [\n    { "type": "section", "text": { "type": "mrkdwn", "text": {{ JSON.stringify('*Content Repurposing Complete*\\nTask: ' + ${VB}.task_id + '\\nSource: ' + ${VB}.pillar_type + '\\nVariants: ' + ((Object.keys(${AGENT}.variants || {})).length) + '\\nPlatforms: ' + ((${VB}.platforms || []).join(', ')) + '\\nStatus: ' + (${VB}.auto_publish ? 'Published' : 'Queued for approval')) }} } }\n  ]\n}`,
+    jsonBody: `={\n  "text": {{ JSON.stringify('Content Repurposed 1->' + ((Object.keys(${AGENT}.variants || {})).length) + ': Task ' + (${VB}.task_id || '') + '. Platforms: ' + ((${VB}.platforms || []).join(', '))) }},\n  "blocks": [\n    { "type": "section", "text": { "type": "mrkdwn", "text": {{ JSON.stringify('*Content Repurposing Complete*\\nTask: ' + (${VB}.task_id || '') + '\\nSource: ' + (${VB}.pillar_type || '') + '\\nVariants: ' + ((Object.keys(${AGENT}.variants || {})).length) + '\\nPlatforms: ' + ((${VB}.platforms || []).join(', ')) + '\\nStatus: ' + (${VB}.auto_publish ? 'Published' : 'Queued for approval')) }} } }\n  ]\n}`,
     options: { timeout: 10000 },
   },
 }
