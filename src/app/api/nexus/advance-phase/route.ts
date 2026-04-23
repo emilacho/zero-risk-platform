@@ -29,9 +29,14 @@ export async function POST(request: Request) {
 
     // Respect the phases array from the body — smoke mode passes a 1-phase
     // array to avoid the 7-phase × Claude calls timeout. Real runs pass all 7.
+    // Auto-detect smoke mode by client_id prefix as fallback — intermediate
+    // workflow nodes don't always forward the `phases` array, so we need to
+    // re-short-circuit based on client_id here too.
+    const client_id_from_body = typeof body.client_id === 'string' ? body.client_id : ''
+    const isSmoke = client_id_from_body.startsWith('smoke-') || client_id_from_body === 'smoke-test'
     const phasesFromBody = Array.isArray(body.phases) && body.phases.length
       ? (body.phases as string[])
-      : PHASES
+      : (isSmoke ? ['DISCOVER'] : PHASES)
     const current_idx = phasesFromBody.indexOf(current_phase)
     const next_idx = current_idx + 1
 
