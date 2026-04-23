@@ -34,31 +34,62 @@ export async function POST(request: Request) {
   const ALLOWED_SENTIMENTS = new Set(['positive','neutral','negative'])
   const ALLOWED_STATUS = new Set(['new','awaiting_review','responded','escalated','ignored'])
 
-  const normalized = rowsIn.map(r => {
+  const normalized = rowsIn.map((r: Record<string, unknown>) => {
     const rawRating = typeof r.rating === 'number' ? Math.round(r.rating) : 3
     const rating = Math.max(1, Math.min(5, rawRating))
-    const platform = ALLOWED_PLATFORMS.has(r.platform) ? r.platform : 'google'
-    const sentiment = ALLOWED_SENTIMENTS.has(r.sentiment) ? r.sentiment : null
-    const status = ALLOWED_STATUS.has(r.status) ? r.status : 'new'
+    const platform = ALLOWED_PLATFORMS.has(r.platform as string) ? (r.platform as string) : 'google'
+    const sentiment = ALLOWED_SENTIMENTS.has(r.sentiment as string) ? (r.sentiment as string) : null
+    const status = ALLOWED_STATUS.has(r.status as string) ? (r.status as string) : 'new'
     return {
-      client_id: isUuid(r.client_id) ? r.client_id : SMOKE_CLIENT_UUID,
+      client_id: isUuid(r.client_id) ? (r.client_id as string) : SMOKE_CLIENT_UUID,
       platform,
-      external_id: r.external_id || r.review_id || `stub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      external_id: (r.external_id as string) || (r.review_id as string) || `stub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       rating,
-      title: r.title || null,
-      body: r.body || r.review_text || null,
-      author: r.author || r.author_name || null,
+      title: (r.title as string) || null,
+      body: (r.body as string) || (r.review_text as string) || null,
+      author: (r.author as string) || (r.author_name as string) || null,
       sentiment,
       status,
       raw: r.raw || r.data || r,
     }
   })
 
-  const supabase = getSupabaseAdmin()
-  const { error, data } = await supabase
-    .from('review_metrics')
-    .upsert(normalized, { onConflict: 'platform,external_id' })
-    .select('id, status')
-  if (error) return NextResponse.json({ error: 'db_error', detail: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, upserted: data?.length ?? 0 })
+  // Tolerate db errors (schema drift, missing env, etc.) — return 200 with
+  // fallback_mode:true so a single backend hiccup doesn't kill an entire
+  // workflow chain. Same pattern as stub-handler.ts and the other stub routes.
+  let upserted = 0
+  let ids: string[] = []
+  let dbError: string | null = null
+  try {
+    const supabase = getSupabaseAdmin()
+    const { error, data } = await supabase
+      .from('review_metrics')
+      .upsert(normalized, { onConflict: 'platform,external_id' })
+      .select('id, status')
+    if (error) {
+      dbError = error.message
+    } else {
+      upserted = data?.length ?? 0
+      ids = (data ?? []).map((r: { id: string }) => r.id)
+    }
+  } catch (e: unknown) {
+    dbError = e instanceof Error ? e.message : String(e)
+  }
+
+  // Echo body scalars so downstream n8n nodes still read $json.X
+  const echo: Record<string, unknown> = {}
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    for (const [k, v] of Object.entries(body)) {
+      if (k === 'rows') continue
+      echo[k] = v
+    }
+  }
+
+  return NextResponse.json({
+    ...echo,
+    ok: true,
+    upserted,
+    ids,
+    ...(dbError ? { fallback_mode: true, db_error: dbError.slice(0, 400) } : {}),
+  })
 }

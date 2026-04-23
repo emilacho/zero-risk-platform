@@ -58,7 +58,7 @@ const DEFAULT_PAYLOAD = {
   'Community Health': { client_id: 'smoke-test' },
 
   // Cluster 6 — Client Success
-  'Client Onboarding': { client_name: 'Smoke Test Co', website: 'https://example.com', industry: 'technology', contract_scope: 'smoke', deal_value: 0, deal_id: 'smoke-deal-001' },
+  'Client Onboarding': { client_id: 'smoke-client-' + Date.now(), client_name: 'Smoke Test Co', website: 'https://example.com', domain: 'example.com', industry: 'technology', contract_scope: ['paid_ads', 'email'], deal_value: 0, deal_id: 'smoke-deal-001', primary_contact_id: 'smoke-contact-001' },
   'Churn Prediction': { client_id: 'smoke-test' },
   'NPS': { client_id: 'smoke-test' },
   'QBR': { client_id: 'smoke-test', quarter: 'Q1-2026' },

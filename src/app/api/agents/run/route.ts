@@ -33,7 +33,13 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const agentName = sanitizeString(body.agent, 50)
+    // Tolerate multiple agent-name field variants (research-generated workflows
+    // use agent_id, agent_slug, agent_name, etc). Fall back through common names
+    // so n8n doesn't need a rewrite every time someone ships a new workflow.
+    const agentName = sanitizeString(
+      body.agent || body.agent_id || body.agent_slug || body.agent_name || body.slug,
+      50
+    )
     // Tolerate multiple task field names (research-generated workflows use task_type,
     // request_text, routing_instructions, etc). Fall back through common variants
     // so we never silently get an empty task.
