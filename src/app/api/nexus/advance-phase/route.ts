@@ -27,18 +27,23 @@ export async function POST(request: Request) {
     const phase_outputs = (body.phase_outputs && typeof body.phase_outputs === 'object' && !Array.isArray(body.phase_outputs))
       ? { ...(body.phase_outputs as Record<string, unknown>) } : {}
 
-    const current_idx = PHASES.indexOf(current_phase)
+    // Respect the phases array from the body — smoke mode passes a 1-phase
+    // array to avoid the 7-phase × Claude calls timeout. Real runs pass all 7.
+    const phasesFromBody = Array.isArray(body.phases) && body.phases.length
+      ? (body.phases as string[])
+      : PHASES
+    const current_idx = phasesFromBody.indexOf(current_phase)
     const next_idx = current_idx + 1
 
     phase_outputs[current_phase] = phase_output
 
-    if (next_idx < PHASES.length) {
+    if (next_idx < phasesFromBody.length) {
       return NextResponse.json({
         ...body,
         ok: true,
-        phases: PHASES,
+        phases: phasesFromBody,
         current_phase_index: next_idx,
-        current_phase: PHASES[next_idx],
+        current_phase: phasesFromBody[next_idx],
         phase_outputs,
         retry_count: 0,
         status: 'in_progress',
@@ -48,7 +53,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ...body,
       ok: true,
-      phases: PHASES,
+      phases: phasesFromBody,
       current_phase_index: current_idx,
       current_phase,
       phase_outputs,

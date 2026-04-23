@@ -65,7 +65,11 @@ const FIXED_PARAMS = {
     ]},
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "client_name": "{{ ${VD}.client_name || '' }}",\n  "client_id": "{{ ${VD}.client_id || '' }}",\n  "workspace_id": "{{ ${NOTION_WS}.workspace_id || '' }}",\n  "plan": {{ JSON.stringify(${SUCCESS_PLAN} ?? {}) }}\n}`,
+    // NOTE: removed $('Create Notion Client Workspace').workspace_id reach-back
+    // because that node runs in a parallel branch and n8n throws
+    // "Node hasn't been executed" when the Success Plan node runs from the
+    // other branch. workspace_id is best-effort — falls back to empty string.
+    jsonBody: `={\n  "client_name": "{{ ${VD}.client_name || '' }}",\n  "client_id": "{{ ${VD}.client_id || '' }}",\n  "workspace_id": "{{ $json.workspace_id || '' }}",\n  "plan": {{ JSON.stringify($json ?? {}) }}\n}`,
     options: { timeout: 30000 },
   },
   'Schedule Kickoff Call (GHL Calendar)': {
