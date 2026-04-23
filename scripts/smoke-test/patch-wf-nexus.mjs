@@ -93,7 +93,11 @@ const REPLACE_NODES = {
       ]},
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: `={\n  "advance_current_phase": {{ JSON.stringify((() => { try { return $('Advance to Next Phase').item.json.current_phase; } catch(e) { return null; } })()) }},\n  "parse_current_phase": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.current_phase; } catch(e) { return null; } })()) }},\n  "parse_request_id": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.request_id; } catch(e) { return null; } })()) }},\n  "parse_client_id": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.client_id; } catch(e) { return null; } })()) }},\n  "parse_campaign_brief": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.campaign_brief; } catch(e) { return null; } })()) }},\n  "parse_priority": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.priority; } catch(e) { return null; } })()) }},\n  "phases": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.phases; } catch(e) { return null; } })()) }},\n  "current_phase": "{{ $json.current_phase || '' }}",\n  "phase_outputs": {{ JSON.stringify($json.phase_outputs || {}) }}\n}`,
+      // Simple pass-through body: $json already carries state from the
+      // previous node (Initialize Pipeline State or Go Back loop).
+      // NO IIFE, NO reach-backs to nodes that may not have executed — those
+      // crash n8n's expression evaluator on first iteration.
+      jsonBody: `={\n  "current_phase": "{{ $json.current_phase || 'DISCOVER' }}",\n  "request_id": "{{ $json.request_id || '' }}",\n  "client_id": "{{ $json.client_id || '' }}",\n  "campaign_brief": {{ JSON.stringify($json.campaign_brief || '') }},\n  "priority": "{{ $json.priority || 'normal' }}",\n  "phases": {{ JSON.stringify($json.phases || ['DISCOVER']) }},\n  "phase_outputs": {{ JSON.stringify($json.phase_outputs || {}) }},\n  "retry_count": {{ Number($json.retry_count) || 0 }}\n}`,
       options: { timeout: 15000 },
     },
   }),
