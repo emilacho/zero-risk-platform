@@ -103,8 +103,43 @@ const REPLACE_NODES = {
   }),
 }
 
-// Also patch Execute Phase + Validate Phase to add smoke headers.
+// Also patch Execute Phase + Validate Phase + Persist State to fix param issues.
 const UPDATE_PARAMETERS = {
+  'Persist Phase State to DB': (params) => {
+    // Original body missing client_id, uses jinja `|` pipe, uses `now()` instead
+    // of $now. Rewrite the body entirely with correct syntax.
+    return {
+      ...params,
+      method: 'POST',
+      url: `=${BASE}/api/campaign-pipeline/state`,
+      sendHeaders: true,
+      headerParameters: { parameters: [
+        { name: 'Content-Type', value: 'application/json' },
+        { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' },
+        { name: 'x-internal-key', value: '={{ $env.INTERNAL_API_KEY }}' },
+      ]},
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: `={\n  "request_id": "{{ $json.request_id || '' }}",\n  "client_id": "{{ $json.client_id || '' }}",\n  "current_phase": "{{ $json.current_phase || 'DISCOVER' }}",\n  "status": "{{ $json.status || 'in_progress' }}",\n  "retry_count": {{ Number($json.retry_count) || 0 }},\n  "updated_at": "{{ new Date().toISOString() }}"\n}`,
+      options: { timeout: 15000 },
+    }
+  },
+  'Notify Mission Control (Phase Complete)': (params) => {
+    return {
+      ...params,
+      method: 'POST',
+      url: `=${BASE}/api/mc-sync`,
+      sendHeaders: true,
+      headerParameters: { parameters: [
+        { name: 'Content-Type', value: 'application/json' },
+        { name: 'x-api-key', value: '={{ $env.MC_API_TOKEN || $env.INTERNAL_API_KEY }}' },
+      ]},
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: `={\n  "action": "phase_complete",\n  "request_id": "{{ $json.request_id || '' }}",\n  "client_id": "{{ $json.client_id || '' }}",\n  "phase": "{{ $json.current_phase || '' }}",\n  "status": "{{ $json.status || '' }}",\n  "timestamp": "{{ new Date().toISOString() }}"\n}`,
+      options: { timeout: 15000, response: { response: { neverError: true } } },
+    }
+  },
   'Execute Phase (jefe-marketing)': (params) => {
     const existingHeaders = params.headerParameters?.parameters || []
     const hasSmokeHeader = existingHeaders.some(h => h.name === 'x-smoke-test')
