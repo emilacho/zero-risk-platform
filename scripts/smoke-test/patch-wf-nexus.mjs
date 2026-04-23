@@ -79,6 +79,24 @@ const REPLACE_NODES = {
       options: { timeout: 15000 },
     },
   }),
+  'Resolve Phase': (orig) => ({
+    ...orig,
+    type: 'n8n-nodes-base.httpRequest',
+    typeVersion: 4.2,
+    parameters: {
+      method: 'POST',
+      url: `=${BASE}/api/nexus/resolve-phase`,
+      sendHeaders: true,
+      headerParameters: { parameters: [
+        { name: 'Content-Type', value: 'application/json' },
+        { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' },
+      ]},
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: `={\n  "advance_current_phase": {{ JSON.stringify((() => { try { return $('Advance to Next Phase').item.json.current_phase; } catch(e) { return null; } })()) }},\n  "parse_current_phase": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.current_phase; } catch(e) { return null; } })()) }},\n  "parse_request_id": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.request_id; } catch(e) { return null; } })()) }},\n  "parse_client_id": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.client_id; } catch(e) { return null; } })()) }},\n  "parse_campaign_brief": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.campaign_brief; } catch(e) { return null; } })()) }},\n  "parse_priority": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.priority; } catch(e) { return null; } })()) }},\n  "phases": {{ JSON.stringify((() => { try { return $('Parse & Validate Request').item.json.phases; } catch(e) { return null; } })()) }},\n  "current_phase": "{{ $json.current_phase || '' }}",\n  "phase_outputs": {{ JSON.stringify($json.phase_outputs || {}) }}\n}`,
+      options: { timeout: 15000 },
+    },
+  }),
 }
 
 // Also patch Execute Phase + Validate Phase to add smoke headers.
