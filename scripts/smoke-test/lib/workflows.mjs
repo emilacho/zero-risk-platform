@@ -61,6 +61,14 @@ const DEFAULT_PAYLOAD = {
   'Client Onboarding': { client_id: 'smoke-client-' + Date.now(), client_name: 'Smoke Test Co', website: 'https://example.com', domain: 'example.com', industry: 'technology', contract_scope: ['paid_ads', 'email'], deal_value: 0, deal_id: 'smoke-deal-001', primary_contact_id: 'smoke-contact-001' },
   // Legacy "Onboarding New Client" workflow: Code node validates name/website/industry
   'Onboarding New Client': { client_id: 'smoke-client-new-' + Date.now(), name: 'Smoke Test Co', website: 'https://example.com', domain: 'example.com', industry: 'technology', email: 'smoke@example.com' },
+  // Lead Enrichment workflow: requires email
+  'Lead Enrichment': { client_id: 'smoke-test', email: 'smoke@example.com', name: 'Smoke Lead', company: 'Smoke Co', phone: '+1-555-0100', source: 'ghl', contact_id: 'smoke-contact-001' },
+  // Lead → Campaign Pipeline: expects body structure
+  'Lead → Campaign Pipeline': { client_id: 'smoke-test', body: { client_id: 'smoke-test', contact_name: 'Smoke Lead', email: 'smoke@example.com', source: 'ghl' } },
+  // Content Publisher Router: requires content + channel
+  'Content Publisher': { client_id: 'smoke-test', content_type: 'email', channel: 'mailgun', content: { subject: 'Smoke subject', body: 'Smoke body' }, approved: true, task_id: 'smoke-publish-' + Date.now() },
+  // Creative Fatigue Auto-Refresh: no specific requirements, use client_id
+  'Creative Fatigue': { client_id: 'smoke-test', force_refresh: true },
   'Churn Prediction': { client_id: 'smoke-test' },
   'NPS': { client_id: 'smoke-test' },
   'QBR': { client_id: 'smoke-test', quarter: 'Q1-2026' },
