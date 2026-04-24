@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 SEO Backlink Opportunity Scanner Weekly",
+  "name": "Zero Risk — SEO Backlink Opportunity Scanner Weekly",
   "meta": {
     "description": "Mondays 6am: unlinked mentions scan + data studies. Calls Backlink Strategist agent. Tiers targets A/B/C. Writes to backlink_opportunities table. Weekly Slack digest.",
     "trigger_type": "cron",
@@ -53,11 +53,11 @@
     }
   ],
   "connections": {
-    "trigger-cron": {
+    "Trigger: Mondays 6am UTC": {
       "main": [
         [
           {
-            "node": "init"
+            "node": "Initialize"
           }
         ]
       ]

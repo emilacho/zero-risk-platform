@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 SEO Topical Authority Builder Monthly",
+  "name": "Zero Risk — SEO Topical Authority Builder Monthly",
   "meta": {
     "description": "1st of month, 3am: builds semantic entity map for top 3 pillars (Koray method). NLP query augmentation. Topical coverage scoring. Decay prediction. Calls Content Strategist. Writes to topical_authority_maps table.",
     "trigger_type": "cron",
@@ -53,11 +53,11 @@
     }
   ],
   "connections": {
-    "trigger-cron": {
+    "Trigger: 1st of month 3am UTC": {
       "main": [
         [
           {
-            "node": "init"
+            "node": "Initialize"
           }
         ]
       ]

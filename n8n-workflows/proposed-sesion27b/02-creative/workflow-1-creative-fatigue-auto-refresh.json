@@ -11,7 +11,10 @@
       "name": "Trigger: Every 6 Hours",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [100, 300]
+      "position": [
+        100,
+        300
+      ]
     },
     {
       "parameters": {
@@ -23,7 +26,10 @@
       "name": "Webhook: Manual Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [300, 300]
+      "position": [
+        300,
+        300
+      ]
     },
     {
       "parameters": {
@@ -33,7 +39,10 @@
       "name": "Code: Prepare Query",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [500, 300]
+      "position": [
+        500,
+        300
+      ]
     },
     {
       "parameters": {
@@ -47,18 +56,61 @@
       "name": "Slack: Notify Team",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 300]
+      "position": [
+        700,
+        300
+      ]
     }
   ],
   "connections": {
-    "schedule": {"main": [[{"node": "prep", "type": "main", "index": 0}]]},
-    "webhook": {"main": [[{"node": "prep", "type": "main", "index": 0}]]},
-    "prep": {"main": [[{"node": "slack", "type": "main", "index": 0}]]}
+    "Trigger: Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Code: Prepare Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code: Prepare Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prepare Query": {
+      "main": [
+        [
+          {
+            "node": "Slack: Notify Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
     "saveDataErrorExecution": "all",
     "timezone": "UTC"
   },
-  "tags": [{"name": "zero-risk"}, {"name": "creative"}, {"name": "cluster-2"}]
+  "tags": [
+    {
+      "name": "zero-risk"
+    },
+    {
+      "name": "creative"
+    },
+    {
+      "name": "cluster-2"
+    }
+  ]
 }

@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 GEO Content Freshness Cron",
+  "name": "Zero Risk — GEO Content Freshness Cron",
   "meta": {
     "description": "Biweekly: scans content inventory for GEO-relevant pages >90 days old. Checks citations. Flags pages losing citations for refresh. Calls GEO Optimization agent. Queues refresh tasks to Supabase.",
     "trigger_type": "cron",
@@ -175,66 +175,66 @@
     }
   ],
   "connections": {
-    "trigger-cron": {
+    "Trigger: Mondays 3am UTC": {
       "main": [
         [
           {
-            "node": "query-stale-content"
+            "node": "Query Stale GEO Content"
           }
         ]
       ]
     },
-    "query-stale-content": {
+    "Query Stale GEO Content": {
       "main": [
         [
           {
-            "node": "split-pages"
+            "node": "Split Into Each Page"
           }
         ]
       ]
     },
-    "split-pages": {
+    "Split Into Each Page": {
       "main": [
         [
           {
-            "node": "fetch-page"
+            "node": "Fetch Page Content"
           }
         ]
       ]
     },
-    "fetch-page": {
+    "Fetch Page Content": {
       "main": [
         [
           {
-            "node": "analyze-citations"
+            "node": "Analyze Citations & Stats"
           }
         ]
       ]
     },
-    "analyze-citations": {
+    "Analyze Citations & Stats": {
       "main": [
         [
           {
-            "node": "if-refresh-needed"
+            "node": "IF refresh_needed"
           }
         ]
       ]
     },
-    "if-refresh-needed": {
+    "IF refresh_needed": {
       "main": [
         [
           {
-            "node": "agent-geo"
+            "node": "Agent: GEO Optimization"
           }
         ],
         []
       ]
     },
-    "agent-geo": {
+    "Agent: GEO Optimization": {
       "main": [
         [
           {
-            "node": "queue-refresh"
+            "node": "Queue Refresh Task"
           }
         ]
       ]

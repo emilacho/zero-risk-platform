@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 IndexNow + Real-Time Crawl Signaling",
+  "name": "Zero Risk — IndexNow + Real-Time Crawl Signaling",
   "meta": {
     "description": "Webhook triggered on content publish. Submits URL(s) to IndexNow (Microsoft/Bing native). Submits to Google Search Console Indexing API. Validates LLM crawler access (GPTBot, PerplexityBot, Gemini-Crawler). Writes indexation events to log.",
     "trigger_type": "webhook",
@@ -106,25 +106,25 @@
     }
   ],
   "connections": {
-    "webhook": {
+    "Webhook: Content Published": {
       "main": [
         [
           {
-            "node": "validate"
+            "node": "Validate URLs"
           }
         ]
       ]
     },
-    "validate": {
+    "Validate URLs": {
       "main": [
         [
           {
-            "node": "indexnow-submit"
+            "node": "Submit to IndexNow"
           }
         ],
         [
           {
-            "node": "gsc-indexing"
+            "node": "Submit to Google Search Console"
           }
         ]
       ]

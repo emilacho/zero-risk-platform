@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 HITL Inbox Processor (Every 15 Minutes)",
+  "name": "Zero Risk — HITL Inbox Processor (Every 15 Minutes)",
   "nodes": [
     {
       "parameters": {
@@ -82,12 +82,7 @@
     },
     {
       "parameters": {
-        "parameters": [
-          {
-            "name": "item",
-            "value": "=item"
-          }
-        ],
+        "fieldToSplitOut": "items_to_expire",
         "options": {}
       },
       "id": "split-expired",
@@ -159,12 +154,7 @@
     },
     {
       "parameters": {
-        "parameters": [
-          {
-            "name": "item",
-            "value": "=item"
-          }
-        ],
+        "fieldToSplitOut": "items_to_escalate",
         "options": {}
       },
       "id": "split-critical",
@@ -191,7 +181,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\u26a0\ufe0f *HITL Critical Escalation*\\n\\n*Item:* {{ $json.item_id }}\\n*Type:* {{ $json.approval_type }}\\n*Age:* {{ ($json.age_minutes / 60).toFixed(1) }}h\\n*Approver:* {{ $json.required_approver }}\\n\\nAction: escalating to {{ $json.escalation_path || 'general-manager' }}\",\n  \"channel\": \"#ops-alerts\"\n}",
+        "jsonBody": "={\n  \"text\": \"⚠️ *HITL Critical Escalation*\\n\\n*Item:* {{ $json.item_id }}\\n*Type:* {{ $json.approval_type }}\\n*Age:* {{ ($json.age_minutes / 60).toFixed(1) }}h\\n*Approver:* {{ $json.required_approver }}\\n\\nAction: escalating to {{ $json.escalation_path || 'general-manager' }}\",\n  \"channel\": \"#ops-alerts\"\n}",
         "options": {
           "timeout": 15000
         }
@@ -236,12 +226,7 @@
     },
     {
       "parameters": {
-        "parameters": [
-          {
-            "name": "item",
-            "value": "=item"
-          }
-        ],
+        "fieldToSplitOut": "items_to_renotify",
         "options": {}
       },
       "id": "split-renotify",
@@ -268,7 +253,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\ud83d\udd14 *HITL Approval Reminder*\\n\\n*Item:* {{ $json.item_id }}\\n*Type:* {{ $json.approval_type }}\\n*Pending Since:* {{ ($json.age_minutes / 60).toFixed(1) }}h ago\\n\\nPlease review in Mission Control \u2192 inbox\",\n  \"channel\": \"@{{ $json.required_approver }}\"\n}",
+        "jsonBody": "={\n  \"text\": \"🔔 *HITL Approval Reminder*\\n\\n*Item:* {{ $json.item_id }}\\n*Type:* {{ $json.approval_type }}\\n*Pending Since:* {{ ($json.age_minutes / 60).toFixed(1) }}h ago\\n\\nPlease review in Mission Control → inbox\",\n  \"channel\": \"@{{ $json.required_approver }}\"\n}",
         "options": {
           "timeout": 15000
         }

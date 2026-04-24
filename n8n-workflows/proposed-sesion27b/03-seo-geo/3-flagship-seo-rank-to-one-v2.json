@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 SEO Rank-to-#1 v2 UPGRADED",
+  "name": "Zero Risk — SEO Rank-to-#1 v2 UPGRADED",
   "meta": {
     "description": "Webhook-triggered end-to-end SEO engagement. UPGRADED: mandatory cannibalization check (blocks pipeline if conflicts), sub-agent output validation (Anthropic orchestrator), critical-path dependency mapping, GEO layer in parallel.",
     "trigger_type": "webhook",
@@ -135,38 +135,38 @@
     }
   ],
   "connections": {
-    "webhook": {
+    "Webhook: SEO Engagement v2": {
       "main": [
         [
           {
-            "node": "validate"
+            "node": "Validate & Normalize"
           }
         ]
       ]
     },
-    "validate": {
+    "Validate & Normalize": {
       "main": [
         [
           {
-            "node": "guard-cannibalization"
+            "node": "GUARD: Cannibalization Check"
           }
         ]
       ]
     },
-    "guard-cannibalization": {
+    "GUARD: Cannibalization Check": {
       "main": [
         [
           {
-            "node": "if-no-cannibalization"
+            "node": "IF no cannibalization conflicts"
           }
         ]
       ]
     },
-    "if-no-cannibalization": {
+    "IF no cannibalization conflicts": {
       "main": [
         [
           {
-            "node": "persist-start"
+            "node": "Persist Engagement Start"
           }
         ],
         []

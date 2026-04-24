@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 Meta-Agent Weekly Learning Cycle (Cron Monday 9am)",
+  "name": "Zero Risk — Meta-Agent Weekly Learning Cycle (Cron Monday 9am)",
   "nodes": [
     {
       "parameters": {
@@ -116,12 +116,7 @@
     },
     {
       "parameters": {
-        "parameters": [
-          {
-            "name": "proposal",
-            "value": "=proposal"
-          }
-        ],
+        "fieldToSplitOut": "improvement_proposals",
         "options": {}
       },
       "id": "split-proposals",
@@ -177,7 +172,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\ud83d\udcca *Weekly Meta-Agent Learning Cycle Complete*\\n\\n*Analysis Period:* {{ $json.analysis_week }}\\n*Total Tasks Analyzed:* {{ $json.total_tasks }}\\n*Overall Success Rate:* {{ $json.overall_success_rate }}\\n*Unique Agents:* {{ $json.total_unique_agents }}\\n\\n*Top 3 Findings:*\\n{{ $json.top_findings.map((f, i) => '\\\\n' + (i+1) + '. ' + f).join('') }}\\n\\n*Improvement Proposals Queued:* {{ ($json.improvement_proposals || []).length }}\",\n  \"channel\": \"#agency-ops\"\n}",
+        "jsonBody": "={\n  \"text\": \"📊 *Weekly Meta-Agent Learning Cycle Complete*\\n\\n*Analysis Period:* {{ $json.analysis_week }}\\n*Total Tasks Analyzed:* {{ $json.total_tasks }}\\n*Overall Success Rate:* {{ $json.overall_success_rate }}\\n*Unique Agents:* {{ $json.total_unique_agents }}\\n\\n*Top 3 Findings:*\\n{{ $json.top_findings.map((f, i) => '\\\\n' + (i+1) + '. ' + f).join('') }}\\n\\n*Improvement Proposals Queued:* {{ ($json.improvement_proposals || []).length }}\",\n  \"channel\": \"#agency-ops\"\n}",
         "options": {
           "timeout": 15000
         }

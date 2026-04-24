@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 SEO Cannibalization Audit Weekly",
+  "name": "Zero Risk — SEO Cannibalization Audit Weekly",
   "meta": {
     "description": "Weekly audit for keyword cannibalization across all active clients. Pulls GSC query-page mappings (last 30d), detects 2+ pages ranking same primary keyword, calculates overlap score, flags conflicts, calls SEO Specialist agent with matrix, writes to Supabase.",
     "trigger_type": "cron",
@@ -177,70 +177,70 @@
     }
   ],
   "connections": {
-    "trigger-cron": {
+    "Trigger: Sundays 2am UTC": {
       "main": [
         [
           {
-            "node": "load-clients"
+            "node": "Load Active Clients"
           }
         ]
       ]
     },
-    "load-clients": {
+    "Load Active Clients": {
       "main": [
         [
           {
-            "node": "split-clients"
+            "node": "Split Into Each Client"
           }
         ]
       ]
     },
-    "split-clients": {
+    "Split Into Each Client": {
       "main": [
         [
           {
-            "node": "gsc-data"
+            "node": "GSC Query-Page Mapping (last 30d)"
           }
         ]
       ]
     },
-    "gsc-data": {
+    "GSC Query-Page Mapping (last 30d)": {
       "main": [
         [
           {
-            "node": "detect-cannibalization"
+            "node": "Detect Cannibalization"
           }
         ]
       ]
     },
-    "detect-cannibalization": {
+    "Detect Cannibalization": {
       "main": [
         [
           {
-            "node": "if-conflicts"
+            "node": "IF conflicts > 0"
           }
         ]
       ]
     },
-    "if-conflicts": {
+    "IF conflicts > 0": {
       "main": [
         [
           {
-            "node": "agent-seo-specialist"
+            "node": "Agent: SEO Specialist"
           }
         ],
         [
           {
-            "node": "persist-audit"
+            "node": "Persist to Supabase"
           }
         ]
       ]
     },
-    "agent-seo-specialist": {
+    "Agent: SEO Specialist": {
       "main": [
         [
           {
-            "node": "persist-audit"
+            "node": "Persist to Supabase"
           }
         ]
       ]

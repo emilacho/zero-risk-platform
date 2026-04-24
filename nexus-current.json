@@ -1,0 +1,1559 @@
+﻿{
+    "updatedAt":  "2026-04-23T18:51:39.047Z",
+    "createdAt":  "2026-04-18T15:44:57.996Z",
+    "id":  "RT1tcru9mysEwKkf",
+    "name":  "Zero Risk - NEXUS 7-Phase Campaign Orchestrator (Webhook)",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "path":  "campaign-orchestrator",
+                                         "responseMode":  "onReceived",
+                                         "options":  {
+
+                                                     },
+                                         "httpMethod":  "POST"
+                                     },
+                      "id":  "webhook-trigger",
+                      "name":  "Campaign Webhook (Entry)",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2,
+                      "position":  [
+                                       100,
+                                       100
+                                   ],
+                      "webhookId":  "a19f4789-e7db-470a-b2ca-b07cd7f440f4"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/nexus/parse-request",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "x-api-key",
+                                                                                         "value":  "={{ $env.INTERNAL_API_KEY }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"body\": {{ JSON.stringify($json.body ?? $json) }},\n  \"client_id\": \"{{ ($json.body \u0026\u0026 $json.body.client_id) || $json.client_id || \u0027\u0027 }}\",\n  \"campaign_brief\": \"{{ ($json.body \u0026\u0026 $json.body.campaign_brief) || $json.campaign_brief || \u0027\u0027 }}\",\n  \"priority\": \"{{ ($json.body \u0026\u0026 $json.body.priority) || $json.priority || \u0027normal\u0027 }}\"\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "parse-campaign-request",
+                      "name":  "Parse \u0026 Validate Request",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       300,
+                                       100
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/campaign-pipeline/state",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                         "name":  "x-api-key"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"campaign_brief\": \"{{ $json.campaign_brief }}\",\n  \"current_phase\": \"{{ $json.current_phase }}\",\n  \"status\": \"initiated\",\n  \"priority\": \"{{ $json.priority }}\"\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "init-pipeline-state",
+                      "name":  "Initialize Pipeline State",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       500,
+                                       100
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/agents/run",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "x-internal-key",
+                                                                                         "value":  "={{ $env.INTERNAL_API_KEY }}"
+                                                                                     },
+                                                                                     {
+                                                                                         "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                         "name":  "x-api-key"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "x-smoke-test",
+                                                                                         "value":  "={{ ($json.client_id || \"\").startsWith(\"smoke-\") ? \"1\" : \"\" }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"agent\": \"jefe-marketing\",\n  \"task_type\": \"phase_execution\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"campaign_brief\": \"{{ $json.campaign_brief }}\",\n  \"phase_input\": {{ JSON.stringify($json.campaign_brief || \u0027\u0027) }}\n}",
+                                         "options":  {
+                                                         "timeout":  60000
+                                                     }
+                                     },
+                      "id":  "execute-phase",
+                      "name":  "Execute Phase (jefe-marketing)",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       700,
+                                       100
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/evidence/validate",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                         "name":  "x-api-key"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"phase\": \"{{ $node[\u0027Resolve Phase\u0027].json.current_phase }}\",\n  \"phase_output\": {{ JSON.stringify($node[\u0027Execute Phase (jefe-marketing)\u0027].json.output || \u0027\u0027) }},\n  \"success_criteria\": \"standard phase-complete check\",\n  \"request_id\": \"{{ $node[\u0027Resolve Phase\u0027].json.request_id }}\",\n  \"client_id\": \"{{ $node[\u0027Resolve Phase\u0027].json.client_id }}\"\n}",
+                                         "options":  {
+                                                         "timeout":  30000
+                                                     }
+                                     },
+                      "id":  "validate-phase",
+                      "name":  "Validate Phase Output (Evidence Collector)",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       900,
+                                       100
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict"
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "leftValue":  "={{ $json.verdict }}",
+                                                                                   "rightValue":  "PASS",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "equals"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        }
+                                     },
+                      "id":  "check-validation",
+                      "name":  "Validation Passed?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1100,
+                                       100
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/nexus/advance-phase",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "x-api-key",
+                                                                                         "value":  "={{ $env.INTERNAL_API_KEY }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"request_id\": \"{{ $json.request_id || \u0027\u0027 }}\",\n  \"client_id\": \"{{ $json.client_id || \u0027\u0027 }}\",\n  \"campaign_brief\": {{ JSON.stringify($json.campaign_brief ?? \u0027\u0027) }},\n  \"current_phase\": \"{{ $json.current_phase || \u0027DISCOVER\u0027 }}\",\n  \"current_phase_index\": {{ Number($json.current_phase_index) || 0 }},\n  \"phase_output\": {{ JSON.stringify($(\u0027Execute Phase (jefe-marketing)\u0027).item.json.output ?? $(\u0027Execute Phase (jefe-marketing)\u0027).item.json.response ?? \u0027\u0027) }},\n  \"phase_outputs\": {{ JSON.stringify($json.phase_outputs || {}) }},\n  \"retry_count\": {{ Number($json.retry_count) || 0 }},\n  \"priority\": \"{{ $json.priority || \u0027normal\u0027 }}\",\n  \"started_at\": \"{{ $json.started_at || new Date().toISOString() }}\"\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "advance-phase",
+                      "name":  "Advance to Next Phase",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1300,
+                                       60
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/nexus/handle-failure",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "x-api-key",
+                                                                                         "value":  "={{ $env.INTERNAL_API_KEY }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"request_id\": \"{{ $json.request_id || \u0027\u0027 }}\",\n  \"client_id\": \"{{ $json.client_id || \u0027\u0027 }}\",\n  \"current_phase\": \"{{ $json.current_phase || \u0027UNKNOWN\u0027 }}\",\n  \"retry_count\": {{ Number($json.retry_count) || 0 }},\n  \"validation_error\": {{ JSON.stringify($(\u0027Validate Phase Output (Evidence Collector)\u0027).item.json.error ?? $(\u0027Validate Phase Output (Evidence Collector)\u0027).item.json.rationale ?? \u0027Unknown error\u0027) }},\n  \"campaign_brief\": {{ JSON.stringify($json.campaign_brief ?? \u0027\u0027) }},\n  \"phases\": {{ JSON.stringify($json.phases || []) }},\n  \"phase_outputs\": {{ JSON.stringify($json.phase_outputs || {}) }},\n  \"started_at\": \"{{ $json.started_at || new Date().toISOString() }}\"\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "handle-validation-failure",
+                      "name":  "Handle Validation Failure",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1300,
+                                       180
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict"
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "leftValue":  "={{ $json.retry_count }}",
+                                                                                   "rightValue":  3,
+                                                                                   "operator":  {
+                                                                                                    "type":  "number",
+                                                                                                    "operation":  "lt"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        }
+                                     },
+                      "id":  "check-retry",
+                      "name":  "Retries Remaining?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1500,
+                                       180
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "retry-loop",
+                      "name":  "Go Back to Phase Execution",
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1700,
+                                       120
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.SLACK_WEBHOOK_URL }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"text\": \"?? *NEXUS Pipeline Escalation to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Phase:* {{ $json.current_phase }}\\n*Reason:* Failed validation after 3 retries\\n*Error:* {{ $json.last_validation_error | slice(0, 150) }}\\n\\nAction: Review in Mission Control ? dashboard/inbox\"\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "escalate-slack",
+                      "name":  "Notify Slack (HITL Escalation)",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1700,
+                                       200
+                                   ],
+                      "disabled":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/hitl/approvals/create",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                         "name":  "x-api-key"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"approval_type\": \"phase_gate_failure\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"priority\": \"{{ $json.priority }}\",\n  \"context\": {\n    \"phase_output\": {{ JSON.stringify($node[\u0027Execute Phase (jefe-marketing)\u0027].json.output | slice(0, 500)) }},\n    \"validation_error\": \"{{ $json.last_validation_error }}\",\n    \"retry_count\": {{ $json.retry_count }}\n  },\n  \"required_approver\": \"jefe-marketing\",\n  \"expires_in_hours\": 24\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "queue-hitl",
+                      "name":  "Queue for HITL Review",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1900,
+                                       200
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://zero-risk-platform.vercel.app/api/campaign-pipeline/state",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                         "name":  "x-api-key"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"request_id\": \"{{ $node[\u0027Resolve Phase\u0027].json.request_id }}\",\n  \"client_id\": \"{{ $node[\u0027Resolve Phase\u0027].json.client_id }}\",\n  \"current_phase\": \"{{ $node[\u0027Advance to Next Phase\u0027].json.current_phase }}\",\n  \"status\": \"{{ $node[\u0027Advance to Next Phase\u0027].json.status }}\",\n  \"retry_count\": {{ $node[\u0027Advance to Next Phase\u0027].json.retry_count }},\n  \"phase_outputs\": { \"{{ $node[\u0027Advance to Next Phase\u0027].json.just_executed_phase }}\": {{ JSON.stringify(($node[\u0027Execute Phase (jefe-marketing)\u0027].json.output || \u0027\u0027).slice(0, 2000)) }} }\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "persist-state",
+                      "name":  "Persist Phase State to DB",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1500,
+                                       100
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/mc-sync",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "x-api-key",
+                                                                                         "value":  "={{ $env.MC_API_TOKEN }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"action\": \"phase_complete\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"status\": \"{{ $json.status }}\",\n  \"timestamp\": \"{{ now().toISOString() }}\"\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "notify-mc-phase",
+                      "name":  "Notify Mission Control (Phase Complete)",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1500,
+                                       60
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict"
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "leftValue":  "={{ $json.status }}",
+                                                                                   "rightValue":  "completed",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "equals"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        }
+                                     },
+                      "id":  "check-complete",
+                      "name":  "All Phases Complete?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1700,
+                                       60
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.SLACK_WEBHOOK_URL }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"text\": \"? *NEXUS Campaign Pipeline Complete*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Completed At:* {{ $json.completed_at }}\\n*Duration:* {{ (new Date($json.completed_at) - new Date($json.started_at)) / 1000 / 60 }}m\\n\\n?? All 7 phases (DISCOVER ? OPERATE) successfully executed.\"\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "notify-completion",
+                      "name":  "Notify Slack (Pipeline Complete)",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1900,
+                                       60
+                                   ],
+                      "disabled":  true
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "end-success",
+                      "name":  "Success (End)",
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  1,
+                      "position":  [
+                                       2100,
+                                       60
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "end-hitl",
+                      "name":  "HITL (End)",
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  1,
+                      "position":  [
+                                       2100,
+                                       200
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "// Resolve the current phase from the latest persisted state, falling back to parse-validate.\n// This runs before Execute Phase in every loop iteration.\nconst phases = [\u0027DISCOVER\u0027, \u0027STRATEGIZE\u0027, \u0027SCAFFOLD\u0027, \u0027BUILD\u0027, \u0027HARDEN\u0027, \u0027LAUNCH\u0027, \u0027OPERATE\u0027];\nlet current_phase = null;\ntry { current_phase = $node[\u0027Advance to Next Phase\u0027].json.current_phase; } catch(e) {}\nif (!current_phase) {\n  try { current_phase = $node[\u0027Parse \u0026 Validate Request\u0027].json.current_phase; } catch(e) {}\n}\ncurrent_phase = current_phase || \u0027DISCOVER\u0027;\nlet parsed = {};\ntry { parsed = $node[\u0027Parse \u0026 Validate Request\u0027].json || {}; } catch(e) {}\nreturn [{\n  current_phase,\n  request_id: parsed.request_id,\n  client_id: parsed.client_id,\n  campaign_brief: parsed.campaign_brief,\n  priority: parsed.priority,\n}];"
+                                     },
+                      "id":  "resolve-phase-node-1776585271501",
+                      "name":  "Resolve Phase",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       700,
+                                       200
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "Campaign Webhook (Entry)":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Parse \u0026 Validate Request",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Parse \u0026 Validate Request":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "Initialize Pipeline State",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "Initialize Pipeline State":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Resolve Phase",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Execute Phase (jefe-marketing)":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "Validate Phase Output (Evidence Collector)",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                        "Validate Phase Output (Evidence Collector)":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "Validation Passed?",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                        "Validation Passed?":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Advance to Next Phase",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ],
+                                                                [
+                                                                    {
+                                                                        "node":  "Handle Validation Failure",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Advance to Next Phase":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Persist Phase State to DB",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Handle Validation Failure":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Retries Remaining?",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Retries Remaining?":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Go Back to Phase Execution",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ],
+                                                                [
+                                                                    {
+                                                                        "node":  "Notify Slack (HITL Escalation)",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Go Back to Phase Execution":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Resolve Phase",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "Notify Slack (HITL Escalation)":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "Queue for HITL Review",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                        "Queue for HITL Review":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "HITL (End)",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Persist Phase State to DB":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Notify Mission Control (Phase Complete)",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Notify Mission Control (Phase Complete)":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "All Phases Complete?",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                        "All Phases Complete?":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Notify Slack (Pipeline Complete)",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ],
+                                                                  [
+                                                                      {
+                                                                          "node":  "Go Back to Phase Execution",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Notify Slack (Pipeline Complete)":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "Success (End)",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                        "Resolve Phase":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Execute Phase (jefe-marketing)",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "saveManualExecutions":  true,
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "errorWorkflow":  "",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  null,
+    "versionId":  "e4b8c8bf-8418-44b6-a771-3a1e6c9612a7",
+    "activeVersionId":  "e4b8c8bf-8418-44b6-a771-3a1e6c9612a7",
+    "versionCounter":  108,
+    "triggerCount":  1,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-18T15:44:57.996Z",
+                       "createdAt":  "2026-04-18T15:44:57.996Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "RT1tcru9mysEwKkf",
+                       "projectId":  "xKBOyp07nrGbu4ob",
+                       "project":  {
+                                       "updatedAt":  "2026-04-18T13:51:26.012Z",
+                                       "createdAt":  "2026-04-18T13:41:21.856Z",
+                                       "id":  "xKBOyp07nrGbu4ob",
+                                       "name":  "Emilio  Perez  \u003cemilacho@hotmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-04-23T18:51:39.062Z",
+                          "createdAt":  "2026-04-23T18:51:39.062Z",
+                          "versionId":  "e4b8c8bf-8418-44b6-a771-3a1e6c9612a7",
+                          "workflowId":  "RT1tcru9mysEwKkf",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "path":  "campaign-orchestrator",
+                                                               "responseMode":  "onReceived",
+                                                               "options":  {
+
+                                                                           },
+                                                               "httpMethod":  "POST"
+                                                           },
+                                            "id":  "webhook-trigger",
+                                            "name":  "Campaign Webhook (Entry)",
+                                            "type":  "n8n-nodes-base.webhook",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             100,
+                                                             100
+                                                         ],
+                                            "webhookId":  "a19f4789-e7db-470a-b2ca-b07cd7f440f4"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/nexus/parse-request",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "name":  "x-api-key",
+                                                                                                               "value":  "={{ $env.INTERNAL_API_KEY }}"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"body\": {{ JSON.stringify($json.body ?? $json) }},\n  \"client_id\": \"{{ ($json.body \u0026\u0026 $json.body.client_id) || $json.client_id || \u0027\u0027 }}\",\n  \"campaign_brief\": \"{{ ($json.body \u0026\u0026 $json.body.campaign_brief) || $json.campaign_brief || \u0027\u0027 }}\",\n  \"priority\": \"{{ ($json.body \u0026\u0026 $json.body.priority) || $json.priority || \u0027normal\u0027 }}\"\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "parse-campaign-request",
+                                            "name":  "Parse \u0026 Validate Request",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             300,
+                                                             100
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/campaign-pipeline/state",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                                               "name":  "x-api-key"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"campaign_brief\": \"{{ $json.campaign_brief }}\",\n  \"current_phase\": \"{{ $json.current_phase }}\",\n  \"status\": \"initiated\",\n  \"priority\": \"{{ $json.priority }}\"\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "init-pipeline-state",
+                                            "name":  "Initialize Pipeline State",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             500,
+                                                             100
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/agents/run",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "name":  "x-internal-key",
+                                                                                                               "value":  "={{ $env.INTERNAL_API_KEY }}"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                                               "name":  "x-api-key"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "name":  "x-smoke-test",
+                                                                                                               "value":  "={{ ($json.client_id || \"\").startsWith(\"smoke-\") ? \"1\" : \"\" }}"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"agent\": \"jefe-marketing\",\n  \"task_type\": \"phase_execution\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"campaign_brief\": \"{{ $json.campaign_brief }}\",\n  \"phase_input\": {{ JSON.stringify($json.campaign_brief || \u0027\u0027) }}\n}",
+                                                               "options":  {
+                                                                               "timeout":  60000
+                                                                           }
+                                                           },
+                                            "id":  "execute-phase",
+                                            "name":  "Execute Phase (jefe-marketing)",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             700,
+                                                             100
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/evidence/validate",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                                               "name":  "x-api-key"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"phase\": \"{{ $node[\u0027Resolve Phase\u0027].json.current_phase }}\",\n  \"phase_output\": {{ JSON.stringify($node[\u0027Execute Phase (jefe-marketing)\u0027].json.output || \u0027\u0027) }},\n  \"success_criteria\": \"standard phase-complete check\",\n  \"request_id\": \"{{ $node[\u0027Resolve Phase\u0027].json.request_id }}\",\n  \"client_id\": \"{{ $node[\u0027Resolve Phase\u0027].json.client_id }}\"\n}",
+                                                               "options":  {
+                                                                               "timeout":  30000
+                                                                           }
+                                                           },
+                                            "id":  "validate-phase",
+                                            "name":  "Validate Phase Output (Evidence Collector)",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             900,
+                                                             100
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "typeValidation":  "strict"
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "leftValue":  "={{ $json.verdict }}",
+                                                                                                         "rightValue":  "PASS",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "string",
+                                                                                                                          "operation":  "equals"
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              }
+                                                           },
+                                            "id":  "check-validation",
+                                            "name":  "Validation Passed?",
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1100,
+                                                             100
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/nexus/advance-phase",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "name":  "x-api-key",
+                                                                                                               "value":  "={{ $env.INTERNAL_API_KEY }}"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"request_id\": \"{{ $json.request_id || \u0027\u0027 }}\",\n  \"client_id\": \"{{ $json.client_id || \u0027\u0027 }}\",\n  \"campaign_brief\": {{ JSON.stringify($json.campaign_brief ?? \u0027\u0027) }},\n  \"current_phase\": \"{{ $json.current_phase || \u0027DISCOVER\u0027 }}\",\n  \"current_phase_index\": {{ Number($json.current_phase_index) || 0 }},\n  \"phase_output\": {{ JSON.stringify($(\u0027Execute Phase (jefe-marketing)\u0027).item.json.output ?? $(\u0027Execute Phase (jefe-marketing)\u0027).item.json.response ?? \u0027\u0027) }},\n  \"phase_outputs\": {{ JSON.stringify($json.phase_outputs || {}) }},\n  \"retry_count\": {{ Number($json.retry_count) || 0 }},\n  \"priority\": \"{{ $json.priority || \u0027normal\u0027 }}\",\n  \"started_at\": \"{{ $json.started_at || new Date().toISOString() }}\"\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "advance-phase",
+                                            "name":  "Advance to Next Phase",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             1300,
+                                                             60
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/nexus/handle-failure",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "name":  "x-api-key",
+                                                                                                               "value":  "={{ $env.INTERNAL_API_KEY }}"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"request_id\": \"{{ $json.request_id || \u0027\u0027 }}\",\n  \"client_id\": \"{{ $json.client_id || \u0027\u0027 }}\",\n  \"current_phase\": \"{{ $json.current_phase || \u0027UNKNOWN\u0027 }}\",\n  \"retry_count\": {{ Number($json.retry_count) || 0 }},\n  \"validation_error\": {{ JSON.stringify($(\u0027Validate Phase Output (Evidence Collector)\u0027).item.json.error ?? $(\u0027Validate Phase Output (Evidence Collector)\u0027).item.json.rationale ?? \u0027Unknown error\u0027) }},\n  \"campaign_brief\": {{ JSON.stringify($json.campaign_brief ?? \u0027\u0027) }},\n  \"phases\": {{ JSON.stringify($json.phases || []) }},\n  \"phase_outputs\": {{ JSON.stringify($json.phase_outputs || {}) }},\n  \"started_at\": \"{{ $json.started_at || new Date().toISOString() }}\"\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "handle-validation-failure",
+                                            "name":  "Handle Validation Failure",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             1300,
+                                                             180
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "typeValidation":  "strict"
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "leftValue":  "={{ $json.retry_count }}",
+                                                                                                         "rightValue":  3,
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "number",
+                                                                                                                          "operation":  "lt"
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              }
+                                                           },
+                                            "id":  "check-retry",
+                                            "name":  "Retries Remaining?",
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1500,
+                                                             180
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+
+                                                           },
+                                            "id":  "retry-loop",
+                                            "name":  "Go Back to Phase Execution",
+                                            "type":  "n8n-nodes-base.noOp",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             1700,
+                                                             120
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.SLACK_WEBHOOK_URL }}",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"text\": \"?? *NEXUS Pipeline Escalation to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Phase:* {{ $json.current_phase }}\\n*Reason:* Failed validation after 3 retries\\n*Error:* {{ $json.last_validation_error | slice(0, 150) }}\\n\\nAction: Review in Mission Control ? dashboard/inbox\"\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "escalate-slack",
+                                            "name":  "Notify Slack (HITL Escalation)",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             1700,
+                                                             200
+                                                         ],
+                                            "disabled":  true
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/hitl/approvals/create",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                                               "name":  "x-api-key"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"approval_type\": \"phase_gate_failure\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"priority\": \"{{ $json.priority }}\",\n  \"context\": {\n    \"phase_output\": {{ JSON.stringify($node[\u0027Execute Phase (jefe-marketing)\u0027].json.output | slice(0, 500)) }},\n    \"validation_error\": \"{{ $json.last_validation_error }}\",\n    \"retry_count\": {{ $json.retry_count }}\n  },\n  \"required_approver\": \"jefe-marketing\",\n  \"expires_in_hours\": 24\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "queue-hitl",
+                                            "name":  "Queue for HITL Review",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             1900,
+                                                             200
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "https://zero-risk-platform.vercel.app/api/campaign-pipeline/state",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                                               "name":  "x-api-key"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"request_id\": \"{{ $node[\u0027Resolve Phase\u0027].json.request_id }}\",\n  \"client_id\": \"{{ $node[\u0027Resolve Phase\u0027].json.client_id }}\",\n  \"current_phase\": \"{{ $node[\u0027Advance to Next Phase\u0027].json.current_phase }}\",\n  \"status\": \"{{ $node[\u0027Advance to Next Phase\u0027].json.status }}\",\n  \"retry_count\": {{ $node[\u0027Advance to Next Phase\u0027].json.retry_count }},\n  \"phase_outputs\": { \"{{ $node[\u0027Advance to Next Phase\u0027].json.just_executed_phase }}\": {{ JSON.stringify(($node[\u0027Execute Phase (jefe-marketing)\u0027].json.output || \u0027\u0027).slice(0, 2000)) }} }\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "persist-state",
+                                            "name":  "Persist Phase State to DB",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             1500,
+                                                             100
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.ZERO_RISK_API_URL || \u0027https://zero-risk-platform.vercel.app\u0027 }}/api/mc-sync",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "name":  "x-api-key",
+                                                                                                               "value":  "={{ $env.MC_API_TOKEN }}"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"action\": \"phase_complete\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"status\": \"{{ $json.status }}\",\n  \"timestamp\": \"{{ now().toISOString() }}\"\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "notify-mc-phase",
+                                            "name":  "Notify Mission Control (Phase Complete)",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             1500,
+                                                             60
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "typeValidation":  "strict"
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "leftValue":  "={{ $json.status }}",
+                                                                                                         "rightValue":  "completed",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "string",
+                                                                                                                          "operation":  "equals"
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              }
+                                                           },
+                                            "id":  "check-complete",
+                                            "name":  "All Phases Complete?",
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1700,
+                                                             60
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.SLACK_WEBHOOK_URL }}",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"text\": \"? *NEXUS Campaign Pipeline Complete*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Completed At:* {{ $json.completed_at }}\\n*Duration:* {{ (new Date($json.completed_at) - new Date($json.started_at)) / 1000 / 60 }}m\\n\\n?? All 7 phases (DISCOVER ? OPERATE) successfully executed.\"\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "notify-completion",
+                                            "name":  "Notify Slack (Pipeline Complete)",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             1900,
+                                                             60
+                                                         ],
+                                            "disabled":  true
+                                        },
+                                        {
+                                            "parameters":  {
+
+                                                           },
+                                            "id":  "end-success",
+                                            "name":  "Success (End)",
+                                            "type":  "n8n-nodes-base.noOp",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             2100,
+                                                             60
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+
+                                                           },
+                                            "id":  "end-hitl",
+                                            "name":  "HITL (End)",
+                                            "type":  "n8n-nodes-base.noOp",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             2100,
+                                                             200
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "// Resolve the current phase from the latest persisted state, falling back to parse-validate.\n// This runs before Execute Phase in every loop iteration.\nconst phases = [\u0027DISCOVER\u0027, \u0027STRATEGIZE\u0027, \u0027SCAFFOLD\u0027, \u0027BUILD\u0027, \u0027HARDEN\u0027, \u0027LAUNCH\u0027, \u0027OPERATE\u0027];\nlet current_phase = null;\ntry { current_phase = $node[\u0027Advance to Next Phase\u0027].json.current_phase; } catch(e) {}\nif (!current_phase) {\n  try { current_phase = $node[\u0027Parse \u0026 Validate Request\u0027].json.current_phase; } catch(e) {}\n}\ncurrent_phase = current_phase || \u0027DISCOVER\u0027;\nlet parsed = {};\ntry { parsed = $node[\u0027Parse \u0026 Validate Request\u0027].json || {}; } catch(e) {}\nreturn [{\n  current_phase,\n  request_id: parsed.request_id,\n  client_id: parsed.client_id,\n  campaign_brief: parsed.campaign_brief,\n  priority: parsed.priority,\n}];"
+                                                           },
+                                            "id":  "resolve-phase-node-1776585271501",
+                                            "name":  "Resolve Phase",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             700,
+                                                             200
+                                                         ]
+                                        }
+                                    ],
+                          "connections":  {
+                                              "Campaign Webhook (Entry)":  {
+                                                                               "main":  [
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "Parse \u0026 Validate Request",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  0
+                                                                                                }
+                                                                                            ]
+                                                                                        ]
+                                                                           },
+                                              "Parse \u0026 Validate Request":  {
+                                                                                    "main":  [
+                                                                                                 [
+                                                                                                     {
+                                                                                                         "node":  "Initialize Pipeline State",
+                                                                                                         "type":  "main",
+                                                                                                         "index":  0
+                                                                                                     }
+                                                                                                 ]
+                                                                                             ]
+                                                                                },
+                                              "Initialize Pipeline State":  {
+                                                                                "main":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "Resolve Phase",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                            },
+                                              "Execute Phase (jefe-marketing)":  {
+                                                                                     "main":  [
+                                                                                                  [
+                                                                                                      {
+                                                                                                          "node":  "Validate Phase Output (Evidence Collector)",
+                                                                                                          "type":  "main",
+                                                                                                          "index":  0
+                                                                                                      }
+                                                                                                  ]
+                                                                                              ]
+                                                                                 },
+                                              "Validate Phase Output (Evidence Collector)":  {
+                                                                                                 "main":  [
+                                                                                                              [
+                                                                                                                  {
+                                                                                                                      "node":  "Validation Passed?",
+                                                                                                                      "type":  "main",
+                                                                                                                      "index":  0
+                                                                                                                  }
+                                                                                                              ]
+                                                                                                          ]
+                                                                                             },
+                                              "Validation Passed?":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Advance to Next Phase",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ],
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Handle Validation Failure",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "Advance to Next Phase":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "Persist Phase State to DB",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "Handle Validation Failure":  {
+                                                                                "main":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "Retries Remaining?",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                            },
+                                              "Retries Remaining?":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Go Back to Phase Execution",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ],
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Notify Slack (HITL Escalation)",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "Go Back to Phase Execution":  {
+                                                                                 "main":  [
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "Resolve Phase",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                              "Notify Slack (HITL Escalation)":  {
+                                                                                     "main":  [
+                                                                                                  [
+                                                                                                      {
+                                                                                                          "node":  "Queue for HITL Review",
+                                                                                                          "type":  "main",
+                                                                                                          "index":  0
+                                                                                                      }
+                                                                                                  ]
+                                                                                              ]
+                                                                                 },
+                                              "Queue for HITL Review":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "HITL (End)",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "Persist Phase State to DB":  {
+                                                                                "main":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "Notify Mission Control (Phase Complete)",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                            },
+                                              "Notify Mission Control (Phase Complete)":  {
+                                                                                              "main":  [
+                                                                                                           [
+                                                                                                               {
+                                                                                                                   "node":  "All Phases Complete?",
+                                                                                                                   "type":  "main",
+                                                                                                                   "index":  0
+                                                                                                               }
+                                                                                                           ]
+                                                                                                       ]
+                                                                                          },
+                                              "All Phases Complete?":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "Notify Slack (Pipeline Complete)",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ],
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "Go Back to Phase Execution",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                                              "Notify Slack (Pipeline Complete)":  {
+                                                                                       "main":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "Success (End)",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                   },
+                                              "Resolve Phase":  {
+                                                                    "main":  [
+                                                                                 [
+                                                                                     {
+                                                                                         "node":  "Execute Phase (jefe-marketing)",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ]
+                                                                             ]
+                                                                }
+                                          },
+                          "authors":  "Emilio  Perez ",
+                          "name":  null,
+                          "description":  null,
+                          "autosaved":  false,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-04-23T18:51:41.327Z",
+                                                             "id":  359,
+                                                             "workflowId":  "RT1tcru9mysEwKkf",
+                                                             "versionId":  "e4b8c8bf-8418-44b6-a771-3a1e6c9612a7",
+                                                             "event":  "deactivated",
+                                                             "userId":  "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+                                                         },
+                                                         {
+                                                             "createdAt":  "2026-04-23T18:51:43.793Z",
+                                                             "id":  360,
+                                                             "workflowId":  "RT1tcru9mysEwKkf",
+                                                             "versionId":  "e4b8c8bf-8418-44b6-a771-3a1e6c9612a7",
+                                                             "event":  "activated",
+                                                             "userId":  "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+                                                         },
+                                                         {
+                                                             "createdAt":  "2026-04-23T18:51:39.381Z",
+                                                             "id":  357,
+                                                             "workflowId":  "RT1tcru9mysEwKkf",
+                                                             "versionId":  "e4b8c8bf-8418-44b6-a771-3a1e6c9612a7",
+                                                             "event":  "deactivated",
+                                                             "userId":  "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+                                                         },
+                                                         {
+                                                             "createdAt":  "2026-04-23T18:51:39.546Z",
+                                                             "id":  358,
+                                                             "workflowId":  "RT1tcru9mysEwKkf",
+                                                             "versionId":  "e4b8c8bf-8418-44b6-a771-3a1e6c9612a7",
+                                                             "event":  "activated",
+                                                             "userId":  "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+                                                         }
+                                                     ]
+                      }
+}

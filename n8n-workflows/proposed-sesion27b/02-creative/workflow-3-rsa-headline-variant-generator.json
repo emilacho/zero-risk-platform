@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 RSA 15-Headline Variant Generator (Webhook)",
+  "name": "Zero Risk — RSA 15-Headline Variant Generator (Webhook)",
   "nodes": [
     {
       "parameters": {
@@ -207,7 +207,7 @@
         "url": "={{ $env.SLACK_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\u2705 RSA 15-Headline Set Generated: {{ $json.task_id }}. Headlines ready for {{ $node['validate'].json.platform }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*RSA Headline Matrix Generated*\\\\nSet ID: {{ $json.task_id }}\\\\nCount: {{ $json.headline_count }}\\\\nValidation: PASSED\\\\nStatus: Ready for {{ $node['validate'].json.platform }}\" } }\n  ]\n}",
+        "jsonBody": "={\n  \"text\": \"✅ RSA 15-Headline Set Generated: {{ $json.task_id }}. Headlines ready for {{ $node['validate'].json.platform }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*RSA Headline Matrix Generated*\\\\nSet ID: {{ $json.task_id }}\\\\nCount: {{ $json.headline_count }}\\\\nValidation: PASSED\\\\nStatus: Ready for {{ $node['validate'].json.platform }}\" } }\n  ]\n}",
         "options": {
           "timeout": 10000
         }
@@ -227,7 +227,7 @@
         "url": "={{ $env.SLACK_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\u26a0\ufe0f RSA Validation Failed: {{ $json.task_id }}. Errors: {{ JSON.stringify($json.errors) }}\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*RSA Validation Error*\\\\nSet ID: {{ $json.task_id }}\\\\nErrors: {{ $json.errors.join(', ') }}\" } }\n  ]\n}",
+        "jsonBody": "={\n  \"text\": \"⚠️ RSA Validation Failed: {{ $json.task_id }}. Errors: {{ JSON.stringify($json.errors) }}\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*RSA Validation Error*\\\\nSet ID: {{ $json.task_id }}\\\\nErrors: {{ $json.errors.join(', ') }}\" } }\n  ]\n}",
         "options": {
           "timeout": 10000
         }
@@ -243,95 +243,95 @@
     }
   ],
   "connections": {
-    "webhook": {
+    "Webhook: RSA Brief": {
       "main": [
         [
           {
-            "node": "validate",
+            "node": "Code: Validate Brief",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "validate": {
+    "Code: Validate Brief": {
       "main": [
         [
           {
-            "node": "brain",
+            "node": "Client Brain: Brand Context",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "brain": {
+    "Client Brain: Brand Context": {
       "main": [
         [
           {
-            "node": "creative-director",
+            "node": "Agent: Creative Director (RSA Gen)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "creative-director": {
+    "Agent: Creative Director (RSA Gen)": {
       "main": [
         [
           {
-            "node": "validate-matrix",
+            "node": "Code: Validate RSA Matrix",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "validate-matrix": {
+    "Code: Validate RSA Matrix": {
       "main": [
         [
           {
-            "node": "check-valid",
+            "node": "If: Validation Passed?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "check-valid": {
+    "If: Validation Passed?": {
       "main": [
         [
           {
-            "node": "store-headline-set",
+            "node": "Store: RSA Headline Library",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "notify-failure",
+            "node": "Slack: Notify Failure",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "store-headline-set": {
+    "Store: RSA Headline Library": {
       "main": [
         [
           {
-            "node": "record-outcome",
+            "node": "Record: Outcome",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "record-outcome": {
+    "Record: Outcome": {
       "main": [
         [
           {
-            "node": "notify-slack",
+            "node": "Slack: Notify Team",
             "type": "main",
             "index": 0
           }

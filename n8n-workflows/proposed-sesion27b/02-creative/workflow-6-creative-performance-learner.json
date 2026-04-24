@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 Creative Performance Learner (Daily Cron 4AM UTC)",
+  "name": "Zero Risk — Creative Performance Learner (Daily Cron 4AM UTC)",
   "nodes": [
     {
       "parameters": {
@@ -182,7 +182,7 @@
         "url": "={{ $env.SLACK_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\ud83d\udcca Creative Performance Report \u2014 Last 24h. Top angles: {{ $node['aggregate-insights'].json.top_performing_angles.join(', ') }}. Top segments: {{ $node['aggregate-insights'].json.top_performing_segments.join(', ') }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*\ud83d\udcca Daily Creative Performance Report*\\\\nPeriod: Last 24h\\\\n\\\\n*Top Performing Angles:*\\\\n{{ $node['aggregate-insights'].json.top_performing_angles.slice(0, 3).map(a => `\u2022 ${a}`).join('\\\\n') }}\\\\n\\\\n*Target Segments:*\\\\n{{ $node['aggregate-insights'].json.top_performing_segments.slice(0, 3).map(s => `\u2022 ${s}`).join('\\\\n') }}\\\\n\\\\n*Key Recommendations:*\\\\n{{ $node['optimization-agent'].json.recommendations.slice(0, 2).join('\\\\n') }}\" } }\n  ]\n}",
+        "jsonBody": "={\n  \"text\": \"📊 Creative Performance Report — Last 24h. Top angles: {{ $node['aggregate-insights'].json.top_performing_angles.join(', ') }}. Top segments: {{ $node['aggregate-insights'].json.top_performing_segments.join(', ') }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*📊 Daily Creative Performance Report*\\\\nPeriod: Last 24h\\\\n\\\\n*Top Performing Angles:*\\\\n{{ $node['aggregate-insights'].json.top_performing_angles.slice(0, 3).map(a => `• ${a}`).join('\\\\n') }}\\\\n\\\\n*Target Segments:*\\\\n{{ $node['aggregate-insights'].json.top_performing_segments.slice(0, 3).map(s => `• ${s}`).join('\\\\n') }}\\\\n\\\\n*Key Recommendations:*\\\\n{{ $node['optimization-agent'].json.recommendations.slice(0, 2).join('\\\\n') }}\" } }\n  ]\n}",
         "options": {
           "timeout": 10000
         }
@@ -198,77 +198,77 @@
     }
   ],
   "connections": {
-    "schedule": {
+    "Trigger: Daily 4 AM UTC": {
       "main": [
         [
           {
-            "node": "prep",
+            "node": "Prep: Query Params",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "prep": {
+    "Prep: Query Params": {
       "main": [
         [
           {
-            "node": "fetch-outcomes",
+            "node": "Fetch: Creative Outcomes (24h)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "fetch-outcomes": {
+    "Fetch: Creative Outcomes (24h)": {
       "main": [
         [
           {
-            "node": "fetch-metrics",
+            "node": "Fetch: Ad Metrics (24h)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "fetch-metrics": {
+    "Fetch: Ad Metrics (24h)": {
       "main": [
         [
           {
-            "node": "aggregate-insights",
+            "node": "Code: Aggregate by Angle + Segment",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "aggregate-insights": {
+    "Code: Aggregate by Angle + Segment": {
       "main": [
         [
           {
-            "node": "optimization-agent",
+            "node": "Agent: Optimization Agent (CAMEL meta-agent)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "optimization-agent": {
+    "Agent: Optimization Agent (CAMEL meta-agent)": {
       "main": [
         [
           {
-            "node": "store-insights",
+            "node": "Store: Creative Performance Insights",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "store-insights": {
+    "Store: Creative Performance Insights": {
       "main": [
         [
           {
-            "node": "notify-slack",
+            "node": "Slack: Daily Report",
             "type": "main",
             "index": 0
           }

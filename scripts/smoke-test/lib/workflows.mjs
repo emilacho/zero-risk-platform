@@ -59,6 +59,8 @@ const DEFAULT_PAYLOAD = {
 
   // Cluster 6 — Client Success
   'Client Onboarding': { client_id: 'smoke-client-' + Date.now(), client_name: 'Smoke Test Co', website: 'https://example.com', domain: 'example.com', industry: 'technology', contract_scope: ['paid_ads', 'email'], deal_value: 0, deal_id: 'smoke-deal-001', primary_contact_id: 'smoke-contact-001' },
+  // Legacy "Onboarding New Client" workflow: Code node validates name/website/industry
+  'Onboarding New Client': { client_id: 'smoke-client-new-' + Date.now(), name: 'Smoke Test Co', website: 'https://example.com', domain: 'example.com', industry: 'technology', email: 'smoke@example.com' },
   'Churn Prediction': { client_id: 'smoke-test' },
   'NPS': { client_id: 'smoke-test' },
   'QBR': { client_id: 'smoke-test', quarter: 'Q1-2026' },

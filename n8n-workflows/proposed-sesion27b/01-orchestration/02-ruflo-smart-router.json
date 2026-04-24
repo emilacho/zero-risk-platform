@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 RUFLO Smart Router (Webhook)",
+  "name": "Zero Risk — RUFLO Smart Router (Webhook)",
   "nodes": [
     {
       "parameters": {
@@ -166,7 +166,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\u26a0\ufe0f *RUFLO Classification Escalated to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Classification:* {{ $json.classification_type }} (confidence: {{ ($json.confidence * 100).toFixed(0) }}%)\\n*Reason:* {{ $json.escalation_reason }}\\n\\nReview in Mission Control \u2192 dashboard/inbox\"\n}",
+        "jsonBody": "={\n  \"text\": \"⚠️ *RUFLO Classification Escalated to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Classification:* {{ $json.classification_type }} (confidence: {{ ($json.confidence * 100).toFixed(0) }}%)\\n*Reason:* {{ $json.escalation_reason }}\\n\\nReview in Mission Control → dashboard/inbox\"\n}",
         "options": {
           "timeout": 15000
         }
@@ -266,117 +266,117 @@
     }
   ],
   "connections": {
-    "webhook-in": {
+    "Router Webhook Entry": {
       "main": [
         [
           {
-            "node": "normalize-request",
+            "node": "Normalize & Validate Request",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "normalize-request": {
+    "Normalize & Validate Request": {
       "main": [
         [
           {
-            "node": "load-client-brain",
+            "node": "Load Client Context (Client Brain)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "load-client-brain": {
+    "Load Client Context (Client Brain)": {
       "main": [
         [
           {
-            "node": "invoke-ruflo",
+            "node": "Invoke RUFLO Classifier",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "invoke-ruflo": {
+    "Invoke RUFLO Classifier": {
       "main": [
         [
           {
-            "node": "extract-routing",
+            "node": "Extract Routing Decision",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "extract-routing": {
+    "Extract Routing Decision": {
       "main": [
         [
           {
-            "node": "check-escalate",
+            "node": "Should Escalate to HITL?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "check-escalate": {
+    "Should Escalate to HITL?": {
       "main": [
         [
           {
-            "node": "log-routing",
+            "node": "Log Routing Decision",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "escalate-hitl",
+            "node": "Queue for HITL Review (High Risk)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "log-routing": {
+    "Log Routing Decision": {
       "main": [
         [
           {
-            "node": "notify-mc",
+            "node": "Notify Mission Control",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "notify-mc": {
+    "Notify Mission Control": {
       "main": [
         [
           {
-            "node": "end-normal",
+            "node": "Normal Routing (End)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "escalate-hitl": {
+    "Queue for HITL Review (High Risk)": {
       "main": [
         [
           {
-            "node": "notify-escalation",
+            "node": "Notify Slack (Escalation)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "notify-escalation": {
+    "Notify Slack (Escalation)": {
       "main": [
         [
           {
-            "node": "end-escalated",
+            "node": "Escalated (End)",
             "type": "main",
             "index": 0
           }

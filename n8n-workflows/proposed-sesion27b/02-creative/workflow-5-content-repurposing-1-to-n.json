@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 Content Repurposing 1\u2192N (Webhook or Cron)",
+  "name": "Zero Risk — Content Repurposing 1→N (Webhook or Cron)",
   "nodes": [
     {
       "parameters": {
@@ -260,7 +260,7 @@
         "url": "={{ $env.SLACK_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\u2705 Content Repurposed 1\u2192{{ Object.keys($node['content-creator-agent'].json.variants).length }}: Task {{ $json.task_id }}. Platforms: {{ $json.platforms.join(', ') }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Content Repurposing Complete*\\\\nTask: {{ $json.task_id }}\\\\nSource: {{ $json.pillar_type }}\\\\nVariants: {{ Object.keys($node['content-creator-agent'].json.variants).length }}\\\\nPlatforms: {{ $json.platforms.join(', ') }}\\\\nStatus: {{ $json.auto_publish ? 'Published' : 'Queued for approval' }}\" } }\n  ]\n}",
+        "jsonBody": "={\n  \"text\": \"✅ Content Repurposed 1→{{ Object.keys($node['content-creator-agent'].json.variants).length }}: Task {{ $json.task_id }}. Platforms: {{ $json.platforms.join(', ') }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Content Repurposing Complete*\\\\nTask: {{ $json.task_id }}\\\\nSource: {{ $json.pillar_type }}\\\\nVariants: {{ Object.keys($node['content-creator-agent'].json.variants).length }}\\\\nPlatforms: {{ $json.platforms.join(', ') }}\\\\nStatus: {{ $json.auto_publish ? 'Published' : 'Queued for approval' }}\" } }\n  ]\n}",
         "options": {
           "timeout": 10000
         }
@@ -289,106 +289,106 @@
     }
   ],
   "connections": {
-    "webhook": {
+    "Webhook: Pillar Content": {
       "main": [
         [
           {
-            "node": "validate",
+            "node": "Code: Validate Brief",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "validate": {
+    "Code: Validate Brief": {
       "main": [
         [
           {
-            "node": "fetch-pillar",
+            "node": "Fetch: Pillar Content",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "fetch-pillar": {
+    "Fetch: Pillar Content": {
       "main": [
         [
           {
-            "node": "brain",
+            "node": "Client Brain: Style Guide",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "brain": {
+    "Client Brain: Style Guide": {
       "main": [
         [
           {
-            "node": "content-creator-agent",
+            "node": "Agent: Content Creator (Repurpose)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "content-creator-agent": {
+    "Agent: Content Creator (Repurpose)": {
       "main": [
         [
           {
-            "node": "store-queue",
+            "node": "Store: Repurposing Queue",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "store-queue": {
+    "Store: Repurposing Queue": {
       "main": [
         [
           {
-            "node": "check-auto-publish",
+            "node": "If: Auto-Publish Enabled?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "check-auto-publish": {
+    "If: Auto-Publish Enabled?": {
       "main": [
         [
           {
-            "node": "auto-publish-agent",
+            "node": "Agent: Growth Hacker (Publish)",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "no-op",
+            "node": "No-Op: Manual Approval Path",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "auto-publish-agent": {
+    "Agent: Growth Hacker (Publish)": {
       "main": [
         [
           {
-            "node": "record-outcome",
+            "node": "Record: Outcome",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "record-outcome": {
+    "Record: Outcome": {
       "main": [
         [
           {
-            "node": "notify-slack",
+            "node": "Slack: Notify Team",
             "type": "main",
             "index": 0
           }

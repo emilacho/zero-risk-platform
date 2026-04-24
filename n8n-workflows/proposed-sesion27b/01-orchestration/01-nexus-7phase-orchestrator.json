@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 NEXUS 7-Phase Campaign Orchestrator (Webhook)",
+  "name": "Zero Risk — NEXUS 7-Phase Campaign Orchestrator (Webhook)",
   "nodes": [
     {
       "parameters": {
@@ -152,7 +152,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Phase passed validation \u2014 advance to next phase\nconst phases = ['DISCOVER', 'STRATEGIZE', 'SCAFFOLD', 'BUILD', 'HARDEN', 'LAUNCH', 'OPERATE'];\nconst current_idx = phases.indexOf($json.current_phase);\nconst next_idx = current_idx + 1;\n\nif (next_idx < phases.length) {\n  // More phases to execute\n  $json.current_phase = phases[next_idx];\n  $json.current_phase_index = next_idx;\n  $json.phase_outputs[phases[current_idx]] = $node['Execute Phase (jefe-marketing)'].json.output;\n  $json.retry_count = 0;\n  $json.status = 'in_progress';\n} else {\n  // All phases completed successfully\n  $json.status = 'completed';\n  $json.phase_outputs[phases[current_idx]] = $node['Execute Phase (jefe-marketing)'].json.output;\n  $json.completed_at = new Date().toISOString();\n}\n\nreturn [$json];"
+        "jsCode": "// Phase passed validation — advance to next phase\nconst phases = ['DISCOVER', 'STRATEGIZE', 'SCAFFOLD', 'BUILD', 'HARDEN', 'LAUNCH', 'OPERATE'];\nconst current_idx = phases.indexOf($json.current_phase);\nconst next_idx = current_idx + 1;\n\nif (next_idx < phases.length) {\n  // More phases to execute\n  $json.current_phase = phases[next_idx];\n  $json.current_phase_index = next_idx;\n  $json.phase_outputs[phases[current_idx]] = $node['Execute Phase (jefe-marketing)'].json.output;\n  $json.retry_count = 0;\n  $json.status = 'in_progress';\n} else {\n  // All phases completed successfully\n  $json.status = 'completed';\n  $json.phase_outputs[phases[current_idx]] = $node['Execute Phase (jefe-marketing)'].json.output;\n  $json.completed_at = new Date().toISOString();\n}\n\nreturn [$json];"
       },
       "id": "advance-phase",
       "name": "Advance to Next Phase",
@@ -165,7 +165,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Validation failed \u2014 increment retry counter\n$json.retry_count = ($json.retry_count || 0) + 1;\n$json.last_validation_error = $node['Validate Phase Output (Evidence Collector)'].json.error || 'Unknown error';\n\nif ($json.retry_count >= 3) {\n  $json.status = 'escalated_to_hitl';\n  $json.escalation_reason = `Phase ${$json.current_phase} failed validation ${$json.retry_count} times`;\n} else {\n  $json.status = 'retrying';\n}\n\nreturn [$json];"
+        "jsCode": "// Validation failed — increment retry counter\n$json.retry_count = ($json.retry_count || 0) + 1;\n$json.last_validation_error = $node['Validate Phase Output (Evidence Collector)'].json.error || 'Unknown error';\n\nif ($json.retry_count >= 3) {\n  $json.status = 'escalated_to_hitl';\n  $json.escalation_reason = `Phase ${$json.current_phase} failed validation ${$json.retry_count} times`;\n} else {\n  $json.status = 'retrying';\n}\n\nreturn [$json];"
       },
       "id": "handle-validation-failure",
       "name": "Handle Validation Failure",
@@ -231,7 +231,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\ud83d\udea8 *NEXUS Pipeline Escalation to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Phase:* {{ $json.current_phase }}\\n*Reason:* Failed validation after 3 retries\\n*Error:* {{ $json.last_validation_error | slice(0, 150) }}\\n\\nAction: Review in Mission Control \u2192 dashboard/inbox\"\n}",
+        "jsonBody": "={\n  \"text\": \"🚨 *NEXUS Pipeline Escalation to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Phase:* {{ $json.current_phase }}\\n*Reason:* Failed validation after 3 retries\\n*Error:* {{ $json.last_validation_error | slice(0, 150) }}\\n\\nAction: Review in Mission Control → dashboard/inbox\"\n}",
         "options": {
           "timeout": 15000
         }
@@ -380,7 +380,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\u2705 *NEXUS Campaign Pipeline Complete*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Completed At:* {{ $json.completed_at }}\\n*Duration:* {{ (new Date($json.completed_at) - new Date($json.started_at)) / 1000 / 60 }}m\\n\\n\ud83d\udcca All 7 phases (DISCOVER \u2192 OPERATE) successfully executed.\"\n}",
+        "jsonBody": "={\n  \"text\": \"✅ *NEXUS Campaign Pipeline Complete*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Completed At:* {{ $json.completed_at }}\\n*Duration:* {{ (new Date($json.completed_at) - new Date($json.started_at)) / 1000 / 60 }}m\\n\\n📊 All 7 phases (DISCOVER → OPERATE) successfully executed.\"\n}",
         "options": {
           "timeout": 15000
         }
@@ -418,197 +418,197 @@
     }
   ],
   "connections": {
-    "webhook-trigger": {
+    "Campaign Webhook (Entry)": {
       "main": [
         [
           {
-            "node": "parse-campaign-request",
+            "node": "Parse & Validate Request",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "parse-campaign-request": {
+    "Parse & Validate Request": {
       "main": [
         [
           {
-            "node": "init-pipeline-state",
+            "node": "Initialize Pipeline State",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "init-pipeline-state": {
+    "Initialize Pipeline State": {
       "main": [
         [
           {
-            "node": "execute-phase",
+            "node": "Execute Phase (jefe-marketing)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "execute-phase": {
+    "Execute Phase (jefe-marketing)": {
       "main": [
         [
           {
-            "node": "validate-phase",
+            "node": "Validate Phase Output (Evidence Collector)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "validate-phase": {
+    "Validate Phase Output (Evidence Collector)": {
       "main": [
         [
           {
-            "node": "check-validation",
+            "node": "Validation Passed?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "check-validation": {
+    "Validation Passed?": {
       "main": [
         [
           {
-            "node": "advance-phase",
+            "node": "Advance to Next Phase",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "handle-validation-failure",
+            "node": "Handle Validation Failure",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "advance-phase": {
+    "Advance to Next Phase": {
       "main": [
         [
           {
-            "node": "persist-state",
+            "node": "Persist Phase State to DB",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "handle-validation-failure": {
+    "Handle Validation Failure": {
       "main": [
         [
           {
-            "node": "check-retry",
+            "node": "Retries Remaining?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "check-retry": {
+    "Retries Remaining?": {
       "main": [
         [
           {
-            "node": "retry-loop",
+            "node": "Go Back to Phase Execution",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "escalate-slack",
+            "node": "Notify Slack (HITL Escalation)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "retry-loop": {
+    "Go Back to Phase Execution": {
       "main": [
         [
           {
-            "node": "execute-phase",
+            "node": "Execute Phase (jefe-marketing)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "escalate-slack": {
+    "Notify Slack (HITL Escalation)": {
       "main": [
         [
           {
-            "node": "queue-hitl",
+            "node": "Queue for HITL Review",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "queue-hitl": {
+    "Queue for HITL Review": {
       "main": [
         [
           {
-            "node": "end-hitl",
+            "node": "HITL (End)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "persist-state": {
+    "Persist Phase State to DB": {
       "main": [
         [
           {
-            "node": "notify-mc-phase",
+            "node": "Notify Mission Control (Phase Complete)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "notify-mc-phase": {
+    "Notify Mission Control (Phase Complete)": {
       "main": [
         [
           {
-            "node": "check-complete",
+            "node": "All Phases Complete?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "check-complete": {
+    "All Phases Complete?": {
       "main": [
         [
           {
-            "node": "notify-completion",
+            "node": "Notify Slack (Pipeline Complete)",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "retry-loop",
+            "node": "Go Back to Phase Execution",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "notify-completion": {
+    "Notify Slack (Pipeline Complete)": {
       "main": [
         [
           {
-            "node": "end-success",
+            "node": "Success (End)",
             "type": "main",
             "index": 0
           }

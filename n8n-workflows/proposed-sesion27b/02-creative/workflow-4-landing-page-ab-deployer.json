@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 Landing Page A/B Deployer (Webhook)",
+  "name": "Zero Risk — Landing Page A/B Deployer (Webhook)",
   "nodes": [
     {
       "parameters": {
@@ -168,7 +168,7 @@
         "url": "={{ $env.SLACK_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\ud83d\udd04 A/B Test Deployed: {{ $json.task_id }}. Variant A: {{ $node['deploy-variant-a'].json.url }}. Variant B: {{ $node['deploy-variant-b'].json.url }}. Traffic split: {{ ($json.traffic_split * 100).toFixed(0) }}%.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Landing Page A/B Test Live*\\\\nTest ID: {{ $json.task_id }}\\\\nVariant A: <{{ $node['deploy-variant-a'].json.url }}|View>\\\\nVariant B: <{{ $node['deploy-variant-b'].json.url }}|View>\\\\nTraffic: A={{ ($json.traffic_split * 100).toFixed(0) }}% / B={{ ((1 - $json.traffic_split) * 100).toFixed(0) }}%\\\\nKPI: {{ $json.kpi }}\\\\nDuration: {{ $json.duration_days }} days\" } }\n  ]\n}",
+        "jsonBody": "={\n  \"text\": \"🔄 A/B Test Deployed: {{ $json.task_id }}. Variant A: {{ $node['deploy-variant-a'].json.url }}. Variant B: {{ $node['deploy-variant-b'].json.url }}. Traffic split: {{ ($json.traffic_split * 100).toFixed(0) }}%.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Landing Page A/B Test Live*\\\\nTest ID: {{ $json.task_id }}\\\\nVariant A: <{{ $node['deploy-variant-a'].json.url }}|View>\\\\nVariant B: <{{ $node['deploy-variant-b'].json.url }}|View>\\\\nTraffic: A={{ ($json.traffic_split * 100).toFixed(0) }}% / B={{ ((1 - $json.traffic_split) * 100).toFixed(0) }}%\\\\nKPI: {{ $json.kpi }}\\\\nDuration: {{ $json.duration_days }} days\" } }\n  ]\n}",
         "options": {
           "timeout": 10000
         }
@@ -184,73 +184,73 @@
     }
   ],
   "connections": {
-    "webhook": {
+    "Webhook: A/B Deploy Brief": {
       "main": [
         [
           {
-            "node": "validate",
+            "node": "Code: Validate Brief",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "validate": {
+    "Code: Validate Brief": {
       "main": [
         [
           {
-            "node": "deploy-variant-a",
+            "node": "Vercel: Deploy Variant A",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "deploy-variant-b",
+            "node": "Vercel: Deploy Variant B",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "deploy-variant-a": {
+    "Vercel: Deploy Variant A": {
       "main": [
         [
           {
-            "node": "posthog-experiment",
+            "node": "PostHog: Create Experiment",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "deploy-variant-b": {
+    "Vercel: Deploy Variant B": {
       "main": [
         [
           {
-            "node": "posthog-experiment",
+            "node": "PostHog: Create Experiment",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "posthog-experiment": {
+    "PostHog: Create Experiment": {
       "main": [
         [
           {
-            "node": "store-experiment-meta",
+            "node": "Store: Experiment Metadata",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "store-experiment-meta": {
+    "Store: Experiment Metadata": {
       "main": [
         [
           {
-            "node": "notify-slack-deploy",
+            "node": "Slack: Notify Deployment",
             "type": "main",
             "index": 0
           }

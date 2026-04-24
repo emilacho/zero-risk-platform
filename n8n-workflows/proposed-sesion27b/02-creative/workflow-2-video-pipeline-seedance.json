@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk \u2014 Video Pipeline: Seedance \u2192 FFmpeg \u2192 Multi-Platform Export (Webhook)",
+  "name": "Zero Risk — Video Pipeline: Seedance → FFmpeg → Multi-Platform Export (Webhook)",
   "nodes": [
     {
       "parameters": {
@@ -86,7 +86,7 @@
         }
       },
       "id": "video-editor-agent",
-      "name": "Agent: Video Editor (Script \u2192 Storyboard)",
+      "name": "Agent: Video Editor (Script → Storyboard)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -152,7 +152,7 @@
         }
       },
       "id": "upload-base-video",
-      "name": "Upload: Base Video \u2192 Supabase",
+      "name": "Upload: Base Video → Supabase",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -289,7 +289,7 @@
         "url": "={{ $env.SLACK_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\u2705 Video Pipeline Complete: Task {{ $json.task_id }}. Platforms: {{ $json.target_platforms.join(', ') }}. All exports ready.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Video Generation Complete*\\\\nTask: {{ $json.task_id }}\\\\nPlatforms: {{ $json.target_platforms.join(', ') }}\\\\nDuration: {{ $json.duration_s }}s\\\\nStatus: All transcodes done\" } }\n  ]\n}",
+        "jsonBody": "={\n  \"text\": \"✅ Video Pipeline Complete: Task {{ $json.task_id }}. Platforms: {{ $json.target_platforms.join(', ') }}. All exports ready.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Video Generation Complete*\\\\nTask: {{ $json.task_id }}\\\\nPlatforms: {{ $json.target_platforms.join(', ') }}\\\\nDuration: {{ $json.duration_s }}s\\\\nStatus: All transcodes done\" } }\n  ]\n}",
         "options": {
           "timeout": 10000
         }
@@ -305,110 +305,110 @@
     }
   ],
   "connections": {
-    "webhook": {
+    "Webhook: Video Brief": {
       "main": [
         [
           {
-            "node": "validate",
+            "node": "Code: Validate Brief",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "validate": {
+    "Code: Validate Brief": {
       "main": [
         [
           {
-            "node": "brain",
+            "node": "Client Brain: Style Guides",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "brain": {
+    "Client Brain: Style Guides": {
       "main": [
         [
           {
-            "node": "video-editor-agent",
+            "node": "Agent: Video Editor (Script → Storyboard)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "video-editor-agent": {
+    "Agent: Video Editor (Script → Storyboard)": {
       "main": [
         [
           {
-            "node": "seedance-generate",
+            "node": "Higgsfield Seedance 2.0: Generate Video",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "seedance-generate": {
+    "Higgsfield Seedance 2.0: Generate Video": {
       "main": [
         [
           {
-            "node": "upload-base-video",
+            "node": "Upload: Base Video → Supabase",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "upload-base-video": {
+    "Upload: Base Video → Supabase": {
       "main": [
         [
           {
-            "node": "whisper-api",
+            "node": "OpenAI Whisper: Auto-Subtitle",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "whisper-api": {
+    "OpenAI Whisper: Auto-Subtitle": {
       "main": [
         [
           {
-            "node": "platform-specs",
+            "node": "Code: Platform Export Specs",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "platform-specs": {
+    "Code: Platform Export Specs": {
       "main": [
         [
           {
-            "node": "transcode-all",
+            "node": "FFmpeg: Transcode All Platforms",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "transcode-all": {
+    "FFmpeg: Transcode All Platforms": {
       "main": [
         [
           {
-            "node": "record-outcome",
+            "node": "Record: Outcome",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "record-outcome": {
+    "Record: Outcome": {
       "main": [
         [
           {
-            "node": "notify-slack",
+            "node": "Slack: Notify Team",
             "type": "main",
             "index": 0
           }
