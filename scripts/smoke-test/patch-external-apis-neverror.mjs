@@ -88,7 +88,13 @@ for (const w of targets) {
       },
     }
     changes++
-    console.log(`  [${w.name}] ${node.name} (${new URL(url.replace(/^=/,'').replace(/\{\{[^}]+\}\}/g, 'x')).hostname || 'unknown'})`)
+    // Safe hostname extraction (URL constructor throws on templated URLs)
+    let hostname = 'unknown'
+    try {
+      const cleaned = url.replace(/^=/, '').replace(/\{\{[^}]+\}\}/g, 'x')
+      if (cleaned.startsWith('http')) hostname = new URL(cleaned).hostname
+    } catch { /* ignore — template URL */ }
+    console.log(`  [${w.name}] ${node.name} (${hostname})`)
   }
   if (!changes) continue
 

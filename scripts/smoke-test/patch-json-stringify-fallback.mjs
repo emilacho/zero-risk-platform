@@ -128,7 +128,7 @@ for (const w of targets) {
   if (!workflowChanges) continue
 
   console.log(`=== ${w.name} (${w.id}): +${workflowChanges} fallback(s)`)
-  if (DRY) continue
+  if (DRY) { totalWorkflowsChanged++; totalRewrites += workflowChanges; continue }
 
   const put = await fetchJson(ep.n8n + '/api/v1/workflows/' + w.id, {
     method: 'PUT', headers: H,
