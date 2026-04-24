@@ -173,6 +173,33 @@ const UPDATE_PARAMETERS = {
     if (!hasApiKey && !hasInternalKey) newHeaders.push({ name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' })
     return { ...params, headerParameters: { parameters: newHeaders } }
   },
+  // IDEA 3: All Phases Complete? must read `status` directly from Advance to
+  // Next Phase output. Reading from $json.status fails because intermediate
+  // nodes (Persist, Notify MC) mutate the shape — Persist maps 'completed' via
+  // STATUS_ALIASES and returns a row-shape response where `status` may differ.
+  // Anchoring the condition to $('Advance to Next Phase').item.json.status
+  // bypasses that corruption and routes correctly when Advance says completed.
+  'All Phases Complete?': (params) => {
+    const conditions = params.conditions || {}
+    const options = conditions.options || {}
+    options.typeValidation = 'loose'
+    options.caseSensitive = false
+    return {
+      ...params,
+      conditions: {
+        ...conditions,
+        options,
+        conditions: [
+          {
+            leftValue: `={{ $('Advance to Next Phase').item.json.status }}`,
+            rightValue: 'completed',
+            operator: { type: 'string', operation: 'equals' },
+          },
+        ],
+        combinator: 'and',
+      },
+    }
+  },
 }
 
 const { workflows } = await listN8nWorkflows()
