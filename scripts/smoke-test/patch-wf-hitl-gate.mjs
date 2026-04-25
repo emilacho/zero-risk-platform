@@ -33,7 +33,7 @@ const RSA_FIXED = {
     url: `={{ ${MC} }}/api/inbox?masterPassword={{ ${MC_TOKEN} }}`,
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={"from":"rsa-generator","to":"leader","type":"approval","taskId":"{{ ${VB}.task_id }}","subject":"⏳ RSA Pendiente Aprobación — {{ ${VB}.keyword }}","body":"Se generaron {{ ${VM}.headline_count }} headlines para el cliente {{ ${VB}.client_id }}.\\n\\nKeyword: {{ ${VB}.keyword }}\\nPlatform: {{ ${VB}.platform }}\\n\\nHeadlines:\\n{{ (${VM}.headlines || []).join('\\n') }}\\n\\nPara aprobar o rechazar: /api/hitl/pending → /api/hitl/resolve"}`,
+    jsonBody: `={"from":"rsa-generator","to":"leader","type":"approval","taskId":"{{ ${VB}.task_id }}","subject":"RSA Pendiente Aprobacion: {{ ${VB}.keyword }}","body":"Cliente: {{ ${VB}.client_id }} | Keyword: {{ ${VB}.keyword }} | Headlines: {{ ${VM}.headline_count }} generadas. Ver en plataforma para aprobar o rechazar. Task: {{ ${VB}.task_id }}"}`,
     options: { timeout: 10000, response: { response: { neverError: true } } },
   },
 }
@@ -139,7 +139,7 @@ const AD_FIXED = {
     url: `={{ ${MC} }}/api/inbox?masterPassword={{ ${MC_TOKEN} }}`,
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={"from":"ad-creative-validator","to":"leader","type":"approval","taskId":"{{ ${VI}.audit_id }}","subject":"⏳ Ad Creative Validado — Revisar {{ ${VI}.campaign_id }}","body":"Message match audit completado.\\n\\nCliente: {{ ${VI}.client_id }}\\nCampaign: {{ ${VI}.campaign_id }}\\nMatch Score: {{ Number(${ED}.match_score) || 100 }}/100\\nChange Type: {{ ${VI}.change_type }}\\n\\nMatch score >= 70 → APROBADO.\\nVerificar en Mission Control si requiere revisión manual."}`,
+    jsonBody: `={"from":"ad-creative-validator","to":"leader","type":"approval","taskId":"{{ ${VI}.audit_id }}","subject":"Ad Creative Validado: Revisar {{ ${VI}.campaign_id }}","body":"Cliente: {{ ${VI}.client_id }} | Campaign: {{ ${VI}.campaign_id }} | Match Score: {{ Number(${ED}.match_score) || 100 }}/100 | Change: {{ ${VI}.change_type }} | Score >= 70 = APROBADO. Ver Mission Control para revision."}`,
     options: { timeout: 10000, response: { response: { neverError: true } } },
   },
 }
