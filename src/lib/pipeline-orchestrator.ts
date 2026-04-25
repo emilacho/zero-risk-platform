@@ -226,7 +226,7 @@ export class PipelineOrchestrator {
 
       if (stepDef.hitl_required && !stepDef.agent) {
         // Pure HITL step — pause pipeline
-        await this.pauseForHITL(pipelineId, i, chainOutputs)
+        await this.pauseForHITL(pipelineId, i, chainOutputs, stepDef.display_name)
         return // Pipeline paused — will resume via /api/hitl/resolve
       } else if (stepDef.is_n8n) {
         // Mechanical step — trigger n8n workflow
@@ -292,7 +292,7 @@ export class PipelineOrchestrator {
 
       // Check if this step has HITL required (agent + HITL, like reporting)
       if (stepDef.hitl_required && stepDef.agent) {
-        await this.pauseForHITL(pipelineId, i, chainOutputs)
+        await this.pauseForHITL(pipelineId, i, chainOutputs, stepDef.display_name)
         return
       }
     }
@@ -617,7 +617,8 @@ export class PipelineOrchestrator {
   private async pauseForHITL(
     pipelineId: string,
     stepIndex: number,
-    chainOutputs: Record<number, string>
+    chainOutputs: Record<number, string>,
+    stepDisplayName?: string
   ): Promise<void> {
     // Get the last agent output for preview
     const latestOutput = chainOutputs[stepIndex] || chainOutputs[stepIndex - 1] || ''
@@ -634,11 +635,11 @@ export class PipelineOrchestrator {
     // Get step ID for HITL resolve URL
     const stepRecord = await this.getStepRecord(pipelineId, stepIndex)
 
-    // Notify Mission Control — HITL inbox message
+    // Notify Mission Control — HITL inbox message (use display name for readability)
     this.mc.onHITLPaused(
       pipelineId,
       stepIndex,
-      `step-${stepIndex}`,
+      stepDisplayName || `step-${stepIndex}`,
       latestOutput.substring(0, 1000),
       stepRecord?.id || ''
     ).catch(err => console.warn('[Pipeline] MC HITL notification failed:', err))
@@ -672,6 +673,39 @@ export class PipelineOrchestrator {
 
     if (decision === 'rejected') {
       await this.updatePipelineStatus(pipelineId, 'failed', stepIndex)
+
+      // Notify MC inbox so Emilio has feedback context to re-run if needed
+      if (feedback) {
+        const { data: pipeline } = await this.supabase
+          .from('pipeline_executions')
+          .select('objective, client_id')
+          .eq('id', pipelineId)
+          .single()
+
+        const mcBase = process.env.MC_BASE_URL || 'http://127.0.0.1:3001'
+        const mcToken = process.env.MC_API_TOKEN || ''
+        const sep = mcToken ? '?masterPassword=' + mcToken : ''
+        fetch(`${mcBase}/api/inbox${sep}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: `pipeline-step-${stepIndex}`,
+            to: 'leader',
+            type: 'report',
+            taskId: pipelineId.substring(0, 8),
+            subject: `⛔ HITL Rechazado — Step ${stepIndex} | Re-run con feedback`,
+            body: [
+              `Paso ${stepIndex} rechazado. Pipeline detenido.`,
+              `\n## Feedback:`,
+              feedback,
+              `\n## Objetivo: ${pipeline?.objective || 'N/A'}`,
+              `\n## Para re-run: POST ${this.baseUrl}/api/pipeline/run`,
+              `Pipeline: ${pipelineId}`,
+            ].join('\n'),
+          }),
+        }).catch(err => console.warn('[Pipeline] MC reject notification failed:', err))
+      }
+
       return
     }
 
