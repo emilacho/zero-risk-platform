@@ -193,11 +193,9 @@ export class MissionControlBridge {
       ...(options.headers as Record<string, string> || {}),
     }
 
-    if (this.mcApiToken) {
-      headers['x-api-key'] = this.mcApiToken
-    }
-
-    const url = `${this.mcBaseUrl}${path}`
+    // MC auth: masterPassword in query string (not header)
+    const sep = path.includes('?') ? '&' : '?'
+    const url = `${this.mcBaseUrl}${path}${this.mcApiToken ? sep + 'masterPassword=' + this.mcApiToken : ''}`
 
     try {
       const response = await fetch(url, {
@@ -281,9 +279,10 @@ export class MissionControlBridge {
       const taskId = this.stepTaskMap.get(`${pipelineId}:${stepIndex}`)
       if (!taskId) return
 
-      await this.mcFetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
+      await this.mcFetch(`/api/tasks`, {
+        method: 'PUT',
         body: JSON.stringify({
+          id: taskId,
           kanban: 'in-progress',
           urgency: 'urgent',
         }),
@@ -311,9 +310,10 @@ export class MissionControlBridge {
 
       const durationSec = Math.round(result.durationMs / 1000)
 
-      await this.mcFetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
+      await this.mcFetch(`/api/tasks`, {
+        method: 'PUT',
         body: JSON.stringify({
+          id: taskId,
           kanban: 'done',
           urgency: 'not-urgent',
           notes: [
@@ -328,9 +328,10 @@ export class MissionControlBridge {
       // Mark next step as urgent
       const nextTaskId = this.stepTaskMap.get(`${pipelineId}:${stepIndex + 1}`)
       if (nextTaskId) {
-        await this.mcFetch(`/api/tasks/${nextTaskId}`, {
-          method: 'PATCH',
+        await this.mcFetch(`/api/tasks`, {
+          method: 'PUT',
           body: JSON.stringify({
+            id: nextTaskId,
             urgency: 'urgent',
           }),
         })
@@ -357,9 +358,10 @@ export class MissionControlBridge {
       const taskId = this.stepTaskMap.get(`${pipelineId}:${stepIndex}`)
       if (!taskId) return
 
-      await this.mcFetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
+      await this.mcFetch(`/api/tasks`, {
+        method: 'PUT',
         body: JSON.stringify({
+          id: taskId,
           kanban: 'todo',  // Back to todo for retry
           importance: 'important',
           urgency: 'urgent',
@@ -372,7 +374,7 @@ export class MissionControlBridge {
         await this.sendInboxMessage({
           from: stepName,
           to: 'leader',
-          type: 'escalation',
+          type: 'report',
           taskId,
           subject: `❌ Pipeline Step ${stepIndex} Failed: ${stepName}`,
           body: [
@@ -412,9 +414,10 @@ export class MissionControlBridge {
 
       // Update task to show it needs human review
       if (this.stepTaskMap.has(`${pipelineId}:${stepIndex}`)) {
-        await this.mcFetch(`/api/tasks/${taskId}`, {
-          method: 'PATCH',
+        await this.mcFetch(`/api/tasks`, {
+          method: 'PUT',
           body: JSON.stringify({
+            id: taskId,
             kanban: 'in-progress',
             importance: 'important',
             urgency: 'urgent',
@@ -433,7 +436,7 @@ export class MissionControlBridge {
       await this.sendInboxMessage({
         from: stepName || `step-${stepIndex}`,
         to: 'leader',
-        type: 'decision',
+        type: 'approval',
         taskId,
         subject: `⏸️ Aprobación Requerida — Pipeline Step ${stepIndex}`,
         body: [
@@ -478,7 +481,7 @@ export class MissionControlBridge {
       await this.sendInboxMessage({
         from: 'pipeline-orchestrator',
         to: 'leader',
-        type: 'status',
+        type: 'update',
         taskId: pipelineId.substring(0, 8),
         subject: `✅ Pipeline Completado — ${totalSteps} pasos, $${totalCost.toFixed(2)}`,
         body: [
@@ -640,7 +643,7 @@ export class MissionControlBridge {
           const inboxResult = await this.sendInboxMessage({
             from: hitlStep.step_name || `step-${hitlStep.step_index}`,
             to: 'leader',
-            type: 'decision',
+            type: 'approval',
             taskId,
             subject: `⏸️ Aprobación Requerida — Pipeline Step ${hitlStep.step_index}`,
             body: [
