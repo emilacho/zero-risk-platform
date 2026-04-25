@@ -224,6 +224,27 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "={{ $env.MC_BASE_URL || 'https://zero-risk-mission-control-production.up.railway.app' }}/api/inbox?masterPassword={{ $env.MC_API_TOKEN || 'zerorisk2026' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"from\":\"rsa-generator\",\"to\":\"leader\",\"type\":\"approval\",\"taskId\":\"{{ $('Code: Validate Brief').item.json.task_id }}\",\"subject\":\"⏳ RSA Pendiente Aprobación — {{ $('Code: Validate Brief').item.json.keyword }}\",\"body\":\"Se generaron {{ $('Code: Validate RSA Matrix').item.json.headline_count }} headlines para el cliente {{ $('Code: Validate Brief').item.json.client_id }}.\\n\\nKeyword: {{ $('Code: Validate Brief').item.json.keyword }}\\nPlatform: {{ $('Code: Validate Brief').item.json.platform }}\\n\\nHeadlines:\\n{{ ($('Code: Validate RSA Matrix').item.json.headlines || []).join('\\n') }}\\n\\nPara aprobar o rechazar: /api/hitl/pending → /api/hitl/resolve\"}",
+        "options": {
+          "timeout": 10000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "notify-mc-inbox",
+      "name": "Notify MC Inbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "={{ $env.SLACK_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
@@ -332,6 +353,17 @@
         [
           {
             "node": "Slack: Notify Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Notify Team": {
+      "main": [
+        [
+          {
+            "node": "Notify MC Inbox",
             "type": "main",
             "index": 0
           }
