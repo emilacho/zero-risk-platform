@@ -46,21 +46,24 @@ const FIXED_PARAMS = {
     url: POSTHOG,
   },
 
-  // Fix: add stub fallback for Slack (currently has no fallback → empty URL if env not set)
+  // Fix: add stub fallback for Slack (currently has no fallback → empty URL if env not set).
+  // Cross-branch refs (VARB from Variant A path) cause n8n_node_not_executed.
+  // Use only $json (PostHog output) + VB for safe single-path access.
   'Slack: Notify Deployment': {
     url: SLACK,
     sendBody: true,
     specifyBody: 'json',
-    // Rewrite jsonBody to use display-name refs instead of broken $node['id'] syntax
-    jsonBody: `={\n  "text": "🔄 A/B Test Deployed: {{ ${VB}.task_id }}. Variant A: {{ ${VARA}.url }}. Variant B: {{ ${VARB}.url }}. Traffic split: {{ ${VB}.traffic_split || '50/50' }}"\n}`,
+    jsonBody: `={\n  "text": "🔄 A/B Test Deployed: {{ ${VB}.task_id }} | client={{ ${VB}.client_id }} | experiment={{ $json.id }} | flag={{ $json.feature_flag_key }}"\n}`,
     options: { timeout: 10000 },
   },
 
-  // Fix bad $node['id'] refs in Store body → display-name refs
+  // Store: only reference data reachable in current execution path.
+  // Cross-branch refs ($('Vercel: Deploy Variant B') from Variant A path) cause
+  // n8n_node_not_executed. Use $json (PostHog output) + VB for safe access.
   'Store: Experiment Metadata': {
     sendBody: true,
     specifyBody: 'json',
-    jsonBody: `={\n  "client_id": "{{ ${VB}.client_id }}",\n  "experiment_id": "{{ ${VB}.task_id }}",\n  "posthog_flag_key": "ab_test_{{ ${VB}.task_id }}",\n  "variant_a_url": "{{ ${VARA}.url }}",\n  "variant_b_url": "{{ ${VARB}.url }}",\n  "traffic_split": {{ JSON.stringify(${VB}.traffic_split || 50) }},\n  "kpi": "{{ ${VB}.kpi || 'conversion' }}",\n  "task_id": "{{ ${VB}.task_id }}"\n}`,
+    jsonBody: `={\n  "client_id": "{{ ${VB}.client_id }}",\n  "experiment_id": "{{ ${VB}.task_id }}",\n  "posthog_flag_key": "ab_test_{{ ${VB}.task_id }}",\n  "posthog_experiment_id": "{{ $json.id }}",\n  "traffic_split": {{ JSON.stringify(${VB}.traffic_split || 50) }},\n  "kpi": "{{ ${VB}.kpi || 'conversion' }}",\n  "task_id": "{{ ${VB}.task_id }}"\n}`,
     options: { timeout: 30000 },
   },
 }
