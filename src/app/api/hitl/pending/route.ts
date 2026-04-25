@@ -9,18 +9,33 @@ export const revalidate = 0
  * GET /api/hitl/pending
  * List all pipeline steps waiting for human approval.
  * Used by Mission Control inbox and Slack notifications.
+ *
+ * Query params:
+ *   include_rejected=true — also return recently rejected steps with retry_url
+ *   limit=N — max results (default 50)
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const includeRejected = searchParams.get('include_rejected') === 'true'
+  const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 200)
+
   const supabase = getSupabaseAdmin()
 
   // Step 1: Get all pending HITL steps (simple query, no joins)
-  const { data: pendingSteps, error: stepsError } = await supabase
+  let query = supabase
     .from('pipeline_steps')
-    .select('id, pipeline_id, step_index, step_name, step_display_name, agent_name, output_text, hitl_status, created_at')
+    .select('id, pipeline_id, step_index, step_name, step_display_name, agent_name, output_text, hitl_status, hitl_feedback, created_at')
     .eq('hitl_required', true)
-    .eq('hitl_status', 'pending')
-    .eq('status', 'paused_hitl')
     .order('created_at', { ascending: true })
+    .limit(limit)
+
+  if (includeRejected) {
+    query = query.in('hitl_status', ['pending', 'rejected'])
+  } else {
+    query = query.eq('hitl_status', 'pending').eq('status', 'paused_hitl')
+  }
+
+  const { data: pendingSteps, error: stepsError } = await query
 
   if (stepsError) {
     return NextResponse.json({ error: stepsError.message }, { status: 500 })
@@ -52,6 +67,7 @@ export async function GET() {
   const items = pendingSteps.map((item) => {
     const pipeline = pipelineMap.get(item.pipeline_id)
     const client = pipeline?.client_id ? clientMap.get(pipeline.client_id) : null
+    const isRejected = item.hitl_status === 'rejected'
 
     return {
       step_id: item.id,
@@ -62,13 +78,21 @@ export async function GET() {
       objective: pipeline?.objective || 'Unknown',
       client: client?.name || 'Unknown',
       preview: item.output_text?.substring(0, 500) || 'No preview available',
+      hitl_status: item.hitl_status,
+      ...(isRejected && { hitl_feedback: item.hitl_feedback }),
       submitted_at: item.created_at,
-      resolve_url: `/api/hitl/resolve?step_id=${item.id}`,
+      resolve_url: isRejected ? null : `/api/hitl/resolve?step_id=${item.id}`,
+      ...(isRejected && { retry_url: `/api/hitl/retry` }),
+      ...(isRejected && { retry_body: { step_id: item.id } }),
     }
   })
 
+  const pending = items.filter(i => i.hitl_status === 'pending')
+  const rejected = items.filter(i => i.hitl_status === 'rejected')
+
   return NextResponse.json({
-    pending_count: items.length,
-    items,
+    pending_count: pending.length,
+    ...(includeRejected && { rejected_count: rejected.length }),
+    items: includeRejected ? items : pending,
   })
 }
