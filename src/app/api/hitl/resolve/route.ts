@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
+import { capture } from '@/lib/posthog'
 
 /**
  * POST /api/hitl/resolve
@@ -84,6 +85,12 @@ export async function POST(request: Request) {
       feedback || undefined,
       editedContent || undefined
     )
+
+    capture('hitl_approval_resolved', step.pipeline_id, {
+      item_id: stepId,
+      decision,
+      reviewer_role: 'human',
+    })
 
     // Get updated pipeline status
     const { data: pipeline } = await supabase

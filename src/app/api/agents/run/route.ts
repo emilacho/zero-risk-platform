@@ -5,6 +5,7 @@ import { buildAgentContext } from '@/lib/client-brain'
 import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
+import { capture } from '@/lib/posthog'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
     const resolvedAgentName = resolveAgentSlug(agentName)
     if (resolvedAgentName !== agentName && !isCanonicalSlug(agentName)) {
       console.info(`[agents/run] ghost slug resolved: "${agentName}" → "${resolvedAgentName}"`)
+      capture('ghost_slug_resolved', 'system', { input_slug: agentName, canonical_slug: resolvedAgentName })
     }
 
     // 0b. Resolve alias → canonical slug via managed_agents_registry.
@@ -367,6 +369,12 @@ export async function POST(request: Request) {
     // --- Call Claude API ---
     // Model resolution: context.model_override > registry model > sonnet fallback
     // model_override lets smoke tests force Haiku (4x cheaper) without editing the registry.
+    capture('agent_run_invoked', String(context.client_id || 'system'), {
+      agent_slug: canonicalSlug,
+      model: (context.model_override as string) || (agentConfig.model as string) || 'claude-sonnet',
+      client_id: context.client_id || null,
+      has_pipeline_id: !!context.pipeline_id,
+    })
     const modelKey = (context.model_override as string) || (agentConfig.model as string) || 'claude-sonnet'
     const FULL_MODEL_MAP: Record<string, string> = {
       ...MODEL_MAP,
@@ -414,6 +422,15 @@ export async function POST(request: Request) {
     const outputTokens = claudeData.usage?.output_tokens || 0
     const tokensUsed = inputTokens + outputTokens
     const durationMs = Date.now() - startTime
+
+    capture('agent_run_completed', String(context.client_id || 'system'), {
+      agent_slug: canonicalSlug,
+      success: true,
+      duration_ms: durationMs,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cost_usd: 0,
+    })
 
     // --- Log execution ---
     try {

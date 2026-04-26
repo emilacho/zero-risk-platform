@@ -22,6 +22,7 @@
 import { NextResponse } from 'next/server'
 import { runAgentViaSDK } from '@/lib/agent-sdk-runner'
 import { sanitizeString } from '@/lib/validation'
+import { capture } from '@/lib/posthog'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 min — pipelines largos
@@ -37,6 +38,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields: agent, task' }, { status: 400 })
     }
 
+    capture('agent_run_invoked', String(body.client_id || 'system'), {
+      agent_slug: agentName,
+      model: 'sdk',
+      client_id: body.client_id || null,
+      has_pipeline_id: !!body.pipeline_id,
+    })
+
     const result = await runAgentViaSDK({
       agentName,
       task,
@@ -45,6 +53,15 @@ export async function POST(request: Request) {
       pipelineId: body.pipeline_id || null,
       stepName: body.step_name || null,
       extra: body.extra || undefined,
+    })
+
+    capture('agent_run_completed', String(body.client_id || 'system'), {
+      agent_slug: agentName,
+      success: result.success,
+      duration_ms: result.durationMs ?? 0,
+      input_tokens: result.inputTokens ?? 0,
+      output_tokens: result.outputTokens ?? 0,
+      cost_usd: result.costUsd ?? 0,
     })
 
     if (!result.success) {

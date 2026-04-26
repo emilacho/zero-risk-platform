@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
+import { capture } from '@/lib/posthog'
 
 /**
  * POST /api/pipeline/run
@@ -65,6 +66,12 @@ export async function POST(request: Request) {
       templateName: template,
       skipSteps,
       createdBy: 'emilio', // single-tenant
+    })
+
+    capture('pipeline_started', clientId, {
+      pipeline_id: pipelineId,
+      client_id: clientId,
+      objective_length: objective.length,
     })
 
     if (isAsync) {
