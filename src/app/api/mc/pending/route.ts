@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const supabase = getSupabaseAdmin()
   const { data: items, error } = await supabase
     .from('hitl_pending_approvals')
-    .select('id, agent_slug, preview, full_content, editor_verdict, revisions_attempted, client_id, approval_type, expires_at, created_at, status')
+    .select('item_id, agent_slug, preview, full_content, editor_verdict, revisions_attempted, client_id, approval_type, expires_at, created_at, status')
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
     .limit(50)
@@ -77,9 +77,9 @@ export async function GET(req: Request) {
   </details>
   <p style="font-size:11px;color:#888;margin:4px 0">Expira: ${new Date(item.expires_at).toLocaleString('es-EC')}</p>
   <p style="margin-top:12px;display:flex;gap:8px">
-    <a href="/api/mc/quick-approve?item_id=${encodeURIComponent(item.id)}&decision=approved&masterPassword=${encodedPassword}"
+    <a href="/api/mc/quick-approve?item_id=${encodeURIComponent(item.item_id)}&decision=approved&masterPassword=${encodedPassword}"
        style="background:#0f6e56;color:white;padding:8px 16px;text-decoration:none;border-radius:4px;font-size:13px">✓ Aprobar</a>
-    <a href="/api/mc/quick-approve?item_id=${encodeURIComponent(item.id)}&decision=rejected&masterPassword=${encodedPassword}"
+    <a href="/api/mc/quick-approve?item_id=${encodeURIComponent(item.item_id)}&decision=rejected&masterPassword=${encodedPassword}"
        style="background:#a32d2d;color:white;padding:8px 16px;text-decoration:none;border-radius:4px;font-size:13px">✗ Rechazar</a>
   </p>
 </article>`
