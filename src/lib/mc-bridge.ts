@@ -27,7 +27,7 @@ interface MCTask {
   description?: string
   importance: 'important' | 'not-important'
   urgency: 'urgent' | 'not-urgent'
-  kanban?: 'todo' | 'in-progress' | 'done'
+  kanban?: 'not-started' | 'in-progress' | 'done'
   assignedTo?: string | null
   projectId?: string
   tags?: string[]
@@ -256,7 +256,7 @@ export class MissionControlBridge {
           description: payload.description ?? null,
           importance: payload.importance || 'not-important',
           urgency: payload.urgency || 'not-urgent',
-          kanban: payload.kanban || 'todo',
+          kanban: (payload.kanban === 'not-started' ? 'todo' : payload.kanban) || 'todo',
           assigned_to: payload.assignedTo ?? null,
           project_id: payload.projectId ?? null,
           pipeline_id: payload.pipelineId ?? null,
@@ -356,7 +356,7 @@ export class MissionControlBridge {
           ].filter(Boolean).join('\n'),
           importance: step.hitl_required ? 'important' : 'not-important',
           urgency: step.index === 0 ? 'urgent' : 'not-urgent',
-          kanban: step.index === 0 ? 'in-progress' : 'todo',
+          kanban: step.index === 0 ? 'in-progress' : 'not-started',
           assignedTo: getMCRole(step.agent),
           tags: ['zero-risk', 'pipeline', `step-${step.index}`],
           notes: `pipeline_id:${pipelineId}|step_index:${step.index}|step_name:${step.name}`,
@@ -510,7 +510,7 @@ export class MissionControlBridge {
         method: 'PUT',
         body: JSON.stringify({
           id: taskId,
-          kanban: 'todo',  // Back to todo for retry
+          kanban: 'not-started',  // Back to queue for retry (MC uses 'not-started')
           importance: 'important',
           urgency: 'urgent',
           notes: `❌ Error: ${errorMessage}\npipeline_id:${pipelineId}|step_index:${stepIndex}`,
@@ -537,7 +537,7 @@ export class MissionControlBridge {
       console.log(`[MC Bridge] Step ${stepIndex} (${stepName}) → FAILED: ${errorMessage}`)
       await this.dualWriteTask('update', {
         mcTaskId: taskId,
-        kanban: 'todo',
+        kanban: 'not-started',
         importance: 'important',
         urgency: 'urgent',
         pipelineId,
@@ -745,7 +745,7 @@ export class MissionControlBridge {
           ? 'done'
           : step.status === 'running' || step.status === 'paused_hitl'
             ? 'in-progress'
-            : 'todo'
+            : 'not-started'
 
         const costInfo = step.cost_usd
           ? `\nCosto: $${step.cost_usd.toFixed(4)} | Tokens: ${step.input_tokens || 0} in / ${step.output_tokens || 0} out`
