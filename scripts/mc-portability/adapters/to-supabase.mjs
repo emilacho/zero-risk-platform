@@ -56,7 +56,7 @@ export async function run(snapshot, { dryRun = true } = {}) {
       description: t.description || null,
       importance: t.importance || 'not-important',
       urgency: t.urgency || 'not-urgent',
-      kanban: t.kanban || 'todo',
+      kanban: ({ 'not-started': 'todo', 'todo': 'todo', 'in-progress': 'in-progress', 'done': 'done' })[t.kanban] || 'todo',
       assigned_to: t.assignedTo || null, project_id: t.projectId || null,
       tags: t.tags || [], notes: notes || null,
       pipeline_id: pm ? pm[1] : null, step_index: sm ? parseInt(sm[1], 10) : null,
