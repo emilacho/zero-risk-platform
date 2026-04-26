@@ -79,3 +79,61 @@ The report groups failures into these buckets so fixes go batch-style:
 3. Apply batch fix (backend commit or `scripts/hardcode-env-vars.mjs`-style batch PUT).
 4. Re-run the same smoke test to verify.
 5. Iterate until PASS rate is green.
+
+---
+
+## patch-wf-slug-normalize.mjs
+
+**Problema resuelto (Sprint #2 P0-A):** 87% de los workflows n8n usaban slugs con
+underscore (`email_marketer`) cuando el sistema (Camino III whitelist, agent runner,
+identidades) usa hyphen (`email-marketer`). Resultado: los outputs escapaban
+silenciosamente del dual-reviewer. Cobertura Camino III pre-fix: 13% (2/15).
+Post-fix: 47% (7/15) — salto 3.6×.
+
+### Uso
+
+```powershell
+cd C:\Users\emila\Documents\Claude\Projects\Agentic Business Agency\zero-risk-platform
+
+# Dry-run (default) — discovery + audit table, sin modificar nada
+node scripts/smoke-test/patch-wf-slug-normalize.mjs
+
+# Filtrar por nombre de workflow
+node scripts/smoke-test/patch-wf-slug-normalize.mjs --name "Email"
+
+# Aplicar patches a n8n via PUT
+node scripts/smoke-test/patch-wf-slug-normalize.mjs --apply
+```
+
+### Qué hace
+
+1. Lee los 31 slugs canónicos (hyphen) desde `docs/04-agentes/identidades/*.md`.
+2. Para cada workflow activo en n8n, escanea `node.parameters.jsonBody` (y otros
+   campos string) buscando el patrón `"agent": "slug"`.
+3. Slugs en underscore con identity file → propone/aplica normalización a hyphen.
+4. Slugs en underscore SIN identity file → lista en `out/wf-slug-orphans-<ts>.md`
+   (para CC#2), NO los parchea.
+5. En `--apply`: PUT + deactivate + activate por workflow (reactivación necesaria
+   para que n8n recargue el JSON).
+
+### Outputs
+
+| Archivo | Descripción |
+|---|---|
+| `out/wf-slug-audit-<ts>.md` | Tabla pre-fix: todas las refs detectadas + action |
+| `out/wf-slug-applied-<ts>.md` | Log de cada PUT con from/to/node/field (solo con --apply) |
+| `out/wf-slug-orphans-<ts>.md` | Slugs sin identity file → CC#2 |
+
+### Run history
+
+| Fecha | Workflows patched | Refs rewritten | Cobertura whitelist |
+|---|---|---|---|
+| 2026-04-26 | 7 | 16 | 7/15 = 47% |
+
+### Cómo medir cobertura Camino III post-fix
+
+```powershell
+# Dry-run: 0 workflows = todos los slugs ya están en hyphen = cobertura ok
+node scripts/smoke-test/patch-wf-slug-normalize.mjs
+# Si "Workflows to patch: 0" → no hay regresión nueva
+```
