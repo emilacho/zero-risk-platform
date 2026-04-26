@@ -299,17 +299,8 @@ export class PipelineOrchestrator {
 
       // Check if this step has HITL required (agent + HITL, like reporting)
       if (stepDef.hitl_required && stepDef.agent) {
-        const verdict = await this.runEditorReview(result.outputText, stepDef, pipelineId)
-        if (verdict.status === 'approved') {
-          // Editor auto-approved — skip HITL, continue pipeline
-          console.log(`[Pipeline] Editor en Jefe auto-approved step ${i} (${stepDef.display_name}), severity=${verdict.severity}`)
-        } else {
-          // revision_needed or escalated — send to human HITL with editor context in output
-          const editorPrefix = `[Editor en Jefe: ${verdict.status.toUpperCase()} | ${verdict.severity}]\n${verdict.feedback}\nIssues: ${verdict.issues.join('; ')}\n\n---\n\n`
-          chainOutputs[i] = editorPrefix + (chainOutputs[i] || result.outputText)
-          await this.pauseForHITL(pipelineId, i, chainOutputs, stepDef.display_name)
-          return
-        }
+        await this.pauseForHITL(pipelineId, i, chainOutputs, stepDef.display_name)
+        return
       }
     }
 
@@ -749,79 +740,6 @@ export class PipelineOrchestrator {
     state.chainOutputs = chainOutputs
 
     await this.executePipeline(pipelineId)
-  }
-
-  // ----------------------------------------------------------
-  // EDITOR EN JEFE: Auto-review before HITL gate
-  // ----------------------------------------------------------
-
-  private async runEditorReview(
-    content: string,
-    stepDef: StepDefinition,
-    pipelineId: string
-  ): Promise<EditorVerdict> {
-    const fallback: EditorVerdict = {
-      status: 'escalated',
-      issues: ['Editor review unavailable — defaulting to HITL'],
-      feedback: '',
-      severity: 'low',
-    }
-
-    try {
-      const { data: pipeline } = await this.supabase
-        .from('pipeline_executions')
-        .select('client_id, objective')
-        .eq('id', pipelineId)
-        .single()
-
-      const task = [
-        `## Content to Review (${stepDef.display_name}):`,
-        content.substring(0, 8000),
-        `\n## Campaign Objective: ${pipeline?.objective || 'N/A'}`,
-        `\nReturn ONLY a valid JSON object with no markdown fences:`,
-        `{"status": "approved|revision_needed|escalated", "issues": ["..."], "feedback": "...", "severity": "low|medium|high|critical"}`,
-      ].join('\n')
-
-      const response = await fetch(`${this.baseUrl}/api/agents/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agent: 'editor-en-jefe',
-          task,
-          context: {
-            client_id: pipeline?.client_id,
-            rag_query: `brand guidelines quality standards ${pipeline?.objective || ''}`,
-            rag_match_count: 5,
-            pipeline_id: pipelineId,
-            step_name: 'editor_review',
-          },
-          caller: 'pipeline',
-        }),
-      })
-
-      if (!response.ok) return fallback
-      const data = await response.json()
-      if (!data.success || !data.response) return fallback
-
-      // Extract JSON from response (editor may wrap it in prose)
-      const jsonMatch = data.response.match(/\{[\s\S]*?"status"[\s\S]*?\}/)
-      if (!jsonMatch) return { ...fallback, feedback: data.response.substring(0, 500) }
-
-      const parsed = JSON.parse(jsonMatch[0]) as Partial<EditorVerdict>
-      const validStatuses = ['approved', 'revision_needed', 'escalated']
-      if (!parsed.status || !validStatuses.includes(parsed.status)) return fallback
-
-      return {
-        status: parsed.status as EditorVerdict['status'],
-        issues: Array.isArray(parsed.issues) ? parsed.issues : [],
-        feedback: parsed.feedback || '',
-        severity: (parsed.severity && ['low', 'medium', 'high', 'critical'].includes(parsed.severity))
-          ? parsed.severity as EditorVerdict['severity']
-          : 'low',
-      }
-    } catch {
-      return fallback
-    }
   }
 
   // ----------------------------------------------------------
