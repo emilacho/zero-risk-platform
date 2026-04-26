@@ -109,10 +109,9 @@ const AGENT_ROLE_MAP: Record<string, string> = {
   'jefe-client-success': 'leader',
 
   // Research
-  'competitive_intelligence_agent': 'researcher',
+  'competitive-intelligence-agent': 'researcher',
   'market-research': 'researcher',
   'customer-research': 'researcher',
-  'ad-intelligence-agent': 'researcher',
 
   // Content / Marketing
   'campaign-brief-agent': 'marketer',
@@ -133,7 +132,7 @@ const AGENT_ROLE_MAP: Record<string, string> = {
   'growth-hacker': 'analyst',
 
   // QA / Review
-  'editor_en_jefe': 'tester',
+  'editor-en-jefe': 'tester',
 
   // Execution
   'media-buyer': 'marketer',

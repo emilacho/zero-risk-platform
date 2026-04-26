@@ -25,6 +25,7 @@
 
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
 
 // ---------- Tipos públicos ----------
 
@@ -92,13 +93,16 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   const startedAt = Date.now()
   const supabase = getSupabaseAdmin()
 
-  // 0. Resolve alias → canonical slug via managed_agents_registry.
-  //    n8n workflows may send legacy snake_case slugs (e.g. "backlink_strategist");
-  //    the registry maps them to the canonical kebab-case slug
-  //    (e.g. "seo-backlink-strategist").
+  // 0a. Static alias resolution (no DB round-trip).
+  const resolvedName = resolveAgentSlug(input.agentName)
+  if (resolvedName !== input.agentName && !isCanonicalSlug(input.agentName)) {
+    console.info(`[agent-sdk-runner] ghost slug resolved: "${input.agentName}" → "${resolvedName}"`)
+  }
+
+  // 0b. Resolve alias → canonical slug via managed_agents_registry.
   //    The registry is the source of truth for identity_md (production-safe,
   //    no filesystem reads on Vercel).
-  let canonicalSlug = input.agentName
+  let canonicalSlug = resolvedName
   let registryRow: {
     slug: string
     display_name: string
@@ -110,7 +114,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       .from('managed_agents_registry')
       .select('slug, display_name, default_model, identity_md, aliases')
       .eq('status', 'active')
-      .or(`slug.eq.${input.agentName},aliases.cs.{"${input.agentName}"}`)
+      .or(`slug.eq.${resolvedName},aliases.cs.{"${resolvedName}"}`)
       .limit(1)
     const row = regRows?.[0]
     if (row) {

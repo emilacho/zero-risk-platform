@@ -4,6 +4,7 @@ import { sanitizeString } from '@/lib/validation'
 import { buildAgentContext } from '@/lib/client-brain'
 import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
+import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -80,11 +81,19 @@ export async function POST(request: Request) {
     // --- Load agent from Supabase (registry + legacy table) ---
     const supabase = getSupabaseAdmin()
 
-    // 0. Resolve alias → canonical slug via managed_agents_registry.
+    // 0a. Static alias resolution (no DB round-trip).
+    //     Converts ghost/legacy slugs (snake_case, semantic aliases) to canonical
+    //     MANIFEST-31 kebab-case slugs before any registry lookup.
+    const resolvedAgentName = resolveAgentSlug(agentName)
+    if (resolvedAgentName !== agentName && !isCanonicalSlug(agentName)) {
+      console.info(`[agents/run] ghost slug resolved: "${agentName}" → "${resolvedAgentName}"`)
+    }
+
+    // 0b. Resolve alias → canonical slug via managed_agents_registry.
     //    n8n workflows may send legacy snake_case slugs (e.g. "backlink_strategist");
     //    the registry maps them to the canonical kebab-case slug.
     //    Registry is the source of truth for identity_md (production-safe).
-    let canonicalSlug = agentName
+    let canonicalSlug = resolvedAgentName
     let registryRow: {
       slug: string
       display_name: string
@@ -96,7 +105,7 @@ export async function POST(request: Request) {
         .from('managed_agents_registry')
         .select('slug, display_name, default_model, identity_md, aliases')
         .eq('status', 'active')
-        .or(`slug.eq.${agentName},aliases.cs.{"${agentName}"}`)
+        .or(`slug.eq.${resolvedAgentName},aliases.cs.{"${resolvedAgentName}"}`)
         .limit(1)
       const row = regRows?.[0]
       if (row) {
