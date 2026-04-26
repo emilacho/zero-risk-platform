@@ -10,29 +10,30 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.0",
+    "@react-three/drei": "^9.114.0",
+    "@react-three/fiber": "^8.17.0",
+    "@sentry/nextjs": "^10.50.0",
+    "@supabase/ssr": "^0.5.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "framer-motion": "^11.5.0",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "@supabase/ssr": "^0.5.0",
-    "@anthropic-ai/claude-agent-sdk": "^0.2.0",
-    "three": "^0.168.0",
-    "@react-three/fiber": "^8.17.0",
-    "@react-three/drei": "^9.114.0",
-    "framer-motion": "^11.5.0",
     "react-markdown": "^9.0.1",
-    "remark-gfm": "^4.0.0"
+    "remark-gfm": "^4.0.0",
+    "three": "^0.168.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
-    "@types/react": "^18.3.0",
-    "@types/node": "^22.0.0",
-    "@types/three": "^0.168.0",
-    "tailwindcss": "^3.4.0",
     "@tailwindcss/typography": "^0.5.15",
-    "postcss": "^8.4.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/three": "^0.168.0",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.57.0",
-    "eslint-config-next": "^14.2.0"
+    "eslint-config-next": "^14.2.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.5.0"
   }
 }
