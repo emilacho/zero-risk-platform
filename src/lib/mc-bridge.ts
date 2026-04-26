@@ -210,6 +210,122 @@ export class MissionControlBridge {
   }
 
   // ----------------------------------------------------------
+  // Dual-write helpers — mirror MC operations to Supabase
+  // Activated by MC_SUPABASE_MODE=true env var (Vercel)
+  // Non-blocking: errors are swallowed to protect MC primary path
+  // ----------------------------------------------------------
+
+  private get dualWriteEnabled(): boolean {
+    return process.env.MC_SUPABASE_MODE === 'true'
+  }
+
+  private async dualWriteTask(
+    operation: 'create' | 'update',
+    payload: {
+      mcTaskId?: string
+      title?: string
+      description?: string
+      importance?: string
+      urgency?: string
+      kanban?: string
+      assignedTo?: string | null
+      projectId?: string
+      pipelineId?: string
+      stepIndex?: number
+      tags?: string[]
+      notes?: string
+    }
+  ): Promise<void> {
+    if (!this.dualWriteEnabled) return
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (!supabaseUrl || !supabaseKey) return
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Prefer': 'return=minimal,resolution=merge-duplicates',
+      }
+
+      if (operation === 'create') {
+        const row = {
+          id: payload.mcTaskId,
+          title: payload.title,
+          description: payload.description ?? null,
+          importance: payload.importance || 'not-important',
+          urgency: payload.urgency || 'not-urgent',
+          kanban: payload.kanban || 'todo',
+          assigned_to: payload.assignedTo ?? null,
+          project_id: payload.projectId ?? null,
+          pipeline_id: payload.pipelineId ?? null,
+          step_index: payload.stepIndex ?? null,
+          tags: payload.tags || [],
+          notes: payload.notes ?? null,
+          source: 'mc_bridge_dual_write',
+        }
+        await fetch(`${supabaseUrl}/rest/v1/mission_control_tasks`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(row),
+        })
+      } else if (payload.mcTaskId) {
+        const updates: Record<string, unknown> = {
+          source: 'mc_bridge_dual_write',
+          updated_at: new Date().toISOString(),
+        }
+        if (payload.kanban !== undefined) updates.kanban = payload.kanban
+        if (payload.importance !== undefined) updates.importance = payload.importance
+        if (payload.urgency !== undefined) updates.urgency = payload.urgency
+        if (payload.notes !== undefined) updates.notes = payload.notes
+        if (payload.pipelineId !== undefined) updates.pipeline_id = payload.pipelineId
+        if (payload.stepIndex !== undefined) updates.step_index = payload.stepIndex
+        await fetch(`${supabaseUrl}/rest/v1/mission_control_tasks?id=eq.${encodeURIComponent(payload.mcTaskId)}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify(updates),
+        })
+      }
+    } catch (error) {
+      console.warn('[MC Bridge dual-write task] non-blocking:', error instanceof Error ? error.message : error)
+    }
+  }
+
+  private async dualWriteInbox(message: MCInboxMessage & { mcMessageId?: string }): Promise<void> {
+    if (!this.dualWriteEnabled) return
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (!supabaseUrl || !supabaseKey) return
+
+      const row = {
+        id: message.mcMessageId,
+        from_agent: message.from,
+        to_role: message.to,
+        type: message.type,
+        task_id: message.taskId || null,
+        subject: message.subject,
+        body: message.body,
+        status: 'unread',
+        source: 'mc_bridge_dual_write',
+      }
+      await fetch(`${supabaseUrl}/rest/v1/mission_control_inbox`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Prefer': 'return=minimal,resolution=merge-duplicates',
+        },
+        body: JSON.stringify(row),
+      })
+    } catch (error) {
+      console.warn('[MC Bridge dual-write inbox] non-blocking:', error instanceof Error ? error.message : error)
+    }
+  }
+
+  // ----------------------------------------------------------
   // Pipeline → MC: Create project for pipeline
   // ----------------------------------------------------------
 
@@ -255,6 +371,19 @@ export class MissionControlBridge {
           const data: MCTaskResponse = await response.json()
           this.stepTaskMap.set(`${pipelineId}:${step.index}`, data.id)
           console.log(`[MC Bridge] Created task ${data.id} for step ${step.index} (${step.display_name})`)
+          await this.dualWriteTask('create', {
+            mcTaskId: data.id,
+            title: task.title,
+            description: task.description,
+            importance: task.importance,
+            urgency: task.urgency,
+            kanban: task.kanban,
+            assignedTo: task.assignedTo,
+            pipelineId,
+            stepIndex: step.index,
+            tags: task.tags,
+            notes: task.notes,
+          })
         } else {
           const errText = await response.text()
           console.warn(`[MC Bridge] Failed to create task for step ${step.index}: ${response.status} ${errText}`)
@@ -288,6 +417,13 @@ export class MissionControlBridge {
         }),
       })
       console.log(`[MC Bridge] Step ${stepIndex} (${stepName}) → in-progress`)
+      await this.dualWriteTask('update', {
+        mcTaskId: taskId,
+        kanban: 'in-progress',
+        urgency: 'urgent',
+        pipelineId,
+        stepIndex,
+      })
     } catch (error) {
       console.warn(`[MC Bridge] onStepStarted failed for step ${stepIndex}:`, error instanceof Error ? error.message : error)
     }
@@ -338,6 +474,18 @@ export class MissionControlBridge {
       }
 
       console.log(`[MC Bridge] Step ${stepIndex} (${stepName}) → done ($${result.costUsd.toFixed(4)})`)
+      await this.dualWriteTask('update', {
+        mcTaskId: taskId,
+        kanban: 'done',
+        urgency: 'not-urgent',
+        pipelineId,
+        stepIndex,
+        notes: [
+          `✅ Completado en ${Math.round(result.durationMs / 1000)}s`,
+          `Tokens: ${result.inputTokens} in / ${result.outputTokens} out`,
+          `Costo: $${result.costUsd.toFixed(4)}`,
+        ].join('\n'),
+      })
     } catch (error) {
       console.warn(`[MC Bridge] onStepCompleted failed for step ${stepIndex}:`, error instanceof Error ? error.message : error)
     }
@@ -387,6 +535,15 @@ export class MissionControlBridge {
       }
 
       console.log(`[MC Bridge] Step ${stepIndex} (${stepName}) → FAILED: ${errorMessage}`)
+      await this.dualWriteTask('update', {
+        mcTaskId: taskId,
+        kanban: 'todo',
+        importance: 'important',
+        urgency: 'urgent',
+        pipelineId,
+        stepIndex,
+        notes: `❌ Error: ${errorMessage}`,
+      })
     } catch (error) {
       console.warn(`[MC Bridge] onStepFailed failed for step ${stepIndex}:`, error instanceof Error ? error.message : error)
     }
@@ -454,6 +611,17 @@ export class MissionControlBridge {
       })
 
       console.log(`[MC Bridge] HITL pause → inbox message sent for step ${stepIndex}`)
+      if (this.stepTaskMap.has(`${pipelineId}:${stepIndex}`)) {
+        await this.dualWriteTask('update', {
+          mcTaskId: taskId,
+          kanban: 'in-progress',
+          importance: 'important',
+          urgency: 'urgent',
+          pipelineId,
+          stepIndex,
+          notes: '⏸️ ESPERANDO APROBACIÓN HUMANA',
+        })
+      }
     } catch (error) {
       console.warn(`[MC Bridge] onHITLPaused failed for step ${stepIndex}:`, error instanceof Error ? error.message : error)
     }
@@ -513,7 +681,9 @@ export class MissionControlBridge {
       })
 
       if (response.ok) {
-        return await response.json()
+        const data = await response.json() as MCInboxResponse
+        await this.dualWriteInbox({ ...message, mcMessageId: data.id })
+        return data
       } else {
         const errText = await response.text()
         console.warn(`[MC Bridge] Inbox message failed: ${response.status} ${errText}`)
@@ -625,6 +795,19 @@ export class MissionControlBridge {
             const data: MCTaskResponse = await response.json()
             this.stepTaskMap.set(`${pipelineId}:${step.step_index}`, data.id)
             tasksCreated++
+            await this.dualWriteTask('create', {
+              mcTaskId: data.id,
+              title: task.title,
+              description: task.description,
+              importance: task.importance,
+              urgency: task.urgency,
+              kanban: task.kanban,
+              assignedTo: task.assignedTo,
+              pipelineId,
+              stepIndex: step.step_index,
+              tags: task.tags,
+              notes: task.notes,
+            })
           } else {
             const errText = await response.text()
             errors.push(`Step ${step.step_index}: ${response.status} ${errText}`)
