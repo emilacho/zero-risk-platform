@@ -338,14 +338,14 @@ async function escalateToHITL(params: {
         status: 'pending',
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       })
-      .select('id')
+      .select('item_id')
       .single()
 
     if (error) {
       console.error('[escalateToHITL] Insert failed:', error.message)
       return null
     }
-    return data?.id || null
+    return data?.item_id || null
   } catch (err) {
     console.error('[escalateToHITL] Unexpected error:', err)
     return null
