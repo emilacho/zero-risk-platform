@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString } from '@/lib/validation'
 import { buildAgentContext } from '@/lib/client-brain'
+import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
+import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -431,14 +433,13 @@ export async function POST(request: Request) {
       // Don't fail the request if logging fails
     }
 
-    return NextResponse.json({
+    // Base response — may be augmented by dual reviewer middleware below
+    const baseResponse = {
       success: true,
       agent: canonicalSlug,
       display_name: (agentConfig.display_name as string) || canonicalSlug,
       model: modelId,
       response: responseText,
-      // Aliases so downstream consumers (n8n workflows) can read the content
-      // without knowing the canonical key name. All three point to the same string.
       output: responseText,
       result: responseText,
       tokens_used: tokensUsed,
@@ -446,7 +447,42 @@ export async function POST(request: Request) {
       output_tokens: outputTokens,
       duration_ms: durationMs,
       skills_loaded: loadedSkills.map(s => s.name),
-    })
+    }
+
+    // DUAL REVIEWER MIDDLEWARE — skip for reviewers themselves, skip header, non-whitelisted
+    const skipMiddleware =
+      request.headers.get('x-skip-editor-middleware') === '1' ||
+      canonicalSlug === PRIMARY_REVIEWER ||
+      canonicalSlug === SECOND_REVIEWER ||
+      !requiresEditorReview(canonicalSlug)
+
+    if (skipMiddleware) {
+      return NextResponse.json(baseResponse)
+    }
+
+    const editorConfig = getEditorConfig(canonicalSlug)!
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `https://${request.headers.get('host') || 'localhost:3000'}`
+
+    try {
+      const middlewareResult = await runDualReviewMiddleware({
+        agentSlug: canonicalSlug,
+        content: responseText,
+        task,
+        context: context as Record<string, unknown>,
+        config: editorConfig,
+        supabase,
+        baseUrl,
+      })
+
+      return NextResponse.json({ ...baseResponse, ...middlewareResult })
+    } catch (middlewareError) {
+      // Middleware failure is non-blocking — return original response with error note
+      console.error('[Editor Middleware] Failed:', middlewareError)
+      return NextResponse.json({
+        ...baseResponse,
+        editor_review: { verdict: 'middleware_error', severity: 'low' },
+      })
+    }
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
