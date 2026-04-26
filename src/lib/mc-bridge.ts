@@ -161,6 +161,10 @@ export class MissionControlBridge {
   private zrBaseUrl: string
   private enabled: boolean
 
+  // When true, routes all MC API calls to /api/mc/* (Supabase-backed).
+  // Set env var MC_SUPABASE_MODE=true to activate after running migrate-mc.mjs.
+  private supabaseMode: boolean
+
   // In-memory mapping of step IDs → MC task IDs (for this pipeline run)
   private stepTaskMap: Map<string, string> = new Map()
 
@@ -169,15 +173,25 @@ export class MissionControlBridge {
     mcApiToken?: string
     zrBaseUrl?: string
   }) {
-    this.mcBaseUrl = options?.mcBaseUrl
-      || process.env.MC_BASE_URL
-      || 'http://127.0.0.1:3001'
-    this.mcApiToken = options?.mcApiToken
-      || process.env.MC_API_TOKEN
-      || null
     this.zrBaseUrl = options?.zrBaseUrl
       || process.env.NEXT_PUBLIC_BASE_URL
       || 'http://localhost:3000'
+
+    // MC_SUPABASE_MODE=true → use zero-risk-platform's own /api/mc/ endpoints
+    this.supabaseMode = process.env.MC_SUPABASE_MODE === 'true'
+
+    if (this.supabaseMode) {
+      // Self-referential: bridge writes to this app's own endpoints
+      this.mcBaseUrl = this.zrBaseUrl
+      this.mcApiToken = process.env.MC_MASTER_PASSWORD || 'zerorisk2026'
+    } else {
+      this.mcBaseUrl = options?.mcBaseUrl
+        || process.env.MC_BASE_URL
+        || 'http://127.0.0.1:3001'
+      this.mcApiToken = options?.mcApiToken
+        || process.env.MC_API_TOKEN
+        || null
+    }
 
     // Bridge is enabled if MC URL is configured
     this.enabled = !!this.mcBaseUrl
@@ -193,9 +207,17 @@ export class MissionControlBridge {
       ...(options.headers as Record<string, string> || {}),
     }
 
+    // In supabase mode: remap MC paths to /api/mc/* equivalents
+    let resolvedPath = path
+    if (this.supabaseMode) {
+      resolvedPath = path
+        .replace(/^\/api\/tasks/, '/api/mc/tasks')
+        .replace(/^\/api\/inbox/, '/api/mc/inbox')
+    }
+
     // MC auth: masterPassword in query string (not header)
-    const sep = path.includes('?') ? '&' : '?'
-    const url = `${this.mcBaseUrl}${path}${this.mcApiToken ? sep + 'masterPassword=' + this.mcApiToken : ''}`
+    const sep = resolvedPath.includes('?') ? '&' : '?'
+    const url = `${this.mcBaseUrl}${resolvedPath}${this.mcApiToken ? sep + 'masterPassword=' + this.mcApiToken : ''}`
 
     try {
       const response = await fetch(url, {
@@ -204,7 +226,7 @@ export class MissionControlBridge {
       })
       return response
     } catch (error) {
-      console.warn(`[MC Bridge] Failed to reach Mission Control at ${url}:`, error instanceof Error ? error.message : error)
+      console.warn(`[MC Bridge] Failed to reach ${this.supabaseMode ? 'Supabase MC' : 'Mission Control'} at ${url}:`, error instanceof Error ? error.message : error)
       throw error
     }
   }
