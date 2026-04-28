@@ -21,7 +21,7 @@ export async function POST() {
     // The pipeline is in paused_hitl state
     const { data: delayedPipelines, error: queryError } = await supabase
       .from('pipeline_executions')
-      .select('id, current_step_index, step_definitions')
+      .select('id, current_step_index, steps_config')
       .eq('status', 'paused_hitl')
 
     if (queryError) {
