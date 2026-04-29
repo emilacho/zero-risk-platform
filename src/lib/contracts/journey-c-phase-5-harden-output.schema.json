@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-c-phase-5-harden-output.schema.json",
+  "title": "Journey C Phase 5 — Harden Output (QA & HITL)",
+  "description": "QA validation results across campaign assets and human-in-the-loop pending items count",
+  "type": "object",
+  "properties": {
+    "qa_passes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Array of QA checks performed on campaign assets (all must be 'pass' to proceed to Phase 6)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 100,
+            "description": "Name of QA check (e.g., 'copy brand compliance', 'technical SEO', 'meta pixel firing', 'landing page load time')"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pass", "fail"],
+            "description": "QA check result. If any status='fail', workflow must pause and escalate"
+          },
+          "issues_found": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 500
+            },
+            "description": "Detailed list of issues if status='fail' (empty array if pass)"
+          }
+        },
+        "required": ["check", "status", "issues_found"],
+        "additionalProperties": false
+      }
+    },
+    "hitl_items_pending": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 500,
+      "description": "Count of human-in-the-loop items pending approval in Mission Control (if >0, workflow pauses until cleared)"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version (must be 1.0)"
+    }
+  },
+  "required": ["qa_passes", "hitl_items_pending", "schema_version"],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "All QA checks must be 'pass' before proceeding to Phase 6",
+      "if": {
+        "properties": {
+          "qa_passes": {
+            "type": "array"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "qa_passes": {
+            "type": "array"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-b-stage-1-intake-form.schema.json",
+  "title": "Journey B Stage 1 — Intake Form Output",
+  "description": "Client metadata collected from onboarding intake form",
+  "type": "object",
+  "properties": {
+    "client_name": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 200,
+      "description": "Company or individual name"
+    },
+    "industry": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 100,
+      "description": "Industry vertical (e.g., SaaS, ecommerce, finance, healthcare, etc.)"
+    },
+    "website_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://",
+      "description": "Must be valid HTTP(S) URL to company website"
+    },
+    "company_size": {
+      "type": "string",
+      "enum": ["1-10", "11-50", "51-200", "201-1000", "1000+"],
+      "description": "Company size bracket (required enum value)"
+    },
+    "primary_contact": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 200
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+        },
+        "phone": {
+          "type": "string",
+          "pattern": "^\\+?[0-9\\s\\-\\(\\)]{10,20}$"
+        }
+      },
+      "required": ["name", "email"],
+      "additionalProperties": false
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["client_name", "industry", "website_url", "company_size", "primary_contact", "schema_version"],
+  "additionalProperties": false
+}

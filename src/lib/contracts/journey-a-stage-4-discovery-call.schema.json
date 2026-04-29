@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-a-stage-4-discovery-call.schema.json",
+  "title": "Journey A Stage 4 — Discovery Call Summary",
+  "description": "Notes, pain points, budget, and timeline captured from discovery call",
+  "type": "object",
+  "properties": {
+    "call_notes": {
+      "type": "string",
+      "minLength": 100,
+      "maxLength": 5000,
+      "description": "Summary of call discussion (min 100 chars). Should capture key topics, client concerns, and positive signals"
+    },
+    "pain_points": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 200
+      },
+      "description": "Array of identified pain points (min 1 item). Each should be specific and actionable"
+    },
+    "budget": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "number", "minimum": 0, "maximum": 999999999 }
+      ],
+      "description": "Budget mentioned (nullable, can be $0 if client didn't disclose). If present, must be >= 0"
+    },
+    "timeline": {
+      "type": "string",
+      "pattern": "^(30d|60d|90d|Q[1-4]|[A-Za-z]+ \\d{4}|urgent|asap|ongoing)$",
+      "maxLength": 50,
+      "description": "Timeline expectations in parseable format (30d, 60d, 90d, Q2, May 2026, urgent, asap, ongoing)"
+    },
+    "next_steps": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 500,
+      "description": "Explicit next action agreed with client (follow-up email, proposal, second call, etc.)"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["call_notes", "pain_points", "budget", "timeline", "next_steps", "schema_version"],
+  "additionalProperties": false
+}

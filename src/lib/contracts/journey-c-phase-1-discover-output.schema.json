@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-c-phase-1-discover-output.schema.json",
+  "title": "Journey C Phase 1 — Discover Output",
+  "description": "Market research phase outputting TAM/SAM/SOM, customer insights, competitive landscape, and Voice of Customer additions",
+  "type": "object",
+  "properties": {
+    "market": {
+      "type": "object",
+      "properties": {
+        "tam_sam_som": {
+          "type": "string",
+          "minLength": 30,
+          "maxLength": 500,
+          "description": "Total/Serviceable/Sellable market sizing analysis"
+        },
+        "trends": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200
+          },
+          "description": "Market trends identified"
+        },
+        "seasonal_factors": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 300,
+          "description": "Seasonal or cyclical factors affecting the market"
+        }
+      },
+      "required": ["tam_sam_som", "trends", "seasonal_factors"],
+      "additionalProperties": false
+    },
+    "customer": {
+      "type": "object",
+      "properties": {
+        "jtbd_refined": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200
+          },
+          "description": "Refined jobs-to-be-done list"
+        },
+        "updated_icp": {
+          "type": "object",
+          "description": "Updated ICP based on Phase 1 discovery"
+        }
+      },
+      "required": ["jtbd_refined", "updated_icp"],
+      "additionalProperties": false
+    },
+    "competitive": {
+      "type": "object",
+      "properties": {
+        "key_competitors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 100
+          },
+          "description": "Key competitors identified"
+        },
+        "positioning_gaps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 300
+          },
+          "description": "Gaps in competitor positioning"
+        }
+      },
+      "required": ["key_competitors", "positioning_gaps"],
+      "additionalProperties": false
+    },
+    "voc_added": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 300
+      },
+      "description": "Voice of Customer insights added to client brain"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["market", "customer", "competitive", "voc_added", "schema_version"],
+  "additionalProperties": false
+}

@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-c-phase-7-optimize-output.schema.json",
+  "title": "Journey C Phase 7 — Optimization Output",
+  "description": "Campaign optimization analysis and iteration decision (iterate/close). Enforces max 3 iterations per error E-008",
+  "type": "object",
+  "properties": {
+    "iteration_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3,
+      "description": "Current iteration number (1, 2, or 3). If >=3 and decision='iterate', must force to 'close'"
+    },
+    "performance_analysis": {
+      "type": "object",
+      "properties": {
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "roas": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Return on Ad Spend"
+            },
+            "ctr": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Click-through rate (0-1)"
+            },
+            "conversion_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Conversion rate (0-1)"
+            }
+          },
+          "required": ["roas", "ctr", "conversion_rate"],
+          "additionalProperties": true
+        },
+        "anomalies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["roas_drop", "creative_fatigue", "audience_saturation", "conversion_drop", "budget_underutilization"],
+                "description": "Type of anomaly detected"
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["low", "medium", "high"],
+                "description": "Severity level"
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": ["type", "severity"]
+          }
+        }
+      },
+      "required": ["metrics", "anomalies"],
+      "additionalProperties": false
+    },
+    "recommendations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["creative", "audience", "budget", "landing_page", "messaging"],
+            "description": "Recommendation category"
+          },
+          "action": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 300,
+            "description": "Specific action to take"
+          },
+          "estimated_impact": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "Expected impact on performance"
+          }
+        },
+        "required": ["category", "action", "estimated_impact"]
+      }
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["iterate", "close"],
+      "description": "Decision to iterate campaign or close it. If iteration_count >= 3, MUST be 'close' (error E-008)"
+    },
+    "kill_decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "creative_id": {
+            "type": "string",
+            "minLength": 5
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200
+          }
+        },
+        "required": ["creative_id", "reason"]
+      },
+      "description": "Creatives/approaches to retire (by creative-director recommendation)"
+    },
+    "agent_outcomes_written": {
+      "type": "boolean",
+      "description": "True if meta-feedback has been logged to agent_outcomes table. Required for audit trail"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["iteration_count", "performance_analysis", "recommendations", "decision", "kill_decisions", "agent_outcomes_written", "schema_version"],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "iteration_count": { "minimum": 3 }
+        }
+      },
+      "then": {
+        "properties": {
+          "decision": { "const": "close" }
+        }
+      }
+    }
+  ]
+}

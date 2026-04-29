@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/agent-output.schema.json",
+  "title": "Agent Output — Master Schema",
+  "description": "Universal schema for ANY agent output across all journeys. Wraps stage-specific schemas with metadata.",
+  "type": "object",
+  "properties": {
+    "agent_slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "minLength": 3,
+      "maxLength": 100,
+      "description": "Unique agent identifier (e.g., 'lead-qualifier', 'jefe-marketing', 'content-writer')"
+    },
+    "stage": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 100,
+      "description": "Stage identifier where output was produced (e.g., 'journey-a-stage-1', 'journey-c-phase-3')"
+    },
+    "output": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Nested object containing stage-specific output (validated against journey schema)"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "execution_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique execution run ID for this agent invocation"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When output was produced (ISO 8601)"
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 600,
+          "description": "Execution duration in seconds (max 10 minutes)"
+        },
+        "tokens_used": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "output": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "description": "Token usage for cost tracking"
+        },
+        "cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated cost of this agent run in USD"
+        },
+        "retry_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "Number of retries executed before success (0 = first try)"
+        },
+        "client_id": {
+          "type": ["string", "null"],
+          "description": "Optional client ID if this output belongs to a specific client journey"
+        },
+        "campaign_id": {
+          "type": ["string", "null"],
+          "description": "Optional campaign ID if this output belongs to a specific campaign"
+        }
+      },
+      "required": ["execution_id", "timestamp"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["agent_slug", "stage", "output", "metadata"],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "agent_slug": "lead-qualifier",
+      "stage": "journey-a-stage-1",
+      "output": {
+        "qualified": true,
+        "score": 75,
+        "reasoning": "Strong ICP fit, adequate budget signaled, Q2 timeline",
+        "next_action": "schedule_discovery",
+        "schema_version": "1.0"
+      },
+      "metadata": {
+        "execution_id": "550e8400-e29b-41d4-a716-446655440000",
+        "timestamp": "2026-04-28T14:30:00Z",
+        "duration_seconds": 8.5,
+        "tokens_used": { "input": 1250, "output": 340 },
+        "cost_usd": 0.012,
+        "retry_count": 0,
+        "client_id": "client-acme-corp",
+        "campaign_id": null
+      }
+    }
+  ]
+}

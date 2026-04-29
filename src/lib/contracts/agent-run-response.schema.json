@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/agent-run-response.schema.json",
+  "title": "Agent Run Response — /api/agents/run Wrapper",
+  "description": "Standard response wrapper from /api/agents/run-sdk endpoint for any agent invocation",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean",
+      "description": "Whether agent run succeeded"
+    },
+    "agent_slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9\\-]+$",
+      "minLength": 3,
+      "maxLength": 100,
+      "description": "Agent identifier slug (e.g., 'campaign-brief-agent', 'brand-strategist')"
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique task ID for this run"
+    },
+    "output": {
+      "oneOf": [
+        { "type": "object" },
+        { "type": "string" },
+        { "type": "array" },
+        { "type": "null" }
+      ],
+      "description": "Agent output (varies by agent, should match schema-specific contract)"
+    },
+    "error": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "pattern": "^E-[A-Z0-9]+$",
+              "description": "Error code (E-WF-001, E-024, etc.)"
+            },
+            "message": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "details": {
+              "type": "object"
+            }
+          },
+          "required": ["code", "message"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Error object if success=false"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Execution time in milliseconds"
+    },
+    "tokens_used": {
+      "type": "object",
+      "properties": {
+        "input": { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 }
+      },
+      "description": "Token usage for billing tracking"
+    },
+    "client_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Client context for this run"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of response"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["success", "agent_slug", "task_id", "output", "error", "duration_ms", "timestamp", "schema_version"],
+  "additionalProperties": false
+}

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-e-stage-2-churn-prediction.schema.json",
+  "title": "Journey E Stage 2 — Churn Prediction Output",
+  "description": "Client churn risk analysis with signals and retention recommendations. Error E-024 validation applies",
+  "type": "object",
+  "properties": {
+    "churn_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Churn risk score 0-100 (0=safe, 100=imminent churn)"
+    },
+    "churn_signals": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 15,
+      "items": {
+        "type": "object",
+        "properties": {
+          "signal": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200,
+            "description": "Specific signal indicating churn risk (e.g., 'declining engagement', 'missed last 2 payments')"
+          },
+          "strength": {
+            "type": "string",
+            "enum": ["weak", "medium", "strong"],
+            "description": "Signal strength"
+          }
+        },
+        "required": ["signal", "strength"]
+      },
+      "description": "Array of churn signals (min 1 item required)"
+    },
+    "retention_recommendations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 300,
+            "description": "Specific retention action (e.g., 'schedule executive review', 'offer expanded tier')"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["p0", "p1", "p2"],
+            "description": "Priority (p0=urgent, p1=high, p2=medium)"
+          },
+          "effort": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Implementation effort"
+          }
+        },
+        "required": ["action", "priority", "effort"]
+      },
+      "description": "Retention actions (min 1 required)"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["churn_score", "churn_signals", "retention_recommendations", "schema_version"],
+  "additionalProperties": false
+}

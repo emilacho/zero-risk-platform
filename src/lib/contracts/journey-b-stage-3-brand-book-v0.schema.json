@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-b-stage-3-brand-book-v0.schema.json",
+  "title": "Journey B Stage 3 — Brand Book V0",
+  "description": "Initial brand strategy document with voice, tone, positioning, and visual identity guidelines",
+  "type": "object",
+  "properties": {
+    "voice": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 300,
+      "description": "Brand voice description (1-2 sentences). How the brand 'sounds' and communicates personality"
+    },
+    "tone": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 200,
+      "description": "Tone characteristics (professional, casual, friendly, authoritative, etc.)"
+    },
+    "positioning": {
+      "type": "string",
+      "minLength": 30,
+      "maxLength": 500,
+      "description": "Brand positioning statement (who we are, who we serve, why we're different)"
+    },
+    "forbidden_words": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "description": "Words/phrases to avoid in brand communication (can be empty)"
+    },
+    "required_terminology": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "description": "Key terms/terminology that must be used consistently (can be empty)"
+    },
+    "visual_identity": {
+      "type": "object",
+      "properties": {
+        "primary_colors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(#[0-9a-fA-F]{6}|rgb\\(\\d+,\\d+,\\d+\\)|[a-z]+)$"
+          },
+          "description": "Primary colors (hex, rgb, or color names)"
+        },
+        "fonts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          },
+          "description": "Font families (e.g., 'Helvetica Neue', 'Open Sans')"
+        },
+        "logo_usage": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 500,
+          "description": "Guidelines on how logo should be used (sizing, spacing, variations)"
+        }
+      },
+      "required": ["primary_colors", "fonts", "logo_usage"],
+      "additionalProperties": false
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["voice", "tone", "positioning", "forbidden_words", "required_terminology", "visual_identity", "schema_version"],
+  "additionalProperties": false
+}

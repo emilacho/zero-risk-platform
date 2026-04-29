@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-b-stage-5-competitive-landscape.schema.json",
+  "title": "Journey B Stage 5 — Competitive Landscape (5-Layer)",
+  "description": "Five-layer competitive intelligence: ad library, landing pages, reviews, pricing, positioning",
+  "type": "object",
+  "properties": {
+    "layer1": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "const": "Meta Ad Library API",
+          "description": "Data source identifier"
+        },
+        "competitor_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of competitors found in ad library"
+        },
+        "ad_themes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 200
+          },
+          "description": "Common ad themes/messaging observed in competitor ads"
+        }
+      },
+      "required": ["source", "competitor_count", "ad_themes"],
+      "additionalProperties": false
+    },
+    "layer2": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "const": "landing page analysis",
+          "description": "Data source identifier"
+        },
+        "top_competitors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "description": "Top landing page competitors with key insights"
+        }
+      },
+      "required": ["source", "top_competitors"],
+      "additionalProperties": false
+    },
+    "layer3": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "const": "reviews",
+          "description": "Data source identifier"
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Review platforms monitored (G2, Trustpilot, etc.)"
+        },
+        "sentiment_summary": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 500,
+          "description": "Summary of competitor sentiment and themes from reviews"
+        }
+      },
+      "required": ["source", "platforms", "sentiment_summary"],
+      "additionalProperties": false
+    },
+    "layer4": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "const": "pricing",
+          "description": "Data source identifier"
+        },
+        "price_range": {
+          "type": "string",
+          "pattern": "^\\$[0-9]+(k|m)? - \\$[0-9]+(k|m)?",
+          "maxLength": 100,
+          "description": "Pricing range of competitors (e.g., '$10k - $100k')"
+        },
+        "pricing_models": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 100
+          },
+          "description": "Pricing models observed (per-user, per-month, per-project, etc.)"
+        }
+      },
+      "required": ["source", "price_range", "pricing_models"],
+      "additionalProperties": false
+    },
+    "layer5": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "const": "positioning",
+          "description": "Data source identifier"
+        },
+        "differentiation_summary": {
+          "type": "string",
+          "minLength": 30,
+          "maxLength": 500,
+          "description": "Summary of how our client can differentiate from competitors"
+        }
+      },
+      "required": ["source", "differentiation_summary"],
+      "additionalProperties": false
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["layer1", "layer2", "layer3", "layer4", "layer5", "schema_version"],
+  "additionalProperties": false
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://zero-risk.com/schemas/common-types.schema.json",
+  "title": "Zero Risk Common Types",
+  "description": "Shared type definitions used across all journey contracts",
+  "definitions": {
+    "ClientId": { "type": "string", "format": "uuid", "description": "Client unique identifier (UUID v4)" },
+    "JourneyId": { "type": "string", "format": "uuid", "description": "Journey execution unique identifier" },
+    "JourneyType": { "type": "string", "enum": ["acquire", "onboard", "produce", "always_on", "review", "growth"] },
+    "JourneyStatus": { "type": "string", "enum": ["initiated", "active", "paused_hitl", "completed", "failed", "abandoned"] },
+    "MCInboxTarget": { "type": "string", "enum": ["approval_required", "ceo", "humano", "role:account_manager", "role:jefe_marketing", "role:jefe_client_success"] },
+    "AgentSlug": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)?$" },
+    "ISO8601DateTime": { "type": "string", "format": "date-time" }
+  }
+}

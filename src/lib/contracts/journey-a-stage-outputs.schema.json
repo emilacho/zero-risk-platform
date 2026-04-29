@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk.dev/schemas/journey-a-stage-outputs.schema.json",
+  "title": "Journey A Stage Outputs",
+  "description": "Schema for outputs from Journey A (ACQUIRE) stages: lead qualification, discovery call summary, proposal generation",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/LeadQualificationOutput" },
+    { "$ref": "#/$defs/DiscoveryCallSummary" },
+    { "$ref": "#/$defs/ProposalGenerated" }
+  ],
+  "$defs": {
+    "ClientId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID of the client in Supabase"
+    },
+    "ISOTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp with timezone"
+    },
+    "StorageUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Valid Supabase Storage or S3 URL",
+      "pattern": "^(https://[a-z0-9]+\\.supabase\\.co/storage|https://s3\\.[a-z0-9-]+\\.amazonaws\\.com)"
+    },
+    "LeadQualificationOutput": {
+      "type": "object",
+      "title": "Lead Qualification Output",
+      "description": "Output from Stage 1: lead-qualification-output",
+      "properties": {
+        "qualified": {
+          "type": "boolean",
+          "description": "Whether the lead qualifies for next stage"
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Qualification score 0-100"
+        },
+        "reasoning": {
+          "type": "string",
+          "minLength": 20,
+          "description": "Explanation of qualification decision"
+        },
+        "next_action": {
+          "type": "string",
+          "enum": ["schedule_discovery", "nurture", "disqualify"],
+          "description": "Recommended next action"
+        },
+        "schema_version": {
+          "type": "string",
+          "const": "1.0"
+        }
+      },
+      "required": ["qualified", "score", "reasoning", "next_action", "schema_version"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "qualified": { "const": true } } },
+          "then": { "properties": { "score": { "minimum": 60 } } }
+        },
+        {
+          "if": { "properties": { "qualified": { "const": false } } },
+          "then": { "properties": { "score": { "maximum": 40 } } }
+        }
+      ]
+    },
+    "DiscoveryCallSummary": {
+      "type": "object",
+      "title": "Discovery Call Summary",
+      "description": "Output from Stage 4: discovery-call-summary",
+      "properties": {
+        "call_notes": {
+          "type": "string",
+          "minLength": 100,
+          "description": "Detailed notes from discovery call"
+        },
+        "pain_points": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Array of identified pain points (min 1)"
+        },
+        "budget": {
+          "oneOf": [
+            { "type": "number", "minimum": 0 },
+            { "type": "null" }
+          ],
+          "description": "Estimated budget (nullable)"
+        },
+        "timeline": {
+          "type": "string",
+          "minLength": 2,
+          "description": "Timeline (e.g., '30d', 'Q2', 'ASAP')"
+        },
+        "next_steps": {
+          "type": "string",
+          "minLength": 20,
+          "description": "Agreed next steps"
+        },
+        "schema_version": {
+          "type": "string",
+          "const": "1.0"
+        }
+      },
+      "required": ["call_notes", "pain_points", "budget", "timeline", "next_steps", "schema_version"],
+      "additionalProperties": false
+    },
+    "ProposalGenerated": {
+      "type": "object",
+      "title": "Proposal Generated",
+      "description": "Output from Stage 8: proposal-generated",
+      "properties": {
+        "proposal_url": {
+          "$ref": "#/$defs/StorageUrl",
+          "description": "URL to proposal document in storage"
+        },
+        "total_value": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Total proposal value in USD (must be > 0)"
+        },
+        "scope": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "string", "minLength": 10 },
+          "description": "Scope items (min 2 items)"
+        },
+        "validity_days": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "description": "Days proposal is valid (default 30)"
+        },
+        "schema_version": {
+          "type": "string",
+          "const": "1.0"
+        }
+      },
+      "required": ["proposal_url", "total_value", "scope", "validity_days", "schema_version"],
+      "additionalProperties": false
+    }
+  }
+}

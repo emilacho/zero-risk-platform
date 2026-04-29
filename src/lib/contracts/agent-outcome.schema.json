@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/agent-outcome.schema.json",
+  "title": "Agent Outcome — Feedback Loop Entry",
+  "description": "Agent performance feedback payload written to Supabase agent_outcomes table for meta-learning and optimization",
+  "type": "object",
+  "properties": {
+    "agent_slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9\\-]+$",
+      "description": "Agent identifier"
+    },
+    "client_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Client context"
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Task ID from /api/agents/run response"
+    },
+    "journey_id": {
+      "type": "string",
+      "pattern": "^journey-[a-z]$",
+      "description": "Journey context (journey-a, journey-b, etc.)"
+    },
+    "stage_id": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 100,
+      "description": "Stage identifier within journey"
+    },
+    "input_context": {
+      "type": "object",
+      "description": "Input provided to agent (client brief, background, constraints)"
+    },
+    "agent_output": {
+      "type": "object",
+      "description": "Actual output from agent run"
+    },
+    "human_feedback": {
+      "type": "object",
+      "properties": {
+        "quality_score": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "1-5 quality rating from human reviewer"
+        },
+        "feedback_text": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Human feedback notes"
+        },
+        "approver_id": {
+          "type": "string",
+          "description": "Who provided feedback"
+        }
+      },
+      "required": ["quality_score"],
+      "additionalProperties": false
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "output_completeness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "0-1 rating of how complete output was"
+        },
+        "accuracy": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "0-1 rating of accuracy to brief"
+        },
+        "creativity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "0-1 rating of creative quality"
+        }
+      },
+      "additionalProperties": true
+    },
+    "issues_found": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "issue_type": {
+            "type": "string",
+            "enum": ["schema_violation", "missing_field", "factual_error", "tone_mismatch", "incomplete", "other"]
+          },
+          "description": { "type": "string" }
+        },
+        "required": ["issue_type"]
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When feedback was recorded"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["agent_slug", "client_id", "task_id", "journey_id", "stage_id", "input_context", "agent_output", "timestamp", "schema_version"],
+  "additionalProperties": false
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-a-stage-1-lead-capture.schema.json",
+  "title": "Journey A Stage 1 — Lead Capture Output",
+  "description": "Lead form submission with qualification score and next action routing",
+  "type": "object",
+  "properties": {
+    "qualified": {
+      "type": "boolean",
+      "description": "Whether lead meets baseline qualification criteria (ICP match, budget, timeline)"
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Lead score 0-100. If qualified=true, score must be >=60. If qualified=false, score must be <=40"
+    },
+    "reasoning": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 500,
+      "description": "Explanation of qualification decision (why this lead scores X, what factors drove decision)"
+    },
+    "next_action": {
+      "type": "string",
+      "enum": ["schedule_discovery", "nurture", "disqualify"],
+      "description": "Routing decision for next step in journey"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version (must be 1.0)"
+    }
+  },
+  "required": ["qualified", "score", "reasoning", "next_action", "schema_version"],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "qualified": { "const": true } }
+      },
+      "then": {
+        "properties": { "score": { "minimum": 60 } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "qualified": { "const": false } }
+      },
+      "then": {
+        "properties": { "score": { "maximum": 40 } }
+      }
+    }
+  ]
+}

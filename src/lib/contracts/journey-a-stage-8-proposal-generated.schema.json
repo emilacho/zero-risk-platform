@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-a-stage-8-proposal-generated.schema.json",
+  "title": "Journey A Stage 8 — Proposal Generated",
+  "description": "Proposal document generated and available at URL with scope and pricing",
+  "type": "object",
+  "properties": {
+    "proposal_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^(https://(supabase|storage\\.googleapis\\.com|s3\\.amazonaws\\.com)|gs://|s3://)",
+      "description": "Must be valid cloud storage URL (Supabase Storage, Google Cloud Storage, or S3). URL must be accessible"
+    },
+    "total_value": {
+      "type": "number",
+      "minimum": 0.01,
+      "maximum": 999999999,
+      "description": "Total contract value in USD (>0 for valid proposal). Must match line items in proposal document"
+    },
+    "scope": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 300
+      },
+      "description": "Array of scope items (min 2 items). Each item describes a deliverable or service included"
+    },
+    "validity_days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 365,
+      "default": 30,
+      "description": "Days proposal is valid (default 30, max 365)"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["proposal_url", "total_value", "scope", "validity_days", "schema_version"],
+  "additionalProperties": false
+}

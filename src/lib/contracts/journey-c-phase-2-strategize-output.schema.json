@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-c-phase-2-strategize-output.schema.json",
+  "title": "Journey C Phase 2 — Strategize Output",
+  "description": "Campaign strategy phase outputting positioning, messaging pillars, tone modifiers, channel mix, and creative direction",
+  "type": "object",
+  "properties": {
+    "positioning": {
+      "type": "string",
+      "minLength": 50,
+      "maxLength": 500,
+      "description": "Campaign positioning statement (who we are to this audience, why now)"
+    },
+    "messaging_pillars": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 5,
+      "items": {
+        "type": "string",
+        "minLength": 20,
+        "maxLength": 200
+      },
+      "description": "Min 3 messaging pillars (core messages to reinforce)"
+    },
+    "tone_modifiers": {
+      "type": "object",
+      "properties": {
+        "primary_tone": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 100
+        },
+        "secondary_tones": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 100
+          }
+        },
+        "avoid": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 100
+          }
+        }
+      },
+      "required": ["primary_tone", "secondary_tones", "avoid"],
+      "additionalProperties": false
+    },
+    "channel_mix": {
+      "type": "object",
+      "properties": {
+        "paid": {
+          "type": "object",
+          "description": "Paid channel allocation (Meta, Google, TikTok with percentages)"
+        },
+        "organic": {
+          "type": "object",
+          "description": "Organic channel strategy (email, social, SEO with approach)"
+        }
+      },
+      "required": ["paid", "organic"],
+      "additionalProperties": false
+    },
+    "creative_direction": {
+      "type": "string",
+      "minLength": 50,
+      "maxLength": 500,
+      "description": "Creative direction brief (visual style, tone, format preferences, etc.)"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["positioning", "messaging_pillars", "tone_modifiers", "channel_mix", "creative_direction", "schema_version"],
+  "additionalProperties": false
+}

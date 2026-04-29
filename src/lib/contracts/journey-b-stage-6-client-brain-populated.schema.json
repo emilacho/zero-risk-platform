@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-b-stage-6-client-brain-populated.schema.json",
+  "title": "Journey B Stage 6 — Client Brain Populated",
+  "description": "Confirmation that Client Brain RAG tables have been populated with onboarding data",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["success", "partial", "failure"],
+      "description": "Populate endpoint result status"
+    },
+    "tables_populated": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["client_brand_books", "client_icp_documents", "client_competitive_landscape"]
+      },
+      "minItems": 1,
+      "description": "Which tables were successfully populated (required: min 1)"
+    },
+    "row_counts": {
+      "type": "object",
+      "properties": {
+        "client_brand_books": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "client_icp_documents": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "client_competitive_landscape": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["client_brand_books", "client_icp_documents", "client_competitive_landscape"],
+      "additionalProperties": false,
+      "description": "Row counts for each populated table"
+    },
+    "voc_document": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "description": "Voice of Customer document (nullable). Populated in Journey C Phase 1, not here"
+        }
+      ],
+      "description": "VOC populated in Journey C Phase 1, so nullable here"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["status", "tables_populated", "row_counts", "voc_document", "schema_version"],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "success" } }
+      },
+      "then": {
+        "properties": {
+          "tables_populated": { "minItems": 3 }
+        }
+      }
+    }
+  ]
+}

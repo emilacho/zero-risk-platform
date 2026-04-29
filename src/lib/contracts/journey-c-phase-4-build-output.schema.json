@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-c-phase-4-build-output.schema.json",
+  "title": "Journey C Phase 4 — Build Output (4 Clusters)",
+  "description": "Four clusters of campaign assets merged: creative, paid media, SEO, web/landing pages",
+  "type": "object",
+  "properties": {
+    "creative_cluster": {
+      "type": "object",
+      "properties": {
+        "ads": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "headline": { "type": "string" },
+              "body": { "type": "string" },
+              "image_url": { "type": "string", "format": "uri" },
+              "cta": { "type": "string" }
+            },
+            "required": ["headline", "body", "cta"]
+          }
+        },
+        "videos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "video_url": { "type": "string", "format": "uri" },
+              "duration_seconds": { "type": "integer", "minimum": 6, "maximum": 120 }
+            },
+            "required": ["title", "video_url"]
+          }
+        },
+        "approval_status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"],
+          "description": "Must be 'approved' before proceeding to Phase 5"
+        }
+      },
+      "required": ["ads", "videos", "approval_status"],
+      "additionalProperties": false
+    },
+    "paid_media_cluster": {
+      "type": "object",
+      "properties": {
+        "campaigns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "platform": { "type": "string", "enum": ["meta", "google", "tiktok"] },
+              "campaign_name": { "type": "string" },
+              "objective": { "type": "string" }
+            },
+            "required": ["platform", "campaign_name"]
+          }
+        },
+        "audience_segments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "segment_name": { "type": "string" },
+              "size_estimate": { "type": "integer" }
+            }
+          }
+        },
+        "bidding_strategy": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 300,
+          "description": "Bidding strategy (CPC, CPA, ROAS, etc.)"
+        }
+      },
+      "required": ["campaigns", "audience_segments", "bidding_strategy"],
+      "additionalProperties": false
+    },
+    "seo_cluster": {
+      "type": "object",
+      "properties": {
+        "content_briefs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "keyword": { "type": "string" },
+              "title": { "type": "string" },
+              "outline": { "type": "string" }
+            }
+          }
+        },
+        "technical_recommendations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 300
+          }
+        },
+        "backlink_opportunities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["content_briefs", "technical_recommendations", "backlink_opportunities"],
+      "additionalProperties": false
+    },
+    "web_cluster": {
+      "type": "object",
+      "properties": {
+        "landing_pages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 100
+              },
+              "control_variant": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 500,
+                "description": "Control variant description (design/copy approach)"
+              },
+              "test_variant": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 500,
+                "description": "Test variant description (differs from control)"
+              },
+              "a_b_test_plan": {
+                "type": "object",
+                "properties": {
+                  "hypothesis": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 300
+                  },
+                  "mde": {
+                    "type": "number",
+                    "minimum": 0.01,
+                    "maximum": 1,
+                    "description": "Minimum Detectable Effect size"
+                  }
+                },
+                "required": ["hypothesis", "mde"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["name", "control_variant", "test_variant", "a_b_test_plan"]
+          }
+        }
+      },
+      "required": ["landing_pages"],
+      "additionalProperties": false
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["creative_cluster", "paid_media_cluster", "seo_cluster", "web_cluster", "schema_version"],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "creative_cluster": { "properties": { "approval_status": { "const": "rejected" } } } }
+      },
+      "then": {
+        "properties": { "creative_cluster": { "properties": { "approval_status": { "const": "rejected" } } } }
+      }
+    }
+  ]
+}

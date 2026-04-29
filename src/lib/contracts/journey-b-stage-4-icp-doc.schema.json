@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-b-stage-4-icp-doc.schema.json",
+  "title": "Journey B Stage 4 — ICP Document",
+  "description": "Ideal Customer Profile with segment definitions, jobs-to-be-done, and objections",
+  "type": "object",
+  "properties": {
+    "segments": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "properties": {
+          "segment_name": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 100,
+            "description": "Name of customer segment (e.g., 'Mid-Market SaaS', 'Enterprise Finance')"
+          },
+          "jtbd": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 200
+            },
+            "description": "Jobs-to-be-done for this segment (min 2 items). What functional/emotional job is client trying to accomplish?"
+          },
+          "objections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 5,
+              "maxLength": 200
+            },
+            "description": "Common objections/concerns this segment raises (can be empty)"
+          },
+          "annual_contract_value": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999,
+            "description": "Expected annual contract value for this segment"
+          }
+        },
+        "required": ["segment_name", "jtbd", "objections", "annual_contract_value"],
+        "additionalProperties": false
+      }
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["segments", "schema_version"],
+  "additionalProperties": false
+}

@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-e-stage-3-expansion-readiness.schema.json",
+  "title": "Journey E Stage 3 — Expansion Readiness Output",
+  "description": "Analysis of upsell and expansion opportunities for existing client (products, ARPUs, confidence scoring)",
+  "type": "object",
+  "properties": {
+    "expansion_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Overall expansion readiness score (0-100)"
+    },
+    "expansion_signals": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Key indicators suggesting client is ready to expand (min 1 required)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "signal": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200,
+            "description": "Description of expansion signal (e.g., 'exceeding usage limits', 'requesting new features', 'positive NPS trend')"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Confidence level for this signal (0-1, where 1 = very confident)"
+          }
+        },
+        "required": ["signal", "confidence"],
+        "additionalProperties": false
+      }
+    },
+    "expansion_opportunities": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Specific expansion products or services (min 1 opportunity required)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_service": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200,
+            "description": "Name and brief description of expansion offering"
+          },
+          "fit_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "How well this product/service fits client use case (0-100)"
+          },
+          "estimated_arpu": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Estimated additional Annual Recurring Revenue from this expansion"
+          }
+        },
+        "required": ["product_service", "fit_score", "estimated_arpu"],
+        "additionalProperties": false
+      }
+    },
+    "recommended_upsell": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "description": "Top 1-2 upsell recommendations to present to client (exactly 1-2 items)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "upsell_item": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200,
+            "description": "Specific upsell product or service name"
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Recommended price for this upsell"
+          },
+          "roi_estimate": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 300,
+            "description": "Estimated ROI statement for client (e.g., '3-5x payback within 6 months')"
+          }
+        },
+        "required": ["upsell_item", "price", "roi_estimate"],
+        "additionalProperties": false
+      }
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version (must be 1.0)"
+    }
+  },
+  "required": ["expansion_score", "expansion_signals", "expansion_opportunities", "recommended_upsell", "schema_version"],
+  "additionalProperties": false
+}

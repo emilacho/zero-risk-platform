@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/mc-inbox-event.schema.json",
+  "title": "Mission Control Inbox Event",
+  "description": "Generic payload for any MC inbox item creation (errors, HITL tasks, alerts, approvals)",
+  "type": "object",
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "enum": ["error", "hitl_task", "approval_required", "alert", "info"],
+      "description": "Event classification"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 200,
+      "description": "Inbox item title/subject"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 2000,
+      "description": "Detailed description"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low"],
+      "description": "Priority level for triage"
+    },
+    "stage_id": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 100,
+      "description": "Journey/workflow stage context"
+    },
+    "client_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Client associated with event"
+    },
+    "agent_slug": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "pattern": "^[a-z0-9\\-]+$"
+        }
+      ],
+      "description": "Agent involved (if applicable)"
+    },
+    "error_code": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "pattern": "^E-[A-Z0-9\\-]+$"
+        }
+      ],
+      "description": "Error code if event_type=error"
+    },
+    "required_action": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 500,
+      "description": "What action needs to be taken"
+    },
+    "approval_target": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "enum": ["jefe-marketing", "ceo", "humano", "approval_required"]
+        }
+      ],
+      "description": "Who should approve (if approval_required event)"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional context (schema_errors, agent output, etc.)",
+      "additionalProperties": true
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["event_type", "title", "description", "priority", "stage_id", "required_action", "timestamp", "schema_version"],
+  "additionalProperties": false
+}

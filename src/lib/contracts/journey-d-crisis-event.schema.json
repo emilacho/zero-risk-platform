@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-d-crisis-event.schema.json",
+  "title": "Journey D — Crisis Event",
+  "description": "Crisis event detected by review-responder or community-manager. Tier 1 = immediate escalation, Tier 2 = within 2h, Tier 3 = next business day",
+  "type": "object",
+  "properties": {
+    "tier": {
+      "type": "integer",
+      "enum": [1, 2, 3],
+      "description": "Crisis tier: 1=immediate escalation, 2=within 2 hours, 3=next business day"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["review_monitor", "social_listening", "community_manager"],
+      "description": "Where crisis was detected"
+    },
+    "content": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 1000,
+      "description": "Description of the crisis event"
+    },
+    "recommended_action": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 500,
+      "description": "Recommended action (e.g., 'respond on platform', 'issue public statement', etc.)"
+    },
+    "escalation_contact": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 100,
+      "description": "Who should be escalated to (jefe-marketing, ceo, pr-manager, etc.)"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    }
+  },
+  "required": ["tier", "source", "content", "recommended_action", "escalation_contact", "schema_version"],
+  "additionalProperties": false
+}

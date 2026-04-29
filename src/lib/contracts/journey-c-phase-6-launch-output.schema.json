@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero-risk-platform.vercel.app/schemas/journey-c-phase-6-launch-output.schema.json",
+  "title": "Journey C Phase 6 — Launch Output (Campaign Go-Live)",
+  "description": "Campaign deployment confirmation with live URLs and active channels",
+  "type": "object",
+  "properties": {
+    "campaign_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
+      "description": "Unique campaign identifier (UUID format required)"
+    },
+    "channels_active": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["meta", "google", "email", "organic_social", "seo", "tiktok", "linkedin"]
+      },
+      "description": "Array of active channels for this campaign (min 1 required)"
+    },
+    "launch_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Campaign go-live timestamp (ISO 8601 format)"
+    },
+    "live_urls": {
+      "type": "object",
+      "properties": {
+        "landing_page": {
+          "type": "string",
+          "format": "uri",
+          "description": "Primary landing page URL (must be valid and accessible)"
+        },
+        "social_posts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          },
+          "description": "Array of live social media post URLs"
+        },
+        "email_campaign": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "description": "Email campaign tracking URL (can be null if email not part of this campaign)"
+        }
+      },
+      "required": ["landing_page", "social_posts"],
+      "additionalProperties": false
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version (must be 1.0)"
+    }
+  },
+  "required": ["campaign_id", "channels_active", "launch_timestamp", "live_urls", "schema_version"],
+  "additionalProperties": false
+}
