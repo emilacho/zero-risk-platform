@@ -63,9 +63,11 @@ const CANONICAL_PHASES = new Set([
   'optimization',
   'reporting',
   'success',
+  'flagship-seo',  // Sub-agent phase used by SEO cluster (sub-agents under seo-specialist)
 ])
 
-const REQUIRED_FIELDS = [
+// Required for ALL identity files (root + sub-agents)
+const REQUIRED_FIELDS_ROOT = [
   'name',
   'display_name',
   'role',
@@ -81,6 +83,15 @@ const REQUIRED_FIELDS = [
   'tools',
   'forbidden_actions',
 ]
+
+// Sub-agents (parent_agent declared) inherit these from parent · so they can be omitted
+const PARENT_INHERITED_FIELDS = new Set([
+  'peer_reviewer',
+  'escalation_path',
+])
+
+// For sub-agents, required = root - inherited
+const REQUIRED_FIELDS_SUB = REQUIRED_FIELDS_ROOT.filter(f => !PARENT_INHERITED_FIELDS.has(f))
 
 const REQUIRED_HEADINGS = ['## Identity', '## Client Adaptation']
 
@@ -233,16 +244,51 @@ function lintFile(filePath, allNames) {
     return { filePath, filename, fails: [`YAML_PARSE: ${e.message}`], warns: [], data: null }
   }
 
+  // Detect sub-agent: has parent_agent (preferred) or legacy parent field
+  const isSubAgent = Boolean(data.parent_agent || data.parent)
+  const parentRef = data.parent_agent || data.parent
+
   // Rule 1 · filename ↔ name
+  // For sub-agents (parent_agent set), allow filename to be a slug variant of name:
+  //   - exact match (e.g., name="seo-orchestrator" file="seo-orchestrator")
+  //   - parent prefix stripped (e.g., name="seo-backlink-strategist" file="backlink-strategist")
+  //   - same hyphen-words in any order (e.g., name="seo-technical" file="technical-seo")
   if (data.name !== filename) {
-    fails.push(`FILENAME_MISMATCH: name="${data.name}" but filename="${filename}"`)
+    if (isSubAgent) {
+      const nameWords = (data.name || '').split('-').sort()
+      const filenameWords = filename.split('-').sort()
+      const wordsMatch = nameWords.length === filenameWords.length &&
+        nameWords.every((w, i) => w === filenameWords[i])
+      const parentPrefixStripped = parentRef && data.name.startsWith(`${parentRef}-`) &&
+        data.name.slice(parentRef.length + 1) === filename
+      const parentSlugFromPrefix = parentRef ? parentRef.split('-')[0] : null  // e.g., "seo" from "seo-specialist"
+      const nameWithoutParentSlug = parentSlugFromPrefix && data.name.startsWith(`${parentSlugFromPrefix}-`)
+        ? data.name.slice(parentSlugFromPrefix.length + 1)
+        : null
+      const slugMatch = nameWithoutParentSlug === filename
+      if (!wordsMatch && !parentPrefixStripped && !slugMatch) {
+        fails.push(
+          `FILENAME_MISMATCH: name="${data.name}" but filename="${filename}" ` +
+          `(sub-agent · expected hyphen-words to match in any order, parent-prefix stripped, ` +
+          `or parent-slug stripped from name)`
+        )
+      }
+    } else {
+      fails.push(`FILENAME_MISMATCH: name="${data.name}" but filename="${filename}"`)
+    }
   }
 
-  // Rule 3 · required fields
-  for (const f of REQUIRED_FIELDS) {
+  // Rule 3 · required fields (relaxed for sub-agents · they inherit peer_reviewer + escalation_path from parent)
+  const requiredFields = isSubAgent ? REQUIRED_FIELDS_SUB : REQUIRED_FIELDS_ROOT
+  for (const f of requiredFields) {
     if (!(f in data) || data[f] === undefined || data[f] === null || data[f] === '') {
       fails.push(`MISSING_REQUIRED_FIELD: ${f}`)
     }
+  }
+
+  // For sub-agents · validate parent_agent exists in the registry
+  if (isSubAgent && parentRef && !allNames.has(parentRef)) {
+    fails.push(`PARENT_AGENT_NOT_FOUND: parent_agent="${parentRef}" no es un agente conocido`)
   }
 
   // Rule 4 · canonical model
@@ -274,16 +320,19 @@ function lintFile(filePath, allNames) {
     }
   }
 
-  // Rule 8 · hitl_triggers count
+  // Rule 8 · hitl_triggers count (relaxed range for sub-agents: 2-7)
   const hitlTriggers = Array.isArray(data.hitl_triggers) ? data.hitl_triggers : []
-  if (hitlTriggers.length < 4 || hitlTriggers.length > 7) {
-    fails.push(`HITL_COUNT: ${hitlTriggers.length} (esperado 4-7)`)
+  const hitlMin = isSubAgent ? 2 : 4
+  const hitlMax = 7
+  if (hitlTriggers.length < hitlMin || hitlTriggers.length > hitlMax) {
+    fails.push(`HITL_COUNT: ${hitlTriggers.length} (esperado ${hitlMin}-${hitlMax}${isSubAgent ? ' · sub-agent' : ''})`)
   }
 
-  // Rule 9 · forbidden_actions count
+  // Rule 9 · forbidden_actions count (relaxed for sub-agents: 2-6)
   const forbidden = Array.isArray(data.forbidden_actions) ? data.forbidden_actions : []
-  if (forbidden.length < 3 || forbidden.length > 6) {
-    fails.push(`FORBIDDEN_COUNT: ${forbidden.length} (esperado 3-6)`)
+  const forbiddenMin = isSubAgent ? 2 : 3
+  if (forbidden.length < forbiddenMin || forbidden.length > 6) {
+    fails.push(`FORBIDDEN_COUNT: ${forbidden.length} (esperado ${forbiddenMin}-6${isSubAgent ? ' · sub-agent' : ''})`)
   }
 
   // Soft warn 1 · HITL triggers without quantitative threshold
@@ -322,7 +371,7 @@ function lintFile(filePath, allNames) {
 }
 
 function checkBidirectionalPeers(results) {
-  // Build map name → { primary, secondary, tertiary, hasNote }
+  // Build map name → { primary, secondary, tertiary, hasNote, isSubAgent }
   const map = new Map()
   for (const r of results) {
     if (!r.data) continue
@@ -331,6 +380,7 @@ function checkBidirectionalPeers(results) {
       secondary: r.data.peer_reviewer_secondary || null,
       tertiary: r.data.peer_reviewer_tertiary || null,
       hasNote: Boolean(r.data.peer_reviewer_note),
+      isSubAgent: Boolean(r.data.parent_agent || r.data.parent),
       filePath: r.filePath,
     })
   }
@@ -339,6 +389,9 @@ function checkBidirectionalPeers(results) {
     if (!r.data) continue
     const me = r.data.name
     const meEntry = map.get(me)
+    // Skip bidirectionality check for sub-agents · they share parent's peer_reviewer
+    // (intra-cluster peer review is a different pattern · not symmetric across cluster)
+    if (meEntry.isSubAgent) continue
     const peer = meEntry.primary
     if (!peer) continue
     const peerEntry = map.get(peer)
