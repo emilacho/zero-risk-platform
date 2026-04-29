@@ -168,7 +168,13 @@ function runValidationPhases() {
   const filenames = Object.keys(FILENAME_TO_JOURNEY)
   const results = []
 
-  console.log('\n=== Phase 1 · Raw fixture validation against DISPATCH schema ===')
+  console.log('\n=== Phase 1 · Shape-aware fixture validation ===')
+  console.log(
+    '  · dispatch shape    → validate against DISPATCH schema',
+  )
+  console.log(
+    '  · workflow_input    → validate well-formed (parseable + non-empty top-level fields)',
+  )
   for (const fn of filenames) {
     let fixture
     try {
@@ -178,19 +184,41 @@ function runValidationPhases() {
         fixture: fn,
         phase: 'P1',
         outcome: 'LOAD_FAIL',
+        shape: 'unknown',
         detail: e.message.slice(0, 60),
       })
       continue
     }
     const looksDispatch = looksLikeDispatchPayload(fixture)
-    const v = validatePayload(fixture)
-    results.push({
-      fixture: fn,
-      phase: 'P1',
-      outcome: v.valid ? 'PASS' : 'FAIL',
-      shape: looksDispatch ? 'dispatch' : 'workflow_input',
-      detail: v.valid ? '' : (v.errors[0] ?? '').slice(0, 60),
-    })
+
+    if (looksDispatch) {
+      // Dispatch payload · validate against dispatch schema strictly
+      const v = validatePayload(fixture)
+      results.push({
+        fixture: fn,
+        phase: 'P1',
+        outcome: v.valid ? 'PASS' : 'FAIL',
+        shape: 'dispatch',
+        detail: v.valid ? 'matches dispatch schema' : (v.errors[0] ?? '').slice(0, 60),
+      })
+    } else {
+      // Workflow-input shape · these fixtures feed n8n workflow webhooks (Journey A
+      // lead form, Journey B intake, etc.) NOT POST /api/journey/dispatch directly.
+      // Validating against dispatch schema would be overzealous (Wave 11 fix per
+      // CC1_W11_FINDINGS.md `T1-finding`). Instead we sanity-check well-formedness:
+      // parseable JSON + at least one top-level field. P2 wrappea como dispatch.
+      const topLevelFieldCount = Object.keys(fixture ?? {}).length
+      const wellFormed = fixture && typeof fixture === 'object' && topLevelFieldCount > 0
+      results.push({
+        fixture: fn,
+        phase: 'P1',
+        outcome: wellFormed ? 'PASS' : 'FAIL',
+        shape: 'workflow_input',
+        detail: wellFormed
+          ? `well-formed · ${topLevelFieldCount} top-level fields`
+          : 'empty or non-object',
+      })
+    }
   }
 
   console.log('\n=== Phase 2 · Wrap as dispatch envelope and re-validate ===')
