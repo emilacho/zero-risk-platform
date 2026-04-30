@@ -1,0 +1,449 @@
+{
+  "$schema": "./cleanup-plan.schema.md",
+  "description": "n8n workflow cleanup plan derived from Wave 10 deep triage + Wave 11 duplicate investigation. Each action is validated against its pre_check before execution. Executor is idempotent: re-running with same plan + same n8n state produces no changes if state already matches.",
+  "generated": "2026-04-29",
+  "wave": "Wave 11",
+  "branch": "wave-11-cleanup-and-cross-check",
+  "phases": [
+    {
+      "phase": "0-disable-stubs",
+      "description": "Disable 2 SEO stubs (2 nodes only · never completed) + 2 active duplicates (HARDCODED v2 + Learning Cycle). Lowest risk · zero pérdida operativa.",
+      "risk": "LOW",
+      "actions": [
+        {
+          "id": "9UYoXtIqFvOaNel0",
+          "name": "SEO Topical Authority Builder Monthly",
+          "action": "disable",
+          "reason": "Stub workflow · solo 2 nodes (scheduleTrigger + Initialize code) · nunca completado · cero ejecuciones reales · documentado en Wave 10 §2.4 par 3",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": true,
+            "comment": "Workflow está inactive en summary.csv pero el linter espera active=true para deactivate. Si pre_check falla con active=false, action es no-op (already disabled · idempotent)."
+          },
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=9UYoXtIqFvOaNel0",
+          "ramping": "immediate"
+        },
+        {
+          "id": "8gIdl3jzDZpHLyyq",
+          "name": "SEO Backlink Opportunity Scanner Weekly",
+          "action": "disable",
+          "reason": "Stub workflow · solo 2 nodes · idéntico patrón a 9UYoXtIqFvOaNel0 · cero ejecuciones",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": true,
+            "comment": "Idem"
+          },
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=8gIdl3jzDZpHLyyq",
+          "ramping": "immediate"
+        },
+        {
+          "id": "k6rZK9Uaa5sZRdZh",
+          "name": "ZR Agent Outcomes Writer (HARDCODED v2)",
+          "action": "disable",
+          "reason": "Duplicate del canónico VJ367iyVT3F22asQ Cluster 1 · URL hardcoded a vercel.app · cero callers en src/ · cero callers en Sprint #3 pack design (que usa path 'outcomes-writer' del Cluster 1) · documentado en Wave 11 WORKFLOW_DUPLICATES_INVESTIGATION.md §1",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": true
+          },
+          "monitor_window_days": 7,
+          "monitor_query": "GET /api/v1/executions?workflowId=k6rZK9Uaa5sZRdZh&limit=20 :: total debe ser 0 en últimos 7 días",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=k6rZK9Uaa5sZRdZh",
+          "ramping": "immediate"
+        },
+        {
+          "id": "7A4PsaMJUbA1kgvt",
+          "name": "Meta-Agent Weekly Learning Cycle (Mon 9am)",
+          "action": "disable",
+          "reason": "Duplicate de 9wwdQX9OtXUaFVNM Weekly Analysis · ambos cron 0 9 * * 1 · Learning Cycle hace 11 nodes inline replicando lo que MetaAgent class (src/lib/meta-agent.ts) hace via /api/analytics/meta-agent-run · canónico es Weekly Analysis (newer · usa abstracción canónica). Wave 11 invierte recomendación de Wave 10. Documentado en WORKFLOW_DUPLICATES_INVESTIGATION.md §2",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": true
+          },
+          "execution_window": "before next Monday 9am UTC (deploy Sunday evening UTC)",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=7A4PsaMJUbA1kgvt",
+          "ramping": "scheduled"
+        }
+      ]
+    },
+    {
+      "phase": "1-reenable-no-deps",
+      "description": "Re-enable 7 workflows inactive sin dependencias externas. Re-enable inmediato · post backup recovery (VHmEAgsBhRd5ymgM debe ir primero · es el backup).",
+      "risk": "LOW",
+      "actions": [
+        {
+          "id": "VHmEAgsBhRd5ymgM",
+          "name": "Supabase Weekly Backup (Cron Sunday 3am UTC)",
+          "action": "enable",
+          "reason": "CRÍTICO · backups offline = riesgo de data loss · Wave 10 W10-D2 P0 · ningún test ni deploy debe correr sin esto",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": false
+          },
+          "post_check": {
+            "type": "next_execution_within_days",
+            "value": 7,
+            "comment": "Cron Sunday 3am · primer execution debe ocurrir dentro de 7 días post-enable"
+          },
+          "priority": "p0",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=VHmEAgsBhRd5ymgM",
+          "ramping": "immediate"
+        },
+        {
+          "id": "g0ewNcSKHmgtWFgu",
+          "name": "Agent Latency + Error Rate Monitor (Cron 10min)",
+          "action": "enable",
+          "reason": "Detection de regresiones de agentes en cuasi-real-time · pillar 5 feedback loop · cron */10 · primera execution dentro de 10 min post-enable",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": false
+          },
+          "post_check": {
+            "type": "next_execution_within_minutes",
+            "value": 15
+          },
+          "priority": "p1",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=g0ewNcSKHmgtWFgu",
+          "ramping": "immediate"
+        },
+        {
+          "id": "sTLfpoGyIphApYmO",
+          "name": "Account Health Score Daily (6am)",
+          "action": "enable",
+          "reason": "Core CCO function · 17 nodos · sin esto jefe-client-success ciego · no deps externas",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": false
+          },
+          "post_check": {
+            "type": "next_execution_within_hours",
+            "value": 24
+          },
+          "priority": "p1",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=sTLfpoGyIphApYmO",
+          "ramping": "immediate"
+        },
+        {
+          "id": "aWM5tIVU638bDTAn",
+          "name": "Creative Performance Learner (Daily 4am)",
+          "action": "enable",
+          "reason": "Pillar 5 feedback loop · invocado por journey-d ALWAYS-ON · cron daily 4am",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": false
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=aWM5tIVU638bDTAn",
+          "ramping": "immediate"
+        },
+        {
+          "id": "f9cgFfI32GJlYZm0",
+          "name": "Cross-Platform Attribution Validator (Hourly)",
+          "action": "enable",
+          "reason": "10-point audit · detecta drift entre Meta/Google/TikTok/GA4 · pillar 5 · sin esto attribution sesgada",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": false
+          },
+          "post_check": {
+            "type": "next_execution_within_hours",
+            "value": 2
+          },
+          "priority": "p1",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=f9cgFfI32GJlYZm0",
+          "ramping": "immediate"
+        },
+        {
+          "id": "F2oUCmxocQmKNP5r",
+          "name": "GEO Content Freshness Cron (Mon 3am UTC)",
+          "action": "enable",
+          "reason": "Sub-workflow SEO Journey D · cron weekly Monday 3am",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": false
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=F2oUCmxocQmKNP5r",
+          "ramping": "immediate"
+        },
+        {
+          "id": "3kECbILUvKiHpPmp",
+          "name": "SEO Cannibalization Audit Weekly (Sun 2am UTC)",
+          "action": "enable",
+          "reason": "Pareado con ANzKornQDkZuZ3yP (ambos llaman /api/cannibalization-audits) · cron weekly Sunday",
+          "pre_check": {
+            "type": "expect_state",
+            "field": "active",
+            "value": false
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=3kECbILUvKiHpPmp",
+          "ramping": "immediate"
+        }
+      ]
+    },
+    {
+      "phase": "2-reenable-needs-creds",
+      "description": "Re-enable 9 workflows que requieren credentials/config externos. NO ejecutar hasta que el operador confirme que cada credencial está cargada en n8n credentials store o env vars.",
+      "risk": "MEDIUM",
+      "actions": [
+        {
+          "id": "Gi2wq9baSRB3jQ0L",
+          "name": "Cost Watchdog Multi-Service v2 (Hourly)",
+          "action": "enable",
+          "reason": "Cost spikes invisibles sin esto · pero requires Anthropic /v1/usage endpoint exists",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "Anthropic /v1/usage endpoint responds 200 en GET con CLAUDE_API_KEY",
+              "OpenAI dashboard/billing/usage endpoint responds (legacy · puede no existir más)",
+              "Apify /v2/users/me responds con APIFY_API_KEY"
+            ]
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=Gi2wq9baSRB3jQ0L"
+        },
+        {
+          "id": "fe9D7xdk5QpKmBRw",
+          "name": "Landing Page CRO Optimizer v2 (Sun 7am)",
+          "action": "enable",
+          "reason": "Activa cro-specialist + Stitch · auto-launch A/B · requires Firecrawl",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "FIRECRAWL_API_KEY presente en n8n credentials store",
+              "GOOGLE_PSI_KEY presente (PageSpeed Insights)"
+            ]
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=fe9D7xdk5QpKmBRw"
+        },
+        {
+          "id": "7dwRRNC66cG5pWRU",
+          "name": "Google Ads Performance Max Optimizer (Daily 4am)",
+          "action": "enable",
+          "reason": "PMax sin auto-opt · requires Google Ads creds",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "GOOGLE_ADS_DEVELOPER_TOKEN presente",
+              "GOOGLE_ADS_REFRESH_TOKEN refrescable"
+            ]
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=7dwRRNC66cG5pWRU"
+        },
+        {
+          "id": "M2zQAsAgoqeSxeUm",
+          "name": "Social Multi-Platform Publisher v2 (Hourly + Webhook)",
+          "action": "enable",
+          "reason": "Social posting off · requires 4 platform tokens",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "LINKEDIN_ACCESS_TOKEN válido (60-day rotation)",
+              "TWITTER_BEARER_TOKEN válido",
+              "INSTAGRAM_BUSINESS_ACCOUNT_ID + access token",
+              "TIKTOK_ACCESS_TOKEN válido"
+            ]
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=M2zQAsAgoqeSxeUm"
+        },
+        {
+          "id": "6qh7SDSEvXULXeFp",
+          "name": "RFM Segmentation Nightly (Daily 2am)",
+          "action": "enable",
+          "reason": "Sub-workflow client_success · requires GHL API key",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "GHL_API_KEY presente y con scope contacts read",
+              "GHL_LOCATION_ID set per cliente activo"
+            ]
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=6qh7SDSEvXULXeFp"
+        },
+        {
+          "id": "CNlTrfwkhhikPgtE",
+          "name": "Client NPS + CSAT Monthly Pulse (1st of month 10am)",
+          "action": "enable",
+          "reason": "Invocado por journey-d cron monthly · requires GHL config",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "GHL_API_KEY con permission para send-email + contacts read",
+              "Email template NPS configurado en GHL"
+            ]
+          },
+          "priority": "p3",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=CNlTrfwkhhikPgtE"
+        },
+        {
+          "id": "sdzZU9pj04Sa5LvD",
+          "name": "Meta Ads Full-Stack Optimizer v2 (Daily 3am)",
+          "action": "enable",
+          "reason": "Core paid media · ads sin auto-opt si no",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "META_ACCESS_TOKEN válido (60-day rotation)",
+              "META_AD_ACCOUNT_ID per cliente con ads activos"
+            ]
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=sdzZU9pj04Sa5LvD"
+        },
+        {
+          "id": "89itIo28xJBrxqd9",
+          "name": "Weekly Client Report Generator v2 (Mondays 8am)",
+          "action": "enable",
+          "reason": "Implementación del journey-d weekly cron · requires multi-token (Notion + GA4 + Meta)",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "NOTION_API_KEY + NOTION_PARENT_PAGE_ID válidos",
+              "GA4_PROPERTY_ID per cliente",
+              "META_ACCESS_TOKEN válido"
+            ]
+          },
+          "priority": "p1",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=89itIo28xJBrxqd9"
+        },
+        {
+          "id": "V7onHMA6pYtKjLh4",
+          "name": "TikTok + LinkedIn Unified Manager (Daily 5am)",
+          "action": "enable",
+          "reason": "Sub-workflow ads · requires TikTok + LinkedIn tokens",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "TIKTOK_ADS_ACCESS_TOKEN válido",
+              "LINKEDIN_ADS_ACCESS_TOKEN válido"
+            ]
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=V7onHMA6pYtKjLh4"
+        }
+      ]
+    },
+    {
+      "phase": "3-replace-by-sprint3",
+      "description": "Disable 5 legacy workflows DESPUÉS del Sprint #3 pack import + smoke test. Pre-check: confirma que el journey-x equivalente en Sprint #3 está activo y funcional. NO ejecutar hasta Wave 12 después de import del pack.",
+      "risk": "HIGH",
+      "blocked_until": "Sprint #3 pack imported + smoke tested · documentado en future Wave 12",
+      "actions": [
+        {
+          "id": "qiDpHgO622iHCKwl",
+          "name": "Lead → Campaign Pipeline (Webhook)",
+          "action": "disable",
+          "reason": "Reemplazado por journey-a-acquire-pipeline.json post-Sprint #3 import",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "Sprint #3 pack workflow journey-a-acquire-pipeline está active=true en n8n live",
+              "Smoke test journey-a passed con cliente sandbox",
+              "GHL webhooks redirected al new path"
+            ]
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=qiDpHgO622iHCKwl"
+        },
+        {
+          "id": "LyVoKcrypS5uLyuu",
+          "name": "Client Onboarding E2E v2 (Webhook: Deal Won)",
+          "action": "disable",
+          "reason": "Reemplazado por journey-b-onboard-pipeline.json post-Sprint #3 import",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "Sprint #3 pack workflow journey-b-onboard-pipeline está active=true",
+              "Smoke test journey-b passed",
+              "GHL Deal Won webhook redirected"
+            ]
+          },
+          "priority": "p2",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=LyVoKcrypS5uLyuu"
+        },
+        {
+          "id": "EmBEtslgcd2p4Wd7",
+          "name": "Churn Prediction 90d Pre-Renewal (9am)",
+          "action": "disable",
+          "reason": "Embebido en journey-e-review-pipeline (sub-step) post-Sprint #3 import",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "journey-e-review-pipeline incluye churn prediction sub-step",
+              "Smoke test journey-e passed"
+            ]
+          },
+          "priority": "p3",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=EmBEtslgcd2p4Wd7"
+        },
+        {
+          "id": "uMrqNtzpuasn4vNn",
+          "name": "QBR Generator Quarterly (1st quarter 4am)",
+          "action": "disable",
+          "reason": "Wrapper journey-e-review-pipeline absorbe lógica · post-Sprint #3 import",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "journey-e-review-pipeline cubre QBR cron quarterly",
+              "Smoke test journey-e passed"
+            ]
+          },
+          "priority": "p3",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=uMrqNtzpuasn4vNn"
+        },
+        {
+          "id": "ohtClKf8B232uQSH",
+          "name": "Expansion Readiness Scanner (Fri 2pm)",
+          "action": "disable",
+          "reason": "Sub-step journey-e · post-Sprint #3 import",
+          "pre_check": {
+            "type": "manual_verify",
+            "checks": [
+              "journey-e-review-pipeline incluye expansion readiness sub-step"
+            ]
+          },
+          "priority": "p3",
+          "rollback_command": "node scripts/cleanup/cleanup-rollback.mjs --workflow=ohtClKf8B232uQSH"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_actions": 25,
+    "by_action": {
+      "enable": 16,
+      "disable": 9
+    },
+    "by_phase": {
+      "0-disable-stubs": 4,
+      "1-reenable-no-deps": 7,
+      "2-reenable-needs-creds": 9,
+      "3-replace-by-sprint3": 5
+    },
+    "executable_today_no_approval": 0,
+    "executable_after_emilio_approval": 11,
+    "blocked_until_sprint3": 5,
+    "needs_credentials_verification": 9
+  },
+  "anti_patterns_logged_for_wave12": [
+    "Hardcoded n8n.cloud URLs (deprecated) en src/app/api/agents/pipeline/route.ts:25",
+    "N8N_WEBHOOK_URL singular (no path-aware routing) en src/lib/pipeline-orchestrator.ts:557",
+    "Validation gap en qiDpHgO622iHCKwl Lead → Campaign Pipeline (acepta cualquier payload)",
+    "Tool gaps en jefe-marketing/editor-en-jefe/video-editor identidades (no declaran webhook tools)",
+    "Sprint #3 design vs production drift: 6 workflows mejorados ya diseñados pero no importados"
+  ]
+}
