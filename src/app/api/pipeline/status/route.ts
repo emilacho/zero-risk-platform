@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * GET /api/pipeline/status?id=<pipeline_id>
@@ -8,6 +9,9 @@ import { getSupabaseAdmin } from '@/lib/supabase'
  * Also: GET /api/pipeline/status (no id) — list all active pipelines
  */
 export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const { searchParams } = new URL(request.url)
   const pipelineId = searchParams.get('id')
   const supabase = getSupabaseAdmin()

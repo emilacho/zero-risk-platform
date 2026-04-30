@@ -12,11 +12,15 @@
  */
 
 import { NextResponse } from 'next/server'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const body = await request.json().catch(() => ({}))
 
   const experimentId = Math.floor(Math.random() * 90000) + 10000
@@ -62,7 +66,10 @@ export async function POST(request: Request) {
   })
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return NextResponse.json({
     endpoint: '/api/stubs/posthog/experiments',
     method: 'POST',

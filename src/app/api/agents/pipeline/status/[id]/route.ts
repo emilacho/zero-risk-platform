@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * Agent Pipeline — Status Polling
@@ -20,6 +21,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireInternalApiKey(_request)
+  if (!auth.ok) return auth.response
+
   try {
     const id = params.id
     if (!id || !UUID_REGEX.test(id)) {

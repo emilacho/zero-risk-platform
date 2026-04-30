@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { FeedbackCollector } from '@/lib/feedback-collector'
 import { MetaAgent } from '@/lib/meta-agent'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * POST /api/analytics/proposals/[id]/resolve
@@ -16,6 +17,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const { id: proposalId } = await params
     const supabase = getSupabaseAdmin()

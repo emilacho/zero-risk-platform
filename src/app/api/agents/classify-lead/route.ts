@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { sanitizeString, validateRequired, isValidEmail } from '@/lib/validation'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // POST /api/agents/classify-lead
 // RUFLO Lead Qualifier — clasifica leads como caliente/tibio/frío
@@ -9,6 +10,9 @@ import { sanitizeString, validateRequired, isValidEmail } from '@/lib/validation
 // Output: { classification, score, reason, actions }
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const startTime = Date.now()
 
   try {

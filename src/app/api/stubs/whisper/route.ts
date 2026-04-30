@@ -10,6 +10,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -27,6 +28,9 @@ const STUB_VTT = `WEBVTT
 `
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const contentType = (request.headers.get('content-type') || '').toLowerCase()
   // Accept form, JSON, or empty — return the same synthetic VTT either way
   let responseFormat = 'vtt'
@@ -67,7 +71,10 @@ export async function POST(request: Request) {
   })
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return NextResponse.json({
     endpoint: '/api/stubs/whisper',
     method: 'POST',

@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * POST /api/hitl/resolve
@@ -19,6 +20,9 @@ import { capture } from '@/lib/posthog'
  * Also accepts via query param: ?step_id=xxx for Slack webhook compatibility
  */
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const { searchParams } = new URL(request.url)
     const body = await request.json()
@@ -121,7 +125,10 @@ export async function POST(request: Request) {
 /**
  * GET /api/hitl/resolve — endpoint info
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return NextResponse.json({
     endpoint: '/api/hitl/resolve',
     method: 'POST',

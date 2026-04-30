@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { FeedbackCollector } from '@/lib/feedback-collector'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * GET /api/analytics/performance
@@ -11,6 +12,9 @@ import { FeedbackCollector } from '@/lib/feedback-collector'
  *   ?days=30           — lookback period (default 30)
  */
 export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const supabase = getSupabaseAdmin()
     const collector = new FeedbackCollector(supabase)

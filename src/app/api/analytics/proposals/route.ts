@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { FeedbackCollector } from '@/lib/feedback-collector'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * GET /api/analytics/proposals
@@ -10,6 +11,9 @@ import { FeedbackCollector } from '@/lib/feedback-collector'
  *   ?status=pending|approved|rejected|deferred|applied  (default: pending)
  */
 export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const supabase = getSupabaseAdmin()
     const collector = new FeedbackCollector(supabase)

@@ -4,11 +4,15 @@
  * Called by the Landing Page A/B Deployer n8n workflow after PostHog experiment creation.
  */
 import { NextResponse } from 'next/server'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const body = await request.json().catch(() => ({}))
 
   const id = `exp_meta_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
@@ -28,6 +32,9 @@ export async function POST(request: Request) {
   })
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return NextResponse.json({ endpoint: '/api/experiments/meta', method: 'POST' })
 }

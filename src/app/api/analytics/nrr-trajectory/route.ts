@@ -3,6 +3,7 @@
  * Usado por Churn Prediction 90d, Expansion Readiness Scanner.
  */
 import { handleReadStub } from '@/lib/read-stub-handler'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -22,5 +23,11 @@ function makeNrr(body: Record<string, unknown>) {
   }
 }
 
-export async function GET(r: Request) { return handleReadStub(r, { name: 'analytics.nrr-trajectory', makeResponse: makeNrr }) }
-export async function POST(r: Request) { return handleReadStub(r, { name: 'analytics.nrr-trajectory', makeResponse: makeNrr }) }
+export async function GET(r: Request) {
+  const auth = await requireInternalApiKey(r)
+  if (!auth.ok) return auth.response
+ return handleReadStub(r, { name: 'analytics.nrr-trajectory', makeResponse: makeNrr }) }
+export async function POST(r: Request) {
+  const auth = await requireInternalApiKey(r)
+  if (!auth.ok) return auth.response
+ return handleReadStub(r, { name: 'analytics.nrr-trajectory', makeResponse: makeNrr }) }

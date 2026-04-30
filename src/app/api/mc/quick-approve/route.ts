@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 const MASTER = process.env.MC_MASTER_PASSWORD || 'zerorisk2026'
 
 export async function GET(req: Request) {
+  const auth = await requireInternalApiKey(req)
+  if (!auth.ok) return auth.response
+
   return handle(req)
 }
 
 export async function POST(req: Request) {
+  const auth = await requireInternalApiKey(req)
+  if (!auth.ok) return auth.response
+
   return handle(req)
 }
 

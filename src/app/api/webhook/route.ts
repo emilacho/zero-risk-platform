@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // POST /api/webhook — generic webhook endpoint for n8n
 // n8n workflows can POST here to create leads, log agent actions, etc.
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const body = await request.json()
     const { type, data } = body

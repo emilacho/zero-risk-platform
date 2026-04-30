@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MissionControlBridge } from '@/lib/mc-bridge'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * POST /api/mc-sync
@@ -17,6 +18,9 @@ import { MissionControlBridge } from '@/lib/mc-bridge'
  * }
  */
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const body = await request.json()
     const action = body.action || 'sync_pipeline'
@@ -153,7 +157,10 @@ export async function POST(request: Request) {
 /**
  * GET /api/mc-sync — endpoint info + health check
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const mc = new MissionControlBridge()
   const mcAvailable = await mc.isAvailable()
 

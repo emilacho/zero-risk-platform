@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * POST /api/hitl/retry
@@ -20,6 +21,9 @@ import { sanitizeString } from '@/lib/validation'
  * }
  */
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const body = await request.json()
 
@@ -113,7 +117,10 @@ export async function POST(request: Request) {
 /**
  * GET /api/hitl/retry — endpoint info
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return NextResponse.json({
     endpoint: '/api/hitl/retry',
     method: 'POST',

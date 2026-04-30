@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * POST /api/onboarding — Start a new client onboarding (Day 1 auto-discovery)
@@ -18,6 +19,9 @@ import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
  * GET /api/onboarding — List all onboarding sessions
  */
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const body = await request.json().catch(() => ({}) as Record<string, unknown>)
 
@@ -94,6 +98,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const supabase = getSupabaseAdmin()
     const orchestrator = new OnboardingOrchestrator(supabase)

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MissionControlBridge } from '@/lib/mc-bridge'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * POST /api/mc-sync/agents
@@ -31,7 +32,10 @@ function inferMCRole(agentName: string): string {
   return 'marketer'
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const supabase = getSupabaseAdmin()
     const mc = new MissionControlBridge()
@@ -134,7 +138,10 @@ export async function POST() {
 /**
  * GET /api/mc-sync/agents — info
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const supabase = getSupabaseAdmin()
   const { count } = await supabase
     .from('agents')

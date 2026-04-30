@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { isValidUUID, pickFields, CAMPAIGN_FIELDS } from '@/lib/validation'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // GET /api/campaigns/[id] — get single campaign
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireInternalApiKey(_request)
+  if (!auth.ok) return auth.response
+
   try {
     if (!isValidUUID(params.id)) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 })
@@ -34,6 +38,9 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     if (!isValidUUID(params.id)) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 })
@@ -69,6 +76,9 @@ export async function DELETE(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireInternalApiKey(_request)
+  if (!auth.ok) return auth.response
+
   try {
     if (!isValidUUID(params.id)) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 })

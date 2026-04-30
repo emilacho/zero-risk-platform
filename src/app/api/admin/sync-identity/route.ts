@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // POST /api/admin/sync-identity
 // One-time endpoint to sync agent identity content into Supabase.
@@ -12,6 +13,9 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 // }
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const body = await request.json()
     const { agent_name, identity_content, secret } = body

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * POST /api/onboarding/[id]/intake — Process Day 2 intake form
@@ -26,6 +27,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const { id: onboardingId } = await params
     const supabase = getSupabaseAdmin()

@@ -23,11 +23,15 @@ import { NextResponse } from 'next/server'
 import { runAgentViaSDK } from '@/lib/agent-sdk-runner'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 min — pipelines largos
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const body = await request.json()
 
@@ -87,7 +91,10 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return NextResponse.json({
     endpoint: '/api/agents/run-sdk',
     method: 'POST',

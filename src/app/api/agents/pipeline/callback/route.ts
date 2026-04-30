@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * Agent Pipeline — n8n Callback
@@ -24,6 +25,9 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 export async function POST(request: NextRequest) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     // 1. Validate shared secret
     const expectedSecret = process.env.PIPELINE_CALLBACK_SECRET || ''

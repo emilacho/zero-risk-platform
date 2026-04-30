@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // GET /api/agents/status
 // Returns the current status of all agents and recent execution logs
 // Now reads from Supabase `agents` table with fallback to hardcoded list
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const supabase = getSupabaseAdmin()
 

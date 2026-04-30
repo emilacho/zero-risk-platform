@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MetaAgent } from '@/lib/meta-agent'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * POST /api/analytics/meta-agent-run
@@ -16,6 +17,9 @@ import { MetaAgent } from '@/lib/meta-agent'
  * Returns history of meta-agent runs.
  */
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const supabase = getSupabaseAdmin()
     const metaAgent = new MetaAgent(supabase)
@@ -42,7 +46,10 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const supabase = getSupabaseAdmin()
     const metaAgent = new MetaAgent(supabase)

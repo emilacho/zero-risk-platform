@@ -6,6 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getSupabase, getSupabaseAdmin } from '@/lib/supabase'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,6 +26,9 @@ function stubCampaign(overrides = {}) {
 
 // GET /api/campaigns — List campaigns. Accepts ?client_id=X, ?status=Y
 export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const url = new URL(request.url)
     const client_id = url.searchParams.get('client_id')
@@ -68,6 +72,9 @@ export async function GET(request: Request) {
 
 // POST /api/campaigns — create campaign (uses admin to bypass RLS)
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     let raw: unknown = {}
     try { raw = await request.json() } catch { raw = {} }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { FeedbackCollector, CampaignResultRecord } from '@/lib/feedback-collector'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * POST /api/analytics/campaign-results
@@ -13,6 +14,9 @@ import { FeedbackCollector, CampaignResultRecord } from '@/lib/feedback-collecto
  * List recent campaign results.
  */
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const supabase = getSupabaseAdmin()
     const collector = new FeedbackCollector(supabase)
@@ -49,6 +53,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const supabase = getSupabaseAdmin()
 

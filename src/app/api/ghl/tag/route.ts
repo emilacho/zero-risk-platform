@@ -3,11 +3,15 @@
  * Usado por Lead Enrichment & Scoring.
  */
 import { handleStubPost } from '@/lib/stub-handler'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return handleStubPost(request, {
     table: 'ghl_tags_log',
     transform: (r) => ({

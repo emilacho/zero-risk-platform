@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 /**
  * Agent Pipeline — Async Trigger
@@ -44,6 +45,9 @@ function getCallbackUrl(): string {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const body = await request.json()
     const task = typeof body?.task === 'string' ? body.task.trim() : ''

@@ -3,6 +3,7 @@
  * Usado por QBR Generator Quarterly.
  */
 import { handleReadStub } from '@/lib/read-stub-handler'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,5 +30,11 @@ function makeBenchmarks(body: Record<string, unknown>) {
   }
 }
 
-export async function GET(r: Request) { return handleReadStub(r, { name: 'analytics.benchmarks', makeResponse: makeBenchmarks }) }
-export async function POST(r: Request) { return handleReadStub(r, { name: 'analytics.benchmarks', makeResponse: makeBenchmarks }) }
+export async function GET(r: Request) {
+  const auth = await requireInternalApiKey(r)
+  if (!auth.ok) return auth.response
+ return handleReadStub(r, { name: 'analytics.benchmarks', makeResponse: makeBenchmarks }) }
+export async function POST(r: Request) {
+  const auth = await requireInternalApiKey(r)
+  if (!auth.ok) return auth.response
+ return handleReadStub(r, { name: 'analytics.benchmarks', makeResponse: makeBenchmarks }) }

@@ -4,11 +4,15 @@
  *  GET  → list (Mission Control)
  */
 import { genericList, genericInsert } from '@/lib/crud-helpers'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return genericInsert('client_reports', request, {
     requireAuth: true,
     required: ['client_id', 'period_start', 'period_end', 'summary'],
@@ -17,6 +21,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return genericList('client_reports', request, {
     filterableColumns: ['client_id', 'status', 'kind'],
     orderColumn: 'period_end',

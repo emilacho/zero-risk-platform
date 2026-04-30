@@ -4,11 +4,15 @@
  */
 
 import { handleStubPost } from '@/lib/stub-handler'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return handleStubPost(request, {
     table: 'agent_outcomes',
     // transform the workflow body shape to the agent_outcomes row shape

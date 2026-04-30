@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // GET /api/leads — List all leads
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const supabase = getSupabase()
   const { data, error } = await supabase
     .from('leads')
@@ -15,6 +19,9 @@ export async function GET() {
 
 // POST /api/leads — Capture a new lead
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const supabase = getSupabase()
   const body = await request.json()
 

@@ -15,6 +15,7 @@ import {
   buildAgentContext,
   type BrainSection,
 } from '@/lib/client-brain'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 interface ToolRequest {
   tool: 'query_client_brain' | 'get_client_guardrails' | 'build_agent_context'
@@ -22,6 +23,9 @@ interface ToolRequest {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireInternalApiKey(req)
+  if (!auth.ok) return auth.response
+
   try {
     // Validate auth — Managed Agents send the service key as Bearer token
     const authHeader = req.headers.get('authorization')

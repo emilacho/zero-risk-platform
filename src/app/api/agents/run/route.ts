@@ -6,6 +6,7 @@ import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWE
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
 import { capture } from '@/lib/posthog'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -33,6 +34,9 @@ const MODEL_MAP: Record<string, string> = {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const startTime = Date.now()
 
   try {
@@ -518,7 +522,10 @@ export async function POST(request: Request) {
 }
 
 // GET /api/agents/run — info
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return NextResponse.json({
     endpoint: '/api/agents/run',
     method: 'POST',

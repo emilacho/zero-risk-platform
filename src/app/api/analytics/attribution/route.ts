@@ -3,6 +3,7 @@
  * Usado por Closed-Loop Attribution.
  */
 import { handleReadStub } from '@/lib/read-stub-handler'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,5 +26,11 @@ function makeAttribution(body: Record<string, unknown>) {
   }
 }
 
-export async function GET(r: Request) { return handleReadStub(r, { name: 'analytics.attribution', makeResponse: makeAttribution }) }
-export async function POST(r: Request) { return handleReadStub(r, { name: 'analytics.attribution', makeResponse: makeAttribution }) }
+export async function GET(r: Request) {
+  const auth = await requireInternalApiKey(r)
+  if (!auth.ok) return auth.response
+ return handleReadStub(r, { name: 'analytics.attribution', makeResponse: makeAttribution }) }
+export async function POST(r: Request) {
+  const auth = await requireInternalApiKey(r)
+  if (!auth.ok) return auth.response
+ return handleReadStub(r, { name: 'analytics.attribution', makeResponse: makeAttribution }) }

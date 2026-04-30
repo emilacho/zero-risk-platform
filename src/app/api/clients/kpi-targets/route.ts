@@ -2,6 +2,7 @@
  * GET|POST /api/clients/kpi-targets — KPI targets per client for QBR.
  */
 import { handleReadStub } from '@/lib/read-stub-handler'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -22,5 +23,11 @@ function makeKpis(body: Record<string, unknown>) {
   }
 }
 
-export async function GET(r: Request) { return handleReadStub(r, { name: 'clients.kpi-targets', makeResponse: makeKpis }) }
-export async function POST(r: Request) { return handleReadStub(r, { name: 'clients.kpi-targets', makeResponse: makeKpis }) }
+export async function GET(r: Request) {
+  const auth = await requireInternalApiKey(r)
+  if (!auth.ok) return auth.response
+ return handleReadStub(r, { name: 'clients.kpi-targets', makeResponse: makeKpis }) }
+export async function POST(r: Request) {
+  const auth = await requireInternalApiKey(r)
+  if (!auth.ok) return auth.response
+ return handleReadStub(r, { name: 'clients.kpi-targets', makeResponse: makeKpis }) }

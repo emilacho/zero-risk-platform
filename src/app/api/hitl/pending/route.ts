@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // Disable Next.js route handler caching — always fresh data
 export const dynamic = 'force-dynamic'
@@ -20,6 +21,9 @@ export const revalidate = 0
  *   limit=N — max results per system (default 50, max 200)
  */
 export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   const { searchParams } = new URL(request.url)
   const includeRejected = searchParams.get('include_rejected') === 'true'
   const includeSystemB = searchParams.get('include_system_b') !== 'false' // default true

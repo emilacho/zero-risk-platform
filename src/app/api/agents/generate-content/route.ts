@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { sanitizeString, validateRequired } from '@/lib/validation'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // POST /api/agents/generate-content
 // Triggers the Content Creator agent via Claude API
@@ -8,6 +9,9 @@ import { sanitizeString, validateRequired } from '@/lib/validation'
 // Output: Generated content variants saved to Supabase
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const body = await request.json()
 

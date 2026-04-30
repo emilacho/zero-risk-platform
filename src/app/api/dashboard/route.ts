@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { countRows } from '@/lib/supabase-admin'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // GET /api/dashboard — returns KPI summary
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   try {
     const [campaigns, activeCampaigns, leads, newLeads, content] = await Promise.all([
       countRows('campaigns'),

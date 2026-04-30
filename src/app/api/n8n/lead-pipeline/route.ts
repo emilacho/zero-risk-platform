@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString, isValidEmail, isValidUUID } from '@/lib/validation'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 // POST /api/n8n/lead-pipeline
 // Endpoint que n8n llama para procesar un lead completo
@@ -16,6 +17,9 @@ function validateN8nAuth(request: Request): boolean {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   // Verify n8n authorization
   if (!validateN8nAuth(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -204,7 +208,10 @@ Responde: {"classification":"caliente|tibio|frio","score":1-100,"reason":"...","
 }
 
 // GET /api/n8n/lead-pipeline — health check
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireInternalApiKey(request)
+  if (!auth.ok) return auth.response
+
   return NextResponse.json({
     status: 'ok',
     endpoint: 'lead-pipeline',

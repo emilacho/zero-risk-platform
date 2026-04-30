@@ -3,6 +3,7 @@
  * Usado por Customer Health Score Daily, Churn Prediction 90d.
  */
 import { handleReadStub } from '@/lib/read-stub-handler'
+import { requireInternalApiKey } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -27,5 +28,11 @@ function makeHealthHistory(body: Record<string, unknown>) {
   }
 }
 
-export async function GET(r: Request) { return handleReadStub(r, { name: 'clients.health-history', makeResponse: makeHealthHistory }) }
-export async function POST(r: Request) { return handleReadStub(r, { name: 'clients.health-history', makeResponse: makeHealthHistory }) }
+export async function GET(r: Request) {
+  const auth = await requireInternalApiKey(r)
+  if (!auth.ok) return auth.response
+ return handleReadStub(r, { name: 'clients.health-history', makeResponse: makeHealthHistory }) }
+export async function POST(r: Request) {
+  const auth = await requireInternalApiKey(r)
+  if (!auth.ok) return auth.response
+ return handleReadStub(r, { name: 'clients.health-history', makeResponse: makeHealthHistory }) }
