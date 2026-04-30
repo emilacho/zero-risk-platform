@@ -2,12 +2,24 @@ import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
 import { captureRouteError } from '@/lib/sentry-capture'
+import { checkRateLimit, getClientKey } from '@/lib/rate-limit'
+import { apiErrors } from '@/lib/api-errors'
 
 // POST /api/webhook — generic webhook endpoint for n8n
 // n8n workflows can POST here to create leads, log agent actions, etc.
 export async function POST(request: Request) {
   const auth = await requireInternalApiKey(request)
   if (!auth.ok) return auth.response
+
+  // Wave 13 T3: rate limit · 30 req/min por IP
+  // Webhook es endpoint genérico · 30/min mucho headroom para n8n normal pero
+  // bloquea burst attacks (n8n lanza ~1-3 webhooks por workflow run normal)
+  const rl = checkRateLimit(getClientKey(request), { max: 30, windowMs: 60_000 })
+  if (!rl.allowed) {
+    return apiErrors.rateLimited(
+      `Webhook rate limit exceeded · retry in ${Math.ceil(rl.retryAfterMs / 1000)}s`,
+    )
+  }
 
   try {
     const body = await request.json()

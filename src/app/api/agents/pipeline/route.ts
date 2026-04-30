@@ -3,6 +3,8 @@ import { randomUUID } from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
 import { captureRouteError } from '@/lib/sentry-capture'
+import { checkRateLimit, getClientKey } from '@/lib/rate-limit'
+import { apiErrors } from '@/lib/api-errors'
 
 /**
  * Agent Pipeline — Async Trigger
@@ -48,6 +50,16 @@ function getCallbackUrl(): string {
 export async function POST(request: NextRequest) {
   const auth = await requireInternalApiKey(request)
   if (!auth.ok) return auth.response
+
+  // Wave 13 T3: rate limit · 60 req/min por client (IP + api-key salt)
+  // MC dispatch normal: ~1-5 launches/hour · 60/min = comfortable headroom
+  // Burst attack protection: in-memory · cold start tolerant · per-instance
+  const rl = checkRateLimit(getClientKey(request), { max: 60, windowMs: 60_000 })
+  if (!rl.allowed) {
+    return apiErrors.rateLimited(
+      `Pipeline dispatch rate limit exceeded · retry in ${Math.ceil(rl.retryAfterMs / 1000)}s`,
+    )
+  }
 
   try {
     const body = await request.json()

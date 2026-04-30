@@ -25,6 +25,8 @@ import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
 import { captureRouteError } from '@/lib/sentry-capture'
+import { checkRateLimit, getClientKey } from '@/lib/rate-limit'
+import { apiErrors } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 min — pipelines largos
@@ -32,6 +34,15 @@ export const maxDuration = 300 // 5 min — pipelines largos
 export async function POST(request: Request) {
   const auth = await requireInternalApiKey(request)
   if (!auth.ok) return auth.response
+
+  // Wave 13 T3: rate limit · 120 req/min por internal-api-key
+  // SDK runner es pesado · evitar burst que sature CLI claude subprocess
+  const rl = checkRateLimit(getClientKey(request), { max: 120, windowMs: 60_000 })
+  if (!rl.allowed) {
+    return apiErrors.rateLimited(
+      `Agent SDK rate limit exceeded · retry in ${Math.ceil(rl.retryAfterMs / 1000)}s`,
+    )
+  }
 
   try {
     const body = await request.json()
