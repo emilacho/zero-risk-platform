@@ -1,7 +1,9 @@
-#!/usr/bin/env node
 /**
  * cleanup-rollback.mjs
  * Wave 11 · CC#2 · Restore n8n workflows to pre-cleanup state.
+ *
+ * Wave 12 fix (CC#1): removed shebang `#!/usr/bin/env node` because vitest
+ * parser fails on it. Invoke with: `node scripts/cleanup/cleanup-rollback.mjs ...`
  *
  * Reads the most recent backup file in audit-output/cleanup-backups/<id>-*.json
  * and reverses the active state via the n8n public API.
@@ -205,7 +207,9 @@ async function main() {
   process.exit(summary.fail > 0 ? 1 : 0)
 }
 
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1].endsWith('cleanup-rollback.mjs')) {
+// Wave 12 fix: process.argv[1] is undefined when imported by vitest.
+const entryArg = process.argv[1] ?? ''
+if (import.meta.url === `file://${entryArg}` || entryArg.endsWith('cleanup-rollback.mjs')) {
   main().catch(e => { console.error('FATAL:', e); process.exit(2) })
 }
 

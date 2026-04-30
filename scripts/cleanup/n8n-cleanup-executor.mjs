@@ -1,7 +1,10 @@
-#!/usr/bin/env node
 /**
  * n8n-cleanup-executor.mjs
  * Wave 11 · CC#2 · Cleanup script for n8n workflows
+ *
+ * Wave 12 fix (CC#1): removed shebang `#!/usr/bin/env node` because
+ * vitest 4.x parser fails on it as "SyntaxError: Invalid or unexpected token"
+ * when imported by tests. Invoke with: `node scripts/cleanup/n8n-cleanup-executor.mjs ...`
  *
  * Executes (or dry-runs) actions defined in cleanup-plan.json against the
  * n8n public API. Backs up each workflow JSON before any state-changing call.
@@ -368,7 +371,11 @@ async function main() {
 }
 
 // Allow main to be skipped under test
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1].endsWith('n8n-cleanup-executor.mjs')) {
+// Wave 12 fix: process.argv[1] is undefined when imported by vitest (no entry script).
+// Guard against undefined before calling .endsWith() — was causing TypeError that
+// vitest mis-reported as "SyntaxError: Invalid or unexpected token".
+const entryArg = process.argv[1] ?? ''
+if (import.meta.url === `file://${entryArg}` || entryArg.endsWith('n8n-cleanup-executor.mjs')) {
   main().catch(e => { console.error('FATAL:', e); process.exit(2) })
 }
 

@@ -18,10 +18,10 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// Import the executor + rollback as ESM modules
-// @ts-expect-error · .mjs file imported in TS test
+// Import the executor + rollback as ESM modules.
+// Wave 12 (CC#1): @ts-expect-error directives removed · TypeScript now resolves
+// the .mjs imports correctly after vitest config + shebang fix.
 import * as executor from '../scripts/cleanup/n8n-cleanup-executor.mjs'
-// @ts-expect-error · .mjs file imported in TS test
 import * as rollback from '../scripts/cleanup/cleanup-rollback.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
