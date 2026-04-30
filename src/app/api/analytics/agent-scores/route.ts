@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { FeedbackCollector } from '@/lib/feedback-collector'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * GET /api/analytics/agent-scores
@@ -33,6 +34,10 @@ export async function GET(request: Request) {
       data: scorecards,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/analytics/agent-scores',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

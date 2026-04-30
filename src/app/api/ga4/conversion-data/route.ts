@@ -19,6 +19,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -198,6 +199,10 @@ export async function GET(request: NextRequest) {
       source: 'ga4_data_api_v1beta',
     })
   } catch (err) {
+    captureRouteError(err, request, {
+      route: '/api/ga4/conversion-data',
+      source: 'route_handler',
+    })
     const msg = err instanceof Error ? err.message : 'Unknown error'
     console.error('[ga4/conversion-data] error:', msg)
     return NextResponse.json({ error: 'fetch_error', detail: msg }, { status: 502 })

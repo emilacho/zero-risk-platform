@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -82,6 +83,10 @@ export async function GET(request: Request) {
         filter: { status, limit },
       })
     } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/clients',
+      source: 'route_handler',
+    })
       // Supabase init or network failed
       return NextResponse.json({
         ok: true,
@@ -93,6 +98,10 @@ export async function GET(request: Request) {
       })
     }
   } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/clients',
+      source: 'route_handler',
+    })
     return NextResponse.json({
       ok: true,
       clients: [stubClient()],
@@ -141,6 +150,10 @@ export async function POST(request: Request) {
       ...(dbError ? { fallback_mode: true, db_error: dbError.slice(0, 400) } : {}),
     })
   } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/clients',
+      source: 'route_handler',
+    })
     return NextResponse.json({
       ok: true,
       fallback_mode: true,

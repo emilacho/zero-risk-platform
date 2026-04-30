@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * Agent Pipeline — n8n Callback
@@ -96,6 +97,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/agents/pipeline/callback',
+      source: 'route_handler',
+    })
     const message =
       error instanceof Error ? error.message : 'Unknown error'
     console.error('[pipeline callback] error:', error)

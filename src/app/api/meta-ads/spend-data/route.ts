@@ -16,6 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -139,6 +140,10 @@ export async function GET(request: NextRequest) {
       source: 'meta_graph_v21_insights',
     })
   } catch (err) {
+    captureRouteError(err, request, {
+      route: '/api/meta-ads/spend-data',
+      source: 'route_handler',
+    })
     const msg = err instanceof Error ? err.message : 'Unknown error'
     console.error('[meta-ads/spend-data] fetch error:', msg)
     return NextResponse.json({ error: 'fetch_error', detail: msg }, { status: 502 })

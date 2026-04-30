@@ -12,6 +12,7 @@
 
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -73,6 +74,10 @@ export async function GET(request: Request) {
       phError = `PostHog HTTP ${phRes.status}`
     }
   } catch (err: unknown) {
+    captureRouteError(err, request, {
+      route: '/api/posthog/events',
+      source: 'route_handler',
+    })
     phError = err instanceof Error ? err.message : String(err)
   }
 

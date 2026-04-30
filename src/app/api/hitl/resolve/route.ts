@@ -4,6 +4,7 @@ import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/hitl/resolve
@@ -115,6 +116,10 @@ export async function POST(request: Request) {
         : `Pipeline resumed from step ${step.step_index + 1}`,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/hitl/resolve',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

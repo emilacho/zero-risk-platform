@@ -4,6 +4,7 @@ import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/pipeline/run
@@ -112,6 +113,10 @@ export async function POST(request: Request) {
       })
     }
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/pipeline/run',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

@@ -4,6 +4,7 @@
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -38,6 +39,10 @@ export async function POST(request: Request) {
       note: 'Stub: real Stitch integration pending.',
     })
   } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/stitch/generate-variants',
+      source: 'route_handler',
+    })
     return NextResponse.json({
       ok: true,
       variants: [],

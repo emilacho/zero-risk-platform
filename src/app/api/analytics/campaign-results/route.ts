@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { FeedbackCollector, CampaignResultRecord } from '@/lib/feedback-collector'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/analytics/campaign-results
@@ -45,6 +46,10 @@ export async function POST(request: Request) {
       message: 'Campaign results recorded. Agent outcomes updated with performance metrics.',
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/analytics/campaign-results',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -88,6 +93,10 @@ export async function GET(request: Request) {
       data: data || [],
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/analytics/campaign-results',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

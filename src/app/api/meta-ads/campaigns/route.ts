@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -101,6 +102,10 @@ export async function GET(request: NextRequest) {
       next_page: data.paging?.next || null,
     })
   } catch (err) {
+    captureRouteError(err, request, {
+      route: '/api/meta-ads/campaigns',
+      source: 'route_handler',
+    })
     const msg = err instanceof Error ? err.message : 'Unknown error'
     console.error('[meta-ads/campaigns] fetch error:', msg)
     return NextResponse.json({ error: 'fetch_error', detail: msg }, { status: 502 })

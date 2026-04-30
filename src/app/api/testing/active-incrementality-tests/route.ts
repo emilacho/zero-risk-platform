@@ -16,6 +16,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -59,6 +60,10 @@ export async function GET() {
       count: data?.length ?? 0,
     })
   } catch (e: unknown) {
+    captureRouteError(e, null, {
+      route: '/api/testing/active-incrementality-tests',
+      source: 'route_handler',
+    })
     return NextResponse.json({
       tests: [],
       count: 0,

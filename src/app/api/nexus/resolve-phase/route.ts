@@ -8,6 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -38,6 +39,10 @@ export async function POST(request: Request) {
       priority: body.priority || body.parse_priority || 'normal',
     })
   } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/nexus/resolve-phase',
+      source: 'route_handler',
+    })
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({
       ok: false,

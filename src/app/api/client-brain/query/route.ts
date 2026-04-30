@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 import { queryClientBrain, getClientGuardrails, buildAgentContext, type BrainSection } from '@/lib/client-brain'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -39,6 +40,10 @@ export async function POST(request: Request) {
     ])
     return NextResponse.json({ results, guardrails, context_md })
   } catch (err) {
+    captureRouteError(err, request, {
+      route: '/api/client-brain/query',
+      source: 'route_handler',
+    })
     const message = err instanceof Error ? err.message : 'Internal error'
     return NextResponse.json({ error: message }, { status: 500 })
   }

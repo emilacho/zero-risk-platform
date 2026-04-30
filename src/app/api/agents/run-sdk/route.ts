@@ -24,6 +24,7 @@ import { runAgentViaSDK } from '@/lib/agent-sdk-runner'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 min — pipelines largos
@@ -84,6 +85,10 @@ export async function POST(request: Request) {
       duration_ms: result.durationMs,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/agents/run-sdk',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 },

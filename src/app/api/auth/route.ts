@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { allowPublic } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * Auth API route — SSR cookie-aware.
@@ -73,6 +74,10 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/auth',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -90,6 +95,10 @@ export async function DELETE() {
     }
     return NextResponse.json({ success: true })
   } catch (error) {
+    captureRouteError(error, null, {
+      route: '/api/auth',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

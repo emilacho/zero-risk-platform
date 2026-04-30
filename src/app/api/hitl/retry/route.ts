@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/hitl/retry
@@ -107,6 +108,10 @@ export async function POST(request: Request) {
       message: `New pipeline started (step 0 skipped). Feedback from rejection incorporated into objective. Track at /api/pipeline/status?id=${newPipelineId}`,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/hitl/retry',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 // POST /api/webhook — generic webhook endpoint for n8n
 // n8n workflows can POST here to create leads, log agent actions, etc.
@@ -109,6 +110,10 @@ export async function POST(request: Request) {
         )
     }
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/webhook',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

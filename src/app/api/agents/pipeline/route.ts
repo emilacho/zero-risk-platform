@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * Agent Pipeline — Async Trigger
@@ -129,6 +130,10 @@ export async function POST(request: NextRequest) {
       status: 'running',
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/agents/pipeline',
+      source: 'route_handler',
+    })
     const message =
       error instanceof Error ? error.message : 'Error desconocido en el proxy.'
     console.error('[pipeline trigger] error:', error)

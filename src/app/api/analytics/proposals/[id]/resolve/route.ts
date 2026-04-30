@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { FeedbackCollector } from '@/lib/feedback-collector'
 import { MetaAgent } from '@/lib/meta-agent'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/analytics/proposals/[id]/resolve
@@ -67,6 +68,10 @@ export async function POST(
         : `Proposal ${body.decision}.`,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/analytics/proposals/[id]/resolve',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

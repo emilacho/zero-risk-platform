@@ -29,6 +29,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10
@@ -101,6 +102,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, id: data.id })
   } catch (err) {
+    captureRouteError(err, request, {
+      route: '/api/agent-outcomes/write',
+      source: 'route_handler',
+    })
     console.error('[agent-outcomes/write] exception:', err)
     return NextResponse.json({ ok: false, reason: 'exception' })
   }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { isValidUUID, pickFields, CONTENT_FIELDS } from '@/lib/validation'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 // GET /api/content/[id] — get single content
 export async function GET(
@@ -26,6 +27,10 @@ export async function GET(
     if (error) return NextResponse.json({ error: error.message }, { status: 404 })
     return NextResponse.json(data)
   } catch (error) {
+    captureRouteError(error, null, {
+      route: '/api/content/[id]',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -64,6 +69,10 @@ export async function PATCH(
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json(data)
   } catch (error) {
+    captureRouteError(error, null, {
+      route: '/api/content/[id]',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -93,6 +102,10 @@ export async function DELETE(
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })
   } catch (error) {
+    captureRouteError(error, null, {
+      route: '/api/content/[id]',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

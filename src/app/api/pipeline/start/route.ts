@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -45,6 +46,10 @@ export async function POST(request: Request) {
       ...(dbError ? { fallback_mode: true, db_error: dbError.slice(0, 400) } : {}),
     })
   } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/pipeline/start',
+      source: 'route_handler',
+    })
     return NextResponse.json({
       ok: true,
       pipeline_id: `pipeline-stub-${Date.now()}`,

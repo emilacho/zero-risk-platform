@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MissionControlBridge } from '@/lib/mc-bridge'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/mc-sync
@@ -147,6 +148,10 @@ export async function POST(request: Request) {
       { status: 400 }
     )
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/mc-sync',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

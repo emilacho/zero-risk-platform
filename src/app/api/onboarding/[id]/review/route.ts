@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/onboarding/[id]/review — HITL review (Day 5)
@@ -66,6 +67,10 @@ export async function POST(
       { status: 400 }
     )
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/onboarding/[id]/review',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -96,6 +101,10 @@ export async function GET(
 
     return NextResponse.json({ success: true, data: status })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/onboarding/[id]/review',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

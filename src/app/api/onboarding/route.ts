@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/onboarding — Start a new client onboarding (Day 1 auto-discovery)
@@ -89,6 +90,10 @@ export async function POST(request: Request) {
       })
     }
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/onboarding',
+      source: 'route_handler',
+    })
     return NextResponse.json({
       ok: true,
       fallback_mode: true,
@@ -116,6 +121,10 @@ export async function GET(request: Request) {
       data: sessions,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/onboarding',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

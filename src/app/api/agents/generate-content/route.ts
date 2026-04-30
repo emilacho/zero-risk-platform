@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { sanitizeString, validateRequired } from '@/lib/validation'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 // POST /api/agents/generate-content
 // Triggers the Content Creator agent via Claude API
@@ -158,6 +159,10 @@ Responde en JSON con este formato:
       content: savedContent,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/agents/generate-content',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

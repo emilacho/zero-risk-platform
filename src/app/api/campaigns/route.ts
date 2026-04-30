@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabase, getSupabaseAdmin } from '@/lib/supabase'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -60,6 +61,10 @@ export async function GET(request: Request) {
       })
     }
   } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/campaigns',
+      source: 'route_handler',
+    })
     return NextResponse.json({
       ok: true,
       campaigns: [stubCampaign()],
@@ -100,6 +105,10 @@ export async function POST(request: Request) {
       ...(dbError ? { db_error: dbError.slice(0, 400) } : {}),
     }, { status: 200 })
   } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/campaigns',
+      source: 'route_handler',
+    })
     return NextResponse.json({
       ok: true,
       ...stubCampaign(),

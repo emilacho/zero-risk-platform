@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/onboarding/[id]/intake — Process Day 2 intake form
@@ -60,6 +61,10 @@ export async function POST(
       next_step: 'enrichment_and_review',
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/onboarding/[id]/intake',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

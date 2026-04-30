@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 // GET /api/agents/status
 // Returns the current status of all agents and recent execution logs
@@ -232,6 +233,10 @@ export async function GET(request: Request) {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/agents/status',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

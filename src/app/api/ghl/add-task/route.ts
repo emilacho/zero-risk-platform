@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -32,6 +33,10 @@ export async function POST(request: Request) {
       note: 'Stub: real GHL Tasks API integration pending.',
     })
   } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/ghl/add-task',
+      source: 'route_handler',
+    })
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ ok: true, fallback_mode: true, handler_error: msg.slice(0, 400) })
   }

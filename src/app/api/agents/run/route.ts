@@ -7,6 +7,7 @@ import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
 import { capture } from '@/lib/posthog'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -514,6 +515,10 @@ export async function POST(request: Request) {
       })
     }
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/agents/run',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

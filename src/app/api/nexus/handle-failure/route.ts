@@ -6,6 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -37,6 +38,10 @@ export async function POST(request: Request) {
       escalation_reason: escalated ? `Phase ${current_phase} failed validation ${retry_count} times` : null,
     })
   } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/nexus/handle-failure',
+      source: 'route_handler',
+    })
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({
       ok: false,

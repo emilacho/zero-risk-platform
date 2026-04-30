@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { sanitizeString, validateRequired, isValidEmail } from '@/lib/validation'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 // POST /api/agents/classify-lead
 // RUFLO Lead Qualifier — clasifica leads como caliente/tibio/frío
@@ -176,6 +177,10 @@ Responde en este formato JSON exacto:
       duration_ms: durationMs,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/agents/classify-lead',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

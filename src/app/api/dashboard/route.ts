@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { countRows } from '@/lib/supabase-admin'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 // GET /api/dashboard — returns KPI summary
 export async function GET(request: Request) {
@@ -25,6 +26,10 @@ export async function GET(request: Request) {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/dashboard',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

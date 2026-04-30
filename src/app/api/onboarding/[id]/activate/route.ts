@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/onboarding/[id]/activate — Day 7: Activate client
@@ -36,6 +37,10 @@ export async function POST(
       next_step: 'create_first_pipeline',
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/onboarding/[id]/activate',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

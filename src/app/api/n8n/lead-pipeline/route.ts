@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString, isValidEmail, isValidUUID } from '@/lib/validation'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 // POST /api/n8n/lead-pipeline
 // Endpoint que n8n llama para procesar un lead completo
@@ -200,6 +201,10 @@ Responde: {"classification":"caliente|tibio|frio","score":1-100,"reason":"...","
       duration_ms: durationMs,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/n8n/lead-pipeline',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

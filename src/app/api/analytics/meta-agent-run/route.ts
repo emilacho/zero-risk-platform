@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MetaAgent } from '@/lib/meta-agent'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/analytics/meta-agent-run
@@ -39,6 +40,10 @@ export async function POST(request: Request) {
       status: result.status === 'completed' ? 200 : 500,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/analytics/meta-agent-run',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -64,6 +69,10 @@ export async function GET(request: Request) {
       data: runs,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/analytics/meta-agent-run',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

@@ -30,6 +30,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -171,6 +172,10 @@ export async function POST(request: NextRequest) {
       audit_id: audit?.id,
     })
   } catch (err) {
+    captureRouteError(err, request, {
+      route: '/api/meta-ads/apply-optimization',
+      source: 'route_handler',
+    })
     const msg = err instanceof Error ? err.message : 'Unknown error'
     console.error('[meta-ads/apply-optimization] error:', msg)
     return NextResponse.json({ error: 'fetch_error', detail: msg, audit_id: audit?.id }, { status: 502 })

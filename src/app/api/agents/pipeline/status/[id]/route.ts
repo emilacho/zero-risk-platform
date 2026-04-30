@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * Agent Pipeline — Status Polling
@@ -51,6 +52,10 @@ export async function GET(
 
     return NextResponse.json(data)
   } catch (error) {
+    captureRouteError(error, null, {
+      route: '/api/agents/pipeline/status/[id]',
+      source: 'route_handler',
+    })
     const message =
       error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json(

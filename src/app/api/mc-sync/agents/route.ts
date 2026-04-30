@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MissionControlBridge } from '@/lib/mc-bridge'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 /**
  * POST /api/mc-sync/agents
@@ -113,6 +114,10 @@ export async function POST(request: Request) {
           results.push({ agent: agent.name, status: 'failed', error: `${response.status}: ${errText.substring(0, 200)}` })
         }
       } catch (e) {
+    captureRouteError(e, request, {
+      route: '/api/mc-sync/agents',
+      source: 'route_handler',
+    })
         results.push({ agent: agent.name, status: 'failed', error: e instanceof Error ? e.message : 'fetch failed' })
       }
     }
@@ -128,6 +133,10 @@ export async function POST(request: Request) {
       details: results,
     })
   } catch (error) {
+    captureRouteError(error, request, {
+      route: '/api/mc-sync/agents',
+      source: 'route_handler',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

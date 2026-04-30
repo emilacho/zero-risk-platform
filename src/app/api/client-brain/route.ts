@@ -16,6 +16,7 @@ import {
   type BrainSection,
 } from '@/lib/client-brain'
 import { requireInternalApiKey } from '@/lib/auth-middleware'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 interface ToolRequest {
   tool: 'query_client_brain' | 'get_client_guardrails' | 'build_agent_context'
@@ -100,6 +101,10 @@ export async function POST(req: NextRequest) {
         )
     }
   } catch (err) {
+    captureRouteError(err, req, {
+      route: '/api/client-brain',
+      source: 'route_handler',
+    })
     const message = err instanceof Error ? err.message : 'Internal error'
     console.error('[client-brain]', message)
     return NextResponse.json({ error: message }, { status: 500 })

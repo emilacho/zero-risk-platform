@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { captureRouteError } from '@/lib/sentry-capture'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -73,6 +74,10 @@ export async function POST(request: Request) {
       ids = (data ?? []).map((r: { id: string }) => r.id)
     }
   } catch (e: unknown) {
+    captureRouteError(e, request, {
+      route: '/api/review-metrics/upsert',
+      source: 'route_handler',
+    })
     dbError = e instanceof Error ? e.message : String(e)
   }
 
