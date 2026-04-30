@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { capture } from '@/lib/posthog'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 15
@@ -86,6 +87,16 @@ export async function POST(request: NextRequest) {
       .single()
     escalationId = escalated?.item_id || null
   }
+
+  // Wave 12 W12-QW8 · instrument hitl_expired event for HITL queue visibility
+  capture('hitl_expired', String(item.client_id || 'system'), {
+    item_id: body.item_id,
+    approval_type: item.approval_type,
+    age_minutes: body.age_minutes || null,
+    escalated: Boolean(escalationPath),
+    escalation_item_id: escalationId,
+    phase: item.phase,
+  })
 
   return NextResponse.json({
     ok: true,

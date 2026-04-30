@@ -29,6 +29,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { capture } from '@/lib/posthog'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10
@@ -98,6 +99,16 @@ export async function POST(request: NextRequest) {
       console.error('[agent-outcomes/write] insert error:', error.message, error.details, error.hint)
       return NextResponse.json({ ok: false, reason: 'db_error', detail: error.message, hint: error.hint, code: error.code })
     }
+
+    // Wave 12 W12-QW8 · instrument outcomes_written event for feedback-loop visibility
+    capture('outcomes_written', String(row.client_id || 'system'), {
+      agent_slug: row.agent_slug,
+      success: row.success,
+      cost_usd: row.cost_usd,
+      latency_ms: row.latency_ms,
+      tokens_used: row.tokens_used,
+      outcome_id: data.id,
+    })
 
     return NextResponse.json({ ok: true, id: data.id })
   } catch (err) {
