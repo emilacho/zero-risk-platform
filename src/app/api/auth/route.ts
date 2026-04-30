@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { allowPublic } from '@/lib/auth-middleware'
 
 /**
  * Auth API route — SSR cookie-aware.
@@ -10,7 +11,12 @@ import { cookies } from 'next/headers'
  * to recognize the authenticated user. Using the regular browser client here
  * would store the session in localStorage on the server and the middleware
  * would never see it, creating an infinite redirect to /login.
+ *
+ * Wave 13: classified `@public-intentional: auth handler manages its own
+ * session via Supabase SSR cookies · external API key auth would be circular`
  */
+const _authTier = allowPublic('@public-intentional: auth handler manages its own Supabase session via cookies')
+void _authTier
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions }
 
