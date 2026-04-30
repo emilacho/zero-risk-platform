@@ -20,9 +20,16 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
+// Wave 12 W11-D5 fix: removed deprecated zerorisk.app.n8n.cloud fallback.
+// Resolution order:
+//   1. N8N_AGENT_PIPELINE_WEBHOOK (full URL override, if set)
+//   2. N8N_BASE_URL + '/webhook/agent-pipeline' (canonical · Railway production)
+//   3. Empty string · POST will fail-fast at fetch time with clear error.
 const N8N_WEBHOOK_URL =
   process.env.N8N_AGENT_PIPELINE_WEBHOOK ||
-  'https://zerorisk.app.n8n.cloud/webhook/agent-pipeline'
+  (process.env.N8N_BASE_URL
+    ? `${process.env.N8N_BASE_URL.replace(/\/+$/, '')}/webhook/agent-pipeline`
+    : '')
 
 const APP_BASE_URL =
   process.env.NEXT_PUBLIC_APP_URL ||
