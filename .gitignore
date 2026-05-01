@@ -42,5 +42,11 @@ audit-output/
 # wave 14 temp diagnostic dumps (n8n executions etc · raw evidence)
 .tmp-w14/
 
+# wave 15 audit raw data (n8n workflow JSON + classifier output)
+.tmp-w15/
+
+# B-001 diagnostic dumps
+.tmp-b001/
+
 # claude code local settings
 .claude/
