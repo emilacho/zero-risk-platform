@@ -38,3 +38,9 @@ scripts/smoke-test/out/
 
 # audit dumps (Wave 10 deep triage · ~960KB of n8n workflow JSONs)
 audit-output/
+
+# wave 14 temp diagnostic dumps (n8n executions etc · raw evidence)
+.tmp-w14/
+
+# claude code local settings
+.claude/

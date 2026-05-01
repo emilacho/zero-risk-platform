@@ -205,7 +205,7 @@ async function main() {
   process.exit(summary.fail > 0 ? 1 : 0)
 }
 
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1].endsWith('cleanup-rollback.mjs')) {
+if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('cleanup-rollback.mjs')) {
   main().catch(e => { console.error('FATAL:', e); process.exit(2) })
 }
 

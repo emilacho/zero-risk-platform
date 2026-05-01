@@ -27,6 +27,35 @@ import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
 
+// Local message shapes — the SDK's d.ts has internal type errors that cause
+// `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
+// fields we actually consume so strict mode can verify access.
+type SDKSystemInitMessage = {
+  type: 'system'
+  subtype: 'init'
+  session_id?: string
+}
+type SDKAssistantBlock = { type: string; text?: string }
+type SDKAssistantStreamMessage = {
+  type: 'assistant'
+  message?: { content?: SDKAssistantBlock[] }
+}
+type SDKResultStreamMessage = {
+  type: 'result'
+  session_id?: string
+  usage?: { input_tokens?: number; output_tokens?: number }
+}
+type SDKStreamMessage =
+  | SDKSystemInitMessage
+  | SDKAssistantStreamMessage
+  | SDKResultStreamMessage
+  | { type: string }
+
+// `query` from the SDK accepts `{ prompt, options }` but the SDK's d.ts has
+// collapsed return inference. We type the call-site explicitly.
+type QueryParams = { prompt: string; options: Options }
+type QueryFn = (p: QueryParams) => AsyncIterable<SDKMessage>
+
 // ---------- Tipos públicos ----------
 
 export interface AgentRunInput {
@@ -194,9 +223,16 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   const modelKey = agentCfg.model || 'claude-sonnet'
   const modelId = MODEL_MAP[modelKey] ?? MODEL_MAP['claude-sonnet']
 
+  // SDK's d.ts has internal type errors that collapse `systemPrompt` to
+  // `string | undefined`, hiding the documented preset-object form. Build the
+  // value first and cast — runtime accepts both shapes per the SDK docs.
+  const systemPromptOption = {
+    type: 'preset' as const,
+    preset: 'claude_code' as const,
+    append: systemPrompt,
+  }
   const options: Options = {
-    // Reemplazamos el system prompt default del SDK por el nuestro.
-    systemPrompt: { type: 'preset', preset: 'claude_code', append: systemPrompt },
+    systemPrompt: systemPromptOption as unknown as Options['systemPrompt'],
     model: modelId,
     // Solo lectura + búsqueda; los agentes no editan archivos locales.
     allowedTools: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
@@ -231,19 +267,26 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   let outputTokens = 0
 
   try {
-    const stream = query({ prompt: input.task, options })
+    const stream = (query as unknown as QueryFn)({ prompt: input.task, options })
 
-    for await (const msg of stream as AsyncIterable<SDKMessage>) {
-      if (msg.type === 'system' && msg.subtype === 'init') {
-        sessionId = msg.session_id
-      } else if (msg.type === 'assistant' && msg.message?.content) {
-        for (const block of msg.message.content) {
-          if (block.type === 'text') responseText += block.text
+    for await (const rawMsg of stream) {
+      const msg = rawMsg as SDKStreamMessage
+      if (msg.type === 'system' && (msg as SDKSystemInitMessage).subtype === 'init') {
+        sessionId = (msg as SDKSystemInitMessage).session_id ?? null
+      } else if (msg.type === 'assistant') {
+        const content = (msg as SDKAssistantStreamMessage).message?.content
+        if (content) {
+          for (const block of content) {
+            if (block.type === 'text' && typeof block.text === 'string') {
+              responseText += block.text
+            }
+          }
         }
       } else if (msg.type === 'result') {
-        inputTokens = msg.usage?.input_tokens ?? 0
-        outputTokens = msg.usage?.output_tokens ?? 0
-        sessionId = sessionId || msg.session_id
+        const result = msg as SDKResultStreamMessage
+        inputTokens = result.usage?.input_tokens ?? 0
+        outputTokens = result.usage?.output_tokens ?? 0
+        sessionId = sessionId ?? result.session_id ?? null
       }
     }
   } catch (err) {

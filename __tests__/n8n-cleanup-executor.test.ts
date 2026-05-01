@@ -18,10 +18,9 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// Import the executor + rollback as ESM modules
-// @ts-expect-error · .mjs file imported in TS test
+// Import the executor + rollback as ESM modules (.mjs paths resolve fine
+// under the project's tsconfig + vitest module resolution).
 import * as executor from '../scripts/cleanup/n8n-cleanup-executor.mjs'
-// @ts-expect-error · .mjs file imported in TS test
 import * as rollback from '../scripts/cleanup/cleanup-rollback.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
