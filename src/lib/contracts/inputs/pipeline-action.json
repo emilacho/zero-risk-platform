@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pipeline-action",
+  "type": "object",
+  "title": "Pipeline action payload (start, run, resume-delayed)",
+  "additionalProperties": true,
+  "properties": {
+    "pipeline_id": { "type": ["string", "null"], "maxLength": 200 },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "task": { "type": ["string", "null"], "maxLength": 10000 },
+    "step_index": { "type": ["number", "null"], "minimum": 0 },
+    "step_name": { "type": ["string", "null"], "maxLength": 200 },
+    "delay_until": { "type": ["string", "null"], "format": "date-time" },
+    "context": { "type": ["object", "null"] },
+    "metadata": { "type": ["object", "null"] }
+  }
+}

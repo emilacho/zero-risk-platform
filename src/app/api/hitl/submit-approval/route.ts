@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -17,6 +18,8 @@ export async function POST(request: Request) {
     let raw: unknown = {}
     try { raw = await request.json() } catch { raw = {} }
     const body: Record<string, unknown> = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? (raw as Record<string, unknown>) : {}
+    const _v = validateObject<Record<string, unknown>>(body, 'hitl-action')
+    if (!_v.ok) return _v.response
 
     const item_id = (typeof body.item_id === 'string' && body.item_id) ||
                     (typeof body.approval_id === 'string' && body.approval_id) ||

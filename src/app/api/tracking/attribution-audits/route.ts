@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   }
 
-  const body = await request.json().catch(() => null)
+  const _raw = await request.json().catch(() => null)
+  if (!_raw) return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  const _v = validateObject<Record<string, unknown>>(_raw, 'analytics-write')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
   if (!body || !body.campaign_id || !body.client_id) {
     return NextResponse.json(
       { error: 'missing_fields', required: ['campaign_id', 'client_id'] },

@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -17,6 +18,8 @@ export async function POST(request: Request) {
     let raw: unknown = {}
     try { raw = await request.json() } catch { raw = {} }
     const body: Record<string, unknown> = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? (raw as Record<string, unknown>) : {}
+    const _v = validateObject<Record<string, unknown>>(body, 'pipeline-action')
+    if (!_v.ok) return _v.response
 
     const client_id = (typeof body.client_id === 'string' && body.client_id) || 'smoke-client-001'
     const pipeline_id = `pipeline-${Date.now()}`

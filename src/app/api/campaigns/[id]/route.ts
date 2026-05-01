@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { isValidUUID, pickFields, CAMPAIGN_FIELDS } from '@/lib/validation'
+import { validateObject } from '@/lib/input-validator'
 
 // GET /api/campaigns/[id] — get single campaign
 export async function GET(
@@ -40,7 +41,15 @@ export async function PATCH(
     }
 
     const supabase = getSupabase()
-    const body = await request.json()
+    let _raw: unknown
+  try {
+    _raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  }
+  const _v = validateObject<Record<string, unknown>>(_raw, 'lenient-write')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
     const safeBody = pickFields(body, [...CAMPAIGN_FIELDS])
 
     if (Object.keys(safeBody).length === 0) {

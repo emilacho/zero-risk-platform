@@ -10,6 +10,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -37,7 +38,15 @@ export async function POST(request: Request) {
     } catch {}
   } else if (contentType.includes('application/json')) {
     try {
-      const body = await request.json()
+      let _raw: unknown
+  try {
+    _raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  }
+  const _v = validateObject<Record<string, unknown>>(_raw, 'stub-row')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
       responseFormat = body?.response_format || 'vtt'
     } catch {}
   }
