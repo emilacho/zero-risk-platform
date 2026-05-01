@@ -15,7 +15,13 @@ import { validateObject } from '@/lib/input-validator'
  *
  * Body: {
  *   pipeline_id: uuid (optional) — sync specific pipeline
- *   action: "sync_pipeline" | "sync_all_active" | "health_check"
+ *   action: "sync_pipeline" | "sync_all_active" | "health_check" | "hitl_cycle_complete"
+ *
+ *   For action="hitl_cycle_complete" (B-001 fix · W14-T4):
+ *     cycle_id: string (required)
+ *     queue_depth: integer >= 0 (required)
+ *     items_processed: integer >= 0 (required)
+ *     timestamp: ISO date-time string (required)
  * }
  */
 export async function POST(request: Request) {
@@ -41,6 +47,59 @@ export async function POST(request: Request) {
   try {
     const action = (body.action as string) || 'sync_pipeline'
     const pipelineId = body.pipeline_id as string | undefined
+
+    // ---- HITL cycle-complete telemetry (B-001 fix · W14-T4) ----------------
+    // n8n's HITL workflow pings this every 15 min after draining the queue.
+    // We re-validate against a stricter schema (cycle_id, queue_depth,
+    // items_processed, timestamp all required + correctly typed) and persist
+    // to a dedicated audit table. No MC bridge call required.
+    if (action === 'hitl_cycle_complete') {
+      const v2 = validateObject<Record<string, any>>(body, 'mc-sync-hitl-cycle')
+      if (!v2.ok) return v2.response
+      const p = v2.data
+
+      try {
+        const supabase = getSupabaseAdmin()
+        const { data, error } = await supabase
+          .from('mc_inbox_hitl_cycles')
+          .insert({
+            cycle_id: p.cycle_id,
+            queue_depth: p.queue_depth,
+            items_processed: p.items_processed,
+            cycle_timestamp: p.timestamp,
+            payload: p,
+            source: 'n8n-hitl-workflow',
+          })
+          .select('id')
+          .single()
+
+        if (error) {
+          return NextResponse.json(
+            {
+              error: 'persist_failed',
+              code: 'E-DB-INSERT',
+              detail: error.message,
+            },
+            { status: 500 }
+          )
+        }
+
+        return NextResponse.json({
+          ok: true,
+          action: 'hitl_cycle_complete',
+          persisted_id: data?.id,
+        })
+      } catch (err) {
+        return NextResponse.json(
+          {
+            error: 'persist_failed',
+            code: 'E-DB-INSERT',
+            detail: err instanceof Error ? err.message : 'Unknown DB error',
+          },
+          { status: 500 }
+        )
+      }
+    }
 
     // Soft-handle NEXUS/research-workflow actions (no sync needed, just ack)
     const NOTIFY_ACTIONS = new Set([
@@ -159,7 +218,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: `Unknown action: ${action}. Valid: sync_pipeline, sync_all_active, health_check` },
+      { error: `Unknown action: ${action}. Valid: sync_pipeline, sync_all_active, health_check, hitl_cycle_complete` },
       { status: 400 }
     )
   } catch (error) {
@@ -187,6 +246,7 @@ export async function GET() {
       health_check: 'Check if Mission Control is reachable',
       sync_pipeline: 'Sync a specific pipeline (requires pipeline_id)',
       sync_all_active: 'Sync all active/paused pipelines',
+      hitl_cycle_complete: 'Persist HITL workflow cycle-complete telemetry (cycle_id, queue_depth, items_processed, timestamp required)',
     },
     example_body: {
       action: 'sync_pipeline',
