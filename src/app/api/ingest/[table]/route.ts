@@ -20,6 +20,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -75,7 +76,10 @@ export async function POST(
     )
   }
 
-  const body = await request.json().catch(() => ({}))
+  const _raw = await request.json().catch(() => ({}))
+  const _v = validateObject<Record<string, unknown>>(_raw, 'lenient-write')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
   const rows = Array.isArray(body) ? body : Array.isArray(body?.rows) ? body.rows : [body]
   if (!rows.length) {
     return NextResponse.json({ error: 'empty_body' }, { status: 400 })

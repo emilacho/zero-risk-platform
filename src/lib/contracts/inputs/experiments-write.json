@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "experiments-write",
+  "type": "object",
+  "title": "Experiment row write",
+  "additionalProperties": true,
+  "properties": {
+    "experiment_id": { "type": ["string", "null"], "maxLength": 200 },
+    "name": { "type": ["string", "null"], "maxLength": 200 },
+    "hypothesis": { "type": ["string", "null"], "maxLength": 4000 },
+    "status": {
+      "type": ["string", "null"],
+      "enum": ["draft", "running", "completed", "aborted", "paused", null]
+    },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "variant": { "type": ["string", "null"], "maxLength": 100 },
+    "metric": { "type": ["string", "null"], "maxLength": 200 },
+    "value": { "type": ["number", "string", "null"] },
+    "metadata": { "type": ["object", "null"] }
+  }
+}

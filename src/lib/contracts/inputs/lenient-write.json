@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lenient-write",
+  "type": "object",
+  "title": "Lenient write payload",
+  "description": "More permissive than stub-row · for fire-and-forget endpoints whose body shape is heterogeneous and where we mostly want JSON-parse + type-check on identifiers.",
+  "additionalProperties": true,
+  "properties": {
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "campaign_id": { "type": ["string", "null"], "maxLength": 200 },
+    "task_id": { "type": ["string", "null"], "maxLength": 200 },
+    "request_id": { "type": ["string", "null"], "maxLength": 200 },
+    "pipeline_id": { "type": ["string", "null"], "maxLength": 200 },
+    "user_id": { "type": ["string", "null"], "maxLength": 100 },
+    "metadata": { "type": ["object", "null"] }
+  }
+}

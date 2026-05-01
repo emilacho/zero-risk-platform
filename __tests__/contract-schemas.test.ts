@@ -109,6 +109,47 @@ const CASES: Case[] = [
     happy: { client_id: 'acme', task_id: 't-1' },
     bad: { client_id: 12345 }, // wrong type
   },
+  // ── W15 schemas ──────────────────────────────────────────────────────
+  {
+    schema: 'lenient-write',
+    happy: { client_id: 'acme', metadata: { x: 1 } },
+    bad: { client_id: 12345 },
+  },
+  {
+    schema: 'analytics-write',
+    happy: { metric_name: 'ctr', metric_value: 0.04 },
+    bad: { score: 'not-a-number' },
+  },
+  {
+    schema: 'hitl-action',
+    happy: { item_id: 'h-1', decision: 'approved', approver: 'emilio' },
+    bad: { decision: 'maybe' },
+  },
+  {
+    schema: 'pipeline-action',
+    happy: { pipeline_id: 'p-1', step_index: 3 },
+    bad: { step_index: -2 },
+  },
+  {
+    schema: 'nexus-action',
+    happy: { request_id: 'r-1', phase: 'DISCOVER', verdict: 'PASS' },
+    bad: { verdict: 'MAYBE' },
+  },
+  {
+    schema: 'onboarding-action',
+    happy: { client_id: 'acme', stage: 'intake' },
+    bad: { client_name: 12345 },
+  },
+  {
+    schema: 'leads-create',
+    happy: { name: 'Juan', email: 'juan@x.com', source: 'fb' },
+    bad: { name: 12345 },
+  },
+  {
+    schema: 'experiments-write',
+    happy: { name: 'Hero CTA test', status: 'running' },
+    bad: { status: 'broken' },
+  },
 ]
 
 describe('contract schemas · happy + violation per schema', () => {

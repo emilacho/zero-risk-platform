@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 import { queryClientBrain, getClientGuardrails, buildAgentContext, type BrainSection } from '@/lib/client-brain'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -20,7 +21,10 @@ export async function POST(request: Request) {
   const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
 
-  const body = await request.json().catch(() => ({}))
+  const _raw = await request.json().catch(() => ({}))
+  const _v = validateObject<Record<string, unknown>>(_raw, 'lenient-write')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
   const { client_id, query, sections, match_count } = body as {
     client_id?: string
     query?: string
