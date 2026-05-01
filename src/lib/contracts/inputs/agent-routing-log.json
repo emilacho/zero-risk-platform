@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-routing-log",
+  "type": "object",
+  "title": "POST /api/agent-routing/log",
+  "required": ["request_id", "original_request", "classification_type"],
+  "additionalProperties": true,
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "original_request": { "type": "string", "minLength": 1, "maxLength": 5000 },
+    "classification_type": {
+      "type": "string",
+      "enum": ["depth-first", "breadth-first", "straightforward"]
+    },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "assigned_agents": { "type": "array", "items": { "type": "string", "maxLength": 100 } },
+    "ruflo_confidence": { "type": ["number", "string", "null"] },
+    "escalation_reason": { "type": ["string", "null"], "maxLength": 2000 }
+  }
+}

@@ -29,9 +29,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10
+
+interface AgentOutcomeInput {
+  agent_slug: string
+  task_id?: string | null
+  request_id?: string | null
+  client_id?: string | null
+  input?: unknown
+  output?: unknown
+  tokens_used?: number | null
+  input_tokens?: number | null
+  output_tokens?: number | null
+  latency_ms?: number | null
+  duration_ms?: number | null
+  success?: boolean
+  error?: string | null
+  model?: string | null
+  cost_usd?: number | null
+  outcome?: 'success' | 'failure' | 'partial' | 'deferred' | null
+  metadata?: Record<string, unknown> | null
+}
 
 export async function POST(request: NextRequest) {
   const auth = checkInternalKey(request)
@@ -39,11 +60,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   }
 
-  const body = await request.json().catch(() => null)
-  if (!body || !body.agent_slug) {
-    // Return 200 anyway — this endpoint is fire-and-forget; upstream shouldn't care
-    return NextResponse.json({ ok: false, reason: 'missing_agent_slug' })
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    // Fire-and-forget endpoint — never throw to upstream
+    return NextResponse.json({ ok: false, reason: 'invalid_json' })
   }
+
+  const v = validateObject<AgentOutcomeInput>(raw, 'agent-outcomes-write')
+  if (!v.ok) {
+    // Don't propagate validation errors to upstream — log silently and 200 OK
+    return NextResponse.json({ ok: false, reason: 'validation_error', detail: v.errors })
+  }
+  const body = v.data
 
   // Truncate large payloads to keep writes fast.
   // input/output columns are JSONB — coerce plain strings into { text } objects

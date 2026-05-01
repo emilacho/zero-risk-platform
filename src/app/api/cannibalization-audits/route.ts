@@ -17,6 +17,7 @@ export async function GET(r: Request) {
 
 export async function POST(request: Request) {
   return handleStubPost(request, {
+    schemaName: 'stub-row',
     table: 'seo_cannibalization_audits',
     transform: (r) => ({
       client_id: r.client_id,

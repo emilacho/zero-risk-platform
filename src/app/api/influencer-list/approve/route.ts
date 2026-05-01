@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export async function POST(request: Request) {
   return handleStubPost(request, {
+    schemaName: 'stub-row',
     table: 'influencer_approved_list',
     requiredFields: ['client_id', 'influencer_handle'],
     transform: (r) => ({

@@ -28,6 +28,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 15
@@ -39,8 +40,14 @@ export async function POST(request: NextRequest) {
 
     let raw: unknown = {}
     try { raw = await request.json() } catch { raw = {} }
-    const body: Record<string, unknown> = (raw && typeof raw === 'object' && !Array.isArray(raw))
-      ? (raw as Record<string, unknown>) : {}
+
+    // Hardened endpoint: validate to catch obvious type errors but tolerate
+    // missing fields (route uses defaults). On schema fail return 400 with
+    // structured error — upstream chains can still inspect detail.
+    const v = validateObject<Record<string, unknown>>(raw, 'hitl-approvals-create')
+    if (!v.ok) return v.response
+    const body: Record<string, unknown> = (v.data && typeof v.data === 'object' && !Array.isArray(v.data))
+      ? (v.data as Record<string, unknown>) : {}
 
     const expiresHours = typeof body.expires_in_hours === 'number' ? body.expires_in_hours : 72
     const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString()

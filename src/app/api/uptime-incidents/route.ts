@@ -9,6 +9,7 @@ export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
   return handleStubPost(request, {
+    schemaName: 'stub-row',
     table: 'uptime_incidents',
     transform: (r) => ({
       monitor_url: r.monitor_url || r.monitorURL || null,

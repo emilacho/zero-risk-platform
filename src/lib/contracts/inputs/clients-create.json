@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clients-create",
+  "type": "object",
+  "title": "POST /api/clients",
+  "additionalProperties": true,
+  "properties": {
+    "client_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "client_name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "industry": { "type": "string", "maxLength": 100 },
+    "status": { "type": "string", "enum": ["active", "paused", "churned", "trial", "onboarding"] },
+    "metadata": { "type": ["object", "null"] }
+  }
+}

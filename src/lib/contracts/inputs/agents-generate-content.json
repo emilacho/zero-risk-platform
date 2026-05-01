@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agents-generate-content",
+  "type": "object",
+  "title": "POST /api/agents/generate-content",
+  "required": ["product", "audience"],
+  "additionalProperties": true,
+  "properties": {
+    "product": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "audience": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "tone": { "type": ["string", "null"], "maxLength": 200 },
+    "channels": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 50 },
+      "maxItems": 20
+    },
+    "campaign_id": { "type": ["string", "null"], "maxLength": 200 }
+  }
+}

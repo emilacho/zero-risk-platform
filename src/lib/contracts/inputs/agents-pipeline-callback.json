@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agents-pipeline-callback",
+  "type": "object",
+  "title": "POST /api/agents/pipeline/callback (n8n → backend)",
+  "required": ["pipeline_id"],
+  "additionalProperties": true,
+  "properties": {
+    "pipeline_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "status": { "type": "string", "enum": ["completed", "error", "in_progress"] },
+    "result": { "type": ["object", "array", "string", "null"] },
+    "error": { "type": ["string", "null"], "maxLength": 4000 },
+    "duration_ms": { "type": ["number", "null"], "minimum": 0, "maximum": 1800000 }
+  }
+}

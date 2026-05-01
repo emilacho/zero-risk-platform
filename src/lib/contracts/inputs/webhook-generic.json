@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "webhook-generic",
+  "type": "object",
+  "title": "POST /api/webhook (generic n8n entry)",
+  "additionalProperties": true,
+  "properties": {
+    "event": { "type": "string", "maxLength": 200 },
+    "type": { "type": "string", "maxLength": 200 },
+    "source": { "type": "string", "maxLength": 200 },
+    "data": {},
+    "payload": {}
+  }
+}

@@ -10,6 +10,7 @@ export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
   return handleStubPost(request, {
+    schemaName: 'stub-row',
     table: 'agent_outcomes',
     // transform the workflow body shape to the agent_outcomes row shape
     transform: (r) => ({

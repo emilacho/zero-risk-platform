@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "campaigns-block-launch",
+  "type": "object",
+  "title": "POST /api/campaigns/block-launch",
+  "additionalProperties": true,
+  "properties": {
+    "campaign_id": { "type": ["string", "null"], "maxLength": 200 },
+    "match_score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "reason": { "type": ["string", "null"], "maxLength": 2000 },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "metadata": { "type": ["object", "null"] }
+  }
+}

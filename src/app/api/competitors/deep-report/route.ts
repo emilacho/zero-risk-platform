@@ -9,6 +9,7 @@ export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
   return handleStubPost(request, {
+    schemaName: 'stub-row',
     table: 'competitor_deep_reports',
     transform: (r) => ({
       client_id: r.client_id,

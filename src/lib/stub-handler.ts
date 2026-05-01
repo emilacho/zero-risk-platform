@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from './supabase'
 import { checkInternalKey } from './internal-auth'
+import { validateObject } from './input-validator'
 
 type StubOptions = {
   table: string
@@ -20,6 +21,10 @@ type StubOptions = {
   // to ok/inserted/ids). Default true — flip off only for routes where echoing
   // private fields back would leak data to an untrusted caller.
   echoBody?: boolean
+  // Optional Ajv schema name (file in src/lib/contracts/inputs/<name>.json).
+  // When set, the body is validated BEFORE transform/insert. Schema failure
+  // returns 400 + E-INPUT-INVALID. Arrays of rows are validated per-element.
+  schemaName?: string
 }
 
 export async function handleStubPost(request: Request, opts: StubOptions) {
@@ -27,6 +32,24 @@ export async function handleStubPost(request: Request, opts: StubOptions) {
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
 
   const body = await request.json().catch(() => ({}))
+
+  if (opts.schemaName) {
+    // Validate top-level OR each element if body is an array of rows.
+    if (Array.isArray(body)) {
+      for (const item of body) {
+        const v = validateObject(item, opts.schemaName)
+        if (!v.ok) return v.response
+      }
+    } else if (body && typeof body === 'object' && Array.isArray((body as { rows?: unknown }).rows)) {
+      for (const item of (body as { rows: unknown[] }).rows) {
+        const v = validateObject(item, opts.schemaName)
+        if (!v.ok) return v.response
+      }
+    } else {
+      const v = validateObject(body, opts.schemaName)
+      if (!v.ok) return v.response
+    }
+  }
   const rawRows: Record<string, unknown>[] = Array.isArray(body)
     ? (body as Record<string, unknown>[])
     : Array.isArray(body?.rows)

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agents-run-sdk",
+  "type": "object",
+  "title": "POST /api/agents/run-sdk request body",
+  "required": ["agent", "task"],
+  "additionalProperties": true,
+  "properties": {
+    "agent": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Canonical or alias agent slug (resolved server-side)"
+    },
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8000,
+      "description": "Instruction the agent should execute"
+    },
+    "resume_session_id": {
+      "type": ["string", "null"],
+      "maxLength": 200
+    },
+    "client_id": {
+      "type": ["string", "null"],
+      "maxLength": 100
+    },
+    "pipeline_id": {
+      "type": ["string", "null"],
+      "maxLength": 100
+    },
+    "step_name": {
+      "type": ["string", "null"],
+      "maxLength": 200
+    },
+    "extra": {
+      "type": ["object", "null"]
+    }
+  }
+}

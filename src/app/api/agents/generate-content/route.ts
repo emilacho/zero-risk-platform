@@ -1,6 +1,16 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
-import { sanitizeString, validateRequired } from '@/lib/validation'
+import { sanitizeString } from '@/lib/validation'
+import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
+
+interface GenerateContentInput {
+  product: string
+  audience: string
+  tone?: string | null
+  channels?: string[]
+  campaign_id?: string | null
+}
 
 // POST /api/agents/generate-content
 // Triggers the Content Creator agent via Claude API
@@ -8,16 +18,24 @@ import { sanitizeString, validateRequired } from '@/lib/validation'
 // Output: Generated content variants saved to Supabase
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json()
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
 
-    const { valid, missing } = validateRequired(body, ['product', 'audience'])
-    if (!valid) {
-      return NextResponse.json(
-        { error: `Campos requeridos faltantes: ${missing.join(', ')}` },
-        { status: 400 }
-      )
+  try {
+    let raw: unknown
+    try {
+      raw = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
     }
+    const v = validateObject<GenerateContentInput>(raw, 'agents-generate-content')
+    if (!v.ok) return v.response
+    const body = v.data
 
     const product = sanitizeString(body.product, 200)
     const audience = sanitizeString(body.audience, 200)

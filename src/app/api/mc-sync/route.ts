@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MissionControlBridge } from '@/lib/mc-bridge'
+import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 /**
  * POST /api/mc-sync
@@ -17,10 +19,28 @@ import { MissionControlBridge } from '@/lib/mc-bridge'
  * }
  */
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
+
+  let raw: unknown
   try {
-    const body = await request.json()
-    const action = body.action || 'sync_pipeline'
-    const pipelineId = body.pipeline_id
+    raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  }
+
+  const v = validateObject<Record<string, unknown>>(raw, 'mc-sync')
+  if (!v.ok) return v.response
+  const body = v.data as Record<string, any>
+
+  try {
+    const action = (body.action as string) || 'sync_pipeline'
+    const pipelineId = body.pipeline_id as string | undefined
 
     // Soft-handle NEXUS/research-workflow actions (no sync needed, just ack)
     const NOTIFY_ACTIONS = new Set([

@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -21,7 +22,10 @@ export async function POST(request: Request) {
   const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
 
-  const body = await request.json().catch(() => ({}))
+  const raw = await request.json().catch(() => ({}))
+  const v = validateObject<Record<string, unknown>>(raw, 'campaigns-block-launch')
+  if (!v.ok) return v.response
+  const body = v.data as Record<string, any>
   const campaignId: string = body?.campaign_id || ''
   const clientId: string = body?.client_id || ''
   const reason: string = body?.reason || 'unspecified'

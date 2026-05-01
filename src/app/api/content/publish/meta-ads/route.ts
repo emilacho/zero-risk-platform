@@ -8,6 +8,7 @@ export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
   return handleStubPost(request, {
+    schemaName: 'stub-row',
     table: 'content_publish_log',
     transform: (r) => ({
       channel: 'meta_ads',

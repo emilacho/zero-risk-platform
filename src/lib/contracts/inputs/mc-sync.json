@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mc-sync",
+  "type": "object",
+  "title": "POST /api/mc-sync",
+  "additionalProperties": true,
+  "properties": {
+    "action": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "pipeline_id": { "type": ["string", "null"], "maxLength": 200 },
+    "cycle_id": { "type": ["string", "null"], "maxLength": 200 },
+    "queue_depth": { "type": ["number", "null"], "minimum": 0 },
+    "items_processed": { "type": ["number", "null"], "minimum": 0 },
+    "timestamp": { "type": ["string", "null"], "format": "date-time" },
+    "task": { "type": ["object", "null"] },
+    "incident": { "type": ["object", "null"] }
+  }
+}

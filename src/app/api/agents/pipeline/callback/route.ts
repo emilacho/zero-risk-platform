@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { validateObject } from '@/lib/input-validator'
+
+interface PipelineCallbackInput {
+  pipeline_id: string
+  status?: 'completed' | 'error' | 'in_progress'
+  result?: unknown
+  error?: string | null
+  duration_ms?: number | null
+}
 
 /**
  * Agent Pipeline — n8n Callback
@@ -40,22 +49,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. Parse body
-    const body = await request.json().catch(() => null)
-    if (!body || typeof body !== 'object') {
+    // 2. Parse + validate body via Ajv
+    let raw: unknown
+    try {
+      raw = await request.json()
+    } catch {
       return NextResponse.json(
-        { error: 'Body must be JSON' },
-        { status: 400 }
+        { error: 'invalid_json', code: 'E-INPUT-PARSE' },
+        { status: 400 },
       )
     }
 
+    const v = validateObject<PipelineCallbackInput>(raw, 'agents-pipeline-callback')
+    if (!v.ok) return v.response
+    const body = v.data
     const pipelineId = body.pipeline_id
-    if (!pipelineId || typeof pipelineId !== 'string') {
-      return NextResponse.json(
-        { error: 'Missing or invalid pipeline_id' },
-        { status: 400 }
-      )
-    }
 
     const status: 'completed' | 'error' =
       body.status === 'error' ? 'error' : 'completed'
