@@ -48,5 +48,8 @@ audit-output/
 # B-001 diagnostic dumps
 .tmp-b001/
 
+# wave 17 scratch dir
+.tmp-w17/
+
 # claude code local settings
 .claude/
