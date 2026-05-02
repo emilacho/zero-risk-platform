@@ -51,5 +51,8 @@ audit-output/
 # wave 17 scratch dir
 .tmp-w17/
 
+# wave 18 batch dir
+zr-w18-batch/
+
 # claude code local settings
 .claude/
