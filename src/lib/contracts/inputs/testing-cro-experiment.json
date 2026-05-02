@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "testing-cro-experiment",
+  "type": "object",
+  "title": "POST /api/testing/cro-experiment",
+  "description": "Register a CRO A/B experiment. Caller: `Zero Risk - Landing Page CRO Optimizer v2 (Sun 7am)`. Closes W15-D-29.",
+  "additionalProperties": true,
+  "required": ["client_id", "experiment_name", "hypothesis", "variants"],
+  "properties": {
+    "client_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "experiment_name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "hypothesis": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "variants": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["name", "url"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "url": { "type": "string", "format": "uri" },
+          "traffic_allocation": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "primary_metric": { "type": ["string", "null"], "maxLength": 100 },
+    "min_sample_size": { "type": ["integer", "null"], "minimum": 0 },
+    "confidence_level": { "type": ["number", "null"], "minimum": 0.5, "maximum": 0.999 },
+    "starts_at": { "type": ["string", "null"], "format": "date-time" },
+    "expected_duration_days": { "type": ["integer", "null"], "minimum": 1, "maximum": 365 }
+  }
+}
