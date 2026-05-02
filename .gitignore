@@ -42,5 +42,10 @@ audit-output/
 # wave 14 temp diagnostic dumps (n8n executions etc · raw evidence)
 .tmp-w14/
 
+# wave 15 / 16 / 17 temp diagnostic dumps (audit + coverage output)
+.tmp-w15/
+.tmp-w17/
+.tmp-b001/
+
 # claude code local settings
 .claude/
