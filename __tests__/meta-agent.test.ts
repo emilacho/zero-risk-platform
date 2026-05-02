@@ -292,7 +292,7 @@ describe('MetaAgent.runWeeklyAnalysis · failure paths', () => {
     // Override fetch after the first response to throw
     const realFetch = globalThis.fetch
     let count = 0
-    globalThis.fetch = vi.fn(async (...args) => {
+    globalThis.fetch = vi.fn(async (...args: Parameters<typeof realFetch>) => {
       count++
       if (count === 1) return realFetch(...args)
       throw new Error('mc unreachable')
