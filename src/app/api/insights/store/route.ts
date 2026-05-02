@@ -15,6 +15,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateInput } from '@/lib/input-validator'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { withSupabaseResult } from '@/lib/bridge-fallback'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -55,30 +56,14 @@ export async function POST(request: Request) {
     created_at: new Date().toISOString(),
   }
 
-  try {
-    const supabase = getSupabaseAdmin()
-    const { data, error } = await supabase
-      .from('agent_insights')
-      .insert(row)
-      .select('id')
-      .single()
-
-    if (error) {
-      return NextResponse.json({
-        ok: true,
-        fallback_mode: true,
-        persisted_id: null,
-        note: `DB write failed gracefully: ${error.message.slice(0, 200)}`,
-      })
-    }
-
-    return NextResponse.json({ ok: true, persisted_id: data?.id })
-  } catch (err) {
-    return NextResponse.json({
-      ok: true,
-      fallback_mode: true,
-      persisted_id: null,
-      note: `DB exception: ${err instanceof Error ? err.message.slice(0, 200) : 'unknown'}`,
-    })
+  // W17-T2 refactor: bridge-fallback helper.
+  const supabase = getSupabaseAdmin()
+  const r = await withSupabaseResult<{ id: string }>(
+    () => supabase.from('agent_insights').insert(row).select('id').single(),
+    { context: '/api/insights/store' },
+  )
+  if (r.fallback_mode) {
+    return NextResponse.json({ ok: true, fallback_mode: true, persisted_id: null, note: r.reason })
   }
+  return NextResponse.json({ ok: true, persisted_id: r.data?.id })
 }
