@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
+import { validateObject } from '@/lib/input-validator'
 
 /**
  * POST /api/hitl/retry
@@ -21,7 +22,15 @@ import { sanitizeString } from '@/lib/validation'
  */
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
+    let _raw: unknown
+  try {
+    _raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  }
+  const _v = validateObject<Record<string, unknown>>(_raw, 'hitl-action')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
 
     const stepId = sanitizeString(body.step_id, 100)
     const extraFeedback = sanitizeString(body.additional_feedback, 1000)

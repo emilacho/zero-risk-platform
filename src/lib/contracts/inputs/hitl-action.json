@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hitl-action",
+  "type": "object",
+  "title": "HITL action payload (resolve, retry, expire, submit)",
+  "description": "Generic shape for HITL state-mutation routes. Identifies the item being acted on plus the actor + outcome.",
+  "additionalProperties": true,
+  "properties": {
+    "item_id": { "type": ["string", "null"], "maxLength": 200 },
+    "id": { "type": ["string", "null"], "maxLength": 200 },
+    "approval_id": { "type": ["string", "null"], "maxLength": 200 },
+    "decision": {
+      "type": ["string", "null"],
+      "enum": ["approved", "rejected", "deferred", "auto_expired", "renotify", null]
+    },
+    "approver": { "type": ["string", "null"], "maxLength": 100 },
+    "approved_by": { "type": ["string", "null"], "maxLength": 100 },
+    "reason": { "type": ["string", "null"], "maxLength": 2000 },
+    "notes": { "type": ["string", "null"], "maxLength": 4000 },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "metadata": { "type": ["object", "null"] }
+  }
+}

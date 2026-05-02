@@ -8,6 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -21,6 +22,8 @@ export async function POST(request: Request) {
     try { raw = await request.json() } catch { raw = {} }
     const body: Record<string, unknown> = (raw && typeof raw === 'object' && !Array.isArray(raw))
       ? (raw as Record<string, unknown>) : {}
+    const _v = validateObject<Record<string, unknown>>(body, 'nexus-action')
+    if (!_v.ok) return _v.response
 
     const current_phase =
       (typeof body.advance_current_phase === 'string' && body.advance_current_phase) ||

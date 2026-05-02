@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "onboarding-action",
+  "type": "object",
+  "title": "Onboarding lifecycle action payload",
+  "additionalProperties": true,
+  "properties": {
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "client_name": { "type": ["string", "null"], "maxLength": 200 },
+    "stage": { "type": ["string", "null"], "maxLength": 100 },
+    "intake": { "type": ["object", "null"] },
+    "review": { "type": ["object", "null"] },
+    "notes": { "type": ["string", "null"], "maxLength": 4000 },
+    "approved_by": { "type": ["string", "null"], "maxLength": 100 },
+    "metadata": { "type": ["object", "null"] }
+  }
+}

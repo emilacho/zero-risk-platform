@@ -13,12 +13,16 @@
  */
 
 import { NextResponse } from 'next/server'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({}))
+  const _raw = await request.json().catch(() => ({}))
+  const _v = validateObject<Record<string, unknown>>(_raw, 'stub-row')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
   const prompt: string = body?.prompt || ''
   const duration = Number(body?.duration) || 15
   const aspectRatio: string = body?.aspect_ratio || '9:16'

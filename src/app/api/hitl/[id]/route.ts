@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,7 +26,10 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
   const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
 
-  const body = await request.json().catch(() => ({}))
+  const _raw = await request.json().catch(() => ({}))
+  const _v = validateObject<Record<string, unknown>>(_raw, 'hitl-action')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
   if (!body.status || !['approved', 'rejected', 'in_review', 'expired'].includes(body.status)) {
     return NextResponse.json({ error: 'status must be approved|rejected|in_review|expired' }, { status: 400 })
   }

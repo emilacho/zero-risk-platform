@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { validateObject } from '@/lib/input-validator'
 
 // POST /api/admin/sync-identity
 // One-time endpoint to sync agent identity content into Supabase.
@@ -13,7 +14,15 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
+    let _raw: unknown
+  try {
+    _raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  }
+  const _v = validateObject<Record<string, unknown>>(_raw, 'lenient-write')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
     const { agent_name, identity_content, secret } = body
 
     // Verify admin secret

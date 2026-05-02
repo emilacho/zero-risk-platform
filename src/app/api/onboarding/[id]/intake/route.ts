@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
+import { validateObject } from '@/lib/input-validator'
 
 /**
  * POST /api/onboarding/[id]/intake — Process Day 2 intake form
@@ -31,7 +32,15 @@ export async function POST(
     const supabase = getSupabaseAdmin()
     const orchestrator = new OnboardingOrchestrator(supabase)
 
-    const body = await request.json()
+    let _raw: unknown
+  try {
+    _raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  }
+  const _v = validateObject<Record<string, unknown>>(_raw, 'onboarding-action')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
 
     const result = await orchestrator.processIntakeForm(onboardingId, {
       toneAccurate: body.toneAccurate ?? true,

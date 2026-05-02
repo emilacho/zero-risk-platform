@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MetaAgent } from '@/lib/meta-agent'
+import { validateObject } from '@/lib/input-validator'
 
 /**
  * POST /api/analytics/meta-agent-run
@@ -20,7 +21,10 @@ export async function POST(request: Request) {
     const supabase = getSupabaseAdmin()
     const metaAgent = new MetaAgent(supabase)
 
-    const body = await request.json().catch(() => ({}))
+    const _raw = await request.json().catch(() => ({}))
+  const _v = validateObject<Record<string, unknown>>(_raw, 'analytics-write')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
 
     const result = await metaAgent.runWeeklyAnalysis({
       runType: body.run_type || 'manual',

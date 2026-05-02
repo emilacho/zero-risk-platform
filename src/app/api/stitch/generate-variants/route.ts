@@ -4,6 +4,7 @@
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -16,6 +17,8 @@ export async function POST(request: Request) {
     let raw: unknown = {}
     try { raw = await request.json() } catch { raw = {} }
     const body: Record<string, unknown> = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? (raw as Record<string, unknown>) : {}
+    const _v = validateObject<Record<string, unknown>>(body, 'lenient-write')
+    if (!_v.ok) return _v.response
 
     const variant_count = (typeof body.variant_count === 'number' ? body.variant_count : 3)
     const variants = []
