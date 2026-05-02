@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "expansion-opportunities",
+  "type": "object",
+  "title": "POST /api/expansion-opportunities",
+  "description": "Expansion Readiness Scanner output write-path. Caller: `Zero Risk - Expansion Readiness Scanner (Friday 2pm)`. Closes W15-D-10.",
+  "additionalProperties": true,
+  "required": ["client_id", "opportunity_type", "score"],
+  "properties": {
+    "client_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "opportunity_type": { "type": "string", "enum": ["upsell", "cross_sell", "renewal_extension", "seat_expansion", "feature_unlock", "service_addon"] },
+    "score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "estimated_value_usd": { "type": ["number", "null"], "minimum": 0 },
+    "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "evidence": {
+      "type": ["array", "null"],
+      "maxItems": 20,
+      "items": { "type": "string", "maxLength": 500 }
+    },
+    "next_action": { "type": ["string", "null"], "maxLength": 500 },
+    "owner_role": { "type": ["string", "null"], "maxLength": 100 },
+    "expires_at": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

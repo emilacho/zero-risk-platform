@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "community-health-upsert",
+  "type": "object",
+  "title": "POST /api/community-health/upsert",
+  "description": "Daily community-health snapshot upsert. Caller: `Zero Risk - Community Health Daily (Daily 8am)`. Closes W15-D-08.",
+  "additionalProperties": true,
+  "required": ["client_id", "snapshot_date"],
+  "properties": {
+    "client_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "snapshot_date": { "type": "string", "format": "date" },
+    "platform": { "type": ["string", "null"], "maxLength": 50 },
+    "health_score": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+    "active_members_24h": { "type": ["integer", "null"], "minimum": 0 },
+    "new_members_24h": { "type": ["integer", "null"], "minimum": 0 },
+    "posts_24h": { "type": ["integer", "null"], "minimum": 0 },
+    "engagement_rate_24h": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "sentiment_score": { "type": ["number", "null"], "minimum": -1, "maximum": 1 },
+    "alerts": {
+      "type": ["array", "null"],
+      "maxItems": 20,
+      "items": { "type": "string", "maxLength": 500 }
+    },
+    "notes": { "type": ["string", "null"], "maxLength": 2000 }
+  }
+}
