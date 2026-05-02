@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "testing-incrementality-results",
+  "type": "object",
+  "title": "POST /api/testing/incrementality-results",
+  "description": "Persist incrementality test result row. Caller: `Zero Risk - Incrementality Test Runner (15min + Webhook)`. Closes W15-D-31.",
+  "additionalProperties": true,
+  "required": ["experiment_id", "test_type", "p_value"],
+  "properties": {
+    "experiment_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "client_id": { "type": ["string", "null"], "maxLength": 200 },
+    "test_type": { "type": "string", "enum": ["incrementality", "geo_holdout", "ghost_ad", "PSA"] },
+    "p_value": { "type": "number", "minimum": 0, "maximum": 1 },
+    "lift_pct": { "type": ["number", "null"] },
+    "incremental_conversions": { "type": ["integer", "null"], "minimum": 0 },
+    "incremental_revenue_usd": { "type": ["number", "null"] },
+    "sample_size": { "type": ["integer", "null"], "minimum": 0 },
+    "control_group_size": { "type": ["integer", "null"], "minimum": 0 },
+    "treatment_group_size": { "type": ["integer", "null"], "minimum": 0 },
+    "confidence_interval": {
+      "type": ["array", "null"],
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "type": "number" }
+    },
+    "captured_at": { "type": ["string", "null"], "format": "date-time" }
+  }
+}
