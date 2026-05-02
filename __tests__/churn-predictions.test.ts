@@ -10,7 +10,7 @@ import { _resetValidatorCache } from '../src/lib/input-validator'
 const VALID_KEY = 'churn-predictions-test-key-1234567890ab'
 
 const captured: { table?: string; row?: Record<string, unknown> } = {}
-const insertSingle = vi.fn(async () => ({
+const insertSingle = vi.fn<() => Promise<{ data: { id: string } | null; error: { message: string } | null }>>(async () => ({
   data: { id: 'cp-00000000-0000-0000-0000-000000000001' },
   error: null,
 }))

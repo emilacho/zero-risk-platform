@@ -7,7 +7,7 @@ import { _resetValidatorCache } from '../src/lib/input-validator'
 const VALID_KEY = 'community-health-test-key-1234567890ab'
 
 const captured: { table?: string; row?: Record<string, unknown>; opts?: Record<string, unknown> } = {}
-const upsertSingle = vi.fn(async () => ({
+const upsertSingle = vi.fn<() => Promise<{ data: { id: string } | null; error: { message: string } | null }>>(async () => ({
   data: { id: 'ch-00000000-0000-0000-0000-0000000000aa' },
   error: null,
 }))

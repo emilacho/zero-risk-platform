@@ -7,7 +7,7 @@ import { _resetValidatorCache } from '../src/lib/input-validator'
 const VALID_KEY = 'rfm-segments-test-key-1234567890abcd'
 
 const captured: { table?: string; row?: Record<string, unknown>; opts?: Record<string, unknown> } = {}
-const upsertSingle = vi.fn(async () => ({
+const upsertSingle = vi.fn<() => Promise<{ data: { id: string } | null; error: { message: string } | null }>>(async () => ({
   data: { id: 'rfm-00000000-0000-0000-0000-000000000025' },
   error: null,
 }))
