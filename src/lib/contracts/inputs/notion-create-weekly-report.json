@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "notion-create-weekly-report",
+  "type": "object",
+  "title": "POST /api/notion/create-weekly-report",
+  "description": "Create a Notion page for a weekly client report. Caller: `Zero Risk - Weekly Client Report Generator v2 (Mondays 8am)`. Closes W15-D-23.",
+  "additionalProperties": true,
+  "required": ["client_id", "week_starting", "title"],
+  "properties": {
+    "client_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "week_starting": { "type": "string", "format": "date" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "highlights": { "type": ["array", "null"], "maxItems": 30, "items": { "type": "string", "maxLength": 1000 } },
+    "metrics": { "type": ["object", "null"] },
+    "next_week_focus": { "type": ["array", "null"], "maxItems": 20, "items": { "type": "string", "maxLength": 500 } },
+    "blockers": { "type": ["array", "null"], "maxItems": 20, "items": { "type": "string", "maxLength": 500 } },
+    "parent_page_id": { "type": ["string", "null"], "maxLength": 200 }
+  }
+}
