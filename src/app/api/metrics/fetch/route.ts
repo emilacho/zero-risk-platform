@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateInput } from '@/lib/input-validator'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { withSupabaseResult } from '@/lib/bridge-fallback'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -44,34 +45,26 @@ export async function POST(request: Request) {
   const since = new Date(Date.now() - sinceDays * 86_400_000).toISOString()
   const limit = Math.min(body.limit ?? 200, 1000)
 
-  let metrics: unknown[] = []
-  let fallbackMode = false
+  const supabase = getSupabaseAdmin()
+  const r = await withSupabaseResult<unknown[]>(
+    () => {
+      let q = supabase
+        .from('performance_metrics')
+        .select('metric_name, value, captured_at, platform, client_id, dimensions')
+        .in('metric_name', body.metric_names)
+        .gte('captured_at', since)
+        .order('captured_at', { ascending: false })
+        .limit(limit)
+      if (body.client_id) q = q.eq('client_id', body.client_id)
+      if (body.platform) q = q.eq('platform', body.platform)
+      if (body.until) q = q.lte('captured_at', body.until)
+      return q
+    },
+    { context: '/api/metrics/fetch' },
+  )
 
-  try {
-    const supabase = getSupabaseAdmin()
-    let q = supabase
-      .from('performance_metrics')
-      .select('metric_name, value, captured_at, platform, client_id, dimensions')
-      .in('metric_name', body.metric_names)
-      .gte('captured_at', since)
-      .order('captured_at', { ascending: false })
-      .limit(limit)
-    if (body.client_id) q = q.eq('client_id', body.client_id)
-    if (body.platform) q = q.eq('platform', body.platform)
-    if (body.until) q = q.lte('captured_at', body.until)
-
-    const { data, error } = await q
-
-    if (error || !data) {
-      fallbackMode = true
-      metrics = []
-    } else {
-      metrics = data
-    }
-  } catch {
-    fallbackMode = true
-    metrics = []
-  }
+  const fallbackMode = r.fallback_mode
+  const metrics = (r.fallback_mode ? [] : (r.data ?? [])) as unknown[]
 
   return NextResponse.json({
     ok: true,

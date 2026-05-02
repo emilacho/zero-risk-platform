@@ -101,7 +101,7 @@ async function emitSentryBreadcrumb(reason: string, ctx?: string): Promise<void>
  *   return NextResponse.json({ ok: true, persisted_id: (r.data as any)?.id })
  */
 export async function withSupabaseResult<T>(
-  op: () => Promise<{ data: T | null; error: { message: string } | null } | null | undefined>,
+  op: () => PromiseLike<{ data: T | null; error: { message: string } | null } | null | undefined>,
   ctx?: BridgeContext,
 ): Promise<FallbackResult<T>> {
   try {

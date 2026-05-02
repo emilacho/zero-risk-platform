@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateInput } from '@/lib/input-validator'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { withSupabaseResult } from '@/lib/bridge-fallback'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -53,30 +54,19 @@ export async function POST(request: Request) {
     sent_at: body.sent_at || new Date().toISOString(),
   }
 
-  try {
-    const supabase = getSupabaseAdmin()
-    const { data, error } = await supabase
-      .from('nps_dispatch_log')
-      .insert(row)
-      .select('id')
-      .single()
+  const supabase = getSupabaseAdmin()
+  const r = await withSupabaseResult<{ id: string }>(
+    () => supabase.from('nps_dispatch_log').insert(row).select('id').single(),
+    { context: '/api/surveys/nps/log-sent' },
+  )
 
-    if (error) {
-      return NextResponse.json({
-        ok: true,
-        fallback_mode: true,
-        persisted_id: null,
-        note: `DB write failed gracefully: ${error.message.slice(0, 200)}`,
-      })
-    }
-
-    return NextResponse.json({ ok: true, persisted_id: data?.id })
-  } catch (err) {
+  if (r.fallback_mode) {
     return NextResponse.json({
       ok: true,
       fallback_mode: true,
       persisted_id: null,
-      note: `DB exception: ${err instanceof Error ? err.message.slice(0, 200) : 'unknown'}`,
+      note: `DB write failed gracefully: ${r.reason ?? 'unknown'}`,
     })
   }
+  return NextResponse.json({ ok: true, persisted_id: r.data?.id ?? null })
 }

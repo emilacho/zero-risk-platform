@@ -29,6 +29,7 @@
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { withSupabaseResult } from '@/lib/bridge-fallback'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -84,41 +85,38 @@ export async function GET(request: Request) {
   let rationale: string | null = null
   let fallbackMode = false
 
-  try {
-    const supabase = getSupabaseAdmin()
-    const since = new Date(Date.now() - sinceDays * 86_400_000).toISOString()
-    const { data, error } = await supabase
-      .from('ghl_expansion_signals')
-      .select('signal, strength, observed_at, score, rationale')
-      .eq('client_id', clientId)
-      .gte('observed_at', since)
-      .order('observed_at', { ascending: false })
-      .limit(50)
+  type SignalRow = { signal: unknown; strength: unknown; observed_at: unknown; score?: unknown; rationale?: unknown }
+  const supabase = getSupabaseAdmin()
+  const since = new Date(Date.now() - sinceDays * 86_400_000).toISOString()
+  const r = await withSupabaseResult<SignalRow[]>(
+    () =>
+      supabase
+        .from('ghl_expansion_signals')
+        .select('signal, strength, observed_at, score, rationale')
+        .eq('client_id', clientId)
+        .gte('observed_at', since)
+        .order('observed_at', { ascending: false })
+        .limit(50),
+    { context: '/api/ghl/expansion-intent' },
+  )
 
-    if (!error && data && data.length > 0) {
-      signals = data.map((r) => ({
-        signal: String(r.signal),
-        strength: typeof r.strength === 'number' ? r.strength : 0,
-        observed_at: String(r.observed_at),
-      }))
-      // Score: prefer the most-recent row's score column if present, else
-      // average strength × 100 with a 30-pt floor.
-      const latestScore = data[0]?.score
-      score = typeof latestScore === 'number'
+  const data = r.fallback_mode ? null : r.data
+  if (data && data.length > 0) {
+    signals = data.map((row) => ({
+      signal: String(row.signal),
+      strength: typeof row.strength === 'number' ? row.strength : 0,
+      observed_at: String(row.observed_at),
+    }))
+    const latestScore = data[0]?.score
+    score =
+      typeof latestScore === 'number'
         ? Math.round(latestScore)
-        : Math.max(30, Math.round(signals.reduce((s, x) => s + x.strength, 0) / signals.length * 100))
-      rationale =
-        typeof data[0]?.rationale === 'string'
-          ? data[0].rationale
-          : `${signals.length} signals in last ${sinceDays}d`
-    } else {
-      fallbackMode = true
-      const stub = stubSignals(clientId, sinceDays)
-      signals = stub.signals
-      score = stub.score
-      rationale = stub.rationale
-    }
-  } catch {
+        : Math.max(30, Math.round((signals.reduce((s, x) => s + x.strength, 0) / signals.length) * 100))
+    rationale =
+      typeof data[0]?.rationale === 'string'
+        ? (data[0].rationale as string)
+        : `${signals.length} signals in last ${sinceDays}d`
+  } else {
     fallbackMode = true
     const stub = stubSignals(clientId, sinceDays)
     signals = stub.signals

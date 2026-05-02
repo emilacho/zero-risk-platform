@@ -36,6 +36,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { validateObject } from '@/lib/input-validator'
+import { withSupabaseResult } from '@/lib/bridge-fallback'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -77,36 +78,31 @@ export async function POST(request: Request) {
   const offset = Math.max(0, filter.offset ?? 0)
   const sinceDays = filter.since_days ?? 30
 
-  let rows: Array<Record<string, unknown>> = []
-  let fallbackMode = false
+  const supabase = getSupabaseAdmin()
+  const r = await withSupabaseResult<Array<Record<string, unknown>>>(
+    () => {
+      let q = supabase
+        .from('agent_outcomes')
+        .select('id, agent_slug, task_id, request_id, client_id, outcome, tokens_used, latency_ms, success, model, cost_usd, created_at, metadata')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1)
 
-  try {
-    const supabase = getSupabaseAdmin()
-    let q = supabase
-      .from('agent_outcomes')
-      .select('id, agent_slug, task_id, request_id, client_id, outcome, tokens_used, latency_ms, success, model, cost_usd, created_at, metadata')
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+      if (filter.client_id) q = q.eq('client_id', filter.client_id)
+      if (filter.agent_slug) q = q.eq('agent_slug', filter.agent_slug)
+      if (filter.outcome_type) q = q.eq('outcome', filter.outcome_type)
+      if (filter.campaign_id) q = q.eq('metadata->>campaign_id', filter.campaign_id)
+      if (sinceDays) {
+        const since = new Date(Date.now() - sinceDays * 86_400_000).toISOString()
+        q = q.gte('created_at', since)
+      }
+      if (filter.until) q = q.lte('created_at', filter.until)
+      return q
+    },
+    { context: '/api/outcomes/query' },
+  )
 
-    if (filter.client_id) q = q.eq('client_id', filter.client_id)
-    if (filter.agent_slug) q = q.eq('agent_slug', filter.agent_slug)
-    if (filter.outcome_type) q = q.eq('outcome', filter.outcome_type)
-    if (filter.campaign_id) q = q.eq('metadata->>campaign_id', filter.campaign_id)
-    if (sinceDays) {
-      const since = new Date(Date.now() - sinceDays * 86_400_000).toISOString()
-      q = q.gte('created_at', since)
-    }
-    if (filter.until) q = q.lte('created_at', filter.until)
-
-    const { data, error } = await q
-    if (error || !data) {
-      fallbackMode = true
-    } else {
-      rows = data as Array<Record<string, unknown>>
-    }
-  } catch {
-    fallbackMode = true
-  }
+  const fallbackMode = r.fallback_mode
+  const rows: Array<Record<string, unknown>> = r.fallback_mode ? [] : (r.data ?? [])
 
   return NextResponse.json({
     ok: true,
