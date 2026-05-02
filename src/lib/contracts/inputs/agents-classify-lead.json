@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agents-classify-lead",
+  "type": "object",
+  "title": "POST /api/agents/classify-lead",
+  "required": ["name", "source"],
+  "additionalProperties": true,
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "email": { "type": ["string", "null"], "maxLength": 200 },
+    "phone": { "type": ["string", "null"], "maxLength": 30 },
+    "source": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "notes": { "type": ["string", "null"], "maxLength": 1000 },
+    "campaign_id": { "type": ["string", "null"], "maxLength": 200 },
+    "metadata": { "type": ["object", "null"] }
+  }
+}

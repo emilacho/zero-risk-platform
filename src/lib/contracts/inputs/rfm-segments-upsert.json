@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rfm-segments-upsert",
+  "type": "object",
+  "title": "POST /api/rfm-segments/upsert",
+  "description": "Nightly RFM bucket write. Caller: `Zero Risk - RFM Segmentation Nightly (Daily 2am)`. Closes W15-D-25.",
+  "additionalProperties": true,
+  "required": ["client_id", "contact_id", "segment"],
+  "properties": {
+    "client_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "contact_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "segment": {
+      "type": "string",
+      "enum": ["champions", "loyal", "potential_loyalists", "new_customers", "promising", "need_attention", "about_to_sleep", "at_risk", "cant_lose_them", "hibernating", "lost"]
+    },
+    "recency_days": { "type": ["integer", "null"], "minimum": 0 },
+    "frequency_30d": { "type": ["integer", "null"], "minimum": 0 },
+    "monetary_lifetime_usd": { "type": ["number", "null"], "minimum": 0 },
+    "rfm_score": { "type": ["string", "null"], "maxLength": 20 },
+    "computed_at": { "type": ["string", "null"], "format": "date-time" },
+    "previous_segment": { "type": ["string", "null"], "maxLength": 50 }
+  }
+}

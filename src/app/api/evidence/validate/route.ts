@@ -27,6 +27,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -39,10 +40,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   }
 
-  const body = await request.json().catch(() => null)
-  if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  const raw = await request.json().catch(() => null)
+  if (!raw || typeof raw !== 'object') {
+    return NextResponse.json({ error: 'invalid_body', code: 'E-INPUT-PARSE' }, { status: 400 })
   }
+  const v = validateObject<Record<string, unknown>>(raw, 'evidence-validate')
+  if (!v.ok) return v.response
+  const body = v.data as Record<string, any>  // any: route uses dynamic field access
 
   // Tolerate aliases: phase may come as phase_name; request_id may come as validation_id
   const request_id = body.request_id || body.validation_id || `ad-hoc-${Date.now()}`

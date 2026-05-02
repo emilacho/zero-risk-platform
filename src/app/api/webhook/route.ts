@@ -1,16 +1,44 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
+import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
+
+interface WebhookInput {
+  type?: string
+  event?: string
+  source?: string
+  data?: Record<string, unknown>
+  payload?: Record<string, unknown>
+}
 
 // POST /api/webhook — generic webhook endpoint for n8n
 // n8n workflows can POST here to create leads, log agent actions, etc.
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
+
+  let raw: unknown
   try {
-    const body = await request.json()
-    const { type, data } = body
+    raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  }
+
+  const v = validateObject<WebhookInput>(raw, 'webhook-generic')
+  if (!v.ok) return v.response
+  const body = v.data
+
+  try {
+    const { type, data } = body as { type?: string; data?: Record<string, unknown> }
 
     if (!type || !data) {
       return NextResponse.json(
-        { error: 'Missing required fields: type, data' },
+        { error: 'Missing required fields: type, data', code: 'E-INPUT-MISSING' },
         { status: 400 }
       )
     }

@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { validateObject } from '@/lib/input-validator'
 import { checkInternalKey } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
@@ -32,14 +33,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   }
 
-  const body = await request.json().catch(() => null)
-  if (!body || !body.request_id || !body.original_request || !body.classification_type) {
-    return NextResponse.json(
-      { error: 'missing_fields', required: ['request_id', 'original_request', 'classification_type'] },
-      { status: 400 }
-    )
+  const raw = await request.json().catch(() => null)
+  if (!raw) {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
   }
+  const v = validateObject<Record<string, unknown>>(raw, 'agent-routing-log')
+  if (!v.ok) return v.response
+  const body = v.data as Record<string, any>
 
+  // Defense-in-depth: schema also enforces, but keep runtime check for clarity.
   if (!VALID_CLASSIFICATIONS.has(body.classification_type)) {
     return NextResponse.json({ error: 'invalid_classification', got: body.classification_type }, { status: 400 })
   }

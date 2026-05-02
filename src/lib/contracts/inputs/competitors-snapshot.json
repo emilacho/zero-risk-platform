@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "competitors-snapshot",
+  "type": "object",
+  "title": "POST /api/competitors/snapshot",
+  "additionalProperties": true,
+  "properties": {
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "competitor": { "type": ["string", "null"], "maxLength": 200 },
+    "domain": { "type": ["string", "null"], "maxLength": 500 },
+    "snapshot_at": { "type": ["string", "null"], "format": "date-time" },
+    "data": {},
+    "ad_count": { "type": ["number", "null"], "minimum": 0 },
+    "platforms": { "type": ["array", "null"] }
+  }
+}

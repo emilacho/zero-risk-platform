@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
+
+interface PipelineInput {
+  task: string
+  client_id?: string | null
+  pipeline_id?: string | null
+  channel?: string | null
+  priority?: string | null
+}
 
 /**
  * Agent Pipeline — Async Trigger
@@ -44,23 +54,37 @@ function getCallbackUrl(): string {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
+
+  let raw: unknown
   try {
-    const body = await request.json()
-    const task = typeof body?.task === 'string' ? body.task.trim() : ''
+    raw = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'invalid_json', code: 'E-INPUT-PARSE' },
+      { status: 400 },
+    )
+  }
 
-    if (!task) {
-      return NextResponse.json(
-        { error: 'Campo "task" es requerido y debe ser un string no vacío.' },
-        { status: 400 }
-      )
-    }
+  const v = validateObject<PipelineInput>(raw, 'agents-pipeline')
+  if (!v.ok) return v.response
+  const body = v.data
+  const task = body.task.trim()
 
-    if (task.length > 2000) {
-      return NextResponse.json(
-        { error: 'La tarea no puede exceder 2000 caracteres.' },
-        { status: 400 }
-      )
-    }
+  if (task.length > 2000) {
+    return NextResponse.json(
+      { error: 'task exceeds 2000 chars', code: 'E-INPUT-TOO-LONG' },
+      { status: 400 },
+    )
+  }
+
+  try {
 
     // 1. Insert pending row in Supabase
     const supabase = getSupabaseAdmin()

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
+import { validateObject } from '@/lib/input-validator'
 
 /**
  * POST /api/onboarding — Start a new client onboarding (Day 1 auto-discovery)
@@ -19,7 +20,10 @@ import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
  */
 export async function POST(request: Request) {
   try {
-    const body = await request.json().catch(() => ({}) as Record<string, unknown>)
+    const _raw = await request.json().catch(() => ({}) as Record<string, unknown>)
+    const _v = validateObject<Record<string, unknown>>(_raw, 'onboarding-action')
+    if (!_v.ok) return _v.response
+    const body = _v.data
 
     // Accept both camelCase (canonical) and snake_case (workflow-generated) field names
     const companyName = (body.companyName as string) || (body.company_name as string) || (body.name as string) || ''

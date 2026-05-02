@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -111,8 +112,11 @@ export async function POST(request: Request) {
 
     let raw: unknown = {}
     try { raw = await request.json() } catch { raw = {} }
-    const body: Record<string, unknown> = (raw && typeof raw === 'object' && !Array.isArray(raw))
-      ? (raw as Record<string, unknown>) : {}
+
+    const v = validateObject<Record<string, unknown>>(raw, 'clients-create')
+    if (!v.ok) return v.response
+    const body: Record<string, unknown> = (v.data && typeof v.data === 'object' && !Array.isArray(v.data))
+      ? (v.data as Record<string, unknown>) : {}
 
     const client_id = (typeof body.client_id === 'string' && body.client_id) || `smoke-client-${Date.now()}`
 

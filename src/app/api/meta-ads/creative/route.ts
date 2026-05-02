@@ -8,6 +8,7 @@
 
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -36,6 +37,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   // Some workflows may POST here — accept and echo
-  const body = await request.json().catch(() => ({}))
+  const _raw = await request.json().catch(() => ({}))
+  const _v = validateObject<Record<string, unknown>>(_raw, 'lenient-write')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
   return NextResponse.json({ ok: true, echo: body, fallback_mode: true })
 }

@@ -20,6 +20,7 @@ export async function GET(r: Request) {
 
 export async function POST(request: Request) {
   return handleStubPost(request, {
+    schemaName: 'stub-row',
     table: 'content_refresh_queue',
     transform: (r) => ({
       client_id: r.client_id,

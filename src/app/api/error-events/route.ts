@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,14 +16,18 @@ export async function POST(request: Request) {
   const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
 
-  const body = await request.json().catch(() => ({}))
+  const raw = await request.json().catch(() => ({}))
+  const v = validateObject<Record<string, unknown>>(raw, 'error-events-create')
+  if (!v.ok) return v.response
+  const body = v.data as Record<string, unknown>
+
   const row = {
-    fingerprint: body.fingerprint || null,
-    source: body.source || 'sentry',
-    severity: body.severity || 'P2',
-    title: body.title || null,
-    environment: body.environment || null,
-    url: body.url || null,
+    fingerprint: (body.fingerprint as string) || null,
+    source: (body.source as string) || 'sentry',
+    severity: (body.severity as string) || 'P2',
+    title: (body.title as string) || null,
+    environment: (body.environment as string) || null,
+    url: (body.url as string) || null,
     data: body,
   }
   const supabase = getSupabaseAdmin()

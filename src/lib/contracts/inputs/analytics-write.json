@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "analytics-write",
+  "type": "object",
+  "title": "Analytics row write payload",
+  "description": "Routes under /api/analytics/* that record a metric/result row. Lenient on the metric payload itself but type-checks identifiers + numeric values.",
+  "additionalProperties": true,
+  "properties": {
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "campaign_id": { "type": ["string", "null"], "maxLength": 200 },
+    "metric_name": { "type": ["string", "null"], "maxLength": 200 },
+    "metric_value": { "type": ["number", "string", "null"] },
+    "period": { "type": ["string", "null"], "maxLength": 50 },
+    "score": { "type": ["number", "null"] },
+    "rows": { "type": ["array", "null"] },
+    "data": { "type": ["object", "array", "null"] }
+  }
+}

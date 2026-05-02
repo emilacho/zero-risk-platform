@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "error-events-create",
+  "type": "object",
+  "title": "POST /api/error-events (Sentry → Zero Risk)",
+  "additionalProperties": true,
+  "properties": {
+    "fingerprint": { "type": ["string", "null"], "maxLength": 500 },
+    "source": { "type": ["string", "null"], "maxLength": 200 },
+    "severity": {
+      "type": ["string", "null"],
+      "enum": ["P0", "P1", "P2", "P3", "info", "warning", "error", "fatal", null]
+    },
+    "title": { "type": ["string", "null"], "maxLength": 1000 },
+    "environment": { "type": ["string", "null"], "maxLength": 100 },
+    "url": { "type": ["string", "null"], "maxLength": 2000 },
+    "message": { "type": ["string", "null"], "maxLength": 4000 },
+    "data": {},
+    "tags": { "type": ["object", "array", "null"] }
+  }
+}

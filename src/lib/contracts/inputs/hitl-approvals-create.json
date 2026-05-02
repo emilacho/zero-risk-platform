@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hitl-approvals-create",
+  "type": "object",
+  "title": "POST /api/hitl/approvals/create",
+  "additionalProperties": true,
+  "properties": {
+    "approval_type": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "required_approver": { "type": "string", "maxLength": 100 },
+    "escalation_path": { "type": ["string", "object", "array", "null"] },
+    "request_id": { "type": ["string", "null"], "maxLength": 200 },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "phase": { "type": ["string", "null"], "maxLength": 100 },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "expires_in_hours": { "type": "number", "minimum": 0, "maximum": 168 },
+    "context": { "type": ["object", "array"] },
+    "payload": { "type": ["object", "array"] }
+  }
+}

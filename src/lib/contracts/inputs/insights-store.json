@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "insights-store",
+  "type": "object",
+  "title": "POST /api/insights/store",
+  "description": "Generic insight write-path. Caller: `Zero Risk - Creative Performance Learner`. Closes W15-D-19.",
+  "additionalProperties": true,
+  "required": ["insight_type", "payload"],
+  "properties": {
+    "client_id": { "type": ["string", "null"], "maxLength": 200 },
+    "insight_type": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "payload": { "type": "object" },
+    "source": { "type": ["string", "null"], "maxLength": 200 },
+    "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "evidence": {
+      "type": ["array", "null"],
+      "maxItems": 50,
+      "items": { "type": "string", "maxLength": 500 }
+    },
+    "agent_slug": { "type": ["string", "null"], "maxLength": 100 },
+    "request_id": { "type": ["string", "null"], "maxLength": 200 }
+  }
+}

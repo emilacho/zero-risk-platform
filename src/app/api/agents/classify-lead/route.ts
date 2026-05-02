@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
-import { sanitizeString, validateRequired, isValidEmail } from '@/lib/validation'
+import { sanitizeString, isValidEmail } from '@/lib/validation'
+import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 // POST /api/agents/classify-lead
 // RUFLO Lead Qualifier — clasifica leads como caliente/tibio/frío
@@ -8,19 +10,37 @@ import { sanitizeString, validateRequired, isValidEmail } from '@/lib/validation
 // Input: { name, email?, phone?, source, notes?, campaign_id? }
 // Output: { classification, score, reason, actions }
 
+interface ClassifyLeadInput {
+  name: string
+  source: string
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  campaign_id?: string | null
+  metadata?: Record<string, unknown> | null
+}
+
 export async function POST(request: Request) {
   const startTime = Date.now()
 
-  try {
-    const body = await request.json()
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
 
-    const { valid, missing } = validateRequired(body, ['name', 'source'])
-    if (!valid) {
-      return NextResponse.json(
-        { error: `Campos requeridos faltantes: ${missing.join(', ')}` },
-        { status: 400 }
-      )
+  try {
+    let raw: unknown
+    try {
+      raw = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
     }
+    const v = validateObject<ClassifyLeadInput>(raw, 'agents-classify-lead')
+    if (!v.ok) return v.response
+    const body = v.data
 
     const leadData = {
       name: sanitizeString(body.name, 100) || 'Sin nombre',

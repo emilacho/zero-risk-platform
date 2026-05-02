@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agents-run",
+  "type": "object",
+  "title": "POST /api/agents/run request body",
+  "additionalProperties": true,
+  "anyOf": [
+    { "required": ["agent"] },
+    { "required": ["agent_id"] },
+    { "required": ["agent_slug"] },
+    { "required": ["agent_name"] },
+    { "required": ["slug"] }
+  ],
+  "properties": {
+    "agent": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "agent_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "agent_slug": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "agent_name": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "slug": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "task": { "type": "string", "maxLength": 10000 },
+    "task_type": { "type": "string", "maxLength": 100 },
+    "request_text": { "type": "string", "maxLength": 10000 },
+    "routing_instructions": { "type": "string", "maxLength": 5000 },
+    "instruction": { "type": "string", "maxLength": 10000 },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "pipeline_id": { "type": ["string", "null"], "maxLength": 100 }
+  }
+}

@@ -368,7 +368,7 @@ async function main() {
 }
 
 // Allow main to be skipped under test
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1].endsWith('n8n-cleanup-executor.mjs')) {
+if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('n8n-cleanup-executor.mjs')) {
   main().catch(e => { console.error('FATAL:', e); process.exit(2) })
 }
 

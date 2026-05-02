@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -17,7 +18,10 @@ export async function POST(request: Request) {
   const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
 
-  const body = await request.json().catch(() => ({}))
+  const _raw = await request.json().catch(() => ({}))
+  const _v = validateObject<Record<string, unknown>>(_raw, 'lenient-write')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
   const taskId: string = body?.task_id || `video_${Date.now()}`
   const inputUrl: string = body?.input_url || ''
   type ExportSpec = { platform?: string; aspect_ratio?: string; resolution?: string; bitrate?: string; fps?: number }

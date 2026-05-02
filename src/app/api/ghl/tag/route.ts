@@ -9,6 +9,7 @@ export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
   return handleStubPost(request, {
+    schemaName: 'stub-row',
     table: 'ghl_tags_log',
     transform: (r) => ({
       contact_id: r.contact_id || r.id || 'unknown',

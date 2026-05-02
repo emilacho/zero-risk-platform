@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
+import { validateObject } from '@/lib/input-validator'
 
 /**
  * POST /api/pipeline/run
@@ -20,7 +21,15 @@ import { capture } from '@/lib/posthog'
  */
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
+    let _raw: unknown
+  try {
+    _raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  }
+  const _v = validateObject<Record<string, unknown>>(_raw, 'pipeline-action')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
 
     const clientId = body.client_id
     const objective = sanitizeString(body.objective, 2000)

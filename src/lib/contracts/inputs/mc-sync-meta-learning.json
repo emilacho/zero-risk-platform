@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mc-sync-meta-learning",
+  "type": "object",
+  "title": "POST /api/mc-sync · action=meta_learning_complete",
+  "description": "Strict schema for Meta-Agent Weekly Learning Cycle telemetry (cron Monday 9am). Closes W15-T6 backend gap (mirror of B-001 / hitl_cycle_complete).",
+  "additionalProperties": true,
+  "required": ["action", "week", "tasks_analyzed", "success_rate", "proposals_queued", "timestamp"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "const": "meta_learning_complete"
+    },
+    "week": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "tasks_analyzed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "success_rate": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "proposals_queued": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

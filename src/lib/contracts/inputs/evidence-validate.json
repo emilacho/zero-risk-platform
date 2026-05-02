@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evidence-validate",
+  "type": "object",
+  "title": "POST /api/evidence/validate",
+  "additionalProperties": true,
+  "properties": {
+    "request_id": { "type": ["string", "null"], "maxLength": 200 },
+    "validation_id": { "type": ["string", "null"], "maxLength": 200 },
+    "phase": { "type": ["string", "null"], "maxLength": 100 },
+    "phase_name": { "type": ["string", "null"], "maxLength": 100 },
+    "phase_output": {},
+    "output": {},
+    "success_criteria": { "type": ["object", "array", "string", "null"] },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 }
+  }
+}

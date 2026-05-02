@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "surveys-nps-log-sent",
+  "type": "object",
+  "title": "POST /api/surveys/nps/log-sent",
+  "description": "NPS dispatch log. Caller: `Zero Risk - NPS + CSAT Monthly Pulse (1st of month 10am)`. Closes W15-D-28.",
+  "additionalProperties": true,
+  "required": ["client_id", "contact_id", "survey_id"],
+  "properties": {
+    "client_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "contact_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "survey_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "channel": { "type": ["string", "null"], "enum": ["email", "sms", "in_app", "whatsapp", null] },
+    "sent_at": { "type": ["string", "null"], "format": "date-time" },
+    "template_id": { "type": ["string", "null"], "maxLength": 200 },
+    "personalization": { "type": ["object", "null"] },
+    "expires_at": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

@@ -23,14 +23,46 @@ import { NextResponse } from 'next/server'
 import { runAgentViaSDK } from '@/lib/agent-sdk-runner'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
+import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 min — pipelines largos
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json()
+interface RunSdkInput {
+  agent: string
+  task: string
+  resume_session_id?: string | null
+  client_id?: string | null
+  pipeline_id?: string | null
+  step_name?: string | null
+  extra?: Record<string, unknown> | null
+}
 
+export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
+
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'invalid_json', code: 'E-INPUT-PARSE' },
+      { status: 400 },
+    )
+  }
+
+  const v = validateObject<RunSdkInput>(raw, 'agents-run-sdk')
+  if (!v.ok) return v.response
+  const body = v.data
+
+  try {
     const agentName = sanitizeString(body.agent, 50)
     const task = sanitizeString(body.task, 8000)
 

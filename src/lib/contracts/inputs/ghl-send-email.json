@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ghl-send-email",
+  "type": "object",
+  "title": "POST /api/ghl/send-email",
+  "description": "Bridge to GoHighLevel email send. Required: to_email + subject + body. Optional: contact_id, template_id, client_id (for audit), reply_to, from_name. Email format checked at the schema layer.",
+  "required": ["to_email", "subject", "body"],
+  "additionalProperties": true,
+  "properties": {
+    "to_email": {
+      "type": "string",
+      "format": "email",
+      "minLength": 3,
+      "maxLength": 320
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200000,
+      "description": "HTML or plain-text body. GHL accepts both."
+    },
+    "from_name": { "type": ["string", "null"], "maxLength": 200 },
+    "from_email": { "type": ["string", "null"], "format": "email", "maxLength": 320 },
+    "reply_to": { "type": ["string", "null"], "format": "email", "maxLength": 320 },
+    "contact_id": { "type": ["string", "null"], "maxLength": 200 },
+    "template_id": { "type": ["string", "null"], "maxLength": 200 },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "campaign_id": { "type": ["string", "null"], "maxLength": 200 },
+    "metadata": { "type": ["object", "null"] }
+  }
+}

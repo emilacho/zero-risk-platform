@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MissionControlBridge } from '@/lib/mc-bridge'
+import { checkInternalKey } from '@/lib/internal-auth'
+import { validateObject } from '@/lib/input-validator'
 
 /**
  * POST /api/mc-sync
@@ -14,13 +16,152 @@ import { MissionControlBridge } from '@/lib/mc-bridge'
  * Body: {
  *   pipeline_id: uuid (optional) — sync specific pipeline
  *   action: "sync_pipeline" | "sync_all_active" | "health_check"
+ *         | "hitl_cycle_complete" | "meta_learning_complete"
+ *
+ *   For action="hitl_cycle_complete" (B-001 fix · W14-T4):
+ *     cycle_id: string (required)
+ *     queue_depth: integer >= 0 (required)
+ *     items_processed: integer >= 0 (required)
+ *     timestamp: ISO date-time string (required)
+ *
+ *   For action="meta_learning_complete" (W15-T6):
+ *     week: string (required)
+ *     tasks_analyzed: integer >= 0 (required)
+ *     success_rate: string (required)
+ *     proposals_queued: integer >= 0 (required)
+ *     timestamp: ISO date-time string (required)
  * }
  */
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
+
+  let raw: unknown
   try {
-    const body = await request.json()
-    const action = body.action || 'sync_pipeline'
-    const pipelineId = body.pipeline_id
+    raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  }
+
+  const v = validateObject<Record<string, unknown>>(raw, 'mc-sync')
+  if (!v.ok) return v.response
+  const body = v.data as Record<string, any>
+
+  try {
+    const action = (body.action as string) || 'sync_pipeline'
+    const pipelineId = body.pipeline_id as string | undefined
+
+    // ---- Meta-Agent Weekly Learning Cycle telemetry (W15-T6) ---------------
+    // Workflow: `Zero Risk - Meta-Agent Weekly Learning Cycle` (cron Mon 9am).
+    // Same shape pattern as hitl_cycle_complete: strict re-validation + insert
+    // into a dedicated audit table. Closes the gap surfaced by the W15-T5 MC
+    // integration audit (was returning silent 400 "Unknown action").
+    if (action === 'meta_learning_complete') {
+      const v2 = validateObject<Record<string, any>>(body, 'mc-sync-meta-learning')
+      if (!v2.ok) return v2.response
+      const p = v2.data
+
+      try {
+        const supabase = getSupabaseAdmin()
+        const { data, error } = await supabase
+          .from('mc_inbox_meta_learning_cycles')
+          .insert({
+            week: p.week,
+            tasks_analyzed: p.tasks_analyzed,
+            success_rate: p.success_rate,
+            proposals_queued: p.proposals_queued,
+            cycle_timestamp: p.timestamp,
+            payload: p,
+            source: 'n8n-meta-agent-weekly-cycle',
+          })
+          .select('id')
+          .single()
+
+        if (error) {
+          return NextResponse.json(
+            {
+              error: 'persist_failed',
+              code: 'E-DB-INSERT',
+              detail: error.message,
+            },
+            { status: 500 }
+          )
+        }
+
+        return NextResponse.json({
+          ok: true,
+          action: 'meta_learning_complete',
+          persisted_id: data?.id,
+        })
+      } catch (err) {
+        return NextResponse.json(
+          {
+            error: 'persist_failed',
+            code: 'E-DB-INSERT',
+            detail: err instanceof Error ? err.message : 'Unknown DB error',
+          },
+          { status: 500 }
+        )
+      }
+    }
+
+    // ---- HITL cycle-complete telemetry (B-001 fix · W14-T4) ----------------
+    // n8n's HITL workflow pings this every 15 min after draining the queue.
+    // We re-validate against a stricter schema (cycle_id, queue_depth,
+    // items_processed, timestamp all required + correctly typed) and persist
+    // to a dedicated audit table. No MC bridge call required.
+    if (action === 'hitl_cycle_complete') {
+      const v2 = validateObject<Record<string, any>>(body, 'mc-sync-hitl-cycle')
+      if (!v2.ok) return v2.response
+      const p = v2.data
+
+      try {
+        const supabase = getSupabaseAdmin()
+        const { data, error } = await supabase
+          .from('mc_inbox_hitl_cycles')
+          .insert({
+            cycle_id: p.cycle_id,
+            queue_depth: p.queue_depth,
+            items_processed: p.items_processed,
+            cycle_timestamp: p.timestamp,
+            payload: p,
+            source: 'n8n-hitl-workflow',
+          })
+          .select('id')
+          .single()
+
+        if (error) {
+          return NextResponse.json(
+            {
+              error: 'persist_failed',
+              code: 'E-DB-INSERT',
+              detail: error.message,
+            },
+            { status: 500 }
+          )
+        }
+
+        return NextResponse.json({
+          ok: true,
+          action: 'hitl_cycle_complete',
+          persisted_id: data?.id,
+        })
+      } catch (err) {
+        return NextResponse.json(
+          {
+            error: 'persist_failed',
+            code: 'E-DB-INSERT',
+            detail: err instanceof Error ? err.message : 'Unknown DB error',
+          },
+          { status: 500 }
+        )
+      }
+    }
 
     // Soft-handle NEXUS/research-workflow actions (no sync needed, just ack)
     const NOTIFY_ACTIONS = new Set([
@@ -139,7 +280,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: `Unknown action: ${action}. Valid: sync_pipeline, sync_all_active, health_check` },
+      { error: `Unknown action: ${action}. Valid: sync_pipeline, sync_all_active, health_check, hitl_cycle_complete, meta_learning_complete` },
       { status: 400 }
     )
   } catch (error) {
@@ -167,6 +308,8 @@ export async function GET() {
       health_check: 'Check if Mission Control is reachable',
       sync_pipeline: 'Sync a specific pipeline (requires pipeline_id)',
       sync_all_active: 'Sync all active/paused pipelines',
+      hitl_cycle_complete: 'Persist HITL workflow cycle-complete telemetry (cycle_id, queue_depth, items_processed, timestamp required)',
+      meta_learning_complete: 'Persist Meta-Agent Weekly Learning Cycle telemetry (week, tasks_analyzed, success_rate, proposals_queued, timestamp required)',
     },
     example_body: {
       action: 'sync_pipeline',

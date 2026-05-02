@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexus-action",
+  "type": "object",
+  "title": "NEXUS phase-action payload",
+  "additionalProperties": true,
+  "properties": {
+    "request_id": { "type": ["string", "null"], "maxLength": 200 },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "phase": { "type": ["string", "null"], "maxLength": 100 },
+    "phase_name": { "type": ["string", "null"], "maxLength": 100 },
+    "phase_output": {},
+    "next_phase": { "type": ["string", "null"], "maxLength": 100 },
+    "verdict": {
+      "type": ["string", "null"],
+      "enum": ["PASS", "RETRY", "FAIL", null]
+    },
+    "failure_reason": { "type": ["string", "null"], "maxLength": 4000 },
+    "user_request": { "type": ["string", "null"], "maxLength": 10000 },
+    "metadata": { "type": ["object", "null"] }
+  }
+}

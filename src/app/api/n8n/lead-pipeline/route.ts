@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString, isValidEmail, isValidUUID } from '@/lib/validation'
+import { validateObject } from '@/lib/input-validator'
 
 // POST /api/n8n/lead-pipeline
 // Endpoint que n8n llama para procesar un lead completo
@@ -24,7 +25,15 @@ export async function POST(request: Request) {
   const startTime = Date.now()
 
   try {
-    const body = await request.json()
+    let _raw: unknown
+  try {
+    _raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 })
+  }
+  const _v = validateObject<Record<string, unknown>>(_raw, 'pipeline-action')
+  if (!_v.ok) return _v.response
+  const body = _v.data as Record<string, any>
 
     // Accept leads from multiple sources (landing page, Meta Lead Ads, manual)
     const leadData = {

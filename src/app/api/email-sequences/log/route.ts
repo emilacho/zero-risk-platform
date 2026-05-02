@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export async function POST(request: Request) {
   return handleStubPost(request, {
+    schemaName: 'stub-row',
     table: 'email_sequences',
     transform: (r) => ({
       client_id: r.client_id || 'unknown',

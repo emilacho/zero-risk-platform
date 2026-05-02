@@ -27,6 +27,35 @@ import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
 
+// Local message shapes — the SDK's d.ts has internal type errors that cause
+// `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
+// fields we actually consume so strict mode can verify access.
+type SDKSystemInitMessage = {
+  type: 'system'
+  subtype: 'init'
+  session_id?: string
+}
+type SDKAssistantBlock = { type: string; text?: string }
+type SDKAssistantStreamMessage = {
+  type: 'assistant'
+  message?: { content?: SDKAssistantBlock[] }
+}
+type SDKResultStreamMessage = {
+  type: 'result'
+  session_id?: string
+  usage?: { input_tokens?: number; output_tokens?: number }
+}
+type SDKStreamMessage =
+  | SDKSystemInitMessage
+  | SDKAssistantStreamMessage
+  | SDKResultStreamMessage
+  | { type: string }
+
+// `query` from the SDK accepts `{ prompt, options }` but the SDK's d.ts has
+// collapsed return inference. We type the call-site explicitly.
+type QueryParams = { prompt: string; options: Options }
+type QueryFn = (p: QueryParams) => AsyncIterable<SDKMessage>
+
 // ---------- Tipos públicos ----------
 
 export interface AgentRunInput {
@@ -81,66 +110,97 @@ const COST_PER_M = {
   opus: { input: 15, output: 75 },
 }
 
-function costFor(model: string, inTok: number, outTok: number): number {
+/**
+ * @internal Exported for unit testing (W15-T4). Not part of the public API.
+ */
+export function _costFor(model: string, inTok: number, outTok: number): number {
   const key = model.includes('haiku') ? 'haiku' : model.includes('opus') ? 'opus' : 'sonnet'
   const p = COST_PER_M[key as keyof typeof COST_PER_M]
   return (inTok / 1_000_000) * p.input + (outTok / 1_000_000) * p.output
 }
 
+const costFor = _costFor
+
 // ---------- Runner principal ----------
 
-export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResult> {
-  const startedAt = Date.now()
-  const supabase = getSupabaseAdmin()
+// ---------- Internal helpers (W15 refactor) ----------
 
-  // 0a. Static alias resolution (no DB round-trip).
-  const resolvedName = resolveAgentSlug(input.agentName)
-  if (resolvedName !== input.agentName && !isCanonicalSlug(input.agentName)) {
-    console.info(`[agent-sdk-runner] ghost slug resolved: "${input.agentName}" → "${resolvedName}"`)
+interface RegistryRow {
+  slug: string
+  display_name: string
+  default_model: string
+  identity_md: string | null
+}
+
+interface AgentConfig {
+  id: string | null
+  name: string
+  display_name?: string
+  identity_content: string
+  model?: string
+}
+
+interface Skill {
+  name: string
+  content: string
+}
+
+type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>
+
+/**
+ * Resolve an input agent slug → canonical slug + (optional) registry row.
+ * Combines static alias map (no DB) with managed_agents_registry lookup.
+ */
+async function resolveCanonicalSlug(
+  supabase: SupabaseAdmin,
+  inputName: string,
+): Promise<{ canonicalSlug: string; registryRow: RegistryRow | null }> {
+  const resolvedName = resolveAgentSlug(inputName)
+  if (resolvedName !== inputName && !isCanonicalSlug(inputName)) {
+    console.info(`[agent-sdk-runner] ghost slug resolved: "${inputName}" → "${resolvedName}"`)
   }
 
-  // 0b. Resolve alias → canonical slug via managed_agents_registry.
-  //    The registry is the source of truth for identity_md (production-safe,
-  //    no filesystem reads on Vercel).
-  let canonicalSlug = resolvedName
-  let registryRow: {
-    slug: string
-    display_name: string
-    default_model: string
-    identity_md: string | null
-  } | null = null
-  {
-    const { data: regRows } = await supabase
-      .from('managed_agents_registry')
-      .select('slug, display_name, default_model, identity_md, aliases')
-      .eq('status', 'active')
-      .or(`slug.eq.${resolvedName},aliases.cs.{"${resolvedName}"}`)
-      .limit(1)
-    const row = regRows?.[0]
-    if (row) {
-      canonicalSlug = row.slug
-      registryRow = {
-        slug: row.slug,
-        display_name: row.display_name,
-        default_model: row.default_model,
-        identity_md: row.identity_md ?? null,
-      }
-    }
-  }
+  const { data: regRows } = await supabase
+    .from('managed_agents_registry')
+    .select('slug, display_name, default_model, identity_md, aliases')
+    .eq('status', 'active')
+    .or(`slug.eq.${resolvedName},aliases.cs.{"${resolvedName}"}`)
+    .limit(1)
 
-  // 1. Try the legacy `agents` table (still authoritative for the 27 agents
-  //    seeded in V1/V2 with proper identity_content + skills wiring).
-  let { data: agentCfg } = await supabase
+  const row = regRows?.[0]
+  if (!row) {
+    return { canonicalSlug: resolvedName, registryRow: null }
+  }
+  return {
+    canonicalSlug: row.slug,
+    registryRow: {
+      slug: row.slug,
+      display_name: row.display_name,
+      default_model: row.default_model,
+      identity_md: row.identity_md ?? null,
+    },
+  }
+}
+
+/**
+ * Load agent config from the legacy `agents` table, with registry fallback.
+ * Returns null if neither source has a usable identity_content.
+ */
+async function loadAgentConfig(
+  supabase: SupabaseAdmin,
+  canonicalSlug: string,
+  registryRow: RegistryRow | null,
+): Promise<AgentConfig | null> {
+  const { data: dbCfg } = await supabase
     .from('agents')
     .select('*')
     .eq('name', canonicalSlug)
     .maybeSingle()
 
-  // 1b. Fallback: synthesize a minimal config from the registry row.
-  //     identity_md must be populated by `scripts/sync-registry-identities.ts`
-  //     before deploying — otherwise we error out cleanly.
-  if (!agentCfg && registryRow?.identity_md) {
-    agentCfg = {
+  if (dbCfg) return dbCfg as AgentConfig
+
+  if (registryRow?.identity_md) {
+    return {
       id: null,
       name: registryRow.slug,
       display_name: registryRow.display_name,
@@ -148,55 +208,72 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       model: registryRow.default_model,
     }
   }
+  return null
+}
 
-  if (!agentCfg) {
-    const hint = registryRow
-      ? `registry row exists but identity_md is empty — run scripts/sync-registry-identities.ts`
-      : `slug not found in registry`
-    return fail(`Agent "${input.agentName}" (resolved to "${canonicalSlug}") not loadable: ${hint}`, startedAt)
-  }
+/**
+ * Load + filter skills from agent_skill_assignments.
+ * Drops empty / "Loaded from filesystem" placeholders.
+ */
+async function loadSkills(supabase: SupabaseAdmin, agentId: string | null): Promise<Skill[]> {
+  if (!agentId) return []
 
-  if (!agentCfg.identity_content || agentCfg.identity_content.startsWith('Loaded from filesystem')) {
-    return fail(`Agent "${canonicalSlug}" has no identity_content loaded`, startedAt)
-  }
+  const { data: skillRows } = await supabase
+    .from('agent_skill_assignments')
+    .select('priority, agent_skills(skill_name, skill_content)')
+    .eq('agent_id', agentId)
+    .order('priority', { ascending: true })
 
-  const { data: skillRows } = agentCfg.id
-    ? await supabase
-        .from('agent_skill_assignments')
-        .select('priority, agent_skills(skill_name, skill_content)')
-        .eq('agent_id', agentCfg.id)
-        .order('priority', { ascending: true })
-    : { data: [] as Array<{ priority: number; agent_skills: { skill_name: string; skill_content: string } | { skill_name: string; skill_content: string }[] }> }
-
-  const skills: { name: string; content: string }[] = []
+  const skills: Skill[] = []
   for (const sa of skillRows ?? []) {
     const skill = Array.isArray(sa.agent_skills) ? sa.agent_skills[0] : sa.agent_skills
     if (!skill?.skill_content) continue
     if (skill.skill_content.startsWith('Loaded from filesystem')) continue
     skills.push({ name: skill.skill_name, content: skill.skill_content })
   }
+  return skills
+}
 
-  // 2. Armar system prompt (identidad + skills + contexto de agencia).
-  const systemParts = [
-    `# Tu Identidad\n${agentCfg.identity_content}`,
+/**
+ * Compose the system prompt from identity + skills + agency context.
+ *
+ * @internal Exported for unit testing (W15-T4). Not part of the public API.
+ */
+export function _buildSystemPrompt(
+  identity: string,
+  skills: Skill[],
+  ctx: Pick<AgentRunInput, 'pipelineId' | 'stepName' | 'extra'>,
+): string {
+  return [
+    `# Tu Identidad\n${identity}`,
     ...skills.map(s => `\n# Skill: ${s.name}\n${s.content}`),
     `\n# Contexto de Operación`,
     `- Agencia: Zero Risk (agencia de negocios agéntica — sirve cualquier industria)`,
     `- Idioma: Español`,
-    input.pipelineId ? `- Pipeline ID: ${input.pipelineId}` : '',
-    input.stepName ? `- Step: ${input.stepName}` : '',
-    input.extra ? `- Extra: ${JSON.stringify(input.extra)}` : '',
-  ].filter(Boolean)
+    ctx.pipelineId ? `- Pipeline ID: ${ctx.pipelineId}` : '',
+    ctx.stepName ? `- Step: ${ctx.stepName}` : '',
+    ctx.extra ? `- Extra: ${JSON.stringify(ctx.extra)}` : '',
+  ].filter(Boolean).join('\n')
+}
 
-  const systemPrompt = systemParts.join('\n')
-
-  // 3. Configurar opciones del SDK.
-  const modelKey = agentCfg.model || 'claude-sonnet'
-  const modelId = MODEL_MAP[modelKey] ?? MODEL_MAP['claude-sonnet']
-
-  const options: Options = {
-    // Reemplazamos el system prompt default del SDK por el nuestro.
-    systemPrompt: { type: 'preset', preset: 'claude_code', append: systemPrompt },
+/**
+ * Build the SDK Options object: model, allowedTools, resume, MCP servers.
+ */
+function buildSdkOptions(
+  modelId: string,
+  systemPrompt: string,
+  input: AgentRunInput,
+): Options {
+  // SDK's d.ts has internal type errors that collapse `systemPrompt` to
+  // `string | undefined`, hiding the documented preset-object form. Build the
+  // value first and cast — runtime accepts both shapes per the SDK docs.
+  const systemPromptOption = {
+    type: 'preset' as const,
+    preset: 'claude_code' as const,
+    append: systemPrompt,
+  }
+  return {
+    systemPrompt: systemPromptOption as unknown as Options['systemPrompt'],
     model: modelId,
     // Solo lectura + búsqueda; los agentes no editan archivos locales.
     allowedTools: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
@@ -223,37 +300,65 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
         }
       : {},
   }
+}
 
-  // 4. Ejecutar query y drenar el stream.
+interface StreamDrainResult {
+  responseText: string
+  sessionId: string | null
+  inputTokens: number
+  outputTokens: number
+}
+
+/**
+ * Drain the SDK stream and accumulate text + usage stats.
+ * Throws on stream error; caller wraps in try/catch.
+ */
+async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDrainResult> {
   let responseText = ''
   let sessionId: string | null = null
   let inputTokens = 0
   let outputTokens = 0
 
-  try {
-    const stream = query({ prompt: input.task, options })
-
-    for await (const msg of stream as AsyncIterable<SDKMessage>) {
-      if (msg.type === 'system' && msg.subtype === 'init') {
-        sessionId = msg.session_id
-      } else if (msg.type === 'assistant' && msg.message?.content) {
-        for (const block of msg.message.content) {
-          if (block.type === 'text') responseText += block.text
+  for await (const rawMsg of stream) {
+    const msg = rawMsg as SDKStreamMessage
+    if (msg.type === 'system' && (msg as SDKSystemInitMessage).subtype === 'init') {
+      sessionId = (msg as SDKSystemInitMessage).session_id ?? null
+    } else if (msg.type === 'assistant') {
+      const content = (msg as SDKAssistantStreamMessage).message?.content
+      if (content) {
+        for (const block of content) {
+          if (block.type === 'text' && typeof block.text === 'string') {
+            responseText += block.text
+          }
         }
-      } else if (msg.type === 'result') {
-        inputTokens = msg.usage?.input_tokens ?? 0
-        outputTokens = msg.usage?.output_tokens ?? 0
-        sessionId = sessionId || msg.session_id
       }
+    } else if (msg.type === 'result') {
+      const r = msg as SDKResultStreamMessage
+      inputTokens = r.usage?.input_tokens ?? 0
+      outputTokens = r.usage?.output_tokens ?? 0
+      sessionId = sessionId ?? r.session_id ?? null
     }
-  } catch (err) {
-    return fail(err instanceof Error ? err.message : 'SDK error', startedAt)
   }
 
-  const durationMs = Date.now() - startedAt
-  const costUsd = costFor(modelId, inputTokens, outputTokens)
+  return { responseText, sessionId, inputTokens, outputTokens }
+}
 
-  // 5. Log ejecución (best-effort).
+/**
+ * Best-effort fire-and-forget log to agents_log. Never throws.
+ */
+function logExecution(
+  supabase: SupabaseAdmin,
+  args: {
+    canonicalSlug: string
+    input: AgentRunInput
+    skills: Skill[]
+    drain: StreamDrainResult
+    modelId: string
+    durationMs: number
+    costUsd: number
+  },
+): void {
+  const { canonicalSlug, input, skills, drain, modelId, durationMs, costUsd } = args
   supabase
     .from('agents_log')
     .insert({
@@ -267,24 +372,72 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
         skills_loaded: skills.map(s => s.name),
       },
       output: {
-        response_length: responseText.length,
+        response_length: drain.responseText.length,
         model: modelId,
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        session_id: sessionId,
+        input_tokens: drain.inputTokens,
+        output_tokens: drain.outputTokens,
+        session_id: drain.sessionId,
       },
       status: 'success',
       duration_ms: durationMs,
       cost: costUsd,
     })
     .then(() => { /* best-effort log */ })
+}
+
+// ---------- Public entry point ----------
+
+export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResult> {
+  const startedAt = Date.now()
+  const supabase = getSupabaseAdmin()
+
+  // 0. Resolve slug → canonical + registry row.
+  const { canonicalSlug, registryRow } = await resolveCanonicalSlug(supabase, input.agentName)
+
+  // 1. Load agent config (legacy table preferred, registry fallback).
+  const agentCfg = await loadAgentConfig(supabase, canonicalSlug, registryRow)
+  if (!agentCfg) {
+    const hint = registryRow
+      ? `registry row exists but identity_md is empty — run scripts/sync-registry-identities.ts`
+      : `slug not found in registry`
+    return fail(`Agent "${input.agentName}" (resolved to "${canonicalSlug}") not loadable: ${hint}`, startedAt)
+  }
+  if (!agentCfg.identity_content || agentCfg.identity_content.startsWith('Loaded from filesystem')) {
+    return fail(`Agent "${canonicalSlug}" has no identity_content loaded`, startedAt)
+  }
+
+  // 2. Load skills + assemble system prompt.
+  const skills = await loadSkills(supabase, agentCfg.id)
+  const systemPrompt = _buildSystemPrompt(agentCfg.identity_content, skills, input)
+
+  // 3. Build SDK options.
+  const modelKey = agentCfg.model || 'claude-sonnet'
+  const modelId = MODEL_MAP[modelKey] ?? MODEL_MAP['claude-sonnet']
+  const options = buildSdkOptions(modelId, systemPrompt, input)
+
+  // 4. Execute SDK query + drain stream.
+  let drain: StreamDrainResult
+  try {
+    const stream = (query as unknown as QueryFn)({ prompt: input.task, options })
+    drain = await drainStream(stream)
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : 'SDK error', startedAt)
+  }
+
+  const durationMs = Date.now() - startedAt
+  const costUsd = costFor(modelId, drain.inputTokens, drain.outputTokens)
+
+  // 5. Best-effort log.
+  logExecution(supabase, {
+    canonicalSlug, input, skills, drain, modelId, durationMs, costUsd,
+  })
 
   return {
     success: true,
-    response: responseText,
-    sessionId,
-    inputTokens,
-    outputTokens,
+    response: drain.responseText,
+    sessionId: drain.sessionId,
+    inputTokens: drain.inputTokens,
+    outputTokens: drain.outputTokens,
     costUsd,
     durationMs,
     model: modelId,

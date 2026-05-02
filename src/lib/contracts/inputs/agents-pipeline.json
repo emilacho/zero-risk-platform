@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agents-pipeline",
+  "type": "object",
+  "title": "POST /api/agents/pipeline request body",
+  "required": ["task"],
+  "additionalProperties": true,
+  "properties": {
+    "task": { "type": "string", "minLength": 1, "maxLength": 10000 },
+    "client_id": { "type": ["string", "null"], "maxLength": 100 },
+    "pipeline_id": { "type": ["string", "null"], "maxLength": 100 },
+    "channel": { "type": ["string", "null"], "maxLength": 100 },
+    "priority": { "type": ["string", "null"], "enum": ["low", "medium", "high", "critical", null] }
+  }
+}

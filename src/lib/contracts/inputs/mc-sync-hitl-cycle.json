@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mc-sync-hitl-cycle",
+  "type": "object",
+  "title": "POST /api/mc-sync · action=hitl_cycle_complete",
+  "description": "Strict schema for HITL cycle-complete notifications emitted by the n8n HITL workflow every 15 min. Closes B-001 backend gap (W14-T4).",
+  "additionalProperties": true,
+  "required": ["action", "cycle_id", "queue_depth", "items_processed", "timestamp"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "const": "hitl_cycle_complete"
+    },
+    "cycle_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "queue_depth": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
