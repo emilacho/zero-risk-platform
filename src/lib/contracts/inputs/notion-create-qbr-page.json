@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "notion-create-qbr-page",
+  "type": "object",
+  "title": "POST /api/notion/create-qbr-page",
+  "description": "Create a Quarterly Business Review (QBR) page in Notion. Caller: `Zero Risk - QBR Generator Quarterly`. Closes W15-D-22. Stubbed until Notion API token lands post-Notion-Plus 5 May.",
+  "additionalProperties": true,
+  "required": ["client_id", "quarter"],
+  "properties": {
+    "client_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "quarter": { "type": "string", "pattern": "^Q[1-4] [0-9]{4}$" },
+    "title": { "type": ["string", "null"], "maxLength": 500 },
+    "summary": { "type": ["string", "null"], "maxLength": 5000 },
+    "kpis": {
+      "type": ["array", "null"],
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "maxLength": 200 },
+          "value": { "type": ["string", "number", "null"] },
+          "target": { "type": ["string", "number", "null"] },
+          "status": { "type": ["string", "null"], "enum": ["on_track", "at_risk", "off_track", null] }
+        }
+      }
+    },
+    "wins": {
+      "type": ["array", "null"],
+      "maxItems": 20,
+      "items": { "type": "string", "maxLength": 1000 }
+    },
+    "risks": {
+      "type": ["array", "null"],
+      "maxItems": 20,
+      "items": { "type": "string", "maxLength": 1000 }
+    },
+    "next_quarter_goals": {
+      "type": ["array", "null"],
+      "maxItems": 20,
+      "items": { "type": "string", "maxLength": 1000 }
+    },
+    "parent_page_id": { "type": ["string", "null"], "maxLength": 200 }
+  }
+}

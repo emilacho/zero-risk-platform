@@ -44,3 +44,9 @@ audit-output/
 
 # claude code local settings
 .claude/
+
+# orphan worktree leftover (Wave 18)
+zr-w18-batch/
+
+# B-001 debug session leftover
+.tmp-b001/
