@@ -32,7 +32,7 @@ vi.mock('@/lib/supabase', () => ({
       chain.order = () => chain
       chain.range = () => chain
       // PromiseLike interface
-      ;(chain as { then: (...a: unknown[]) => unknown }).then = (
+      ;(chain as Record<string, unknown>).then = (
         onfulfilled?: (v: unknown) => unknown,
         onrejected?: (e: unknown) => unknown,
       ) => respond().then(onfulfilled, onrejected)

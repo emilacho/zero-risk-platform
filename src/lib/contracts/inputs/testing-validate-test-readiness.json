@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "testing-validate-test-readiness",
+  "type": "object",
+  "title": "POST /api/testing/validate-test-readiness",
+  "description": "Pre-flight check: is an experiment ready to start. Caller: `Zero Risk - Incrementality Test Runner (15min + Webhook)`. Closes W15-D-32.",
+  "additionalProperties": true,
+  "required": ["experiment_id"],
+  "properties": {
+    "experiment_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "client_id": { "type": ["string", "null"], "maxLength": 200 },
+    "min_sample_size": { "type": ["integer", "null"], "minimum": 0 },
+    "min_baseline_traffic_per_day": { "type": ["integer", "null"], "minimum": 0 },
+    "required_creatives_count": { "type": ["integer", "null"], "minimum": 1 }
+  }
+}

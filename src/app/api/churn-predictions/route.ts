@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateInput } from '@/lib/input-validator'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { withSupabaseResult } from '@/lib/bridge-fallback'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -58,30 +59,15 @@ export async function POST(request: Request) {
     context: body.context ?? null,
   }
 
-  try {
-    const supabase = getSupabaseAdmin()
-    const { data, error } = await supabase
-      .from('churn_predictions')
-      .insert(row)
-      .select('id')
-      .single()
-
-    if (error) {
-      return NextResponse.json({
-        ok: true,
-        fallback_mode: true,
-        persisted_id: null,
-        note: `DB write failed gracefully: ${error.message.slice(0, 200)}`,
-      })
-    }
-
-    return NextResponse.json({ ok: true, persisted_id: data?.id })
-  } catch (err) {
-    return NextResponse.json({
-      ok: true,
-      fallback_mode: true,
-      persisted_id: null,
-      note: `DB exception swallowed: ${err instanceof Error ? err.message.slice(0, 200) : 'unknown'}`,
-    })
+  // W17-T2 refactor: route the supabase op through the bridge-fallback helper.
+  // Behavior identical to W16 (graceful 200 on DB failure), boilerplate gone.
+  const supabase = getSupabaseAdmin()
+  const r = await withSupabaseResult<{ id: string }>(
+    () => supabase.from('churn_predictions').insert(row).select('id').single(),
+    { context: '/api/churn-predictions' },
+  )
+  if (r.fallback_mode) {
+    return NextResponse.json({ ok: true, fallback_mode: true, persisted_id: null, note: r.reason })
   }
+  return NextResponse.json({ ok: true, persisted_id: r.data?.id })
 }

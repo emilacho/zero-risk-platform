@@ -45,13 +45,13 @@ audit-output/
 # wave 15 audit raw data (n8n workflow JSON + classifier output)
 .tmp-w15/
 
-# B-001 diagnostic dumps
+# B-001 diagnostic dumps / debug session leftover
 .tmp-b001/
 
 # wave 17 scratch dir
 .tmp-w17/
 
-# wave 18 batch dir
+# wave 18 orphan worktree leftover
 zr-w18-batch/
 
 # claude code local settings

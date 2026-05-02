@@ -28,6 +28,7 @@
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { withSupabaseResult } from '@/lib/bridge-fallback'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -77,41 +78,44 @@ export async function GET(request: Request) {
   let totals = { deals: 0, value_usd: 0, weighted_value_usd: 0 }
   let fallbackMode = false
 
-  try {
-    const supabase = getSupabaseAdmin()
-    let q = supabase
-      .from('ghl_pipeline_snapshots')
-      .select('stage_name, deal_count, value_usd, weighted_value_usd, captured_at')
-      .eq('client_id', clientId)
-      .order('captured_at', { ascending: false })
-      .limit(20)
-    if (pipelineId) q = q.eq('ghl_pipeline_id', pipelineId)
-    const { data, error } = await q
+  type SnapshotRow = { stage_name: unknown; deal_count: unknown; value_usd: unknown; weighted_value_usd: unknown; captured_at: unknown }
+  const supabase = getSupabaseAdmin()
+  const r = await withSupabaseResult<SnapshotRow[]>(
+    () => {
+      let q = supabase
+        .from('ghl_pipeline_snapshots')
+        .select('stage_name, deal_count, value_usd, weighted_value_usd, captured_at')
+        .eq('client_id', clientId)
+        .order('captured_at', { ascending: false })
+        .limit(20)
+      if (pipelineId) q = q.eq('ghl_pipeline_id', pipelineId)
+      return q
+    },
+    { context: '/api/ghl/pipeline-summary' },
+  )
 
-    if (!error && data && data.length > 0) {
-      // Aggregate latest snapshot per stage_name (already ordered desc).
-      const seen = new Set<string>()
-      for (const r of data) {
-        if (seen.has(r.stage_name)) continue
-        seen.add(r.stage_name)
-        stages.push({
-          stage_name: String(r.stage_name),
-          deal_count: typeof r.deal_count === 'number' ? r.deal_count : 0,
-          value_usd: typeof r.value_usd === 'number' ? r.value_usd : 0,
-        })
-      }
-      totals = {
-        deals: stages.reduce((s, x) => s + x.deal_count, 0),
-        value_usd: stages.reduce((s, x) => s + x.value_usd, 0),
-        weighted_value_usd: data.reduce((s, x) => s + (typeof x.weighted_value_usd === 'number' ? x.weighted_value_usd : 0), 0),
-      }
-    } else {
-      fallbackMode = true
-      const stub = stubPipeline()
-      stages = stub.stages
-      totals = stub.totals
+  const data = r.fallback_mode ? null : r.data
+  if (data && data.length > 0) {
+    const seen = new Set<string>()
+    for (const row of data) {
+      const stage = String(row.stage_name)
+      if (seen.has(stage)) continue
+      seen.add(stage)
+      stages.push({
+        stage_name: stage,
+        deal_count: typeof row.deal_count === 'number' ? row.deal_count : 0,
+        value_usd: typeof row.value_usd === 'number' ? row.value_usd : 0,
+      })
     }
-  } catch {
+    totals = {
+      deals: stages.reduce((s, x) => s + x.deal_count, 0),
+      value_usd: stages.reduce((s, x) => s + x.value_usd, 0),
+      weighted_value_usd: data.reduce(
+        (s, x) => s + (typeof x.weighted_value_usd === 'number' ? x.weighted_value_usd : 0),
+        0,
+      ),
+    }
+  } else {
     fallbackMode = true
     const stub = stubPipeline()
     stages = stub.stages

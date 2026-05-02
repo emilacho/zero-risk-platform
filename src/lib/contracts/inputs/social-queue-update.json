@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "social-queue-update",
+  "type": "object",
+  "title": "POST /api/social-queue/update",
+  "description": "Update a social_queue row after a publish attempt. Caller: `Zero Risk - Social Multi-Platform Publisher v2`. Closes W15-D-27.",
+  "additionalProperties": true,
+  "required": ["id", "status"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "status": { "type": "string", "enum": ["pending", "scheduled", "published", "failed", "cancelled"] },
+    "platform": { "type": ["string", "null"], "maxLength": 50 },
+    "post_id": { "type": ["string", "null"], "maxLength": 300 },
+    "post_url": { "type": ["string", "null"], "maxLength": 1000 },
+    "published_at": { "type": ["string", "null"], "format": "date-time" },
+    "error": { "type": ["string", "null"], "maxLength": 2000 }
+  }
+}
