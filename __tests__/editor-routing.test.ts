@@ -95,9 +95,31 @@ describe('requiresEditorReview', () => {
     expect(requiresEditorReview('')).toBe(false)
   })
 
-  it('is case-sensitive (avoids accidental whitelist bypass)', () => {
-    expect(requiresEditorReview('Content-Creator')).toBe(false)
-    expect(requiresEditorReview('CONTENT-CREATOR')).toBe(false)
+  // Sprint #2 P0 — slug normalization fix (87% bypass closed)
+  it('normalizes underscore variants (workflow legacy slugs)', () => {
+    expect(requiresEditorReview('content_creator')).toBe(true)
+    expect(requiresEditorReview('email_marketer')).toBe(true)
+    expect(requiresEditorReview('seo_specialist')).toBe(true)
+    expect(requiresEditorReview('pr_earned_media_manager')).toBe(true)
+    expect(requiresEditorReview('reporting_agent')).toBe(true)
+  })
+
+  it('is case-insensitive after normalization', () => {
+    expect(requiresEditorReview('Content-Creator')).toBe(true)
+    expect(requiresEditorReview('CONTENT-CREATOR')).toBe(true)
+    expect(requiresEditorReview('Email_Marketer')).toBe(true)
+  })
+
+  it('resolves semantic aliases via resolveAgentSlug', () => {
+    expect(requiresEditorReview('copywriter')).toBe(true) // → content-creator
+    expect(requiresEditorReview('landing_optimizer')).toBe(true) // → cro-specialist
+    expect(requiresEditorReview('qbr_generator')).toBe(true) // → reporting-agent
+  })
+
+  it('still rejects truly unknown slugs', () => {
+    expect(requiresEditorReview('totally-fake-agent')).toBe(false)
+    expect(requiresEditorReview(null as unknown as string)).toBe(false)
+    expect(requiresEditorReview(undefined as unknown as string)).toBe(false)
   })
 })
 
@@ -113,6 +135,14 @@ describe('getEditorConfig', () => {
   it('returns null for unknown agents', () => {
     expect(getEditorConfig('does-not-exist')).toBeNull()
     expect(getEditorConfig('')).toBeNull()
+  })
+
+  // Sprint #2 P0 — slug normalization
+  it('returns same config for normalized variants', () => {
+    const canonical = getEditorConfig('email-marketer')
+    expect(getEditorConfig('email_marketer')).toEqual(canonical)
+    expect(getEditorConfig('Email-Marketer')).toEqual(canonical)
+    expect(getEditorConfig('EMAIL_MARKETER')).toEqual(canonical)
   })
 })
 

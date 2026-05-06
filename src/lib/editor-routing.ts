@@ -11,8 +11,16 @@
  * - max_revisions: # de iteraciones automáticas antes de escalar a HITL humano
  * - escalate_on: severities que escalan DIRECTAMENTE a HITL (sin esperar revisions)
  *
+ * Slug normalization (Sprint #2 P0 · 2026-05-06):
+ * `requiresEditorReview` y `getEditorConfig` ahora normalizan el slug ANTES del
+ * lookup — corrige el bypass del 87% donde workflows que mandaban
+ * `email_marketer` (underscore) escapaban al whitelist (que solo tenía `email-marketer`).
+ * La normalización aplica resolveAgentSlug + toLowerCase + underscore→hyphen.
+ *
  * Doc canonical: docs/04-agentes/ESTRUCTURA_ORGANIZACIONAL.md sección 7
  */
+
+import { resolveAgentSlug } from '@/lib/agent-alias-map'
 
 export type EditorVerdictStatus = 'approved' | 'revision_needed' | 'escalated'
 export type EditorVerdictSeverity = 'low' | 'medium' | 'high' | 'critical'
@@ -115,12 +123,38 @@ export const EDITOR_WHITELIST: Record<string, EditorRoutingConfig> = {
   },
 }
 
+/**
+ * Normaliza un slug a kebab-case canónico antes del lookup en EDITOR_WHITELIST.
+ * Aplica:
+ *   1. trim + toLowerCase
+ *   2. underscore → hyphen (cubre "email_marketer" → "email-marketer")
+ *   3. resolveAgentSlug (cubre aliases legados como "copywriter" → "content-creator")
+ *
+ * Esto cierra el bypass del 87% reportado en Sprint #1 análisis cruzado workflows
+ * vs estructura organizacional (PM_REPORT_S33P5).
+ */
+export function normalizeAgentSlug(agentSlug: string | null | undefined): string {
+  if (!agentSlug || typeof agentSlug !== 'string') return ''
+  const lowered = agentSlug.trim().toLowerCase()
+  if (!lowered) return ''
+  // Try resolveAgentSlug on the raw lowered form FIRST — the alias map keys
+  // semantic aliases like "landing_optimizer" with underscores, so converting
+  // to hyphens prematurely would miss them.
+  const resolvedRaw = resolveAgentSlug(lowered)
+  if (resolvedRaw !== lowered) return resolvedRaw
+  // Fallback: kebab-case (covers MANIFEST-31 canonical kebab forms like
+  // "Email-Marketer" → "email-marketer", and any snake_case slug whose alias
+  // resolves to a hyphenated canonical).
+  const hyphenated = lowered.replace(/_/g, '-')
+  return resolveAgentSlug(hyphenated)
+}
+
 export function requiresEditorReview(agentSlug: string): boolean {
-  return agentSlug in EDITOR_WHITELIST
+  return normalizeAgentSlug(agentSlug) in EDITOR_WHITELIST
 }
 
 export function getEditorConfig(agentSlug: string): EditorRoutingConfig | null {
-  return EDITOR_WHITELIST[agentSlug] || null
+  return EDITOR_WHITELIST[normalizeAgentSlug(agentSlug)] || null
 }
 
 // ============================================================
