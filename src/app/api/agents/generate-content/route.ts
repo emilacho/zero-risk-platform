@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabase, getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString } from '@/lib/validation'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
+import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
+import { runDualReviewMiddleware } from '@/lib/editor-middleware'
+import { resolveAgentSlug } from '@/lib/agent-alias-map'
 
 interface GenerateContentInput {
   product: string
@@ -165,12 +168,56 @@ Responde en JSON con este formato:
       cost: 0, // Calculate based on model pricing
     })
 
-    return NextResponse.json({
+    const baseResponse = {
       success: true,
       variants_generated: variants.length,
       variants_saved: savedContent.length,
       content: savedContent,
-    })
+    }
+
+    // DUAL REVIEWER MIDDLEWARE — content-creator is a whitelist agent. Run the
+    // generated variants through Editor en Jefe + Brand Strategist so this
+    // endpoint also flows through Camino III HITL. Mirrors /api/agents/run.
+    const canonicalSlug = resolveAgentSlug('content-creator')
+    const skipMiddleware =
+      request.headers.get('x-skip-editor-middleware') === '1' ||
+      canonicalSlug === PRIMARY_REVIEWER ||
+      canonicalSlug === SECOND_REVIEWER ||
+      !requiresEditorReview(canonicalSlug)
+
+    if (skipMiddleware) {
+      return NextResponse.json(baseResponse)
+    }
+
+    const editorConfig = getEditorConfig(canonicalSlug)!
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      `https://${request.headers.get('host') || 'localhost:3000'}`
+
+    const reviewableContent = variants
+      .map((v: { headline?: string; body?: string; cta?: string }) =>
+        [v.headline, v.body, v.cta].filter(Boolean).join('\n'),
+      )
+      .join('\n---\n')
+
+    try {
+      const middlewareResult = await runDualReviewMiddleware({
+        agentSlug: canonicalSlug,
+        content: reviewableContent,
+        task: `Genera 3 variantes de copy para ${product} dirigido a ${audience}`,
+        context: { product, audience, tone, channels, campaign_id: campaignId },
+        config: editorConfig,
+        supabase: getSupabaseAdmin(),
+        baseUrl,
+      })
+      return NextResponse.json({ ...baseResponse, ...middlewareResult })
+    } catch (middlewareError) {
+      console.error('[Editor Middleware generate-content] Failed:', middlewareError)
+      return NextResponse.json({
+        ...baseResponse,
+        editor_review: { verdict: 'middleware_error', severity: 'low' },
+      })
+    }
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
