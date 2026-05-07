@@ -25,6 +25,10 @@ import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
+import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
+import { runDualReviewMiddleware } from '@/lib/editor-middleware'
+import { resolveAgentSlug } from '@/lib/agent-alias-map'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 min — pipelines largos
@@ -100,7 +104,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: result.error }, { status: 500 })
     }
 
-    return NextResponse.json({
+    // Base response — may be augmented by dual reviewer middleware below
+    const baseResponse = {
       success: true,
       agent: agentName,
       response: result.response,
@@ -110,7 +115,45 @@ export async function POST(request: Request) {
       output_tokens: result.outputTokens,
       cost_usd: result.costUsd,
       duration_ms: result.durationMs,
-    })
+    }
+
+    // DUAL REVIEWER MIDDLEWARE — mirrors /api/agents/run lines 478-503 so workflows
+    // hitting run-sdk also flow through Camino III HITL when a whitelist agent
+    // emits content. Skipped for reviewers themselves, header opt-out, and non-whitelisted.
+    const canonicalSlug = resolveAgentSlug(agentName)
+    const skipMiddleware =
+      request.headers.get('x-skip-editor-middleware') === '1' ||
+      canonicalSlug === PRIMARY_REVIEWER ||
+      canonicalSlug === SECOND_REVIEWER ||
+      !requiresEditorReview(canonicalSlug)
+
+    if (skipMiddleware) {
+      return NextResponse.json(baseResponse)
+    }
+
+    const editorConfig = getEditorConfig(canonicalSlug)!
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      `https://${request.headers.get('host') || 'localhost:3000'}`
+
+    try {
+      const middlewareResult = await runDualReviewMiddleware({
+        agentSlug: canonicalSlug,
+        content: result.response ?? '',
+        task,
+        context: (body.extra || {}) as Record<string, unknown>,
+        config: editorConfig,
+        supabase: getSupabaseAdmin(),
+        baseUrl,
+      })
+      return NextResponse.json({ ...baseResponse, ...middlewareResult })
+    } catch (middlewareError) {
+      console.error('[Editor Middleware run-sdk] Failed:', middlewareError)
+      return NextResponse.json({
+        ...baseResponse,
+        editor_review: { verdict: 'middleware_error', severity: 'low' },
+      })
+    }
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
