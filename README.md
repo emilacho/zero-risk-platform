@@ -40,19 +40,23 @@ Voice & Tone, ICPs, Visual Identity, Messaging Pillars, Forbidden Words.
 
 Four service-specific MCP servers ready for the implementation sprint:
 
-| Package | Service | Tools (planned) |
-|---------|---------|-----------------|
-| `@zero-risk/ghl-mcp-server` | GoHighLevel | 13 |
-| `@zero-risk/dataforseo-mcp-server` | DataForSEO | 12 |
-| `@zero-risk/apify-mcp-server` | Apify scrapers | 6 |
-| `@zero-risk/higgsfield-mcp-server` | Higgsfield video | 4 |
+| Package | Service | Tools (planned) | Tools wired |
+|---------|---------|-----------------|-------------|
+| `@zero-risk/ghl-mcp-server` | GoHighLevel | 13 | `ghl_search_contacts` |
+| `@zero-risk/dataforseo-mcp-server` | DataForSEO | 12 | `dfs_keywords_for_keyword` |
+| `@zero-risk/apify-mcp-server` | Apify scrapers | 6 | `apify_get_dataset` |
+| `@zero-risk/higgsfield-mcp-server` | Higgsfield video | 4 | `higgsfield_list_styles` |
 
 Each ships with package.json, tsconfig.json, README, MCP entrypoint, API
-client wrapper, and vitest skeleton. Handlers throw `not_implemented`
-until the per-service implementation sprint.
+client wrapper, and vitest tests. The first real tool per server is wired
+end-to-end (zod-validated args + handler dispatch via a `HANDLERS` map);
+remaining tools still return `status=not_implemented` until the
+per-service implementation sprint extends `HANDLERS`.
 
 Excluded from the root tsconfig — install standalone via
-`cd packages/<name> && pnpm install`.
+`cd packages/<name> && pnpm install`. Tests live under
+`packages/<name>/__tests__/` and run with `pnpm test` inside the
+package.
 
 ## Setup
 
