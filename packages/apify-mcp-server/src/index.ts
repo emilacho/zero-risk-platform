@@ -6,6 +6,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { ApifyClient } from './client.js'
+import * as apifyGetDataset from './tools/apify-get-dataset.js'
 
 const TOKEN = process.env.APIFY_TOKEN ?? ''
 if (!TOKEN) {
@@ -13,7 +14,11 @@ if (!TOKEN) {
   process.exit(1)
 }
 
-void new ApifyClient({ token: TOKEN })
+const client = new ApifyClient({ token: TOKEN })
+
+const HANDLERS: Record<string, (args: unknown) => Promise<unknown>> = {
+  [apifyGetDataset.name]: (args) => apifyGetDataset.handler(client, args),
+}
 
 interface ToolDef {
   name: string
@@ -47,6 +52,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const tool = TOOLS.find((t) => t.name === request.params.name)
   if (!tool) throw new Error(`Unknown tool: ${request.params.name}`)
+  const realHandler = HANDLERS[tool.name]
+  if (realHandler) {
+    try {
+      const result = await realHandler(request.params.arguments)
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              error: err instanceof Error ? err.message : String(err),
+              tool: tool.name,
+            }),
+          },
+        ],
+        isError: true,
+      }
+    }
+  }
   return {
     content: [
       { type: 'text', text: JSON.stringify({ status: 'not_implemented', tool: tool.name, scaffold_version: '0.1.0' }) },

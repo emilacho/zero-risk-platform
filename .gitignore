@@ -3,6 +3,12 @@
 /.pnp
 .pnp.js
 
+# nested package node_modules (packages/*/node_modules from standalone installs)
+packages/*/node_modules/
+# nested package lockfiles — root pnpm workspace not enabled yet, so per-package
+# lockfiles drift from the source of truth. Re-introduce when workspace lands.
+packages/*/pnpm-lock.yaml
+
 # testing
 /coverage
 

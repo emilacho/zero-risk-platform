@@ -9,6 +9,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { GHLClient } from './client.js'
+import * as ghlSearchContacts from './tools/ghl-search-contacts.js'
 
 const PRIVATE_KEY = process.env.GHL_PRIVATE_KEY ?? ''
 const LOCATION_ID = process.env.GHL_LOCATION_ID ?? ''
@@ -18,9 +19,14 @@ if (!PRIVATE_KEY || !LOCATION_ID) {
   process.exit(1)
 }
 
-// Client constructed but not yet used by any tool handler in this scaffold.
-// Will be passed to handlers in the implementation sprint.
-void new GHLClient({ privateKey: PRIVATE_KEY, locationId: LOCATION_ID })
+const client = new GHLClient({ privateKey: PRIVATE_KEY, locationId: LOCATION_ID })
+
+// Map of tools that have real handlers. Tools listed in TOOLS but absent
+// from HANDLERS still respond with status=not_implemented during the
+// per-tool implementation sprint.
+const HANDLERS: Record<string, (args: unknown) => Promise<unknown>> = {
+  [ghlSearchContacts.name]: (args) => ghlSearchContacts.handler(client, args),
+}
 
 interface ToolDef {
   name: string
@@ -63,6 +69,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const tool = TOOLS.find((t) => t.name === request.params.name)
   if (!tool) throw new Error(`Unknown tool: ${request.params.name}`)
+  const realHandler = HANDLERS[tool.name]
+  if (realHandler) {
+    try {
+      const result = await realHandler(request.params.arguments)
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              error: err instanceof Error ? err.message : String(err),
+              tool: tool.name,
+            }),
+          },
+        ],
+        isError: true,
+      }
+    }
+  }
   return {
     content: [
       {
