@@ -1,0 +1,142 @@
+{
+  "name": "Zero Risk — Brand Discovery (brand-strategist)",
+  "_meta": {
+    "version": "1.0-skeleton",
+    "purpose": "Triggered post-onboarding. Brand Strategist scrapes the client's website, derives Voice/Tone, ICPs, Visual Identity, Messaging, and Forbidden Words, and persists a Brand Book v0 to client_brand_books. Editor en Jefe + Brand Strategist dual-review fires automatically through /api/agents/run middleware.",
+    "owner_agent": "brand-strategist",
+    "outputs_to": "client_brand_books table + /brand-book/[clientId] viewer",
+    "status": "skeleton · spec ready · NOT yet activated in n8n"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/brand-discovery",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Brand Discovery Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "zero-risk-brand-discovery"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nconst missing = [];\nif (!b.client_id) missing.push('client_id');\nif (!b.website_url) missing.push('website_url');\nif (missing.length) throw new Error(`Missing required fields: ${missing.join(', ')}`);\nreturn [{ json: { client_id: b.client_id, website_url: b.website_url, industry: b.industry || null } }];"
+      },
+      "id": "validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"brand-strategist\",\n  \"task\": \"Scrape {{ $json.website_url }} and derive a Brand Book v0 for client {{ $json.client_id }} (industry: {{ $json.industry }}). Output strict JSON with keys: brand_purpose, brand_vision, brand_mission, brand_values, brand_personality, voice_description, tone_guidelines, writing_style, tagline, elevator_pitch, key_messages, value_propositions, primary_colors, typography, imagery_style, logo_usage_notes, forbidden_words, required_terminology, competitor_mentions_policy, compliance_notes.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"step_name\": \"brand_discovery\"\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "invoke-brand-strategist",
+      "name": "Invoke brand-strategist (auto dual-review)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// brand-strategist returns response.text containing JSON\nconst raw = $input.first().json.response || '';\nconst jsonMatch = raw.match(/\\{[\\s\\S]*\\}/);\nif (!jsonMatch) throw new Error('Brand Strategist did not return parseable JSON');\nconst parsed = JSON.parse(jsonMatch[0]);\nreturn [{ json: { ...parsed, client_id: $node['Validate Input'].json.client_id } }];"
+      },
+      "id": "parse-brand-book",
+      "name": "Parse Brand Book JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_brand_books",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ...$json, auto_generated: true, auto_generated_from: $node['Validate Input'].json.website_url, version: 1, human_validated: false }) }}",
+        "options": {}
+      },
+      "id": "persist-brand-book",
+      "name": "Persist client_brand_books row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"Brand Book v0 generado · cliente {{ $node['Validate Input'].json.client_id }}\\nReview: {{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/brand-book/{{ $node['Validate Input'].json.client_id }}\"\n}",
+        "options": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"client_id\": \"{{ $node['Validate Input'].json.client_id }}\",\n  \"brand_book_url\": \"{{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/brand-book/{{ $node['Validate Input'].json.client_id }}\"\n}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: Brand Discovery Request": { "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]] },
+    "Validate Input": { "main": [[{ "node": "Invoke brand-strategist (auto dual-review)", "type": "main", "index": 0 }]] },
+    "Invoke brand-strategist (auto dual-review)": { "main": [[{ "node": "Parse Brand Book JSON", "type": "main", "index": 0 }]] },
+    "Parse Brand Book JSON": { "main": [[{ "node": "Persist client_brand_books row", "type": "main", "index": 0 }]] },
+    "Persist client_brand_books row": { "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]] },
+    "Notify Slack": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "onboarding", "id": "10" },
+    { "name": "brand-strategist", "id": "11" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}

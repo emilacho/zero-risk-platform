@@ -1,0 +1,171 @@
+{
+  "name": "Zero Risk — Ad Creative Brief (creative-director)",
+  "_meta": {
+    "version": "1.0-skeleton",
+    "purpose": "Triggered after Campaign Brief Agent emits a brief. Creative Director reads the brief, the client's Brand Book, and the campaign objective, then expands into 3-5 creative directions (concept + visual mood + copy hook) ready for content-creator and video-editor pickup.",
+    "owner_agent": "creative-director",
+    "outputs_to": "creative_directions table (or content table with type='creative_direction')",
+    "status": "skeleton · spec ready · NOT yet activated"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/ad-creative-brief",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Campaign Brief Ready",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "zero-risk-ad-creative-brief"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nconst missing = [];\nif (!b.client_id) missing.push('client_id');\nif (!b.campaign_brief_id) missing.push('campaign_brief_id');\nif (missing.length) throw new Error(`Missing: ${missing.join(', ')}`);\nreturn [{ json: { client_id: b.client_id, campaign_brief_id: b.campaign_brief_id, n_directions: b.n_directions || 3 } }];"
+      },
+      "id": "validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/campaign_briefs?id=eq.{{ $json.campaign_brief_id }}&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-brief",
+      "name": "Fetch Campaign Brief",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 240]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/brand-book/{{ $node['Validate Input'].json.client_id }}",
+        "options": {}
+      },
+      "id": "fetch-brand-book",
+      "name": "Fetch Brand Book",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const brief = ($node['Fetch Campaign Brief'].json[0]) || {};\nconst brandBook = $node['Fetch Brand Book'].json.brand_book || {};\nconst n = $node['Validate Input'].json.n_directions;\nconst task = `Read the following Campaign Brief and Brand Book and produce ${n} distinct Creative Directions for an ad campaign. Each direction must include: concept_name, big_idea, visual_mood (3-5 keywords), copy_hook (max 80 chars), recommended_channels, target_segment_id (if Brief specifies). Output strict JSON: { directions: [...] }.\\n\\n=== CAMPAIGN BRIEF ===\\n${JSON.stringify(brief)}\\n\\n=== BRAND BOOK ===\\nVoice: ${brandBook.voice_description || ''}\\nTagline: ${brandBook.tagline || ''}\\nKey messages: ${JSON.stringify(brandBook.key_messages || [])}\\nForbidden: ${JSON.stringify(brandBook.forbidden_words || [])}`;\nreturn [{ json: { task, client_id: $node['Validate Input'].json.client_id, campaign_brief_id: $node['Validate Input'].json.campaign_brief_id } }];"
+      },
+      "id": "build-task",
+      "name": "Build Creative Director Task",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"creative-director\",\n  \"task\": {{ JSON.stringify($json.task) }},\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"step_name\": \"ad_creative_brief\"\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "invoke-creative-director",
+      "name": "Invoke creative-director (auto dual-review)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.response || '';\nconst m = raw.match(/\\{[\\s\\S]*\\}/);\nif (!m) throw new Error('creative-director did not return JSON');\nconst parsed = JSON.parse(m[0]);\nconst directions = parsed.directions || [];\nreturn directions.map(d => ({ json: { ...d, client_id: $node['Validate Input'].json.client_id, campaign_brief_id: $node['Validate Input'].json.campaign_brief_id } }));"
+      },
+      "id": "split-directions",
+      "name": "Split into N directions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/content",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.concept_name, body: JSON.stringify($json), type: 'creative_direction', status: 'draft', campaign_id: $json.campaign_brief_id, generated_by: 'creative-director' }) }}",
+        "options": {}
+      },
+      "id": "persist-directions",
+      "name": "Persist each direction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"client_id\": \"{{ $node['Validate Input'].json.client_id }}\",\n  \"directions_created\": {{ $node['Split into N directions'].json.length }}\n}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1920, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: Campaign Brief Ready": { "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]] },
+    "Validate Input": {
+      "main": [[
+        { "node": "Fetch Campaign Brief", "type": "main", "index": 0 },
+        { "node": "Fetch Brand Book", "type": "main", "index": 0 }
+      ]]
+    },
+    "Fetch Campaign Brief": { "main": [[{ "node": "Build Creative Director Task", "type": "main", "index": 0 }]] },
+    "Fetch Brand Book": { "main": [[{ "node": "Build Creative Director Task", "type": "main", "index": 0 }]] },
+    "Build Creative Director Task": { "main": [[{ "node": "Invoke creative-director (auto dual-review)", "type": "main", "index": 0 }]] },
+    "Invoke creative-director (auto dual-review)": { "main": [[{ "node": "Split into N directions", "type": "main", "index": 0 }]] },
+    "Split into N directions": { "main": [[{ "node": "Persist each direction", "type": "main", "index": 0 }]] },
+    "Persist each direction": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "creative-director", "id": "12" },
+    { "name": "campaign", "id": "13" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}
