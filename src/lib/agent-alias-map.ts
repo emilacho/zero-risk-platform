@@ -69,6 +69,12 @@ export const AGENT_ALIAS_MAP: Readonly<Record<string, string>> = {
   // meta_agent used in old n8n wf as "optimize everything" → optimization-agent
   meta_agent: 'optimization-agent',
 
+  // GEO (Generative Engine Optimization · AI-search content) is a specialty
+  // within SEO; the cron workflow "GEO Content Freshness" used this slug.
+  // Mapped to seo-specialist whose mandate already covers AI-search surfaces.
+  'seo-geo-optimization': 'seo-specialist',
+  seo_geo_optimization: 'seo-specialist',
+
   // ----------------------------------------------------------------
   // mc-bridge AGENT_ROLE_MAP ghost: ad-intelligence-agent
   // Not in MANIFEST-31; nearest capability = competitive-intelligence-agent
