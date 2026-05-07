@@ -1,0 +1,178 @@
+{
+  "name": "Zero Risk — QBR Mensual (reporting-agent)",
+  "_meta": {
+    "version": "1.0-skeleton",
+    "purpose": "Monthly cron (1st of every month, 09:00 UTC). For each active client, the reporting-agent aggregates last-30-day metrics across performance_metrics, agent_outcomes, content, campaigns, and pipeline tables, then emits a structured QBR document persisted to client_reports and emailed to the account-manager.",
+    "owner_agent": "reporting-agent",
+    "outputs_to": "client_reports table + email via /api/integrations/ghl-email",
+    "status": "skeleton · spec ready · NOT yet activated"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 1 * *" }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Cron · 1st of month 09:00 UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/clients?status=eq.active&select=id,name,industry",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-clients",
+      "name": "Fetch active clients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "split-clients",
+      "name": "Split per client",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compute window: last calendar month (UTC).\nconst now = new Date();\nconst end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));  // 1st of current month 00:00 UTC\nconst start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));\nreturn [{ json: { ...$input.first().json, window_start: start.toISOString(), window_end: end.toISOString() } }];"
+      },
+      "id": "compute-window",
+      "name": "Compute reporting window",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/metrics/fetch?client_id={{ $json.id }}&from={{ $json.window_start }}&to={{ $json.window_end }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }]
+        },
+        "options": {}
+      },
+      "id": "fetch-metrics",
+      "name": "Fetch monthly metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"reporting-agent\",\n  \"task\": \"Generate the Monthly QBR for client {{ $node['Compute reporting window'].json.name }} (industry {{ $node['Compute reporting window'].json.industry }}). Window: {{ $node['Compute reporting window'].json.window_start }} → {{ $node['Compute reporting window'].json.window_end }}. Use the metrics payload below to write a 6-section QBR: Executive Summary, KPI Dashboard, Wins, Misses, Optimization Bets for next month, and Strategic Asks for the client. Output strict JSON: { sections: { executive_summary, kpi_dashboard, wins, misses, optimization_bets, strategic_asks }, headline_metric, headline_metric_value }.\\n\\n=== METRICS ===\\n{{ JSON.stringify($json) }}\",\n  \"client_id\": \"{{ $node['Compute reporting window'].json.id }}\",\n  \"step_name\": \"qbr_monthly\"\n}",
+        "options": { "timeout": 240000 }
+      },
+      "id": "invoke-reporting-agent",
+      "name": "Invoke reporting-agent (auto dual-review)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.response || '';\nconst m = raw.match(/\\{[\\s\\S]*\\}/);\nif (!m) throw new Error('reporting-agent did not return JSON');\nconst parsed = JSON.parse(m[0]);\nreturn [{ json: { ...parsed, client_id: $node['Compute reporting window'].json.id, period_start: $node['Compute reporting window'].json.window_start, period_end: $node['Compute reporting window'].json.window_end } }];"
+      },
+      "id": "parse-qbr",
+      "name": "Parse QBR JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_reports",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, report_type: 'qbr_monthly', period_start: $json.period_start, period_end: $json.period_end, sections: $json.sections, headline_metric: $json.headline_metric, headline_metric_value: $json.headline_metric_value, generated_by: 'reporting-agent' }) }}",
+        "options": {}
+      },
+      "id": "persist-report",
+      "name": "Persist QBR to client_reports",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/integrations/ghl-send-email",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to_email\": \"{{ $env.QBR_NOTIFY_EMAIL || 'emilacho@hotmail.com' }}\",\n  \"subject\": \"QBR Mensual — {{ $node['Compute reporting window'].json.name }}\",\n  \"html\": \"<h2>QBR ready</h2><p>{{ $json.headline_metric }}: <strong>{{ $json.headline_metric_value }}</strong></p><p><a href=\\\"{{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/dashboard/clients/{{ $json.client_id }}/reports/latest\\\">Open full report</a></p>\"\n}",
+        "options": {}
+      },
+      "id": "email-account-manager",
+      "name": "Email account-manager",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 300]
+    }
+  ],
+  "connections": {
+    "Cron · 1st of month 09:00 UTC": { "main": [[{ "node": "Fetch active clients", "type": "main", "index": 0 }]] },
+    "Fetch active clients": { "main": [[{ "node": "Split per client", "type": "main", "index": 0 }]] },
+    "Split per client": { "main": [[{ "node": "Compute reporting window", "type": "main", "index": 0 }]] },
+    "Compute reporting window": { "main": [[{ "node": "Fetch monthly metrics", "type": "main", "index": 0 }]] },
+    "Fetch monthly metrics": { "main": [[{ "node": "Invoke reporting-agent (auto dual-review)", "type": "main", "index": 0 }]] },
+    "Invoke reporting-agent (auto dual-review)": { "main": [[{ "node": "Parse QBR JSON", "type": "main", "index": 0 }]] },
+    "Parse QBR JSON": { "main": [[{ "node": "Persist QBR to client_reports", "type": "main", "index": 0 }]] },
+    "Persist QBR to client_reports": { "main": [[{ "node": "Email account-manager", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "zero-risk", "id": "1" },
+    { "name": "reporting-agent", "id": "14" },
+    { "name": "qbr", "id": "15" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}
