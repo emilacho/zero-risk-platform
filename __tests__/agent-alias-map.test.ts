@@ -28,6 +28,10 @@ describe('resolveAgentSlug', () => {
     expect(resolveAgentSlug('qbr_generator')).toBe('reporting-agent')
     expect(resolveAgentSlug('meta_agent')).toBe('optimization-agent')
   })
+  it('resolves GEO content-freshness slug to seo-specialist', () => {
+    expect(resolveAgentSlug('seo-geo-optimization')).toBe('seo-specialist')
+    expect(resolveAgentSlug('seo_geo_optimization')).toBe('seo-specialist')
+  })
   it('resolves ad-intelligence ghosts (kebab + snake)', () => {
     expect(resolveAgentSlug('ad-intelligence-agent')).toBe('competitive-intelligence-agent')
     expect(resolveAgentSlug('ad_intelligence_agent')).toBe('competitive-intelligence-agent')
