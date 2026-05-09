@@ -7,6 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { DFSClient } from './client.js'
 import * as dfsKeywordsForKeyword from './tools/dfs-keywords-for-keyword.js'
+import * as dfsSerpGoogle from './tools/dfs-serp-google.js'
 
 const LOGIN = process.env.DATAFORSEO_LOGIN ?? ''
 const PASSWORD = process.env.DATAFORSEO_PASSWORD ?? ''
@@ -19,6 +20,7 @@ const client = new DFSClient({ login: LOGIN, password: PASSWORD })
 
 const HANDLERS: Record<string, (args: unknown) => Promise<unknown>> = {
   [dfsKeywordsForKeyword.name]: (args) => dfsKeywordsForKeyword.handler(client, args),
+  [dfsSerpGoogle.name]: (args) => dfsSerpGoogle.handler(client, args),
 }
 
 interface ToolDef {

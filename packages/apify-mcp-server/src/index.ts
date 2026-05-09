@@ -7,6 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { ApifyClient } from './client.js'
 import * as apifyGetDataset from './tools/apify-get-dataset.js'
+import * as apifyRunActor from './tools/apify-run-actor.js'
 
 const TOKEN = process.env.APIFY_TOKEN ?? ''
 if (!TOKEN) {
@@ -18,6 +19,7 @@ const client = new ApifyClient({ token: TOKEN })
 
 const HANDLERS: Record<string, (args: unknown) => Promise<unknown>> = {
   [apifyGetDataset.name]: (args) => apifyGetDataset.handler(client, args),
+  [apifyRunActor.name]: (args) => apifyRunActor.handler(client, args),
 }
 
 interface ToolDef {

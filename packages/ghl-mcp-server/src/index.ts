@@ -10,6 +10,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { GHLClient } from './client.js'
 import * as ghlSearchContacts from './tools/ghl-search-contacts.js'
+import * as ghlCreateContact from './tools/ghl-create-contact.js'
 
 const PRIVATE_KEY = process.env.GHL_PRIVATE_KEY ?? ''
 const LOCATION_ID = process.env.GHL_LOCATION_ID ?? ''
@@ -26,6 +27,7 @@ const client = new GHLClient({ privateKey: PRIVATE_KEY, locationId: LOCATION_ID 
 // per-tool implementation sprint.
 const HANDLERS: Record<string, (args: unknown) => Promise<unknown>> = {
   [ghlSearchContacts.name]: (args) => ghlSearchContacts.handler(client, args),
+  [ghlCreateContact.name]: (args) => ghlCreateContact.handler(client, args),
 }
 
 interface ToolDef {

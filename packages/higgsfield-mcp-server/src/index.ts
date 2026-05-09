@@ -7,6 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { HiggsfieldClient } from './client.js'
 import * as higgsfieldListStyles from './tools/higgsfield-list-styles.js'
+import * as higgsfieldGenerateVideo from './tools/higgsfield-generate-video.js'
 
 const API_KEY = process.env.HIGGSFIELD_API_KEY ?? ''
 const WEBHOOK_URL = process.env.HIGGSFIELD_WEBHOOK_URL
@@ -19,6 +20,7 @@ const client = new HiggsfieldClient({ apiKey: API_KEY, webhookUrl: WEBHOOK_URL }
 
 const HANDLERS: Record<string, (args: unknown) => Promise<unknown>> = {
   [higgsfieldListStyles.name]: (args) => higgsfieldListStyles.handler(client, args),
+  [higgsfieldGenerateVideo.name]: (args) => higgsfieldGenerateVideo.handler(client, args),
 }
 
 interface ToolDef {
