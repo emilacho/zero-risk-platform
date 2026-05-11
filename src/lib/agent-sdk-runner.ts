@@ -272,7 +272,7 @@ function buildSdkOptions(
     preset: 'claude_code' as const,
     append: systemPrompt,
   }
-  return {
+  const opts: Options = {
     systemPrompt: systemPromptOption as unknown as Options['systemPrompt'],
     model: modelId,
     // Solo lectura + búsqueda; los agentes no editan archivos locales.
@@ -300,6 +300,72 @@ function buildSdkOptions(
         }
       : {},
   }
+
+  // ── Vercel serverless · linux-x64 escape hatch ────────────────────────────
+  // The SDK's internal resolution does a dynamic require computed from
+  // process.platform + process.arch inside sdk.mjs:
+  //
+  //   let oB = J2((jI) => hB.resolve(jI));
+  //   if (oB) D = oB;
+  //   else try { D = hB.resolve("./cli.js") } catch { throw "Native CLI binary..."; }
+  //
+  // Vercel's nft (Node File Tracer) cannot follow that dynamic require, so the
+  // optional native dep is pruned from the function bundle even though pnpm
+  // installed it. The SDK package itself does NOT ship cli.js in its `files`
+  // list, so the fallback always throws.
+  //
+  // Mitigation: do the resolution here with a STATIC literal package name.
+  // NFT understands `require.resolve('<literal>')` as a static reference and
+  // includes the package in the function bundle. The resolved file path is
+  // then handed to the SDK via `pathToClaudeCodeExecutable`, bypassing its
+  // own runtime resolution entirely. PR #13 (config-only) attempted the same
+  // via `outputFileTracingIncludes` but Vercel did not honor it.
+  //
+  // No-op on dev (Windows/macOS) — the linux-x64 package isn't installed
+  // locally and the try/catch lets the SDK fall back to whatever platform
+  // package IS present.
+  if (process.platform === 'linux' && process.arch === 'x64') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pathMod = require('node:path') as typeof import('node:path')
+      let exe: string | null = null
+      try {
+        // Primary: resolve the package's main entry directly.
+        exe = require.resolve('@anthropic-ai/claude-agent-sdk-linux-x64')
+      } catch {
+        // Fallback: package may publish without a "main" field. Derive entry
+        // from package.json so a future SDK packaging change does not silently
+        // re-break this path.
+        const pkgJsonPath = require.resolve(
+          '@anthropic-ai/claude-agent-sdk-linux-x64/package.json',
+        )
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pkg = require(pkgJsonPath) as {
+          main?: string
+          bin?: string | Record<string, string>
+        }
+        const entry =
+          pkg.main ??
+          (typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.claude) ??
+          'cli.js'
+        exe = pathMod.join(pathMod.dirname(pkgJsonPath), entry)
+      }
+      if (exe) {
+        ;(opts as Options & { pathToClaudeCodeExecutable?: string }).pathToClaudeCodeExecutable = exe
+        console.info(`[agent-sdk-runner] pinned pathToClaudeCodeExecutable=${exe}`)
+      }
+    } catch (err) {
+      // Local dev shouldn't hit this branch (process.platform !== 'linux'),
+      // and on Vercel a failure here means the package literally isn't in
+      // node_modules — let the SDK throw its descriptive error so we see it.
+      console.warn(
+        '[agent-sdk-runner] could not pin linux-x64 binary path:',
+        err instanceof Error ? err.message : String(err),
+      )
+    }
+  }
+
+  return opts
 }
 
 interface StreamDrainResult {
