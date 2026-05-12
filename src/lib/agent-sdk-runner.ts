@@ -309,57 +309,136 @@ function buildSdkOptions(
   //   if (oB) D = oB;
   //   else try { D = hB.resolve("./cli.js") } catch { throw "Native CLI binary..."; }
   //
-  // Vercel's nft (Node File Tracer) cannot follow that dynamic require, so the
-  // optional native dep is pruned from the function bundle even though pnpm
-  // installed it. The SDK package itself does NOT ship cli.js in its `files`
-  // list, so the fallback always throws.
+  // Vercel's nft (Node File Tracer) cannot follow that dynamic require, so
+  // even when pnpm installs the optional native dep, the SDK's runtime call
+  // to `createRequire(import.meta.url).resolve(...)` may still fail because
+  // sdk.mjs got moved into a bundled chunk whose require base no longer
+  // points at the real node_modules.
   //
-  // Mitigation: do the resolution here with a STATIC literal package name.
-  // NFT understands `require.resolve('<literal>')` as a static reference and
-  // includes the package in the function bundle. The resolved file path is
-  // then handed to the SDK via `pathToClaudeCodeExecutable`, bypassing its
-  // own runtime resolution entirely. PR #13 (config-only) attempted the same
-  // via `outputFileTracingIncludes` but Vercel did not honor it.
+  // Mitigation strategy (in priority order):
   //
-  // No-op on dev (Windows/macOS) — the linux-x64 package isn't installed
-  // locally and the try/catch lets the SDK fall back to whatever platform
-  // package IS present.
+  //   1. Plan C · path.resolve(process.cwd(), 'node_modules/...') — a pure
+  //      path-string operation that webpack never rewrites and is immune to
+  //      bundler/NFT idiosyncrasies. Tries a few canonical binary names and
+  //      falls back to reading the platform package's own package.json for
+  //      the actual `main`/`bin` entry. Works with pnpm symlinks or
+  //      --shamefully-hoist flat layouts because `process.cwd()` always
+  //      resolves to the function root on Vercel.
+  //
+  //   2. Plan A · require.resolve('<literal>') — original escape hatch from
+  //      commit 814b381. Kept as a backstop in case 1 misses on a future
+  //      packaging change.
+  //
+  // No-op on dev (Windows/macOS) — the `process.platform === 'linux'` guard
+  // short-circuits the entire block.
   if (process.platform === 'linux' && process.arch === 'x64') {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pathMod = require('node:path') as typeof import('node:path')
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fsMod = require('node:fs') as typeof import('node:fs')
+
       let exe: string | null = null
-      try {
-        // Primary: resolve the package's main entry directly.
-        exe = require.resolve('@anthropic-ai/claude-agent-sdk-linux-x64')
-      } catch {
-        // Fallback: package may publish without a "main" field. Derive entry
-        // from package.json so a future SDK packaging change does not silently
-        // re-break this path.
-        const pkgJsonPath = require.resolve(
-          '@anthropic-ai/claude-agent-sdk-linux-x64/package.json',
-        )
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pkg = require(pkgJsonPath) as {
-          main?: string
-          bin?: string | Record<string, string>
+      let resolutionMethod = 'none'
+
+      // ── Plan C · path.resolve directo (webpack untouchable) ──────────────
+      const pkgRoot = pathMod.resolve(
+        process.cwd(),
+        'node_modules/@anthropic-ai/claude-agent-sdk-linux-x64',
+      )
+
+      // Try canonical entry filenames first (covers >99% of native bin packs).
+      const candidates = [
+        pathMod.join(pkgRoot, 'cli.js'),
+        pathMod.join(pkgRoot, 'index.js'),
+        pathMod.join(pkgRoot, 'index.mjs'),
+        pathMod.join(pkgRoot, 'bin', 'claude'),
+      ]
+      for (const candidate of candidates) {
+        try {
+          fsMod.accessSync(candidate, fsMod.constants.R_OK)
+          exe = candidate
+          resolutionMethod = `plan-c-candidate (${pathMod.basename(candidate)})`
+          break
+        } catch {
+          /* try next */
         }
-        const entry =
-          pkg.main ??
-          (typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.claude) ??
-          'cli.js'
-        exe = pathMod.join(pathMod.dirname(pkgJsonPath), entry)
       }
+
+      // If no canonical name matched, consult the platform package's package.json
+      // for its declared main/bin entry. Still uses path.resolve (not require)
+      // so webpack stays out of it.
+      if (!exe) {
+        try {
+          const pkgJsonPath = pathMod.join(pkgRoot, 'package.json')
+          const raw = fsMod.readFileSync(pkgJsonPath, 'utf-8')
+          const pkg = JSON.parse(raw) as {
+            main?: string
+            bin?: string | Record<string, string>
+          }
+          const entry =
+            pkg.main ??
+            (typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.claude) ??
+            null
+          if (entry) {
+            const candidate = pathMod.join(pkgRoot, entry)
+            fsMod.accessSync(candidate, fsMod.constants.R_OK)
+            exe = candidate
+            resolutionMethod = `plan-c-pkgjson (${entry})`
+          }
+        } catch {
+          /* fall through to Plan A */
+        }
+      }
+
+      // ── Plan A · require.resolve fallback ────────────────────────────────
+      if (!exe) {
+        try {
+          exe = require.resolve('@anthropic-ai/claude-agent-sdk-linux-x64')
+          resolutionMethod = 'plan-a-require-resolve'
+        } catch {
+          try {
+            const pkgJsonPath = require.resolve(
+              '@anthropic-ai/claude-agent-sdk-linux-x64/package.json',
+            )
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const pkg = require(pkgJsonPath) as {
+              main?: string
+              bin?: string | Record<string, string>
+            }
+            const entry =
+              pkg.main ??
+              (typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.claude) ??
+              'cli.js'
+            exe = pathMod.join(pathMod.dirname(pkgJsonPath), entry)
+            resolutionMethod = 'plan-a-pkgjson'
+          } catch {
+            /* exhausted — let SDK throw its own descriptive error */
+          }
+        }
+      }
+
       if (exe) {
         ;(opts as Options & { pathToClaudeCodeExecutable?: string }).pathToClaudeCodeExecutable = exe
-        console.info(`[agent-sdk-runner] pinned pathToClaudeCodeExecutable=${exe}`)
+        console.info(
+          `[agent-sdk-runner] pinned pathToClaudeCodeExecutable=${exe} via ${resolutionMethod}`,
+        )
+      } else {
+        // Diagnostic: dump what we found at the package root so the next
+        // triage round has hard data instead of guessing.
+        let ls: string[] = []
+        try {
+          ls = fsMod.readdirSync(pkgRoot).slice(0, 20)
+        } catch {
+          ls = ['<pkgRoot not readable>']
+        }
+        console.warn(
+          `[agent-sdk-runner] no binary candidate matched at ${pkgRoot} · ls=${JSON.stringify(ls)} · SDK will throw its own error`,
+        )
       }
     } catch (err) {
-      // Local dev shouldn't hit this branch (process.platform !== 'linux'),
-      // and on Vercel a failure here means the package literally isn't in
-      // node_modules — let the SDK throw its descriptive error so we see it.
       console.warn(
-        '[agent-sdk-runner] could not pin linux-x64 binary path:',
+        '[agent-sdk-runner] escape hatch threw unexpectedly:',
         err instanceof Error ? err.message : String(err),
       )
     }
