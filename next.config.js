@@ -11,6 +11,25 @@ const nextConfig = {
   // TODO: remove experimental.instrumentationHook when upgrading to Next.js 15 (stable there)
   experimental: {
     instrumentationHook: true,
+    // @anthropic-ai/claude-agent-sdk dynamically requires a platform-specific
+    // native binary at runtime (e.g. @anthropic-ai/claude-agent-sdk-linux-x64).
+    // Without this entry, Next/Webpack tries to bundle the SDK and the runtime
+    // require fails with "Native CLI binary for linux-x64 not found".
+    // Confirmed against production POST /api/agents/run-sdk on 2026-05-11.
+    serverComponentsExternalPackages: ['@anthropic-ai/claude-agent-sdk'],
+  },
+  // Vercel's nft (Node File Tracer) cannot follow the dynamic require of the
+  // optional-dep platform binary, so the linux-x64 package is excluded from
+  // the serverless function bundle even when pnpm installed it. Force-include
+  // it for the only route that exercises the SDK.
+  //
+  // If a future route also imports the SDK, add its URL path here. The musl
+  // variant is intentionally NOT included — Vercel functions run on Amazon
+  // Linux 2 (glibc), not Alpine.
+  outputFileTracingIncludes: {
+    '/api/agents/run-sdk': [
+      './node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/**',
+    ],
   },
 };
 
