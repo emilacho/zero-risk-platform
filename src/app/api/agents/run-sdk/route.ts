@@ -26,6 +26,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { checkInternalKey } from '@/lib/internal-auth'
@@ -65,9 +66,26 @@ interface AgentRunResultProxy {
   error?: string
 }
 
-// Slightly under maxDuration so the abort happens before Vercel kills the
-// function — gives us a clean 504 response instead of a hard timeout error.
-const RAILWAY_FETCH_TIMEOUT_MS = 290_000
+// 60 s aligns with Vercel Pro Fluid Compute defaults. Most agent runs land
+// well under this; multi-turn pipelines that need longer should re-issue
+// the call (or upgrade to a streaming response if/when the SDK supports it
+// inside a serverless function).
+const RAILWAY_FETCH_TIMEOUT_MS = 60_000
+
+// Inbound headers we never forward to the Railway service. `host` would
+// confuse the upstream's virtual-host routing; `content-length` would
+// mismatch since we re-stringify the body; `connection` / `keep-alive`
+// are hop-by-hop. Everything else (trace IDs, request IDs, user-agent,
+// accept, etc.) gets forwarded as-is per the "headers passthrough
+// excepto host" requirement.
+const HOP_BY_HOP_OR_REWRITTEN_HEADERS = new Set([
+  'host',
+  'content-length',
+  'connection',
+  'keep-alive',
+  'transfer-encoding',
+  'upgrade',
+])
 
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)
@@ -110,25 +128,51 @@ export async function POST(request: Request) {
     // ── Proxy to Railway agent-runner ────────────────────────────────────
     // The actual SDK invocation lives in services/agent-runner/ on Railway.
     // This block forwards the request, propagates auth, and surfaces clean
-    // 5xx errors when the runner is unreachable / mis-configured.
+    // 5xx / 504 errors per the v2 proxy spec (Sentry capture on upstream
+    // failure · upstream_status surfaced in the response body).
     const railwayUrl = process.env.RAILWAY_AGENT_RUNNER_URL
     if (!railwayUrl) {
+      Sentry.captureMessage(
+        'agent-runner proxy: RAILWAY_AGENT_RUNNER_URL not configured on Vercel',
+        'error',
+      )
       return NextResponse.json(
-        {
-          success: false,
-          error: 'RAILWAY_AGENT_RUNNER_URL not configured on Vercel · runner unreachable',
-        },
-        { status: 500 },
+        { error: 'agent-runner not configured', upstream_status: 0 },
+        { status: 502 },
       )
     }
     const internalAuth = process.env.INTERNAL_API_KEY ?? ''
     if (!internalAuth) {
+      Sentry.captureMessage(
+        'agent-runner proxy: INTERNAL_API_KEY not configured on Vercel',
+        'error',
+      )
       return NextResponse.json(
-        { success: false, error: 'INTERNAL_API_KEY not configured on Vercel' },
-        { status: 500 },
+        { error: 'agent-runner auth not configured', upstream_status: 0 },
+        { status: 502 },
       )
     }
 
+    // Forward inbound headers (except host + content-length + hop-by-hop)
+    // so trace / request-id / x-vercel-id propagate through to Railway logs.
+    // Then override / set the two headers we own: the upstream-auth secret
+    // and content-type (which must match the re-stringified body).
+    const forwardedHeaders: Record<string, string> = {}
+    request.headers.forEach((value, key) => {
+      if (!HOP_BY_HOP_OR_REWRITTEN_HEADERS.has(key.toLowerCase())) {
+        forwardedHeaders[key] = value
+      }
+    })
+    forwardedHeaders['x-internal-auth'] = internalAuth
+    forwardedHeaders['content-type'] = 'application/json'
+
+    // The Railway service expects camelCase keys (see
+    // services/agent-runner/src/index.ts handler). The inbound Vercel API
+    // contract uses snake_case (n8n convention). We translate field names
+    // here · this is NOT byte-for-byte passthrough, but it IS field-for-
+    // field forwarding with the rename the upstream contract requires.
+    // When the Railway service learns to accept snake_case as well, this
+    // block can be replaced with `JSON.stringify(body)`.
     const proxyBody = {
       agentName,
       task,
@@ -146,34 +190,72 @@ export async function POST(request: Request) {
     try {
       railwayResponse = await fetch(`${railwayUrl.replace(/\/+$/, '')}/run-sdk`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-internal-auth': internalAuth,
-        },
+        headers: forwardedHeaders,
         body: JSON.stringify(proxyBody),
         signal: controller.signal,
       })
     } catch (err) {
       clearTimeout(timeoutHandle)
       const isAbort = err instanceof Error && err.name === 'AbortError'
-      const msg = isAbort
-        ? `Railway agent-runner timeout after ${RAILWAY_FETCH_TIMEOUT_MS / 1000}s`
-        : err instanceof Error
-          ? `Railway agent-runner unreachable: ${err.message}`
-          : 'Railway agent-runner unreachable'
-      return NextResponse.json({ success: false, error: msg }, { status: 504 })
+      if (isAbort) {
+        // Hot path · no Sentry noise for routine timeouts.
+        return NextResponse.json({ error: 'agent-runner timeout' }, { status: 504 })
+      }
+      Sentry.captureException(
+        err instanceof Error ? err : new Error(String(err)),
+        { tags: { proxy: 'agent-runner', kind: 'fetch_error' } },
+      )
+      return NextResponse.json(
+        { error: 'agent-runner upstream failed', upstream_status: 0 },
+        { status: 502 },
+      )
     }
     clearTimeout(timeoutHandle)
 
+    // Read body once · need it for both the parse and the 5xx Sentry breadcrumb.
+    const railwayText = await railwayResponse.text()
+
+    // Upstream 5xx · log + 502. Skip Sentry for 502 from us (no double-count)
+    // and skip when the body is a well-formed agent failure (those are app
+    // errors, not infra · pass them through to the caller untouched).
+    if (railwayResponse.status >= 500) {
+      let isGracefulAgentFailure = false
+      try {
+        const parsed = JSON.parse(railwayText) as { success?: boolean; error?: string }
+        isGracefulAgentFailure = parsed.success === false && typeof parsed.error === 'string'
+      } catch {
+        // non-JSON body · genuine infra failure
+      }
+      if (!isGracefulAgentFailure) {
+        Sentry.captureMessage(
+          `agent-runner upstream 5xx: status=${railwayResponse.status}`,
+          {
+            level: 'error',
+            tags: { proxy: 'agent-runner', kind: 'upstream_5xx' },
+            extra: { body_preview: railwayText.slice(0, 500) },
+          },
+        )
+        return NextResponse.json(
+          { error: 'agent-runner upstream failed', upstream_status: railwayResponse.status },
+          { status: 502 },
+        )
+      }
+    }
+
     let result: AgentRunResultProxy
     try {
-      result = (await railwayResponse.json()) as AgentRunResultProxy
+      result = JSON.parse(railwayText) as AgentRunResultProxy
     } catch {
-      return NextResponse.json(
+      Sentry.captureMessage(
+        `agent-runner returned non-JSON: status=${railwayResponse.status}`,
         {
-          success: false,
-          error: `Railway agent-runner returned non-JSON (status ${railwayResponse.status})`,
+          level: 'error',
+          tags: { proxy: 'agent-runner', kind: 'non_json' },
+          extra: { body_preview: railwayText.slice(0, 500) },
         },
+      )
+      return NextResponse.json(
+        { error: 'agent-runner upstream failed', upstream_status: railwayResponse.status },
         { status: 502 },
       )
     }
