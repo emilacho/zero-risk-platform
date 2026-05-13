@@ -1,13 +1,19 @@
 /**
  * POST /api/agents/run-sdk
  *
- * Ejecutor de UN agente usando @anthropic-ai/claude-agent-sdk.
- * Este endpoint es el reemplazo de /api/agents/run (que llama Messages API directo).
+ * Thin proxy to the Railway-hosted agent-runner service. Vercel handles
+ * auth + validation + sanitization + analytics + editor middleware; the
+ * actual SDK invocation runs on Railway where pnpm installs the SDK's
+ * 219.9MB optional linux-x64 native binary cleanly (Vercel's NFT could
+ * not include it in the function bundle · see commit history of
+ * fix/vercel-claude-agent-sdk-binary for the 7-commit triage).
  *
- * IMPORTANTE: runtime = "nodejs" obligatorio. El SDK spawnea el CLI `claude`
- * como subproceso — no funciona en Edge Runtime.
+ * Required env vars (set in Vercel dashboard):
+ *   RAILWAY_AGENT_RUNNER_URL  · e.g. https://zero-risk-agent-runner-production.up.railway.app
+ *   INTERNAL_API_KEY          · shared secret for caller→Vercel AND Vercel→Railway hops
  *
- * Body:
+ * Body shape unchanged from the pre-migration route (n8n workflows and
+ * other callers don't need to know the runner moved):
  *   {
  *     agent: string,
  *     task: string,
@@ -20,7 +26,6 @@
  */
 
 import { NextResponse } from 'next/server'
-import { runAgentViaSDK } from '@/lib/agent-sdk-runner'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { checkInternalKey } from '@/lib/internal-auth'
@@ -42,6 +47,27 @@ interface RunSdkInput {
   step_name?: string | null
   extra?: Record<string, unknown> | null
 }
+
+/**
+ * Shape returned by the Railway agent-runner service.
+ * Must stay byte-aligned with `AgentRunResult` exported from
+ * services/agent-runner/src/lib/agent-sdk-runner.ts.
+ */
+interface AgentRunResultProxy {
+  success: boolean
+  response: string
+  sessionId: string | null
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  durationMs: number
+  model: string
+  error?: string
+}
+
+// Slightly under maxDuration so the abort happens before Vercel kills the
+// function — gives us a clean 504 response instead of a hard timeout error.
+const RAILWAY_FETCH_TIMEOUT_MS = 290_000
 
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)
@@ -81,7 +107,29 @@ export async function POST(request: Request) {
       has_pipeline_id: !!body.pipeline_id,
     })
 
-    const result = await runAgentViaSDK({
+    // ── Proxy to Railway agent-runner ────────────────────────────────────
+    // The actual SDK invocation lives in services/agent-runner/ on Railway.
+    // This block forwards the request, propagates auth, and surfaces clean
+    // 5xx errors when the runner is unreachable / mis-configured.
+    const railwayUrl = process.env.RAILWAY_AGENT_RUNNER_URL
+    if (!railwayUrl) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'RAILWAY_AGENT_RUNNER_URL not configured on Vercel · runner unreachable',
+        },
+        { status: 500 },
+      )
+    }
+    const internalAuth = process.env.INTERNAL_API_KEY ?? ''
+    if (!internalAuth) {
+      return NextResponse.json(
+        { success: false, error: 'INTERNAL_API_KEY not configured on Vercel' },
+        { status: 500 },
+      )
+    }
+
+    const proxyBody = {
       agentName,
       task,
       resumeSessionId: body.resume_session_id || null,
@@ -89,7 +137,59 @@ export async function POST(request: Request) {
       pipelineId: body.pipeline_id || null,
       stepName: body.step_name || null,
       extra: body.extra || undefined,
-    })
+    }
+
+    const controller = new AbortController()
+    const timeoutHandle = setTimeout(() => controller.abort(), RAILWAY_FETCH_TIMEOUT_MS)
+
+    let railwayResponse: Response
+    try {
+      railwayResponse = await fetch(`${railwayUrl.replace(/\/+$/, '')}/run-sdk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-auth': internalAuth,
+        },
+        body: JSON.stringify(proxyBody),
+        signal: controller.signal,
+      })
+    } catch (err) {
+      clearTimeout(timeoutHandle)
+      const isAbort = err instanceof Error && err.name === 'AbortError'
+      const msg = isAbort
+        ? `Railway agent-runner timeout after ${RAILWAY_FETCH_TIMEOUT_MS / 1000}s`
+        : err instanceof Error
+          ? `Railway agent-runner unreachable: ${err.message}`
+          : 'Railway agent-runner unreachable'
+      return NextResponse.json({ success: false, error: msg }, { status: 504 })
+    }
+    clearTimeout(timeoutHandle)
+
+    let result: AgentRunResultProxy
+    try {
+      result = (await railwayResponse.json()) as AgentRunResultProxy
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Railway agent-runner returned non-JSON (status ${railwayResponse.status})`,
+        },
+        { status: 502 },
+      )
+    }
+    // Defensive: ensure all fields we read below have a value even if the
+    // Railway service evolves its response shape independently.
+    result = {
+      success: !!result.success,
+      response: typeof result.response === 'string' ? result.response : '',
+      sessionId: result.sessionId ?? null,
+      inputTokens: typeof result.inputTokens === 'number' ? result.inputTokens : 0,
+      outputTokens: typeof result.outputTokens === 'number' ? result.outputTokens : 0,
+      costUsd: typeof result.costUsd === 'number' ? result.costUsd : 0,
+      durationMs: typeof result.durationMs === 'number' ? result.durationMs : 0,
+      model: typeof result.model === 'string' ? result.model : 'unknown',
+      error: result.error,
+    }
 
     capture('agent_run_completed', String(body.client_id || 'system'), {
       agent_slug: agentName,
@@ -168,6 +268,7 @@ export async function GET() {
     method: 'POST',
     runtime: 'nodejs',
     description:
-      'Ejecutor de UN agente vía @anthropic-ai/claude-agent-sdk. Reemplaza /api/agents/run.',
+      'Thin proxy to the Railway agent-runner service. SDK invocation lives at services/agent-runner/ on Railway · this endpoint preserves the original API contract.',
+    upstream: process.env.RAILWAY_AGENT_RUNNER_URL ? 'configured' : 'MISSING (set RAILWAY_AGENT_RUNNER_URL)',
   })
 }
