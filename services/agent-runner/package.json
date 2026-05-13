@@ -4,6 +4,7 @@
   "private": true,
   "description": "Zero Risk · Railway-hosted agent runner · executes @anthropic-ai/claude-agent-sdk on Linux x64 with native binary support (lifts the SDK out of Vercel serverless where NFT cannot trace the optional native dep)",
   "type": "module",
+  "packageManager": "pnpm@11.0.9",
   "engines": {
     "node": ">=22.0.0"
   },
