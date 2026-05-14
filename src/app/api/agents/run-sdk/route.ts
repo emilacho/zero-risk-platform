@@ -66,11 +66,13 @@ interface AgentRunResultProxy {
   error?: string
 }
 
-// 60 s aligns with Vercel Pro Fluid Compute defaults. Most agent runs land
-// well under this; multi-turn pipelines that need longer should re-issue
-// the call (or upgrade to a streaming response if/when the SDK supports it
-// inside a serverless function).
-const RAILWAY_FETCH_TIMEOUT_MS = 60_000
+// 290 s aligns with maxDuration = 300 (Vercel Pro Fluid Compute default)
+// with a 10 s buffer for response cleanup / Sentry flush before the
+// platform itself kills the function. The previous 60 s was too tight
+// for legitimate SDK tasks (e.g. "Generar intake form personalizado"
+// runs 30-120 s) and was aborting them prematurely · CC#1 confirmed
+// 3 fires with identical 60 s timeout pattern (execs 5931, 5933).
+const RAILWAY_FETCH_TIMEOUT_MS = 290_000
 
 // Inbound headers we never forward to the Railway service. `host` would
 // confuse the upstream's virtual-host routing; `content-length` would
