@@ -18,7 +18,11 @@ import {
   AggregateVerdict,
   PRIMARY_REVIEWER,
   SECOND_REVIEWER,
-  aggregateVerdicts,
+  THIRD_REVIEWER,
+  REVIEW_CONFIG,
+  aggregateVerdictsN,
+  type ReviewerInput,
+  type ReviewerRole,
 } from './editor-routing'
 
 // ============================================================
@@ -60,7 +64,7 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
   const { agentSlug, content, task, context, config, supabase, baseUrl } = params
 
   // Initial dual review
-  const aggregateVerdict = await invokeBothReviewersParallel({ content, agentSlug, task, context, config, baseUrl })
+  const aggregateVerdict = await invokeAllReviewersParallel({ content, agentSlug, task, context, config, baseUrl })
 
   // Approved — no escalation needed
   if (aggregateVerdict.status === 'approved') {
@@ -126,7 +130,7 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
     if (!revisionResponse?.success) break
 
     currentContent = revisionResponse.response || currentContent
-    currentVerdict = await invokeBothReviewersParallel({
+    currentVerdict = await invokeAllReviewersParallel({
       content: currentContent,
       agentSlug,
       task,
@@ -183,7 +187,15 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
 // Internal helpers
 // ============================================================
 
-async function invokeBothReviewersParallel(params: {
+/**
+ * Camino III · fan out the review to N reviewers in parallel and aggregate.
+ *
+ * Reviewer count comes from REVIEW_CONFIG.reviewer_count (default 3). Setting
+ * it to 2 falls back to the legacy editor + brand_strategist split without
+ * any other code change · useful for emergency rollback if the third
+ * reviewer pipeline misbehaves in prod.
+ */
+async function invokeAllReviewersParallel(params: {
   content: string
   agentSlug: string
   task: string
@@ -191,25 +203,74 @@ async function invokeBothReviewersParallel(params: {
   config: EditorRoutingConfig
   baseUrl: string
 }): Promise<AggregateVerdict> {
-  const [editorVerdict, brandVerdict] = await Promise.all([
-    invokeReviewer({
-      reviewerSlug: PRIMARY_REVIEWER,
-      reviewerType: 'editor',
-      ...params,
-    }),
-    invokeReviewer({
-      reviewerSlug: SECOND_REVIEWER,
-      reviewerType: 'brand_deep',
-      ...params,
-    }),
-  ])
+  const roleSpecs: Array<{
+    role: ReviewerRole
+    reviewerSlug: string
+    reviewerType: ReviewerInvokeType
+  }> = [
+    { role: 'editor', reviewerSlug: PRIMARY_REVIEWER, reviewerType: 'editor' },
+    { role: 'brand_strategist', reviewerSlug: SECOND_REVIEWER, reviewerType: 'brand_deep' },
+  ]
+  if (REVIEW_CONFIG.reviewer_count >= 3) {
+    roleSpecs.push({
+      role: 'client_success_lead',
+      reviewerSlug: THIRD_REVIEWER,
+      reviewerType: 'client_success',
+    })
+  }
 
-  return aggregateVerdicts(editorVerdict, brandVerdict)
+  const verdicts = await Promise.all(
+    roleSpecs.map((spec) =>
+      invokeReviewer({
+        reviewerSlug: spec.reviewerSlug,
+        reviewerType: spec.reviewerType,
+        ...params,
+      }),
+    ),
+  )
+
+  const inputs: ReviewerInput[] = roleSpecs.map((spec, i) => ({
+    role: spec.role,
+    verdict: verdicts[i],
+  }))
+  return aggregateVerdictsN(inputs)
+}
+
+type ReviewerInvokeType = 'editor' | 'brand_deep' | 'client_success'
+
+function buildReviewerTask(params: {
+  reviewerType: ReviewerInvokeType
+  content: string
+  agentSlug: string
+  task: string
+  context: Record<string, unknown>
+  config: EditorRoutingConfig
+}): string {
+  switch (params.reviewerType) {
+    case 'editor':
+      return buildEditorTaskWithAllLens(params)
+    case 'brand_deep':
+      return buildBrandStrategistTaskBrandDeep(params)
+    case 'client_success':
+      return buildClientSuccessTask(params)
+  }
+}
+
+function ragQueryFor(reviewerType: ReviewerInvokeType, task: string): string {
+  const snippet = task.substring(0, 100)
+  switch (reviewerType) {
+    case 'editor':
+      return `brand guidelines quality standards ${snippet}`
+    case 'brand_deep':
+      return `brand book voice positioning ${snippet}`
+    case 'client_success':
+      return `client expectations onboarding retention positioning ${snippet}`
+  }
 }
 
 async function invokeReviewer(params: {
   reviewerSlug: string
-  reviewerType: 'editor' | 'brand_deep'
+  reviewerType: ReviewerInvokeType
   content: string
   agentSlug: string
   task: string
@@ -225,10 +286,7 @@ async function invokeReviewer(params: {
   }
 
   try {
-    const reviewerTask =
-      params.reviewerType === 'editor'
-        ? buildEditorTaskWithAllLens(params)
-        : buildBrandStrategistTaskBrandDeep(params)
+    const reviewerTask = buildReviewerTask(params)
 
     const apiKey = process.env.INTERNAL_API_KEY || process.env.CLAUDE_API_KEY || ''
     const response = await fetch(`${params.baseUrl}/api/agents/run`, {
@@ -243,9 +301,7 @@ async function invokeReviewer(params: {
         task: reviewerTask,
         context: {
           client_id: params.context?.client_id,
-          rag_query: params.reviewerType === 'editor'
-            ? `brand guidelines quality standards ${params.task.substring(0, 100)}`
-            : `brand book voice positioning ${params.task.substring(0, 100)}`,
+          rag_query: ragQueryFor(params.reviewerType, params.task),
           rag_match_count: 5,
           originating_agent: params.agentSlug,
           lens_emphasis: params.config.lens_emphasis,
@@ -412,6 +468,56 @@ ${params.config.lens_emphasis || 'general'}
 
 ## Return ONLY valid JSON (no markdown fences, no prose):
 {"status": "approved" | "revision_needed" | "escalated", "issues": ["..."], "feedback": "...", "severity": "low" | "medium" | "high" | "critical"}`
+}
+
+function buildClientSuccessTask(params: {
+  content: string
+  agentSlug: string
+  task: string
+  context: Record<string, unknown>
+  config: EditorRoutingConfig
+}): string {
+  return `## Content to Review (from ${params.agentSlug}):
+
+${params.content.substring(0, 8000)}
+
+## Original Task Context:
+${params.task.substring(0, 500)}
+
+## Your Role: CLIENT-SUCCESS REVIEW (Camino III · Reviewer 3 of 3)
+
+You are the third reviewer in a 3-of-N voting system. Reviewers 1 and 2
+cover general quality (Editor en Jefe) and brand-deep voice/personality
+(Brand Strategist). Your angle is the **client outcome lens** — would the
+end client read this and say "yes, this is what I'm paying you to deliver"?
+
+Focus exclusively on:
+
+1. **Client expectation match**: Does the output align with the client's
+   stated objectives, KPIs, or onboarding promises? If the brief named a
+   specific outcome (e.g., "drive demo bookings · ROI 3x"), is that visible
+   in the deliverable?
+2. **Retention risk**: Is there anything here that would erode trust if the
+   client saw it as-is? Vague claims, off-brand humor, unverified statistics?
+3. **Positioning fit**: Does this advance the client's market position vs
+   their direct competitors, or does it sound like a template that could
+   have been written for any vendor in the category?
+4. **Channel + audience appropriateness**: Specific to the client's ICP
+   stage of awareness (Schwartz) and the channel norms (LinkedIn ≠ TikTok ≠
+   newsletter). A formally-correct brand voice can still miss the audience.
+5. **Effort signal**: Does the deliverable show the level of strategic
+   thinking the client is paying for, or is it generic enough that any
+   AI-output detector would flag it as low-effort?
+6. **Operational viability**: Can the client actually USE this without
+   further internal work? (e.g., is the CTA wired to a real flow, are the
+   numbers / dates current, are dependencies resolved?)
+
+You are NOT re-doing the Editor or Brand Strategist's job. If you would
+have flagged the same brand-voice issue they did, defer to them and focus
+on client-outcome concerns they may have missed.
+
+## Return ONLY valid JSON (no markdown fences):
+{"status": "approved" | "revision_needed" | "escalated", "issues": ["specific client-outcome risks"], "feedback": "actionable client-success guidance", "severity": "low" | "medium" | "high" | "critical"}`
 }
 
 function buildBrandStrategistTaskBrandDeep(params: {

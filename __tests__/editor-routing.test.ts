@@ -19,6 +19,7 @@ import {
   requiresEditorReview,
   getEditorConfig,
   aggregateVerdicts,
+  aggregateVerdictsN,
   type EditorVerdict,
 } from '../src/lib/editor-routing'
 
@@ -161,13 +162,13 @@ describe('aggregateVerdicts · status logic', () => {
     const r1 = aggregateVerdicts(v('approved'), v('escalated', 'high'))
     expect(r1.status).toBe('escalated')
     expect(r1.disagreement).toBe(true)
-    expect(r1.disagreement_reason).toMatch(/Editor=approved.*Brand Strategist=escalated/i)
+    expect(r1.disagreement_reason).toMatch(/Editor en Jefe=approved.*Brand Strategist=escalated/i)
 
     // symmetric
     const r2 = aggregateVerdicts(v('escalated', 'high'), v('approved'))
     expect(r2.status).toBe('escalated')
     expect(r2.disagreement).toBe(true)
-    expect(r2.disagreement_reason).toMatch(/Editor=escalated.*Brand Strategist=approved/i)
+    expect(r2.disagreement_reason).toMatch(/Editor en Jefe=escalated.*Brand Strategist=approved/i)
   })
 
   it('both escalated → escalated (no disagreement, both agree)', () => {
@@ -176,17 +177,19 @@ describe('aggregateVerdicts · status logic', () => {
     expect(r.disagreement).toBe(false)
   })
 
-  it('one revision_needed + one approved → revision_needed (no disagreement)', () => {
+  it('one revision_needed + one approved → revision_needed (Camino III: disagreement true because statuses differ)', () => {
     const r = aggregateVerdicts(v('revision_needed', 'medium'), v('approved'))
     expect(r.status).toBe('revision_needed')
-    expect(r.disagreement).toBe(false)
+    // Camino III 3-of-N voting · disagreement = NOT all same status (any non-consensus).
+    // Pre-3-of-N behavior flagged disagreement only on approved↔escalated; the new logic
+    // generalizes so the 1-1-1 tie case (added below) reads the same way.
+    expect(r.disagreement).toBe(true)
   })
 
-  it('escalated wins over revision_needed', () => {
+  it('escalated wins over revision_needed (disagreement true · differing statuses)', () => {
     const r = aggregateVerdicts(v('revision_needed', 'medium'), v('escalated', 'high'))
     expect(r.status).toBe('escalated')
-    // Note: this combo is NOT flagged as disagreement (only approved↔escalated triggers it)
-    expect(r.disagreement).toBe(false)
+    expect(r.disagreement).toBe(true)
   })
 
   it('both revision_needed → revision_needed', () => {
@@ -248,5 +251,91 @@ describe('aggregateVerdicts · issues + feedback merge', () => {
     )
     expect(r.reviewers.editor).toEqual({ status: 'approved', severity: 'low' })
     expect(r.reviewers.brand_strategist).toEqual({ status: 'escalated', severity: 'critical' })
+  })
+})
+
+// ──────────────────────────────────────────────────────────
+// aggregateVerdictsN · Camino III 3-of-N voting (Sprint #5)
+// ──────────────────────────────────────────────────────────
+describe('aggregateVerdictsN · 3-of-N voting', () => {
+  it('all three approved → status approved · no disagreement · reviewer_count=3', () => {
+    const r = aggregateVerdictsN([
+      { role: 'editor', verdict: v('approved', 'low') },
+      { role: 'brand_strategist', verdict: v('approved', 'low') },
+      { role: 'client_success_lead', verdict: v('approved', 'low') },
+    ])
+    expect(r.status).toBe('approved')
+    expect(r.disagreement).toBe(false)
+    expect(r.reviewer_count).toBe(3)
+    expect(r.reviewers.client_success_lead).toEqual({ status: 'approved', severity: 'low' })
+  })
+
+  it('2 approved + 1 revision_needed → revision_needed · disagreement true', () => {
+    const r = aggregateVerdictsN([
+      { role: 'editor', verdict: v('approved', 'low') },
+      { role: 'brand_strategist', verdict: v('approved', 'low') },
+      { role: 'client_success_lead', verdict: v('revision_needed', 'medium', ['Vague CTA']) },
+    ])
+    expect(r.status).toBe('revision_needed')
+    expect(r.disagreement).toBe(true)
+    expect(r.issues).toContain('Vague CTA')
+  })
+
+  it('2 approved + 1 escalated → escalated · disagreement true · severity from escalating reviewer', () => {
+    const r = aggregateVerdictsN([
+      { role: 'editor', verdict: v('approved', 'low') },
+      { role: 'brand_strategist', verdict: v('approved', 'medium') },
+      { role: 'client_success_lead', verdict: v('escalated', 'critical') },
+    ])
+    expect(r.status).toBe('escalated')
+    expect(r.severity).toBe('critical')
+    expect(r.disagreement).toBe(true)
+    expect(r.disagreement_reason).toContain('Client Success Lead=escalated')
+  })
+
+  it('tie 1-1-1 (approved + revision_needed + escalated) → escalated · disagreement true', () => {
+    const r = aggregateVerdictsN([
+      { role: 'editor', verdict: v('approved', 'low') },
+      { role: 'brand_strategist', verdict: v('revision_needed', 'medium') },
+      { role: 'client_success_lead', verdict: v('escalated', 'high') },
+    ])
+    expect(r.status).toBe('escalated')
+    expect(r.disagreement).toBe(true)
+    expect(r.severity).toBe('high')
+    expect(r.disagreement_reason).toBeDefined()
+  })
+
+  it('all three escalated → escalated · disagreement FALSE (consensus)', () => {
+    const r = aggregateVerdictsN([
+      { role: 'editor', verdict: v('escalated', 'high') },
+      { role: 'brand_strategist', verdict: v('escalated', 'critical') },
+      { role: 'client_success_lead', verdict: v('escalated', 'high') },
+    ])
+    expect(r.status).toBe('escalated')
+    expect(r.disagreement).toBe(false)
+    expect(r.severity).toBe('critical')
+  })
+
+  it('feedback concatenated with Client Success Lead label', () => {
+    const r = aggregateVerdictsN([
+      { role: 'editor', verdict: v('approved', 'low', [], 'Quality OK.') },
+      { role: 'brand_strategist', verdict: v('approved', 'low', [], 'Brand fit OK.') },
+      { role: 'client_success_lead', verdict: v('revision_needed', 'medium', [], 'CTA not wired to flow.') },
+    ])
+    expect(r.feedback).toContain('[Editor en Jefe]')
+    expect(r.feedback).toContain('[Brand Strategist]')
+    expect(r.feedback).toContain('[Client Success Lead]')
+    expect(r.feedback).toContain('CTA not wired to flow.')
+  })
+
+  it('legacy aggregateVerdicts call still works via delegation', () => {
+    const r = aggregateVerdicts(v('approved', 'low'), v('approved', 'low'))
+    expect(r.status).toBe('approved')
+    expect(r.reviewer_count).toBe(2)
+    expect(r.reviewers.client_success_lead).toBeUndefined()
+  })
+
+  it('throws when called with empty reviewer list', () => {
+    expect(() => aggregateVerdictsN([])).toThrow(/at least one reviewer/)
   })
 })

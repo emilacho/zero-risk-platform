@@ -43,6 +43,12 @@ export const AGENT_ALIAS_MAP: Readonly<Record<string, string>> = {
   reporting_agent: 'reporting-agent',
   jefe_marketing: 'jefe-marketing',
   jefe_client_success: 'jefe-client-success',
+  // Camino III 3rd reviewer alias · "client-success-lead" is the spec name
+  // used in the orchestration playbook (zr-vault/wiki/playbooks/camino-iii-*).
+  // The actual agent identity is `jefe-client-success`; keep the alias here
+  // so middleware calls with the playbook name resolve to the real slug.
+  'client-success-lead': 'jefe-client-success',
+  client_success_lead: 'jefe-client-success',
   campaign_brief_agent: 'campaign-brief-agent',
   brand_strategist: 'brand-strategist',
   market_research: 'market-research',
