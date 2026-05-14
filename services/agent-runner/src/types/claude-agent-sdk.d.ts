@@ -1,6 +1,9 @@
 /**
  * Type declarations for @anthropic-ai/claude-agent-sdk
  * The SDK is a CLI wrapper — these are minimal declarations for TypeScript.
+ *
+ * Copied verbatim from zero-risk-platform/src/types/claude-agent-sdk.d.ts.
+ * Keep in sync until a shared package factors this out.
  */
 declare module '@anthropic-ai/claude-agent-sdk' {
   export interface Options {

@@ -1,0 +1,36 @@
+{
+  "name": "zero-risk-agent-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zero Risk · Railway-hosted agent runner · executes @anthropic-ai/claude-agent-sdk on Linux x64 with native binary support (lifts the SDK out of Vercel serverless where NFT cannot trace the optional native dep)",
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"],
+    "overrides": {
+      "@anthropic-ai/claude-agent-sdk-linux-x64-musl": "npm:@anthropic-ai/claude-agent-sdk-linux-x64@0.2.138",
+      "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": "npm:@anthropic-ai/claude-agent-sdk-linux-arm64@0.2.138"
+    }
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx --watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.2.138",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "express": "^4.21.0",
+    "tsx": "^4.21.0",
+    "zod": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

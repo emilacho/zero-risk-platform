@@ -1,31 +1,27 @@
 /**
- * Zero Risk — Agent SDK Runner (V3, Sesión 19)
+ * Zero Risk · Agent SDK Runner · Railway copy
  *
- * Reemplazo de la llamada directa a /v1/messages por @anthropic-ai/claude-agent-sdk.
+ * Mirror of zero-risk-platform/src/lib/agent-sdk-runner.ts adapted for this
+ * standalone Express service. Differences vs the Vercel copy:
  *
- * Diferencias clave vs el runner anterior (src/app/api/agents/run/route.ts):
+ *   - `@/lib/...` Next.js path aliases replaced with relative ESM imports
+ *     (`./supabase.js`, `./agent-alias-map.js`).
+ *   - Inline `require('path').resolve(...)` for the MCP server arg replaced
+ *     by a top-level `import { resolve as pathResolve } from 'node:path'`,
+ *     since this service runs as ESM (`"type":"module"` in package.json).
+ *   - No Vercel/NFT escape hatches — Railway installs the SDK's optional
+ *     linux-x64 native binary cleanly via pnpm, so the SDK's own
+ *     `createRequire(import.meta.url).resolve(...)` works as designed.
  *
- *  1. Sesiones persistentes — cada ejecución puede reanudar un session_id
- *     previo, lo que permite encadenar pasos del pipeline sin re-enviar el
- *     system prompt completo (ahorro de tokens + contexto natural).
- *
- *  2. Subagentes declarativos — los 27 agentes de Zero Risk se declaran como
- *     AgentDefinition y el SDK gestiona el aislamiento de contexto.
- *
- *  3. Hooks nativos — podemos pausar en PostToolUse para HITL, registrar
- *     telemetría en PreToolUse, etc., sin parchar el cliente HTTP.
- *
- *  4. MCP servers — Client Brain se expone como MCP server (ver
- *     src/lib/mcp/client-brain-server.ts) en vez de inyectarse como texto.
- *
- *  Nota de runtime: el SDK spawnea el CLI `claude` como subproceso, por lo
- *  que la ruta que lo consume DEBE declarar `runtime = "nodejs"` y el host
- *  debe tener el binario disponible (ver README del refactor).
+ * Everything else (model mapping, Supabase queries, system prompt assembly,
+ * stream draining, cost computation, logging) is byte-identical to the
+ * Vercel copy. Keep in sync until a shared package factors this out.
  */
 
+import { resolve as pathResolve } from 'node:path'
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import { getSupabaseAdmin } from '@/lib/supabase'
-import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
+import { getSupabaseAdmin } from './supabase.js'
+import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
 // `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
@@ -89,9 +85,6 @@ export interface AgentRunResult {
 
 // ---------- Model mapping ----------
 
-// Accepts both the legacy short keys (used by the `agents` table) and the
-// full model IDs stored in `managed_agents_registry.default_model` (which is
-// constrained by CHECK to {claude-haiku-4-5, claude-sonnet-4-6, claude-opus-4-6}).
 const MODEL_MAP: Record<string, string> = {
   // legacy short keys
   'claude-haiku': 'claude-haiku-4-5-20251001',
@@ -111,7 +104,7 @@ const COST_PER_M = {
 }
 
 /**
- * @internal Exported for unit testing (W15-T4). Not part of the public API.
+ * @internal Exported for unit testing. Not part of the public API.
  */
 export function _costFor(model: string, inTok: number, outTok: number): number {
   const key = model.includes('haiku') ? 'haiku' : model.includes('opus') ? 'opus' : 'sonnet'
@@ -121,9 +114,7 @@ export function _costFor(model: string, inTok: number, outTok: number): number {
 
 const costFor = _costFor
 
-// ---------- Runner principal ----------
-
-// ---------- Internal helpers (W15 refactor) ----------
+// ---------- Internal helpers ----------
 
 interface RegistryRow {
   slug: string
@@ -237,7 +228,7 @@ async function loadSkills(supabase: SupabaseAdmin, agentId: string | null): Prom
 /**
  * Compose the system prompt from identity + skills + agency context.
  *
- * @internal Exported for unit testing (W15-T4). Not part of the public API.
+ * @internal Exported for unit testing. Not part of the public API.
  */
 export function _buildSystemPrompt(
   identity: string,
@@ -287,7 +278,7 @@ function buildSdkOptions(
             type: 'stdio',
             command: 'node',
             args: [
-              require('path').resolve(process.cwd(), 'src/lib/mcp/client-brain-server.js'),
+              pathResolve(process.cwd(), 'src/lib/mcp/client-brain-server.js'),
             ],
             env: {
               CLIENT_ID: input.clientId,
