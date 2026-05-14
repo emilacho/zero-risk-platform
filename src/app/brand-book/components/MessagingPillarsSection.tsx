@@ -35,7 +35,7 @@ export function MessagingPillarsSection({
     <div className="space-y-6">
       {tagline && (
         <blockquote className="border-l-4 border-zero-risk-primary bg-zero-risk-primary/5 px-4 py-3">
-          <p className="text-lg font-medium italic text-gray-900">"{tagline}"</p>
+          <p className="text-lg font-medium italic text-gray-900">&quot;{tagline}&quot;</p>
         </blockquote>
       )}
 
