@@ -9,7 +9,11 @@
     "node": ">=22.0.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": ["esbuild"],
+    "overrides": {
+      "@anthropic-ai/claude-agent-sdk-linux-x64-musl": "npm:@anthropic-ai/claude-agent-sdk-linux-x64@0.2.138",
+      "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": "npm:@anthropic-ai/claude-agent-sdk-linux-arm64@0.2.138"
+    }
   },
   "scripts": {
     "start": "tsx src/index.ts",
