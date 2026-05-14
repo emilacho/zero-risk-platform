@@ -1,0 +1,15 @@
+{
+  "extends": "next/core-web-vitals",
+  "ignorePatterns": [
+    "node_modules/",
+    ".next/",
+    "out/",
+    "services/agent-runner/",
+    "packages/",
+    "scripts/",
+    "supabase/",
+    "n8n-workflows/",
+    "__tests__/agent-sdk-runner-helpers.test.ts",
+    "__tests__/run-sdk-middleware.test.ts"
+  ]
+}
