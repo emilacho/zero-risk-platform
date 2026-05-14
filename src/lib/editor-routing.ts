@@ -163,6 +163,19 @@ export function getEditorConfig(agentSlug: string): EditorRoutingConfig | null {
 
 export const PRIMARY_REVIEWER = 'editor-en-jefe'
 export const SECOND_REVIEWER = 'brand-strategist'
+// Camino III · 3-of-N voting (Sprint #5) · third reviewer angle = "would the
+// client be happy with this output". jefe-client-success (CCO Tier 2) owns
+// the client-success lens; agent-alias-map.ts aliases `client-success-lead`
+// (playbook name) to this slug.
+export const THIRD_REVIEWER = 'jefe-client-success'
+
+export type ReviewerRole = 'editor' | 'brand_strategist' | 'client_success_lead'
+
+export const REVIEWER_SLUGS: Record<ReviewerRole, string> = {
+  editor: PRIMARY_REVIEWER,
+  brand_strategist: SECOND_REVIEWER,
+  client_success_lead: THIRD_REVIEWER,
+}
 
 export type ReviewPattern = 'parallel' | 'sequential' | 'conditional'
 export type DisagreementPolicy = 'strict' | 'lenient' | 'hitl'
@@ -170,6 +183,13 @@ export type DisagreementPolicy = 'strict' | 'lenient' | 'hitl'
 export const REVIEW_CONFIG = {
   pattern: 'parallel' as ReviewPattern,
   disagreement_policy: 'hitl' as DisagreementPolicy,
+  /**
+   * Number of reviewers required for a verdict. Defaults to 3 (Camino III
+   * 3-of-N voting). The middleware reads this to decide how many parallel
+   * invokes to fire; setting back to 2 would skip the client-success lens
+   * without changing the rest of the pipeline.
+   */
+  reviewer_count: 3,
 } as const
 
 // ============================================================
@@ -180,17 +200,30 @@ export const REVIEW_CONFIG = {
 // Severity = max(editor.severity, brand.severity)
 // ============================================================
 
+export interface ReviewerVerdictSummary {
+  status: EditorVerdictStatus
+  severity: EditorVerdictSeverity
+}
+
 export interface AggregateVerdict {
   status: EditorVerdictStatus
   severity: EditorVerdictSeverity
   issues: string[]
   feedback: string
   reviewers: {
-    editor: { status: EditorVerdictStatus; severity: EditorVerdictSeverity }
-    brand_strategist: { status: EditorVerdictStatus; severity: EditorVerdictSeverity }
+    editor: ReviewerVerdictSummary
+    brand_strategist: ReviewerVerdictSummary
+    /**
+     * Camino III 3-of-N voting · optional so the legacy 2-reviewer call sites
+     * (and any downstream consumers reading the API response) continue to
+     * work without conditional checks for older paths.
+     */
+    client_success_lead?: ReviewerVerdictSummary
   }
   disagreement: boolean
   disagreement_reason?: string
+  /** Count of reviewers that produced a verdict (2 or 3 in practice). */
+  reviewer_count?: number
 }
 
 const SEVERITY_RANK: Record<EditorVerdictSeverity, number> = {
@@ -200,51 +233,102 @@ const SEVERITY_RANK: Record<EditorVerdictSeverity, number> = {
   critical: 3,
 }
 
-export function aggregateVerdicts(
-  editorVerdict: EditorVerdict,
-  brandVerdict: EditorVerdict
-): AggregateVerdict {
-  const isDisagreement =
-    (editorVerdict.status === 'approved' && brandVerdict.status === 'escalated') ||
-    (editorVerdict.status === 'escalated' && brandVerdict.status === 'approved')
+/**
+ * Aggregate N reviewer verdicts into one consensus.
+ *
+ * Status rule (covers both the legacy 2-reviewer case and Camino III 3-of-N):
+ *   - any reviewer escalated → status = 'escalated'
+ *   - else any reviewer revision_needed → status = 'revision_needed'
+ *   - else (all approved) → status = 'approved'
+ *
+ * Disagreement = at least two reviewers produced different statuses. The
+ * 1-1-1 tie (one approved, one revision_needed, one escalated) lands in the
+ * "escalated" bucket (per the playbook · tie → HITL) and also flips the
+ * disagreement flag so downstream consumers can show "X reviewers disagreed".
+ *
+ * Severity = max severity across all reviewers.
+ *
+ * Feedback = concatenated by role label so the operator sees who said what.
+ */
+export interface ReviewerInput {
+  role: ReviewerRole
+  verdict: EditorVerdict
+}
+
+const REVIEWER_LABEL: Record<ReviewerRole, string> = {
+  editor: 'Editor en Jefe',
+  brand_strategist: 'Brand Strategist',
+  client_success_lead: 'Client Success Lead',
+}
+
+export function aggregateVerdictsN(reviewers: ReviewerInput[]): AggregateVerdict {
+  if (reviewers.length === 0) {
+    throw new Error('aggregateVerdictsN requires at least one reviewer input')
+  }
+
+  const statuses = new Set(reviewers.map((r) => r.verdict.status))
+  const disagreement = statuses.size > 1
 
   let aggregateStatus: EditorVerdictStatus
-  if (isDisagreement) {
+  if (reviewers.some((r) => r.verdict.status === 'escalated')) {
     aggregateStatus = 'escalated'
-  } else if (editorVerdict.status === 'escalated' || brandVerdict.status === 'escalated') {
-    aggregateStatus = 'escalated'
-  } else if (editorVerdict.status === 'revision_needed' || brandVerdict.status === 'revision_needed') {
+  } else if (reviewers.some((r) => r.verdict.status === 'revision_needed')) {
     aggregateStatus = 'revision_needed'
   } else {
     aggregateStatus = 'approved'
   }
 
-  const aggregateSeverity: EditorVerdictSeverity =
-    SEVERITY_RANK[editorVerdict.severity] >= SEVERITY_RANK[brandVerdict.severity]
-      ? editorVerdict.severity
-      : brandVerdict.severity
+  let aggregateSeverity: EditorVerdictSeverity = 'low'
+  for (const { verdict } of reviewers) {
+    if (SEVERITY_RANK[verdict.severity] > SEVERITY_RANK[aggregateSeverity]) {
+      aggregateSeverity = verdict.severity
+    }
+  }
 
-  const dedupedIssues = Array.from(new Set([...editorVerdict.issues, ...brandVerdict.issues]))
-
-  const combinedFeedback = [
-    editorVerdict.feedback ? `[Editor en Jefe]\n${editorVerdict.feedback}` : '',
-    brandVerdict.feedback ? `[Brand Strategist]\n${brandVerdict.feedback}` : '',
-  ]
-    .filter(Boolean)
+  const dedupedIssues = Array.from(new Set(reviewers.flatMap((r) => r.verdict.issues)))
+  const combinedFeedback = reviewers
+    .filter((r) => r.verdict.feedback)
+    .map((r) => `[${REVIEWER_LABEL[r.role]}]\n${r.verdict.feedback}`)
     .join('\n\n')
+
+  const reviewersField: AggregateVerdict['reviewers'] = {
+    editor: { status: 'approved', severity: 'low' },
+    brand_strategist: { status: 'approved', severity: 'low' },
+  }
+  for (const { role, verdict } of reviewers) {
+    reviewersField[role] = { status: verdict.status, severity: verdict.severity }
+  }
+
+  let disagreementReason: string | undefined
+  if (disagreement) {
+    const summary = reviewers
+      .map(({ role, verdict }) => `${REVIEWER_LABEL[role]}=${verdict.status}`)
+      .join(', ')
+    disagreementReason = `${summary} — escalating to HITL for tiebreaker`
+  }
 
   return {
     status: aggregateStatus,
     severity: aggregateSeverity,
     issues: dedupedIssues,
     feedback: combinedFeedback,
-    reviewers: {
-      editor: { status: editorVerdict.status, severity: editorVerdict.severity },
-      brand_strategist: { status: brandVerdict.status, severity: brandVerdict.severity },
-    },
-    disagreement: isDisagreement,
-    disagreement_reason: isDisagreement
-      ? `Editor=${editorVerdict.status}, Brand Strategist=${brandVerdict.status} — escalating to HITL for tiebreaker`
-      : undefined,
+    reviewers: reviewersField,
+    disagreement,
+    disagreement_reason: disagreementReason,
+    reviewer_count: reviewers.length,
   }
+}
+
+/**
+ * Legacy 2-reviewer entry point. Preserved for any callers that haven't
+ * moved to `aggregateVerdictsN`; internally it just delegates.
+ */
+export function aggregateVerdicts(
+  editorVerdict: EditorVerdict,
+  brandVerdict: EditorVerdict,
+): AggregateVerdict {
+  return aggregateVerdictsN([
+    { role: 'editor', verdict: editorVerdict },
+    { role: 'brand_strategist', verdict: brandVerdict },
+  ])
 }
