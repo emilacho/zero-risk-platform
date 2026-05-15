@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clients-upsert",
+  "type": "object",
+  "title": "POST /api/clients/upsert · atomic 3-table persistence for onboarding",
+  "additionalProperties": true,
+  "required": ["name"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Client display name · also used to derive slug when slug not provided"
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[a-z0-9-]+$",
+      "description": "URL-safe identifier · UNIQUE on clients table · auto-derived from name when omitted"
+    },
+    "client_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Explicit client UUID · if provided, upserted by id; else upsert by slug"
+    },
+    "website": { "type": ["string", "null"], "maxLength": 500 },
+    "website_url": { "type": ["string", "null"], "maxLength": 500 },
+    "industry": { "type": ["string", "null"], "maxLength": 200 },
+    "contact_email": { "type": ["string", "null"], "maxLength": 320 },
+    "country": { "type": ["string", "null"], "maxLength": 8 },
+    "language": { "type": ["string", "null"], "maxLength": 8 },
+    "status": {
+      "type": "string",
+      "enum": ["onboarding", "active", "paused", "churned", "trial"]
+    },
+    "brand_book": {
+      "type": ["object", "null"],
+      "description": "Brand book payload · all fields optional · maps 1:1 to client_brand_books columns",
+      "additionalProperties": true,
+      "properties": {
+        "brand_purpose": { "type": "string" },
+        "brand_vision": { "type": "string" },
+        "brand_mission": { "type": "string" },
+        "brand_values": { "type": "array", "items": { "type": "string" } },
+        "brand_personality": { "type": "string" },
+        "voice_description": { "type": "string" },
+        "tone_guidelines": { "type": "object" },
+        "writing_style": { "type": "string" },
+        "tagline": { "type": "string" },
+        "elevator_pitch": { "type": "string" },
+        "key_messages": { "type": "array", "items": { "type": "string" } },
+        "value_propositions": { "type": "array", "items": { "type": "string" } },
+        "primary_colors": { "type": "array", "items": { "type": "string" } },
+        "imagery_style": { "type": "string" },
+        "forbidden_words": { "type": "array", "items": { "type": "string" } },
+        "required_terminology": { "type": "array", "items": { "type": "string" } },
+        "competitor_mentions_policy": { "type": "string" },
+        "content_text": { "type": "string" },
+        "auto_generated_from": { "type": "string" }
+      }
+    },
+    "journey": {
+      "type": "string",
+      "enum": ["ACQUIRE", "ONBOARD", "PRODUCE", "ALWAYS_ON", "REVIEW"],
+      "default": "ONBOARD"
+    },
+    "journey_stage": {
+      "type": ["string", "null"],
+      "maxLength": 100,
+      "description": "Current journey stage label · e.g. 'auto_discovery_complete'"
+    },
+    "journey_status": {
+      "type": "string",
+      "enum": ["initiated", "active", "paused_hitl", "completed", "failed", "abandoned"],
+      "default": "active"
+    },
+    "trigger_type": {
+      "type": "string",
+      "enum": ["manual", "webhook", "cron", "callback"],
+      "default": "webhook"
+    },
+    "trigger_source": { "type": ["string", "null"], "maxLength": 200 },
+    "trigger_payload": { "type": ["object", "null"] },
+    "metadata": { "type": ["object", "null"] }
+  }
+}
