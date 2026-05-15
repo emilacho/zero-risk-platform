@@ -55,6 +55,53 @@ interface DeepReportInput {
   recent_moves?: unknown[]
   deep_scan_data?: Record<string, unknown>
   analysis_source?: string
+  // Sprint #6 Brazo 2 closeout · the B1 workflow sends `raw` (merged 5-layer
+  // payload) and `synthesis` (strategist Opus output) as siblings, NOT as a
+  // pre-assembled `deep_scan_data` blob. When the route only read
+  // `body.deep_scan_data` directly, every landscape row landed with `{}`
+  // (Finding #2 of B1-EXPRESSION-FIXED report 15:47Z). Accept both shapes
+  // so the existing direct-API contract (deep_scan_data: {...}) keeps
+  // working AND the n8n workflow flow populates the jsonb.
+  raw?: unknown
+  synthesis?: unknown
+  task_id?: string
+}
+
+/**
+ * Build the deep_scan_data jsonb from the incoming body.
+ *
+ * Precedence:
+ *  1. If `body.deep_scan_data` is a non-empty object → use it as-is
+ *     (direct-API callers that already assemble the blob client-side)
+ *  2. Otherwise, if `body.raw` or `body.synthesis` or `body.task_id` are
+ *     present → assemble a structured jsonb from those siblings (the n8n
+ *     B1 workflow shape · Sprint #6 Brazo 2 contract)
+ *  3. Otherwise → `{}` (no scan data on this call · still valid for
+ *     callers that only want to upsert scalar fields)
+ */
+function buildDeepScanData(body: DeepReportInput): Record<string, unknown> {
+  if (
+    body.deep_scan_data &&
+    typeof body.deep_scan_data === 'object' &&
+    Object.keys(body.deep_scan_data).length > 0
+  ) {
+    return body.deep_scan_data
+  }
+
+  const hasWorkflowFields =
+    body.raw !== undefined ||
+    body.synthesis !== undefined ||
+    (typeof body.task_id === 'string' && body.task_id.length > 0)
+
+  if (!hasWorkflowFields) return {}
+
+  const assembled: Record<string, unknown> = {
+    scan_timestamp: new Date().toISOString(),
+  }
+  if (body.task_id) assembled.task_id = body.task_id
+  if (body.raw !== undefined) assembled.raw = body.raw
+  if (body.synthesis !== undefined) assembled.synthesis = body.synthesis
+  return assembled
 }
 
 /**
@@ -175,6 +222,7 @@ export async function POST(request: Request) {
 
   const nowIso = new Date().toISOString()
   const analysisSource = body.analysis_source ?? '5-layer-scanner'
+  const deepScanData = buildDeepScanData(body)
 
   if (existing) {
     // ── 2a · UPDATE existing · merge arrays + overlay scalars + JSONB ──
@@ -189,7 +237,7 @@ export async function POST(request: Request) {
       ),
       weaknesses: mergeDedupeArray(existing.weaknesses, body.weaknesses),
       recent_moves: mergeDedupeArray(existing.recent_moves, body.recent_moves),
-      deep_scan_data: body.deep_scan_data ?? {},
+      deep_scan_data: deepScanData,
       analysis_source: analysisSource,
       last_analyzed_at: nowIso,
       updated_at: nowIso,
@@ -249,7 +297,7 @@ export async function POST(request: Request) {
     content_strategy_summary: body.content_strategy_summary ?? null,
     ad_strategy_summary: body.ad_strategy_summary ?? null,
     recent_moves: Array.isArray(body.recent_moves) ? body.recent_moves : [],
-    deep_scan_data: body.deep_scan_data ?? {},
+    deep_scan_data: deepScanData,
     analysis_source: analysisSource,
     last_analyzed_at: nowIso,
   }
