@@ -1,75 +1,125 @@
 /**
- * POST /api/notion/create-weekly-report — create a Notion weekly report page.
+ * POST /api/notion/create-weekly-report
  *
- * Closes W15-D-23. Workflow caller:
+ * Weekly client report page. Workflow caller:
  *   `Zero Risk - Weekly Client Report Generator v2 (Mondays 8am)`
  *
- * Stub today: persists payload to `notion_page_log` + returns a deterministic
- * mock page_id. Real Notion integration when NOTION_API_KEY arrives.
+ * Sections: highlights · metrics (key/value as bullets · Notion has no
+ * native key-value widget that maps cleanly to arbitrary JSON) · next-week
+ * focus · blockers.
  *
- * Auth: tier 2 INTERNAL.
+ * Closes W15-D-23.
  */
-import { NextResponse } from 'next/server'
-import { checkInternalKey } from '@/lib/internal-auth'
-import { validateInput } from '@/lib/input-validator'
-import { getSupabaseAdmin } from '@/lib/supabase'
-import { withSupabaseResult } from '@/lib/bridge-fallback'
+import { NextResponse } from "next/server";
+import { checkInternalKey } from "@/lib/internal-auth";
+import { validateInput } from "@/lib/input-validator";
+import { getSupabaseAdmin } from "@/lib/supabase";
+import {
+  createSubpage,
+  resolveParentPageId,
+  paragraph,
+  heading2,
+  bullet,
+  divider,
+  bulletList,
+  NotionConfigError,
+} from "@/lib/notion-client";
 
-export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 interface WeeklyReportBody {
-  client_id: string
-  week_starting: string
-  title: string
-  highlights?: string[] | null
-  metrics?: Record<string, unknown> | null
-  next_week_focus?: string[] | null
-  blockers?: string[] | null
-  parent_page_id?: string | null
+  client_id: string;
+  week_starting: string;
+  title: string;
+  highlights?: string[] | null;
+  metrics?: Record<string, unknown> | null;
+  next_week_focus?: string[] | null;
+  blockers?: string[] | null;
+  parent_page_id?: string | null;
+}
+
+function buildWeeklyBlocks(body: WeeklyReportBody): unknown[] {
+  const blocks: unknown[] = [
+    heading2(body.title),
+    paragraph(`Week starting · ${body.week_starting}`),
+    divider(),
+    heading2("Highlights"),
+    ...bulletList(body.highlights),
+    divider(),
+    heading2("Metrics"),
+  ];
+  if (!body.metrics || Object.keys(body.metrics).length === 0) {
+    blocks.push(paragraph("(no metrics reported)"));
+  } else {
+    for (const [k, v] of Object.entries(body.metrics)) {
+      blocks.push(bullet(`${k} · ${String(v)}`));
+    }
+  }
+  blocks.push(divider(), heading2("Next week focus"));
+  blocks.push(...bulletList(body.next_week_focus));
+  blocks.push(divider(), heading2("Blockers"));
+  blocks.push(...bulletList(body.blockers));
+  return blocks;
 }
 
 export async function POST(request: Request) {
-  const auth = checkInternalKey(request)
+  const auth = checkInternalKey(request);
   if (!auth.ok) {
     return NextResponse.json(
-      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { error: "unauthorized", code: "E-AUTH-001", detail: auth.reason },
       { status: 401 },
-    )
+    );
   }
 
-  const v = await validateInput<WeeklyReportBody>(request, 'notion-create-weekly-report')
-  if (!v.ok) return v.response
-  const body = v.data
+  const v = await validateInput<WeeklyReportBody>(request, "notion-create-weekly-report");
+  if (!v.ok) return v.response;
+  const body = v.data;
 
-  const stubPageId = `notion-weekly-${body.client_id}-${body.week_starting}`.replace(/[^a-z0-9-]/gi, '-').slice(0, 64)
+  try {
+    const parentPageId = resolveParentPageId(body.parent_page_id);
+    const page = await createSubpage({
+      parentPageId,
+      title: body.title,
+      blocks: buildWeeklyBlocks(body),
+    });
 
-  const row = {
-    page_id: stubPageId,
-    page_type: 'weekly_report',
-    client_id: body.client_id,
-    week_starting: body.week_starting,
-    title: body.title,
-    payload: body,
-    parent_page_id: body.parent_page_id ?? process.env.NOTION_PARENT_PAGE_ID ?? null,
-    fallback_mode: true,
-    created_at: new Date().toISOString(),
+    try {
+      const supabase = getSupabaseAdmin();
+      await supabase.from("notion_page_log").insert({
+        page_id: page.page_id,
+        page_type: "weekly_report",
+        client_id: body.client_id,
+        week_starting: body.week_starting,
+        title: body.title,
+        payload: body,
+        parent_page_id: parentPageId,
+        fallback_mode: false,
+        created_at: new Date().toISOString(),
+      });
+    } catch {
+      /* never block */
+    }
+
+    return NextResponse.json({
+      ok: true,
+      page_id: page.page_id,
+      page_url: page.page_url,
+      created_time: page.created_time,
+      week_starting: body.week_starting,
+      client_id: body.client_id,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (err instanceof NotionConfigError) {
+      return NextResponse.json(
+        { ok: false, error: "Notion configuration error", detail: msg },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json(
+      { ok: false, error: "Notion API call failed", detail: msg.slice(0, 600) },
+      { status: 502 },
+    );
   }
-
-  const supabase = getSupabaseAdmin()
-  const r = await withSupabaseResult<{ id: string }>(
-    () => supabase.from('notion_page_log').insert(row).select('id').single(),
-    { context: '/api/notion/create-weekly-report' },
-  )
-
-  return NextResponse.json({
-    ok: true,
-    page_id: stubPageId,
-    notion_url: `https://www.notion.so/${stubPageId}`,
-    week_starting: body.week_starting,
-    client_id: body.client_id,
-    persisted_id: r.fallback_mode ? null : r.data?.id,
-    fallback_mode: true,
-    note: r.fallback_mode ? `Notion API stubbed + log write failed: ${r.reason}` : 'Notion API stubbed (NOTION_API_KEY pending)',
-  })
 }
