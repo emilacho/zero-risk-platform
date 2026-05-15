@@ -35,6 +35,7 @@ import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWE
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { resolveAgentSlug } from '@/lib/agent-alias-map'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 min — pipelines largos
@@ -120,10 +121,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields: agent, task' }, { status: 400 })
     }
 
-    capture('agent_run_invoked', String(body.client_id || 'system'), {
+    // LOTE-C item 8 · multi-path client_id resolver. Historically callers only
+    // populated `body.client_id`, but several n8n workflows nest under
+    // metadata / client.id / extra. Resolve once and use the resolved value
+    // for analytics, the proxy forward, and downstream observability so
+    // `agent_invocations.client_id` lands populated for the new rows.
+    const clientId = resolveClientIdFromBody(body)
+    if (!clientId) {
+      // Soft warn · the request still proceeds (a null client_id is valid
+      // for system / health-probe invocations). Body keys are surfaced so
+      // operators can see which payload shape arrived without the field.
+      console.warn(
+        '[run-sdk] no client_id resolved from body · keys=',
+        Object.keys(body as unknown as Record<string, unknown>).join(','),
+      )
+    }
+
+    capture('agent_run_invoked', String(clientId || 'system'), {
       agent_slug: agentName,
       model: 'sdk',
-      client_id: body.client_id || null,
+      client_id: clientId,
       has_pipeline_id: !!body.pipeline_id,
     })
 
@@ -179,7 +196,7 @@ export async function POST(request: Request) {
       agentName,
       task,
       resumeSessionId: body.resume_session_id || null,
-      clientId: body.client_id || null,
+      clientId,
       pipelineId: body.pipeline_id || null,
       stepName: body.step_name || null,
       extra: body.extra || undefined,
@@ -275,7 +292,7 @@ export async function POST(request: Request) {
       error: result.error,
     }
 
-    capture('agent_run_completed', String(body.client_id || 'system'), {
+    capture('agent_run_completed', String(clientId || 'system'), {
       agent_slug: agentName,
       success: result.success,
       duration_ms: result.durationMs ?? 0,
