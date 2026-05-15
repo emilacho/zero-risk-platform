@@ -6,6 +6,7 @@ import { validateObject } from '@/lib/input-validator'
 import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { resolveAgentSlug } from '@/lib/agent-alias-map'
+import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 
 interface GenerateContentInput {
   product: string
@@ -39,6 +40,10 @@ export async function POST(request: Request) {
     const v = validateObject<GenerateContentInput>(raw, 'agents-generate-content')
     if (!v.ok) return v.response
     const body = v.data
+    // LOTE-C Fix 8c · resolve client_id from RAW body (validator strips
+    // unknown fields). Camino III reviewers in this endpoint need the same
+    // attribution as `/api/agents/run` callers.
+    const resolvedClientId = resolveClientIdFromBody(raw)
 
     const product = sanitizeString(body.product, 200)
     const audience = sanitizeString(body.audience, 200)
@@ -209,6 +214,7 @@ Responde en JSON con este formato:
         config: editorConfig,
         supabase: getSupabaseAdmin(),
         baseUrl,
+        clientId: resolvedClientId,
       })
       return NextResponse.json({ ...baseResponse, ...middlewareResult })
     } catch (middlewareError) {

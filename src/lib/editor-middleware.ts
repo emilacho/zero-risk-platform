@@ -37,6 +37,14 @@ export interface MiddlewareParams {
   config: EditorRoutingConfig
   supabase: SupabaseClient
   baseUrl: string
+  // LOTE-C Fix 8c · resolvedClientId propagated from the caller route's
+  // multi-path resolver (PR #16/#17 · `src/lib/client-id-resolver.ts`).
+  // Camino III reviewers run as inner `/api/agents/run` sub-calls · without
+  // this, those 3 sub-invocations land in `agent_invocations` with
+  // `client_id=NULL`, undercounting cost-by-client by ~75% (1 primary + 3
+  // reviewers per fire). Optional · falls back to `context.client_id` for
+  // legacy callers that haven't migrated to the resolver yet.
+  clientId?: string | null
 }
 
 export interface MiddlewareResult {
@@ -63,8 +71,19 @@ export interface MiddlewareResult {
 export async function runDualReviewMiddleware(params: MiddlewareParams): Promise<MiddlewareResult> {
   const { agentSlug, content, task, context, config, supabase, baseUrl } = params
 
+  // Fix 8c · effective client_id used by reviewer sub-calls. Prefer the
+  // caller-resolved value · fall back to legacy `context.client_id` so
+  // existing callers that haven't been migrated still work.
+  const effectiveClientId =
+    (typeof params.clientId === 'string' && params.clientId.length > 0
+      ? params.clientId
+      : null) ??
+    (typeof context?.client_id === 'string' && (context.client_id as string).length > 0
+      ? (context.client_id as string)
+      : null)
+
   // Initial dual review
-  const aggregateVerdict = await invokeAllReviewersParallel({ content, agentSlug, task, context, config, baseUrl })
+  const aggregateVerdict = await invokeAllReviewersParallel({ content, agentSlug, task, context, config, baseUrl, clientId: effectiveClientId })
 
   // Approved — no escalation needed
   if (aggregateVerdict.status === 'approved') {
@@ -92,6 +111,7 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
       originalTask: task,
       originalContext: context,
       supabase,
+      clientId: effectiveClientId,
     })
 
     return {
@@ -125,6 +145,7 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
       editorIssues: currentVerdict.issues,
       revisionNumber: revision,
       baseUrl,
+      clientId: effectiveClientId,
     })
 
     if (!revisionResponse?.success) break
@@ -137,6 +158,7 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
       context,
       config,
       baseUrl,
+      clientId: effectiveClientId,
     })
 
     if (currentVerdict.status === 'approved') {
@@ -164,6 +186,7 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
     originalTask: task,
     originalContext: context,
     supabase,
+    clientId: effectiveClientId,
   })
 
   return {
@@ -202,6 +225,7 @@ async function invokeAllReviewersParallel(params: {
   context: Record<string, unknown>
   config: EditorRoutingConfig
   baseUrl: string
+  clientId: string | null
 }): Promise<AggregateVerdict> {
   const roleSpecs: Array<{
     role: ReviewerRole
@@ -277,6 +301,7 @@ async function invokeReviewer(params: {
   context: Record<string, unknown>
   config: EditorRoutingConfig
   baseUrl: string
+  clientId: string | null
 }): Promise<EditorVerdict> {
   const fallback: EditorVerdict = {
     status: 'escalated',
@@ -299,8 +324,14 @@ async function invokeReviewer(params: {
       body: JSON.stringify({
         agent: params.reviewerSlug,
         task: reviewerTask,
+        // Fix 8c · client_id at top-level (resolver path #1 · documented
+        // contract). The route's multi-path resolver picks this up and
+        // populates `agent_invocations.client_id` for the reviewer row.
+        // Without this, Camino III sub-invocations land NULL and cost-by-
+        // client attribution undercounts by ~75% per primary fire.
+        client_id: params.clientId,
         context: {
-          client_id: params.context?.client_id,
+          client_id: params.clientId ?? params.context?.client_id,
           rag_query: ragQueryFor(params.reviewerType, params.task),
           rag_match_count: 5,
           originating_agent: params.agentSlug,
@@ -329,6 +360,7 @@ async function reinvokeAgentWithFeedback(params: {
   editorIssues: string[]
   revisionNumber: number
   baseUrl: string
+  clientId: string | null
 }): Promise<{ success: boolean; response: string }> {
   const enhancedTask = `[REVISION ${params.revisionNumber}]
 
@@ -358,6 +390,10 @@ INSTRUCTION: Re-generate addressing the editor's feedback. Keep what worked, fix
       body: JSON.stringify({
         agent: params.agentSlug,
         task: enhancedTask,
+        // Fix 8c · client_id at top-level so the producer agent's revision
+        // round (1+ rows per fire when revisions trigger) also lands with
+        // populated client_id. Resolver path #1.
+        client_id: params.clientId,
         context: params.originalContext,
         caller: 'editor-revision',
       }),
@@ -378,6 +414,7 @@ async function escalateToHITL(params: {
   originalTask: string
   originalContext: Record<string, unknown>
   supabase: SupabaseClient
+  clientId: string | null
 }): Promise<string | null> {
   try {
     const { data, error } = await params.supabase
@@ -389,7 +426,9 @@ async function escalateToHITL(params: {
         editor_verdict: params.aggregateVerdict,
         revisions_attempted: params.revisionsAttempted,
         original_task: params.originalTask.substring(0, 1000),
-        client_id: params.originalContext?.client_id || null,
+        // Fix 8c · prefer caller-resolved clientId · fall back to legacy
+        // path so existing escalations still land with attribution.
+        client_id: params.clientId ?? params.originalContext?.client_id ?? null,
         approval_type: 'editor_escalation',
         status: 'pending',
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),

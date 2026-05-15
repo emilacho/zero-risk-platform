@@ -586,6 +586,9 @@ export async function POST(request: Request) {
         config: editorConfig,
         supabase,
         baseUrl,
+        // LOTE-C Fix 8c · propagate resolved client_id to Camino III
+        // reviewers so their `agent_invocations` rows also land populated.
+        clientId: resolvedClientId,
       })
 
       return NextResponse.json({ ...baseResponse, ...middlewareResult })

@@ -346,6 +346,9 @@ export async function POST(request: Request) {
         config: editorConfig,
         supabase: getSupabaseAdmin(),
         baseUrl,
+        // LOTE-C Fix 8c · propagate resolved client_id (PR #16 resolver
+        // chain) to Camino III reviewers · symmetric with `/api/agents/run`.
+        clientId: clientId,
       })
       return NextResponse.json({ ...baseResponse, ...middlewareResult })
     } catch (middlewareError) {
