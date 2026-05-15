@@ -26,6 +26,74 @@ function stubClient(id = 'smoke-client-001') {
   }
 }
 
+/**
+ * Sprint #6 · attach competitors array (from client_competitive_landscape)
+ * to each client row when ?include=competitors is set. Two helpers · per-row
+ * fetch (used in single-client GET path) and batched list attach (used in
+ * the list GET path · 1 query covers all client_ids to avoid N+1).
+ *
+ * The competitors subset is the columns the daily-monitor workflow needs to
+ * iterate · light shape, NOT the full landscape row (callers can hit the
+ * landscape table directly for the rich payload).
+ */
+type SupabaseLike = ReturnType<typeof getSupabaseAdmin>
+
+interface CompetitorMini {
+  id: string
+  competitor_name: string
+  competitor_website: string | null
+  competitor_type: string | null
+}
+
+async function fetchCompetitorsForClient(
+  supabase: SupabaseLike,
+  clientId: string,
+): Promise<CompetitorMini[]> {
+  try {
+    const { data } = await supabase
+      .from('client_competitive_landscape')
+      .select('id, competitor_name, competitor_website, competitor_type')
+      .eq('client_id', clientId)
+    return (data ?? []) as CompetitorMini[]
+  } catch {
+    return []
+  }
+}
+
+async function attachCompetitorsToList(
+  supabase: SupabaseLike,
+  clients: Array<Record<string, unknown>>,
+): Promise<Array<Record<string, unknown>>> {
+  if (clients.length === 0) return clients
+  const ids = clients
+    .map((c) => (c.id as string | undefined) ?? (c.client_id as string | undefined))
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+  if (ids.length === 0) return clients.map((c) => ({ ...c, competitors: [] }))
+  try {
+    const { data } = await supabase
+      .from('client_competitive_landscape')
+      .select('id, client_id, competitor_name, competitor_website, competitor_type')
+      .in('client_id', ids)
+    const byClient = new Map<string, CompetitorMini[]>()
+    for (const row of (data ?? []) as Array<CompetitorMini & { client_id: string }>) {
+      const arr = byClient.get(row.client_id) ?? []
+      arr.push({
+        id: row.id,
+        competitor_name: row.competitor_name,
+        competitor_website: row.competitor_website,
+        competitor_type: row.competitor_type,
+      })
+      byClient.set(row.client_id, arr)
+    }
+    return clients.map((c) => {
+      const id = (c.id as string | undefined) ?? (c.client_id as string | undefined) ?? ''
+      return { ...c, competitors: byClient.get(id) ?? [] }
+    })
+  } catch {
+    return clients.map((c) => ({ ...c, competitors: [] }))
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const auth = checkInternalKey(request)
@@ -35,6 +103,15 @@ export async function GET(request: Request) {
     const client_id = url.searchParams.get('client_id')
     const status = url.searchParams.get('status') || 'active'
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10), 500)
+    // Sprint #6 Brazo 2 · include=competitors attaches a `competitors` array
+    // to each client row sourced from client_competitive_landscape. Used by
+    // the Competitor Daily Monitor (B2) workflow's `Expand Competitors`
+    // code node. Multiple includes can be comma-separated for future extension.
+    const includeRaw = url.searchParams.get('include') || ''
+    const includeSet = new Set(
+      includeRaw.split(',').map((s) => s.trim()).filter(Boolean),
+    )
+    const includeCompetitors = includeSet.has('competitors')
 
     try {
       const supabase = getSupabaseAdmin()
@@ -42,7 +119,12 @@ export async function GET(request: Request) {
       // Single fetch
       if (client_id) {
         const { data } = await supabase.from('clients').select('*').eq('client_id', client_id).maybeSingle()
-        if (data) return NextResponse.json({ ok: true, client: data, ...data })
+        if (data) {
+          const enriched = includeCompetitors
+            ? { ...data, competitors: await fetchCompetitorsForClient(supabase, data.id as string | undefined ?? client_id) }
+            : data
+          return NextResponse.json({ ok: true, client: enriched, ...enriched })
+        }
         // Not found → return stub so downstream workflow nodes can proceed
         const stub = stubClient(client_id)
         return NextResponse.json({ ok: true, client: stub, fallback_mode: true, ...stub })
@@ -68,19 +150,25 @@ export async function GET(request: Request) {
             db_error: fallback.error.message.slice(0, 400),
           })
         }
+        const list = includeCompetitors
+          ? await attachCompetitorsToList(supabase, fallback.data || [])
+          : fallback.data || []
         return NextResponse.json({
           ok: true,
-          clients: fallback.data || [],
-          count: fallback.data?.length ?? 0,
+          clients: list,
+          count: list.length,
           filter: 'none_fallback',
         })
       }
 
+      const list = includeCompetitors
+        ? await attachCompetitorsToList(supabase, data || [])
+        : data || []
       return NextResponse.json({
         ok: true,
-        clients: data || [],
-        count: data?.length ?? 0,
-        filter: { status, limit },
+        clients: list,
+        count: list.length,
+        filter: { status, limit, include: [...includeSet] },
       })
     } catch (e: unknown) {
       // Supabase init or network failed
