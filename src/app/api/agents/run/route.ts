@@ -32,6 +32,22 @@ const MODEL_MAP: Record<string, string> = {
   'claude-opus': 'claude-opus-4-6',
 }
 
+// USD per token by canonical model id. Anthropic 2026 list prices.
+// Fallback for unknown ids uses Sonnet rates so we never silently report $0
+// when tokens > 0 (the bug LOTE-C blind dry-run surfaced: hardcoded cost_usd=0
+// downstream broke cost-alerts cron + /agents/stats + /costs end-to-end).
+const MODEL_PRICING: Record<string, { in: number; out: number }> = {
+  'claude-opus-4-7':            { in: 15 / 1_000_000, out: 75 / 1_000_000 },
+  'claude-opus-4-6':            { in: 15 / 1_000_000, out: 75 / 1_000_000 },
+  'claude-sonnet-4-6':          { in:  3 / 1_000_000, out: 15 / 1_000_000 },
+  'claude-haiku-4-5-20251001':  { in:  1 / 1_000_000, out:  5 / 1_000_000 },
+}
+
+function computeCostUsd(modelId: string, inputTokens: number, outputTokens: number): number {
+  const pricing = MODEL_PRICING[modelId] ?? MODEL_PRICING['claude-sonnet-4-6']
+  return inputTokens * pricing.in + outputTokens * pricing.out
+}
+
 export async function POST(request: Request) {
   const startTime = Date.now()
 
@@ -422,6 +438,7 @@ export async function POST(request: Request) {
     const outputTokens = claudeData.usage?.output_tokens || 0
     const tokensUsed = inputTokens + outputTokens
     const durationMs = Date.now() - startTime
+    const costUsd = computeCostUsd(modelId, inputTokens, outputTokens)
 
     capture('agent_run_completed', String(context.client_id || 'system'), {
       agent_slug: canonicalSlug,
@@ -429,7 +446,7 @@ export async function POST(request: Request) {
       duration_ms: durationMs,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      cost_usd: 0,
+      cost_usd: costUsd,
     })
 
     // --- Log execution ---
@@ -453,7 +470,7 @@ export async function POST(request: Request) {
         },
         status: 'success',
         duration_ms: durationMs,
-        cost: 0,
+        cost: costUsd,
       })
     } catch {
       // Don't fail the request if logging fails
@@ -471,6 +488,7 @@ export async function POST(request: Request) {
       tokens_used: tokensUsed,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
+      cost_usd: costUsd,
       duration_ms: durationMs,
       skills_loaded: loadedSkills.map(s => s.name),
     }
