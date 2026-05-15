@@ -225,7 +225,7 @@ INSERT INTO agent_tools (agent_id, tool_name, tool_type, status) VALUES
   ((SELECT id FROM agents WHERE name = 'sales-enablement'), 'gohighlevel', 'api_direct', 'pending'),
   ((SELECT id FROM agents WHERE name = 'sales-enablement'), 'mailgun', 'api_direct', 'pending'),
   ((SELECT id FROM agents WHERE name = 'sales-enablement'), 'whatsapp', 'composio', 'pending'),
-  ((SELECT id FROM agents WHERE name = 'creative-director'), 'ideogram-v3', 'api_direct', 'pending'),
+  ((SELECT id FROM agents WHERE name = 'creative-director'), 'gpt-image-1', 'api_direct', 'pending'),
   ((SELECT id FROM agents WHERE name = 'creative-director'), 'kling-ai', 'api_direct', 'pending'),
   ((SELECT id FROM agents WHERE name = 'tracking-specialist'), 'ga4', 'api_direct', 'pending'),
   ((SELECT id FROM agents WHERE name = 'tracking-specialist'), 'posthog', 'api_direct', 'pending'),

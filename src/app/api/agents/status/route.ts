@@ -183,7 +183,7 @@ export async function GET() {
           model: 'claude-sonnet',
           role: 'empleado',
           status: 'pending',
-          description: 'Images (Ideogram v3), video (Kling AI)',
+          description: 'Images (GPT Image · gpt-image-1), video (Higgsfield)',
           department: 'Marketing',
         },
         {
@@ -214,7 +214,7 @@ export async function GET() {
     const services = {
       composio: !!process.env.COMPOSIO_API_KEY,
       claude_api: !!process.env.CLAUDE_API_KEY,
-      ideogram: !!process.env.IDEOGRAM_API_KEY,
+      openai: !!process.env.OPENAI_API_KEY,
       n8n_webhook: !!process.env.N8N_WEBHOOK_URL,
       supabase: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
     }

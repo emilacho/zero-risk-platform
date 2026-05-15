@@ -8,8 +8,8 @@ Reference for using AI image generators, video generators, and code-based video 
 
 | Need | Tool Category | Best Fit |
 |------|---------------|----------|
-| Static ad images (banners, social) | Image generation | Nano Banana Pro, Flux, Ideogram |
-| Ad images with text overlays | Image generation (text-capable) | Ideogram, Nano Banana Pro |
+| Static ad images (banners, social) | Image generation | Nano Banana Pro, Flux, GPT Image (gpt-image-1) |
+| Ad images with text overlays | Image generation (text-capable) | GPT Image (gpt-image-1), Nano Banana Pro |
 | Short video ads (6-30 sec) | Video generation | Veo, Kling, Runway, Sora, Seedance |
 | Video ads with voiceover | Video gen + voice | Veo/Sora (native), or Runway + ElevenLabs |
 | Voiceover tracks for ads | Voice generation | ElevenLabs, OpenAI TTS, Cartesia |
@@ -18,7 +18,7 @@ Reference for using AI image generators, video generators, and code-based video 
 | Product mockups and variations | Image generation + references | Flux (multi-image reference) |
 | Templated video ads at scale | Code-based video | Remotion |
 | Personalized video (name, data) | Code-based video | Remotion |
-| Brand-consistent variations | Image gen + style refs | Flux, Ideogram, Nano Banana Pro |
+| Brand-consistent variations | Image gen + style refs | Flux, GPT Image (gpt-image-1), Nano Banana Pro |
 
 ---
 
@@ -92,19 +92,20 @@ Open-weight image generation models with API access through Replicate and BFL's 
 
 ---
 
-### Ideogram
+### GPT Image (gpt-image-1)
 
 Specialized in typography and text rendering within images.
 
 **Best for:** Ad banners with text, branded graphics, social ad images with headlines
-**API:** Ideogram API, Runware
-**Pricing:** ~$0.06/image (API), ~$0.009/image (subscription)
+**API:** OpenAI Images API (`POST https://api.openai.com/v1/images/generations` · model `gpt-image-1`)
+**Pricing:** ~$0.04/image 1024×1024 · ~$0.06/image at 1024×1536 or 1536×1024
+**Wrapper:** Use the Zero Risk endpoint `POST /api/images/generate` (Sprint #6 Brazo 1) instead of calling OpenAI directly — it persists to `agent_image_generations`, uploads the b64 payload to the `agent-images` Storage bucket, and returns a public URL.
 
 **Strengths:**
-- Best-in-class text rendering (~90% accuracy vs ~30% for most tools)
-- Style reference system (upload up to 3 reference images)
-- 4.3 billion style presets for consistent brand aesthetics
-- Strong at logos and branded typography
+- Top-tier text rendering quality at this price point — legible headlines, no garbled letters in most cases
+- Auto-revises prompts (returned in `revised_prompt`) so the original brief is preserved
+- Returns base64 — the wrapper handles the Storage upload + public URL handoff
+- Cheaper than DALL-E 3 with comparable quality for marketing collateral
 
 **Ad creative use cases:**
 - Generate ad banners with headline text directly in the image
@@ -112,7 +113,7 @@ Specialized in typography and text rendering within images.
 - Produce multiple design variations with consistent typography
 - Generate promotional materials without needing a designer for each iteration
 
-**Docs:** [Ideogram API](https://developer.ideogram.ai/), [Ideogram](https://ideogram.ai/)
+**Docs:** [OpenAI Images API](https://platform.openai.com/docs/api-reference/images), [gpt-image-1 model](https://platform.openai.com/docs/models/gpt-image-1)
 
 ---
 
@@ -588,7 +589,7 @@ Need video ads?
 └── Both → Use AI gen for hero creative, Remotion for variations
 
 Need image ads?
-├── Need text/headlines in image? → Ideogram
+├── Need text/headlines in image? → GPT Image (gpt-image-1)
 ├── Need product consistency across variations? → Flux (multi-ref)
 ├── Need quick iterations on existing images? → Nano Banana Pro
 ├── Need highest visual quality? → Flux Pro, Midjourney
@@ -601,7 +602,7 @@ Need image ads?
 |----------|------|-----------------|
 | 100 static images | Nano Banana Pro | ~$4-24 |
 | 100 static images | Flux Dev | ~$1-2 |
-| 100 static images | Ideogram API | ~$6 |
+| 100 static images | GPT Image (gpt-image-1) API | ~$6 |
 | 100 × 15-sec videos | Veo 3.1 Fast | ~$225 |
 | 100 × 15-sec videos | Remotion (templated) | ~$0 (self-hosted render) |
 | 10 hero videos + 90 templated | Veo + Remotion | ~$22 + render time |
