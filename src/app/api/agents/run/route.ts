@@ -6,6 +6,7 @@ import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWE
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
 import { capture } from '@/lib/posthog'
+import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -75,6 +76,19 @@ export async function POST(request: Request) {
     const task = sanitizeString(taskRaw, 5000)
     const context = body.context || body.client_brain || {}
     const caller = sanitizeString(body.caller, 20) || 'api'
+
+    // LOTE-C Fix 8b · multi-path client_id resolver · symmetric to /api/agents/run-sdk
+    // (PR #16 · `src/lib/client-id-resolver.ts`). Production n8n workflows send
+    // `client_id` at top-level (NOT nested under `context`), so the legacy
+    // `context.client_id` read fell through to NULL on every invocation.
+    // 36/36 agent_invocations rows landed with client_id=NULL pre-fix.
+    // Resolver chain · first non-empty string wins · null fallback preserves
+    // existing behavior for payloads with no client_id anywhere.
+    const resolvedClientId =
+      resolveClientIdFromBody(body) ??
+      (typeof context.client_id === 'string' && context.client_id.length > 0
+        ? (context.client_id as string)
+        : null)
 
     if (!agentName || !task) {
       return NextResponse.json(
@@ -237,11 +251,11 @@ export async function POST(request: Request) {
     }
 
     // --- Client Brain RAG context (guardrails + semantic search) ---
-    if (context.client_id) {
+    if (resolvedClientId) {
       try {
         const ragQuery = context.rag_query || task  // orchestrator can pass targeted query
         const brainContext = await buildAgentContext({
-          client_id: context.client_id,
+          client_id: resolvedClientId,
           query: ragQuery.substring(0, 500),  // limit query length
           match_count: context.rag_match_count || 5,
         })
@@ -251,7 +265,7 @@ export async function POST(request: Request) {
         }
       } catch (ragError) {
         // RAG failure should not block agent execution
-        console.warn(`Client Brain RAG failed for client ${context.client_id}:`, ragError)
+        console.warn(`Client Brain RAG failed for client ${resolvedClientId}:`, ragError)
         systemParts.push(`\n# Client Brain — Nota: búsqueda semántica no disponible (fallback sin contexto)`)
       }
     }
@@ -288,7 +302,10 @@ export async function POST(request: Request) {
     // This keeps workflow smoke validation cost at $0 while still exercising
     // every HTTP hop, n8n connection graph, and Supabase write in the pipeline.
     const smokeHeader = request.headers.get('x-smoke-test') === '1'
-    const clientId = String((context.client_id ?? body.client_id ?? '') || '')
+    // Smoke detection uses the resolved id so callers that nest client_id under
+    // metadata / client.id / extra.client_id still trigger smoke-mode when their
+    // resolved value starts with the smoke- prefix.
+    const clientId = resolvedClientId ?? ''
     const isSmokeTest =
       smokeHeader ||
       context.smoke_test === true ||
@@ -385,10 +402,10 @@ export async function POST(request: Request) {
     // --- Call Claude API ---
     // Model resolution: context.model_override > registry model > sonnet fallback
     // model_override lets smoke tests force Haiku (4x cheaper) without editing the registry.
-    capture('agent_run_invoked', String(context.client_id || 'system'), {
+    capture('agent_run_invoked', String(resolvedClientId || 'system'), {
       agent_slug: canonicalSlug,
       model: (context.model_override as string) || (agentConfig.model as string) || 'claude-sonnet',
-      client_id: context.client_id || null,
+      client_id: resolvedClientId,
       has_pipeline_id: !!context.pipeline_id,
     })
     const modelKey = (context.model_override as string) || (agentConfig.model as string) || 'claude-sonnet'
@@ -442,7 +459,7 @@ export async function POST(request: Request) {
     const endedAt = new Date()
     const startedAt = new Date(startTime)
 
-    capture('agent_run_completed', String(context.client_id || 'system'), {
+    capture('agent_run_completed', String(resolvedClientId || 'system'), {
       agent_slug: canonicalSlug,
       success: true,
       duration_ms: durationMs,
@@ -463,7 +480,7 @@ export async function POST(request: Request) {
           skills_loaded: loadedSkills.map(s => s.name),
           skills_filtered: !!skillsFilter,
           chain_length: context.chain?.length || 0,
-          client_brain_enabled: !!context.client_id,
+          client_brain_enabled: !!resolvedClientId,
         },
         output: {
           response_length: responseText.length,
@@ -494,7 +511,7 @@ export async function POST(request: Request) {
         task_id: (context.pipeline_id as string | null) || (context.task_id as string | null) || null,
         workflow_id: (context.workflow_id as string | null) || null,
         workflow_execution_id: (context.workflow_execution_id as string | null) || null,
-        client_id: (context.client_id as string | null) || null,
+        client_id: resolvedClientId,
         journey_id: (context.journey_id as string | null) || (context._journey_id as string | null) || null,
         model: modelId,
         started_at: startedAt.toISOString(),
