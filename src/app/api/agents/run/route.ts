@@ -439,6 +439,8 @@ export async function POST(request: Request) {
     const tokensUsed = inputTokens + outputTokens
     const durationMs = Date.now() - startTime
     const costUsd = computeCostUsd(modelId, inputTokens, outputTokens)
+    const endedAt = new Date()
+    const startedAt = new Date(startTime)
 
     capture('agent_run_completed', String(context.client_id || 'system'), {
       agent_slug: canonicalSlug,
@@ -449,7 +451,8 @@ export async function POST(request: Request) {
       cost_usd: costUsd,
     })
 
-    // --- Log execution ---
+    // --- Log execution · dual-write ---
+    // 1. legacy `agents_log` table (kept for backwards-compat · CC#3 can consolidate later)
     try {
       await supabase.from('agents_log').insert({
         agent_name: canonicalSlug,
@@ -475,6 +478,56 @@ export async function POST(request: Request) {
     } catch {
       // Don't fail the request if logging fails
     }
+
+    // 2. canonical `agent_invocations` table (Sprint #4 Fase A · MC /agents/stats + /costs consume this)
+    // Bridge for production traffic: daemon doesn't run in Railway (no claude CLI) so this is the only
+    // path that feeds observability dashboards. Schema reference:
+    // mission-control/mission-control/supabase/migrations/2026051401_create_agent_invocations.sql
+    // Fire-and-forget · request must not fail if observability insert breaks.
+    void supabase
+      .from('agent_invocations')
+      .insert({
+        session_id: (claudeData?.id as string | undefined) || `run-${startTime}-${Math.random().toString(36).slice(2, 8)}`,
+        agent_id: canonicalSlug,
+        agent_name: (agentConfig.display_name as string) || canonicalSlug,
+        command: null,
+        task_id: (context.pipeline_id as string | null) || (context.task_id as string | null) || null,
+        workflow_id: (context.workflow_id as string | null) || null,
+        workflow_execution_id: (context.workflow_execution_id as string | null) || null,
+        client_id: (context.client_id as string | null) || null,
+        journey_id: (context.journey_id as string | null) || (context._journey_id as string | null) || null,
+        model: modelId,
+        started_at: startedAt.toISOString(),
+        ended_at: endedAt.toISOString(),
+        cost_usd: costUsd,
+        tokens_input: inputTokens,
+        tokens_output: outputTokens,
+        tokens_cache_read: (claudeData?.usage?.cache_read_input_tokens as number) || 0,
+        tokens_cache_creation: (claudeData?.usage?.cache_creation_input_tokens as number) || 0,
+        num_turns: 1,
+        status: 'completed',
+        exit_code: 0,
+        error_message: null,
+        metadata: {
+          source: 'api_agents_run',
+          caller,
+          task_text: task.substring(0, 200),
+          skills_loaded: loadedSkills.map(s => s.name).slice(0, 20),
+          response_length: responseText.length,
+          stop_reason: claudeData?.stop_reason || null,
+        },
+      })
+      .then(
+        ({ error }) => {
+          if (error) {
+            // Use console.warn so Vercel logs surface this without failing the request
+            console.warn('[agents-run] agent_invocations insert failed:', error.message)
+          }
+        },
+        (err: unknown) => {
+          console.warn('[agents-run] agent_invocations insert exception:', err instanceof Error ? err.message : String(err))
+        },
+      )
 
     // Base response — may be augmented by dual reviewer middleware below
     const baseResponse = {
