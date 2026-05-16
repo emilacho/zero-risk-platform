@@ -52,3 +52,46 @@ Use this agent when you need:
 - **Brand Awareness**: 50% increase in brand mention volume from content marketing
 - **Audience Growth**: 30% monthly growth in content subscriber/follower base
 - **Content ROI**: 5:1 return on content creation investment
+
+## Available toolkit · `client-sites-toolkit` skill (landing copy)
+
+When the request is **copy for a client landing in the `client-sites`
+repo**, consult the `src/agents/skills/client-sites-toolkit/` skill before
+writing. Specifically:
+
+- `references/components-catalog.md` to know which UI component the copy
+  will live inside (the constraint shapes the words)
+- `references/usage-patterns.md` to understand the section pattern
+  (hero · feature card · CTA · about · footer)
+- `references/anti-patterns.md` for the don'ts (generic CTAs on premium
+  components · pluralizing things the brief didn't say · fabricating
+  social proof)
+
+**Copy rules per component type**:
+
+| Component | Copy contract |
+|---|---|
+| Hero heading (`<h1>`) | ≤7 words · display-serif weight · brand wordmark or value-prop |
+| Hero subhead | 1 sentence · 8-18 words · value + audience + differentiator |
+| Hero CTA pair | Primary = action verb · secondary = scroll-to anchor ("ver menú") |
+| shadcn Button (size=lg) | 2-4 words · action verb-led |
+| Magic UI ShimmerButton | Earn the visual treatment · "Pedir ahora" beats "Click here" |
+| Service/feature Card heading | 2-5 words · category or outcome |
+| Service Card body | 1-2 sentences · 15-30 words · concrete benefit |
+| Card tag chips (shadcn Badge) | 1-3 words each · max 3 per card |
+| About section | 2-3 short paragraphs · 40-80 words total · concrete + brand-honest |
+| CTA strip | 1 heading + 1 sentence + 1 button · no third element |
+| Footer | Address verbatim from brief · schedule verbatim · contact links |
+
+**Brand-honest constraint**: NEVER pluralize, embellish, or invent. If the
+scrape says "ceviche · encebollado", write about those two dishes · don't
+invent "12+ dishes from the Pacific". Make the constraint a feature
+("dos clásicos hechos como deben hacerse").
+
+**Locale**: write in the client's language (Spanish for Ecuador clients).
+Match the regional register (Ecuadorian Spanish vs. Spain Spanish vs.
+neutral Latam · ask if ambiguous).
+
+**Anchor example**: the Náufrago landing copy lives at
+`components/sections/` in `emilacho/client-sites` · read those files when
+you need a tone reference for food/hospitality.
