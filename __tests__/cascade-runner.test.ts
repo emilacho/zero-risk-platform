@@ -66,9 +66,10 @@ describe("runCascade · Gap 3", () => {
       "creative-director",
       "web-designer",
       "content-creator",
+      "spell-check-corrector",
       "editor-en-jefe",
     ])
-    expect(result.agents).toHaveLength(6)
+    expect(result.agents).toHaveLength(7)
     expect(result.ok).toBe(true)
   })
 
@@ -211,7 +212,7 @@ describe("runCascade · Gap 3", () => {
     })
 
     expect(result.ok).toBe(false)
-    expect(result.agents).toHaveLength(6) // still ran all 6
+    expect(result.agents).toHaveLength(7) // still ran all 7 (6 + spell-check)
     const creative = result.agents.find((a) => a.slug === "creative-director")
     expect(creative?.status).toBe("failed")
     expect(creative?.error).toBe("simulated_creative_fail")
@@ -233,6 +234,86 @@ describe("runCascade · Gap 3", () => {
       internalApiKey: "test-key",
       fetchImpl,
     })
-    expect(result.total_cost_usd).toBeCloseTo(0.3, 6) // 6 × 0.05
+    expect(result.total_cost_usd).toBeCloseTo(0.35, 6) // 7 × 0.05 (Gap 2 added spell-check stage)
+  })
+
+  // Gap 2 (2026-05-16) · spell-check-corrector inserted between content-creator
+  // and editor-en-jefe. Editor-en-jefe should receive spellcheck output as
+  // additional context block (per cascade-runner buildTask "editor-en-jefe" case).
+  it("spell-check-corrector runs between content-creator and editor-en-jefe", async () => {
+    const calls: string[] = []
+    const tasksByAgent: Record<string, string> = {}
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { agent: string; task: string }
+      calls.push(body.agent)
+      tasksByAgent[body.agent] = body.task
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          response: `{"agent_called":"${body.agent}"}`,
+          cost_usd: 0.005,
+          model: body.agent === "spell-check-corrector" ? "claude-haiku-4-5" : "claude-sonnet-4-6",
+        }),
+      } as Response
+    }) as unknown as typeof fetch
+
+    const result = await runCascade(baseReq, {
+      baseUrl: "http://localhost",
+      internalApiKey: "test-key",
+      fetchImpl,
+    })
+
+    // Order assertion · spell-check sits between content and editor
+    const contentIdx = calls.indexOf("content-creator")
+    const spellIdx = calls.indexOf("spell-check-corrector")
+    const editorIdx = calls.indexOf("editor-en-jefe")
+    expect(contentIdx).toBeGreaterThanOrEqual(0)
+    expect(spellIdx).toBe(contentIdx + 1)
+    expect(editorIdx).toBe(spellIdx + 1)
+
+    // spell-check receives content output (contextBlock pretty-prints with 2-space indent)
+    expect(tasksByAgent["spell-check-corrector"]).toContain("[content agent output]")
+    expect(tasksByAgent["spell-check-corrector"]).toContain('"content-creator"')
+
+    // editor-en-jefe receives spellcheck output as new context block
+    expect(tasksByAgent["editor-en-jefe"]).toContain("[spellcheck agent output]")
+    expect(tasksByAgent["editor-en-jefe"]).toContain('"spell-check-corrector"')
+
+    // spell-check entry exists in result.agents
+    const spell = result.agents.find((a) => a.slug === "spell-check-corrector")
+    expect(spell?.status).toBe("completed")
+    expect(spell?.model).toBe("claude-haiku-4-5")
+  })
+
+  // Gap 2 · editor-en-jefe prompt explicitly de-prioritizes typo review
+  // since spell-check already ran upstream.
+  it("editor-en-jefe task instruction reflects post-spell-check semantic focus", async () => {
+    let editorTask = ""
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { agent: string; task: string }
+      if (body.agent === "editor-en-jefe") editorTask = body.task
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          response: '{"ok":true}',
+          cost_usd: 0.01,
+          model: "claude-sonnet-4-6",
+        }),
+      } as Response
+    }) as unknown as typeof fetch
+
+    await runCascade(baseReq, {
+      baseUrl: "http://localhost",
+      internalApiKey: "test-key",
+      fetchImpl,
+    })
+
+    expect(editorTask).toContain("Spell-check has already passed")
+    expect(editorTask).toContain("semantic")
+    expect(editorTask).toContain("[spellcheck agent output]")
   })
 })
