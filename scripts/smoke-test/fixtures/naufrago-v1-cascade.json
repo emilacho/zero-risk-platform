@@ -1,0 +1,55 @@
+{
+  "cascade_id": "naufrago-v1-smoke-2026-05-16",
+  "client_id": "d69100b5-8ad7-4bb0-908c-68b5544065dc",
+  "client_name": "Náufrago (piloto · onboarding e2e v2)",
+  "delivery_context": {
+    "surfaces": ["web", "email", "paid", "organic-social"],
+    "locale": "es-EC",
+    "currency": "USD",
+    "device_mix": "mobile-first"
+  },
+  "brand_voice_summary": "directo · empático · técnicamente sólido sin jerga · siempre orientado a próximo paso accionable · evita anglicismos innecesarios",
+  "outputs": [
+    {
+      "agent": "content-creator",
+      "surface": "blog",
+      "language": "es",
+      "body": "## ¿Por qué tu auditoría de riesgo industrial no está cumpliendo?\n\nLa mayoría de las consultorías de seguridad industrial en Ecuador entregan PDFs de 80 páginas que nadie lee. Le decimos consultoría tradicional. El resultado es predecible: el cliente firma el informe, lo archiva, y seis meses después el ministerio aparece con una multa que la auditoría ya había advertido.\n\nEn Zero Risk hacemos algo distinto. Cada diagnóstico que entregamos viene con tres entregables vivos: un dashboard de cumplimiento, una hoja de ruta priorizada por impacto regulatorio, y un canal directo con el equipo técnico durante 90 días. Eso es lo que llamamos diagnóstico operativo, no consultoría.\n\nAgendá tu diagnóstico esta semana."
+    },
+    {
+      "agent": "email-marketer",
+      "surface": "email",
+      "language": "es",
+      "body": "Asunto: Tu consultoría de seguridad probablemente está obsoleta\n\nHola {{first_name}},\n\nMirá: el 73% de las empresas industriales en Ecuador que tienen su consultoría de seguridad al día reciben multas dentro del año siguiente.\n\nNo es porque la consultoría sea mala. Es porque está diseñada para entregarse, no para implementarse.\n\nEn Zero Risk hacemos diagnósticos operativos · entregables vivos · seguimiento técnico de 90 días.\n\n¿Tenés 15 minutos esta semana?\n\nReservá acá: {{cta_url}}"
+    },
+    {
+      "agent": "media-buyer",
+      "surface": "ad-meta-primary",
+      "language": "es",
+      "body": "El ministerio te va a multar. La consultoría que ya pagaste no te va a salvar.\n\nNoventa días de seguimiento técnico · dashboard de cumplimiento en tiempo real · diagnóstico priorizado por impacto regulatorio.\n\nZero Risk · diagnóstico operativo, no PDF muerto.\n\nClick here →"
+    },
+    {
+      "agent": "web-designer",
+      "surface": "landing-hero",
+      "language": "es",
+      "body": "## Section 1 · Hero\nComponent: Aceternity Spotlight + Magic UI BlurFade + shadcn Button size=lg\nCopy slots:\n  H1: \"Tu consultoría de seguridad no te va a salvar de la multa\"\n  Subhead: \"Diagnóstico operativo con seguimiento técnico de 90 días para empresas industriales en Ecuador.\"\n  Primary CTA label: \"Agendá tu diagnóstico\"\n  Secondary CTA label: \"Descubrí más\"\nImage slots: none · Spotlight es el tratamiento de fondo\nTheme tokens: --primary (CTA), --background (Spotlight)\nMobile breakpoints: 1-col centered en todos los tamaños · H1 4xl/sm:6xl/md:8xl\nLCP priority: heading must render in first paint"
+    },
+    {
+      "agent": "social-media-strategist",
+      "surface": "instagram-caption",
+      "language": "es",
+      "body": "Bro, tu consultoría de seguridad industrial es un PDF de 80 páginas que nadie va a leer 💀\n\nEn Zero Risk te entregamos algo que sí podés usar: dashboard de cumplimiento, hoja de ruta priorizada, y 90 días de soporte técnico real.\n\nDM o link en bio para reservar tu sesión 👇\n\n#SeguridadIndustrial #Ecuador #ZeroRisk #ConsultoríaInteligente"
+    }
+  ],
+  "camino_iii_verdict": {
+    "status": "approved",
+    "severity": "low",
+    "reviewer_count": 3,
+    "reviewers": {
+      "editor": { "status": "approved", "severity": "low" },
+      "brand_strategist": { "status": "approved", "severity": "low" },
+      "client_success_lead": { "status": "approved", "severity": "low" }
+    },
+    "notes": "Camino III approved each output individually. This fixture is intentionally seeded with cross-output drift (vocabulary: consultoría/diagnóstico/sesión · POV: tú/vos/usted · CTA verb family: Agendá/Reservá/Click here · register: blog formal-warm vs Instagram slang/emojis) that ONLY a cross-output reviewer should catch."
+  }
+}

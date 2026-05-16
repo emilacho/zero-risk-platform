@@ -41,6 +41,13 @@ describe('resolveAgentSlug', () => {
     expect(resolveAgentSlug('jefe-marketing')).toBe('jefe-marketing')
     expect(resolveAgentSlug('this-is-not-a-slug')).toBe('this-is-not-a-slug')
   })
+  it('passes Gaps 4+5 cascade reviewer slugs through unchanged (no alias needed)', () => {
+    // Project-local extensions skip the alias map: the canonical kebab-case
+    // form IS what gets stored in `agents.name`, and n8n / workflows that
+    // need to invoke them must use the kebab form directly.
+    expect(resolveAgentSlug('style-consistency-reviewer')).toBe('style-consistency-reviewer')
+    expect(resolveAgentSlug('delivery-coordinator')).toBe('delivery-coordinator')
+  })
   it('handles empty string by returning empty string', () => {
     expect(resolveAgentSlug('')).toBe('')
   })
@@ -52,6 +59,16 @@ describe('isCanonicalSlug', () => {
     expect(isCanonicalSlug('jefe-marketing')).toBe(true)
     expect(isCanonicalSlug('content-creator')).toBe(true)
     expect(isCanonicalSlug('competitive-intelligence-agent')).toBe(true)
+  })
+  it('returns false for project-local Gaps 4+5 cascade reviewers (intentionally OUT of MANIFEST-31)', () => {
+    // The cascade reviewers are project-local extensions seeded by
+    // 202605161900_seed_style_consistency_reviewer_and_delivery_coordinator.sql.
+    // They live in the `agents` table directly · not in the canonical
+    // MANIFEST-31 set. Runtime resolution via agent-sdk-runner queries
+    // `agents.name` directly, so MANIFEST membership is not required for
+    // these slugs to invoke correctly.
+    expect(isCanonicalSlug('style-consistency-reviewer')).toBe(false)
+    expect(isCanonicalSlug('delivery-coordinator')).toBe(false)
   })
   it('returns false for snake_case (must resolve first)', () => {
     expect(isCanonicalSlug('content_creator')).toBe(false)
