@@ -37,7 +37,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"name\": \"{{ $json.client_name }}\",\n  \"slug\": \"{{ $json.slug }}\",\n  \"industry\": \"{{ $json.industry }}\",\n  \"country\": \"{{ $json.country }}\",\n  \"logo_url\": {{ $json.brand_assets.logo_url ? JSON.stringify($json.brand_assets.logo_url) : 'null' }},\n  \"brand_colors\": {{ JSON.stringify($json.brand_assets.colors) }},\n  \"brand_fonts\": {{ JSON.stringify($json.brand_assets.fonts) }}\n}",
+        "jsonBody": "={{ ({ name: $node['Validate Payload'].json.client_name, slug: $node['Validate Payload'].json.slug, industry: $node['Validate Payload'].json.industry, country: $node['Validate Payload'].json.country, logo_url: ($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.logo_url) || null, brand_colors: ($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.colors) || null, brand_fonts: ($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.fonts) || null }) }}",
         "options": { "timeout": 30000 }
       },
       "id": "persist-client",
@@ -49,9 +49,9 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose", "version": 1 },
           "conditions": [
-            { "id": "ig", "leftValue": "={{ $node['validate'].json.instagram_handle }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }
+            { "id": "ig", "leftValue": "={{ $node['Validate Payload'].json.instagram_handle }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }
           ],
           "combinator": "and"
         }
@@ -70,7 +70,7 @@
         "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={ \"usernames\": [\"{{ $node['validate'].json.instagram_handle }}\"], \"resultsLimit\": 12 }",
+        "jsonBody": "={{ ({ usernames: [$node['Validate Payload'].json.instagram_handle], resultsLimit: 12 }) }}",
         "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
       },
       "id": "apify-scrape",
@@ -93,8 +93,8 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"brand-strategist\",\n  \"task\": \"Cliente · {{ $node['validate'].json.client_name }} (slug={{ $node['validate'].json.slug }}, industry={{ $node['validate'].json.industry }}, location={{ $node['validate'].json.location }}).\\nDiferenciador · {{ $node['validate'].json.diferenciador }}.\\nProducts · {{ $node['validate'].json.products }}.\\nBrand assets uploaded · respect VERBATIM · logo {{ $node['persist-client'].json.logo_url || $node['validate'].json.brand_assets.logo_url }} · colors {{ JSON.stringify($node['validate'].json.brand_assets.colors) }} · fonts {{ JSON.stringify($node['validate'].json.brand_assets.fonts) }}.\\nScrape summary · {{ $node['validate'].json.scrape_summary }}.\\nTask · build brand book. Return strict JSON with keys: positioning_statement, brand_voice, values (array), tagline_options (array), target_audience_summary, do_say (array), dont_say (array). No prose outside the JSON.\",\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"caller\": \"n8n-cliente-nuevo-landing-cascade-master\"\n}",
-        "options": { "timeout": 180000 }
+        "jsonBody": "={{ ({ agent: 'brand-strategist', task: 'Cliente: ' + $node['Validate Payload'].json.client_name + ' (industry=' + $node['Validate Payload'].json.industry + ', location=' + ($node['Validate Payload'].json.location || 'n/a') + '). Diferenciador: ' + ($node['Validate Payload'].json.diferenciador || 'n/a') + '. Products: ' + ($node['Validate Payload'].json.products || 'n/a') + '. Brand assets · USE VERBATIM. Logo: ' + (($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.logo_url) || 'none') + '. Brand colors HEX: ' + (($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.colors) || []).join(', ') + '. Brand fonts: ' + (($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.fonts) || []).join(', ') + '. Scrape: ' + ($node['Validate Payload'].json.scrape_summary || 'none').substring(0, 600) + '. Task: brand book. Return strict JSON keys positioning_statement, brand_voice, values, tagline_options, target_audience_summary, do_say, dont_say. No prose outside JSON.', client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, caller: 'n8n-cliente-nuevo-landing-cascade-master' }) }}",
+        "options": { "timeout": 300000 }
       },
       "id": "agent-brand-strategist",
       "name": "Agent · brand-strategist",
@@ -115,8 +115,8 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"market_research_analyst\",\n  \"task\": \"Cliente · {{ $node['validate'].json.client_name }} (industry={{ $node['validate'].json.industry }}, country={{ $node['validate'].json.country }}, location={{ $node['validate'].json.location }}).\\n\\n[brand agent output]\\n{{ JSON.stringify($node['agent-brand-strategist'].json.response || $node['agent-brand-strategist'].json.output || '') }}\\n\\nTask · surface 2-4 priority personas. Return strict JSON with key personas (array of {name, age_range, demographics, pain_points, decision_criteria, preferred_channels, trigger_to_order}). No prose outside the JSON.\",\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"caller\": \"n8n-cliente-nuevo-landing-cascade-master\"\n}",
-        "options": { "timeout": 180000 }
+        "jsonBody": "={{ ({ agent: 'market_research_analyst', task: 'Cliente: ' + $node['Validate Payload'].json.client_name + ' (' + $node['Validate Payload'].json.industry + ', ' + ($node['Validate Payload'].json.country || '') + ', ' + ($node['Validate Payload'].json.location || '') + '). [brand] ' + (($node['Agent · brand-strategist'].json && $node['Agent · brand-strategist'].json.response) || '').substring(0, 2500) + '. Task: 2-4 priority personas. Return strict JSON key personas array of {name, age_range, demographics, pain_points, decision_criteria, preferred_channels, trigger_to_order}. No prose outside JSON.', client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, caller: 'n8n-cliente-nuevo-landing-cascade-master' }) }}",
+        "options": { "timeout": 300000 }
       },
       "id": "agent-market-research",
       "name": "Agent · market_research_analyst",
@@ -137,8 +137,8 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"creative-director\",\n  \"task\": \"Cliente · {{ $node['validate'].json.client_name }}.\\nBrand assets uploaded by cliente · USE THESE VERBATIM · do NOT generate a different palette · logo {{ $node['validate'].json.brand_assets.logo_url }} · colors {{ JSON.stringify($node['validate'].json.brand_assets.colors) }} · fonts {{ JSON.stringify($node['validate'].json.brand_assets.fonts) }}.\\n\\n[brand agent output]\\n{{ JSON.stringify($node['agent-brand-strategist'].json.response || '') }}\\n\\n[research agent output]\\n{{ JSON.stringify($node['agent-market-research'].json.response || '') }}\\n\\nTask · visual direction. Return strict JSON with keys: palette_top5 (array of {hex, name}), imagery_style, mood, hero_image_prompt, visual_direction_summary. If the cliente uploaded brand_colors, palette_top5 MUST start with those exact hex codes. No prose outside the JSON.\",\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"caller\": \"n8n-cliente-nuevo-landing-cascade-master\"\n}",
-        "options": { "timeout": 180000 }
+        "jsonBody": "={{ ({ agent: 'creative-director', task: 'Cliente: ' + $node['Validate Payload'].json.client_name + '. Brand assets USE VERBATIM. Logo: ' + (($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.logo_url) || 'none') + '. Colors HEX (palette_top5 MUST start with these): ' + (($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.colors) || []).join(', ') + '. Fonts: ' + (($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.fonts) || []).join(', ') + '. [brand] ' + (($node['Agent · brand-strategist'].json && $node['Agent · brand-strategist'].json.response) || '').substring(0, 1500) + '. [research] ' + (($node['Agent · market_research_analyst'].json && $node['Agent · market_research_analyst'].json.response) || '').substring(0, 1500) + '. Task: visual direction. Return strict JSON keys palette_top5 (array {hex, name}), imagery_style, mood, hero_image_prompt, visual_direction_summary. No prose outside JSON.', client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, caller: 'n8n-cliente-nuevo-landing-cascade-master' }) }}",
+        "options": { "timeout": 300000 }
       },
       "id": "agent-creative-director",
       "name": "Agent · creative-director",
@@ -149,24 +149,6 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/images/generate",
-        "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"prompt\": \"Hero image for {{ $node['validate'].json.client_name }} ({{ $node['validate'].json.industry }}). Use brand palette {{ JSON.stringify($node['validate'].json.brand_assets.colors) }} verbatim. Style guidance from creative-director output: {{ $node['agent-creative-director'].json.response }}\",\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"size\": \"1024x1024\",\n  \"caller\": \"n8n-cliente-nuevo-landing-cascade-master\"\n}",
-        "options": { "timeout": 120000, "response": { "response": { "neverError": true } } }
-      },
-      "id": "hero-gen",
-      "name": "Hero · GPT Image",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2240, 300],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "method": "POST",
         "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
         "sendHeaders": true,
         "headerParameters": {
@@ -177,14 +159,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"web-designer\",\n  \"task\": \"Cliente · {{ $node['validate'].json.client_name }}.\\n\\n[brand]\\n{{ JSON.stringify($node['agent-brand-strategist'].json.response || '') }}\\n\\n[research]\\n{{ JSON.stringify($node['agent-market-research'].json.response || '') }}\\n\\n[creative]\\n{{ JSON.stringify($node['agent-creative-director'].json.response || '') }}\\n\\nTask · section architecture. Return strict JSON with keys: sections (array of {name, purpose, primary_cta, content_blocks}), navigation (array), primary_cta_global, performance_priorities (array). Reference the client-sites-toolkit skill component catalog when naming components. No prose outside the JSON.\",\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"caller\": \"n8n-cliente-nuevo-landing-cascade-master\"\n}",
-        "options": { "timeout": 180000 }
+        "jsonBody": "={{ ({ agent: 'web-designer', task: 'Cliente: ' + $node['Validate Payload'].json.client_name + '. [brand] ' + (($node['Agent · brand-strategist'].json && $node['Agent · brand-strategist'].json.response) || '').substring(0, 1200) + '. [research] ' + (($node['Agent · market_research_analyst'].json && $node['Agent · market_research_analyst'].json.response) || '').substring(0, 1200) + '. [creative] ' + (($node['Agent · creative-director'].json && $node['Agent · creative-director'].json.response) || '').substring(0, 1500) + '. Task: section architecture. Return strict JSON keys sections (array {name, purpose, primary_cta, content_blocks}), navigation, primary_cta_global, performance_priorities. Reference client-sites-toolkit. No prose outside JSON.', client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, caller: 'n8n-cliente-nuevo-landing-cascade-master' }) }}",
+        "options": { "timeout": 300000 }
       },
       "id": "agent-web-designer",
       "name": "Agent · web-designer",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2240, 500]
+      "position": [2240, 400]
     },
     {
       "parameters": {
@@ -199,14 +181,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"content-creator\",\n  \"task\": \"Cliente · {{ $node['validate'].json.client_name }} ({{ $node['validate'].json.industry }}). WhatsApp {{ $node['validate'].json.whatsapp }}.\\n\\n[brand]\\n{{ JSON.stringify($node['agent-brand-strategist'].json.response || '') }}\\n\\n[research]\\n{{ JSON.stringify($node['agent-market-research'].json.response || '') }}\\n\\n[creative]\\n{{ JSON.stringify($node['agent-creative-director'].json.response || '') }}\\n\\n[web]\\n{{ JSON.stringify($node['agent-web-designer'].json.response || '') }}\\n\\nTask · write all UI strings. Return strict JSON with keys: hero {headline, subheadline, cta_text}, menu {section_title, items (array)}, about {title, body}, contact {title, whatsapp_cta, hours_label}, footer. No prose outside the JSON.\",\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"caller\": \"n8n-cliente-nuevo-landing-cascade-master\"\n}",
-        "options": { "timeout": 180000 }
+        "jsonBody": "={{ ({ agent: 'content-creator', task: 'Cliente: ' + $node['Validate Payload'].json.client_name + ' (' + $node['Validate Payload'].json.industry + ') WhatsApp ' + ($node['Validate Payload'].json.whatsapp || 'n/a') + '. [brand] ' + (($node['Agent · brand-strategist'].json && $node['Agent · brand-strategist'].json.response) || '').substring(0, 1000) + '. [research] ' + (($node['Agent · market_research_analyst'].json && $node['Agent · market_research_analyst'].json.response) || '').substring(0, 1000) + '. [creative] ' + (($node['Agent · creative-director'].json && $node['Agent · creative-director'].json.response) || '').substring(0, 1200) + '. [web] ' + (($node['Agent · web-designer'].json && $node['Agent · web-designer'].json.response) || '').substring(0, 1200) + '. Task: write all UI strings. Return strict JSON keys hero {headline, subheadline, cta_text}, menu {section_title, items}, about {title, body}, contact {title, whatsapp_cta, hours_label}, footer. No prose outside JSON.', client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, caller: 'n8n-cliente-nuevo-landing-cascade-master' }) }}",
+        "options": { "timeout": 300000 }
       },
       "id": "agent-content-creator",
       "name": "Agent · content-creator (marketing)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2500, 500]
+      "position": [2500, 400]
     },
     {
       "parameters": {
@@ -221,14 +203,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"spell-check-corrector\",\n  \"task\": \"Cliente · {{ $node['validate'].json.client_name }}.\\n\\n[content agent output]\\n{{ JSON.stringify($node['agent-content-creator'].json.response || '') }}\\n\\nTask · orthographic + grammar pass. Auto-apply ONLY high-confidence fixes. Flag medium/low confidence for editor review. Return strict JSON with keys: corrections (array), corrected_copy (full copy object with high-confidence fixes), flagged_for_review (array), language_detected (es|en|mixed), summary. No prose outside the JSON.\",\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"caller\": \"n8n-cliente-nuevo-landing-cascade-master\"\n}",
-        "options": { "timeout": 120000 }
+        "jsonBody": "={{ ({ agent: 'spell-check-corrector', task: 'Cliente: ' + $node['Validate Payload'].json.client_name + '. [content] ' + (($node['Agent · content-creator (marketing)'].json && $node['Agent · content-creator (marketing)'].json.response) || '').substring(0, 3000) + '. Task: orthographic + grammar pass. Auto-apply ONLY high-confidence fixes. Return strict JSON keys corrections (array), corrected_copy, flagged_for_review (array), language_detected (es|en|mixed), summary. No prose outside JSON.', client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, caller: 'n8n-cliente-nuevo-landing-cascade-master' }) }}",
+        "options": { "timeout": 300000 }
       },
       "id": "agent-spell-check",
       "name": "Agent · spell-check-corrector (Haiku)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2760, 500]
+      "position": [2760, 400]
     },
     {
       "parameters": {
@@ -243,14 +225,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"task\": \"Cliente · {{ $node['validate'].json.client_name }}. FINAL QA across all upstream agent outputs · spell-check has already passed · focus on semantic + brand + strategic review.\\n\\n[brand]\\n{{ JSON.stringify($node['agent-brand-strategist'].json.response || '') }}\\n\\n[research]\\n{{ JSON.stringify($node['agent-market-research'].json.response || '') }}\\n\\n[creative]\\n{{ JSON.stringify($node['agent-creative-director'].json.response || '') }}\\n\\n[web]\\n{{ JSON.stringify($node['agent-web-designer'].json.response || '') }}\\n\\n[content]\\n{{ JSON.stringify($node['agent-content-creator'].json.response || '') }}\\n\\n[spellcheck]\\n{{ JSON.stringify($node['agent-spell-check'].json.response || '') }}\\n\\nTask · final QA. Return strict JSON with keys: verdict (approved|revision_needed|escalated), severity (low|medium|high|critical), strengths (array), concerns (array), recommended_fixes (array). No prose outside the JSON. Camino III auto-fires inside /api/agents/run.\",\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"caller\": \"n8n-cliente-nuevo-landing-cascade-master\"\n}",
-        "options": { "timeout": 240000 }
+        "jsonBody": "={{ ({ agent: 'editor-en-jefe', task: 'Cliente: ' + $node['Validate Payload'].json.client_name + '. FINAL QA. [brand] ' + (($node['Agent · brand-strategist'].json && $node['Agent · brand-strategist'].json.response) || '').substring(0, 700) + '. [research] ' + (($node['Agent · market_research_analyst'].json && $node['Agent · market_research_analyst'].json.response) || '').substring(0, 700) + '. [creative] ' + (($node['Agent · creative-director'].json && $node['Agent · creative-director'].json.response) || '').substring(0, 700) + '. [web] ' + (($node['Agent · web-designer'].json && $node['Agent · web-designer'].json.response) || '').substring(0, 700) + '. [content] ' + (($node['Agent · content-creator (marketing)'].json && $node['Agent · content-creator (marketing)'].json.response) || '').substring(0, 1000) + '. [spellcheck] ' + (($node['Agent · spell-check-corrector (Haiku)'].json && $node['Agent · spell-check-corrector (Haiku)'].json.response) || '').substring(0, 800) + '. Task: final QA semantic + brand + strategic review (spell-check has already passed). Return strict JSON with keys verdict (approved|revision_needed|escalated), severity (low|medium|high|critical), strengths (array), concerns (array), recommended_fixes (array). No prose outside the JSON. Camino III auto-fires inside /api/agents/run.', client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, caller: 'n8n-cliente-nuevo-landing-cascade-master' }) }}",
+        "options": { "timeout": 300000 }
       },
       "id": "agent-editor-jefe",
       "name": "Agent · editor-en-jefe (Camino III)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3020, 500]
+      "position": [3020, 400]
     },
     {
       "parameters": {
@@ -265,15 +247,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"style-consistency-reviewer\",\n  \"task\": \"Cliente · {{ $node['validate'].json.client_name }}. Cross-output coherence audit across the full cascade.\\n\\n[all outputs · brand/research/creative/web/content]\\n{{ JSON.stringify({ brand: $node['agent-brand-strategist'].json.response, research: $node['agent-market-research'].json.response, creative: $node['agent-creative-director'].json.response, web: $node['agent-web-designer'].json.response, content: $node['agent-content-creator'].json.response }) }}\\n\\nTask · score 4 axes (tone_alignment, vocabulary_harmony, voice_fidelity, pov_consistency). Return strict JSON with keys: axis_scores {tone_alignment, vocabulary_harmony, voice_fidelity, pov_consistency} (each 0-100), drift_findings (array), overall_score (0-100), recommended_action (approve|minor_fixes|major_revision). No prose outside the JSON.\",\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"caller\": \"n8n-cliente-nuevo-landing-cascade-master\"\n}",
-        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+        "jsonBody": "={{ ({ agent: 'style-consistency-reviewer', task: 'Cliente: ' + $node['Validate Payload'].json.client_name + '. Cross-output coherence audit. [brand] ' + (($node['Agent · brand-strategist'].json && $node['Agent · brand-strategist'].json.response) || '').substring(0, 800) + '. [research] ' + (($node['Agent · market_research_analyst'].json && $node['Agent · market_research_analyst'].json.response) || '').substring(0, 800) + '. [creative] ' + (($node['Agent · creative-director'].json && $node['Agent · creative-director'].json.response) || '').substring(0, 800) + '. [web] ' + (($node['Agent · web-designer'].json && $node['Agent · web-designer'].json.response) || '').substring(0, 800) + '. [content] ' + (($node['Agent · content-creator (marketing)'].json && $node['Agent · content-creator (marketing)'].json.response) || '').substring(0, 1000) + '. Task: score 4 axes (tone_alignment, vocabulary_harmony, voice_fidelity, pov_consistency) each 0-100. Return strict JSON with keys axis_scores, drift_findings (array), overall_score (0-100), recommended_action (approve|minor_fixes|major_revision). No prose outside the JSON.', client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, caller: 'n8n-cliente-nuevo-landing-cascade-master' }) }}",
+        "options": { "timeout": 300000 }
       },
       "id": "agent-style-reviewer",
       "name": "Agent · style-consistency-reviewer (Gap 4)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3280, 500],
-      "continueOnFail": true
+      "position": [3280, 400]
     },
     {
       "parameters": {
@@ -288,14 +269,31 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"delivery-coordinator\",\n  \"task\": \"Cliente · {{ $node['validate'].json.client_name }}. Final shippability gate · 7-check audit before ensamblaje.\\n\\n[editor verdict]\\n{{ JSON.stringify($node['agent-editor-jefe'].json.response || '') }}\\n\\n[style review]\\n{{ JSON.stringify($node['agent-style-reviewer'].json.response || '') }}\\n\\n[all outputs]\\n{{ JSON.stringify({ brand: $node['agent-brand-strategist'].json.response, research: $node['agent-market-research'].json.response, creative: $node['agent-creative-director'].json.response, web: $node['agent-web-designer'].json.response, content: $node['agent-content-creator'].json.response, spellcheck: $node['agent-spell-check'].json.response }) }}\\n\\nTask · 7-check audit (brand_guardrails, copy_consistency, visual_harmony, cta_clarity, mobile_intent, accessibility_floor, locale_sanity). Return strict JSON with keys: checks (object of 7 booleans + per-check notes), overall_status (ship|return_to_producer|escalate_to_hitl), blockers (array), recommendations (array). No prose outside the JSON.\",\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"caller\": \"n8n-cliente-nuevo-landing-cascade-master\"\n}",
-        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+        "jsonBody": "={{ ({ agent: 'delivery-coordinator', task: 'Cliente: ' + $node['Validate Payload'].json.client_name + '. Final shippability gate. [editor] ' + (($node['Agent · editor-en-jefe (Camino III)'].json && $node['Agent · editor-en-jefe (Camino III)'].json.response) || '').substring(0, 2000) + '. [style] ' + (($node['Agent · style-consistency-reviewer (Gap 4)'].json && $node['Agent · style-consistency-reviewer (Gap 4)'].json.response) || '').substring(0, 2000) + '. Task: 7-check audit (brand_guardrails, copy_consistency, visual_harmony, cta_clarity, mobile_intent, accessibility_floor, locale_sanity). Return strict JSON with keys checks (object of 7 booleans + per-check notes), overall_status (ship|return_to_producer|escalate_to_hitl), blockers (array), recommendations (array). No prose outside the JSON.', client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, caller: 'n8n-cliente-nuevo-landing-cascade-master' }) }}",
+        "options": { "timeout": 300000 }
       },
       "id": "agent-delivery-coord",
       "name": "Agent · delivery-coordinator (Gap 5)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3540, 500],
+      "position": [3540, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/images/generate",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (function() { let prompt = 'Hero landing image for ' + $node['Validate Payload'].json.client_name + ' (' + $node['Validate Payload'].json.industry + '). Brand colors HEX (use these): ' + (($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.colors) || []).join(', ') + '. Style guidance from creative-director: ' + (($node['Agent · creative-director'].json && $node['Agent · creative-director'].json.response) || '').substring(0, 1500); try { const c = JSON.parse((($node['Agent · creative-director'].json && $node['Agent · creative-director'].json.response) || '{}').replace(/^```json\\s*/, '').replace(/```\\s*$/, '')); if (c && c.hero_image_prompt) { prompt = c.hero_image_prompt + ' Brand colors HEX (use these palette): ' + (($node['Validate Payload'].json.brand_assets && $node['Validate Payload'].json.brand_assets.colors) || []).join(', '); } } catch (e) {} return { prompt: prompt, client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, agent_slug: 'creative-director', size: '1024x1024', caller: 'n8n-cliente-nuevo-landing-cascade-master' }; })() }}",
+        "options": { "timeout": 120000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "hero-gen",
+      "name": "Hero · GPT Image (post-delivery)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3800, 400],
       "continueOnFail": true
     },
     {
@@ -311,14 +309,37 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"client_id\": \"{{ $node['persist-client'].json.id || $node['persist-client'].json.client_id }}\",\n  \"slug\": \"{{ $node['validate'].json.slug }}\",\n  \"version\": \"v2\",\n  \"task_id\": \"{{ $node['validate'].json.task_id }}\",\n  \"outputs\": {\n    \"brand\": {{ JSON.stringify($node['agent-brand-strategist'].json) }},\n    \"research\": {{ JSON.stringify($node['agent-market-research'].json) }},\n    \"creative\": {{ JSON.stringify($node['agent-creative-director'].json) }},\n    \"web\": {{ JSON.stringify($node['agent-web-designer'].json) }},\n    \"content\": {{ JSON.stringify($node['agent-content-creator'].json) }},\n    \"spellcheck\": {{ JSON.stringify($node['agent-spell-check'].json) }},\n    \"editor\": {{ JSON.stringify($node['agent-editor-jefe'].json) }},\n    \"style\": {{ JSON.stringify($node['agent-style-reviewer'].json) }},\n    \"delivery\": {{ JSON.stringify($node['agent-delivery-coord'].json) }},\n    \"hero\": {{ JSON.stringify($node['hero-gen'].json) }},\n    \"scrape\": {{ JSON.stringify($node['apify-scrape'].json) }}\n  }\n}",
+        "jsonBody": "={{ ({ client_id: $node['Persist Client · UPSERT'].json.id || $node['Persist Client · UPSERT'].json.client_id, slug: $node['Validate Payload'].json.slug, version: 'v2', task_id: $node['Validate Payload'].json.task_id, outputs: { brand: $node['Agent · brand-strategist'].json, research: $node['Agent · market_research_analyst'].json, creative: $node['Agent · creative-director'].json, web: $node['Agent · web-designer'].json, content: $node['Agent · content-creator (marketing)'].json, spellcheck: $node['Agent · spell-check-corrector (Haiku)'].json, editor: $node['Agent · editor-en-jefe (Camino III)'].json, style: $node['Agent · style-consistency-reviewer (Gap 4)'].json, delivery: $node['Agent · delivery-coordinator (Gap 5)'].json, hero: $node['Hero · GPT Image (post-delivery)'].json, scrape: $node['Apify · Instagram Scrape'].json } }) }}",
         "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
       },
       "id": "persist-outputs",
       "name": "Save All Outputs · Storage v2/",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3800, 500],
+      "position": [4060, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/cascade/copy-hero-to-v2",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ slug: $node['Validate Payload'].json.slug, version: 'v2', source_image_url: ($node['Hero · GPT Image (post-delivery)'].json && $node['Hero · GPT Image (post-delivery)'].json.image_url) || null }) }}",
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "hero-copy-v2",
+      "name": "Hero · Copy to v2/hero.png",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4320, 400],
       "continueOnFail": true
     },
     {
@@ -329,27 +350,27 @@
         "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"[FROM-N8N] [CLIENTE-NUEVO-LANDING-CASCADE-COMPLETE] · client={{ $node['validate'].json.client_name }} · slug={{ $node['validate'].json.slug }} · task_id={{ $node['validate'].json.task_id }} · editor_verdict={{ $node['agent-editor-jefe'].json.response ? 'see-payload' : 'pending' }} · delivery_status={{ $node['agent-delivery-coord'].json.response ? 'see-payload' : 'gap-pending' }} · outputs at client-websites/{{ $node['validate'].json.slug }}/v2/\"\n}",
+        "jsonBody": "={{ ({ text: '[FROM-N8N] [CLIENTE-NUEVO-LANDING-CASCADE-COMPLETE] · client=' + $node['Validate Payload'].json.client_name + ' · slug=' + $node['Validate Payload'].json.slug + ' · task_id=' + $node['Validate Payload'].json.task_id + ' · editor_verdict=' + (($node['Agent · editor-en-jefe (Camino III)'].json && $node['Agent · editor-en-jefe (Camino III)'].json.response) ? 'see-payload' : 'pending') + ' · delivery_status=' + (($node['Agent · delivery-coordinator (Gap 5)'].json && $node['Agent · delivery-coordinator (Gap 5)'].json.response) ? 'see-payload' : 'pending') + ' · hero=' + (($node['Hero · GPT Image (post-delivery)'].json && $node['Hero · GPT Image (post-delivery)'].json.image_url) ? 'generated' : 'failed') + ' · outputs at client-websites/' + $node['Validate Payload'].json.slug + '/v2/' }) }}",
         "options": { "timeout": 15000, "response": { "response": { "neverError": true } } }
       },
       "id": "slack-notify",
       "name": "Notify · Slack + CC#4 Callback",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [4060, 500],
+      "position": [4580, 400],
       "continueOnFail": true
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { ok: true, task_id: $node['validate'].json.task_id, client_id: $node['persist-client'].json.id, slug: $node['validate'].json.slug, version: 'v2', outputs_path: 'client-websites/' + $node['validate'].json.slug + '/v2/', editor_verdict_present: !!$node['agent-editor-jefe'].json.response, delivery_status_present: !!$node['agent-delivery-coord'].json.response } }}",
+        "responseBody": "={{ ({ ok: true, task_id: $node['Validate Payload'].json.task_id, client_id: $node['Persist Client · UPSERT'].json.id, slug: $node['Validate Payload'].json.slug, version: 'v2', outputs_path: 'client-websites/' + $node['Validate Payload'].json.slug + '/v2/', editor_verdict_present: !!($node['Agent · editor-en-jefe (Camino III)'].json && $node['Agent · editor-en-jefe (Camino III)'].json.response), delivery_status_present: !!($node['Agent · delivery-coordinator (Gap 5)'].json && $node['Agent · delivery-coordinator (Gap 5)'].json.response), style_review_present: !!($node['Agent · style-consistency-reviewer (Gap 4)'].json && $node['Agent · style-consistency-reviewer (Gap 4)'].json.response), hero_generated: !!($node['Hero · GPT Image (post-delivery)'].json && $node['Hero · GPT Image (post-delivery)'].json.image_url), hero_v2_path: ($node['Hero · Copy to v2/hero.png'].json && $node['Hero · Copy to v2/hero.png'].json.path) || null }) }}",
         "options": {}
       },
       "id": "respond",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [4320, 500]
+      "position": [4840, 400]
     }
   ],
   "connections": {
@@ -365,20 +386,16 @@
     "Apify · Instagram Scrape": { "main": [[{ "node": "Agent · brand-strategist", "type": "main", "index": 0 }]] },
     "Agent · brand-strategist": { "main": [[{ "node": "Agent · market_research_analyst", "type": "main", "index": 0 }]] },
     "Agent · market_research_analyst": { "main": [[{ "node": "Agent · creative-director", "type": "main", "index": 0 }]] },
-    "Agent · creative-director": {
-      "main": [[
-        { "node": "Hero · GPT Image", "type": "main", "index": 0 },
-        { "node": "Agent · web-designer", "type": "main", "index": 0 }
-      ]]
-    },
-    "Hero · GPT Image": { "main": [[{ "node": "Save All Outputs · Storage v2/", "type": "main", "index": 0 }]] },
+    "Agent · creative-director": { "main": [[{ "node": "Agent · web-designer", "type": "main", "index": 0 }]] },
     "Agent · web-designer": { "main": [[{ "node": "Agent · content-creator (marketing)", "type": "main", "index": 0 }]] },
     "Agent · content-creator (marketing)": { "main": [[{ "node": "Agent · spell-check-corrector (Haiku)", "type": "main", "index": 0 }]] },
     "Agent · spell-check-corrector (Haiku)": { "main": [[{ "node": "Agent · editor-en-jefe (Camino III)", "type": "main", "index": 0 }]] },
     "Agent · editor-en-jefe (Camino III)": { "main": [[{ "node": "Agent · style-consistency-reviewer (Gap 4)", "type": "main", "index": 0 }]] },
     "Agent · style-consistency-reviewer (Gap 4)": { "main": [[{ "node": "Agent · delivery-coordinator (Gap 5)", "type": "main", "index": 0 }]] },
-    "Agent · delivery-coordinator (Gap 5)": { "main": [[{ "node": "Save All Outputs · Storage v2/", "type": "main", "index": 0 }]] },
-    "Save All Outputs · Storage v2/": { "main": [[{ "node": "Notify · Slack + CC#4 Callback", "type": "main", "index": 0 }]] },
+    "Agent · delivery-coordinator (Gap 5)": { "main": [[{ "node": "Hero · GPT Image (post-delivery)", "type": "main", "index": 0 }]] },
+    "Hero · GPT Image (post-delivery)": { "main": [[{ "node": "Save All Outputs · Storage v2/", "type": "main", "index": 0 }]] },
+    "Save All Outputs · Storage v2/": { "main": [[{ "node": "Hero · Copy to v2/hero.png", "type": "main", "index": 0 }]] },
+    "Hero · Copy to v2/hero.png": { "main": [[{ "node": "Notify · Slack + CC#4 Callback", "type": "main", "index": 0 }]] },
     "Notify · Slack + CC#4 Callback": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1", "saveManualExecutions": true },
