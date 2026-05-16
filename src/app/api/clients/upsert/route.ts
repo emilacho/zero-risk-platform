@@ -52,6 +52,11 @@ interface ClientsUpsertInput {
   trigger_source?: string | null
   trigger_payload?: Record<string, unknown> | null
   metadata?: Record<string, unknown> | null
+  // Gap 1 · cliente-uploaded brand assets · creative-director MUST respect.
+  // Webhook payload + /api/cascade/onboard read these via this endpoint.
+  logo_url?: string | null
+  brand_colors?: unknown[] | null
+  brand_fonts?: string[] | null
 }
 
 /**
@@ -105,6 +110,18 @@ export async function POST(request: Request) {
   if (body.country) clientRow.country = body.country
   if (body.language) clientRow.language = body.language
   if (body.client_id) clientRow.id = body.client_id
+  // Gap 1 · brand assets persisted at the row level
+  if (typeof body.logo_url === 'string' && body.logo_url.trim()) {
+    clientRow.logo_url = body.logo_url.trim()
+  }
+  if (Array.isArray(body.brand_colors) && body.brand_colors.length > 0) {
+    clientRow.brand_colors = body.brand_colors
+  }
+  if (Array.isArray(body.brand_fonts) && body.brand_fonts.length > 0) {
+    clientRow.brand_fonts = body.brand_fonts.filter(
+      (f): f is string => typeof f === 'string' && f.length > 0,
+    )
+  }
 
   const conflictTarget = body.client_id ? 'id' : 'slug'
   const { data: clientUpsert, error: clientErr } = await supabase
