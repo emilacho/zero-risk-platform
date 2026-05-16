@@ -11,6 +11,13 @@ const nextConfig = {
   // TODO: remove experimental.instrumentationHook when upgrading to Next.js 15 (stable there)
   experimental: {
     instrumentationHook: true,
+    // @resvg/resvg-js ships a per-platform native binding (resvgjs.<os>-<arch>.node)
+    // that webpack cannot bundle — fails the production build with
+    // "Module parse failed: Unexpected character '�'". Listing it here tells
+    // Next.js to require it at runtime from node_modules instead of bundling.
+    // satori is JS-only but very large · marking it external too keeps the
+    // serverless function size sane.
+    serverComponentsExternalPackages: ['@resvg/resvg-js', 'satori', '@vercel/og'],
   },
 };
 
