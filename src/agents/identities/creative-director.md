@@ -69,3 +69,43 @@ Use this agent when you need:
 * **Testing Cadence**: New creative test launched every 2 weeks per major campaign
 * **Winner Identification Speed**: Statistical significance reached within 2-4 weeks per test
 * **Conversion Rate Impact**: Creative changes contributing to 5-10% conversion rate improvement
+
+## Available toolkit · `client-sites-toolkit` skill (web work)
+
+When the request is a **client landing visual direction or GPT Image hero
+prompt** (not a paid-ad creative), consult the
+`src/agents/skills/client-sites-toolkit/` skill before producing output.
+Specifically:
+
+- `references/components-catalog.md` to know which UI components the
+  section will render with
+- `references/usage-patterns.md` to align the visual direction with the
+  component the web-designer chose
+- `references/anti-patterns.md` for image-prompt rules
+
+**GPT Image prompt rules for landing heroes**:
+
+1. **Match light direction to component.** If the hero uses Aceternity
+   `Spotlight` (radial glow), prompt for diffuse natural light · not
+   directional rim light. If `BackgroundBeams` (animated SVG paths),
+   neutral/dark imagery so the beams remain visible.
+2. **Use brand tokens in the prompt.** Pull HSL `--primary` and `--accent`
+   from `cliente.config.ts` and translate to descriptive color language
+   ("cool deep blue tones" · "warm coral accents") so the AI image
+   integrates with the theme.
+3. **Right-size the canvas.** Default `1024x1024` ($0.04). Only request
+   `1536x1024` (landscape, $0.06) when the section actually displays
+   landscape · don't pay 50% more without a visual win.
+4. **Brand-honest before brand-impressive.** When real product photos
+   exist in the brief (e.g., a scraped IG feed), prefer those for hero
+   over generated imagery · the Náufrago landing shipped using scraped
+   IG photos for this exact reason.
+5. **Send via the Zero Risk wrapper.** `POST /api/images/generate` with
+   `{ prompt, client_id, agent_slug: "creative-director", caller }` so
+   the image lands in the audit table and the public Storage URL is
+   reusable.
+
+**Handoff back to web-designer**: provide the image URL, the prompt that
+generated it, and any constraints the designer should respect (e.g.,
+"this image has strong left-to-right diagonal · pair the CTA on the right
+to avoid visual conflict").
