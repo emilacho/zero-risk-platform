@@ -1,0 +1,520 @@
+{
+  "name": "Zero Risk — Client Onboarding E2E v2 (Webhook: Deal Won)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/deal-won-onboarding",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-deal-won",
+      "name": "Webhook: Deal Won",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "7b2b7829-0184-4158-9477-093194396e3b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nconst missing = [];\nif (!b.client_name) missing.push('client_name');\nif (!b.website && !b.domain) missing.push('website');\nif (!b.industry) missing.push('industry');\nif (!b.contract_scope) missing.push('contract_scope');\nif (missing.length) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\n// LOTE-C Fix · pre-generate client UUID so downstream agent invocations\n// (onboarding-specialist + Camino III reviewers) AND the persist upsert\n// share the same UUID. /api/clients/upsert honors explicit client_id per\n// its docs. If the webhook already carries a client_id (re-runs, manual\n// retries), use that instead of regenerating.\n// n8n Code node sandbox blocks both `crypto` (global) and require('crypto')\n// per the platform's hardening · inline UUID v4 via Math.random meets\n// uniqueness needs for workflow-scoped propagation (NOT crypto-grade · ok\n// here because the value is a primary-key surrogate, not a security token).\nif (!b.client_id) {\n  b.client_id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\nreturn [{ json: b }];"
+      },
+      "id": "validate-deal",
+      "name": "Validate Deal Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-smoke-test",
+              "value": "={{ ($('Validate Deal Data').item.json.client_id || \"\").startsWith(\"smoke-\") ? \"1\" : \"\" }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"onboarding-specialist\",\n  \"agent_id\": \"onboarding-specialist\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\",\n  \"task\": {{ JSON.stringify('Auto-discover and populate Client Brain for ' + ($('Validate Deal Data').item.json.client_name || 'new client') + ' (industry: ' + ($('Validate Deal Data').item.json.industry || 'unknown') + ', website: ' + ($('Validate Deal Data').item.json.website || 'unknown') + '). Research brand voice, ICP, competitive landscape, VOC. Return discovery report.') }},\n  \"context\": { \"smoke_test\": {{ ($('Validate Deal Data').item.json.client_id || \"\").startsWith(\"smoke-\") }}, \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\", \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name || '' }}\", \"website\": \"{{ $('Validate Deal Data').item.json.website || '' }}\", \"industry\": \"{{ $('Validate Deal Data').item.json.industry || '' }}\" }\n}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "call-onboarding-agent",
+      "name": "Call Onboarding Specialist: Auto-Discovery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/notion/create-client-workspace",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name || '' }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || ('temp-' + Date.now()) }}\",\n  \"industry\": \"{{ $('Validate Deal Data').item.json.industry || '' }}\",\n  \"parent_page_id\": \"{{ $env.NOTION_PARENT_PAGE_ID || 'stub-parent' }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "create-notion-workspace",
+      "name": "Create Notion Client Workspace",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const discovery = $node['Call Onboarding Specialist: Auto-Discovery'].json.result || {};\nconst scope = $node['Validate Deal Data'].json.contract_scope || [];\n\nconst activationMilestones = [];\nconst ttv_targets = {};\n\nif (scope.includes('paid_ads')) {\n  activationMilestones.push({ channel: 'paid_ads', milestone: 'First campaign launched', day: 14, success_metric: 'First converted lead' });\n  ttv_targets.paid_ads = 14;\n}\nif (scope.includes('content_seo')) {\n  activationMilestones.push({ channel: 'content_seo', milestone: 'Content calendar published', day: 30, success_metric: 'First organic traffic' });\n  ttv_targets.content_seo = 30;\n}\nif (scope.includes('email')) {\n  activationMilestones.push({ channel: 'email', milestone: 'Email sequence deployed', day: 7, success_metric: 'First engagement' });\n  ttv_targets.email = 7;\n}\nif (scope.includes('industrial') || scope.includes('complex')) {\n  ttv_targets.complex = 45;\n}\n\nconst successPlan = {\n  goals: [],\n  success_metrics: [],\n  timeline: activationMilestones,\n  ttv_targets,\n  champion_map: { identified: false, count: 0, stakeholders: [] },\n  status: 'draft'\n};\n\nreturn [{ json: { ...successPlan, discovery_report: discovery } }];"
+      },
+      "id": "build-success-plan",
+      "name": "Build Success Plan Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/notion/create-success-plan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name || '' }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\",\n  \"workspace_id\": \"{{ $json.workspace_id || '' }}\",\n  \"plan\": {{ JSON.stringify($json ?? {}) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "create-success-plan-notion",
+      "name": "Create Success Plan in Notion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/ghl/create-calendar-event",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $('Validate Deal Data').item.json.primary_contact_id || ('stub-contact-' + Date.now()) }}\",\n  \"event_title\": {{ JSON.stringify('Kickoff Call: ' + ($('Validate Deal Data').item.json.client_name || 'new client')) }},\n  \"duration_minutes\": 60,\n  \"scheduled_at\": \"{{ new Date(Date.now() + 3*24*60*60*1000).toISOString() }}\",\n  \"description\": \"Welcome to Zero Risk! Success plan alignment + team intro.\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "schedule-kickoff",
+      "name": "Schedule Kickoff Call (GHL Calendar)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const activationHealth = 'Yellow'; // Initial onboarding health always Yellow (assumes basic setup)\nconst championMap = { count: 0, stakeholders: [] }; // To be updated post-kickoff\n\nreturn [{ json: { client_id: $node['Validate Deal Data'].json.client_id, client_name: $node['Validate Deal Data'].json.client_name, activation_health: activationHealth, champion_count: championMap.count, onboarding_status: 'initiated', kickoff_scheduled: true } }];"
+      },
+      "id": "compute-handoff-score",
+      "name": "Compute Handoff Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/ghl/add-task",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $('Validate Deal Data').item.json.primary_contact_id || ('stub-contact-' + Date.now()) }}\",\n  \"title\": {{ JSON.stringify('Account Manager Handoff: ' + ($('Validate Deal Data').item.json.client_name || 'new client')) }},\n  \"description\": \"Onboarding initiated. Client Brain auto-populated. Success plan drafted. Ready for AM ownership.\",\n  \"due_date\": \"{{ new Date(Date.now() + 5*24*60*60*1000).toISOString().split('T')[0] }}\",\n  \"priority\": \"high\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ghl-handoff-task",
+      "name": "GHL: Create AM Handoff Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL || $env.SLACK_WEBHOOK_URL_EQUIPO || \"REDACTED_SET_SLACK_WEBHOOK_URL_ENV\" }}",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": {{ JSON.stringify('ONBOARDING INITIATED\\nClient: ' + ($('Validate Deal Data').item.json.client_name || 'unknown') + '\\nIndustry: ' + ($('Validate Deal Data').item.json.industry || 'unknown') + '\\nContract: ' + (Array.isArray($('Validate Deal Data').item.json.contract_scope) ? ($('Validate Deal Data').item.json.contract_scope.join(', ')) : String($('Validate Deal Data').item.json.contract_scope || ''))) }}\n}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "alert-onboarding-slack",
+      "name": "Alert Slack: Onboarding Initiated",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2320,
+        300
+      ],
+      "disabled": false
+    },
+    {
+      "id": "mc-inbox-5uLyuu",
+      "name": "Notify MC Inbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2560,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-mission-control-production.up.railway.app/api/inbox",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "masterPassword",
+              "value": "zerorisk2026"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"from\":\"client-onboarding\",\"to\":\"leader\",\"type\":\"report\",\"taskId\":\"{{ $json.task_id ?? $json.client_id ?? ('wf-' + $now) }}\",\"subject\":\"Client Onboarding completado\",\"body\":\"client={{ $json.client_id ?? 'unknown' }} | workflow={{ $workflow.name }}\"}",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      }
+    },
+    {
+      "id": "persist-client-supabase",
+      "name": "Persist Client to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        250
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || \"https://zero-risk-platform.vercel.app\" }}/api/clients/upsert",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $('Validate Deal Data').item.json.client_id, client_id: $('Validate Deal Data').item.json.client_id, client_id: $('Validate Deal Data').item.json.client_id, name: $('Validate Deal Data').item.json.client_name, website: $('Validate Deal Data').item.json.website || $('Validate Deal Data').item.json.domain || null, industry: $('Validate Deal Data').item.json.industry || null, contact_email: $('Validate Deal Data').item.json.email || null, country: $('Validate Deal Data').item.json.country || \"EC\", language: \"es\", status: \"onboarding\", brand_book: {   content_text: $('Call Onboarding Specialist: Auto-Discovery').item.json.response || \"\",   auto_generated_from: \"onboarding_e2e_v2_webhook\" }, journey: \"ONBOARD\", journey_stage: \"auto_discovery_complete\", journey_status: \"active\", trigger_type: \"webhook\", trigger_source: $('Validate Deal Data').item.json.source || \"deal_won_webhook\", trigger_payload: { client_name: $('Validate Deal Data').item.json.client_name, contract_scope: $('Validate Deal Data').item.json.contract_scope }, metadata: { workflow: \"Client Onboarding E2E v2\", workflow_id: $workflow.id, execution_id: $execution.id } }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "onError": "continueRegularOutput"
+      }
+    },
+    {
+      "id": "trigger-master-journey-ugk3",
+      "name": "Trigger Master Journey ugK3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1720,
+        250
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-production-72be.up.railway.app/webhook/journey-dispatch",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $('Persist Client to Supabase').item.json.client_id, journey: \"ONBOARD\", current_stage: \"auto_discovery_complete\", trigger_source: \"onboarding_e2e_v2\", metadata: {   onboarding_exec_id: $execution.id,   brand_book_id: $('Persist Client to Supabase').item.json.brand_book_id,   journey_state_id: $('Persist Client to Supabase').item.json.journey_state_id } }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook: Deal Won": {
+      "main": [
+        [
+          {
+            "node": "Validate Deal Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Deal Data": {
+      "main": [
+        [
+          {
+            "node": "Call Onboarding Specialist: Auto-Discovery",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Notion Client Workspace",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Onboarding Specialist: Auto-Discovery": {
+      "main": [
+        [
+          {
+            "node": "Persist Client to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Notion Client Workspace": {
+      "main": [
+        [
+          {
+            "node": "Build Success Plan Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success Plan Template": {
+      "main": [
+        [
+          {
+            "node": "Create Success Plan in Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Success Plan in Notion": {
+      "main": [
+        [
+          {
+            "node": "Schedule Kickoff Call (GHL Calendar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Kickoff Call (GHL Calendar)": {
+      "main": [
+        [
+          {
+            "node": "Compute Handoff Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Handoff Score": {
+      "main": [
+        [
+          {
+            "node": "GHL: Create AM Handoff Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Create AM Handoff Task": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack: Onboarding Initiated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Slack: Onboarding Initiated": {
+      "main": [
+        [
+          {
+            "node": "Notify MC Inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Client to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Trigger Master Journey ugK3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Master Journey ugK3": {
+      "main": [
+        [
+          {
+            "node": "Build Success Plan Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null
+}
