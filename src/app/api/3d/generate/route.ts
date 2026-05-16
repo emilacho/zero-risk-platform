@@ -20,7 +20,7 @@ import { randomUUID } from 'node:crypto'
 
 const STORAGE_BUCKET = 'client-websites'
 const MESHY_API_BASE = 'https://api.meshy.ai/openapi/v2'
-const DEFAULT_MODEL = 'meshy-4'
+const DEFAULT_MODEL = 'meshy-6'
 const DEFAULT_FORMAT = 'glb'
 const DEFAULT_ART_STYLE = 'realistic'
 const DEFAULT_TYPE = 'object'
