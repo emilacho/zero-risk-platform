@@ -112,32 +112,40 @@ export async function POST(request: Request) {
     internalApiKey,
   })
 
-  // Persist the storyboard JSON to storage if we got something useful.
-  // Failures here are non-fatal · the storyboard is still returned in
-  // the response body so the host can retry the upload itself.
-  let storageStatus: { uploaded: boolean; error?: string } = { uploaded: false }
-  if (result.ok && result.storyboard) {
+  // Persist the storyboard + video-specs JSONs to storage if we got
+  // something useful. Failures here are non-fatal · both artifacts are
+  // returned in the response body so the host can retry the upload
+  // itself. Each artifact is uploaded independently · partial-success
+  // is tracked per-artifact.
+  let storyboardStatus: { uploaded: boolean; error?: string } = { uploaded: false }
+  let videoSpecsStatus: { uploaded: boolean; error?: string } = { uploaded: false }
+
+  async function uploadJson(
+    path: string,
+    payload: unknown,
+  ): Promise<{ uploaded: boolean; error?: string }> {
     try {
       const supabase = getSupabaseAdmin()
-      const payload = Buffer.from(JSON.stringify(result.storyboard, null, 2))
+      const buf = Buffer.from(JSON.stringify(payload, null, 2))
       const { error: upErr } = await supabase.storage
         .from(STORAGE_BUCKET)
-        .upload(result.storage_path, payload, {
+        .upload(path, buf, {
           contentType: 'application/json; charset=utf-8',
           upsert: true,
           cacheControl: '300',
         })
-      if (upErr) {
-        storageStatus = { uploaded: false, error: upErr.message }
-      } else {
-        storageStatus = { uploaded: true }
-      }
+      if (upErr) return { uploaded: false, error: upErr.message }
+      return { uploaded: true }
     } catch (err) {
-      storageStatus = {
-        uploaded: false,
-        error: err instanceof Error ? err.message : String(err),
-      }
+      return { uploaded: false, error: err instanceof Error ? err.message : String(err) }
     }
+  }
+
+  if (result.storyboard) {
+    storyboardStatus = await uploadJson(result.storage_path, result.storyboard)
+  }
+  if (result.video_specs) {
+    videoSpecsStatus = await uploadJson(result.video_storage_path, result.video_specs)
   }
 
   return NextResponse.json(
@@ -147,13 +155,23 @@ export async function POST(request: Request) {
       client_slug: result.client_slug,
       platforms_requested: result.platforms_requested,
       platforms_produced: result.platforms_produced,
+      video_platforms_produced: result.video_platforms_produced,
       storyboard: result.storyboard,
+      video_specs: result.video_specs,
       storage_path: result.storage_path,
-      storage_status: storageStatus,
+      video_storage_path: result.video_storage_path,
+      storage_status: storyboardStatus,
+      video_storage_status: videoSpecsStatus,
       cost_usd: result.cost_usd,
+      carousel_cost_usd: result.carousel_cost_usd,
+      video_cost_usd: result.video_cost_usd,
       duration_ms: result.duration_ms,
-      model: result.model,
-      session_id: result.session_id,
+      model: result.carousel_model,
+      video_model: result.video_model,
+      session_id: result.carousel_session_id,
+      video_session_id: result.video_session_id,
+      carousel_error: result.carousel_error,
+      video_error: result.video_error,
       error: result.error,
     },
     { status: result.ok ? 200 : 502 },
