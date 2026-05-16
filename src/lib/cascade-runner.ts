@@ -38,7 +38,11 @@ import type {
  * Sequence order matters · the prompts for agent N reference parsed
  * outputs from agents 1..N-1.
  */
-const SEQUENCE: CascadeAgentSlug[] = [
+/**
+ * Base sequence · runs for every cascade invocation regardless of flags.
+ * Optional agents (customer-research) are injected via `buildSequence()`.
+ */
+const BASE_SEQUENCE: CascadeAgentSlug[] = [
   "brand-strategist",
   // CC#2 Path D fix · slug aligned to DB-canonical underscored name (the
   // `agents` table has `market_research_analyst` underscored · registry has
@@ -55,6 +59,27 @@ const SEQUENCE: CascadeAgentSlug[] = [
   "spell-check-corrector",
   "editor-en-jefe",
 ]
+
+/**
+ * Build the effective sequence for a single cascade run. Optional agents
+ * are injected based on request flags:
+ *   - `deep_customer_research: true` → `customer-research` between
+ *     `market_research_analyst` and `creative-director` (2026-05-16 ·
+ *     resolved deferred slug `customer_research_agent` → canonical).
+ *
+ * Returning a fresh array per invocation so concurrent callers with
+ * different flags don't mutate each other's sequences.
+ */
+export function buildSequence(req: CascadeRunRequest): CascadeAgentSlug[] {
+  const seq = [...BASE_SEQUENCE]
+  if (req.deep_customer_research) {
+    const mraIdx = seq.indexOf("market_research_analyst")
+    if (mraIdx >= 0) {
+      seq.splice(mraIdx + 1, 0, "customer-research")
+    }
+  }
+  return seq
+}
 
 /**
  * Per-agent task prompts. Each takes the cascade context built so far
@@ -78,11 +103,20 @@ function buildTask(
         "Task: build the brand book. Return strict JSON with keys: positioning_statement, brand_voice, values (array), tagline_options (array), target_audience_summary, do_say (array), dont_say (array). No prose outside the JSON.",
       ].join("\n\n")
     case "market_research_analyst":
+    case "market-research-analyst":
       return [
         cliente,
         scrapeLine,
         contextBlock("brand", cascadeContext.brand),
         "Task: surface 2-4 priority personas. Return strict JSON with key `personas` (array of {name, age_range, demographics, pain_points, decision_criteria, preferred_channels, trigger_to_order}). No prose outside the JSON.",
+      ].join("\n\n")
+    case "customer-research":
+      return [
+        cliente,
+        scrapeLine,
+        contextBlock("brand", cascadeContext.brand),
+        contextBlock("personas", cascadeContext.research),
+        "Task: deep customer research · go beyond the 4 personas surfaced by the market-research step · produce Jobs-To-Be-Done (JTBD) statements, customer-interview-style verbatims (synthetic but plausible), buying-decision committee map, and the top 3 emotional drivers per persona. Return strict JSON with keys: jtbd_statements (array · max 6), verbatim_quotes (array of {persona_name, quote, context}), buying_committee (array of {role, concerns, decision_weight}), emotional_drivers (array of {persona_name, top_3_drivers}). No prose outside the JSON.",
       ].join("\n\n")
     case "creative-director":
       return [
@@ -195,6 +229,7 @@ export async function runCascade(
   const cascadeContext: Record<string, Record<string, unknown> | null> = {
     brand: null,
     research: null,
+    deep_research: null,
     creative: null,
     web: null,
     content: null,
@@ -203,7 +238,8 @@ export async function runCascade(
   const agents: CascadeAgentRun[] = []
   const fetchImpl = deps.fetchImpl ?? fetch
 
-  for (const slug of SEQUENCE) {
+  const sequence = buildSequence(request)
+  for (const slug of sequence) {
     const task = buildTask(slug, request, cascadeContext)
     const body = {
       agent: slug,
@@ -284,6 +320,9 @@ export async function runCascade(
               break
             case "content-creator":
               cascadeContext.content = parsed
+              break
+            case "customer-research":
+              cascadeContext.deep_research = parsed
               break
             case "spell-check-corrector":
               cascadeContext.spellcheck = parsed

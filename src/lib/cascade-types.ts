@@ -34,6 +34,17 @@ export interface CascadeRunRequest {
   /** cliente-uploaded assets · creative-director MUST respect (Gap 1) */
   brand_assets: CascadeBrandAssets
   caller?: string
+  /**
+   * Optional deep customer-research branch (2026-05-16 · resolved deferred
+   * slug `customer_research_agent` → canonical `customer-research`). When
+   * true, `customer-research` runs AFTER `market_research_analyst` and its
+   * parsed output is appended to `cascadeContext.deep_research` · downstream
+   * agents (creative-director onwards) can see it.
+   *
+   * Default false · skips the agent invocation entirely (cost-neutral for
+   * cascades that don't need ICP/JTBD depth).
+   */
+  deep_customer_research?: boolean
 }
 
 export type CascadeAgentSlug =
@@ -41,6 +52,8 @@ export type CascadeAgentSlug =
   // CC#2 Path D fix · DB-canonical underscored (was 'market-research-analyst' ·
   // unresolvable in `agents` table + `managed_agents_registry`)
   | "market_research_analyst"
+  | "market-research-analyst" // dashed alias for legacy callers · same agent
+  | "customer-research"        // 2026-05-16 deferred-resolve · optional deep ICP branch
   | "creative-director"
   | "web-designer"
   | "content-creator"
