@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const b = $input.first().json.body || $input.first().json;\nconst missing = [];\nif (!b.client_name) missing.push('client_name');\nif (!b.website && !b.domain) missing.push('website');\nif (!b.industry) missing.push('industry');\nif (!b.contract_scope) missing.push('contract_scope');\nif (missing.length) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\n// LOTE-C Fix · pre-generate client UUID so downstream agent invocations\n// (onboarding-specialist + Camino III reviewers) AND the persist upsert\n// share the same UUID. /api/clients/upsert honors explicit client_id per\n// its docs. If the webhook already carries a client_id (re-runs, manual\n// retries), use that instead of regenerating.\n// n8n Code node sandbox blocks both `crypto` (global) and require('crypto')\n// per the platform's hardening · inline UUID v4 via Math.random meets\n// uniqueness needs for workflow-scoped propagation (NOT crypto-grade · ok\n// here because the value is a primary-key surrogate, not a security token).\nif (!b.client_id) {\n  b.client_id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\nreturn [{ json: b }];"
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nconst missing = [];\nif (!b.client_name) missing.push('client_name');\nif (!b.website && !b.domain) missing.push('website');\nif (!b.industry) missing.push('industry');\nif (!b.contract_scope) missing.push('contract_scope');\nif (missing.length) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\n// LOTE-C Fix · pre-generate client UUID so downstream agent invocations\n// share the same UUID as the persist upsert.\nif (!b.client_id) {\n  b.client_id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n// Gap 1 · brand assets passed through unchanged so Persist + Cascade pick them up.\nb.client_logo_url = b.client_logo_url || null;\nb.client_brand_colors = Array.isArray(b.client_brand_colors) ? b.client_brand_colors : null;\nb.client_brand_fonts = Array.isArray(b.client_brand_fonts) ? b.client_brand_fonts : null;\nreturn [{ json: b }];"
       },
       "id": "validate-deal",
       "name": "Validate Deal Data",
@@ -320,7 +320,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ client_id: $('Validate Deal Data').item.json.client_id, client_id: $('Validate Deal Data').item.json.client_id, client_id: $('Validate Deal Data').item.json.client_id, name: $('Validate Deal Data').item.json.client_name, website: $('Validate Deal Data').item.json.website || $('Validate Deal Data').item.json.domain || null, industry: $('Validate Deal Data').item.json.industry || null, contact_email: $('Validate Deal Data').item.json.email || null, country: $('Validate Deal Data').item.json.country || \"EC\", language: \"es\", status: \"onboarding\", brand_book: {   content_text: $('Call Onboarding Specialist: Auto-Discovery').item.json.response || \"\",   auto_generated_from: \"onboarding_e2e_v2_webhook\" }, journey: \"ONBOARD\", journey_stage: \"auto_discovery_complete\", journey_status: \"active\", trigger_type: \"webhook\", trigger_source: $('Validate Deal Data').item.json.source || \"deal_won_webhook\", trigger_payload: { client_name: $('Validate Deal Data').item.json.client_name, contract_scope: $('Validate Deal Data').item.json.contract_scope }, metadata: { workflow: \"Client Onboarding E2E v2\", workflow_id: $workflow.id, execution_id: $execution.id } }) }}",
+        "jsonBody": "={{ JSON.stringify({ client_id: $('Validate Deal Data').item.json.client_id, client_id: $('Validate Deal Data').item.json.client_id, client_id: $('Validate Deal Data').item.json.client_id, name: $('Validate Deal Data').item.json.client_name, website: $('Validate Deal Data').item.json.website || $('Validate Deal Data').item.json.domain || null, industry: $('Validate Deal Data').item.json.industry || null, contact_email: $('Validate Deal Data').item.json.email || null, country: $('Validate Deal Data').item.json.country || \"EC\", language: \"es\", status: \"onboarding\", brand_book: {   content_text: $('Call Onboarding Specialist: Auto-Discovery').item.json.response || \"\",   auto_generated_from: \"onboarding_e2e_v2_webhook\" }, journey: \"ONBOARD\", journey_stage: \"auto_discovery_complete\", journey_status: \"active\", trigger_type: \"webhook\", trigger_source: $('Validate Deal Data').item.json.source || \"deal_won_webhook\", trigger_payload: { client_name: $('Validate Deal Data').item.json.client_name, contract_scope: $('Validate Deal Data').item.json.contract_scope }, metadata: { workflow: \"Client Onboarding E2E v2\", workflow_id: $workflow.id, execution_id: $execution.id }, logo_url: $('Validate Deal Data').item.json.client_logo_url, brand_colors: $('Validate Deal Data').item.json.client_brand_colors, brand_fonts: $('Validate Deal Data').item.json.client_brand_fonts }) }}",
         "options": {
           "timeout": 30000,
           "response": {
@@ -367,6 +367,47 @@
           }
         }
       },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || \"https://zero-risk-platform.vercel.app\" }}/api/cascade/onboard",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $('Validate Deal Data').item.json.client_id, scrape_summary: $('Call Onboarding Specialist: Auto-Discovery').item.json.response, caller: \"onboarding-e2e-v2:\" + $execution.id }) }}",
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "run-onboarding-cascade",
+      "name": "Run Onboarding Cascade (Gap 3)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1720,
+        100
+      ],
       "onError": "continueRegularOutput"
     }
   ],
@@ -490,7 +531,7 @@
       "main": [
         [
           {
-            "node": "Trigger Master Journey ugK3",
+            "node": "Run Onboarding Cascade (Gap 3)",
             "type": "main",
             "index": 0
           }
@@ -507,6 +548,17 @@
           }
         ]
       ]
+    },
+    "Run Onboarding Cascade (Gap 3)": {
+      "main": [
+        [
+          {
+            "node": "Trigger Master Journey ugK3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -514,7 +566,5 @@
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
-  },
-  "staticData": null,
-  "meta": null
+  }
 }
