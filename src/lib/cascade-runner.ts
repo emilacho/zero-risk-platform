@@ -40,7 +40,12 @@ import type {
  */
 const SEQUENCE: CascadeAgentSlug[] = [
   "brand-strategist",
-  "market-research-analyst",
+  // CC#2 Path D fix · slug aligned to DB-canonical underscored name (the
+  // `agents` table has `market_research_analyst` underscored · registry has
+  // `market-research` no-suffix · `market-research-analyst` was unresolvable
+  // and the cascade silently skipped this step in Náufrago v1 production fire
+  // on 2026-05-16 · see vault wiki/decisions/2026-05-16-cascade-migration-vercel-to-n8n.md).
+  "market_research_analyst",
   "creative-director",
   "web-designer",
   "content-creator",
@@ -72,7 +77,7 @@ function buildTask(
         `Brand assets uploaded by cliente (respect verbatim · do NOT invent):\n${brandAssetsLine}`,
         "Task: build the brand book. Return strict JSON with keys: positioning_statement, brand_voice, values (array), tagline_options (array), target_audience_summary, do_say (array), dont_say (array). No prose outside the JSON.",
       ].join("\n\n")
-    case "market-research-analyst":
+    case "market_research_analyst":
       return [
         cliente,
         scrapeLine,
@@ -268,7 +273,7 @@ export async function runCascade(
             case "brand-strategist":
               cascadeContext.brand = parsed
               break
-            case "market-research-analyst":
+            case "market_research_analyst":
               cascadeContext.research = parsed
               break
             case "creative-director":

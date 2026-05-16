@@ -62,7 +62,8 @@ describe("runCascade · Gap 3", () => {
 
     expect(calls).toEqual([
       "brand-strategist",
-      "market-research-analyst",
+      // CC#2 Path D fix · DB-canonical underscored slug (was 'market-research-analyst' · unresolvable in registry/agents · cascade silently skipped in Náufrago v1 production fire)
+      "market_research_analyst",
       "creative-director",
       "web-designer",
       "content-creator",
@@ -102,14 +103,14 @@ describe("runCascade · Gap 3", () => {
 
     // brand-strategist task does NOT contain any prior agent signal
     expect(tasksByAgent["brand-strategist"]).not.toContain("signal_from_")
-    // market-research-analyst SHOULD contain brand-strategist's signal
-    expect(tasksByAgent["market-research-analyst"]).toContain(
+    // market_research_analyst SHOULD contain brand-strategist's signal
+    expect(tasksByAgent["market_research_analyst"]).toContain(
       "signal_from_brand-strategist",
     )
     // creative-director SHOULD contain both brand + research signals
     expect(tasksByAgent["creative-director"]).toContain("signal_from_brand-strategist")
     expect(tasksByAgent["creative-director"]).toContain(
-      "signal_from_market-research-analyst",
+      "signal_from_market_research_analyst",
     )
     // content-creator SHOULD contain all 4 prior signals
     expect(tasksByAgent["content-creator"]).toContain("signal_from_creative-director")

@@ -38,7 +38,9 @@ export interface CascadeRunRequest {
 
 export type CascadeAgentSlug =
   | "brand-strategist"
-  | "market-research-analyst"
+  // CC#2 Path D fix · DB-canonical underscored (was 'market-research-analyst' ·
+  // unresolvable in `agents` table + `managed_agents_registry`)
+  | "market_research_analyst"
   | "creative-director"
   | "web-designer"
   | "content-creator"
