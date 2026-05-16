@@ -305,6 +305,64 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: result.error }, { status: 500 })
     }
 
+    // Canonical slug · used for the persist below and the editor middleware further down.
+    const canonicalSlug = resolveAgentSlug(agentName)
+
+    // CC#2 dogfood-gap fix · the Railway agent-runner only writes to `agents_log`,
+    // so observability dashboards (Mission Control /agents/stats + /costs) never see
+    // run-sdk traffic. Mirror the /api/agents/run insert (lines 504-547) here so the
+    // proxy populates `agent_invocations` for every successful Railway call. Fire-and-
+    // forget · the request must not fail if observability persist breaks.
+    const endedAt = new Date()
+    const startedAt = new Date(endedAt.getTime() - (result.durationMs || 0))
+    void getSupabaseAdmin()
+      .from('agent_invocations')
+      .insert({
+        session_id:
+          result.sessionId ||
+          `run-sdk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        agent_id: canonicalSlug,
+        agent_name: canonicalSlug,
+        command: null,
+        task_id: (body.pipeline_id as string | null) || null,
+        workflow_id: null,
+        workflow_execution_id: null,
+        client_id: clientId,
+        journey_id: null,
+        model: result.model,
+        started_at: startedAt.toISOString(),
+        ended_at: endedAt.toISOString(),
+        cost_usd: result.costUsd,
+        tokens_input: result.inputTokens,
+        tokens_output: result.outputTokens,
+        tokens_cache_read: 0,
+        tokens_cache_creation: 0,
+        num_turns: 1,
+        status: 'completed',
+        exit_code: 0,
+        error_message: null,
+        metadata: {
+          source: 'api_agents_run_sdk',
+          agent_slug_input: agentName,
+          task_text: task.substring(0, 200),
+          response_length: result.response.length,
+          session_id_format: result.sessionId?.startsWith('msg_') ? 'anthropic' : 'sdk_uuid',
+        },
+      })
+      .then(
+        ({ error }) => {
+          if (error) {
+            console.warn('[run-sdk] agent_invocations insert failed:', error.message)
+          }
+        },
+        (err: unknown) => {
+          console.warn(
+            '[run-sdk] agent_invocations insert exception:',
+            err instanceof Error ? err.message : String(err),
+          )
+        },
+      )
+
     // Base response — may be augmented by dual reviewer middleware below
     const baseResponse = {
       success: true,
@@ -321,7 +379,6 @@ export async function POST(request: Request) {
     // DUAL REVIEWER MIDDLEWARE — mirrors /api/agents/run lines 478-503 so workflows
     // hitting run-sdk also flow through Camino III HITL when a whitelist agent
     // emits content. Skipped for reviewers themselves, header opt-out, and non-whitelisted.
-    const canonicalSlug = resolveAgentSlug(agentName)
     const skipMiddleware =
       request.headers.get('x-skip-editor-middleware') === '1' ||
       canonicalSlug === PRIMARY_REVIEWER ||
