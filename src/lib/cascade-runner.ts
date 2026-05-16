@@ -44,6 +44,10 @@ const SEQUENCE: CascadeAgentSlug[] = [
   "creative-director",
   "web-designer",
   "content-creator",
+  // Gap 2 (2026-05-16) · Haiku spell-check pass between copy and final QA.
+  // Auto-corrects high-confidence orthographic/grammar issues and flags
+  // low-confidence items for editor-en-jefe's semantic review block.
+  "spell-check-corrector",
   "editor-en-jefe",
 ]
 
@@ -101,6 +105,12 @@ function buildTask(
         contextBlock("web", cascadeContext.web),
         "Task: write all UI strings. Return strict JSON with keys: hero {headline, subheadline, cta_text}, menu {section_title, items (array)}, about {title, body}, contact {title, whatsapp_cta, hours_label}, footer. No prose outside the JSON.",
       ].join("\n\n")
+    case "spell-check-corrector":
+      return [
+        cliente,
+        contextBlock("content", cascadeContext.content),
+        "Task: orthographic + grammar pass on the content agent output above. Auto-apply ONLY high-confidence fixes (obvious typos · missing accents · clear punctuation issues). Flag medium/low confidence for editor review · do NOT change tone, vocabulary, or brand voice. Detect language inconsistency (if mixed languages appear in copy that should be a single language). Return strict JSON with keys: corrections (array of {section, original, corrected, confidence, issue_type, reason}), corrected_copy (full copy object with high-confidence fixes applied), flagged_for_review (array of {section, original, issue}), language_detected (es|en|mixed), summary. No prose outside the JSON.",
+      ].join("\n\n")
     case "editor-en-jefe":
       return [
         cliente,
@@ -109,7 +119,8 @@ function buildTask(
         contextBlock("creative", cascadeContext.creative),
         contextBlock("web", cascadeContext.web),
         contextBlock("content", cascadeContext.content),
-        "Task: final QA across ALL agent outputs. Return strict JSON with keys: verdict (approved|revision_needed|escalated), severity (low|medium|high|critical), strengths (array), concerns (array), recommended_fixes (array). No prose outside the JSON.",
+        contextBlock("spellcheck", cascadeContext.spellcheck),
+        "Task: final QA across ALL agent outputs. Spell-check has already passed · focus on semantic + brand + strategic review (NOT typos/tildes/punctuation). If spellcheck.flagged_for_review has items, evaluate whether they reflect semantic issues. Return strict JSON with keys: verdict (approved|revision_needed|escalated), severity (low|medium|high|critical), strengths (array), concerns (array), recommended_fixes (array). No prose outside the JSON.",
       ].join("\n\n")
   }
 }
@@ -182,6 +193,7 @@ export async function runCascade(
     creative: null,
     web: null,
     content: null,
+    spellcheck: null,
   }
   const agents: CascadeAgentRun[] = []
   const fetchImpl = deps.fetchImpl ?? fetch
@@ -267,6 +279,9 @@ export async function runCascade(
               break
             case "content-creator":
               cascadeContext.content = parsed
+              break
+            case "spell-check-corrector":
+              cascadeContext.spellcheck = parsed
               break
             case "editor-en-jefe":
               // terminal · review verdict captured in agents[] only

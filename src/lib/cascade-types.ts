@@ -42,6 +42,7 @@ export type CascadeAgentSlug =
   | "creative-director"
   | "web-designer"
   | "content-creator"
+  | "spell-check-corrector"
   | "editor-en-jefe"
 
 export interface CascadeAgentRun {
