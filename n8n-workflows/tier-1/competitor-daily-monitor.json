@@ -2,32 +2,64 @@
   "name": "Zero Risk — Competitor Daily Monitor (6am)",
   "nodes": [
     {
-      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 6 * * *" }] } },
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
       "id": "cron",
       "name": "Daily 6am",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [200, 320]
+      "position": [
+        200,
+        320
+      ]
     },
     {
       "parameters": {
         "method": "GET",
         "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/clients?status=active&include=competitors",
-        "options": { "timeout": 30000 }
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        }
       },
       "id": "fetch-clients",
       "name": "Fetch Clients + Competitors",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [420, 320]
+      "position": [
+        420,
+        320
+      ]
     },
     {
-      "parameters": { "fieldToSplitOut": "clients", "options": {} },
+      "parameters": {
+        "fieldToSplitOut": "clients",
+        "options": {}
+      },
       "id": "split-clients",
       "name": "Split Clients",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [640, 320]
+      "position": [
+        640,
+        320
+      ]
     },
     {
       "parameters": {
@@ -37,24 +69,44 @@
       "name": "Expand Competitors",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [860, 320]
+      "position": [
+        860,
+        320
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.apify.com/v2/acts/apify~facebook-ads-library-scraper/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}&timeout=60",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"searchTerms\": [\"{{ $json.competitor_name }}\"],\n  \"adActiveStatus\": \"active\",\n  \"countryCode\": \"US\",\n  \"maxItems\": 10\n}",
-        "options": { "timeout": 90000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 90000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "meta-ads",
       "name": "Apify Meta Ads",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, 180]
+      "position": [
+        1100,
+        180
+      ]
     },
     {
       "parameters": {
@@ -63,20 +115,36 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-API-KEY", "value": "={{ $env.SERPER_API_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "X-API-KEY",
+              "value": "={{ $env.SERPER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"q\": \"\\\"{{ $json.competitor_name }}\\\"\",\n  \"tbs\": \"qdr:d\",\n  \"num\": 10\n}",
-        "options": { "timeout": 20000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "news",
       "name": "Serper News",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, 320]
+      "position": [
+        1100,
+        320
+      ]
     },
     {
       "parameters": {
@@ -85,28 +153,51 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "=Bearer {{ $env.FIRECRAWL_API_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.FIRECRAWL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"url\": \"https://{{ $json.competitor_domain }}\",\n  \"formats\": [\"markdown\"],\n  \"onlyMainContent\": true\n}",
-        "options": { "timeout": 60000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "landing",
       "name": "Firecrawl Landing",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, 460]
+      "position": [
+        1100,
+        460
+      ]
     },
     {
-      "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} },
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
       "id": "merge",
       "name": "Merge Sources",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [1340, 320]
+      "position": [
+        1340,
+        320
+      ]
     },
     {
       "parameters": {
@@ -116,14 +207,28 @@
       "name": "Aggregate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1580, 320]
+      "position": [
+        1580,
+        320
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/competitors/snapshot",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
@@ -133,44 +238,85 @@
       "name": "Persist Snapshot",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1820, 320]
+      "position": [
+        1820,
+        320
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "strict" },
-          "conditions": [{ "leftValue": "={{ $json.has_changes }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }]
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_changes }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
         }
       },
       "id": "has-changes",
       "name": "Has Changes?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2060, 320]
+      "position": [
+        2060,
+        320
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"agent\": \"competitive_intelligence\",\n  \"task\": \"Analyze competitor delta for client {{ $json.client_name }}. Competitor: {{ $json.competitor_name }}. Signals:\\n- {{ $json.new_ads.length }} new ads\\n- {{ $json.news.length }} news items\\n- Landing snapshot: {{ $json.landing_markdown ? 'captured' : 'n/a' }}\\n\\nIdentify strategic shifts and recommend tactical responses for our client. Context payload attached in extra.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
-        "options": { "timeout": 120000 }
+        "options": {
+          "timeout": 120000
+        }
       },
       "id": "invoke-ci",
       "name": "Invoke CI Agent",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2300, 220]
+      "position": [
+        2300,
+        220
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.SLACK_WEBHOOK_URL }}",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"text\": \"🔎 *Competitor Delta*\\n• Client: {{ $node['Aggregate'].json.client_name }}\\n• Competitor: {{ $node['Aggregate'].json.competitor_name }}\\n• {{ $node['Aggregate'].json.summary }}\"\n}",
@@ -180,26 +326,196 @@
       "name": "Slack",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2540, 220]
+      "position": [
+        2540,
+        220
+      ]
     },
-    { "parameters": {}, "id": "noop", "name": "No Changes", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [2300, 420] }
+    {
+      "parameters": {},
+      "id": "noop",
+      "name": "No Changes",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        420
+      ]
+    }
   ],
   "connections": {
-    "Daily 6am": { "main": [[{ "node": "Fetch Clients + Competitors", "type": "main", "index": 0 }]] },
-    "Fetch Clients + Competitors": { "main": [[{ "node": "Split Clients", "type": "main", "index": 0 }]] },
-    "Split Clients": { "main": [[{ "node": "Expand Competitors", "type": "main", "index": 0 }]] },
-    "Expand Competitors": { "main": [[{ "node": "Apify Meta Ads", "type": "main", "index": 0 }, { "node": "Serper News", "type": "main", "index": 0 }, { "node": "Firecrawl Landing", "type": "main", "index": 0 }]] },
-    "Apify Meta Ads": { "main": [[{ "node": "Merge Sources", "type": "main", "index": 0 }]] },
-    "Serper News": { "main": [[{ "node": "Merge Sources", "type": "main", "index": 1 }]] },
-    "Firecrawl Landing": { "main": [[{ "node": "Merge Sources", "type": "main", "index": 2 }]] },
-    "Merge Sources": { "main": [[{ "node": "Aggregate", "type": "main", "index": 0 }]] },
-    "Aggregate": { "main": [[{ "node": "Persist Snapshot", "type": "main", "index": 0 }]] },
-    "Persist Snapshot": { "main": [[{ "node": "Has Changes?", "type": "main", "index": 0 }]] },
-    "Has Changes?": { "main": [[{ "node": "Invoke CI Agent", "type": "main", "index": 0 }], [{ "node": "No Changes", "type": "main", "index": 0 }]] },
-    "Invoke CI Agent": { "main": [[{ "node": "Slack", "type": "main", "index": 0 }]] }
+    "Daily 6am": {
+      "main": [
+        [
+          {
+            "node": "Fetch Clients + Competitors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Clients + Competitors": {
+      "main": [
+        [
+          {
+            "node": "Split Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Clients": {
+      "main": [
+        [
+          {
+            "node": "Expand Competitors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Competitors": {
+      "main": [
+        [
+          {
+            "node": "Apify Meta Ads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Serper News",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Firecrawl Landing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apify Meta Ads": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Serper News": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Firecrawl Landing": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Sources": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Persist Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Has Changes?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Changes?": {
+      "main": [
+        [
+          {
+            "node": "Invoke CI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoke CI Agent": {
+      "main": [
+        [
+          {
+            "node": "Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
-  "tags": [{ "name": "zero-risk", "id": "1" }, { "name": "pilar-5", "id": "6" }, { "name": "tier-1", "id": "13" }, { "name": "competitive-intel", "id": "16" }],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "zero-risk",
+      "id": "1"
+    },
+    {
+      "name": "pilar-5",
+      "id": "6"
+    },
+    {
+      "name": "tier-1",
+      "id": "13"
+    },
+    {
+      "name": "competitive-intel",
+      "id": "16"
+    }
+  ],
   "triggerCount": 1,
   "versionId": "1"
 }
