@@ -52,6 +52,14 @@ export const AGENT_ALIAS_MAP: Readonly<Record<string, string>> = {
   campaign_brief_agent: 'campaign-brief-agent',
   brand_strategist: 'brand-strategist',
   market_research: 'market-research',
+  // CC#2 Path D fix · cascade-runner referenced `market-research-analyst` (no
+  // MANIFEST-31 entry, no agents row, no registry slug) · the 'analyst' suffix
+  // is a project-local variant of MANIFEST-31's `market-research`. Cross-variant
+  // alias defenses · the cascade-runner.ts SEQUENCE now uses the underscored DB
+  // canonical, but any external caller still using the hyphenated suffix form
+  // resolves correctly via this entry.
+  'market-research-analyst': 'market_research_analyst',
+  market_research_analyst: 'market_research_analyst',
   customer_research: 'customer-research',
   competitive_intelligence_agent: 'competitive-intelligence-agent',
   mops_director: 'mops-director',
