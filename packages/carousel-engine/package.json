@@ -1,0 +1,35 @@
+{
+  "name": "@zero-risk/carousel-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Satori-powered carousel/social image generator · 5 platform templates · brand-injectable · returns PNG buffers ready to upload to Supabase Storage.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./templates/*": "./src/templates/*.tsx",
+    "./fonts": "./src/fonts/index.ts",
+    "./fixtures": "./src/fixtures/index.ts"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  },
+  "dependencies": {
+    "satori": "^0.26.0",
+    "@resvg/resvg-js": "^2.6.0",
+    "@vercel/og": "^0.11.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "typescript": "^5.5.0"
+  },
+  "keywords": [
+    "satori",
+    "carousel",
+    "social-media",
+    "instagram",
+    "tiktok",
+    "facebook",
+    "twitter",
+    "zero-risk"
+  ]
+}
