@@ -1,0 +1,198 @@
+{
+  "name": "Zero Risk — Meta Ads Campaign Creator (Brazo 3)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meta-ads-campaign-creator",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook · /meta-ads-campaign-creator",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate Meta Ads campaign brief payload.\n// Required keys · client_id · client_name · industry · campaign_name · objective · daily_budget_cents · landing_url · target_country · personas[] · diferenciador\nconst body = $input.first().json.body || $input.first().json;\nconst required = ['client_id', 'client_name', 'industry', 'campaign_name', 'objective', 'daily_budget_cents', 'landing_url', 'target_country'];\nconst missing = required.filter(k => body[k] === undefined || body[k] === null || body[k] === '');\nif (missing.length > 0) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\nconst validObjectives = ['OUTCOME_AWARENESS','OUTCOME_TRAFFIC','OUTCOME_ENGAGEMENT','OUTCOME_LEADS','OUTCOME_APP_PROMOTION','OUTCOME_SALES'];\nif (!validObjectives.includes(body.objective)) {\n  throw new Error(`Invalid objective '${body.objective}'. Must be one of: ${validObjectives.join(', ')}`);\n}\nif (typeof body.daily_budget_cents !== 'number' || body.daily_budget_cents < 100) {\n  throw new Error(`daily_budget_cents must be a number >= 100 cents ($1 minimum)`);\n}\nreturn [{ json: { ...body, personas: body.personas || [], diferenciador: body.diferenciador || '', brand_assets: body.brand_assets || {} } }];"
+      },
+      "id": "validate",
+      "name": "Validate Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ agent: 'media-buyer', task: 'Cliente: ' + $node['Validate Brief'].json.client_name + ' (industry=' + $node['Validate Brief'].json.industry + ', country=' + $node['Validate Brief'].json.target_country + '). Campaign: ' + $node['Validate Brief'].json.campaign_name + '. Objective: ' + $node['Validate Brief'].json.objective + '. Daily budget cents: ' + $node['Validate Brief'].json.daily_budget_cents + '. Diferenciador: ' + $node['Validate Brief'].json.diferenciador + '. Task: design adset targeting + optimization_goal. Return strict JSON keys targeting (object with geo_locations, age_min, age_max, genders, interests, behaviors), optimization_goal (one of REACH/IMPRESSIONS/LINK_CLICKS/LANDING_PAGE_VIEWS/OFFSITE_CONVERSIONS/LEAD_GENERATION), billing_event (IMPRESSIONS or LINK_CLICKS), recommended_bid_strategy. No prose outside JSON.', client_id: $node['Validate Brief'].json.client_id, caller: 'n8n-meta-ads-campaign-creator' }) }}",
+        "options": { "timeout": 300000 }
+      },
+      "id": "agent-media-buyer",
+      "name": "Agent · media-buyer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ agent: 'customer-research', task: 'Cliente: ' + $node['Validate Brief'].json.client_name + ' (' + $node['Validate Brief'].json.industry + ', ' + $node['Validate Brief'].json.target_country + '). Campaign brief: ' + $node['Validate Brief'].json.campaign_name + '. Personas seed (may be empty): ' + JSON.stringify($node['Validate Brief'].json.personas).substring(0, 1500) + '. Task: refine 2-3 priority personas + pain_points + objections + decision_criteria for Meta Ads creative briefing. Return strict JSON key personas (array of {name, demographics, pain_points, objections, decision_criteria, hooks_for_ad_copy}). No prose outside JSON.', client_id: $node['Validate Brief'].json.client_id, caller: 'n8n-meta-ads-campaign-creator' }) }}",
+        "options": { "timeout": 300000 }
+      },
+      "id": "agent-customer-research",
+      "name": "Agent · customer-research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ agent: 'creative-director', task: 'Cliente: ' + $node['Validate Brief'].json.client_name + '. Campaign: ' + $node['Validate Brief'].json.campaign_name + '. Diferenciador: ' + $node['Validate Brief'].json.diferenciador + '. Landing URL: ' + $node['Validate Brief'].json.landing_url + '. Brand colors: ' + (($node['Validate Brief'].json.brand_assets && $node['Validate Brief'].json.brand_assets.colors) || []).join(', ') + '. [personas] ' + (($node['Agent · customer-research'].json && $node['Agent · customer-research'].json.response) || '').substring(0, 1500) + '. Task: 3 creative variants for Meta Ads single_image format. Return strict JSON key creatives (array of 3 items each with title (≤40 chars), body (≤125 chars), call_to_action_type (one of LEARN_MORE/SHOP_NOW/SIGN_UP/CONTACT_US/GET_QUOTE/SUBSCRIBE), link_url=landing_url). No prose outside JSON.', client_id: $node['Validate Brief'].json.client_id, caller: 'n8n-meta-ads-campaign-creator' }) }}",
+        "options": { "timeout": 300000 }
+      },
+      "id": "agent-creative-director",
+      "name": "Agent · creative-director",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble create-campaign payload from agent outputs.\nfunction safeJson(s, fallback) {\n  if (!s) return fallback;\n  try { return JSON.parse(s); } catch { return fallback; }\n}\nconst brief = $node['Validate Brief'].json;\nconst mb = safeJson(($node['Agent · media-buyer'].json || {}).response, {});\nconst cd = safeJson(($node['Agent · creative-director'].json || {}).response, {});\nconst creatives = Array.isArray(cd.creatives) ? cd.creatives : [];\nif (creatives.length === 0) {\n  throw new Error('creative-director returned no creatives — abort before Meta call');\n}\nconst payload = {\n  client_id: brief.client_id,\n  campaign: {\n    name: brief.campaign_name,\n    objective: brief.objective,\n    daily_budget_cents: brief.daily_budget_cents,\n    special_ad_categories: brief.special_ad_categories || [],\n    buying_type: 'AUCTION',\n  },\n  adset: {\n    name: brief.campaign_name + ' · adset 1',\n    targeting: mb.targeting || { geo_locations: { countries: [brief.target_country] } },\n    optimization_goal: mb.optimization_goal || 'LINK_CLICKS',\n    billing_event: mb.billing_event || 'IMPRESSIONS',\n    daily_budget_cents: brief.daily_budget_cents,\n  },\n  creatives: creatives.slice(0, 3).map(c => ({\n    variant_id: c.variant_id || null,\n    name: c.title,\n    title: c.title,\n    body: c.body,\n    call_to_action_type: c.call_to_action_type,\n    link_url: c.link_url || brief.landing_url,\n  })),\n  caller: 'n8n-meta-ads-campaign-creator',\n};\nreturn [{ json: payload }];"
+      },
+      "id": "assemble",
+      "name": "Assemble Create Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/meta-ads/campaigns/create",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "create-campaign",
+      "name": "POST /api/meta-ads/campaigns/create",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MC_BASE_URL || 'https://zero-risk-mission-control-production.up.railway.app' }}/api/inbox",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "masterPassword", "value": "={{ $env.MC_MASTER_PASSWORD }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ from: 'Brazo 3 · Meta Ads Creator', to: 'Emilio', type: 'approval_request', subject: 'Meta Ads campaign PAUSED · approval required · ' + $node['Validate Brief'].json.campaign_name, body: '## Meta Ads Campaign created (PAUSED)\\n\\n**Cliente:** ' + $node['Validate Brief'].json.client_name + '\\n**Campaign name:** ' + $node['Validate Brief'].json.campaign_name + '\\n**Objective:** ' + $node['Validate Brief'].json.objective + '\\n**Daily budget:** $' + ($node['Validate Brief'].json.daily_budget_cents / 100).toFixed(2) + '\\n\\n**Meta IDs:**\\n- campaign_id: `' + $json.campaign_id + '`\\n- adset_id: `' + $json.adset_id + '`\\n- creative_ids: `' + JSON.stringify($json.creative_ids) + '`\\n- ad_ids: `' + JSON.stringify($json.ad_ids) + '`\\n\\n⚠️ **Status PAUSED · NO money spent yet.** Approve to flip ACTIVE via `POST /api/meta-ads/campaigns/{id}/activate` (Sprint #8 endpoint · or flip manually in Meta Ads Manager for Sprint #7).', context: { campaign_id: $json.campaign_id, adset_id: $json.adset_id, creative_ids: $json.creative_ids, ad_ids: $json.ad_ids, client_id: $node['Validate Brief'].json.client_id, source_workflow: 'meta-ads-campaign-creator' } }) }}",
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "hitl-inbox",
+      "name": "HITL · MC Inbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 320]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, campaign_id: $node['POST /api/meta-ads/campaigns/create'].json.campaign_id, adset_id: $node['POST /api/meta-ads/campaigns/create'].json.adset_id, creative_ids: $node['POST /api/meta-ads/campaigns/create'].json.creative_ids, ad_ids: $node['POST /api/meta-ads/campaigns/create'].json.ad_ids, hitl_dispatched: true, status: 'PAUSED' }) }}"
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1520, 320]
+    }
+  ],
+  "connections": {
+    "Webhook · /meta-ads-campaign-creator": {
+      "main": [[{ "node": "Validate Brief", "type": "main", "index": 0 }]]
+    },
+    "Validate Brief": {
+      "main": [[
+        { "node": "Agent · media-buyer", "type": "main", "index": 0 },
+        { "node": "Agent · customer-research", "type": "main", "index": 0 },
+        { "node": "Agent · creative-director", "type": "main", "index": 0 }
+      ]]
+    },
+    "Agent · media-buyer": {
+      "main": [[{ "node": "Assemble Create Payload", "type": "main", "index": 0 }]]
+    },
+    "Agent · customer-research": {
+      "main": [[{ "node": "Assemble Create Payload", "type": "main", "index": 0 }]]
+    },
+    "Agent · creative-director": {
+      "main": [[{ "node": "Assemble Create Payload", "type": "main", "index": 0 }]]
+    },
+    "Assemble Create Payload": {
+      "main": [[{ "node": "POST /api/meta-ads/campaigns/create", "type": "main", "index": 0 }]]
+    },
+    "POST /api/meta-ads/campaigns/create": {
+      "main": [[{ "node": "HITL · MC Inbox", "type": "main", "index": 0 }]]
+    },
+    "HITL · MC Inbox": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "versionId": "brazo3-sprint7-build",
+  "tags": ["brazo-3", "meta-ads", "sprint-7", "build-only"]
+}
