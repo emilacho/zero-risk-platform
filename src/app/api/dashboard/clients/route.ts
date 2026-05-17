@@ -4,7 +4,9 @@
  * Dashboard surface · list clientes with metadata + rolled-up counts
  * (invocations, agents touched, total spend USD). Read-only.
  *
- * Query · ?limit=N (1..200, default 100) · ?status=active|paused
+ * Query · ?limit=N (1..200, default 100) · ?status=active|paused ·
+ *        ?includeArchived=true (default false · honors archived_at
+ *        soft-delete from Sprint 6 cleanup 2026-05-17)
  */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
@@ -27,6 +29,8 @@ interface ClientRow {
   brand_colors: unknown
   created_at: string | null
   updated_at: string | null
+  archived_at: string | null
+  archived_reason: string | null
 }
 
 interface InvocationCountRow {
@@ -47,17 +51,19 @@ export async function GET(request: Request) {
     const rawLimit = parseInt(url.searchParams.get('limit') || '100', 10)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 100
     const statusFilter = url.searchParams.get('status')
+    const includeArchived = url.searchParams.get('includeArchived') === 'true'
 
     const supabase = getSupabaseAdmin()
 
     let q = supabase
       .from('clients')
       .select(
-        'id, name, slug, website_url, domain, industry, market, country, language, status, logo_url, brand_colors, created_at, updated_at',
+        'id, name, slug, website_url, domain, industry, market, country, language, status, logo_url, brand_colors, created_at, updated_at, archived_at, archived_reason',
       )
       .order('created_at', { ascending: false })
       .limit(limit)
     if (statusFilter) q = q.eq('status', statusFilter)
+    if (!includeArchived) q = q.is('archived_at', null)
     const { data: clientRows, error: clientsErr } = await q
     if (clientsErr) {
       return NextResponse.json(
@@ -105,6 +111,8 @@ export async function GET(request: Request) {
         brand_colors: c.brand_colors,
         created_at: c.created_at,
         updated_at: c.updated_at,
+        archived_at: c.archived_at,
+        archived_reason: c.archived_reason,
         stats: {
           invocations: s?.invocations ?? 0,
           agents_touched: s ? s.agents_touched.size : 0,
@@ -116,7 +124,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ok: true,
       count: enriched.length,
-      filters: { status: statusFilter ?? null, limit },
+      filters: { status: statusFilter ?? null, limit, includeArchived },
       clients: enriched,
       timestamp: new Date().toISOString(),
     })

@@ -59,7 +59,12 @@ export async function GET() {
         .from('agents')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'active'),
-      supabase.from('clients').select('id', { count: 'exact', head: true }),
+      // Sprint 6 cleanup · clients_total now counts non-archived only
+      // (archived_at IS NULL). Matches dashboard "Active clients" KPI.
+      supabase
+        .from('clients')
+        .select('id', { count: 'exact', head: true })
+        .is('archived_at', null),
       supabase
         .from('agent_invocations')
         .select('cost_usd, started_at')
