@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zero Risk · Design Tokens · Preview</title>
+  <link rel="stylesheet" href="./tokens.css" />
+  <style>
+    /* Self-contained preview · no Tailwind · uses only tokens.css custom properties */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--zr-font-body);
+      color: var(--zr-color-text-primary);
+      background: var(--zr-color-surface-background);
+      padding: var(--zr-space-7);
+      line-height: 1.5;
+    }
+    .page { max-width: 1280px; margin: 0 auto; }
+    .doc-hero {
+      font-family: var(--zr-font-display);
+      font-size: var(--zr-text-display-xl);
+      line-height: var(--zr-text-display-lh-xl);
+      letter-spacing: var(--zr-text-display-tracking);
+      font-weight: var(--zr-font-weight-bold);
+      color: var(--zr-color-primary-700);
+      margin-bottom: var(--zr-space-4);
+    }
+    .doc-sub {
+      font-family: var(--zr-font-heading);
+      font-size: var(--zr-text-heading-md);
+      color: var(--zr-color-neutral-600);
+      margin-bottom: var(--zr-space-7);
+    }
+    section { margin-bottom: var(--zr-space-9); }
+    h2 {
+      font-family: var(--zr-font-heading);
+      font-size: var(--zr-text-heading-xl);
+      letter-spacing: var(--zr-text-heading-tracking);
+      color: var(--zr-color-primary-700);
+      margin-bottom: var(--zr-space-2);
+      padding-bottom: var(--zr-space-2);
+      border-bottom: 2px solid var(--zr-color-accent-400);
+    }
+    h2 .badge {
+      display: inline-block;
+      font-family: var(--zr-font-mono);
+      font-size: var(--zr-text-mono-sm);
+      font-weight: var(--zr-font-weight-medium);
+      color: var(--zr-color-accent-700);
+      background: var(--zr-color-accent-100);
+      padding: 2px 8px;
+      border-radius: var(--zr-radius-sm);
+      margin-left: var(--zr-space-3);
+      vertical-align: middle;
+    }
+    p.section-intro {
+      font-size: var(--zr-text-body-md);
+      color: var(--zr-color-neutral-700);
+      margin-bottom: var(--zr-space-5);
+      max-width: 720px;
+    }
+
+    /* COLOR PALETTE GRID */
+    .ramp {
+      display: grid;
+      grid-template-columns: 140px repeat(9, 1fr);
+      gap: var(--zr-space-1);
+      margin-bottom: var(--zr-space-3);
+      align-items: stretch;
+    }
+    .ramp-label {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      font-family: var(--zr-font-mono);
+      font-size: var(--zr-text-mono-md);
+      font-weight: var(--zr-font-weight-semibold);
+      color: var(--zr-color-neutral-800);
+      padding: var(--zr-space-3);
+      background: var(--zr-color-surface-elevated);
+      border: 1px solid var(--zr-color-surface-border);
+      border-radius: var(--zr-radius-md);
+    }
+    .ramp-label small {
+      font-family: var(--zr-font-mono);
+      font-size: 10px;
+      color: var(--zr-color-neutral-500);
+      font-weight: var(--zr-font-weight-regular);
+      margin-top: 2px;
+    }
+    .swatch {
+      aspect-ratio: 1 / 1.4;
+      border-radius: var(--zr-radius-md);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: var(--zr-space-2);
+      font-family: var(--zr-font-mono);
+      font-size: 9px;
+      box-shadow: var(--zr-shadow-subtle);
+      position: relative;
+    }
+    .swatch .stop {
+      font-weight: var(--zr-font-weight-bold);
+      font-size: 11px;
+    }
+    .swatch .hex {
+      font-size: 9px;
+      opacity: 0.7;
+    }
+    .swatch.light-text { color: #ffffff; }
+    .swatch.dark-text { color: #0F172A; }
+
+    /* SPACING SCALE */
+    .spacing-row {
+      display: flex;
+      align-items: center;
+      gap: var(--zr-space-4);
+      padding: var(--zr-space-2) 0;
+      border-bottom: 1px solid var(--zr-color-surface-border);
+    }
+    .spacing-label {
+      width: 80px;
+      font-family: var(--zr-font-mono);
+      font-size: var(--zr-text-mono-md);
+      font-weight: var(--zr-font-weight-semibold);
+      color: var(--zr-color-neutral-800);
+    }
+    .spacing-px {
+      width: 80px;
+      font-family: var(--zr-font-mono);
+      font-size: var(--zr-text-mono-sm);
+      color: var(--zr-color-neutral-500);
+    }
+    .spacing-bar {
+      height: 24px;
+      background: linear-gradient(90deg, var(--zr-color-primary-700) 0%, var(--zr-color-accent-400) 100%);
+      border-radius: var(--zr-radius-sm);
+      box-shadow: var(--zr-shadow-subtle);
+    }
+
+    /* TYPOGRAPHY EXAMPLES */
+    .type-row {
+      padding: var(--zr-space-3) 0;
+      border-bottom: 1px solid var(--zr-color-surface-border);
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: var(--zr-space-5);
+      align-items: baseline;
+    }
+    .type-row .meta {
+      font-family: var(--zr-font-mono);
+      font-size: var(--zr-text-mono-sm);
+      color: var(--zr-color-neutral-500);
+    }
+    .type-row .meta b {
+      display: block;
+      font-family: var(--zr-font-mono);
+      color: var(--zr-color-neutral-800);
+      font-weight: var(--zr-font-weight-semibold);
+      margin-bottom: 4px;
+    }
+    .type-display-xl { font-family: var(--zr-font-display); font-size: var(--zr-text-display-xl); line-height: var(--zr-text-display-lh-xl); letter-spacing: var(--zr-text-display-tracking); font-weight: var(--zr-font-weight-bold); color: var(--zr-color-primary-700); }
+    .type-display-lg { font-family: var(--zr-font-display); font-size: var(--zr-text-display-lg); line-height: var(--zr-text-display-lh-lg); letter-spacing: var(--zr-text-display-tracking); font-weight: var(--zr-font-weight-bold); }
+    .type-display-md { font-family: var(--zr-font-display); font-size: var(--zr-text-display-md); line-height: var(--zr-text-display-lh-md); letter-spacing: var(--zr-text-display-tracking); font-weight: var(--zr-font-weight-bold); }
+    .type-heading-xl { font-family: var(--zr-font-heading); font-size: var(--zr-text-heading-xl); line-height: var(--zr-text-heading-lh-xl); letter-spacing: var(--zr-text-heading-tracking); font-weight: var(--zr-font-weight-bold); }
+    .type-heading-md { font-family: var(--zr-font-heading); font-size: var(--zr-text-heading-md); line-height: var(--zr-text-heading-lh-md); letter-spacing: var(--zr-text-heading-tracking); font-weight: var(--zr-font-weight-bold); }
+    .type-body-lg { font-family: var(--zr-font-body); font-size: var(--zr-text-body-lg); line-height: var(--zr-text-body-lh-lg); }
+    .type-body-md { font-family: var(--zr-font-body); font-size: var(--zr-text-body-md); line-height: var(--zr-text-body-lh-md); }
+    .type-mono-md { font-family: var(--zr-font-mono); font-size: var(--zr-text-mono-md); line-height: var(--zr-text-mono-lg); color: var(--zr-color-accent-700); }
+
+    /* MOTION DEMOS */
+    .motion-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: var(--zr-space-4);
+    }
+    .motion-card {
+      background: var(--zr-color-surface-elevated);
+      border: 1px solid var(--zr-color-surface-border);
+      border-radius: var(--zr-radius-lg);
+      padding: var(--zr-space-5);
+      box-shadow: var(--zr-shadow-subtle);
+      cursor: pointer;
+    }
+    .motion-card:hover { box-shadow: var(--zr-shadow-medium); }
+    .motion-card .name { font-family: var(--zr-font-mono); font-size: var(--zr-text-mono-md); font-weight: var(--zr-font-weight-semibold); color: var(--zr-color-primary-700); margin-bottom: var(--zr-space-2); }
+    .motion-card .desc { font-size: var(--zr-text-body-sm); color: var(--zr-color-neutral-600); margin-bottom: var(--zr-space-3); }
+    .motion-dot-track {
+      height: 6px;
+      background: var(--zr-color-neutral-200);
+      border-radius: var(--zr-radius-full);
+      position: relative;
+      overflow: hidden;
+    }
+    .motion-dot {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      transform: translate(-50%, -50%);
+      width: 18px;
+      height: 18px;
+      border-radius: var(--zr-radius-full);
+      background: linear-gradient(135deg, var(--zr-color-primary-700), var(--zr-color-accent-400));
+      box-shadow: var(--zr-shadow-neon-violet);
+      animation-duration: 1500ms;
+      animation-iteration-count: infinite;
+      animation-direction: alternate;
+      animation-name: slide;
+    }
+    .motion-dot.eo-expo    { animation-timing-function: var(--zr-easing-easeOutExpo); }
+    .motion-dot.eo-back    { animation-timing-function: var(--zr-easing-easeOutBack); }
+    .motion-dot.eo-bounce  { animation-timing-function: var(--zr-easing-easeOutBounce); }
+    .motion-dot.eo-cubic   { animation-timing-function: var(--zr-easing-easeInOutCubic); }
+    .motion-dot.eo-quad    { animation-timing-function: var(--zr-easing-easeOutQuad); }
+    .motion-dot.eo-linear  { animation-timing-function: var(--zr-easing-linear); }
+    @keyframes slide { from { left: 0; } to { left: 100%; } }
+
+    /* SHADOW DEMOS */
+    .shadow-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: var(--zr-space-5);
+      padding: var(--zr-space-5);
+      background: var(--zr-color-surface-overlay);
+      border-radius: var(--zr-radius-lg);
+    }
+    .shadow-card {
+      background: var(--zr-color-surface-background);
+      border-radius: var(--zr-radius-lg);
+      padding: var(--zr-space-5);
+      text-align: center;
+      font-family: var(--zr-font-mono);
+      font-size: var(--zr-text-mono-sm);
+      color: var(--zr-color-neutral-700);
+    }
+    .shadow-subtle      { box-shadow: var(--zr-shadow-subtle); }
+    .shadow-medium      { box-shadow: var(--zr-shadow-medium); }
+    .shadow-strong      { box-shadow: var(--zr-shadow-strong); }
+    .shadow-neon-violet { box-shadow: var(--zr-shadow-neon-violet); }
+    .shadow-neon-cyan   { box-shadow: var(--zr-shadow-neon-cyan); }
+
+    /* RADIUS DEMOS */
+    .radius-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: var(--zr-space-3); }
+    .radius-card { background: linear-gradient(135deg, var(--zr-color-primary-700), var(--zr-color-accent-400)); height: 110px; display: flex; align-items: flex-end; justify-content: center; padding: var(--zr-space-2); font-family: var(--zr-font-mono); font-size: var(--zr-text-mono-sm); color: #fff; }
+
+    /* DARK MODE TOGGLE */
+    .theme-toggle {
+      position: fixed; top: 16px; right: 16px;
+      padding: 8px 16px;
+      background: var(--zr-color-primary-700);
+      color: var(--zr-color-text-on-primary);
+      border: none;
+      border-radius: var(--zr-radius-full);
+      cursor: pointer;
+      font-family: var(--zr-font-mono);
+      font-size: var(--zr-text-mono-sm);
+      box-shadow: var(--zr-shadow-medium);
+      z-index: var(--zr-z-toast);
+    }
+    .theme-toggle:hover { box-shadow: var(--zr-shadow-neon-violet); }
+  </style>
+</head>
+<body>
+  <button class="theme-toggle" onclick="document.documentElement.toggleAttribute('data-theme') || document.documentElement.setAttribute('data-theme', 'dark'); if (document.documentElement.getAttribute('data-theme') !== 'dark') document.documentElement.removeAttribute('data-theme');">
+    toggle theme
+  </button>
+
+  <div class="page">
+    <h1 class="doc-hero">Zero Risk Design Tokens</h1>
+    <p class="doc-sub">v1.0.0 · D1 canonical · 2026-05-17</p>
+
+    <!-- ════════ COLOR PALETTE ════════ -->
+    <section id="color">
+      <h2>Color palette<span class="badge">9 ramps × 9 stops = 81 tokens</span></h2>
+      <p class="section-intro">Each ramp anchors at a canonical brand stop. Ramps are designed to maintain perceptual lightness progression across all 9 stops. Primary anchors at 700 (deep violet brand). Accent anchors at 400 (cyan mid-light). Semantics (success / warning / danger) anchor at 500.</p>
+
+      <div class="ramp" id="ramp-primary">
+        <div class="ramp-label">primary<small>Zero Risk violet · anchor 700</small></div>
+        <div class="swatch light-text" style="background:#F1ECF7;color:#0F172A;"><span class="stop">100</span><span class="hex">#F1ECF7</span></div>
+        <div class="swatch dark-text" style="background:#DCCCEC;"><span class="stop">200</span><span class="hex">#DCCCEC</span></div>
+        <div class="swatch dark-text" style="background:#B795D6;"><span class="stop">300</span><span class="hex">#B795D6</span></div>
+        <div class="swatch light-text" style="background:#8A5FBC;"><span class="stop">400</span><span class="hex">#8A5FBC</span></div>
+        <div class="swatch light-text" style="background:#5D3F94;"><span class="stop">500</span><span class="hex">#5D3F94</span></div>
+        <div class="swatch light-text" style="background:#4A3179;"><span class="stop">600</span><span class="hex">#4A3179</span></div>
+        <div class="swatch light-text" style="background:#3D2466;"><span class="stop">700★</span><span class="hex">#3D2466</span></div>
+        <div class="swatch light-text" style="background:#2E1B4D;"><span class="stop">800</span><span class="hex">#2E1B4D</span></div>
+        <div class="swatch light-text" style="background:#1C1030;"><span class="stop">900</span><span class="hex">#1C1030</span></div>
+      </div>
+      <div class="ramp" id="ramp-accent">
+        <div class="ramp-label">accent<small>Zero Risk cyan · anchor 400</small></div>
+        <div class="swatch dark-text" style="background:#E8FAFB;"><span class="stop">100</span><span class="hex">#E8FAFB</span></div>
+        <div class="swatch dark-text" style="background:#C6F2F4;"><span class="stop">200</span><span class="hex">#C6F2F4</span></div>
+        <div class="swatch dark-text" style="background:#8FE5E8;"><span class="stop">300</span><span class="hex">#8FE5E8</span></div>
+        <div class="swatch dark-text" style="background:#4DD4D8;"><span class="stop">400★</span><span class="hex">#4DD4D8</span></div>
+        <div class="swatch light-text" style="background:#2FB8BC;"><span class="stop">500</span><span class="hex">#2FB8BC</span></div>
+        <div class="swatch light-text" style="background:#209B9F;"><span class="stop">600</span><span class="hex">#209B9F</span></div>
+        <div class="swatch light-text" style="background:#167D80;"><span class="stop">700</span><span class="hex">#167D80</span></div>
+        <div class="swatch light-text" style="background:#0F5F62;"><span class="stop">800</span><span class="hex">#0F5F62</span></div>
+        <div class="swatch light-text" style="background:#084044;"><span class="stop">900</span><span class="hex">#084044</span></div>
+      </div>
+      <div class="ramp">
+        <div class="ramp-label">neutral<small>Slate · anchor 500</small></div>
+        <div class="swatch dark-text" style="background:#F1F5F9;"><span class="stop">100</span><span class="hex">#F1F5F9</span></div>
+        <div class="swatch dark-text" style="background:#E2E8F0;"><span class="stop">200</span><span class="hex">#E2E8F0</span></div>
+        <div class="swatch dark-text" style="background:#CBD5E1;"><span class="stop">300</span><span class="hex">#CBD5E1</span></div>
+        <div class="swatch dark-text" style="background:#94A3B8;"><span class="stop">400</span><span class="hex">#94A3B8</span></div>
+        <div class="swatch light-text" style="background:#64748B;"><span class="stop">500★</span><span class="hex">#64748B</span></div>
+        <div class="swatch light-text" style="background:#475569;"><span class="stop">600</span><span class="hex">#475569</span></div>
+        <div class="swatch light-text" style="background:#334155;"><span class="stop">700</span><span class="hex">#334155</span></div>
+        <div class="swatch light-text" style="background:#1E293B;"><span class="stop">800</span><span class="hex">#1E293B</span></div>
+        <div class="swatch light-text" style="background:#0F172A;"><span class="stop">900</span><span class="hex">#0F172A</span></div>
+      </div>
+      <div class="ramp">
+        <div class="ramp-label">success<small>Emerald · anchor 500</small></div>
+        <div class="swatch dark-text" style="background:#DFFAEE;"><span class="stop">100</span><span class="hex">#DFFAEE</span></div>
+        <div class="swatch dark-text" style="background:#B3F2D5;"><span class="stop">200</span><span class="hex">#B3F2D5</span></div>
+        <div class="swatch dark-text" style="background:#7AEABA;"><span class="stop">300</span><span class="hex">#7AEABA</span></div>
+        <div class="swatch dark-text" style="background:#3DDDA0;"><span class="stop">400</span><span class="hex">#3DDDA0</span></div>
+        <div class="swatch light-text" style="background:#00D084;"><span class="stop">500★</span><span class="hex">#00D084</span></div>
+        <div class="swatch light-text" style="background:#00A86A;"><span class="stop">600</span><span class="hex">#00A86A</span></div>
+        <div class="swatch light-text" style="background:#008455;"><span class="stop">700</span><span class="hex">#008455</span></div>
+        <div class="swatch light-text" style="background:#006640;"><span class="stop">800</span><span class="hex">#006640</span></div>
+        <div class="swatch light-text" style="background:#00422B;"><span class="stop">900</span><span class="hex">#00422B</span></div>
+      </div>
+      <div class="ramp">
+        <div class="ramp-label">warning<small>Amber · anchor 500</small></div>
+        <div class="swatch dark-text" style="background:#FEF3C7;"><span class="stop">100</span><span class="hex">#FEF3C7</span></div>
+        <div class="swatch dark-text" style="background:#FDE68A;"><span class="stop">200</span><span class="hex">#FDE68A</span></div>
+        <div class="swatch dark-text" style="background:#FCD34D;"><span class="stop">300</span><span class="hex">#FCD34D</span></div>
+        <div class="swatch dark-text" style="background:#FBBF24;"><span class="stop">400</span><span class="hex">#FBBF24</span></div>
+        <div class="swatch dark-text" style="background:#F59E0B;"><span class="stop">500★</span><span class="hex">#F59E0B</span></div>
+        <div class="swatch light-text" style="background:#D97706;"><span class="stop">600</span><span class="hex">#D97706</span></div>
+        <div class="swatch light-text" style="background:#B45309;"><span class="stop">700</span><span class="hex">#B45309</span></div>
+        <div class="swatch light-text" style="background:#92400E;"><span class="stop">800</span><span class="hex">#92400E</span></div>
+        <div class="swatch light-text" style="background:#78350F;"><span class="stop">900</span><span class="hex">#78350F</span></div>
+      </div>
+      <div class="ramp">
+        <div class="ramp-label">danger<small>Crimson · anchor 500</small></div>
+        <div class="swatch dark-text" style="background:#FFE4EB;"><span class="stop">100</span><span class="hex">#FFE4EB</span></div>
+        <div class="swatch dark-text" style="background:#FFC2CF;"><span class="stop">200</span><span class="hex">#FFC2CF</span></div>
+        <div class="swatch dark-text" style="background:#FF94AC;"><span class="stop">300</span><span class="hex">#FF94AC</span></div>
+        <div class="swatch light-text" style="background:#FF6088;"><span class="stop">400</span><span class="hex">#FF6088</span></div>
+        <div class="swatch light-text" style="background:#FF3366;"><span class="stop">500★</span><span class="hex">#FF3366</span></div>
+        <div class="swatch light-text" style="background:#DB1B4F;"><span class="stop">600</span><span class="hex">#DB1B4F</span></div>
+        <div class="swatch light-text" style="background:#B0143F;"><span class="stop">700</span><span class="hex">#B0143F</span></div>
+        <div class="swatch light-text" style="background:#841030;"><span class="stop">800</span><span class="hex">#841030</span></div>
+        <div class="swatch light-text" style="background:#5E0A22;"><span class="stop">900</span><span class="hex">#5E0A22</span></div>
+      </div>
+    </section>
+
+    <!-- ════════ SPACING ════════ -->
+    <section id="spacing">
+      <h2>Spacing scale<span class="badge">10 stops · 4px base</span></h2>
+      <p class="section-intro">All component padding · margin · gap consume from this scale. Use the stop number (`space-4`) not the raw pixel value, so brand swaps don't break density.</p>
+      <div class="spacing-row"><div class="spacing-label">space-0</div><div class="spacing-px">0</div><div class="spacing-bar" style="width:1px;"></div></div>
+      <div class="spacing-row"><div class="spacing-label">space-1</div><div class="spacing-px">4px</div><div class="spacing-bar" style="width:4px;"></div></div>
+      <div class="spacing-row"><div class="spacing-label">space-2</div><div class="spacing-px">8px</div><div class="spacing-bar" style="width:8px;"></div></div>
+      <div class="spacing-row"><div class="spacing-label">space-3</div><div class="spacing-px">12px</div><div class="spacing-bar" style="width:12px;"></div></div>
+      <div class="spacing-row"><div class="spacing-label">space-4</div><div class="spacing-px">16px</div><div class="spacing-bar" style="width:16px;"></div></div>
+      <div class="spacing-row"><div class="spacing-label">space-5</div><div class="spacing-px">24px</div><div class="spacing-bar" style="width:24px;"></div></div>
+      <div class="spacing-row"><div class="spacing-label">space-6</div><div class="spacing-px">32px</div><div class="spacing-bar" style="width:32px;"></div></div>
+      <div class="spacing-row"><div class="spacing-label">space-7</div><div class="spacing-px">48px</div><div class="spacing-bar" style="width:48px;"></div></div>
+      <div class="spacing-row"><div class="spacing-label">space-8</div><div class="spacing-px">64px</div><div class="spacing-bar" style="width:64px;"></div></div>
+      <div class="spacing-row"><div class="spacing-label">space-9</div><div class="spacing-px">96px</div><div class="spacing-bar" style="width:96px;"></div></div>
+      <div class="spacing-row"><div class="spacing-label">space-10</div><div class="spacing-px">128px</div><div class="spacing-bar" style="width:128px;"></div></div>
+    </section>
+
+    <!-- ════════ TYPOGRAPHY ════════ -->
+    <section id="typography">
+      <h2>Typography<span class="badge">4 families · display + heading + body + mono</span></h2>
+      <p class="section-intro">Space Grotesk for display copy · Inter for headings + body · JetBrains Mono for code · IDs · numeric data. Line-heights are locked per size for vertical rhythm consistency.</p>
+      <div class="type-row"><div class="meta"><b>display-xl</b>Space Grotesk · 80/84px · -0.02em</div><div class="type-display-xl">Empezar hoy</div></div>
+      <div class="type-row"><div class="meta"><b>display-lg</b>Space Grotesk · 64/67px · -0.02em</div><div class="type-display-lg">Agencia Agéntica</div></div>
+      <div class="type-row"><div class="meta"><b>display-md</b>Space Grotesk · 48/50px · -0.02em</div><div class="type-display-md">Zero Risk</div></div>
+      <div class="type-row"><div class="meta"><b>heading-xl</b>Inter Bold · 32/38px · -0.01em</div><div class="type-heading-xl">Section title</div></div>
+      <div class="type-row"><div class="meta"><b>heading-md</b>Inter Bold · 24/29px · -0.01em</div><div class="type-heading-md">Card title</div></div>
+      <div class="type-row"><div class="meta"><b>body-lg</b>Inter Regular · 18/29px</div><div class="type-body-lg">Larger body for emphasis · descriptions · lead paragraphs.</div></div>
+      <div class="type-row"><div class="meta"><b>body-md</b>Inter Regular · 16/24px</div><div class="type-body-md">Default body copy. The bulk of running text uses this size.</div></div>
+      <div class="type-row"><div class="meta"><b>mono-md</b>JetBrains Mono · 14/21px</div><div class="type-mono-md">var(--zr-color-primary-700)</div></div>
+    </section>
+
+    <!-- ════════ MOTION ════════ -->
+    <section id="motion">
+      <h2>Motion · easing curves<span class="badge">6 easings · 5 durations</span></h2>
+      <p class="section-intro">Each card animates on loop · same 1500ms duration · different easing. Notice how easeOutExpo (default) settles fast and gentle · easeOutBack overshoots slightly · easeOutBounce is playful (use sparingly) · linear is for parallax only.</p>
+      <div class="motion-grid">
+        <div class="motion-card"><div class="name">easeOutExpo (default)</div><div class="desc">Fast settle · entrances · canonical.</div><div class="motion-dot-track"><div class="motion-dot eo-expo"></div></div></div>
+        <div class="motion-card"><div class="name">easeInOutCubic</div><div class="desc">Bidirectional transitions · nav.</div><div class="motion-dot-track"><div class="motion-dot eo-cubic"></div></div></div>
+        <div class="motion-card"><div class="name">easeOutBack</div><div class="desc">Slight overshoot · CTAs · pop-in.</div><div class="motion-dot-track"><div class="motion-dot eo-back"></div></div></div>
+        <div class="motion-card"><div class="name">easeOutBounce</div><div class="desc">Playful · use sparingly.</div><div class="motion-dot-track"><div class="motion-dot eo-bounce"></div></div></div>
+        <div class="motion-card"><div class="name">easeOutQuad</div><div class="desc">Subtle · micro-interactions.</div><div class="motion-dot-track"><div class="motion-dot eo-quad"></div></div></div>
+        <div class="motion-card"><div class="name">linear</div><div class="desc">Parallax · marquees · scroll-tied.</div><div class="motion-dot-track"><div class="motion-dot eo-linear"></div></div></div>
+      </div>
+    </section>
+
+    <!-- ════════ SHADOWS ════════ -->
+    <section id="shadow">
+      <h2>Shadow elevation<span class="badge">5 standards + 2 neon</span></h2>
+      <p class="section-intro">Resting → hover → modal elevation ladder · plus two neon accents for cinematic moments. Dark mode auto-deepens (see <code class="type-mono-md">tokens.css</code>).</p>
+      <div class="shadow-grid">
+        <div class="shadow-card shadow-subtle">subtle</div>
+        <div class="shadow-card shadow-medium">medium</div>
+        <div class="shadow-card shadow-strong">strong</div>
+        <div class="shadow-card shadow-neon-violet">neon-violet</div>
+        <div class="shadow-card shadow-neon-cyan">neon-cyan</div>
+      </div>
+    </section>
+
+    <!-- ════════ RADIUS ════════ -->
+    <section id="radius">
+      <h2>Border radius<span class="badge">7 stops + full</span></h2>
+      <p class="section-intro">From sharp technical UI (0) to pill avatar (full · 9999px). Each stop chosen to match a component archetype.</p>
+      <div class="radius-grid">
+        <div class="radius-card" style="border-radius:0;">none</div>
+        <div class="radius-card" style="border-radius:4px;">sm · 4px</div>
+        <div class="radius-card" style="border-radius:8px;">md · 8px</div>
+        <div class="radius-card" style="border-radius:12px;">lg · 12px</div>
+        <div class="radius-card" style="border-radius:16px;">xl · 16px</div>
+        <div class="radius-card" style="border-radius:24px;">2xl · 24px</div>
+        <div class="radius-card" style="border-radius:32px;">3xl · 32px</div>
+        <div class="radius-card" style="border-radius:9999px;">full</div>
+      </div>
+    </section>
+
+    <footer style="font-family: var(--zr-font-mono); font-size: var(--zr-text-mono-sm); color: var(--zr-color-neutral-500); padding-top: var(--zr-space-7); border-top: 1px solid var(--zr-color-surface-border);">
+      Source · <code style="color:var(--zr-color-primary-700)">design-system/tokens.json</code> · canonical truth for every Zero Risk surface.
+    </footer>
+  </div>
+</body>
+</html>
