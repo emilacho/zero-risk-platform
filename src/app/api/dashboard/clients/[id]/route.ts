@@ -5,7 +5,18 @@
  * worked on this cliente (rolled-up sessions + spend per agent) + Storage
  * file listing under `client-websites/<slug>/` + journey timeline. Read-only.
  *
- * The [id] route param is the client UUID.
+ * The [id] route param accepts EITHER a client UUID OR a client slug.
+ * Previously UUID-only · slug inputs blew up with `invalid input syntax
+ * for type uuid: "<slug>"` because the `id` column is uuid-typed and
+ * Postgres rejects non-UUID strings before evaluating the predicate.
+ * BUG02 dashboard-side workaround (3d982ba) added `clientByIdOrSlug` to
+ * the dashboard API client · this commit retires that workaround by
+ * fixing the platform endpoint to do the right lookup directly.
+ *
+ * Resolution path · UUID-shaped input → `.eq('id', id)` · non-UUID
+ * input → `.eq('slug', id)`. Downstream queries (agent_invocations ·
+ * client_journey_state) always use the RESOLVED `client.id` UUID so
+ * they never see a slug.
  */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
@@ -74,13 +85,16 @@ interface StorageObject {
   metadata: Record<string, unknown> | null
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id } = await context.params
-    if (!id) {
+    const { id: idOrSlug } = await context.params
+    if (!idOrSlug) {
       return NextResponse.json(
         { ok: false, error: 'id required', code: 'E-DASHBOARD-CLIENT-DETAIL-ID' },
         { status: 400 },
@@ -88,11 +102,15 @@ export async function GET(
     }
 
     const supabase = getSupabaseAdmin()
+    // Pick the column to filter by: uuid-shaped → id column · everything
+    // else → slug column. Avoids `invalid input syntax for type uuid`
+    // when the URL carries a friendly slug like /clients/naufrago.
+    const lookupColumn: 'id' | 'slug' = UUID_RE.test(idOrSlug) ? 'id' : 'slug'
 
     const { data: client, error: clientErr } = await supabase
       .from('clients')
       .select('*')
-      .eq('id', id)
+      .eq(lookupColumn, idOrSlug)
       .maybeSingle()
     if (clientErr) {
       return NextResponse.json(
@@ -102,18 +120,25 @@ export async function GET(
     }
     if (!client) {
       return NextResponse.json(
-        { ok: false, error: `client not found · id=${id}`, code: 'E-DASHBOARD-CLIENT-DETAIL-NOTFOUND' },
+        {
+          ok: false,
+          error: `client not found · ${lookupColumn}=${idOrSlug}`,
+          code: 'E-DASHBOARD-CLIENT-DETAIL-NOTFOUND',
+        },
         { status: 404 },
       )
     }
     const c = client as ClientRow
+    // Downstream queries always use the resolved UUID · never the slug ·
+    // so client_id-typed FK predicates don't trip the uuid parser.
+    const clientId = c.id
 
     const { data: invocations } = await supabase
       .from('agent_invocations')
       .select(
         'id, agent_id, agent_name, model, cost_usd, tokens_input, tokens_output, started_at, ended_at, status, metadata',
       )
-      .eq('client_id', id)
+      .eq('client_id', clientId)
       .order('started_at', { ascending: false })
       .limit(200)
 
@@ -137,7 +162,7 @@ export async function GET(
       .select(
         'id, journey, current_stage, status, trigger_type, trigger_source, hitl_pending_count, hitl_resolved_count, outcome, error_count, last_error, started_at, updated_at, completed_at',
       )
-      .eq('client_id', id)
+      .eq('client_id', clientId)
       .order('started_at', { ascending: false })
       .limit(20)
 

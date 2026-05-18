@@ -27,6 +27,11 @@ interface QueryState {
 // Stateful holder · each test overrides what each .from('table') returns.
 let nextResults: Record<string, { data: Row[]; count?: number | null }> = {}
 
+// BUG02 follow-up · records every .eq(column, value) call grouped by
+// table · used by the uuid-vs-slug column-selection tests to assert the
+// clients/[id] route picks the right column. Existing tests ignore it.
+let eqCalls: Array<{ table: string; column: string; value: unknown }> = []
+
 function makeQuery(table: string) {
   const state: QueryState = {
     table,
@@ -37,7 +42,10 @@ function makeQuery(table: string) {
   // resolve to { data, count, error }.
   const chain: Record<string, (...args: unknown[]) => unknown> & PromiseLike<unknown> = {
     select: () => chain,
-    eq: () => chain,
+    eq: (column: unknown, value: unknown) => {
+      eqCalls.push({ table, column: String(column), value })
+      return chain
+    },
     in: () => chain,
     gte: () => chain,
     order: () => chain,
@@ -68,6 +76,7 @@ vi.mock('@/lib/supabase', () => ({
 
 beforeEach(() => {
   nextResults = {}
+  eqCalls = []
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://test.supabase.co')
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon-key')
 })
@@ -279,6 +288,95 @@ describe('GET /api/dashboard/clients/[id]', () => {
       params: Promise.resolve({ id: 'missing' }),
     })
     expect(res.status).toBe(404)
+  })
+
+  // BUG02 follow-up (2026-05-18) · the route now accepts UUID or slug
+  // in the [id] segment. These two tests pin the column-selection
+  // behaviour so the dashboard-side `clientByIdOrSlug` workaround can
+  // be retired safely (Sprint #9 cleanup).
+  it('looks up by slug column when input is non-UUID-shaped', async () => {
+    const uuid = 'd69100b5-8ad7-4bb0-908c-68b5544065dc'
+    nextResults = {
+      clients: {
+        data: [
+          {
+            id: uuid,
+            name: 'Náufrago',
+            slug: 'naufrago',
+            domain: 'naufrago.ec',
+            industry: 'ghost-kitchen',
+            country: 'EC',
+            status: 'onboarding',
+            brand_colors: ['#3D2466'],
+          },
+        ],
+      },
+      agent_invocations: { data: [] },
+      client_journey_state: { data: [] },
+    }
+    const { GET } = await import('../src/app/api/dashboard/clients/[id]/route')
+    const res = await GET(buildReq('/api/dashboard/clients/naufrago'), {
+      params: Promise.resolve({ id: 'naufrago' }),
+    })
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.ok).toBe(true)
+    expect(json.client.slug).toBe('naufrago')
+    // Clients table was queried by SLUG, not by id (which is uuid-typed
+    // and would have thrown on Postgres against a slug string).
+    const clientsEq = eqCalls.find((c) => c.table === 'clients')
+    expect(clientsEq).toEqual({ table: 'clients', column: 'slug', value: 'naufrago' })
+    // Downstream queries use the RESOLVED uuid · never the slug · so
+    // the client_id FK predicate never sees a non-uuid value.
+    const invEq = eqCalls.find((c) => c.table === 'agent_invocations')
+    expect(invEq).toEqual({
+      table: 'agent_invocations',
+      column: 'client_id',
+      value: uuid,
+    })
+    const jrnEq = eqCalls.find((c) => c.table === 'client_journey_state')
+    expect(jrnEq).toEqual({
+      table: 'client_journey_state',
+      column: 'client_id',
+      value: uuid,
+    })
+  })
+
+  it('looks up by id column when input is UUID-shaped', async () => {
+    const uuid = 'd69100b5-8ad7-4bb0-908c-68b5544065dc'
+    nextResults = {
+      clients: {
+        data: [
+          { id: uuid, name: 'Náufrago', slug: 'naufrago', status: 'onboarding' },
+        ],
+      },
+      agent_invocations: { data: [] },
+      client_journey_state: { data: [] },
+    }
+    const { GET } = await import('../src/app/api/dashboard/clients/[id]/route')
+    const res = await GET(buildReq(`/api/dashboard/clients/${uuid}`), {
+      params: Promise.resolve({ id: uuid }),
+    })
+    expect(res.status).toBe(200)
+    const clientsEq = eqCalls.find((c) => c.table === 'clients')
+    expect(clientsEq).toEqual({ table: 'clients', column: 'id', value: uuid })
+  })
+
+  it('returns 404 for non-UUID input with no slug match', async () => {
+    nextResults = { clients: { data: [] } }
+    const { GET } = await import('../src/app/api/dashboard/clients/[id]/route')
+    const res = await GET(buildReq('/api/dashboard/clients/does-not-exist'), {
+      params: Promise.resolve({ id: 'does-not-exist' }),
+    })
+    expect(res.status).toBe(404)
+    const clientsEq = eqCalls.find((c) => c.table === 'clients')
+    expect(clientsEq).toEqual({
+      table: 'clients',
+      column: 'slug',
+      value: 'does-not-exist',
+    })
+    const json = await res.json()
+    expect(json.error).toContain('slug=does-not-exist')
   })
 })
 
