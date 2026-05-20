@@ -10,6 +10,7 @@
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { capture } from '@/lib/posthog'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -58,6 +59,17 @@ export async function POST(request: Request) {
     // completes within the 60s smoke timeout. Real runs do all 7 phases.
     const isSmoke = client_id.startsWith('smoke-') || client_id === 'smoke-test'
     const phasesToUse = isSmoke ? ['DISCOVER'] : PHASES
+
+    // Sprint 4 D5 · canonical reporting event. Smoke runs still fire so
+    // QA can verify the wire end-to-end · downstream dashboards filter
+    // by `smoke_mode` if they need to exclude.
+    capture('campaign_started', client_id, {
+      request_id,
+      priority,
+      phases_count: phasesToUse.length,
+      smoke_mode: isSmoke,
+      brief_length: campaign_brief.length,
+    })
 
     return NextResponse.json({
       ok: true,

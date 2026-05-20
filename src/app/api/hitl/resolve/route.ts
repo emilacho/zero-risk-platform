@@ -100,6 +100,15 @@ export async function POST(request: Request) {
       decision,
       reviewer_role: 'human',
     })
+    // Sprint 4 D5 · canonical reporting event when an approval lands ·
+    // emitted ONLY when decision === 'approved' so the funnel counts
+    // approvals separately from rejections + edits.
+    if (decision === 'approved') {
+      capture('hitl_approved', step.pipeline_id, {
+        item_id: stepId,
+        reviewer_role: 'human',
+      })
+    }
 
     // Get updated pipeline status
     const { data: pipeline } = await supabase

@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
+import { capture } from '@/lib/posthog'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -57,6 +58,20 @@ export async function POST(request: Request) {
         status: 'in_progress',
       })
     }
+
+    // Sprint 4 D5 · canonical reporting event · NEXUS pipeline reached
+    // OPERATE close (last phase). `client_id_from_body` may be empty for
+    // pre-wire smoke runs · we still emit so QA can verify the wire,
+    // distinctId falls back to 'nexus-anonymous' in that case.
+    capture(
+      'campaign_completed',
+      client_id_from_body || 'nexus-anonymous',
+      {
+        final_phase: current_phase,
+        phases_completed: phasesFromBody.length,
+        smoke_mode: isSmoke,
+      },
+    )
 
     return NextResponse.json({
       ...body,
