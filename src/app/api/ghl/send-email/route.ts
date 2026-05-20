@@ -1,54 +1,41 @@
 /**
- * POST /api/ghl/send-email — bridge to GHL email send.
+ * POST /api/ghl/send-email — DEPRECATED shim · 2026-05-20 Sprint 3 D2.
  *
- * Closes W15-D-14. Workflow caller:
- *   `Zero Risk — Client NPS + CSAT Monthly Pulse (1st of Month 10am)`
+ * Original GHL stub (`fallback_mode: true · synthetic message_id`) is
+ * replaced canonically by `/api/email/send` (Resend wrapper per Stack
+ * V4 GHL-Out master plan).
  *
- * Purpose: send a transactional email via GoHighLevel. This is a stub bridge
- * for now — real GHL Email API integration is pending. The route DOES persist
- * every send attempt to ghl_email_log so audit + retry logic have a trail
- * even before the real upstream API is wired.
+ * This route is preserved as a thin pass-through for backwards-compat
+ * with n8n workflows that still POST here · sunset 2 weeks after the
+ * V4 cutover (date in `X-Sunset` header). Each call ·
  *
- * Body (Ajv schema: ghl-send-email):
- *   {
- *     to_email: string (email format · required),
- *     subject: string (required),
- *     body: string (required · HTML or plain text),
- *     from_name?: string,
- *     from_email?: string,
- *     reply_to?: string,
- *     contact_id?: string,
- *     template_id?: string,
- *     client_id?: string,
- *     campaign_id?: string,
- *     metadata?: object
- *   }
+ *   1. Adds `X-Deprecated: true` + `X-Sunset` + `X-Successor` headers
+ *      so monitoring (and any human reading the response) sees it
+ *   2. Logs the caller fingerprint to `ghl_email_log` for migration
+ *      audit (which workflow / which IP still hits us)
+ *   3. Forwards the body to the internal `/api/email/send` handler
+ *      directly · NO outbound HTTP (avoids extra hop)
  *
- * Response (200):
- *   {
- *     ok: true,
- *     message_id: string,        // local synthetic id; replaced by GHL's when wired
- *     to_email: string,
- *     subject: string,
- *     queued_at: ISO,
- *     fallback_mode: true,       // until real GHL API is wired
- *     persisted: boolean         // whether ghl_email_log insert succeeded
- *   }
- *
- * Auth: tier 2 INTERNAL.
+ * Body shape is the legacy one (`to_email · subject · body · from_name
+ * · from_email · reply_to · contact_id · template_id · client_id ·
+ * campaign_id · metadata`) · normalized to canonical Resend shape by
+ * `/api/email/send`'s own `normalizeBody()` helper.
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { validateObject } from '@/lib/input-validator'
+import { sendEmail } from '@/lib/email/resend'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 30
 
-interface SendEmailInput {
-  to_email: string
-  subject: string
-  body: string
+const SUNSET_DATE = '2026-06-03' // 2 weeks post-Sprint-3-D2 ship
+
+interface LegacyGhlInput {
+  to_email?: string
+  subject?: string
+  body?: string
   from_name?: string | null
   from_email?: string | null
   reply_to?: string | null
@@ -59,67 +46,127 @@ interface SendEmailInput {
   metadata?: Record<string, unknown> | null
 }
 
+function deprecationHeaders(): Record<string, string> {
+  return {
+    'X-Deprecated': 'true',
+    'X-Sunset': SUNSET_DATE,
+    'X-Successor': '/api/email/send',
+    'X-Deprecation-Reason': 'Stack V4 GHL-Out migration · Resend canon',
+  }
+}
+
+async function logDeprecatedCall(args: {
+  to_email: string
+  subject: string
+  caller_ua: string | null
+  caller_ip: string | null
+}): Promise<void> {
+  try {
+    const supabase = getSupabaseAdmin()
+    await supabase.from('ghl_email_log').insert({
+      message_id: `shim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      to_email: args.to_email,
+      subject: args.subject.slice(0, 500),
+      status: 'shim_forwarded',
+      metadata: {
+        deprecation: {
+          sunset: SUNSET_DATE,
+          successor: '/api/email/send',
+          caller_ua: args.caller_ua,
+          caller_ip: args.caller_ip,
+        },
+      },
+      queued_at: new Date().toISOString(),
+    })
+  } catch {
+    // Audit is best-effort.
+  }
+}
+
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)
   if (!auth.ok) {
     return NextResponse.json(
       { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
-      { status: 401 },
+      { status: 401, headers: deprecationHeaders() },
     )
   }
 
-  let raw: unknown
+  let raw: LegacyGhlInput
   try {
-    raw = await request.json()
+    raw = (await request.json()) as LegacyGhlInput
   } catch {
     return NextResponse.json(
       { error: 'invalid_json', code: 'E-INPUT-PARSE' },
-      { status: 400 },
+      { status: 400, headers: deprecationHeaders() },
     )
   }
 
-  const v = validateObject<SendEmailInput>(raw, 'ghl-send-email')
-  if (!v.ok) return v.response
-  const body = v.data
+  // Audit · which caller still hits the deprecated route.
+  void logDeprecatedCall({
+    to_email: raw.to_email ?? '',
+    subject: raw.subject ?? '',
+    caller_ua: request.headers.get('user-agent'),
+    caller_ip:
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+  })
 
-  const messageId = `ghl-msg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-  const queuedAt = new Date().toISOString()
+  // Map legacy → canonical shape and forward via the internal helper
+  // (no HTTP round-trip · directly invoke sendEmail).
+  if (!raw.to_email) {
+    return NextResponse.json(
+      { ok: false, error: 'to_email_required', code: 'InvalidInput' },
+      { status: 400, headers: deprecationHeaders() },
+    )
+  }
+  const fromCombined =
+    raw.from_name && raw.from_email
+      ? `${raw.from_name} <${raw.from_email}>`
+      : raw.from_email || undefined
 
-  // Best-effort persist to ghl_email_log (table optional). We never fail the
-  // request when persist fails — workflows depend on this returning ok so
-  // they can chain to the next step.
-  let persisted = false
-  try {
-    const supabase = getSupabaseAdmin()
-    const { error } = await supabase.from('ghl_email_log').insert({
-      message_id: messageId,
-      to_email: body.to_email,
-      subject: body.subject.slice(0, 500),
-      body_preview: body.body.slice(0, 1000),
-      from_name: body.from_name ?? null,
-      from_email: body.from_email ?? null,
-      reply_to: body.reply_to ?? null,
-      contact_id: body.contact_id ?? null,
-      template_id: body.template_id ?? null,
-      client_id: body.client_id ?? null,
-      campaign_id: body.campaign_id ?? null,
-      metadata: body.metadata ?? null,
-      queued_at: queuedAt,
-      status: 'queued_stub',
-    })
-    persisted = !error
-  } catch {
-    // Table missing or DB unavailable — keep going.
+  const result = await sendEmail({
+    to: raw.to_email,
+    subject: raw.subject ?? '',
+    html: raw.body,
+    from: fromCombined,
+    reply_to: raw.reply_to ?? undefined,
+    internal_ref: raw.contact_id ?? raw.client_id ?? undefined,
+  })
+
+  if (!result.ok) {
+    let status = 502
+    if (result.code === 'ServiceUnconfigured') status = 503
+    else if (result.code === 'InvalidInput') status = 400
+    else if (result.code === 'NetworkError') status = 504
+    return NextResponse.json(
+      {
+        ok: false,
+        error: result.code,
+        detail: result.detail,
+        provider: 'resend',
+        legacy_route: '/api/ghl/send-email',
+      },
+      { status, headers: deprecationHeaders() },
+    )
   }
 
-  return NextResponse.json({
-    ok: true,
-    message_id: messageId,
-    to_email: body.to_email,
-    subject: body.subject,
-    queued_at: queuedAt,
-    fallback_mode: true,
-    persisted,
-    note: 'Stub: real GHL Email API integration pending. message_id is synthetic.',
-  })
+  // Shape-compatible legacy response (additional fields are additive ·
+  // existing n8n callers ignore unknown keys).
+  return NextResponse.json(
+    {
+      ok: true,
+      message_id: result.message_id,
+      to_email: raw.to_email,
+      subject: raw.subject,
+      queued_at: result.queued_at,
+      fallback_mode: false, // canonical Resend send · NOT a stub anymore
+      provider: 'resend',
+      _deprecated: {
+        sunset: SUNSET_DATE,
+        successor: '/api/email/send',
+        reason: 'Stack V4 GHL-Out migration',
+      },
+    },
+    { status: 200, headers: deprecationHeaders() },
+  )
 }
