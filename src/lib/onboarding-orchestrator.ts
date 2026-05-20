@@ -14,6 +14,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { dispatchJourney } from './journey-orchestrator/index.js'
 import { WebDiscovery } from './web-discovery'
 import { BrandAnalyzer } from './brand-analyzer'
 import { MissionControlBridge } from './mc-bridge'
@@ -249,6 +250,28 @@ export class OnboardingOrchestrator {
         ].join('\n'),
         ['zero-risk', 'onboarding', 'day-1-complete']
       ).catch(() => {})
+
+      // Sprint 1 L1 hook · advance the per-client ONBOARD journey to
+      // send_intake_form stage via the Master Journey Orchestrator.
+      // Best-effort · we never fail Day-1 success because L1 had a hiccup ·
+      // and L1 itself logs error_count on the client_journey_state row.
+      // Closes the Peniche stuck case · post-discovery the L1 ensures
+      // the next worker (send-intake-form) is invoked rather than the
+      // journey silently stalling.
+      dispatchJourney({
+        client_id: clientId,
+        journey: 'ONBOARD',
+        trigger_type: 'cascade_done',
+        stage: 'send_intake_form',
+        trigger_source: 'onboarding_orchestrator.day1_complete',
+        params: {
+          onboarding_id: onboardingId,
+          previous_stage: 'kickoff',
+        },
+      }).catch((e) => {
+        const msg = e instanceof Error ? e.message : 'unknown'
+        console.warn('[onboarding-orchestrator] L1 dispatchJourney hook failed (non-fatal):', msg)
+      })
 
       return {
         success: true,
