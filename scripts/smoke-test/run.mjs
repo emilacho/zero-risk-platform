@@ -3,9 +3,9 @@
  * Zero Risk — Smoke test harness (FASE 0)
  *
  * Single entry point:
- *   node scripts/smoke-test/run.mjs agents                     # test all 27+ agents
+ *   node scripts/smoke-test/run.mjs agents                     # test all 59 agents (9 con execution history)
  *   node scripts/smoke-test/run.mjs agent <slug>               # test one agent
- *   node scripts/smoke-test/run.mjs workflows                  # test all workflows with webhooks
+ *   node scripts/smoke-test/run.mjs workflows                  # test all 58 workflows live (36 active · 22 inactive · snapshot 2026-05-17)
  *   node scripts/smoke-test/run.mjs workflow <id|name>         # test one workflow
  *   node scripts/smoke-test/run.mjs all                        # agents + workflows
  *   node scripts/smoke-test/run.mjs inspect                    # one-shot system health
@@ -16,6 +16,17 @@
  *   --timeout=60000              per-unit timeout ms (default 60s agents, 150s workflows)
  *   --dry-run                    inventory only, no actual calls
  *   --out=out/smoke-YYYY-MM-DD.csv  override output path
+ *
+ * NOTA · sync 2026-05-20 ground truth · CC#2 Sprint 1 ·
+ *   Counts en comments arriba (59 agents · 58 workflows) son ground truth snapshot 2026-05-17.
+ *   Pre-run · validate-with-API antes de claim:
+ *     - agents · curl supabase.co/rest/v1/agents?select=count
+ *     - workflows · curl -H "X-N8N-API-KEY: $KEY" n8n.../api/v1/workflows | jq '.data | length'
+ *   Si count API ≠ count comment · flag stack-drift + actualizar comment + PROCESSING_LOG.
+ *   TODO (LOW · Sprint follow-up) · refactor para pull live count desde Supabase + n8n API antes
+ *   de cada run · eliminar hardcoded counts · log discrepancy automáticamente.
+ *   Pre-run requirement adicional · verify N8N_API_KEY JWT exp claim (no expirado) · dispatch
+ *   CIC refresh primero si expirado o <12h restantes.
  */
 
 import { resolve, dirname, join } from 'path'

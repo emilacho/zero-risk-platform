@@ -1,7 +1,9 @@
 # Zero Risk — Smoke Test Harness
 
-Scientific-grade parallel test harness for the 27+ agentes y 45 n8n workflows.
+Scientific-grade parallel test harness for the **59 agentes** (9 con execution history · 15.3% utilization) and **58 n8n workflows** (36 active · 22 inactive · ground truth snapshot 2026-05-17).
 Replaces the manual "fire webhook, wait, query API" loop with a single reproducible CLI.
+
+> **NOTA · sync 2026-05-20 ground truth · CC#2 Sprint 1** · counts arriba reemplazan "27+ agentes" + "45 workflows" históricos. *Recomendación · validate-with-API count antes de cada run* · agentes via `curl supabase.co/rest/v1/agents?select=count` · workflows via `curl -H "X-N8N-API-KEY: $KEY" n8n.../api/v1/workflows | jq '.data | length'`. Counts en `run.mjs` están hardcoded (LOW drift item · TODO refactor para pull live count antes de cada run). Si counts API ≠ counts hardcoded · flag stack-drift.
 
 ## Quickstart
 
