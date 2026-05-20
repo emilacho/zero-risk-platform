@@ -22,6 +22,7 @@
  * platform routes (`/api/onboarding` etc).
  */
 import { getSupabaseAdmin } from '../supabase'
+import { capture } from '../posthog'
 import { resolveNextStage } from './state-machine'
 import { routeForJourney, type DispatchMode } from './routes-map'
 import {
@@ -146,6 +147,22 @@ export async function dispatchJourney(
         .eq('id', persisted.id)
     }
   }
+
+  // Sprint 4 D5 · canonical reporting event. Fires on every L1 dispatch
+  // regardless of L2 outcome · the `dispatch_status` property surfaces
+  // whether the L2 actually ran. `client_id` may be null for triggers
+  // not tied to a row · fall back to journey_id so PostHog still groups
+  // sensibly.
+  capture('journey_transition', client_id ?? persisted.id, {
+    journey_id: persisted.id,
+    journey,
+    next_stage: nextStage,
+    previous_stage: existingRow?.current_stage ?? null,
+    trigger_type,
+    trigger_source: trigger_source ?? null,
+    dispatch_status: dispatchStatus,
+    l2_mode: route.mode,
+  })
 
   return {
     ok: dispatchStatus !== 'failed',

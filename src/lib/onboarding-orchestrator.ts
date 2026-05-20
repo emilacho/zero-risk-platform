@@ -18,6 +18,7 @@ import { dispatchJourney } from './journey-orchestrator/index'
 import { WebDiscovery } from './web-discovery'
 import { BrandAnalyzer } from './brand-analyzer'
 import { MissionControlBridge } from './mc-bridge'
+import { capture } from './posthog'
 
 // ============================================================
 // Types
@@ -250,6 +251,18 @@ export class OnboardingOrchestrator {
         ].join('\n'),
         ['zero-risk', 'onboarding', 'day-1-complete']
       ).catch(() => {})
+
+      // Sprint 4 D5 · canonical reporting event. Fail-open · `capture()`
+      // never throws, returns early if PostHog isn't configured.
+      capture('cliente_onboarded', clientId, {
+        onboarding_id: onboardingId,
+        company_name: input.companyName,
+        brand_book_id: brandBookId,
+        icps_created: icpsCreated,
+        competitors_analyzed: competitorsAnalyzed,
+        pages_scraped: clientData.totalPagesScraped,
+        day1_cost_usd: Number(totalCost.toFixed(4)),
+      })
 
       // Sprint 1 L1 hook · advance the per-client ONBOARD journey to
       // send_intake_form stage via the Master Journey Orchestrator.
