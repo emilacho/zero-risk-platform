@@ -1,12 +1,12 @@
 -- Migration · sms_events · 2026-05-20 Sprint 3 D4
--- CC#2 multi-tenant scope · tenant_id + RLS canon (see 202605200100_*.sql preamble)
+-- Single-tenant canon enforced 2026-05-20 per Emilio decision (CLAUDE.md Stack clave V4)
+-- RLS · service_role bypass + admin-only (app_roles.role = 'admin')
 -- Companion to email_events · same provider-agnostic pattern.
 
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS sms_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id TEXT NOT NULL DEFAULT 'zero-risk-default',
   client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
   contact_id UUID,
   provider TEXT NOT NULL
@@ -29,7 +29,6 @@ CREATE TABLE IF NOT EXISTS sms_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_sms_events_tenant ON sms_events(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_sms_events_client ON sms_events(client_id) WHERE client_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_sms_events_contact ON sms_events(contact_id) WHERE contact_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_sms_events_to ON sms_events(to_phone);
@@ -42,14 +41,11 @@ ALTER TABLE sms_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY sms_events_service_role_all ON sms_events
   AS PERMISSIVE FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-CREATE POLICY sms_events_tenant_scoped_select ON sms_events
-  AS PERMISSIVE FOR SELECT TO authenticated
-  USING (tenant_id = COALESCE(auth.jwt() ->> 'tenant_id', 'zero-risk-default'));
+CREATE POLICY sms_events_admin_full_access ON sms_events
+  AS PERMISSIVE FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM app_roles WHERE user_id = auth.uid() AND role = 'admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM app_roles WHERE user_id = auth.uid() AND role = 'admin'));
 
-CREATE POLICY sms_events_tenant_scoped_insert ON sms_events
-  AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK (tenant_id = COALESCE(auth.jwt() ->> 'tenant_id', 'zero-risk-default'));
-
-COMMENT ON TABLE sms_events IS 'Sprint 3 D4 · CC#2 · provider-agnostic SMS event log · Twilio/GHL/MessageBird';
+COMMENT ON TABLE sms_events IS 'Sprint 3 D4 · CC#2 · provider-agnostic SMS event log · Twilio/MessageBird · single-tenant canon';
 
 COMMIT;

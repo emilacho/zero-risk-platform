@@ -1,7 +1,8 @@
 -- Migration · email_events · 2026-05-20 Sprint 3 D4
--- CC#2 multi-tenant scope · tenant_id + RLS canon (see 202605200100_*.sql preamble)
+-- Single-tenant canon enforced 2026-05-20 per Emilio decision (CLAUDE.md Stack clave V4)
+-- RLS · service_role bypass + admin-only (app_roles.role = 'admin')
 --
--- Provider-agnostic event log (GHL · Mailgun · SMTP-direct · whichever stack canon resolves)
+-- Provider-agnostic event log (Resend Stack V4 canon · Mailgun · SMTP-direct · legacy GHL)
 -- Stack canon · email integration NO wired per Sprint 1 sync drift finding 7 · this table
 -- ready para receive events una vez provider creds populated.
 
@@ -9,7 +10,6 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS email_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id TEXT NOT NULL DEFAULT 'zero-risk-default',
   client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
   contact_id UUID,
   provider TEXT NOT NULL
@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS email_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_email_events_tenant ON email_events(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_email_events_client ON email_events(client_id) WHERE client_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_email_events_contact ON email_events(contact_id) WHERE contact_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_email_events_to ON email_events(to_email);
@@ -43,14 +42,11 @@ ALTER TABLE email_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY email_events_service_role_all ON email_events
   AS PERMISSIVE FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-CREATE POLICY email_events_tenant_scoped_select ON email_events
-  AS PERMISSIVE FOR SELECT TO authenticated
-  USING (tenant_id = COALESCE(auth.jwt() ->> 'tenant_id', 'zero-risk-default'));
+CREATE POLICY email_events_admin_full_access ON email_events
+  AS PERMISSIVE FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM app_roles WHERE user_id = auth.uid() AND role = 'admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM app_roles WHERE user_id = auth.uid() AND role = 'admin'));
 
-CREATE POLICY email_events_tenant_scoped_insert ON email_events
-  AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK (tenant_id = COALESCE(auth.jwt() ->> 'tenant_id', 'zero-risk-default'));
-
-COMMENT ON TABLE email_events IS 'Sprint 3 D4 · CC#2 · provider-agnostic email event log · GHL/Mailgun/SMTP/Resend';
+COMMENT ON TABLE email_events IS 'Sprint 3 D4 · CC#2 · provider-agnostic email event log · Resend/Mailgun/SMTP · single-tenant canon';
 
 COMMIT;

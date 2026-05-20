@@ -1,16 +1,15 @@
 -- Migration · calendar_bookings · 2026-05-20 Sprint 3 D4
--- CC#2 multi-tenant scope · tenant_id + RLS canon (see 202605200100_*.sql preamble)
+-- Single-tenant canon enforced 2026-05-20 per Emilio decision (CLAUDE.md Stack clave V4)
+-- RLS · service_role bypass + admin-only (app_roles.role = 'admin')
 --
 -- Cal.com self-host integration · Sprint 3 D1 deployed cal-com service en peaceful-spirit Railway ·
 -- domain https://cal-com-production-e55b.up.railway.app · webhook handler en
 -- /api/calendar/webhook/route.ts (Sprint 3 D4 deliverable · graceful 503 stub sin CAL_COM_API_KEY).
--- GHL Calendar nativo (canon previo per STACK_FINAL_V3) preservado como fallback via provider column.
 
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS calendar_bookings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id TEXT NOT NULL DEFAULT 'zero-risk-default',
   client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
   contact_id UUID,
   champion_id UUID REFERENCES client_champions(id) ON DELETE SET NULL,
@@ -37,7 +36,6 @@ CREATE TABLE IF NOT EXISTS calendar_bookings (
   CONSTRAINT booking_time_valid CHECK (scheduled_end > scheduled_start)
 );
 
-CREATE INDEX IF NOT EXISTS idx_calendar_tenant ON calendar_bookings(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_calendar_client ON calendar_bookings(client_id) WHERE client_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_calendar_contact ON calendar_bookings(contact_id) WHERE contact_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_calendar_champion ON calendar_bookings(champion_id) WHERE champion_id IS NOT NULL;
@@ -50,19 +48,11 @@ ALTER TABLE calendar_bookings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY calendar_service_role_all ON calendar_bookings
   AS PERMISSIVE FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-CREATE POLICY calendar_tenant_scoped_select ON calendar_bookings
-  AS PERMISSIVE FOR SELECT TO authenticated
-  USING (tenant_id = COALESCE(auth.jwt() ->> 'tenant_id', 'zero-risk-default'));
+CREATE POLICY calendar_admin_full_access ON calendar_bookings
+  AS PERMISSIVE FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM app_roles WHERE user_id = auth.uid() AND role = 'admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM app_roles WHERE user_id = auth.uid() AND role = 'admin'));
 
-CREATE POLICY calendar_tenant_scoped_insert ON calendar_bookings
-  AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK (tenant_id = COALESCE(auth.jwt() ->> 'tenant_id', 'zero-risk-default'));
-
-CREATE POLICY calendar_tenant_scoped_update ON calendar_bookings
-  AS PERMISSIVE FOR UPDATE TO authenticated
-  USING (tenant_id = COALESCE(auth.jwt() ->> 'tenant_id', 'zero-risk-default'))
-  WITH CHECK (tenant_id = COALESCE(auth.jwt() ->> 'tenant_id', 'zero-risk-default'));
-
-COMMENT ON TABLE calendar_bookings IS 'Sprint 3 D4 · CC#2 · multi-provider calendar bookings · Cal.com (sprint 3 D1 deploy) · GHL Calendar · Google/Outlook · webhook_payload preserves raw provider data';
+COMMENT ON TABLE calendar_bookings IS 'Sprint 3 D4 · CC#2 · multi-provider calendar bookings · Cal.com (sprint 3 D1 deploy) · Google/Outlook · webhook_payload preserves raw provider data · single-tenant canon';
 
 COMMIT;
