@@ -21,16 +21,16 @@
  * fire-and-forget for n8n webhooks · awaited with 30s ceiling for HTTP
  * platform routes (`/api/onboarding` etc).
  */
-import { getSupabaseAdmin } from '../supabase.js'
-import { resolveNextStage } from './state-machine.js'
-import { routeForJourney, type DispatchMode } from './routes-map.js'
+import { getSupabaseAdmin } from '../supabase'
+import { resolveNextStage } from './state-machine'
+import { routeForJourney, type DispatchMode } from './routes-map'
 import {
   type DispatchRequest,
   type DispatchResult,
   type JourneyType,
   type JourneyStateRow,
   type TriggerType,
-} from './types.js'
+} from './types'
 
 /**
  * DB-level enum `trigger_type` only accepts {webhook · manual · cron}.

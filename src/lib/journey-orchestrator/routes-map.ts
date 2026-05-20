@@ -14,7 +14,7 @@
  *   ACQUIRE   → STUB (TODO sprint posterior · lead capture wrapper)
  *   GROWTH    → STUB (TODO sprint posterior)
  */
-import type { JourneyType } from './types.js'
+import type { JourneyType } from './types'
 
 export type DispatchMode = 'http' | 'n8n_webhook' | 'stub'
 

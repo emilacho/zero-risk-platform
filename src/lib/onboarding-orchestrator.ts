@@ -14,7 +14,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
-import { dispatchJourney } from './journey-orchestrator/index.js'
+import { dispatchJourney } from './journey-orchestrator/index'
 import { WebDiscovery } from './web-discovery'
 import { BrandAnalyzer } from './brand-analyzer'
 import { MissionControlBridge } from './mc-bridge'

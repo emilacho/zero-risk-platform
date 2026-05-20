@@ -9,7 +9,7 @@
  * L1 just answers · "given current stage + a trigger, what's the next
  * stage label we should persist?"
  */
-import type { JourneyType, TriggerType } from './types.js'
+import type { JourneyType, TriggerType } from './types'
 
 /** Canonical stage labels per journey (one-line summary · L2 has details). */
 export const JOURNEY_STAGES: Record<JourneyType, readonly string[]> = {

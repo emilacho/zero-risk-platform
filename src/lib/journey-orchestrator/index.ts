@@ -8,16 +8,16 @@
  * validators) are re-exported for unit tests but should NOT be invoked
  * directly from app code · always go through `dispatchJourney()`.
  */
-export { dispatchJourney } from './dispatch.js'
-export { validateDispatchRequest } from './validators.js'
-export type { ValidationResult } from './validators.js'
+export { dispatchJourney } from './dispatch'
+export { validateDispatchRequest } from './validators'
+export type { ValidationResult } from './validators'
 export {
   JOURNEY_STAGES,
   resolveNextStage,
   isTerminalStage,
-} from './state-machine.js'
-export { routeForJourney, _ROUTES_INTERNAL } from './routes-map.js'
-export type { L2Route, DispatchMode } from './routes-map.js'
+} from './state-machine'
+export { routeForJourney, _ROUTES_INTERNAL } from './routes-map'
+export type { L2Route, DispatchMode } from './routes-map'
 export {
   JOURNEY_TYPES,
   TRIGGER_TYPES,
@@ -28,4 +28,4 @@ export {
   type DispatchRequest,
   type DispatchResult,
   type JourneyStateRow,
-} from './types.js'
+} from './types'

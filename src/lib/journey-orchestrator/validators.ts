@@ -10,7 +10,7 @@ import {
   type DispatchRequest,
   type JourneyType,
   type TriggerType,
-} from './types.js'
+} from './types'
 
 export interface ValidationResult {
   ok: boolean
