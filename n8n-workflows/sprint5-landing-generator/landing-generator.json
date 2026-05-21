@@ -1,0 +1,148 @@
+{
+  "name": "Sprint 5 · Landing Generator · sidecar post-LAUNCH",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "landing-generator",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook · POST /landing-generator",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "landing-generator-sprint5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "campaign-id-required",
+              "leftValue": "={{ $json.body.campaign_id }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            },
+            {
+              "id": "client-name-required",
+              "leftValue": "={{ $json.body.client_name }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            },
+            {
+              "id": "outputs-required",
+              "leftValue": "={{ $json.body.outputs }}",
+              "rightValue": "",
+              "operator": { "type": "object", "operation": "notEmpty" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "validate-payload",
+      "name": "Validate payload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/cascade/landing-from-outputs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  client_id: $json.body.client_id || null,\n  campaign_id: $json.body.campaign_id,\n  client_name: $json.body.client_name,\n  vertical: $json.body.vertical || null,\n  outputs: $json.body.outputs\n}) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "landing-upsert",
+      "name": "POST /api/cascade/landing-from-outputs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agent-invocations",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  agent_name: 'landing-generator-sidecar',\n  workflow_name: 'sprint5-landing-generator',\n  client_id: $('Webhook · POST /landing-generator').first().json.body.client_id || null,\n  status: $json.ok ? 'success' : 'failure',\n  metadata: {\n    campaign_id: $('Webhook · POST /landing-generator').first().json.body.campaign_id,\n    slug: $json.slug || null,\n    sections_count: $json.sections_count || 0,\n    url: $json.url || null,\n    error: $json.error || null\n  }\n}) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "log-invocation",
+      "name": "Log to agent_invocations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 220],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  ok: $('POST /api/cascade/landing-from-outputs').first().json.ok,\n  landing_url: $('POST /api/cascade/landing-from-outputs').first().json.url || null,\n  slug: $('POST /api/cascade/landing-from-outputs').first().json.slug || null\n}) }}"
+      },
+      "id": "respond-success",
+      "name": "Respond · 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'validation_failed', detail: 'campaign_id + client_name + outputs all required in body' }) }}"
+      },
+      "id": "respond-validation-fail",
+      "name": "Respond · 400 validation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 420]
+    }
+  ],
+  "connections": {
+    "Webhook · POST /landing-generator": {
+      "main": [[{ "node": "Validate payload", "type": "main", "index": 0 }]]
+    },
+    "Validate payload": {
+      "main": [
+        [{ "node": "POST /api/cascade/landing-from-outputs", "type": "main", "index": 0 }],
+        [{ "node": "Respond · 400 validation", "type": "main", "index": 0 }]
+      ]
+    },
+    "POST /api/cascade/landing-from-outputs": {
+      "main": [[{ "node": "Log to agent_invocations", "type": "main", "index": 0 }]]
+    },
+    "Log to agent_invocations": {
+      "main": [[{ "node": "Respond · 200", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [
+    { "name": "sprint-5" },
+    { "name": "landing" },
+    { "name": "cascade-sidecar" },
+    { "name": "post-launch" }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-05-21T07:30:00.000Z",
+  "versionId": "sprint5-landing-generator-v1"
+}
