@@ -19,6 +19,7 @@ import { WebDiscovery } from './web-discovery'
 import { BrandAnalyzer } from './brand-analyzer'
 import { MissionControlBridge } from './mc-bridge'
 import { capture } from './posthog'
+import { syncReportSafe } from './notion/sync-helper'
 
 // ============================================================
 // Types
@@ -263,6 +264,32 @@ export class OnboardingOrchestrator {
         pages_scraped: clientData.totalPagesScraped,
         day1_cost_usd: Number(totalCost.toFixed(4)),
       })
+
+      // Sprint 5 wire-in · push the new client row to the Notion clients
+      // database. Best-effort · syncReportSafe swallows + logs · NEVER
+      // bubbles up so Day 1 success is independent of Notion availability.
+      void syncReportSafe(
+        'client',
+        {
+          // Notion property shape · the database schema lives in Notion ·
+          // we pass canonical key names so the operator maps them on
+          // first sync. When the database is created (`NOTION_DATABASE_CLIENTS`
+          // env), this payload lands as a new row.
+          Name: { title: [{ text: { content: input.companyName } }] },
+          ClientId: { rich_text: [{ text: { content: clientId } }] },
+          OnboardingId: { rich_text: [{ text: { content: onboardingId } }] },
+          Vertical: input.industry
+            ? { select: { name: input.industry } }
+            : { select: null },
+          JourneyStatus: { select: { name: 'discovered' } },
+          BrandBookId: { rich_text: [{ text: { content: brandBookId } }] },
+          ICPs: { number: icpsCreated },
+          Competitors: { number: competitorsAnalyzed },
+          Day1CostUsd: { number: Number(totalCost.toFixed(4)) },
+          OnboardedAt: { date: { start: new Date().toISOString() } },
+        },
+        '[onboarding-orchestrator notion]',
+      )
 
       // Sprint 1 L1 hook · advance the per-client ONBOARD journey to
       // send_intake_form stage via the Master Journey Orchestrator.
