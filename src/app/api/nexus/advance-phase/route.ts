@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
 import { capture } from '@/lib/posthog'
+import { syncReportSafe } from '@/lib/notion/sync-helper'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -72,6 +73,51 @@ export async function POST(request: Request) {
         smoke_mode: isSmoke,
       },
     )
+
+    // Sprint 5 wire-in · push the campaign close to the Notion campaigns
+    // database. Best-effort · syncReportSafe swallows + logs · the NEXUS
+    // pipeline never fails just because Notion is unconfigured.
+    // Smoke runs are skipped to keep the campaigns database clean of
+    // synthetic noise · QA can flip the flag if they need to verify wire.
+    if (!isSmoke) {
+      const campaignId =
+        (typeof body.request_id === 'string' && body.request_id) ||
+        `nexus-${Date.now()}`
+      const conversionRate =
+        typeof body.conversion_rate === 'number' ? body.conversion_rate : null
+      const landingUrl =
+        typeof body.landing_url === 'string' ? body.landing_url : null
+      const resultsSummary =
+        typeof phase_outputs[current_phase] === 'string'
+          ? (phase_outputs[current_phase] as string).slice(0, 1900)
+          : JSON.stringify(phase_outputs[current_phase] ?? null).slice(0, 1900)
+
+      void syncReportSafe(
+        'campaign',
+        {
+          Name: {
+            title: [{ text: { content: `NEXUS · ${campaignId}` } }],
+          },
+          CampaignId: { rich_text: [{ text: { content: campaignId } }] },
+          ClientId: {
+            rich_text: [
+              { text: { content: client_id_from_body || 'unknown' } },
+            ],
+          },
+          FinalPhase: { select: { name: current_phase } },
+          PhasesCompleted: { number: phasesFromBody.length },
+          ConversionRate:
+            conversionRate !== null
+              ? { number: conversionRate }
+              : { number: null },
+          LandingUrl:
+            landingUrl !== null ? { url: landingUrl } : { url: null },
+          Results: { rich_text: [{ text: { content: resultsSummary } }] },
+          CompletedAt: { date: { start: new Date().toISOString() } },
+        },
+        '[nexus-phase7 notion]',
+      )
+    }
 
     return NextResponse.json({
       ...body,

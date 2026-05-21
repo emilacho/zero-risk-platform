@@ -1,0 +1,156 @@
+{
+  "name": "Zero Risk · Weekly Notion Report (Mondays 09:00 ECT)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 14 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Cron · Monday 09:00 ECT (14:00 UTC)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.PLATFORM_API_URL }}/api/posthog/events?days=7&event_count=true",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "fetch-posthog-7d",
+      "name": "Fetch PostHog 7d events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.PLATFORM_API_URL }}/api/atlas/snapshot",
+        "options": {
+          "timeout": 8000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "fetch-atlas-snapshot",
+      "name": "Fetch Atlas snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Synthesize the weekly report payload · combines PostHog events +\n// Atlas snapshot into one Notion-shaped page for the `weekly` database.\nconst posthog = $input.first().json || {};\nconst atlas = $input.last().json || {};\n\nconst events = posthog.events || {};\nconst agents = atlas.agents || {};\nconst clients = atlas.clients || {};\nconst workflows = atlas.workflows || {};\nconst drift = atlas.drift || {};\n\nconst weekStart = new Date();\nweekStart.setUTCDate(weekStart.getUTCDate() - 7);\nconst weekStartIso = weekStart.toISOString().slice(0, 10);\nconst weekEndIso = new Date().toISOString().slice(0, 10);\n\nconst summary = [\n  `Campaigns started: ${events.campaign_started || 0}`,\n  `Campaigns completed: ${events.campaign_completed || 0}`,\n  `Onboardings: ${events.cliente_onboarded || 0}`,\n  `HITL approvals: ${events.hitl_approved || 0}`,\n  `Journey transitions: ${events.journey_transition || 0}`,\n  `Active clients: ${clients.active_real || 0}/${clients.total || 0}`,\n  `Active agents 30d: ${agents.with_executions_30d || 0}/${agents.total || 0}`,\n  `Active workflows: ${workflows.active || 0}/${workflows.total || 0}`,\n  `Drift findings: ${drift.findings_count || 0}`,\n].join(' · ');\n\nreturn [{\n  json: {\n    type: 'weekly',\n    payload: {\n      Name: { title: [{ text: { content: `Weekly · ${weekStartIso} → ${weekEndIso}` } }] },\n      WeekStart: { date: { start: weekStartIso } },\n      WeekEnd: { date: { start: weekEndIso } },\n      CampaignsStarted: { number: events.campaign_started || 0 },\n      CampaignsCompleted: { number: events.campaign_completed || 0 },\n      Onboardings: { number: events.cliente_onboarded || 0 },\n      HitlApprovals: { number: events.hitl_approved || 0 },\n      JourneyTransitions: { number: events.journey_transition || 0 },\n      ActiveClients: { number: clients.active_real || 0 },\n      TotalClients: { number: clients.total || 0 },\n      DriftFindings: { number: drift.findings_count || 0 },\n      Summary: { rich_text: [{ text: { content: summary.slice(0, 1900) } }] },\n      GeneratedAt: { date: { start: new Date().toISOString() } },\n    },\n  },\n}];"
+      },
+      "id": "synthesize-payload",
+      "name": "Synthesize Notion payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 390]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PLATFORM_API_URL }}/api/notion/sync-report",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 15000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "post-notion-sync",
+      "name": "POST /api/notion/sync-report (type=weekly)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 390]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Telemetry · log the outcome to console for n8n exec history.\n// 503 unconfigured is the steady state pre-Notion-database-creation ·\n// not an error · just a heads-up.\nconst body = $input.first().json || {};\nconst status = body.error ? body.error : 'ok';\nconst pageId = body.page_id || 'none';\nconst detail = body.detail || '';\nconsole.log(`[weekly-notion-report] status=${status} page_id=${pageId} detail=${detail}`);\nreturn [{ json: { ok: !body.error, status, page_id: pageId, detail } }];"
+      },
+      "id": "log-outcome",
+      "name": "Log outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 390]
+    }
+  ],
+  "connections": {
+    "Cron · Monday 09:00 ECT (14:00 UTC)": {
+      "main": [
+        [
+          { "node": "Fetch PostHog 7d events", "type": "main", "index": 0 },
+          { "node": "Fetch Atlas snapshot", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch PostHog 7d events": {
+      "main": [[{ "node": "Synthesize Notion payload", "type": "main", "index": 0 }]]
+    },
+    "Fetch Atlas snapshot": {
+      "main": [[{ "node": "Synthesize Notion payload", "type": "main", "index": 0 }]]
+    },
+    "Synthesize Notion payload": {
+      "main": [[{ "node": "POST /api/notion/sync-report (type=weekly)", "type": "main", "index": 0 }]]
+    },
+    "POST /api/notion/sync-report (type=weekly)": {
+      "main": [[{ "node": "Log outcome", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": true,
+    "timezone": "America/Guayaquil"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "sprint-5-reporting-wire-in"
+  },
+  "tags": [
+    "zero-risk",
+    "reporting",
+    "weekly",
+    "notion",
+    "sprint-5"
+  ],
+  "_canon": {
+    "owner": "CC#4",
+    "sprint": 5,
+    "purpose": "Weekly Notion report · syntheses PostHog 7d events + Atlas snapshot into one Notion page in the `weekly` database every Monday 09:00 ECT.",
+    "env_required": [
+      "PLATFORM_API_URL",
+      "INTERNAL_API_KEY",
+      "NOTION_TOKEN (platform side)",
+      "NOTION_DATABASE_WEEKLY (platform side)"
+    ],
+    "activation": "Inactive on import · Emilio activates after populating NOTION_TOKEN + NOTION_DATABASE_WEEKLY env vars in Vercel + verifying first manual run via n8n UI."
+  }
+}
