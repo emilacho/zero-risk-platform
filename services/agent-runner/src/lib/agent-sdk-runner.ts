@@ -18,10 +18,10 @@
  * Vercel copy. Keep in sync until a shared package factors this out.
  */
 
-import { resolve as pathResolve } from 'node:path'
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
+import { buildMcpServers } from './mcp/agent-mcp-registry.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
 // `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
@@ -271,57 +271,17 @@ function buildSdkOptions(
     permissionMode: 'default',
     // Reanudar sesión previa para encadenar contexto entre pasos del pipeline.
     ...(input.resumeSessionId ? { resume: input.resumeSessionId } : {}),
-    // MCP servers · Client Brain (per-cliente) + Pipeboard Meta Ads (per-agente
-    // when Brazo 3 surface). See `needsMetaAds()` for the agent slug heuristic.
-    mcpServers: buildMcpServers(input),
+    // MCP servers · canonical registry (Sprint 6 Track C1) covers
+    // client-brain (per-cliente) + meta-ads (Brazo 3) + apify · dataforseo
+    // · higgsfield via env-gated conditional activation. See
+    // `agent-mcp-registry.ts` for the activation matrix and per-agent
+    // deny-list. `needsMetaAds()` remains exported below for direct callers
+    // (smoke test + lib consumers).
+    mcpServers: buildMcpServers({
+      agentSlug: input.agentName,
+      clientId: input.clientId ?? undefined,
+    }),
   }
-}
-
-/**
- * Resolve which MCP servers to spawn for this agent invocation.
- *
- * - `client-brain` stdio · only when a `clientId` is present · gives the
- *   agent access to the cliente's brand_voice / config / brand assets.
- * - `meta-ads` stdio (Pipeboard MCP · BSL 1.1 · `pipeboard-co/meta-ads-mcp`) ·
- *   only when the agent slug indicates Brazo 3 work (media-buyer, paid-social,
- *   instagram-curator, social-media-strategist, community-manager). Auth via
- *   `META_ACCESS_TOKEN` env (fallback `META_SYSTEM_USER_TOKEN` for the
- *   pre-canon-alias window).
- */
-function buildMcpServers(input: AgentRunInput): Options['mcpServers'] {
-  const servers: NonNullable<Options['mcpServers']> = {}
-  if (input.clientId) {
-    servers['client-brain'] = {
-      type: 'stdio',
-      command: 'node',
-      args: [
-        pathResolve(process.cwd(), 'src/lib/mcp/client-brain-server.js'),
-      ],
-      env: {
-        CLIENT_ID: input.clientId,
-        SUPABASE_URL: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-        PATH: process.env.PATH || '',
-      },
-    }
-  }
-  if (needsMetaAds(input)) {
-    const metaToken =
-      process.env.META_ACCESS_TOKEN ||
-      process.env.META_SYSTEM_USER_TOKEN ||
-      ''
-    if (metaToken) {
-      servers['meta-ads'] = {
-        type: 'stdio',
-        command: 'meta-ads-mcp',
-        env: {
-          META_ACCESS_TOKEN: metaToken,
-          PATH: process.env.PATH || '',
-        },
-      }
-    }
-  }
-  return servers
 }
 
 /**
