@@ -83,25 +83,37 @@ export const AGENT_ALIAS_MAP: Readonly<Record<string, string>> = {
   // meta_agent used in old n8n wf as "optimize everything" → optimization-agent
   meta_agent: 'optimization-agent',
 
-  // GEO (Generative Engine Optimization · AI-search content) is a specialty
-  // within SEO; the cron workflow "GEO Content Freshness" used this slug.
-  // Mapped to seo-specialist whose mandate already covers AI-search surfaces.
-  'seo-geo-optimization': 'seo-specialist',
-  seo_geo_optimization: 'seo-specialist',
-
   // ----------------------------------------------------------------
   // mc-bridge AGENT_ROLE_MAP ghost: ad-intelligence-agent
-  // Not in MANIFEST-31; nearest capability = competitive-intelligence-agent
+  // Not in MANIFEST-36; nearest capability = competitive-intelligence-agent
   // ----------------------------------------------------------------
   'ad-intelligence-agent': 'competitive-intelligence-agent',
   ad_intelligence_agent: 'competitive-intelligence-agent',
+
+  // ----------------------------------------------------------------
+  // 5 SEO sub-agents activated 2026-05-21 (sprint-seo) ·
+  // underscore_variant → canonical hyphen-case slug. Pre-activation,
+  // `seo-geo-optimization` was aliased to `seo-specialist` · that alias
+  // is REMOVED now since the sub-agent is canonical in its own right.
+  // ----------------------------------------------------------------
+  seo_orchestrator: 'seo-orchestrator',
+  seo_content_strategist: 'seo-content-strategist',
+  seo_technical: 'seo-technical',
+  seo_geo_optimization: 'seo-geo-optimization',
+  seo_backlink_strategist: 'seo-backlink-strategist',
 }
 
 /**
- * Canonical set of all 31 agent slugs defined in MANIFEST.md.
+ * Canonical set of all 36 agent slugs (31 core + 5 SEO sub-agents).
+ *
+ * MANIFEST-36 ratified 2026-05-21 per dispatch [CC-ACTIVATE-5-SEO-SUBAGENTS] ·
+ * the 5 SEO sub-agents activate the flagship workflow `seo-rank-to-one` ·
+ * all 5 report to seo-orchestrator which reports to jefe-marketing.
+ *
  * Used for post-resolution validation; warns on unknown slugs at runtime.
  */
-export const MANIFEST_31_SLUGS: ReadonlySet<string> = new Set([
+export const MANIFEST_36_SLUGS: ReadonlySet<string> = new Set([
+  // 31 core (pre-2026-05-21)
   'ruflo',
   'jefe-marketing',
   'campaign-brief-agent',
@@ -133,10 +145,22 @@ export const MANIFEST_31_SLUGS: ReadonlySet<string> = new Set([
   'account-manager',
   'onboarding-specialist',
   'reporting-agent',
+  // 5 SEO sub-agents (2026-05-21 sprint-seo activate)
+  'seo-orchestrator',
+  'seo-content-strategist',
+  'seo-technical',
+  'seo-geo-optimization',
+  'seo-backlink-strategist',
 ])
 
 /**
- * Resolves a ghost/legacy slug to its canonical MANIFEST-31 equivalent.
+ * Backwards-compat alias · pre-2026-05-21 callers referenced MANIFEST_31_SLUGS.
+ * @deprecated use MANIFEST_36_SLUGS · removed Sprint 6.
+ */
+export const MANIFEST_31_SLUGS = MANIFEST_36_SLUGS
+
+/**
+ * Resolves a ghost/legacy slug to its canonical MANIFEST-36 equivalent.
  * Returns the input unchanged if no alias is registered (pass-through).
  */
 export function resolveAgentSlug(slug: string): string {
@@ -144,9 +168,9 @@ export function resolveAgentSlug(slug: string): string {
 }
 
 /**
- * Returns true if the slug is a canonical MANIFEST-31 slug.
+ * Returns true if the slug is a canonical MANIFEST-36 slug (31 core + 5 SEO sub-agents).
  * Use AFTER resolveAgentSlug for post-resolution validation.
  */
 export function isCanonicalSlug(slug: string): boolean {
-  return MANIFEST_31_SLUGS.has(slug)
+  return MANIFEST_36_SLUGS.has(slug)
 }
