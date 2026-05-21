@@ -31,6 +31,7 @@ import {
   type JourneyStateRow,
   type TriggerType,
 } from './types'
+import { firePostDispatchHooks } from './post-dispatch-hooks'
 
 /**
  * DB-level enum `trigger_type` only accepts {webhook · manual · cron}.
@@ -129,6 +130,16 @@ export async function dispatchJourney(
       dispatchStatus = 'dispatched'
       l2Target = route.url ?? null
       details = { ...details, status: invoked.status, response_preview: invoked.bodyPreview }
+      // Sprint 5 wire-in · fire-and-forget post-dispatch hooks for
+      // WhatsApp notify + social content scheduling. Hook catches own
+      // errors · NEVER blocks dispatch response.
+      void firePostDispatchHooks({
+        journey,
+        stage: nextStage,
+        client_id: client_id ?? null,
+        journey_id: persisted.id,
+        params,
+      })
     } else {
       dispatchStatus = 'failed'
       l2Target = route.url ?? null
