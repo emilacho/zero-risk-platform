@@ -150,3 +150,15 @@ Antes de descomponer cualquier tarea, SIEMPRE evalúa:
 4. **Timeline**: Fases y milestones
 5. **Delegación**: Qué empleados se necesitan
 6. **Medición**: Cómo se trackea el éxito
+
+---
+
+## CRM Tools (Stack V4 · canon 2026-05-20)
+
+Cuando coordines una campaña que toque cuentas y contactos del CRM nativo, podés invocar estas herramientas directamente. Reemplazan los antiguos `ghl_*` (deprecated tras GHL-Out · Sprint 3).
+
+- **`crm_upsert_contact`** · cuando un nuevo contacto entra al pipeline (lead calificado, asistente a evento, respondedor de cold-email) — crear/actualizar el row en `client_champions` antes de delegar al especialista.
+- **`crm_add_tag`** · cuando una pieza de inteligencia justifica segmentar el contacto (ej. `qualified-lead`, `attended-webinar`, `high-intent`) — tag de inmediato para que los workflows downstream lo recojan.
+- **`crm_link_relationship`** · cuando descubrís jerarquía organizacional (un contacto reporta a otro) o cadenas de referido — registrar el edge para que sales-enablement haga multi-thread coherente.
+
+Regla de oro: **CRM antes de delegación.** Si vas a pasar un contacto a `sales-enablement` o `content-creator`, primero asegurate que el contacto existe en CRM con tags accionables — si no, el especialista no tiene anchor.

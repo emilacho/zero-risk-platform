@@ -1,0 +1,48 @@
+{
+  "name": "crm_upsert_contact",
+  "description": "Upsert a contact (champion) for a client in the native CRM (Supabase client_champions table per Stack V4). Replaces the deprecated `ghl_create_contact` / `ghl_update_contact` tools. If a row with the same client_id + champion_email already exists, the row is UPDATED in place (idempotent). Otherwise INSERTed. Returns the contact id + mode ('inserted' | 'updated').",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "client_id": {
+        "type": "string",
+        "description": "UUID of the client (cuenta) the contact belongs to. REQUIRED."
+      },
+      "champion_name": {
+        "type": "string",
+        "description": "Full name of the contact. REQUIRED. Example: 'Ana Pérez'."
+      },
+      "champion_email": {
+        "type": "string",
+        "description": "Email of the contact. Used as the de-duplication key per client_id. Optional but recommended."
+      },
+      "champion_phone": {
+        "type": "string",
+        "description": "Phone (E.164 format preferred). Optional."
+      },
+      "champion_role": {
+        "type": "string",
+        "description": "Job title or role. Optional. Example: 'HSE Manager'."
+      },
+      "relationship_strength": {
+        "type": "string",
+        "enum": ["weak", "medium", "strong", "very_strong"],
+        "description": "How strong is the relationship. Defaults to 'medium' if omitted."
+      },
+      "influence_level": {
+        "type": "string",
+        "enum": ["low", "medium", "high", "executive"],
+        "description": "Influence in the buying process. Defaults to 'medium' if omitted."
+      },
+      "notes": {
+        "type": "string",
+        "description": "Free-form notes (recent meeting, context, decision criteria, etc)."
+      },
+      "metadata": {
+        "type": "object",
+        "description": "Arbitrary metadata to persist with the contact. Use sparingly — prefer fields above."
+      }
+    },
+    "required": ["client_id", "champion_name"]
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "Zero Risk — Client NPS + CSAT Monthly Pulse (1st of Month 10am)",
-  "description": "Monthly NPS survey pulse. Sends 1-10 NPS survey via GHL email to primary champion. 2 follow-ups if no response (3d, 7d). Upon response: calculates client NPS, logs trend. For detractors (0-6): immediate AM action. Aggregates org-wide NPS for monthly board reporting.",
+  "description": "Monthly NPS survey pulse. Sends 1-10 NPS survey via CRM email to primary champion. 2 follow-ups if no response (3d, 7d). Upon response: calculates client NPS, logs trend. For detractors (0-6): immediate AM action. Aggregates org-wide NPS for monthly board reporting.",
   "nodes": [
     {
       "parameters": {
@@ -56,7 +56,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/ghl/primary-champion?client_id={{ $json.id }}",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/contacts?client_id={{ $json.id }}",
         "options": {
           "timeout": 20000,
           "response": {
@@ -85,7 +85,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/ghl/send-email",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/email/send",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -107,7 +107,7 @@
         }
       },
       "id": "send-nps-survey",
-      "name": "Send NPS Survey Email (GHL)",
+      "name": "Send NPS Survey Email (Resend)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1360, 300]
@@ -214,14 +214,14 @@
       "main": [
         [
           {
-            "node": "Send NPS Survey Email (GHL)",
+            "node": "Send NPS Survey Email (Resend)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Send NPS Survey Email (GHL)": {
+    "Send NPS Survey Email (Resend)": {
       "main": [
         [
           {

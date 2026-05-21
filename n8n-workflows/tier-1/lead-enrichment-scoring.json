@@ -9,7 +9,7 @@
         "options": {}
       },
       "id": "webhook",
-      "name": "Webhook: GHL New Lead",
+      "name": "Webhook: CRM New Lead",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [220, 320],
@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.email) throw new Error('Missing email');\nreturn [{ json: { email: b.email, name: b.name || '', company: b.company || '', phone: b.phone || '', source: b.source || 'ghl', contact_id: b.contact_id || b.id || null } }];"
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nif (!b.email) throw new Error('Missing email');\nreturn [{ json: { email: b.email, name: b.name || '', company: b.company || '', phone: b.phone || '', source: b.source || 'crm', contact_id: b.contact_id || b.id || null } }];"
       },
       "id": "validate",
       "name": "Validate",
@@ -113,7 +113,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/ghl/tag",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/contact-tags",
         "sendHeaders": true,
         "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
         "sendBody": true,
@@ -121,8 +121,8 @@
         "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"tag\": \"nurture\"\n}",
         "options": {}
       },
-      "id": "ghl-nurture",
-      "name": "GHL Tag: Nurture",
+      "id": "crm-nurture",
+      "name": "CRM Tag: Nurture",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1400, 320]
@@ -130,7 +130,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/ghl/tag",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/contact-tags",
         "sendHeaders": true,
         "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }, { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }] },
         "sendBody": true,
@@ -138,8 +138,8 @@
         "jsonBody": "={\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"tag\": \"cold\"\n}",
         "options": {}
       },
-      "id": "ghl-cold",
-      "name": "GHL Tag: Cold",
+      "id": "crm-cold",
+      "name": "CRM Tag: Cold",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1400, 460]
@@ -175,7 +175,7 @@
     }
   ],
   "connections": {
-    "Webhook: GHL New Lead": { "main": [[{ "node": "Validate", "type": "main", "index": 0 }]] },
+    "Webhook: CRM New Lead": { "main": [[{ "node": "Validate", "type": "main", "index": 0 }]] },
     "Validate": { "main": [[{ "node": "Apollo Enrich", "type": "main", "index": 0 }, { "node": "Serper LinkedIn", "type": "main", "index": 0 }]] },
     "Apollo Enrich": { "main": [[{ "node": "Score Lead", "type": "main", "index": 0 }]] },
     "Serper LinkedIn": { "main": [[{ "node": "Score Lead", "type": "main", "index": 0 }]] },
@@ -183,13 +183,13 @@
     "Route by Bucket": {
       "main": [
         [{ "node": "Start Pipeline (Hot)", "type": "main", "index": 0 }],
-        [{ "node": "GHL Tag: Nurture", "type": "main", "index": 0 }],
-        [{ "node": "GHL Tag: Cold", "type": "main", "index": 0 }]
+        [{ "node": "CRM Tag: Nurture", "type": "main", "index": 0 }],
+        [{ "node": "CRM Tag: Cold", "type": "main", "index": 0 }]
       ]
     },
     "Start Pipeline (Hot)": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
-    "GHL Tag: Nurture": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
-    "GHL Tag: Cold": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
+    "CRM Tag: Nurture": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
+    "CRM Tag: Cold": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] },
     "Slack Notify": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1", "saveManualExecutions": true },

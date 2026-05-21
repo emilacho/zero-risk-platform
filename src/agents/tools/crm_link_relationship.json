@@ -1,0 +1,52 @@
+{
+  "name": "crm_link_relationship",
+  "description": "Create a directional edge between two contacts in the native CRM (Supabase contact_relationships table per Stack V4). Replaces the deprecated `ghl_link_contact` tool. Supports reports-to, colleague, referred-by, partner-of, and other relationship types. Self-relationships are rejected at the DB level.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "from_contact_id": {
+        "type": "string",
+        "description": "UUID of the source contact. REQUIRED."
+      },
+      "to_contact_id": {
+        "type": "string",
+        "description": "UUID of the target contact. REQUIRED. Must differ from from_contact_id."
+      },
+      "relationship_type": {
+        "type": "string",
+        "enum": [
+          "reports_to",
+          "colleague",
+          "referred_by",
+          "referred",
+          "partner_of",
+          "vendor_of",
+          "customer_of",
+          "same_company",
+          "spouse",
+          "family",
+          "other"
+        ],
+        "description": "Edge semantic. REQUIRED."
+      },
+      "strength": {
+        "type": "string",
+        "enum": ["weak", "medium", "strong"],
+        "description": "Strength of the relationship. Defaults to 'medium'."
+      },
+      "notes": {
+        "type": "string",
+        "description": "Free-form context."
+      },
+      "from_contact_type": {
+        "type": "string",
+        "description": "Defaults to 'champion'."
+      },
+      "to_contact_type": {
+        "type": "string",
+        "description": "Defaults to 'champion'."
+      }
+    },
+    "required": ["from_contact_id", "to_contact_id", "relationship_type"]
+  }
+}
