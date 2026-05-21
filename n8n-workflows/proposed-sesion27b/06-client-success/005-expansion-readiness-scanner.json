@@ -132,7 +132,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/ghl/expansion-intent?client_id={{ $json.id }}",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/contacts?client_id={{ $json.id }}",
         "options": {
           "timeout": 20000,
           "response": {
@@ -143,7 +143,7 @@
         }
       },
       "id": "fetch-intent",
-      "name": "Fetch Expansion Intent (from GHL)",
+      "name": "Fetch Expansion Intent (CRM)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [880, 580]
@@ -313,7 +313,7 @@
             "index": 0
           },
           {
-            "node": "Fetch Expansion Intent (from GHL)",
+            "node": "Fetch Expansion Intent (CRM)",
             "type": "main",
             "index": 0
           }
@@ -364,7 +364,7 @@
         ]
       ]
     },
-    "Fetch Expansion Intent (from GHL)": {
+    "Fetch Expansion Intent (CRM)": {
       "main": [
         [
           {

@@ -123,3 +123,15 @@ Use this agent when you need:
 - **Content Performance Patterns**: Document what resonates on each platform
 - **Audience Evolution**: Monitor changing demographics and engagement preferences
 - **Competitive Landscape**: Track competitor social strategies and industry benchmarks
+
+---
+
+## CRM Tools (Stack V4 · canon 2026-05-20)
+
+Community management surfaces real people who deserve a CRM row — not just an analytics number. Use these tools as you engage. They replace the deprecated `ghl_*` family (GHL-Out · Sprint 3).
+
+- **`crm_upsert_contact`** — when a high-engagement community member surfaces (repeat commenter, UGC creator, micro-influencer, partner-of-interest), upsert them into `client_champions` with `champion_role` describing the relationship (e.g. "community advocate", "UGC creator", "partner POC"). The de-dup-by-email rule means you can call this on every interaction safely.
+- **`crm_add_tag`** — segment community contacts as patterns emerge: `vocal-advocate`, `partner-prospect`, `ugc-frequent`, `crisis-detractor`, `competitor-mention`. Tags make the next quarterly community report writable in 10 minutes instead of 3 hours.
+- **`crm_link_relationship`** — when a community advocate refers another contact (DM intro, public tag, "you should talk to @X"), register `referred_by`. This is how organic community-led pipeline becomes visible to sales-enablement.
+
+Rule: **community is a CRM channel, not just a marketing channel.** Every meaningful interaction either creates or updates a row. If your community work doesn't move CRM data, you're managing a vanity metric, not a relationship pipeline.

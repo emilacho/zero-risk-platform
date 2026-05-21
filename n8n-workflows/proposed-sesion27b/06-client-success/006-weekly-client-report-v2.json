@@ -1,6 +1,6 @@
 {
   "name": "Zero Risk — Weekly Client Report Generator v2 (Mondays 8am)",
-  "description": "Weekly reports for all active clients. Pulls multi-channel data (Meta/Google/TikTok/LinkedIn Ads, GA4, PostHog, GHL pipeline). Calls Reporting Agent with SCQA + McKinsey pyramid. Includes executive brief, KPI dashboard, channel breakdown, benchmarks, recommendations. HITL approval gate (Emilio). Once approved, delivers via Notion + email + Slack.",
+  "description": "Weekly reports for all active clients. Pulls multi-channel data (Meta/Google/TikTok/LinkedIn Ads, GA4, PostHog, CRM pipeline). Calls Reporting Agent with SCQA + McKinsey pyramid. Includes executive brief, KPI dashboard, channel breakdown, benchmarks, recommendations. HITL approval gate (Emilio). Once approved, delivers via Notion + email + Slack.",
   "nodes": [
     {
       "parameters": {
@@ -110,7 +110,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/ghl/pipeline-summary?client_id={{ $json.id }}&days=7",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/pipeline/journeys?client_id={{ $json.id }}&days=7",
         "options": {
           "timeout": 20000,
           "response": {
@@ -120,8 +120,8 @@
           }
         }
       },
-      "id": "fetch-ghl-pipeline",
-      "name": "GHL Pipeline (7d)",
+      "id": "fetch-pipeline",
+      "name": "CRM Pipeline (7d)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [880, 340]
@@ -176,7 +176,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent_id\": \"reporting-agent\",\n  \"task\": \"Generate comprehensive weekly report for {{ $json.client_name }} ({{ $json.engagement_tier }}). Use SCQA narrative + McKinsey pyramid structure. Meta Ads: spend={{ $json.meta_spend || 0 }}, impressions={{ $json.meta_impressions || 0 }}, actions={{ $json.meta_actions || 0 }}. GA4: sessions={{ $json.ga4_sessions || 0 }}, conversions={{ $json.ga4_conversions || 0 }}, engagement={{ $json.ga4_engagement_rate || 0 }}%. GHL Pipeline: leads={{ $json.ghl_new_leads || 0 }}, pipeline_value={{ $json.ghl_pipeline_value || 0 }}, closed={{ $json.ghl_closed_value || 0 }}. Include: executive brief (1 page SCQA), KPI dashboard with trend arrows, channel breakdown, stat significance testing, competitive benchmarks (show percentile), prioritized recommendations ranked by impact×feasibility.\",\n  \"context\": {{ JSON.stringify($json) }}\n}",
+        "jsonBody": "={\n  \"agent_id\": \"reporting-agent\",\n  \"task\": \"Generate comprehensive weekly report for {{ $json.client_name }} ({{ $json.engagement_tier }}). Use SCQA narrative + McKinsey pyramid structure. Meta Ads: spend={{ $json.meta_spend || 0 }}, impressions={{ $json.meta_impressions || 0 }}, actions={{ $json.meta_actions || 0 }}. GA4: sessions={{ $json.ga4_sessions || 0 }}, conversions={{ $json.ga4_conversions || 0 }}, engagement={{ $json.ga4_engagement_rate || 0 }}%. CRM Pipeline: leads={{ $json.crm_new_leads || 0 }}, pipeline_value={{ $json.crm_pipeline_value || 0 }}, closed={{ $json.crm_closed_value || 0 }}. Include: executive brief (1 page SCQA), KPI dashboard with trend arrows, channel breakdown, stat significance testing, competitive benchmarks (show percentile), prioritized recommendations ranked by impact×feasibility.\",\n  \"context\": {{ JSON.stringify($json) }}\n}",
         "options": {
           "timeout": 120000
         }
@@ -309,7 +309,7 @@
             "index": 0
           },
           {
-            "node": "GHL Pipeline (7d)",
+            "node": "CRM Pipeline (7d)",
             "type": "main",
             "index": 0
           },
@@ -343,7 +343,7 @@
         ]
       ]
     },
-    "GHL Pipeline (7d)": {
+    "CRM Pipeline (7d)": {
       "main": [
         [
           {

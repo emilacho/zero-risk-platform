@@ -150,7 +150,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/ghl/create-calendar-event",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/calendar/book",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -172,7 +172,7 @@
         }
       },
       "id": "schedule-kickoff",
-      "name": "Schedule Kickoff Call (GHL Calendar)",
+      "name": "Schedule Kickoff Call (Cal.com)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -196,7 +196,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/ghl/add-task",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/contacts",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -217,8 +217,8 @@
           "timeout": 30000
         }
       },
-      "id": "ghl-handoff-task",
-      "name": "GHL: Create AM Handoff Task",
+      "id": "crm-handoff-task",
+      "name": "CRM: Create AM Handoff Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -476,14 +476,14 @@
       "main": [
         [
           {
-            "node": "Schedule Kickoff Call (GHL Calendar)",
+            "node": "Schedule Kickoff Call (Cal.com)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Schedule Kickoff Call (GHL Calendar)": {
+    "Schedule Kickoff Call (Cal.com)": {
       "main": [
         [
           {
@@ -498,14 +498,14 @@
       "main": [
         [
           {
-            "node": "GHL: Create AM Handoff Task",
+            "node": "CRM: Create AM Handoff Task",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "GHL: Create AM Handoff Task": {
+    "CRM: Create AM Handoff Task": {
       "main": [
         [
           {

@@ -44,7 +44,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/ghl/opportunities?campaign_id={{ $json.id }}&days=30",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/pipeline/journeys?campaign_id={{ $json.id }}&days=30",
         "options": { "timeout": 20000, "response": { "response": { "neverError": true } } }
       },
       "id": "opps",

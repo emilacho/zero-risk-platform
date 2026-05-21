@@ -75,7 +75,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/ghl/relationships?client_id={{ $json.id }}",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/contact-relationships?client_id={{ $json.id }}",
         "options": {
           "timeout": 20000,
           "response": {

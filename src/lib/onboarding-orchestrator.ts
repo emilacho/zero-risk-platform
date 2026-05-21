@@ -18,6 +18,7 @@ import { dispatchJourney } from './journey-orchestrator/index'
 import { WebDiscovery } from './web-discovery'
 import { BrandAnalyzer } from './brand-analyzer'
 import { MissionControlBridge } from './mc-bridge'
+import { persistContact } from './contact-persist'
 
 // ============================================================
 // Types
@@ -235,6 +236,38 @@ export class OnboardingOrchestrator {
         total_tokens_used: totalTokens,
         total_cost_usd: totalCost,
       })
+
+      // Sprint 5 D1 CRM wire-in · persist contact derived from intake
+      // input + scraped contactInfo (if available) to client_champions ·
+      // best-effort · NEVER fails the onboarding flow on CRM errors.
+      // Canonical table per decision doc `crm-canonical-table-client-champions`
+      // 2026-05-21.
+      try {
+        const contactInfo = clientData?.contactInfo as
+          | { emails?: string[]; phones?: string[] }
+          | undefined
+        const primaryEmail = contactInfo?.emails?.[0] ?? null
+        const primaryPhone = contactInfo?.phones?.[0] ?? null
+        const contactResult = await persistContact(this.supabase, {
+          clientId,
+          championName: input.companyName,
+          championEmail: primaryEmail,
+          championPhone: primaryPhone,
+          vertical: brandResult.analysis.detected_industry ?? input.industry ?? null,
+          journeyStatus: 'discovery',
+          notes: `Auto-created from onboarding intake · session ${onboardingId.substring(0, 8)}`,
+          extraMetadata: {
+            onboarding_id: onboardingId,
+            source: 'onboarding_orchestrator.start',
+            day: 1,
+          },
+        })
+        if (!contactResult.ok) {
+          errors.push(`Contact persist soft-failed: ${contactResult.code} · ${contactResult.detail}`)
+        }
+      } catch (e) {
+        errors.push(`Contact persist threw: ${e instanceof Error ? e.message : 'unknown'}`)
+      }
 
       // Notify MC about completion
       this.notifyMC(

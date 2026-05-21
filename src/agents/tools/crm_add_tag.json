@@ -1,0 +1,31 @@
+{
+  "name": "crm_add_tag",
+  "description": "Tag a contact in the native CRM (Supabase contact_tags table per Stack V4). Replaces the deprecated `ghl_add_tag` tool. Uses upsert semantics — calling with the same (contact_id, tag) pair twice is a no-op. Returns the persisted tag row.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "contact_id": {
+        "type": "string",
+        "description": "UUID of the contact (client_champions.id). REQUIRED."
+      },
+      "tag": {
+        "type": "string",
+        "description": "Tag value. REQUIRED. Example: 'qualified-lead', 'high-intent', 'enterprise', 'follow-up-2026-q2'."
+      },
+      "tag_category": {
+        "type": "string",
+        "description": "Optional grouping. Example: 'lifecycle', 'segment', 'priority'."
+      },
+      "contact_type": {
+        "type": "string",
+        "enum": ["lead", "client", "champion", "partner", "vendor", "other"],
+        "description": "Discriminator. Defaults to 'champion' if omitted."
+      },
+      "source": {
+        "type": "string",
+        "description": "Origin of the tag assignment. Example: 'agent:sales-enablement', 'workflow:onboarding-e2e-v2'."
+      }
+    },
+    "required": ["contact_id", "tag"]
+  }
+}
