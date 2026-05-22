@@ -16,6 +16,7 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { dispatchJourney } from './journey-orchestrator/index'
 import { WebDiscovery } from './web-discovery'
+import { ingestDiscoveryToBrain } from './web-discovery-brain-ingest'
 import { BrandAnalyzer } from './brand-analyzer'
 import { MissionControlBridge } from './mc-bridge'
 
@@ -167,6 +168,14 @@ export class OnboardingOrchestrator {
           contact_info: clientData.contactInfo,
           colors: clientData.colorPalette,
         },
+      })
+
+      // Sprint 7.6 Track C4/C6 · ingest scraped pages como chunks a
+      // client_brain_chunks (post Sprint 7.5 PR #76 merge). Fire-and-forget ·
+      // gracefully skips si table NO existe · NEVER blocks Day-1 success.
+      void ingestDiscoveryToBrain(this.supabase, clientId, clientData).catch((err) => {
+        const msg = err instanceof Error ? err.message : 'unknown'
+        console.warn('[onboarding-orchestrator] Brain ingest hook failed (non-fatal):', msg)
       })
 
       // Step 4: Brand Analysis — Claude interprets scraped data
