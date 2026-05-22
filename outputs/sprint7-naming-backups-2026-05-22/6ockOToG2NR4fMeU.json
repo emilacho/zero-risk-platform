@@ -1,0 +1,293 @@
+{
+  "updatedAt": "2026-04-24T17:38:32.433Z",
+  "createdAt": "2026-04-18T15:44:59.269Z",
+  "id": "6ockOToG2NR4fMeU",
+  "name": "Zero Risk - Creative Fatigue Auto-Refresh Loop (Every 6h)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "hoursInterval": 6,
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Trigger: Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/creative-fatigue-webhook",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook",
+      "name": "Webhook: Manual Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ],
+      "webhookId": "b7fcc60b-950d-4bb0-8017-253632ef94d3"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {timestamp: new Date().toISOString(), lookback_days: 7, ctr_threshold: 0.5, frequency_max: 3.5}}];"
+      },
+      "id": "prep",
+      "name": "Code: Prepare Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://zero-risk-platform.vercel.app/api/stubs/slack-webhook' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"text\": \"? Creative Fatigue Check Complete - {{ $json.timestamp }}\"}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "slack",
+      "name": "Slack: Notify Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ],
+      "disabled": true
+    }
+  ],
+  "connections": {
+    "Trigger: Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Code: Prepare Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code: Prepare Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prepare Query": {
+      "main": [
+        [
+          {
+            "node": "Slack: Notify Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "timezone": "UTC",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Trigger: Every 6 Hours": {
+      "recurrenceRules": [
+        0
+      ]
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "01051636-f7e8-40d1-aa9a-aace9678db84",
+  "activeVersionId": "01051636-f7e8-40d1-aa9a-aace9678db84",
+  "versionCounter": 105,
+  "triggerCount": 2,
+  "shared": [
+    {
+      "updatedAt": "2026-04-18T15:44:59.269Z",
+      "createdAt": "2026-04-18T15:44:59.269Z",
+      "role": "workflow:owner",
+      "workflowId": "6ockOToG2NR4fMeU",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "updatedAt": "2026-04-18T13:51:26.012Z",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-04-24T17:38:32.448Z",
+    "createdAt": "2026-04-24T17:38:32.448Z",
+    "versionId": "01051636-f7e8-40d1-aa9a-aace9678db84",
+    "workflowId": "6ockOToG2NR4fMeU",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "hoursInterval": 6,
+                "field": "hours"
+              }
+            ]
+          }
+        },
+        "id": "schedule",
+        "name": "Trigger: Every 6 Hours",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          100,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "zero-risk/creative-fatigue-webhook",
+          "responseMode": "onReceived"
+        },
+        "id": "webhook",
+        "name": "Webhook: Manual Trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          300,
+          300
+        ],
+        "webhookId": "b7fcc60b-950d-4bb0-8017-253632ef94d3"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{json: {timestamp: new Date().toISOString(), lookback_days: 7, ctr_threshold: 0.5, frequency_max: 3.5}}];"
+        },
+        "id": "prep",
+        "name": "Code: Prepare Query",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          500,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://zero-risk-platform.vercel.app/api/stubs/slack-webhook' }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\"text\": \"? Creative Fatigue Check Complete - {{ $json.timestamp }}\"}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            },
+            "timeout": 10000
+          }
+        },
+        "id": "slack",
+        "name": "Slack: Notify Team",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          700,
+          300
+        ],
+        "disabled": true
+      }
+    ],
+    "connections": {
+      "Trigger: Every 6 Hours": {
+        "main": [
+          [
+            {
+              "node": "Code: Prepare Query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook: Manual Trigger": {
+        "main": [
+          [
+            {
+              "node": "Code: Prepare Query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code: Prepare Query": {
+        "main": [
+          [
+            {
+              "node": "Slack: Notify Team",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-04-24T17:38:33.698Z",
+        "id": 527,
+        "workflowId": "6ockOToG2NR4fMeU",
+        "versionId": "01051636-f7e8-40d1-aa9a-aace9678db84",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    ]
+  }
+}

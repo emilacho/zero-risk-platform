@@ -1,0 +1,597 @@
+{
+  "updatedAt": "2026-05-12T04:38:53.513Z",
+  "createdAt": "2026-04-18T15:44:59.039Z",
+  "id": "o4B2RvvzJSgZZHNn",
+  "name": "Zero Risk - Phase Gate Evidence Collector (Webhook)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "evidence-collector",
+        "responseMode": "onReceived",
+        "options": {},
+        "httpMethod": "POST"
+      },
+      "id": "webhook-in",
+      "name": "Evidence Collector Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        100
+      ],
+      "webhookId": "45a072d6-64b3-4f31-a11e-77a0859b77bc"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate incoming evidence request\nconst { phase_name, phase_output, success_criteria, client_id, request_id } = $input.first().json.body;\n\nif (!phase_name || !phase_output || !success_criteria) {\n  throw new Error('Missing required: phase_name, phase_output, success_criteria');\n}\n\nconst validation_id = `audit-${request_id || phase_name}-${Date.now()}`;\n\nreturn [{\n  json: {\n    validation_id,\n    phase_name,\n    phase_output: phase_output.slice(0, 5000),\n    success_criteria,\n    client_id: client_id || 'unknown',\n    request_id: request_id || 'unknown',\n    received_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "normalize",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Structural validation: check required fields in phase output\nconst output = JSON.parse($json.phase_output);\nconst criteria = Array.isArray($json.success_criteria) ? $json.success_criteria : $json.success_criteria.split(',');\n\nconst structural_issues = [];\n\n// Check for required sections based on phase\nconst phase_requirements = {\n  'DISCOVER': ['market_opportunity', 'competitive_landscape', 'client_objectives'],\n  'STRATEGIZE': ['positioning', 'messaging_pillars', 'channel_mix', 'budget'],\n  'SCAFFOLD': ['content_calendar', 'creative_briefs', 'platform_requirements'],\n  'BUILD': ['creative_assets', 'seo_optimization', 'paid_media_setup'],\n  'HARDEN': ['qa_results', 'ab_tests_config', 'compliance_validation'],\n  'LAUNCH': ['audiences_targeted', 'campaigns_live', 'budget_deployed'],\n  'OPERATE': ['performance_metrics', 'optimization_recommendations', 'team_briefing']\n};\n\nconst required = phase_requirements[$json.phase_name] || [];\nrequired.forEach(field => {\n  if (!(field in output) || !output[field]) {\n    structural_issues.push(`Missing required field: ${field}`);\n  }\n});\n\nreturn [{\n  json: {\n    validation_id: $json.validation_id,\n    phase_name: $json.phase_name,\n    structural_valid: structural_issues.length === 0,\n    structural_issues,\n    phase_output: $json.phase_output,\n    success_criteria: $json.success_criteria\n  }\n}];"
+      },
+      "id": "structural-validation",
+      "name": "Structural Validation (Fields)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.structural_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-structural",
+      "name": "Structural Check Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+              "name": "x-api-key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"task_type\": \"phase_gate_qc\",\n  \"phase\": \"{{ $json.phase_name }}\",\n  \"phase_output\": {{ JSON.stringify($json.phase_output || '') }},\n  \"success_criteria\": {{ JSON.stringify(typeof $json.success_criteria === 'string' ? $json.success_criteria : JSON.stringify($json.success_criteria || [])) }},\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"request_id\": \"{{ $json.request_id }}\"\n}\n",
+        "options": {
+          "timeout": 120000
+        },
+        "contentType": "json"
+      },
+      "id": "semantic-validation",
+      "name": "Semantic Validation (Editor en Jefe QC)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract validation verdict\nconst editor_response = $node['Semantic Validation (Editor en Jefe QC)'].json;\n\nlet verdict = 'PASS';\nlet severity = 'low';\nlet issues = [];\n\nif (editor_response.success === false) {\n  verdict = 'FAIL';\n  severity = 'critical';\n  issues = [editor_response.error || 'Editor validation failed'];\n} else {\n  verdict = editor_response.verdict || 'PASS';\n  severity = editor_response.severity || 'low';\n  issues = editor_response.issues || [];\n}\n\nreturn [{\n  json: {\n    validation_id: $json.validation_id,\n    phase_name: $json.phase_name,\n    verdict,\n    severity,\n    structural_issues: $json.structural_issues || [],\n    semantic_issues: issues,\n    editor_rationale: editor_response.rationale || '',\n    all_issues_count: ($json.structural_issues || []).length + issues.length,\n    validated_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "extract-verdict",
+      "name": "Extract Validation Verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/phase-gate/audit",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+              "name": "x-api-key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"validation_id\": \"{{ $node['Normalize Request'].json.validation_id }}\",\n  \"phase\": \"{{ $node['Normalize Request'].json.phase_name }}\",\n  \"verdict\": \"{{ $node['Extract Validation Verdict'].json.verdict }}\",\n  \"severity\": \"{{ $node['Extract Validation Verdict'].json.severity }}\",\n  \"structural_issues\": {{ JSON.stringify($node['Structural Validation (Fields)'].json.structural_issues || []) }},\n  \"semantic_issues\": {{ JSON.stringify($node['Extract Validation Verdict'].json.issues || []) }},\n  \"all_issues_count\": {{ ($node['Structural Validation (Fields)'].json.structural_issues || []).length + ($node['Extract Validation Verdict'].json.issues || []).length }},\n  \"rationale\": {{ JSON.stringify($node['Extract Validation Verdict'].json.rationale || '') }},\n  \"validated_at\": \"{{ new Date().toISOString() }}\",\n  \"client_id\": \"{{ $node['Normalize Request'].json.client_id }}\",\n  \"request_id\": \"{{ $node['Normalize Request'].json.request_id }}\"\n}\n",
+        "options": {
+          "timeout": 15000
+        },
+        "contentType": "json"
+      },
+      "id": "log-audit",
+      "name": "Log Audit to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "end-structural-fail",
+      "name": "Structural Fail (End)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        800,
+        180
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "end-pass",
+      "name": "Pass (End)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Evidence Collector Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Structural Validation (Fields)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structural Validation (Fields)": {
+      "main": [
+        [
+          {
+            "node": "Structural Check Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structural Check Passed?": {
+      "main": [
+        [
+          {
+            "node": "Semantic Validation (Editor en Jefe QC)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Structural Fail (End)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Semantic Validation (Editor en Jefe QC)": {
+      "main": [
+        [
+          {
+            "node": "Extract Validation Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Validation Verdict": {
+      "main": [
+        [
+          {
+            "node": "Log Audit to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Audit to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Pass (End)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "49fd421f-a5e3-4007-a5ae-a3028d7de168",
+  "activeVersionId": "49fd421f-a5e3-4007-a5ae-a3028d7de168",
+  "versionCounter": 110,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-04-18T15:44:59.039Z",
+      "createdAt": "2026-04-18T15:44:59.039Z",
+      "role": "workflow:owner",
+      "workflowId": "o4B2RvvzJSgZZHNn",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "updatedAt": "2026-04-18T13:51:26.012Z",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-12T04:38:53.529Z",
+    "createdAt": "2026-05-12T04:38:53.529Z",
+    "versionId": "49fd421f-a5e3-4007-a5ae-a3028d7de168",
+    "workflowId": "o4B2RvvzJSgZZHNn",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "evidence-collector",
+          "responseMode": "onReceived",
+          "options": {},
+          "httpMethod": "POST"
+        },
+        "id": "webhook-in",
+        "name": "Evidence Collector Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          100,
+          100
+        ],
+        "webhookId": "45a072d6-64b3-4f31-a11e-77a0859b77bc"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Validate incoming evidence request\nconst { phase_name, phase_output, success_criteria, client_id, request_id } = $input.first().json.body;\n\nif (!phase_name || !phase_output || !success_criteria) {\n  throw new Error('Missing required: phase_name, phase_output, success_criteria');\n}\n\nconst validation_id = `audit-${request_id || phase_name}-${Date.now()}`;\n\nreturn [{\n  json: {\n    validation_id,\n    phase_name,\n    phase_output: phase_output.slice(0, 5000),\n    success_criteria,\n    client_id: client_id || 'unknown',\n    request_id: request_id || 'unknown',\n    received_at: new Date().toISOString()\n  }\n}];"
+        },
+        "id": "normalize",
+        "name": "Normalize Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          300,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Structural validation: check required fields in phase output\nconst output = JSON.parse($json.phase_output);\nconst criteria = Array.isArray($json.success_criteria) ? $json.success_criteria : $json.success_criteria.split(',');\n\nconst structural_issues = [];\n\n// Check for required sections based on phase\nconst phase_requirements = {\n  'DISCOVER': ['market_opportunity', 'competitive_landscape', 'client_objectives'],\n  'STRATEGIZE': ['positioning', 'messaging_pillars', 'channel_mix', 'budget'],\n  'SCAFFOLD': ['content_calendar', 'creative_briefs', 'platform_requirements'],\n  'BUILD': ['creative_assets', 'seo_optimization', 'paid_media_setup'],\n  'HARDEN': ['qa_results', 'ab_tests_config', 'compliance_validation'],\n  'LAUNCH': ['audiences_targeted', 'campaigns_live', 'budget_deployed'],\n  'OPERATE': ['performance_metrics', 'optimization_recommendations', 'team_briefing']\n};\n\nconst required = phase_requirements[$json.phase_name] || [];\nrequired.forEach(field => {\n  if (!(field in output) || !output[field]) {\n    structural_issues.push(`Missing required field: ${field}`);\n  }\n});\n\nreturn [{\n  json: {\n    validation_id: $json.validation_id,\n    phase_name: $json.phase_name,\n    structural_valid: structural_issues.length === 0,\n    structural_issues,\n    phase_output: $json.phase_output,\n    success_criteria: $json.success_criteria\n  }\n}];"
+        },
+        "id": "structural-validation",
+        "name": "Structural Validation (Fields)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          500,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.structural_valid }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "id": "check-structural",
+        "name": "Structural Check Passed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          700,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                "name": "x-api-key"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"task_type\": \"phase_gate_qc\",\n  \"phase\": \"{{ $json.phase_name }}\",\n  \"phase_output\": {{ JSON.stringify($json.phase_output || '') }},\n  \"success_criteria\": {{ JSON.stringify(typeof $json.success_criteria === 'string' ? $json.success_criteria : JSON.stringify($json.success_criteria || [])) }},\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"request_id\": \"{{ $json.request_id }}\"\n}\n",
+          "options": {
+            "timeout": 120000
+          },
+          "contentType": "json"
+        },
+        "id": "semantic-validation",
+        "name": "Semantic Validation (Editor en Jefe QC)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          900,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Extract validation verdict\nconst editor_response = $node['Semantic Validation (Editor en Jefe QC)'].json;\n\nlet verdict = 'PASS';\nlet severity = 'low';\nlet issues = [];\n\nif (editor_response.success === false) {\n  verdict = 'FAIL';\n  severity = 'critical';\n  issues = [editor_response.error || 'Editor validation failed'];\n} else {\n  verdict = editor_response.verdict || 'PASS';\n  severity = editor_response.severity || 'low';\n  issues = editor_response.issues || [];\n}\n\nreturn [{\n  json: {\n    validation_id: $json.validation_id,\n    phase_name: $json.phase_name,\n    verdict,\n    severity,\n    structural_issues: $json.structural_issues || [],\n    semantic_issues: issues,\n    editor_rationale: editor_response.rationale || '',\n    all_issues_count: ($json.structural_issues || []).length + issues.length,\n    validated_at: new Date().toISOString()\n  }\n}];"
+        },
+        "id": "extract-verdict",
+        "name": "Extract Validation Verdict",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/phase-gate/audit",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                "name": "x-api-key"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"validation_id\": \"{{ $node['Normalize Request'].json.validation_id }}\",\n  \"phase\": \"{{ $node['Normalize Request'].json.phase_name }}\",\n  \"verdict\": \"{{ $node['Extract Validation Verdict'].json.verdict }}\",\n  \"severity\": \"{{ $node['Extract Validation Verdict'].json.severity }}\",\n  \"structural_issues\": {{ JSON.stringify($node['Structural Validation (Fields)'].json.structural_issues || []) }},\n  \"semantic_issues\": {{ JSON.stringify($node['Extract Validation Verdict'].json.issues || []) }},\n  \"all_issues_count\": {{ ($node['Structural Validation (Fields)'].json.structural_issues || []).length + ($node['Extract Validation Verdict'].json.issues || []).length }},\n  \"rationale\": {{ JSON.stringify($node['Extract Validation Verdict'].json.rationale || '') }},\n  \"validated_at\": \"{{ new Date().toISOString() }}\",\n  \"client_id\": \"{{ $node['Normalize Request'].json.client_id }}\",\n  \"request_id\": \"{{ $node['Normalize Request'].json.request_id }}\"\n}\n",
+          "options": {
+            "timeout": 15000
+          },
+          "contentType": "json"
+        },
+        "id": "log-audit",
+        "name": "Log Audit to Supabase",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1300,
+          100
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "end-structural-fail",
+        "name": "Structural Fail (End)",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          800,
+          180
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "end-pass",
+        "name": "Pass (End)",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1500,
+          100
+        ]
+      }
+    ],
+    "connections": {
+      "Evidence Collector Webhook": {
+        "main": [
+          [
+            {
+              "node": "Normalize Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize Request": {
+        "main": [
+          [
+            {
+              "node": "Structural Validation (Fields)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Structural Validation (Fields)": {
+        "main": [
+          [
+            {
+              "node": "Structural Check Passed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Structural Check Passed?": {
+        "main": [
+          [
+            {
+              "node": "Semantic Validation (Editor en Jefe QC)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Structural Fail (End)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Semantic Validation (Editor en Jefe QC)": {
+        "main": [
+          [
+            {
+              "node": "Extract Validation Verdict",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Validation Verdict": {
+        "main": [
+          [
+            {
+              "node": "Log Audit to Supabase",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Log Audit to Supabase": {
+        "main": [
+          [
+            {
+              "node": "Pass (End)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-12T04:38:53.851Z",
+        "id": 671,
+        "workflowId": "o4B2RvvzJSgZZHNn",
+        "versionId": "49fd421f-a5e3-4007-a5ae-a3028d7de168",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-05-12T04:38:54.014Z",
+        "id": 672,
+        "workflowId": "o4B2RvvzJSgZZHNn",
+        "versionId": "49fd421f-a5e3-4007-a5ae-a3028d7de168",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    ]
+  }
+}
