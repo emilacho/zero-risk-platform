@@ -1,0 +1,305 @@
+{
+  "name": "Camino III · 3-of-N Voting Gate · Sprint 7.6",
+  "meta": {
+    "description": "Camino III canonical 3-of-N voting workflow · invoked by NEXUS Phase 5 QA (and other review-triggering workflows) before publish. Webhook entry receives review payload · creates review row · fans out to 3 reviewer agents in parallel (editor-en-jefe + brand-strategist + jefe-client-success) · collects votes · auto-tabulates via SQL RPC · returns gate decision (approved | rejected | escalated_hitl).",
+    "spec_doc": "zr-vault/wiki/decisions/2026-05-22-camino-iii-voting-canonization.md",
+    "sprint": "7.6 Track B CC#2",
+    "decision_matrix": "≥2 green AND 0 red → approved · ≥2 red → rejected · else → escalated_hitl",
+    "cost_per_run_usd": "~0.05 (3 reviewer agent calls)"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "camino-iii-voting-gate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-entry",
+      "name": "Webhook · POST /camino-iii-voting-gate",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "webhookId": "camino-iii-voting-gate-sprint7p6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "item-type-required",
+              "leftValue": "={{ $json.body.item_type }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            },
+            {
+              "id": "item-id-required",
+              "leftValue": "={{ $json.body.item_id }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "validate-input",
+      "name": "Validate payload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [420, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/reviews",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  item_type: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type,\n  item_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id,\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  campaign_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.campaign_id || null,\n  payload: $('Webhook · POST /camino-iii-voting-gate').first().json.body.payload || {},\n  expected_votes_count: 3,\n  metadata: { trigger: 'camino-iii-voting-gate', triggered_at: new Date().toISOString() }\n}) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "create-review",
+      "name": "Create review row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  agent_name: 'editor-en-jefe',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  task_input: {\n    task_type: 'camino_iii_vote',\n    review_id: $('Create review row').first().json.review.id,\n    item_type: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type,\n    item_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id,\n    payload: $('Webhook · POST /camino-iii-voting-gate').first().json.body.payload,\n    instructions: 'Camino III canonical vote · output JSON {\"vote\": \"green|amber|red\", \"rationale\": \"why\", \"confidence\": 0.0-1.0, \"concerns\": []}'\n  }\n}) }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "invoke-editor",
+      "name": "Vote A · editor-en-jefe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 220],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  agent_name: 'brand-strategist',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  task_input: {\n    task_type: 'camino_iii_vote',\n    review_id: $('Create review row').first().json.review.id,\n    item_type: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type,\n    item_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id,\n    payload: $('Webhook · POST /camino-iii-voting-gate').first().json.body.payload,\n    instructions: 'Camino III canonical vote · output JSON {\"vote\": \"green|amber|red\", \"rationale\": \"why\", \"confidence\": 0.0-1.0, \"concerns\": []}'\n  }\n}) }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "invoke-brand",
+      "name": "Vote B · brand-strategist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  agent_name: 'jefe-client-success',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  task_input: {\n    task_type: 'camino_iii_vote',\n    review_id: $('Create review row').first().json.review.id,\n    item_type: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type,\n    item_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id,\n    payload: $('Webhook · POST /camino-iii-voting-gate').first().json.body.payload,\n    instructions: 'Camino III canonical vote · output JSON {\"vote\": \"green|amber|red\", \"rationale\": \"why\", \"confidence\": 0.0-1.0, \"concerns\": []}'\n  }\n}) }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "invoke-cs",
+      "name": "Vote C · jefe-client-success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 580],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/votes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'editor-en-jefe',\n  raw_agent_output: JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "record-vote-a",
+      "name": "Record vote A",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 220],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/votes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'brand-strategist',\n  raw_agent_output: JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "record-vote-b",
+      "name": "Record vote B",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/votes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'jefe-client-success',\n  raw_agent_output: JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "record-vote-c",
+      "name": "Record vote C",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 580],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/reviews/{{ $('Create review row').first().json.review.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "fetch-final",
+      "name": "Fetch final tabulation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  ok: $json.ok,\n  review_id: $json.review.id,\n  status: $json.review.status,\n  decision_reason: $json.review.decision_reason,\n  votes: {\n    green: $json.review.green_count,\n    amber: $json.review.amber_count,\n    red: $json.review.red_count\n  },\n  tabulation: $json.tabulation,\n  votes_detail: $json.votes\n}) }}"
+      },
+      "id": "respond-success",
+      "name": "Respond · 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1520, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'validation_failed', detail: 'item_type + item_id required in body' }) }}"
+      },
+      "id": "respond-validation-fail",
+      "name": "Respond · 400 validation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [640, 540]
+    }
+  ],
+  "connections": {
+    "Webhook · POST /camino-iii-voting-gate": {
+      "main": [[{ "node": "Validate payload", "type": "main", "index": 0 }]]
+    },
+    "Validate payload": {
+      "main": [
+        [{ "node": "Create review row", "type": "main", "index": 0 }],
+        [{ "node": "Respond · 400 validation", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create review row": {
+      "main": [
+        [
+          { "node": "Vote A · editor-en-jefe", "type": "main", "index": 0 },
+          { "node": "Vote B · brand-strategist", "type": "main", "index": 0 },
+          { "node": "Vote C · jefe-client-success", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Vote A · editor-en-jefe": {
+      "main": [[{ "node": "Record vote A", "type": "main", "index": 0 }]]
+    },
+    "Vote B · brand-strategist": {
+      "main": [[{ "node": "Record vote B", "type": "main", "index": 0 }]]
+    },
+    "Vote C · jefe-client-success": {
+      "main": [[{ "node": "Record vote C", "type": "main", "index": 0 }]]
+    },
+    "Record vote A": {
+      "main": [[{ "node": "Fetch final tabulation", "type": "main", "index": 0 }]]
+    },
+    "Record vote B": {
+      "main": [[{ "node": "Fetch final tabulation", "type": "main", "index": 0 }]]
+    },
+    "Record vote C": {
+      "main": [[{ "node": "Fetch final tabulation", "type": "main", "index": 0 }]]
+    },
+    "Fetch final tabulation": {
+      "main": [[{ "node": "Respond · 200", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [
+    { "name": "sprint-7.6" },
+    { "name": "camino-iii" },
+    { "name": "voting" },
+    { "name": "qa-gate" }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-05-22T12:00:00.000Z",
+  "versionId": "camino-iii-voting-gate-v1"
+}
