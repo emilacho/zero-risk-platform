@@ -140,7 +140,26 @@ Responde: {"classification":"caliente|tibio|frio","score":1-100,"reason":"...","
       .single()
 
     if (leadError) {
-      return NextResponse.json({ error: leadError.message }, { status: 500 })
+      // NOT NULL / FK / CHECK constraint violations → 400 schema validation
+      // per Sprint 7 D-H2 fix · only true infra errors should bubble as 500
+      const code = (leadError as { code?: string }).code
+      const msg = leadError.message ?? 'db_error'
+      if (code === '23502' || code === '23503' || code === '23514' || code?.startsWith('23')) {
+        return NextResponse.json(
+          { error: 'validation_error', code: 'E-LEAD-PIPELINE-' + code, detail: msg },
+          { status: 400 },
+        )
+      }
+      if (code === '42501' || msg.toLowerCase().includes('rls') || msg.toLowerCase().includes('policy')) {
+        return NextResponse.json(
+          { error: 'rls_violation', code: 'E-LEAD-PIPELINE-RLS', detail: msg },
+          { status: 400 },
+        )
+      }
+      return NextResponse.json(
+        { error: 'db_error', code: 'E-LEAD-PIPELINE-DB', detail: msg },
+        { status: 500 },
+      )
     }
 
     const durationMs = Date.now() - startTime

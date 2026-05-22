@@ -90,6 +90,23 @@ export const AGENT_ALIAS_MAP: Readonly<Record<string, string>> = {
   seo_geo_optimization: 'seo-specialist',
 
   // ----------------------------------------------------------------
+  // Camino III 3-of-N voting · canonical reviewer slugs
+  // PRIMARY = editor-en-jefe · SECOND = brand-strategist · THIRD = client-success-lead
+  // The workflow Phase Gate Evidence Collector + cascade orchestration
+  // historically used `qa-reviewer-A` / `qa-reviewer-B` as positional labels.
+  // Per Sprint 7 B8 canonization · these resolve to the actual reviewer slugs.
+  // ----------------------------------------------------------------
+  'qa-reviewer-A': 'editor-en-jefe',
+  'qa-reviewer-a': 'editor-en-jefe',
+  qa_reviewer_a: 'editor-en-jefe',
+  'qa-reviewer-B': 'brand-strategist',
+  'qa-reviewer-b': 'brand-strategist',
+  qa_reviewer_b: 'brand-strategist',
+  'qa-reviewer-C': 'jefe-client-success',
+  'qa-reviewer-c': 'jefe-client-success',
+  qa_reviewer_c: 'jefe-client-success',
+
+  // ----------------------------------------------------------------
   // mc-bridge AGENT_ROLE_MAP ghost: ad-intelligence-agent
   // Not in MANIFEST-31; nearest capability = competitive-intelligence-agent
   // ----------------------------------------------------------------

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MetaAgent } from '@/lib/meta-agent'
 import { validateObject } from '@/lib/input-validator'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 /**
  * POST /api/analytics/meta-agent-run
@@ -17,6 +18,13 @@ import { validateObject } from '@/lib/input-validator'
  * Returns history of meta-agent runs.
  */
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
   try {
     const supabase = getSupabaseAdmin()
     const metaAgent = new MetaAgent(supabase)

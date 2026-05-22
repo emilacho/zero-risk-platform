@@ -90,7 +90,20 @@ export async function POST(request: Request) {
       ? (rawBody as ClientWorkspaceBody)
       : {};
 
-  const client_id = body.client_id ?? "unknown";
+  // Sprint 7 D-M2 fix · reject null/missing/"unknown" client_id to prevent
+  // garbage Notion pages with placeholder identifiers
+  const rawClientId = typeof body.client_id === "string" ? body.client_id.trim() : "";
+  if (!rawClientId || rawClientId.toLowerCase() === "unknown" || rawClientId.toLowerCase() === "null") {
+    return NextResponse.json(
+      {
+        error: "validation_error",
+        code: "E-NOTION-CLIENT-ID",
+        detail: "client_id is required · cannot be null, empty, or 'unknown'",
+      },
+      { status: 400 },
+    );
+  }
+  const client_id = rawClientId;
   const client_name = body.client_name ?? "Unknown Client";
 
   try {

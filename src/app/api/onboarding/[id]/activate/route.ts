@@ -20,9 +20,15 @@ export async function POST(
     const activated = await orchestrator.activateClient(onboardingId)
 
     if (!activated) {
+      // Activation returns false when onboarding session doesn't exist · canonical 404
+      // per Sprint 7 D-H2 fix · 500 was misleading (resource missing, not server fault)
       return NextResponse.json(
-        { error: 'Failed to activate client. Check onboarding session exists.' },
-        { status: 500 }
+        {
+          error: 'not_found',
+          code: 'E-ONBOARDING-404',
+          detail: `Onboarding session "${onboardingId}" not found or already activated`,
+        },
+        { status: 404 },
       )
     }
 
@@ -33,8 +39,12 @@ export async function POST(
     })
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      {
+        error: 'internal',
+        code: 'E-ONBOARDING-ACTIVATE-EXC',
+        detail: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 },
     )
   }
 }

@@ -85,7 +85,32 @@ async function getGoogleAccessToken(sa: ServiceAccountKey, scope: string): Promi
   return data.access_token as string
 }
 
+// GA4 is OUT canonical Stack V4 (Sprint 5 decision · GA4 OUT · PostHog IN).
+// Per Sprint 7 D-M1 fix · this endpoint is 410 Gone with sunset header.
+// Successor · PostHog conversion query via `/api/agent-outcomes` + custom queries.
 export async function GET(request: NextRequest) {
+  return NextResponse.json(
+    {
+      error: 'gone',
+      code: 'E-GA4-OUT',
+      detail: 'GA4 OUT canon Stack V4 (Sprint 5 decision · PostHog IN). Endpoint deprecated.',
+      successor: 'PostHog conversion query via /api/agent-outcomes · or direct PostHog /api/projects/{id}/query',
+      sunset: '2026-05-22',
+    },
+    {
+      status: 410,
+      headers: {
+        Deprecation: 'true',
+        Sunset: 'Thu, 22 May 2026 00:00:00 GMT',
+        Link: '</api/agent-outcomes>; rel="successor-version"',
+      },
+    },
+  )
+}
+
+// Legacy handler · retained for reference (never called · 410 above short-circuits)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _legacyGET(request: NextRequest) {
   const auth = checkInternalKey(request)
   if (!auth.ok) {
     return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
 import { validateObject } from '@/lib/input-validator'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 /**
  * POST /api/onboarding/[id]/intake — Process Day 2 intake form
@@ -27,6 +28,13 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
   try {
     const { id: onboardingId } = await params
     const supabase = getSupabaseAdmin()
