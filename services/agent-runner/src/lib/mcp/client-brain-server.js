@@ -1,5 +1,26 @@
 #!/usr/bin/env node
 // =============================================================
+// ⚠️ DEPRECATED 2026-05-22 · Sprint 7.5 A7 · MCP tool-on-demand
+// pattern is now SECONDARY FALLBACK. Canonical source of Client
+// Brain context in system prompts is push-enrichment in
+// `agent-sdk-runner.ts` via
+// `services/agent-runner/src/lib/brain-enrichment.ts`.
+//
+// Why deprecated · this MCP server exposes `query_client_brain`
+// as a tool the agent decides to invoke mid-execution. Identity
+// prompts mostly don't instruct agents to call it (3/17) → tool
+// never invoked → agent responds with identity-only context →
+// generic output. CC#4 audit 2026-05-22 confirmed via grep+logs.
+//
+// Push-enrichment guarantees chunks ARE injected BEFORE the first
+// turn · no prompt engineering dependency · 100% of invocations
+// with `clientId` receive Client Brain context.
+//
+// Roadmap · this file stays as fallback diagnostic; the
+// `mcpServers.client-brain` mount in `buildSdkOptions()` can be
+// removed in Sprint 8 cleanup once push-enrichment proves 100%
+// reliable in production.
+// =============================================================
 // Zero Risk V3 — MCP Client Brain Server (Railway copy)
 // Stdio MCP server that exposes Client Brain RAG as tools
 // for Managed Agents running via the Claude Agent SDK.
