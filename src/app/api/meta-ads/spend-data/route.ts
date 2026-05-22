@@ -5,7 +5,7 @@
  * per campaign over the specified date range.
  *
  * Used by: Cross-Platform Attribution Validator (cluster 4) to compare
- * Meta's reported conversions vs GA4 / Google Ads / TikTok for discrepancy detection.
+ * Meta's reported conversions vs PostHog / Google Ads / TikTok for discrepancy detection.
  *
  * GET ?campaign_id=xxx&date_preset=last_7d&client_id=xxx
  *   or

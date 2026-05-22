@@ -1,5 +1,8 @@
 /**
- * POST /api/content/publish/email — stub para publicar content via email (Mailgun/GHL SMTP).
+ * POST /api/content/publish/email — stub para publicar content via email.
+ *
+ * Stack V4 canon · backend = Resend (Mailgun + GHL SMTP deprecated 2026-05-22).
+ * Real send via /api/email/send · this route just logs the publish event.
  */
 import { handleStubPost } from '@/lib/stub-handler'
 

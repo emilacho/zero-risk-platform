@@ -1,22 +1,33 @@
 /**
- * POST /api/content/publish/ghl — publish via GoHighLevel (contacts + opportunities + workflows).
+ * POST /api/content/publish/ghl · 410 Gone · Stack V4 canon 2026-05-22.
+ *
+ * GHL OUT canon (decision 2026-05-22 ·
+ * `zr-vault/wiki/decisions/2026-05-22-stack-canon-purge-deprecated-services-audit.md`) ·
+ * GHL was NEVER subscribed · "Stack V4 = migration desde GHL" reframe rescinded.
+ *
+ * Replacement · Stack V4 channel-specific endpoints ·
+ *   - Email · /api/email/send (Resend backend)
+ *   - SMS · /api/sms/send (Twilio backend)
+ *   - WhatsApp · /api/whatsapp/send (Meta Cloud API directo)
+ *   - Calendar · /api/calendar/book (Cal.com self-host)
  */
-import { handleStubPost } from '@/lib/stub-handler'
+import { buildDeprecatedResponse } from '@/lib/deprecation/response'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+export async function GET(request: Request) {
+  return buildDeprecatedResponse({
+    endpoint: 'content/publish/ghl',
+    replacement: '/api/email/send · /api/sms/send · /api/whatsapp/send',
+    request,
+  })
+}
+
 export async function POST(request: Request) {
-  return handleStubPost(request, {
-    schemaName: 'stub-row',
-    table: 'content_publish_log',
-    transform: (r) => ({
-      channel: 'ghl',
-      client_id: r.client_id || null,
-      task_id: r.task_id || null,
-      ghl_campaign_id: `ghl-stub-${Date.now()}`,
-      published_at: new Date().toISOString(),
-      data: r,
-    }),
+  return buildDeprecatedResponse({
+    endpoint: 'content/publish/ghl',
+    replacement: '/api/email/send · /api/sms/send · /api/whatsapp/send',
+    request,
   })
 }

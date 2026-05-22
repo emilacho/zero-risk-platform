@@ -10,7 +10,7 @@
  *     client_id: string,
  *     audit_type?: "hourly_cross_platform" | "daily" | "campaign_end",
  *     severity?: "ok" | "low" | "medium" | "high" | "critical",
- *     platform_conversions?: { meta, google, tiktok, ga4, ... },
+ *     platform_conversions?: { meta, google, tiktok, posthog, ... },
  *     discrepancies?: Array<{ source, diff_pct, ... }>,
  *     qa_results?: Array<{ check, status, ... }>,
  *     max_discrepancy_pct?: number
