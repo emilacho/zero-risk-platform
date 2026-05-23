@@ -27,13 +27,17 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        # Sprint 7.7 tail · vitest Linux CI requires `@rolldown/binding-linux-x64-gnu`
-        # native binding. `rm lockfile && pnpm install` regenera Linux-shape
-        # lockfile incl. optional binding. `--config.optional=true` forces
-        # optional deps install (default true but explicit for clarity).
+        # Sprint 7.7 tail · vitest 4 native binding `@rolldown/binding-linux-x64-gnu`
+        # needs `pnpm.supportedArchitectures` (package.json) to force pnpm a
+        # fetch Linux x64 glibc binding. Env vars npm_config_target_*
+        # canonical workaround si supportedArchitectures no resuelve.
         run: |
           rm -f pnpm-lock.yaml
-          pnpm install --no-frozen-lockfile --config.optional=true
+          pnpm install --no-frozen-lockfile
+        env:
+          npm_config_target_os: linux
+          npm_config_target_arch: x64
+          npm_config_target_libc: glibc
 
       - name: Typecheck
         run: pnpm typecheck
