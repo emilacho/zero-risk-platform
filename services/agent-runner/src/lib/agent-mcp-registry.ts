@@ -1,14 +1,15 @@
 /**
- * Agent MCP Registry · Sprint 6 Track C1 wire-in.
+ * Agent MCP Registry · Sprint 6 Track C1 wire-in · extended Sprint 7.7 Track B.
  *
  * Builds the canonical `mcpServers` map for `agent-sdk-runner.ts` based on
  * env-var presence + (optional) agent slug gating. Returns ONLY MCPs that
  * have keys live · NO-OP gracefully cuando env missing.
  *
- * Stack V4 canon · 3 MCPs propios operational ·
+ * Stack V4 canon · 4 MCPs operational ·
  *   - @zero-risk/apify-mcp-server     · APIFY_TOKEN
  *   - @zero-risk/dataforseo-mcp-server · DATAFORSEO_LOGIN + DATAFORSEO_PASSWORD
  *   - @zero-risk/higgsfield-mcp-server · HIGGSFIELD_API_KEY (+ optional HIGGSFIELD_WEBHOOK_URL)
+ *   - meta-ads-mcp (Pipeboard · npm) · META_ACCESS_TOKEN + 3-agent allow-list
  *
  * GHL MCP · DEPRECATED per Stack V4 canon · NOT registered. See vault
  * decision `zr-vault/wiki/decisions/2026-05-21-ghl-mcp-deprecation-stack-v4.md`.
@@ -19,6 +20,9 @@
  * Per-agent gating · soft scoping via canonical mapping (which agent should
  * see which MCP tools). Out-of-scope agents simply don't get the MCP server
  * registered. Saves token budget + reduces tool-confusion.
+ *
+ * meta-ads uses ALLOW-list (inverse of deny-list) because it should activate
+ * for ONLY 3 paid-media agent slugs · per Sprint 7.7 Track B spec.
  */
 import { resolve as pathResolve } from 'node:path'
 
@@ -46,6 +50,18 @@ const AGENT_MCP_DENY: Record<string, Set<string>> = {
   'account-manager': new Set(['apify', 'dataforseo', 'higgsfield']),
   'community-manager': new Set(['higgsfield']),
 }
+
+/**
+ * Allow-list for meta-ads MCP (inverse pattern · only these 3 paid-media
+ * agent slugs get the Meta Marketing API toolset). Per Sprint 7.7 Track B
+ * spec · prevents the 30+ other agents from seeing irrelevant Meta Ads
+ * tools at runtime (saves token budget + reduces prompt-injection surface).
+ */
+const META_ADS_ALLOW: ReadonlySet<string> = new Set([
+  'media-buyer',
+  'social-media-strategist',
+  'paid-search-strategist',
+])
 
 export interface AgentMcpContext {
   agentSlug?: string
@@ -129,6 +145,44 @@ export function buildMcpServers(
           : {}),
         PATH: process.env.PATH ?? '',
       },
+    }
+  }
+
+  // Meta Ads MCP (Pipeboard · meta-ads-mcp npm v1.1.0) · 20+ Meta Marketing API
+  // tools (campaigns · ads · creatives · insights · audiences · ad library scrape).
+  // Allow-list gating · only 3 paid-media agents see this MCP at runtime.
+  // Env gate · META_ACCESS_TOKEN (also accepts META_SYSTEM_USER_TOKEN per Brazo 3
+  // pre-canon-alias window).
+  if (ctx.agentSlug && META_ADS_ALLOW.has(ctx.agentSlug) && !denied.has('meta-ads')) {
+    const metaToken =
+      process.env.META_ACCESS_TOKEN ?? process.env.META_SYSTEM_USER_TOKEN ?? ''
+    if (metaToken) {
+      servers['meta-ads'] = {
+        type: 'stdio',
+        command: 'node',
+        args: [
+          pathResolve(
+            process.cwd(),
+            'node_modules',
+            'meta-ads-mcp',
+            'build',
+            'index.js',
+          ),
+        ],
+        env: {
+          META_ACCESS_TOKEN: metaToken,
+          ...(process.env.META_FB_PAGE_ID
+            ? { META_FB_PAGE_ID: process.env.META_FB_PAGE_ID }
+            : {}),
+          ...(process.env.META_IG_BUSINESS_ACCOUNT_ID
+            ? { META_IG_BUSINESS_ACCOUNT_ID: process.env.META_IG_BUSINESS_ACCOUNT_ID }
+            : {}),
+          ...(process.env.META_AD_ACCOUNT_ID
+            ? { META_AD_ACCOUNT_ID: process.env.META_AD_ACCOUNT_ID }
+            : {}),
+          PATH: process.env.PATH ?? '',
+        },
+      }
     }
   }
 
