@@ -1,0 +1,354 @@
+{
+  "updatedAt": "2026-05-11T19:55:54.377Z",
+  "createdAt": "2026-04-18T14:07:58.046Z",
+  "id": "VJ367iyVT3F22asQ",
+  "name": "ZR — Agent Outcomes Writer (Cluster 1)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "outcomes-writer",
+        "options": {}
+      },
+      "id": "e08e577e-6fc7-4a57-9adc-f85f52351a95",
+      "name": "Outcomes Webhook Entry",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "unique-webhook-outcomes-1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize outcome data\nconst body = $input.first().json.body;\nconst { agent_slug, task_id, input_text, output_text, tokens_used, latency_ms, success, error } = body;\n\nif (!agent_slug || !task_id) {\n  throw new Error('Missing required: agent_slug, task_id');\n}\n\nconst outcome = {\n  agent_slug,\n  task_id,\n  input: input_text || '',\n  output: output_text || '',\n  tokens_used: tokens_used || 0,\n  latency_ms: latency_ms || 0,\n  success: success !== undefined ? success : true,\n  error: error || null,\n  created_at: new Date().toISOString()\n};\n\nreturn [{ json: outcome }];"
+      },
+      "id": "c55c8bd9-0d61-4d50-a351-f2881144227e",
+      "name": "Normalize Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agent-outcomes/write",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent_slug\": \"{{ $json.agent_slug }}\",\n  \"task_id\": \"{{ $json.task_id }}\",\n  \"input\": \"{{ $json.input }}\",\n  \"output\": \"{{ $json.output }}\",\n  \"tokens_used\": {{ $json.tokens_used }},\n  \"latency_ms\": {{ $json.latency_ms }},\n  \"success\": {{ $json.success }},\n  \"error\": \"{{ $json.error }}\",\n  \"created_at\": \"{{ $json.created_at }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "42c34954-df91-47eb-ae41-0ff99e741538",
+      "name": "Write to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        352,
+        144
+      ],
+      "id": "4faf4575-4152-491c-8590-c56b5aaf7330",
+      "name": "Sticky Note"
+    }
+  ],
+  "connections": {
+    "Outcomes Webhook Entry": {
+      "main": [
+        [
+          {
+            "node": "Normalize Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Outcome": {
+      "main": [
+        [
+          {
+            "node": "Write to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+  "activeVersionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+  "versionCounter": 69,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-04-18T14:07:58.046Z",
+      "createdAt": "2026-04-18T14:07:58.046Z",
+      "role": "workflow:owner",
+      "workflowId": "VJ367iyVT3F22asQ",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "updatedAt": "2026-04-18T13:51:26.012Z",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-04-18T14:23:23.438Z",
+    "createdAt": "2026-04-18T14:22:53.278Z",
+    "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+    "workflowId": "VJ367iyVT3F22asQ",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "outcomes-writer",
+          "options": {}
+        },
+        "id": "e08e577e-6fc7-4a57-9adc-f85f52351a95",
+        "name": "Outcomes Webhook Entry",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "unique-webhook-outcomes-1"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Normalize outcome data\nconst body = $input.first().json.body;\nconst { agent_slug, task_id, input_text, output_text, tokens_used, latency_ms, success, error } = body;\n\nif (!agent_slug || !task_id) {\n  throw new Error('Missing required: agent_slug, task_id');\n}\n\nconst outcome = {\n  agent_slug,\n  task_id,\n  input: input_text || '',\n  output: output_text || '',\n  tokens_used: tokens_used || 0,\n  latency_ms: latency_ms || 0,\n  success: success !== undefined ? success : true,\n  error: error || null,\n  created_at: new Date().toISOString()\n};\n\nreturn [{ json: outcome }];"
+        },
+        "id": "c55c8bd9-0d61-4d50-a351-f2881144227e",
+        "name": "Normalize Outcome",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          208,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL }}/api/agent-outcomes/write",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.INTERNAL_API_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"agent_slug\": \"{{ $json.agent_slug }}\",\n  \"task_id\": \"{{ $json.task_id }}\",\n  \"input\": \"{{ $json.input }}\",\n  \"output\": \"{{ $json.output }}\",\n  \"tokens_used\": {{ $json.tokens_used }},\n  \"latency_ms\": {{ $json.latency_ms }},\n  \"success\": {{ $json.success }},\n  \"error\": \"{{ $json.error }}\",\n  \"created_at\": \"{{ $json.created_at }}\"\n}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "42c34954-df91-47eb-ae41-0ff99e741538",
+        "name": "Write to Supabase",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          400,
+          0
+        ]
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          352,
+          144
+        ],
+        "id": "4faf4575-4152-491c-8590-c56b5aaf7330",
+        "name": "Sticky Note"
+      }
+    ],
+    "connections": {
+      "Outcomes Webhook Entry": {
+        "main": [
+          [
+            {
+              "node": "Normalize Outcome",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize Outcome": {
+        "main": [
+          [
+            {
+              "node": "Write to Supabase",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Emilio  Perez ",
+    "name": "Version e42ce270",
+    "description": "",
+    "autosaved": true,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-04-18T14:23:23.415Z",
+        "id": 5,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:28:10.536Z",
+        "id": 31,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:28:54.666Z",
+        "id": 38,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:32:49.535Z",
+        "id": 55,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:32:55.850Z",
+        "id": 62,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:43:28.961Z",
+        "id": 79,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:43:35.210Z",
+        "id": 86,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T17:43:42.293Z",
+        "id": 99,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T17:46:11.518Z",
+        "id": 106,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T19:06:38.474Z",
+        "id": 128,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T19:06:50.916Z",
+        "id": 135,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-05-11T19:55:54.771Z",
+        "id": 665,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-05-11T19:55:54.989Z",
+        "id": 666,
+        "workflowId": "VJ367iyVT3F22asQ",
+        "versionId": "e42ce270-b8a4-4d7c-b396-0f1717559222",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    ]
+  }
+}

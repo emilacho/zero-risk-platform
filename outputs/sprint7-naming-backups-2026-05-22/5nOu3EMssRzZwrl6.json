@@ -1,0 +1,977 @@
+{
+  "updatedAt": "2026-05-12T19:31:48.570Z",
+  "createdAt": "2026-04-18T15:44:58.273Z",
+  "id": "5nOu3EMssRzZwrl6",
+  "name": "Zero Risk - RUFLO Smart Router (Webhook)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "router-entry",
+        "responseMode": "onReceived",
+        "options": {},
+        "httpMethod": "POST"
+      },
+      "id": "webhook-in",
+      "name": "Router Webhook Entry",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        100
+      ],
+      "webhookId": "877ac43b-cd14-44b3-8926-11ce7f66d149"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate and normalize incoming router request\nconst { client_id, request, context_type } = $input.first().json.body;\n\nif (!client_id || !request) {\n  throw new Error('Missing required: client_id, request');\n}\n\nconst request_id = `route-${client_id}-${Date.now()}`;\n\nreturn [{\n  json: {\n    request_id,\n    client_id,\n    request: request.slice(0, 5000), // cap request size\n    context_type: context_type || 'general',\n    received_at: new Date().toISOString(),\n    status: 'received'\n  }\n}];"
+      },
+      "id": "normalize-request",
+      "name": "Normalize & Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/client-brain/{{ $json.client_id }}?sections=client_brand_books,client_icp_documents,client_service_capabilities",
+        "options": {
+          "timeout": 15000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "value": "application/json",
+              "name": "Content-Type"
+            },
+            {
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+              "name": "x-api-key"
+            }
+          ]
+        }
+      },
+      "id": "load-client-brain",
+      "name": "Load Client Context (Client Brain)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+              "name": "x-api-key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"ruflo\",\n  \"task_type\": \"classify_and_decompose\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"request_text\": \"{{ $json.request }}\",\n  \"context_type\": \"{{ $json.context_type }}\",\n  \"client_brain\": \"{{ $node['Load Client Context (Client Brain)'].json }}\",\n  \"routing_instructions\": \"Classify this request as: depth-first (multiple perspectives on same issue), breadth-first (distinct independent sub-questions), or straightforward (focused, well-defined). Return structured JSON with: classification_type, task_breakdown (ordered list), assigned_agents (sequence with dependencies), success_criteria, estimated_complexity (low|medium|high|critical).\"\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "invoke-ruflo",
+      "name": "Invoke RUFLO Classifier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract routing decision from RUFLO response\nconst ruflo_response = $node['Invoke RUFLO Classifier'].json;\n\nif (!ruflo_response.success) {\n  throw new Error('RUFLO classification failed: ' + (ruflo_response.error || 'unknown'));\n}\n\nconst routing = {\n  request_id: $json.request_id,\n  client_id: $json.client_id,\n  classification_type: ruflo_response.classification_type,\n  task_breakdown: ruflo_response.task_breakdown || [],\n  assigned_agents: ruflo_response.assigned_agents || [],\n  success_criteria: ruflo_response.success_criteria || [],\n  estimated_complexity: ruflo_response.estimated_complexity,\n  confidence: ruflo_response.confidence || 0.85,\n  should_escalate_hitl: ruflo_response.should_escalate_hitl || false,\n  escalation_reason: ruflo_response.escalation_reason || null,\n  routed_at: new Date().toISOString()\n};\n\nreturn [{ json: routing }];"
+      },
+      "id": "extract-routing",
+      "name": "Extract Routing Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.should_escalate_hitl }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-escalate",
+      "name": "Should Escalate to HITL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/approvals/create",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+              "name": "x-api-key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"approval_type\": \"routing_classification\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"classification_type\": \"{{ $json.classification_type }}\",\n  \"context\": {\n    \"original_request\": \"{{ ($json.request || '').slice(0, 500) }}\",\n    \"ruflo_confidence\": \"{{ $json.confidence }}\",\n    \"escalation_reason\": \"{{ $json.escalation_reason }}\"\n  },\n  \"required_approver\": \"ruflo\",\n  \"expires_in_hours\": 2\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "escalate-hitl",
+      "name": "Queue for HITL Review (High Risk)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://zero-risk-platform.vercel.app/api/stubs/slack-webhook' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"?? *RUFLO Classification Escalated to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Classification:* {{ $json.classification_type }} (confidence: {{ ($json.confidence * 100).toFixed(0) }}%)\\n*Reason:* {{ $json.escalation_reason }}\\n\\nReview in Mission Control ? dashboard/inbox\"\n}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "notify-escalation",
+      "name": "Notify Slack (Escalation)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        180
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agent-routing/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+              "name": "x-api-key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"classification_type\": \"{{ $json.classification_type }}\",\n  \"assigned_agents\": \"{{ JSON.stringify(($json.assigned_agents) ?? null) }}\",\n  \"complexity\": \"{{ $json.estimated_complexity }}\",\n  \"confidence\": {{ $json.confidence }},\n  \"status\": \"{{ $json.should_escalate_hitl ? 'escalated' : 'routed' }}\",\n  \"routed_at\": \"{{ $json.routed_at }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "log-routing",
+      "name": "Log Routing Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/mc-sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"routing_decision\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"classification\": \"{{ $json.classification_type }}\",\n  \"agents_assigned\": {{ ($json.assigned_agents || []).length }},\n  \"timestamp\": \"{{ now().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "notify-mc",
+      "name": "Notify Mission Control",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "end-normal",
+      "name": "Normal Routing (End)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "end-escalated",
+      "name": "Escalated (End)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        180
+      ]
+    },
+    {
+      "id": "mc-inbox-zZwrl6",
+      "name": "Notify MC Inbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1940,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-mission-control-production.up.railway.app/api/inbox",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "masterPassword",
+              "value": "zerorisk2026"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"from\":\"ruflo-router\",\"to\":\"leader\",\"type\":\"report\",\"taskId\":\"{{ $json.task_id ?? $json.client_id ?? ('wf-' + $now) }}\",\"subject\":\"RUFLO routing completado\",\"body\":\"client={{ $json.client_id ?? 'unknown' }} | workflow={{ $workflow.name }}\"}",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Router Webhook Entry": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & Validate Request": {
+      "main": [
+        [
+          {
+            "node": "Load Client Context (Client Brain)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Client Context (Client Brain)": {
+      "main": [
+        [
+          {
+            "node": "Invoke RUFLO Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoke RUFLO Classifier": {
+      "main": [
+        [
+          {
+            "node": "Extract Routing Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Routing Decision": {
+      "main": [
+        [
+          {
+            "node": "Should Escalate to HITL?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Escalate to HITL?": {
+      "main": [
+        [
+          {
+            "node": "Log Routing Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Queue for HITL Review (High Risk)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Routing Decision": {
+      "main": [
+        [
+          {
+            "node": "Notify Mission Control",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Mission Control": {
+      "main": [
+        [
+          {
+            "node": "Normal Routing (End)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue for HITL Review (High Risk)": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack (Escalation)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Slack (Escalation)": {
+      "main": [
+        [
+          {
+            "node": "Escalated (End)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normal Routing (End)": {
+      "main": [
+        [
+          {
+            "node": "Notify MC Inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "18f76102-8be8-405a-8396-dd568fc319fd",
+  "activeVersionId": "18f76102-8be8-405a-8396-dd568fc319fd",
+  "versionCounter": 104,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-04-18T15:44:58.273Z",
+      "createdAt": "2026-04-18T15:44:58.273Z",
+      "role": "workflow:owner",
+      "workflowId": "5nOu3EMssRzZwrl6",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "updatedAt": "2026-04-18T13:51:26.012Z",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-12T19:31:48.587Z",
+    "createdAt": "2026-05-12T19:31:48.587Z",
+    "versionId": "18f76102-8be8-405a-8396-dd568fc319fd",
+    "workflowId": "5nOu3EMssRzZwrl6",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "router-entry",
+          "responseMode": "onReceived",
+          "options": {},
+          "httpMethod": "POST"
+        },
+        "id": "webhook-in",
+        "name": "Router Webhook Entry",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          100,
+          100
+        ],
+        "webhookId": "877ac43b-cd14-44b3-8926-11ce7f66d149"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Validate and normalize incoming router request\nconst { client_id, request, context_type } = $input.first().json.body;\n\nif (!client_id || !request) {\n  throw new Error('Missing required: client_id, request');\n}\n\nconst request_id = `route-${client_id}-${Date.now()}`;\n\nreturn [{\n  json: {\n    request_id,\n    client_id,\n    request: request.slice(0, 5000), // cap request size\n    context_type: context_type || 'general',\n    received_at: new Date().toISOString(),\n    status: 'received'\n  }\n}];"
+        },
+        "id": "normalize-request",
+        "name": "Normalize & Validate Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          300,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/client-brain/{{ $json.client_id }}?sections=client_brand_books,client_icp_documents,client_service_capabilities",
+          "options": {
+            "timeout": 15000
+          },
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "value": "application/json",
+                "name": "Content-Type"
+              },
+              {
+                "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                "name": "x-api-key"
+              }
+            ]
+          }
+        },
+        "id": "load-client-brain",
+        "name": "Load Client Context (Client Brain)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          500,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                "name": "x-api-key"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"agent\": \"ruflo\",\n  \"task_type\": \"classify_and_decompose\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"request_text\": \"{{ $json.request }}\",\n  \"context_type\": \"{{ $json.context_type }}\",\n  \"client_brain\": \"{{ $node['Load Client Context (Client Brain)'].json }}\",\n  \"routing_instructions\": \"Classify this request as: depth-first (multiple perspectives on same issue), breadth-first (distinct independent sub-questions), or straightforward (focused, well-defined). Return structured JSON with: classification_type, task_breakdown (ordered list), assigned_agents (sequence with dependencies), success_criteria, estimated_complexity (low|medium|high|critical).\"\n}",
+          "options": {
+            "timeout": 120000
+          }
+        },
+        "id": "invoke-ruflo",
+        "name": "Invoke RUFLO Classifier",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          700,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Extract routing decision from RUFLO response\nconst ruflo_response = $node['Invoke RUFLO Classifier'].json;\n\nif (!ruflo_response.success) {\n  throw new Error('RUFLO classification failed: ' + (ruflo_response.error || 'unknown'));\n}\n\nconst routing = {\n  request_id: $json.request_id,\n  client_id: $json.client_id,\n  classification_type: ruflo_response.classification_type,\n  task_breakdown: ruflo_response.task_breakdown || [],\n  assigned_agents: ruflo_response.assigned_agents || [],\n  success_criteria: ruflo_response.success_criteria || [],\n  estimated_complexity: ruflo_response.estimated_complexity,\n  confidence: ruflo_response.confidence || 0.85,\n  should_escalate_hitl: ruflo_response.should_escalate_hitl || false,\n  escalation_reason: ruflo_response.escalation_reason || null,\n  routed_at: new Date().toISOString()\n};\n\nreturn [{ json: routing }];"
+        },
+        "id": "extract-routing",
+        "name": "Extract Routing Decision",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          900,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.should_escalate_hitl }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "id": "check-escalate",
+        "name": "Should Escalate to HITL?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/approvals/create",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                "name": "x-api-key"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"approval_type\": \"routing_classification\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"classification_type\": \"{{ $json.classification_type }}\",\n  \"context\": {\n    \"original_request\": \"{{ ($json.request || '').slice(0, 500) }}\",\n    \"ruflo_confidence\": \"{{ $json.confidence }}\",\n    \"escalation_reason\": \"{{ $json.escalation_reason }}\"\n  },\n  \"required_approver\": \"ruflo\",\n  \"expires_in_hours\": 2\n}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "escalate-hitl",
+        "name": "Queue for HITL Review (High Risk)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1300,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://zero-risk-platform.vercel.app/api/stubs/slack-webhook' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"text\": \"?? *RUFLO Classification Escalated to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Classification:* {{ $json.classification_type }} (confidence: {{ ($json.confidence * 100).toFixed(0) }}%)\\n*Reason:* {{ $json.escalation_reason }}\\n\\nReview in Mission Control ? dashboard/inbox\"\n}",
+          "options": {
+            "timeout": 10000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "notify-escalation",
+        "name": "Notify Slack (Escalation)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1500,
+          180
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agent-routing/log",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                "name": "x-api-key"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"classification_type\": \"{{ $json.classification_type }}\",\n  \"assigned_agents\": \"{{ JSON.stringify(($json.assigned_agents) ?? null) }}\",\n  \"complexity\": \"{{ $json.estimated_complexity }}\",\n  \"confidence\": {{ $json.confidence }},\n  \"status\": \"{{ $json.should_escalate_hitl ? 'escalated' : 'routed' }}\",\n  \"routed_at\": \"{{ $json.routed_at }}\"\n}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "log-routing",
+        "name": "Log Routing Decision",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1300,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/mc-sync",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.INTERNAL_API_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"action\": \"routing_decision\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"classification\": \"{{ $json.classification_type }}\",\n  \"agents_assigned\": {{ ($json.assigned_agents || []).length }},\n  \"timestamp\": \"{{ now().toISOString() }}\"\n}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "notify-mc",
+        "name": "Notify Mission Control",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1500,
+          100
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "end-normal",
+        "name": "Normal Routing (End)",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1700,
+          100
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "end-escalated",
+        "name": "Escalated (End)",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1700,
+          180
+        ]
+      },
+      {
+        "id": "mc-inbox-zZwrl6",
+        "name": "Notify MC Inbox",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1940,
+          100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://zero-risk-mission-control-production.up.railway.app/api/inbox",
+          "authentication": "none",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "masterPassword",
+                "value": "zerorisk2026"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\"from\":\"ruflo-router\",\"to\":\"leader\",\"type\":\"report\",\"taskId\":\"{{ $json.task_id ?? $json.client_id ?? ('wf-' + $now) }}\",\"subject\":\"RUFLO routing completado\",\"body\":\"client={{ $json.client_id ?? 'unknown' }} | workflow={{ $workflow.name }}\"}",
+          "options": {
+            "allowUnauthorizedCerts": false
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Router Webhook Entry": {
+        "main": [
+          [
+            {
+              "node": "Normalize & Validate Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize & Validate Request": {
+        "main": [
+          [
+            {
+              "node": "Load Client Context (Client Brain)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Load Client Context (Client Brain)": {
+        "main": [
+          [
+            {
+              "node": "Invoke RUFLO Classifier",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Invoke RUFLO Classifier": {
+        "main": [
+          [
+            {
+              "node": "Extract Routing Decision",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Routing Decision": {
+        "main": [
+          [
+            {
+              "node": "Should Escalate to HITL?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Should Escalate to HITL?": {
+        "main": [
+          [
+            {
+              "node": "Log Routing Decision",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Queue for HITL Review (High Risk)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Log Routing Decision": {
+        "main": [
+          [
+            {
+              "node": "Notify Mission Control",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notify Mission Control": {
+        "main": [
+          [
+            {
+              "node": "Normal Routing (End)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Queue for HITL Review (High Risk)": {
+        "main": [
+          [
+            {
+              "node": "Notify Slack (Escalation)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notify Slack (Escalation)": {
+        "main": [
+          [
+            {
+              "node": "Escalated (End)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normal Routing (End)": {
+        "main": [
+          [
+            {
+              "node": "Notify MC Inbox",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-12T19:31:48.946Z",
+        "id": 675,
+        "workflowId": "5nOu3EMssRzZwrl6",
+        "versionId": "18f76102-8be8-405a-8396-dd568fc319fd",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-05-12T19:31:49.101Z",
+        "id": 676,
+        "workflowId": "5nOu3EMssRzZwrl6",
+        "versionId": "18f76102-8be8-405a-8396-dd568fc319fd",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    ]
+  }
+}

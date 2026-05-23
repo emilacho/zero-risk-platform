@@ -298,7 +298,7 @@ describe('FeedbackCollector.recordCampaignResults', () => {
     ])
     const fc = new FeedbackCollector(supabase)
     await fc.recordCampaignResults({
-      clientId: 'c-1', pipelineId: 'p-2', contentType: 'email', channel: 'mailgun',
+      clientId: 'c-1', pipelineId: 'p-2', contentType: 'email', channel: 'resend',
     })
     const inserted = ops[0].insert as Record<string, unknown>
     expect(inserted.impressions).toBe(0)

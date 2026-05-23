@@ -1,0 +1,133 @@
+{
+  "name": "Zero Risk — Social Planner Scheduler (Camino B · Meta Graph)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-5min",
+      "name": "Cron · every 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/social/posts?status=scheduled&limit=50",
+        "options": { "timeout": 15000 },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        }
+      },
+      "id": "fetch-due",
+      "name": "Fetch Scheduled Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter rows where scheduled_at <= now (5min slack)\nconst nowMs = Date.now() + 5 * 60 * 1000;\nconst rows = ($input.first().json.rows || []).filter(r => {\n  const t = new Date(r.scheduled_at).getTime();\n  return !isNaN(t) && t <= nowMs;\n});\nreturn rows.map(r => ({ json: r }));"
+      },
+      "id": "filter-due",
+      "name": "Filter Due Now",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/social/posts/{{ $json.id }}/mark-publishing",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "options": { "timeout": 10000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "mark-publishing",
+      "name": "Mark Publishing (advisory · NOT mandatory)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v21.0/{{ $json.network === 'facebook' ? $env.META_FB_PAGE_ID : $env.META_IG_BUSINESS_ACCOUNT_ID }}/{{ $json.network === 'facebook' ? 'feed' : 'media_publish' }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "access_token", "value": "={{ $env.META_PAGE_ACCESS_TOKEN }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.network === 'facebook' ? JSON.stringify({ message: $json.content }) : JSON.stringify({ creation_id: $json.media_urls[0] }) }}",
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "publish-meta",
+      "name": "Publish to Meta Graph",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/social/posts/{{ $node['Filter Due Now'].json.id }}/finalize",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ provider_post_id: ($json.id || $json.post_id || ''), status: ($json.error ? 'failed' : 'published'), error_detail: ($json.error?.message || null) }) }}",
+        "options": { "timeout": 10000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "finalize",
+      "name": "Finalize Post Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 320]
+    }
+  ],
+  "connections": {
+    "Cron · every 5 min": {
+      "main": [[{ "node": "Fetch Scheduled Posts", "type": "main", "index": 0 }]]
+    },
+    "Fetch Scheduled Posts": {
+      "main": [[{ "node": "Filter Due Now", "type": "main", "index": 0 }]]
+    },
+    "Filter Due Now": {
+      "main": [[{ "node": "Mark Publishing (advisory · NOT mandatory)", "type": "main", "index": 0 }]]
+    },
+    "Mark Publishing (advisory · NOT mandatory)": {
+      "main": [[{ "node": "Publish to Meta Graph", "type": "main", "index": 0 }]]
+    },
+    "Publish to Meta Graph": {
+      "main": [[{ "node": "Finalize Post Status", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "versionId": "sprint4-social-camino-b-cron-5min",
+  "tags": ["sprint-4", "social-planner", "camino-b", "meta-graph", "scheduler"],
+  "_notes": "DO NOT activate live until Meta Graph env vars + Page ID + IG Business Account ID are populated. mark-publishing + finalize endpoints (POST /api/social/posts/[id]/mark-publishing + .../finalize) are stubs for Sprint #N+ wire · current scheduler.json publishes optimistically without status callbacks · UPDATE manual via Supabase OR add the 2 missing endpoints when activating. Workflow shipped as JSON file ONLY · NOT imported a n8n instance vivo."
+}

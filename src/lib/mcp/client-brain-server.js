@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 // =============================================================
+// ⚠️ DEPRECATED 2026-05-22 · Sprint 7.5 A7 · see Railway copy
+// `services/agent-runner/src/lib/mcp/client-brain-server.js`
+// for full rationale. Canonical Client Brain access is now
+// push-enrichment in `agent-sdk-runner.ts`. This file remains
+// as fallback diagnostic until Sprint 8 cleanup.
+// =============================================================
 // Zero Risk V3 — MCP Client Brain Server
 // Stdio MCP server that exposes Client Brain RAG as tools
 // for Managed Agents running via the Claude Agent SDK.

@@ -7,7 +7,7 @@
  * Returns sessions / conversions / conversion_rate / bounce_rate for a given
  * landing page URL over the last N days. Pulls from `page_conversion_metrics`
  * (preferred), falls back to a deterministic stub when the table is missing
- * or empty (no GA4 backfill yet). Stub is keyed off the URL hash so workflow
+ * or empty (no PostHog backfill yet). Stub is keyed off the URL hash so workflow
  * runs are reproducible during development.
  *
  * Auth: tier 2 INTERNAL.
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
       url: target,
       days,
       metrics: deterministicStub(target, days),
-      note: r.reason ?? 'GA4 backfill pending · deterministic stub served',
+      note: r.reason ?? 'PostHog backfill pending · deterministic stub served',
     })
   }
 

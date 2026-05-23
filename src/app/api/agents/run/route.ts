@@ -7,6 +7,7 @@ import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
 import { capture } from '@/lib/posthog'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
+import { enrichClientIdFromContext } from '@/lib/client-id-enricher'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -501,18 +502,38 @@ export async function POST(request: Request) {
     // path that feeds observability dashboards. Schema reference:
     // mission-control/mission-control/supabase/migrations/2026051401_create_agent_invocations.sql
     // Fire-and-forget · request must not fail if observability insert breaks.
+
+    // Sprint 7.7 Track D2 · client_id late-binding enrichment.
+    // Si body NO trajo client_id but FK columns (workflow_execution_id ·
+    // journey_id · task_id · session_id) están presentes · DB lookup chain
+    // recovers cliente attribution. Cierra 23.5% billing gap del rollup audit.
+    const taskIdForInsert =
+      (context.pipeline_id as string | null) || (context.task_id as string | null) || null
+    const workflowExecutionIdForInsert = (context.workflow_execution_id as string | null) || null
+    const journeyIdForInsert =
+      (context.journey_id as string | null) || (context._journey_id as string | null) || null
+    const sessionIdForInsert =
+      (claudeData?.id as string | undefined) || `run-${startTime}-${Math.random().toString(36).slice(2, 8)}`
+    const enrichment = await enrichClientIdFromContext(supabase, resolvedClientId, {
+      workflow_execution_id: workflowExecutionIdForInsert,
+      journey_id: journeyIdForInsert,
+      task_id: taskIdForInsert,
+      session_id: sessionIdForInsert,
+    }).catch(() => ({ client_id: resolvedClientId, source: 'none' as const, attempted_lookups: [] }))
+    const enrichedClientId = enrichment.client_id
+
     void supabase
       .from('agent_invocations')
       .insert({
-        session_id: (claudeData?.id as string | undefined) || `run-${startTime}-${Math.random().toString(36).slice(2, 8)}`,
+        session_id: sessionIdForInsert,
         agent_id: canonicalSlug,
         agent_name: (agentConfig.display_name as string) || canonicalSlug,
         command: null,
-        task_id: (context.pipeline_id as string | null) || (context.task_id as string | null) || null,
+        task_id: taskIdForInsert,
         workflow_id: (context.workflow_id as string | null) || null,
-        workflow_execution_id: (context.workflow_execution_id as string | null) || null,
-        client_id: resolvedClientId,
-        journey_id: (context.journey_id as string | null) || (context._journey_id as string | null) || null,
+        workflow_execution_id: workflowExecutionIdForInsert,
+        client_id: enrichedClientId,
+        journey_id: journeyIdForInsert,
         model: modelId,
         started_at: startedAt.toISOString(),
         ended_at: endedAt.toISOString(),
@@ -525,6 +546,7 @@ export async function POST(request: Request) {
         status: 'completed',
         exit_code: 0,
         error_message: null,
+        system_prompt: systemPrompt,
         metadata: {
           source: 'api_agents_run',
           caller,
@@ -532,6 +554,11 @@ export async function POST(request: Request) {
           skills_loaded: loadedSkills.map(s => s.name).slice(0, 20),
           response_length: responseText.length,
           stop_reason: claudeData?.stop_reason || null,
+          // Sprint 7.7 Track D2 · provenance del client_id final
+          client_id_resolution: {
+            source: enrichment.source,
+            attempted_lookups: enrichment.attempted_lookups,
+          },
         },
       })
       .then(

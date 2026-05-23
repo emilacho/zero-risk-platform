@@ -183,7 +183,7 @@ export async function GET() {
           model: 'claude-sonnet',
           role: 'empleado',
           status: 'pending',
-          description: 'Images (GPT Image · gpt-image-1), video (Higgsfield)',
+          description: 'Images (GPT Image · gpt-image-1), video (Veo 3.1)',
           department: 'Marketing',
         },
         {
@@ -192,7 +192,7 @@ export async function GET() {
           model: 'claude-haiku',
           role: 'empleado',
           status: 'pending',
-          description: 'GA4, PostHog, Meta Pixel',
+          description: 'PostHog, Meta Pixel',
           department: 'Marketing',
         },
       ]
@@ -210,13 +210,22 @@ export async function GET() {
       },
     }))
 
-    // Check service connections
+    // Check service connections · Stack V4 canon 2026-05-22
+    // (composio OUT · mailgun OUT · ghl OUT · ideogram OUT · kling OUT)
     const services = {
-      composio: !!process.env.COMPOSIO_API_KEY,
       claude_api: !!process.env.CLAUDE_API_KEY,
       openai: !!process.env.OPENAI_API_KEY,
-      n8n_webhook: !!process.env.N8N_WEBHOOK_URL,
+      n8n_webhook: !!(process.env.N8N_WEBHOOK_URL || process.env.N8N_BASE_URL),
       supabase: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      resend: !!process.env.RESEND_API_KEY,
+      twilio: !!process.env.TWILIO_ACCOUNT_SID,
+      whatsapp: !!process.env.WHATSAPP_PHONE_NUMBER_ID,
+      cal_com: !!process.env.CAL_COM_API_KEY,
+      tally: !!process.env.TALLY_SIGNING_SECRET,
+      notion: !!process.env.NOTION_API_KEY,
+      apify: !!process.env.APIFY_TOKEN,
+      dataforseo: !!(process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD),
+      posthog: !!process.env.POSTHOG_PERSONAL_API_KEY,
     }
 
     return NextResponse.json({
