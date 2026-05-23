@@ -21,7 +21,7 @@
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
-import { buildMcpServers } from './mcp/agent-mcp-registry.js'
+import { buildMcpServers } from './agent-mcp-registry.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
 // `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
