@@ -1,5 +1,19 @@
 # @zero-risk/ghl-mcp-server
 
+> **🚨 STATUS · DEPRECATED · SUNSET 2026-06-04** (Sprint 6 Track C1 · Stack V4 GHL-OUT canon)
+>
+> Per `zr-vault/wiki/decisions/2026-05-21-ghl-mcp-deprecation-stack-v4.md` · this MCP server is NOT registered en `agent-sdk-runner.ts` mcpServers map starting 2026-05-21. Canonical replacements ·
+> - Email · `/api/email/send` (Resend wrapper · `src/lib/email/resend.ts`)
+> - Contacts · Supabase nativo (`client_champions` table + Sprint 6 Track A2)
+> - Landing pages · client-sites repo (Next.js direct)
+> - SMS · `/api/sms/send` (Twilio · `src/lib/sms/twilio.ts`)
+> - WhatsApp · `/api/whatsapp/send` (Meta Graph directo · `src/lib/whatsapp/meta-graph.ts`)
+>
+> Package will be moved to `packages/_archived/ghl-mcp-server/` on 2026-06-04. Until then, sources remain in tree for audit + rollback.
+
+---
+
+
 MCP server exposing GoHighLevel as Claude tools.
 
 **Status:** Scaffold only — Block 11 of CC#1 sprint 2026-05-07. Tool implementations are stubs that throw `not_implemented`. Implementation sprint will wire each tool to the real GHL API.
