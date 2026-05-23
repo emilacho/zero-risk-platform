@@ -18,6 +18,7 @@ import { dispatchJourney } from './journey-orchestrator/index'
 import { WebDiscovery } from './web-discovery'
 import { BrandAnalyzer } from './brand-analyzer'
 import { MissionControlBridge } from './mc-bridge'
+import { chunksFromBrandBook, persistChunks } from './brain/persist-chunks'
 
 // ============================================================
 // Types
@@ -183,6 +184,40 @@ export class OnboardingOrchestrator {
       const brandBookId = await analyzer.writeBrandBookToDB(
         clientId, brandResult.analysis, input.websiteUrl
       )
+
+      // Sprint 7.5 A5 · Client Brain wire-in · embed brand book chunks
+      // immediately after write so the agent runtime has Client Brain
+      // context for this client's very first invocation. Graceful · onboarding
+      // never fails on embedding errors (caller logs · brain stays empty
+      // for this client until next backfill).
+      try {
+        // Re-fetch the row to get all the persisted columns (writeBrandBookToDB
+        // only returns the ID) · cheap (one row) · ensures chunks reflect what
+        // was actually written, not the in-memory analysis object.
+        const { data: bookRow } = await this.supabase
+          .from('client_brand_books')
+          .select('*')
+          .eq('id', brandBookId)
+          .single()
+        if (bookRow) {
+          const chunks = chunksFromBrandBook(bookRow)
+          const persistRes = await persistChunks(this.supabase, {
+            clientId,
+            sourceTable: 'client_brand_books',
+            sourceId: brandBookId,
+            chunks,
+          })
+          if (persistRes.ok) {
+            console.log(
+              `[brain-wire] ${input.companyName} · ${persistRes.chunks_upserted}/${chunks.length} chunks embedded · $${persistRes.cost_usd.toFixed(6)}`,
+            )
+          } else {
+            errors.push(`Brain wire-in soft-failed: ${persistRes.code} · ${persistRes.detail}`)
+          }
+        }
+      } catch (e) {
+        errors.push(`Brain wire-in threw: ${e instanceof Error ? e.message : 'unknown'}`)
+      }
 
       // Update detected industry on client record
       if (brandResult.analysis.detected_industry) {

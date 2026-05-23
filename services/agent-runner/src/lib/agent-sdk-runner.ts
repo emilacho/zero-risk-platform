@@ -402,7 +402,31 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
 
   // 2. Load skills + assemble system prompt.
   const skills = await loadSkills(supabase, agentCfg.id)
-  const systemPrompt = _buildSystemPrompt(agentCfg.identity_content, skills, input)
+  let systemPrompt = _buildSystemPrompt(agentCfg.identity_content, skills, input)
+
+  // 2b · Sprint 7.5 A6 · push-enrichment Client Brain RAG.
+  // Inject top_k canonical chunks for this client's brain into the system
+  // prompt. Graceful · NEVER throws · falls back to identity-only prompt
+  // when clientId missing OR OpenAI/RPC fails OR brain empty for client.
+  const { enrichSystemPromptWithClientBrain } = await import('./brain-enrichment')
+  const enrichment = await enrichSystemPromptWithClientBrain({
+    supabase,
+    clientId: input.clientId,
+    taskDescription: input.task ?? '',
+    agentSlug: canonicalSlug,
+    topK: 5,
+  })
+  if (enrichment.brain_hit) {
+    systemPrompt = `${systemPrompt}\n\n${enrichment.enrichment}`
+    console.log(
+      `[brain-enrich] ${canonicalSlug} · ${enrichment.chunks_used} chunks injected · client=${input.clientId} · $${enrichment.cost_usd.toFixed(6)}`,
+    )
+  } else if (input.clientId) {
+    // Soft-fail: client_id provided but brain returned nothing · log for audit.
+    console.warn(
+      `[brain-enrich] ${canonicalSlug} · NO chunks · client=${input.clientId} · reason=${enrichment.error ?? 'unknown'}`,
+    )
+  }
 
   // 3. Build SDK options.
   const modelKey = agentCfg.model || 'claude-sonnet'
