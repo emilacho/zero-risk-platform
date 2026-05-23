@@ -100,14 +100,34 @@ async function listWorkflows() {
   return j.data ?? []
 }
 
+// Two-form invocation detection ·
+//   Form A · JSON-serialized body  · "agent": "slug"
+//   Form B · JS template literal   · agent: "slug"  (no quotes around the key)
+// Form B is how buildAgentRunNode emits jsonBody (={{ JSON.stringify({ agent: "<slug>", ... }) }}).
+// The original single-regex over JSON.stringify(wf) missed Form B because the
+// serialized template string escapes quotes but the key `agent` is unquoted JS.
 function extractInvocations(wf) {
   const body = JSON.stringify(wf)
   const slugs = new Set()
-  for (const m of body.matchAll(/\\"agent\\"\s*:\s*\\"([a-zA-Z][a-zA-Z0-9_-]+)\\"/g)) {
-    const raw = m[1]
-    slugs.add(ALIASES[raw] ?? raw)
+  const patterns = [
+    /\\"agent\\"\s*:\s*\\"([a-zA-Z][a-zA-Z0-9_-]+)\\"/g, // Form A · JSON
+    /\bagent\s*:\s*\\"([a-zA-Z][a-zA-Z0-9_-]+)\\"/g,      // Form B · JS template
+  ]
+  for (const re of patterns) {
+    for (const m of body.matchAll(re)) {
+      const raw = m[1]
+      slugs.add(ALIASES[raw] ?? raw)
+    }
   }
   return slugs
+}
+
+// Canonical idempotency check · the HTTP node created by buildAgentRunNode is
+// named `Invoke · <slug>` · presence of a node with that exact name proves the
+// wire-in already happened, independent of body-string parsing quirks.
+function hasInvokeNode(wf, agent) {
+  const expected = `Invoke · ${agent}`
+  return (wf?.nodes ?? []).some((n) => n.name === expected)
 }
 
 function buildAgentRunNode(agent, anchorPosition) {
@@ -188,8 +208,7 @@ async function main() {
       plan.push({ agent: anchor.agent, status: "no-host", detail: `no workflow matches /${anchor.workflow_match}/i` })
       continue
     }
-    const existing = extractInvocations(target)
-    if (existing.has(anchor.agent)) {
+    if (hasInvokeNode(target, anchor.agent)) {
       plan.push({ agent: anchor.agent, status: "already-wired", detail: target.name })
       continue
     }
@@ -242,18 +261,31 @@ async function main() {
     )
     // Build patched workflow
     const newNode = buildAgentRunNode(p.agent, p.anchor_position)
-    const patched = JSON.parse(JSON.stringify(wf))
-    patched.nodes = [...(patched.nodes ?? []), newNode]
-    // n8n REST PUT shape · NO support for partial updates in v1 · we PUT the
-    // full workflow body. Strip read-only fields.
-    delete patched.id
-    delete patched.active
-    delete patched.createdAt
-    delete patched.updatedAt
-    delete patched.tags
+    const patchedNodes = [...(wf.nodes ?? []), newNode]
+    // n8n REST PUT shape · v1 rejects fields outside {name, nodes, connections, settings}
+    // (HTTP 400 "request/body must NOT have additional properties"). Build a minimal
+    // body via whitelist instead of blacklist · resilient to new server-managed fields
+    // (pinData, triggerCount, meta, versionId, etc.) and unknown settings keys
+    // (settings.availableInMCP, settings.binaryMode).
+    const ALLOWED_SETTINGS = [
+      "executionOrder", "errorWorkflow", "callerPolicy",
+      "executionTimeout", "saveExecutionProgress",
+      "saveManualExecutions", "saveDataErrorExecution",
+      "saveDataSuccessExecution", "timezone",
+    ]
+    const cleanSettings = {}
+    for (const k of ALLOWED_SETTINGS) {
+      if (wf.settings && wf.settings[k] !== undefined) cleanSettings[k] = wf.settings[k]
+    }
+    const putBody = {
+      name: wf.name,
+      nodes: patchedNodes,
+      connections: wf.connections ?? {},
+      settings: cleanSettings,
+    }
     const res = await n8nFetch(`/api/v1/workflows/${wf.id}`, {
       method: "PUT",
-      body: JSON.stringify(patched),
+      body: JSON.stringify(putBody),
     })
     if (res.ok) {
       applied++
