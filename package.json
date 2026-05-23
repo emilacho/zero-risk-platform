@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "Zero Risk V2 — Marketing automation platform (single-tenant)",
+  "pnpm": {
+    "supportedArchitectures": {
+      "os": ["current", "linux"],
+      "cpu": ["current", "x64"],
+      "libc": ["current", "glibc"]
+    }
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
