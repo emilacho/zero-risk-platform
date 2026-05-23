@@ -1,0 +1,376 @@
+{
+  "updatedAt": "2026-05-11T19:55:56.598Z",
+  "createdAt": "2026-04-18T14:39:56.059Z",
+  "id": "k6rZK9Uaa5sZRdZh",
+  "name": "ZR — Agent Outcomes Writer (HARDCODED v2)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "outcomes-writer-v2",
+        "options": {}
+      },
+      "id": "e8a29b52-fbf4-4c34-bf3b-d869bfd8dc49",
+      "name": "Outcomes Webhook Entry",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        -144
+      ],
+      "webhookId": "wf1-hardcoded-webhook-v2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nconst { agent_slug, task_id, input_text, output_text, tokens_used, latency_ms, success, error } = body;\nif (!agent_slug || !task_id) throw new Error('Missing required: agent_slug, task_id');\nconst outcome = {\n  agent_slug,\n  task_id,\n  input: input_text || '',\n  output: output_text || '',\n  tokens_used: tokens_used || 0,\n  latency_ms: latency_ms || 0,\n  success: success !== undefined ? success : true,\n  error: error || null,\n  created_at: new Date().toISOString()\n};\nreturn [{ json: outcome }];"
+      },
+      "id": "cbbbd5fc-223f-4140-9c78-20673cd22fbb",
+      "name": "Normalize Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-platform.vercel.app/api/agent-outcomes/write",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent_slug\": \"{{ $json.agent_slug }}\",\n  \"task_id\": \"{{ $json.task_id }}\",\n  \"input\": \"{{ $json.input }}\",\n  \"output\": \"{{ $json.output }}\",\n  \"tokens_used\": {{ $json.tokens_used }},\n  \"latency_ms\": {{ $json.latency_ms }},\n  \"success\": {{ $json.success }},\n  \"created_at\": \"{{ $json.created_at }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "77dbfc93-0980-4063-9ac9-434d43628ccf",
+      "name": "Write to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -352,
+        -144
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "ca1975d7-266a-468e-963a-e4aa1889f3c5",
+      "name": "Success (End)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        -144
+      ]
+    }
+  ],
+  "connections": {
+    "Outcomes Webhook Entry": {
+      "main": [
+        [
+          {
+            "node": "Normalize Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Outcome": {
+      "main": [
+        [
+          {
+            "node": "Write to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Success (End)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+  "activeVersionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+  "versionCounter": 62,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-04-18T14:39:56.059Z",
+      "createdAt": "2026-04-18T14:39:56.059Z",
+      "role": "workflow:owner",
+      "workflowId": "k6rZK9Uaa5sZRdZh",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "updatedAt": "2026-04-18T13:51:26.012Z",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-04-18T14:42:18.285Z",
+    "createdAt": "2026-04-18T14:39:56.059Z",
+    "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+    "workflowId": "k6rZK9Uaa5sZRdZh",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "outcomes-writer-v2",
+          "options": {}
+        },
+        "id": "e8a29b52-fbf4-4c34-bf3b-d869bfd8dc49",
+        "name": "Outcomes Webhook Entry",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -752,
+          -144
+        ],
+        "webhookId": "wf1-hardcoded-webhook-v2"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $input.first().json.body;\nconst { agent_slug, task_id, input_text, output_text, tokens_used, latency_ms, success, error } = body;\nif (!agent_slug || !task_id) throw new Error('Missing required: agent_slug, task_id');\nconst outcome = {\n  agent_slug,\n  task_id,\n  input: input_text || '',\n  output: output_text || '',\n  tokens_used: tokens_used || 0,\n  latency_ms: latency_ms || 0,\n  success: success !== undefined ? success : true,\n  error: error || null,\n  created_at: new Date().toISOString()\n};\nreturn [{ json: outcome }];"
+        },
+        "id": "cbbbd5fc-223f-4140-9c78-20673cd22fbb",
+        "name": "Normalize Outcome",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -544,
+          -144
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://zero-risk-platform.vercel.app/api/agent-outcomes/write",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-api-key",
+                "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"agent_slug\": \"{{ $json.agent_slug }}\",\n  \"task_id\": \"{{ $json.task_id }}\",\n  \"input\": \"{{ $json.input }}\",\n  \"output\": \"{{ $json.output }}\",\n  \"tokens_used\": {{ $json.tokens_used }},\n  \"latency_ms\": {{ $json.latency_ms }},\n  \"success\": {{ $json.success }},\n  \"created_at\": \"{{ $json.created_at }}\"\n}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "77dbfc93-0980-4063-9ac9-434d43628ccf",
+        "name": "Write to Supabase",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -352,
+          -144
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "ca1975d7-266a-468e-963a-e4aa1889f3c5",
+        "name": "Success (End)",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          -144,
+          -144
+        ]
+      }
+    ],
+    "connections": {
+      "Outcomes Webhook Entry": {
+        "main": [
+          [
+            {
+              "node": "Normalize Outcome",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize Outcome": {
+        "main": [
+          [
+            {
+              "node": "Write to Supabase",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Write to Supabase": {
+        "main": [
+          [
+            {
+              "node": "Success (End)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Emilio  Perez ",
+    "name": "Version 92c5dd0c",
+    "description": "",
+    "autosaved": true,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-04-18T14:42:18.259Z",
+        "id": 6,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-05-11T19:55:56.994Z",
+        "id": 667,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-05-11T19:55:57.225Z",
+        "id": 668,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:28:10.876Z",
+        "id": 32,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:28:55.091Z",
+        "id": 39,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:32:49.819Z",
+        "id": 56,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:32:56.274Z",
+        "id": 63,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:43:29.238Z",
+        "id": 80,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T16:43:35.615Z",
+        "id": 87,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T17:43:43.499Z",
+        "id": 103,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T17:46:13.510Z",
+        "id": 110,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T19:06:38.833Z",
+        "id": 129,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      },
+      {
+        "createdAt": "2026-04-18T19:06:51.387Z",
+        "id": 136,
+        "workflowId": "k6rZK9Uaa5sZRdZh",
+        "versionId": "92c5dd0c-9b35-4aab-a02b-d7227d4d68e8",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    ]
+  }
+}
