@@ -2,7 +2,7 @@
   "name": "@zero-risk/ghl-mcp-server",
   "version": "0.1.0",
   "type": "module",
-  "description": "MCP server exposing GoHighLevel CRM, conversations, pipelines, calendars, and forms as Claude tools",
+  "description": "[DEPRECATED · SUNSET 2026-06-04 · Stack V4 GHL-OUT] MCP server exposing GoHighLevel CRM, conversations, pipelines, calendars, and forms as Claude tools",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

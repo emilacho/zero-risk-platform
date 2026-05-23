@@ -18,10 +18,10 @@
  * Vercel copy. Keep in sync until a shared package factors this out.
  */
 
-import { resolve as pathResolve } from 'node:path'
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
+import { buildMcpServers } from './mcp/agent-mcp-registry.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
 // `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
@@ -271,26 +271,29 @@ function buildSdkOptions(
     permissionMode: 'default',
     // Reanudar sesión previa para encadenar contexto entre pasos del pipeline.
     ...(input.resumeSessionId ? { resume: input.resumeSessionId } : {}),
-    // MCP servers: Client Brain se conecta si hay clientId.
-    mcpServers: input.clientId
-      ? {
-          'client-brain': {
-            type: 'stdio',
-            command: 'node',
-            args: [
-              pathResolve(process.cwd(), 'src/lib/mcp/client-brain-server.js'),
-            ],
-            env: {
-              CLIENT_ID: input.clientId,
-              SUPABASE_URL: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-              SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-              // Inherit PATH for node resolution
-              PATH: process.env.PATH || '',
-            },
-          },
-        }
-      : {},
+    // MCP servers · canonical registry (Sprint 6 Track C1) covers
+    // client-brain (per-cliente) + meta-ads (Brazo 3) + apify · dataforseo
+    // · higgsfield via env-gated conditional activation. See
+    // `agent-mcp-registry.ts` for the activation matrix and per-agent
+    // deny-list. `needsMetaAds()` remains exported below for direct callers
+    // (smoke test + lib consumers).
+    mcpServers: buildMcpServers({
+      agentSlug: input.agentName,
+      clientId: input.clientId ?? undefined,
+    }),
   }
+}
+
+/**
+ * Heuristic · which agent slugs benefit from the Pipeboard Meta Ads MCP
+ * tool surface (36 tools · accounts · campaigns · adsets · ads · creatives ·
+ * insights · targeting search). Matches the 6 Meta-related agents
+ * documented in audit `2026-05-18-brazo3-meta-ads-gap-analysis.md` Frente 3.
+ */
+export function needsMetaAds(input: { agentName: string }): boolean {
+  return /media[-_]buyer|paid[-_]social|paid[-_]media|instagram|social[-_]media|community[-_]manager|\bmeta\b/i.test(
+    input.agentName,
+  )
 }
 
 interface StreamDrainResult {
