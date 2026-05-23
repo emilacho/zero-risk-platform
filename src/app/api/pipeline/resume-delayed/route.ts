@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 /**
  * POST /api/pipeline/resume-delayed
@@ -13,7 +14,14 @@ import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
  *
  * Returns: { resumed: number, pipelines: string[] }
  */
-export async function POST() {
+export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
   try {
     const supabase = getSupabaseAdmin()
 

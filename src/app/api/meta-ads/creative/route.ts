@@ -36,6 +36,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
   // Some workflows may POST here — accept and echo
   const _raw = await request.json().catch(() => ({}))
   const _v = validateObject<Record<string, unknown>>(_raw, 'lenient-write')

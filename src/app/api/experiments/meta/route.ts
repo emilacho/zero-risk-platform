@@ -5,11 +5,19 @@
  */
 import { NextResponse } from 'next/server'
 import { validateObject } from '@/lib/input-validator'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
   const _raw = await request.json().catch(() => ({}))
   const _v = validateObject<Record<string, unknown>>(_raw, 'experiments-write')
   if (!_v.ok) return _v.response

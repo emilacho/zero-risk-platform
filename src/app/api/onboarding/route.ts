@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
 import { validateObject } from '@/lib/input-validator'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 /**
  * POST /api/onboarding — Start a new client onboarding (Day 1 auto-discovery)
@@ -19,6 +20,13 @@ import { validateObject } from '@/lib/input-validator'
  * GET /api/onboarding — List all onboarding sessions
  */
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
   try {
     const _raw = await request.json().catch(() => ({}) as Record<string, unknown>)
     const _v = validateObject<Record<string, unknown>>(_raw, 'onboarding-action')

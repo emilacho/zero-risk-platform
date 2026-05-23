@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { MissionControlBridge } from '@/lib/mc-bridge'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 /**
  * POST /api/mc-sync/agents
@@ -31,7 +32,14 @@ function inferMCRole(agentName: string): string {
   return 'marketer'
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
   try {
     const supabase = getSupabaseAdmin()
     const mc = new MissionControlBridge()

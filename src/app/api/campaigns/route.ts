@@ -6,6 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getSupabase, getSupabaseAdmin } from '@/lib/supabase'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -68,6 +69,13 @@ export async function GET(request: Request) {
 
 // POST /api/campaigns — create campaign (uses admin to bypass RLS)
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason },
+      { status: 401 },
+    )
+  }
   try {
     let raw: unknown = {}
     try { raw = await request.json() } catch { raw = {} }
