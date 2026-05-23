@@ -9,7 +9,9 @@
     "node": ">=22.0.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"],
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
     "overrides": {
       "@anthropic-ai/claude-agent-sdk-linux-x64-musl": "npm:@anthropic-ai/claude-agent-sdk-linux-x64@0.2.138",
       "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": "npm:@anthropic-ai/claude-agent-sdk-linux-arm64@0.2.138"
@@ -25,6 +27,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@supabase/supabase-js": "^2.45.0",
     "express": "^4.21.0",
+    "meta-ads-mcp": "1.1.0",
     "tsx": "^4.21.0",
     "zod": "^4.3.0"
   },

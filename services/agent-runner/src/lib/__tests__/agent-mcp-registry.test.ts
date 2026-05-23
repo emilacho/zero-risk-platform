@@ -15,6 +15,11 @@ const KEYS = [
   "DATAFORSEO_LOGIN",
   "DATAFORSEO_PASSWORD",
   "HIGGSFIELD_API_KEY",
+  "META_ACCESS_TOKEN",
+  "META_SYSTEM_USER_TOKEN",
+  "META_FB_PAGE_ID",
+  "META_IG_BUSINESS_ACCOUNT_ID",
+  "META_AD_ACCOUNT_ID",
 ] as const
 
 describe("buildMcpServers", () => {
@@ -100,6 +105,79 @@ describe("buildMcpServers", () => {
     const servers = buildMcpServers({ agentSlug: "editor-en-jefe" })
     expect(servers.apify).toBeDefined()
     expect(servers.higgsfield).toBeDefined()
+  })
+
+  // ── Meta Ads MCP · Sprint 7.7 Track B · allow-list gating ─────────────────
+
+  it("meta-ads · NOT registered when META_ACCESS_TOKEN missing", () => {
+    const servers = buildMcpServers({ agentSlug: "media-buyer" })
+    expect(servers["meta-ads"]).toBeUndefined()
+  })
+
+  it("meta-ads · NOT registered without agent slug match (deny non-paid-media)", () => {
+    process.env.META_ACCESS_TOKEN = "EAxxx"
+    const servers = buildMcpServers({ agentSlug: "content-creator" })
+    expect(servers["meta-ads"]).toBeUndefined()
+  })
+
+  it("meta-ads · registered for media-buyer with META_ACCESS_TOKEN", () => {
+    process.env.META_ACCESS_TOKEN = "EAxxx"
+    const servers = buildMcpServers({ agentSlug: "media-buyer" })
+    expect(servers["meta-ads"]).toBeDefined()
+    expect(servers["meta-ads"]?.command).toBe("node")
+    expect(servers["meta-ads"]?.env.META_ACCESS_TOKEN).toBe("EAxxx")
+  })
+
+  it("meta-ads · registered for social-media-strategist", () => {
+    process.env.META_ACCESS_TOKEN = "EAyyy"
+    const servers = buildMcpServers({ agentSlug: "social-media-strategist" })
+    expect(servers["meta-ads"]).toBeDefined()
+  })
+
+  it("meta-ads · registered for paid-search-strategist", () => {
+    process.env.META_ACCESS_TOKEN = "EAzzz"
+    const servers = buildMcpServers({ agentSlug: "paid-search-strategist" })
+    expect(servers["meta-ads"]).toBeDefined()
+  })
+
+  it("meta-ads · falls back to META_SYSTEM_USER_TOKEN (Brazo 3 pre-canon alias)", () => {
+    process.env.META_SYSTEM_USER_TOKEN = "EAlegacy"
+    const servers = buildMcpServers({ agentSlug: "media-buyer" })
+    expect(servers["meta-ads"]).toBeDefined()
+    expect(servers["meta-ads"]?.env.META_ACCESS_TOKEN).toBe("EAlegacy")
+  })
+
+  it("meta-ads · forwards optional META_FB_PAGE_ID + IG + AD_ACCOUNT_ID when set", () => {
+    process.env.META_ACCESS_TOKEN = "EA"
+    process.env.META_FB_PAGE_ID = "fb-page-123"
+    process.env.META_IG_BUSINESS_ACCOUNT_ID = "ig-biz-456"
+    process.env.META_AD_ACCOUNT_ID = "act_789"
+    const servers = buildMcpServers({ agentSlug: "media-buyer" })
+    expect(servers["meta-ads"]?.env.META_FB_PAGE_ID).toBe("fb-page-123")
+    expect(servers["meta-ads"]?.env.META_IG_BUSINESS_ACCOUNT_ID).toBe("ig-biz-456")
+    expect(servers["meta-ads"]?.env.META_AD_ACCOUNT_ID).toBe("act_789")
+  })
+
+  it("meta-ads · omits optional env vars when not set (no empty-string leak)", () => {
+    process.env.META_ACCESS_TOKEN = "EA"
+    const servers = buildMcpServers({ agentSlug: "media-buyer" })
+    expect(servers["meta-ads"]?.env.META_FB_PAGE_ID).toBeUndefined()
+    expect(servers["meta-ads"]?.env.META_IG_BUSINESS_ACCOUNT_ID).toBeUndefined()
+    expect(servers["meta-ads"]?.env.META_AD_ACCOUNT_ID).toBeUndefined()
+  })
+
+  it("meta-ads · spawn command path resolves to node_modules/meta-ads-mcp/build/index.js", () => {
+    process.env.META_ACCESS_TOKEN = "EA"
+    const servers = buildMcpServers({ agentSlug: "media-buyer" })
+    const args = servers["meta-ads"]?.args ?? []
+    expect(args.length).toBe(1)
+    expect(args[0]).toMatch(/node_modules[\\/]+meta-ads-mcp[\\/]+build[\\/]+index\.js$/)
+  })
+
+  it("meta-ads · NOT registered when agentSlug undefined (anonymous invocation)", () => {
+    process.env.META_ACCESS_TOKEN = "EA"
+    const servers = buildMcpServers({})
+    expect(servers["meta-ads"]).toBeUndefined()
   })
 })
 
