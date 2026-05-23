@@ -12,6 +12,13 @@
  * Required env (Vercel project) ·
  *   - WHATSAPP_PHONE_NUMBER_ID  · Meta Business phone number ID
  *   - WHATSAPP_ACCESS_TOKEN     · system user permanent token (no expiry)
+ *                                 Fallback chain · WHATSAPP_ACCESS_TOKEN →
+ *                                 META_SYSTEM_USER_TOKEN → META_ACCESS_TOKEN.
+ *                                 Meta system user tokens granted the
+ *                                 whatsapp_business_messaging permission work
+ *                                 against the WABA, so re-using the existing
+ *                                 META_SYSTEM_USER_TOKEN avoids populating a
+ *                                 separate WhatsApp-only token.
  *   - META_APP_SECRET           · HMAC verify webhook signatures
  *
  * Never throws · discriminated union SendResult per Twilio pattern.
@@ -63,13 +70,22 @@ export type SendResult =
       meta_error_code?: number
     }
 
+function resolveAccessToken(): string | undefined {
+  return (
+    process.env.WHATSAPP_ACCESS_TOKEN ||
+    process.env.META_SYSTEM_USER_TOKEN ||
+    process.env.META_ACCESS_TOKEN ||
+    undefined
+  )
+}
+
 function envOrNull(): {
   phoneId: string
   token: string
   appSecret: string
 } | null {
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID
-  const token = process.env.WHATSAPP_ACCESS_TOKEN
+  const token = resolveAccessToken()
   const appSecret = process.env.META_APP_SECRET
   if (!phoneId || !token || !appSecret) return null
   return { phoneId, token, appSecret }
@@ -78,7 +94,8 @@ function envOrNull(): {
 function missingEnvDetail(): string {
   const missing = [
     !process.env.WHATSAPP_PHONE_NUMBER_ID && "WHATSAPP_PHONE_NUMBER_ID",
-    !process.env.WHATSAPP_ACCESS_TOKEN && "WHATSAPP_ACCESS_TOKEN",
+    !resolveAccessToken() &&
+      "WHATSAPP_ACCESS_TOKEN (or META_SYSTEM_USER_TOKEN · META_ACCESS_TOKEN fallback)",
     !process.env.META_APP_SECRET && "META_APP_SECRET",
   ]
     .filter(Boolean)

@@ -211,6 +211,52 @@ describe("POST /api/whatsapp/send", () => {
     )
     expect(res.status).toBe(401)
   })
+
+  it("META_SYSTEM_USER_TOKEN fallback · 200 sin WHATSAPP_ACCESS_TOKEN", async () => {
+    vi.unstubAllEnvs()
+    vi.stubEnv("WHATSAPP_PHONE_NUMBER_ID", VALID_PHONE_ID)
+    vi.stubEnv("META_SYSTEM_USER_TOKEN", "EAATESTSYSTEMUSER-FAKE")
+    vi.stubEnv("META_APP_SECRET", VALID_APP_SECRET)
+    let observedAuth = ""
+    setMockFetch(async (_url, init) => {
+      observedAuth = String(
+        (init?.headers as Record<string, string> | undefined)?.Authorization ?? "",
+      )
+      return okJsonResponse({ messages: [{ id: "wamid.FALLBACK1" }] })
+    })
+    const { POST } = await import("../src/app/api/whatsapp/send/route")
+    const res = await POST(
+      buildPost("/api/whatsapp/send", {
+        to: "+593987654321",
+        template_name: "welcome_es",
+      }),
+    )
+    expect(res.status).toBe(200)
+    expect(observedAuth).toBe("Bearer EAATESTSYSTEMUSER-FAKE")
+  })
+
+  it("META_ACCESS_TOKEN fallback · last-resort token resolves", async () => {
+    vi.unstubAllEnvs()
+    vi.stubEnv("WHATSAPP_PHONE_NUMBER_ID", VALID_PHONE_ID)
+    vi.stubEnv("META_ACCESS_TOKEN", "EAATESTLEGACYMETAACCESS-FAKE")
+    vi.stubEnv("META_APP_SECRET", VALID_APP_SECRET)
+    let observedAuth = ""
+    setMockFetch(async (_url, init) => {
+      observedAuth = String(
+        (init?.headers as Record<string, string> | undefined)?.Authorization ?? "",
+      )
+      return okJsonResponse({ messages: [{ id: "wamid.FALLBACK2" }] })
+    })
+    const { POST } = await import("../src/app/api/whatsapp/send/route")
+    const res = await POST(
+      buildPost("/api/whatsapp/send", {
+        to: "+593987654321",
+        template_name: "welcome_es",
+      }),
+    )
+    expect(res.status).toBe(200)
+    expect(observedAuth).toBe("Bearer EAATESTLEGACYMETAACCESS-FAKE")
+  })
 })
 
 // ============================================================================
