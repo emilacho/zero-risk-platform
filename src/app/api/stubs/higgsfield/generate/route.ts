@@ -1,64 +1,44 @@
 /**
- * POST /api/stubs/higgsfield/generate
+ * POST /api/stubs/higgsfield/generate · DEPRECATED 2026-05-22
  *
- * Drop-in replacement for Higgsfield Seedance 2.0 (`api.higgsfield.ai/v1/generate`)
- * during smoke tests and pre-prod. Returns a synthetic video_url + matching the
- * real API's response shape so downstream workflow nodes don't change.
+ * Higgsfield OUT canon Stack V4 (decision 2026-05-22 ·
+ * `zr-vault/wiki/decisions/2026-05-22-stack-canon-purge-deprecated-services-audit.md`).
+ * Video AI consolidated to Veo 3.1 only · NO split logic · NO Seedance fallback.
  *
- * Rewrite the n8n workflow node to hit this URL via:
- *   {{ $env.HIGGSFIELD_API_URL || 'https://zero-risk-platform.vercel.app/api/stubs/higgsfield/generate' }}
- *
- * When real Higgsfield is wired, point HIGGSFIELD_API_URL to the real endpoint
- * and this stub is bypassed. No workflow changes needed.
+ * This stub returns 410 Gone with Deprecation + Sunset headers + Link to
+ * canonical successor. Any n8n workflow still calling this URL gets a clear
+ * deprecation signal · should migrate to Veo 3.1 endpoint.
  */
-
 import { NextResponse } from 'next/server'
-import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-export async function POST(request: Request) {
-  const _raw = await request.json().catch(() => ({}))
-  const _v = validateObject<Record<string, unknown>>(_raw, 'stub-row')
-  if (!_v.ok) return _v.response
-  const body = _v.data as Record<string, any>
-  const prompt: string = body?.prompt || ''
-  const duration = Number(body?.duration) || 15
-  const aspectRatio: string = body?.aspect_ratio || '9:16'
-  const style: string = body?.style || 'dynamic'
-  const quality: string = body?.quality || '720p'
+function goneResponse() {
+  return NextResponse.json(
+    {
+      error: 'gone',
+      code: 'E-HIGGSFIELD-OUT',
+      detail:
+        'Higgsfield OUT canon Stack V4 (decision 2026-05-22). Video AI consolidated to Veo 3.1 only.',
+      successor: 'Veo 3.1 via downstream worker · invocation pattern documented in editor-en-jefe identity',
+      sunset: '2026-05-22',
+    },
+    {
+      status: 410,
+      headers: {
+        Deprecation: 'true',
+        Sunset: 'Thu, 22 May 2026 00:00:00 GMT',
+        Link: '<https://zr-vault/wiki/decisions/2026-05-22-stack-canon-purge-deprecated-services-audit>; rel="canonical"',
+      },
+    },
+  )
+}
 
-  const taskId = `seedance_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-  const videoUrl = `https://stub.higgsfield.local/videos/${taskId}.mp4`
-
-  // Mirror the real Seedance response shape (based on public docs):
-  // { status, job_id, video_url, duration, aspect_ratio, resolution, ... }
-  return NextResponse.json({
-    ok: true,
-    status: 'completed',
-    job_id: taskId,
-    task_id: taskId,
-    video_url: videoUrl,
-    thumbnail_url: videoUrl.replace('.mp4', '_thumb.jpg'),
-    duration,
-    duration_s: duration,
-    aspect_ratio: aspectRatio,
-    resolution: aspectRatio === '16:9' ? '1920x1080' : '1080x1920',
-    style,
-    quality,
-    model: 'seedance-2.0',
-    prompt_echo: prompt.slice(0, 200),
-    cost_usd: 0,
-    fallback_mode: true,
-  })
+export async function POST() {
+  return goneResponse()
 }
 
 export async function GET() {
-  return NextResponse.json({
-    endpoint: '/api/stubs/higgsfield/generate',
-    method: 'POST',
-    body: { prompt: 'string', duration: 'number', aspect_ratio: 'string', style: 'string', quality: 'string' },
-    note: 'Drop-in stub for Higgsfield Seedance 2.0. Override via env HIGGSFIELD_API_URL.',
-  })
+  return goneResponse()
 }

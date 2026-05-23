@@ -40,7 +40,21 @@ function bucketKey(iso: string, gran: Granularity): string {
   return iso.slice(0, 13) + ':00:00Z'
 }
 
-const KNOWN_SERVICES = ['anthropic', 'openai', 'apify', 'higgsfield', 'mailgun', 'ghl', 'supabase', 'vercel']
+// Stack V4 canon services (post 2026-05-22 deprecation audit) ·
+// Removed · higgsfield (Veo 3.1 only) · mailgun (Resend) · ghl (never subscribed)
+// Added · resend · twilio · railway · veo · dataforseo
+const KNOWN_SERVICES = [
+  'anthropic',
+  'openai',
+  'apify',
+  'dataforseo',
+  'resend',
+  'twilio',
+  'veo',
+  'supabase',
+  'vercel',
+  'railway',
+]
 
 function deterministicStubBuckets(hours: number, gran: Granularity): Bucket[] {
   const bucketCount = gran === 'hour' ? hours : Math.max(1, Math.ceil(hours / 24))
