@@ -191,13 +191,47 @@ export class WebDiscovery {
   // ----------------------------------------------------------
 
   async scrapePage(url: string): Promise<ScrapedPage> {
+    // Sprint 7.6 Track C · canonical realistic User-Agent + agent fallback
+    // pattern. Direct fetch first (cheap · 0 LLM tokens) · si fails OR returns
+    // suspiciously empty body · fallback to web-fetch-scout agent (~$0.02/call).
+    const direct = await this.directFetch(url)
+    const meaningful =
+      direct.statusCode === 200 &&
+      direct.bodyText.length >= 500 &&
+      direct.title.length > 0
+    if (meaningful) return direct
+
+    // Direct fetch insufficient · fallback a Managed Agent
+    const fallback = await this.scrapePageViaAgent(url)
+    // Si agent también falla · return whichever has más content (best-effort)
+    if (fallback.statusCode === 200 && fallback.bodyText.length > direct.bodyText.length) {
+      return fallback
+    }
+    return direct.bodyText.length > 0 ? direct : fallback
+  }
+
+  /**
+   * Direct HTTP fetch · realistic browser User-Agent · faster + cheaper than
+   * agent path · canonical primary. Sprint 7.6 Track C2 · changed UA from
+   * `ZeroRisk-Discovery/1.0` (bot-flagged · root cause de pages_scraped=0)
+   * a Chrome canónico realista.
+   */
+  private async directFetch(url: string): Promise<ScrapedPage> {
     try {
       const response = await fetch(url, {
         headers: {
-          'User-Agent': 'ZeroRisk-Discovery/1.0 (marketing agency onboarding)',
-          'Accept': 'text/html',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+            '(KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+          'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,' +
+            'image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
         },
-        signal: AbortSignal.timeout(15000), // 15s timeout
+        signal: AbortSignal.timeout(15000),
+        redirect: 'follow',
       })
 
       if (!response.ok) {
@@ -209,6 +243,124 @@ export class WebDiscovery {
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
       return this.emptyPage(url, 0, msg)
+    }
+  }
+
+  /**
+   * Sprint 7.6 Track C3 · fallback path · invoke `web-fetch-scout` Managed
+   * Agent vía `/api/agents/run` cuando direct fetch falla (WAF · bot detection
+   * · JS-rendered SPA). Agent uses WebFetch SDK tool que renderiza con browser
+   * engine reliable.
+   *
+   * Returns ScrapedPage shape igual a directFetch para drop-in replacement.
+   * Errors swallowed · empty page returned con error annotation.
+   */
+  private async scrapePageViaAgent(url: string): Promise<ScrapedPage> {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL ??
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ??
+      'http://localhost:3000'
+    const apiKey = process.env.INTERNAL_API_KEY
+    if (!apiKey) {
+      return this.emptyPage(url, 0, 'INTERNAL_API_KEY missing · agent fallback unavailable')
+    }
+
+    try {
+      const res = await fetch(`${baseUrl}/api/agents/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          agent: 'web-fetch-scout',
+          task:
+            `Fetch the following URL using WebFetch tool and return structured ` +
+            `content as JSON per the canonical shape in your identity. URL: ${url}`,
+          context: {
+            extra: {
+              urls: [url],
+              client_context: 'Sprint 7.6 Track C · auto-discovery web_fetch fallback',
+            },
+          },
+          caller: 'web-discovery',
+        }),
+        signal: AbortSignal.timeout(45000),
+      })
+
+      if (!res.ok) {
+        return this.emptyPage(url, res.status, `agent HTTP ${res.status}`)
+      }
+
+      const data = (await res.json()) as {
+        output?: string
+        response?: string
+        text?: string
+      }
+      const agentOutput = data.output ?? data.response ?? data.text ?? ''
+      const parsed = this.parseAgentOutput(agentOutput, url)
+      if (parsed) return parsed
+      return this.emptyPage(url, 0, 'agent output not parseable as canonical JSON')
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error'
+      return this.emptyPage(url, 0, `agent fetch error · ${msg}`)
+    }
+  }
+
+  /**
+   * Parse web-fetch-scout JSON output → ScrapedPage. Defensive · agent puede
+   * wrappear con markdown · puede return prosa · puede return shape variante ·
+   * we extract canonical shape o return null.
+   */
+  private parseAgentOutput(output: string, fallbackUrl: string): ScrapedPage | null {
+    try {
+      const cleaned = output
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim()
+      const jsonStart = cleaned.indexOf('{')
+      const jsonEnd = cleaned.lastIndexOf('}')
+      if (jsonStart === -1 || jsonEnd === -1) return null
+      const jsonStr = cleaned.slice(jsonStart, jsonEnd + 1)
+      const parsed = JSON.parse(jsonStr) as {
+        pages?: Array<{
+          url?: string
+          status_code?: number
+          title?: string
+          meta_description?: string
+          headings?: string[]
+          body_text?: string
+          social_links?: string[]
+          contact_info?: {
+            emails?: string[]
+            phones?: string[]
+            address?: string | null
+          }
+          colors?: string[]
+          links?: string[]
+        }>
+      }
+      const page = parsed.pages?.[0]
+      if (!page) return null
+      return {
+        url: page.url ?? fallbackUrl,
+        title: page.title ?? '',
+        metaDescription: page.meta_description ?? '',
+        headings: page.headings ?? [],
+        bodyText: page.body_text ?? '',
+        links: page.links ?? [],
+        images: [],
+        socialLinks: page.social_links ?? [],
+        contactInfo: {
+          emails: page.contact_info?.emails ?? [],
+          phones: page.contact_info?.phones ?? [],
+          address: page.contact_info?.address ?? null,
+        },
+        colors: page.colors ?? [],
+        statusCode: page.status_code ?? 200,
+      }
+    } catch {
+      return null
     }
   }
 
