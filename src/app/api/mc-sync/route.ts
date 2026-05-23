@@ -186,11 +186,28 @@ export async function POST(request: Request) {
           // log-only; don't block the caller
         }
       }
+      // Sprint 7.6 A5 fix · echo state fields so downstream loop nodes
+      // (NEXUS workflow Resolve Phase iter 2+) can read request_id/client_id
+      // from $json. Without this echo, Notify MC strips state and the loop
+      // path Persist → Notify MC → All Phases Complete? → Go Back → Resolve
+      // loses request_id, causing Persist iter 2+ to fail with missing_fields.
+      // Echo is namespaced under top-level so it's idempotent + non-breaking.
       return NextResponse.json({
         ok: true,
         action,
         acknowledged: true,
         note: 'notification acknowledged, no sync performed',
+        // Echo · pass through state from the incoming body so workflow loops preserve it
+        request_id: body.request_id ?? null,
+        client_id: body.client_id ?? null,
+        current_phase: body.phase ?? body.current_phase ?? null,
+        status: body.status ?? null,
+        campaign_brief: body.campaign_brief ?? null,
+        phases: body.phases ?? null,
+        current_phase_index: body.current_phase_index ?? null,
+        phase_outputs: body.phase_outputs ?? null,
+        retry_count: body.retry_count ?? null,
+        priority: body.priority ?? null,
       })
     }
 
