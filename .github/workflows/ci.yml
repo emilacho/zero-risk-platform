@@ -27,9 +27,14 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
+        # Sprint 7.7 tail · `@rolldown/binding-linux-x64-gnu` native binding
+        # needed para vitest Linux CI · pnpm install canónico no incluye
+        # optional deps si lockfile las tiene marked optional. Force install
+        # con `--config.optional=true` + rebuild.
         run: |
           rm -f pnpm-lock.yaml
-          pnpm install
+          pnpm install --no-frozen-lockfile
+          pnpm add -D @rolldown/binding-linux-x64-gnu || true
 
       - name: Typecheck
         run: pnpm typecheck
