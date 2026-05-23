@@ -90,7 +90,7 @@ describe('Gaps 4 + 5 · cascade reviewer identities on disk', () => {
       })
 
       it('has YAML frontmatter with the expected agent name', () => {
-        const body = readFileSync(path, 'utf8')
+        const body = readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
         expect(body.startsWith('---\n')).toBe(true)
         // Frontmatter `name:` field must match (line-anchored, before first `---` close).
         const fmEnd = body.indexOf('\n---', 4)
@@ -102,7 +102,7 @@ describe('Gaps 4 + 5 · cascade reviewer identities on disk', () => {
       })
 
       it('body is production-quality (≥800 chars after frontmatter, not the "pending-identity" sentinel)', () => {
-        const body = readFileSync(path, 'utf8')
+        const body = readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
         const fmEnd = body.indexOf('\n---', 4)
         const post = body.slice(fmEnd + 4).trim()
         expect(post.length, 'identity body too short to be production-quality').toBeGreaterThan(800)
@@ -112,14 +112,14 @@ describe('Gaps 4 + 5 · cascade reviewer identities on disk', () => {
       })
 
       it('contains every expected H1/H2 section', () => {
-        const body = readFileSync(path, 'utf8')
+        const body = readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
         for (const section of r.expectedSections) {
           expect(body, `missing section "${section}"`).toContain(section)
         }
       })
 
       it('declares a strict JSON output contract with the expected keys', () => {
-        const body = readFileSync(path, 'utf8')
+        const body = readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
         for (const key of r.expectedJsonKeys) {
           expect(body, `JSON contract missing key ${key}`).toContain(key)
         }
