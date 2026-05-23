@@ -546,6 +546,7 @@ export async function POST(request: Request) {
         status: 'completed',
         exit_code: 0,
         error_message: null,
+        system_prompt: systemPrompt,
         metadata: {
           source: 'api_agents_run',
           caller,
