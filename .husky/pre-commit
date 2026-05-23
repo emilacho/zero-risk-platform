@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+# Sprint 7 Track C3 · pre-commit hook · canonical lint gate.
+#
+# Strategy ·
+#   - Runs `lint:canon` (non-strict mode) · WARNS but never blocks on existing baseline
+#   - Errors (auth-missing endpoints) STILL block · prevents net-new auth bypass
+#   - Skip via `git commit --no-verify` solo en emergency (canonical anti-pattern · evitar)
+#
+# If you hit an error · either add auth to the new endpoint OR add path to
+# PUBLIC_ENDPOINTS allowlist en `scripts/lint-canon.mjs:69`.
+#
+# Bypass · `LINT_CANON_SKIP=1 git commit ...` (telemetric · use sparingly)
+
+if [ "$LINT_CANON_SKIP" = "1" ]; then
+  echo "[pre-commit] LINT_CANON_SKIP=1 · skipping canon lint (telemetric)"
+  exit 0
+fi
+
+echo "[pre-commit] Sprint 7 Track C3 · canonical lint"
+node scripts/lint-canon.mjs
+RESULT=$?
+
+if [ $RESULT -eq 2 ]; then
+  echo ""
+  echo "❌ Canon lint ERRORS detected · commit blocked"
+  echo "   Fix the errors OR add PUBLIC_ENDPOINTS allowlist entry"
+  echo "   Bypass · LINT_CANON_SKIP=1 git commit ... (use sparingly)"
+  exit 1
+fi
+
+if [ $RESULT -eq 1 ]; then
+  echo ""
+  echo "⚠️  Canon lint warnings · review but not blocking"
+  echo "   Run \`pnpm lint:canon:strict\` to see them as errors"
+fi
+
+exit 0

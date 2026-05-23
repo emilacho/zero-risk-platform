@@ -1,0 +1,12 @@
+{
+  "_comment": "Sprint 7 Track C5 · canonical sub-workflow ID mapping. Placeholders pending live n8n REST lookup.",
+  "_lookup_command": "curl -H \"X-N8N-API-KEY: $N8N_API_KEY\" \"${N8N_BASE_URL}/api/v1/workflows\" | jq '.data[] | { id, name }'",
+  "_updated": "2026-05-22 · Sprint 7 spec",
+  "L1_MASTER_JOURNEY_ORCHESTRATOR_ID": "<TBD · live lookup pending>",
+  "NEXUS_7PHASE_ORCHESTRATOR_ID": "<TBD · live lookup pending>",
+  "PHASE_GATE_EVIDENCE_COLLECTOR_ID": "<TBD · live lookup pending>",
+  "AGENT_OUTCOMES_STREAM_WRITER_ID": "<TBD · live lookup pending>",
+  "RUFLO_SMART_ROUTER_ID": "<TBD · live lookup pending>",
+  "_canonical_pattern_doc": "zr-vault/wiki/playbooks/sub-workflow-refs-canon.md",
+  "_l1_migration_spec": "zr-vault/wiki/decisions/2026-05-22-l1-master-journey-migration-to-n8n-spec.md"
+}

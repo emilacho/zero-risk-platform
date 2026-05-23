@@ -1,0 +1,65 @@
+name: n8n Daily Backup · Sprint 7 Track C1
+
+on:
+  schedule:
+    # Daily at 03:00 UTC (~22:00 EST · post-EOD)
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    # Manual trigger via gh CLI
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.11.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: |
+          rm -f pnpm-lock.yaml
+          pnpm install --no-frozen-lockfile
+
+      - name: Run n8n backup
+        env:
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/backup-n8n-workflows.mjs
+
+      - name: Commit snapshot if changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          DATE=$(date -u +%Y-%m-%d)
+          git add "n8n-workflows/live-snapshots/${DATE}/" || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(backup): n8n daily snapshot ${DATE}"
+            git push origin main
+          else
+            echo "No changes to commit"
+          fi
+
+      - name: Slack alert on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_EQUIPO }}
+        run: |
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -X POST "$SLACK_WEBHOOK_URL" \
+              -H 'Content-Type: application/json' \
+              -d "{\"text\":\"🚨 n8n daily backup FAILED · run $(date -u +%Y-%m-%dT%H:%M:%S) · check Actions logs\"}"
+          fi
