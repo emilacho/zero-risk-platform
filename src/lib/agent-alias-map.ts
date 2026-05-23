@@ -95,6 +95,22 @@ export const AGENT_ALIAS_MAP: Readonly<Record<string, string>> = {
   // ----------------------------------------------------------------
   'ad-intelligence-agent': 'competitive-intelligence-agent',
   ad_intelligence_agent: 'competitive-intelligence-agent',
+
+  // ----------------------------------------------------------------
+  // Sprint 6 Track A1 · additional ghost variants found in live n8n
+  // audit 2026-05-21 (zr-vault/raw/state/2026-05-21-58-workflows-live-deep-audit-manifest.md)
+  // ----------------------------------------------------------------
+  // `competitive_intelligence` (without `_agent` suffix) found in
+  // "Zero Risk — Competitor Daily Monitor" workflow · resolve to MANIFEST-31.
+  competitive_intelligence: 'competitive-intelligence-agent',
+  'competitive-intelligence': 'competitive-intelligence-agent',
+
+  // `social_adapter` found in "Social Multi-Platform Publisher" workflow ·
+  // NOT in MANIFEST-31 · resolution decision filed at
+  // zr-vault/wiki/decisions/2026-05-21-social-adapter-canon-resolution.md
+  // social-media-strategist owns multi-platform content reformatting.
+  social_adapter: 'social-media-strategist',
+  'social-adapter': 'social-media-strategist',
 }
 
 /**
