@@ -33,7 +33,7 @@ describe('carousel-designer identity_md · structural sanity', () => {
   })
 
   it('has YAML frontmatter with name + model + role + display_name', () => {
-    const body = readFileSync(path, 'utf8')
+    const body = readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
     expect(body.startsWith('---\n')).toBe(true)
     const fmEnd = body.indexOf('\n---', 4)
     expect(fmEnd).toBeGreaterThan(0)
@@ -45,7 +45,7 @@ describe('carousel-designer identity_md · structural sanity', () => {
   })
 
   it('body is production-quality (≥ 1500 chars after frontmatter)', () => {
-    const body = readFileSync(path, 'utf8')
+    const body = readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
     const fmEnd = body.indexOf('\n---', 4)
     const post = body.slice(fmEnd + 4).trim()
     expect(post.length, 'identity body too short to be production-quality').toBeGreaterThan(1500)
@@ -53,7 +53,7 @@ describe('carousel-designer identity_md · structural sanity', () => {
   })
 
   it('includes the canonical H2 sections', () => {
-    const body = readFileSync(path, 'utf8')
+    const body = readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
     const expectedSections = [
       '# Carousel Designer Agent',
       '## Role Definition',
@@ -73,21 +73,21 @@ describe('carousel-designer identity_md · structural sanity', () => {
   })
 
   it('declares the strict-JSON output contract with the expected keys', () => {
-    const body = readFileSync(path, 'utf8')
+    const body = readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
     for (const key of ['"version"', '"client_slug"', '"campaign_intent"', '"platforms"', '"slides"', '"shared_lexicon"', '"cta_verb_family"']) {
       expect(body, `output contract missing key ${key}`).toContain(key)
     }
   })
 
   it('per-platform table covers all 5 platforms', () => {
-    const body = readFileSync(path, 'utf8')
+    const body = readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
     for (const p of ['instagram-feed', 'instagram-reel', 'tiktok', 'facebook-feed', 'twitter-card']) {
       expect(body).toContain(p)
     }
   })
 
   it('per-slide shape contract names all 6 fields (slide_index · role · eyebrow · headline · body · cta)', () => {
-    const body = readFileSync(path, 'utf8')
+    const body = readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
     for (const f of ['slide_index', 'role', 'eyebrow', 'headline', 'body', 'cta']) {
       expect(body).toContain(f)
     }

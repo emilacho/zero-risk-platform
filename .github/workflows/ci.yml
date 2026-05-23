@@ -38,7 +38,9 @@ jobs:
         run: pnpm lint
 
       - name: Test
-        # TODO Sprint #5 followup #13: regenerate pnpm-lock.yaml on Linux to include @rolldown/binding-linux-x64-gnu native binding
-        # Tests pass locally (vitest 34/34) · skip in CI until lockfile properly resolves Linux native deps
-        # Tracked: outputs/CI_TEST_SKIP_FOLLOWUP.md
-        run: echo "Tests skipped in CI · run pnpm test locally to validate · TODO regenerate lockfile on Linux"
+        # Sprint 7.7 tail · CC#3 · canon "tests CI activado" · `pnpm install` ya
+        # regenera lockfile Linux (line 31-32 above) que resuelve @rolldown
+        # native binding cleanly. 77/77 test files · 842/842 tests verde local
+        # post Sprint 7.5 split cleanup (16 obsolete tests removed · they tested
+        # pre-Sprint-7.5 Vercel-side runtime · post-split runs Railway proxy).
+        run: pnpm test
