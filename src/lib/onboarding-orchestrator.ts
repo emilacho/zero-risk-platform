@@ -260,6 +260,28 @@ export class OnboardingOrchestrator {
         ['zero-risk', 'onboarding', 'day-1-complete']
       ).catch(() => {})
 
+      // Sprint 6 Track C4 · Notion sync hook · fire-and-forget · creates
+      // a workspace page in Notion for this cliente (post-Phase-1 default).
+      // Safe to fail silently · catches own errors · NEVER throws upstream.
+      void import('./integrations/notion-sync-hook').then(({ syncToNotion }) =>
+        syncToNotion({
+          type: 'client',
+          client_id: clientId,
+          payload: {
+            company_name: input.companyName,
+            website_url: input.websiteUrl,
+            industry: input.industry ?? null,
+            target_audience: input.targetAudience ?? null,
+            brand_book_id: brandBookId,
+            icps_count: icpsCreated,
+            competitors_count: competitorsAnalyzed,
+            pages_scraped: clientData.totalPagesScraped,
+            total_cost_usd: totalCost,
+          },
+          context: 'onboarding-day1',
+        }),
+      ).catch(() => {})
+
       // Sprint 1 L1 hook · advance the per-client ONBOARD journey to
       // send_intake_form stage via the Master Journey Orchestrator.
       // Best-effort · we never fail Day-1 success because L1 had a hiccup ·

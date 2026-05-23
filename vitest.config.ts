@@ -5,7 +5,11 @@ export default defineConfig({
   test: {
     globals: false,
     environment: 'node',
-    include: ['__tests__/**/*.test.ts', 'src/**/*.test.ts'],
+    include: [
+      '__tests__/**/*.test.ts',
+      'src/**/*.test.ts',
+      'services/agent-runner/src/**/*.test.ts',
+    ],
     testTimeout: 10000,
     reporters: ['default'],
     server: {
