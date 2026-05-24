@@ -45,8 +45,18 @@ beforeEach(() => {
   vi.clearAllMocks()
   process.env.MESHY_API_KEY = 'msy_test_key'
   global.fetch = fetchMock as unknown as typeof fetch
-  // Reset Supabase mock to happy defaults
+  // Reset Supabase mock to happy defaults.
+  // Sprint 8C D8 · vitest 3 downgrade · `vi.clearAllMocks` resets the
+  // `mockReturnThis()` chaining configured at top-level supabaseMock
+  // definition · re-establish here so `supabase.storage.from(BUCKET)`
+  // returns the storage sub-object (with .upload) instead of undefined.
+  supabaseMock.from.mockReturnThis()
+  supabaseMock.select.mockReturnThis()
+  supabaseMock.eq.mockReturnThis()
+  supabaseMock.insert.mockReturnThis()
+  supabaseMock.storage.from.mockReturnThis()
   supabaseMock.storage.upload.mockResolvedValue({ data: { path: 'naufrago/3d-models/12345.glb' }, error: null })
+  supabaseMock.storage.getPublicUrl.mockReturnValue({ data: { publicUrl: 'https://stub.storage/upload-url' } })
   supabaseMock.maybeSingle.mockResolvedValue({ data: { slug: 'naufrago' }, error: null })
   supabaseMock.single.mockResolvedValue({ data: { id: 'gen-uuid', created_at: '2026-05-16T13:00:00Z' }, error: null })
 })
