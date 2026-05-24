@@ -52,11 +52,23 @@ const DB_TRIGGER_MAP: Record<TriggerType, 'webhook' | 'manual' | 'cron'> = {
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>
 
+export type L1Engine = 'vercel' | 'n8n'
+
 interface DispatchOptions {
   /** Override Supabase client for tests. */
   supabase?: SupabaseAdmin
   /** Override fetch for tests. */
   fetchImpl?: typeof fetch
+  /**
+   * Engine override · Sprint 8C migration shim.
+   *
+   * - 'vercel' (default) · canonical existing path · Supabase persist + L2 invoke from Vercel
+   * - 'n8n' · proxy mode · POSTs to n8n workflow `/webhook/l1-dispatch` · n8n owns FSM + persist
+   *
+   * If unset · resolves from `process.env.L1_ENGINE`. Defaults to 'vercel' for backward compat.
+   * Sprint 9 candidate · flip default to 'n8n' once cutover smoke verifies multiple sessions.
+   */
+  engine?: L1Engine
 }
 
 /**
@@ -67,6 +79,14 @@ export async function dispatchJourney(
   req: DispatchRequest,
   opts: DispatchOptions = {},
 ): Promise<DispatchResult> {
+  // Sprint 8C migration shim · env-flag opt-in to n8n L1 (workflow U7SzRbYhYAS2IE1h).
+  // Default = vercel canonical · zero behavior change for existing callers.
+  const engine: L1Engine =
+    opts.engine ?? (process.env.L1_ENGINE === 'n8n' ? 'n8n' : 'vercel')
+  if (engine === 'n8n') {
+    return dispatchViaN8n(req, opts.fetchImpl ?? fetch)
+  }
+
   const supabase = opts.supabase ?? getSupabaseAdmin()
   const fetchFn = opts.fetchImpl ?? fetch
   const { journey, trigger_type, params = {}, client_id, parent_journey_id, trigger_source } = req
@@ -287,4 +307,75 @@ function computeNextCheck(mode: DispatchMode, journey: JourneyType): string | nu
     return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
   }
   return null
+}
+
+/**
+ * Sprint 8C migration · proxy dispatch to n8n L1 workflow `U7SzRbYhYAS2IE1h`.
+ *
+ * Backward compat preserved · same DispatchResult shape returned. n8n owns
+ * Supabase state persist + L2 invocation. Engine marker `engine: 'n8n-l1'`
+ * lands in `client_journey_state.metadata` to distinguish origin.
+ *
+ * If n8n proxy fails (network · 5xx · timeout) we return a 'failed' result ·
+ * caller can retry OR fall back via `engine: 'vercel'` override. We do NOT
+ * silently fall back to Vercel · the env flag is operator intent and a
+ * silent fallback would mask deployment issues.
+ */
+async function dispatchViaN8n(
+  req: DispatchRequest,
+  fetchFn: typeof fetch,
+): Promise<DispatchResult> {
+  const base =
+    process.env.N8N_BASE_URL ?? 'https://n8n-production-72be.up.railway.app'
+  const url = `${base}/webhook/l1-dispatch`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 30_000)
+  try {
+    const res = await fetchFn(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+      signal: controller.signal,
+    })
+    const text = await res.text().catch(() => '')
+    if (!res.ok) {
+      return {
+        ok: false,
+        journey_id: '',
+        journey: req.journey,
+        dispatch_status: 'failed',
+        l2_target: url,
+        error: `n8n_proxy_http_${res.status} · ${text.slice(0, 200)}`,
+        details: { engine: 'n8n-l1', mode: 'proxy', status: res.status },
+      }
+    }
+    try {
+      const parsed = JSON.parse(text) as DispatchResult
+      // Trust n8n's DispatchResult shape · but enforce journey field matches request
+      return { ...parsed, journey: req.journey }
+    } catch {
+      return {
+        ok: false,
+        journey_id: '',
+        journey: req.journey,
+        dispatch_status: 'failed',
+        l2_target: url,
+        error: `n8n_proxy_parse_error · ${text.slice(0, 200)}`,
+        details: { engine: 'n8n-l1', mode: 'proxy' },
+      }
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'unknown_error'
+    return {
+      ok: false,
+      journey_id: '',
+      journey: req.journey,
+      dispatch_status: 'failed',
+      l2_target: url,
+      error: `n8n_proxy_network · ${msg}`,
+      details: { engine: 'n8n-l1', mode: 'proxy' },
+    }
+  } finally {
+    clearTimeout(timer)
+  }
 }

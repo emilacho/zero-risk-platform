@@ -98,4 +98,5 @@ export interface JourneyStateRow {
   last_error_at: string | null
   started_at: string
   updated_at: string
+  completed_at: string | null
 }
