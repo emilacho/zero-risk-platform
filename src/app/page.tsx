@@ -47,8 +47,8 @@ export default function Home() {
       <nav className="fixed top-0 z-50 w-full border-b border-gray-100 bg-white/90 backdrop-blur-sm">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zero-risk-highlight text-white font-bold text-sm">
-              ZR
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zero-risk-highlight text-white font-bold text-[9px]">
+              Zero Risk
             </div>
             <span className="text-lg font-bold text-gray-900">Zero Risk</span>
           </div>
@@ -247,8 +247,8 @@ export default function Home() {
         <div className="mx-auto max-w-7xl px-6 py-12">
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zero-risk-highlight text-white font-bold text-sm">
-                ZR
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zero-risk-highlight text-white font-bold text-[9px]">
+                Zero Risk
               </div>
               <span className="text-sm font-bold text-white">Zero Risk Ecuador</span>
             </div>

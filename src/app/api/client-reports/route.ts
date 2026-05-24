@@ -4,11 +4,16 @@
  *  GET  → list (Mission Control)
  */
 import { genericList, genericInsert } from '@/lib/crud-helpers'
+import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   return genericInsert('client_reports', request, {
     requireAuth: true,
     required: ['client_id', 'period_start', 'period_end', 'summary'],

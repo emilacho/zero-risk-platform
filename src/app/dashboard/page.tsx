@@ -20,10 +20,10 @@ const recentActivity = [
 const systemStatus = [
   { name: 'Vercel', status: 'Operativo', color: 'bg-green-500' },
   { name: 'Supabase', status: 'Operativo', color: 'bg-green-500' },
-  { name: 'n8n', status: 'Trial (13 días)', color: 'bg-yellow-500' },
-  { name: 'Composio', status: 'Pendiente', color: 'bg-gray-400' },
-  { name: 'Mailgun', status: 'Pendiente', color: 'bg-gray-400' },
-  { name: 'GoHighLevel', status: 'Pendiente', color: 'bg-gray-400' },
+  { name: 'n8n', status: 'Operativo', color: 'bg-green-500' },
+  { name: 'Railway agent-runner', status: 'Operativo', color: 'bg-green-500' },
+  { name: 'Resend', status: 'Pendiente vendor sign-up', color: 'bg-gray-400' },
+  { name: 'Meta Graph (WhatsApp · Social · Ads)', status: 'Pendiente WABA verify', color: 'bg-gray-400' },
 ]
 
 export default function DashboardPage() {
@@ -83,7 +83,7 @@ export default function DashboardPage() {
               { name: 'Capa 2: Orquestación (n8n)', progress: 5, color: 'bg-purple-500' },
               { name: 'Capa 3: Landing Pages', progress: 0, color: 'bg-yellow-500' },
               { name: 'Capa 4: Backend', progress: 50, color: 'bg-indigo-500' },
-              { name: 'Capa 5: Command Center (JARVIS)', progress: 5, color: 'bg-pink-500' },
+              { name: 'Capa 5: Command Center (Mission Control)', progress: 5, color: 'bg-pink-500' },
             ].map((layer) => (
               <div key={layer.name}>
                 <div className="flex items-center justify-between mb-1">

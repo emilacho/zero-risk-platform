@@ -280,7 +280,7 @@ export function TaskRunner() {
               </p>
               <p className="mt-1 text-xs text-blue-700">
                 Cadena activa: RUFLO → Jefe de Marketing → Empleados →
-                Consolidación. La cadena tarda entre 1 y 3 minutos. JARVIS
+                Consolidación. La cadena tarda entre 1 y 3 minutos. Mission Control
                 consulta el estado cada 3 segundos.
               </p>
             </div>

@@ -9,5 +9,5 @@ export const LAYERS = {
   ORCHESTRATION: 'Layer 2: Orchestration (n8n)',
   LANDING_PAGES: 'Layer 3: Landing Pages',
   BACKEND: 'Layer 4: Backend (Supabase + Next.js API)',
-  COMMAND_CENTER: 'Layer 5: Command Center (JARVIS)',
+  COMMAND_CENTER: 'Layer 5: Command Center (Mission Control)',
 } as const

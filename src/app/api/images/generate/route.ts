@@ -5,6 +5,7 @@ import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { capture } from '@/lib/posthog'
 import { PRICING_BY_SIZE, priceForSize } from '@/lib/image-pricing'
 import { randomUUID } from 'node:crypto'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 // Sprint #6 Brazo 1 · GPT Image generation wrapper
 //
@@ -23,6 +24,9 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   let body: Record<string, unknown>
   try {
     body = (await request.json()) as Record<string, unknown>

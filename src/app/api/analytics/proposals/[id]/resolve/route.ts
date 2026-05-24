@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { FeedbackCollector } from '@/lib/feedback-collector'
 import { MetaAgent } from '@/lib/meta-agent'
 import { validateObject } from '@/lib/input-validator'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 /**
  * POST /api/analytics/proposals/[id]/resolve
@@ -17,6 +18,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   try {
     const { id: proposalId } = await params
     const supabase = getSupabaseAdmin()

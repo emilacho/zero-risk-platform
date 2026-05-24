@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 export async function POST(request: Request) {
+  // Auth · NO check needed · 410 Gone deprecated endpoint (Stack V4 canon).
   return buildDeprecatedResponse({
     endpoint: "ghl/create-calendar-event",
     replacement: "/api/calendar/book",

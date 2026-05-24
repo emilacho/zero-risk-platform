@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { FeedbackCollector, CampaignResultRecord } from '@/lib/feedback-collector'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 /**
  * POST /api/analytics/campaign-results
@@ -13,6 +14,9 @@ import { FeedbackCollector, CampaignResultRecord } from '@/lib/feedback-collecto
  * List recent campaign results.
  */
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   try {
     const supabase = getSupabaseAdmin()
     const collector = new FeedbackCollector(supabase)
