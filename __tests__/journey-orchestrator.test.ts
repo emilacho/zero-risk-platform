@@ -104,7 +104,11 @@ describe('resolveNextStage', () => {
   })
 
   it('hitl_resolved advances one stage', () => {
+    // ONBOARD canonical order post Sprint 8C drift fix · kickoff → auto_discovery_complete → send_intake_form → ...
     expect(resolveNextStage('ONBOARD', 'kickoff', 'hitl_resolved')).toBe(
+      'auto_discovery_complete',
+    )
+    expect(resolveNextStage('ONBOARD', 'auto_discovery_complete', 'hitl_resolved')).toBe(
       'send_intake_form',
     )
     expect(resolveNextStage('ONBOARD', 'send_intake_form', 'hitl_resolved')).toBe(
@@ -310,6 +314,51 @@ describe('dispatchJourney', () => {
     const calls = (supabase as unknown as { _calls: { updates: unknown[]; inserts: unknown[] } })._calls
     expect(calls.updates.length).toBeGreaterThan(0)
     expect(calls.inserts.length).toBe(0)
+  })
+
+  // Sprint 8C migration shim · engine='n8n' proxies to n8n webhook
+  it('engine=n8n proxies request to n8n webhook + returns DispatchResult', async () => {
+    const supabase = makeMockSupabase({})
+    const n8nResponse = {
+      ok: true,
+      journey_id: 'n8n-journey-1',
+      journey: 'PRODUCE',
+      dispatch_status: 'dispatched',
+      l2_target: 'https://n8n.example/webhook/campaign-orchestrator',
+      details: { engine: 'n8n-l1', mode: 'n8n_webhook' },
+    }
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(url).toContain('/webhook/l1-dispatch')
+      return new Response(JSON.stringify(n8nResponse), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const req: DispatchRequest = {
+      client_id: VALID_UUID,
+      journey: 'PRODUCE',
+      trigger_type: 'manual',
+    }
+    const result = await dispatchJourney(req, { supabase, fetchImpl, engine: 'n8n' })
+    expect(result.ok).toBe(true)
+    expect(result.journey_id).toBe('n8n-journey-1')
+    expect(result.dispatch_status).toBe('dispatched')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('engine=n8n returns failed when n8n webhook returns 5xx', async () => {
+    const supabase = makeMockSupabase({})
+    const fetchImpl = vi.fn(async () =>
+      new Response('upstream down', { status: 502 }),
+    ) as unknown as typeof fetch
+
+    const req: DispatchRequest = {
+      client_id: VALID_UUID,
+      journey: 'ONBOARD',
+      trigger_type: 'manual',
+    }
+    const result = await dispatchJourney(req, { supabase, fetchImpl, engine: 'n8n' })
+    expect(result.ok).toBe(false)
+    expect(result.dispatch_status).toBe('failed')
+    expect(result.error).toContain('n8n_proxy_http_502')
   })
 
   it('Peniche resume_stuck smoke · onboard journey + send_intake_form stage', async () => {

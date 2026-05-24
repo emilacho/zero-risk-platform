@@ -22,10 +22,11 @@ export const JOURNEY_STAGES: Record<JourneyType, readonly string[]> = {
   ],
   ONBOARD: [
     'kickoff', // Phase 1 · OnboardingOrchestrator startOnboarding()
-    'send_intake_form', // Phase 2 · Tally/GHL form · Peniche stuck here
-    'intake_received', // Phase 3 · client filled form
-    'brand_discovery', // Phase 4 · brand-strategist auto-research
-    'review_handoff', // Phase 5 · ready for first PRODUCE journey
+    'auto_discovery_complete', // Phase 2 · auto-discovery agent finished (9 live rows post Sprint 7.6 #79)
+    'send_intake_form', // Phase 3 · Tally/GHL form · Peniche stuck here
+    'intake_received', // Phase 4 · client filled form
+    'brand_discovery', // Phase 5 · brand-strategist auto-research
+    'review_handoff', // Phase 6 · ready for first PRODUCE journey
   ],
   PRODUCE: [
     'brief_intake', // NEXUS Phase 1

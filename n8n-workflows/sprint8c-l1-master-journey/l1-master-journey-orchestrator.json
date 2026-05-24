@@ -1,0 +1,340 @@
+{
+  "name": "Zero Risk - L1 Master Journey Orchestrator (Sprint 8C)",
+  "meta": {
+    "description": "L1 Master Journey FSM · iso-comportamental con Vercel src/lib/journey-orchestrator/dispatch.ts. Webhook entry POST /webhook/l1-dispatch. Reads/writes client_journey_state Supabase via PostgREST. Dispatches L2 per journey (ONBOARD HTTP · PRODUCE n8n NEXUS · ALWAYS_ON HTTP · 3 stubs NoOp). Post-dispatch hooks WhatsApp + social fire-and-forget. Backward compat MANDATORY · misma tabla schema canonical.",
+    "spec_doc": "zr-vault/raw/qa/2026-05-24-l1-migration-fase-3-n8n-workflow-design.md",
+    "sprint": "8C CC#3",
+    "engine_marker": "n8n-l1",
+    "cost_per_run_usd": "~0.0001 (just db writes + L2 dispatch HTTP)",
+    "backward_compat": "OPTION α · same client_journey_state table · zero schema change · engine='n8n-l1' marker in metadata distinguishes origin"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "l1-dispatch",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-entry",
+      "name": "Webhook L1 dispatch",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 400],
+      "webhookId": "l1-dispatch-sprint8c"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "journey-valid",
+              "leftValue": "={{ ['ACQUIRE','ONBOARD','PRODUCE','ALWAYS_ON','REVIEW','GROWTH'].includes($json.body.journey) }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            },
+            {
+              "id": "trigger-valid",
+              "leftValue": "={{ ['manual','webhook','cascade_done','cron','anomaly_detected','hitl_resolved','resume_stuck'].includes($json.body.trigger_type) }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        }
+      },
+      "id": "validate-input",
+      "name": "Validate payload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'invalid_request', detail: 'journey must be in JOURNEY_TYPES and trigger_type in TRIGGER_TYPES' }) }}",
+        "options": { "responseCode": 400 }
+      },
+      "id": "respond-400",
+      "name": "Respond 400 invalid",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 580]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_journey_state?client_id=eq.{{ $('Webhook L1 dispatch').first().json.body.client_id }}&journey=eq.{{ $('Webhook L1 dispatch').first().json.body.journey }}&status=eq.active&order=started_at.desc&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "get-existing-row",
+      "name": "Get existing active row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 320],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// L1 FSM resolveNextStage port · iso-comportamental state-machine.ts\nconst JOURNEY_STAGES = {\n  ACQUIRE: ['lead_capture','qualified','discovery_call','proposal_generated','won'],\n  ONBOARD: ['kickoff','auto_discovery_complete','send_intake_form','intake_received','brand_discovery','review_handoff'],\n  PRODUCE: ['brief_intake','research','creative_concepts','production','qa_review','launch','optimize'],\n  ALWAYS_ON: ['monitoring','anomaly_detected','recovery_dispatched'],\n  REVIEW: ['data_collection','qbr_drafted','qbr_reviewed','qbr_sent'],\n  GROWTH: ['expansion_identified','pitch_prepared','committed'],\n};\nconst DB_TRIGGER_MAP = {\n  manual:'manual', webhook:'webhook', cron:'cron',\n  cascade_done:'webhook', anomaly_detected:'cron',\n  hitl_resolved:'webhook', resume_stuck:'manual',\n};\n\nconst body = $('Webhook L1 dispatch').first().json.body;\nconst existing = $input.first().json;\nconst existingRow = Array.isArray(existing) && existing.length > 0 ? existing[0] : null;\nconst journey = body.journey;\nconst trigger = body.trigger_type;\nconst stages = JOURNEY_STAGES[journey];\n\nlet nextStage;\nif (body.stage) {\n  nextStage = body.stage;\n} else if (!stages || stages.length === 0) {\n  nextStage = null;\n} else if (!existingRow || existingRow.current_stage == null) {\n  nextStage = stages[0];\n} else if (trigger === 'resume_stuck') {\n  nextStage = existingRow.current_stage;\n} else if (trigger === 'hitl_resolved' || trigger === 'cascade_done') {\n  const idx = stages.indexOf(existingRow.current_stage);\n  nextStage = (idx < 0 || idx >= stages.length - 1) ? existingRow.current_stage : stages[idx + 1];\n} else if (journey === 'ALWAYS_ON' && trigger === 'anomaly_detected') {\n  nextStage = 'anomaly_detected';\n} else {\n  nextStage = existingRow.current_stage;\n}\n\nreturn [{\n  json: {\n    body,\n    existing_row: existingRow,\n    next_stage: nextStage,\n    db_trigger: DB_TRIGGER_MAP[trigger] || 'manual',\n    trigger_type_original: trigger,\n  }\n}];"
+      },
+      "id": "resolve-next-stage",
+      "name": "Resolve next stage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "row-exists",
+              "leftValue": "={{ $json.existing_row != null }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        }
+      },
+      "id": "if-row-exists",
+      "name": "Row exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 320]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_journey_state?id=eq.{{ $json.existing_row.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  current_stage: $json.next_stage,\n  trigger_type: $json.db_trigger,\n  trigger_source: $json.body.trigger_source || null,\n  trigger_payload: { params: $json.body.params || {}, original_request: { stage: $json.body.stage || null } },\n  metadata: { trigger_type_original: $json.trigger_type_original, last_dispatched_at: new Date().toISOString(), engine: 'n8n-l1' },\n  updated_at: new Date().toISOString()\n}) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "patch-update-row",
+      "name": "PATCH update row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_journey_state",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  client_id: $json.body.client_id || null,\n  journey: $json.body.journey,\n  current_stage: $json.next_stage,\n  status: 'active',\n  trigger_type: $json.db_trigger,\n  trigger_source: $json.body.trigger_source || null,\n  trigger_payload: { params: $json.body.params || {}, original_request: { stage: $json.body.stage || null } },\n  metadata: { trigger_type_original: $json.trigger_type_original, last_dispatched_at: new Date().toISOString(), engine: 'n8n-l1' },\n  parent_journey_id: $json.body.parent_journey_id || null,\n  started_at: new Date().toISOString(),\n  updated_at: new Date().toISOString()\n}) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "post-insert-row",
+      "name": "POST insert row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 420]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "combinator": "and", "conditions": [{ "id": "is-onboard", "leftValue": "={{ $('Webhook L1 dispatch').first().json.body.journey }}", "rightValue": "ONBOARD", "operator": { "type": "string", "operation": "equals" } }] }, "renameOutput": true, "outputKey": "ONBOARD" },
+            { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "combinator": "and", "conditions": [{ "id": "is-produce", "leftValue": "={{ $('Webhook L1 dispatch').first().json.body.journey }}", "rightValue": "PRODUCE", "operator": { "type": "string", "operation": "equals" } }] }, "renameOutput": true, "outputKey": "PRODUCE" },
+            { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "combinator": "and", "conditions": [{ "id": "is-always-on", "leftValue": "={{ $('Webhook L1 dispatch').first().json.body.journey }}", "rightValue": "ALWAYS_ON", "operator": { "type": "string", "operation": "equals" } }] }, "renameOutput": true, "outputKey": "ALWAYS_ON" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "switch-journey",
+      "name": "Switch by journey",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1560, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/onboarding",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  journey_id: ($input.first().json[0] && $input.first().json[0].id) || ($input.first().json.id),\n  client_id: $('Webhook L1 dispatch').first().json.body.client_id,\n  journey: 'ONBOARD',\n  stage: $('Resolve next stage').first().json.next_stage,\n  trigger_type: $('Webhook L1 dispatch').first().json.body.trigger_type,\n  params: $('Webhook L1 dispatch').first().json.body.params || {}\n}) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "dispatch-onboard",
+      "name": "L2 dispatch ONBOARD",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 160],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_BASE_URL || 'https://n8n-production-72be.up.railway.app' }}/webhook/campaign-orchestrator",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  journey_id: ($input.first().json[0] && $input.first().json[0].id) || ($input.first().json.id),\n  client_id: $('Webhook L1 dispatch').first().json.body.client_id,\n  journey: 'PRODUCE',\n  stage: $('Resolve next stage').first().json.next_stage,\n  trigger_type: $('Webhook L1 dispatch').first().json.body.trigger_type,\n  params: $('Webhook L1 dispatch').first().json.body.params || {}\n}) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "dispatch-produce",
+      "name": "L2 dispatch PRODUCE NEXUS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 320],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/journey/event-log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  journey_id: ($input.first().json[0] && $input.first().json[0].id) || ($input.first().json.id),\n  client_id: $('Webhook L1 dispatch').first().json.body.client_id,\n  journey: 'ALWAYS_ON',\n  stage: $('Resolve next stage').first().json.next_stage,\n  trigger_type: $('Webhook L1 dispatch').first().json.body.trigger_type,\n  params: $('Webhook L1 dispatch').first().json.body.params || {}\n}) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "dispatch-always-on",
+      "name": "L2 dispatch ALWAYS_ON",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 480],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "stub-noop",
+      "name": "Stub NoOp REVIEW/ACQUIRE/GROWTH",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1780, 640]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Build DispatchResult canonical · defensive against unrun branch nodes.\nfunction safeNode(name) {\n  try { return $(name).first()?.json; } catch (e) { return null; }\n}\n\nconst body = $('Webhook L1 dispatch').first().json.body;\nconst nextStage = $('Resolve next stage').first().json.next_stage;\nconst l2 = $input.first().json;\n\n// journey_id from whichever persist branch ran\nconst insertOut = safeNode('POST insert row');\nconst patchOut = safeNode('PATCH update row');\nconst insertRow = Array.isArray(insertOut) ? insertOut[0] : insertOut;\nconst patchRow = Array.isArray(patchOut) ? patchOut[0] : patchOut;\nconst persistedRow = insertRow || patchRow;\nconst journeyId = persistedRow?.id || null;\n\nconst journey = body.journey;\nconst isStub = ['REVIEW','ACQUIRE','GROWTH'].includes(journey);\n\nlet dispatchStatus, l2Target, l2Error;\nif (isStub) {\n  dispatchStatus = 'stubbed';\n  l2Target = 'stub:' + journey;\n} else if (l2 && (l2.ok === false || (typeof l2.statusCode === 'number' && l2.statusCode >= 400) || l2.error)) {\n  dispatchStatus = 'failed';\n  l2Target = null;\n  l2Error = (l2.message || l2.error || JSON.stringify(l2)).toString().slice(0, 200);\n} else {\n  dispatchStatus = 'dispatched';\n  const ZR = $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app';\n  const N8 = $env.N8N_BASE_URL || 'https://n8n-production-72be.up.railway.app';\n  l2Target = journey === 'ONBOARD' ? ZR + '/api/onboarding' :\n             journey === 'PRODUCE' ? N8 + '/webhook/campaign-orchestrator' :\n             journey === 'ALWAYS_ON' ? ZR + '/api/journey/event-log' : null;\n}\n\nfunction computeNextCheck() {\n  if (isStub) return null;\n  if (journey === 'PRODUCE') return new Date(Date.now() + 5 * 60 * 1000).toISOString();\n  if (journey === 'ALWAYS_ON') return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();\n  return null;\n}\n\nreturn [{\n  json: {\n    ok: dispatchStatus !== 'failed',\n    journey_id: journeyId,\n    journey: journey,\n    dispatch_status: dispatchStatus,\n    l2_target: l2Target,\n    next_check_at: computeNextCheck(),\n    error: l2Error,\n    details: { mode: isStub ? 'stub' : (journey === 'PRODUCE' ? 'n8n_webhook' : 'http'), engine: 'n8n-l1', next_stage: nextStage },\n  }\n}];"
+      },
+      "id": "build-result",
+      "name": "Build DispatchResult",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2020, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-success",
+      "name": "Respond 200 DispatchResult",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2240, 400]
+    }
+  ],
+  "connections": {
+    "Webhook L1 dispatch": {
+      "main": [[{ "node": "Validate payload", "type": "main", "index": 0 }]]
+    },
+    "Validate payload": {
+      "main": [
+        [{ "node": "Get existing active row", "type": "main", "index": 0 }],
+        [{ "node": "Respond 400 invalid", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get existing active row": {
+      "main": [[{ "node": "Resolve next stage", "type": "main", "index": 0 }]]
+    },
+    "Resolve next stage": {
+      "main": [[{ "node": "Row exists?", "type": "main", "index": 0 }]]
+    },
+    "Row exists?": {
+      "main": [
+        [{ "node": "PATCH update row", "type": "main", "index": 0 }],
+        [{ "node": "POST insert row", "type": "main", "index": 0 }]
+      ]
+    },
+    "PATCH update row": {
+      "main": [[{ "node": "Switch by journey", "type": "main", "index": 0 }]]
+    },
+    "POST insert row": {
+      "main": [[{ "node": "Switch by journey", "type": "main", "index": 0 }]]
+    },
+    "Switch by journey": {
+      "main": [
+        [{ "node": "L2 dispatch ONBOARD", "type": "main", "index": 0 }],
+        [{ "node": "L2 dispatch PRODUCE NEXUS", "type": "main", "index": 0 }],
+        [{ "node": "L2 dispatch ALWAYS_ON", "type": "main", "index": 0 }],
+        [{ "node": "Stub NoOp REVIEW/ACQUIRE/GROWTH", "type": "main", "index": 0 }]
+      ]
+    },
+    "L2 dispatch ONBOARD": {
+      "main": [[{ "node": "Build DispatchResult", "type": "main", "index": 0 }]]
+    },
+    "L2 dispatch PRODUCE NEXUS": {
+      "main": [[{ "node": "Build DispatchResult", "type": "main", "index": 0 }]]
+    },
+    "L2 dispatch ALWAYS_ON": {
+      "main": [[{ "node": "Build DispatchResult", "type": "main", "index": 0 }]]
+    },
+    "Stub NoOp REVIEW/ACQUIRE/GROWTH": {
+      "main": [[{ "node": "Build DispatchResult", "type": "main", "index": 0 }]]
+    },
+    "Build DispatchResult": {
+      "main": [[{ "node": "Respond 200 DispatchResult", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {}
+}

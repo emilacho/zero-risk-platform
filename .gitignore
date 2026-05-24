@@ -23,6 +23,9 @@ packages/*/pnpm-lock.yaml
 .DS_Store
 *.pem
 
+# Sprint 8C L1 migration · smoke artifacts contain live client UUIDs · keep out of repo
+scripts/l1-migration/out/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
