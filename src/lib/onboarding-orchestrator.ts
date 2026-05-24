@@ -21,6 +21,9 @@ import { BrandAnalyzer } from './brand-analyzer'
 import { MissionControlBridge } from './mc-bridge'
 import { chunksFromBrandBook, persistChunks } from './brain/persist-chunks'
 import { persistContactsFromDiscovery } from './crm/persist-contacts'
+import { persistCompanies } from './crm/persist-companies'
+import { ensureDefaultPipeline } from './crm/persist-pipelines'
+import { persistActivities } from './crm/persist-activities'
 
 // ============================================================
 // Types
@@ -207,6 +210,81 @@ export class OnboardingOrchestrator {
         .catch((err) => {
           const msg = err instanceof Error ? err.message : 'unknown'
           console.warn('[onboarding-orchestrator] contacts persist hook crashed (non-fatal):', msg)
+        })
+
+      // Sprint 8C combo · seed the canonical CRM surfaces (companies +
+      // default pipeline + onboarding activity log entry). Fire-and-forget
+      // matches the contacts + Brain ingest hooks above · never blocks
+      // Day-1 success criteria. The cliente's own company gets a self-row
+      // so it can be referenced by deals · activities · crm_notes later
+      // without needing a separate manual seed step.
+      void persistCompanies(
+        this.supabase,
+        clientId,
+        [
+          {
+            name: input.companyName,
+            domain: input.websiteUrl?.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '') || null,
+            industry: input.industry || null,
+            relationship: 'customer',
+            source: 'onboarding',
+            source_metadata: { onboarding_id: onboardingId, self_row: true },
+          },
+        ],
+        'onboarding',
+      )
+        .then((res) => {
+          if (res.error) {
+            console.warn(
+              `[onboarding-orchestrator] companies persist failed (non-fatal): ${res.error}`,
+            )
+          } else if (res.attempted > 0) {
+            console.log(
+              `[onboarding-orchestrator] companies persisted · ${res.inserted_or_skipped}/${res.attempted} for ${input.companyName} (client=${clientId})`,
+            )
+          }
+        })
+        .catch((err) => {
+          console.warn(
+            '[onboarding-orchestrator] companies persist hook crashed (non-fatal):',
+            err instanceof Error ? err.message : 'unknown',
+          )
+        })
+
+      void ensureDefaultPipeline(this.supabase, clientId)
+        .then((res) => {
+          if (res.error) {
+            console.warn(
+              `[onboarding-orchestrator] default pipeline ensure failed (non-fatal): ${res.error}`,
+            )
+          } else if (res.attempted > 0) {
+            console.log(
+              `[onboarding-orchestrator] default pipeline · ${res.inserted_or_skipped}/${res.attempted} for ${input.companyName} (client=${clientId})`,
+            )
+          }
+        })
+        .catch((err) => {
+          console.warn(
+            '[onboarding-orchestrator] default pipeline hook crashed (non-fatal):',
+            err instanceof Error ? err.message : 'unknown',
+          )
+        })
+
+      void persistActivities(this.supabase, clientId, [
+        {
+          subject_type: 'cliente',
+          subject_id: clientId,
+          kind: 'system_event',
+          summary: `Onboarding iniciado · ${input.companyName}`,
+          body: `Day-1 auto-discovery iniciado para ${input.websiteUrl}. ${clientData.totalPagesScraped} páginas scrapeadas.`,
+          metadata: { onboarding_id: onboardingId, website_url: input.websiteUrl, source: 'onboarding-orchestrator' },
+        },
+      ])
+        .catch((err) => {
+          console.warn(
+            '[onboarding-orchestrator] activities persist crashed (non-fatal):',
+            err instanceof Error ? err.message : 'unknown',
+          )
         })
 
       // Step 4: Brand Analysis — Claude interprets scraped data
