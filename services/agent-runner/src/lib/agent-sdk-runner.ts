@@ -71,6 +71,19 @@ export interface AgentRunInput {
   extra?: Record<string, unknown>
 }
 
+/**
+ * Brain enrichment metadata surfaced in the agent run result so the Vercel
+ * proxy + observability writers can persist it on the canonical
+ * agent_invocations.metadata + agents_log.output rows. Sprint 8B B3.
+ */
+export interface BrainEnrichmentResultMeta {
+  brain_hit: boolean
+  brain_chunks_count: number
+  brain_query_ms: number
+  brain_cost_usd: number
+  brain_error?: string
+}
+
 export interface AgentRunResult {
   success: boolean
   response: string
@@ -80,6 +93,12 @@ export interface AgentRunResult {
   costUsd: number
   durationMs: number
   model: string
+  /**
+   * Sprint 8B · brain enrichment metadata. Always present (zero values when
+   * clientId missing OR brain empty for client). Vercel proxy forwards this
+   * to agent_invocations.metadata.brain_chunks_count etc.
+   */
+  brainEnrichment: BrainEnrichmentResultMeta
   error?: string
 }
 
@@ -339,6 +358,12 @@ async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDra
 
 /**
  * Best-effort fire-and-forget log to agents_log. Never throws.
+ *
+ * Sprint 8B B3 · output JSONB now includes brain enrichment markers
+ * (brain_hit, brain_chunks_count, brain_query_ms, brain_cost_usd) so the
+ * Railway runtime path produces visible runtime evidence of Pilar 2 RAG.
+ * Sister track CC#1 B2 patches the swallowed-error fire-and-forget pattern;
+ * once that lands, every SDK invocation produces an audit row here.
  */
 function logExecution(
   supabase: SupabaseAdmin,
@@ -350,9 +375,10 @@ function logExecution(
     modelId: string
     durationMs: number
     costUsd: number
+    brainEnrichment: BrainEnrichmentResultMeta
   },
 ): void {
-  const { canonicalSlug, input, skills, drain, modelId, durationMs, costUsd } = args
+  const { canonicalSlug, input, skills, drain, modelId, durationMs, costUsd, brainEnrichment } = args
   supabase
     .from('agents_log')
     .insert({
@@ -364,6 +390,7 @@ function logExecution(
         step_name: input.stepName,
         resumed: !!input.resumeSessionId,
         skills_loaded: skills.map(s => s.name),
+        client_id: input.clientId ?? null,
       },
       output: {
         response_length: drain.responseText.length,
@@ -371,6 +398,11 @@ function logExecution(
         input_tokens: drain.inputTokens,
         output_tokens: drain.outputTokens,
         session_id: drain.sessionId,
+        brain_hit: brainEnrichment.brain_hit,
+        brain_chunks_count: brainEnrichment.brain_chunks_count,
+        brain_query_ms: brainEnrichment.brain_query_ms,
+        brain_cost_usd: brainEnrichment.brain_cost_usd,
+        ...(brainEnrichment.brain_error ? { brain_error: brainEnrichment.brain_error } : {}),
       },
       status: 'success',
       duration_ms: durationMs,
@@ -419,7 +451,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   if (enrichment.brain_hit) {
     systemPrompt = `${systemPrompt}\n\n${enrichment.enrichment}`
     console.log(
-      `[brain-enrich] ${canonicalSlug} · ${enrichment.chunks_used} chunks injected · client=${input.clientId} · $${enrichment.cost_usd.toFixed(6)}`,
+      `[brain-enrich] ${canonicalSlug} · ${enrichment.brain_chunks_count} chunks injected · ${enrichment.brain_query_ms}ms · client=${input.clientId} · $${enrichment.cost_usd.toFixed(6)}`,
     )
   } else if (input.clientId) {
     // Soft-fail: client_id provided but brain returned nothing · log for audit.
@@ -445,9 +477,18 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   const durationMs = Date.now() - startedAt
   const costUsd = costFor(modelId, drain.inputTokens, drain.outputTokens)
 
-  // 5. Best-effort log.
+  const brainEnrichmentMeta: BrainEnrichmentResultMeta = {
+    brain_hit: enrichment.brain_hit,
+    brain_chunks_count: enrichment.brain_chunks_count,
+    brain_query_ms: enrichment.brain_query_ms,
+    brain_cost_usd: enrichment.cost_usd,
+    ...(enrichment.error ? { brain_error: enrichment.error } : {}),
+  }
+
+  // 5. Best-effort log · include brain enrichment markers for runtime audit.
   logExecution(supabase, {
     canonicalSlug, input, skills, drain, modelId, durationMs, costUsd,
+    brainEnrichment: brainEnrichmentMeta,
   })
 
   return {
@@ -459,6 +500,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     costUsd,
     durationMs,
     model: modelId,
+    brainEnrichment: brainEnrichmentMeta,
   }
 }
 
@@ -472,6 +514,12 @@ function fail(message: string, startedAt: number): AgentRunResult {
     costUsd: 0,
     durationMs: Date.now() - startedAt,
     model: 'unknown',
+    brainEnrichment: {
+      brain_hit: false,
+      brain_chunks_count: 0,
+      brain_query_ms: 0,
+      brain_cost_usd: 0,
+    },
     error: message,
   }
 }
