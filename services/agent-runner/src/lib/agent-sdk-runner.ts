@@ -40,7 +40,24 @@ type SDKAssistantStreamMessage = {
 type SDKResultStreamMessage = {
   type: 'result'
   session_id?: string
-  usage?: { input_tokens?: number; output_tokens?: number }
+  /**
+   * Sprint 8 prompt-caching observability · the Agent SDK auto-enables
+   * Anthropic prompt caching (per upstream issue
+   * anthropics/claude-agent-sdk-typescript#188 · defaults to 1h TTL). The
+   * underlying API responses include cache_creation + cache_read counters
+   * which we now extract for cost-rollup visibility. SDK currently does
+   * NOT expose breakpoint control · we observe what the SDK chose to cache.
+   */
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    cache_creation_input_tokens?: number
+    cache_read_input_tokens?: number
+    cache_creation?: {
+      ephemeral_5m_input_tokens?: number
+      ephemeral_1h_input_tokens?: number
+    }
+  }
 }
 type SDKStreamMessage =
   | SDKSystemInitMessage
@@ -77,6 +94,19 @@ export interface AgentRunInput {
  * proxy + observability writers can persist it on the canonical
  * agent_invocations.metadata + agents_log.output rows. Sprint 8B B3.
  */
+/**
+ * Sprint 8 cache observability metadata · surfaced on AgentRunResult so the
+ * Vercel proxy can persist it in agent_invocations.metadata. SDK auto-caches
+ * (per upstream issue #188 · 1h TTL default) · zero values when prefix below
+ * model's 1024-token cache threshold OR SDK chose not to cache.
+ */
+export interface CacheMetricsMeta {
+  cache_creation_input_tokens: number
+  cache_read_input_tokens: number
+  cache_creation_5m_tokens: number
+  cache_creation_1h_tokens: number
+}
+
 export interface BrainEnrichmentResultMeta {
   brain_hit: boolean
   brain_chunks_count: number
@@ -100,6 +130,11 @@ export interface AgentRunResult {
    * to agent_invocations.metadata.brain_chunks_count etc.
    */
   brainEnrichment: BrainEnrichmentResultMeta
+  /**
+   * Sprint 8 prompt-cache observability · always present · zero values when
+   * the SDK does not cache (prefix below 1024 tokens · or first-time call).
+   */
+  cacheMetrics: CacheMetricsMeta
   error?: string
 }
 
@@ -125,11 +160,35 @@ const COST_PER_M = {
 
 /**
  * @internal Exported for unit testing. Not part of the public API.
+ *
+ * Sprint 8 · cache-aware cost. Anthropic prompt caching pricing per docs ·
+ *   - regular input · 1.0× base
+ *   - cache_read    · 0.1× base (90% off · the win)
+ *   - cache write 5m TTL · 1.25× base
+ *   - cache write 1h TTL · 2.0× base
+ *
+ * `inTok` from `usage.input_tokens` is the REGULAR input (Anthropic excludes
+ * cached portions from this number). Cache reads / writes are billed via the
+ * separate counters passed here.
  */
-export function _costFor(model: string, inTok: number, outTok: number): number {
+export function _costFor(
+  model: string,
+  inTok: number,
+  outTok: number,
+  cacheRead = 0,
+  cache5mWrite = 0,
+  cache1hWrite = 0,
+): number {
   const key = model.includes('haiku') ? 'haiku' : model.includes('opus') ? 'opus' : 'sonnet'
   const p = COST_PER_M[key as keyof typeof COST_PER_M]
-  return (inTok / 1_000_000) * p.input + (outTok / 1_000_000) * p.output
+  const baseIn = p.input / 1_000_000
+  return (
+    inTok * baseIn +
+    outTok * (p.output / 1_000_000) +
+    cacheRead * baseIn * 0.1 +
+    cache5mWrite * baseIn * 1.25 +
+    cache1hWrite * baseIn * 2.0
+  )
 }
 
 const costFor = _costFor
@@ -321,6 +380,16 @@ interface StreamDrainResult {
   sessionId: string | null
   inputTokens: number
   outputTokens: number
+  /**
+   * Sprint 8 cache observability · cache_creation_input_tokens (new writes
+   * to cache · paid at write premium) and cache_read_input_tokens (hits ·
+   * paid at 10% of base · 90% savings). Zero when SDK does not cache · or
+   * when prefix is below the model's 1024-token threshold.
+   */
+  cacheCreationInputTokens: number
+  cacheReadInputTokens: number
+  cacheCreation5mTokens: number
+  cacheCreation1hTokens: number
 }
 
 /**
@@ -332,6 +401,10 @@ async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDra
   let sessionId: string | null = null
   let inputTokens = 0
   let outputTokens = 0
+  let cacheCreationInputTokens = 0
+  let cacheReadInputTokens = 0
+  let cacheCreation5mTokens = 0
+  let cacheCreation1hTokens = 0
 
   for await (const rawMsg of stream) {
     const msg = rawMsg as SDKStreamMessage
@@ -350,11 +423,24 @@ async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDra
       const r = msg as SDKResultStreamMessage
       inputTokens = r.usage?.input_tokens ?? 0
       outputTokens = r.usage?.output_tokens ?? 0
+      cacheCreationInputTokens = r.usage?.cache_creation_input_tokens ?? 0
+      cacheReadInputTokens = r.usage?.cache_read_input_tokens ?? 0
+      cacheCreation5mTokens = r.usage?.cache_creation?.ephemeral_5m_input_tokens ?? 0
+      cacheCreation1hTokens = r.usage?.cache_creation?.ephemeral_1h_input_tokens ?? 0
       sessionId = sessionId ?? r.session_id ?? null
     }
   }
 
-  return { responseText, sessionId, inputTokens, outputTokens }
+  return {
+    responseText,
+    sessionId,
+    inputTokens,
+    outputTokens,
+    cacheCreationInputTokens,
+    cacheReadInputTokens,
+    cacheCreation5mTokens,
+    cacheCreation1hTokens,
+  }
 }
 
 /**
@@ -390,9 +476,10 @@ function logExecution(
     durationMs: number
     costUsd: number
     brainEnrichment: BrainEnrichmentResultMeta
+    cacheMetrics: CacheMetricsMeta
   },
 ): void {
-  const { canonicalSlug, input, skills, drain, modelId, durationMs, costUsd, brainEnrichment } = args
+  const { canonicalSlug, input, skills, drain, modelId, durationMs, costUsd, brainEnrichment, cacheMetrics } = args
   const row = {
     agent_name: canonicalSlug,
     action: 'agent_sdk_run',
@@ -415,6 +502,13 @@ function logExecution(
       brain_query_ms: brainEnrichment.brain_query_ms,
       brain_cost_usd: brainEnrichment.brain_cost_usd,
       ...(brainEnrichment.brain_error ? { brain_error: brainEnrichment.brain_error } : {}),
+      // Sprint 8 cache observability · SDK auto-caches with 1h TTL default
+      // (per upstream issue #188). Zeros are normal for first-time calls
+      // OR when prefix is under the model's 1024-token cache threshold.
+      cache_creation_input_tokens: cacheMetrics.cache_creation_input_tokens,
+      cache_read_input_tokens: cacheMetrics.cache_read_input_tokens,
+      cache_creation_5m_tokens: cacheMetrics.cache_creation_5m_tokens,
+      cache_creation_1h_tokens: cacheMetrics.cache_creation_1h_tokens,
     },
     status: 'success',
     duration_ms: durationMs,
@@ -491,7 +585,14 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   }
 
   const durationMs = Date.now() - startedAt
-  const costUsd = costFor(modelId, drain.inputTokens, drain.outputTokens)
+  const costUsd = costFor(
+    modelId,
+    drain.inputTokens,
+    drain.outputTokens,
+    drain.cacheReadInputTokens,
+    drain.cacheCreation5mTokens,
+    drain.cacheCreation1hTokens,
+  )
 
   const brainEnrichmentMeta: BrainEnrichmentResultMeta = {
     brain_hit: enrichment.brain_hit,
@@ -501,10 +602,18 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     ...(enrichment.error ? { brain_error: enrichment.error } : {}),
   }
 
-  // 5. Best-effort log · include brain enrichment markers for runtime audit.
+  const cacheMetricsMeta: CacheMetricsMeta = {
+    cache_creation_input_tokens: drain.cacheCreationInputTokens,
+    cache_read_input_tokens: drain.cacheReadInputTokens,
+    cache_creation_5m_tokens: drain.cacheCreation5mTokens,
+    cache_creation_1h_tokens: drain.cacheCreation1hTokens,
+  }
+
+  // 5. Best-effort log · include brain enrichment + cache markers.
   logExecution(supabase, {
     canonicalSlug, input, skills, drain, modelId, durationMs, costUsd,
     brainEnrichment: brainEnrichmentMeta,
+    cacheMetrics: cacheMetricsMeta,
   })
 
   return {
@@ -517,6 +626,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     durationMs,
     model: modelId,
     brainEnrichment: brainEnrichmentMeta,
+    cacheMetrics: cacheMetricsMeta,
   }
 }
 
@@ -535,6 +645,12 @@ function fail(message: string, startedAt: number): AgentRunResult {
       brain_chunks_count: 0,
       brain_query_ms: 0,
       brain_cost_usd: 0,
+    },
+    cacheMetrics: {
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+      cache_creation_5m_tokens: 0,
+      cache_creation_1h_tokens: 0,
     },
     error: message,
   }

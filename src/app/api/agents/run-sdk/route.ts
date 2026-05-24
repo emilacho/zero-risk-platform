@@ -67,6 +67,19 @@ interface BrainEnrichmentProxyMeta {
   brain_error?: string
 }
 
+/**
+ * Sprint 8 · prompt-cache metadata returned by Railway runner. The Agent
+ * SDK auto-caches with a 1h TTL default (per upstream issue #188) · these
+ * counters surface the hit/write split so cost rollups reflect the 90%
+ * cache-read discount.
+ */
+interface CacheMetricsProxyMeta {
+  cache_creation_input_tokens: number
+  cache_read_input_tokens: number
+  cache_creation_5m_tokens: number
+  cache_creation_1h_tokens: number
+}
+
 interface AgentRunResultProxy {
   success: boolean
   response: string
@@ -77,6 +90,7 @@ interface AgentRunResultProxy {
   durationMs: number
   model: string
   brainEnrichment?: BrainEnrichmentProxyMeta
+  cacheMetrics?: CacheMetricsProxyMeta
   error?: string
 }
 
@@ -310,6 +324,21 @@ export async function POST(request: Request) {
             : {}),
         }
       : undefined
+    const rawCache = (result as { cacheMetrics?: unknown }).cacheMetrics as
+      | Record<string, unknown>
+      | undefined
+    const cacheMetrics: CacheMetricsProxyMeta | undefined = rawCache && typeof rawCache === 'object'
+      ? {
+          cache_creation_input_tokens:
+            typeof rawCache.cache_creation_input_tokens === 'number' ? rawCache.cache_creation_input_tokens : 0,
+          cache_read_input_tokens:
+            typeof rawCache.cache_read_input_tokens === 'number' ? rawCache.cache_read_input_tokens : 0,
+          cache_creation_5m_tokens:
+            typeof rawCache.cache_creation_5m_tokens === 'number' ? rawCache.cache_creation_5m_tokens : 0,
+          cache_creation_1h_tokens:
+            typeof rawCache.cache_creation_1h_tokens === 'number' ? rawCache.cache_creation_1h_tokens : 0,
+        }
+      : undefined
     result = {
       success: !!result.success,
       response: typeof result.response === 'string' ? result.response : '',
@@ -320,6 +349,7 @@ export async function POST(request: Request) {
       durationMs: typeof result.durationMs === 'number' ? result.durationMs : 0,
       model: typeof result.model === 'string' ? result.model : 'unknown',
       brainEnrichment,
+      cacheMetrics,
       error: result.error,
     }
 
@@ -350,6 +380,7 @@ export async function POST(request: Request) {
       cost_usd: result.costUsd,
       duration_ms: result.durationMs,
       ...(result.brainEnrichment ? { brain_enrichment: result.brainEnrichment } : {}),
+      ...(result.cacheMetrics ? { cache_metrics: result.cacheMetrics } : {}),
     }
 
     // DUAL REVIEWER MIDDLEWARE — mirrors /api/agents/run lines 478-503 so workflows
