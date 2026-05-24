@@ -44,6 +44,7 @@ const fetchMock = vi.fn()
 beforeEach(() => {
   vi.clearAllMocks()
   process.env.MESHY_API_KEY = 'msy_test_key'
+  process.env.INTERNAL_API_KEY = 'test-internal-key'
   global.fetch = fetchMock as unknown as typeof fetch
   // Reset Supabase mock to happy defaults
   supabaseMock.storage.upload.mockResolvedValue({ data: { path: 'naufrago/3d-models/12345.glb' }, error: null })
@@ -64,7 +65,10 @@ async function loadRoute() {
 function jsonRequest(body: Record<string, unknown>): Request {
   return new Request('http://localhost/api/3d/generate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': 'test-internal-key', // Sprint 8 D5 · checkInternalKey now gates this route
+    },
     body: JSON.stringify(body),
   })
 }

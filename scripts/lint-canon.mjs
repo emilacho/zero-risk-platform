@@ -150,17 +150,29 @@ async function checkEndpointAuth() {
   for (const file of routeFiles) {
     if (!file.endsWith("route.ts")) continue
     const rel = relative(join(ROOT, "src", "app", "api"), file)
+    // Normalize Windows backslashes to forward slashes BEFORE applying the
+    // route-suffix strip + PUBLIC_ENDPOINTS lookup · otherwise on Windows
+    // every urlPath ends with `\route.ts` and the allowlist check misses ·
+    // producing false-positive endpoint-auth-missing errors. CI (Linux) was
+    // immune so this surfaced only on local runs.
+    const relPosix = rel.replace(/\\/g, "/")
     const urlPath =
       "/api/" +
-      rel
+      relPosix
         .replace(/\/route\.ts$/, "")
         .replace(/\[[^\]]+\]/g, "[param]")
     if (PUBLIC_ENDPOINTS.has(urlPath.replace(/\/\[param\]/g, ""))) continue
     const content = await readFile(file, "utf8")
     const hasPost = /^export\s+(?:async\s+)?function\s+POST/m.test(content)
     if (!hasPost) continue
+    // Auth detection · direct call OR delegation to a shared handler that
+    // enforces auth by default (handleReadStub · handleStub · handleStubPost
+    // all call checkInternalKey internally · see src/lib/read-stub-handler.ts
+    // + src/lib/stub-handler.ts). Recognizing those names eliminates ~22
+    // false-positive endpoint-auth-missing errors that were really 3-line
+    // wrappers around an auth-gated shared helper.
     const hasAuth =
-      /requireInternalKey|checkInternalKey|verifyTallyWebhook|verifyMetaSignature|verifyWebhookSignature|ADMIN_SECRET|pipeline_secret|verifySignature/i.test(
+      /requireInternalKey|checkInternalKey|requireAdmin|verifyTallyWebhook|verifyMetaSignature|verifyWebhookSignature|ADMIN_SECRET|pipeline_secret|PIPELINE_CALLBACK_SECRET|SUPABASE_SERVICE_ROLE_KEY|verifySignature|handleReadStub|handleStubPost|handleStub\b|buildDeprecatedResponse/i.test(
         content,
       )
     if (!hasAuth) {

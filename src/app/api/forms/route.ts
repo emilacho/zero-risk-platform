@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -47,6 +48,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Auth · requireAdmin is stricter than checkInternalKey (admin session) ·
+  // lint-canon recognizes both markers post Sprint 8 D5.
   const auth = await requireAdmin(request)
   if (!auth.ok) return auth.response
 

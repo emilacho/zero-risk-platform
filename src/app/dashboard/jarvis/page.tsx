@@ -2,14 +2,14 @@ import { Header } from '@/components/dashboard/Header'
 import { TaskRunner } from '@/components/command-center/TaskRunner'
 
 export const metadata = {
-  title: 'JARVIS — Zero Risk Command Center',
+  title: 'Mission Control — Zero Risk Command Center',
 }
 
 export default function JarvisPage() {
   return (
     <>
       <Header
-        title="JARVIS — Command Center"
+        title="Mission Control — Command Center"
         subtitle="Ejecuta tareas de la agencia agéntica en lenguaje natural"
       />
 

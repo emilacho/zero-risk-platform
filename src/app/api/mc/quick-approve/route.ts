@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 const MASTER = process.env.MC_MASTER_PASSWORD || 'zerorisk2026'
 
@@ -7,6 +8,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const auth = checkInternalKey(req)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   return handle(req)
 }
 

@@ -37,12 +37,13 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Lint canon (Sprint 7 Track C3 · warnings advisory · errors block)
+      - name: Lint canon (Sprint 7 Track C3 · strict post Sprint 8 D5)
         # Exit 0 · clean · Exit 1 · warnings only · Exit 2 · errors block CI
-        # Current baseline · 64 errors (pre-existing Track B1 scope · expected fail)
-        # · use `continue-on-error: true` until Track B1 cleanup lands
-        run: node scripts/lint-canon.mjs || true
-        continue-on-error: true
+        # Sprint 8 D5 cleanup landed 2026-05-23 · baseline 60 errors → 0
+        # (auth-missing fixes + lint-canon Windows path + handleStub/handleReadStub
+        # /requireAdmin/buildDeprecatedResponse markers). Remaining 13 warnings
+        # are deprecated-ref / naming-zr-shorthand (D6 sweep scope · NOT blocking).
+        run: node scripts/lint-canon.mjs
 
       - name: Test
         # TODO Sprint #5 followup #13: regenerate pnpm-lock.yaml on Linux to include @rolldown/binding-linux-x64-gnu native binding

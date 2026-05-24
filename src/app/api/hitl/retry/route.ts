@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
 import { validateObject } from '@/lib/input-validator'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 /**
  * POST /api/hitl/retry
@@ -21,6 +22,9 @@ import { validateObject } from '@/lib/input-validator'
  * }
  */
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   try {
     let _raw: unknown
   try {

@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
   { name: 'Inbox HITL', href: '/dashboard/inbox', icon: '📥' },
-  { name: 'JARVIS', href: '/dashboard/jarvis', icon: '🧠' },
+  { name: 'Mission Control', href: '/dashboard/jarvis', icon: '🧠' },
   { name: 'Campañas', href: '/dashboard/campaigns', icon: '📢' },
   { name: 'Leads', href: '/dashboard/leads', icon: '👥' },
   { name: 'Contenido', href: '/dashboard/content', icon: '📝' },
@@ -24,8 +24,8 @@ export function Sidebar() {
     <aside className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-zero-risk-primary">
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 px-6 border-b border-white/10">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zero-risk-highlight text-white font-bold text-sm">
-          ZR
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zero-risk-highlight text-white font-bold text-[10px]">
+          Zero Risk
         </div>
         <div>
           <h1 className="text-sm font-bold text-white">Zero Risk</h1>
