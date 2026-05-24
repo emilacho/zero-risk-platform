@@ -22,6 +22,7 @@ import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent
 import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
 import { buildMcpServers } from './agent-mcp-registry.js'
+import { insertWithRetry } from './agents-log-retry.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
 // `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
@@ -357,13 +358,26 @@ async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDra
 }
 
 /**
- * Best-effort fire-and-forget log to agents_log. Never throws.
+ * Persist execution record to `agents_log` with 3-retry exponential backoff.
  *
- * Sprint 8B B3 · output JSONB now includes brain enrichment markers
- * (brain_hit, brain_chunks_count, brain_query_ms, brain_cost_usd) so the
- * Railway runtime path produces visible runtime evidence of Pilar 2 RAG.
- * Sister track CC#1 B2 patches the swallowed-error fire-and-forget pattern;
- * once that lands, every SDK invocation produces an audit row here.
+ * Combined fix · CC#1 B2 (retry · explicit error handling · log visibility)
+ * + CC#2 B3 (brain enrichment markers in output JSONB · client_id in input).
+ *
+ * Previously the `.then(() => {})` with no `.catch()` swallowed both PostgREST
+ * 4xx/5xx via `data.error` AND network rejections · `agents_log` had 0 rows
+ * total since deploy despite many SDK runs. Failures are now logged to
+ * console with attempt number + reason · final unrecoverable failure logged
+ * as ERROR with full row preview for post-mortem replay.
+ *
+ * The output JSONB carries brain enrichment markers (brain_hit ·
+ * brain_chunks_count · brain_query_ms · brain_cost_usd · optional
+ * brain_error) so the Railway runtime path produces visible runtime evidence
+ * of Pilar 2 RAG · matching the agent_invocations.metadata shape the Vercel
+ * proxy persists.
+ *
+ * Still fire-and-forget from the caller's perspective (returns void · the
+ * actual work happens in an unawaited IIFE inside insertWithRetry) so SDK
+ * run latency is unaffected.
  */
 function logExecution(
   supabase: SupabaseAdmin,
@@ -379,36 +393,35 @@ function logExecution(
   },
 ): void {
   const { canonicalSlug, input, skills, drain, modelId, durationMs, costUsd, brainEnrichment } = args
-  supabase
-    .from('agents_log')
-    .insert({
-      agent_name: canonicalSlug,
-      action: 'agent_sdk_run',
-      input: {
-        task: input.task.substring(0, 200),
-        pipeline_id: input.pipelineId,
-        step_name: input.stepName,
-        resumed: !!input.resumeSessionId,
-        skills_loaded: skills.map(s => s.name),
-        client_id: input.clientId ?? null,
-      },
-      output: {
-        response_length: drain.responseText.length,
-        model: modelId,
-        input_tokens: drain.inputTokens,
-        output_tokens: drain.outputTokens,
-        session_id: drain.sessionId,
-        brain_hit: brainEnrichment.brain_hit,
-        brain_chunks_count: brainEnrichment.brain_chunks_count,
-        brain_query_ms: brainEnrichment.brain_query_ms,
-        brain_cost_usd: brainEnrichment.brain_cost_usd,
-        ...(brainEnrichment.brain_error ? { brain_error: brainEnrichment.brain_error } : {}),
-      },
-      status: 'success',
-      duration_ms: durationMs,
-      cost: costUsd,
-    })
-    .then(() => { /* best-effort log */ })
+  const row = {
+    agent_name: canonicalSlug,
+    action: 'agent_sdk_run',
+    input: {
+      task: input.task.substring(0, 200),
+      pipeline_id: input.pipelineId,
+      step_name: input.stepName,
+      resumed: !!input.resumeSessionId,
+      skills_loaded: skills.map(s => s.name),
+      client_id: input.clientId ?? null,
+    },
+    output: {
+      response_length: drain.responseText.length,
+      model: modelId,
+      input_tokens: drain.inputTokens,
+      output_tokens: drain.outputTokens,
+      session_id: drain.sessionId,
+      brain_hit: brainEnrichment.brain_hit,
+      brain_chunks_count: brainEnrichment.brain_chunks_count,
+      brain_query_ms: brainEnrichment.brain_query_ms,
+      brain_cost_usd: brainEnrichment.brain_cost_usd,
+      ...(brainEnrichment.brain_error ? { brain_error: brainEnrichment.brain_error } : {}),
+    },
+    status: 'success',
+    duration_ms: durationMs,
+    cost: costUsd,
+  }
+  // Unawaited · caller stays fire-and-forget · helper logs all attempt failures.
+  void insertWithRetry(supabase, row, canonicalSlug)
 }
 
 // ---------- Public entry point ----------
