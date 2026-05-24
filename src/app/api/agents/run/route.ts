@@ -461,6 +461,12 @@ export async function POST(request: Request) {
         brain_cost_usd: number
         brain_error?: string
       }
+      cacheMetrics?: {
+        cache_creation_input_tokens: number
+        cache_read_input_tokens: number
+        cache_creation_5m_tokens: number
+        cache_creation_1h_tokens: number
+      }
       error?: string
     }
     const railwayData = (await railwayResp.json()) as RailwayResult
@@ -478,6 +484,7 @@ export async function POST(request: Request) {
     const durationMs = railwayData.durationMs ?? Date.now() - startTime
     const modelId = railwayData.model ?? 'unknown'
     const brainEnrichmentMeta = railwayData.brainEnrichment
+    const cacheMetricsMeta = railwayData.cacheMetrics
     const endedAt = new Date()
     const startedAt = new Date(startTime)
     // Sprint 8B B4 · system prompt construction moved to Railway · we no
@@ -566,8 +573,11 @@ export async function POST(request: Request) {
         cost_usd: costUsd,
         tokens_input: inputTokens,
         tokens_output: outputTokens,
-        tokens_cache_read: (claudeData?.usage?.cache_read_input_tokens as number) || 0,
-        tokens_cache_creation: (claudeData?.usage?.cache_creation_input_tokens as number) || 0,
+        // Sprint 8 cache observability · top-level columns mirror the JSONB
+        // metadata. Source · Railway response cacheMetrics (post Sprint 8B B4
+        // proxy refactor · claudeData stub is no longer populated locally).
+        tokens_cache_read: cacheMetricsMeta?.cache_read_input_tokens ?? 0,
+        tokens_cache_creation: cacheMetricsMeta?.cache_creation_input_tokens ?? 0,
         num_turns: 1,
         status: 'completed',
         exit_code: 0,
@@ -601,6 +611,19 @@ export async function POST(request: Request) {
                 ...(brainEnrichmentMeta.brain_error
                   ? { brain_error: brainEnrichmentMeta.brain_error }
                   : {}),
+              }
+            : {}),
+          // Sprint 8 prompt-caching observability · Agent SDK auto-caches
+          // (per upstream #188 · 1h TTL default) · counters surface the
+          // hit/write split so cost rollups reflect the 90% cache-read
+          // discount. Zero values when SDK didn't cache (first-time call,
+          // prefix < 1024 tokens, or smoke-mock path early-return).
+          ...(cacheMetricsMeta
+            ? {
+                cache_creation_input_tokens: cacheMetricsMeta.cache_creation_input_tokens,
+                cache_read_input_tokens: cacheMetricsMeta.cache_read_input_tokens,
+                cache_creation_5m_tokens: cacheMetricsMeta.cache_creation_5m_tokens,
+                cache_creation_1h_tokens: cacheMetricsMeta.cache_creation_1h_tokens,
               }
             : {}),
         },
