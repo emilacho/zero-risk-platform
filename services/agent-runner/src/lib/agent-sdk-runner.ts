@@ -23,6 +23,7 @@ import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
 import { buildMcpServers } from './agent-mcp-registry.js'
 import { insertWithRetry } from './agents-log-retry.js'
+import { callSdkWithRetry } from './sdk-call-retry.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
 // `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
@@ -575,11 +576,25 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   const modelId = MODEL_MAP[modelKey] ?? MODEL_MAP['claude-sonnet']
   const options = buildSdkOptions(modelId, systemPrompt, input)
 
-  // 4. Execute SDK query + drain stream.
+  // 4. Execute SDK query + drain stream · Sprint 8D Fase 1 wrap with retry
+  //    for Anthropic capacity transients ("service was not able to process",
+  //    "overloaded", 5xx, ECONNRESET, etc). Non-transient errors pass through
+  //    immediately. See sdk-call-retry.ts for the full transient pattern list.
   let drain: StreamDrainResult
   try {
-    const stream = (query as unknown as QueryFn)({ prompt: input.task, options })
-    drain = await drainStream(stream)
+    const wrapped = await callSdkWithRetry(
+      async () => {
+        const stream = (query as unknown as QueryFn)({ prompt: input.task, options })
+        return await drainStream(stream)
+      },
+      { canonicalSlug },
+    )
+    drain = wrapped.result
+    if (wrapped.retry.retried) {
+      console.log(
+        `[sdk-call-retry] OK ${canonicalSlug} · succeeded on attempt ${wrapped.retry.attempts}/3 after ${wrapped.retry.transientErrors.length} transient(s)`,
+      )
+    }
   } catch (err) {
     return fail(err instanceof Error ? err.message : 'SDK error', startedAt)
   }
