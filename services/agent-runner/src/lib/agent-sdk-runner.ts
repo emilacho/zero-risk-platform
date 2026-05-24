@@ -22,6 +22,7 @@ import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent
 import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
 import { buildMcpServers } from './agent-mcp-registry.js'
+import { insertWithRetry } from './agents-log-retry.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
 // `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
@@ -338,7 +339,18 @@ async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDra
 }
 
 /**
- * Best-effort fire-and-forget log to agents_log. Never throws.
+ * Persist execution record to `agents_log` with 3-retry exponential backoff.
+ * Sprint 8B B2 · replaces previous silent fire-and-forget that swallowed
+ * Supabase errors (the `.then(() => {})` with no `.catch()` discarded both
+ * PostgREST 4xx/5xx via `data.error` AND network rejections). All failures
+ * are now logged to console with the attempt number + reason · final
+ * unrecoverable failure logged as ERROR with full row payload preview for
+ * post-mortem replay.
+ *
+ * Still fire-and-forget from the caller's perspective (returns void · the
+ * actual work happens in an unawaited async IIFE) so SDK run latency is
+ * unaffected · but a failed insert is now visible in Railway logs instead
+ * of disappearing.
  */
 function logExecution(
   supabase: SupabaseAdmin,
@@ -353,30 +365,29 @@ function logExecution(
   },
 ): void {
   const { canonicalSlug, input, skills, drain, modelId, durationMs, costUsd } = args
-  supabase
-    .from('agents_log')
-    .insert({
-      agent_name: canonicalSlug,
-      action: 'agent_sdk_run',
-      input: {
-        task: input.task.substring(0, 200),
-        pipeline_id: input.pipelineId,
-        step_name: input.stepName,
-        resumed: !!input.resumeSessionId,
-        skills_loaded: skills.map(s => s.name),
-      },
-      output: {
-        response_length: drain.responseText.length,
-        model: modelId,
-        input_tokens: drain.inputTokens,
-        output_tokens: drain.outputTokens,
-        session_id: drain.sessionId,
-      },
-      status: 'success',
-      duration_ms: durationMs,
-      cost: costUsd,
-    })
-    .then(() => { /* best-effort log */ })
+  const row = {
+    agent_name: canonicalSlug,
+    action: 'agent_sdk_run',
+    input: {
+      task: input.task.substring(0, 200),
+      pipeline_id: input.pipelineId,
+      step_name: input.stepName,
+      resumed: !!input.resumeSessionId,
+      skills_loaded: skills.map(s => s.name),
+    },
+    output: {
+      response_length: drain.responseText.length,
+      model: modelId,
+      input_tokens: drain.inputTokens,
+      output_tokens: drain.outputTokens,
+      session_id: drain.sessionId,
+    },
+    status: 'success',
+    duration_ms: durationMs,
+    cost: costUsd,
+  }
+  // Unawaited IIFE · caller stays fire-and-forget · internal retry logs all failures.
+  void insertWithRetry(supabase, row, canonicalSlug)
 }
 
 // ---------- Public entry point ----------
