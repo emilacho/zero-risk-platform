@@ -4,7 +4,7 @@ import { PipelineOrchestrator } from '@/lib/pipeline-orchestrator'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { validateObject } from '@/lib/input-validator'
-import { checkInternalKey } from '@/lib/internal-auth'
+import { checkInternalOrAdmin } from '@/lib/internal-auth'
 
 /**
  * POST /api/hitl/resolve
@@ -21,7 +21,10 @@ import { checkInternalKey } from '@/lib/internal-auth'
  * Also accepts via query param: ?step_id=xxx for Slack webhook compatibility
  */
 export async function POST(request: Request) {
-  const auth = checkInternalKey(request)
+  // Dual-auth · n8n HITL workflow uses x-api-key · dashboard inbox UI
+  // uses Supabase admin session (cookie middleware · src/middleware.ts).
+  // Accept either. Audit · zr-vault/raw/qa/2026-05-23-19-endpoints-internal-audit.md.
+  const auth = await checkInternalOrAdmin(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
 
   try {
