@@ -20,6 +20,7 @@ import { ingestDiscoveryToBrain } from './web-discovery-brain-ingest'
 import { BrandAnalyzer } from './brand-analyzer'
 import { MissionControlBridge } from './mc-bridge'
 import { chunksFromBrandBook, persistChunks } from './brain/persist-chunks'
+import { persistContactsFromDiscovery } from './crm/persist-contacts'
 
 // ============================================================
 // Types
@@ -178,6 +179,35 @@ export class OnboardingOrchestrator {
         const msg = err instanceof Error ? err.message : 'unknown'
         console.warn('[onboarding-orchestrator] Brain ingest hook failed (non-fatal):', msg)
       })
+
+      // Sprint 8 A5 · persist scraped contactInfo to canonical `contacts`
+      // table (migration 202605240700_crm_contacts_canonical.sql). Pre-A5
+      // this data only lived as JSONB in onboarding_sessions.scrape_metadata
+      // · now also lands in canonical CRM rows for sales-side consumption.
+      // Idempotent upsert · re-runs of the same scrape are no-ops via the
+      // (client_id, kind, value) unique index.
+      void persistContactsFromDiscovery(
+        this.supabase,
+        clientId,
+        clientData.contactInfo,
+        'web_discovery',
+        { onboarding_id: onboardingId, website_url: input.websiteUrl },
+      )
+        .then((res) => {
+          if (res.error) {
+            console.warn(
+              `[onboarding-orchestrator] contacts persist failed (non-fatal): ${res.error}`,
+            )
+          } else if (res.attempted > 0) {
+            console.log(
+              `[onboarding-orchestrator] contacts persisted · ${res.inserted_or_skipped}/${res.attempted} for ${input.companyName} (client=${clientId})`,
+            )
+          }
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : 'unknown'
+          console.warn('[onboarding-orchestrator] contacts persist hook crashed (non-fatal):', msg)
+        })
 
       // Step 4: Brand Analysis — Claude interprets scraped data
       const analyzer = new BrandAnalyzer(this.supabase)

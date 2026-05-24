@@ -14,6 +14,17 @@ interface GenerateContentInput {
   tone?: string | null
   channels?: string[]
   campaign_id?: string | null
+  // Sprint 8 A3 · explicit attribution field · documented contract for
+  // callers. Resolver also reads from raw body via `resolveClientIdFromBody`
+  // so legacy callers nesting under metadata/client/extra also work · this
+  // declared field is the canonical path going forward.
+  client_id?: string | null
+  // Sprint 8 A3 · FK fields for late-binding enricher. Callers (n8n workflows)
+  // may have these in their dispatch context · forwarding them here ensures
+  // the Camino III reviewer sub-rows can recover client_id via the chain.
+  workflow_execution_id?: string | null
+  journey_id?: string | null
+  task_id?: string | null
 }
 
 // POST /api/agents/generate-content

@@ -330,7 +330,14 @@ async function invokeReviewer(params: {
         // Without this, Camino III sub-invocations land NULL and cost-by-
         // client attribution undercounts by ~75% per primary fire.
         client_id: params.clientId,
+        // Sprint 8 A3 · forward FK fields from parent context so the route's
+        // late-binding enricher (`enrichClientIdFromContext`) can chain off
+        // workflow_execution_id / journey_id / task_id / session_id when
+        // params.clientId arrives null (e.g. parent endpoint `/api/agents/
+        // generate-content` didn't write its own agent_invocations row and
+        // resolveClientIdFromBody returned null upstream).
         context: {
+          ...params.context,
           client_id: params.clientId ?? params.context?.client_id,
           rag_query: ragQueryFor(params.reviewerType, params.task),
           rag_match_count: 5,
