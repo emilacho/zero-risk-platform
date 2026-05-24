@@ -80,9 +80,12 @@ async function fetchN8n() {
 }
 
 async function fetchAgentInvocations() {
-  // Last 30 days
+  // Last 30 days · use `agent_id` column (canonical slug) NOT `agent_name`
+  // which stores the human-readable display_name (e.g. "Reporting Agent").
+  // Confirmed Sprint 8 D9 audit 2026-05-23 · canonical column for MANIFEST
+  // slug matching is `agent_id`.
   const since = new Date(Date.now() - 30 * 86400000).toISOString()
-  const url = `${SUPABASE_URL}/rest/v1/agent_invocations?select=agent_name&created_at=gte.${since}`
+  const url = `${SUPABASE_URL}/rest/v1/agent_invocations?select=agent_id&created_at=gte.${since}`
   const res = await fetch(url, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
   })
@@ -90,11 +93,23 @@ async function fetchAgentInvocations() {
   return res.json()
 }
 
+// Two-form invocation detection · same fix as PR #83 sprint6-wire-dormant-agents.mjs ·
+//   Form A · JSON-serialized body  · "agent": "slug"
+//   Form B · JS template literal   · agent: "slug"  (no quotes around the key)
+// buildAgentRunNode emits Form B inside jsonBody (={{ JSON.stringify({ agent: "<slug>", ... }) }}).
+// The original single-regex over JSON.stringify(wf) missed Form B because the
+// serialized template string escapes value quotes but the `agent` key is unquoted JS literal.
 function extractInvocations(wf) {
   const body = JSON.stringify(wf)
   const slugs = new Set()
-  for (const m of body.matchAll(/\\"agent\\"\s*:\s*\\"([a-zA-Z][a-zA-Z0-9_-]+)\\"/g)) {
-    slugs.add(ALIASES[m[1]] ?? m[1])
+  const patterns = [
+    /\\"agent\\"\s*:\s*\\"([a-zA-Z][a-zA-Z0-9_-]+)\\"/g, // Form A · JSON
+    /\bagent\s*:\s*\\"([a-zA-Z][a-zA-Z0-9_-]+)\\"/g,      // Form B · JS template
+  ]
+  for (const re of patterns) {
+    for (const m of body.matchAll(re)) {
+      slugs.add(ALIASES[m[1]] ?? m[1])
+    }
   }
   return slugs
 }
@@ -116,10 +131,10 @@ async function main() {
     }
   }
 
-  // Build per-slug invocation count last 30 days
+  // Build per-slug invocation count last 30 days · column renamed agent_name → agent_id
   const supaMap = new Map()
   for (const row of inv) {
-    const s = ALIASES[row.agent_name] ?? row.agent_name
+    const s = ALIASES[row.agent_id] ?? row.agent_id
     supaMap.set(s, (supaMap.get(s) ?? 0) + 1)
   }
 
