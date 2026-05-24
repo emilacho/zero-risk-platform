@@ -4,6 +4,7 @@ import { sanitizeString } from '@/lib/validation'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { capture } from '@/lib/posthog'
 import { randomUUID } from 'node:crypto'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 // Sprint #6 Brazo Meshy · 3D model generation wrapper
 //
@@ -70,6 +71,9 @@ interface MeshyPollResponse {
 }
 
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   let body: Record<string, unknown>
   try {
     body = (await request.json()) as Record<string, unknown>

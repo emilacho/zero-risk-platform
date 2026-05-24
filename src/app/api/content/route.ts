@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 // GET /api/content — List all content
 export async function GET() {
@@ -15,6 +16,9 @@ export async function GET() {
 
 // POST /api/content — Create content
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   const supabase = getSupabase()
   let body: Record<string, unknown>
   try {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString, isValidEmail, isValidUUID } from '@/lib/validation'
 import { validateObject } from '@/lib/input-validator'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 // POST /api/n8n/lead-pipeline
 // Endpoint que n8n llama para procesar un lead completo
@@ -17,6 +18,9 @@ function validateN8nAuth(request: Request): boolean {
 }
 
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   // Verify n8n authorization
   if (!validateN8nAuth(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

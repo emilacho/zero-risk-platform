@@ -8,6 +8,7 @@ import { resolveAgentSlug, isCanonicalSlug } from '@/lib/agent-alias-map'
 import { capture } from '@/lib/posthog'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { enrichClientIdFromContext } from '@/lib/client-id-enricher'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -51,6 +52,9 @@ function computeCostUsd(modelId: string, inputTokens: number, outputTokens: numb
 }
 
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   const startTime = Date.now()
 
   try {

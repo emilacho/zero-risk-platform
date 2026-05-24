@@ -37,3 +37,35 @@ export function requireInternalKey(handler: RouteHandler): RouteHandler {
     return handler(request, ctx)
   }
 }
+
+/**
+ * Dual-auth · accepts EITHER `x-api-key: $INTERNAL_API_KEY` (n8n · Slack
+ * webhooks · CLI scripts) OR a valid admin Supabase session (dashboard
+ * UI fetches that ride the existing cookie-based middleware).
+ *
+ * Sprint 8 D5 audit · used by routes with mixed consumers like
+ * `/api/hitl/resolve` (called by n8n HITL workflow AND by the dashboard
+ * inbox "Approve/Reject" button). Picking only one auth path would
+ * either expose the route or break the UI.
+ *
+ * Returns `{ ok: true, via: 'internal' | 'admin' }` on success. Always
+ * tries `x-api-key` first (synchronous · zero DB roundtrip) so n8n hot
+ * paths don't pay the admin-session lookup cost.
+ */
+export async function checkInternalOrAdmin(
+  request: Request,
+): Promise<{ ok: true; via: 'internal' | 'admin' } | { ok: false; reason: string }> {
+  const internalCheck = checkInternalKey(request)
+  if (internalCheck.ok) return { ok: true, via: 'internal' }
+  // Lazy-import admin-auth to avoid pulling Supabase SSR + cookies wiring
+  // into every route that only needs the cheap x-api-key path.
+  try {
+    const { requireAdmin } = await import('./admin-auth')
+    const admin = await requireAdmin(request)
+    if (admin.ok) return { ok: true, via: 'admin' }
+    return { ok: false, reason: 'internal-key missing · admin-session denied' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'unknown'
+    return { ok: false, reason: `internal-key missing · admin auth threw · ${msg}` }
+  }
+}

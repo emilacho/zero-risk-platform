@@ -19,6 +19,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Auth · NO check needed · 410 Gone deprecated endpoint (Stack V4 canon).
   return buildDeprecatedResponse({
     endpoint: "ghl/relationships",
     replacement: null,

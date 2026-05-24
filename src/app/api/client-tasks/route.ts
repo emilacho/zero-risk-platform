@@ -22,6 +22,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -39,6 +40,9 @@ interface TaskBody {
 }
 
 export async function POST(req: Request) {
+  const auth = checkInternalKey(req)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   let body: TaskBody
   try {
     body = (await req.json()) as TaskBody

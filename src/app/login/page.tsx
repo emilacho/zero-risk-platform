@@ -43,8 +43,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="mb-8 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-zero-risk-highlight text-white font-bold text-xl shadow-lg">
-            ZR
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-zero-risk-highlight text-white font-bold text-[11px] shadow-lg">
+            Zero Risk
           </div>
           <h1 className="mt-4 text-2xl font-bold text-white">Zero Risk</h1>
           <p className="mt-1 text-sm text-gray-400">Panel de Control</p>

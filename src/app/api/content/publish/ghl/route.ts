@@ -12,6 +12,8 @@
  *   - Calendar · /api/calendar/book (Cal.com self-host)
  */
 import { buildDeprecatedResponse } from '@/lib/deprecation/response'
+import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,6 +27,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+
   return buildDeprecatedResponse({
     endpoint: 'content/publish/ghl',
     replacement: '/api/email/send · /api/sms/send · /api/whatsapp/send',
