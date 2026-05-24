@@ -36,7 +36,12 @@ function isAuthed(req: Request): boolean {
     console.error('[agent-runner] INTERNAL_API_KEY not set in service env — denying all requests')
     return false
   }
-  const provided = req.header('x-internal-auth')
+  // Sprint 8D Fase 1 · accept both x-internal-auth (Vercel proxy header)
+  // and x-api-key (n8n direct caller header) so n8n can bypass Vercel for
+  // long-running LLM steps that exceed Vercel's 300s function timeout. Both
+  // headers carry the same INTERNAL_API_KEY secret · comparison is
+  // identical · only the header name differs by caller convention.
+  const provided = req.header('x-internal-auth') ?? req.header('x-api-key')
   return typeof provided === 'string' && provided === INTERNAL_API_KEY
 }
 
@@ -60,18 +65,46 @@ app.get('/health', (_req, res) => {
   })
 })
 
+// Sprint 8D Fase 1 · body accepts both camelCase (Vercel proxy convention ·
+// pre-canon) and snake_case (n8n direct caller convention · canon post Vercel
+// proxy Sprint 8B B4). Each field has both accessor paths · whichever is
+// present wins · camelCase preferred when both present (defensive · old
+// Vercel proxy callers stay byte-for-byte compatible).
 interface RunSdkBody {
   agentName?: unknown
+  agent?: unknown
+  agent_name?: unknown
   task?: unknown
   resumeSessionId?: unknown
+  resume_session_id?: unknown
   clientId?: unknown
+  client_id?: unknown
   pipelineId?: unknown
+  pipeline_id?: unknown
   stepName?: unknown
+  step_name?: unknown
   extra?: unknown
 }
 
 function isStringOrNullable(v: unknown): v is string | null | undefined {
   return v === null || v === undefined || typeof v === 'string'
+}
+
+/** Pick first string-valued candidate from a list (canon-aware aliasing). */
+function pickString(...candidates: unknown[]): string | undefined {
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.length > 0) return c
+  }
+  return undefined
+}
+
+/** Pick first string|null candidate · undefined if all absent. */
+function pickStringOrNull(...candidates: unknown[]): string | null | undefined {
+  for (const c of candidates) {
+    if (c === null) return null
+    if (typeof c === 'string') return c
+  }
+  return undefined
 }
 
 app.post('/run-sdk', async (req: Request, res: Response) => {
@@ -86,31 +119,41 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     return
   }
 
+  // Sprint 8D Fase 1 · resolve camelCase/snake_case alias pairs into the
+  // canonical camelCase shape the SDK runner expects. n8n direct callers
+  // typically send snake_case + `agent` (the n8n template form); Vercel
+  // proxy historically sent camelCase. Both flow through this normalizer.
+  const agentName = pickString(body.agentName, body.agent, body.agent_name)
+  const resumeSessionId = pickStringOrNull(body.resumeSessionId, body.resume_session_id)
+  const clientId = pickStringOrNull(body.clientId, body.client_id)
+  const pipelineId = pickStringOrNull(body.pipelineId, body.pipeline_id)
+  const stepName = pickStringOrNull(body.stepName, body.step_name)
+
   // The Vercel proxy already validated via Zod and sanitized strings, but
   // re-check shape here so a misconfigured caller (e.g. a CLI smoke test)
   // gets a clear error instead of a runtime crash.
-  if (typeof body.agentName !== 'string' || body.agentName.length === 0) {
-    res.status(400).json({ success: false, error: 'agentName (string) required' })
+  if (typeof agentName !== 'string' || agentName.length === 0) {
+    res.status(400).json({ success: false, error: 'agentName (or agent | agent_name · string) required' })
     return
   }
   if (typeof body.task !== 'string' || body.task.length === 0) {
     res.status(400).json({ success: false, error: 'task (string) required' })
     return
   }
-  if (!isStringOrNullable(body.resumeSessionId)) {
-    res.status(400).json({ success: false, error: 'resumeSessionId must be string|null|undefined' })
+  if (!isStringOrNullable(resumeSessionId)) {
+    res.status(400).json({ success: false, error: 'resumeSessionId / resume_session_id must be string|null|undefined' })
     return
   }
-  if (!isStringOrNullable(body.clientId)) {
-    res.status(400).json({ success: false, error: 'clientId must be string|null|undefined' })
+  if (!isStringOrNullable(clientId)) {
+    res.status(400).json({ success: false, error: 'clientId / client_id must be string|null|undefined' })
     return
   }
-  if (!isStringOrNullable(body.pipelineId)) {
-    res.status(400).json({ success: false, error: 'pipelineId must be string|null|undefined' })
+  if (!isStringOrNullable(pipelineId)) {
+    res.status(400).json({ success: false, error: 'pipelineId / pipeline_id must be string|null|undefined' })
     return
   }
-  if (!isStringOrNullable(body.stepName)) {
-    res.status(400).json({ success: false, error: 'stepName must be string|null|undefined' })
+  if (!isStringOrNullable(stepName)) {
+    res.status(400).json({ success: false, error: 'stepName / step_name must be string|null|undefined' })
     return
   }
   if (
@@ -123,12 +166,12 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
   }
 
   const input: AgentRunInput = {
-    agentName: body.agentName,
+    agentName: agentName,
     task: body.task,
-    resumeSessionId: body.resumeSessionId ?? null,
-    clientId: body.clientId ?? null,
-    pipelineId: body.pipelineId ?? null,
-    stepName: body.stepName ?? null,
+    resumeSessionId: resumeSessionId ?? null,
+    clientId: clientId ?? null,
+    pipelineId: pipelineId ?? null,
+    stepName: stepName ?? null,
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }
 
