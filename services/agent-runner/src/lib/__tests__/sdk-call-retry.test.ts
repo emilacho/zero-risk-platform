@@ -70,15 +70,22 @@ describe("callSdkWithRetry", () => {
   })
 
   it("exhausts 3 retries on persistent transient · re-throws last error", async () => {
-    const fn = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("ECONNRESET first"))
-      .mockRejectedValueOnce(new Error("ECONNRESET second"))
-      .mockRejectedValueOnce(new Error("ECONNRESET third"))
+    // Use mockImplementation with sync throw to avoid vitest's unhandled-rejection
+    // detection on pre-queued mockRejectedValueOnce promises (CI flake fix).
+    const errors = ["ECONNRESET first", "ECONNRESET second", "ECONNRESET third"]
+    let call = 0
+    const fn = vi.fn(async () => {
+      const msg = errors[call++]
+      throw new Error(msg)
+    })
     const promise = callSdkWithRetry(fn, { canonicalSlug: "exhausted" })
+    // Catch upfront so vitest doesn't flag intermediate rejection-state as unhandled.
+    const settled = promise.catch((e) => e)
     await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[0])
     await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[1])
-    await expect(promise).rejects.toThrow("ECONNRESET third")
+    const finalErr = await settled
+    expect(finalErr).toBeInstanceOf(Error)
+    expect((finalErr as Error).message).toBe("ECONNRESET third")
     expect(fn).toHaveBeenCalledTimes(3)
     expect(console.warn).toHaveBeenCalledTimes(2)
     expect(console.error).toHaveBeenCalledTimes(1)
