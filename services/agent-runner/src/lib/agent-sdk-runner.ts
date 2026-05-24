@@ -418,9 +418,12 @@ function logExecution(
     },
     status: 'success',
     duration_ms: durationMs,
-    cost: costUsd,
+    cost_usd: costUsd,
   }
   // Unawaited · caller stays fire-and-forget · helper logs all attempt failures.
+  // Sprint 8 follow-up · CC#3 audit · field rename `cost` → `cost_usd` matches
+  // canonical agents_log schema · INSERT failed with PGRST204 silently for
+  // every SDK run since deploy · B2 fix surfaced via console.error post-merge.
   void insertWithRetry(supabase, row, canonicalSlug)
 }
 
