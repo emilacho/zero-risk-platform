@@ -24,6 +24,8 @@ import {
   bulletList,
   NotionConfigError,
 } from "@/lib/notion-client";
+import { createReporteRow, tryCreateDbRow } from "@/lib/notion-db-rows";
+import { randomUUID } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -101,6 +103,22 @@ export async function POST(request: Request) {
       /* never block */
     }
 
+    // Sprint 8C dual-mode · create row en Reportes DB · tipo=weekly
+    const reporteRow = await tryCreateDbRow(
+      () =>
+        createReporteRow({
+          report_id: randomUUID(),
+          titulo: body.title,
+          tipo: "weekly",
+          client_id: body.client_id,
+          periodo_start: body.week_starting,
+          generated_at: new Date().toISOString(),
+          status: "delivered",
+          notion_page_url: page.page_url,
+        }),
+      `create-weekly-report · client_id=${body.client_id} · week=${body.week_starting}`,
+    );
+
     return NextResponse.json({
       ok: true,
       page_id: page.page_id,
@@ -108,6 +126,9 @@ export async function POST(request: Request) {
       created_time: page.created_time,
       week_starting: body.week_starting,
       client_id: body.client_id,
+      // Sprint 8C dual-mode · Reportes DB row reference
+      reportes_db_row_id: reporteRow?.row_id ?? null,
+      reportes_db_row_url: reporteRow?.row_url ?? null,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

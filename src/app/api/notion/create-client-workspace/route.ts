@@ -27,6 +27,7 @@ import {
   divider,
   NotionConfigError,
 } from "@/lib/notion-client";
+import { createClienteRow, tryCreateDbRow } from "@/lib/notion-db-rows";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -127,6 +128,21 @@ export async function POST(request: Request) {
       /* never block on log */
     }
 
+    // Sprint 8C dual-mode · create row en Clientes DB (canonical Item #2) ·
+    // graceful failure · page creation primary · row companion para Notion DB cockpit.
+    const clientesRow = await tryCreateDbRow(
+      () =>
+        createClienteRow({
+          client_id,
+          client_name,
+          industria: body.industry,
+          estado: "active",
+          onboarded_at: new Date().toISOString(),
+          notion_workspace_page: page.page_url,
+        }),
+      `create-client-workspace · client_id=${client_id}`,
+    );
+
     return NextResponse.json({
       ok: true,
       client_id,
@@ -134,6 +150,9 @@ export async function POST(request: Request) {
       workspace_id: page.page_id,
       workspace_url: page.page_url,
       created_time: page.created_time,
+      // Sprint 8C dual-mode · DB row reference si applicable
+      clientes_db_row_id: clientesRow?.row_id ?? null,
+      clientes_db_row_url: clientesRow?.row_url ?? null,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
