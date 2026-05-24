@@ -45,7 +45,10 @@ jobs:
         continue-on-error: true
 
       - name: Test
-        # TODO Sprint #5 followup #13: regenerate pnpm-lock.yaml on Linux to include @rolldown/binding-linux-x64-gnu native binding
-        # Tests pass locally (vitest 34/34) · skip in CI until lockfile properly resolves Linux native deps
-        # Tracked: outputs/CI_TEST_SKIP_FOLLOWUP.md
-        run: echo "Tests skipped in CI · run pnpm test locally to validate · TODO regenerate lockfile on Linux"
+        # Sprint 8C D8 · vitest 3.2.4 downgrade resolved the rolldown
+        # `@rolldown/binding-linux-x64-gnu` blocker that previously skipped
+        # tests in CI. Combined with the vitest.config shebang-strip plugin
+        # (handles `.mjs` script imports), the full 896/896 suite runs
+        # cleanly on ubuntu-latest. Canon §4.3 "verify CI verde POST-push"
+        # now includes test pass as a real gate.
+        run: pnpm test
