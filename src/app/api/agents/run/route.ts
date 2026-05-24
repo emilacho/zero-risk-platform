@@ -102,13 +102,9 @@ export async function POST(request: Request) {
       )
     }
 
-    const claudeApiKey = process.env.CLAUDE_API_KEY
-    if (!claudeApiKey) {
-      return NextResponse.json(
-        { error: 'CLAUDE_API_KEY not configured' },
-        { status: 500 }
-      )
-    }
+    // Sprint 8B B4 · CLAUDE_API_KEY check removed · LLM call moved to Railway
+    // agent-runner which owns the Anthropic credential. RAILWAY_AGENT_RUNNER_URL
+    // gate happens later in the LLM-call section.
 
     // --- Load agent from Supabase (registry + legacy table) ---
     const supabase = getSupabaseAdmin()
@@ -400,65 +396,95 @@ export async function POST(request: Request) {
       })
     }
 
-    // --- Call Claude API ---
-    // Model resolution: context.model_override > registry model > sonnet fallback
-    // model_override lets smoke tests force Haiku (4x cheaper) without editing the registry.
+    // --- Sprint 8B B4 · Delegate to Railway agent-runner ---
+    // Per master plan · the Anthropic API call + system prompt construction
+    // moves to Railway (services/agent-runner) where the Claude Agent SDK
+    // binary runs natively + Brain enricher injects client RAG context.
+    // This route stays for orchestration concerns · auth / sanitization /
+    // smoke mock / Camino III middleware / agent_invocations observability
+    // INSERT. The actual LLM work and brain enrichment live one hop down.
     capture('agent_run_invoked', String(resolvedClientId || 'system'), {
       agent_slug: canonicalSlug,
       model: (context.model_override as string) || (agentConfig.model as string) || 'claude-sonnet',
       client_id: resolvedClientId,
       has_pipeline_id: !!context.pipeline_id,
     })
-    const modelKey = (context.model_override as string) || (agentConfig.model as string) || 'claude-sonnet'
-    const FULL_MODEL_MAP: Record<string, string> = {
-      ...MODEL_MAP,
-      'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
-      'claude-haiku-4-5-20251001': 'claude-haiku-4-5-20251001',
-      'claude-sonnet-4-6': 'claude-sonnet-4-6',
-      'claude-opus-4-6': 'claude-opus-4-6',
+
+    const railwayUrl = process.env.RAILWAY_AGENT_RUNNER_URL
+    if (!railwayUrl) {
+      console.error('[agents-run] RAILWAY_AGENT_RUNNER_URL not configured · Sprint 8B requires Railway proxy')
+      return NextResponse.json(
+        { error: 'agent-runner not configured', code: 'E-RUNNER-MISSING' },
+        { status: 503 },
+      )
     }
-    const modelId = FULL_MODEL_MAP[modelKey] || MODEL_MAP['claude-sonnet']
+    const internalKey = process.env.INTERNAL_API_KEY ?? ''
 
-    // max_tokens cap: context can lower it (smoke tests should cap around 50-200).
-    // Never exceed 4096 to avoid runaway cost from a misbehaving agent.
-    const requestedMaxTokens = typeof context.max_tokens === 'number' ? context.max_tokens : 4096
-    const maxTokens = Math.max(1, Math.min(4096, requestedMaxTokens))
-
-    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+    const railwayResp = await fetch(`${railwayUrl.replace(/\/+$/, '')}/run-sdk`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': claudeApiKey,
-        'anthropic-version': '2023-06-01',
+        'x-internal-auth': internalKey,
       },
       body: JSON.stringify({
-        model: modelId,
-        max_tokens: maxTokens,
-        system: systemPrompt,
-        messages: [{
-          role: 'user',
-          content: task,
-        }],
+        agentName: canonicalSlug,
+        task,
+        clientId: resolvedClientId ?? null,
+        pipelineId: (context.pipeline_id as string | null) ?? null,
+        stepName: (context.step_name as string | null) ?? null,
+        extra: (context.extra as Record<string, unknown> | undefined) ?? undefined,
       }),
+      signal: AbortSignal.timeout(290_000),
     })
 
-    if (!claudeResponse.ok) {
-      const errData = await claudeResponse.json().catch(() => ({}))
+    if (!railwayResp.ok) {
+      const errText = await railwayResp.text().catch(() => '')
       return NextResponse.json(
-        { error: `Claude API error: ${claudeResponse.status}`, details: errData },
-        { status: 502 }
+        { error: `agent-runner upstream failed: ${railwayResp.status}`, details: errText.slice(0, 500) },
+        { status: 502 },
       )
     }
 
-    const claudeData = await claudeResponse.json()
-    const responseText = claudeData.content?.[0]?.text || ''
-    const inputTokens = claudeData.usage?.input_tokens || 0
-    const outputTokens = claudeData.usage?.output_tokens || 0
+    interface RailwayResult {
+      success: boolean
+      response?: string
+      sessionId?: string | null
+      inputTokens?: number
+      outputTokens?: number
+      costUsd?: number
+      durationMs?: number
+      model?: string
+      brainEnrichment?: {
+        brain_hit: boolean
+        brain_chunks_count: number
+        brain_query_ms: number
+        brain_cost_usd: number
+        brain_error?: string
+      }
+      error?: string
+    }
+    const railwayData = (await railwayResp.json()) as RailwayResult
+    if (!railwayData.success) {
+      return NextResponse.json(
+        { error: railwayData.error || 'agent-runner returned success=false' },
+        { status: 500 },
+      )
+    }
+    const responseText = railwayData.response ?? ''
+    const inputTokens = railwayData.inputTokens ?? 0
+    const outputTokens = railwayData.outputTokens ?? 0
     const tokensUsed = inputTokens + outputTokens
-    const durationMs = Date.now() - startTime
-    const costUsd = computeCostUsd(modelId, inputTokens, outputTokens)
+    const costUsd = railwayData.costUsd ?? 0
+    const durationMs = railwayData.durationMs ?? Date.now() - startTime
+    const modelId = railwayData.model ?? 'unknown'
+    const brainEnrichmentMeta = railwayData.brainEnrichment
     const endedAt = new Date()
     const startedAt = new Date(startTime)
+    // Sprint 8B B4 · system prompt construction moved to Railway · we no
+    // longer have local visibility. Set to null in INSERT. Operators wanting
+    // exact prompt persistence query `agents_log.output` on Railway-side row
+    // (B2 fixes silent INSERT swallow · once landed agents_log gets the prompt).
+    const claudeData: { id?: string; stop_reason?: string | null; usage?: Record<string, number> } = {}
 
     capture('agent_run_completed', String(resolvedClientId || 'system'), {
       agent_slug: canonicalSlug,
@@ -546,7 +572,11 @@ export async function POST(request: Request) {
         status: 'completed',
         exit_code: 0,
         error_message: null,
-        system_prompt: systemPrompt,
+        // Sprint 8B B4 · system_prompt persists on Railway-side `agents_log`
+        // (which now includes the actual prompt sent to the model + brain
+        // enrichment). Local Vercel build was dropped to honor "zero prompt
+        // construction" canon · NULL here is the correct semantic.
+        system_prompt: null,
         metadata: {
           source: 'api_agents_run',
           caller,
@@ -559,6 +589,20 @@ export async function POST(request: Request) {
             source: enrichment.source,
             attempted_lookups: enrichment.attempted_lookups,
           },
+          // Sprint 8B B3 · brain enrichment runtime evidence · sourced from
+          // Railway response. brain_hit=false when clientId missing OR brain
+          // empty for client. Closes the 6-gap audit (CC#2 A8).
+          ...(brainEnrichmentMeta
+            ? {
+                brain_hit: brainEnrichmentMeta.brain_hit,
+                brain_chunks_count: brainEnrichmentMeta.brain_chunks_count,
+                brain_query_ms: brainEnrichmentMeta.brain_query_ms,
+                brain_cost_usd: brainEnrichmentMeta.brain_cost_usd,
+                ...(brainEnrichmentMeta.brain_error
+                  ? { brain_error: brainEnrichmentMeta.brain_error }
+                  : {}),
+              }
+            : {}),
         },
       })
       .then(

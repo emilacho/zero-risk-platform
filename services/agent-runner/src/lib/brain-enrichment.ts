@@ -25,8 +25,17 @@ const DEFAULT_TOP_K = 5
 
 export interface EnrichmentResult {
   enrichment: string // ready-to-inject prompt section (may be empty string)
+  /**
+   * Canonical Sprint 8B field · count of chunks injected into the system
+   * prompt. Surfaced in `agent_invocations.metadata.brain_chunks_count`
+   * and `agents_log.output.brain_chunks_count` for runtime auditability.
+   */
+  brain_chunks_count: number
+  /** Backwards-compat alias for brain_chunks_count · existing callers may read this. */
   chunks_used: number
   brain_hit: boolean
+  /** Total embed + RPC round-trip latency in ms · Sprint 8B observability. */
+  brain_query_ms: number
   tokens_used: number
   cost_usd: number
   error?: string // present only when something soft-failed
@@ -96,10 +105,13 @@ export async function enrichSystemPromptWithClientBrain(args: {
   agentSlug?: string
   topK?: number
 }): Promise<EnrichmentResult> {
+  const queryStartedAt = Date.now()
   const empty: EnrichmentResult = {
     enrichment: '',
+    brain_chunks_count: 0,
     chunks_used: 0,
     brain_hit: false,
+    brain_query_ms: 0,
     tokens_used: 0,
     cost_usd: 0,
   }
@@ -115,7 +127,7 @@ export async function enrichSystemPromptWithClientBrain(args: {
 
   const queryEmbedding = await embedQuery(queryText)
   if (!queryEmbedding) {
-    return { ...empty, error: 'embed_query_failed' }
+    return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: 'embed_query_failed' }
   }
 
   try {
@@ -124,19 +136,22 @@ export async function enrichSystemPromptWithClientBrain(args: {
       p_query_embedding: queryEmbedding,
       p_top_k: args.topK ?? DEFAULT_TOP_K,
     })
-    if (error) return { ...empty, error: `rpc_error: ${error.message}` }
+    if (error) return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: `rpc_error: ${error.message}` }
     const rows = (data ?? []) as BrainChunkRow[]
+    const brainQueryMs = Date.now() - queryStartedAt
     if (rows.length === 0) {
-      return { ...empty, brain_hit: false, error: 'brain_empty_for_client' }
+      return { ...empty, brain_hit: false, brain_query_ms: brainQueryMs, error: 'brain_empty_for_client' }
     }
     return {
       enrichment: formatChunksAsContext(rows),
+      brain_chunks_count: rows.length,
       chunks_used: rows.length,
       brain_hit: true,
+      brain_query_ms: brainQueryMs,
       tokens_used: queryText.length / 4, // rough estimate · 4 chars per token
       cost_usd: 0.00002 * (queryText.length / 4000), // ~$0.00002 per 1K tokens
     }
   } catch (e) {
-    return { ...empty, error: e instanceof Error ? e.message : 'unknown' }
+    return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: e instanceof Error ? e.message : 'unknown' }
   }
 }

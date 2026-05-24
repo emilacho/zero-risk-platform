@@ -55,6 +55,18 @@ interface RunSdkInput {
  * Must stay byte-aligned with `AgentRunResult` exported from
  * services/agent-runner/src/lib/agent-sdk-runner.ts.
  */
+/**
+ * Sprint 8B B3 · Brain enrichment metadata returned by Railway runner.
+ * Surfaced on outbound response so observability writers persist it.
+ */
+interface BrainEnrichmentProxyMeta {
+  brain_hit: boolean
+  brain_chunks_count: number
+  brain_query_ms: number
+  brain_cost_usd: number
+  brain_error?: string
+}
+
 interface AgentRunResultProxy {
   success: boolean
   response: string
@@ -64,6 +76,7 @@ interface AgentRunResultProxy {
   costUsd: number
   durationMs: number
   model: string
+  brainEnrichment?: BrainEnrichmentProxyMeta
   error?: string
 }
 
@@ -280,6 +293,23 @@ export async function POST(request: Request) {
     }
     // Defensive: ensure all fields we read below have a value even if the
     // Railway service evolves its response shape independently.
+    const rawBrain = (result as { brainEnrichment?: unknown }).brainEnrichment as
+      | Record<string, unknown>
+      | undefined
+    const brainEnrichment: BrainEnrichmentProxyMeta | undefined = rawBrain && typeof rawBrain === 'object'
+      ? {
+          brain_hit: rawBrain.brain_hit === true,
+          brain_chunks_count:
+            typeof rawBrain.brain_chunks_count === 'number' ? rawBrain.brain_chunks_count : 0,
+          brain_query_ms:
+            typeof rawBrain.brain_query_ms === 'number' ? rawBrain.brain_query_ms : 0,
+          brain_cost_usd:
+            typeof rawBrain.brain_cost_usd === 'number' ? rawBrain.brain_cost_usd : 0,
+          ...(typeof rawBrain.brain_error === 'string'
+            ? { brain_error: rawBrain.brain_error }
+            : {}),
+        }
+      : undefined
     result = {
       success: !!result.success,
       response: typeof result.response === 'string' ? result.response : '',
@@ -289,6 +319,7 @@ export async function POST(request: Request) {
       costUsd: typeof result.costUsd === 'number' ? result.costUsd : 0,
       durationMs: typeof result.durationMs === 'number' ? result.durationMs : 0,
       model: typeof result.model === 'string' ? result.model : 'unknown',
+      brainEnrichment,
       error: result.error,
     }
 
@@ -305,7 +336,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: result.error }, { status: 500 })
     }
 
-    // Base response — may be augmented by dual reviewer middleware below
+    // Base response — may be augmented by dual reviewer middleware below.
+    // Sprint 8B B3 · brain_enrichment surfaced so callers + observability
+    // writers (downstream /api/agents/run consumer) see Pilar 2 RAG markers.
     const baseResponse = {
       success: true,
       agent: agentName,
@@ -316,6 +349,7 @@ export async function POST(request: Request) {
       output_tokens: result.outputTokens,
       cost_usd: result.costUsd,
       duration_ms: result.durationMs,
+      ...(result.brainEnrichment ? { brain_enrichment: result.brainEnrichment } : {}),
     }
 
     // DUAL REVIEWER MIDDLEWARE — mirrors /api/agents/run lines 478-503 so workflows
