@@ -25,6 +25,11 @@ import { buildMcpServers } from './agent-mcp-registry.js'
 import { insertWithRetry } from './agents-log-retry.js'
 import { insertAgentInvocationWithRetry } from './agent-invocations-log.js'
 import { callSdkWithRetry } from './sdk-call-retry.js'
+import {
+  shouldSkipStep,
+  saveCheckpoint,
+  type ShouldSkipResult,
+} from './workflow-checkpoint.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
 // `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
@@ -96,6 +101,15 @@ export interface AgentRunInput {
    */
   workflowId?: string | null
   workflowExecutionId?: string | null
+  /**
+   * Sprint 8D tail canon · workflow checkpoint/resume idempotency guardrail
+   * #3. When `forceRestart=true` · skip the checkpoint cache lookup and
+   * re-execute the agent SDK call from scratch. Default (false / undefined)
+   * uses cached `completed` checkpoint if present (re-hydrates response from
+   * `workflow_checkpoints.output_ref`). Set true for HITL rejection re-runs
+   * · operator-forced fresh smokes · or any path that needs ungated SDK call.
+   */
+  forceRestart?: boolean
   /** Extra para system prompt. */
   extra?: Record<string, unknown>
 }
@@ -607,6 +621,44 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   // 0. Resolve slug → canonical + registry row.
   const { canonicalSlug, registryRow } = await resolveCanonicalSlug(supabase, input.agentName)
 
+  // 0b. Sprint 8D tail · workflow checkpoint/resume canon (idempotency
+  //     guardrail #3). Skip SDK call entirely when a `completed` checkpoint
+  //     exists for (workflow_id, client_id, agent_slug) and forceRestart is
+  //     not true. Re-hydrates the cached AgentRunResult from output_ref.
+  //     Skipped silently when workflow_id OR client_id missing (cannot
+  //     uniquely identify the step). Graceful · helper NEVER throws.
+  let checkpointDecision: ShouldSkipResult | null = null
+  if (input.workflowId && input.clientId) {
+    checkpointDecision = await shouldSkipStep(
+      supabase,
+      {
+        workflowId: input.workflowId,
+        clientId: input.clientId,
+        stepName: canonicalSlug,
+      },
+      { forceRestart: input.forceRestart === true },
+    )
+    if (checkpointDecision.skip && checkpointDecision.checkpoint?.output_ref) {
+      const cached = checkpointDecision.checkpoint.output_ref as Record<string, unknown>
+      console.log(
+        `[workflow-checkpoint] SKIP ${canonicalSlug} · client=${input.clientId} · workflow=${input.workflowId} · cached from ${checkpointDecision.checkpoint.updated_at}`,
+      )
+      return rehydrateFromCheckpoint(cached, startedAt)
+    }
+    // Best-effort · mark step in_progress (advisory · concurrent racers may
+    // both proceed but unique constraint ensures only 1 row · downstream
+    // saveCheckpoint at end will overwrite with terminal status).
+    if (!checkpointDecision.skip) {
+      void saveCheckpoint(supabase, {
+        workflowId: input.workflowId,
+        workflowExecutionId: input.workflowExecutionId ?? null,
+        clientId: input.clientId,
+        stepName: canonicalSlug,
+        status: 'in_progress',
+      })
+    }
+  }
+
   // 1. Load agent config (legacy table preferred, registry fallback).
   const agentCfg = await loadAgentConfig(supabase, canonicalSlug, registryRow)
   if (!agentCfg) {
@@ -710,7 +762,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     cacheMetrics: cacheMetricsMeta,
   })
 
-  return {
+  const result: AgentRunResult = {
     success: true,
     response: drain.responseText,
     sessionId: drain.sessionId,
@@ -721,6 +773,90 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     model: modelId,
     brainEnrichment: brainEnrichmentMeta,
     cacheMetrics: cacheMetricsMeta,
+  }
+
+  // 5b. Sprint 8D tail · save checkpoint canonical · status='completed' +
+  //     embedded output_ref (response + tokens + cost + brain + cache).
+  //     Next re-trigger for same (workflow_id, client_id, agent_slug) will
+  //     skip the SDK call entirely. Fire-and-forget · NEVER throws.
+  if (input.workflowId && input.clientId) {
+    void saveCheckpoint(supabase, {
+      workflowId: input.workflowId,
+      workflowExecutionId: input.workflowExecutionId ?? null,
+      clientId: input.clientId,
+      stepName: canonicalSlug,
+      status: 'completed',
+      outputRef: serializeResultForCheckpoint(result),
+      costUsd,
+      durationMs,
+    })
+  }
+
+  return result
+}
+
+/**
+ * Serialize an AgentRunResult into a compact jsonb-storable shape for
+ * `workflow_checkpoints.output_ref`. Caps response text at 100k chars to
+ * prevent runaway rows on verbose generations.
+ */
+function serializeResultForCheckpoint(r: AgentRunResult): Record<string, unknown> {
+  const RESPONSE_CAP = 100_000
+  const responseClipped = r.response.length > RESPONSE_CAP
+    ? r.response.slice(0, RESPONSE_CAP)
+    : r.response
+  return {
+    schema_version: 1,
+    response: responseClipped,
+    response_truncated: r.response.length > RESPONSE_CAP,
+    sessionId: r.sessionId,
+    inputTokens: r.inputTokens,
+    outputTokens: r.outputTokens,
+    costUsd: r.costUsd,
+    durationMs: r.durationMs,
+    model: r.model,
+    brainEnrichment: r.brainEnrichment,
+    cacheMetrics: r.cacheMetrics,
+  }
+}
+
+/**
+ * Re-hydrate an AgentRunResult from a `workflow_checkpoints.output_ref`
+ * payload (written by serializeResultForCheckpoint). Returns success result
+ * with `durationMs` overridden to reflect the cache-hit duration (near-zero
+ * · the caller's started_at vs now). The cached original durationMs is
+ * preserved on the result for forensics via the `extra` field.
+ */
+function rehydrateFromCheckpoint(
+  cached: Record<string, unknown>,
+  startedAt: number,
+): AgentRunResult {
+  const cacheHitDurationMs = Date.now() - startedAt
+  const cachedDurationMs = typeof cached.durationMs === 'number' ? cached.durationMs : 0
+  console.log(
+    `[workflow-checkpoint] rehydrated · cache-hit duration ${cacheHitDurationMs}ms · saved original ${cachedDurationMs}ms`,
+  )
+  return {
+    success: true,
+    response: String(cached.response ?? ''),
+    sessionId: (cached.sessionId as string | null) ?? null,
+    inputTokens: 0, // cache hit · no new tokens
+    outputTokens: 0,
+    costUsd: 0,     // cache hit · no new cost · savings = cached.costUsd
+    durationMs: cacheHitDurationMs,
+    model: String(cached.model ?? 'cached'),
+    brainEnrichment: (cached.brainEnrichment as BrainEnrichmentResultMeta | undefined) ?? {
+      brain_hit: false,
+      brain_chunks_count: 0,
+      brain_query_ms: 0,
+      brain_cost_usd: 0,
+    },
+    cacheMetrics: (cached.cacheMetrics as CacheMetricsMeta | undefined) ?? {
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+      cache_creation_5m_tokens: 0,
+      cache_creation_1h_tokens: 0,
+    },
   }
 }
 

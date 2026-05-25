@@ -83,6 +83,14 @@ interface RunSdkBody {
   pipeline_id?: unknown
   stepName?: unknown
   step_name?: unknown
+  /**
+   * Sprint 8D tail canon · workflow checkpoint/resume bypass flag. true →
+   * skip cache lookup · re-execute SDK call. Default false → use cached
+   * `completed` checkpoint if present.
+   */
+  forceRestart?: unknown
+  force_restart?: unknown
+  context?: unknown
   extra?: unknown
 }
 
@@ -200,6 +208,18 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     return
   }
 
+  // Sprint 8D tail · workflow checkpoint canon · forceRestart flag accepted
+  // top-level OR nested under context (matches workflow_id pattern).
+  const ctxObj =
+    body.context && typeof body.context === 'object' && !Array.isArray(body.context)
+      ? (body.context as Record<string, unknown>)
+      : {}
+  const forceRestart =
+    body.forceRestart === true ||
+    body.force_restart === true ||
+    ctxObj.forceRestart === true ||
+    ctxObj.force_restart === true
+
   const input: AgentRunInput = {
     agentName: agentName,
     task: body.task,
@@ -209,6 +229,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     stepName: stepName ?? null,
     workflowId: workflowId ?? null,
     workflowExecutionId: workflowExecutionId ?? null,
+    forceRestart,
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }
 
