@@ -1,28 +1,31 @@
 /**
- * Agent MCP Registry · Sprint 6 Track C1 wire-in · extended Sprint 7.7 Track B.
+ * Agent MCP Registry · Sprint 6 Track C1 wire-in · extended Sprint 7.7 Track B
+ * · canon default-deny refactor Sprint 8D 2026-05-25 (CC#2 arquitectura cleanup).
  *
  * Builds the canonical `mcpServers` map for `agent-sdk-runner.ts` based on
- * env-var presence + (optional) agent slug gating. Returns ONLY MCPs that
- * have keys live · NO-OP gracefully cuando env missing.
+ * env-var presence + per-MCP allow-list (canon default-deny). Returns ONLY
+ * MCPs that have keys live AND whose allow-list includes the calling agent.
+ * NO-OP gracefully cuando env missing.
  *
  * Stack V4 canon · 4 MCPs operational ·
- *   - @zero-risk/apify-mcp-server     · APIFY_TOKEN
- *   - @zero-risk/dataforseo-mcp-server · DATAFORSEO_LOGIN + DATAFORSEO_PASSWORD
- *   - @zero-risk/higgsfield-mcp-server · HIGGSFIELD_API_KEY (+ optional HIGGSFIELD_WEBHOOK_URL)
- *   - meta-ads-mcp (Pipeboard · npm) · META_ACCESS_TOKEN + 3-agent allow-list
+ *   - @zero-risk/apify-mcp-server     · APIFY_TOKEN     + APIFY_ALLOW slugs
+ *   - @zero-risk/dataforseo-mcp-server · DATAFORSEO_LOGIN+PASSWORD + DATAFORSEO_ALLOW
+ *   - @zero-risk/higgsfield-mcp-server · HIGGSFIELD_API_KEY + HIGGSFIELD_ALLOW
+ *   - meta-ads-mcp (Pipeboard · npm)  · META_ACCESS_TOKEN + META_ADS_ALLOW
  *
  * GHL MCP · DEPRECATED per Stack V4 canon · NOT registered. See vault
  * decision `zr-vault/wiki/decisions/2026-05-21-ghl-mcp-deprecation-stack-v4.md`.
  *
  * Client Brain MCP · always wired when input.clientId present (canonical
- * existing pattern · NOT changed by this Sprint 6 wire).
+ * existing pattern · NOT subject to allow-list · per-client design).
  *
- * Per-agent gating · soft scoping via canonical mapping (which agent should
- * see which MCP tools). Out-of-scope agents simply don't get the MCP server
- * registered. Saves token budget + reduces tool-confusion.
+ * Per-MCP allow-list canon (Sprint 8D 2026-05-25 CC#2) · ALL non-client-brain
+ * MCPs default-deny · explicit allow-list per agent slug based on identity_md
+ * declared tools. Saves token budget · reduces tool confusion · prevents
+ * accidental use by agents whose identity doesn't expect the tool.
  *
- * meta-ads uses ALLOW-list (inverse of deny-list) because it should activate
- * for ONLY 3 paid-media agent slugs · per Sprint 7.7 Track B spec.
+ * Pattern adopted from meta-ads (Sprint 7.7 Track B) · canonicalized across
+ * all 4 MCPs · replaces the prior deny-list + default-allow pattern.
  */
 import { resolve as pathResolve } from 'node:path'
 
@@ -41,22 +44,32 @@ function resolveMcpEntrypoint(packageName: string): string {
   )
 }
 
-/** Optional per-agent slug → MCP scope map (deny-list pattern · default allow) */
-const AGENT_MCP_DENY: Record<string, Set<string>> = {
-  // Auth/onboarding agents NO need Apify/DataForSEO/Higgsfield · save token budget
-  'onboarding-specialist': new Set(['apify', 'dataforseo', 'higgsfield']),
-  // pure-text writer agents NO need video MCP
-  'email-marketer': new Set(['higgsfield']),
-  'account-manager': new Set(['apify', 'dataforseo', 'higgsfield']),
-  'community-manager': new Set(['higgsfield']),
-}
-
 /**
- * Allow-list for meta-ads MCP (inverse pattern · only these 3 paid-media
- * agent slugs get the Meta Marketing API toolset). Per Sprint 7.7 Track B
- * spec · prevents the 30+ other agents from seeing irrelevant Meta Ads
- * tools at runtime (saves token budget + reduces prompt-injection surface).
+ * Per-MCP allow-list · canon default-deny (Sprint 8D arquitectura cleanup
+ * 2026-05-25 CC#2 · refactor from default-allow + deny-list).
+ *
+ * Each MCP lists ONLY the agent slugs that declared usage in their
+ * identity_md per audit `raw/qa/2026-05-25-cc2-arquitectura-cleanup.md`.
+ * Agents NOT in the allow-list silently skip that MCP at runtime · saves
+ * token budget · reduces tool confusion · prevents accidental use by
+ * agents whose identity doesn't expect the tool.
+ *
+ * Add agents here if a future identity_md update declares the tool · do
+ * NOT add speculatively. If a smoke breaks post-deploy because an agent
+ * needs an undeclared MCP · either (a) add to the identity_md AND this
+ * allow-list · or (b) only this allow-list with comment "runtime override".
  */
+const APIFY_ALLOW: ReadonlySet<string> = new Set([
+  'competitive-intelligence-agent',
+  'market-research',
+])
+const DATAFORSEO_ALLOW: ReadonlySet<string> = new Set([
+  'market-research',
+  'seo-specialist',
+])
+const HIGGSFIELD_ALLOW: ReadonlySet<string> = new Set([
+  'video-editor',
+])
 const META_ADS_ALLOW: ReadonlySet<string> = new Set([
   'media-buyer',
   'social-media-strategist',
@@ -83,10 +96,12 @@ export function buildMcpServers(
   ctx: AgentMcpContext,
 ): Record<string, McpServerConfig> {
   const servers: Record<string, McpServerConfig> = {}
-  const denied = ctx.agentSlug ? (AGENT_MCP_DENY[ctx.agentSlug] ?? new Set()) : new Set<string>()
+  const slug = ctx.agentSlug
 
-  // Client Brain · only when clientId present (canonical existing pattern)
-  if (ctx.clientId && !denied.has('client-brain')) {
+  // Client Brain · per-client always-on · NOT subject to per-agent allow-list
+  // (canonical existing pattern · every agent invocation with a clientId gets
+  // RAG access · this is design intent · NOT switched to allow-list here).
+  if (ctx.clientId) {
     servers['client-brain'] = {
       type: 'stdio',
       command: 'node',
@@ -101,8 +116,9 @@ export function buildMcpServers(
     }
   }
 
-  // Apify · 6 tools (Meta/Google/TikTok ad libraries · landing scrape)
-  if (process.env.APIFY_TOKEN && !denied.has('apify')) {
+  // Apify · 2 tools (apify_run_actor · apify_get_dataset) · ad library scrape
+  // primitives. Allow-list canon default-deny · agents NOT in APIFY_ALLOW skip.
+  if (process.env.APIFY_TOKEN && slug && APIFY_ALLOW.has(slug)) {
     servers.apify = {
       type: 'stdio',
       command: 'node',
@@ -114,11 +130,13 @@ export function buildMcpServers(
     }
   }
 
-  // DataForSEO · 12 tools (SERP · keywords · backlinks · competitors)
+  // DataForSEO · 2 tools (dfs_serp_google · dfs_keywords_for_keyword) · SERP +
+  // keyword research primitives. Allow-list canon default-deny.
   if (
     process.env.DATAFORSEO_LOGIN &&
     process.env.DATAFORSEO_PASSWORD &&
-    !denied.has('dataforseo')
+    slug &&
+    DATAFORSEO_ALLOW.has(slug)
   ) {
     servers.dataforseo = {
       type: 'stdio',
@@ -132,8 +150,11 @@ export function buildMcpServers(
     }
   }
 
-  // Higgsfield · 4 tools (video gen · Seedance 2.0 + Lite tier)
-  if (process.env.HIGGSFIELD_API_KEY && !denied.has('higgsfield')) {
+  // Higgsfield · 4 tools (video gen · Seedance 2.0 + Lite tier). Allow-list
+  // canon default-deny. Stack V4 marked the MCP "archived legacy" but the
+  // npm package + env wire-in remain · runtime registration limited to
+  // video-editor only (single declarer per identity_md audit).
+  if (process.env.HIGGSFIELD_API_KEY && slug && HIGGSFIELD_ALLOW.has(slug)) {
     servers.higgsfield = {
       type: 'stdio',
       command: 'node',
@@ -150,10 +171,11 @@ export function buildMcpServers(
 
   // Meta Ads MCP (Pipeboard · meta-ads-mcp npm v1.1.0) · 20+ Meta Marketing API
   // tools (campaigns · ads · creatives · insights · audiences · ad library scrape).
-  // Allow-list gating · only 3 paid-media agents see this MCP at runtime.
+  // Allow-list canon (canonical since Sprint 7.7 Track B · pattern adopted
+  // for apify/dataforseo/higgsfield Sprint 8D arquitectura cleanup 2026-05-25).
   // Env gate · META_ACCESS_TOKEN (also accepts META_SYSTEM_USER_TOKEN per Brazo 3
   // pre-canon-alias window).
-  if (ctx.agentSlug && META_ADS_ALLOW.has(ctx.agentSlug) && !denied.has('meta-ads')) {
+  if (slug && META_ADS_ALLOW.has(slug)) {
     const metaToken =
       process.env.META_ACCESS_TOKEN ?? process.env.META_SYSTEM_USER_TOKEN ?? ''
     if (metaToken) {
