@@ -25,6 +25,8 @@ const baseReq: CascadeRunRequest = {
     brand_fonts: null,
   },
   caller: 'test',
+  workflow_id: 'test-workflow-id',
+  workflow_execution_id: 'test-execution-id',
 }
 
 describe('buildSequence · customer-research optional branch', () => {

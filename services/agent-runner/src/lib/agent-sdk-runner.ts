@@ -86,6 +86,15 @@ export interface AgentRunInput {
   pipelineId?: string | null
   /** Nombre del step (para logs). */
   stepName?: string | null
+  /**
+   * Sprint 8D workflow attribution (Emilio canon 2026-05-24 · "agentes
+   * solo se invocan vía workflows"). Forwarded by the Vercel proxy after
+   * enforcement gate · runner persists on `agents_log.input` + (when DB
+   * column exists) `agent_invocations.workflow_id` / `_execution_id` so
+   * every invocation is auditable to its originating workflow.
+   */
+  workflowId?: string | null
+  workflowExecutionId?: string | null
   /** Extra para system prompt. */
   extra?: Record<string, unknown>
 }
@@ -491,6 +500,10 @@ function logExecution(
       resumed: !!input.resumeSessionId,
       skills_loaded: skills.map(s => s.name),
       client_id: input.clientId ?? null,
+      // Sprint 8D workflow attribution · persists in agents_log.input JSONB
+      // for spam-loop forensics ("which workflow fired this agent · when").
+      workflow_id: input.workflowId ?? null,
+      workflow_execution_id: input.workflowExecutionId ?? null,
     },
     output: {
       response_length: drain.responseText.length,

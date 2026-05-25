@@ -128,6 +128,8 @@ describe('POST /api/influencer/outreach · happy path', () => {
       campaign_brief: 'launch ceviche delivery to surfers',
       targets: [{ handle: 'olonsurf', platform: 'instagram', notes: 'local surf shop' }],
       budget_per_collab_usd: 100,
+      workflow_id: 'test-workflow-id',
+      workflow_execution_id: 'test-execution-id',
     }))
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
@@ -165,6 +167,8 @@ describe('POST /api/influencer/outreach · happy path', () => {
     await POST(jsonReq({
       campaign_brief: 'x',
       targets: [{ handle: 'a' }],
+      workflow_id: 'test-workflow-id',
+      workflow_execution_id: 'test-execution-id',
     }))
     expect(agentCalled).toBe('influencer-manager')
   })
@@ -180,6 +184,8 @@ describe('POST /api/influencer/outreach · happy path', () => {
     const res = await POST(jsonReq({
       campaign_brief: 'x',
       targets: [{ handle: 'a' }],
+      workflow_id: 'test-workflow-id',
+      workflow_execution_id: 'test-execution-id',
     }))
     expect(res.status).toBe(502)
     const body = (await res.json()) as { ok?: boolean; error?: string }

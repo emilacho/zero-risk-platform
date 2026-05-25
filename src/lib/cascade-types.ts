@@ -35,6 +35,16 @@ export interface CascadeRunRequest {
   brand_assets: CascadeBrandAssets
   caller?: string
   /**
+   * Sprint 8D · workflow attribution (Emilio canon 2026-05-24). MUST be
+   * forwarded by the upstream n8n caller (e.g. `/api/cascade/onboard`
+   * route reads them from its inbound request body and propagates here)
+   * so each cascade agent invocation persists with workflow_id +
+   * workflow_execution_id · the /api/agents/run endpoint rejects 403 if
+   * either is missing.
+   */
+  workflow_id: string
+  workflow_execution_id: string
+  /**
    * Optional deep customer-research branch (2026-05-16 · resolved deferred
    * slug `customer_research_agent` → canonical `customer-research`). When
    * true, `customer-research` runs AFTER `market_research_analyst` and its

@@ -120,6 +120,31 @@ export async function POST(request: Request) {
     )
   }
 
+  // Sprint 8D · cascade-runner downstream invokes /api/agents/run per
+  // agent · that endpoint enforces workflow_id (Emilio canon 2026-05-24).
+  // Receive workflow_id + workflow_execution_id from the n8n caller (e.g.
+  // Client Onboarding E2E v2 workflow Run Onboarding Cascade node passes
+  // $workflow.id + $execution.id). Reject if missing · same 403 shape.
+  const ctxIn = (body.context && typeof body.context === 'object' ? body.context : {}) as Record<string, unknown>
+  const wfId =
+    (typeof body.workflow_id === 'string' && body.workflow_id.length > 0 ? body.workflow_id : null) ||
+    (typeof ctxIn.workflow_id === 'string' && ctxIn.workflow_id.length > 0 ? (ctxIn.workflow_id as string) : null)
+  const wfExec =
+    (typeof body.workflow_execution_id === 'string' && body.workflow_execution_id.length > 0 ? body.workflow_execution_id : null) ||
+    (typeof ctxIn.workflow_execution_id === 'string' && ctxIn.workflow_execution_id.length > 0 ? (ctxIn.workflow_execution_id as string) : null)
+  if (!wfId || !wfExec) {
+    return addDeprecationHeaders(
+      NextResponse.json(
+        {
+          error: 'workflow_id_required',
+          code: 'E-WF-ID-REQUIRED',
+          detail: 'canon Sprint 8D · cascade-runner downstream agents require workflow_id + workflow_execution_id · pass top-level OR under context',
+        },
+        { status: 403 },
+      ),
+    )
+  }
+
   const supabase = getSupabaseAdmin()
 
   // 1. Load cliente row · slug + name + brand assets
@@ -166,6 +191,8 @@ export async function POST(request: Request) {
     scrape_summary: scrapeSummary,
     brand_assets: brandAssets,
     caller: typeof body.caller === "string" ? body.caller : "cascade-onboard",
+    workflow_id: wfId,
+    workflow_execution_id: wfExec,
   }
 
   const result = await runCascade(cascadeReq, { baseUrl, internalApiKey })

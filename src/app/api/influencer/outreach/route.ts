@@ -144,16 +144,42 @@ export async function POST(request: Request) {
   const baseUrl = `${url.protocol}//${url.host}`
   const resolvedClientId = resolveClientIdFromBody(req as unknown as Record<string, unknown>)
 
+  // Sprint 8D · downstream /api/agents/run requires workflow_id +
+  // workflow_execution_id (Emilio canon 2026-05-24). Forward from this
+  // route's caller (n8n workflow that invoked /api/influencer/outreach
+  // should pass both top-level OR nested under context). Reject 403 if
+  // missing · same shape as enforced endpoints.
+  const reqRec = req as unknown as Record<string, unknown>
+  const ctxIn = (reqRec.context && typeof reqRec.context === 'object' ? reqRec.context : {}) as Record<string, unknown>
+  const wfId = (typeof reqRec.workflow_id === 'string' && reqRec.workflow_id.length > 0 ? reqRec.workflow_id : null) ||
+    (typeof ctxIn.workflow_id === 'string' && ctxIn.workflow_id.length > 0 ? (ctxIn.workflow_id as string) : null)
+  const wfExec = (typeof reqRec.workflow_execution_id === 'string' && reqRec.workflow_execution_id.length > 0 ? reqRec.workflow_execution_id : null) ||
+    (typeof ctxIn.workflow_execution_id === 'string' && ctxIn.workflow_execution_id.length > 0 ? (ctxIn.workflow_execution_id as string) : null)
+  if (!wfId || !wfExec) {
+    return NextResponse.json(
+      {
+        error: 'workflow_id_required',
+        code: 'E-WF-ID-REQUIRED',
+        detail: 'canon Sprint 8D · /api/influencer/outreach invokes /api/agents/run downstream · workflow_id + workflow_execution_id required (top-level OR context)',
+      },
+      { status: 403 },
+    )
+  }
+
   const startedAt = Date.now()
   const body = {
     agent: 'influencer-manager',
     task: buildTask(req),
     client_id: resolvedClientId,
     caller: req.caller ?? 'influencer-outreach',
+    workflow_id: wfId,
+    workflow_execution_id: wfExec,
     context: {
       campaign_brief: req.campaign_brief,
       targets: req.targets,
       budget_per_collab_usd: req.budget_per_collab_usd ?? null,
+      workflow_id: wfId,
+      workflow_execution_id: wfExec,
     },
   }
 

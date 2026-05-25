@@ -24,6 +24,8 @@ const baseReq: CascadeRunRequest = {
     brand_fonts: ["Inter", "Playfair Display"],
   },
   caller: "test",
+  workflow_id: "test-workflow-id",
+  workflow_execution_id: "test-execution-id",
 }
 
 function mockOk(payload: Record<string, unknown>): typeof fetch {
