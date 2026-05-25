@@ -1,11 +1,13 @@
 /**
- * agent-mcp-registry · Sprint 6 Track C1 unit tests · MCP wire-in canon.
+ * agent-mcp-registry · Sprint 6 Track C1 unit tests + Sprint 8D canon
+ * default-deny refactor 2026-05-25 (CC#2 arquitectura cleanup).
  *
  * Verifies ·
- *   - Apify/DataForSEO/Higgsfield registered conditionally on env presence
+ *   - Per-MCP allow-list canon · default-deny (apify · dataforseo · higgsfield · meta-ads)
+ *   - Env presence required (env missing → MCP NOT registered even if slug allowed)
+ *   - Client Brain auto-on with clientId (NOT subject to allow-list · per-client design)
  *   - GHL NOT registered (Stack V4 canon · DEPRECATED)
- *   - Client Brain registered cuando clientId present
- *   - Per-agent deny-list gates correctly
+ *   - Anonymous invocation (no slug) → only client-brain available
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { buildMcpServers, summarizeMcpActivation } from "../agent-mcp-registry"
@@ -22,7 +24,7 @@ const KEYS = [
   "META_AD_ACCOUNT_ID",
 ] as const
 
-describe("buildMcpServers", () => {
+describe("buildMcpServers · default-deny + per-MCP allow-list canon", () => {
   const original: Record<string, string | undefined> = {}
   beforeEach(() => {
     for (const k of KEYS) {
@@ -37,34 +39,88 @@ describe("buildMcpServers", () => {
     }
   })
 
+  // ── Empty / no env state ─────────────────────────────────────────────
+
   it("registers nothing when all env unset and no clientId", () => {
-    const servers = buildMcpServers({ agentSlug: "marketing-strategist" })
+    const servers = buildMcpServers({ agentSlug: "competitive-intelligence-agent" })
     expect(Object.keys(servers)).toEqual([])
   })
 
-  it("registers apify when APIFY_TOKEN set", () => {
+  // ── Apify · APIFY_ALLOW = {competitive-intelligence-agent, market-research}
+
+  it("apify · registered for competitive-intelligence-agent with APIFY_TOKEN set", () => {
     process.env.APIFY_TOKEN = "apify_test"
-    const servers = buildMcpServers({ agentSlug: "marketing-strategist" })
+    const servers = buildMcpServers({ agentSlug: "competitive-intelligence-agent" })
+    expect(servers.apify).toBeDefined()
+    expect(servers.apify?.env.APIFY_TOKEN).toBe("apify_test")
+  })
+
+  it("apify · registered for market-research with APIFY_TOKEN set", () => {
+    process.env.APIFY_TOKEN = "apify_test"
+    const servers = buildMcpServers({ agentSlug: "market-research" })
     expect(servers.apify).toBeDefined()
   })
 
-  it("registers dataforseo only when BOTH login+password set", () => {
+  it("apify · NOT registered for agent not in APIFY_ALLOW (default-deny)", () => {
+    process.env.APIFY_TOKEN = "apify_test"
+    const servers = buildMcpServers({ agentSlug: "brand-strategist" })
+    expect(servers.apify).toBeUndefined()
+  })
+
+  it("apify · NOT registered when APIFY_TOKEN missing even if slug allowed", () => {
+    const servers = buildMcpServers({ agentSlug: "competitive-intelligence-agent" })
+    expect(servers.apify).toBeUndefined()
+  })
+
+  // ── DataForSEO · DATAFORSEO_ALLOW = {market-research, seo-specialist}
+
+  it("dataforseo · registered only when BOTH login+password set (env gate)", () => {
     process.env.DATAFORSEO_LOGIN = "login"
-    let servers = buildMcpServers({ agentSlug: "marketing-strategist" })
+    let servers = buildMcpServers({ agentSlug: "seo-specialist" })
     expect(servers.dataforseo).toBeUndefined()
 
     process.env.DATAFORSEO_PASSWORD = "pwd"
-    servers = buildMcpServers({ agentSlug: "marketing-strategist" })
+    servers = buildMcpServers({ agentSlug: "seo-specialist" })
     expect(servers.dataforseo).toBeDefined()
   })
 
-  it("registers higgsfield when HIGGSFIELD_API_KEY set", () => {
+  it("dataforseo · registered for market-research", () => {
+    process.env.DATAFORSEO_LOGIN = "login"
+    process.env.DATAFORSEO_PASSWORD = "pwd"
+    const servers = buildMcpServers({ agentSlug: "market-research" })
+    expect(servers.dataforseo).toBeDefined()
+  })
+
+  it("dataforseo · NOT registered for agent not in DATAFORSEO_ALLOW", () => {
+    process.env.DATAFORSEO_LOGIN = "login"
+    process.env.DATAFORSEO_PASSWORD = "pwd"
+    const servers = buildMcpServers({ agentSlug: "competitive-intelligence-agent" })
+    expect(servers.dataforseo).toBeUndefined()
+  })
+
+  // ── Higgsfield · HIGGSFIELD_ALLOW = {video-editor}
+
+  it("higgsfield · registered for video-editor with HIGGSFIELD_API_KEY set", () => {
     process.env.HIGGSFIELD_API_KEY = "hf_test"
-    const servers = buildMcpServers({ agentSlug: "editor-en-jefe" })
+    const servers = buildMcpServers({ agentSlug: "video-editor" })
     expect(servers.higgsfield).toBeDefined()
   })
 
-  it("NEVER registers ghl (Stack V4 canon · DEPRECATED 2026-05-21)", () => {
+  it("higgsfield · NOT registered for agent not in HIGGSFIELD_ALLOW", () => {
+    process.env.HIGGSFIELD_API_KEY = "hf_test"
+    const servers = buildMcpServers({ agentSlug: "editor-en-jefe" })
+    expect(servers.higgsfield).toBeUndefined()
+  })
+
+  it("higgsfield · NOT registered for onboarding-specialist (legacy deny preserved)", () => {
+    process.env.HIGGSFIELD_API_KEY = "hf_test"
+    const servers = buildMcpServers({ agentSlug: "onboarding-specialist" })
+    expect(servers.higgsfield).toBeUndefined()
+  })
+
+  // ── GHL · permanently NOT registered
+
+  it("ghl · NEVER registered (Stack V4 canon DEPRECATED 2026-05-21)", () => {
     process.env.GHL_API_KEY = "ghl_should_be_ignored"
     const servers = buildMcpServers({ agentSlug: "account-manager" })
     expect(servers.ghl).toBeUndefined()
@@ -72,7 +128,9 @@ describe("buildMcpServers", () => {
     delete process.env.GHL_API_KEY
   })
 
-  it("denies all MCPs for onboarding-specialist (per AGENT_MCP_DENY)", () => {
+  // ── Default-deny effect · agents previously default-allowed now skip
+
+  it("default-deny · onboarding-specialist gets no MCPs (was deny-list before · now no allow)", () => {
     process.env.APIFY_TOKEN = "x"
     process.env.HIGGSFIELD_API_KEY = "y"
     process.env.DATAFORSEO_LOGIN = "a"
@@ -83,31 +141,37 @@ describe("buildMcpServers", () => {
     expect(servers.dataforseo).toBeUndefined()
   })
 
-  it("denies higgsfield only for email-marketer", () => {
+  it("default-deny · email-marketer gets no MCPs (no identity_md declaration)", () => {
     process.env.APIFY_TOKEN = "x"
     process.env.HIGGSFIELD_API_KEY = "y"
     const servers = buildMcpServers({ agentSlug: "email-marketer" })
-    expect(servers.apify).toBeDefined()
+    expect(servers.apify).toBeUndefined()
     expect(servers.higgsfield).toBeUndefined()
   })
 
-  it("denies all MCPs for community-manager except non-higgsfield ones (the deny rule lists higgsfield)", () => {
+  it("default-deny · community-manager gets no non-client-brain MCPs", () => {
     process.env.APIFY_TOKEN = "x"
     process.env.HIGGSFIELD_API_KEY = "y"
     const servers = buildMcpServers({ agentSlug: "community-manager" })
     expect(servers.higgsfield).toBeUndefined()
-    expect(servers.apify).toBeDefined()
+    expect(servers.apify).toBeUndefined()
   })
 
-  it("allows MCPs for slugs not in deny-list", () => {
-    process.env.APIFY_TOKEN = "x"
-    process.env.HIGGSFIELD_API_KEY = "y"
-    const servers = buildMcpServers({ agentSlug: "editor-en-jefe" })
-    expect(servers.apify).toBeDefined()
-    expect(servers.higgsfield).toBeDefined()
+  // ── Client Brain · per-client always-on · NOT subject to allow-list
+
+  it("client-brain · registered when clientId present regardless of agent slug", () => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "srv_key"
+    const servers = buildMcpServers({ agentSlug: "any-random-slug", clientId: "cli_123" })
+    expect(servers["client-brain"]).toBeDefined()
+    expect(servers["client-brain"]?.env.CLIENT_ID).toBe("cli_123")
   })
 
-  // ── Meta Ads MCP · Sprint 7.7 Track B · allow-list gating ─────────────────
+  it("client-brain · NOT registered without clientId", () => {
+    const servers = buildMcpServers({ agentSlug: "brand-strategist" })
+    expect(servers["client-brain"]).toBeUndefined()
+  })
+
+  // ── Meta Ads MCP · Sprint 7.7 Track B · allow-list gating (unchanged) ─────────
 
   it("meta-ads · NOT registered when META_ACCESS_TOKEN missing", () => {
     const servers = buildMcpServers({ agentSlug: "media-buyer" })
@@ -177,6 +241,21 @@ describe("buildMcpServers", () => {
   it("meta-ads · NOT registered when agentSlug undefined (anonymous invocation)", () => {
     process.env.META_ACCESS_TOKEN = "EA"
     const servers = buildMcpServers({})
+    expect(servers["meta-ads"]).toBeUndefined()
+  })
+
+  // ── Anonymous invocation · no slug → no agent-gated MCPs
+
+  it("anonymous · no slug → no agent-gated MCPs even with env set", () => {
+    process.env.APIFY_TOKEN = "x"
+    process.env.HIGGSFIELD_API_KEY = "y"
+    process.env.DATAFORSEO_LOGIN = "a"
+    process.env.DATAFORSEO_PASSWORD = "b"
+    process.env.META_ACCESS_TOKEN = "EA"
+    const servers = buildMcpServers({})
+    expect(servers.apify).toBeUndefined()
+    expect(servers.dataforseo).toBeUndefined()
+    expect(servers.higgsfield).toBeUndefined()
     expect(servers["meta-ads"]).toBeUndefined()
   })
 })
