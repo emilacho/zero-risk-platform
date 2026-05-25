@@ -98,24 +98,18 @@ describe("buildMcpServers · default-deny + per-MCP allow-list canon", () => {
     expect(servers.dataforseo).toBeUndefined()
   })
 
-  // ── Higgsfield · HIGGSFIELD_ALLOW = {video-editor}
+  // ── Higgsfield · PURGED per Stack V4 canon (Sprint 7.7 D · canonicalized
+  //    2026-05-25 CC#2 Higgsfield purge). Replacement · Veo 3.1 spec-only.
 
-  it("higgsfield · registered for video-editor with HIGGSFIELD_API_KEY set", () => {
-    process.env.HIGGSFIELD_API_KEY = "hf_test"
+  it("higgsfield · NEVER registered (Stack V4 canon PURGED · canonicalized 2026-05-25)", () => {
+    process.env.HIGGSFIELD_API_KEY = "hf_should_be_ignored"
+    // Even video-editor (former allow-list entry pre-2026-05-25) NOT registered
     const servers = buildMcpServers({ agentSlug: "video-editor" })
-    expect(servers.higgsfield).toBeDefined()
-  })
-
-  it("higgsfield · NOT registered for agent not in HIGGSFIELD_ALLOW", () => {
-    process.env.HIGGSFIELD_API_KEY = "hf_test"
-    const servers = buildMcpServers({ agentSlug: "editor-en-jefe" })
     expect(servers.higgsfield).toBeUndefined()
-  })
-
-  it("higgsfield · NOT registered for onboarding-specialist (legacy deny preserved)", () => {
-    process.env.HIGGSFIELD_API_KEY = "hf_test"
-    const servers = buildMcpServers({ agentSlug: "onboarding-specialist" })
-    expect(servers.higgsfield).toBeUndefined()
+    // Editor-en-jefe also NOT registered (legacy reference cleanup)
+    const servers2 = buildMcpServers({ agentSlug: "editor-en-jefe" })
+    expect(servers2.higgsfield).toBeUndefined()
+    delete process.env.HIGGSFIELD_API_KEY
   })
 
   // ── GHL · permanently NOT registered
