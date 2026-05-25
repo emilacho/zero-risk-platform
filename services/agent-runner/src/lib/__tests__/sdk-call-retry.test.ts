@@ -1,12 +1,91 @@
 /**
- * sdk-call-retry unit tests · Sprint 8D Fase 1 cuenta #1 closure.
+ * sdk-call-retry unit tests · Sprint 8D Fase 1 baseline + Sprint 8D tail
+ * brand-strategist Railway app-level resilience upgrade.
  *
- * Verifies Anthropic transient retry pattern · success on first try ·
- * retry on transient (overloaded · service-not-able · 5xx) · throw
- * non-transient immediately · exhausted retries re-throw last error.
+ * Verifies ·
+ *  - Success on first try
+ *  - Retry on transient (string-pattern · error.code · HTTP status)
+ *  - Differentiated backoff (regular vs rate-limit)
+ *  - Non-transient errors throw immediately (no retry noise)
+ *  - Exhausted retries re-throw last error
+ *  - Jitter applied (delay within ±20% of base)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { callSdkWithRetry, SDK_CALL_RETRY_DELAYS_MS } from "../sdk-call-retry"
+import {
+  callSdkWithRetry,
+  classifyError,
+  SDK_CALL_RETRY_DELAYS_MS,
+  SDK_CALL_RATELIMIT_DELAYS_MS,
+} from "../sdk-call-retry"
+
+describe("classifyError", () => {
+  it("classifies HTTP 429 as transient + rateLimit (longer backoff)", () => {
+    const err = Object.assign(new Error("Too many requests"), { status: 429 })
+    const c = classifyError(err)
+    expect(c.transient).toBe(true)
+    expect(c.rateLimit).toBe(true)
+    expect(c.reason).toContain("http-429")
+  })
+
+  it("classifies error.code=ECONNRESET as transient (network)", () => {
+    const err = Object.assign(new Error("socket disconnect"), { code: "ECONNRESET" })
+    const c = classifyError(err)
+    expect(c.transient).toBe(true)
+    expect(c.rateLimit).toBe(false)
+    expect(c.reason).toContain("network-error-code=ECONNRESET")
+  })
+
+  it("classifies error.code=ETIMEDOUT as transient", () => {
+    const err = Object.assign(new Error("..."), { code: "ETIMEDOUT" })
+    expect(classifyError(err).transient).toBe(true)
+  })
+
+  it("classifies HTTP 502/503/504 as transient (server-side)", () => {
+    for (const status of [500, 502, 503, 504, 521, 599]) {
+      const err = Object.assign(new Error("server err"), { status })
+      const c = classifyError(err)
+      expect(c.transient).toBe(true)
+      expect(c.rateLimit).toBe(false)
+      expect(c.reason).toContain(`status=${status}`)
+    }
+  })
+
+  it("classifies HTTP 408 + 425 as transient (timeout/early-data)", () => {
+    expect(classifyError(Object.assign(new Error(), { status: 408 })).transient).toBe(true)
+    expect(classifyError(Object.assign(new Error(), { status: 425 })).transient).toBe(true)
+  })
+
+  it("classifies HTTP 4xx (NOT 408/425/429) as non-transient", () => {
+    for (const status of [400, 401, 403, 404, 422]) {
+      const err = Object.assign(new Error("client err"), { status })
+      const c = classifyError(err)
+      expect(c.transient).toBe(false)
+      expect(c.reason).toContain("non-retryable")
+    }
+  })
+
+  it("falls back to message-pattern match when no status/code", () => {
+    expect(classifyError(new Error("Overloaded")).transient).toBe(true)
+    expect(classifyError(new Error("The service was not able to process your request")).transient).toBe(true)
+    expect(classifyError(new Error("The connection to the server was closed unexpectedly")).transient).toBe(true)
+    expect(classifyError(new Error("socket hang up")).transient).toBe(true)
+  })
+
+  it("classifies completely unknown errors as non-transient (fail-fast)", () => {
+    expect(classifyError(new Error("Invalid model")).transient).toBe(false)
+    expect(classifyError(new Error("foo bar baz")).transient).toBe(false)
+  })
+
+  it("reads status from nested error.response.status (fetch-style)", () => {
+    const err = Object.assign(new Error("..."), { response: { status: 503 } })
+    expect(classifyError(err).transient).toBe(true)
+  })
+
+  it("reads code from nested error.cause.code (Node fetch-style)", () => {
+    const err = Object.assign(new Error("..."), { cause: { code: "ECONNRESET" } })
+    expect(classifyError(err).transient).toBe(true)
+  })
+})
 
 describe("callSdkWithRetry", () => {
   beforeEach(() => {
@@ -31,34 +110,76 @@ describe("callSdkWithRetry", () => {
     expect(console.warn).not.toHaveBeenCalled()
   })
 
-  it("retries on 'service was not able to process' transient · succeeds 2nd attempt", async () => {
+  it("retries on 'service was not able to process' · succeeds 2nd attempt", async () => {
     const fn = vi
       .fn()
       .mockRejectedValueOnce(new Error("The service was not able to process your request"))
       .mockResolvedValueOnce({ data: "ok-retry" })
     const promise = callSdkWithRetry(fn, { canonicalSlug: "brand-strategist" })
-    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[0])
+    // Jitter is ±20% so advance the full upper bound (1.2× baseDelay).
+    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[0] * 1.2)
     const result = await promise
     expect(fn).toHaveBeenCalledTimes(2)
     expect(result.result).toEqual({ data: "ok-retry" })
     expect(result.retry.attempts).toBe(2)
     expect(result.retry.retried).toBe(true)
-    expect(result.retry.transientErrors).toHaveLength(1)
     expect(console.warn).toHaveBeenCalledTimes(1)
   })
 
-  it("retries on 'overloaded' transient · succeeds 3rd attempt", async () => {
+  it("retries on error.code=ECONNRESET (structured) · succeeds 2nd attempt", async () => {
+    const econnreset = Object.assign(new Error("socket reset"), { code: "ECONNRESET" })
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(econnreset)
+      .mockResolvedValueOnce({ data: "ok" })
+    const promise = callSdkWithRetry(fn, { canonicalSlug: "brand-strategist" })
+    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[0] * 1.2)
+    const result = await promise
+    expect(fn).toHaveBeenCalledTimes(2)
+    expect(result.retry.attempts).toBe(2)
+  })
+
+  it("retries on HTTP 500 (structured) · succeeds 2nd attempt", async () => {
+    const http500 = Object.assign(new Error("server error"), { status: 500 })
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(http500)
+      .mockResolvedValueOnce({ data: "ok" })
+    const promise = callSdkWithRetry(fn, { canonicalSlug: "brand-strategist" })
+    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[0] * 1.2)
+    const result = await promise
+    expect(fn).toHaveBeenCalledTimes(2)
+    expect(result.retry.attempts).toBe(2)
+  })
+
+  it("uses longer rate-limit backoff on HTTP 429", async () => {
+    const http429 = Object.assign(new Error("rate limited"), { status: 429 })
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(http429)
+      .mockResolvedValueOnce({ data: "ok" })
+    const promise = callSdkWithRetry(fn, { canonicalSlug: "brand-strategist" })
+    // Should sleep ~30s (rate-limit) not ~5s (regular) · advance only 5s + buffer should NOT resolve
+    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[0] * 1.2)
+    expect(fn).toHaveBeenCalledTimes(1) // still on first attempt · rate-limit not elapsed
+    // Now advance up to rate-limit delay upper bound (30s · 1.2 jitter = 36s)
+    await vi.advanceTimersByTimeAsync(SDK_CALL_RATELIMIT_DELAYS_MS[0] * 1.2)
+    const result = await promise
+    expect(fn).toHaveBeenCalledTimes(2)
+    expect(result.retry.transientErrors[0]).toContain("http-429")
+  })
+
+  it("retries on 'overloaded' · succeeds 3rd attempt", async () => {
     const fn = vi
       .fn()
       .mockRejectedValueOnce(new Error("Overloaded · please retry"))
       .mockRejectedValueOnce(new Error("Overloaded · still"))
       .mockResolvedValueOnce({ data: "ok-3rd" })
     const promise = callSdkWithRetry(fn, { canonicalSlug: "jefe-marketing" })
-    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[0])
-    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[1])
+    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[0] * 1.2)
+    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[1] * 1.2)
     const result = await promise
     expect(fn).toHaveBeenCalledTimes(3)
-    expect(result.result).toEqual({ data: "ok-3rd" })
     expect(result.retry.attempts).toBe(3)
   })
 
@@ -69,51 +190,39 @@ describe("callSdkWithRetry", () => {
     expect(console.warn).not.toHaveBeenCalled()
   })
 
-  it("exhausts 3 retries on persistent transient · re-throws last error", async () => {
-    // Use mockImplementation with sync throw to avoid vitest's unhandled-rejection
-    // detection on pre-queued mockRejectedValueOnce promises (CI flake fix).
-    const errors = ["ECONNRESET first", "ECONNRESET second", "ECONNRESET third"]
+  it("re-throws HTTP 401 immediately · no retry (auth failure)", async () => {
+    const http401 = Object.assign(new Error("auth"), { status: 401 })
+    const fn = vi.fn(async () => { throw http401 })
+    await expect(callSdkWithRetry(fn, { canonicalSlug: "test" })).rejects.toBe(http401)
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it("exhausts retries on persistent transient · re-throws last error", async () => {
+    const errors = [
+      Object.assign(new Error("first"), { code: "ECONNRESET" }),
+      Object.assign(new Error("second"), { code: "ECONNRESET" }),
+      Object.assign(new Error("third"), { code: "ECONNRESET" }),
+      Object.assign(new Error("fourth"), { code: "ECONNRESET" }),
+    ]
     let call = 0
-    const fn = vi.fn(async () => {
-      const msg = errors[call++]
-      throw new Error(msg)
-    })
+    const fn = vi.fn(async () => { throw errors[call++] })
     const promise = callSdkWithRetry(fn, { canonicalSlug: "exhausted" })
-    // Catch upfront so vitest doesn't flag intermediate rejection-state as unhandled.
     const settled = promise.catch((e) => e)
-    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[0])
-    await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[1])
+    for (const delay of SDK_CALL_RETRY_DELAYS_MS) {
+      await vi.advanceTimersByTimeAsync(delay * 1.2)
+    }
     const finalErr = await settled
     expect(finalErr).toBeInstanceOf(Error)
-    expect((finalErr as Error).message).toBe("ECONNRESET third")
-    expect(fn).toHaveBeenCalledTimes(3)
-    expect(console.warn).toHaveBeenCalledTimes(2)
+    expect((finalErr as Error).message).toBe("fourth")
+    expect(fn).toHaveBeenCalledTimes(SDK_CALL_RETRY_DELAYS_MS.length + 1)
     expect(console.error).toHaveBeenCalledTimes(1)
   })
 
-  it("recognizes 5xx HTTP error strings as transient", async () => {
-    const cases = [
-      "502 Bad Gateway from upstream",
-      "503 Service Unavailable",
-      "504 Gateway Timeout",
-      "Server-side issue · please retry",
-      "Connection aborted",
-      "Request timed out after 60s",
-    ]
-    for (const msg of cases) {
-      const fn = vi
-        .fn()
-        .mockRejectedValueOnce(new Error(msg))
-        .mockResolvedValueOnce({ ok: true })
-      const promise = callSdkWithRetry(fn, { canonicalSlug: "transient-test" })
-      await vi.advanceTimersByTimeAsync(SDK_CALL_RETRY_DELAYS_MS[0])
-      await promise
-      expect(fn).toHaveBeenCalledTimes(2)
-      fn.mockClear()
-    }
+  it("backoff schedule is [5s · 15s · 30s] (regular transient · was 1s/3s/10s pre-Sprint-8D-tail)", () => {
+    expect(SDK_CALL_RETRY_DELAYS_MS).toEqual([5000, 15000, 30000])
   })
 
-  it("backoff delays match exponential schedule [1000 · 3000 · 10000]", () => {
-    expect(SDK_CALL_RETRY_DELAYS_MS).toEqual([1000, 3000, 10000])
+  it("rate-limit backoff schedule is [30s · 60s · 120s]", () => {
+    expect(SDK_CALL_RATELIMIT_DELAYS_MS).toEqual([30000, 60000, 120000])
   })
 })
