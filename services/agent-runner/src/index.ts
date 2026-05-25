@@ -90,6 +90,14 @@ interface RunSdkBody {
    */
   forceRestart?: unknown
   force_restart?: unknown
+  /**
+   * Sprint 9 entry canon · dry-run mode flag. true → skip Anthropic SDK
+   * call · return canonical fake response · zero LLM cost · zero MCP
+   * invocation · zero Client Brain enrichment. Skips checkpoint save
+   * canon-guard (no fake-response cache pollution).
+   */
+  dryRun?: unknown
+  dry_run?: unknown
   context?: unknown
   extra?: unknown
 }
@@ -220,6 +228,17 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     ctxObj.forceRestart === true ||
     ctxObj.force_restart === true
 
+  // Sprint 9 entry canon · dry-run flag · accepts top-level (camelCase OR
+  // snake_case) OR nested under context. Plus env var DRY_RUN_DEFAULT as
+  // global panic button (mirror dry-run-mode.ts resolveDryRun).
+  const dryRun =
+    body.dryRun === true ||
+    body.dry_run === true ||
+    ctxObj.dryRun === true ||
+    ctxObj.dry_run === true ||
+    (typeof process.env.DRY_RUN_DEFAULT === 'string' &&
+      process.env.DRY_RUN_DEFAULT.toLowerCase() === 'true')
+
   const input: AgentRunInput = {
     agentName: agentName,
     task: body.task,
@@ -230,6 +249,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     workflowId: workflowId ?? null,
     workflowExecutionId: workflowExecutionId ?? null,
     forceRestart,
+    dryRun,
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }
 
