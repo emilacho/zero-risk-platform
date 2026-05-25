@@ -54,6 +54,25 @@ export async function POST(request: NextRequest) {
   const phase_output = body.phase_output !== undefined ? body.phase_output : body.output
   const success_criteria = body.success_criteria
   const client_id = body.client_id
+  // Sprint 8D · workflow attribution for downstream /api/agents/run call
+  // (editor-en-jefe semantic validation). n8n NEXUS workflow that invokes
+  // /api/evidence/validate passes workflow_id + execution_id top-level OR
+  // nested under context. Reject 403 if missing · same pattern as endpoint.
+  const ctxIn = (body.context && typeof body.context === 'object' ? body.context : {}) as Record<string, unknown>
+  const wfId = (typeof body.workflow_id === 'string' && body.workflow_id.length > 0 ? body.workflow_id : null) ||
+    (typeof ctxIn.workflow_id === 'string' && ctxIn.workflow_id.length > 0 ? (ctxIn.workflow_id as string) : null)
+  const wfExec = (typeof body.workflow_execution_id === 'string' && body.workflow_execution_id.length > 0 ? body.workflow_execution_id : null) ||
+    (typeof ctxIn.workflow_execution_id === 'string' && ctxIn.workflow_execution_id.length > 0 ? (ctxIn.workflow_execution_id as string) : null)
+  if (!wfId || !wfExec) {
+    return NextResponse.json(
+      {
+        error: 'workflow_id_required',
+        code: 'E-WF-ID-REQUIRED',
+        detail: 'canon Sprint 8D · /api/evidence/validate invokes /api/agents/run (editor-en-jefe) downstream · workflow_id + workflow_execution_id required (top-level OR context)',
+      },
+      { status: 403 },
+    )
+  }
 
   // If phase/output are empty strings from template-resolution failures,
   // return a soft PASS so the upstream workflow continues rather than aborting.
@@ -114,11 +133,15 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           agent: 'editor-en-jefe',
           task: `Review this phase-${phase} output for Zero Risk campaign ${request_id}. Identify semantic issues (brand voice mismatch, claim verification needs, tone, positioning consistency). Return JSON with keys: { issues: string[], editor_review: object, pass: boolean }.`,
+          workflow_id: wfId,
+          workflow_execution_id: wfExec,
           context: {
             phase,
             phase_output,
             client_id: client_id || 'unknown',
             success_criteria: success_criteria || [],
+            workflow_id: wfId,
+            workflow_execution_id: wfExec,
           },
         }),
         signal: AbortSignal.timeout(45000),

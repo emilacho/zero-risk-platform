@@ -106,6 +106,55 @@ export async function POST(request: Request) {
       )
     }
 
+    // ── Sprint 8D · workflow_id enforcement (Emilio canon 2026-05-24) ────
+    // Symmetric with /api/agents/run-sdk · "agentes solo se invocan vía
+    // workflows NUNCA directo". Reject if missing workflow_id /
+    // workflow_execution_id (accept top-level OR nested under context).
+    // 403 + structured log so spam loops cannot accumulate cost.
+    const wfIdCandidate =
+      typeof body.workflow_id === 'string' && body.workflow_id.length > 0
+        ? (body.workflow_id as string)
+        : typeof context.workflow_id === 'string' && context.workflow_id.length > 0
+          ? (context.workflow_id as string)
+          : null
+    const wfExecCandidate =
+      typeof body.workflow_execution_id === 'string' && body.workflow_execution_id.length > 0
+        ? (body.workflow_execution_id as string)
+        : typeof context.workflow_execution_id === 'string' &&
+            context.workflow_execution_id.length > 0
+          ? (context.workflow_execution_id as string)
+          : null
+    if (!wfIdCandidate || !wfExecCandidate) {
+      const missing = [
+        !wfIdCandidate && 'workflow_id',
+        !wfExecCandidate && 'workflow_execution_id',
+      ].filter(Boolean)
+      const callerHint = {
+        agent: agentName,
+        caller,
+        user_agent: request.headers.get('user-agent')?.slice(0, 100) || null,
+        x_vercel_id: request.headers.get('x-vercel-id')?.slice(0, 64) || null,
+        body_keys: Object.keys(body || {}),
+        has_context: !!body.context,
+        missing,
+      }
+      console.warn(
+        '[agents/run] REJECTED · workflow_id enforcement · ' + JSON.stringify(callerHint),
+      )
+      return NextResponse.json(
+        {
+          error: 'workflow_id_required',
+          code: 'E-WF-ID-REQUIRED',
+          detail:
+            'canon Sprint 8D (Emilio 2026-05-24) · agents only via workflows · ' +
+            `missing field(s): ${missing.join(', ')} · ` +
+            'pass workflow_id + workflow_execution_id top-level OR nested under context · ' +
+            'for ad-hoc smoke tests use the canonical "Smoke Test Agent Invocation" n8n workflow',
+        },
+        { status: 403 }
+      )
+    }
+
     // Sprint 8B B4 · CLAUDE_API_KEY check removed · LLM call moved to Railway
     // agent-runner which owns the Anthropic credential. RAILWAY_AGENT_RUNNER_URL
     // gate happens later in the LLM-call section.

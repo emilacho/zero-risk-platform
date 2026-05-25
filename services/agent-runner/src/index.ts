@@ -128,6 +128,15 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
   const clientId = pickStringOrNull(body.clientId, body.client_id)
   const pipelineId = pickStringOrNull(body.pipelineId, body.pipeline_id)
   const stepName = pickStringOrNull(body.stepName, body.step_name)
+  // Sprint 8D workflow attribution · same alias pattern as other fields ·
+  // Vercel proxy enforces NON-NULL at the gateway · runner just normalizes
+  // and forwards into the AgentRunInput (the observability writer in
+  // agent-sdk-runner.ts then includes them on agent_invocations rows).
+  const workflowId = pickStringOrNull(body.workflowId, body.workflow_id)
+  const workflowExecutionId = pickStringOrNull(
+    body.workflowExecutionId,
+    body.workflow_execution_id,
+  )
 
   // The Vercel proxy already validated via Zod and sanitized strings, but
   // re-check shape here so a misconfigured caller (e.g. a CLI smoke test)
@@ -156,6 +165,32 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'stepName / step_name must be string|null|undefined' })
     return
   }
+  // Sprint 8D · workflow_id enforcement at Railway too (Emilio canon
+  // 2026-05-24 · "agentes solo se invocan vía workflows"). Closes the
+  // direct-bypass loophole · post Sprint 8D Fase 1 some n8n workflows hit
+  // Railway directly to escape Vercel 300s function timeout · without this
+  // server-side gate they could submit without workflow attribution. n8n
+  // workflows auto-populate via `$workflow.id` + `$execution.id`. Reject
+  // 403 mirrors the Vercel proxy enforcement so any caller (Vercel or
+  // direct) faces the same canon.
+  if (typeof workflowId !== 'string' || workflowId.length === 0) {
+    res.status(403).json({
+      success: false,
+      error: 'workflow_id_required',
+      code: 'E-WF-ID-REQUIRED',
+      detail: 'canon Sprint 8D · workflowId / workflow_id required (n8n $workflow.id) · agents only via workflows',
+    })
+    return
+  }
+  if (typeof workflowExecutionId !== 'string' || workflowExecutionId.length === 0) {
+    res.status(403).json({
+      success: false,
+      error: 'workflow_execution_id_required',
+      code: 'E-WF-EXEC-ID-REQUIRED',
+      detail: 'canon Sprint 8D · workflowExecutionId / workflow_execution_id required (n8n $execution.id)',
+    })
+    return
+  }
   if (
     body.extra !== undefined &&
     body.extra !== null &&
@@ -172,6 +207,8 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     clientId: clientId ?? null,
     pipelineId: pipelineId ?? null,
     stepName: stepName ?? null,
+    workflowId: workflowId ?? null,
+    workflowExecutionId: workflowExecutionId ?? null,
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }
 

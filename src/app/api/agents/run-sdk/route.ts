@@ -47,7 +47,42 @@ interface RunSdkInput {
   client_id?: string | null
   pipeline_id?: string | null
   step_name?: string | null
+  /**
+   * Workflow attribution · canon Sprint 8D (Emilio 2026-05-24) · "agentes
+   * solo se invocan vía workflows NUNCA directo". Both required (non-null
+   * non-empty). n8n auto-populates via `$workflow.id` + `$execution.id`
+   * template expressions. Server-side wrappers (cascade-runner ·
+   * onboarding · evidence-validate · influencer-outreach · generate-content)
+   * MUST forward the workflow_id received from their upstream n8n caller.
+   * Direct CC / Cowork / smoke-script callers MUST route via the canonical
+   * "Smoke Test Agent Invocation" n8n workflow.
+   * Either top-level OR nested under `context.workflow_id` accepted.
+   */
+  workflow_id?: string | null
+  workflow_execution_id?: string | null
+  context?: Record<string, unknown> | null
   extra?: Record<string, unknown> | null
+}
+
+/**
+ * Resolve workflow_id + workflow_execution_id from request body · accepts
+ * top-level OR nested under `context` (matches /api/agents/run pattern at
+ * line 549-570 · symmetry across both endpoints).
+ */
+function resolveWorkflowAttribution(body: RunSdkInput): {
+  workflow_id: string | null
+  workflow_execution_id: string | null
+} {
+  const ctx = (body.context ?? {}) as Record<string, unknown>
+  const wfId = body.workflow_id ?? (ctx.workflow_id as string | null | undefined) ?? null
+  const wfExec =
+    body.workflow_execution_id ??
+    (ctx.workflow_execution_id as string | null | undefined) ??
+    null
+  return {
+    workflow_id: typeof wfId === 'string' && wfId.length > 0 ? wfId : null,
+    workflow_execution_id: typeof wfExec === 'string' && wfExec.length > 0 ? wfExec : null,
+  }
 }
 
 /**
@@ -148,6 +183,52 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields: agent, task' }, { status: 400 })
     }
 
+    // ── Sprint 8D · workflow_id enforcement (Emilio canon 2026-05-24) ────
+    // After the spam loop incident ($19/day Anthropic spend · 2026-05-24
+    // forensics) Emilio cristalizó canon · "de ahora en adelante nada se
+    // activa si no es a través de un workflow". Any agent invocation
+    // without workflow attribution is rejected with 403 + structured log
+    // so we can audit the caller and refactor them through the canonical
+    // "Smoke Test Agent Invocation" n8n workflow.
+    //
+    // n8n callers · auto-populate via `$workflow.id` + `$execution.id`.
+    // Server-side wrappers (cascade-runner · onboarding · evidence-validate
+    // · influencer-outreach · generate-content) · forward the workflow_id
+    // received from their upstream n8n caller (NOT generate synthetic IDs).
+    const wfAttr = resolveWorkflowAttribution(body)
+    if (!wfAttr.workflow_id || !wfAttr.workflow_execution_id) {
+      const callerHint = {
+        agent: agentName,
+        user_agent: request.headers.get('user-agent')?.slice(0, 100) || null,
+        x_vercel_id: request.headers.get('x-vercel-id')?.slice(0, 64) || null,
+        body_keys: Object.keys(body as unknown as Record<string, unknown>),
+        has_context: !!body.context,
+        missing: [
+          !wfAttr.workflow_id && 'workflow_id',
+          !wfAttr.workflow_execution_id && 'workflow_execution_id',
+        ].filter(Boolean),
+      }
+      console.warn(
+        '[run-sdk] REJECTED · workflow_id enforcement · ' + JSON.stringify(callerHint),
+      )
+      Sentry.captureMessage(
+        `[run-sdk] workflow_id enforcement reject · agent=${agentName} · missing=${callerHint.missing.join(',')}`,
+        'warning',
+      )
+      return NextResponse.json(
+        {
+          error: 'workflow_id_required',
+          code: 'E-WF-ID-REQUIRED',
+          detail:
+            'canon Sprint 8D (Emilio 2026-05-24) · agents only via workflows · ' +
+            `missing field(s): ${callerHint.missing.join(', ')} · ` +
+            'pass workflow_id + workflow_execution_id top-level OR nested under context · ' +
+            'for ad-hoc smoke tests use the canonical "Smoke Test Agent Invocation" n8n workflow',
+        },
+        { status: 403 },
+      )
+    }
+
     // LOTE-C item 8 · multi-path client_id resolver. Historically callers only
     // populated `body.client_id`, but several n8n workflows nest under
     // metadata / client.id / extra. Resolve once and use the resolved value
@@ -226,6 +307,11 @@ export async function POST(request: Request) {
       clientId,
       pipelineId: body.pipeline_id || null,
       stepName: body.step_name || null,
+      // Sprint 8D workflow attribution · forwarded to Railway so the
+      // downstream observability writer persists workflow_id + execution_id
+      // on `agent_invocations` (no more NULL rows · auditable per-workflow).
+      workflowId: wfAttr.workflow_id,
+      workflowExecutionId: wfAttr.workflow_execution_id,
       extra: body.extra || undefined,
     }
 

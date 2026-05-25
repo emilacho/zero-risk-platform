@@ -246,10 +246,18 @@ export async function runCascade(
       task,
       client_id: request.client_id,
       caller: request.caller ?? "cascade-runner",
+      // Sprint 8D · forward workflow_id + execution_id from the cascade
+      // request (which received them from the n8n workflow that invoked
+      // /api/cascade/onboard). Required · /api/agents/run rejects 403 if
+      // either is missing.
+      workflow_id: request.workflow_id,
+      workflow_execution_id: request.workflow_execution_id,
       context: {
         scrape_summary: request.scrape_summary,
         brand_assets: request.brand_assets,
         cascade_context: cascadeContext,
+        workflow_id: request.workflow_id,
+        workflow_execution_id: request.workflow_execution_id,
       },
     }
 
