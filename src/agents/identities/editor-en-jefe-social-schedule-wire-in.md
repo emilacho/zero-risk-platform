@@ -26,7 +26,7 @@ TOOL · social_schedule
 
 - NEXUS Phase content cascade · post-creative_concepts (Phase 3) · agent emit `social_caption` + `network` + `media_urls` (output del worker-creative + worker-video) → editor-en-jefe wire al hook `firePostDispatchHooks` (via journey-orchestrator dispatch.ts) → INSERT row social_posts pending_approval
 - HITL approval gate · MC inbox surface · admin aprueba → status='scheduled' → n8n cron 5min publica via Meta Graph v21
-- Video AI tool selection per playbook `video-ai-tool-selection-veo-vs-seedance.md` · media_urls puede ser Higgsfield · Seedance · Veo output URL
+- Video AI tool selection per playbook `video-ai-tool-selection-veo-vs-seedance.md` · media_urls puede ser Veo 3.1 · Seedance output URL (Higgsfield canonical retired · Stack V4 audit 2026-05-22 · referencia histórica solo)
 
 ## Anti-patterns
 

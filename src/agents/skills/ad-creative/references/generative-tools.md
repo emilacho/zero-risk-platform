@@ -247,24 +247,16 @@ ByteDance's video generation model with simultaneous audio-visual generation and
 
 ---
 
-### Higgsfield
+### Higgsfield (canonical retired)
 
-Full-stack video creation platform with cinematic camera controls.
+> **NOTE · Higgsfield retirado canónico** del stack video por Stack V4 audit 2026-05-22 · Veo 3.1 es el canonical video stack. Referencia histórica preservada para context · NOT recomendado para nuevos ad creative pipelines. Ver `wiki/decisions/2026-05-22-stack-canon-purge-deprecated-services-audit.md` para audit completo.
 
-**Best for:** Social video ads, cinematic style, mobile-first content
+Full-stack video creation platform with cinematic camera controls (historical reference).
+
+**Was best for:** Social video ads, cinematic style, mobile-first content
 **Platform:** [higgsfield.ai](https://higgsfield.ai/)
 
-**Capabilities:**
-- 50+ professional camera movements (zooms, pans, FPV drone shots)
-- Image-to-video animation
-- Built-in editing, transitions, and keyframing
-- All-in-one workflow: image gen, animation, editing
-
-**Ad creative use cases:**
-- Social media video ads with cinematic feel
-- Animate product images into dynamic video
-- Create multiple video variations with different camera styles
-- Quick-turn video content for social campaigns
+**Replacement canonical** · Veo 3.1 cubre social video ads canonical (vertical 9:16 native) · para cinematic camera work usar Kling 2.6 (canonical alternative for cinematic style per generative-tools tabla).
 
 ---
 
@@ -277,7 +269,7 @@ Full-stack video creation platform with cinematic camera controls.
 | **Runway Gen-4** | 10 sec | No | 1080p | Official | Controlled, consistent |
 | **Sora 2** | 60 sec | Native | 1080p | Official | Dialogue-heavy |
 | **Seedance 2.0** | 20 sec | Native | 2K | Official + third-party | Affordable high-volume |
-| **Higgsfield** | Varies | Yes | 1080p | Web-based | Social, mobile-first |
+| **Higgsfield** | Varies | Yes | 1080p | Web-based | ~~Social, mobile-first~~ (canonical retired · Stack V4 audit 2026-05-22 · Veo 3.1 canonical) |
 
 ---
 
@@ -585,7 +577,7 @@ Need video ads?
 │   ├── Need consistency across scenes? → Runway Gen-4
 │   ├── Need vertical social video? → Veo 3.1 (native 9:16)
 │   ├── Need high volume at low cost? → Seedance 2.0
-│   └── Need cinematic camera work? → Higgsfield, Kling
+│   └── Need cinematic camera work? → Kling 2.6 (Higgsfield canonical retired · Stack V4 audit 2026-05-22)
 └── Both → Use AI gen for hero creative, Remotion for variations
 
 Need image ads?
