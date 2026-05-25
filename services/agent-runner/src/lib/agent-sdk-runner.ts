@@ -558,7 +558,11 @@ function logExecution(
     model: modelId,
     started_at: new Date(startedAtMs).toISOString(),
     ended_at: new Date(endedAtMs).toISOString(),
-    duration_ms: durationMs,
+    // duration_ms is a GENERATED column in agent_invocations · computed as
+    // (ended_at - started_at). Explicit values trigger PostgREST 428C9
+    // "cannot insert a non-DEFAULT value into a generated column". Vercel
+    // proxy /api/agents/run also omits it (Sprint #4 Fase A migration ·
+    // mission-control/supabase/migrations/2026051401_create_agent_invocations.sql).
     cost_usd: costUsd,
     tokens_input: drain.inputTokens,
     tokens_output: drain.outputTokens,
