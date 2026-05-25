@@ -7,11 +7,13 @@
  * MCPs that have keys live AND whose allow-list includes the calling agent.
  * NO-OP gracefully cuando env missing.
  *
- * Stack V4 canon · 4 MCPs operational ·
+ * Stack V4 canon · 3 MCPs operational + 1 archived ·
  *   - @zero-risk/apify-mcp-server     · APIFY_TOKEN     + APIFY_ALLOW slugs
  *   - @zero-risk/dataforseo-mcp-server · DATAFORSEO_LOGIN+PASSWORD + DATAFORSEO_ALLOW
- *   - @zero-risk/higgsfield-mcp-server · HIGGSFIELD_API_KEY + HIGGSFIELD_ALLOW
  *   - meta-ads-mcp (Pipeboard · npm)  · META_ACCESS_TOKEN + META_ADS_ALLOW
+ *   - @zero-risk/higgsfield-mcp-server · ARCHIVED (Sprint 7.7 D · canonicalized 2026-05-25)
+ *     Replacement canonical · Veo 3.1 (spec-only · NO lib · differido per
+ *     cliente YouTube tier). See `tech-stacks/veo-3-1.md`.
  *
  * GHL MCP · DEPRECATED per Stack V4 canon · NOT registered. See vault
  * decision `zr-vault/wiki/decisions/2026-05-21-ghl-mcp-deprecation-stack-v4.md`.
@@ -67,9 +69,11 @@ const DATAFORSEO_ALLOW: ReadonlySet<string> = new Set([
   'market-research',
   'seo-specialist',
 ])
-const HIGGSFIELD_ALLOW: ReadonlySet<string> = new Set([
-  'video-editor',
-])
+// Higgsfield MCP · PURGED per Stack V4 canon · canonical replacement Veo 3.1
+// (spec-only · NO lib · differido per cliente YouTube tier). The MCP package
+// remains archived at `packages/higgsfield-mcp-server/` per Sprint 7.7 D
+// cleanup precedent ("keep MCP archived") · no runtime registration.
+// See vault decision `2026-05-25-cc2-higgsfield-purge-veo-update.md`.
 const META_ADS_ALLOW: ReadonlySet<string> = new Set([
   'media-buyer',
   'social-media-strategist',
@@ -150,24 +154,10 @@ export function buildMcpServers(
     }
   }
 
-  // Higgsfield · 4 tools (video gen · Seedance 2.0 + Lite tier). Allow-list
-  // canon default-deny. Stack V4 marked the MCP "archived legacy" but the
-  // npm package + env wire-in remain · runtime registration limited to
-  // video-editor only (single declarer per identity_md audit).
-  if (process.env.HIGGSFIELD_API_KEY && slug && HIGGSFIELD_ALLOW.has(slug)) {
-    servers.higgsfield = {
-      type: 'stdio',
-      command: 'node',
-      args: [resolveMcpEntrypoint('higgsfield-mcp-server')],
-      env: {
-        HIGGSFIELD_API_KEY: process.env.HIGGSFIELD_API_KEY,
-        ...(process.env.HIGGSFIELD_WEBHOOK_URL
-          ? { HIGGSFIELD_WEBHOOK_URL: process.env.HIGGSFIELD_WEBHOOK_URL }
-          : {}),
-        PATH: process.env.PATH ?? '',
-      },
-    }
-  }
+  // Higgsfield MCP · INTENTIONALLY NOT REGISTERED · Stack V4 canon OUT (Sprint
+  // 7.7 D audit · canonicalized 2026-05-25 CC#2 Higgsfield purge). Replacement
+  // canonical · Veo 3.1 (spec-only · NO lib · differido per cliente YouTube
+  // tier). See vault `00-meta/system-map/tech-stacks/veo-3-1.md`.
 
   // Meta Ads MCP (Pipeboard · meta-ads-mcp npm v1.1.0) · 20+ Meta Marketing API
   // tools (campaigns · ads · creatives · insights · audiences · ad library scrape).

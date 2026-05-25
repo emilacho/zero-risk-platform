@@ -234,7 +234,7 @@ const DEPRECATED = [
   { pattern: /\bIdeogram\b/i, name: "Ideogram", replacement: "GPT Image 1.5 (Stack V4)" },
   { pattern: /\bComposio\b/i, name: "Composio", replacement: "Direct API integrations (Stack V4)" },
   { pattern: /\bJARVIS\b/, name: "JARVIS", replacement: "NEXUS or Mission Control" },
-  { pattern: /\bKling AI\b/i, name: "Kling AI", replacement: "Higgsfield Seedance 2.0" },
+  { pattern: /\bKling AI\b/i, name: "Kling AI", replacement: "Veo 3.1 (Stack V4 · spec-only · tech-stacks/veo-3-1.md)" },
   { pattern: /\bGoHighLevel\b/i, name: "GoHighLevel", replacement: "Stack V4 modular (DEPRECATED 2026-05-20)" },
   { pattern: /process\.env\.GHL_API_KEY/, name: "GHL_API_KEY env", replacement: "Stack V4 individual keys" },
   { pattern: /process\.env\.MAILGUN_API_KEY/, name: "MAILGUN_API_KEY env", replacement: "RESEND_API_KEY" },
