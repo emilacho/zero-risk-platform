@@ -4,18 +4,32 @@ import { OnboardingOrchestrator } from '@/lib/onboarding-orchestrator'
 import { validateObject } from '@/lib/input-validator'
 import { checkInternalKey } from '@/lib/internal-auth'
 
+// Sprint 8D Finding 3 · OnboardingOrchestrator.startOnboarding() can take
+// 60-180s on a cold client (Day 1 auto-discovery scrapes 5+ URLs · runs
+// brand-analyzer Claude call · persists 7 tables). Vercel function default
+// timeout is 60s · was killing cold runs mid-flight. Bump to the platform
+// ceiling (300s on Pro Fluid Compute) so the orchestrator completes when
+// invoked from the L1 dispatcher.
+export const maxDuration = 300
+
 /**
  * POST /api/onboarding — Start a new client onboarding (Day 1 auto-discovery)
  *
- * Body:
- * {
- *   "companyName": "Zero Risk Ecuador",
- *   "websiteUrl": "https://zeroriskec.com",
- *   "industry": "Seguridad industrial",
- *   "targetAudience": "Empresas industriales en Ecuador",
- *   "competitorUrls": ["https://competitor1.com", "https://competitor2.com"],
- *   "additionalNotes": "First client — industrial safety"
- * }
+ * Body shape (two accepted layouts) ·
+ *   1. Top-level (legacy direct callers · MC UI · CLI smokes) ·
+ *      {
+ *        "companyName": "Zero Risk Ecuador",
+ *        "websiteUrl": "https://zeroriskec.com",
+ *        ...
+ *      }
+ *   2. Nested under `params` (Sprint 8D L1 Master Journey Orchestrator
+ *      dispatch convention · n8n workflow wraps the inbound payload as
+ *      `{ journey, client_id, params: { companyName, websiteUrl, ... } }`).
+ *
+ * The unwrap chain reads top-level first · then `params.*` (camelCase
+ * then snake_case) so both legacy and L1-dispatched callers work without
+ * any caller-side refactor. Documented Sprint 8D Finding 3 · audit
+ * raw/qa/2026-05-25-journey-b-3-puntos-audit.md.
  *
  * GET /api/onboarding — List all onboarding sessions
  */
@@ -33,14 +47,59 @@ export async function POST(request: Request) {
     if (!_v.ok) return _v.response
     const body = _v.data
 
-    // Accept both camelCase (canonical) and snake_case (workflow-generated) field names
-    const companyName = (body.companyName as string) || (body.company_name as string) || (body.name as string) || ''
-    const websiteUrl = (body.websiteUrl as string) || (body.website_url as string) || (body.website as string) || (body.domain as string) || ''
-    const industry = (body.industry as string) || ''
-    const targetAudience = (body.targetAudience as string) || (body.target_audience as string) || undefined
-    const competitorUrls = (body.competitorUrls as string[]) || (body.competitor_urls as string[]) || undefined
-    const additionalNotes = (body.additionalNotes as string) || (body.additional_notes as string) || (body.notes as string) || undefined
-    const createdBy = (body.createdBy as string) || (body.created_by as string) || 'api'
+    // Sprint 8D Finding 3 · accept both top-level (legacy direct callers) and
+    // `params.*` (L1 Master Journey dispatch convention) layouts. Each field
+    // checks top-level camelCase → top-level snake_case → params.camelCase →
+    // params.snake_case in that order. Both layouts work without caller refactor.
+    const params = (body.params && typeof body.params === 'object' ? body.params : {}) as Record<string, unknown>
+    const companyName =
+      (body.companyName as string) ||
+      (body.company_name as string) ||
+      (body.name as string) ||
+      (params.companyName as string) ||
+      (params.company_name as string) ||
+      (params.name as string) ||
+      ''
+    const websiteUrl =
+      (body.websiteUrl as string) ||
+      (body.website_url as string) ||
+      (body.website as string) ||
+      (body.domain as string) ||
+      (params.websiteUrl as string) ||
+      (params.website_url as string) ||
+      (params.website as string) ||
+      (params.domain as string) ||
+      ''
+    const industry =
+      (body.industry as string) ||
+      (params.industry as string) ||
+      ''
+    const targetAudience =
+      (body.targetAudience as string) ||
+      (body.target_audience as string) ||
+      (params.targetAudience as string) ||
+      (params.target_audience as string) ||
+      undefined
+    const competitorUrls =
+      (body.competitorUrls as string[]) ||
+      (body.competitor_urls as string[]) ||
+      (params.competitorUrls as string[]) ||
+      (params.competitor_urls as string[]) ||
+      undefined
+    const additionalNotes =
+      (body.additionalNotes as string) ||
+      (body.additional_notes as string) ||
+      (body.notes as string) ||
+      (params.additionalNotes as string) ||
+      (params.additional_notes as string) ||
+      (params.notes as string) ||
+      undefined
+    const createdBy =
+      (body.createdBy as string) ||
+      (body.created_by as string) ||
+      (params.createdBy as string) ||
+      (params.created_by as string) ||
+      'api'
 
     // Smoke-mode short-circuit: avoid running heavy OnboardingOrchestrator in smoke tests
     const smokeHeader = request.headers.get('x-smoke-test') === '1'
