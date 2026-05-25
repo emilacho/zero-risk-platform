@@ -23,6 +23,7 @@ import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
 import { buildMcpServers } from './agent-mcp-registry.js'
 import { insertWithRetry } from './agents-log-retry.js'
+import { insertAgentInvocationWithRetry } from './agent-invocations-log.js'
 import { callSdkWithRetry } from './sdk-call-retry.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
@@ -483,13 +484,14 @@ function logExecution(
     skills: Skill[]
     drain: StreamDrainResult
     modelId: string
+    startedAtMs: number
     durationMs: number
     costUsd: number
     brainEnrichment: BrainEnrichmentResultMeta
     cacheMetrics: CacheMetricsMeta
   },
 ): void {
-  const { canonicalSlug, input, skills, drain, modelId, durationMs, costUsd, brainEnrichment, cacheMetrics } = args
+  const { canonicalSlug, input, skills, drain, modelId, startedAtMs, durationMs, costUsd, brainEnrichment, cacheMetrics } = args
   const row = {
     agent_name: canonicalSlug,
     action: 'agent_sdk_run',
@@ -533,6 +535,59 @@ function logExecution(
   // canonical agents_log schema · INSERT failed with PGRST204 silently for
   // every SDK run since deploy · B2 fix surfaced via console.error post-merge.
   void insertWithRetry(supabase, row, canonicalSlug)
+
+  // Sprint 8D cuenta #1 closure · dual-write to canonical agent_invocations
+  // table so canon enforcement audit query (`workflow_id IS NULL`) and Mission
+  // Control dashboards see Railway-direct n8n invocations. Without this, n8n
+  // direct path (Sprint 8D Fase 1 bypass) produces success+cost in n8n output
+  // but ZERO rows in agent_invocations · audit trail BROKEN. The Vercel proxy
+  // route `/api/agents/run` writes here for the CLI path; this matches that
+  // shape so dashboards consuming agent_invocations are caller-agnostic.
+  const endedAtMs = startedAtMs + durationMs
+  const sessionIdForInsert = drain.sessionId ?? `runner-${startedAtMs}-${Math.random().toString(36).slice(2, 8)}`
+  const invocationRow: Record<string, unknown> = {
+    session_id: sessionIdForInsert,
+    agent_id: canonicalSlug,
+    agent_name: canonicalSlug,
+    command: null,
+    task_id: input.pipelineId ?? null,
+    workflow_id: input.workflowId ?? null,
+    workflow_execution_id: input.workflowExecutionId ?? null,
+    client_id: input.clientId ?? null,
+    journey_id: null,
+    model: modelId,
+    started_at: new Date(startedAtMs).toISOString(),
+    ended_at: new Date(endedAtMs).toISOString(),
+    duration_ms: durationMs,
+    cost_usd: costUsd,
+    tokens_input: drain.inputTokens,
+    tokens_output: drain.outputTokens,
+    tokens_cache_read: cacheMetrics.cache_read_input_tokens,
+    tokens_cache_creation: cacheMetrics.cache_creation_input_tokens,
+    num_turns: 1,
+    status: 'completed',
+    exit_code: 0,
+    error_message: null,
+    system_prompt: null,
+    metadata: {
+      source: 'agent-runner-railway',
+      caller: 'agent-runner',
+      task_text: input.task.substring(0, 200),
+      step_name: input.stepName ?? null,
+      pipeline_id: input.pipelineId ?? null,
+      resumed: !!input.resumeSessionId,
+      skills_loaded: skills.map(s => s.name).slice(0, 20),
+      response_length: drain.responseText.length,
+      brain_hit: brainEnrichment.brain_hit,
+      brain_chunks_count: brainEnrichment.brain_chunks_count,
+      brain_query_ms: brainEnrichment.brain_query_ms,
+      brain_cost_usd: brainEnrichment.brain_cost_usd,
+      ...(brainEnrichment.brain_error ? { brain_error: brainEnrichment.brain_error } : {}),
+      cache_creation_5m_tokens: cacheMetrics.cache_creation_5m_tokens,
+      cache_creation_1h_tokens: cacheMetrics.cache_creation_1h_tokens,
+    },
+  }
+  void insertAgentInvocationWithRetry(supabase, invocationRow, canonicalSlug)
 }
 
 // ---------- Public entry point ----------
@@ -638,8 +693,11 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   }
 
   // 5. Best-effort log · include brain enrichment + cache markers.
+  //    Dual-write · `agents_log` (Railway runner forensics) + `agent_invocations`
+  //    (canonical Sprint 8D audit trail · workflow_id column for enforcement
+  //    query). See agent-invocations-log.ts for dual-write rationale.
   logExecution(supabase, {
-    canonicalSlug, input, skills, drain, modelId, durationMs, costUsd,
+    canonicalSlug, input, skills, drain, modelId, startedAtMs: startedAt, durationMs, costUsd,
     brainEnrichment: brainEnrichmentMeta,
     cacheMetrics: cacheMetricsMeta,
   })
