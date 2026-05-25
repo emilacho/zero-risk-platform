@@ -134,7 +134,7 @@ describe('POST /api/agents/log-invocation · canon §149 enforcement', () => {
     expect(j.agent_invocation_id).toBe('inv-canonical-uuid')
     expect(j.canonical_pattern).toBe('log-invocation-local-session')
     expect(insertMock).toHaveBeenCalledOnce()
-    const inserted = insertMock.mock.calls[0]![0] as Array<Record<string, unknown>>
+    const inserted = (insertMock.mock.calls[0] as unknown as [Array<Record<string, unknown>>])[0]
     expect(inserted[0]!.workflow_id).toBe('mc-daemon-health-canonical')
     expect(inserted[0]!.agent_name).toBe('health-check-daemon')
     const meta = inserted[0]!.metadata as Record<string, unknown>
@@ -148,17 +148,17 @@ describe('POST /api/agents/log-invocation · canon §149 enforcement', () => {
     const longText = 'x'.repeat(2500)
     const res = await POST(makeReq({ ...HAPPY_BODY, response_text: longText }))
     expect(res.status).toBe(200)
-    const inserted = insertMock.mock.calls[0]![0] as Array<Record<string, unknown>>
+    const inserted = (insertMock.mock.calls[0] as unknown as [Array<Record<string, unknown>>])[0]
     const summary = inserted[0]!.output_summary as string
     expect(summary.length).toBe(2001)
     expect(summary.endsWith('…')).toBe(true)
   })
 
   it('persist_failed · 500 E-PERSIST-FAILED on supabase error', async () => {
-    singleMock.mockImplementationOnce(async () => ({
+    singleMock.mockImplementationOnce((async () => ({
       data: null,
       error: { message: 'unique violation canon' },
-    }))
+    })) as unknown as typeof singleMock extends (...args: infer A) => infer R ? (...args: A) => R : never)
     const { POST } = await importRoute()
     const res = await POST(makeReq(HAPPY_BODY))
     expect(res.status).toBe(500)
