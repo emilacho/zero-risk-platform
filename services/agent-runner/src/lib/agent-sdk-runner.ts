@@ -573,6 +573,10 @@ function logExecution(
     exit_code: 0,
     error_message: null,
     system_prompt: null,
+    // Sprint 8D transparency enhancement · canonical forensics deep self-contained
+    // truncated 2000 chars + ellipsis · full payloads viven en Anthropic console retention
+    input_summary: input.task.length > 2000 ? input.task.slice(0, 2000) + '…' : input.task,
+    output_summary: drain.responseText.length > 2000 ? drain.responseText.slice(0, 2000) + '…' : drain.responseText,
     metadata: {
       source: 'agent-runner-railway',
       caller: 'agent-runner',
