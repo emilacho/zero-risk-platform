@@ -192,10 +192,13 @@ describe("buildMcpServers · default-deny + per-MCP allow-list canon", () => {
     expect(servers["meta-ads"]).toBeDefined()
   })
 
-  it("meta-ads · registered for paid-search-strategist", () => {
+  it("meta-ads · NOT registered for paid-search-strategist (REMOVED 2026-05-25 · GAP REAL canon-realign)", () => {
     process.env.META_ACCESS_TOKEN = "EAzzz"
     const servers = buildMcpServers({ agentSlug: "paid-search-strategist" })
-    expect(servers["meta-ads"]).toBeDefined()
+    // Post-Option-A removal · paid-search-strategist no longer in META_ADS_ALLOW
+    // · slug never existed en managed_agents_registry · media-buyer covers
+    // Google Ads + PPC canonical. See vault `2026-05-25-cc2-paid-search-strategist-naming-drift-audit.md`.
+    expect(servers["meta-ads"]).toBeUndefined()
   })
 
   it("meta-ads · falls back to META_SYSTEM_USER_TOKEN (Brazo 3 pre-canon alias)", () => {

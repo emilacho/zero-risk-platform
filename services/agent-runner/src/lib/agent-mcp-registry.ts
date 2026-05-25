@@ -77,7 +77,11 @@ const DATAFORSEO_ALLOW: ReadonlySet<string> = new Set([
 const META_ADS_ALLOW: ReadonlySet<string> = new Set([
   'media-buyer',
   'social-media-strategist',
-  'paid-search-strategist',
+  // 'paid-search-strategist' REMOVED 2026-05-25 CC#2 Sprint 9 entry (Option A
+  // post-audit GAP REAL verdict) · slug never existed en managed_agents_registry
+  // · stale entry desde Sprint 7.7 Track B speculative design · media-buyer
+  // already covers Google Ads + PPC canonical via identity_md. See vault
+  // `raw/qa/2026-05-25-cc2-paid-search-strategist-naming-drift-audit.md`.
 ])
 
 export interface AgentMcpContext {
