@@ -60,6 +60,13 @@ interface RunSdkInput {
    */
   workflow_id?: string | null
   workflow_execution_id?: string | null
+  /**
+   * Sprint 8D tail canon · workflow checkpoint/resume bypass flag. true →
+   * skip cache lookup · re-execute SDK call. Accepted top-level (camelCase
+   * OR snake_case) OR nested under `context`.
+   */
+  force_restart?: boolean
+  forceRestart?: boolean
   context?: Record<string, unknown> | null
   extra?: Record<string, unknown> | null
 }
@@ -300,6 +307,15 @@ export async function POST(request: Request) {
     // field forwarding with the rename the upstream contract requires.
     // When the Railway service learns to accept snake_case as well, this
     // block can be replaced with `JSON.stringify(body)`.
+    // Sprint 8D tail · forceRestart flag (workflow checkpoint canon) ·
+    // accepts top-level OR nested under context · matches workflow_id pattern.
+    const ctx = (body.context ?? {}) as Record<string, unknown>
+    const forceRestart =
+      body.force_restart === true ||
+      body.forceRestart === true ||
+      ctx.force_restart === true ||
+      ctx.forceRestart === true
+
     const proxyBody = {
       agentName,
       task,
@@ -312,6 +328,10 @@ export async function POST(request: Request) {
       // on `agent_invocations` (no more NULL rows · auditable per-workflow).
       workflowId: wfAttr.workflow_id,
       workflowExecutionId: wfAttr.workflow_execution_id,
+      // Sprint 8D tail · workflow checkpoint canon · default false (use cache
+      // when canonical completed checkpoint exists). Set true to bypass cache
+      // and re-execute SDK call (HITL rejection re-runs · ops force-fresh).
+      forceRestart,
       extra: body.extra || undefined,
     }
 
