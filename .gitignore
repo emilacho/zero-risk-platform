@@ -66,3 +66,4 @@ zr-w18-batch/
 # claude code local settings
 .claude/
 logs
+outputs/
