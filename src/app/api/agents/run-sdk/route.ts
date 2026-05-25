@@ -67,6 +67,14 @@ interface RunSdkInput {
    */
   force_restart?: boolean
   forceRestart?: boolean
+  /**
+   * Sprint 9 entry canon · dry-run mode flag. true → skip Anthropic SDK
+   * call · return canonical fake response · zero LLM cost · skip checkpoint
+   * save (canon guard against cache pollution). Accepted top-level
+   * (camelCase OR snake_case) OR nested under `context`.
+   */
+  dry_run?: boolean
+  dryRun?: boolean
   context?: Record<string, unknown> | null
   extra?: Record<string, unknown> | null
 }
@@ -316,6 +324,19 @@ export async function POST(request: Request) {
       ctx.force_restart === true ||
       ctx.forceRestart === true
 
+    // Sprint 9 entry · dry-run flag · accepts top-level (camelCase OR snake_case)
+    // OR nested under context. Header X-Dry-Run also honored at the proxy level
+    // (forwarded as dryRun=true). Env DRY_RUN_DEFAULT panic-button is checked
+    // again downstream at Railway (defense in depth).
+    const headerDryRun =
+      request.headers.get('x-dry-run')?.toLowerCase() === 'true'
+    const dryRun =
+      body.dry_run === true ||
+      body.dryRun === true ||
+      ctx.dry_run === true ||
+      ctx.dryRun === true ||
+      headerDryRun
+
     const proxyBody = {
       agentName,
       task,
@@ -332,6 +353,10 @@ export async function POST(request: Request) {
       // when canonical completed checkpoint exists). Set true to bypass cache
       // and re-execute SDK call (HITL rejection re-runs · ops force-fresh).
       forceRestart,
+      // Sprint 9 entry · dry-run mode · default false (real SDK call). Set
+      // true to skip Anthropic + return canonical fake response · zero LLM
+      // cost · enables mass-audit Phase 2 functional validation.
+      dryRun,
       extra: body.extra || undefined,
     }
 

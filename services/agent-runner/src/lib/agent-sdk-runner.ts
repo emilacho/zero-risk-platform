@@ -30,6 +30,7 @@ import {
   saveCheckpoint,
   type ShouldSkipResult,
 } from './workflow-checkpoint.js'
+import { buildDryRunFakeResponse } from './dry-run-mode.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
 // `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
@@ -110,6 +111,15 @@ export interface AgentRunInput {
    * · operator-forced fresh smokes · or any path that needs ungated SDK call.
    */
   forceRestart?: boolean
+  /**
+   * Sprint 9 entry canon · dry-run mode. When `dryRun=true` · skip the
+   * Anthropic SDK call · return a canonical fake StreamDrainResult · cost
+   * 0 USD · 0 tokens · 0 MCP invocations · 0 Client Brain enrichment.
+   * Enables mass-audit Phase 2 functional validation (58 workflows ~$3 total
+   * vs $30-100 without dry-run). Skips checkpoint save canon-guard
+   * (prevents cache pollution per spike `2026-05-25-cc2-dry-run-mass-audit-brazos-ejecutores-spike.md`).
+   */
+  dryRun?: boolean
   /** Extra para system prompt. */
   extra?: Record<string, unknown>
 }
@@ -607,6 +617,10 @@ function logExecution(
       ...(brainEnrichment.brain_error ? { brain_error: brainEnrichment.brain_error } : {}),
       cache_creation_5m_tokens: cacheMetrics.cache_creation_5m_tokens,
       cache_creation_1h_tokens: cacheMetrics.cache_creation_1h_tokens,
+      // Sprint 9 entry canon · dry-run audit trail · invocations where this
+      // flag is true returned canonical fake responses · NO Anthropic call ·
+      // forensics + post-deploy compliance queries should filter on this.
+      dry_run: input.dryRun === true,
     },
   }
   void insertAgentInvocationWithRetry(supabase, invocationRow, canonicalSlug)
@@ -648,7 +662,10 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     // Best-effort · mark step in_progress (advisory · concurrent racers may
     // both proceed but unique constraint ensures only 1 row · downstream
     // saveCheckpoint at end will overwrite with terminal status).
-    if (!checkpointDecision.skip) {
+    //
+    // Sprint 9 entry canon guard · skip in_progress save when dry-run is
+    // active · prevent checkpoint cache pollution with fake responses.
+    if (!checkpointDecision.skip && input.dryRun !== true) {
       void saveCheckpoint(supabase, {
         workflowId: input.workflowId,
         workflowExecutionId: input.workflowExecutionId ?? null,
@@ -708,23 +725,36 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   //    for Anthropic capacity transients ("service was not able to process",
   //    "overloaded", 5xx, ECONNRESET, etc). Non-transient errors pass through
   //    immediately. See sdk-call-retry.ts for the full transient pattern list.
+  //
+  //    Sprint 9 entry canon · dry-run mode short-circuit · when input.dryRun
+  //    is true · skip SDK + retry wrapper entirely · return canonical fake
+  //    StreamDrainResult · cost computation downstream produces 0 USD given
+  //    zero token inputs. See dry-run-mode.ts for activation patterns +
+  //    canon guards.
   let drain: StreamDrainResult
-  try {
-    const wrapped = await callSdkWithRetry(
-      async () => {
-        const stream = (query as unknown as QueryFn)({ prompt: input.task, options })
-        return await drainStream(stream)
-      },
-      { canonicalSlug },
+  if (input.dryRun === true) {
+    drain = buildDryRunFakeResponse(canonicalSlug, input.task ?? '')
+    console.log(
+      `[dry-run] ${canonicalSlug} · canonical fake response · zero LLM cost · skip checkpoint save`,
     )
-    drain = wrapped.result
-    if (wrapped.retry.retried) {
-      console.log(
-        `[sdk-call-retry] OK ${canonicalSlug} · succeeded on attempt ${wrapped.retry.attempts}/3 after ${wrapped.retry.transientErrors.length} transient(s)`,
+  } else {
+    try {
+      const wrapped = await callSdkWithRetry(
+        async () => {
+          const stream = (query as unknown as QueryFn)({ prompt: input.task, options })
+          return await drainStream(stream)
+        },
+        { canonicalSlug },
       )
+      drain = wrapped.result
+      if (wrapped.retry.retried) {
+        console.log(
+          `[sdk-call-retry] OK ${canonicalSlug} · succeeded on attempt ${wrapped.retry.attempts}/3 after ${wrapped.retry.transientErrors.length} transient(s)`,
+        )
+      }
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : 'SDK error', startedAt)
     }
-  } catch (err) {
-    return fail(err instanceof Error ? err.message : 'SDK error', startedAt)
   }
 
   const durationMs = Date.now() - startedAt
@@ -779,7 +809,12 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   //     embedded output_ref (response + tokens + cost + brain + cache).
   //     Next re-trigger for same (workflow_id, client_id, agent_slug) will
   //     skip the SDK call entirely. Fire-and-forget · NEVER throws.
-  if (input.workflowId && input.clientId) {
+  //
+  //     Sprint 9 entry canon guard · skip save when dry-run is active ·
+  //     prevents fake `[DRY_RUN]` response polluting the checkpoint cache.
+  //     A subsequent real (non-dry-run) call must re-execute the SDK ·
+  //     dry-run is for plumbing validation only · NOT a real cache fill.
+  if (input.workflowId && input.clientId && input.dryRun !== true) {
     void saveCheckpoint(supabase, {
       workflowId: input.workflowId,
       workflowExecutionId: input.workflowExecutionId ?? null,
