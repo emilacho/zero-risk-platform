@@ -42,10 +42,10 @@ function buildSocialRequest(overrides: Partial<SocialContentRequest> = {}): Soci
     campaign_intent: 'product launch',
     context: {
       brand_book: { content: 'minimal brand book' },
-      brand_strategist_output: 'positioning summary',
-      ad_creative_brief_output: 'creative direction',
+      visual_direction: { palette: 'minimal' },
+      copy: { headline: 'test' },
     },
-    platforms_requested: ['instagram-post', 'facebook'],
+    platforms_requested: ['instagram-feed', 'facebook-feed'],
     ...overrides,
   }
 }
