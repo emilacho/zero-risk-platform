@@ -49,10 +49,10 @@ interface N8nWorkflow {
 describe('n8n workflow · Cliente Nuevo Landing Cascade Master', () => {
   const workflow = JSON.parse(readFileSync(WORKFLOW_PATH, 'utf8')) as N8nWorkflow
 
-  it('parses as valid JSON with 19 nodes (sequential chain post-Path-D-fix)', () => {
+  it('parses as valid JSON with 20 nodes (post-§149 backport · added Invoke · market-research)', () => {
     expect(workflow.name).toBe('Zero Risk — Cliente Nuevo · Landing Cascade Master')
     expect(Array.isArray(workflow.nodes)).toBe(true)
-    expect(workflow.nodes.length).toBe(19)
+    expect(workflow.nodes.length).toBe(20)
     expect(workflow.connections).toBeDefined()
     expect(workflow.settings.executionOrder).toBe('v1')
   })
@@ -192,10 +192,11 @@ describe('n8n workflow · Cliente Nuevo Landing Cascade Master', () => {
     expect(body).toContain('hero_generated')
   })
 
-  it('tags include zero-risk + tier-1 + cascade for n8n filterability', () => {
-    const tagNames = workflow.tags.map(t => t.name)
-    expect(tagNames).toContain('zero-risk')
-    expect(tagNames).toContain('tier-1')
-    expect(tagNames).toContain('cascade')
+  it('tags array is present (post-§149 backport · live n8n strips tags via REST export · canonical tracks live shape)', () => {
+    // Live n8n REST `GET /workflows/:id` returns `tags: []` even when the
+    // workflow has tags assigned via the GUI · n8n REST omits tag membership
+    // in the export. Post-backport canonical mirrors that shape. Tag-based
+    // filterability is enforced at the n8n GUI layer, not in canonical JSON.
+    expect(Array.isArray(workflow.tags)).toBe(true)
   })
 })
