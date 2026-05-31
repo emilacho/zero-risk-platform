@@ -1,55 +1,118 @@
 {
   "name": "Zero Risk — SEO Backlink Opportunity Scanner Weekly",
-  "meta": {
-    "description": "Mondays 6am: unlinked mentions scan + data studies. Calls Backlink Strategist agent. Tiers targets A/B/C. Writes to backlink_opportunities table. Weekly Slack digest.",
-    "trigger_type": "cron",
-    "cron_schedule": "0 6 * * 1",
-    "expected_duration_minutes": 25,
-    "cost_usd_per_run": "4-6",
-    "tags": [
-      {
-        "name": "zero-risk"
-      },
-      {
-        "name": "cluster-3"
-      },
-      {
-        "name": "seo"
-      },
-      {
-        "name": "backlinks"
-      },
-      {
-        "name": "weekly"
-      }
-    ]
-  },
   "nodes": [
     {
       "parameters": {
-        "rule": "0 6 * * 1"
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * 1"
+            }
+          ]
+        }
       },
-      "id": "trigger-cron",
+      "id": "trigger-8gIdl3",
       "name": "Trigger: Mondays 6am UTC",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        100,
+        240,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "return [{json:{message:'Backlink scanner triggered'}}];"
+        "jsCode": "const resp = await fetch('https://zero-risk-platform.vercel.app/api/clients?active=true', { headers: { 'x-api-key': 'key' } });\nconst data = await resp.json();\nreturn [{ json: { clients: Array.isArray(data) ? data : (data.clients ?? data.rows ?? []) } }];"
       },
-      "id": "init",
-      "name": "Initialize",
+      "id": "load-clients-8gIdl3",
+      "name": "Load Active Clients",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        320,
+        460,
         300
       ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "clients"
+      },
+      "id": "split-8gIdl3",
+      "name": "Split Into Each Client",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || \"https://zero-risk-platform.vercel.app\" }}/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  agent_name: \"seo-backlink-strategist\",\n  client_id: $json.client_id || $json.id || null,\n  task_input: {\n    client_id: $json.client_id || $json.id,\n    client_name: $json.client_name || $json.name,\n    vertical: $json.vertical || $json.industry,\n    domain: $json.domain || null,\n    target_keyword: $json.target_keyword || null,\n    locale: $json.locale || { country: \"US\", language: \"en\" },\n    cron_run_at: new Date().toISOString()\n  }, workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "invoke-8gIdl3",
+      "name": "Invoke seo-backlink-strategist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || \"https://zero-risk-platform.vercel.app\" }}/api/cascade/persist-outputs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  client_id: ($node[\"Split Into Each Client\"].json.client_id || $node[\"Split Into Each Client\"].json.id),\n  slug: ($node[\"Split Into Each Client\"].json.slug || $node[\"Split Into Each Client\"].json.client_id || \"unknown\"),\n  version: \"backlink-opportunities-\" + new Date().toISOString().slice(0, 10),\n  task_id: \"backlink-opportunities-cron-\" + Date.now(),\n  outputs: {\n    \"seo-backlink-strategist\": $json\n  }\n}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "persist-8gIdl3",
+      "name": "Persist Deliverable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        300
+      ],
+      "continueOnFail": true
     }
   ],
   "connections": {
@@ -57,10 +120,53 @@
       "main": [
         [
           {
-            "node": "Initialize"
+            "node": "Load Active Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Active Clients": {
+      "main": [
+        [
+          {
+            "node": "Split Into Each Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Into Each Client": {
+      "main": [
+        [
+          {
+            "node": "Invoke seo-backlink-strategist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoke seo-backlink-strategist": {
+      "main": [
+        [
+          {
+            "node": "Persist Deliverable",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
     }
-  }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "triggerCount": 1,
+  "versionId": "81950b10-3449-4688-85bd-4aa3c4d84a1c"
 }

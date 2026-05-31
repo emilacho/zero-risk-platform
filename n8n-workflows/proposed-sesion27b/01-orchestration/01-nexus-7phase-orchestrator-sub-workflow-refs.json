@@ -3,8 +3,8 @@
   "nodes": [
     {
       "parameters": {
+        "httpMethod": "POST",
         "path": "campaign-orchestrator",
-        "responseMode": "onReceived",
         "options": {}
       },
       "id": "webhook-trigger",
@@ -12,22 +12,43 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        100,
-        100
+        -288,
+        96
       ],
-      "webhookId": "unique-webhook-id-1"
+      "webhookId": "a19f4789-e7db-470a-b2ca-b07cd7f440f4"
     },
     {
       "parameters": {
-        "jsCode": "// Parse and validate incoming campaign request\nconst { client_id, campaign_brief, priority } = $input.first().json.body;\n\nif (!client_id || !campaign_brief) {\n  throw new Error('Missing required fields: client_id, campaign_brief');\n}\n\nconst request_id = `nexus-${client_id}-${Date.now()}`;\nconst phases = ['DISCOVER', 'STRATEGIZE', 'SCAFFOLD', 'BUILD', 'HARDEN', 'LAUNCH', 'OPERATE'];\n\nreturn [{\n  json: {\n    request_id,\n    client_id,\n    campaign_brief,\n    priority: priority || 'normal',\n    phases,\n    current_phase_index: 0,\n    current_phase: phases[0],\n    phase_outputs: {},\n    retry_count: 0,\n    started_at: new Date().toISOString(),\n    status: 'initiated'\n  }\n}];"
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/nexus/parse-request",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"body\": {{ JSON.stringify($json.body ?? $json) }},\n  \"client_id\": \"{{ ($json.body && $json.body.client_id) || $json.client_id || '' }}\",\n  \"campaign_brief\": \"{{ ($json.body && $json.body.campaign_brief) || $json.campaign_brief || '' }}\",\n  \"priority\": \"{{ ($json.body && $json.body.priority) || $json.priority || 'normal' }}\"\n}",
+        "options": {
+          "timeout": 15000
+        },
+        "contentType": "json"
       },
       "id": "parse-campaign-request",
       "name": "Parse & Validate Request",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
-        300,
-        100
+        -64,
+        96
       ]
     },
     {
@@ -40,6 +61,10 @@
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed"
             }
           ]
         },
@@ -48,15 +73,16 @@
         "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"campaign_brief\": \"{{ $json.campaign_brief }}\",\n  \"current_phase\": \"{{ $json.current_phase }}\",\n  \"status\": \"initiated\",\n  \"priority\": \"{{ $json.priority }}\"\n}",
         "options": {
           "timeout": 15000
-        }
+        },
+        "contentType": "json"
       },
       "id": "init-pipeline-state",
       "name": "Initialize Pipeline State",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        500,
-        100
+        176,
+        96
       ]
     },
     {
@@ -71,50 +97,54 @@
               "value": "application/json"
             },
             {
-              "name": "x-internal-key",
-              "value": "={{ $env.INTERNAL_API_KEY }}"
+              "name": "x-api-key",
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed"
+            },
+            {
+              "name": "x-smoke-test",
+              "value": "={{ ($json.client_id || \"\").startsWith(\"smoke-\") ? \"1\" : \"\" }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"jefe-marketing\",\n  \"task_type\": \"phase_execution\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"campaign_brief\": \"{{ $json.campaign_brief }}\",\n  \"phase_input\": \"{{ $json.phase_outputs[$json.current_phase - 1] || $json.campaign_brief }}\",\n  \"success_criteria\": {\n    \"DISCOVER\": \"Market opportunity validated, competitive landscape mapped, client objectives understood\",\n    \"STRATEGIZE\": \"Positioning defined, messaging pillars set, channel mix approved, budget allocated\",\n    \"SCAFFOLD\": \"Content calendar finalized, creative briefs written, platform requirements documented\",\n    \"BUILD\": \"All creative assets completed, SEO optimized, paid media campaigns staged, launch checklist ready\",\n    \"HARDEN\": \"QA loops passed, A/B tests configured, compliance validated, brand audit cleared\",\n    \"LAUNCH\": \"All audiences targeted, campaigns live, budgets deployed, real-time monitoring active\",\n    \"OPERATE\": \"Performance metrics tracked, optimization recommendations ready, team briefed on learnings\"\n  }\n}",
+        "jsonBody": "={\n  \"agent\": \"jefe-marketing\",\n  \"task_type\": \"phase_execution\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"campaign_brief\": \"{{ $json.campaign_brief }}\",\n  \"phase_input\": {{ JSON.stringify($json.campaign_brief || '') }},\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\"\n}",
         "options": {
-          "timeout": 300000
-        }
+          "timeout": 60000
+        },
+        "contentType": "json"
       },
       "id": "execute-phase",
       "name": "Execute Phase (jefe-marketing)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        700,
-        100
+        624,
+        96
       ]
     },
     {
       "id": "validate-phase",
-      "name": "Validate Phase Output (Evidence Collector) (sub-workflow)",
+      "name": "Validate Phase Output (Evidence Collector)",
       "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.1,
+      "typeVersion": 1,
       "position": [
-        900,
-        100
+        832,
+        96
       ],
       "parameters": {
-        "workflowId": "PHASE_GATE_EVIDENCE_COLLECTOR_ID",
-        "options": {
-          "waitForSubWorkflow": true
-        }
+        "workflowId": "o4B2RvvzJSgZZHNn"
       },
-      "notes": "Sprint 7 Track C5 · converted from httpRequest to executeWorkflow · /api/evidence/validate → PHASE_GATE_EVIDENCE_COLLECTOR_ID"
+      "notes": "Sprint 7 C5 cutover · 2026-05-23 · converted from httpRequest → executeWorkflow → o4B2RvvzJSgZZHNn"
     },
     {
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
           },
           "conditions": [
             {
@@ -127,41 +157,84 @@
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       },
       "id": "check-validation",
       "name": "Validation Passed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1100,
-        100
+        1040,
+        96
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Phase passed validation — advance to next phase\nconst phases = ['DISCOVER', 'STRATEGIZE', 'SCAFFOLD', 'BUILD', 'HARDEN', 'LAUNCH', 'OPERATE'];\nconst current_idx = phases.indexOf($json.current_phase);\nconst next_idx = current_idx + 1;\n\nif (next_idx < phases.length) {\n  // More phases to execute\n  $json.current_phase = phases[next_idx];\n  $json.current_phase_index = next_idx;\n  $json.phase_outputs[phases[current_idx]] = $node['Execute Phase (jefe-marketing)'].json.output;\n  $json.retry_count = 0;\n  $json.status = 'in_progress';\n} else {\n  // All phases completed successfully\n  $json.status = 'completed';\n  $json.phase_outputs[phases[current_idx]] = $node['Execute Phase (jefe-marketing)'].json.output;\n  $json.completed_at = new Date().toISOString();\n}\n\nreturn [$json];"
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/nexus/advance-phase",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"request_id\": \"{{ $('Parse & Validate Request').item.json.request_id || $json.request_id || '' }}\",\n  \"client_id\": \"{{ $('Parse & Validate Request').item.json.client_id || $json.client_id || '' }}\",\n  \"campaign_brief\": {{ JSON.stringify($('Parse & Validate Request').item.json.campaign_brief || $json.campaign_brief || '') }},\n  \"current_phase\": \"{{ $('Resolve Phase').item.json.current_phase || $json.current_phase || 'DISCOVER' }}\",\n  \"current_phase_index\": {{ Number($('Resolve Phase').item.json.current_phase_index ?? $json.current_phase_index ?? 0) }},\n  \"phase_output\": {{ JSON.stringify($('Execute Phase (jefe-marketing)').item.json.output ?? $('Execute Phase (jefe-marketing)').item.json.response ?? '') }},\n  \"phase_outputs\": {{ JSON.stringify($('Resolve Phase').item.json.phase_outputs || $json.phase_outputs || {}) }},\n  \"retry_count\": {{ Number($json.retry_count) || 0 }},\n  \"priority\": \"{{ $('Parse & Validate Request').item.json.priority || $json.priority || 'normal' }}\",\n  \"phases\": {{ JSON.stringify($('Parse & Validate Request').item.json.phases || $json.phases || ['DISCOVER']) }}\n}",
+        "options": {
+          "timeout": 15000
+        },
+        "contentType": "json"
       },
       "id": "advance-phase",
       "name": "Advance to Next Phase",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
-        1300,
-        60
+        1168,
+        -112
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Validation failed — increment retry counter\n$json.retry_count = ($json.retry_count || 0) + 1;\n$json.last_validation_error = $node['Validate Phase Output (Evidence Collector)'].json.error || 'Unknown error';\n\nif ($json.retry_count >= 3) {\n  $json.status = 'escalated_to_hitl';\n  $json.escalation_reason = `Phase ${$json.current_phase} failed validation ${$json.retry_count} times`;\n} else {\n  $json.status = 'retrying';\n}\n\nreturn [$json];"
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/nexus/handle-failure",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id || '' }}\",\n  \"client_id\": \"{{ $json.client_id || '' }}\",\n  \"current_phase\": \"{{ $json.current_phase || 'UNKNOWN' }}\",\n  \"retry_count\": {{ Number($json.retry_count) || 0 }},\n  \"validation_error\": {{ JSON.stringify($('Validate Phase Output (Evidence Collector)').item.json.error ?? $('Validate Phase Output (Evidence Collector)').item.json.rationale ?? 'Unknown error') }},\n  \"campaign_brief\": {{ JSON.stringify($json.campaign_brief ?? '') }},\n  \"phases\": {{ JSON.stringify($json.phases || []) }},\n  \"phase_outputs\": {{ JSON.stringify($json.phase_outputs || {}) }},\n  \"started_at\": \"{{ $json.started_at || new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 15000
+        },
+        "contentType": "json"
       },
       "id": "handle-validation-failure",
       "name": "Handle Validation Failure",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
-        1300,
-        180
+        1184,
+        528
       ]
     },
     {
@@ -169,7 +242,9 @@
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
           },
           "conditions": [
             {
@@ -182,15 +257,16 @@
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       },
       "id": "check-retry",
       "name": "Retries Remaining?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1500,
-        180
+        1440,
+        560
       ]
     },
     {
@@ -200,38 +276,49 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        1700,
-        120
+        1792,
+        128
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://zero-risk-platform.vercel.app/api/stubs/slack-webhook' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"🚨 *NEXUS Pipeline Escalation to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Phase:* {{ $json.current_phase }}\\n*Reason:* Failed validation after 3 retries\\n*Error:* {{ $json.last_validation_error | slice(0, 150) }}\\n\\nAction: Review in Mission Control → dashboard/inbox\"\n}",
+        "jsonBody": "={\n  \"text\": \"?? *NEXUS Pipeline Escalation to HITL*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Phase:* {{ $json.current_phase }}\\n*Reason:* Failed validation after 3 retries\\n*Error:* {{ ($json.last_validation_error || '').slice(0, 150) }}\\n\\nAction: Review in Mission Control ? dashboard/inbox\"\n}",
         "options": {
-          "timeout": 15000
-        }
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 10000
+        },
+        "contentType": "json"
       },
       "id": "escalate-slack",
       "name": "Notify Slack (HITL Escalation)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1700,
-        200
-      ]
+        1840,
+        512
+      ],
+      "disabled": true
     },
     {
       "parameters": {
@@ -243,23 +330,28 @@
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"approval_type\": \"phase_gate_failure\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"priority\": \"{{ $json.priority }}\",\n  \"context\": {\n    \"phase_output\": \"{{ $node['Execute Phase (jefe-marketing)'].json.output | slice(0, 500) }}\",\n    \"validation_error\": \"{{ $json.last_validation_error }}\",\n    \"retry_count\": {{ $json.retry_count }}\n  },\n  \"required_approver\": \"jefe-marketing\",\n  \"expires_in_hours\": 24\n}",
+        "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"approval_type\": \"phase_gate_failure\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"priority\": \"{{ $json.priority }}\",\n  \"context\": {\n    \"phase_output\": {{ JSON.stringify($node['Execute Phase (jefe-marketing)('].json.output || '').slice(0, 500)) }},\n    \"validation_error\": \"{{ $json.last_validation_error }}\",\n    \"retry_count\": {{ $json.retry_count }}\n  },\n  \"required_approver\": \"jefe-marketing\",\n  \"expires_in_hours\": 24\n}",
         "options": {
           "timeout": 15000
-        }
+        },
+        "contentType": "json"
       },
       "id": "queue-hitl",
       "name": "Queue for HITL Review",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1900,
-        200
+        2016,
+        208
       ]
     },
     {
@@ -272,23 +364,28 @@
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"current_phase\": \"{{ $json.current_phase }}\",\n  \"status\": \"{{ $json.status }}\",\n  \"retry_count\": {{ $json.retry_count }},\n  \"phase_output\": \"{{ $node['Execute Phase (jefe-marketing)'].json.output | slice(0, 2000) }}\",\n  \"updated_at\": \"{{ now().toISOString() }}\"\n}",
+        "jsonBody": "={\n  \"request_id\": \"{{ $('Parse & Validate Request').item.json.request_id || $json.request_id || '' }}\",\n  \"client_id\": \"{{ $('Parse & Validate Request').item.json.client_id || $json.client_id || '' }}\",\n  \"current_phase\": \"{{ $json.current_phase || $('Resolve Phase').item.json.current_phase || 'DISCOVER' }}\",\n  \"status\": \"{{ $json.status || 'in_progress' }}\",\n  \"retry_count\": {{ Number($json.retry_count) || 0 }},\n  \"updated_at\": \"{{ new Date().toISOString() }}\"\n}",
         "options": {
           "timeout": 15000
-        }
+        },
+        "contentType": "json"
       },
       "id": "persist-state",
       "name": "Persist Phase State to DB",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1500,
-        100
+        1504,
+        112
       ]
     },
     {
@@ -304,36 +401,44 @@
             },
             {
               "name": "x-api-key",
-              "value": "={{ $env.MC_API_TOKEN }}"
+              "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"action\": \"phase_complete\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"phase\": \"{{ $json.current_phase }}\",\n  \"status\": \"{{ $json.status }}\",\n  \"timestamp\": \"{{ now().toISOString() }}\"\n}",
+        "jsonBody": "={\n  \"action\": \"phase_complete\",\n  \"request_id\": \"{{ $json.request_id || '' }}\",\n  \"client_id\": \"{{ $json.client_id || '' }}\",\n  \"phase\": \"{{ $json.current_phase || '' }}\",\n  \"status\": \"{{ $json.status || '' }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
         "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
           "timeout": 15000
-        }
+        },
+        "contentType": "json"
       },
       "id": "notify-mc-phase",
       "name": "Notify Mission Control (Phase Complete)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1500,
-        60
+        1488,
+        -176
       ]
     },
     {
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true,
-            "typeValidation": "strict"
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
           },
           "conditions": [
             {
-              "leftValue": "={{ $json.status }}",
+              "leftValue": "={{ $('Advance to Next Phase').item.json.status }}",
               "rightValue": "completed",
               "operator": {
                 "type": "string",
@@ -342,45 +447,57 @@
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       },
       "id": "check-complete",
       "name": "All Phases Complete?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1700,
-        60
+        1744,
+        -144
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://zero-risk-platform.vercel.app/api/stubs/slack-webhook' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"✅ *NEXUS Campaign Pipeline Complete*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Completed At:* {{ $json.completed_at }}\\n*Duration:* {{ (new Date($json.completed_at) - new Date($json.started_at)) / 1000 / 60 }}m\\n\\n📊 All 7 phases (DISCOVER → OPERATE) successfully executed.\"\n}",
+        "jsonBody": "={\n  \"text\": \"? *NEXUS Campaign Pipeline Complete*\\n\\n*Request:* {{ $json.request_id }}\\n*Client:* {{ $json.client_id }}\\n*Completed At:* {{ $json.completed_at }}\\n*Duration:* {{ (new Date($json.completed_at) - new Date($json.started_at)) / 1000 / 60 }}m\\n\\n?? All 7 phases (DISCOVER ? OPERATE) successfully executed.\"\n}",
         "options": {
-          "timeout": 15000
-        }
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 10000
+        },
+        "contentType": "json"
       },
       "id": "notify-completion",
       "name": "Notify Slack (Pipeline Complete)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1900,
-        60
-      ]
+        2048,
+        -64
+      ],
+      "disabled": true
     },
     {
       "parameters": {},
@@ -389,8 +506,8 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        2100,
-        60
+        2288,
+        64
       ]
     },
     {
@@ -400,9 +517,151 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        2100,
-        200
+        2304,
+        208
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/nexus/resolve-phase",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"current_phase\": \"{{ $json.current_phase || $('Parse & Validate Request').item.json.current_phase || 'DISCOVER' }}\",\n  \"request_id\": \"{{ $('Parse & Validate Request').item.json.request_id || $json.request_id || '' }}\",\n  \"client_id\": \"{{ $('Parse & Validate Request').item.json.client_id || $json.client_id || '' }}\",\n  \"campaign_brief\": {{ JSON.stringify($('Parse & Validate Request').item.json.campaign_brief || $json.campaign_brief || '') }},\n  \"priority\": \"{{ $('Parse & Validate Request').item.json.priority || $json.priority || 'normal' }}\",\n  \"phases\": {{ JSON.stringify($('Parse & Validate Request').item.json.phases || $json.phases || ['DISCOVER']) }},\n  \"phase_outputs\": {{ JSON.stringify($json.phase_outputs || {}) }},\n  \"retry_count\": {{ Number($json.retry_count) || 0 }},\n  \"current_phase_index\": {{ Number($json.current_phase_index ?? 0) }}\n}",
+        "options": {
+          "timeout": 15000
+        },
+        "contentType": "json"
+      },
+      "id": "resolve-phase-node-1776585271501",
+      "name": "Resolve Phase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-platform.vercel.app/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ agent: \"campaign-brief-agent\", context: $json, task: \"Sprint 7 A1 wire-in side-effect invocation from Zero Risk — NEXUS 7-Phase Campaign Orchestrator (Webhook)\", workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "wire-campaign-brief-agent-k4x87p5x",
+      "name": "Invoke · campaign-brief-agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -68,
+        216
+      ]
+    },
+    {
+      "id": "merge-phase-context",
+      "name": "Merge Phase Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        728,
+        96
+      ],
+      "parameters": {
+        "jsCode": "// Sprint 8 NEXUS regression fix · 2026-05-24 · CC#2\n// Merge executor agent response with upstream phase context so the\n// downstream Validate Phase Output (executeWorkflow → Phase Gate Evidence\n// Collector) sub-workflow receives all 3 fields its Normalize Request\n// destructure expects · phase_name + phase_output + success_criteria.\nconst exec = $input.first().json;\nconst resolved = (() => {\n  try { return $('Resolve Phase').first().json; } catch { return {}; }\n})();\nconst parsed = (() => {\n  try { return $('Parse & Validate Request').first().json; } catch { return {}; }\n})();\nconst initialized = (() => {\n  try { return $('Initialize Pipeline State').first().json; } catch { return {}; }\n})();\nconst phase_name = exec.phase_name ?? exec.phase ?? exec.current_phase ?? resolved.current_phase ?? initialized.current_phase ?? parsed.current_phase ?? 'DISCOVER';\nconst phase_output = exec.phase_output ?? exec.output ?? exec.result ?? exec.response ?? '';\nconst success_criteria = (() => {\n  for (const src of [resolved, initialized, parsed]) {\n    if (Array.isArray(src?.success_criteria) && src.success_criteria.length > 0) return src.success_criteria;\n    if (src?.success_criteria && typeof src.success_criteria === 'object' && src.current_phase && Array.isArray(src.success_criteria[src.current_phase])) {\n      return src.success_criteria[src.current_phase];\n    }\n  }\n  return ['(none provided · default)'];\n})();\nreturn [{ json: {\n  ...exec,\n  phase_name,\n  phase_output,\n  success_criteria,\n  client_id: exec.client_id ?? resolved.client_id ?? parsed.client_id ?? initialized.client_id ?? null,\n  request_id: exec.request_id ?? resolved.request_id ?? parsed.request_id ?? initialized.request_id ?? null,\n}}];"
+      },
+      "notes": "Sprint 8 NEXUS regression fix · 2026-05-24 · CC#2 · merges phase context (current_phase + success_criteria + client_id + request_id) from upstream nodes into executor response so sub-workflow Evidence Collector receives all required Normalize Request fields."
+    },
+    {
+      "id": "track-retry-count-cc3-canon-guardrail-2",
+      "name": "Track Retry Count (canon guardrail #2)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        984,
+        528
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Sprint 8D canon guardrail #2 · retry cap self-reference fix CC#3 2026-05-25\n// Reads prior Handle Validation Failure output canonical · increments retry_count ·\n// passes downstream so Retries Remaining? IF check sees correctly incremented value.\nlet priorRetryCount = null;\ntry {\n  const prior = $('Handle Validation Failure').first();\n  priorRetryCount = prior?.json?.retry_count;\n} catch (e) {\n  // First iteration · Handle Validation Failure hasn't run yet · canonical\n  priorRetryCount = null;\n}\nconst nextRetryCount = (typeof priorRetryCount === 'number' ? priorRetryCount : 0) + 1;\nreturn [{\n  json: {\n    ...$input.first().json,\n    retry_count: nextRetryCount,\n    _retry_track_source: 'cc3-canon-guardrail-2-fix',\n  }\n}];"
+      }
+    },
+    {
+      "id": "dlq-insert-cc3-canon-guardrail-2",
+      "name": "DLQ Insert (workflow_dlq · best effort)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2040,
+        612
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/workflow_dlq",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"workflow_id\": \"RT1tcru9mysEwKkf\",\n  \"workflow_name\": \"NEXUS 7-Phase Campaign Orchestrator\",\n  \"request_id\": \"{{ $json.request_id || '' }}\",\n  \"client_id\": \"{{ $json.client_id || null }}\",\n  \"current_phase\": \"{{ $json.current_phase || 'UNKNOWN' }}\",\n  \"retry_count\": {{ Number($json.retry_count) || 0 }},\n  \"last_validation_error\": {{ JSON.stringify($json.last_validation_error || '') }},\n  \"escalation_reason\": {{ JSON.stringify($json.escalation_reason || 'max_retries_exceeded') }},\n  \"created_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      }
     }
   ],
   "connections": {
@@ -411,6 +670,13 @@
         [
           {
             "node": "Parse & Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invoke · campaign-brief-agent",
             "type": "main",
             "index": 0
           }
@@ -432,7 +698,7 @@
       "main": [
         [
           {
-            "node": "Execute Phase (jefe-marketing)",
+            "node": "Resolve Phase",
             "type": "main",
             "index": 0
           }
@@ -443,7 +709,7 @@
       "main": [
         [
           {
-            "node": "Validate Phase Output (Evidence Collector)",
+            "node": "Merge Phase Context",
             "type": "main",
             "index": 0
           }
@@ -472,7 +738,7 @@
         ],
         [
           {
-            "node": "Handle Validation Failure",
+            "node": "Track Retry Count (canon guardrail #2)",
             "type": "main",
             "index": 0
           }
@@ -523,7 +789,7 @@
       "main": [
         [
           {
-            "node": "Execute Phase (jefe-marketing)",
+            "node": "Resolve Phase",
             "type": "main",
             "index": 0
           }
@@ -535,6 +801,11 @@
         [
           {
             "node": "Queue for HITL Review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "DLQ Insert (workflow_dlq · best effort)",
             "type": "main",
             "index": 0
           }
@@ -559,19 +830,18 @@
             "node": "Notify Mission Control (Phase Complete)",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Notify Mission Control (Phase Complete)": {
-      "main": [
-        [
+          },
           {
             "node": "All Phases Complete?",
             "type": "main",
             "index": 0
           }
         ]
+      ]
+    },
+    "Notify Mission Control (Phase Complete)": {
+      "main": [
+        []
       ]
     },
     "All Phases Complete?": {
@@ -602,45 +872,50 @@
           }
         ]
       ]
+    },
+    "Resolve Phase": {
+      "main": [
+        [
+          {
+            "node": "Execute Phase (jefe-marketing)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Phase Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Phase Output (Evidence Collector)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Retry Count (canon guardrail #2)": {
+      "main": [
+        [
+          {
+            "node": "Handle Validation Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner",
-    "errorWorkflow": ""
+    "errorWorkflow": "",
+    "availableInMCP": false,
+    "binaryMode": "separate"
   },
-  "staticData": null,
-  "tags": [
-    {
-      "name": "zero-risk",
-      "id": "1"
-    },
-    {
-      "name": "cluster-1-orchestration",
-      "id": "2"
-    },
-    {
-      "name": "nexus-pipeline",
-      "id": "3"
-    }
-  ],
+  "tags": [],
   "triggerCount": 1,
-  "updatedAt": "2026-04-18T00:00:00.000Z",
-  "versionId": "1",
-  "meta": {
-    "sprint7_track_c5_conversions": {
-      "converted_at": "2026-05-22T04:44:32.806Z",
-      "count": 1,
-      "conversions": [
-        {
-          "node_id": "validate-phase",
-          "node_name": "Validate Phase Output (Evidence Collector) (sub-workflow)",
-          "original_url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/evidence/validate",
-          "sub_workflow_id": "PHASE_GATE_EVIDENCE_COLLECTOR_ID"
-        }
-      ],
-      "canonical_pattern_doc": "zr-vault/wiki/playbooks/sub-workflow-refs-canon.md"
-    }
-  }
+  "versionId": "2d9c6f71-25a6-46ed-9dcb-61f45f464e97"
 }

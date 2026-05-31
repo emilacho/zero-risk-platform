@@ -1,6 +1,5 @@
 {
   "name": "Zero Risk — Client Onboarding E2E v2 (Webhook: Deal Won)",
-  "description": "E2E onboarding workflow triggered on new deal (GHL opportunity = Won). Auto-populates Client Brain (brand, ICP, competitive landscape, VoC). Co-creates success plan with client. Sets activation milestones + TTV targets. Handoff to Account Manager when health ≥ Yellow.",
   "nodes": [
     {
       "parameters": {
@@ -55,7 +54,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"onboarding-specialist\",\n  \"agent_id\": \"onboarding-specialist\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\",\n  \"task\": {{ JSON.stringify('Auto-discover and populate Client Brain for ' + ($('Validate Deal Data').item.json.client_name || 'new client') + ' (industry: ' + ($('Validate Deal Data').item.json.industry || 'unknown') + ', website: ' + ($('Validate Deal Data').item.json.website || 'unknown') + '). Research brand voice, ICP, competitive landscape, VOC. Return discovery report.') }},\n  \"context\": { \"smoke_test\": {{ ($('Validate Deal Data').item.json.client_id || \"\").startsWith(\"smoke-\") }}, \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\", \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name || '' }}\", \"website\": \"{{ $('Validate Deal Data').item.json.website || '' }}\", \"industry\": \"{{ $('Validate Deal Data').item.json.industry || '' }}\" }\n}",
+        "jsonBody": "={\n  \"agent\": \"onboarding-specialist\",\n  \"agent_id\": \"onboarding-specialist\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\",\n  \"task\": {{ JSON.stringify('Auto-discover and populate Client Brain for ' + ($('Validate Deal Data').item.json.client_name || 'new client') + ' (industry: ' + ($('Validate Deal Data').item.json.industry || 'unknown') + ', website: ' + ($('Validate Deal Data').item.json.website || 'unknown') + '). Research brand voice, ICP, competitive landscape, VOC. Return discovery report.') }},\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"context\": { \"smoke_test\": {{ ($('Validate Deal Data').item.json.client_id || \"\").startsWith(\"smoke-\") }}, \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\", \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name || '' }}\", \"website\": \"{{ $('Validate Deal Data').item.json.website || '' }}\", \"industry\": \"{{ $('Validate Deal Data').item.json.industry || '' }}\" }\n}",
         "options": {
           "timeout": 180000
         }
@@ -151,7 +150,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/ghl/create-calendar-event",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/calendar/book",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -197,7 +196,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/ghl/add-task",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/client-tasks",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -230,7 +229,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SLACK_WEBHOOK_URL || $env.SLACK_WEBHOOK_URL_EQUIPO }}",
+        "url": "={{ $env.SLACK_WEBHOOK_URL || $env.SLACK_WEBHOOK_URL_EQUIPO || \"REDACTED-Slack-webhook-fallback-see-Slack-EQUIPO-env-var\" }}",
         "sendHeaders": false,
         "headerParameters": {
           "parameters": [
@@ -335,20 +334,17 @@
     },
     {
       "id": "trigger-master-journey-ugk3",
-      "name": "Trigger Master Journey ugK3 (sub-workflow)",
+      "name": "Trigger Master Journey ugK3",
       "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.1,
+      "typeVersion": 1,
       "position": [
         1720,
         250
       ],
       "parameters": {
-        "workflowId": "L1_MASTER_JOURNEY_ORCHESTRATOR_ID",
-        "options": {
-          "waitForSubWorkflow": true
-        }
+        "workflowId": "ugK3QrxkWq22Bly5"
       },
-      "notes": "Sprint 7 Track C5 · converted from httpRequest to executeWorkflow · /webhook/journey-dispatch → L1_MASTER_JOURNEY_ORCHESTRATOR_ID"
+      "notes": "Sprint 7 C5 cutover · 2026-05-23 · converted from httpRequest → executeWorkflow → ugK3QrxkWq22Bly5"
     },
     {
       "parameters": {
@@ -402,6 +398,126 @@
       ],
       "parameters": {},
       "notes": "Gap 2 (2026-05-16) · marker only · the actual spell-check-corrector agent runs INSIDE /api/cascade/onboard between content-creator and editor-en-jefe (see src/lib/cascade-runner.ts SEQUENCE). This noOp documents the stage in n8n UI for operator visibility."
+    },
+    {
+      "id": "apify-wire-load-clients-onboarding_e2e",
+      "name": "[APIFY-WIRE] Load active clients with apify enabled (onboarding_e2e)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        1000
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/clients?status=eq.active&select=id,name,slug,config&config->apify->enabled=eq.true",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 30000
+    },
+    {
+      "id": "apify-wire-split-clients-onboarding_e2e",
+      "name": "[APIFY-WIRE] Split per cliente (onboarding_e2e)",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        600,
+        1000
+      ],
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "apify-wire-filter-functions-onboarding_e2e",
+      "name": "[APIFY-WIRE] Filter functions for onboarding_e2e scope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        1000
+      ],
+      "parameters": {
+        "jsCode": "const cliente = $input.item.json;\nconst cron = (cliente.config && cliente.config.apify && cliente.config.apify.cron_cadence_per_function) || {};\nconst tier = (cliente.config && cliente.config.apify && cliente.config.apify.plan_tier) || 'basic';\nconst scopeFunctions = [\"instagram_scraper\",\"facebook_ads_library_scraper\",\"linkedin_company_scraper\"];\nconst activas = scopeFunctions.filter(fn => cron[fn] != null);\nreturn activas.map(fn => ({\n  json: { client_id: cliente.id, client_name: cliente.name, apify_function: fn, cadence: cron[fn], tier }\n}));"
+      }
+    },
+    {
+      "id": "apify-wire-split-functions-onboarding_e2e",
+      "name": "[APIFY-WIRE] Split per function (onboarding_e2e)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1000,
+        1000
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "apify-wire-call-service-onboarding_e2e",
+      "name": "[APIFY-WIRE] Call Apify Service Workflow (onboarding_e2e)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        1000
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-production-72be.up.railway.app/webhook/apify-service-workflow",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  client_id: $json.client_id,\n  apify_function: $json.apify_function,\n  destination: \"brain_rag\",\n  dry_run: true,\n  source_table: \"client_competitive_landscape\",\n  metadata: {\n    calling_workflow_id: $workflow.id,\n    calling_workflow_execution_id: $execution.id,\n    scope: \"onboarding_e2e\",\n    sprint: \"9-cleanup-wire-6-critical-onboarding-e2e\",\n    tier: $json.tier,\n    cadence: $json.cadence\n  }\n}) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 30000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "apify-wire-aggregate-onboarding_e2e",
+      "name": "[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        1000
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst summary = { total_calls: items.length, successes: 0, errors: 0, skipped_gate: 0, by_function: {} };\nfor (const it of items) {\n  const r = it.json || {};\n  const fn = r.apify_function || 'unknown';\n  summary.by_function[fn] = (summary.by_function[fn] || 0) + 1;\n  if (r.status === 'skipped' || r.skip_reason) summary.skipped_gate++;\n  else if (r.success === false || r.error) summary.errors++;\n  else summary.successes++;\n}\nreturn [{ json: { scope: 'onboarding_e2e', destination_table: 'client_competitive_landscape', summary, ran_at: new Date().toISOString() } }];"
+      }
     }
   ],
   "connections": {
@@ -410,6 +526,11 @@
         [
           {
             "node": "Validate Deal Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[APIFY-WIRE] Load active clients with apify enabled (onboarding_e2e)",
             "type": "main",
             "index": 0
           }
@@ -563,41 +684,70 @@
           }
         ]
       ]
+    },
+    "[APIFY-WIRE] Load active clients with apify enabled (onboarding_e2e)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Split per cliente (onboarding_e2e)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Split per cliente (onboarding_e2e)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Filter functions for onboarding_e2e scope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Filter functions for onboarding_e2e scope": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Split per function (onboarding_e2e)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Split per function (onboarding_e2e)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Call Apify Service Workflow (onboarding_e2e)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Call Apify Service Workflow (onboarding_e2e)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
-    "saveManualExecutions": true
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "tags": [
-    {
-      "name": "zero-risk"
-    },
-    {
-      "name": "cluster-6"
-    },
-    {
-      "name": "client-success"
-    },
-    {
-      "name": "onboarding"
-    }
-  ],
+  "tags": [],
   "triggerCount": 1,
-  "versionId": "1",
-  "meta": {
-    "sprint7_track_c5_conversions": {
-      "converted_at": "2026-05-22T04:44:36.739Z",
-      "count": 1,
-      "conversions": [
-        {
-          "node_id": "trigger-master-journey-ugk3",
-          "node_name": "Trigger Master Journey ugK3 (sub-workflow)",
-          "original_url": "https://n8n-production-72be.up.railway.app/webhook/journey-dispatch",
-          "sub_workflow_id": "L1_MASTER_JOURNEY_ORCHESTRATOR_ID"
-        }
-      ],
-      "canonical_pattern_doc": "zr-vault/wiki/playbooks/sub-workflow-refs-canon.md"
-    }
-  }
+  "versionId": "09e3c5b7-0122-4609-b66c-271445c9e47f"
 }

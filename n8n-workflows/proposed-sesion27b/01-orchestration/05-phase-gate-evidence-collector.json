@@ -1,11 +1,12 @@
 {
-  "name": "Zero Risk \u2014 Phase Gate Evidence Collector (Webhook)",
+  "name": "Zero Risk — Phase Gate Evidence Collector (Webhook)",
   "nodes": [
     {
       "parameters": {
         "path": "evidence-collector",
         "responseMode": "onReceived",
-        "options": {}
+        "options": {},
+        "httpMethod": "POST"
       },
       "id": "webhook-in",
       "name": "Evidence Collector Webhook",
@@ -15,7 +16,7 @@
         100,
         100
       ],
-      "webhookId": "unique-webhook-evidence-1"
+      "webhookId": "45a072d6-64b3-4f31-a11e-77a0859b77bc"
     },
     {
       "parameters": {
@@ -32,7 +33,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Structural validation: check required fields in phase output\nconst output = JSON.parse($json.phase_output);\nconst criteria = Array.isArray($json.success_criteria) ? $json.success_criteria : $json.success_criteria.split(',');\n\nconst structural_issues = [];\n\n// Check for required sections based on phase\nconst phase_requirements = {\n  'DISCOVER': ['market_opportunity', 'competitive_landscape', 'client_objectives'],\n  'STRATEGIZE': ['positioning', 'messaging_pillars', 'channel_mix', 'budget'],\n  'SCAFFOLD': ['content_calendar', 'creative_briefs', 'platform_requirements'],\n  'BUILD': ['creative_assets', 'seo_optimization', 'paid_media_setup'],\n  'HARDEN': ['qa_results', 'ab_tests_config', 'compliance_validation'],\n  'LAUNCH': ['audiences_targeted', 'campaigns_live', 'budget_deployed'],\n  'OPERATE': ['performance_metrics', 'optimization_recommendations', 'team_briefing']\n};\n\nconst required = phase_requirements[$json.phase_name] || [];\nrequired.forEach(field => {\n  if (!(field in output) || !output[field]) {\n    structural_issues.push(`Missing required field: ${field}`);\n  }\n});\n\nreturn [{\n  json: {\n    validation_id: $json.validation_id,\n    phase_name: $json.phase_name,\n    structural_valid: structural_issues.length === 0,\n    structural_issues,\n    phase_output: $json.phase_output,\n    success_criteria: $json.success_criteria\n  }\n}];"
+        "jsCode": "// Sprint 8 · CC#2 · 2026-05-24 · structural validation · lenient JSON parse.\n// On non-JSON phase_output (prose / markdown narrative) gracefully degrades ·\n// skips required-fields check + lets downstream Semantic Validation + Extract\n// Verdict route via severity. Matches Camino A canon (adapters never throw ·\n// chain surfaces verdicts instead of dying mid-execution).\nconst phase_requirements = {\n  'DISCOVER': ['market_opportunity', 'competitive_landscape', 'client_objectives'],\n  'STRATEGIZE': ['positioning', 'messaging_pillars', 'channel_mix', 'budget'],\n  'SCAFFOLD': ['content_calendar', 'creative_briefs', 'platform_requirements'],\n  'BUILD': ['creative_assets', 'seo_optimization', 'paid_media_setup'],\n  'HARDEN': ['qa_results', 'ab_tests_config', 'compliance_validation'],\n  'LAUNCH': ['audiences_targeted', 'campaigns_live', 'budget_deployed'],\n  'OPERATE': ['performance_metrics', 'optimization_recommendations', 'team_briefing']\n};\n\nconst raw = $json.phase_output;\nconst structural_issues = [];\nlet output_format = 'json';\nlet output = null;\n\nif (raw === null || raw === undefined || raw === '') {\n  output_format = 'empty';\n  structural_issues.push('phase_output is empty');\n} else if (typeof raw === 'object') {\n  output = raw; // already parsed\n} else if (typeof raw === 'string') {\n  try {\n    output = JSON.parse(raw);\n  } catch {\n    output_format = raw.trim().startsWith('#') || raw.includes('\\n## ') ? 'markdown' : 'prose';\n    structural_issues.push(`phase_output not JSON (${output_format}) · per-phase field check skipped · downstream semantic validation applies`);\n  }\n} else {\n  output_format = `unknown (${typeof raw})`;\n  structural_issues.push(`phase_output unexpected type · ${typeof raw}`);\n}\n\n// Per-phase field check only when output parsed as object\nif (output && typeof output === 'object' && !Array.isArray(output)) {\n  const required = phase_requirements[$json.phase_name] || [];\n  required.forEach((field) => {\n    if (!(field in output) || !output[field]) {\n      structural_issues.push(`Missing required field: ${field}`);\n    }\n  });\n}\n\nconst criteria = Array.isArray($json.success_criteria)\n  ? $json.success_criteria\n  : (typeof $json.success_criteria === 'string' ? $json.success_criteria.split(',') : []);\n\nreturn [{\n  json: {\n    validation_id: $json.validation_id,\n    phase_name: $json.phase_name,\n    structural_valid: structural_issues.length === 0,\n    structural_issues,\n    output_format,\n    phase_output: $json.phase_output,\n    success_criteria: criteria,\n  }\n}];"
       },
       "id": "structural-validation",
       "name": "Structural Validation (Fields)",
@@ -41,14 +42,15 @@
       "position": [
         500,
         100
-      ]
+      ],
+      "notes": "Sprint 8 · 2026-05-24 · CC#2 · lenient JSON.parse · gracefully degrades on prose/markdown phase_output · chain surfaces verdicts instead of throwing mid-execution"
     },
     {
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -84,17 +86,18 @@
               "value": "application/json"
             },
             {
-              "name": "x-internal-key",
-              "value": "={{ $env.INTERNAL_API_KEY }}"
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+              "name": "x-api-key"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"task_type\": \"phase_gate_qc\",\n  \"phase\": \"{{ $json.phase_name }}\",\n  \"phase_output\": \"{{ $json.phase_output }}\",\n  \"success_criteria\": \"{{ typeof $json.success_criteria === 'string' ? $json.success_criteria : $json.success_criteria.join('; ') }}\",\n  \"validation_instruction\": \"Evaluate this phase output against the success criteria. Check for: (1) Brand voice alignment (if copywriting phase), (2) Factual accuracy, (3) Completeness vs criteria, (4) Strategic fit. Return structured JSON: {issues: [...], severity: low|medium|high|critical, verdict: PASS|RETRY|FAIL, rationale, evidence_summary}\"\n}",
+        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"task_type\": \"phase_gate_qc\",\n  \"phase\": \"{{ $json.phase_name }}\",\n  \"phase_output\": {{ JSON.stringify($json.phase_output || '') }},\n  \"success_criteria\": {{ JSON.stringify(typeof $json.success_criteria === 'string' ? $json.success_criteria : JSON.stringify($json.success_criteria || [])) }},\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"request_id\": \"{{ $json.request_id }}\",\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\"\n}\n",
         "options": {
           "timeout": 120000
-        }
+        },
+        "contentType": "json"
       },
       "id": "semantic-validation",
       "name": "Semantic Validation (Editor en Jefe QC)",
@@ -128,15 +131,20 @@
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+              "name": "x-api-key"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"validation_id\": \"{{ $json.validation_id }}\",\n  \"phase\": \"{{ $json.phase_name }}\",\n  \"verdict\": \"{{ $json.verdict }}\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"structural_issues\": \"{{ JSON.stringify($json.structural_issues) }}\",\n  \"semantic_issues\": \"{{ JSON.stringify($json.semantic_issues) }}\",\n  \"all_issues_count\": {{ $json.all_issues_count }},\n  \"rationale\": \"{{ $json.editor_rationale }}\",\n  \"validated_at\": \"{{ $json.validated_at }}\"\n}",
+        "jsonBody": "={\n  \"validation_id\": \"{{ $node['Normalize Request'].json.validation_id }}\",\n  \"phase\": \"{{ $node['Normalize Request'].json.phase_name }}\",\n  \"verdict\": \"{{ $node['Extract Validation Verdict'].json.verdict }}\",\n  \"severity\": \"{{ $node['Extract Validation Verdict'].json.severity }}\",\n  \"structural_issues\": {{ JSON.stringify($node['Structural Validation (Fields)'].json.structural_issues || []) }},\n  \"semantic_issues\": {{ JSON.stringify($node['Extract Validation Verdict'].json.issues || []) }},\n  \"all_issues_count\": {{ ($node['Structural Validation (Fields)'].json.structural_issues || []).length + ($node['Extract Validation Verdict'].json.issues || []).length }},\n  \"rationale\": {{ JSON.stringify($node['Extract Validation Verdict'].json.rationale || '') }},\n  \"validated_at\": \"{{ new Date().toISOString() }}\",\n  \"client_id\": \"{{ $node['Normalize Request'].json.client_id }}\",\n  \"request_id\": \"{{ $node['Normalize Request'].json.request_id }}\"\n}\n",
         "options": {
           "timeout": 15000
-        }
+        },
+        "contentType": "json"
       },
       "id": "log-audit",
       "name": "Log Audit to Supabase",
@@ -168,6 +176,32 @@
         1500,
         100
       ]
+    },
+    {
+      "id": "execute-workflow-trigger-entry",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {},
+      "notes": "Camino A · 2026-05-23 · CC#2 · added to enable sub-workflow ref invocation (executeWorkflow) · webhook trigger preserved for backwards-compat"
+    },
+    {
+      "id": "adapt-subwf-input",
+      "name": "Adapt Sub-workflow Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Camino A · 2026-05-23 · CC#2\n// 1) Wrap executeWorkflow flat input into webhook-equivalent shape (.body)\n// 2) Map NEXUS-internal key aliases to Phase-Gate-canonical names\n//    (phase → phase_name · output → phase_output) so downstream\n//    Normalize Request destructure works without code edits.\nconst p = $input.first().json;\nconst body = {\n  ...p,\n  phase_name: p.phase_name ?? p.phase ?? p.current_phase,\n  phase_output: p.phase_output ?? p.output ?? p.result,\n  success_criteria: Array.isArray(p.success_criteria) && p.success_criteria.length === 0\n    ? ['(none provided · default)']\n    : (p.success_criteria ?? ['(none provided · default)'])\n};\nreturn [{ json: { body } }];\n"
+      },
+      "notes": "Camino A adapter · webhook compat layer + NEXUS key alias mapping"
     }
   ],
   "connections": {
@@ -237,18 +271,40 @@
       "main": [
         [
           {
-            "node": "Log Audit",
+            "node": "Log Audit to Supabase",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Log Audit": {
+    "Log Audit to Supabase": {
       "main": [
         [
           {
-            "node": "End Pass (End)",
+            "node": "Pass (End)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Adapt Sub-workflow Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adapt Sub-workflow Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
             "type": "main",
             "index": 0
           }
@@ -260,24 +316,10 @@
     "executionOrder": "v1",
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner",
-    "errorWorkflow": ""
+    "errorWorkflow": "",
+    "availableInMCP": false
   },
-  "staticData": null,
-  "tags": [
-    {
-      "name": "zero-risk",
-      "id": "1"
-    },
-    {
-      "name": "cluster-1-orchestration",
-      "id": "2"
-    },
-    {
-      "name": "qa",
-      "id": "3"
-    }
-  ],
+  "tags": [],
   "triggerCount": 1,
-  "updatedAt": "2026-04-18T00:00:00.000Z",
-  "versionId": "1"
+  "versionId": "b60e9527-39e3-437f-b53a-5b4ef19b5171"
 }
