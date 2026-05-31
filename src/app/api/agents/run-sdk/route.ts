@@ -30,6 +30,7 @@ import * as Sentry from '@sentry/nextjs'
 import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { killSwitch, type InvocationContext } from '@/lib/agent-safety'
 import { validateObject } from '@/lib/input-validator'
 import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
@@ -266,6 +267,38 @@ export async function POST(request: Request) {
       client_id: clientId,
       has_pipeline_id: !!body.pipeline_id,
     })
+
+    // ── PR #128 v2 · agent-safety SHADOW mount (Sprint 11 Ola 1 Track 1) ──
+    // killSwitch corre las 3 gates (§149 validate_workflow_id · §150 G3
+    // idempotency · §150 G6 rate_limit) y escribe 1 row a agent_safety_audit
+    // por invocación. Default canon · SHADOW · NO bloquea producción · solo
+    // deja evidencia para baseline 7-day pre-enforce flip.
+    //
+    // Spec · SPEC-PR-128-ADR-008-EXTENDED-SHADOW-MODE-v2.md §3.1
+    // Honest §148 · este route YA tiene un hard 403 §149 enforcement arriba
+    // (línea ~245) · killSwitch shadow se ejecuta DESPUÉS · audita pero NO
+    // duplica el reject. Si gate enforce flag está OFF, NO se actúa sobre
+    // `safety.allow=false` · solo se loguea via audit row.
+    try {
+      const safetyCtx: InvocationContext = {
+        workflow_id: wfAttr.workflow_id,
+        workflow_execution_id: wfAttr.workflow_execution_id,
+        client_id: clientId ?? null,
+        agent_id: agentName,
+        task,
+        tool_name: undefined,
+        estimated_cost_usd: undefined,
+        caller: 'api',
+        request_id:
+          (body.context?.['request_id'] as string | undefined) ??
+          (body.extra?.['request_id'] as string | undefined),
+      }
+      await killSwitch(safetyCtx, getSupabaseAdmin(), '/api/agents/run-sdk')
+    } catch (e) {
+      // Fail-open · NO bloquear prod por bug propio middleware (canon §148).
+      const msg = e instanceof Error ? e.message : String(e)
+      console.warn('[run-sdk] killSwitch shadow uncaught · fail-open:', msg)
+    }
 
     // ── Proxy to Railway agent-runner ────────────────────────────────────
     // The actual SDK invocation lives in services/agent-runner/ on Railway.

@@ -3,22 +3,19 @@
  *
  * Single entry point invoked by both route handlers
  * (`/api/agents/run` legacy + `/api/agents/run-sdk` canon) and by the
- * Railway `agent-runner` Express middleware (defense-in-depth).
+ * Railway `agent-runner` Express middleware (defense-in-depth · deferred PR).
  *
- * Runs all 3 gates in canonical order, records an audit row, returns
+ * Runs all 3 gates in canonical order, records audit row, returns
  * `allow + block reason` tuple.
  *
  * Spec · SPEC-PR-128-ADR-008-EXTENDED-SHADOW-MODE-v2.md §2.4
  *
- * IMPLEMENTATION STATUS · 🟡 STUB orchestration logic present but audit
- * write + Sentry capture pending PR build phase. The gates themselves are
- * also stubs (see their files). The orchestrator's CONTRACT (what it
- * returns, in which order it runs gates) is locked.
+ * IMPLEMENTATION STATUS · 🟢 BUILD-PHASE · gates wired + audit row write.
+ * Slack ping = stub stdout breadcrumb (see audit-log.ts §maybeSlackPingShadow).
  *
  * Env toggle ·
  *   AGENT_SAFETY_ENABLED=false → global short-circuit · returns allow=true ·
- *                                logs Sentry warning · never blocks · canon
- *                                fail-open per §148.
+ *                                never blocks · canon fail-open per §148.
  */
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -26,16 +23,21 @@ import type { InvocationContext, SafetyDecision } from './types'
 import { validateWorkflowId } from './validate-workflow-id'
 import { checkIdempotency } from './check-idempotency'
 import { checkRateLimit } from './check-rate-limit'
+import {
+  recordSafetyPass,
+  maybeSlackPingShadow,
+  type EndpointLabel,
+} from './audit-log'
 
 export async function killSwitch(
   ctx: InvocationContext,
   supabase: SupabaseClient,
+  endpoint: EndpointLabel = '/api/agents/run-sdk',
 ): Promise<SafetyDecision> {
   const request_id = randomUUID()
 
-  // Global fail-open · canon §148 honest reporting · NO production block by us.
   if (process.env.AGENT_SAFETY_ENABLED === 'false') {
-    // STUB · Sentry.captureMessage pending in build phase
+    // Global fail-open · canon §148 honest reporting · NO production block by us.
     return { allow: true, gates: [], shadow_blocks: [], request_id }
   }
 
@@ -44,7 +46,7 @@ export async function killSwitch(
     const g1 = validateWorkflowId(ctx)
     // Gate 2 · §150 G3 (async · 1-2 DB ops)
     const g2 = await checkIdempotency(ctx, supabase)
-    // Gate 3 · §150 G6 (async · 1-3 RPC calls)
+    // Gate 3 · §150 G6 (async · 1-N RPC calls per bucket)
     const g3 = await checkRateLimit(ctx, supabase)
 
     const gates = [g1, g2, g3]
@@ -53,9 +55,14 @@ export async function killSwitch(
       .filter((g) => g.would_reject && !g.enforced)
       .map((g) => g.gate)
 
-    // STUB · audit row INSERT to agent_safety_audit pending build phase ·
-    // Real impl: await recordSafetyPass(supabase, { request_id, ctx, gates, blockingGate, shadow_blocks })
-    // STUB · Slack ping for shadow blocks (1/10/100/1000 logarithmic) pending build phase
+    // Persist audit row · fail-open semantics inside recordSafetyPass.
+    await recordSafetyPass(supabase, { request_id, ctx, gates, endpoint })
+
+    // Shadow visibility · stdout breadcrumb (Vercel function logs).
+    // Build-phase 2 hooks real Slack webhook + logarithmic ping (1/10/100/1000).
+    for (const gateName of shadow_blocks) {
+      maybeSlackPingShadow(gateName, ctx)
+    }
 
     return {
       allow: !blockingGate,
@@ -65,9 +72,11 @@ export async function killSwitch(
       shadow_blocks,
       request_id,
     }
-  } catch {
+  } catch (e) {
     // Fail-open · NO production block on middleware bug. Spec §2.4 canon.
-    // STUB · Sentry.captureException pending build phase
+    // Build-phase 2 hooks Sentry.captureException here.
+    const msg = e instanceof Error ? e.message : String(e)
+    console.warn('[agent-safety/kill-switch] uncaught · fail-open:', msg)
     return { allow: true, gates: [], shadow_blocks: [], request_id }
   }
 }
