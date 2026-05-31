@@ -22,6 +22,7 @@ let stubRows1h: Array<{ workflow_id: string | null; cost_usd: number | null }> =
 let stubError24: { message: string } | null = null
 let stubError1: { message: string } | null = null
 const monitorInserts: Array<Record<string, unknown>> = []
+const monitorUpdates: Array<{ id: string; patch: Record<string, unknown> }> = []
 
 vi.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: vi.fn(() => ({
@@ -55,11 +56,27 @@ vi.mock('@/lib/supabase', () => ({
               }),
             }
           },
+          update: (patch: Record<string, unknown>) => ({
+            eq: (_col: string, id: string) => {
+              monitorUpdates.push({ id, patch })
+              return Promise.resolve({ data: null, error: null })
+            },
+          }),
         }
       }
       throw new Error(`unexpected table: ${table}`)
     },
   })),
+}))
+
+// Mock the Slack alert dispatcher. Default · webhook configured and returns
+// dispatched: true. Individual tests override via dispatchMock.mockResolvedValueOnce().
+interface MockDispatchResult { dispatched: boolean; reason?: string }
+const dispatchMock = vi.fn(
+  async (_input: unknown): Promise<MockDispatchResult> => ({ dispatched: true }),
+)
+vi.mock('@/lib/cost-monitor-alert', () => ({
+  dispatchCostMonitorAlert: (input: unknown) => dispatchMock(input),
 }))
 
 import { GET, POST } from '../src/app/api/cost-monitor/cron/route'
@@ -75,6 +92,9 @@ beforeEach(() => {
   stubError24 = null
   stubError1 = null
   monitorInserts.length = 0
+  monitorUpdates.length = 0
+  dispatchMock.mockReset()
+  dispatchMock.mockImplementation(async () => ({ dispatched: true }))
 })
 
 afterEach(() => {
@@ -142,13 +162,74 @@ describe('GET/POST /api/cost-monitor/cron · SHADOW-first guarantee', () => {
     expect(json.shadow_mode).toBe(true)
   })
 
-  it('shadow_mode toggles to false when COST_MONITOR_SHADOW_MODE=0', async () => {
+  it('shadow_mode toggles to false when COST_MONITOR_SHADOW_MODE=0 (no breach · no dispatch)', async () => {
     process.env.COST_MONITOR_SHADOW_MODE = '0'
     const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
     const json = (await res.json()) as Record<string, unknown>
     expect(json.shadow_mode).toBe(false)
-    // Still no dispatch · this PR ships shadow-only · alert dispatch lands in a follow-up
+    expect(json.alert_dispatched).toBe(false) // no breach → no dispatch attempted
+    expect(dispatchMock).not.toHaveBeenCalled()
+  })
+
+  it('shadow=true + breach · dispatch NOT called (SHADOW guard)', async () => {
+    process.env.COST_MONITOR_SHADOW_MODE = '1'
+    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 8 }] // > $5 burst
+    const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
+    const json = (await res.json()) as Record<string, unknown>
+    expect(json.is_breach).toBe(true)
     expect(json.alert_dispatched).toBe(false)
+    expect(dispatchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET/POST /api/cost-monitor/cron · alert-live dispatch (shadow=0)', () => {
+  beforeEach(() => {
+    process.env.COST_MONITOR_SHADOW_MODE = '0'
+  })
+
+  it('shadow=false + breach · dispatch called + alert_dispatched=true in response', async () => {
+    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 8 }] // > $5 burst
+    const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
+    const json = (await res.json()) as Record<string, unknown>
+    expect(json.is_breach).toBe(true)
+    expect(json.alert_dispatched).toBe(true)
+    expect(dispatchMock).toHaveBeenCalledTimes(1)
+    const dispatchArg = dispatchMock.mock.calls[0][0] as Record<string, unknown>
+    expect(Array.isArray(dispatchArg.breaches)).toBe(true)
+    expect((dispatchArg.breaches as unknown[]).length).toBeGreaterThan(0)
+    expect(dispatchArg.run_id).toMatch(/^test-run-id-/)
+  })
+
+  it('shadow=false + breach · cost_monitor_runs.alert_dispatched flipped to true via UPDATE', async () => {
+    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 8 }]
+    await POST(req({ authorization: 'Bearer test-secret-1234' }))
+    // The initial INSERT writes alert_dispatched: false (audit trail first),
+    // then the UPDATE flips it to true after successful dispatch.
+    expect(monitorInserts[0].alert_dispatched).toBe(false)
+    expect(monitorUpdates).toHaveLength(1)
+    expect(monitorUpdates[0].patch.alert_dispatched).toBe(true)
+  })
+
+  it('shadow=false + breach + webhook failure · alert_dispatched=false but 200 still', async () => {
+    dispatchMock.mockResolvedValueOnce({
+      dispatched: false,
+      reason: 'webhook returned 500 internal',
+    })
+    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 8 }]
+    const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as Record<string, unknown>
+    expect(json.alert_dispatched).toBe(false)
+    expect(json.alert_reason).toContain('webhook returned 500')
+    // No UPDATE issued when dispatch fails · row remains alert_dispatched: false
+    expect(monitorUpdates).toHaveLength(0)
+  })
+
+  it('shadow=false + no breach · dispatch NOT called', async () => {
+    stubRows24h = [{ workflow_id: 'normal', cost_usd: 1 }]
+    stubRows1h = [{ workflow_id: 'normal', cost_usd: 0.5 }]
+    await POST(req({ authorization: 'Bearer test-secret-1234' }))
+    expect(dispatchMock).not.toHaveBeenCalled()
   })
 })
 
