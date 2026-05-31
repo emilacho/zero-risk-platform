@@ -9,6 +9,7 @@ import { capture } from '@/lib/posthog'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { enrichClientIdFromContext } from '@/lib/client-id-enricher'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { killSwitch, type InvocationContext } from '@/lib/agent-safety'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -462,6 +463,35 @@ export async function POST(request: Request) {
       client_id: resolvedClientId,
       has_pipeline_id: !!context.pipeline_id,
     })
+
+    // ── PR #128 v2 · agent-safety SHADOW mount (Sprint 11 Ola 1 Track 1) ──
+    // Symmetric con /api/agents/run-sdk · killSwitch corre las 3 gates en
+    // SHADOW · audit row a agent_safety_audit · NO bloquea producción.
+    //
+    // Spec · SPEC-PR-128-ADR-008-EXTENDED-SHADOW-MODE-v2.md §3.2
+    // Honest §148 · este route YA tiene hard 403 §149 enforcement (línea
+    // ~127) · killSwitch shadow se ejecuta DESPUÉS · audita gates 2-3
+    // (idempotency + rate_limit) para baseline 7-day pre-enforce flip.
+    try {
+      const safetyCtx: InvocationContext = {
+        workflow_id: wfIdCandidate,
+        workflow_execution_id: wfExecCandidate,
+        client_id: resolvedClientId ?? null,
+        agent_id: canonicalSlug,
+        task,
+        tool_name: undefined,
+        estimated_cost_usd: undefined,
+        caller: (caller as InvocationContext['caller']) ?? 'api',
+        request_id:
+          (context.request_id as string | undefined) ??
+          (context.idempotency_key as string | undefined),
+      }
+      await killSwitch(safetyCtx, supabase, '/api/agents/run')
+    } catch (e) {
+      // Fail-open · NO bloquear prod por bug propio middleware (canon §148).
+      const msg = e instanceof Error ? e.message : String(e)
+      console.warn('[agents-run] killSwitch shadow uncaught · fail-open:', msg)
+    }
 
     const railwayUrl = process.env.RAILWAY_AGENT_RUNNER_URL
     if (!railwayUrl) {
