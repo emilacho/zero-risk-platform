@@ -8,11 +8,13 @@
  * the 2026-05-24 NEXUS spam incident (≈$19/day · ≈659 invocations · burst
  * pattern · daily-only monitoring missed it).
  *
- * SHADOW MODE · this endpoint detects breaches and writes a row to
- * `cost_monitor_runs` (with is_breach + breach details) but does NOT dispatch
- * any Slack alert. Baseline is built by inspecting `cost_monitor_runs` rows.
- * Flip to alert-live is documented in the runbook and gated by env var
- * `COST_MONITOR_SHADOW_MODE` (default: "1" = shadow).
+ * MODES · gated by env var `COST_MONITOR_SHADOW_MODE` (default: "1" = shadow).
+ *  - SHADOW ("1") · detect breaches and write audit row, do NOT dispatch any
+ *    Slack alert. Use during baseline · build confidence in thresholds.
+ *  - ALERT-LIVE ("0") · on breach, also POST to `SLACK_WEBHOOK_URL_EQUIPO`.
+ *    The audit row is still always written; `alert_dispatched` reflects
+ *    whether the webhook POST succeeded. Best-effort · a webhook failure
+ *    does NOT fail the cron (cleanup canonical · audit > ping).
  *
  * Auth · accepts EITHER `Authorization: Bearer <CRON_SECRET>` (Vercel Cron
  * default header) OR `x-api-key: <CRON_SECRET>` (manual smoke trigger). Both
@@ -27,6 +29,7 @@
 import { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { dispatchCostMonitorAlert } from '@/lib/cost-monitor-alert'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -168,11 +171,15 @@ async function runMonitor(req: Request) {
 
   const isBreach = breaches.length > 0
 
-  // Audit row · always inserted, breach or not. Forensics view.
+  // Audit row · always inserted, breach or not. Forensics view. We insert
+  // FIRST (with alert_dispatched: false) so the row exists even if the Slack
+  // dispatch hangs or throws · then update the flag in-place if dispatch
+  // succeeds. Audit trail is the canonical source · Slack is the ping.
+  const ranAtIso = now.toISOString()
   const { data: insertedRow, error: insertErr } = await supabase
     .from('cost_monitor_runs')
     .insert({
-      ran_at: now.toISOString(),
+      ran_at: ranAtIso,
       aggregate_24h_usd: aggregate24h,
       aggregate_1h_usd: aggregate1h,
       threshold_daily_per_workflow_usd: THRESHOLD_DAILY_PER_WORKFLOW_USD,
@@ -187,7 +194,7 @@ async function runMonitor(req: Request) {
         invocations_1h: rows1.length,
       },
       shadow_mode: shadowMode,
-      alert_dispatched: false, // SHADOW-first · never dispatch from this PR
+      alert_dispatched: false,
     })
     .select()
     .single()
@@ -198,11 +205,42 @@ async function runMonitor(req: Request) {
     console.warn('[cost-monitor-cron] cost_monitor_runs insert failed:', insertErr.message)
   }
 
+  // Slack alert dispatch · gated by NOT-shadow-mode AND breach. Best-effort ·
+  // a webhook failure does not fail the cron. Audit row is the canonical
+  // record · alert_dispatched flag tracks whether the ping went out.
+  let alertDispatched = false
+  let alertReason: string | undefined
+  if (!shadowMode && isBreach) {
+    const dispatchResult = await dispatchCostMonitorAlert({
+      breaches,
+      aggregate_24h_usd: aggregate24h,
+      aggregate_1h_usd: aggregate1h,
+      invocations_24h: rows24.length,
+      invocations_1h: rows1.length,
+      run_id: insertedRow?.id ?? null,
+      ran_at: ranAtIso,
+    })
+    alertDispatched = dispatchResult.dispatched
+    alertReason = dispatchResult.reason
+    if (alertDispatched && insertedRow?.id) {
+      const { error: updErr } = await supabase
+        .from('cost_monitor_runs')
+        .update({ alert_dispatched: true })
+        .eq('id', insertedRow.id)
+      if (updErr) {
+        console.warn('[cost-monitor-cron] alert_dispatched update failed:', updErr.message)
+      }
+    } else if (!alertDispatched && alertReason) {
+      console.warn('[cost-monitor-cron] alert NOT dispatched:', alertReason)
+    }
+  }
+
   return NextResponse.json({
     ok: true,
-    ran_at: now.toISOString(),
+    ran_at: ranAtIso,
     shadow_mode: shadowMode,
-    alert_dispatched: false,
+    alert_dispatched: alertDispatched,
+    alert_reason: alertReason,
     aggregate_24h_usd: aggregate24h,
     aggregate_1h_usd: aggregate1h,
     invocations_24h: rows24.length,
