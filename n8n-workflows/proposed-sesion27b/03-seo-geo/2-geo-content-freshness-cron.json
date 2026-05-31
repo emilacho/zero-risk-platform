@@ -1,33 +1,16 @@
 {
   "name": "Zero Risk — GEO Content Freshness Cron",
-  "meta": {
-    "description": "Biweekly: scans content inventory for GEO-relevant pages >90 days old. Checks citations. Flags pages losing citations for refresh. Calls GEO Optimization agent. Queues refresh tasks to Supabase.",
-    "trigger_type": "cron",
-    "cron_schedule": "0 3 * * 1",
-    "expected_duration_minutes": 25,
-    "cost_usd_per_run": "3-5",
-    "tags": [
-      {
-        "name": "zero-risk"
-      },
-      {
-        "name": "cluster-3"
-      },
-      {
-        "name": "seo"
-      },
-      {
-        "name": "geo"
-      },
-      {
-        "name": "biweekly"
-      }
-    ]
-  },
   "nodes": [
     {
       "parameters": {
-        "rule": "0 3 * * 1"
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * 1"
+            }
+          ]
+        }
       },
       "id": "trigger-cron",
       "name": "Trigger: Mondays 3am UTC",
@@ -52,7 +35,9 @@
       ]
     },
     {
-      "parameters": {},
+      "parameters": {
+        "fieldToSplitOut": "pages"
+      },
       "id": "split-pages",
       "name": "Split Into Each Page",
       "type": "n8n-nodes-base.splitOut",
@@ -116,7 +101,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://zero-risk-platform.vercel.app/api/agents/run-sdk",
+        "url": "=https://zero-risk-platform.vercel.app/api/agents/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -126,13 +111,13 @@
             },
             {
               "name": "x-api-key",
-              "value": "=key"
+              "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"agent\":\"seo-geo-optimization\",\"model\":\"claude-sonnet-4-6\",\"task\":\"GEO freshness for {{ $json.url }}\",\"client_id\":\"{{ $json.client_id }}\"}"
+        "jsonBody": "={\"agent\":\"seo-geo-optimization\",\"model\":\"claude-sonnet-4-6\",\"task\":\"GEO freshness for {{ $json.url }}\",\"client_id\":\"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\"\n}"
       },
       "id": "agent-geo",
       "name": "Agent: GEO Optimization",
@@ -179,7 +164,9 @@
       "main": [
         [
           {
-            "node": "Query Stale GEO Content"
+            "node": "Query Stale GEO Content",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -188,7 +175,9 @@
       "main": [
         [
           {
-            "node": "Split Into Each Page"
+            "node": "Split Into Each Page",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -197,7 +186,9 @@
       "main": [
         [
           {
-            "node": "Fetch Page Content"
+            "node": "Fetch Page Content",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -206,7 +197,9 @@
       "main": [
         [
           {
-            "node": "Analyze Citations & Stats"
+            "node": "Analyze Citations & Stats",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -215,7 +208,9 @@
       "main": [
         [
           {
-            "node": "IF refresh_needed"
+            "node": "IF refresh_needed",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -224,7 +219,9 @@
       "main": [
         [
           {
-            "node": "Agent: GEO Optimization"
+            "node": "Agent: GEO Optimization",
+            "type": "main",
+            "index": 0
           }
         ],
         []
@@ -234,10 +231,20 @@
       "main": [
         [
           {
-            "node": "Queue Refresh Task"
+            "node": "Queue Refresh Task",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
     }
-  }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "triggerCount": 1,
+  "versionId": "4d694040-24c9-4d54-b7f7-b653b38bb1f5"
 }

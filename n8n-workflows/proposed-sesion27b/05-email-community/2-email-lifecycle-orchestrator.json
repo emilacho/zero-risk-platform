@@ -1,13 +1,5 @@
 {
   "name": "Zero Risk — Email Lifecycle Orchestrator (Webhook-Driven)",
-  "description": "Routes contacts through 5-flow lifecycle: welcome, abandoned cart, post-purchase, browse abandonment, winback. Calls Email Marketer agent for copy with Schwedelson patterns.",
-  "tags": [
-    {"name": "zero-risk"},
-    {"name": "cluster-5"},
-    {"name": "email-community"},
-    {"name": "lifecycle-email"}
-  ],
-  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -20,7 +12,11 @@
       "name": "Webhook: Lifecycle Event",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [200, 360]
+      "position": [
+        200,
+        360
+      ],
+      "webhookId": "853a625a-bf7c-4c39-b75b-3254b3c7684e"
     },
     {
       "parameters": {
@@ -30,14 +26,17 @@
       "name": "Validate Event",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [420, 360]
+      "position": [
+        420,
+        360
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -55,14 +54,17 @@
       "name": "Event = contact_created?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [620, 200]
+      "position": [
+        620,
+        200
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -80,14 +82,17 @@
       "name": "Event = cart_abandoned?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [620, 360]
+      "position": [
+        620,
+        360
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -105,14 +110,17 @@
       "name": "Event = purchase_completed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [620, 520]
+      "position": [
+        620,
+        520
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -130,14 +138,17 @@
       "name": "Event = browse_abandoned?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [620, 680]
+      "position": [
+        620,
+        680
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -155,12 +166,15 @@
       "name": "Event = inactivity_180d?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [620, 840]
+      "position": [
+        620,
+        840
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -176,7 +190,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Welcome Series (3 emails, 1-7 day cadence). Use Jay Schwedelson patterns: numerals in subject (+19%), 3-word short format (+25%), emoji testing (+17%). Return 3 emails: { subject_a, subject_b, preview_text, mjml_body, plain_text, send_day }. Personalize with {{first_name}}.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "jsonBody": "={\n  \"agent\": \"email-marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Welcome Series (3 emails, 1-7 day cadence). Use Jay Schwedelson patterns: numerals in subject (+19%), 3-word short format (+25%), emoji testing (+17%). Return 3 emails: { subject_a, subject_b, preview_text, mjml_body, plain_text, send_day }. Personalize with {{first_name}}.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }},\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\"\n}",
         "options": {
           "timeout": 120000
         }
@@ -185,12 +199,15 @@
       "name": "Compose Welcome (Sonnet)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 200]
+      "position": [
+        900,
+        200
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -206,7 +223,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Abandoned Cart Sequence (3 emails: 2h, 24h, 72h). Email 1: functional reminder, 2: social proof + scarcity, 3: last chance + incentive. Use Schwedelson downplay-urgency pattern. Return { subject, preview, html, plain_text, send_delay_hours }.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "jsonBody": "={\n  \"agent\": \"email-marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Abandoned Cart Sequence (3 emails: 2h, 24h, 72h). Email 1: functional reminder, 2: social proof + scarcity, 3: last chance + incentive. Use Schwedelson downplay-urgency pattern. Return { subject, preview, html, plain_text, send_delay_hours }.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }},\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\"\n}",
         "options": {
           "timeout": 120000
         }
@@ -215,12 +232,15 @@
       "name": "Compose Abandoned Cart (Sonnet)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 360]
+      "position": [
+        900,
+        360
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -236,7 +256,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Post-Purchase Nurture (3 emails: day 0, +14, +30). Email 1: thank you + usage guide, Email 2: case study/upsell, Email 3: satisfaction check. Return { subject, preview, html, send_day }. Apply numerals and short-format subject patterns.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "jsonBody": "={\n  \"agent\": \"email-marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Post-Purchase Nurture (3 emails: day 0, +14, +30). Email 1: thank you + usage guide, Email 2: case study/upsell, Email 3: satisfaction check. Return { subject, preview, html, send_day }. Apply numerals and short-format subject patterns.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }},\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\"\n}",
         "options": {
           "timeout": 120000
         }
@@ -245,12 +265,15 @@
       "name": "Compose Post-Purchase (Sonnet)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 520]
+      "position": [
+        900,
+        520
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -266,7 +289,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Browse Abandonment Sequence (2 emails: 24h, 72h). Show viewed products, scarcity/social proof, incentive. Return { subject, preview, html, send_hours }.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "jsonBody": "={\n  \"agent\": \"email-marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Browse Abandonment Sequence (2 emails: 24h, 72h). Show viewed products, scarcity/social proof, incentive. Return { subject, preview, html, send_hours }.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }},\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\"\n}",
         "options": {
           "timeout": 120000
         }
@@ -275,12 +298,15 @@
       "name": "Compose Browse Abandonment (Sonnet)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 680]
+      "position": [
+        900,
+        680
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -296,7 +322,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"email_marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Winback/Re-engagement (3 emails: acknowledge lapse, new offer, survey/exit). Escalate incentive across 3 emails. Return { subject, preview, html, send_days }. Apply downplay-urgency pattern.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }}\n}",
+        "jsonBody": "={\n  \"agent\": \"email-marketer\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Design Winback/Re-engagement (3 emails: acknowledge lapse, new offer, survey/exit). Escalate incentive across 3 emails. Return { subject, preview, html, send_days }. Apply downplay-urgency pattern.\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"extra\": {{ JSON.stringify($json) }},\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\"\n}",
         "options": {
           "timeout": 120000
         }
@@ -305,7 +331,10 @@
       "name": "Compose Winback (Sonnet)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 840]
+      "position": [
+        900,
+        840
+      ]
     },
     {
       "parameters": {
@@ -335,7 +364,10 @@
       "name": "Log Sequence",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 360]
+      "position": [
+        1200,
+        360
+      ]
     },
     {
       "parameters": {
@@ -347,7 +379,40 @@
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1200, 200]
+      "position": [
+        1200,
+        200
+      ]
+    },
+    {
+      "id": "mc-inbox-Vqrihh",
+      "name": "Notify MC Inbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        360
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-mission-control-production.up.railway.app/api/inbox",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "masterPassword",
+              "value": "zerorisk2026"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"from\":\"email-lifecycle\",\"to\":\"leader\",\"type\":\"report\",\"taskId\":\"{{ $json.task_id ?? $json.client_id ?? ('wf-' + $now) }}\",\"subject\":\"Email Lifecycle completado\",\"body\":\"client={{ $json.client_id ?? 'unknown' }} | workflow={{ $workflow.name }}\"}",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      }
     }
   ],
   "connections": {
@@ -510,9 +575,22 @@
             "node": "Respond to Webhook",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Notify MC Inbox",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
     }
-  }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "triggerCount": 1,
+  "versionId": "f9ba0f93-48b3-4d91-ba22-4269e41ac172"
 }

@@ -1,6 +1,5 @@
 {
-  "name": "Zero Risk \u2014 Cost Watchdog Multi-Service v2 (Cron Hourly)",
-  "description": "Tracks Anthropic, OpenAI, Apify costs. Anomaly detection (200%+), per-client attribution.",
+  "name": "Zero Risk — Cost Watchdog Multi-Service v2 (Cron Hourly)",
   "nodes": [
     {
       "parameters": {
@@ -25,13 +24,21 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.anthropic.com/v1/usage",
+        "url": "=https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/agent_invocations_daily_rollup?day=eq.{{ $now.format('yyyy-MM-dd') }}&select=agent_id,model,total_cost_usd,invocations_count",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "x-api-key",
-              "value": "={{ $env.CLAUDE_API_KEY }}"
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
             }
           ]
         },
@@ -98,7 +105,10 @@
       "position": [
         480,
         300
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 30000
     },
     {
       "parameters": {
@@ -119,6 +129,19 @@
         "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/cost-usage?hours=24&granularity=hourly",
         "options": {
           "timeout": 15000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "value": "application/json",
+              "name": "Content-Type"
+            },
+            {
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+              "name": "x-api-key"
+            }
+          ]
         }
       },
       "id": "fetch-history",
@@ -195,7 +218,8 @@
       "position": [
         1680,
         100
-      ]
+      ],
+      "disabled": true
     },
     {
       "parameters": {},
@@ -206,6 +230,44 @@
       "position": [
         1680,
         300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-platform.vercel.app/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ agent: \"mops-director\", context: $json, task: \"Sprint 7 A1 wire-in side-effect invocation from Zero Risk — Cost Watchdog Multi-Service v2 (Cron Hourly)\", workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "wire-mops-director-ilujrc5g",
+      "name": "Invoke · mops-director",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        320
       ]
     }
   ],
@@ -272,6 +334,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Invoke · mops-director",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -318,19 +387,11 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "saveManualExecutions": true
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "tags": [
-    {
-      "name": "zero-risk"
-    },
-    {
-      "name": "cluster-7"
-    },
-    {
-      "name": "ops-monitoring"
-    }
-  ],
+  "tags": [],
   "triggerCount": 1,
-  "versionId": "1"
+  "versionId": "fad1fd27-e71d-4cc0-83c1-9c05838d095e"
 }

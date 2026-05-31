@@ -3,11 +3,14 @@
   "nodes": [
     {
       "parameters": {
-        "rule": "everyX",
-        "value": 1,
-        "unit": "days",
-        "hour": 4,
-        "minute": 0
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 4 * * *"
+            }
+          ]
+        }
       },
       "id": "schedule",
       "name": "Trigger: Daily 4 AM UTC",
@@ -99,7 +102,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const outcomes = $node['fetch-outcomes'].json.outcomes || [];\nconst metrics = $node['fetch-metrics'].json.metrics || [];\nconst aggregated = {};\noutcomes.forEach(outcome => {\n  const angle = outcome.output?.creative_angle || 'unknown';\n  const segment = outcome.output?.audience_segment || 'general';\n  const key = `${angle}_${segment}`;\n  if (!aggregated[key]) {\n    aggregated[key] = {\n      angle: angle,\n      segment: segment,\n      outcome_count: 0,\n      avg_ctr: 0,\n      avg_engagement: 0,\n      total_conversions: 0,\n      avg_spend: 0\n    };\n  }\n  aggregated[key].outcome_count += 1;\n});\nmetrics.forEach(m => {\n  const angle = m.creative_angle || 'unknown';\n  const segment = m.audience_segment || 'general';\n  const key = `${angle}_${segment}`;\n  if (aggregated[key]) {\n    aggregated[key].avg_ctr = (aggregated[key].avg_ctr + parseFloat(m.ctr)) / 2;\n    aggregated[key].avg_engagement = (aggregated[key].avg_engagement + parseFloat(m.engagement_rate || 0)) / 2;\n    aggregated[key].total_conversions += parseInt(m.conversions) || 0;\n    aggregated[key].avg_spend = (aggregated[key].avg_spend + parseFloat(m.spend)) / 2;\n  }\n});\nconst sorted = Object.values(aggregated).sort((a, b) => b.avg_ctr - a.avg_ctr);\nreturn [{ json: {\n  aggregated_insights: sorted.slice(0, 10),\n  total_combos: sorted.length,\n  top_performing_angles: sorted.slice(0, 3).map(s => s.angle),\n  top_performing_segments: [...new Set(sorted.slice(0, 3).map(s => s.segment))]\n} }];"
+        "jsCode": "const outcomes = $node['Fetch: Creative Outcomes (24h)'].json.outcomes || [];\nconst metrics = $node['Fetch: Ad Metrics (24h)'].json.metrics || [];\nconst aggregated = {};\noutcomes.forEach(outcome => {\n  const angle = outcome.output?.creative_angle || 'unknown';\n  const segment = outcome.output?.audience_segment || 'general';\n  const key = `${angle}_${segment}`;\n  if (!aggregated[key]) {\n    aggregated[key] = {\n      angle: angle,\n      segment: segment,\n      outcome_count: 0,\n      avg_ctr: 0,\n      avg_engagement: 0,\n      total_conversions: 0,\n      avg_spend: 0\n    };\n  }\n  aggregated[key].outcome_count += 1;\n});\nmetrics.forEach(m => {\n  const angle = m.creative_angle || 'unknown';\n  const segment = m.audience_segment || 'general';\n  const key = `${angle}_${segment}`;\n  if (aggregated[key]) {\n    aggregated[key].avg_ctr = (aggregated[key].avg_ctr + parseFloat(m.ctr)) / 2;\n    aggregated[key].avg_engagement = (aggregated[key].avg_engagement + parseFloat(m.engagement_rate || 0)) / 2;\n    aggregated[key].total_conversions += parseInt(m.conversions) || 0;\n    aggregated[key].avg_spend = (aggregated[key].avg_spend + parseFloat(m.spend)) / 2;\n  }\n});\nconst sorted = Object.values(aggregated).sort((a, b) => b.avg_ctr - a.avg_ctr);\nreturn [{ json: {\n  aggregated_insights: sorted.slice(0, 10),\n  total_combos: sorted.length,\n  top_performing_angles: sorted.slice(0, 3).map(s => s.angle),\n  top_performing_segments: [...new Set(sorted.slice(0, 3).map(s => s.segment))]\n} }];"
       },
       "id": "aggregate-insights",
       "name": "Code: Aggregate by Angle + Segment",
@@ -113,7 +116,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -129,7 +132,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"optimization_agent\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Analyze creative performance data from last 24h. Aggregated insights: {{ JSON.stringify($node['aggregate-insights'].json.aggregated_insights) }}. Produce: (1) Performance ranking by creative angle x audience segment, (2) Key findings (which angles + segments are winning), (3) Predictions: which combinations to double down on, (4) Recommendations for next creative generation. Output: { findings: [], recommendations: [], next_generation_guidance: { priority_angles: [], target_segments: [] } }\",\n  \"client_id\": \"multi\",\n  \"extra\": { \"metrics\": {{ JSON.stringify($node['fetch-metrics'].json.metrics.slice(0, 50)) }}, \"insights\": {{ JSON.stringify($node['aggregate-insights'].json) }} }\n}",
+        "jsonBody": "={\n  \"agent\": \"optimization-agent\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"task\": \"Analyze creative performance data from last 24h. Aggregated insights: {{ JSON.stringify($node['aggregate-insights'].json.aggregated_insights) }}. Produce: (1) Performance ranking by creative angle x audience segment, (2) Key findings (which angles + segments are winning), (3) Predictions: which combinations to double down on, (4) Recommendations for next creative generation. Output: { findings: [], recommendations: [], next_generation_guidance: { priority_angles: [], target_segments: [] } }\",\n  \"client_id\": \"multi\",\n  \"extra\": { \"metrics\": {{ JSON.stringify($node['Fetch: Ad Metrics (24h)'].json.metrics.slice(0, 50)) }}, \"insights\": {{ JSON.stringify($node['aggregate-insights'].json) }} },\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\"\n}",
         "options": {
           "timeout": 120000
         }
@@ -162,7 +165,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"insight_type\": \"creative_performance\",\n  \"period\": \"last_24h\",\n  \"generated_at\": \"{{ $json.timestamp }}\",\n  \"data\": {\n    \"findings\": {{ JSON.stringify($node['optimization-agent'].json.findings) }},\n    \"recommendations\": {{ JSON.stringify($node['optimization-agent'].json.recommendations) }},\n    \"next_generation_guidance\": {{ JSON.stringify($node['optimization-agent'].json.next_generation_guidance) }},\n    \"aggregated_metrics\": {{ JSON.stringify($node['aggregate-insights'].json) }}\n  }\n}",
+        "jsonBody": "={\n  \"insight_type\": \"creative_performance\",\n  \"period\": \"last_24h\",\n  \"generated_at\": \"{{ $json.timestamp }}\",\n  \"data\": {\n    \"findings\": {{ JSON.stringify($node['Agent: Optimization Agent (CAMEL meta-agent)'].json.findings) }},\n    \"recommendations\": {{ JSON.stringify($node['Agent: Optimization Agent (CAMEL meta-agent)'].json.recommendations) }},\n    \"next_generation_guidance\": {{ JSON.stringify($node['Agent: Optimization Agent (CAMEL meta-agent)'].json.next_generation_guidance) }},\n    \"aggregated_metrics\": {{ JSON.stringify($node['aggregate-insights'].json) }}\n  }\n}",
         "options": {
           "timeout": 30000
         }
@@ -182,7 +185,7 @@
         "url": "={{ $env.SLACK_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"📊 Creative Performance Report — Last 24h. Top angles: {{ $node['aggregate-insights'].json.top_performing_angles.join(', ') }}. Top segments: {{ $node['aggregate-insights'].json.top_performing_segments.join(', ') }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*📊 Daily Creative Performance Report*\\\\nPeriod: Last 24h\\\\n\\\\n*Top Performing Angles:*\\\\n{{ $node['aggregate-insights'].json.top_performing_angles.slice(0, 3).map(a => `• ${a}`).join('\\\\n') }}\\\\n\\\\n*Target Segments:*\\\\n{{ $node['aggregate-insights'].json.top_performing_segments.slice(0, 3).map(s => `• ${s}`).join('\\\\n') }}\\\\n\\\\n*Key Recommendations:*\\\\n{{ $node['optimization-agent'].json.recommendations.slice(0, 2).join('\\\\n') }}\" } }\n  ]\n}",
+        "jsonBody": "={\n  \"text\": \"📊 Creative Performance Report — Last 24h. Top angles: {{ $node['aggregate-insights'].json.top_performing_angles.join(', ') }}. Top segments: {{ $node['aggregate-insights'].json.top_performing_segments.join(', ') }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*📊 Daily Creative Performance Report*\\\\nPeriod: Last 24h\\\\n\\\\n*Top Performing Angles:*\\\\n{{ $node['aggregate-insights'].json.top_performing_angles.slice(0, 3).map(a => `• ${a}`).join('\\\\n') }}\\\\n\\\\n*Target Segments:*\\\\n{{ $node['aggregate-insights'].json.top_performing_segments.slice(0, 3).map(s => `• ${s}`).join('\\\\n') }}\\\\n\\\\n*Key Recommendations:*\\\\n{{ $node['Agent: Optimization Agent (CAMEL meta-agent)'].json.recommendations.slice(0, 2).join('\\\\n') }}\" } }\n  ]\n}",
         "options": {
           "timeout": 10000
         }
@@ -194,7 +197,8 @@
       "position": [
         1500,
         300
-      ]
+      ],
+      "disabled": true
     }
   ],
   "connections": {
@@ -280,23 +284,11 @@
     "executionOrder": "v1",
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
-    "timezone": "UTC"
+    "timezone": "UTC",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "tags": [
-    {
-      "name": "zero-risk"
-    },
-    {
-      "name": "cluster-2"
-    },
-    {
-      "name": "creative"
-    },
-    {
-      "name": "optimization"
-    },
-    {
-      "name": "feedback-loop"
-    }
-  ]
+  "tags": [],
+  "triggerCount": 1,
+  "versionId": "5423a73b-d43d-4d71-9145-8bad2ad603b0"
 }

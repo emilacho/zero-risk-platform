@@ -1,13 +1,5 @@
 {
   "name": "Zero Risk — Review Severity Tier Router (Real-time)",
-  "description": "Routes new reviews (Google/Trustpilot/App Store) into Tier 1 (legal/safety → immediate HITL), Tier 2 (service failure → 4h SLA), Tier 3 (routine → auto-reply).",
-  "tags": [
-    {"name": "zero-risk"},
-    {"name": "cluster-5"},
-    {"name": "email-community"},
-    {"name": "review-management"}
-  ],
-  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -20,7 +12,11 @@
       "name": "Webhook: Review Posted",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [200, 360]
+      "position": [
+        200,
+        360
+      ],
+      "webhookId": "34e49cf8-6469-45cd-b632-f416a9c99c82"
     },
     {
       "parameters": {
@@ -30,7 +26,10 @@
       "name": "Validate Review",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [420, 360]
+      "position": [
+        420,
+        360
+      ]
     },
     {
       "parameters": {
@@ -40,14 +39,17 @@
       "name": "Classify Severity Tier",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [620, 360]
+      "position": [
+        620,
+        360
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -65,14 +67,17 @@
       "name": "Is Tier 1?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [820, 360]
+      "position": [
+        820,
+        360
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -90,13 +95,16 @@
       "name": "Is Tier 2?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [820, 520]
+      "position": [
+        820,
+        520
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
-        "sendHeaders": true,
+        "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://zero-risk-platform.vercel.app/api/stubs/slack-webhook' }}",
+        "sendHeaders": false,
         "headerParameters": {
           "parameters": [
             {
@@ -107,7 +115,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"🚨 TIER 1 LEGAL/SAFETY ALERT\",\n  \"attachments\": [{\n    \"color\": \"danger\",\n    \"fields\": [{\n      \"title\": \"Platform\",\n      \"value\": \"{{ $node['validate'].json.platform }}\"\n    }, {\n      \"title\": \"Rating\",\n      \"value\": \"{{ $node['validate'].json.rating }}⭐\"\n    }, {\n      \"title\": \"Review\",\n      \"value\": \"{{ $node['validate'].json.text }}\"\n    }, {\n      \"title\": \"Action\",\n      \"value\": \"IMMEDIATE HITL REQUIRED — No auto-response. Route to legal team.\"\n    }]\n  }]\n}",
+        "jsonBody": "={\n  \"text\": \"TIER 1 LEGAL/SAFETY ALERT\",\n  \"attachments\": [{\n    \"color\": \"danger\",\n    \"fields\": [\n      { \"title\": \"Platform\", \"value\": \"{{ $('Validate Review').item.json.platform || '' }}\" },\n      { \"title\": \"Rating\", \"value\": \"{{ ($('Validate Review').item.json.rating || '?') + 'star' }}\" },\n      { \"title\": \"Review\", \"value\": {{ JSON.stringify($('Validate Review').item.json.text || $('Validate Review').item.json.review_text || '') }} },\n      { \"title\": \"Action\", \"value\": \"IMMEDIATE HITL REQUIRED. No auto-response. Route to legal team.\" }\n    ]\n  }]\n}",
         "options": {
           "timeout": 10000
         }
@@ -116,12 +124,16 @@
       "name": "Slack: Tier 1 Alert (No Auto-Response)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1020, 260]
+      "position": [
+        1020,
+        260
+      ],
+      "disabled": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/agents/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -132,26 +144,33 @@
             {
               "name": "x-api-key",
               "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-smoke-test",
+              "value": "={{ ($('Validate Review').item.json.client_id || \"\").startsWith(\"smoke-\") ? \"1\" : \"\" }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"review_responder\",\n  \"model\": \"claude-haiku-4-5\",\n  \"task\": \"Draft 2 response variants for negative review ({{ $node['validate'].json.rating }}⭐) using Birdeye 4-step (Apologize→Acknowledge→Act→Follow-up). Review: {{ $node['validate'].json.text }}. Both variants for HITL approval. JSON: { variant_1, variant_2, recommended_action }.\",\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"extra\": {{ JSON.stringify($node['validate'].json) }}\n}",
+        "jsonBody": "={\n  \"agent\": \"review-responder\",\n  \"model\": \"claude-haiku-4-5\",\n  \"task\": {{ JSON.stringify('Draft 2 response variants for negative review (' + ($('Validate Review').item.json.rating || '?') + 'star) using Birdeye 4-step. Review: ' + ($('Validate Review').item.json.text || $('Validate Review').item.json.review_text || '')) }},\n  \"client_id\": \"{{ $('Validate Review').item.json.client_id || '' }}\",\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"context\": { \"smoke_test\": {{ ($('Validate Review').item.json.client_id || \"\").startsWith(\"smoke-\") }} },\n  \"extra\": {{ JSON.stringify($('Validate Review').item.json ?? {}) }}\n}",
         "options": {
-          "timeout": 60000
+          "timeout": 120000
         }
       },
       "id": "draft-tier2",
       "name": "Draft Tier 2 Response (Haiku)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1020, 420]
+      "position": [
+        1020,
+        420
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/review-responses/queue-hitl",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/review-responses/queue-hitl",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -167,7 +186,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"review_id\": \"{{ $node['validate'].json.review_id }}\",\n  \"platform\": \"{{ $node['validate'].json.platform }}\",\n  \"severity_tier\": \"{{ $node['classify-tier'].json.severity_tier }}\",\n  \"response_variants\": {{ JSON.stringify($node['draft-tier2'].json) }},\n  \"sla_hours\": {{ $node['classify-tier'].json.response_sla_hours }}\n}",
+        "jsonBody": "={\n  \"client_id\": \"{{ $('Validate Review').item.json.client_id || '' }}\",\n  \"review_id\": \"{{ $('Validate Review').item.json.review_id || '' }}\",\n  \"platform\": \"{{ $('Validate Review').item.json.platform || '' }}\",\n  \"severity_tier\": \"{{ $('Classify Severity Tier').item.json.severity_tier || 'tier2' }}\",\n  \"response_variants\": {{ JSON.stringify($('Draft Tier 2 Response (Haiku)').item.json ?? {}) }},\n  \"sla_hours\": {{ Number($('Classify Severity Tier').item.json.response_sla_hours) || 24 }}\n}",
         "options": {
           "timeout": 30000
         }
@@ -176,28 +195,142 @@
       "name": "Queue Tier 2 for HITL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1220, 420]
+      "position": [
+        1220,
+        420
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const templates = {\n  google: 'Thank you for your feedback! We appreciate you taking the time to share your experience. We value your business and look forward to serving you again.',\n  trustpilot: 'Thank you for your review. Your feedback helps us improve. We appreciate your support.',\n  appstore: 'Thanks for the review! We appreciate your feedback and look forward to your next visit.',\n  playstore: 'Thank you for reviewing our app. Your feedback helps us improve. We appreciate your support.'\n};\nreturn [{ json: { auto_response: templates[$node['validate'].json.platform] || templates.google } }];"
+        "jsCode": "const templates = {\n  google: 'Thank you for your feedback! We appreciate you taking the time to share your experience. We value your business and look forward to serving you again.',\n  trustpilot: 'Thank you for your review. Your feedback helps us improve. We appreciate your support.',\n  appstore: 'Thanks for the review! We appreciate your feedback and look forward to your next visit.',\n  playstore: 'Thank you for reviewing our app. Your feedback helps us improve. We appreciate your support.'\n};\nreturn [{ json: { auto_response: templates[$node['Validate Review'].json.platform] || templates.google } }];"
       },
       "id": "template-tier3",
       "name": "Select Tier 3 Template",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1020, 580]
+      "position": [
+        1020,
+        580
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://zero-risk-platform.vercel.app/api/stubs/slack-webhook' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.GHL_API_KEY }}"
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"review_response\",\n  \"contactId\": \"{{ $('Validate Review').item.json.author || 'unknown' }}\",\n  \"message\": \"{{ $json.auto_response || '' }}\",\n  \"platform\": \"{{ $('Validate Review').item.json.platform || '' }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "post-tier3",
+      "name": "Post Tier 3 Auto-Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1220,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/review-metrics/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $('Validate Review').item.json.client_id || '' }}\",\n  \"review_id\": \"{{ $('Validate Review').item.json.review_id || '' }}\",\n  \"external_id\": \"{{ $('Validate Review').item.json.review_id || '' }}\",\n  \"platform\": \"{{ $('Validate Review').item.json.platform || 'google' }}\",\n  \"rating\": {{ Number($('Validate Review').item.json.rating) || 3 }},\n  \"severity_tier\": \"{{ $('Classify Severity Tier').item.json.severity_tier || 'tier3' }}\",\n  \"sentiment\": \"{{ $('Classify Severity Tier').item.json.sentiment || 'neutral' }}\",\n  \"body\": {{ JSON.stringify($('Validate Review').item.json.text || $('Validate Review').item.json.review_text || '') }},\n  \"status\": \"new\",\n  \"posted_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "log-metric",
+      "name": "Log Review Metric",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1420,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { review_id: ($('Validate Review').item.json.review_id || null), tier: ($('Classify Severity Tier').item.json.severity_tier || 'tier3'), status: 'processed' } }}",
+        "options": {},
+        "httpMethod": "POST"
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1420,
+        240
+      ]
+    },
+    {
+      "id": "mc-inbox-iE7JaR",
+      "name": "Notify MC Inbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1660,
+        360
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-mission-control-production.up.railway.app/api/inbox",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "masterPassword",
+              "value": "zerorisk2026"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"from\":\"review-severity\",\"to\":\"leader\",\"type\":\"report\",\"taskId\":\"{{ $json.task_id ?? $json.client_id ?? ('wf-' + $now) }}\",\"subject\":\"Review Severity procesado\",\"body\":\"client={{ $json.client_id ?? 'unknown' }} | workflow={{ $workflow.name }}\"}",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-platform.vercel.app/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
             },
             {
               "name": "Content-Type",
@@ -207,7 +340,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"type\": \"review_response\",\n  \"contactId\": \"{{ $node['validate'].json.author }}\",\n  \"message\": \"{{ $json.auto_response }}\",\n  \"platform\": \"{{ $node['validate'].json.platform }}\"\n}",
+        "jsonBody": "={{ JSON.stringify({ agent: \"pr-earned-media-manager\", context: $json, task: \"Sprint 7 A1 wire-in side-effect invocation from Zero Risk — Review Severity Tier Router (Real-time)\", workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
         "options": {
           "timeout": 30000,
           "response": {
@@ -217,53 +350,52 @@
           }
         }
       },
-      "id": "post-tier3",
-      "name": "Post Tier 3 Auto-Response",
+      "id": "wire-pr-earned-media-manager-c7xj4euy",
+      "name": "Invoke · pr-earned-media-manager",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1220, 580]
+      "position": [
+        840,
+        480
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ZERO_RISK_API_URL }}/api/review-metrics/upsert",
+        "url": "https://zero-risk-platform.vercel.app/api/agents/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
               "name": "x-api-key",
               "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"client_id\": \"{{ $node['validate'].json.client_id }}\",\n  \"review_id\": \"{{ $node['validate'].json.review_id }}\",\n  \"platform\": \"{{ $node['validate'].json.platform }}\",\n  \"rating\": {{ $node['validate'].json.rating }},\n  \"severity_tier\": \"{{ $node['classify-tier'].json.severity_tier }}\",\n  \"sentiment\": \"{{ $node['classify-tier'].json.sentiment }}\",\n  \"posted_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "jsonBody": "={{ JSON.stringify({ agent: \"community-manager\", context: $json, task: \"Sprint 7 A1 wire-in side-effect invocation from Zero Risk — Review Severity Tier Router (Real-time)\", workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
         "options": {
-          "timeout": 30000
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
-      "id": "log-metric",
-      "name": "Log Review Metric",
+      "id": "wire-community-manager-ku7jnxi8",
+      "name": "Invoke · community-manager",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1420, 360]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { review_id: $node['validate'].json.review_id, tier: $node['classify-tier'].json.severity_tier, status: 'processed' } }}",
-        "options": {}
-      },
-      "id": "respond",
-      "name": "Respond to Webhook",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [1420, 240]
+      "position": [
+        840,
+        480
+      ]
     }
   ],
   "connections": {
@@ -294,6 +426,20 @@
         [
           {
             "node": "Is Tier 1?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invoke · pr-earned-media-manager",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invoke · community-manager",
             "type": "main",
             "index": 0
           }
@@ -394,9 +540,22 @@
             "node": "Respond to Webhook",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Notify MC Inbox",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
     }
-  }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "triggerCount": 1,
+  "versionId": "691f8824-7982-4a13-a20b-2effd8f613f1"
 }

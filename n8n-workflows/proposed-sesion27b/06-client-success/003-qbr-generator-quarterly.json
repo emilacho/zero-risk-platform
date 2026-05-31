@@ -1,6 +1,5 @@
 {
   "name": "Zero Risk — QBR Generator Quarterly (1st of Quarter 4am)",
-  "description": "Quarterly Business Review generation for Tier 1 & 2 clients. Pulls 90d campaign outcomes, KPIs vs targets, competitive benchmarks. Calls Reporting Agent with SCQA + McKinsey pyramid. Generates draft in Notion. HITL gate: Emilio approval before delivery.",
   "nodes": [
     {
       "parameters": {
@@ -17,7 +16,10 @@
       "name": "1st of Quarter at 4am",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [200, 300]
+      "position": [
+        200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -40,7 +42,10 @@
       "name": "Fetch Tier 1 & 2 Clients",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [420, 300]
+      "position": [
+        420,
+        300
+      ]
     },
     {
       "parameters": {
@@ -51,7 +56,10 @@
       "name": "Split Clients",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [640, 300]
+      "position": [
+        640,
+        300
+      ]
     },
     {
       "parameters": {
@@ -64,13 +72,29 @@
               "neverError": true
             }
           }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed"
+            }
+          ]
         }
       },
       "id": "fetch-90d-outcomes",
       "name": "Fetch 90d Campaign Outcomes",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [880, 100]
+      "position": [
+        880,
+        100
+      ]
     },
     {
       "parameters": {
@@ -83,13 +107,29 @@
               "neverError": true
             }
           }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed"
+            }
+          ]
         }
       },
       "id": "fetch-kpi-targets",
       "name": "Fetch KPI Targets",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [880, 220]
+      "position": [
+        880,
+        220
+      ]
     },
     {
       "parameters": {
@@ -102,13 +142,29 @@
               "neverError": true
             }
           }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed"
+            }
+          ]
         }
       },
       "id": "fetch-benchmarks",
       "name": "Fetch Competitive Benchmarks",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [880, 340]
+      "position": [
+        880,
+        340
+      ]
     },
     {
       "parameters": {
@@ -120,7 +176,10 @@
       "name": "Merge QBR Data",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
     },
     {
       "parameters": {
@@ -141,7 +200,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent_id\": \"reporting-agent\",\n  \"task\": \"Generate QBR narrative with SCQA + McKinsey pyramid for {{ $json.client_name }} (Tier {{ $json.engagement_tier }}). Last 90d outcomes: ROAS={{ $json.roas }}, leads={{ $json.leads_generated }}, pipeline_value={{ $json.pipeline_value }}. Targets: ROAS_target={{ $json.kpi_roas_target }}, leads_target={{ $json.kpi_leads_target }}. Industry benchmarks: median_roas={{ $json.benchmark_median_roas }}, 75th_percentile={{ $json.benchmark_75th_roas }}. Include executive brief (SCQA), KPI dashboard, channel breakdown, benchmarking, recommendations.\",\n  \"context\": {{ JSON.stringify($json) }}\n}",
+        "jsonBody": "={\n  \"agent_id\": \"reporting-agent\",\n  \"task\": \"Generate QBR narrative with SCQA + McKinsey pyramid for {{ $json.client_name }} (Tier {{ $json.engagement_tier }}). Last 90d outcomes: ROAS={{ $json.roas }}, leads={{ $json.leads_generated }}, pipeline_value={{ $json.pipeline_value }}. Targets: ROAS_target={{ $json.kpi_roas_target }}, leads_target={{ $json.kpi_leads_target }}. Industry benchmarks: median_roas={{ $json.benchmark_median_roas }}, 75th_percentile={{ $json.benchmark_75th_roas }}. Include executive brief (SCQA), KPI dashboard, channel breakdown, benchmarking, recommendations.\",\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"context\": {{ JSON.stringify($json) }}\n}",
         "options": {
           "timeout": 120000
         }
@@ -150,7 +209,10 @@
       "name": "Call Reporting Agent: Generate QBR",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1360, 300]
+      "position": [
+        1360,
+        300
+      ]
     },
     {
       "parameters": {
@@ -171,7 +233,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"client_name\": \"{{ $json.client_name }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"quarter\": \"Q{{ Math.ceil(new Date().getMonth() / 3) }}\",\n  \"year\": \"{{ new Date().getFullYear() }}\",\n  \"qbr_content\": \"{{ $node['Call Reporting Agent: Generate QBR'].json.result }}\",\n  \"status\": \"draft\",\n  \"requires_approval\": true,\n  \"parent_page_id\": \"{{ $env.NOTION_PARENT_PAGE_ID }}\"\n}",
+        "jsonBody": "={\n  \"client_name\": \"{{ $json.client_name }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"quarter\": \"Q{{ Math.ceil(new Date().getMonth() / 3) }}\",\n  \"year\": \"{{ new Date().getFullYear() }}\",\n  \"qbr_content\": {{ JSON.stringify($node['Call Reporting Agent: Generate QBR'].json.result) }},\n  \"status\": \"draft\",\n  \"requires_approval\": true,\n  \"parent_page_id\": \"{{ $env.NOTION_PARENT_PAGE_ID }}\"\n}",
         "options": {
           "timeout": 30000
         }
@@ -180,7 +242,10 @@
       "name": "Create Notion QBR Draft",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1600, 300]
+      "position": [
+        1600,
+        300
+      ]
     },
     {
       "parameters": {
@@ -195,7 +260,7 @@
             },
             {
               "name": "x-api-key",
-              "value": "={{ $env.MC_API_KEY }}"
+              "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
         },
@@ -210,7 +275,10 @@
       "name": "Submit HITL Gate: Emilio Approval",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1840, 300]
+      "position": [
+        1840,
+        300
+      ]
     },
     {
       "parameters": {
@@ -234,7 +302,149 @@
       "name": "Alert Slack: HITL Gate Opened",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2080, 300]
+      "position": [
+        2080,
+        300
+      ],
+      "disabled": true
+    },
+    {
+      "id": "webhook-journey-e-review",
+      "name": "Webhook: Journey E REVIEW (Dispatch)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        500
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "journey-e-review",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "journey-e-review-wh",
+      "notes": "Sprint 7.7 wire-journey-e · 2026-05-23 · CC#2 · second entry trigger preserving Schedule Trigger · enables Journey E REVIEW dispatch via webhook (Master Orchestrator + external test callers)"
+    },
+    {
+      "id": "apify-wire-load-clients-qbr_quarterly",
+      "name": "[APIFY-WIRE] Load active clients with apify enabled (qbr_quarterly)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        900
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/clients?status=eq.active&select=id,name,slug,config&config->apify->enabled=eq.true",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 30000
+    },
+    {
+      "id": "apify-wire-split-clients-qbr_quarterly",
+      "name": "[APIFY-WIRE] Split per cliente (qbr_quarterly)",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        600,
+        900
+      ],
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "apify-wire-filter-functions-qbr_quarterly",
+      "name": "[APIFY-WIRE] Filter functions for qbr_quarterly scope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        900
+      ],
+      "parameters": {
+        "jsCode": "const cliente = $input.item.json;\nconst cron = (cliente.config && cliente.config.apify && cliente.config.apify.cron_cadence_per_function) || {};\nconst tier = (cliente.config && cliente.config.apify && cliente.config.apify.plan_tier) || 'basic';\nconst scopeFunctions = [\"instagram_scraper\",\"tiktok_profile_scraper\",\"linkedin_company_scraper\",\"facebook_ads_library_scraper\"];\nconst activas = scopeFunctions.filter(fn => cron[fn] != null);\nreturn activas.map(fn => ({\n  json: { client_id: cliente.id, client_name: cliente.name, apify_function: fn, cadence: cron[fn], tier }\n}));"
+      }
+    },
+    {
+      "id": "apify-wire-split-functions-qbr_quarterly",
+      "name": "[APIFY-WIRE] Split per function (qbr_quarterly)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1000,
+        900
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "apify-wire-call-service-qbr_quarterly",
+      "name": "[APIFY-WIRE] Call Apify Service Workflow (qbr_quarterly)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        900
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-production-72be.up.railway.app/webhook/apify-service-workflow",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  client_id: $json.client_id,\n  apify_function: $json.apify_function,\n  destination: \"brain_rag\",\n  dry_run: true,\n  source_table: \"client_historical_outputs\",\n  metadata: {\n    calling_workflow_id: $workflow.id,\n    calling_workflow_execution_id: $execution.id,\n    scope: \"qbr_quarterly\",\n    sprint: \"9-cleanup-wire-6-critical-qbr-quarterly\",\n    tier: $json.tier,\n    cadence: $json.cadence\n  }\n}) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 30000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "apify-wire-aggregate-qbr_quarterly",
+      "name": "[APIFY-WIRE] Aggregate Service responses (qbr_quarterly)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        900
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst summary = { total_calls: items.length, successes: 0, errors: 0, skipped_gate: 0, by_function: {} };\nfor (const it of items) {\n  const r = it.json || {};\n  const fn = r.apify_function || 'unknown';\n  summary.by_function[fn] = (summary.by_function[fn] || 0) + 1;\n  if (r.status === 'skipped' || r.skip_reason) summary.skipped_gate++;\n  else if (r.success === false || r.error) summary.errors++;\n  else summary.successes++;\n}\nreturn [{ json: { scope: 'qbr_quarterly', destination_table: 'client_historical_outputs', summary, ran_at: new Date().toISOString() } }];"
+      }
     }
   ],
   "connections": {
@@ -243,6 +453,11 @@
         [
           {
             "node": "Fetch Tier 1 & 2 Clients",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[APIFY-WIRE] Load active clients with apify enabled (qbr_quarterly)",
             "type": "main",
             "index": 0
           }
@@ -357,26 +572,81 @@
           }
         ]
       ]
+    },
+    "Webhook: Journey E REVIEW (Dispatch)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Tier 1 & 2 Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Load active clients with apify enabled (qbr_quarterly)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Split per cliente (qbr_quarterly)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Split per cliente (qbr_quarterly)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Filter functions for qbr_quarterly scope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Filter functions for qbr_quarterly scope": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Split per function (qbr_quarterly)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Split per function (qbr_quarterly)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Call Apify Service Workflow (qbr_quarterly)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Call Apify Service Workflow (qbr_quarterly)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Aggregate Service responses (qbr_quarterly)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
-    "saveManualExecutions": true
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "tags": [
-    {
-      "name": "zero-risk"
-    },
-    {
-      "name": "cluster-6"
-    },
-    {
-      "name": "client-success"
-    },
-    {
-      "name": "qbr"
-    }
-  ],
-  "triggerCount": 1,
-  "versionId": "1"
+  "tags": [],
+  "triggerCount": 2,
+  "versionId": "d2733802-e9fa-4f0c-8439-211b9035fdbb"
 }
