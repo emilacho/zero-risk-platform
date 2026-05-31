@@ -377,6 +377,12 @@ export class PipelineOrchestrator {
       const ragQuery = `${pipeline?.objective || ''} — ${stepDef.description || stepDef.display_name}`
 
       // Call /api/agents/run
+      // Sprint 11 Ola 1 §149 · pipeline-orchestrator runs INSIDE an upstream
+      // request (usually invoked from a Vercel route handler driven by a
+      // workflow) but the lib itself doesn't always receive the n8n
+      // workflow_id explicitly. Mint a deterministic internal-prefixed
+      // marker per pipeline+step so the gate sees a non-null value tagged
+      // for forensics (`internal-pipeline-<pipelineId>-<step>`).
       const response = await fetch(`${this.baseUrl}/api/agents/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -384,6 +390,8 @@ export class PipelineOrchestrator {
           agent: stepDef.agent,
           task,
           context: {
+            workflow_id: `internal-pipeline-${pipelineId}`,
+            workflow_execution_id: `internal-pipeline-${pipelineId}-${stepDef.name}`,
             chain,
             client_id: pipeline?.client_id,
             rag_query: ragQuery,           // targeted RAG search per step
@@ -479,6 +487,10 @@ export class PipelineOrchestrator {
 
         const ragQuery = `${pipeline?.objective || ''} — content creation by ${agentName}`
 
+        // Sprint 11 Ola 1 §149 · sub-agent fanout · same internal-prefix
+        // canon as the sequential step above (line ~380). Each parallel
+        // agent gets a deterministic marker tagged with its slug so the
+        // audit can distinguish parallel-fanout rows from sequential rows.
         const response = await fetch(`${this.baseUrl}/api/agents/run`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -486,6 +498,8 @@ export class PipelineOrchestrator {
             agent: agentName,
             task,
             context: {
+              workflow_id: `internal-pipeline-${pipelineId}`,
+              workflow_execution_id: `internal-pipeline-${pipelineId}-${stepDef.name}-${agentName}`,
               client_id: pipeline?.client_id,
               rag_query: ragQuery,
               rag_match_count: 3,  // fewer results for parallel agents to save tokens
