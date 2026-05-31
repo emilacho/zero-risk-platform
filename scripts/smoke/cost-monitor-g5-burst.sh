@@ -80,11 +80,22 @@ fi
 if [[ "$THRESHOLD" != "5" ]]; then
   echo "[smoke-g5] FAIL · threshold=$THRESHOLD != 5" >&2; ASSERT_OK=0
 fi
-if [[ "$SHADOW" != "true" ]]; then
-  echo "[smoke-g5] FAIL · shadow_mode=$SHADOW != true · SHADOW guarantee violated" >&2; ASSERT_OK=0
-fi
-if [[ "$ALERT" != "false" ]]; then
-  echo "[smoke-g5] FAIL · alert_dispatched=$ALERT != false · SHADOW guarantee violated" >&2; ASSERT_OK=0
+# Mode-aware assertions · SHADOW (shadow_mode=true) MUST NOT dispatch ·
+# ALERT-LIVE (shadow_mode=false) MUST dispatch on breach.
+if [[ "$SHADOW" == "true" ]]; then
+  if [[ "$ALERT" != "false" ]]; then
+    echo "[smoke-g5] FAIL · shadow=true but alert_dispatched=$ALERT (expected false · SHADOW guarantee violated)" >&2; ASSERT_OK=0
+  else
+    echo "[smoke-g5] mode=SHADOW · alert correctly NOT dispatched"
+  fi
+elif [[ "$SHADOW" == "false" ]]; then
+  if [[ "$ALERT" != "true" ]]; then
+    echo "[smoke-g5] FAIL · shadow=false but alert_dispatched=$ALERT (expected true · webhook dispatch failed?)" >&2; ASSERT_OK=0
+  else
+    echo "[smoke-g5] mode=ALERT-LIVE · alert dispatched to Slack #equipo (verify ping in channel)"
+  fi
+else
+  echo "[smoke-g5] FAIL · unexpected shadow_mode value: $SHADOW" >&2; ASSERT_OK=0
 fi
 
 echo "[smoke-g5] phase 4 · cleanup"
@@ -101,5 +112,7 @@ if [[ "$ASSERT_OK" != "1" ]]; then
   echo "[smoke-g5] OVERALL FAIL · breach assertions not met" >&2
   exit 2
 fi
-echo "[smoke-g5] OVERALL PASS · hourly_burst breach detected · SHADOW mode confirmed · cleanup complete"
+MODE_LABEL="SHADOW"
+[[ "$SHADOW" == "false" ]] && MODE_LABEL="ALERT-LIVE"
+echo "[smoke-g5] OVERALL PASS · hourly_burst breach detected · mode=${MODE_LABEL} · cleanup complete"
 exit 0
