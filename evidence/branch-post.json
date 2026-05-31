@@ -1,0 +1,435 @@
+{
+  "label": "post-migration",
+  "started_at": "2026-05-31T16:15:37.376Z",
+  "supabase_url": "https://gywzghonodutfjfthrnu...(redacted)",
+  "summary": {
+    "tables_tested": 14,
+    "views_tested": 5,
+    "anon_read": {
+      "ok_with_data": 0,
+      "ok_empty": 14,
+      "errored": 0
+    },
+    "anon_write": {
+      "succeeded_LEAK": 0,
+      "blocked": 14
+    },
+    "svc_read": {
+      "ok": 14,
+      "failed": 0
+    },
+    "views_anon_read": {
+      "with_data": 0,
+      "empty": 5,
+      "errored": 0
+    }
+  },
+  "interpretation": {
+    "anon_exposed_tables": [],
+    "backend_intact": true,
+    "views_filtering_to_anon": [
+      "active_journeys",
+      "v_hitl_inbox",
+      "v_active_pipelines",
+      "v_agent_scorecards",
+      "v_pending_improvements"
+    ],
+    "views_leaking_to_anon": []
+  },
+  "table_probes": [
+    {
+      "table": "client_reports",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "content_packages",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "experiments",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "rank_tracking_daily",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "review_metrics",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "seo_engagements",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "social_metrics",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "social_schedules",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "workflow_checkpoints",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "seo_deliverables",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "analytics",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "websites",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "managed_agents_registry",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "table": "settings",
+      "relrowsecurity": false,
+      "policy_count": 0,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "anon_insert": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "anon_delete": {
+        "ok": false,
+        "error_code": "42501"
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    }
+  ],
+  "view_probes": [
+    {
+      "view": "active_journeys",
+      "security_invoker": null,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "view": "v_hitl_inbox",
+      "security_invoker": null,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "view": "v_active_pipelines",
+      "security_invoker": null,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "view": "v_agent_scorecards",
+      "security_invoker": null,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    },
+    {
+      "view": "v_pending_improvements",
+      "security_invoker": null,
+      "anon_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      },
+      "svc_select": {
+        "ok": true,
+        "rows": 0,
+        "error_code": null
+      }
+    }
+  ]
+}

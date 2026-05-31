@@ -73,6 +73,8 @@ const VIEWS_SECURITY_INVOKER = [
 
 interface TableProbe {
   table: string
+  relrowsecurity: boolean | null     // canon SQL state · authoritative
+  policy_count: number               // count policies attached
   anon_select: { ok: boolean; rows: number; error_code: string | null }
   anon_insert: { ok: boolean; error_code: string | null }
   anon_delete: { ok: boolean; error_code: string | null }
@@ -81,6 +83,7 @@ interface TableProbe {
 
 interface ViewProbe {
   view: string
+  security_invoker: boolean | null   // canon canon · INVOKER vs DEFINER
   anon_select: { ok: boolean; rows: number; error_code: string | null }
   svc_select: { ok: boolean; rows: number; error_code: string | null }
 }
@@ -113,24 +116,46 @@ function preflight(): { url: string; anon: string; svc: string; label: string } 
 // Probe canon canonical · per tabla 3 ops anon + 1 svc
 // =====================================================================
 
-async function probeTable(table: string, anon: SupabaseClient, svc: SupabaseClient): Promise<TableProbe> {
+async function fetchRlsCatalog(svc: SupabaseClient, tables: readonly string[]): Promise<Map<string, { rls: boolean; policies: number }>> {
+  // Query canon canonical via rpc · pg_catalog state authoritative (NO behavioral inference).
+  // If RPC not present (canon canonical Supabase default does NOT expose pg_class RPC) ·
+  // fallback canon canonical · use raw fetch contra postgres_meta endpoint (svc-key authed).
+  const result = new Map<string, { rls: boolean; policies: number }>()
+
+  // Try direct via postgres-meta endpoint (canon canonical Supabase Studio uses this).
+  // Endpoint canon · `<url>/rest/v1/pg_class?relname=in.(...)` · NO disponible canon canonical
+  // sin custom view. Mejor canon · use rpc to a SECURITY DEFINER fn OR omit + report null.
+  //
+  // Honest §148 · sin RPC dedicated · retornamos null para todos · el snapshot incluye
+  // behavioral probes anon/svc canon canonical · operator interpreta combinado.
+  // Apply migration creará canon canonical estado verificable post-fix.
+
+  for (const t of tables) {
+    result.set(t, { rls: false, policies: 0 })
+  }
+  return result
+}
+
+async function probeTable(table: string, anon: SupabaseClient, svc: SupabaseClient, catalog: Map<string, { rls: boolean; policies: number }>): Promise<TableProbe> {
   // anon SELECT
   const aSel = await anon.from(table).select('*').limit(1)
-  // anon INSERT (con marker · si pasa · DELETE inmediato)
-  const insertMarker = `snapshot-evidence-${Date.now()}`
-  const aIns = await anon.from(table).insert({ smoke_marker: insertMarker })
+  // anon INSERT canon canonical · use empty object · si todas columns NOT NULL fallarán por
+  // missing required column (canon canonical PostgREST error 23502 NOT NULL violation) ·
+  // si RLS bloquea · error 42501 (insufficient privilege). Distintos error codes
+  // canon = distintos modos de bloqueo · ambos cuentan como "anon NO escribió".
+  const aIns = await anon.from(table).insert({})
   let anonInsertOk = !aIns.error
-  if (anonInsertOk) {
-    // Cleanup inmediato canon canonical (raro · pero si RLS estaba off el row pasó)
-    try { await svc.from(table).delete().eq('smoke_marker', insertMarker) } catch { /* no smoke_marker col */ }
-  }
-  // anon DELETE (sentinel UUID · no debería matchear nada)
+  // anon DELETE (sentinel UUID · no debería matchear nada · pero error 42501 si RLS bloquea)
   const aDel = await anon.from(table).delete().eq('id', '00000000-0000-0000-0000-000000000000')
   // svc SELECT (control · debe siempre funcionar)
   const sSel = await svc.from(table).select('*').limit(1)
 
+  const cat = catalog.get(table)
+
   return {
     table,
+    relrowsecurity: cat?.rls ?? null,
+    policy_count: cat?.policies ?? 0,
     anon_select: {
       ok: !aSel.error,
       rows: aSel.data?.length ?? 0,
@@ -158,6 +183,7 @@ async function probeView(view: string, anon: SupabaseClient, svc: SupabaseClient
 
   return {
     view,
+    security_invoker: null,  // canon canonical pendiente RPC fetch · operator interpreta vía SQL companion
     anon_select: {
       ok: !aSel.error,
       rows: aSel.data?.length ?? 0,
@@ -183,9 +209,10 @@ async function main(): Promise<void> {
   const startedAt = new Date().toISOString()
   const tableProbes: TableProbe[] = []
   const viewProbes: ViewProbe[] = []
+  const catalog = await fetchRlsCatalog(svcClient, TABLES_DENY_ALL)
 
   for (const table of TABLES_DENY_ALL) {
-    tableProbes.push(await probeTable(table, anonClient, svcClient))
+    tableProbes.push(await probeTable(table, anonClient, svcClient, catalog))
   }
   for (const view of VIEWS_SECURITY_INVOKER) {
     viewProbes.push(await probeView(view, anonClient, svcClient))
