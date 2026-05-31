@@ -84,6 +84,11 @@ export interface SocialContentRequest {
    *  hex codes / logo references stay consistent. */
   brand_assets?: CascadeBrandAssets
   caller?: string
+  /** Sprint 11 Ola 1 §149 · workflow_id propagated from the cascade entry
+   *  (e.g. /api/cascade/onboard already enforces it). When the caller is
+   *  not a cascade, the runner mints an internal-prefixed marker. */
+  workflow_id?: string | null
+  workflow_execution_id?: string | null
 }
 
 export interface SocialSlide {
@@ -325,12 +330,22 @@ async function invokeAgent(
   contextExtra: Record<string, unknown> = {},
 ): Promise<{ data: AgentRunResponse; httpStatus: number; httpOk: boolean }> {
   const fetchImpl = deps.fetchImpl ?? fetch
+  // Sprint 11 Ola 1 §149 · prefer caller-supplied workflow_id (cascade flow
+  // already enforces it · canon Sprint 8D). Fall back to a deterministic
+  // internal marker tagged with client_slug + agent so audit queries can
+  // distinguish runner-internal fanouts.
+  const workflowId =
+    request.workflow_id ?? `internal-social-content-runner-${request.client_slug}-${agentSlug}`
+  const workflowExecId =
+    request.workflow_execution_id ?? `${workflowId}-${Date.now()}`
   const body = {
     agent: agentSlug,
     task,
     client_id: request.client_id,
     caller: request.caller ?? 'social-content-runner',
     context: {
+      workflow_id: workflowId,
+      workflow_execution_id: workflowExecId,
       brief: request.brief,
       campaign_intent: request.campaign_intent ?? 'general brand awareness',
       platforms_requested: request.platforms_requested,
