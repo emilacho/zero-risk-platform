@@ -1,0 +1,21 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+Initialising login role...
+DRY RUN: migrations will *not* be pushed to the database.
+Connecting to remote database...
+Found local migration files to be inserted before the last migration on remote database.
+
+Rerun the command with --include-all flag to apply these migrations:
+supabase\migrations\202605161900_seed_style_consistency_reviewer_and_delivery_coordinator.sql
+supabase\migrations\202605162000_seed_carousel_designer_agent.sql                            
+supabase\migrations\202605170100_archive_smoke_clients.sql                                   
+supabase\migrations\202605170100_meta_ads_tables.sql                                         
+supabase\migrations\202605201200_whatsapp_messages.sql                                       
+supabase\migrations\202605201300_landings.sql                                                
+supabase\migrations\202605201300_social_posts.sql                                            
+supabase\migrations\202605210800_social_posts_pending_approval.sql                           
+supabase\migrations\202605220000_camino_iii_voting_schema.sql                                
+supabase\migrations\202605220100_seed_5_missing_agents_from_registry.sql                     
+supabase\migrations\202605220200_dedup_agents_snake_canonical_duplicates.sql                 
+
