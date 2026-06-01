@@ -76,7 +76,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"agent\":\"seo-specialist\",\"model\":\"claude-sonnet-4-6\",\"task\":\"Cannibalization check for {{ $json.domain }}\",\"client_id\":\"{{ $json.client_id }}\"}"
+        "jsonBody": "={\"agent\":\"seo-specialist\",\"model\":\"claude-sonnet-4-6\",\"task\":\"Cannibalization check for {{ $json.domain }}\",\"client_id\":\"{{ $json.client_id }}\",\"workflow_id\":\"{{ $workflow.id }}\",\"workflow_execution_id\":\"{{ $execution.id }}\"}"
       },
       "id": "guard-cannibalization",
       "name": "GUARD: Cannibalization Check",

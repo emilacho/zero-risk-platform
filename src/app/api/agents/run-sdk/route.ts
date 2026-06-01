@@ -36,6 +36,7 @@ import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { resolveAgentSlug } from '@/lib/agent-alias-map'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
+import { validateWorkflowId } from '@/lib/agent-safety'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 min — pipelines largos
@@ -211,6 +212,35 @@ export async function POST(request: Request) {
     // · influencer-outreach · generate-content) · forward the workflow_id
     // received from their upstream n8n caller (NOT generate synthetic IDs).
     const wfAttr = resolveWorkflowAttribution(body)
+
+    // §149 canonical gate · ADR-008-EXT v2 · `validateWorkflowId` is the
+    // canonical shadow-ready gate. Runs on EVERY call (incl. missing-wf_id)
+    // so its decisions can be observed before flipping to enforce mode.
+    // Toggle ·  `AGENT_SAFETY_WORKFLOW_ID_ENFORCE=1` flips lib to enforce.
+    // Default ("0" or unset) · shadow · logs but doesn't block · inline 403
+    // below remains the live enforcer until the canonical flip dispatch.
+    const safetyDecision = validateWorkflowId({
+      workflow_id: wfAttr.workflow_id,
+      workflow_execution_id: wfAttr.workflow_execution_id,
+      client_id: body.client_id ?? null,
+      agent_id: agentName,
+      task,
+      caller: 'api',
+    })
+    if (safetyDecision.would_reject || safetyDecision.metadata?.is_smoke_caller) {
+      console.info(
+        '[run-sdk] §149 safety decision · ' +
+          JSON.stringify({
+            gate: safetyDecision.gate,
+            shadow_mode: safetyDecision.shadow_mode,
+            would_reject: safetyDecision.would_reject,
+            enforced: safetyDecision.enforced,
+            reason: safetyDecision.reason,
+            metadata: safetyDecision.metadata,
+          }),
+      )
+    }
+
     if (!wfAttr.workflow_id || !wfAttr.workflow_execution_id) {
       const callerHint = {
         agent: agentName,
