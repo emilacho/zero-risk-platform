@@ -1,0 +1,41 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[smoke-killswitch] canon canonical · spec-CC1-killswitch-frena-proof · burst=100
+[smoke-killswitch] started_at=2026-06-01T16:42:51.607Z
+
+[smoke-killswitch] FASE A · BASELINE no-false-positive · canon canonical legit traffic · ✅ PASS · 0ms
+  · invocations: 100
+  · blocked: 0
+  · shadow_flagged: 0
+  · unique_request_ids: 100
+  · allow_rate_pct: 100
+  · sample_decision: {"allow":true,"shadow_blocks":[],"request_id":"9c9a00d2-9a5f-4006-8d4a-d0dc788da5c5"}
+
+[smoke-killswitch] FASE B · FRENA-evidence shadow · canon decisión-de-corte registrada (NEXUS pattern) · ✅ PASS · 1ms
+  · invocations: 100
+  · allow_count: 100
+  · shadow_blocked_validate_workflow_id: 100
+  · production_blocked: 0
+  · evidence_capture_pct: 100
+  · sample_g1_would_reject: true
+  · sample_g1_enforced: false
+  · sample_g1_shadow_mode: true
+  · sample_decision: {"allow":true,"shadow_blocks":["validate_workflow_id"],"request_id":"dc6b4bb0-ccdb-4175-8ed3-c7d0f291494c"}
+
+[smoke-killswitch] FASE C · ENFORCE-flip simulation (process-scoped · NO prod toggle) · ✅ PASS · 1ms
+  · runaway_invocations: 100
+  · runaway_blocked: 100
+  · runaway_block_gate_correct: 100
+  · legit_invocations: 20
+  · legit_allowed: 20
+  · block_rate_pct: 100
+  · sample_decision: {"allow":false,"block_gate":"validate_workflow_id","block_reason":"Missing or empty workflow_id (§149 violation · all agent invocations must originate from a workflow)","request_id":"15c25312-44cd-44f4-9abd-88481ddbc125"}
+
+[smoke-killswitch] FASE D · cleanup canon · env restore · zero residue · ✅ PASS · 0ms
+  · env_workflow_id_enforce: unset
+  · env_safety_enabled: unset
+
+
+[smoke-killswitch] summary · 4/4 phases pass · 2ms total
+[smoke-killswitch] ALL_PASS=true
