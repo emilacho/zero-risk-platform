@@ -1,0 +1,18 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[measure-fp] canon canonical · loaded 72 samples
+[measure-fp] started_at=2026-06-02T18:07:14.369Z
+[measure-fp] CLAUDE_API_KEY=set
+[measure-fp] LAKERA_API_KEY=pend §151
+[measure-fp] mode · skip_haiku=false · bench=true · limit=all
+[measure-fp] progress · 0/72
+[measure-fp] progress · 10/72
+[measure-fp] progress · 20/72
+[measure-fp] progress · 30/72
+[measure-fp] progress · 40/72
+[measure-fp] progress · 50/72
+[measure-fp] progress · 60/72
+[measure-fp] progress · 70/72
+[measure-fp] per-sample sidecar canon canonical · C:\Users\emili\Documents\Claude\Projects\Agentic Business Agency\zero-risk-platform-cc1-s12-adr012-fp-measure\evidence\measure-fp-per-sample.json
+[measure-fp] done canon canonical
