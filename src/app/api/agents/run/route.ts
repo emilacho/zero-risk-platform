@@ -9,6 +9,12 @@ import { capture } from '@/lib/posthog'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { enrichClientIdFromContext } from '@/lib/client-id-enricher'
 import { checkInternalKey } from '@/lib/internal-auth'
+import {
+  addLegacyDeprecationHeaders,
+  legacyJson,
+  logLegacyEndpointUsage,
+  LEGACY_INVOCATION_METADATA,
+} from '@/lib/legacy-endpoint-deprecation'
 
 // POST /api/agents/run
 // Ejecutor de UN agente. n8n orquesta la cadena completa.
@@ -51,9 +57,15 @@ function computeCostUsd(modelId: string, inputTokens: number, outputTokens: numb
   return inputTokens * pricing.in + outputTokens * pricing.out
 }
 
+// Sprint 12 · Drift B paso D · deprecation helpers live in
+// `src/lib/legacy-endpoint-deprecation.ts` (imported above). They wire the
+// observability that measures REAL legacy-endpoint traffic over a shadow
+// window so the §144 pre-rankeada migration list ranks by real usage · NOT
+// the static sweep. Pure additive · does NOT change request handling.
+
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)
-  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
+  if (!auth.ok) return legacyJson({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
 
   const startTime = Date.now()
 
@@ -96,7 +108,7 @@ export async function POST(request: Request) {
         : null)
 
     if (!agentName || !task) {
-      return NextResponse.json(
+      return legacyJson(
         {
           error: 'Missing required fields: agent, task',
           received_keys: Object.keys(body || {}),
@@ -105,6 +117,22 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
+
+    // Sprint 12 · Drift B paso D · log every legacy invocation that passes the
+    // entry validation (auth + required fields) so the §144 pre-rankeada list
+    // can rank by REAL usage. Fires AFTER auth + req-field check to avoid
+    // noisy log entries from probes / malformed callers, BEFORE wf_id
+    // enforcement so the log captures attempts even from non-compliant callers
+    // (those returning 403 below also get logged · they still count as legacy
+    // invocation attempts that need migration).
+    logLegacyEndpointUsage({
+      workflow_id: typeof body.workflow_id === 'string' ? body.workflow_id : (typeof context?.workflow_id === 'string' ? context.workflow_id : null),
+      workflow_execution_id: typeof body.workflow_execution_id === 'string' ? body.workflow_execution_id : (typeof context?.workflow_execution_id === 'string' ? context.workflow_execution_id : null),
+      agent_slug: agentName,
+      caller,
+      user_agent: request.headers.get('user-agent')?.slice(0, 100) || null,
+      client_id: resolvedClientId,
+    })
 
     // ── Sprint 8D · workflow_id enforcement (Emilio canon 2026-05-24) ────
     // Symmetric with /api/agents/run-sdk · "agentes solo se invocan vía
@@ -141,7 +169,7 @@ export async function POST(request: Request) {
       console.warn(
         '[agents/run] REJECTED · workflow_id enforcement · ' + JSON.stringify(callerHint),
       )
-      return NextResponse.json(
+      return legacyJson(
         {
           error: 'workflow_id_required',
           code: 'E-WF-ID-REQUIRED',
@@ -231,14 +259,14 @@ export async function POST(request: Request) {
       const hint = registryRow
         ? `registry row exists but identity_md is empty — run scripts/sync-registry-identities.ts`
         : `slug not found in agents table or managed_agents_registry`
-      return NextResponse.json(
+      return legacyJson(
         { error: `Agent "${agentName}" (resolved to "${canonicalSlug}") not loadable: ${hint}` },
         { status: 404 }
       )
     }
 
     if (!agentConfig.identity_content || (agentConfig.identity_content as string).startsWith('Loaded from filesystem')) {
-      return NextResponse.json(
+      return legacyJson(
         { error: `Agent "${canonicalSlug}" has no identity content loaded. Run migration script first.` },
         { status: 500 }
       )
@@ -395,7 +423,7 @@ export async function POST(request: Request) {
       mergeScalars(extra?.input)
       mergeScalars(extra?.request)
 
-      return NextResponse.json({
+      return legacyJson({
         // Echo passes through user-provided fields (duration_s, client_id, campaign_brief, etc.)
         ...echoedBody,
         // Claude-style response envelope
@@ -466,7 +494,7 @@ export async function POST(request: Request) {
     const railwayUrl = process.env.RAILWAY_AGENT_RUNNER_URL
     if (!railwayUrl) {
       console.error('[agents-run] RAILWAY_AGENT_RUNNER_URL not configured · Sprint 8B requires Railway proxy')
-      return NextResponse.json(
+      return legacyJson(
         { error: 'agent-runner not configured', code: 'E-RUNNER-MISSING' },
         { status: 503 },
       )
@@ -492,7 +520,7 @@ export async function POST(request: Request) {
 
     if (!railwayResp.ok) {
       const errText = await railwayResp.text().catch(() => '')
-      return NextResponse.json(
+      return legacyJson(
         { error: `agent-runner upstream failed: ${railwayResp.status}`, details: errText.slice(0, 500) },
         { status: 502 },
       )
@@ -524,7 +552,7 @@ export async function POST(request: Request) {
     }
     const railwayData = (await railwayResp.json()) as RailwayResult
     if (!railwayData.success) {
-      return NextResponse.json(
+      return legacyJson(
         { error: railwayData.error || 'agent-runner returned success=false' },
         { status: 500 },
       )
@@ -643,6 +671,12 @@ export async function POST(request: Request) {
         metadata: {
           source: 'api_agents_run',
           caller,
+          // Sprint 12 · Drift B paso D · explicit legacy-endpoint markers so
+          // the §144 pre-rankeada migration list can be built from
+          // `agent_invocations` directly via JSONB query · canonical spread
+          // sourced from `LEGACY_INVOCATION_METADATA` for single-source-of-
+          // truth.
+          ...LEGACY_INVOCATION_METADATA,
           task_text: task.substring(0, 200),
           skills_loaded: loadedSkills.map(s => s.name).slice(0, 20),
           response_length: responseText.length,
@@ -718,7 +752,7 @@ export async function POST(request: Request) {
       !requiresEditorReview(canonicalSlug)
 
     if (skipMiddleware) {
-      return NextResponse.json(baseResponse)
+      return legacyJson(baseResponse)
     }
 
     const editorConfig = getEditorConfig(canonicalSlug)!
@@ -738,17 +772,17 @@ export async function POST(request: Request) {
         clientId: resolvedClientId,
       })
 
-      return NextResponse.json({ ...baseResponse, ...middlewareResult })
+      return legacyJson({ ...baseResponse, ...middlewareResult })
     } catch (middlewareError) {
       // Middleware failure is non-blocking — return original response with error note
       console.error('[Editor Middleware] Failed:', middlewareError)
-      return NextResponse.json({
+      return legacyJson({
         ...baseResponse,
         editor_review: { verdict: 'middleware_error', severity: 'low' },
       })
     }
   } catch (error) {
-    return NextResponse.json(
+    return legacyJson(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
@@ -757,7 +791,7 @@ export async function POST(request: Request) {
 
 // GET /api/agents/run — info
 export async function GET() {
-  return NextResponse.json({
+  return legacyJson({
     endpoint: '/api/agents/run',
     method: 'POST',
     description: 'Ejecutor de UN agente. n8n orquesta la cadena completa.',
