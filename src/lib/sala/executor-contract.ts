@@ -90,7 +90,54 @@ export interface RetryPolicy {
   readonly maxBackoffMs: number
 }
 
-// ─── 4 · Execution input ────────────────────────────────────────────
+// ─── 4 · Logical period (Opus #7 Q5 freeze · typed union) ───────────
+//
+// The logical period drives idempotency · it is THE field whose
+// presence/absence decides whether two triggers collapse or
+// duplicate. A free `string` here was the original recommendation
+// (deferred-narrowing); Opus #7 rejected that path with a security
+// rationale · a free string lets a caller pass a timestamp or an
+// execution_id by accident, producing a unique period per call,
+// which makes idempotency a no-op and re-creates the 24-may $19
+// burst silently.
+//
+// The closed-discriminant union below FORCES the caller to choose
+// one of the known kinds; the `custom` variant keeps the catalogue
+// extensible without freezing it, but requires an explicit `note`
+// so a reviewer can audit why the canonical kinds did not fit.
+//
+// Adding a new kind = additive change to this union + an updated
+// catalogue review · NOT a string lint rule that can drift. The
+// lint/checklist remains a defence-in-depth but is no longer the
+// only barrier.
+
+export type LogicalPeriod =
+  /** ISO week, e.g. `"2026-W23"`. Use for weekly periodic operations
+   *  (weekly report, weekly cron). */
+  | { readonly kind: 'iso_week'; readonly value: string }
+  /** ISO month, e.g. `"2026-06"`. Use for monthly periodic
+   *  operations (QBR build, monthly billing). */
+  | { readonly kind: 'iso_month'; readonly value: string }
+  /** ISO date, e.g. `"2026-06-02"`. Use for daily operations or
+   *  one-off scheduled events tied to a calendar day. */
+  | { readonly kind: 'iso_date'; readonly value: string }
+  /** Campaign identifier, e.g. `"camp-7f3a"`. Use for per-campaign
+   *  operations (create brief, run audit) where the campaign is
+   *  the natural idempotency boundary. */
+  | { readonly kind: 'campaign_id'; readonly value: string }
+  /** Manual / ad-hoc trigger ULID, e.g. `"01HQX..."`. Use when the
+   *  triggering event itself is the idempotency boundary (one user
+   *  click = one ULID = one logical operation). */
+  | { readonly kind: 'trigger_ulid'; readonly value: string }
+  /** Escape hatch for periods that do not fit the canonical kinds
+   *  above. REQUIRES `note` · a short human explanation so
+   *  reviewers can audit whether a new canonical kind should be
+   *  added. The `note` is METADATA · it does NOT participate in
+   *  the idempotency key (two `custom` periods with the same value
+   *  and different notes still collapse to the same key). */
+  | { readonly kind: 'custom'; readonly value: string; readonly note: string }
+
+// ─── 5 · Execution input ────────────────────────────────────────────
 //
 // Carries the business identity (operation + client + period) that
 // drives idempotency, plus the arbitrary payload that the durable
@@ -106,14 +153,12 @@ export interface ExecutionInput<TPayload = unknown> {
   /** Target tenant/client. Forms part of the idempotency key. */
   readonly clientId: string
 
-  /** Logical period or cause identifier. Forms part of the idempotency
-   *  key. Examples · ISO week "2026-W23" for periodic ops, ULID
-   *  "manual-trigger-{ulid}" for ad-hoc, or campaign id for per-
-   *  campaign ops. The KEY POINT (Opus Q2 ADR-009 ronda 1) is that
-   *  THIS is the field whose presence/absence decides whether two
-   *  triggers collapse or duplicate — so the Sala must choose it with
-   *  business semantics in mind, NOT mechanical timestamps. */
-  readonly logicalPeriod: string
+  /** Logical period or cause identifier · the kind+value pair that
+   *  decides whether two triggers collapse or duplicate. See
+   *  `LogicalPeriod` above for the closed catalogue + the `custom`
+   *  escape hatch. This field is the load-bearing business-identity
+   *  axis of the idempotency key (Opus #7 Q5 freeze). */
+  readonly logicalPeriod: LogicalPeriod
 
   /** Business payload handed to the durable function as-is. Opaque to
    *  the executor. */
@@ -257,10 +302,17 @@ export interface SalaExecutorHealth {
 
 export interface IdempotencyKeyDeriver {
   /** Derive the canonical key from business identity. Pure ·
-   *  deterministic · zero IO. */
+   *  deterministic · zero IO.
+   *
+   *  The `logicalPeriod` is typed as the discriminated union (Opus
+   *  #7 Q5 freeze) · the implementation serialises both `kind` and
+   *  `value` into the canonical hashed string. Two `custom` periods
+   *  with the same `value` and different `note` fields produce the
+   *  same key (the `note` is metadata, not identity · see
+   *  `LogicalPeriod` for the rationale). */
   derive(parts: {
     readonly operationType: string
     readonly clientId: string
-    readonly logicalPeriod: string
+    readonly logicalPeriod: LogicalPeriod
   }): IdempotencyKey
 }

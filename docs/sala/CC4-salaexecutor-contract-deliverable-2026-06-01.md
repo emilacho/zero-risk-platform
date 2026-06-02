@@ -103,6 +103,10 @@ These do NOT block the contract delivery (they don't change the interface shape)
 
 5. **`logicalPeriod` semantics** · the field carries enormous business weight (it is what makes idempotency collapse or duplicate). Should the contract narrow it to a typed union (`{ kind: "iso_week" | "iso_month" | "campaign_id" | "trigger_ulid"; value: string }`)? **Recommendation · NO at the contract level · the Sala's enforcement of "pick logicalPeriod with business semantics" is a higher-layer policy (lint rule + reviewer checklist); the contract stays string. Narrowing here would freeze the catalogue of period kinds prematurely.**
 
+   **Opus #7 closure (2026-06-02) · RECOMMENDATION OVERRIDDEN.** Opus rejected the free-string proposal with a security rationale · a free string lets a caller pass a timestamp or `execution_id` by accident, producing a unique period per call, which makes idempotency a no-op and re-creates the 24-may $19 burst silently. The closed-discriminant union FORCES the caller to choose a known kind; the `custom` variant keeps the catalogue extensible without freezing it, but requires an explicit `note` so reviewers can audit whether a new canonical kind should be added. Lint/checklist becomes defence-in-depth, not the only barrier.
+
+   **Applied in commit (post-#7)** · `LogicalPeriod` discriminated union with kinds `iso_week | iso_month | iso_date | campaign_id | trigger_ulid | custom` shipped in `src/lib/sala/executor-contract.ts` § 4. `ExecutionInput.logicalPeriod` + `IdempotencyKeyDeriver.derive` input updated to consume the union.
+
 ---
 
 ## §5 · Build state · NOT in scope
