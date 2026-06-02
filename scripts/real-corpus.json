@@ -1,0 +1,1986 @@
+{
+  "version": "1.0.0",
+  "created": "2026-06-02T19:26:47.733Z",
+  "source": "Gate 3 proxy corpus · canon §148 honest · prod has zero external ingress data",
+  "note": "Real data sampled from prod ordaeyxvvvdqsznsecjx · 4 internal tables · canon-proxy for \"filter behavior on real text\".",
+  "per_source_counts": {
+    "agent_invocations": 198,
+    "onboarding_discovery_logs": 14,
+    "agent_outcomes": 0,
+    "cowork_messages": 7
+  },
+  "total": 219,
+  "samples": [
+    {
+      "id": "inv_ac0b01d7",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "seo-specialist",
+      "created_at": "2026-06-01T19:35:03.518323+00:00",
+      "text": "Cannibalization check for smoke-seo-guard.example.com",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_bdff4194",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "jefe-marketing",
+      "created_at": "2026-05-25T17:36:56.941638+00:00",
+      "text": "Verification dry_run smoke 2 � CC#1 Step 2 cuenta #1 � short",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_53c04b22",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "brand-strategist",
+      "created_at": "2026-05-25T17:36:34.748849+00:00",
+      "text": "Verification dry_run smoke � CC#1 Step 2 cuenta #1 cache pattern verify � short response",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_addf2f6a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "media-buyer",
+      "created_at": "2026-05-25T16:11:13.025295+00:00",
+      "text": "Smoke post paid-search-strategist removal � media-buyer canonical allow-list intact",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_76ace875",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "carousel-designer",
+      "created_at": "2026-05-25T15:25:25.570395+00:00",
+      "text": "Smoke 3 dry-run via X-Dry-Run header � NEW tuple",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_eb30c779",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "sales-enablement",
+      "created_at": "2026-05-25T15:25:06.819485+00:00",
+      "text": "Smoke 2 dry-run canon � DRY_RUN=true � NEW tuple no prior checkpoint expected",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_a32caeb7",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "jefe-marketing",
+      "created_at": "2026-05-25T15:24:37.362134+00:00",
+      "text": "Smoke 1 dry-run canon � NORMAL call � respond with 1-line ack only",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_e3a52688",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "creative-director",
+      "created_at": "2026-05-25T11:29:57.878474+00:00",
+      "text": "Smoke 3 retry � force_restart in context � respond 1-line ack",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_8c7ea376",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "creative-director",
+      "created_at": "2026-05-25T11:29:16.678653+00:00",
+      "text": "Smoke 1 workflow-checkpoint canon � respond with 1-line ack only",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_eb65e793",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "jefe-marketing",
+      "created_at": "2026-05-25T11:15:20.329057+00:00",
+      "text": "Sprint 8D transparency smoke · respond 1 line ack canonical.",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_4fc7dcde",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "brand-strategist",
+      "created_at": "2026-05-25T11:13:15.451776+00:00",
+      "text": "Smoke post-sdk-call-retry resilience upgrade PR #109 � CC#1 verify � short response acknowledging receipt",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_07825a50",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "video-editor",
+      "created_at": "2026-05-25T11:00:39.550561+00:00",
+      "text": "Smoke 2026-05-25 Higgsfield purged � Veo 3.1 spec-only canon � reply with 1-line ack only",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_3a3d5c68",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "competitive-intelligence-agent",
+      "created_at": "2026-05-25T11:00:16.339929+00:00",
+      "text": "Smoke 3rd retry post Railway settle",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_52318df0",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "brand-strategist",
+      "created_at": "2026-05-25T10:32:43.628705+00:00",
+      "text": "Auto-generar Brand Book v1 INFORMED para cliente 5470bdf9-697d-4fed-a81d-54172e2235e6. Tu cliente tiene brain RAG enriquecido con intake form (v0) + ICP customer research (v1) + competitive landscape ",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_f0deb681",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "competitive-intelligence-agent",
+      "created_at": "2026-05-25T10:26:30.024625+00:00",
+      "text": "5-layer competitive landscape para 5470bdf9-697d-4fed-a81d-54172e2235e6 en su vertical · top 5 competidores identificados + diferenciación + ad library audit",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_e250c074",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "customer-research",
+      "created_at": "2026-05-25T10:25:46.072093+00:00",
+      "text": "Generar ICP document v0 basado en intake responses + scrapeo web · 1-3 audience segments · JTBD + objeciones",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_4559c572",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "onboarding-specialist",
+      "created_at": "2026-05-25T10:25:21.289006+00:00",
+      "text": "Generar intake form personalizado para nuevo cliente 5470bdf9-697d-4fed-a81d-54172e2235e6 · industria + tamaño + objetivos preliminares",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_96c16f89",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "competitive-intelligence-agent",
+      "created_at": "2026-05-25T10:18:01.194748+00:00",
+      "text": "5-layer competitive landscape para 5470bdf9-697d-4fed-a81d-54172e2235e6 en su vertical · top 5 competidores identificados + diferenciación + ad library audit",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_f1a6c051",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "customer-research",
+      "created_at": "2026-05-25T10:17:16.5433+00:00",
+      "text": "Generar ICP document v0 basado en intake responses + scrapeo web · 1-3 audience segments · JTBD + objeciones",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_3b24e05c",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "onboarding-specialist",
+      "created_at": "2026-05-25T10:16:39.426521+00:00",
+      "text": "Generar intake form personalizado para nuevo cliente 5470bdf9-697d-4fed-a81d-54172e2235e6 · industria + tamaño + objetivos preliminares",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_b799aeee",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "jefe-marketing",
+      "created_at": "2026-05-25T09:54:48.83659+00:00",
+      "text": "Producir plan del primer sprint · 2-3 deliverables iniciales · deadlines · agentes asignados",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_bb79a86a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "sales-enablement",
+      "created_at": "2026-05-25T09:53:35.506336+00:00",
+      "text": "Generar kickoff deck para 5470bdf9-697d-4fed-a81d-54172e2235e6 · slides: vision · KPIs propuestos · timeline · sprint 1 plan · communication cadence",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_d287f770",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "web-designer",
+      "created_at": "2026-05-25T09:50:38.525503+00:00",
+      "text": "Diseñar layout Notion workspace para 5470bdf9-697d-4fed-a81d-54172e2235e6 · sections: Brand Book · Campaigns · Reports · Files · Communication",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_27c131ae",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "brand-strategist",
+      "created_at": "2026-05-25T09:47:55.128463+00:00",
+      "text": "Auto-generar Brand Book v1 INFORMED para cliente 5470bdf9-697d-4fed-a81d-54172e2235e6. Tu cliente tiene brain RAG enriquecido con intake form (v0) + ICP customer research (v1) + competitive landscape ",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_8e52c200",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "brand-strategist",
+      "created_at": "2026-05-25T09:36:56.651865+00:00",
+      "text": "Smoke 2026-05-25 Track 1 default-deny MCP verify � agent NOT in allow-list � respond 1-line ack",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_6d773511",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "competitive-intelligence-agent",
+      "created_at": "2026-05-25T09:36:43.657101+00:00",
+      "text": "Smoke 2026-05-25 Track 1 default-deny MCP verify � respond with 1-line ack",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_43043dd4",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "brand-strategist",
+      "created_at": "2026-05-25T09:24:14.684065+00:00",
+      "text": "Auto-generar Brand Book v1 INFORMED para cliente 5470bdf9-697d-4fed-a81d-54172e2235e6. Tu cliente tiene brain RAG enriquecido con intake form (v0) + ICP customer research (v1) + competitive landscape ",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_15b9953c",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "competitive-intelligence-agent",
+      "created_at": "2026-05-25T09:09:09.558118+00:00",
+      "text": "5-layer competitive landscape para 5470bdf9-697d-4fed-a81d-54172e2235e6 en su vertical · top 5 competidores identificados + diferenciación + ad library audit",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_ff1dee08",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "customer-research",
+      "created_at": "2026-05-25T09:08:31.170244+00:00",
+      "text": "Generar ICP document v0 basado en intake responses + scrapeo web · 1-3 audience segments · JTBD + objeciones",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_b993bfa4",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "onboarding-specialist",
+      "created_at": "2026-05-25T09:07:47.177188+00:00",
+      "text": "Generar intake form personalizado para nuevo cliente 5470bdf9-697d-4fed-a81d-54172e2235e6 · industria + tamaño + objetivos preliminares",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_9bad093a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "brand-strategist",
+      "created_at": "2026-05-25T08:41:36.145101+00:00",
+      "text": "Generar Brand Book v0 conciso · 5-7 lineas · brand purpose + tone + tagline + value proposition · responder en español canónico.",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_40682d13",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "brand-strategist",
+      "created_at": "2026-05-25T08:40:49.89089+00:00",
+      "text": "Generar Brand Book v0 conciso · 5-7 lineas · brand purpose + tone + tagline + value proposition · responder en español canónico.",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_3beda08c",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "brand-strategist",
+      "created_at": "2026-05-25T08:40:06.945435+00:00",
+      "text": "Generar Brand Book v0 conciso · 5-7 lineas · brand purpose + tone + tagline + value proposition · responder en español canónico.",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_08c6bd5d",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "jefe-marketing",
+      "created_at": "2026-05-25T08:39:59.64082+00:00",
+      "text": "Smoke #106 verify agent_invocations row lands � CC#1 final � short response",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_5b64ab42",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:46:03.097004+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_bc4ff9a8",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Editor en Jefe (QA)",
+      "created_at": "2026-05-24T17:45:57.772111+00:00",
+      "text": "## Content to Review (from onboarding-specialist):\n\nVoy a generar el intake form personalizado para nuevo cliente como Onboarding Specialist de Zero Risk.El sistema no tiene permisos de escritura de a",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_0efb1fc3",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:45:49.211023+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_dd85e0f1",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:45:38.243806+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_e3e456ff",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:45:25.169765+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_79d96abe",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:45:10.039595+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_0d706851",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:44:55.771999+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_c3ad0627",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:44:44.597873+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_e7cc227b",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:44:31.485577+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_f7d613f7",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Brand Strategist",
+      "created_at": "2026-05-24T17:44:22.381455+00:00",
+      "text": "## Content to Review (from onboarding-specialist):\n\nVoy a generar el intake form personalizado ahora.No hay carpeta de onboarding creada aún — presento el intake form completo directamente aquí para q",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_e93b41b5",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:44:20.560234+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_0eedc907",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:44:06.018847+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_610b962c",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:43:19.442271+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_ff1f78d5",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:43:08.269562+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_82ac1a83",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:42:58.683605+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_4b75ff4a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:42:45.518489+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_021a5970",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:42:32.061308+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_9cbcb1d7",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:42:16.754144+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_78a0d469",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:42:06.254924+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_fa40376e",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:41:52.72912+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_261381f8",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:41:42.267111+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_06ec6963",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:41:29.260006+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_948b24da",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:41:15.031993+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_32ab84f9",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:40:58.588889+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_19a5c85c",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:40:45.672714+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_0211cd76",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:40:34.704049+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_82f52174",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:40:22.049723+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_e85eb3e5",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:40:10.449322+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_faaa40f0",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:39:56.835459+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_72d04703",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:39:43.347443+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_634bded0",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:39:29.829853+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_3ce7829f",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:39:16.927177+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_5b577710",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:39:05.883383+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_558c38a5",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:38:51.301116+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_107b0d9b",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:38:41.090961+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_f0344267",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:38:29.903363+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_fba2a3a5",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:38:17.35926+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_b5415a48",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:38:06.070982+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_c8b9cb76",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:37:54.136368+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_926ea6b9",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:37:42.433347+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_78aca325",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:37:31.936268+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_76f0de7c",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:37:21.072805+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_3395daa5",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:37:08.593985+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_788581d9",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:36:58.286088+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_98292805",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:36:48.312506+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_398b3315",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:36:38.366344+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_f8a67c15",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:36:24.934857+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_83fae82f",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:36:12.793602+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_78ba14f1",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:36:00.960882+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_4aeea04d",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:35:49.394808+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_db7fe4d3",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:35:38.232878+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_cc0c3d6a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:35:27.025944+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_03d092d8",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:35:13.423072+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_a2d0540a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:35:01.517275+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_ff9a940f",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:34:49.250163+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_f9f736d1",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:34:39.144168+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_3c85ebca",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Editor en Jefe (QA)",
+      "created_at": "2026-05-24T17:34:32.517995+00:00",
+      "text": "## Content to Review (from onboarding-specialist):\n\nVoy a generar el intake form personalizado para nuevo cliente como Onboarding Specialist de Zero Risk.El directorio `/app/onboarding` requiere permi",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_6bc81ecc",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:34:27.441221+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_b3f0f831",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:34:16.117286+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_6859f07f",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Brand Strategist",
+      "created_at": "2026-05-24T17:34:12.941315+00:00",
+      "text": "## Content to Review (from onboarding-specialist):\n\nVoy a generar el intake form personalizado para nuevo cliente como Onboarding Specialist de Zero Risk.El directorio `/app/onboarding` requiere permi",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_c29c97be",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:34:02.952869+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_438d6504",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:33:09.991437+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_7b58260a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:32:56.467407+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_64fc3b12",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:32:42.670402+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_c85863e4",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:32:30.520692+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_8e2705ea",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:32:18.540874+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_1a65386e",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:32:06.006739+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_e6c416c3",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:31:53.628498+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_9df8f87a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:31:39.758613+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_d0f04297",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:31:24.924244+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_bc2a1fee",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:31:12.844944+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_978ca425",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:30:59.745692+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_d1c53f21",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:30:49.469582+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_9c30d94b",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:30:37.227147+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_7a1b0995",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:30:26.902854+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_233ea2e1",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:30:13.202237+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_1dd6ff04",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Client Success",
+      "created_at": "2026-05-24T17:30:05.513495+00:00",
+      "text": "## Content to Review (from onboarding-specialist):\n\nVoy a generar el intake form personalizado para onboarding de nuevo cliente.Estructura definida. Redactando preguntas por sección.El intake form est",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_69fe65f8",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:29:56.969564+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_e7f2dc27",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:29:07.091196+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_3979e954",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:28:48.995199+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_ff4d1fbf",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:28:37.016558+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_8f7186f9",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:28:21.793718+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_9697c914",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:28:10.10136+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_914e87ce",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Brand Strategist",
+      "created_at": "2026-05-24T17:27:54.712115+00:00",
+      "text": "## Content to Review (from onboarding-specialist):\n\nVoy a generar el intake form personalizado como documento estructurado para nuevos clientes.El intake form está listo. Dado que el entorno tiene res",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_3e514a8e",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Editor en Jefe (QA)",
+      "created_at": "2026-05-24T17:27:52.731503+00:00",
+      "text": "## Content to Review (from onboarding-specialist):\n\nVoy a generar el intake form personalizado como documento estructurado para nuevos clientes.El intake form está listo. Dado que el entorno tiene res",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_f986f46b",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Client Success",
+      "created_at": "2026-05-24T17:27:49.11206+00:00",
+      "text": "## Content to Review (from onboarding-specialist):\n\nVoy a generar el intake form personalizado como documento estructurado para nuevos clientes.El intake form está listo. Dado que el entorno tiene res",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_8630fcdf",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:27:25.925547+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_0c5be6d4",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:27:13.867304+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_04ad20ed",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:26:59.297469+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_741e5a77",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:26:48.107828+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_984c9e60",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:26:32.911638+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_bb7ec610",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:26:21.268762+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_1a537e26",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:26:10.73356+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_0cd8e393",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:25:55.771631+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_ccc6cd2a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:25:40.189681+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_58727470",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:25:27.93652+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_46d8b343",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:24:52.693145+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_f4705c24",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:23:54.473599+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_bf179098",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:23:44.270168+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_56248ba8",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:23:31.636696+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_eff6361f",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:23:18.776904+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_57380542",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:23:06.899062+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_e4e09a63",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:22:55.784127+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_0c956a0b",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:22:43.04586+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_9f6e2961",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:22:31.890374+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_cd5fd96e",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:22:20.645196+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_cc9f55bd",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Editor en Jefe (QA)",
+      "created_at": "2026-05-24T17:22:18.072954+00:00",
+      "text": "## Content to Review (from onboarding-specialist):\n\nVoy a generar el intake form personalizado para onboarding de nuevo cliente.Estructura definida. Redactando preguntas por sección.El intake form est",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_1985ead1",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:22:09.909773+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_134647f4",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Brand Strategist",
+      "created_at": "2026-05-24T17:22:03.136548+00:00",
+      "text": "## Content to Review (from onboarding-specialist):\n\nVoy a generar el intake form personalizado para onboarding de nuevo cliente.Estructura definida. Redactando preguntas por sección.El intake form est",
+      "locale_guess": "es"
+    },
+    {
+      "id": "inv_8bc6d72e",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:21:58.4662+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_d00cd111",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:21:45.32546+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_fb4d49ae",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:21:32.524337+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_735dc9a0",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:20:34.327029+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_437302de",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:20:23.893582+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_fcb62275",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:20:12.112306+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_b0a917a2",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:19:58.980594+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_6151f6bb",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:19:47.559231+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_21fd3b0a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:19:35.286234+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_fe230a9e",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:19:22.487883+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_009407a0",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:18:53.430418+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_3828eaa8",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:18:40.216548+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_1a0bfcff",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:17:47.447051+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_90860889",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:17:38.76121+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_ae64da53",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:17:33.801223+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_af37e1f2",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:17:23.813872+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_69a39614",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:17:21.528166+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_85831170",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:17:07.990184+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_04efd23e",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:16:52.696924+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_48e896ae",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:16:47.630804+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_1ff4bfa5",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:16:41.235817+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_b8eb780f",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:16:34.160205+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_cabc14c9",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:16:31.181946+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_af71d2c8",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:16:20.986157+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_30f75a65",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:16:17.831625+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_1934befd",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:16:09.309341+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_117abc9a",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:15:55.613365+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_9aa01637",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:15:44.394126+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_1a439f69",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:15:41.633435+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_78632015",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:15:30.952058+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_492fb092",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:15:22.41644+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_39f6ecf2",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:15:19.097759+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_a5b5c640",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:15:07.497088+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_ccdffd42",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:15:01.66883+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_0f16a00f",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:14:57.287456+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_651e9cf8",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:14:50.754428+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_1d7dabfd",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:14:38.956644+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_a7967e47",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:14:24.825196+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_2c64c572",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:14:17.745308+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_7f4d5157",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:14:07.212076+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_28337f34",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:14:06.542223+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_734ba23c",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:13:57.022945+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_b2b93202",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:13:52.949087+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_b09725a8",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:13:46.218826+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_48f04328",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:13:42.000156+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_162cb78f",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:13:31.668685+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_f71600f0",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:13:28.899633+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_f2920507",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:13:19.593424+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_62d7f499",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:13:16.069493+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_fc0a1356",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:13:04.28694+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_c499692e",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:13:04.164522+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_95aa130e",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:12:51.260113+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_86f26249",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:12:50.671405+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_de442327",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:12:40.05334+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "inv_32ad782c",
+      "source_table": "agent_invocations",
+      "source_field": "metadata.task_text",
+      "agent_name": "Jefe de Marketing",
+      "created_at": "2026-05-24T17:12:40.015671+00:00",
+      "text": "phase_execution",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_0d5e9745",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-04-14T15:58:20.607808+00:00",
+      "text": "Scraped 0/3 pages https://zeroriskec.com {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_3709bd82",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-04-14T15:58:20.838152+00:00",
+      "text": "Scraped 0/3 pages https://zeroriskec.com/quienes-somos {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_2868e85b",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-04-14T15:58:20.952124+00:00",
+      "text": "Scraped 0/3 pages https://zeroriskec.com/services {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_fdda81c6",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-04-14T15:58:21.068195+00:00",
+      "text": "Scraped 0/3 pages https://zeroriskec.com/productos {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_7cb1d60e",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-04-14T15:58:21.190761+00:00",
+      "text": "Scraped 0/3 pages https://zeroriskec.com/contactenos {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_b5967b62",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-04-14T15:58:21.294005+00:00",
+      "text": "Scraped 0/1 pages https://zeroriskec.com/news {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_d0059d00",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-04-14T15:58:56.345955+00:00",
+      "text": "Review discovery initiated for \"Seguridad Industrial Pérez\". Production uses Apify/SerpAPI. https://zeroriskec.com {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_d62dc814",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-05-19T19:08:34.989142+00:00",
+      "text": "Scraped 0/3 pages https://www.penichesurfescape.com {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_322f46b3",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-05-19T19:08:35.4356+00:00",
+      "text": "Scraped 0/3 pages https://www.penichesurfescape.com/quienes-somos {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_837d7dbb",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-05-19T19:08:35.823624+00:00",
+      "text": "Scraped 0/3 pages https://www.penichesurfescape.com/services {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_7adb7a40",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-05-19T19:08:36.216936+00:00",
+      "text": "Scraped 0/3 pages https://www.penichesurfescape.com/productos {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_adba4443",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-05-19T19:08:36.530304+00:00",
+      "text": "Scraped 0/3 pages https://www.penichesurfescape.com/contactenos {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_0dd28a65",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-05-19T19:08:36.685203+00:00",
+      "text": "Scraped 0/1 pages https://www.penichesurfescape.com/news {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "obd_01a8415f",
+      "source_table": "onboarding_discovery_logs",
+      "source_field": "result_summary+target_url+result_data",
+      "agent_name": "onboarding-discovery",
+      "created_at": "2026-05-19T19:09:24.273594+00:00",
+      "text": "Review discovery initiated for \"Peniche Surf Escape\". Production uses Apify/SerpAPI. https://www.penichesurfescape.com {}",
+      "locale_guess": "en"
+    },
+    {
+      "id": "cwk_8df8ee13",
+      "source_table": "cowork_messages",
+      "source_field": "message",
+      "agent_name": "cowork",
+      "created_at": "2026-05-16T22:45:26.914316+00:00",
+      "text": "smoke-test phase3 deploy",
+      "locale_guess": "en"
+    },
+    {
+      "id": "cwk_7c9ef736",
+      "source_table": "cowork_messages",
+      "source_field": "message",
+      "agent_name": "cowork",
+      "created_at": "2026-05-17T17:00:34.198595+00:00",
+      "text": "puedes recibir este mensaje?",
+      "locale_guess": "en"
+    },
+    {
+      "id": "cwk_fc7fa9c4",
+      "source_table": "cowork_messages",
+      "source_field": "message",
+      "agent_name": "cowork",
+      "created_at": "2026-05-19T17:32:51.555501+00:00",
+      "text": "vamos a ingresar un nuevo cliente",
+      "locale_guess": "en"
+    },
+    {
+      "id": "cwk_8a55537f",
+      "source_table": "cowork_messages",
+      "source_field": "message",
+      "agent_name": "cowork",
+      "created_at": "2026-05-19T17:34:09.307132+00:00",
+      "text": "[9:04 PM, 5/18/2026] Alvaro Camacho: Redes Sociales:\n@penichesurfescape IG\n@peniche.surf.escape Tik T\n[9:05 PM, 5/18/2026] Alvaro Camacho: Website:\nwww.penichesurfescape.com\n[9:05 PM, 5/18/2026] Alvaro Camacho: Google Drive: (Material)\nhttps://drive.google.com/drive/folders/1lWdPMeizKc71Pw28YKKxTEv8EMyT3h8M",
+      "locale_guess": "en"
+    },
+    {
+      "id": "cwk_ac41e6d6",
+      "source_table": "cowork_messages",
+      "source_field": "message",
+      "agent_name": "cowork",
+      "created_at": "2026-05-19T17:34:26.005641+00:00",
+      "text": "tenias que haber disparado el master workflow",
+      "locale_guess": "en"
+    },
+    {
+      "id": "cwk_b01a0836",
+      "source_table": "cowork_messages",
+      "source_field": "message",
+      "agent_name": "cowork",
+      "created_at": "2026-05-19T17:41:41.605457+00:00",
+      "text": "se disparo el workflow",
+      "locale_guess": "en"
+    },
+    {
+      "id": "cwk_acb81086",
+      "source_table": "cowork_messages",
+      "source_field": "message",
+      "agent_name": "cowork",
+      "created_at": "2026-05-19T18:07:57.507879+00:00",
+      "text": "se disparo el workflow?",
+      "locale_guess": "en"
+    }
+  ]
+}

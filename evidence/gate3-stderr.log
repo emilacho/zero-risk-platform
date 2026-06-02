@@ -1,0 +1,17 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[gate3] loaded 219 samples canon canonical
+[gate3] progress 0/219
+[gate3] progress 20/219
+[gate3] progress 40/219
+[gate3] progress 60/219
+[gate3] progress 80/219
+[gate3] progress 100/219
+[gate3] progress 120/219
+[gate3] progress 140/219
+[gate3] progress 160/219
+[gate3] progress 180/219
+[gate3] progress 200/219
+[gate3] per-sample written canon canonical · C:\Users\emili\Documents\Claude\Projects\Agentic Business Agency\zero-risk-platform-cc1-s12-adr012-gate3\evidence\gate3-per-sample.json
+[gate3] done canon canonical

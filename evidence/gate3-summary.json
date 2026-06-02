@@ -1,0 +1,77 @@
+{
+  "started_at": "2026-06-02T19:28:18.687Z",
+  "finished_at": "2026-06-02T19:33:08.160Z",
+  "corpus_version": "1.0.0",
+  "samples_count": 219,
+  "canonical_assumption": "All samples default-labeled benigno (canon canonical-§148 honest · prod is canon canonical pre-cliente-piloto · internal text canon-no external attack expected). FP rate = flagged_any / total. FN = canon canonical-cannot-measure-without-injection-samples-in-real-corpus.",
+  "summary": {
+    "flagged_any": 8,
+    "flagged_regex": 0,
+    "flagged_classifier_pipeline": 0,
+    "flagged_classifier_forced": 8,
+    "fp_rate_pipeline": 0,
+    "fp_rate_forced": 0.0365296803652968,
+    "fp_rate_regex_only": 0
+  },
+  "by_source": {
+    "agent_invocations": {
+      "total": 198,
+      "flagged": 8,
+      "flagged_ids": [
+        "inv_bdff4194",
+        "inv_53c04b22",
+        "inv_addf2f6a",
+        "inv_a32caeb7",
+        "inv_8c7ea376",
+        "inv_07825a50",
+        "inv_8e52c200",
+        "inv_6d773511"
+      ]
+    },
+    "onboarding_discovery_logs": {
+      "total": 14,
+      "flagged": 0,
+      "flagged_ids": []
+    },
+    "cowork_messages": {
+      "total": 7,
+      "flagged": 0,
+      "flagged_ids": []
+    }
+  },
+  "by_locale": {
+    "en": {
+      "total": 202,
+      "flagged": 8
+    },
+    "es": {
+      "total": 17,
+      "flagged": 0
+    }
+  },
+  "classifier_latency_ms": {
+    "p50": 1125,
+    "p99": 5535,
+    "count": 219
+  },
+  "classification_distribution_forced": {
+    "safe": 209,
+    "obfuscated": 5,
+    "_error": 2,
+    "instruction_override": 3
+  },
+  "flagged_sample_ids": {
+    "regex": [],
+    "pipeline": [],
+    "forced": [
+      "inv_bdff4194",
+      "inv_53c04b22",
+      "inv_addf2f6a",
+      "inv_a32caeb7",
+      "inv_8c7ea376",
+      "inv_07825a50",
+      "inv_8e52c200",
+      "inv_6d773511"
+    ]
+  }
+}
