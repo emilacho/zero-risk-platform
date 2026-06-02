@@ -93,10 +93,19 @@ const DEFAULT_TIMEOUT_MS = 5000
  * Caller (gate function) interprets null as gate-error.
  */
 export function parseClassifierResponse(raw: string): ClassifierOutput | null {
+  // Canon canonical · strip markdown code fence (canon canonical ```json ... ```)
+  // before parse · Haiku canonical-emite consistente JSON envuelto en fence
+  // pese al directive "sin código fence" (canon canonical-measurement
+  // RESULTS-CC1-ADR-012-fp-measurement-preflip · 100% Haiku responses traen
+  // fence). Reject-on-malformed se preserva para basura real post-strip.
+  let cleaned = raw.trim()
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/, '').replace(/\n?```\s*$/, '')
+  }
   // Canon canonical strict JSON.parse · canon canonical no eval · no Function.
   let parsed: unknown
   try {
-    parsed = JSON.parse(raw.trim())
+    parsed = JSON.parse(cleaned)
   } catch {
     return null
   }

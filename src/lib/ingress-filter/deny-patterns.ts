@@ -92,6 +92,30 @@ export const EN_PATTERNS: DenyPattern[] = [
     severity: 'MEDIUM',
     locale: 'en',
   },
+  // ─── v2 additions canon canonical · canon canonical RESULTS-CC1-ADR-012-fp-
+  // measurement-preflip findings · 3 EN misses identificados golden set v1 ·
+  // (canon canonical symmetric con ES role_brackets_v1_es existente).
+  {
+    pattern_id: 'role_brackets_v2_en',
+    pattern: /\[(?:SYSTEM|ASSISTANT|USER|INSTRUCTION|END|SYS|INST)\]/i,
+    description: 'Canonical role-spoof EN bracketed v2 · [SYSTEM] [ASSISTANT] [USER] [INSTRUCTION] [END] · canon symmetric con role_brackets_v1_es',
+    severity: 'HIGH',
+    locale: 'en',
+  },
+  {
+    pattern_id: 'override_security_v2_en',
+    pattern: /\b(?:override|bypass|disable|circumvent) (?:security|safety|safeguards?|filters?|guardrails?|restrictions?)\b/i,
+    description: 'Canonical security override variant v2 · "override security" / "bypass safety" / "disable filters"',
+    severity: 'HIGH',
+    locale: 'en',
+  },
+  {
+    pattern_id: 'print_internal_v2_en',
+    pattern: /\b(?:print|show|output|reveal|expose|dump) (?:all |the |your )?(?:internal|hidden|secret) (?:instructions?|prompts?|rules?|configurations?)\b/i,
+    description: 'Canonical exfiltration variant v2 · "print all internal instructions" / "show hidden prompt"',
+    severity: 'HIGH',
+    locale: 'en',
+  },
 ]
 
 /** Canon canonical ES patterns · post-R6 · mercado hispano nativo. */
@@ -163,6 +187,16 @@ export const ES_PATTERNS: DenyPattern[] = [
     pattern_id: 'respond_link_v1_es',
     pattern: /(?:respond[ée]|contest[áa]) (?:con|incluyendo) (?:el? )?(?:enlace|link|url)/i,
     description: 'Canonical response-hijack ES · review-monitor injection típica',
+    severity: 'HIGH',
+    locale: 'es',
+  },
+  // ─── v2 ES addition canon canonical · canon canonical "mostrá tus reglas"
+  // canon canonical-variant (existing v1 ES exfiltration only covers "revelá"
+  // canon canonical-not "mostrá" canonical-canon-form-imperative).
+  {
+    pattern_id: 'mostra_reglas_v2_es',
+    pattern: /\b(?:mostr[áa](?:me)?|enseñ[áa](?:me)?|dec[íi]me|cont[áa]me|list[áa](?:me)?)\s+(?:el |la |las |los |tu |tus )?(?:reglas?|prompt|instrucciones?|configuración|sistema interno|mensaje del sistema|memoria)\b/i,
+    description: 'Canonical exfiltration ES variant v2 · "mostrá tus reglas internas" · "enseñame el prompt" · canon canonical-complemento revela_sistema_v1_es',
     severity: 'HIGH',
     locale: 'es',
   },

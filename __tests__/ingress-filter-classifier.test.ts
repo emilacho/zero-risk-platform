@@ -59,6 +59,44 @@ describe('parseClassifierResponse · canon canonical strict R2 #3', () => {
       )
       expect(out).not.toBeNull()
     })
+
+    // ─── canon canonical · markdown fence regression tests (RESULTS-CC1-ADR-
+    // 012-fp-measurement-preflip · Haiku canonical-emite ```json ... ``` ·
+    // strict parser canon canonical-rechazaba canonical-100% canon canonical
+    // pre-fix · post-fix canon canonical-parse OK)
+
+    it('parses markdown ```json fence (canon canonical fix · Haiku habit)', () => {
+      const out = parseClassifierResponse(
+        '```json\n{"classification_type":"instruction_override","confidence":0.98,"should_escalate_hitl":true,"escalation_reason":"high_risk_route_egress"}\n```',
+      )
+      expect(out).not.toBeNull()
+      expect(out!.classification_type).toBe('instruction_override')
+      expect(out!.confidence).toBe(0.98)
+      expect(out!.should_escalate_hitl).toBe(true)
+    })
+
+    it('parses markdown ``` plain fence (no language tag)', () => {
+      const out = parseClassifierResponse(
+        '```\n{"classification_type":"safe","confidence":0.95,"should_escalate_hitl":false,"escalation_reason":null}\n```',
+      )
+      expect(out).not.toBeNull()
+      expect(out!.classification_type).toBe('safe')
+    })
+
+    it('parses markdown ```JSON uppercase fence', () => {
+      const out = parseClassifierResponse(
+        '```JSON\n{"classification_type":"jailbreak","confidence":0.9,"should_escalate_hitl":true,"escalation_reason":"high_risk_route_egress"}\n```',
+      )
+      expect(out).not.toBeNull()
+      expect(out!.classification_type).toBe('jailbreak')
+    })
+
+    it('parses fenced output with trailing whitespace canonical', () => {
+      const out = parseClassifierResponse(
+        '```json\n{"classification_type":"safe","confidence":1,"should_escalate_hitl":false,"escalation_reason":null}\n```   \n  \n',
+      )
+      expect(out).not.toBeNull()
+    })
   })
 
   describe('canonical reject-on-malformed', () => {
