@@ -1,0 +1,49 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[smoke-ingress] canon canonical · spec-CC1-ADR-012-build § smoke 4 escenarios
+[smoke-ingress] started_at=2026-06-02T04:54:09.274Z
+
+[smoke-ingress] FASE BL · BASELINE · 10 legítimas · canon canonical 0 false-positive · ✅ PASS · 2ms
+  · samples=10
+  · false_positives=0
+
+[smoke-ingress] FASE A · Direct injection vía form (Spanish inject) · ✅ PASS · 0ms
+  · length_charset=pass/LOW/0ms
+  · schema_validator=pass/LOW/0ms
+  · regex_deny=flag/HIGH/0ms
+  · provenance_tag=pass/LOW/0ms
+  · severity: HIGH
+  · shadow_blocks: ["regex_deny"]
+  · block_reason: ignora_anteriores_v1_es
+
+[smoke-ingress] FASE B · Indirect injection vía Apify scrape (hidden HTML) · ✅ PASS · 0ms
+  · length_charset=pass/LOW/0ms
+  · schema_validator=pass/LOW/0ms
+  · regex_deny=flag/HIGH/0ms
+  · provenance_tag=pass/LOW/0ms
+  · severity: HIGH
+  · shadow_blocks: ["regex_deny"]
+  · block_reason: ignore_previous_v1_en
+
+[smoke-ingress] FASE C · Indirect injection vía review inbound (Spanish [SISTEMA]) · ✅ PASS · 0ms
+  · length_charset=pass/LOW/0ms
+  · schema_validator=pass/LOW/0ms
+  · regex_deny=flag/HIGH/0ms
+  · provenance_tag=pass/LOW/0ms
+  · severity: HIGH
+  · shadow_blocks: ["regex_deny"]
+  · block_reason: role_brackets_v1_es
+
+[smoke-ingress] FASE D · Cross-tenant leak vía WhatsApp (Spanish exfiltration) · ✅ PASS · 0ms
+  · length_charset=pass/LOW/0ms
+  · schema_validator=pass/LOW/0ms
+  · regex_deny=flag/HIGH/0ms
+  · provenance_tag=pass/LOW/0ms
+  · severity: HIGH
+  · shadow_blocks: ["regex_deny"]
+  · block_reason: revela_sistema_v1_es
+
+
+[smoke-ingress] summary · 5/5 phases pass · 2ms total
+[smoke-ingress] ALL_PASS=true
