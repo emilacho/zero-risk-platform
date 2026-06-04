@@ -17,3 +17,7 @@ export {
   createG6BudgetHook,
   type CreateG6BudgetHookInput,
 } from './factory'
+export {
+  createG6RouterBudgetCheck,
+  type CreateG6RouterBudgetCheckInput,
+} from './router-adapter'
