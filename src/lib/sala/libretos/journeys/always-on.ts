@@ -39,15 +39,15 @@ export const alwaysOnLibreto: Libreto = {
         kind: 'conditional',
         conditions: [
           {
-            when: 'classification.kind === "email_lifecycle"',
+            when: 'classification.is_email_lifecycle',
             then: 'email_responder',
           },
           {
-            when: 'classification.kind === "social_engagement"',
+            when: 'classification.is_social_engagement',
             then: 'social_responder',
           },
           {
-            when: 'classification.kind === "review_received"',
+            when: 'classification.is_review_received',
             then: 'review_responder',
           },
         ],
