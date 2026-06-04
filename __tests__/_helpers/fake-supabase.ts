@@ -44,6 +44,11 @@ function freshState(table: string): ChainState {
   }
 }
 
+export interface FakeRpcCall {
+  fn: string
+  args: Record<string, unknown> | undefined
+}
+
 export interface FakeSupabaseControls {
   /** Add a row to the in-memory backing (canon canonical mimic INSERT side-effect). */
   push(row: Record<string, unknown>): void
@@ -60,6 +65,18 @@ export interface FakeSupabaseControls {
   rows: Record<string, unknown>[]
   /** Reset all state. */
   reset(): void
+  /**
+   * Track M canon canonical · register an RPC handler. The adapter probes
+   * the schema by calling `rpc('sala_event_log_allocate_sequence', { p_stream_id })`.
+   * Tests set this to simulate either (a) the RPC being present (return data) or
+   * (b) the RPC being absent (return error with code PGRST202).
+   */
+  setRpcHandler(
+    fn: string,
+    handler: (args: Record<string, unknown> | undefined) => FakeResponse,
+  ): void
+  /** Track M canon · log of every rpc() call · canon canon-canonical-inspection. */
+  rpcCalls: FakeRpcCall[]
 }
 
 export function createFakeSupabase(): {
@@ -241,9 +258,35 @@ export function createFakeSupabase(): {
     return builder
   }
 
+  // Track M canon canonical · RPC handlers registry · canon-canonical-default
+  // canon-NO handler set · canon-canonical-returns PGRST202 (function not found)
+  // canon-canonical-canon-this means existing tests AUTO-fallback to optimistic
+  // canon-canonical-preserving their behaviour.
+  const rpcHandlers: Map<string, (args: Record<string, unknown> | undefined) => FakeResponse> = new Map()
+  const rpcCalls: FakeRpcCall[] = []
+
   const client = {
     from(table: string) {
       return makeBuilder(freshState(table))
+    },
+    rpc(fn: string, args?: Record<string, unknown>) {
+      rpcCalls.push({ fn, args })
+      const handler = rpcHandlers.get(fn)
+      const response: FakeResponse = handler
+        ? handler(args)
+        : {
+            data: null,
+            error: {
+              code: 'PGRST202',
+              message: `Could not find the function public.${fn}(...) in the schema cache`,
+            },
+          }
+      // canon · supabase-js .rpc() is awaitable directly · canon-canonical-emulate that
+      return {
+        then(onfulfilled: (r: FakeResponse) => unknown, onrejected?: (e: unknown) => unknown) {
+          return Promise.resolve(response).then(onfulfilled, onrejected)
+        },
+      }
     },
   } as unknown as SupabaseClient
 
@@ -264,7 +307,13 @@ export function createFakeSupabase(): {
       rows.length = 0
       calls.length = 0
       queuedResponses.length = 0
+      rpcHandlers.clear()
+      rpcCalls.length = 0
     },
+    setRpcHandler(fn, handler) {
+      rpcHandlers.set(fn, handler)
+    },
+    rpcCalls,
   }
 
   return { client, controls }

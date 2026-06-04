@@ -117,9 +117,17 @@ Tests use a canon canonical-`FakeSupabaseClient` that mirrors PostgREST + UNIQUE
 
 **Idempotency dedup (DB-level)** · enforced by `UNIQUE(tenant_id, idempotency_key)`. canon canonical · `insert()` does FAST-PATH `findByIdempotencyKey()` pre-check first to short-circuit known duplicates without wasting sequence allocation. Race conditions between pre-check and INSERT canon-caught as 23505 and converted to dedup-return.
 
-**Sequence allocation (per-stream monotonic)** · canon canonical-adapter AUTO-ALLOCATES via `SELECT MAX(sequence)+1 FROM sala_event_log WHERE stream_id=$1` when caller omits `sequence`. canon canon-canonical `UNIQUE(stream_id, sequence)` catches races. On 23505 collision · adapter RETRIES with freshly-allocated sequence · canon-bounded by `maxSequenceRetries` (default 5). Caller can OVERRIDE with explicit `sequence` (replay/import scenario) · canon canon-NO retry (collision treated as caller bug · propagated).
+**Sequence allocation (per-stream monotonic)** · two paths · canon canonical-adapter picks based on `allocatorMode` ·
 
-**§148 honest caveat** · this is "optimistic concurrency" · NOT a pessimistic lock. Under canon-high contention (many concurrent writers to same stream) retries may exhaust. canon canon-Sprint 13+ optimization · ship a SECURITY DEFINER function `sala_event_log_allocate_sequence(stream_id)` wrapping `SELECT ... FOR UPDATE` / `pg_advisory_xact_lock` · called via RPC. Per Track J guardrails canon-NO schema extension allowed, so this ships the optimistic pattern + canon-documented escape hatch.
+- **`atomic_rpc`** (Track M · post-migration) · calls SECURITY DEFINER RPC `sala_event_log_allocate_sequence(p_stream_id)` which uses `pg_advisory_xact_lock(hash(stream_id))` + `SELECT MAX(sequence)+1 FOR UPDATE` to serialise per-stream allocators. Single-shot · canon-canonical-NO retry needed.
+- **`optimistic`** (Track J · pre-Track-M migration) · `SELECT MAX(sequence)+1 FROM sala_event_log WHERE stream_id=$1` + UNIQUE catch + retry bounded by `maxSequenceRetries` (default 5).
+- **`auto`** (default) · probes the RPC once · canon-uses `atomic_rpc` if present · falls back to `optimistic` otherwise. Ships SAFELY before the Track M migration applies.
+
+Caller can OVERRIDE with explicit `sequence` (replay/import scenario) · canon canon-NO retry (collision treated as caller bug · propagated).
+
+**§148 honest caveat (pre-Track-M)** · optimistic mode is "optimistic concurrency" · NOT a pessimistic lock. Live evidence escalón 1 (2026-06-04T08:03 harness 03-race-sequence) · N=10 concurrent writers needed `max_retry_attempts=6` (canon-canonical-above default 5 · canon-canon-MAX_SEQUENCE_RETRIES=8 in harness kept it green · canon-prod default of 5 would exhaust at N≥15-20).
+
+**§148 honest caveat (atomic_rpc)** · Supabase RPC + INSERT are TWO separate HTTP round-trips · the advisory lock releases between them. The atomicity guarantee then relies on the UNIQUE(stream_id, sequence) constraint as the final arbiter. For TRUE single-transaction atomicity · Sprint 13+ ships a Supabase Edge Function wrapping {RPC + INSERT} inside one PG transaction. For Sprint 12 canary scale (Journey B piloto · 1 cliente) the RPC alone reduces collision probability by orders of magnitude vs the optimistic-only path.
 
 **RLS** · canon canon-migration §5 enables RLS · canon canon-service_role grants explicit INSERT/SELECT. Adapter NEVER attempts to bypass RLS · canon canon-relies on caller constructing the client with the right key.
 
@@ -134,8 +142,13 @@ const client = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 const storage = new SupabaseEventLogStorage(client, {
-  maxSequenceRetries: 5, // canon · default · canon-set 1 to disable retry
+  allocatorMode: 'auto',   // canon · default · canon-detects RPC at runtime
+  maxSequenceRetries: 5,   // canon · default · canon-only used in optimistic mode
 })
+
+// canon canonical · inspect current detection (canon-canonical-useful in tests + dashboards)
+const { configured, detected } = storage.getAllocatorMode()
+// canon · `detected` is 'unknown' until the first insert · canon-then 'atomic_rpc' or 'optimistic'
 ```
 
 #### Error mapping
