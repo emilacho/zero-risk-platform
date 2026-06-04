@@ -39,7 +39,13 @@ import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { validateWorkflowId } from '@/lib/agent-safety'
 
 export const runtime = 'nodejs'
-export const maxDuration = 300 // 5 min — pipelines largos
+// Sprint 12 Track U · P0 #2 bump 300→800s · Track R audit identified Journey B
+// Step 3 (brand-strategist) doing ~363s real work · the 300s cap was aborting
+// legitimate agent calls mid-execution. 800s is the Vercel Pro Fluid Compute
+// ceiling (canon docs 2026) · still inside billed-by-second tier so cost
+// differential is small. Long-term canon · migrate to Inngest async pattern
+// (ENCENDIDO escalón 2 wire-in · Sprint 13+) so the cap drops out entirely.
+export const maxDuration = 800 // 13.3 min — Journey B canon piloto Pérez
 
 interface RunSdkInput {
   agent: string
@@ -145,13 +151,14 @@ interface AgentRunResultProxy {
   error?: string
 }
 
-// 290 s aligns with maxDuration = 300 (Vercel Pro Fluid Compute default)
+// 790 s aligns with maxDuration = 800 (Vercel Pro Fluid Compute ceiling)
 // with a 10 s buffer for response cleanup / Sentry flush before the
-// platform itself kills the function. The previous 60 s was too tight
-// for legitimate SDK tasks (e.g. "Generar intake form personalizado"
-// runs 30-120 s) and was aborting them prematurely · CC#1 confirmed
-// 3 fires with identical 60 s timeout pattern (execs 5931, 5933).
-const RAILWAY_FETCH_TIMEOUT_MS = 290_000
+// platform itself kills the function. Bumped from 290 s in Sprint 12
+// Track U · evidence from Track R audit (Journey B Step 3 brand-strategist
+// ~363 s real work was being aborted by the 290 s upstream timeout · the
+// 60 s pre-bump pattern was even tighter · CC#1 confirmed 3 fires with
+// identical 60 s timeout pattern execs 5931, 5933).
+const RAILWAY_FETCH_TIMEOUT_MS = 790_000
 
 // Inbound headers we never forward to the Railway service. `host` would
 // confuse the upstream's virtual-host routing; `content-length` would
