@@ -87,7 +87,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name || '' }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || ('temp-' + Date.now()) }}\",\n  \"industry\": \"{{ $('Validate Deal Data').item.json.industry || '' }}\",\n  \"parent_page_id\": \"{{ $env.NOTION_PARENT_PAGE_ID || 'stub-parent' }}\"\n}",
+        "jsonBody": "={\n  \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name || '' }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\",\n  \"industry\": \"{{ $('Validate Deal Data').item.json.industry || '' }}\",\n  \"parent_page_id\": \"{{ $env.NOTION_PARENT_PAGE_ID || 'stub-parent' }}\"\n}",
         "options": {
           "timeout": 30000
         }
