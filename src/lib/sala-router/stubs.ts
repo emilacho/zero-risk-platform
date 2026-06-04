@@ -154,29 +154,76 @@ function getByPath(obj: unknown, path: string): unknown {
 }
 
 // =====================================================================
+// Bucket-key canonical formula · escalón 4 desbloqueo (2026-06-04)
+// =====================================================================
+
+/**
+ * Canon canonical bucket-key formula for the G6 atomic counter.
+ *
+ * `t:{tenant_id}:c:{client_id}:j:{journey_type}:o:{operation_type}`
+ *
+ * Per-operation granularity · the cap is per operation/agent (the unit
+ * of cost). Additional scopes (global, per-client, per-tenant) live in
+ * SEPARATE buckets and use SEPARATE keys · future work. The router
+ * COMPOSES this string, the G6 seam MATCHES on it, and seeds in
+ * `rate_limit_buckets` are keyed by this exact format.
+ *
+ * Centralized here so any future format change ripples through the wire
+ * automatically · canon §148 single source of truth.
+ *
+ * Examples:
+ *   `t:acme:c:client-123:j:ONBOARD:o:ONBOARD.brief-strategist`
+ *   `t:zero-risk:c:perez:j:PRODUCE:o:PRODUCE.campaign-brief-agent`
+ */
+export function buildBucketKey(input: BucketKeyInput): string {
+  return [
+    't',
+    input.tenant_id,
+    'c',
+    input.client_id,
+    'j',
+    input.journey_type,
+    'o',
+    input.operation_type,
+  ].join(':')
+}
+
+export interface BucketKeyInput {
+  readonly tenant_id: string
+  readonly client_id: string
+  readonly journey_type: string
+  readonly operation_type: string
+}
+
+// =====================================================================
 // Budget-check stub · always-allow by default, deterministic by ctor
 // =====================================================================
 
 /**
  * Canon canonical · the simplest possible budget stub · every dispatch
  * is allowed. Used in tests that do NOT exercise the budget path.
+ *
+ * **ASYNC** per escalón 4 desbloqueo (Option B 2026-06-04) · matches
+ * `BudgetCheckFn` shape so the seam can swap in `SupabaseG6BudgetHook`
+ * (PR #155) at escalón 5 without router changes.
  */
-export const allowAllBudgetStub: BudgetCheckFn = (input) => ({
+export const allowAllBudgetStub: BudgetCheckFn = async (input) => ({
   allowed: true,
   budget_key: budgetKeyOf(input),
 })
 
 /**
  * Canon canonical · a deterministic budget stub for tests that DO
- * exercise the `budget_blocked` path. Blocks dispatches whose
- * `{client_id, journey_type, operation_type}` is in the deny list.
+ * exercise the `budget_blocked` path. Blocks dispatches whose bucket key
+ * is in the deny list. Bucket key uses the canonical formula
+ * `t:{tenant}:c:{client}:j:{journey}:o:{operation}` from `buildBucketKey`.
  */
 export function denyByKeyBudgetStub(
   deny_keys: ReadonlyArray<string>,
   reason = 'denied by test stub',
 ): BudgetCheckFn {
   const deny = new Set(deny_keys)
-  return (input) => {
+  return async (input) => {
     const key = budgetKeyOf(input)
     if (deny.has(key)) return { allowed: false, budget_key: key, reason }
     return { allowed: true, budget_key: key }
@@ -184,5 +231,16 @@ export function denyByKeyBudgetStub(
 }
 
 function budgetKeyOf(input: Parameters<BudgetCheckFn>[0]): string {
-  return `${input.client_id}::${input.journey_type}::${input.operation_type}`
+  // Per canon §148 single source of truth · prefer the bucket_key the
+  // router computed via buildBucketKey() if it was passed; fall back to
+  // canon canonical computation for older callers that don't pass it.
+  return (
+    input.bucket_key ??
+    buildBucketKey({
+      tenant_id: input.tenant_id,
+      client_id: input.client_id,
+      journey_type: input.journey_type,
+      operation_type: input.operation_type,
+    })
+  )
 }

@@ -192,7 +192,7 @@ describe('RealSalaIntegration · canon canonical budget_blocked path', () => {
     }
     expect(nextStepId).toBeTruthy()
     const operation_type = `ONBOARD.${nextStepId}`
-    const denyKey = `${C}::ONBOARD::${operation_type}`
+    const denyKey = `t:${T}:c:${C}:j:ONBOARD:o:${operation_type}`
     const budget_check = denyByKeyBudgetStub([denyKey], 'denied for test')
     const { integration } = realHarness({ budget_check })
     const trigger = await integration.kickstart(kickInput({ journey_type: 'ONBOARD' }))
@@ -205,7 +205,7 @@ describe('RealSalaIntegration · canon canonical budget_blocked path', () => {
   })
 
   it('canon · runUntilHalt with deny-all budget halts canon canon-budget_blocked', async () => {
-    const denyAll = () => ({ allowed: false as const, budget_key: 'test-key', reason: 'denied' })
+    const denyAll = async () => ({ allowed: false as const, budget_key: 'test-key', reason: 'denied' })
     const { integration } = realHarness({ budget_check: denyAll })
     const result = await integration.runUntilHalt(
       kickInput({ journey_type: 'ONBOARD', max_ticks: 5 }),

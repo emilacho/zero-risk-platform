@@ -237,16 +237,37 @@ export type NextStepResolution =
   | { readonly kind: 'unresolved'; readonly reason: string }
 
 /**
- * Canon canonical · the budget-check seam · G6 bucket atómico. The
- * router invokes this BEFORE returning a `DispatchDecision`. If the
+ * Canon canonical · the budget-check seam · G6 bucket atómico.
+ *
+ * **ASYNC** per escalón 4 desbloqueo (Opción B · 2026-06-04). The real
+ * G6 hook (`SupabaseG6BudgetHook.checkAndIncrement`) is an RPC against
+ * Supabase and is inherently asynchronous; the seam matches that shape
+ * so the router can `await` the check inside `decide()` without losing
+ * atomicity (Option A · sync cache · was rejected because it cannot
+ * preserve the atomic increment guarantee of the bucket).
+ *
+ * The router invokes this BEFORE returning a `DispatchDecision`. If the
  * fn returns `{ allowed: false }`, the router emits
  * `BudgetBlockedDecision` instead.
  *
  * In shadow mode (today), the implementation is a noop-allow stub or a
  * deterministic test stub. The wire to the real G6 bucket lives BEHIND
- * this seam · §144-gated · NOT in this PR.
+ * this seam · §144-gated · NOT in this PR. Track N (PR #155) ships the
+ * `BudgetHook` shape and `SupabaseG6BudgetHook` that the wire will plug
+ * into this seam in escalón 5.
  */
-export type BudgetCheckFn = (input: BudgetCheckInput) => BudgetCheckResult
+export type BudgetCheckFn = (
+  input: BudgetCheckInput,
+) => Promise<BudgetCheckResult>
+
+/**
+ * Canon canonical · the legacy synchronous shape. Kept as a documented
+ * alias only · NOT used by `decide()` post escalón 4 desbloqueo. If a
+ * sync stub is convenient inside a test, wrap it via `Promise.resolve()`
+ * at the call site (or use `allowAllBudgetStub` / `denyByKeyBudgetStub`
+ * from `./stubs.ts` which already return Promises).
+ */
+export type SyncBudgetCheckFn = (input: BudgetCheckInput) => BudgetCheckResult
 
 export interface BudgetCheckInput {
   readonly tenant_id: string
@@ -258,6 +279,15 @@ export interface BudgetCheckInput {
    *  have a per-step estimate; if absent, the bucket check uses count
    *  alone. */
   readonly projected_cost_usd?: number
+  /** Canon canonical · the canonical bucket-key the router computed for
+   *  this dispatch via `buildBucketKey()`. The fn implementation MAY
+   *  ignore this and recompute (escalón 5 G6 binding does that), but
+   *  the router passes it so the seam can short-circuit / log without
+   *  re-parsing.
+   *
+   *  Format · `t:{tenant_id}:c:{client_id}:j:{journey_type}:o:{operation_type}`
+   *  · per-operation granularity. See `buildBucketKey()` in `./stubs.ts`. */
+  readonly bucket_key: string
 }
 
 export interface BudgetCheckResult {

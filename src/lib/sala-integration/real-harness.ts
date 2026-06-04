@@ -161,7 +161,7 @@ export class RealSalaIntegration {
       stream_id: trigger.stream_id,
     })
 
-    const decisions = decide({
+    const decisions = await decide({
       event: trigger,
       journey_state,
       libreto_lookup: this.libretoLookup,
