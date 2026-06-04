@@ -42,9 +42,9 @@ export const acquireLibreto: Libreto = {
       next_step: {
         kind: 'conditional',
         conditions: [
-          { when: 'classification.fit_is_high', then: 'parallel_fit' },
-          { when: 'classification.fit_is_medium', then: 'parallel_fit' },
-          { when: 'classification.fit_is_low', then: 'low_fit_nurture' },
+          { when: 'classification.fit === "high"', then: 'parallel_fit' },
+          { when: 'classification.fit === "medium"', then: 'parallel_fit' },
+          { when: 'classification.fit === "low"', then: 'low_fit_nurture' },
         ],
         default: 'needs_judgment',
       },
@@ -103,9 +103,9 @@ export const acquireLibreto: Libreto = {
       next_step: {
         kind: 'conditional',
         conditions: [
-          { when: 'recommendation.is_reach_out', then: 'draft_outreach' },
-          { when: 'recommendation.is_nurture', then: 'low_fit_nurture' },
-          { when: 'recommendation.is_drop', then: 'lead_dropped' },
+          { when: 'recommendation === "reach_out"', then: 'draft_outreach' },
+          { when: 'recommendation === "nurture"', then: 'low_fit_nurture' },
+          { when: 'recommendation === "drop"', then: 'lead_dropped' },
         ],
         default: 'needs_judgment',
       },
