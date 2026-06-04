@@ -105,14 +105,47 @@ In-memory fake. Mirrors DB semantics exactly (UNIQUE constraints · CHECK · mon
 
 ### `SupabaseEventLogStorage`
 
-Real prod adapter. Wraps a `SupabaseClient` (caller provides · service-role for writes per migration §5 grants). §148 honest · this adapter is **canon canonical-NOT exercised until §144 migration apply** · canon canonical-compiles + typechecks · canon canonical-tests use the in-memory adapter.
+Real prod adapter (canon canonical Sprint 12 Ronda 3 Track J · CC#1 · PR canon). Wraps a `SupabaseClient` (caller provides · service-role for writes per migration §5 grants).
 
-Maps DB error codes ·
-- `23505` UNIQUE on `idempotency_key` → dedup (returns existing row)
-- `23505` UNIQUE on `stream_id, sequence` → throws (caller retries)
-- `23514` CHECK on `gate_type_consistent` → throws (caller bug)
+§148 honest · canon canonical-COMPLETE + integration-ready · canon canonical-NOT exercised against real DB until §144:
+- (a) migration `202606021946_sala_event_log.sql` (PR #141) applied prod, AND
+- (b) router/projector dispatches first event via this lib.
 
-Caller MUST allocate `sequence` per-stream (canon canonical · router responsibility per ADR-009).
+Tests use a canon canonical-`FakeSupabaseClient` that mirrors PostgREST + UNIQUE constraint semantics (canon canon-`__tests__/_helpers/fake-supabase.ts`). canon canon-the in-memory adapter mirrors contract for cross-implementation parity.
+
+#### Concurrency model
+
+**Idempotency dedup (DB-level)** · enforced by `UNIQUE(tenant_id, idempotency_key)`. canon canonical · `insert()` does FAST-PATH `findByIdempotencyKey()` pre-check first to short-circuit known duplicates without wasting sequence allocation. Race conditions between pre-check and INSERT canon-caught as 23505 and converted to dedup-return.
+
+**Sequence allocation (per-stream monotonic)** · canon canonical-adapter AUTO-ALLOCATES via `SELECT MAX(sequence)+1 FROM sala_event_log WHERE stream_id=$1` when caller omits `sequence`. canon canon-canonical `UNIQUE(stream_id, sequence)` catches races. On 23505 collision · adapter RETRIES with freshly-allocated sequence · canon-bounded by `maxSequenceRetries` (default 5). Caller can OVERRIDE with explicit `sequence` (replay/import scenario) · canon canon-NO retry (collision treated as caller bug · propagated).
+
+**§148 honest caveat** · this is "optimistic concurrency" · NOT a pessimistic lock. Under canon-high contention (many concurrent writers to same stream) retries may exhaust. canon canon-Sprint 13+ optimization · ship a SECURITY DEFINER function `sala_event_log_allocate_sequence(stream_id)` wrapping `SELECT ... FOR UPDATE` / `pg_advisory_xact_lock` · called via RPC. Per Track J guardrails canon-NO schema extension allowed, so this ships the optimistic pattern + canon-documented escape hatch.
+
+**RLS** · canon canon-migration §5 enables RLS · canon canon-service_role grants explicit INSERT/SELECT. Adapter NEVER attempts to bypass RLS · canon canon-relies on caller constructing the client with the right key.
+
+#### Construction
+
+```ts
+import { createClient } from '@supabase/supabase-js'
+import { SupabaseEventLogStorage } from '@/lib/sala-event-log'
+
+const client = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
+const storage = new SupabaseEventLogStorage(client, {
+  maxSequenceRetries: 5, // canon · default · canon-set 1 to disable retry
+})
+```
+
+#### Error mapping
+
+- `23505` UNIQUE on `idempotency_key` → canon-canonical dedup (returns existing row · `inserted: false`)
+- `23505` UNIQUE on `stream_id, sequence` (auto-alloc) → canon-retry up to `maxSequenceRetries`
+- `23505` UNIQUE on `stream_id, sequence` (explicit sequence) → canon-throw `stream_sequence_unique`
+- `23514` CHECK on `gate_type_consistent` → canon-throw `check_violation`
+- max retries exhausted → canon-throw `max sequence allocation retries (N) exceeded`
+- other errors → canon-propagate `insert_failed` / `select_failed` / `lookup_failed`
 
 ---
 
