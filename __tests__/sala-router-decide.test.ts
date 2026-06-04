@@ -166,7 +166,7 @@ function baseInput(overrides: Partial<DecideInput> = {}): DecideInput {
 // =====================================================================
 
 describe('decide · happy path · dispatch next action', () => {
-  it('emits Dispatch when libreto + interpreter + budget all green', () => {
+  it('emits Dispatch when libreto + interpreter + budget all green', async () => {
     const libreto = buildLibreto(
       'ONBOARD',
       [
@@ -176,7 +176,7 @@ describe('decide · happy path · dispatch next action', () => {
       ],
       'step-1',
     )
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({ libreto_lookup: makeLookup([libreto]) }),
     )
 
@@ -195,8 +195,8 @@ describe('decide · happy path · dispatch next action', () => {
 })
 
 describe('decide · function TOTAL · cero drop silente', () => {
-  it('unknown journey_type → needs_judgment (libreto_not_found)', () => {
-    const decisions = decide(
+  it('unknown journey_type → needs_judgment (libreto_not_found)', async () => {
+    const decisions = await decide(
       baseInput({
         event: buildEvent({ journey_type: 'UNKNOWN_X' }),
         libreto_lookup: makeLookup([]),
@@ -208,14 +208,14 @@ describe('decide · function TOTAL · cero drop silente', () => {
     expect(decisions[0].reason).toBe('libreto_not_found')
   })
 
-  it('libreto pending_144 → needs_judgment (libreto_pending_144)', () => {
+  it('libreto pending_144 → needs_judgment (libreto_pending_144)', async () => {
     const libreto = buildLibreto(
       'GROWTH',
       [action('step-1', 'agent-x', 'end-ok'), terminal('end-ok', true)],
       'step-1',
       'pending_144',
     )
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({
         event: buildEvent({ journey_type: 'GROWTH' }),
         journey_state: buildJourneyState({ journey: 'GROWTH' }),
@@ -227,13 +227,13 @@ describe('decide · function TOTAL · cero drop silente', () => {
     expect(decisions[0].reason).toBe('libreto_pending_144')
   })
 
-  it('current_step missing from libreto → needs_judgment', () => {
+  it('current_step missing from libreto → needs_judgment', async () => {
     const libreto = buildLibreto(
       'ONBOARD',
       [action('step-A', 'agent-x', 'end-ok'), terminal('end-ok', true)],
       'step-A',
     )
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({
         journey_state: buildJourneyState({ current_step: 'step-ghost' }),
         libreto_lookup: makeLookup([libreto]),
@@ -244,8 +244,8 @@ describe('decide · function TOTAL · cero drop silente', () => {
     expect(decisions[0].reason).toBe('current_step_not_in_libreto')
   })
 
-  it('stream mismatch between event and projection → needs_judgment', () => {
-    const decisions = decide(
+  it('stream mismatch between event and projection → needs_judgment', async () => {
+    const decisions = await decide(
       baseInput({
         event: buildEvent({ stream_id: 'stream-other' }),
       }),
@@ -255,7 +255,7 @@ describe('decide · function TOTAL · cero drop silente', () => {
 })
 
 describe('decide · budget-check (G6 paso 3.5)', () => {
-  it('budget denied → budget_blocked (no dispatch)', () => {
+  it('budget denied → budget_blocked (no dispatch)', async () => {
     const libreto = buildLibreto(
       'ONBOARD',
       [
@@ -266,9 +266,9 @@ describe('decide · budget-check (G6 paso 3.5)', () => {
       'step-1',
     )
     const deny = denyByKeyBudgetStub([
-      `${CLIENT}::ONBOARD::ONBOARD.step-2`,
+      `t:${TENANT}:c:${CLIENT}:j:ONBOARD:o:ONBOARD.step-2`,
     ])
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({
         libreto_lookup: makeLookup([libreto]),
         budget_check: deny,
@@ -278,11 +278,13 @@ describe('decide · budget-check (G6 paso 3.5)', () => {
     expect(decisions[0].kind).toBe('budget_blocked')
     if (decisions[0].kind !== 'budget_blocked') throw new Error('narrow')
     expect(decisions[0].step_id).toBe('step-2')
-    expect(decisions[0].budget_key).toBe(`${CLIENT}::ONBOARD::ONBOARD.step-2`)
+    expect(decisions[0].budget_key).toBe(
+      `t:${TENANT}:c:${CLIENT}:j:ONBOARD:o:ONBOARD.step-2`,
+    )
     expect(decisions[0].reason).toBeTruthy()
   })
 
-  it('budget allowed → dispatch (control case for the deny stub)', () => {
+  it('budget allowed → dispatch (control case for the deny stub)', async () => {
     const libreto = buildLibreto(
       'ONBOARD',
       [
@@ -293,7 +295,7 @@ describe('decide · budget-check (G6 paso 3.5)', () => {
       'step-1',
     )
     const deny = denyByKeyBudgetStub(['other-key'])
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({
         libreto_lookup: makeLookup([libreto]),
         budget_check: deny,
@@ -304,7 +306,7 @@ describe('decide · budget-check (G6 paso 3.5)', () => {
 })
 
 describe('decide · gates as first-class steps', () => {
-  it('next step is a gate → gate_pending', () => {
+  it('next step is a gate → gate_pending', async () => {
     const libreto = buildLibreto(
       'PRODUCE',
       [
@@ -314,7 +316,7 @@ describe('decide · gates as first-class steps', () => {
       ],
       'step-1',
     )
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({
         event: buildEvent({ journey_type: 'PRODUCE' }),
         journey_state: buildJourneyState({ journey: 'PRODUCE' }),
@@ -328,7 +330,7 @@ describe('decide · gates as first-class steps', () => {
     expect(decisions[0].step_id).toBe('gate-camino')
   })
 
-  it('gate already pending → no new decision (branch parked)', () => {
+  it('gate already pending → no new decision (branch parked)', async () => {
     const libreto = buildLibreto(
       'PRODUCE',
       [
@@ -337,7 +339,7 @@ describe('decide · gates as first-class steps', () => {
       ],
       'gate-hitl',
     )
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({
         event: buildEvent({ journey_type: 'PRODUCE', step_id: null, event_type: 'step_started' }),
         journey_state: buildJourneyState({
@@ -359,7 +361,7 @@ describe('decide · gates as first-class steps', () => {
     expect(decisions).toHaveLength(0)
   })
 
-  it('gate_resolved while gate pending → progresses past gate', () => {
+  it('gate_resolved while gate pending → progresses past gate', async () => {
     const libreto = buildLibreto(
       'PRODUCE',
       [
@@ -369,7 +371,7 @@ describe('decide · gates as first-class steps', () => {
       ],
       'gate-camino',
     )
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({
         event: buildEvent({
           journey_type: 'PRODUCE',
@@ -394,13 +396,13 @@ describe('decide · gates as first-class steps', () => {
 })
 
 describe('decide · terminal handling', () => {
-  it('current step is terminal_success → terminal decision', () => {
+  it('current step is terminal_success → terminal decision', async () => {
     const libreto = buildLibreto(
       'REVIEW',
       [terminal('end-ok', true)],
       'end-ok',
     )
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({
         event: buildEvent({ journey_type: 'REVIEW', step_id: 'end-ok' }),
         journey_state: buildJourneyState({
@@ -415,13 +417,13 @@ describe('decide · terminal handling', () => {
     expect(decisions[0].outcome).toBe('success')
   })
 
-  it('next step is terminal_failure → terminal failure decision', () => {
+  it('next step is terminal_failure → terminal failure decision', async () => {
     const libreto = buildLibreto(
       'REVIEW',
       [action('step-1', 'agent-x', 'end-fail'), terminal('end-fail', false)],
       'step-1',
     )
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({
         event: buildEvent({ journey_type: 'REVIEW' }),
         journey_state: buildJourneyState({ journey: 'REVIEW' }),
@@ -460,8 +462,8 @@ describe('decide · NEXUS stress · multi-phase state machine', () => {
     'intake',
   )
 
-  it('phase 1 → phase 2 (intake done → dispatch strategy)', () => {
-    const decisions = decide(
+  it('phase 1 → phase 2 (intake done → dispatch strategy)', async () => {
+    const decisions = await decide(
       baseInput({
         event: buildEvent({
           journey_type: 'PRODUCE',
@@ -481,8 +483,8 @@ describe('decide · NEXUS stress · multi-phase state machine', () => {
     expect(decisions[0].agent_id).toBe('data-strategist')
   })
 
-  it('production done → camino-iii-gate (gate_pending)', () => {
-    const decisions = decide(
+  it('production done → camino-iii-gate (gate_pending)', async () => {
+    const decisions = await decide(
       baseInput({
         event: buildEvent({
           journey_type: 'PRODUCE',
@@ -502,8 +504,8 @@ describe('decide · NEXUS stress · multi-phase state machine', () => {
     expect(decisions[0].gate_type).toBe('camino_iii')
   })
 
-  it('camino_iii resolved → dispatch launch', () => {
-    const decisions = decide(
+  it('camino_iii resolved → dispatch launch', async () => {
+    const decisions = await decide(
       baseInput({
         event: buildEvent({
           journey_type: 'PRODUCE',
@@ -525,8 +527,8 @@ describe('decide · NEXUS stress · multi-phase state machine', () => {
     expect(decisions[0].agent_id).toBe('campaign-launch')
   })
 
-  it('NEXUS over-budget on launch → budget_blocked (cap enforcement)', () => {
-    const decisions = decide(
+  it('NEXUS over-budget on launch → budget_blocked (cap enforcement)', async () => {
+    const decisions = await decide(
       baseInput({
         event: buildEvent({
           journey_type: 'PRODUCE',
@@ -540,7 +542,7 @@ describe('decide · NEXUS stress · multi-phase state machine', () => {
         }),
         libreto_lookup: makeLookup([NEXUS]),
         budget_check: denyByKeyBudgetStub([
-          `${CLIENT}::PRODUCE::PRODUCE.launch`,
+          `t:${TENANT}:c:${CLIENT}:j:PRODUCE:o:PRODUCE.launch`,
         ]),
       }),
     )
@@ -551,7 +553,7 @@ describe('decide · NEXUS stress · multi-phase state machine', () => {
 })
 
 describe('decide · attempt counter on retry', () => {
-  it('same step retry → attempt + 1', () => {
+  it('same step retry → attempt + 1', async () => {
     const libreto = buildLibreto(
       'ONBOARD',
       [
@@ -561,7 +563,7 @@ describe('decide · attempt counter on retry', () => {
       ],
       'step-1',
     )
-    const decisions = decide(
+    const decisions = await decide(
       baseInput({
         event: buildEvent({
           event_type: 'step_failed',
@@ -584,7 +586,7 @@ describe('decide · attempt counter on retry', () => {
 })
 
 describe('decide · idempotency key computation', () => {
-  it('same {operation_type, client_id, logical_period} → same key', () => {
+  it('same {operation_type, client_id, logical_period} → same key', async () => {
     const libreto = buildLibreto(
       'ONBOARD',
       [
@@ -594,10 +596,10 @@ describe('decide · idempotency key computation', () => {
       ],
       'step-1',
     )
-    const d1 = decide(
+    const d1 = await decide(
       baseInput({ libreto_lookup: makeLookup([libreto]) }),
     )
-    const d2 = decide(
+    const d2 = await decide(
       baseInput({
         event: buildEvent({ event_id: 'evt-different-id' }),
         libreto_lookup: makeLookup([libreto]),
