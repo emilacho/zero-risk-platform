@@ -28,24 +28,17 @@ vi.mock('@/lib/supabase', () => ({
     from(table: string) {
       if (table === 'clients') {
         return {
-          select: (cols: string) => {
-            if (cols.includes('client_name')) {
-              return {
-                // `.ilike(column, value)` chain · we differentiate by column arg
-                ilike: (col: string) => ({
-                  limit: () => (col === 'name' ? ilikeNameResult() : ilikeClientNameResult()),
-                }),
-                eq: () => ({
-                  limit: () => ({ data: [], error: null }),
-                  maybeSingle: () => ({ data: null, error: null }),
-                }),
-                limit: () => ({ data: [], error: null }),
-              }
-            }
-            return {
-              select: () => ({ eq: () => ({ limit: () => ({ data: [], error: null }) }) }),
-            }
-          },
+          select: (_cols: string) => ({
+            // `.ilike(column, value)` chain · we differentiate by column arg
+            ilike: (col: string) => ({
+              limit: () => (col === 'name' ? ilikeNameResult() : ilikeClientNameResult()),
+            }),
+            eq: () => ({
+              limit: () => ({ data: [], error: null }),
+              maybeSingle: () => ({ data: null, error: null }),
+            }),
+            limit: () => ({ data: [], error: null }),
+          }),
         }
       }
       return { select: () => ({ eq: () => ({ limit: () => ({ data: [], error: null }) }) }) }

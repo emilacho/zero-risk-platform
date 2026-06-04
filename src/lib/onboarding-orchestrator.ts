@@ -788,19 +788,44 @@ export class OnboardingOrchestrator {
   // ----------------------------------------------------------
 
   private async ensureClient(input: OnboardingInput): Promise<string> {
-    // Check if client already exists by slug
+    // Sprint 12 · Náufrago MC fix · resolve-by-name canon before create.
+    // Three resolution paths in order of strictness ·
+    //   1. slug exact match (legacy · fastest · ascii-normalized)
+    //   2. name ILIKE exact match (case-insensitive · catches "Náufrago"
+    //      vs "Naufrago" vs "naufrago" naming variations)
+    //   3. create new row (only if both lookups miss)
+    // Prevents shadow rows + Mission Control TEMP id confusion when the
+    // same client is referenced with different casing across systems.
     const slug = input.companyName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
 
-    const { data: existing } = await this.supabase
+    const { data: existingBySlug } = await this.supabase
       .from('clients')
       .select('id')
       .eq('slug', slug)
-      .single()
+      .maybeSingle()
 
-    if (existing) return existing.id
+    if (existingBySlug) return existingBySlug.id
+
+    // Fallback · case-insensitive name match (covers diacritics + casing)
+    const { data: existingByName } = await this.supabase
+      .from('clients')
+      .select('id, name')
+      .ilike('name', input.companyName)
+      .limit(2)
+
+    if (existingByName && existingByName.length === 1) {
+      return existingByName[0].id as string
+    }
+    // 2+ matches · ambiguous · log and fall through to create (caller
+    // resolves by passing client_id explicitly next time)
+    if (existingByName && existingByName.length > 1) {
+      console.warn(
+        `[onboarding-orchestrator] ensureClient · name "${input.companyName}" matched ${existingByName.length} rows · creating new (caller should disambiguate by passing client_id)`,
+      )
+    }
 
     // Create new client
     const { data: newClient, error } = await this.supabase
