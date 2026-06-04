@@ -128,17 +128,21 @@ export async function GET(request: Request) {
       // ILIKE. Returns explicit ambiguous (409) when name maps to multiple rows
       // so caller never silently picks wrong tenant.
       if (name) {
+        // SELECT * because the production `clients` schema doesn't have
+        // `client_id` / `client_name` columns (just `id` + `name`) and the
+        // explicit column list fails the query in some deployments. `*`
+        // works everywhere · returns the full row to the caller.
         const { data: rows, error: nameErr } = await supabase
           .from('clients')
-          .select('id, client_id, name, client_name, status, created_at')
+          .select('*')
           .ilike('name', name)
           .limit(5)
         if (nameErr) {
-          // Some deployments name the column differently (`client_name` vs `name`)
-          // — try the other column before giving up.
+          // Defensive · `client_name` legacy column path for deployments
+          // that don't have `name`. Both errors → 404 unknown.
           const alt = await supabase
             .from('clients')
-            .select('id, client_id, name, client_name, status, created_at')
+            .select('*')
             .ilike('client_name', name)
             .limit(5)
           const list = alt.data ?? []
