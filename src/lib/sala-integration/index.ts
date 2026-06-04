@@ -40,3 +40,15 @@ export {
 export type { DefaultStubRouterOptions } from './stub-router'
 
 export { SalaIntegration } from './harness'
+
+// canon canonical · Track L · convergencia · real wired-up integration
+export { RealSalaIntegration } from './real-harness'
+export type {
+  RealSalaIntegrationConfig,
+  KickstartInput,
+  ProcessEventResult,
+  RunUntilHaltResult,
+} from './real-harness'
+
+export { createInterpreterAdapter } from './interpreter-adapter'
+export type { InterpreterAdapterOptions } from './interpreter-adapter'

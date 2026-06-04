@@ -147,3 +147,87 @@ Cuando G + H aterricen:
 3. **Add real budget hook** · canon canon-canon canon canon-bucket atómico G6 vía RPC
 4. **Wire real motor canon canon-`SalaExecutor.enqueue`** dentro del harness en lugar del stub
 5. **Tests E2E canon-mantienen** porque las interfaces stub mirroring las reales
+
+---
+
+# Track L · convergencia canon canonical
+
+Sprint 12 Fase 0 Ronda 3 Track L · CC#1.
+
+Esta canon canon-canon-PR convierte el shadow E2E de Track K (canon-stubs) en convergencia real wireada con:
+- **Router REAL** (Track H · PR #149 · `decide()`) en lugar de `DefaultStubRouter`
+- **Interpreter REAL** (Track G · PR #148 · `resolveStep`) vía adapter en lugar de `DefaultStubInterpreter`
+
+## `RealSalaIntegration` class
+
+Composición event-driven · canon canon-cada call a `decide()` consume un `PersistedEvent` (el último que aterrizó en el stream) y produce `Decision[]`.
+
+```ts
+import { RealSalaIntegration } from '@/lib/sala-integration'
+import { InMemoryEventLogStorage } from '@/lib/sala-event-log'
+
+const storage = new InMemoryEventLogStorage()
+const integration = new RealSalaIntegration({
+  storage,
+  // canon canon · resolve_next_step defaults to createInterpreterAdapter() (Track G real)
+  // canon canon · budget_check defaults to allowAllBudgetStub (canon-G6 wire post-§144)
+  // canon canon · libreto_lookup defaults to CANONICAL_LIBRETOS
+})
+
+const event = await integration.kickstart({
+  tenant_id: '...',
+  client_id: '...',
+  stream_id: '...',
+  journey_type: 'ONBOARD',
+  logical_period: '2026-W23',
+})
+
+const result = await integration.processEvent(event)
+// canon · result.decisions has 1+ Decision (función TOTAL · always at least 1)
+// canon · result.events_appended has the events triggered by applying each Decision
+
+const final = await integration.runUntilHalt({
+  tenant_id: '...',
+  client_id: '...',
+  stream_id: '...',
+  journey_type: 'PRODUCE',
+  logical_period: '2026-W23',
+  max_ticks: 50,
+})
+// canon · final.halted_by · 'gate_pending' / 'terminal' / 'needs_judgment' / 'budget_blocked' / 'no_dispatch_emitted' / 'max_ticks'
+```
+
+## Convención canon canonical kickstart
+
+El router responde a eventos · canon-canon-canon-la canónica para iniciar un stream es **`step_completed` en `entry_step_id`** (canon-as if a synthetic pre-step finished). El router entonces ve "entry_step is done · what's next?" y emite la decisión apropiada para el SEGUNDO step del libreto.
+
+Cuando Mitad 2 wire el executor, el `step_completed` callback del executor sigue el mismo patrón.
+
+## Interpreter adapter
+
+`createInterpreterAdapter()` puentea el `resolveStep` del Track G real (returning `StepResolution` con 6 kinds) al `ResolveNextStepFn` del router (returning `NextStepResolution` con 4 kinds). Lossless mapping documented en `interpreter-adapter.ts`.
+
+## §148 honest
+
+- **Cero stubs en el path real** · router + interpreter son los reales.
+- **Budget check sigue stub** · canon-G6 bucket wire post-§144.
+- **Motor canon canon-NO invoked real** · canon-applyRealDecision simula step_completed con artifact_writes en lugar de invocar `executor.enqueue()`.
+- **Tests shadow only** · cero DB touch · cero prod.
+
+## Test results · canon canonical 19/19 PASS
+
+- kickstart (3 · canon-step_completed convention + journey-specific + missing libreto)
+- processEvent canon-real router (3 · decision arrays + función TOTAL + correlation_id)
+- runUntilHalt across 5 ready libretos (5 · ONBOARD · PRODUCE · ALWAYS_ON · REVIEW · ACQUIRE)
+- GROWTH pending_144 (1 · halt at needs_judgment)
+- budget_blocked path (2 · denyByKey + denyAll)
+- projections (2)
+- interpreter adapter (2)
+- tenant isolation (1)
+
+## Cola §144-gated
+
+- Migration apply PR #141
+- G6 budget hook wire-in (canon-real Supabase RPC bucket atómico)
+- Motor wire-in (canon-real `SalaExecutor.enqueue` instead of canon-stub outcome simulated)
+- Router/motor wire-in production · canon-flip enforce
