@@ -41,11 +41,13 @@ async function run() {
       sequence: 1,
       correlation_id: corr,
       event_type: 'dispatch_requested',
+      journey_type: 'SMOKE_TEST',
+      operation_type: 'smoke.idempotency',
       idempotency_key,
       logical_period: '2026-W23',
       payload: { harness: HARNESS, attempt: 1 },
     })
-    .select('id')
+    .select('event_id')
     .single()
 
   if (ins1.error) failures.push({ step: 'insert_1', error: ins1.error.message })
@@ -60,11 +62,13 @@ async function run() {
       sequence: 2, // canon-DIFFERENT sequence · idempotency UNIQUE catches first
       correlation_id: corr,
       event_type: 'dispatch_requested',
+      journey_type: 'SMOKE_TEST',
+      operation_type: 'smoke.idempotency',
       idempotency_key,
       logical_period: '2026-W23',
       payload: { harness: HARNESS, attempt: 2 },
     })
-    .select('id')
+    .select('event_id')
 
   // expected · error code 23505 (Postgres UNIQUE violation)
   if (!ins2.error) {
@@ -76,7 +80,7 @@ async function run() {
   // assert · exactly 1 row with this idempotency_key
   const { data: rows, error: selErr } = await svc
     .from(TABLE)
-    .select('id, sequence, payload')
+    .select('event_id, sequence, payload')
     .eq('idempotency_key', idempotency_key)
 
   if (selErr) failures.push({ step: 'select_count', error: selErr.message })
@@ -91,7 +95,7 @@ async function run() {
     failures,
     idempotency_key,
     row_count: rows?.length ?? 0,
-    insert1_id: ins1.data?.id ?? null,
+    insert1_id: ins1.data?.event_id ?? null,
     insert2_error_code: ins2.error?.code ?? null,
   })
 }

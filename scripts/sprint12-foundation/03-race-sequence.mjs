@@ -40,7 +40,7 @@ async function insertWithSequenceRetry(svc, base, attempt = 1) {
   const { data, error } = await svc
     .from(TABLE)
     .insert({ ...base, sequence: next })
-    .select('id, sequence')
+    .select('event_id, sequence')
     .single()
 
   if (error?.code === '23505' && attempt < MAX_SEQUENCE_RETRIES) {
@@ -50,7 +50,7 @@ async function insertWithSequenceRetry(svc, base, attempt = 1) {
     return insertWithSequenceRetry(svc, base, attempt + 1)
   }
   if (error) throw error
-  return { id: data.id, sequence: data.sequence, attempts: attempt }
+  return { event_id: data.event_id, sequence: data.sequence, attempts: attempt }
 }
 
 async function run() {
@@ -66,6 +66,8 @@ async function run() {
       stream_id: stream,
       correlation_id: corr,
       event_type: 'dispatch_requested',
+      journey_type: 'SMOKE_TEST',
+      operation_type: 'smoke.race',
       idempotency_key,
       logical_period: '2026-W23',
       payload: { harness: HARNESS, writer: i },
