@@ -17,6 +17,7 @@
  * (returned in the function result) that the smoke script reads back.
  */
 import { inngestClient } from './client'
+import { buildDeadLetterFailureHandler } from './dead-letter-handler'
 
 /** Event name the synthetic functions respond to · namespaced
  *  `synthetic/*` so a future router with real journey events
@@ -45,6 +46,12 @@ export const syntheticDurabilityTest = inngestClient.createFunction(
     idempotency: 'event.data.runId',
     retries: 3,
     triggers: [{ event: SYNTHETIC_DURABILITY_EVENT }],
+    // DLQ Option A · co-req #3 pre-flip escalón 5 · 2026-06-04.
+    // When all 3 retries exhaust, write a `dead_letter` event to
+    // sala_event_log + best-effort Slack alert. The handler swallows
+    // its own errors so a writer failure NEVER masks the original
+    // function error (§148 cap is safety net · not critical path).
+    onFailure: buildDeadLetterFailureHandler('synthetic-durability-test'),
   },
   async ({ event, step, attempt }) => {
     const data = (event.data ?? {}) as {
