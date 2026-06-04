@@ -90,6 +90,61 @@ export interface RetryPolicy {
   readonly maxBackoffMs: number
 }
 
+// ─── 3b · Budget policy (Opus §H-d · 5th pecado · CAP convergence) ──
+//
+// Per Opus stress-test ronda 1 §H (d) · the cap is MORE essential
+// in the Sala than in the daemon (cascades + fan-out gates create
+// more amplification surface than flat polling). Idempotency stops
+// duplicate work; only the budget stops a legitimate-but-runaway
+// cascade.
+//
+// The interface exposes the GUARANTEE that a registered handler can
+// be capped; the enforcement mechanism (atomic counter against the
+// G6 `rate_limit_buckets` table via `increment_bucket_atomic` RPC)
+// lives in the implementation, NOT in the durable runtime. The cap
+// remains in OUR layer — same architectural choice as idempotency-
+// in-our-layer (Q2 ADR-009).
+//
+// Two granularities exposed · per-run cost ceiling, per-run step
+// count ceiling. Either is optional; absence means unbounded at the
+// contract level (orchestration layer is free to enforce a default
+// via lint or by always passing a policy).
+
+export interface BudgetPolicy {
+  /** Identifier of the `rate_limit_buckets` row (or equivalent) that
+   *  the implementation atomically increments. Matches the G6
+   *  `bucket_key` column shape. */
+  readonly bucketKey: string
+
+  /** Maximum cumulative cost (USD) one run of this handler may
+   *  spend before the implementation aborts further steps. Absent
+   *  means no per-run cost cap (the bucket may still have a window
+   *  cap enforced externally). */
+  readonly maxCostPerRunUsd?: number
+
+  /** Maximum number of `step.run` calls one run of this handler may
+   *  execute before the implementation aborts further steps. Absent
+   *  means no per-run step cap. */
+  readonly maxStepsPerRun?: number
+}
+
+/** Result of a budget check at a step boundary. Implementations call
+ *  the G6 atomic-increment RPC; if the bucket is exhausted the
+ *  result carries `ok: false` with a reason and the executor aborts
+ *  the step.
+ *
+ *  This shape is consumed by `BudgetHook.checkAndIncrement` (see
+ *  `src/lib/sala/budget-hook.ts`). The contract exposes the SHAPE
+ *  only; binding to the actual G6 RPC happens at executor wire-up
+ *  time (post-#8 freeze · §144 Emilio). */
+export interface BudgetCheckResult {
+  readonly ok: boolean
+  readonly bucketKey: string
+  readonly remainingCostUsd?: number
+  readonly remainingSteps?: number
+  readonly reason?: string
+}
+
 // ─── 4 · Logical period (Opus #7 Q5 freeze · typed union) ───────────
 //
 // The logical period drives idempotency · it is THE field whose
@@ -237,7 +292,21 @@ export interface SalaExecutor {
   register<TInput, TOutput>(
     operationType: string,
     fn: DurableFunction<TInput, TOutput>,
-    options: { readonly retry: RetryPolicy },
+    options: {
+      readonly retry: RetryPolicy
+      /** Optional per-handler budget cap. When present, the
+       *  implementation enforces this cap at step boundaries via the
+       *  atomic counter (G6 `rate_limit_buckets.increment_bucket_atomic`).
+       *  Absent means no per-run cap from this layer · external
+       *  window-based caps may still apply.
+       *
+       *  Opus §H-d (5th pecado · CAP convergence) · the cap is more
+       *  essential in the Sala than in the daemon because cascades +
+       *  fan-out gates amplify a single trigger into many legitimate
+       *  dispatches. Idempotency stops duplicates; only this stops a
+       *  legitimate runaway. */
+      readonly budget?: BudgetPolicy
+    },
   ): void
 
   /** Enqueue a durable execution.
