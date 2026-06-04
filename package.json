@@ -5,9 +5,18 @@
   "description": "Zero Risk V2 — Marketing automation platform (single-tenant)",
   "pnpm": {
     "supportedArchitectures": {
-      "os": ["current", "linux"],
-      "cpu": ["current", "x64"],
-      "libc": ["current", "glibc"]
+      "os": [
+        "current",
+        "linux"
+      ],
+      "cpu": [
+        "current",
+        "x64"
+      ],
+      "libc": [
+        "current",
+        "glibc"
+      ]
     }
   },
   "scripts": {
@@ -36,6 +45,7 @@
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "framer-motion": "^11.5.0",
+    "inngest": "^4.5.0",
     "next": "^14.2.0",
     "pg": "^8.13.0",
     "posthog-node": "^5.30.4",
