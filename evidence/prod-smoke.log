@@ -1,0 +1,20 @@
+[smoke-rls] === Sprint 11 Ola 1 · RLS deny-all lockdown verification ===
+
+[smoke-rls] FASE A · anon denied · 14 tablas RLS deny-all SIN excepción
+[smoke-rls] FASE A · ✅ PASS · {"tables_tested":14,"all_three_ops_blocked":true,"leak_count":0,"leaks":[],"sample_clean_probe":{"table":"client_reports","select_blocked":true,"insert_blocked":true,"delete_blocked":true,"select_error_or_empty":"empty_data_array_canon_RLS_filtered","insert_error":"PGRST204","delete_error":"42501"}}
+
+[smoke-rls] FASE B · service_role bypass · backend intacto
+[smoke-rls] FASE B · ✅ PASS · {"tables_tested":14,"all_select_ok":true,"select_failures":[],"sample_insert_ok":true,"sample_insert_error":null,"sample_insert_table":"settings","canon_note":"service_role bypasea RLS canon canonical Supabase default · backend SUPABASE_SERVICE_ROLE_KEY intacto"}
+
+[smoke-rls] FASE C · 5 vistas SECURITY INVOKER · anon no ve PII subyacente
+[smoke-rls] FASE C · ✅ PASS · {"views_tested":5,"all_anon_blocked_or_empty":true,"all_svc_ok":true,"leaks":[],"svc_failures":[],"canon_note":"SECURITY INVOKER · vistas respetan RLS de tablas base · anon no salta el filtro"}
+
+[smoke-rls] FASE D · final cleanup canon canonical
+[smoke-rls] FASE D · ✅ PASS · {"settings_smoke_rows_deleted":0,"delete_error":null}
+
+[smoke-rls] === SUMMARY ===
+  Fase A · anon denied 14 tablas · ✅ · 4091ms
+  Fase B · service_role bypass intacto · ✅ · 1448ms
+  Fase C · 5 vistas SECURITY INVOKER · ✅ · 929ms
+  Fase D · cleanup canon canonical · ✅ · 92ms
+[smoke-rls] ✅ ALL PHASES PASS · RLS lockdown VERIFIED canon canonical · ready Emilio §144 prod approval

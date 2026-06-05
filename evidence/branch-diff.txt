@@ -1,0 +1,221 @@
+--- evidence/branch-pre.json	2026-05-31 18:13:51.699085200 +0200
++++ evidence/branch-post.json	2026-05-31 18:15:44.063727900 +0200
+@@ -1,6 +1,6 @@
+ {
+-  "label": "pre-migration",
+-  "started_at": "2026-05-31T16:13:45.860Z",
++  "label": "post-migration",
++  "started_at": "2026-05-31T16:15:37.376Z",
+   "supabase_url": "https://gywzghonodutfjfthrnu...(redacted)",
+   "summary": {
+     "tables_tested": 14,
+@@ -48,11 +48,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -71,11 +71,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -94,11 +94,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -117,11 +117,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -140,11 +140,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -163,11 +163,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -186,11 +186,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -209,11 +209,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -232,11 +232,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -255,11 +255,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -278,11 +278,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -301,11 +301,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -324,11 +324,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -347,11 +347,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
