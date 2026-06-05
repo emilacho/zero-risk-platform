@@ -220,7 +220,8 @@ describe('POST /api/sala/intake · enabled · accepted path', () => {
     expect(body.kind).toBe('accepted')
     expect(body.journey_type).toBe('ONBOARD')
     expect(body.worker_workflow_id).toBe('LyVoKcrypS5uLyuu')
-    expect(body.stream_id.startsWith('sala/v1/')).toBe(true)
+    // Phase 1.1 · mintStreamId now returns UUID v5 (was sala/v1/ text).
+    expect(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.stream_id)).toBe(true)
     expect(body.inserted).toBe(true)
   })
 

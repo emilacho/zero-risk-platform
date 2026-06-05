@@ -76,6 +76,25 @@ export async function dispatchOneIntake(
   }
   const idempotency_key = buildIdempotencyKey(idempotency_inputs)
 
+  // Phase 1.1 (2026-06-05 first-fire gap #1 fix) · forward the
+  // envelope_payload from the intake event to the dispatcher as
+  // `business_payload`. The dispatcher spreads it INTO the webhook
+  // body BEFORE the sala metadata (sala fields always win on
+  // collision). Without this, source-supplied business fields like
+  // `client_name · website · industry · contract_scope` never reach
+  // the worker's Validate Deal Data node.
+  const intake_payload = (intake.source_event.payload ?? {}) as Record<
+    string,
+    unknown
+  >
+  const raw_envelope_payload = intake_payload.envelope_payload
+  const business_payload =
+    raw_envelope_payload &&
+    typeof raw_envelope_payload === 'object' &&
+    !Array.isArray(raw_envelope_payload)
+      ? (raw_envelope_payload as Record<string, unknown>)
+      : undefined
+
   const decision: DispatchDecision = {
     kind: 'dispatch',
     stream_id: intake.stream_id,
@@ -96,6 +115,7 @@ export async function dispatchOneIntake(
       webhook_path: map_target.webhook_path,
       webhook_url: '', // dispatcher derives from n8n_base_url + webhook_path
     },
+    ...(business_payload ? { business_payload } : {}),
   }
 
   // ─── 3 · fire via workflow-dispatcher · Model B (#172) ───

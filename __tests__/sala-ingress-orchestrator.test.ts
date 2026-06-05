@@ -112,7 +112,8 @@ describe('orchestrateIngress · accepted path · tier A internal_key', () => {
     if (r.kind === 'accepted') {
       expect(r.journey_type).toBe('ONBOARD')
       expect(r.worker_workflow_id).toBe('LyVoKcrypS5uLyuu')
-      expect(r.stream_id.startsWith('sala/v1/')).toBe(true)
+      // Phase 1.1 · mintStreamId now returns UUID v5 (was sala/v1/ text).
+      expect(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(r.stream_id)).toBe(true)
       expect(r.inserted).toBe(true)
     }
     const events = await storage.select({ tenant_id: 'naufrago' })
@@ -331,7 +332,7 @@ describe('orchestrateIngress · stream_id + correlation_id minting (§149)', () 
     const tables = new InMemoryIngressTables()
       .seedSource(TIER_A_EMILIO)
       .seedRule(RULE_EMILIO_ONBOARD)
-    const envelope = emilioEnvelope({ stream_id: 'sala/v1/import/custom' })
+    const envelope = emilioEnvelope({ stream_id: '11111111-2222-3333-4444-555555555555' })
     const r = await orchestrateIngress({
       envelope,
       auth_request: { source: envelope.source, internal_key: 'x' },
@@ -339,7 +340,7 @@ describe('orchestrateIngress · stream_id + correlation_id minting (§149)', () 
       storage: new InMemoryEventLogStorage(),
       auth_secret_override: 'x',
     })
-    if (r.kind === 'accepted') expect(r.stream_id).toBe('sala/v1/import/custom')
+    if (r.kind === 'accepted') expect(r.stream_id).toBe('11111111-2222-3333-4444-555555555555')
   })
 
   it('uses caller correlation_id when present', async () => {

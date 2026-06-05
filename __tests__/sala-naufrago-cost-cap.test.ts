@@ -12,6 +12,8 @@ import {
   NAUFRAGO_DAILY_ALERT_USD,
   NAUFRAGO_PHASE1_RUN_CAP_USD,
   NAUFRAGO_TENANT_ID_HINT,
+  NAUFRAGO_TENANT_ID_UUID,
+  NAUFRAGO_TENANT_IDS,
 } from '@/lib/sala-journey-dispatch'
 
 describe('Náufrago cost cap · canon constants', () => {
@@ -21,8 +23,60 @@ describe('Náufrago cost cap · canon constants', () => {
   it('canon · USD 10.00 daily alert threshold (G5 canon)', () => {
     expect(NAUFRAGO_DAILY_ALERT_USD).toBe(10.0)
   })
-  it('canon · tenant_id hint matches Náufrago piloto label', () => {
+  it('canon · tenant_id hint matches Náufrago piloto label (legacy alias)', () => {
     expect(NAUFRAGO_TENANT_ID_HINT).toBe('naufrago')
+  })
+  it('canon · tenant_id UUID matches Náufrago client_id (Phase 1.1 gap #2 fix)', () => {
+    // sala_event_log.tenant_id is UUID-typed · the cap MUST engage on UUID.
+    expect(NAUFRAGO_TENANT_ID_UUID).toBe('d69100b5-8ad7-4bb0-908c-68b5544065dc')
+  })
+  it('canon · both UUID and legacy alias engage the cap (alias set)', () => {
+    expect(NAUFRAGO_TENANT_IDS.has(NAUFRAGO_TENANT_ID_UUID)).toBe(true)
+    expect(NAUFRAGO_TENANT_IDS.has(NAUFRAGO_TENANT_ID_HINT)).toBe(true)
+  })
+})
+
+describe('Náufrago cap · Phase 1.1 gap #2 · UUID engagement (MANDATORY)', () => {
+  it('canon · cap ENGAGES when tenant_id is the canonical UUID + over cap', () => {
+    const r = evaluateNaufragoRunCap({
+      tenant_id: NAUFRAGO_TENANT_ID_UUID,
+      spent_usd: 5.0,
+      enforce: true,
+    })
+    expect(r.verdict).toBe('block')
+    if (r.verdict === 'block') {
+      expect(r.reason).toBe('over_cap')
+      expect(r.cap_usd).toBe(5.0)
+    }
+  })
+
+  it('canon · cap PASSES (under_cap) when UUID + under cap', () => {
+    const r = evaluateNaufragoRunCap({
+      tenant_id: NAUFRAGO_TENANT_ID_UUID,
+      spent_usd: 2.5,
+      enforce: true,
+    })
+    expect(r.verdict).toBe('pass')
+    if (r.verdict === 'pass') expect(r.reason).toBe('under_cap')
+  })
+
+  it('canon · legacy string alias still engages (backwards-compat)', () => {
+    const r = evaluateNaufragoRunCap({
+      tenant_id: NAUFRAGO_TENANT_ID_HINT, // 'naufrago'
+      spent_usd: 7.5,
+      enforce: true,
+    })
+    expect(r.verdict).toBe('block')
+  })
+
+  it('canon · random UUID is NOT Náufrago tenant (cap does NOT engage)', () => {
+    const r = evaluateNaufragoRunCap({
+      tenant_id: '11111111-2222-3333-4444-555555555555',
+      spent_usd: 100,
+      enforce: true,
+    })
+    expect(r.verdict).toBe('pass')
+    if (r.verdict === 'pass') expect(r.reason).toBe('other_tenant')
   })
 })
 
@@ -129,12 +183,16 @@ describe('getNaufragoCapSnapshot · introspection', () => {
     else process.env.SALA_NAUFRAGO_RUN_CAP_ENFORCE = orig
   })
 
-  it('canon · snapshot includes cap + alert + enforced state + canon source', () => {
+  it('canon · snapshot includes cap + alert + enforced state + canon source + UUID tenant fields', () => {
     delete process.env.SALA_NAUFRAGO_RUN_CAP_ENFORCE
     const snap = getNaufragoCapSnapshot()
     expect(snap.cap_usd).toBe(5.0)
     expect(snap.daily_alert_usd).toBe(10.0)
     expect(snap.tenant_id_hint).toBe('naufrago')
+    expect(snap.tenant_id_uuid).toBe(NAUFRAGO_TENANT_ID_UUID)
+    expect(snap.tenant_ids_accepted).toEqual(
+      expect.arrayContaining([NAUFRAGO_TENANT_ID_UUID, NAUFRAGO_TENANT_ID_HINT]),
+    )
     expect(snap.enforced).toBe(false)
     expect(snap.enforce_env_var).toBe('SALA_NAUFRAGO_RUN_CAP_ENFORCE')
     expect(snap.canon_source).toMatch(/SEAM-CLOSE-modelb-shadow-2026-06-05/)
