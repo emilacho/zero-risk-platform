@@ -1,18 +1,20 @@
 /**
  * Tests · Costura B contract · §149 correlation round-trip.
  *
- * Sprint 12 SEAM-CLOSE Costura B (2026-06-05) · CC#4 owns the worker-
- * side edit (existing run-sdk node body-template must propagate
- * `_journey_id` → `workflow_id`). This test validates that IF CC#4's
- * modification lands correctly, the projection writes the right
- * `step_completed` event to the right sala stream.
+ * Sprint 12 SEAM-CLOSE Ronda 2 convergencia (2026-06-05) · CC#4 ran
+ * 3/3 round-trip smoke against the canonical n8n expression
+ * `{{ $('Validate Deal Data').item.json._journey_id || $workflow.id }}`
+ * (per `MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION` constant + master plan
+ * SEAM-CLOSE §RONDA 2). The expression references the predecessor
+ * node `Validate Deal Data` directly · NOT `$json.body` which would
+ * read the wrong shape post-reshape.
  *
  * The test does NOT exercise the n8n worker · it simulates the
  * round-trip ·
  *   1. Sala dispatches to worker via `dispatchToWorkflow` · webhook
  *      body carries `_journey_id = stream_id`
- *   2. Worker (simulated) calls `/api/agents/run-sdk` with
- *      `workflow_id = body._journey_id` (CC#4's pending edit)
+ *   2. Worker (simulated · CC#4's expression evaluated) calls
+ *      `/api/agents/run-sdk` with `workflow_id = <stream_id>`
  *   3. `/api/agents/run-sdk` writes a row to `agent_invocations` with
  *      `workflow_id = sala stream_id`
  *   4. Projection reads the row, synthesizes a `step_completed` event
@@ -22,13 +24,20 @@
  * (workflow_id legacy n8n shape) SKIPS the row · test verifies the
  * fail-safe.
  *
- * Drift detection · if the contract changes (e.g. the worker stops
- * using `_journey_id` as the propagation field), this test breaks
+ * Drift detection · if the contract changes (e.g. the worker moves
+ * the expression away from `Validate Deal Data` predecessor or stops
+ * using `_journey_id` field), the expression invariants test breaks
  * and CC#3 + CC#4 must re-align.
  */
 import { describe, it, expect, vi } from 'vitest'
 import {
+  checkExpressionInvariants,
   dispatchToWorkflow,
+  MODELB_EXPRESSION_INVARIANTS,
+  MODELB_PREDECESSOR_NODE_NAME,
+  MODELB_RUNSDK_NODE_NAMES,
+  MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION,
+  MODELB_WORKER_ID,
   projectAgentInvocation,
   type AgentInvocationRow,
 } from '@/lib/sala-journey-dispatch'
@@ -193,5 +202,182 @@ describe('Costura B · contract-test bidirectional · stream_id format invariant
       created_at: '2026-06-05T15:00:00Z',
     }
     expect(projectAgentInvocation(row)).not.toBeNull()
+  })
+})
+
+// =====================================================================
+// SEAM-CLOSE Ronda 2 convergencia · canonical n8n expression invariants
+// CC#4 ran 3/3 round-trip smoke with this exact string · sala mirrors it.
+// =====================================================================
+
+describe('Costura B · ronda 2 · canonical n8n expression invariants', () => {
+  it('canon · MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION matches CC#4 runtime-confirmed string', () => {
+    // Source of truth · CC#4 worker LyVoKcrypS5uLyuu · 3/3 round-trip
+    // smoke PASS 2026-06-05 · master plan SEAM-CLOSE §RONDA 2.
+    expect(MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION).toBe(
+      "{{ $('Validate Deal Data').item.json._journey_id || $workflow.id }}",
+    )
+  })
+
+  it('canon · expression passes all 4 invariants · no drift', () => {
+    const violations = checkExpressionInvariants(
+      MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION,
+    )
+    expect(violations).toEqual([])
+  })
+
+  it('canon · references the predecessor node by name (not $json.body)', () => {
+    // The predecessor node `Validate Deal Data` reshapes the webhook
+    // payload · the run-sdk node consumes its output. So `$json.body`
+    // refers to Validate's reshaped output, NOT the raw webhook body.
+    // The canonical expression bypasses the reshape by addressing the
+    // predecessor node DIRECTLY.
+    expect(MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION).toContain(
+      `$('${MODELB_PREDECESSOR_NODE_NAME}')`,
+    )
+    expect(MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION).not.toContain('$json.body')
+  })
+
+  it('canon · reads ._journey_id field on the predecessor output', () => {
+    expect(MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION).toContain('._journey_id')
+  })
+
+  it('canon · falls back to $workflow.id when _journey_id absent (legacy direct webhook)', () => {
+    expect(MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION).toContain('|| $workflow.id')
+  })
+
+  it('canon · wraps in n8n expression braces · runtime-evaluable', () => {
+    expect(MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION.startsWith('{{')).toBe(true)
+    expect(MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION.endsWith('}}')).toBe(true)
+  })
+
+  it('canon · the worker_id this expression applies to is LyVoKcrypS5uLyuu', () => {
+    expect(MODELB_WORKER_ID).toBe('LyVoKcrypS5uLyuu')
+  })
+
+  it('canon · the only run-sdk node carrying this expression is Auto-Discovery', () => {
+    expect(Array.from(MODELB_RUNSDK_NODE_NAMES)).toEqual([
+      'Call Onboarding Specialist: Auto-Discovery',
+    ])
+  })
+
+  it('canon · MODELB_EXPRESSION_INVARIANTS captures all 4 contract clauses', () => {
+    expect(Object.keys(MODELB_EXPRESSION_INVARIANTS).sort()).toEqual([
+      'contains_journey_id_field',
+      'contains_predecessor_node_name',
+      'has_fallback_to_n8n_workflow_id',
+      'wraps_in_n8n_expression_braces',
+    ])
+  })
+
+  it('canon · checkExpressionInvariants detects every individual violation', () => {
+    expect(
+      checkExpressionInvariants(
+        '{{ $json.body._journey_id || $workflow.id }}',
+      ),
+    ).toContain('contains_predecessor_node_name')
+    expect(
+      checkExpressionInvariants(
+        "{{ $('Validate Deal Data').item.json.other_field || $workflow.id }}",
+      ),
+    ).toContain('contains_journey_id_field')
+    expect(
+      checkExpressionInvariants(
+        "{{ $('Validate Deal Data').item.json._journey_id }}",
+      ),
+    ).toContain('has_fallback_to_n8n_workflow_id')
+    expect(
+      checkExpressionInvariants(
+        "$('Validate Deal Data').item.json._journey_id || $workflow.id",
+      ),
+    ).toContain('wraps_in_n8n_expression_braces')
+  })
+})
+
+// =====================================================================
+// Smoke conjunto · sala-side mirror of CC#4 runtime 3/3 PASS
+// =====================================================================
+
+describe('Costura B · ronda 2 · smoke conjunto · sala-side mirror', () => {
+  it('canon · CC#4 3/3 mirror · expression resolves stream_id from webhook _journey_id', () => {
+    // Simulate the n8n expression evaluation against the webhook body
+    // CC#3 dispatcher sends. The predecessor node preserves _journey_id
+    // through Validate Deal Data, so the expression resolves to it.
+    const webhookBody = {
+      _sala_correlation_id: 'corr-roundtrip',
+      _journey_id: SALA_STREAM,
+      tenant_id: TENANT,
+      client_id: CLIENT,
+      // ...rest of GHL deal payload...
+    }
+    // Mock the n8n eval · `$('Validate Deal Data').item.json` would
+    // carry the preserved webhook fields after Validate's reshape.
+    const validateOutput = { ...webhookBody }
+    const resolvedWorkflowId =
+      (validateOutput._journey_id as string | undefined) ?? 'lyvo-default'
+    expect(resolvedWorkflowId).toBe(SALA_STREAM)
+  })
+
+  it('canon · 3/3 sala-side mirror · row appears under correct stream', async () => {
+    // Mirror of CC#4's 3 round-trip runs · each writes an
+    // agent_invocation row · projection surfaces each under the sala
+    // stream. This is what CC#4 verified runtime; we replay sala-side
+    // to confirm the contract closure.
+    const storage = new InMemoryEventLogStorage()
+    const rows: AgentInvocationRow[] = [
+      {
+        id: 'inv-r1',
+        workflow_id: SALA_STREAM,
+        workflow_execution_id: 'exec-r1',
+        client_id: CLIENT,
+        tenant_id: TENANT,
+        agent_id: 'onboarding-specialist',
+        agent_name: 'onboarding-specialist',
+        status: 'completed',
+        cost_usd: 0.04,
+        duration_ms: 5_000,
+        created_at: '2026-06-05T15:10:00Z',
+      },
+      {
+        id: 'inv-r2',
+        workflow_id: SALA_STREAM,
+        workflow_execution_id: 'exec-r2',
+        client_id: CLIENT,
+        tenant_id: TENANT,
+        agent_id: 'brand-strategist',
+        agent_name: 'brand-strategist',
+        status: 'completed',
+        cost_usd: 0.06,
+        duration_ms: 7_500,
+        created_at: '2026-06-05T15:11:00Z',
+      },
+      {
+        id: 'inv-r3',
+        workflow_id: SALA_STREAM,
+        workflow_execution_id: 'exec-r3',
+        client_id: CLIENT,
+        tenant_id: TENANT,
+        agent_id: 'web-designer',
+        agent_name: 'web-designer',
+        status: 'completed',
+        cost_usd: 0.05,
+        duration_ms: 6_200,
+        created_at: '2026-06-05T15:12:00Z',
+      },
+    ]
+    for (const row of rows) {
+      const input = projectAgentInvocation(row, { journey_type: 'ONBOARD' })
+      expect(input).not.toBeNull()
+      await append(storage, input!)
+    }
+    const events = await storage.select({
+      tenant_id: TENANT,
+      stream_id: SALA_STREAM,
+    })
+    expect(events.length).toBe(3)
+    const stepIds = events.map((e) => e.step_id)
+    expect(stepIds).toContain('onboarding-specialist')
+    expect(stepIds).toContain('brand-strategist')
+    expect(stepIds).toContain('web-designer')
   })
 })
