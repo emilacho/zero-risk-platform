@@ -123,8 +123,15 @@ describe('writeDeadLetter · happy path', () => {
     )
     expect(storage.insert).toHaveBeenCalledTimes(1)
     expect(inserts[0]!.event_type).toBe('dead_letter')
-    expect(inserts[0]!.tenant_id).toBe('synthetic')
-    expect(inserts[0]!.client_id).toBe('c-canary')
+    // tenant_id + client_id + stream_id + correlation_id are UUID-typed
+    // columns · since buildCtx passes non-UUID strings, the writer
+    // substitutes synthetic UUIDs and stashes originals in payload.
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    expect(inserts[0]!.tenant_id).toMatch(UUID_RE)
+    expect(inserts[0]!.client_id).toMatch(UUID_RE)
+    expect(inserts[0]!.stream_id).toMatch(UUID_RE)
+    expect(inserts[0]!.correlation_id).toMatch(UUID_RE)
     expect(inserts[0]!.operation_type).toBe('synthetic-durability-test')
     expect(inserts[0]!.journey_type).toBe('ONBOARD')
     expect(inserts[0]!.workflow_run_id).toBe('inngest-run-abc-123')
@@ -137,6 +144,12 @@ describe('writeDeadLetter · happy path', () => {
     expect(payload.dead_lettered_at).toBe(
       new Date(1780_000_000_000).toISOString(),
     )
+    // Original non-UUID identifiers preserved in payload.
+    const originals = payload.original_identifiers as Record<string, unknown>
+    expect(originals.tenant_id).toBe('synthetic')
+    expect(originals.client_id).toBe('c-canary')
+    expect(originals.stream_id).toBe('synthetic/c-canary/ONBOARD/2026-W23')
+    expect(originals.correlation_id).toBe('corr-001')
   })
 
   it('fires Slack webhook with [DLQ] format when URL provided', async () => {
@@ -179,6 +192,48 @@ describe('writeDeadLetter · happy path', () => {
     const body = JSON.parse(calls[0]![1].body as string) as { text: string }
     // header is "[DLQ] X · function · " + 200-char error excerpt
     expect(body.text.length).toBeLessThanOrEqual(280)
+  })
+
+  it('passes through caller-provided UUIDs without substitution', async () => {
+    const VALID_TENANT = '11111111-2222-4333-8444-555555555555'
+    const VALID_CLIENT = '22222222-3333-4444-8555-666666666666'
+    const VALID_STREAM = '33333333-4444-4555-8666-777777777777'
+    const VALID_CORR = '44444444-5555-4666-8777-888888888888'
+    const { storage, inserts } = fakeStorage()
+    await writeDeadLetter(
+      buildCtx({
+        trigger_event: {
+          id: 'evt-uuid-1',
+          name: 'synthetic/durability.test',
+          data: {
+            tenant_id: VALID_TENANT,
+            client_id: VALID_CLIENT,
+            stream_id: VALID_STREAM,
+            correlation_id: VALID_CORR,
+            journey_type: 'ONBOARD',
+            logical_period: '2026-W23',
+          },
+          ts: 1780_000_000_000,
+        },
+      }),
+      asDeps({
+        storage,
+        slackWebhookUrl: 'https://slack.test/hook',
+        logger: silentLogger(),
+        fetchImpl: vi.fn(async () => ({ ok: true, status: 200 } as Response)),
+      }),
+    )
+    expect(inserts[0]!.tenant_id).toBe(VALID_TENANT)
+    expect(inserts[0]!.client_id).toBe(VALID_CLIENT)
+    expect(inserts[0]!.stream_id).toBe(VALID_STREAM)
+    expect(inserts[0]!.correlation_id).toBe(VALID_CORR)
+    // No substitution → originals should be null in payload.
+    const originals = (inserts[0]!.payload as Record<string, unknown>)
+      .original_identifiers as Record<string, unknown>
+    expect(originals.tenant_id).toBeNull()
+    expect(originals.client_id).toBeNull()
+    expect(originals.stream_id).toBeNull()
+    expect(originals.correlation_id).toBeNull()
   })
 
   it('builds a unique idempotency_key per terminal failure (no dedup collapse)', async () => {
@@ -382,8 +437,11 @@ describe('buildDeadLetterFailureHandler · Inngest onFailure wire shape', () => 
       }),
     ).resolves.toBeUndefined()
     const insertArg = insertFn.mock.calls[0]![0] as Record<string, unknown>
-    expect(insertArg.tenant_id).toBe('unknown')
-    expect(insertArg.client_id).toBe('unknown')
+    // No tenant_id/client_id in trigger event → writer substitutes UUIDs.
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    expect(insertArg.tenant_id).toMatch(UUID_RE)
+    expect(insertArg.client_id).toMatch(UUID_RE)
     expect((insertArg.payload as Record<string, unknown>).final_error).toBe(
       'string-error',
     )
