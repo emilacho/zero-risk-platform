@@ -95,7 +95,7 @@ describe('POST /api/sala/events/append · feature flag (default-OFF)', () => {
         client_id: CLIENT,
         stream_id: STREAM,
         journey_type: 'ONBOARD',
-        phase_step_id: 'deal_won_received',
+        phase_step_id: 'INTAKE',
       }),
     )
     expect(res.status).toBe(503)
@@ -123,7 +123,7 @@ describe('POST /api/sala/events/append · auth + body validation', () => {
         client_id: CLIENT,
         stream_id: STREAM,
         journey_type: 'ONBOARD',
-        phase_step_id: 'deal_won_received',
+        phase_step_id: 'INTAKE',
       }),
     )
     expect(res.status).toBe(401)
@@ -202,7 +202,7 @@ describe('POST /api/sala/events/append · reconcile + append happy path', () => 
           client_id: CLIENT,
           stream_id: STREAM,
           journey_type: 'ONBOARD',
-          phase_step_id: 'deal_won_received',
+          phase_step_id: 'INTAKE',
         },
         { 'x-api-key': 'test-key' },
       ),
@@ -214,7 +214,7 @@ describe('POST /api/sala/events/append · reconcile + append happy path', () => 
     expect(body.appended_event_id).toBeDefined()
     const events = await sharedStorage.select({ tenant_id: TENANT, stream_id: STREAM })
     expect(events.length).toBe(1)
-    expect(events[0].step_id).toBe('deal_won_received')
+    expect(events[0].step_id).toBe('INTAKE')
   })
 
   it('canon · skipped_ahead is appended AND reported (NEVER halts)', async () => {
@@ -226,7 +226,7 @@ describe('POST /api/sala/events/append · reconcile + append happy path', () => 
           client_id: CLIENT,
           stream_id: STREAM,
           journey_type: 'ONBOARD',
-          phase_step_id: 'success_plan_built', // skipped 3 ahead
+          phase_step_id: 'SCHEDULING', // skipped 3 ahead
         },
         { 'x-api-key': 'test-key' },
       ),
@@ -249,7 +249,7 @@ describe('POST /api/sala/events/append · reconcile + append happy path', () => 
           client_id: CLIENT,
           stream_id: STREAM,
           journey_type: 'ONBOARD',
-          phase_step_id: 'made_up_step',
+          phase_step_id: 'MADE_UP_PHASE',
         },
         { 'x-api-key': 'test-key' },
       ),
@@ -270,7 +270,7 @@ describe('POST /api/sala/events/append · reconcile + append happy path', () => 
           client_id: CLIENT,
           stream_id: STREAM,
           journey_type: 'ONBOARD',
-          phase_step_id: 'deal_won_received',
+          phase_step_id: 'INTAKE',
         },
         { 'x-api-key': 'test-key' },
       ),
@@ -282,7 +282,7 @@ describe('POST /api/sala/events/append · reconcile + append happy path', () => 
           client_id: CLIENT,
           stream_id: STREAM,
           journey_type: 'ONBOARD',
-          phase_step_id: 'onboarding_specialist_done',
+          phase_step_id: 'DISCOVERY',
         },
         { 'x-api-key': 'test-key' },
       ),
@@ -290,7 +290,7 @@ describe('POST /api/sala/events/append · reconcile + append happy path', () => 
     expect(res2.status).toBe(200)
     const body = await res2.json()
     expect(body.reconcile.kind).toBe('match')
-    expect(body.reconcile.expected_next).toBe('notion_workspace_created')
+    expect(body.reconcile.expected_next).toBe('WORKSPACE')
   })
 })
 

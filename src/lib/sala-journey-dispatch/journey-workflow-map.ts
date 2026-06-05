@@ -19,8 +19,39 @@
  * §148 explicit · this file is READ-ONLY data · cero side effects.
  * Reversibility · removing an entry returns the journey to legacy
  * `target='agent'` path (router default behavior).
+ *
+ * Costura C (closure 2026-06-05) · `phase_boundaries` MUST mirror the
+ * 7 canonical phases that CC#4 wired in the worker
+ * `modelb-phase-boundary-emit` node payload schema · MODELB-ADAPTER
+ * contract §1.3 + §2.2. Contract test
+ * `__tests__/sala-modelb-contract-phase-taxonomy.test.ts` ENFORCES
+ * exact match · drift on either side breaks CI.
  */
 import type { JourneyType } from '@/lib/sala/libretos'
+
+/**
+ * Canon canonical · the 7 canonical phases CC#4 emits from the n8n
+ * worker `LyVoKcrypS5uLyuu` per the Model B contract spec §1.3 + §2.2.
+ *
+ * Order canon · matches the worker's execution sequence (APIFY_WIRE is
+ * parallel from the webhook but emits last in the canonical ordering
+ * for OBSERVE reconciliation per the contract doc Open-question §5.1).
+ *
+ * §148 honest · CC#4 owns this list on the worker side · sala mirrors
+ * it here · drift breaks the contract test in CI.
+ */
+export const CANONICAL_PHASES_LyVoKcrypS5uLyuu = Object.freeze([
+  'INTAKE',
+  'DISCOVERY',
+  'WORKSPACE',
+  'SCHEDULING',
+  'NOTIFICATION',
+  'CASCADE',
+  'APIFY_WIRE',
+] as const)
+
+export type CanonicalPhaseLyVo =
+  (typeof CANONICAL_PHASES_LyVoKcrypS5uLyuu)[number]
 
 export interface JourneyWorkflowTarget {
   /** Canon canonical · n8n workflow_id (from `GET /api/v1/workflows`). */
@@ -32,9 +63,10 @@ export interface JourneyWorkflowTarget {
   /** Canon canonical · human-readable name for audit + Slack alerts. */
   readonly worker_name: string
   /** Canon canonical · phase boundaries the worker emits to
-   *  `/api/sala/events/append` for OBSERVE-mode reconciliation.
-   *  When the sala receives one of these step_ids, it compares against
-   *  the libreto's expected next step · mismatch → alert. */
+   *  `/api/sala/ingress` for OBSERVE-mode reconciliation. Aligned to
+   *  the 7 canonical phases per CC#4 contract spec §1.3. When the
+   *  sala receives one of these phase names, it compares against the
+   *  libreto's expected next phase · mismatch → alert. */
   readonly phase_boundaries: ReadonlyArray<string>
   /** Canon canonical · idempotency suffix · combined with stream_id
    *  to derive the dispatch idempotency key · two dispatch-decisions
@@ -55,16 +87,7 @@ export const JOURNEY_WORKFLOW_MAP: Readonly<
     workflow_id: 'LyVoKcrypS5uLyuu',
     webhook_path: 'zero-risk/deal-won-onboarding',
     worker_name: 'Client Onboarding E2E v2 (Webhook Deal Won)',
-    phase_boundaries: [
-      'deal_won_received',
-      'onboarding_specialist_done',
-      'notion_workspace_created',
-      'success_plan_built',
-      'kickoff_scheduled',
-      'mc_inbox_notified',
-      'cliente_persisted',
-      'journey_completed',
-    ],
+    phase_boundaries: CANONICAL_PHASES_LyVoKcrypS5uLyuu,
     idempotency_suffix: 'onboard-worker-dispatch',
   },
   // PRODUCE, ACQUIRE, ALWAYS_ON, REVIEW, GROWTH · intentionally
@@ -85,4 +108,10 @@ export function getJourneyWorkflowTarget(
  *  worker-driven OR agent-driven flow. */
 export function isWorkflowJourney(journey_type: JourneyType): boolean {
   return getJourneyWorkflowTarget(journey_type) !== undefined
+}
+
+/** Canon canonical · helper · whether a phase name is one of the 7
+ *  canonical phases CC#4 emits from the worker. */
+export function isCanonicalPhase(name: string): name is CanonicalPhaseLyVo {
+  return (CANONICAL_PHASES_LyVoKcrypS5uLyuu as ReadonlyArray<string>).includes(name)
 }
