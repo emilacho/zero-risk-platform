@@ -113,6 +113,12 @@ export async function decide(input: DecideInput): Promise<Decision[]> {
     case 'judgment_resolved':
     case 'budget_blocked':
       return resolveDecision(input, libreto, current_step)
+    case 'dead_letter':
+      // DLQ Option A · terminal failure already recorded by Inngest
+      // onFailure handler · router has NO further routing decision to
+      // make (the run is dead by definition). Returning empty decisions
+      // is correct · the event-log row is the canonical artifact.
+      return []
     default:
       // Compile-time exhaustiveness · this `never` shouts if a new
       // event_type is added to the schema without updating the router.
