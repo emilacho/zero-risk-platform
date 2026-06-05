@@ -79,6 +79,12 @@ export interface DryRunFakeResponse {
   cacheCreation5mTokens: number
   cacheCreation1hTokens: number
   responseText: string
+  /**
+   * SPEC lazo agentico 2026-06-05 follow-up · Discovery tool capture · always
+   * null in dry-run (the canonical fake doesn't invoke MCP tools · `discoveryToolCall`
+   * surface stays canonical so downstream typing stays simple).
+   */
+  discoveryToolCall: null
 }
 
 /**
@@ -110,6 +116,7 @@ export function buildDryRunFakeResponse(
     responseText:
       `[DRY_RUN] agent=${slug} · task="${taskExcerpt}" · canonical fake response · ` +
       `NO Anthropic API call · NO MCP tools invoked · NO Client Brain enrichment`,
+    discoveryToolCall: null,
   }
 }
 
