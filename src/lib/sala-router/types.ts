@@ -70,6 +70,27 @@ export interface DispatchDecision {
   /** Canon canonical · causation chain · the event_id that triggered
    *  this dispatch (cadena causal · ADR-009 field #8). */
   readonly caused_by_event_id: string
+
+  /** Canon canonical · Model B (conexión 2026-06-05) · which executor
+   *  consumes this dispatch:
+   *    - 'agent'    (default · backwards-compat) · executor invokes
+   *      `/api/agents/run-sdk` directly with `agent_id` as the slug
+   *    - 'workflow' · executor POSTs to the existing n8n workflow
+   *      webhook (see `workflow_target`) and lets the workflow run as-is
+   *      while the sala observes events via projection + callbacks
+   *
+   *  When omitted, callers MUST treat as 'agent' (the legacy path).
+   *  `target='workflow'` is opt-in per JOURNEY_WORKFLOW_MAP lookup. */
+  readonly target?: 'agent' | 'workflow'
+
+  /** Canon canonical · Model B · target details when `target='workflow'`.
+   *  The router populates this from `JOURNEY_WORKFLOW_MAP[journey_type]`
+   *  via the dispatcher's resolver. `target='agent'` leaves it `undefined`. */
+  readonly workflow_target?: {
+    readonly workflow_id: string
+    readonly webhook_path: string
+    readonly webhook_url: string
+  }
 }
 
 /**
