@@ -63,6 +63,15 @@ export {
 } from './webhook-receiver'
 
 export {
+  MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION,
+  MODELB_PREDECESSOR_NODE_NAME,
+  MODELB_RUNSDK_NODE_NAMES,
+  MODELB_WORKER_ID,
+  MODELB_EXPRESSION_INVARIANTS,
+  checkExpressionInvariants,
+} from './modelb-canonical-expression'
+
+export {
   NAUFRAGO_PHASE1_RUN_CAP_USD,
   NAUFRAGO_DAILY_ALERT_USD,
   NAUFRAGO_TENANT_ID_HINT,
