@@ -23,27 +23,34 @@ import {
   inngestClient,
 } from '@/lib/sala/inngest/client'
 import { SYNTHETIC_FUNCTIONS } from '@/lib/sala/inngest/synthetic-functions'
+import {
+  isSyntheticCanaryEnabled,
+  syntheticCanaryFn,
+} from '@/lib/sala/inngest/canary-function'
 
 const mode = getSalaInngestMode()
+const canaryEnabled = isSyntheticCanaryEnabled()
 
-// SHADOW · only synthetic functions. Mode is logged on import (cold
-// start) so the Vercel function log makes the active set explicit
-// for forensic checks.
+// Synthetic function set · the durability probe ships always, the
+// canary is gated by `SALA_CANARY_ENABLED=true` so production runtime
+// stays narrow until Track S finale prep §144 flips it.
+const activeFunctions = canaryEnabled
+  ? ([...SYNTHETIC_FUNCTIONS, syntheticCanaryFn] as Parameters<
+      typeof serve
+    >[0]['functions'])
+  : ([...SYNTHETIC_FUNCTIONS] as Parameters<typeof serve>[0]['functions'])
+
+// Mode + active-function summary is logged on import (cold start) so
+// the Vercel function log makes the registered set explicit for
+// forensic checks.
 // eslint-disable-next-line no-console
 console.log(
-  `[sala/inngest] serve · mode=${mode} · synthetic_count=${SYNTHETIC_FUNCTIONS.length}`,
+  `[sala/inngest] serve · mode=${mode} · canary=${canaryEnabled} · active_count=${activeFunctions.length}`,
 )
 
 const handler = serve({
   client: inngestClient,
-  functions:
-    mode === 'shadow'
-      ? // SHADOW · ONLY the synthetic durability probes register.
-        ([...SYNTHETIC_FUNCTIONS] as Parameters<typeof serve>[0]['functions'])
-      : // LIVE wires in a later §144 step · not authorised today.
-        // Until then, accept synthetics anyway so the endpoint stays
-        // green even with the env flipped accidentally.
-        ([...SYNTHETIC_FUNCTIONS] as Parameters<typeof serve>[0]['functions']),
+  functions: activeFunctions,
 })
 
 export const { GET, POST, PUT } = handler
