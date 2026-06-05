@@ -20,6 +20,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   resolveDiscoverySource,
+  type DiscoveredIcpSegment,
   type DiscoveryOutput,
 } from '@/lib/discovery-output'
 
@@ -67,7 +68,7 @@ const CANONICAL: DiscoveryOutput = {
 describe('CC#3↔CC#4 contract · response.body.discovery_output shape', () => {
   it('canonical 5 top-level keys present + named exactly per spec', () => {
     const r = resolveDiscoverySource({
-      tool_call: { input: CANONICAL, emission_count: 1 },
+      tool_call: { input: CANONICAL as unknown as Record<string, unknown>, emission_count: 1 },
       expected_client_id: NAUFRAGO,
     })
     expect(r.kind).toBe('ok')
@@ -82,7 +83,7 @@ describe('CC#3↔CC#4 contract · response.body.discovery_output shape', () => {
 
   it('own_handles · 5 canonical social platforms · YouTube canonical incl', () => {
     const r = resolveDiscoverySource({
-      tool_call: { input: CANONICAL, emission_count: 1 },
+      tool_call: { input: CANONICAL as unknown as Record<string, unknown>, emission_count: 1 },
       expected_client_id: NAUFRAGO,
     })
     if (r.kind === 'ok') {
@@ -96,7 +97,7 @@ describe('CC#3↔CC#4 contract · response.body.discovery_output shape', () => {
 
   it('competitors[] · each entry has canonical fields CC#4 reads for Apify', () => {
     const r = resolveDiscoverySource({
-      tool_call: { input: CANONICAL, emission_count: 1 },
+      tool_call: { input: CANONICAL as unknown as Record<string, unknown>, emission_count: 1 },
       expected_client_id: NAUFRAGO,
     })
     if (r.kind === 'ok') {
@@ -112,20 +113,26 @@ describe('CC#3↔CC#4 contract · response.body.discovery_output shape', () => {
 
   it('icp · canonical fields surfaced (single segment)', () => {
     const r = resolveDiscoverySource({
-      tool_call: { input: CANONICAL, emission_count: 1 },
+      tool_call: { input: CANONICAL as unknown as Record<string, unknown>, emission_count: 1 },
       expected_client_id: NAUFRAGO,
     })
-    if (r.kind === 'ok' && r.value.icp && !Array.isArray(r.value.icp)) {
-      expect(r.value.icp.audience_segment).toBe('Young professionals · F&B explorers')
-      expect(r.value.icp.segment_priority).toBe(1)
-      expect(r.value.icp.pain_points?.length).toBe(2)
-      expect(r.value.icp.preferred_channels?.length).toBe(2)
+    expect(r.kind).toBe('ok')
+    if (r.kind === 'ok') {
+      const rawIcp = r.value.icp
+      if (!rawIcp || Array.isArray(rawIcp)) {
+        throw new Error('icp expected single object · got array or undefined')
+      }
+      const icp = rawIcp as DiscoveredIcpSegment
+      expect(icp.audience_segment).toBe('Young professionals · F&B explorers')
+      expect(icp.segment_priority).toBe(1)
+      expect(icp.pain_points?.length).toBe(2)
+      expect(icp.preferred_channels?.length).toBe(2)
     }
   })
 
   it('client_id round-trips verbatim · CC#4 verifies via _journey_id in metadata', () => {
     const r = resolveDiscoverySource({
-      tool_call: { input: CANONICAL, emission_count: 1 },
+      tool_call: { input: CANONICAL as unknown as Record<string, unknown>, emission_count: 1 },
       expected_client_id: NAUFRAGO,
     })
     if (r.kind === 'ok') expect(r.value.client_id).toBe(NAUFRAGO)
@@ -133,7 +140,7 @@ describe('CC#3↔CC#4 contract · response.body.discovery_output shape', () => {
 
   it('competitive_landscape_summary surface · single string · NOT split', () => {
     const r = resolveDiscoverySource({
-      tool_call: { input: CANONICAL, emission_count: 1 },
+      tool_call: { input: CANONICAL as unknown as Record<string, unknown>, emission_count: 1 },
       expected_client_id: NAUFRAGO,
     })
     if (r.kind === 'ok') {
@@ -144,7 +151,7 @@ describe('CC#3↔CC#4 contract · response.body.discovery_output shape', () => {
 
   it('canonical · resolved value DEEP-equals tool_call input (no field drop)', () => {
     const r = resolveDiscoverySource({
-      tool_call: { input: CANONICAL, emission_count: 1 },
+      tool_call: { input: CANONICAL as unknown as Record<string, unknown>, emission_count: 1 },
       expected_client_id: NAUFRAGO,
     })
     if (r.kind === 'ok') {
