@@ -42,6 +42,7 @@ import {
   persistDiscoveryToBrain,
   populateClientConfigFromDiscovery,
   resolveDiscoverySource,
+  type DiscoveryOutput,
 } from '@/lib/discovery-output'
 
 export const runtime = 'nodejs'
@@ -624,6 +625,13 @@ export async function POST(request: Request) {
           errors?: readonly string[]
         }
       | undefined
+    // SPEC lazo agentico 2026-06-06 · CC#3↔CC#4 convergence canon ·
+    // surface the resolved DiscoveryOutput in the HTTP response body so the
+    // worker (n8n APIFY_WIRE node) reads `response.body.discovery_output`
+    // for dynamic scrape targets · canonical primary path (path A) ·
+    // `clients.config.apify.competitor_list` populate via Track C stays
+    // synchronous + serves as durable record (path B · backup + dashboards).
+    let discoveryOutputResolved: DiscoveryOutput | undefined
     if (isDiscoveryBrainPushEnabled() && isDiscoveryAgentSlug(agentName) && clientId) {
       try {
         const resolved = resolveDiscoverySource({
@@ -655,6 +663,12 @@ export async function POST(request: Request) {
             duration_ms: brainOutcome.duration_ms,
             errors: [...brainOutcome.errors, ...configOutcome.errors],
           }
+          // Canon canonical · surface the resolved DiscoveryOutput on the
+          // response body for the worker. Only when persist succeeded · the
+          // worker's contract is "discovery_output present = brain+config
+          // populated · safe to consume". Absence on a discovery-agent run
+          // signals the agent didn't emit · worker should branch accordingly.
+          discoveryOutputResolved = resolved.value
         } else {
           discoveryPersist = {
             source: resolved.source,
@@ -688,6 +702,12 @@ export async function POST(request: Request) {
       duration_ms: result.durationMs,
       ...(result.brainEnrichment ? { brain_enrichment: result.brainEnrichment } : {}),
       ...(result.cacheMetrics ? { cache_metrics: result.cacheMetrics } : {}),
+      // SPEC lazo agentico 2026-06-06 CC#3↔CC#4 convergence · path A canonical
+      // (response.body.discovery_output) · the n8n worker reads from here for
+      // APIFY_WIRE dynamic targets. Path B (clients.config.apify.competitor_list)
+      // is populated synchronously by populateClientConfigFromDiscovery and
+      // serves as durable backup record + dashboards source.
+      ...(discoveryOutputResolved ? { discovery_output: discoveryOutputResolved } : {}),
       ...(discoveryPersist ? { discovery_persist: discoveryPersist } : {}),
     }
 
