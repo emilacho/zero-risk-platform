@@ -1,9 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "ghl-send-email",
+  "$id": "ghl-send-email-deprecated",
+  "deprecated": true,
+  "x-deprecated-since": "2026-05-20",
+  "x-deprecated-replacement": "email-send",
+  "x-deprecated-canon": "Stack V4 GHL-Out · use POST /api/email/send (Resend backend) · /api/ghl/send-email is 410 Gone stub. See wiki/decisions/2026-05-21-ghl-mcp-deprecation-stack-v4.md.",
   "type": "object",
-  "title": "POST /api/ghl/send-email",
-  "description": "Bridge to GoHighLevel email send. Required: to_email + subject + body. Optional: contact_id, template_id, client_id (for audit), reply_to, from_name. Email format checked at the schema layer.",
+  "title": "POST /api/ghl/send-email (DEPRECATED · 410 Gone · use /api/email/send)",
+  "description": "DEPRECATED Stack V4 GHL-Out 2026-05-20 · canonical replacement is POST /api/email/send (Resend). Contract preserved for migration audit-trail only. Required: to_email + subject + body. Optional: contact_id, template_id, client_id, reply_to, from_name.",
   "required": ["to_email", "subject", "body"],
   "additionalProperties": true,
   "properties": {
