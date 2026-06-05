@@ -84,6 +84,21 @@ const META_ADS_ALLOW: ReadonlySet<string> = new Set([
   // `raw/qa/2026-05-25-cc2-paid-search-strategist-naming-drift-audit.md`.
 ])
 
+/**
+ * Discovery Output MCP allow-list · SPEC lazo agentico 2026-06-05 follow-up.
+ *
+ * The Auto-Discovery surface · `onboarding-specialist` invokes
+ * `emit_discovery_output` to ship the structured output (own_handles +
+ * competitors + icp + summary). Other agents do NOT need this tool · keeping
+ * the allow-list narrow follows the Sprint 8D default-deny canon.
+ *
+ * Adding new agents · only when their identity_md declares Discovery emission
+ * as a canonical responsibility. Currently · 1 agent (Phase 1 piloto surface).
+ */
+const DISCOVERY_OUTPUT_ALLOW: ReadonlySet<string> = new Set([
+  'onboarding-specialist',
+])
+
 export interface AgentMcpContext {
   agentSlug?: string
   clientId?: string
@@ -204,6 +219,28 @@ export function buildMcpServers(
 
   // GHL MCP · INTENTIONALLY NOT REGISTERED · Stack V4 deprecated · see
   // vault decision `2026-05-21-ghl-mcp-deprecation-stack-v4.md`.
+
+  // Discovery Output MCP · SPEC lazo agentico 2026-06-05 · single tool
+  // `emit_discovery_output` (zod-validated structured output for Auto-Discovery).
+  // Gated by SALA_DISCOVERY_BRAIN_PUSH_ENABLED so disabled = MCP not spawned ·
+  // matches the platform-side default-OFF gate (parse + persist hook). The
+  // agent SDK validates tool args against the schema BEFORE calling the tool ·
+  // so every tool_use block surfaced to the runner is guaranteed canonical.
+  if (
+    slug &&
+    DISCOVERY_OUTPUT_ALLOW.has(slug) &&
+    process.env.SALA_DISCOVERY_BRAIN_PUSH_ENABLED === 'true'
+  ) {
+    servers['discovery-output'] = {
+      type: 'stdio',
+      command: 'node',
+      args: [pathResolve(process.cwd(), 'src/lib/mcp/discovery-output-server.js')],
+      env: {
+        ...(ctx.clientId ? { CLIENT_ID: ctx.clientId } : {}),
+        PATH: process.env.PATH ?? '',
+      },
+    }
+  }
 
   return servers
 }

@@ -39,9 +39,9 @@ import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { validateWorkflowId } from '@/lib/agent-safety'
 import {
   isDiscoveryBrainPushEnabled,
-  parseDiscoveryOutput,
   persistDiscoveryToBrain,
   populateClientConfigFromDiscovery,
+  resolveDiscoverySource,
 } from '@/lib/discovery-output'
 
 export const runtime = 'nodejs'
@@ -156,6 +156,21 @@ interface CacheMetricsProxyMeta {
   cache_creation_1h_tokens: number
 }
 
+/**
+ * SPEC lazo agentico 2026-06-05 follow-up · Discovery tool-call capture
+ * shape · matches `DiscoveryToolCallCapture` in
+ * `services/agent-runner/src/lib/agent-sdk-runner.ts` byte-aligned. When
+ * present · the platform PREFERS this over the text parser (parser stays
+ * as defense-in-depth fallback). The Railway runner captures the agent's
+ * `emit_discovery_output` tool_use blocks from the SDK stream · args are
+ * pre-validated against the zod schema in the MCP server so shape is
+ * canonical per SDK contract.
+ */
+interface DiscoveryToolCallProxyMeta {
+  input: Record<string, unknown>
+  emission_count: number
+}
+
 interface AgentRunResultProxy {
   success: boolean
   response: string
@@ -167,6 +182,7 @@ interface AgentRunResultProxy {
   model: string
   brainEnrichment?: BrainEnrichmentProxyMeta
   cacheMetrics?: CacheMetricsProxyMeta
+  discoveryToolCall?: DiscoveryToolCallProxyMeta
   error?: string
 }
 
@@ -526,6 +542,29 @@ export async function POST(request: Request) {
             typeof rawCache.cache_creation_1h_tokens === 'number' ? rawCache.cache_creation_1h_tokens : 0,
         }
       : undefined
+    // SPEC lazo agentico 2026-06-05 follow-up · Discovery tool-call capture
+    // forwarded from Railway runner · args are pre-validated against the zod
+    // schema in the MCP server so shape is canonical per SDK contract · we
+    // still defensively type-check at the proxy boundary because the runner
+    // is a separate deployment surface.
+    const rawDiscoveryToolCall = (result as { discoveryToolCall?: unknown }).discoveryToolCall as
+      | Record<string, unknown>
+      | undefined
+    const discoveryToolCall: DiscoveryToolCallProxyMeta | undefined =
+      rawDiscoveryToolCall &&
+      typeof rawDiscoveryToolCall === 'object' &&
+      !Array.isArray(rawDiscoveryToolCall) &&
+      rawDiscoveryToolCall.input &&
+      typeof rawDiscoveryToolCall.input === 'object' &&
+      !Array.isArray(rawDiscoveryToolCall.input)
+        ? {
+            input: rawDiscoveryToolCall.input as Record<string, unknown>,
+            emission_count:
+              typeof rawDiscoveryToolCall.emission_count === 'number'
+                ? rawDiscoveryToolCall.emission_count
+                : 1,
+          }
+        : undefined
     result = {
       success: !!result.success,
       response: typeof result.response === 'string' ? result.response : '',
@@ -537,6 +576,7 @@ export async function POST(request: Request) {
       model: typeof result.model === 'string' ? result.model : 'unknown',
       brainEnrichment,
       cacheMetrics,
+      ...(discoveryToolCall ? { discoveryToolCall } : {}),
       error: result.error,
     }
 
@@ -561,13 +601,20 @@ export async function POST(request: Request) {
     // consumes dynamic targets discovered by the agent · NOT a manual list.
     //
     // Default-OFF via `SALA_DISCOVERY_BRAIN_PUSH_ENABLED` · gate at the
-    // shape-check level so the parse cost is also zero when off. Per-agent
-    // restriction (slug heuristic) keeps the side effect bounded to the
-    // Auto-Discovery surface · other agents pass through untouched.
+    // source-resolution level so the parse + tool-shape-check are also zero
+    // when off. Per-agent restriction (slug heuristic) keeps the side effect
+    // bounded to the Auto-Discovery surface · other agents pass through.
+    //
+    // SPEC follow-up (2026-06-05) · source resolution canonical · PREFER
+    // tool_call (zod-validated upstream · MCP server) over text parser
+    // (defense-in-depth fallback). The `source` field surfaces WHICH path
+    // produced the Discovery · forensics for prose-only regressions.
     let discoveryPersist:
       | {
+          source: 'tool_call' | 'text_parser' | 'none'
           parse_kind: 'ok' | 'absent' | 'malformed'
           parse_reason?: string
+          tool_emission_count?: number
           competitor_landscape_rows?: number
           icp_document_rows?: number
           brain_chunks_upserted?: number
@@ -579,21 +626,27 @@ export async function POST(request: Request) {
       | undefined
     if (isDiscoveryBrainPushEnabled() && isDiscoveryAgentSlug(agentName) && clientId) {
       try {
-        const parse = parseDiscoveryOutput(result.response, {
+        const resolved = resolveDiscoverySource({
+          ...(result.discoveryToolCall ? { tool_call: result.discoveryToolCall } : {}),
+          agent_response_text: result.response,
           expected_client_id: clientId,
         })
-        if (parse.kind === 'ok') {
+        if (resolved.kind === 'ok') {
           const supabase = getSupabaseAdmin()
           const brainOutcome = await persistDiscoveryToBrain({
             supabase,
-            discovery: parse.value,
+            discovery: resolved.value,
           })
           const configOutcome = await populateClientConfigFromDiscovery({
             supabase,
-            discovery: parse.value,
+            discovery: resolved.value,
           })
           discoveryPersist = {
+            source: resolved.source,
             parse_kind: 'ok',
+            ...(resolved.emission_count !== null
+              ? { tool_emission_count: resolved.emission_count }
+              : {}),
             competitor_landscape_rows: brainOutcome.competitor_landscape_rows,
             icp_document_rows: brainOutcome.icp_document_rows,
             brain_chunks_upserted: brainOutcome.brain_chunks_upserted,
@@ -603,12 +656,17 @@ export async function POST(request: Request) {
             errors: [...brainOutcome.errors, ...configOutcome.errors],
           }
         } else {
-          discoveryPersist = { parse_kind: parse.kind, parse_reason: parse.reason }
+          discoveryPersist = {
+            source: resolved.source,
+            parse_kind: resolved.kind,
+            parse_reason: resolved.reason,
+          }
         }
       } catch (e) {
         // §148 honest · never throw past the persist boundary · always
         // return the agent result · the persist outcome is observability only.
         discoveryPersist = {
+          source: 'none',
           parse_kind: 'malformed',
           parse_reason: `persist_threw: ${e instanceof Error ? e.message : 'unknown'}`,
         }

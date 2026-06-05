@@ -39,3 +39,9 @@ export {
   type PopulateConfigInput,
   type PopulateConfigResult,
 } from './populate-config'
+
+export {
+  resolveDiscoverySource,
+  type DiscoveryResolveResult,
+  type ResolveDiscoverySourceInput,
+} from './resolve-source'

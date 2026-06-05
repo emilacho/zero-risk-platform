@@ -40,7 +40,20 @@ type SDKSystemInitMessage = {
   subtype: 'init'
   session_id?: string
 }
-type SDKAssistantBlock = { type: string; text?: string }
+/**
+ * Canon canonical · assistant content blocks · the SDK emits text + tool_use.
+ * The d.ts collapses these · we explicitly type the tool_use shape so we can
+ * capture structured tool args without a cast at every site. The Anthropic
+ * SDK emits tool_use blocks PRIOR to the tool actually running · so capturing
+ * here gives us the input directly · the actual MCP tool execution + reply
+ * still happens normally · we only OBSERVE.
+ */
+type SDKAssistantBlock = {
+  type: string
+  text?: string
+  name?: string
+  input?: Record<string, unknown>
+}
 type SDKAssistantStreamMessage = {
   type: 'assistant'
   message?: { content?: SDKAssistantBlock[] }
@@ -150,6 +163,31 @@ export interface BrainEnrichmentResultMeta {
   brain_error?: string
 }
 
+/**
+ * Canon canonical · captured `emit_discovery_output` tool call (SPEC lazo
+ * agentico 2026-06-05 follow-up · tool-call linchpin).
+ *
+ * When the Auto-Discovery agent invokes the canonical MCP tool · the SDK
+ * emits an `assistant` message with a `tool_use` content block carrying the
+ * structured input. drainStream observes it and surfaces it here · the
+ * Vercel proxy PREFERS this over the parser-on-text fallback (the parser
+ * stays as defense-in-depth · `parseDiscoveryOutput` in `src/lib/discovery-output/`).
+ *
+ * Multiple emissions · we keep the LAST one (final answer · agent may iterate).
+ * Tool args ARE pre-validated against the zod schema in the MCP server before
+ * the agent SDK forwards them · so `input` is guaranteed canonical shape per
+ * the SDK contract · we still TS-cast at the persist boundary for safety.
+ */
+export interface DiscoveryToolCallCapture {
+  /** Canon canonical · the structured payload as emitted by the agent · matches
+   *  the `DiscoveryOutput` interface in `src/lib/discovery-output/types.ts`
+   *  byte-aligned with the zod schema in `discovery-output-server.js`. */
+  readonly input: Record<string, unknown>
+  /** Canon canonical · how many emissions saw on the stream · canonical is 1 ·
+   *  >1 means the agent iterated (we kept the LAST · forensics surface). */
+  readonly emission_count: number
+}
+
 export interface AgentRunResult {
   success: boolean
   response: string
@@ -170,6 +208,14 @@ export interface AgentRunResult {
    * the SDK does not cache (prefix below 1024 tokens · or first-time call).
    */
   cacheMetrics: CacheMetricsMeta
+  /**
+   * Canon canonical · SPEC lazo agentico 2026-06-05 follow-up · structured
+   * Discovery output captured via the `emit_discovery_output` MCP tool · only
+   * present when the agent invoked the tool · absent for all other agents
+   * + for onboarding-specialist runs where the tool was not called (in which
+   * case the platform falls back to the text parser).
+   */
+  discoveryToolCall?: DiscoveryToolCallCapture
   error?: string
 }
 
@@ -410,7 +456,7 @@ export function needsMetaAds(input: { agentName: string }): boolean {
   )
 }
 
-interface StreamDrainResult {
+export interface StreamDrainResult {
   responseText: string
   sessionId: string | null
   inputTokens: number
@@ -425,13 +471,20 @@ interface StreamDrainResult {
   cacheReadInputTokens: number
   cacheCreation5mTokens: number
   cacheCreation1hTokens: number
+  /**
+   * Canon canonical · SPEC lazo agentico 2026-06-05 follow-up · Discovery
+   * tool-call capture · null when the agent did NOT invoke `emit_discovery_output`
+   * (which is the case for all non-discovery agents AND for discovery agents
+   * that emitted prose-only). Surfaced to AgentRunResult.discoveryToolCall.
+   */
+  discoveryToolCall: DiscoveryToolCallCapture | null
 }
 
 /**
  * Drain the SDK stream and accumulate text + usage stats.
  * Throws on stream error; caller wraps in try/catch.
  */
-async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDrainResult> {
+export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDrainResult> {
   let responseText = ''
   let sessionId: string | null = null
   let inputTokens = 0
@@ -440,6 +493,11 @@ async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDra
   let cacheReadInputTokens = 0
   let cacheCreation5mTokens = 0
   let cacheCreation1hTokens = 0
+  // SPEC lazo agentico 2026-06-05 follow-up · capture every tool_use of the
+  // canonical Discovery tool · keep the LAST one (final answer) · the count
+  // surfaces forensics when the agent emits more than once.
+  let discoveryEmissionCount = 0
+  let lastDiscoveryInput: Record<string, unknown> | null = null
 
   for await (const rawMsg of stream) {
     const msg = rawMsg as SDKStreamMessage
@@ -451,6 +509,19 @@ async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDra
         for (const block of content) {
           if (block.type === 'text' && typeof block.text === 'string') {
             responseText += block.text
+          } else if (
+            block.type === 'tool_use' &&
+            block.name === 'emit_discovery_output' &&
+            block.input &&
+            typeof block.input === 'object' &&
+            !Array.isArray(block.input)
+          ) {
+            // Canon · agent invoked the canonical Discovery tool. Per SPEC
+            // we keep the LAST emission (final answer · the agent may iterate).
+            // Args are pre-validated by the MCP server's zod schema before
+            // reaching here so shape is canonical per SDK contract.
+            discoveryEmissionCount++
+            lastDiscoveryInput = block.input
           }
         }
       }
@@ -475,6 +546,13 @@ async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDra
     cacheReadInputTokens,
     cacheCreation5mTokens,
     cacheCreation1hTokens,
+    discoveryToolCall:
+      lastDiscoveryInput !== null
+        ? {
+            input: lastDiscoveryInput,
+            emission_count: discoveryEmissionCount,
+          }
+        : null,
   }
 }
 
@@ -803,6 +881,9 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     model: modelId,
     brainEnrichment: brainEnrichmentMeta,
     cacheMetrics: cacheMetricsMeta,
+    ...(drain.discoveryToolCall
+      ? { discoveryToolCall: drain.discoveryToolCall }
+      : {}),
   }
 
   // 5b. Sprint 8D tail · save checkpoint canonical · status='completed' +
