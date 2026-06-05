@@ -163,14 +163,16 @@ async function main() {
   while (Date.now() < deadlineAt) {
     await sleep(POLL_INTERVAL_MS)
     const elapsedS = Math.round((Date.now() - sendStartedAt) / 1000)
-    // Filter by payload.original_event_name = 'synthetic/durability.test'
-    // + payload.trigger_payload.runId === our unique runId. PostgREST
-    // JSONB filter uses `->>` for text extraction. This avoids any
-    // UUID-cast ambiguity since runId is a unique string per smoke run.
+    // The writer unwraps the failure-event wrapper (since v3 unwrap fix)
+    // so payload.original_event_name === 'synthetic/durability.test' and
+    // trigger_payload IS the original synthetic event data (NOT the
+    // inngest/function.failed wrapper). The runId we sent lives at
+    // payload.trigger_payload.runId.
     const q =
       '/rest/v1/sala_event_log?select=*' +
       '&event_type=eq.dead_letter' +
       '&payload->>function_id=eq.synthetic-durability-test' +
+      '&payload->>original_event_name=eq.synthetic/durability.test' +
       '&payload->trigger_payload->>runId=eq.' +
       encodeURIComponent(runId) +
       '&order=created_at.desc&limit=1'
@@ -209,16 +211,20 @@ async function main() {
   // ─── STEP 3 · evidence dump ─────────────────────────────────────
   logHeader('STEP 3 · evidence')
   const payload = row.payload || {}
-  console.log('event_id          · ' + row.event_id)
-  console.log('event_type        · ' + row.event_type)
-  console.log('tenant_id         · ' + row.tenant_id)
-  console.log('client_id         · ' + row.client_id)
-  console.log('operation_type    · ' + row.operation_type)
-  console.log('workflow_run_id   · ' + (row.workflow_run_id ?? '(null)'))
+  console.log('event_id                 · ' + row.event_id)
+  console.log('event_type               · ' + row.event_type)
+  console.log('tenant_id                · ' + row.tenant_id)
+  console.log('client_id                · ' + row.client_id)
+  console.log('stream_id                · ' + row.stream_id)
+  console.log('correlation_id           · ' + row.correlation_id)
+  console.log('operation_type           · ' + row.operation_type)
+  console.log('workflow_run_id          · ' + (row.workflow_run_id ?? '(null)'))
   console.log('payload.function_id      · ' + payload.function_id)
   console.log('payload.inngest_run_id   · ' + payload.inngest_run_id)
   console.log('payload.attempts_made    · ' + payload.attempts_made)
   console.log('payload.dead_lettered_at · ' + payload.dead_lettered_at)
+  console.log('payload.original_event_id     · ' + payload.original_event_id)
+  console.log('payload.original_event_name   · ' + payload.original_event_name)
   console.log(
     'payload.final_error      · ' +
       (typeof payload.final_error === 'string'
@@ -230,9 +236,16 @@ async function main() {
     'event_type === dead_letter': row.event_type === 'dead_letter',
     'tenant_id matches synthetic UUID': row.tenant_id === tenant_id,
     'client_id matches synthetic UUID': row.client_id === client_id,
+    'stream_id matches synthetic UUID': row.stream_id === stream_id,
+    'correlation_id matches synthetic UUID':
+      row.correlation_id === correlation_id,
     'function_id === synthetic-durability-test':
       payload.function_id === 'synthetic-durability-test',
-    'inngest_run_id is set': Boolean(payload.inngest_run_id),
+    'inngest_run_id is set (failure wrapper run_id)': Boolean(
+      payload.inngest_run_id,
+    ),
+    'original_event_name === synthetic/durability.test':
+      payload.original_event_name === 'synthetic/durability.test',
     'final_error mentions step-2':
       typeof payload.final_error === 'string' &&
       payload.final_error.includes('step-2'),
