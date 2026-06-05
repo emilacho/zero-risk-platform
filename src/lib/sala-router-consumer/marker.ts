@@ -32,6 +32,13 @@ export interface BuildMarkerInput {
   readonly kind: DispatchOutcomeKind
   readonly detail: string
   readonly dispatch_result?: Record<string, unknown>
+  /**
+   * Canon canonical · cap §150 evaluation outcome (SPEC lazo agentico
+   * 2026-06-05) · stamped into the marker payload when present so
+   * forensics + dashboards see the verdict + spend snapshot · auditable
+   * per-dispatch without re-querying.
+   */
+  readonly cap_evaluation?: Record<string, unknown>
   /** Optional · override logical_period for tests · default mirrors
    *  the intake event's. */
   readonly logical_period?: string
@@ -72,6 +79,7 @@ export function buildDispatchMarkerEvent(input: BuildMarkerInput): EventAppendIn
       intake_intent: intake.intake_intent,
       worker_workflow_id: intake.worker_workflow_id,
       ...(input.dispatch_result ? { workflow_dispatch_result: input.dispatch_result } : {}),
+      ...(input.cap_evaluation ? { cap_evaluation: input.cap_evaluation } : {}),
     },
     gate_type: null,
   }

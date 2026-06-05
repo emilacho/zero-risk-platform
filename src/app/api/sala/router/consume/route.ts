@@ -30,6 +30,7 @@ import { SupabaseEventLogStorage } from '@/lib/sala-event-log'
 import {
   consumeIntakeTick,
   isConsumerEnabled,
+  wireCapSpendQuerySupabase,
 } from '@/lib/sala-router-consumer'
 
 function fail(status: number, code: string, detail: string): NextResponse {
@@ -70,11 +71,16 @@ export async function POST(request: Request) {
       ? raw.scan_window
       : undefined
 
-  // ─── 4 · compose storage ───
+  // ─── 4 · compose storage + cap-wire (SPEC lazo agentico §gap §150) ───
   let storage: SupabaseEventLogStorage
+  let cap_spend_query
   try {
     const supabase = getSupabaseAdmin()
     storage = new SupabaseEventLogStorage(supabase)
+    // Canon canonical · production wires the Supabase-backed spend query ·
+    // dispatch evaluates per-stream cumulative cost vs §150 cap before
+    // dispatching to the worker.
+    cap_spend_query = wireCapSpendQuerySupabase(supabase)
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
     return fail(503, 'supabase_unavailable', detail)
@@ -87,6 +93,7 @@ export async function POST(request: Request) {
       tenant_id,
       batch_size,
       scan_window,
+      cap_spend_query,
     })
     return NextResponse.json({ ok: true, tick }, { status: 200 })
   } catch (e) {
@@ -121,6 +128,7 @@ export async function GET() {
       'skipped_parse_error',
       'skipped_unknown_journey',
       'skipped_dispatcher_off',
+      'skipped_cap_blocked',
       'marker_write_failed',
     ],
   })

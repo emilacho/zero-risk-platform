@@ -14,7 +14,11 @@
 import { buildIdempotencyKey } from '@/lib/sala-event-log'
 import {
   dispatchToWorkflow,
+  evaluateNaufragoRunCap,
   getJourneyWorkflowTarget,
+  isNaufragoCapEnforced,
+  NAUFRAGO_TENANT_IDS,
+  type NaufragoCostCapResult,
   type WorkflowDispatchResult,
 } from '@/lib/sala-journey-dispatch'
 import type { DispatchDecision } from '@/lib/sala-router'
@@ -23,17 +27,48 @@ import type {
   ParsedIntakeEvent,
 } from './types'
 
+/**
+ * Canon canonical · cap-wire query surface · the consumer needs to know
+ * how much the tenant has spent in the current run/window before deciding
+ * to dispatch (SPEC lazo agentico 2026-06-05 §gap §150). Implementations ·
+ * tests pass an in-memory stub · production wires to Supabase
+ * `agent_invocations.cost_usd SUM` per tenant since the stream start (or
+ * a configurable window).
+ */
+export type CapSpendQuery = (input: {
+  readonly tenant_id: string
+  readonly stream_id: string
+  readonly correlation_id: string
+}) => Promise<number>
+
 export interface DispatchOneInput {
   readonly intake: ParsedIntakeEvent
   readonly enabled?: boolean
   readonly n8n_base_url?: string
   readonly fetcher?: typeof fetch
+  /**
+   * Canon canonical · optional · forces the §150 cap enforce path (tests).
+   * Production defers to `SALA_NAUFRAGO_RUN_CAP_ENFORCE` env var via
+   * `isNaufragoCapEnforced()`.
+   */
+  readonly cap_enforce_override?: boolean
+  /**
+   * Canon canonical · injected spend query · defaults to a noop returning 0
+   * (cap effectively pass for non-Náufrago tenants OR when no caller wires
+   * a real query). Production wraps Supabase RPC / select sum (see
+   * `wireCapSpendQuerySupabase` in orchestrator).
+   */
+  readonly cap_spend_query?: CapSpendQuery
 }
 
 export interface DispatchOneResult {
   readonly kind: DispatchOutcomeKind
   readonly detail: string
   readonly workflow_dispatch_result?: WorkflowDispatchResult
+  /** Canon canonical · the cap evaluation outcome · always populated when
+   *  the cap was evaluated (Náufrago tenant + enforce on) · for surface
+   *  + marker payload + observability. */
+  readonly cap_evaluation?: NaufragoCostCapResult
 }
 
 /**
@@ -118,6 +153,43 @@ export async function dispatchOneIntake(
     ...(business_payload ? { business_payload } : {}),
   }
 
+  // ─── 2.5 · cap-wire (SPEC lazo agentico 2026-06-05 · gap §150) ───
+  // Before dispatching · evaluate the Náufrago per-run cap. The cap function
+  // exists since Phase 1.1 (gap #2 fix · UUID engagement verified) · this
+  // is the FIRST call-site that wires it into the dispatch flow. Behavior ·
+  //   - cap NOT enforced (`SALA_NAUFRAGO_RUN_CAP_ENFORCE!=true`) → noop pass
+  //   - cap enforced + tenant NOT Náufrago (UUID or alias) → pass (other_tenant)
+  //   - cap enforced + Náufrago + spend < cap → pass (under_cap)
+  //   - cap enforced + Náufrago + spend >= cap → BLOCK (skipped_cap_blocked)
+  //
+  // The spend query is INJECTED so this lib stays pure · the orchestrator
+  // wires the production Supabase impl. When no query provided, default to
+  // 0 spend (safe · pass through · matches behavior before this PR).
+  let cap_evaluation: NaufragoCostCapResult | undefined
+  const cap_enforced = isNaufragoCapEnforced({ enforce: input.cap_enforce_override })
+  const is_naufrago_tenant = NAUFRAGO_TENANT_IDS.has(intake.tenant_id)
+  if (cap_enforced && is_naufrago_tenant) {
+    const spent_usd = input.cap_spend_query
+      ? await input.cap_spend_query({
+          tenant_id: intake.tenant_id,
+          stream_id: intake.stream_id,
+          correlation_id: intake.correlation_id,
+        })
+      : 0
+    cap_evaluation = evaluateNaufragoRunCap({
+      tenant_id: intake.tenant_id,
+      spent_usd,
+      enforce: true,
+    })
+    if (cap_evaluation.verdict === 'block') {
+      return {
+        kind: 'skipped_cap_blocked',
+        detail: `cap §150 blocked · spent=$${cap_evaluation.spent_usd.toFixed(2)} >= cap=$${cap_evaluation.cap_usd.toFixed(2)} · tenant=${intake.tenant_id.slice(0, 8)}`,
+        cap_evaluation,
+      }
+    }
+  }
+
   // ─── 3 · fire via workflow-dispatcher · Model B (#172) ───
   const result = await dispatchToWorkflow({
     decision,
@@ -132,6 +204,7 @@ export async function dispatchOneIntake(
       kind: 'dispatched_ok',
       detail: `webhook ${result.webhook_url} responded ${result.status_code}`,
       workflow_dispatch_result: result,
+      ...(cap_evaluation ? { cap_evaluation } : {}),
     }
   }
   if (result.reason === 'flag_off') {
@@ -139,11 +212,13 @@ export async function dispatchOneIntake(
       kind: 'skipped_dispatcher_off',
       detail: 'SALA_WORKFLOW_DISPATCH_ENABLED!=true · shadow path',
       workflow_dispatch_result: result,
+      ...(cap_evaluation ? { cap_evaluation } : {}),
     }
   }
   return {
     kind: 'dispatched_failed',
     detail: `dispatcher reason=${result.reason} · ${result.detail ?? ''}`,
     workflow_dispatch_result: result,
+    ...(cap_evaluation ? { cap_evaluation } : {}),
   }
 }
