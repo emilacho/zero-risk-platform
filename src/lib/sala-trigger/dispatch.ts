@@ -268,7 +268,9 @@ export async function dispatchSalaTrigger(
     config.resolve_next_step ?? createInterpreterAdapter()
   const budgetCheck: BudgetCheckFn = config.budget_check ?? allowAllBudgetStub
 
-  const decisions: Decision[] = decide({
+  // canon canon-canon-decide() is async since Track P G6 wire (#159) ·
+  // canon-canon-budget_check awaits RPC under live mode · canon-canon-must await
+  const decisions: Decision[] = await decide({
     event: trigger_event,
     journey_state,
     libreto_lookup: libretoLookup,
