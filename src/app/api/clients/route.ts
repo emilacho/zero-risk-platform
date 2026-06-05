@@ -101,6 +101,12 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url)
     const client_id = url.searchParams.get('client_id')
+    // Sprint 12 · Náufrago MC fix · lookup-by-name canon path.
+    // Mission Control + n8n onboarding workflows resolve canonical UUID by
+    // name instead of generating `temp-${Date.now()}` placeholders that
+    // orphan downstream entities (Notion workspace + brain ingests).
+    // Resolution · ILIKE exact match → 1 row 200 · 0 rows 404 · 2+ rows 409.
+    const name = url.searchParams.get('name')
     const status = url.searchParams.get('status') || 'active'
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10), 500)
     // Sprint #6 Brazo 2 · include=competitors attaches a `competitors` array
@@ -115,6 +121,62 @@ export async function GET(request: Request) {
 
     try {
       const supabase = getSupabaseAdmin()
+
+      // Sprint 12 · lookup-by-name · resolves canonical UUID before client_id fetch
+      // so callers (Mission Control + n8n onboarding workflows) skip the
+      // `temp-${Date.now()}` placeholder path. Case-insensitive exact match via
+      // ILIKE. Returns explicit ambiguous (409) when name maps to multiple rows
+      // so caller never silently picks wrong tenant.
+      if (name) {
+        // SELECT * because the production `clients` schema doesn't have
+        // `client_id` / `client_name` columns (just `id` + `name`) and the
+        // explicit column list fails the query in some deployments. `*`
+        // works everywhere · returns the full row to the caller.
+        const { data: rows, error: nameErr } = await supabase
+          .from('clients')
+          .select('*')
+          .ilike('name', name)
+          .limit(5)
+        if (nameErr) {
+          // Defensive · `client_name` legacy column path for deployments
+          // that don't have `name`. Both errors → 404 unknown.
+          const alt = await supabase
+            .from('clients')
+            .select('*')
+            .ilike('client_name', name)
+            .limit(5)
+          const list = alt.data ?? []
+          if (alt.error || list.length === 0) {
+            return NextResponse.json(
+              { ok: false, error: 'client_name_not_found', name, lookup: 'by-name' },
+              { status: 404 },
+            )
+          }
+          if (list.length > 1) {
+            return NextResponse.json(
+              { ok: false, error: 'client_name_ambiguous', name, candidates: list, lookup: 'by-name' },
+              { status: 409 },
+            )
+          }
+          const match = list[0]
+          return NextResponse.json({ ok: true, client: match, lookup: 'by-name', ...match })
+        }
+        const list = rows ?? []
+        if (list.length === 0) {
+          return NextResponse.json(
+            { ok: false, error: 'client_name_not_found', name, lookup: 'by-name' },
+            { status: 404 },
+          )
+        }
+        if (list.length > 1) {
+          return NextResponse.json(
+            { ok: false, error: 'client_name_ambiguous', name, candidates: list, lookup: 'by-name' },
+            { status: 409 },
+          )
+        }
+        const match = list[0]
+        return NextResponse.json({ ok: true, client: match, lookup: 'by-name', ...match })
+      }
 
       // Single fetch
       if (client_id) {

@@ -17,6 +17,7 @@
  * (returned in the function result) that the smoke script reads back.
  */
 import { inngestClient } from './client'
+import { buildDeadLetterFailureHandler } from './dead-letter-handler'
 
 /** Event name the synthetic functions respond to · namespaced
  *  `synthetic/*` so a future router with real journey events
@@ -45,11 +46,17 @@ export const syntheticDurabilityTest = inngestClient.createFunction(
     idempotency: 'event.data.runId',
     retries: 3,
     triggers: [{ event: SYNTHETIC_DURABILITY_EVENT }],
+    // DLQ Option A · co-req #3 pre-flip escalón 5 · 2026-06-04.
+    // When all 3 retries exhaust, write a `dead_letter` event to
+    // sala_event_log + best-effort Slack alert. The handler swallows
+    // its own errors so a writer failure NEVER masks the original
+    // function error (§148 cap is safety net · not critical path).
+    onFailure: buildDeadLetterFailureHandler('synthetic-durability-test'),
   },
   async ({ event, step, attempt }) => {
     const data = (event.data ?? {}) as {
       runId?: string
-      simulate_failure?: 'step-2' | 'step-3' | 'none'
+      simulate_failure?: 'step-2' | 'step-3' | 'always' | 'none'
     }
     const runId = data.runId ?? 'unknown-runid'
     const simulate = data.simulate_failure ?? 'none'
@@ -71,6 +78,15 @@ export const syntheticDurabilityTest = inngestClient.createFunction(
       if (simulate === 'step-2' && attempt < 2) {
         throw new Error(
           `synthetic transient failure · step-2 · attempt ${attempt} · runId ${runId}`,
+        )
+      }
+      // DLQ E2E shadow · 'always' mode ignores attempt + always throws
+      // → Inngest exhausts retries=3 → onFailure fires → writeDeadLetter
+      // exercises the cloud onFailure→event-log+Slack path E2E. Used
+      // ONLY by the DLQ shadow smoke (NEVER from real callers).
+      if (simulate === 'always') {
+        throw new Error(
+          `synthetic permanent failure · step-2 · attempt ${attempt} · runId ${runId} · simulate=always`,
         )
       }
       // Light synthetic work · 200ms · short enough to not hold

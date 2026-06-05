@@ -20,7 +20,17 @@
 // Enums · 3 canonical types canon canonical from migration §1
 // =====================================================================
 
-/** Canon canonical 10 event_type values · ADR-009 ronda 3 §Enum + §H additions */
+/** Canon canonical 11 event_type values · ADR-009 ronda 3 §Enum + §H additions
+ *  + 'dead_letter' (DLQ Option A · co-req #3 pre-flip escalón 5 · 2026-06-04).
+ *
+ *  `dead_letter` semantics · emitted by the Inngest `onFailure` handler
+ *  when a function exhausts its retry budget. Distinguishes terminal
+ *  failure from transient `step_failed` (which may still retry). The
+ *  payload carries · `function_id` · `original_event_id` ·
+ *  `final_error` · `attempts_made` · `inngest_run_id` ·
+ *  `dead_lettered_at`. See `src/lib/sala/inngest/synthetic-functions.ts`
+ *  for the writer + `DLQ-confirmacion-pre-flip-2026-06-04.md` for spec.
+ */
 export const EVENT_TYPES = [
   'dispatch_requested',
   'step_started',
@@ -32,6 +42,7 @@ export const EVENT_TYPES = [
   'needs_judgment',
   'judgment_resolved',
   'budget_blocked',
+  'dead_letter',
 ] as const
 
 export type EventType = (typeof EVENT_TYPES)[number]

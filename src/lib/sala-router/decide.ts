@@ -24,6 +24,7 @@
 
 import { buildIdempotencyKey } from '@/lib/sala-event-log'
 import type { GateType } from '@/lib/sala-event-log'
+import { buildBucketKey } from './stubs'
 import type {
   Libreto,
   JourneyType,
@@ -49,7 +50,7 @@ import type {
 // Public entrypoint
 // =====================================================================
 
-export function decide(input: DecideInput): Decision[] {
+export async function decide(input: DecideInput): Promise<Decision[]> {
   const { event, journey_state } = input
 
   // ─── Step 1 · sanity check the event vs the projection ─────────
@@ -112,6 +113,12 @@ export function decide(input: DecideInput): Decision[] {
     case 'judgment_resolved':
     case 'budget_blocked':
       return resolveDecision(input, libreto, current_step)
+    case 'dead_letter':
+      // DLQ Option A · terminal failure already recorded by Inngest
+      // onFailure handler · router has NO further routing decision to
+      // make (the run is dead by definition). Returning empty decisions
+      // is correct · the event-log row is the canonical artifact.
+      return []
     default:
       // Compile-time exhaustiveness · this `never` shouts if a new
       // event_type is added to the schema without updating the router.
@@ -130,11 +137,11 @@ export function decide(input: DecideInput): Decision[] {
 // Core resolution · drives the next step decision
 // =====================================================================
 
-function resolveDecision(
+async function resolveDecision(
   input: DecideInput,
   libreto: Libreto,
   current_step: Step,
-): Decision[] {
+): Promise<Decision[]> {
   const { event, journey_state } = input
 
   // ─── Terminal first · libreto says we're done on this branch ──
@@ -218,7 +225,7 @@ function resolveDecision(
       // FORK → fan out N dispatches via the join's branches metadata.
       const next = resolution.next_step
       if (next.step_type === 'action') {
-        return dispatchAction(input, libreto, next)
+        return await dispatchAction(input, libreto, next)
       }
       if (
         next.step_type === 'gate_camino_iii' ||
@@ -234,7 +241,7 @@ function resolveDecision(
         return [buildTerminal(input, libreto, next as TerminalStep)]
       }
       if (next.step_type === 'fork') {
-        return dispatchFork(input, libreto, next as ForkStep)
+        return await dispatchFork(input, libreto, next as ForkStep)
       }
       // 'join' is structural · no dispatch happens at the join itself,
       // only at the next_step after the join. The interpreter SHOULD
@@ -265,11 +272,11 @@ function resolveDecision(
 // Dispatch builders · budget-check gates them all
 // =====================================================================
 
-function dispatchAction(
+async function dispatchAction(
   input: DecideInput,
   libreto: Libreto,
   step: ActionStep,
-): Decision[] {
+): Promise<Decision[]> {
   const idempotency_inputs = buildIdempotencyInputs(input, libreto, step)
   const idempotency_key = buildIdempotencyKey({
     operation_type: idempotency_inputs.operation_type,
@@ -277,17 +284,34 @@ function dispatchAction(
     logical_period: idempotency_inputs.logical_period,
     input_hash: idempotency_inputs.input_hash,
   })
+  // Canon canonical bucket-key · per-operation granularity per escalón 4
+  // desbloqueo spec · the router COMPOSES the key, the G6 seam MATCHES
+  // on the same string. Seeds in `rate_limit_buckets` keyed by this
+  // exact format. Centralized in `buildBucketKey()` (stubs.ts) so any
+  // change ripples through the wire automatically.
+  const bucket_key = buildBucketKey({
+    tenant_id: input.event.tenant_id,
+    client_id: input.event.client_id,
+    journey_type: libreto.journey_type,
+    operation_type: idempotency_inputs.operation_type,
+  })
 
   // ─── Paso 3.5 · budget-check BEFORE dispatch ──────────────────
   // Opus ronda 1 §2 · the cap is enforced inside the router atomically
   // (read-then-act in the bucket); if the bucket says no, we emit
   // `budget_blocked` and the dispatch DID NOT happen.
-  const budget = input.budget_check({
+  //
+  // ASYNC per escalón 4 desbloqueo (Option B 2026-06-04) · the real G6
+  // hook calls `supabase.rpc('increment_bucket_atomic', ...)` and that
+  // is inherently async. We await here so the seam can preserve the
+  // atomic increment semantics (Option A · sync cache · would lose it).
+  const budget = await input.budget_check({
     tenant_id: input.event.tenant_id,
     client_id: input.event.client_id,
     journey_type: libreto.journey_type,
     operation_type: idempotency_inputs.operation_type,
     step_id: step.step_id,
+    bucket_key,
   })
   if (!budget.allowed) {
     const blocked: BudgetBlockedDecision = {
@@ -329,11 +353,11 @@ function dispatchAction(
   return [dispatch]
 }
 
-function dispatchFork(
+async function dispatchFork(
   input: DecideInput,
   libreto: Libreto,
   fork_step: ForkStep,
-): Decision[] {
+): Promise<Decision[]> {
   // Each branch is resolved as its own dispatch · the join collects them.
   const decisions: Decision[] = []
   for (const branch_step_id of fork_step.branches) {
@@ -348,7 +372,7 @@ function dispatchFork(
       continue
     }
     if (branch_step.step_type === 'action') {
-      decisions.push(...dispatchAction(input, libreto, branch_step))
+      decisions.push(...(await dispatchAction(input, libreto, branch_step)))
     } else if (
       branch_step.step_type === 'gate_camino_iii' ||
       branch_step.step_type === 'gate_hitl' ||
