@@ -172,7 +172,7 @@ async function checkEndpointAuth() {
     // false-positive endpoint-auth-missing errors that were really 3-line
     // wrappers around an auth-gated shared helper.
     const hasAuth =
-      /requireInternalKey|checkInternalKey|checkInternalOrAdmin|checkSalaWebhookAuth|requireAdmin|verifyTallyWebhook|verifyMetaSignature|verifyWebhookSignature|ADMIN_SECRET|pipeline_secret|PIPELINE_CALLBACK_SECRET|CRON_SECRET|SUPABASE_SERVICE_ROLE_KEY|verifySignature|handleReadStub|handleStubPost|handleStub\b|buildDeprecatedResponse/i.test(
+      /requireInternalKey|checkInternalKey|checkInternalOrAdmin|checkSalaWebhookAuth|checkSourceAuth|orchestrateIngress|requireAdmin|verifyTallyWebhook|verifyMetaSignature|verifyWebhookSignature|ADMIN_SECRET|pipeline_secret|PIPELINE_CALLBACK_SECRET|CRON_SECRET|SUPABASE_SERVICE_ROLE_KEY|verifySignature|handleReadStub|handleStubPost|handleStub\b|buildDeprecatedResponse/i.test(
         content,
       )
     if (!hasAuth) {
