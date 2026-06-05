@@ -13,11 +13,16 @@
  */
 
 export {
+  CANONICAL_PHASES_LyVoKcrypS5uLyuu,
   JOURNEY_WORKFLOW_MAP,
   getJourneyWorkflowTarget,
+  isCanonicalPhase,
   isWorkflowJourney,
 } from './journey-workflow-map'
-export type { JourneyWorkflowTarget } from './journey-workflow-map'
+export type {
+  CanonicalPhaseLyVo,
+  JourneyWorkflowTarget,
+} from './journey-workflow-map'
 
 export {
   isWorkflowDispatchEnabled,
@@ -48,6 +53,43 @@ export {
   reconcileObserved,
   postReconciliationAlert,
 } from './reconciliation'
+
+export {
+  checkSalaWebhookAuth,
+  parseIngressBody,
+  parseCallbackBody,
+  buildIngressIdempotencyOperationType,
+  buildCallbackIdempotencyOperationType,
+} from './webhook-receiver'
+
+export {
+  MODELB_RUNSDK_WORKFLOW_ID_EXPRESSION,
+  MODELB_PREDECESSOR_NODE_NAME,
+  MODELB_RUNSDK_NODE_NAMES,
+  MODELB_WORKER_ID,
+  MODELB_EXPRESSION_INVARIANTS,
+  checkExpressionInvariants,
+} from './modelb-canonical-expression'
+
+export {
+  NAUFRAGO_PHASE1_RUN_CAP_USD,
+  NAUFRAGO_DAILY_ALERT_USD,
+  NAUFRAGO_TENANT_ID_HINT,
+  isNaufragoCapEnforced,
+  evaluateNaufragoRunCap,
+  getNaufragoCapSnapshot,
+} from './naufrago-cost-cap'
+export type {
+  NaufragoCostCapInput,
+  NaufragoCostCapResult,
+} from './naufrago-cost-cap'
+export type {
+  SalaWebhookAuthResult,
+  SalaWebhookAuthInput,
+  IngressBody,
+  CallbackBody,
+  ParsedBody,
+} from './webhook-receiver'
 export type {
   ReconcileInput,
   ReconcileResult,
