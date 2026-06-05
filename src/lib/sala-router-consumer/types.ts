@@ -79,6 +79,15 @@ export type DispatchOutcomeKind =
   | 'skipped_parse_error'
   | 'skipped_unknown_journey'
   | 'skipped_dispatcher_off'
+  /**
+   * Canon canonical · cap-blocked outcome (SPEC lazo agentico 2026-06-05) ·
+   * `evaluateNaufragoRunCap` returned `block` because the per-run cumulative
+   * cost exceeded the canonical USD cap. The dispatcher is NOT called ·
+   * a marker is still written to preserve idempotency (canon §150 G2 · no
+   * retry-loop incidental on cap-blocks). The dashboard surfaces the block
+   * via the marker's payload.dispatch_kind = 'skipped_cap_blocked'.
+   */
+  | 'skipped_cap_blocked'
   | 'marker_write_failed'
 
 export interface DispatchOutcome {

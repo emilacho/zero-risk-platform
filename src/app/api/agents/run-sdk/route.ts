@@ -37,6 +37,12 @@ import { resolveAgentSlug } from '@/lib/agent-alias-map'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { validateWorkflowId } from '@/lib/agent-safety'
+import {
+  isDiscoveryBrainPushEnabled,
+  parseDiscoveryOutput,
+  persistDiscoveryToBrain,
+  populateClientConfigFromDiscovery,
+} from '@/lib/discovery-output'
 
 export const runtime = 'nodejs'
 // Sprint 12 Track U · P0 #2 bump 300→800s · Track R audit identified Journey B
@@ -84,6 +90,19 @@ interface RunSdkInput {
   dryRun?: boolean
   context?: Record<string, unknown> | null
   extra?: Record<string, unknown> | null
+}
+
+/**
+ * Canon canonical · SPEC lazo agentico 2026-06-05 · which agent slugs
+ * SHOULD have their response parsed for Discovery output JSON. The match
+ * is intentionally narrow · only the Auto-Discovery surface in Phase 1.
+ * Other agents return prose (cascade · evidence · brand) · parsing them
+ * would be wasted work + risk false positives. Adding new slugs is a
+ * canonical edit (1 line) when CC#4 expands the loop to other journeys.
+ */
+function isDiscoveryAgentSlug(agentSlug: string): boolean {
+  const slug = (agentSlug ?? '').toLowerCase()
+  return slug === 'onboarding-specialist' || slug === 'onboarding_specialist'
 }
 
 /**
@@ -534,6 +553,68 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: result.error }, { status: 500 })
     }
 
+    // ─── Discovery output → brain PUSH + config populate ──────────────────
+    // SPEC lazo agentico 2026-06-05 · close the loop · the agent emits a
+    // structured Discovery output · the platform PERSISTS it to the brain
+    // (competitive_landscape + icp_documents + chunks) and POPULATES
+    // clients.config.apify (own_handles + competitor_list) so APIFY_WIRE
+    // consumes dynamic targets discovered by the agent · NOT a manual list.
+    //
+    // Default-OFF via `SALA_DISCOVERY_BRAIN_PUSH_ENABLED` · gate at the
+    // shape-check level so the parse cost is also zero when off. Per-agent
+    // restriction (slug heuristic) keeps the side effect bounded to the
+    // Auto-Discovery surface · other agents pass through untouched.
+    let discoveryPersist:
+      | {
+          parse_kind: 'ok' | 'absent' | 'malformed'
+          parse_reason?: string
+          competitor_landscape_rows?: number
+          icp_document_rows?: number
+          brain_chunks_upserted?: number
+          config_handles_written?: number
+          config_competitors_written?: number
+          duration_ms?: number
+          errors?: readonly string[]
+        }
+      | undefined
+    if (isDiscoveryBrainPushEnabled() && isDiscoveryAgentSlug(agentName) && clientId) {
+      try {
+        const parse = parseDiscoveryOutput(result.response, {
+          expected_client_id: clientId,
+        })
+        if (parse.kind === 'ok') {
+          const supabase = getSupabaseAdmin()
+          const brainOutcome = await persistDiscoveryToBrain({
+            supabase,
+            discovery: parse.value,
+          })
+          const configOutcome = await populateClientConfigFromDiscovery({
+            supabase,
+            discovery: parse.value,
+          })
+          discoveryPersist = {
+            parse_kind: 'ok',
+            competitor_landscape_rows: brainOutcome.competitor_landscape_rows,
+            icp_document_rows: brainOutcome.icp_document_rows,
+            brain_chunks_upserted: brainOutcome.brain_chunks_upserted,
+            config_handles_written: configOutcome.handles_written,
+            config_competitors_written: configOutcome.competitors_written,
+            duration_ms: brainOutcome.duration_ms,
+            errors: [...brainOutcome.errors, ...configOutcome.errors],
+          }
+        } else {
+          discoveryPersist = { parse_kind: parse.kind, parse_reason: parse.reason }
+        }
+      } catch (e) {
+        // §148 honest · never throw past the persist boundary · always
+        // return the agent result · the persist outcome is observability only.
+        discoveryPersist = {
+          parse_kind: 'malformed',
+          parse_reason: `persist_threw: ${e instanceof Error ? e.message : 'unknown'}`,
+        }
+      }
+    }
+
     // Base response — may be augmented by dual reviewer middleware below.
     // Sprint 8B B3 · brain_enrichment surfaced so callers + observability
     // writers (downstream /api/agents/run consumer) see Pilar 2 RAG markers.
@@ -549,6 +630,7 @@ export async function POST(request: Request) {
       duration_ms: result.durationMs,
       ...(result.brainEnrichment ? { brain_enrichment: result.brainEnrichment } : {}),
       ...(result.cacheMetrics ? { cache_metrics: result.cacheMetrics } : {}),
+      ...(discoveryPersist ? { discovery_persist: discoveryPersist } : {}),
     }
 
     // DUAL REVIEWER MIDDLEWARE — mirrors /api/agents/run lines 478-503 so workflows

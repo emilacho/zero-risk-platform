@@ -18,7 +18,7 @@ import {
   type EventLogStorage,
   type ReadFilters,
 } from '@/lib/sala-event-log'
-import { dispatchOneIntake } from './dispatch'
+import { dispatchOneIntake, type CapSpendQuery } from './dispatch'
 import { buildDispatchMarkerEvent } from './marker'
 import { parseIntakeEvent } from './parsing'
 import { selectPendingIntakeEvents } from './query'
@@ -34,6 +34,18 @@ export interface OrchestratorInput extends ConsumerTickInput {
    *  window · default 200 · the FILTER then keeps only un-processed
    *  intake events bounded by batch_size. */
   readonly scan_window?: number
+  /**
+   * Canon canonical · cap-wire (SPEC lazo agentico 2026-06-05) ·
+   * forwarded to `dispatchOneIntake` so the §150 cap call-site can query
+   * cumulative spend before dispatch. Production injects
+   * `wireCapSpendQuerySupabase(supabase)` · tests inject in-memory stubs.
+   * When omitted, the cap evaluates with `spent_usd=0` (under_cap pass).
+   */
+  readonly cap_spend_query?: CapSpendQuery
+  /** Canon canonical · forwarded to dispatch · tests force cap enforce
+   *  without flipping the env. Production reads
+   *  `SALA_NAUFRAGO_RUN_CAP_ENFORCE` via `isNaufragoCapEnforced()`. */
+  readonly cap_enforce_override?: boolean
 }
 
 /** Canon canonical · runs one tick · TOTAL · cero silent drops. */
@@ -94,6 +106,10 @@ export async function consumeIntakeTick(
       enabled: input.enabled,
       n8n_base_url: input.n8n_base_url,
       fetcher: input.fetcher,
+      ...(input.cap_spend_query ? { cap_spend_query: input.cap_spend_query } : {}),
+      ...(input.cap_enforce_override !== undefined
+        ? { cap_enforce_override: input.cap_enforce_override }
+        : {}),
     })
 
     // ─── 4 · write marker event ───
@@ -104,6 +120,9 @@ export async function consumeIntakeTick(
       dispatch_result: result.workflow_dispatch_result as
         | Record<string, unknown>
         | undefined,
+      ...(result.cap_evaluation
+        ? { cap_evaluation: result.cap_evaluation as unknown as Record<string, unknown> }
+        : {}),
     })
     let marker_event_id: string | null = null
     try {

@@ -32,10 +32,17 @@ export { buildDispatchMarkerEvent } from './marker'
 export type { BuildMarkerInput } from './marker'
 
 export { dispatchOneIntake } from './dispatch'
-export type { DispatchOneInput, DispatchOneResult } from './dispatch'
+export type {
+  CapSpendQuery,
+  DispatchOneInput,
+  DispatchOneResult,
+} from './dispatch'
 
 export { consumeIntakeTick } from './orchestrator'
 export type { OrchestratorInput } from './orchestrator'
+
+export { wireCapSpendQuerySupabase } from './cap-spend-query'
+export type { WireCapSpendQueryOptions } from './cap-spend-query'
 
 /** Canon canonical · whether the consumer endpoint is enabled.
  *  Default-OFF · canon §144 escalón 6 sibling. Tests inject explicit. */
