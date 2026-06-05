@@ -37,8 +37,10 @@ export {
 } from './routing'
 
 export {
+  SALA_INGRESS_NAMESPACE_UUID,
   mintCorrelationId,
   mintStreamId,
+  uuidV5,
   type MintStreamIdInput,
 } from './stream-id'
 

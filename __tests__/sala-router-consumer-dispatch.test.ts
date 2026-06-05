@@ -143,6 +143,79 @@ describe('dispatchOneIntake · dispatched_ok', () => {
   })
 })
 
+describe('dispatchOneIntake · Phase 1.1 gap #1 · envelope_payload forwarding', () => {
+  it('forwards intake.source_event.payload.envelope_payload as business_payload', async () => {
+    let body: Record<string, unknown> = {}
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      body = JSON.parse((init?.body as string) ?? '{}')
+      return new Response('ok', { status: 200 })
+    })
+    const i = intake()
+    // Simulate the ingress endpoint's payload shape · the envelope_payload
+    // is nested under the persisted event's payload column.
+    i.source_event.payload = {
+      envelope_payload: {
+        client_name: 'Náufrago',
+        website: 'naufrago.com',
+        industry: 'F&B',
+        contract_scope: 'onboarding',
+        deal_value_usd: 12000,
+      },
+      intake_tier: 'A',
+    }
+    await dispatchOneIntake({
+      intake: i,
+      enabled: true,
+      n8n_base_url: 'https://n8n.test',
+      fetcher: fetcher as unknown as typeof fetch,
+    })
+    expect(body.client_name).toBe('Náufrago')
+    expect(body.website).toBe('naufrago.com')
+    expect(body.industry).toBe('F&B')
+    expect(body.contract_scope).toBe('onboarding')
+    expect(body.deal_value_usd).toBe(12000)
+    // Sala metadata still present + correct
+    expect(body._journey_id).toBe('sala/v1/x')
+    expect(body.client_id).toBe('c1')
+    expect(body.tenant_id).toBe('naufrago')
+    expect(body.trigger_source).toBe('sala-router-dispatch')
+  })
+
+  it('passes through cleanly when envelope_payload is missing', async () => {
+    let body: Record<string, unknown> = {}
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      body = JSON.parse((init?.body as string) ?? '{}')
+      return new Response('ok', { status: 200 })
+    })
+    await dispatchOneIntake({
+      intake: intake(), // payload = {} default
+      enabled: true,
+      n8n_base_url: 'https://n8n.test',
+      fetcher: fetcher as unknown as typeof fetch,
+    })
+    expect(body._journey_id).toBe('sala/v1/x')
+    // No extra business fields injected
+    expect(body.client_name).toBeUndefined()
+  })
+
+  it('ignores non-object envelope_payload (array · primitive)', async () => {
+    let body: Record<string, unknown> = {}
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      body = JSON.parse((init?.body as string) ?? '{}')
+      return new Response('ok', { status: 200 })
+    })
+    const i = intake()
+    i.source_event.payload = { envelope_payload: ['not', 'an', 'object'] }
+    await dispatchOneIntake({
+      intake: i,
+      enabled: true,
+      n8n_base_url: 'https://n8n.test',
+      fetcher: fetcher as unknown as typeof fetch,
+    })
+    expect(body._journey_id).toBe('sala/v1/x')
+  })
+})
+
 describe('dispatchOneIntake · dispatched_failed', () => {
   it('returns dispatched_failed when webhook returns non-2xx', async () => {
     const fetcher = vi.fn(async () => new Response('down', { status: 503 }))

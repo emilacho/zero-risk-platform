@@ -91,6 +91,15 @@ export interface DispatchDecision {
     readonly webhook_path: string
     readonly webhook_url: string
   }
+
+  /** Canon canonical · Phase 1.1 (2026-06-05 first-fire gap #1 fix) ·
+   *  business payload forwarded to the worker webhook body. When
+   *  `target='workflow'`, the dispatcher SPREADS this into the body
+   *  BEFORE the sala metadata, so sala fields ALWAYS override on
+   *  collision. Allows source-supplied fields (client_name · website ·
+   *  industry · contract_scope · etc) to reach the worker's Validate
+   *  Deal Data node without bespoke n8n shapes per source. */
+  readonly business_payload?: Record<string, unknown>
 }
 
 /**

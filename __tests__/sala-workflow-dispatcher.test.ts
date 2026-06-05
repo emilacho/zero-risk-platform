@@ -337,3 +337,96 @@ describe('dispatchToWorkflow · custom target override (tests + smoke)', () => {
     if (res.ok) expect(res.workflow_id).toBe('TestWorkflowId123')
   })
 })
+
+describe('dispatchToWorkflow · Phase 1.1 gap #1 · business_payload spread', () => {
+  it('canon · spreads business_payload into webhook body BEFORE sala metadata', async () => {
+    let capturedBody: Record<string, unknown> | undefined
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body))
+      return new Response('{}', { status: 200 })
+    })
+    const res = await dispatchToWorkflow({
+      decision: workflowDispatch({
+        business_payload: {
+          client_name: 'Náufrago',
+          website: 'naufrago.com',
+          industry: 'F&B',
+          contract_scope: 'onboarding',
+        },
+      }),
+      enabled: true,
+      n8n_base_url: 'https://example.test',
+      fetcher: fetcher as unknown as typeof fetch,
+      logger: silentLogger(),
+    })
+    expect(res.ok).toBe(true)
+    expect(capturedBody).toBeDefined()
+    expect(capturedBody!.client_name).toBe('Náufrago')
+    expect(capturedBody!.website).toBe('naufrago.com')
+    expect(capturedBody!.industry).toBe('F&B')
+    expect(capturedBody!.contract_scope).toBe('onboarding')
+  })
+
+  it('canon · sala metadata ALWAYS overrides business_payload on collision', async () => {
+    let capturedBody: Record<string, unknown> | undefined
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body))
+      return new Response('{}', { status: 200 })
+    })
+    await dispatchToWorkflow({
+      decision: workflowDispatch({
+        business_payload: {
+          // malicious / buggy source tries to override sala fields
+          _sala_correlation_id: 'attacker-supplied',
+          _journey_id: 'attacker-supplied-stream',
+          client_id: 'attacker-supplied-client',
+          tenant_id: 'attacker-supplied-tenant',
+          trigger_source: 'attacker-supplied',
+          benign_field: 'kept',
+        },
+      }),
+      enabled: true,
+      n8n_base_url: 'https://example.test',
+      fetcher: fetcher as unknown as typeof fetch,
+      logger: silentLogger(),
+    })
+    expect(capturedBody).toBeDefined()
+    // sala fields preserved
+    expect(capturedBody!._sala_correlation_id).toBe(CORR)
+    expect(capturedBody!._journey_id).toBe(STREAM)
+    expect(capturedBody!.client_id).toBe(CLIENT)
+    expect(capturedBody!.tenant_id).toBe(TENANT)
+    expect(capturedBody!.trigger_source).toBe('sala-router-dispatch')
+    // benign source field passes through
+    expect(capturedBody!.benign_field).toBe('kept')
+  })
+
+  it('canon · null / undefined / array business_payload is ignored safely', async () => {
+    let capturedBody: Record<string, unknown> | undefined
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body))
+      return new Response('{}', { status: 200 })
+    })
+    // Array (rejected · spread is dropped)
+    await dispatchToWorkflow({
+      decision: workflowDispatch({
+        business_payload: ['not', 'an', 'object'] as unknown as Record<string, unknown>,
+      }),
+      enabled: true,
+      n8n_base_url: 'https://example.test',
+      fetcher: fetcher as unknown as typeof fetch,
+      logger: silentLogger(),
+    })
+    expect(capturedBody!._journey_id).toBe(STREAM)
+    expect(capturedBody!.client_id).toBe(CLIENT)
+    // Missing business_payload (typical · current call-sites)
+    await dispatchToWorkflow({
+      decision: workflowDispatch(),
+      enabled: true,
+      n8n_base_url: 'https://example.test',
+      fetcher: fetcher as unknown as typeof fetch,
+      logger: silentLogger(),
+    })
+    expect(capturedBody!._journey_id).toBe(STREAM)
+  })
+})

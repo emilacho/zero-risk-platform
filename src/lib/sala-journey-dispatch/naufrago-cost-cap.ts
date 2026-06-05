@@ -33,8 +33,35 @@ export const NAUFRAGO_DAILY_ALERT_USD = 10.0
 
 /** Canon canonical · the Náufrago tenant_id (single-tenant per canon V4 §2).
  *  Used by call-sites to decide whether the cap applies to a given
- *  decision/event. */
+ *  decision/event.
+ *
+ *  Phase 1.1 (2026-06-05 first-fire gap #2 fix · MANDATORY) ·
+ *  the value is now the canonical UUID rather than the string
+ *  literal `'naufrago'` · this matches `sala_event_log.tenant_id`
+ *  (UUID column) so the cap actually engages when intake events
+ *  carry the UUID tenant_id. The string `'naufrago'` is kept as an
+ *  ALIAS for backwards-compat (admin scripts · ground-truth queries
+ *  that filter by label) · canon §148 single source of truth.
+ *
+ *  Why client_id UUID == tenant_id UUID? · Náufrago is a single-tenant
+ *  piloto (canon V4 §2 single-tenant explicit) · the client's UUID
+ *  doubles as the tenant identifier. Future multi-tenant promotion
+ *  swaps this constant for a dedicated tenant UUID. */
+export const NAUFRAGO_TENANT_ID_UUID = 'd69100b5-8ad7-4bb0-908c-68b5544065dc'
+
+/** Canon canonical · ALIAS for the legacy string label. Used by ground-
+ *  truth queries + admin scripts. NOT used in runtime evaluation
+ *  (evaluateNaufragoRunCap accepts both via the alias set below). */
 export const NAUFRAGO_TENANT_ID_HINT = 'naufrago'
+
+/** Canon canonical · the set of values that identify "this is the
+ *  Náufrago piloto tenant" · the cap matches if `input.tenant_id`
+ *  appears here. Allows both the canonical UUID AND the legacy
+ *  string alias to engage the cap. */
+export const NAUFRAGO_TENANT_IDS: ReadonlySet<string> = new Set([
+  NAUFRAGO_TENANT_ID_UUID,
+  NAUFRAGO_TENANT_ID_HINT,
+])
 
 export interface NaufragoCostCapInput {
   /** Force the enforce flag · overrides env. Tests use this. */
@@ -73,7 +100,7 @@ export function evaluateNaufragoRunCap(
   if (!isNaufragoCapEnforced({ enforce: input.enforce })) {
     return { verdict: 'pass', reason: 'flag_off' }
   }
-  if (input.tenant_id !== NAUFRAGO_TENANT_ID_HINT) {
+  if (!NAUFRAGO_TENANT_IDS.has(input.tenant_id)) {
     return { verdict: 'pass', reason: 'other_tenant' }
   }
   const cap = input.cap_usd ?? NAUFRAGO_PHASE1_RUN_CAP_USD
@@ -95,10 +122,12 @@ export function getNaufragoCapSnapshot() {
   return {
     cap_usd: NAUFRAGO_PHASE1_RUN_CAP_USD,
     daily_alert_usd: NAUFRAGO_DAILY_ALERT_USD,
+    tenant_id_uuid: NAUFRAGO_TENANT_ID_UUID,
     tenant_id_hint: NAUFRAGO_TENANT_ID_HINT,
+    tenant_ids_accepted: Array.from(NAUFRAGO_TENANT_IDS),
     enforced: isNaufragoCapEnforced(),
     enforce_env_var: 'SALA_NAUFRAGO_RUN_CAP_ENFORCE',
     canon_source:
-      'SEAM-CLOSE-modelb-shadow-2026-06-05.md · Tope de costo Náufrago',
+      'SEAM-CLOSE-modelb-shadow-2026-06-05.md · Tope de costo Náufrago · Phase 1.1 (gap #2 fix) tenant UUID canon',
   }
 }

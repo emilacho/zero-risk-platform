@@ -74,7 +74,9 @@ export {
 export {
   NAUFRAGO_PHASE1_RUN_CAP_USD,
   NAUFRAGO_DAILY_ALERT_USD,
+  NAUFRAGO_TENANT_ID_UUID,
   NAUFRAGO_TENANT_ID_HINT,
+  NAUFRAGO_TENANT_IDS,
   isNaufragoCapEnforced,
   evaluateNaufragoRunCap,
   getNaufragoCapSnapshot,

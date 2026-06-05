@@ -180,7 +180,19 @@ export async function dispatchToWorkflow(
   // forwards `_journey_id` as `workflow_id` to `/api/agents/run-sdk` so
   // `agent_invocations.workflow_id = sala stream_id` (projection can
   // then match rows back to the sala stream).
+  //
+  // Phase 1.1 (2026-06-05 first-fire gap #1 fix) · `business_payload`
+  // SPREADS FIRST so source-supplied fields (client_name · website ·
+  // industry · contract_scope · etc) reach the worker's Validate Deal
+  // Data node without bespoke n8n shapes. Sala metadata declared
+  // AFTER so sala fields ALWAYS override on key collision (defense ·
+  // a malicious or buggy source can't hijack _sala_* / _journey_id /
+  // client_id / tenant_id / trigger_source / target_step_id).
+  const business = decision.business_payload
   const body = {
+    ...(business && typeof business === 'object' && !Array.isArray(business)
+      ? business
+      : {}),
     _sala_correlation_id: decision.correlation_id,
     _sala_caused_by_event_id: decision.caused_by_event_id,
     _sala_idempotency_token: idempotency_token,
