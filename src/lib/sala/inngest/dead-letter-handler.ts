@@ -33,8 +33,22 @@
  * input value for enum sala_event_type_enum: "dead_letter"` · the
  * handler logs + swallows · Slack still fires · zero crash.
  */
+import { randomUUID } from 'node:crypto'
 import { buildIdempotencyKey } from '@/lib/sala-event-log'
 import type { EventLogStorage } from '@/lib/sala-event-log'
+
+/** RFC4122 UUID pattern · ANY version (1-5). Used by writeDeadLetter
+ *  to validate UUID-typed columns before INSERT. tenant_id, client_id,
+ *  stream_id, correlation_id are all UUID columns in sala_event_log
+ *  (per ADR-009 schema). If the trigger event passed a non-UUID string
+ *  there, the INSERT would fail · we generate a synthetic UUID and
+ *  preserve the original string in `payload` for observability. */
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isUuid(v: unknown): v is string {
+  return typeof v === 'string' && UUID_REGEX.test(v)
+}
 
 export interface DeadLetterContext {
   /** The Inngest function id (e.g. 'synthetic-durability-test'). */
@@ -140,14 +154,25 @@ export async function writeDeadLetter(
         string,
         unknown
       >
-      const tenant_id = (triggerData.tenant_id as string) ?? 'unknown'
-      const client_id = (triggerData.client_id as string) ?? 'unknown'
-      const stream_id =
-        (triggerData.stream_id as string) ??
-        `dlq/${ctx.function_id}/${ctx.inngest_run_id ?? 'no-run'}`
-      const correlation_id =
-        (triggerData.correlation_id as string) ??
-        `dlq-${ctx.function_id}-${now()}`
+      // ─── UUID-typed columns · canonical contract ──────────────────
+      // tenant_id · client_id · stream_id · correlation_id are UUID
+      // columns in sala_event_log. If the trigger event provided a
+      // valid UUID, use it · otherwise generate a synthetic UUID and
+      // stash the original (non-UUID) value in payload.original_* for
+      // observability. Defense-in-depth so DLQ telemetry NEVER drops
+      // due to upstream callers passing string identifiers.
+      const tenant_id = isUuid(triggerData.tenant_id)
+        ? (triggerData.tenant_id as string)
+        : randomUUID()
+      const client_id = isUuid(triggerData.client_id)
+        ? (triggerData.client_id as string)
+        : randomUUID()
+      const stream_id = isUuid(triggerData.stream_id)
+        ? (triggerData.stream_id as string)
+        : randomUUID()
+      const correlation_id = isUuid(triggerData.correlation_id)
+        ? (triggerData.correlation_id as string)
+        : randomUUID()
       const operation_type = ctx.function_id
       const journey_type = (triggerData.journey_type as string) ?? 'SYNTHETIC'
       const logical_period =
@@ -186,6 +211,24 @@ export async function writeDeadLetter(
           inngest_run_id: ctx.inngest_run_id ?? null,
           dead_lettered_at,
           trigger_payload: triggerData,
+          // Original (non-UUID) values from trigger event, preserved
+          // so dashboards can still correlate even when the columnar
+          // fields got UUID-substituted. Null when upstream provided
+          // a valid UUID (no substitution happened).
+          original_identifiers: {
+            tenant_id: isUuid(triggerData.tenant_id)
+              ? null
+              : (triggerData.tenant_id ?? null),
+            client_id: isUuid(triggerData.client_id)
+              ? null
+              : (triggerData.client_id ?? null),
+            stream_id: isUuid(triggerData.stream_id)
+              ? null
+              : (triggerData.stream_id ?? null),
+            correlation_id: isUuid(triggerData.correlation_id)
+              ? null
+              : (triggerData.correlation_id ?? null),
+          },
         },
       })
       logger.info('dead_letter event written', {

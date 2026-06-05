@@ -38,6 +38,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 function loadDotenv() {
   const candidates = [
@@ -93,8 +94,15 @@ async function main() {
   // Unique runId per execution · prevents Inngest's idempotency
   // (event.data.runId · 24h TTL) from collapsing repeated smokes.
   const runId = 'dlq-e2e-shadow-' + Date.now()
-  const tenant_id = 'synthetic'
-  const client_id = runId
+  // tenant_id · client_id · stream_id · correlation_id are UUID columns
+  // in sala_event_log (per ADR-009 schema). The writer hardens against
+  // string identifiers (substitutes UUID + stashes original in payload)
+  // but we pass valid UUIDs here so the canonical path is exercised
+  // E2E without the substitution branch firing.
+  const tenant_id = randomUUID()
+  const client_id = randomUUID()
+  const stream_id = randomUUID()
+  const correlation_id = randomUUID()
 
   // ─── STEP 0 · pre-check · enum value applied ────────────────────
   logHeader('STEP 0 · pre-check · `dead_letter` enum value present')
@@ -129,8 +137,8 @@ async function main() {
       simulate_failure: 'always',
       tenant_id,
       client_id,
-      stream_id: 'synthetic/' + client_id + '/SMOKE/dlq-e2e',
-      correlation_id: 'dlq-e2e-' + runId,
+      stream_id,
+      correlation_id,
       journey_type: 'SMOKE',
       logical_period: 'dlq-e2e',
     },
@@ -155,14 +163,17 @@ async function main() {
   while (Date.now() < deadlineAt) {
     await sleep(POLL_INTERVAL_MS)
     const elapsedS = Math.round((Date.now() - sendStartedAt) / 1000)
+    // Filter by payload.original_event_name = 'synthetic/durability.test'
+    // + payload.trigger_payload.runId === our unique runId. PostgREST
+    // JSONB filter uses `->>` for text extraction. This avoids any
+    // UUID-cast ambiguity since runId is a unique string per smoke run.
     const q =
       '/rest/v1/sala_event_log?select=*' +
       '&event_type=eq.dead_letter' +
-      '&tenant_id=eq.' +
-      encodeURIComponent(tenant_id) +
-      '&client_id=eq.' +
-      encodeURIComponent(client_id) +
-      '&limit=1'
+      '&payload->>function_id=eq.synthetic-durability-test' +
+      '&payload->trigger_payload->>runId=eq.' +
+      encodeURIComponent(runId) +
+      '&order=created_at.desc&limit=1'
     const res = await fetch(supaUrl + q, { headers: restHeaders })
     if (res.status !== 200) {
       console.warn(
@@ -217,14 +228,17 @@ async function main() {
 
   const expectations = {
     'event_type === dead_letter': row.event_type === 'dead_letter',
-    'tenant_id === synthetic': row.tenant_id === 'synthetic',
-    'client_id === ' + client_id: row.client_id === client_id,
+    'tenant_id matches synthetic UUID': row.tenant_id === tenant_id,
+    'client_id matches synthetic UUID': row.client_id === client_id,
     'function_id === synthetic-durability-test':
       payload.function_id === 'synthetic-durability-test',
     'inngest_run_id is set': Boolean(payload.inngest_run_id),
     'final_error mentions step-2':
       typeof payload.final_error === 'string' &&
       payload.final_error.includes('step-2'),
+    'trigger_payload.runId matches':
+      payload.trigger_payload &&
+      payload.trigger_payload.runId === runId,
   }
   console.log('')
   let allOk = true
