@@ -101,7 +101,17 @@ const defaultLogger = {
 
 /** Construct the onFailure handler bound to a function id. The
  *  returned function is the value passed to Inngest's
- *  `createFunction({ ..., onFailure })`. */
+ *  `createFunction({ ..., onFailure })`.
+ *
+ *  When Inngest dispatches the auto-generated failure handler, the
+ *  `input.event` it passes is the `inngest/function.failed` system
+ *  event · NOT the original triggering event. The original event is
+ *  NESTED at `input.event.data.event` (per Inngest v4 cloud schema)
+ *  alongside `input.event.data.run_id` + `input.event.data.function_id`
+ *  + `input.event.data.error`. We unwrap that here so the writer sees
+ *  the ORIGINAL event's data fields (tenant_id · client_id · etc) for
+ *  isUuid() validation · NOT the failure-event wrapper.
+ */
 export function buildDeadLetterFailureHandler(
   function_id: string,
   deps: DeadLetterHandlerDeps = {},
@@ -112,11 +122,21 @@ export function buildDeadLetterFailureHandler(
     readonly attempt?: number
     readonly run_id?: string
   }): Promise<void> => {
+    // Unwrap the nested original event if present (Inngest function.failed
+    // shape). Fall back to the input event itself when called directly
+    // (e.g. by tests not simulating the failure-event wrapper).
+    const failureData = (input.event?.data ?? {}) as Record<string, unknown>
+    const innerEvent =
+      (failureData.event as DeadLetterContext['trigger_event'] | undefined) ??
+      input.event
+    const innerRunId =
+      (failureData.run_id as string | undefined) ?? input.run_id
+
     const ctx: DeadLetterContext = {
       function_id,
-      trigger_event: input.event,
+      trigger_event: innerEvent,
       error: input.error,
-      inngest_run_id: input.run_id,
+      inngest_run_id: innerRunId,
       attempts_made: input.attempt,
     }
     await writeDeadLetter(ctx, deps)

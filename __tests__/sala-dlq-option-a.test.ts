@@ -418,6 +418,59 @@ describe('buildDeadLetterFailureHandler · Inngest onFailure wire shape', () => 
     )
   })
 
+  it('unwraps the Inngest function.failed wrapper to reach the original event', async () => {
+    const VALID_TENANT = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    const VALID_CLIENT = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff'
+    const { storage, insertFn } = fakeStorage()
+    const handler = buildDeadLetterFailureHandler(
+      'synthetic-durability-test',
+      asDeps({
+        storage,
+        slackWebhookUrl: 'https://slack.test/hook',
+        logger: silentLogger(),
+        fetchImpl: vi.fn(async () => ({ ok: true, status: 200 } as Response)),
+      }),
+    )
+    // Simulate the real Inngest function.failed event shape · top-level
+    // data is the wrapper · `data.event` is the ORIGINAL synthetic event.
+    await handler({
+      event: {
+        id: '01KFAILUREID',
+        name: 'inngest/function.failed',
+        data: {
+          _inngest: { status: 'Failed' },
+          run_id: 'inngest-fn-run-abc',
+          function_id: 'zero-risk-platform-synthetic-durability-test',
+          event: {
+            id: '01KORIGSYNTHETIC',
+            name: 'synthetic/durability.test',
+            data: {
+              tenant_id: VALID_TENANT,
+              client_id: VALID_CLIENT,
+              runId: 'inner-run-xyz',
+            },
+          },
+        },
+      },
+      error: new Error('terminal'),
+    })
+    const insertArg = insertFn.mock.calls[0]![0] as Record<string, unknown>
+    // The writer should see the INNER event's UUIDs · NOT random ones.
+    expect(insertArg.tenant_id).toBe(VALID_TENANT)
+    expect(insertArg.client_id).toBe(VALID_CLIENT)
+    // inngest_run_id should come from failure wrapper's `run_id` field.
+    expect((insertArg.payload as Record<string, unknown>).inngest_run_id).toBe(
+      'inngest-fn-run-abc',
+    )
+    // original_event_name should be the ORIGINAL (not the wrapper).
+    expect(
+      (insertArg.payload as Record<string, unknown>).original_event_name,
+    ).toBe('synthetic/durability.test')
+    expect(
+      (insertArg.payload as Record<string, unknown>).original_event_id,
+    ).toBe('01KORIGSYNTHETIC')
+  })
+
   it('handler resolves even with undefined optional ctx fields', async () => {
     const { storage, insertFn } = fakeStorage()
     const fetchImpl = vi.fn(async () => ({ ok: true, status: 200 } as Response))
