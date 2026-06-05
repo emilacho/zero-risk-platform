@@ -17,12 +17,12 @@ describe('JOURNEY_WORKFLOW_MAP · Phase 1 scope', () => {
     expect(target!.worker_name).toMatch(/Client Onboarding E2E v2/)
   })
 
-  it('canon · ONBOARD declares 8 phase_boundaries · coarse-grain libreto', () => {
+  it('canon · ONBOARD declares 7 canonical phase_boundaries · coarse-grain libreto · CC#4-aligned (Costura C)', () => {
     const target = JOURNEY_WORKFLOW_MAP.ONBOARD!
-    expect(target.phase_boundaries.length).toBe(8)
-    expect(target.phase_boundaries[0]).toBe('deal_won_received')
+    expect(target.phase_boundaries.length).toBe(7)
+    expect(target.phase_boundaries[0]).toBe('INTAKE')
     expect(target.phase_boundaries[target.phase_boundaries.length - 1]).toBe(
-      'journey_completed',
+      'APIFY_WIRE',
     )
   })
 

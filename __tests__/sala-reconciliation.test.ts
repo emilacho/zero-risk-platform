@@ -10,43 +10,44 @@ import {
   postReconciliationAlert,
 } from '@/lib/sala-journey-dispatch'
 
+// Canon canonical · the 7-phase taxonomy aligned with CC#4 (Costura C
+// closure 2026-06-05). Names mirror CANONICAL_PHASES_LyVoKcrypS5uLyuu.
 const PHASES = [
-  'deal_won_received',
-  'onboarding_specialist_done',
-  'notion_workspace_created',
-  'success_plan_built',
-  'kickoff_scheduled',
-  'mc_inbox_notified',
-  'cliente_persisted',
-  'journey_completed',
+  'INTAKE',
+  'DISCOVERY',
+  'WORKSPACE',
+  'SCHEDULING',
+  'NOTIFICATION',
+  'CASCADE',
+  'APIFY_WIRE',
 ]
 
 describe('reconcileObserved · match', () => {
   it('canon · first phase emitted, no baseline → match', () => {
     const r = reconcileObserved({
-      emitted_phase_step_id: 'deal_won_received',
+      emitted_phase_step_id: 'INTAKE',
       last_phase_step_id: null,
       phase_boundaries: PHASES,
     })
     expect(r.kind).toBe('match')
-    expect(r.expected_next).toBe('onboarding_specialist_done')
+    expect(r.expected_next).toBe('DISCOVERY')
     expect(r.delta).toBe(0)
   })
 
   it('canon · emitted is expected next from last → match', () => {
     const r = reconcileObserved({
-      emitted_phase_step_id: 'notion_workspace_created',
-      last_phase_step_id: 'onboarding_specialist_done',
+      emitted_phase_step_id: 'WORKSPACE',
+      last_phase_step_id: 'DISCOVERY',
       phase_boundaries: PHASES,
     })
     expect(r.kind).toBe('match')
-    expect(r.expected_next).toBe('success_plan_built')
+    expect(r.expected_next).toBe('SCHEDULING')
   })
 
   it('canon · idempotent re-emit of last phase → match', () => {
     const r = reconcileObserved({
-      emitted_phase_step_id: 'notion_workspace_created',
-      last_phase_step_id: 'notion_workspace_created',
+      emitted_phase_step_id: 'WORKSPACE',
+      last_phase_step_id: 'WORKSPACE',
       phase_boundaries: PHASES,
     })
     expect(r.kind).toBe('match')
@@ -57,7 +58,7 @@ describe('reconcileObserved · match', () => {
 describe('reconcileObserved · skipped_ahead', () => {
   it('canon · first observed is not boundary #0 → skipped_ahead', () => {
     const r = reconcileObserved({
-      emitted_phase_step_id: 'success_plan_built',
+      emitted_phase_step_id: 'SCHEDULING',
       last_phase_step_id: null,
       phase_boundaries: PHASES,
     })
@@ -67,21 +68,21 @@ describe('reconcileObserved · skipped_ahead', () => {
 
   it('canon · emitted is 2 boundaries ahead → skipped_ahead with delta=1', () => {
     const r = reconcileObserved({
-      emitted_phase_step_id: 'notion_workspace_created',
-      last_phase_step_id: 'deal_won_received',
+      emitted_phase_step_id: 'WORKSPACE',
+      last_phase_step_id: 'INTAKE',
       phase_boundaries: PHASES,
     })
     expect(r.kind).toBe('skipped_ahead')
     expect(r.delta).toBe(1)
-    expect(r.expected_next).toBe('onboarding_specialist_done')
+    expect(r.expected_next).toBe('DISCOVERY')
   })
 })
 
 describe('reconcileObserved · backwards', () => {
   it('canon · emitted before last → backwards with negative delta', () => {
     const r = reconcileObserved({
-      emitted_phase_step_id: 'onboarding_specialist_done',
-      last_phase_step_id: 'success_plan_built',
+      emitted_phase_step_id: 'DISCOVERY',
+      last_phase_step_id: 'SCHEDULING',
       phase_boundaries: PHASES,
     })
     expect(r.kind).toBe('backwards')
@@ -92,8 +93,8 @@ describe('reconcileObserved · backwards', () => {
 describe('reconcileObserved · unknown_phase', () => {
   it('canon · emitted not in boundaries → unknown_phase', () => {
     const r = reconcileObserved({
-      emitted_phase_step_id: 'made_up_step',
-      last_phase_step_id: 'deal_won_received',
+      emitted_phase_step_id: 'MADE_UP_PHASE',
+      last_phase_step_id: 'INTAKE',
       phase_boundaries: PHASES,
     })
     expect(r.kind).toBe('unknown_phase')
@@ -104,7 +105,7 @@ describe('reconcileObserved · unknown_phase', () => {
 describe('reconcileObserved · no_baseline', () => {
   it('canon · last not in boundaries → no_baseline', () => {
     const r = reconcileObserved({
-      emitted_phase_step_id: 'deal_won_received',
+      emitted_phase_step_id: 'INTAKE',
       last_phase_step_id: 'unknown-step-from-state',
       phase_boundaries: PHASES,
     })
@@ -125,7 +126,7 @@ describe('postReconciliationAlert · match path · log only', () => {
       },
       journey_type: 'ONBOARD',
       stream_id: 'stream-1',
-      emitted_phase_step_id: 'deal_won_received',
+      emitted_phase_step_id: 'INTAKE',
       last_phase_step_id: null,
       slack_webhook_url: 'https://hooks.test/slack',
       fetch_impl: fetchImpl as unknown as typeof fetch,
@@ -147,14 +148,14 @@ describe('postReconciliationAlert · mismatch path · Slack alert', () => {
     await postReconciliationAlert({
       result: {
         kind: 'skipped_ahead',
-        expected_next: 'onboarding_specialist_done',
+        expected_next: 'DISCOVERY',
         delta: 1,
         summary: 'skipped 1',
       },
       journey_type: 'ONBOARD',
       stream_id: 'stream-1',
-      emitted_phase_step_id: 'notion_workspace_created',
-      last_phase_step_id: 'deal_won_received',
+      emitted_phase_step_id: 'WORKSPACE',
+      last_phase_step_id: 'INTAKE',
       slack_webhook_url: 'https://hooks.test/slack',
       fetch_impl: fetchImpl as unknown as typeof fetch,
       logger,
@@ -183,8 +184,8 @@ describe('postReconciliationAlert · mismatch path · Slack alert', () => {
       },
       journey_type: 'ONBOARD',
       stream_id: 'stream-1',
-      emitted_phase_step_id: 'deal_won_received',
-      last_phase_step_id: 'success_plan_built',
+      emitted_phase_step_id: 'INTAKE',
+      last_phase_step_id: 'SCHEDULING',
       slack_webhook_url: 'https://hooks.test/slack',
       fetch_impl: fetchImpl as unknown as typeof fetch,
     })
@@ -208,8 +209,8 @@ describe('postReconciliationAlert · mismatch path · Slack alert', () => {
       },
       journey_type: 'ONBOARD',
       stream_id: 'stream-1',
-      emitted_phase_step_id: 'made_up_step',
-      last_phase_step_id: 'deal_won_received',
+      emitted_phase_step_id: 'MADE_UP_PHASE',
+      last_phase_step_id: 'INTAKE',
       slack_webhook_url: 'https://hooks.test/slack',
       fetch_impl: fetchImpl as unknown as typeof fetch,
     })
@@ -233,8 +234,8 @@ describe('postReconciliationAlert · fail-open · NEVER throws', () => {
         },
         journey_type: 'ONBOARD',
         stream_id: 'stream-1',
-        emitted_phase_step_id: 'deal_won_received',
-        last_phase_step_id: 'success_plan_built',
+        emitted_phase_step_id: 'INTAKE',
+        last_phase_step_id: 'SCHEDULING',
         slack_webhook_url: 'https://hooks.test/slack',
         fetch_impl: fetchImpl as unknown as typeof fetch,
         logger,
@@ -280,8 +281,8 @@ describe('postReconciliationAlert · fail-open · NEVER throws', () => {
         },
         journey_type: 'ONBOARD',
         stream_id: 'stream-1',
-        emitted_phase_step_id: 'deal_won_received',
-        last_phase_step_id: 'success_plan_built',
+        emitted_phase_step_id: 'INTAKE',
+        last_phase_step_id: 'SCHEDULING',
         logger,
       })
       expect(logger.info).toHaveBeenCalled()
@@ -299,8 +300,8 @@ describe('reconcileObserved + alert · STOP-2 dimension (a) dispatch-único', ()
   // NOT spam Slack with mismatch alerts.
   it('canon · re-emitting last phase boundary → match (no alert · idempotent)', async () => {
     const result1 = reconcileObserved({
-      emitted_phase_step_id: 'notion_workspace_created',
-      last_phase_step_id: 'notion_workspace_created',
+      emitted_phase_step_id: 'WORKSPACE',
+      last_phase_step_id: 'WORKSPACE',
       phase_boundaries: PHASES,
     })
     expect(result1.kind).toBe('match')
@@ -310,8 +311,8 @@ describe('reconcileObserved + alert · STOP-2 dimension (a) dispatch-único', ()
       result: result1,
       journey_type: 'ONBOARD',
       stream_id: 'stream-1',
-      emitted_phase_step_id: 'notion_workspace_created',
-      last_phase_step_id: 'notion_workspace_created',
+      emitted_phase_step_id: 'WORKSPACE',
+      last_phase_step_id: 'WORKSPACE',
       slack_webhook_url: 'https://hooks.test/slack',
       fetch_impl: fetchImpl as unknown as typeof fetch,
     })
