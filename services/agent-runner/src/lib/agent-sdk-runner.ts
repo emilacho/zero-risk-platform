@@ -408,6 +408,44 @@ export function _buildSystemPrompt(
 }
 
 /**
+ * Canon canonical · MCP namespace prefix that the Claude Agent SDK uses for
+ * tool surface from registered MCP servers. The SDK constructs tool names as
+ * `mcp__<server-name>__<tool-name>` · adding the FULLY QUALIFIED name to
+ * `allowedTools` is the canonical way to let `permissionMode='default'`
+ * accept an MCP tool without an interactive approval prompt (the SDK gates
+ * any tool NOT in `allowedTools`).
+ *
+ * Per-MCP allowed tools table (SPEC lazo agentico 2026-06-06 follow-up · Track L).
+ * Add new entries when a future MCP needs autonomous tool calls from agents.
+ * Tests cover the activation matrix in `__tests__/agent-sdk-runner-allowed-tools.test.ts`.
+ */
+const MCP_ALLOWED_TOOLS_BY_SERVER: Record<string, readonly string[]> = {
+  'discovery-output': ['mcp__discovery-output__emit_discovery_output'],
+}
+
+/**
+ * Canon canonical · derive the per-agent allowedTools array · base SDK tools
+ * + per-MCP additions based on which MCP servers `buildMcpServers` registered.
+ * Pure function · cero IO · tested independently of the SDK call site.
+ *
+ * Why · `permissionMode='default'` blocks any tool NOT in `allowedTools` ·
+ * the smoke linchpin (2026-06-06) revealed the agent saw the MCP tool but
+ * refused to invoke it without user permission (canonical SDK behavior).
+ * Adding the tool to `allowedTools` lifts the gate · the agent invokes
+ * autonomously when ready · canon §148 honest forensics via emission_count.
+ */
+export function deriveAllowedTools(
+  mcpServers: Record<string, unknown>,
+): string[] {
+  const base = ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch']
+  const extras: string[] = []
+  for (const [serverName, tools] of Object.entries(MCP_ALLOWED_TOOLS_BY_SERVER)) {
+    if (mcpServers[serverName]) extras.push(...tools)
+  }
+  return [...base, ...extras]
+}
+
+/**
  * Build the SDK Options object: model, allowedTools, resume, MCP servers.
  */
 function buildSdkOptions(
@@ -423,24 +461,34 @@ function buildSdkOptions(
     preset: 'claude_code' as const,
     append: systemPrompt,
   }
+  // MCP servers · canonical registry (Sprint 6 Track C1) covers
+  // client-brain (per-cliente) + meta-ads (Brazo 3) + apify · dataforseo
+  // · higgsfield via env-gated conditional activation. See
+  // `agent-mcp-registry.ts` for the activation matrix and per-agent
+  // deny-list. `needsMetaAds()` remains exported below for direct callers
+  // (smoke test + lib consumers).
+  //
+  // SPEC lazo agentico 2026-06-06 Track L · build mcpServers FIRST so
+  // `deriveAllowedTools` can branch on which servers are registered ·
+  // canonical mc/MCP-tools-in-allowedTools wiring per the SDK contract
+  // (permissionMode=default gates any tool not whitelisted).
+  const mcpServers = buildMcpServers({
+    agentSlug: input.agentName,
+    clientId: input.clientId ?? undefined,
+  })
   return {
     systemPrompt: systemPromptOption as unknown as Options['systemPrompt'],
     model: modelId,
     // Solo lectura + búsqueda; los agentes no editan archivos locales.
-    allowedTools: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
+    // SPEC Track L · per-MCP tool additions when the server is registered
+    // (e.g. discovery-output → emit_discovery_output canonical autonomous emit).
+    allowedTools: deriveAllowedTools(
+      mcpServers as unknown as Record<string, unknown>,
+    ),
     permissionMode: 'default',
     // Reanudar sesión previa para encadenar contexto entre pasos del pipeline.
     ...(input.resumeSessionId ? { resume: input.resumeSessionId } : {}),
-    // MCP servers · canonical registry (Sprint 6 Track C1) covers
-    // client-brain (per-cliente) + meta-ads (Brazo 3) + apify · dataforseo
-    // · higgsfield via env-gated conditional activation. See
-    // `agent-mcp-registry.ts` for the activation matrix and per-agent
-    // deny-list. `needsMetaAds()` remains exported below for direct callers
-    // (smoke test + lib consumers).
-    mcpServers: buildMcpServers({
-      agentSlug: input.agentName,
-      clientId: input.clientId ?? undefined,
-    }),
+    mcpServers,
   }
 }
 
