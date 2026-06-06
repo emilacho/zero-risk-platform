@@ -38,7 +38,30 @@ function asResult(usage: Record<string, unknown> = {}) {
 }
 
 describe('drainStream · emit_discovery_output capture', () => {
-  it('captures tool input when agent invokes emit_discovery_output', async () => {
+  it('captures tool input via canonical SDK MCP namespace (mcp__discovery-output__emit_discovery_output)', async () => {
+    // Canon · Track M (2026-06-06 · post-smoke ROJO root-cause) · the SDK
+    // emits tool_use blocks with the FULLY QUALIFIED MCP namespace name ·
+    // drainStream MUST match against the namespace · matching the bare name
+    // silently misses every tool_use block.
+    const stream = streamOf(
+      { type: 'system', subtype: 'init', session_id: 'sess-1' },
+      asAssistant([
+        { type: 'text', text: 'Calling MCP tool now.' },
+        {
+          type: 'tool_use',
+          name: 'mcp__discovery-output__emit_discovery_output',
+          input: SAMPLE_INPUT,
+        },
+      ]),
+      asResult(),
+    )
+    const drain = await drainStream(stream as never)
+    expect(drain.discoveryToolCall).not.toBeNull()
+    expect(drain.discoveryToolCall?.input).toEqual(SAMPLE_INPUT)
+    expect(drain.discoveryToolCall?.emission_count).toBe(1)
+  })
+
+  it('also captures via the bare tool name (defensive · backwards-compat)', async () => {
     const stream = streamOf(
       { type: 'system', subtype: 'init', session_id: 'sess-1' },
       asAssistant([
@@ -64,13 +87,23 @@ describe('drainStream · emit_discovery_output capture', () => {
     expect(drain.responseText).toContain('Just prose')
   })
 
-  it('keeps LAST emission when agent iterates (multiple tool_use blocks)', async () => {
+  it('keeps LAST emission when agent iterates (mixed namespace + bare)', async () => {
     const firstInput = { ...SAMPLE_INPUT, own_handles: { instagram: '@first' } }
     const secondInput = { ...SAMPLE_INPUT, own_handles: { instagram: '@final' } }
     const stream = streamOf(
       { type: 'system', subtype: 'init', session_id: 'sess-1' },
-      asAssistant([{ type: 'tool_use', name: 'emit_discovery_output', input: firstInput }]),
-      asAssistant([{ type: 'tool_use', name: 'emit_discovery_output', input: secondInput }]),
+      asAssistant([
+        // first iteration · bare name
+        { type: 'tool_use', name: 'emit_discovery_output', input: firstInput },
+      ]),
+      asAssistant([
+        // last iteration · canonical SDK namespace (the form prod actually emits)
+        {
+          type: 'tool_use',
+          name: 'mcp__discovery-output__emit_discovery_output',
+          input: secondInput,
+        },
+      ]),
       asResult(),
     )
     const drain = await drainStream(stream as never)

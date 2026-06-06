@@ -424,6 +424,25 @@ const MCP_ALLOWED_TOOLS_BY_SERVER: Record<string, readonly string[]> = {
 }
 
 /**
+ * Canon canonical · the SDK tool_use block names the Claude Agent SDK emits
+ * for the canonical Discovery tool. SPEC Track M (2026-06-06 · post-smoke
+ * ROJO round 4 root-cause) · the SDK emits tool_use blocks with the FULLY
+ * QUALIFIED MCP namespace name (`mcp__<server>__<tool>`) · NOT the bare
+ * tool name. drainStream must match against the namespace · matching the
+ * bare name silently misses every tool_use block · the agent calls the
+ * tool but the capture path falls through to the text parser fallback.
+ *
+ * We accept BOTH forms for resilience · if a future SDK release changes
+ * the convention OR a server-side override drops the prefix · drainStream
+ * still captures. Cero false positives because only canonical names enter
+ * this set.
+ */
+export const DISCOVERY_TOOL_USE_NAMES: ReadonlySet<string> = new Set([
+  'mcp__discovery-output__emit_discovery_output', // canonical SDK MCP namespace
+  'emit_discovery_output', // bare name · defensive fallback
+])
+
+/**
  * Canon canonical · derive the per-agent allowedTools array · base SDK tools
  * + per-MCP additions based on which MCP servers `buildMcpServers` registered.
  * Pure function · cero IO · tested independently of the SDK call site.
@@ -559,7 +578,8 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
             responseText += block.text
           } else if (
             block.type === 'tool_use' &&
-            block.name === 'emit_discovery_output' &&
+            typeof block.name === 'string' &&
+            DISCOVERY_TOOL_USE_NAMES.has(block.name) &&
             block.input &&
             typeof block.input === 'object' &&
             !Array.isArray(block.input)
@@ -568,6 +588,11 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
             // we keep the LAST emission (final answer · the agent may iterate).
             // Args are pre-validated by the MCP server's zod schema before
             // reaching here so shape is canonical per SDK contract.
+            //
+            // Track M (2026-06-06) · accept both the canonical SDK MCP
+            // namespace name (`mcp__discovery-output__emit_discovery_output`)
+            // AND the bare tool name (`emit_discovery_output`) · matches the
+            // DISCOVERY_TOOL_USE_NAMES set canonical.
             discoveryEmissionCount++
             lastDiscoveryInput = block.input
           }
