@@ -47,7 +47,9 @@ import {
 import {
   dispatchAsyncCallback,
   resolveCallbackUrl,
+  validateCallbackUrl,
 } from '@/lib/agent-async-callback'
+import { waitUntil } from '@vercel/functions'
 
 export const runtime = 'nodejs'
 // Sprint 12 Track U · P0 #2 bump 300→800s · Track R audit identified Journey B
@@ -231,6 +233,52 @@ const HOP_BY_HOP_OR_REWRITTEN_HEADERS = new Set([
   'upgrade',
 ])
 
+/**
+ * Canon canonical · Track O fast-ack recursion helper. Build a synthetic
+ * Request body with `callback_url` STRIPPED from top-level + context · the
+ * inner POST then routes through the sync path canon · zero double-dispatch.
+ *
+ * Preserves all other body fields verbatim · headers identical (the auth
+ * key + workflow attribution headers must reach the inner call). The auth
+ * gate has already passed at the outer level · the inner call repeats it
+ * (canon defense in depth · zero cost vs the agent SDK call).
+ */
+export function buildInnerRequestWithoutCallback(
+  outerRequest: Request,
+  outerBody: RunSdkInput,
+): Request {
+  const ctx = (outerBody.context ?? {}) as Record<string, unknown>
+  // SHALLOW-OMIT both snake + camel · top-level + context-level. Cero JSON
+  // body re-parse downstream · the validateObject layer reads fresh.
+  const {
+    callback_url: _cb1,
+    callbackUrl: _cb2,
+    ...bodyMinusCallback
+  } = outerBody as unknown as Record<string, unknown>
+  const {
+    callback_url: _ctxCb1,
+    callbackUrl: _ctxCb2,
+    ...ctxMinusCallback
+  } = ctx
+  const innerBody = {
+    ...bodyMinusCallback,
+    context: ctxMinusCallback,
+  }
+  // Forward the original headers verbatim · auth + workflow_id stay canonical.
+  const innerHeaders = new Headers()
+  outerRequest.headers.forEach((value, key) => {
+    if (!HOP_BY_HOP_OR_REWRITTEN_HEADERS.has(key.toLowerCase())) {
+      innerHeaders.set(key, value)
+    }
+  })
+  innerHeaders.set('content-type', 'application/json')
+  return new Request(outerRequest.url, {
+    method: 'POST',
+    headers: innerHeaders,
+    body: JSON.stringify(innerBody),
+  })
+}
+
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)
   if (!auth.ok) {
@@ -253,6 +301,72 @@ export async function POST(request: Request) {
   const v = validateObject<RunSdkInput>(raw, 'agents-run-sdk')
   if (!v.ok) return v.response
   const body = v.data
+
+  // ─── Track O async fast-ack branch (SPEC 2026-06-09) ──────────────────
+  // When `callback_url` is present + valid · return 202 + ack body IMMEDIATELY
+  // and execute the full agent workflow in background via `waitUntil`. The
+  // canonical n8n Wait+Resume pattern · n8n's HTTP node returns in <1s · the
+  // worker pauses on the Wait node · the callback (fired post-agent-completion
+  // + post-persist-hooks) reaches n8n's resume URL · worker continues.
+  //
+  // Why · n8n's HTTP client disconnects long-running requests at ~30s (worker
+  // node timeout) · the agent + persist take ~250-300s · canonical fix is
+  // fire-and-forget via Wait pattern + waitUntil keeps the background promise
+  // alive under maxDuration=800s (Vercel Pro Fluid Compute).
+  //
+  // Recursion design · the outer call detects callback_url + dispatches a
+  // recursive POST to itself with callback_url STRIPPED from body+context ·
+  // the inner call takes the canonical sync path · returns finalResponse ·
+  // outer awaits then POSTs that response to the caller's callback_url.
+  // Cero double-dispatch (inner sees callback_url=null + skips its own
+  // dispatch · outer owns the canonical callback).
+  const callbackUrlRaw = resolveCallbackUrl(body)
+  if (callbackUrlRaw && validateCallbackUrl(callbackUrlRaw)) {
+    const callbackUrl = callbackUrlRaw
+    const ackTimestamp = new Date().toISOString()
+    waitUntil(
+      (async () => {
+        let innerBody: unknown
+        try {
+          const innerRequest = buildInnerRequestWithoutCallback(request, body)
+          const innerResponse = await POST(innerRequest)
+          innerBody = await innerResponse.json()
+        } catch (e) {
+          innerBody = {
+            success: false,
+            error: e instanceof Error ? e.message : String(e),
+            error_kind: 'inner_run_threw',
+            ack_timestamp: ackTimestamp,
+          }
+        }
+        const cb = await dispatchAsyncCallback({
+          callback_url: callbackUrl,
+          body:
+            innerBody && typeof innerBody === 'object' && !Array.isArray(innerBody)
+              ? (innerBody as Record<string, unknown>)
+              : { success: false, error: 'inner_response_not_object' },
+        })
+        if (cb.ok) {
+          console.info(
+            `[run-sdk async-callback Track O] OK ${cb.status_code} · ${cb.duration_ms}ms`,
+          )
+        } else {
+          console.warn(
+            `[run-sdk async-callback Track O] FAIL ${cb.kind} · ${cb.detail}`,
+          )
+        }
+      })(),
+    )
+    return NextResponse.json(
+      {
+        accepted: true,
+        will_callback: true,
+        callback_url: callbackUrl,
+        ack_timestamp: ackTimestamp,
+      },
+      { status: 202 },
+    )
+  }
 
   try {
     const agentName = sanitizeString(body.agent, 50)
