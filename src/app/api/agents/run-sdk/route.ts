@@ -44,6 +44,10 @@ import {
   resolveDiscoverySource,
   type DiscoveryOutput,
 } from '@/lib/discovery-output'
+import {
+  dispatchAsyncCallback,
+  resolveCallbackUrl,
+} from '@/lib/agent-async-callback'
 
 export const runtime = 'nodejs'
 // Sprint 12 Track U · P0 #2 bump 300→800s · Track R audit identified Journey B
@@ -89,6 +93,22 @@ interface RunSdkInput {
    */
   dry_run?: boolean
   dryRun?: boolean
+  /**
+   * SPEC async-agent-callback 2026-06-09 · Track N · n8n Wait+Resume pattern.
+   *
+   * When the caller (typically an n8n worker · n8n's `Wait` node generates
+   * `$execution.resumeUrl`) provides this URL · the route POSTs the canonical
+   * baseResponse to it AFTER persist hooks complete. n8n's Wait node then
+   * resumes the workflow with the response body. Works around the n8n HTTP
+   * client keepalive cap (~155s observed 2026-06-09) that disconnects mid-
+   * agent-run · agent SDK + persist hooks still run on Vercel Fluid Compute ·
+   * the callback fires once everything is done.
+   *
+   * Backward-compat · when absent · canonical behavior unchanged (sync return).
+   * Accepted top-level OR nested under `context.callback_url`.
+   */
+  callback_url?: string | null
+  callbackUrl?: string | null
   context?: Record<string, unknown> | null
   extra?: Record<string, unknown> | null
 }
@@ -721,36 +741,97 @@ export async function POST(request: Request) {
       canonicalSlug === SECOND_REVIEWER ||
       !requiresEditorReview(canonicalSlug)
 
+    let finalResponse: Record<string, unknown>
     if (skipMiddleware) {
-      return NextResponse.json(baseResponse)
+      finalResponse = baseResponse
+    } else {
+      const editorConfig = getEditorConfig(canonicalSlug)!
+      const baseUrl =
+        process.env.NEXT_PUBLIC_BASE_URL ||
+        `https://${request.headers.get('host') || 'localhost:3000'}`
+      try {
+        const middlewareResult = await runDualReviewMiddleware({
+          agentSlug: canonicalSlug,
+          content: result.response ?? '',
+          task,
+          context: (body.extra || {}) as Record<string, unknown>,
+          config: editorConfig,
+          supabase: getSupabaseAdmin(),
+          baseUrl,
+          // LOTE-C Fix 8c · propagate resolved client_id (PR #16 resolver
+          // chain) to Camino III reviewers · symmetric with `/api/agents/run`.
+          clientId: clientId,
+        })
+        finalResponse = { ...baseResponse, ...middlewareResult }
+      } catch (middlewareError) {
+        console.error('[Editor Middleware run-sdk] Failed:', middlewareError)
+        finalResponse = {
+          ...baseResponse,
+          editor_review: { verdict: 'middleware_error', severity: 'low' },
+        }
+      }
     }
 
-    const editorConfig = getEditorConfig(canonicalSlug)!
-    const baseUrl =
-      process.env.NEXT_PUBLIC_BASE_URL ||
-      `https://${request.headers.get('host') || 'localhost:3000'}`
-
-    try {
-      const middlewareResult = await runDualReviewMiddleware({
-        agentSlug: canonicalSlug,
-        content: result.response ?? '',
-        task,
-        context: (body.extra || {}) as Record<string, unknown>,
-        config: editorConfig,
-        supabase: getSupabaseAdmin(),
-        baseUrl,
-        // LOTE-C Fix 8c · propagate resolved client_id (PR #16 resolver
-        // chain) to Camino III reviewers · symmetric with `/api/agents/run`.
-        clientId: clientId,
+    // ─── SPEC async-agent-callback 2026-06-09 · Track N ──────────────────
+    // n8n's `Wait` node generates `$execution.resumeUrl` and pauses the
+    // worker · the caller (worker's HTTP node) forwards that URL as
+    // `callback_url` here · we POST the canonical finalResponse to it
+    // AFTER persist hooks complete · n8n resumes the worker with the body.
+    //
+    // Why · n8n's HTTP client cuts long-running connections at ~155s
+    // observed 2026-06-09 (round 4 smoke) · the agent + persist take
+    // ~250-300s · canonical fix is fire-and-resume via Wait pattern.
+    //
+    // Backward-compat · when `callback_url` absent · cero side effect ·
+    // direct callers still get the canonical sync response.
+    const callbackUrl = resolveCallbackUrl(body)
+    let callbackOutcome:
+      | {
+          fired: boolean
+          ok?: boolean
+          kind?: string
+          status_code?: number
+          duration_ms?: number
+          detail?: string
+        }
+      | undefined
+    if (callbackUrl) {
+      const cb = await dispatchAsyncCallback({
+        callback_url: callbackUrl,
+        body: finalResponse,
       })
-      return NextResponse.json({ ...baseResponse, ...middlewareResult })
-    } catch (middlewareError) {
-      console.error('[Editor Middleware run-sdk] Failed:', middlewareError)
-      return NextResponse.json({
-        ...baseResponse,
-        editor_review: { verdict: 'middleware_error', severity: 'low' },
-      })
+      if (cb.ok) {
+        console.info(
+          `[run-sdk async-callback] OK ${cb.status_code} · ${cb.duration_ms}ms · agent=${agentName}`,
+        )
+        callbackOutcome = {
+          fired: true,
+          ok: true,
+          status_code: cb.status_code,
+          duration_ms: cb.duration_ms,
+        }
+      } else {
+        console.warn(
+          `[run-sdk async-callback] FAIL ${cb.kind} · ${cb.detail} · agent=${agentName}`,
+        )
+        callbackOutcome = {
+          fired: true,
+          ok: false,
+          kind: cb.kind,
+          detail: cb.detail,
+          duration_ms: cb.duration_ms,
+          ...(cb.kind === 'non_2xx' && cb.status_code !== undefined
+            ? { status_code: cb.status_code }
+            : {}),
+        }
+      }
     }
+
+    return NextResponse.json(
+      callbackOutcome
+        ? { ...finalResponse, async_callback: callbackOutcome }
+        : finalResponse,
+    )
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
