@@ -27,6 +27,7 @@ import {
   isSyntheticCanaryEnabled,
   syntheticCanaryFn,
 } from '@/lib/sala/inngest/canary-function'
+import { LIVE_FUNCTIONS } from '@/lib/sala/inngest/live-functions'
 
 const mode = getSalaInngestMode()
 const canaryEnabled = isSyntheticCanaryEnabled()
@@ -34,18 +35,23 @@ const canaryEnabled = isSyntheticCanaryEnabled()
 // Synthetic function set · the durability probe ships always, the
 // canary is gated by `SALA_CANARY_ENABLED=true` so production runtime
 // stays narrow until Track S finale prep §144 flips it.
-const activeFunctions = canaryEnabled
-  ? ([...SYNTHETIC_FUNCTIONS, syntheticCanaryFn] as Parameters<
-      typeof serve
-    >[0]['functions'])
-  : ([...SYNTHETIC_FUNCTIONS] as Parameters<typeof serve>[0]['functions'])
+//
+// LIVE function set (editorial gate · real durable HITL wait) registers
+// ONLY when SALA_INNGEST_MODE=live · default 'shadow' keeps it DARK so
+// the durable-wait path is published-but-dormant until the §144 flip lote.
+const liveActive = mode === 'live'
+const activeFunctions = [
+  ...SYNTHETIC_FUNCTIONS,
+  ...(canaryEnabled ? [syntheticCanaryFn] : []),
+  ...(liveActive ? LIVE_FUNCTIONS : []),
+] as Parameters<typeof serve>[0]['functions']
 
 // Mode + active-function summary is logged on import (cold start) so
 // the Vercel function log makes the registered set explicit for
 // forensic checks.
 // eslint-disable-next-line no-console
 console.log(
-  `[sala/inngest] serve · mode=${mode} · canary=${canaryEnabled} · active_count=${activeFunctions.length}`,
+  `[sala/inngest] serve · mode=${mode} · canary=${canaryEnabled} · live=${liveActive} · active_count=${activeFunctions.length}`,
 )
 
 const handler = serve({

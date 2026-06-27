@@ -15,3 +15,30 @@ export {
   SYNTHETIC_FUNCTIONS,
   syntheticDurabilityTest,
 } from './synthetic-functions'
+export { LIVE_FUNCTIONS } from './live-functions'
+export {
+  EDITORIAL_GATE_REQUESTED_EVENT,
+  EDITORIAL_DECISION_RESOLVED_EVENT,
+  EDITORIAL_GATE_TIMEOUT,
+  editorialGateFn,
+  decideEditorialOutcome,
+  type EditorialGateRequest,
+  type EditorialResolution,
+  type EditorialGateOutcome,
+} from './editorial-gate'
+export {
+  getResumeHookMode,
+  emitEditorialResolution,
+  buildEditorialResolutionFromDecisionRow,
+  type ResumeHookMode,
+  type EditorialDecisionRow,
+  type EmitEditorialResolutionResult,
+} from './resume-emitter'
+export {
+  EDITORIAL_DECISIONS_TABLE,
+  mapOutcomeToFinalVerdict,
+  verdictToResolutionStatus,
+  persistEditorialDecision,
+  type EditorialVerdict,
+  type PersistEditorialDecisionResult,
+} from './editorial-writeback'
