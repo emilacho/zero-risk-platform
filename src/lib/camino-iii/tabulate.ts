@@ -28,6 +28,21 @@ export interface VoteRecord {
   vote: Vote
   rationale?: string
   confidence?: number | null
+  /**
+   * Whether this record counts toward the gate tally. Defaults to `true`.
+   * Non-voting reviewers (e.g. the GPT-5.5 advisor · `qa-advisor-D`) set this
+   * to `false` · their review is captured for the editorial record + HITL
+   * context but NEVER sways the 3-of-N decision. See `reviewers.ts`.
+   */
+  is_voting?: boolean
+}
+
+/** A non-voting reviewer's review · surfaced for transparency, never tallied. */
+export interface AdvisoryRecord {
+  reviewer_agent: string
+  vote: Vote
+  rationale?: string
+  confidence?: number | null
 }
 
 export interface TabulationResult {
@@ -40,19 +55,41 @@ export interface TabulationResult {
     total: number
   }
   expected_votes: number
+  /**
+   * Reviews from non-voting reviewers (advisors). Present only when at least
+   * one advisory record was supplied. Excluded from `votes` and the gate
+   * decision · informational only.
+   */
+  advisory?: AdvisoryRecord[]
 }
 
 /**
  * Pure tabulation function · canonical matrix per Sprint 7.6 vault decision.
  *
- * @param votes · array of VoteRecord · order-independent · de-dup by reviewer_agent expected upstream
+ * @param records · array of VoteRecord · order-independent · de-dup by reviewer_agent expected upstream.
+ *   Records with `is_voting === false` (advisors · e.g. GPT-5.5) are split out:
+ *   captured in `result.advisory` but excluded from the tally + the gate.
  * @param expectedVotes · canonical 3 · configurable for asymmetric setups (1-7 range)
  */
-export function tabulateVotes(votes: VoteRecord[], expectedVotes = 3): TabulationResult {
+export function tabulateVotes(records: VoteRecord[], expectedVotes = 3): TabulationResult {
+  // Only voting reviewers count toward the gate. Advisors (is_voting === false)
+  // are surfaced separately and never affect status, counts, or the pending gate.
+  const votes = records.filter((v) => v.is_voting !== false)
+  const advisors = records.filter((v) => v.is_voting === false)
+
   const green = votes.filter((v) => v.vote === 'green').length
   const amber = votes.filter((v) => v.vote === 'amber').length
   const red = votes.filter((v) => v.vote === 'red').length
   const total = votes.length
+
+  const advisory: AdvisoryRecord[] | undefined = advisors.length
+    ? advisors.map((a) => ({
+        reviewer_agent: a.reviewer_agent,
+        vote: a.vote,
+        rationale: a.rationale,
+        confidence: a.confidence ?? null,
+      }))
+    : undefined
 
   if (total < expectedVotes) {
     return {
@@ -60,6 +97,7 @@ export function tabulateVotes(votes: VoteRecord[], expectedVotes = 3): Tabulatio
       decision_reason: `awaiting votes · ${total}/${expectedVotes} collected`,
       votes: { green, amber, red, total },
       expected_votes: expectedVotes,
+      ...(advisory ? { advisory } : {}),
     }
   }
 
@@ -82,6 +120,7 @@ export function tabulateVotes(votes: VoteRecord[], expectedVotes = 3): Tabulatio
     decision_reason: reason,
     votes: { green, amber, red, total },
     expected_votes: expectedVotes,
+    ...(advisory ? { advisory } : {}),
   }
 }
 

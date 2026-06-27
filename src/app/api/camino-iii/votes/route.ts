@@ -18,6 +18,7 @@ import {
   resolveReviewerPosition,
   type Vote,
 } from '@/lib/camino-iii/tabulate'
+import { isVotingReviewer } from '@/lib/camino-iii/reviewers'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -114,6 +115,9 @@ export async function POST(request: Request) {
         review_id: reviewId,
         reviewer_agent: reviewerAgent,
         reviewer_position: reviewerPosition,
+        // Advisors (GPT-5.5 · qa-advisor-D) record their review but are excluded
+        // from the gate tally · SQL camino_iii_tabulate counts is_voting=true only.
+        is_voting: isVotingReviewer(reviewerAgent),
         vote,
         rationale,
         confidence,
