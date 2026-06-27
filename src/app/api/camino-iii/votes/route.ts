@@ -19,6 +19,7 @@ import {
   type Vote,
 } from '@/lib/camino-iii/tabulate'
 import { isVotingReviewer } from '@/lib/camino-iii/reviewers'
+import { validateCorrectionsForVote } from '@/lib/camino-iii/corrections'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -105,6 +106,25 @@ export async function POST(request: Request) {
     )
   }
 
+  // ── Camino III lazo de corrección (SPEC 2026-06-27 §2) ───────────────
+  // Un voto `red` (REJECT) DEBE traer al menos un objeto-corrección
+  // accionable · un rechazo sin correcciones es un bug, no un voto. Los
+  // objetos se persisten en camino_iii_votes.corrections (migración
+  // 202606271200) y se consolidan a editorial_decisions para viajar al
+  // creador. amber/green pueden adjuntar correcciones (advisory).
+  const correctionsCheck = validateCorrectionsForVote(vote, body.corrections)
+  if (!correctionsCheck.ok) {
+    return NextResponse.json(
+      {
+        error: 'validation_error',
+        code: 'E-CAMINO-VOTE-CORRECTIONS',
+        detail: correctionsCheck.reason,
+      },
+      { status: 400 },
+    )
+  }
+  const corrections = correctionsCheck.corrections
+
   const reviewerPosition = resolveReviewerPosition(reviewerAgent)
 
   try {
@@ -122,6 +142,7 @@ export async function POST(request: Request) {
         rationale,
         confidence,
         concerns,
+        corrections,
         raw_agent_output: rawOutput,
         agent_invocation_id: typeof body.agent_invocation_id === 'string' ? body.agent_invocation_id : null,
         duration_ms: typeof body.duration_ms === 'number' ? body.duration_ms : null,
