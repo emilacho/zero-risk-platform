@@ -70,9 +70,11 @@ export async function POST(req: Request) {
         client_id: body.client_id,
         title: body.title,
         description: body.description ?? null,
-        assigned_to: body.assigned_to ?? null,
+        // BUG4 fix (2026-06-27 · CC#4): `assigned_to` column does not exist in
+        // `client_tasks` → 500. Removed from insert. And the date column is
+        // `due_date`, not `due_at` → map body.due_at into the real column.
         priority: body.priority ?? 'normal',
-        due_at: body.due_at ?? null,
+        due_date: body.due_at ?? null,
         status: 'open',
         metadata: body.metadata ?? {},
       })
