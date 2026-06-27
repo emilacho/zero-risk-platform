@@ -12,8 +12,25 @@
  * the proxy layers the editor decision on top.
  */
 
+// Sentry must init before any other module runs · keep this the FIRST import.
+import './instrument.js'
+import * as Sentry from '@sentry/node'
 import express, { type Request, type Response } from 'express'
 import { runAgentViaSDK, type AgentRunInput } from './lib/agent-sdk-runner.js'
+
+/**
+ * Capture an agent error in Sentry with canonical context tags. Sprint
+ * Monitoreo §144 · workflow_id + client_id + agent_slug so the dashboard can
+ * group/alert per workflow + client + agent. No-op when Sentry has no DSN.
+ */
+function captureAgentError(error: unknown, input: AgentRunInput): void {
+  Sentry.withScope((scope) => {
+    scope.setTag('workflow_id', input.workflowId ?? 'none')
+    scope.setTag('client_id', input.clientId ?? 'none')
+    scope.setTag('agent_slug', input.agentName ?? 'unknown')
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)))
+  })
+}
 
 const PORT = Number(process.env.PORT) || 8080
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY ?? ''
@@ -259,12 +276,16 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     // 500 only when success is false AND no usable response was produced —
     // matches the Vercel route.ts contract from before the migration.
     if (!result.success) {
+      // Handled agent failure (the SDK runner returns success:false rather than
+      // throwing) — this is the common agent-error path · capture it with context.
+      captureAgentError(new Error(result.error ?? 'agent run failed'), input)
       res.status(500).json(result)
       return
     }
     res.status(200).json(result)
   } catch (err) {
     console.error('[agent-runner] unexpected error in /run-sdk:', err)
+    captureAgentError(err, input)
     res.status(500).json({
       success: false,
       error: err instanceof Error ? err.message : 'Unknown error',
