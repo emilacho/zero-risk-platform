@@ -27,7 +27,10 @@ import { checkInternalKey } from '@/lib/internal-auth'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
+// Canon · matches client_tasks CHECK constraint (migration 202605200100):
+// priority IN ('low','medium','high','urgent'). Was ['low','normal',...] which
+// the DB rejects (no 'normal') → 500 client_tasks_priority_check.
+const PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const
 
 interface TaskBody {
   client_id?: string
@@ -73,9 +76,11 @@ export async function POST(req: Request) {
         // BUG4 fix (2026-06-27 · CC#4): `assigned_to` column does not exist in
         // `client_tasks` → 500. Removed from insert. And the date column is
         // `due_date`, not `due_at` → map body.due_at into the real column.
-        priority: body.priority ?? 'normal',
+        priority: body.priority ?? 'medium',
         due_date: body.due_at ?? null,
-        status: 'open',
+        // Canon · status CHECK is ('pending','in_progress','blocked','completed',
+        // 'cancelled'). Was 'open' → 500 client_tasks_status_check. New tasks = pending.
+        status: 'pending',
         metadata: body.metadata ?? {},
       })
       .select()
