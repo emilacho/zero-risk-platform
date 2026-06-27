@@ -9,7 +9,7 @@
  * fix/vercel-claude-agent-sdk-binary for the 7-commit triage).
  *
  * Required env vars (set in Vercel dashboard):
- *   RAILWAY_AGENT_RUNNER_URL  · e.g. https://zero-risk-agent-runner-production.up.railway.app
+ *   RAILWAY_AGENT_RUNNER_URL  · e.g. https://zero-risk-platform-production.up.railway.app
  *   INTERNAL_API_KEY          · shared secret for caller→Vercel AND Vercel→Railway hops
  *
  * Body shape unchanged from the pre-migration route (n8n workflows and
