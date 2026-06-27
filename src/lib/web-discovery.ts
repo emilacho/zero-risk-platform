@@ -266,6 +266,13 @@ export class WebDiscovery {
     }
 
     try {
+      // Sprint 11 Ola 1 §149 · web-discovery is an internal fallback path
+      // invoked from /api/auto-discovery (which itself runs inside an n8n
+      // workflow). The fallback doesn't have access to the upstream
+      // workflow_id at this layer, so we mint a deterministic marker
+      // tagged with the URL hash for forensics. The marker uses the
+      // 'internal-web-discovery-...' exempt-prefix canon.
+      const urlHash = url.replace(/^https?:\/\//, '').slice(0, 64)
       const res = await fetch(`${baseUrl}/api/agents/run`, {
         method: 'POST',
         headers: {
@@ -278,6 +285,8 @@ export class WebDiscovery {
             `Fetch the following URL using WebFetch tool and return structured ` +
             `content as JSON per the canonical shape in your identity. URL: ${url}`,
           context: {
+            workflow_id: `internal-web-discovery-${urlHash}`,
+            workflow_execution_id: `internal-web-discovery-${urlHash}-${Date.now()}`,
             extra: {
               urls: [url],
               client_context: 'Sprint 7.6 Track C · auto-discovery web_fetch fallback',

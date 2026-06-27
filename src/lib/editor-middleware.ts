@@ -338,6 +338,17 @@ async function invokeReviewer(params: {
         // resolveClientIdFromBody returned null upstream).
         context: {
           ...params.context,
+          // Sprint 11 Ola 1 §149 · explicit workflow_id propagation. The
+          // spread above carries upstream workflow_id when the parent /run
+          // call surfaced it; this falls back to a tagged internal marker
+          // when upstream sent NULL so the gate sees a deterministic value
+          // instead of dropping the row. The marker uses an exempt-prefix
+          // canon ('internal-camino-iii-...') visible in audit queries.
+          workflow_id:
+            (params.context?.workflow_id as string | undefined) ??
+            `internal-camino-iii-${params.reviewerSlug}-${Date.now()}`,
+          workflow_execution_id:
+            (params.context?.workflow_execution_id as string | undefined) ?? null,
           client_id: params.clientId ?? params.context?.client_id,
           rag_query: ragQueryFor(params.reviewerType, params.task),
           rag_match_count: 5,
@@ -401,7 +412,18 @@ INSTRUCTION: Re-generate addressing the editor's feedback. Keep what worked, fix
         // round (1+ rows per fire when revisions trigger) also lands with
         // populated client_id. Resolver path #1.
         client_id: params.clientId,
-        context: params.originalContext,
+        // Sprint 11 Ola 1 §149 · explicit workflow_id propagation. Revisions
+        // happen *during* an upstream agent invocation · inherit its
+        // workflow_id from originalContext when present, fall back to a
+        // tagged internal marker so the gate never sees a null row.
+        context: {
+          ...params.originalContext,
+          workflow_id:
+            (params.originalContext?.workflow_id as string | undefined) ??
+            `internal-editor-revision-${params.agentSlug}-rev${params.revisionNumber}-${Date.now()}`,
+          workflow_execution_id:
+            (params.originalContext?.workflow_execution_id as string | undefined) ?? null,
+        },
         caller: 'editor-revision',
       }),
     })
