@@ -16,9 +16,31 @@ import { NextResponse } from "next/server";
 import { checkInternalKey } from "@/lib/internal-auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { generateEmbeddings, EMBEDDING_DIMENSIONS, estimateCost } from "@/lib/brain/embed";
+import { runIngressFilter, DEFAULT_ROUTE_POLICY, type ProvenanceTag } from "@/lib/ingress-filter";
+import { buildBrainProvenanceTag } from "@/lib/client-brain";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+// FASE C · portero de datos (§144 · shadow primero) ·
+// el ingest es la ÚNICA puerta de escritura de evidencia al cerebro · aplica el
+// filtro anti-injection (ADR-012 · 5 capas) en modo shadow (audita · NO rechaza)
+// + estampa provenance_tag (evidencia · trust por fuente · default untrusted).
+
+// Valores válidos del enum ingress (ProvenanceTag.source). El `source` del body
+// es la etiqueta del Brain (taxonomía discovery · libre) · acá lo mapeamos al
+// enum estrecho del filtro para la Capa 1 de provenance del filtro.
+const INGRESS_SOURCE_ENUM = new Set<ProvenanceTag["source"]>([
+  "tally_form", "apify_scrape", "whatsapp_inbound", "review_monitor",
+  "dataforseo_scrape", "email_inbound", "onboarding_upload", "notion_comment",
+  "webhook_generic", "callback_external", "legacy_pre_adr012", "unknown",
+]);
+
+function toIngressSource(source: string): ProvenanceTag["source"] {
+  return INGRESS_SOURCE_ENUM.has(source as ProvenanceTag["source"])
+    ? (source as ProvenanceTag["source"])
+    : "webhook_generic";
+}
 
 const ALLOWED_SOURCE_TABLES = new Set([
   "client_brand_books",
@@ -39,6 +61,9 @@ interface IngestBody {
   source_id?: string;
   sections?: IngestSection[];
   metadata?: Record<string, unknown>;
+  /** FASE C · etiqueta de fuente para provenance del Brain (taxonomía discovery ·
+   *  ej. 'apify_scrape' | 'onboarding_discovery' | 'search'). Default seguro. */
+  source?: string;
 }
 
 export async function POST(request: Request) {
@@ -67,6 +92,10 @@ export async function POST(request: Request) {
   const sourceTable = typeof body.source_table === "string" ? body.source_table.trim() : "";
   const sourceId = typeof body.source_id === "string" ? body.source_id.trim() : "";
   const sections = Array.isArray(body.sections) ? body.sections : [];
+  // FASE C · etiqueta de fuente (Brain provenance) · default discovery.
+  const brainSource = typeof body.source === "string" && body.source.trim().length > 0
+    ? body.source.trim()
+    : "onboarding_discovery";
 
   if (!clientId || !sourceTable || !sourceId) {
     return NextResponse.json(
@@ -121,6 +150,40 @@ export async function POST(request: Request) {
     );
   }
 
+  // FASE C · portero anti-injection (ADR-012 · 5 capas) en modo SHADOW ·
+  // audita por sección · NUNCA rechaza (DEFAULT_ROUTE_POLICY.shadow_mode=true ·
+  // allow siempre true · shadow_blocks registra qué bloquearía en enforce).
+  // Capa 3 (classifier) skip · sin costo LLM · el flip a enforce es §144 aparte.
+  const ingressSource = toIngressSource(brainSource);
+  const filterDecisions = await Promise.all(
+    valid.map((s) =>
+      runIngressFilter(
+        {
+          raw_text: s.text,
+          source: ingressSource,
+          ingress_route: "/api/brain/ingest-source",
+          client_id: clientId,
+        },
+        { route: DEFAULT_ROUTE_POLICY, skip_classifier: true },
+      ),
+    ),
+  );
+  const shadowFlagged = filterDecisions
+    .map((d, i) => ({ section_label: valid[i].section_label, shadow_blocks: d.shadow_blocks, severity: d.severity }))
+    .filter((d) => d.shadow_blocks.length > 0);
+  if (shadowFlagged.length > 0) {
+    console.warn(
+      `[ingest-source][ingress-filter][shadow] ${shadowFlagged.length}/${valid.length} secciones bloquearían en enforce · client=${clientId} · ` +
+        shadowFlagged.map((d) => `${d.section_label}:${d.shadow_blocks.join("+")}(${d.severity})`).join(" · "),
+    );
+  }
+  const ingressFilterAudit = {
+    shadow_mode: true as const,
+    sections_evaluated: valid.length,
+    sections_shadow_flagged: shadowFlagged.length,
+    flagged: shadowFlagged,
+  };
+
   // Batch embed all section texts (canonical · single OpenAI call)
   const embed = await generateEmbeddings(valid.map((s) => s.text));
   if (!embed.ok) {
@@ -141,6 +204,15 @@ export async function POST(request: Request) {
   // UPSERT rows · ON CONFLICT (client_id, source_table, source_id, section_label) DO UPDATE
   const supabase = getSupabaseAdmin();
   const nowIso = new Date().toISOString();
+  // FASE C · provenance_tag por fila · evidencia · trust por fuente (default
+  // untrusted · mapa fuente→untrusted) · el write-back canon (type=canon) es C2.
+  const provenanceTag = buildBrainProvenanceTag({
+    source: brainSource,
+    type: "evidence",
+    trust_level: "untrusted",
+    received_at: nowIso,
+    ingress_route: "/api/brain/ingest-source",
+  });
   const rows = valid.map((s, i) => ({
     client_id: clientId,
     source_table: sourceTable,
@@ -148,6 +220,7 @@ export async function POST(request: Request) {
     section_label: s.section_label,
     chunk_text: s.text.slice(0, 8000),
     embedding: embed.embeddings[i],
+    provenance_tag: provenanceTag,
     metadata: {
       ...(body.metadata ?? {}),
       embedding_model: embed.model,
@@ -188,6 +261,8 @@ export async function POST(request: Request) {
       cost_usd: estimateCost(embed.tokens),
       tokens_used: embed.tokens,
       embedding_model: embed.model,
+      provenance_tag: provenanceTag,
+      ingress_filter: ingressFilterAudit,
     },
     { status: 200 },
   );

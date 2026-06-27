@@ -12,11 +12,28 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { generateEmbedding } from './embed'
+import { runIngressFilter, DEFAULT_ROUTE_POLICY, type ProvenanceTag } from '../ingress-filter'
+import { buildBrainProvenanceTag, type BrainTrustLevel } from '../client-brain'
 
 export interface BrainChunk {
   section_label: string
   chunk_text: string
   metadata?: Record<string, unknown>
+}
+
+// FASE C · 2ª vía de escritura · este helper es la puerta de escritura del
+// onboarding (brand_book) + discovery (competidores/ICP/VOC). Converge al mismo
+// portero que /api/brain/ingest-source · filtro anti-injection shadow + provenance_tag.
+
+const INGRESS_SOURCE_ENUM = new Set<ProvenanceTag['source']>([
+  'tally_form', 'apify_scrape', 'whatsapp_inbound', 'review_monitor',
+  'dataforseo_scrape', 'email_inbound', 'onboarding_upload', 'notion_comment',
+  'webhook_generic', 'callback_external', 'legacy_pre_adr012', 'unknown',
+])
+function toIngressSource(source: string): ProvenanceTag['source'] {
+  return INGRESS_SOURCE_ENUM.has(source as ProvenanceTag['source'])
+    ? (source as ProvenanceTag['source'])
+    : 'webhook_generic'
 }
 
 export type PersistResult =
@@ -74,16 +91,51 @@ export async function persistChunks(
     sourceTable: SourceTable
     sourceId: string
     chunks: BrainChunk[]
+    /** FASE C · etiqueta de fuente (Brain provenance · taxonomía discovery ·
+     *  ej. 'apify_scrape' | 'onboarding_discovery' | 'search'). Default seguro. */
+    source?: string
+    /** FASE C · confianza · default 'untrusted' (evidencia de terceros). */
+    trustLevel?: BrainTrustLevel
   },
 ): Promise<PersistResult> {
   if (!args.clientId || !args.sourceId || args.chunks.length === 0) {
     return { ok: true, chunks_upserted: 0, tokens_used: 0, cost_usd: 0 }
   }
 
+  // FASE C · provenance · evidencia · trust por fuente (default untrusted).
+  const brainSource = args.source && args.source.trim().length > 0 ? args.source.trim() : 'onboarding_discovery'
+  const nowIso = new Date().toISOString()
+  const provenanceTag = buildBrainProvenanceTag({
+    source: brainSource,
+    type: 'evidence',
+    trust_level: args.trustLevel ?? 'untrusted',
+    received_at: nowIso,
+    ingress_route: 'lib/brain/persist-chunks',
+  })
+  const ingressSource = toIngressSource(brainSource)
+
   let tokens = 0
   let upserted = 0
   for (const c of args.chunks) {
     const text = c.chunk_text.slice(0, 6000) // cap to keep tokens bounded
+
+    // FASE C · portero anti-injection (ADR-012) en modo SHADOW · audita ·
+    // NUNCA bloquea (shadow_mode=true · skip_classifier · sin costo LLM).
+    try {
+      const decision = await runIngressFilter(
+        { raw_text: text, source: ingressSource, ingress_route: 'lib/brain/persist-chunks', client_id: args.clientId },
+        { route: DEFAULT_ROUTE_POLICY, skip_classifier: true },
+      )
+      if (decision.shadow_blocks.length > 0) {
+        console.warn(
+          `[persist-chunks][ingress-filter][shadow] ${args.sourceTable}/${c.section_label} bloquearía en enforce · ` +
+            `${decision.shadow_blocks.join('+')}(${decision.severity}) · client=${args.clientId}`,
+        )
+      }
+    } catch {
+      // El filtro nunca debe romper la escritura · shadow es best-effort audit.
+    }
+
     const e = await generateEmbedding(text)
     if (!e.ok) {
       // Skip this chunk · log via stderr-style return when caller logs
@@ -98,8 +150,9 @@ export async function persistChunks(
         section_label: c.section_label,
         chunk_text: text,
         embedding: e.embedding as unknown as string, // pgvector accepts JSON array
+        provenance_tag: provenanceTag,
         metadata: c.metadata ?? {},
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       },
       { onConflict: 'client_id,source_table,source_id,section_label' },
     )
