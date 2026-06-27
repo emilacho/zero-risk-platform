@@ -169,9 +169,9 @@ export async function GET() {
       "NOTION_PARENT_PAGE_ID (or pass parent_page_id per request)",
     ],
     env_optional: [
-      "NOTION_DATABASE_CLIENTS",
-      "NOTION_DATABASE_CAMPAIGNS",
-      "NOTION_DATABASE_WEEKLY",
+      "NOTION_CLIENTS_DATA_SOURCE_ID",
+      "NOTION_CAMPAIGNS_DATA_SOURCE_ID",
+      "NOTION_REPORTS_DATA_SOURCE_ID",
     ],
   })
 }

@@ -39,7 +39,7 @@ Cada DB tiene **dos** IDs configurados: el database ID (page-based writers) y el
 
 ## Gap detectado (§148 · reportar, no improvisar)
 
-1. **Drift de nombres env.** El código de `src/app/api/notion/sync-report/route.ts` lista como `env_optional` las claves `NOTION_DATABASE_CLIENTS` / `NOTION_DATABASE_CAMPAIGNS` / `NOTION_DATABASE_WEEKLY`, pero `.env.local` define `NOTION_CLIENTS_DB_ID` / `NOTION_CAMPAIGNS_DB_ID` / `NOTION_REPORTS_DB_ID` (+ los `*_DATA_SOURCE_ID`). Nombres distintos → posible lookup fallido según qué módulo lea cuál. **A confirmar Emilio.**
+1. **Drift de nombres env · RESUELTO 2026-06-27.** El diagnóstico de `src/app/api/notion/sync-report/route.ts` listaba `NOTION_DATABASE_CLIENTS` / `NOTION_DATABASE_CAMPAIGNS` / `NOTION_DATABASE_WEEKLY` (no leídas en ningún `process.env`), mientras los row-writers reales (`src/lib/notion-db-rows.ts`) consumen `NOTION_CLIENTS_DATA_SOURCE_ID` / `NOTION_CAMPAIGNS_DATA_SOURCE_ID` / `NOTION_REPORTS_DATA_SOURCE_ID` (fuente de verdad en `.env.local`). Unificado: el diagnóstico ahora lista los `*_DATA_SOURCE_ID` reales. (`WEEKLY`→`REPORTS`/Reportes).
 2. **Prod no verificado.** Los valores están en `.env.local` (local). Canon §6 marca "Vercel pending Emilio post-merge". NO verifiqué si los 6 IDs están poblados en Vercel prod — la tarea era solo detectar.
 
 **Acción Emilio:** confirmar que las 3 DBs existen en el workspace Notion con esos IDs y que las env vars de Vercel están pobladas con la convención de nombres correcta. NO creé nada.
