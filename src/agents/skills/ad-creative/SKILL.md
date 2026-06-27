@@ -122,7 +122,7 @@ For detailed specs and format variations, see [references/platform-specs.md](ref
 For image and video ad creative, use generative AI tools and code-based video rendering. See [references/generative-tools.md](references/generative-tools.md) for the complete guide covering:
 
 - **Image generation** — Nano Banana Pro (Gemini), Flux, GPT Image (gpt-image-1) for static ad images · use the Zero Risk wrapper `POST /api/images/generate` to persist + get a public URL
-- **Video generation** — Veo, Kling, Runway, Sora, Seedance, Higgsfield for video ads
+- **Video generation** — Veo 3.1 canonical (per Stack V4 audit 2026-05-22 · Higgsfield retirado canónico), Kling, Runway, Sora, Seedance for video ads
 - **Voice & audio** — ElevenLabs, OpenAI TTS, Cartesia for voiceovers, cloning, multilingual
 - **Code-based video** — Remotion for templated, data-driven video at scale
 - **Platform image specs** — Correct dimensions for every ad placement
