@@ -5,6 +5,7 @@
 // =============================================================
 
 import { getSupabaseAdmin } from './supabase'
+import { generateEmbedding as openaiEmbedding } from './brain/embed'
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -38,24 +39,86 @@ export interface QueryClientBrainParams {
   match_count?: number
 }
 
+// ── Provenance tag · Sprint-brain §144 FASE B (ADR-012 §6.6 + dos puertas) ──
+
+/** Brain trust levels · ADR-012 enum + `unknown` para backfill legacy. */
+export type BrainTrustLevel =
+  | 'untrusted'
+  | 'tenant_trusted'
+  | 'system_trusted'
+  | 'unknown'
+
+/**
+ * Provenance tag persisted on every Brain chunk (`client_brain_chunks.provenance_tag`).
+ *
+ * `type` is the two-doors dimension (architecture §3) ·
+ *   - `evidence` = raw/discovery data · context only · NEVER asserted as client fact.
+ *   - `canon`    = jefe/Emilio-approved · trusted for decide/publish (FASE D read rule).
+ *
+ * `source` + ingress fields come from ADR-012 §6.6.1 (anti-injection provenance).
+ */
+export interface BrainProvenanceTag {
+  source: string
+  type: 'evidence' | 'canon'
+  trust_level: BrainTrustLevel
+  ingress_id?: string
+  session_id?: string
+  received_at?: string
+  ingress_route?: string
+}
+
+/**
+ * Canonical default for rows that pre-date ADR-012 (backfill). Matches the
+ * DEFAULT in migration 202606271220. Treat as untrusted evidence.
+ */
+export const LEGACY_PROVENANCE_TAG: BrainProvenanceTag = {
+  source: 'legacy_pre_adr012',
+  trust_level: 'unknown',
+  type: 'evidence',
+}
+
+/**
+ * Build a canonical Brain provenance tag for a NEW write (FASE C writers ·
+ * portero de datos = evidence · write-back Camino III = canon). Defaults to
+ * untrusted evidence — the safe floor — when caller omits fields.
+ */
+export function buildBrainProvenanceTag(
+  input: Partial<BrainProvenanceTag> & { source: string },
+): BrainProvenanceTag {
+  return {
+    source: input.source,
+    type: input.type ?? 'evidence',
+    trust_level: input.trust_level ?? 'untrusted',
+    ...(input.ingress_id ? { ingress_id: input.ingress_id } : {}),
+    ...(input.session_id ? { session_id: input.session_id } : {}),
+    ...(input.received_at ? { received_at: input.received_at } : {}),
+    ...(input.ingress_route ? { ingress_route: input.ingress_route } : {}),
+  }
+}
+
 // ── Embedding helper ─────────────────────────────────────────
 
 /**
- * Generate an embedding vector via Anthropic's Voyager or OpenAI ada-002.
- * Currently wraps the Supabase Edge Function `generate-embedding`
- * which proxies to the configured embedding provider.
+ * Generate an embedding vector for a query.
  *
- * In production, this should call:
- *   POST /functions/v1/generate-embedding { text: string }
- * Returns: number[] (1536 dimensions)
+ * Sprint-brain §144 A1 fix · canonical path = OpenAI `text-embedding-3-small`
+ * (1536d) via `src/lib/brain/embed.ts` — the SAME provider the write path
+ * (`/api/brain/ingest-source`) and push-enrichment (`brain-enrichment.ts`)
+ * use, so query embeddings live in the same vector space as the stored chunks.
+ *
+ * Replaces the prior Supabase Edge Function `generate-embedding`, which is
+ * NOT deployed in prod (verified 2026-06-27 · HTTP 404 NOT_FOUND) and would
+ * fail every query. §148.
+ *
+ * Returns: number[] (1536 dimensions). Throws on embedding failure so callers
+ * decide how to degrade.
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const supabase = getSupabaseAdmin()
-  const { data, error } = await supabase.functions.invoke('generate-embedding', {
-    body: { text },
-  })
-  if (error) throw new Error(`Embedding generation failed: ${error.message}`)
-  return data.embedding as number[]
+  const res = await openaiEmbedding(text)
+  if (!res.ok) {
+    throw new Error(`Embedding generation failed: ${res.code} · ${res.detail}`)
+  }
+  return res.embedding
 }
 
 // ── Core: query_client_brain() ───────────────────────────────
@@ -78,24 +141,67 @@ export async function queryClientBrain(
   const {
     client_id,
     query,
-    sections = ['brand_books', 'icp_documents', 'voc_library', 'competitive_landscape', 'historical_outputs'],
+    sections,
     match_count = 10,
   } = params
 
-  // Step 1: Generate embedding from the query text
+  // Step 1: Generate embedding from the query text (OpenAI 1536d · canonical).
   const queryEmbedding = await generateEmbedding(query)
 
-  // Step 2: Call the Supabase RPC function
+  // Step 2: Call the canonical RPC `query_client_brain(p_client_id,
+  // p_query_embedding vector(1536), p_top_k int)` over `client_brain_chunks`.
+  //
+  // Sprint-brain §144 A1 fix · the prior 4-arg signature
+  // (p_sections text[], p_match_count) was DROPPED by migration
+  // 202605220900 and returns HTTP 404 PGRST202 in prod (verified 2026-06-27).
+  // The canonical 3-arg RPC has no section filter, so when the caller asks for
+  // specific sections we over-fetch then filter by `source_table` in JS.
+  const sectionFilter =
+    sections && sections.length > 0 && sections.length < 5 ? new Set(sections) : null
+  const topK = sectionFilter
+    ? Math.min(50, Math.max(match_count * 3, match_count))
+    : match_count
+
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase.rpc('query_client_brain', {
     p_client_id: client_id,
     p_query_embedding: queryEmbedding,
-    p_sections: sections,
-    p_match_count: match_count,
+    p_top_k: topK,
   })
 
   if (error) throw new Error(`query_client_brain failed: ${error.message}`)
-  return (data ?? []) as BrainSearchResult[]
+
+  // Canonical RPC returns (chunk_id, source_table, source_id, section_label,
+  // chunk_text, similarity). Map to the stable BrainSearchResult shape
+  // (label ← section_label · content_text ← chunk_text) so consumers
+  // (/api/client-brain/query · rag-search) keep working unchanged.
+  type RpcRow = {
+    chunk_id: string
+    source_table: string
+    source_id: string
+    section_label: string
+    chunk_text: string
+    similarity: number
+  }
+  // Chunks store the full table name (`client_competitive_landscape`) but the
+  // BrainSection type + the caller's `sections` param are unprefixed
+  // (`competitive_landscape`). Normalize so section filtering + the public
+  // type stay consistent.
+  const stripPrefix = (t: string): BrainSection =>
+    (t.startsWith('client_') ? t.slice('client_'.length) : t) as BrainSection
+  let rows = ((data ?? []) as RpcRow[]).map<BrainSearchResult>((r) => ({
+    source_table: stripPrefix(r.source_table),
+    source_id: r.source_id,
+    label: r.section_label,
+    content_text: r.chunk_text,
+    similarity: r.similarity,
+  }))
+
+  if (sectionFilter) {
+    rows = rows.filter((r) => sectionFilter.has(r.source_table)).slice(0, match_count)
+  }
+
+  return rows
 }
 
 // ── Core: get_client_guardrails() ────────────────────────────
