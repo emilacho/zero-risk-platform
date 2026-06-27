@@ -149,13 +149,25 @@ describe('CC#3↔CC#4 contract · response.body.discovery_output shape', () => {
     }
   })
 
-  it('canonical · resolved value DEEP-equals tool_call input (no field drop)', () => {
+  it('canonical · resolved value preserves ALL input fields (no drop) + enriches competitors with provenance defaults', () => {
     const r = resolveDiscoverySource({
       tool_call: { input: CANONICAL as unknown as Record<string, unknown>, emission_count: 1 },
       expected_client_id: NAUFRAGO,
     })
     if (r.kind === 'ok') {
-      expect(r.value).toEqual(CANONICAL)
+      // No field drop · every input field round-trips (toMatchObject tolerates
+      // the additive provenance fields the parser now stamps per competitor).
+      expect(r.value).toMatchObject(CANONICAL)
+      // Sprint multi-source · parser stamps the Brain provenance taxonomy on each
+      // competitor with the safe floor when the agent omits them.
+      for (const c of r.value.competitors) {
+        expect(c.type).toBe('evidence')
+        expect(['untrusted', 'tenant_trusted']).toContain(c.trust_level)
+        expect(['apify_scrape', 'onboarding_discovery', 'search']).toContain(c.source)
+      }
+      // CANONICAL competitors omit provenance → default floor.
+      expect(r.value.competitors[0].source).toBe('onboarding_discovery')
+      expect(r.value.competitors[0].trust_level).toBe('untrusted')
     }
   })
 })

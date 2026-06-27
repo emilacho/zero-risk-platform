@@ -40,6 +40,21 @@ export interface DiscoveredCompetitor {
   readonly competitor_type?: 'direct' | 'indirect' | 'aspirational' | 'alternative'
   /** Optional · positioning summary · feeds value_proposition or content_strategy_summary. */
   readonly positioning?: string
+  /**
+   * Sprint multi-source discovery · provenance de ESTA fila de competidor ·
+   * alineado a la taxonomía canónica del Brain `provenance_tag` (CHECK en prod
+   * `client_brain_chunks_provenance_tag_chk` · ver src/lib/client-brain.ts
+   * `buildBrainProvenanceTag`). Optional para parse no-breaking · el parser
+   * aplica floor seguro cuando el agente los omite (onboarding_discovery /
+   * untrusted / evidence).
+   */
+  readonly source?: 'apify_scrape' | 'onboarding_discovery' | 'search'
+  /** = provenance_tag.trust_level · discovery de terceros NUNCA es tenant_trusted
+   *  (ese valor es solo para dato directo del cliente). */
+  readonly trust_level?: 'untrusted' | 'tenant_trusted'
+  /** = provenance_tag.type · dimensión dos-puertas · discovery SIEMPRE 'evidence'
+   *  (solo pasa a 'canon' tras PASS de Camino III · otro paso). */
+  readonly type?: 'evidence'
 }
 
 /** Canon canonical · ICP segment shape · maps to `client_icp_documents` columns. */
@@ -75,6 +90,17 @@ export interface DiscoveryOutput {
   readonly icp?: DiscoveredIcpSegment | readonly DiscoveredIcpSegment[]
   /** Optional · 1-2 paragraph competitive landscape · chunked verbatim. */
   readonly competitive_landscape_summary?: string
+  /**
+   * Sprint multi-source discovery · resumen de ejecución por fuente (qué actores
+   * Apify corrieron y con qué resultado) · para transparencia + el veredicto del
+   * competitive-intelligence-agent. Optional · aditivo no-breaking.
+   */
+  readonly sources?: ReadonlyArray<{
+    readonly actor: string // ej. instagram_scraper, google_serp
+    readonly apify_function: string
+    readonly status: 'ok' | 'failed' | 'skipped'
+    readonly count: number
+  }>
 }
 
 /** Canon canonical · parse result tagged union · cero implicit accept. */

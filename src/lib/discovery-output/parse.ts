@@ -159,6 +159,16 @@ export function validateDiscoveryShape(
       ...(typeof cObj.why === 'string' ? { why: cObj.why } : {}),
       ...(isCompetitorType(cObj.competitor_type) ? { competitor_type: cObj.competitor_type } : {}),
       ...(typeof cObj.positioning === 'string' ? { positioning: cObj.positioning } : {}),
+      // Sprint multi-source · provenance per competitor · floor seguro cuando el
+      // agente omite o emite valores fuera del enum (taxonomía Brain provenance_tag).
+      source:
+        cObj.source === 'apify_scrape' || cObj.source === 'search' || cObj.source === 'onboarding_discovery'
+          ? cObj.source
+          : 'onboarding_discovery',
+      // Discovery de terceros NUNCA es tenant_trusted · clamp a untrusted salvo
+      // que el valor sea explícitamente uno del enum.
+      trust_level: cObj.trust_level === 'tenant_trusted' ? 'tenant_trusted' : 'untrusted',
+      type: 'evidence',
     })
   }
 
@@ -195,12 +205,32 @@ export function validateDiscoveryShape(
     summary = obj.competitive_landscape_summary
   }
 
+  // sources · optional · per-source execution summary (Apify actors etc) ·
+  // tolerante · filtra entradas malformadas en vez de fallar (aditivo no-breaking).
+  let sources: DiscoveryOutput['sources']
+  if (Array.isArray(obj.sources)) {
+    const parsed = obj.sources
+      .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object' && !Array.isArray(s))
+      .map((s) => ({
+        actor: typeof s.actor === 'string' ? s.actor : '',
+        apify_function: typeof s.apify_function === 'string' ? s.apify_function : '',
+        status:
+          s.status === 'ok' || s.status === 'failed' || s.status === 'skipped'
+            ? (s.status as 'ok' | 'failed' | 'skipped')
+            : 'skipped',
+        count: typeof s.count === 'number' && Number.isFinite(s.count) ? s.count : 0,
+      }))
+      .filter((s) => s.actor.length > 0)
+    if (parsed.length > 0) sources = parsed
+  }
+
   const value: DiscoveryOutput = {
     client_id: cid,
     own_handles: sanitizeHandles(ownHandles as Record<string, unknown>),
     competitors,
     ...(icp !== undefined ? { icp } : {}),
     ...(summary !== undefined ? { competitive_landscape_summary: summary } : {}),
+    ...(sources !== undefined ? { sources } : {}),
   }
   return { kind: 'ok', value }
 }
