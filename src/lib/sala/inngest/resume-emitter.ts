@@ -33,6 +33,7 @@ import {
   EDITORIAL_DECISION_RESOLVED_EVENT,
   type EditorialResolution,
 } from './editorial-gate'
+import { verdictToResolutionStatus } from './editorial-writeback'
 
 /** Mode of the resume hook · 'shadow' default (NEVER emits) · 'live' opt-in. */
 export type ResumeHookMode = 'shadow' | 'live'
@@ -41,34 +42,34 @@ export function getResumeHookMode(): ResumeHookMode {
   return process.env.SALA_G6_HOOK_MODE === 'live' ? 'live' : 'shadow'
 }
 
-/** Minimal shape of a `camino_iii_reviews` row needed to build the event. */
-export interface CaminoReviewRow {
-  readonly id: string
+/** Minimal shape of an `editorial_decisions` row needed to build the event.
+ *  The HUMAN verdict lives here (CC#2 migration 202606270010) · NOT in
+ *  camino_iii_reviews (which holds the review header for the individual votes). */
+export interface EditorialDecisionRow {
+  readonly review_id: string
+  /** Lifecycle · 'PENDING' | 'RESOLVED'. Only RESOLVED rows emit a resume. */
   readonly status: string
-  readonly hitl_resolved_by?: string | null
-  readonly decision_reason?: string | null
+  /** Human verdict · 'PASS' | 'REJECT' | 'ESCALATE' (null while PENDING). */
+  readonly final_verdict?: string | null
+  readonly resolved_by?: string | null
+  readonly rationale?: string | null
 }
 
-/** Map a resolved review row → the resume event payload. Returns null when the
- *  row is not in a terminal/resolvable state (still pending · nothing to emit). */
-export function buildEditorialResolutionFromReviewRow(
-  row: CaminoReviewRow,
+/** Map a RESOLVED `editorial_decisions` row → the resume event payload. Returns
+ *  null when the row is still PENDING or has no final verdict (nothing to emit).
+ *  Translates the `final_verdict` (PASS/REJECT/ESCALATE) into the gate's neutral
+ *  resolution vocabulary (approved/rejected/escalated_hitl). */
+export function buildEditorialResolutionFromDecisionRow(
+  row: EditorialDecisionRow,
 ): EditorialResolution | null {
-  const terminal: ReadonlyArray<EditorialResolution['status']> = [
-    'approved',
-    'rejected',
-    'escalated_hitl',
-    'expired',
-    'cancelled',
-  ]
-  if (!terminal.includes(row.status as EditorialResolution['status'])) {
-    return null
-  }
+  if (row.status !== 'RESOLVED') return null
+  const status = verdictToResolutionStatus(row.final_verdict)
+  if (status === null) return null
   return {
-    review_id: row.id,
-    status: row.status as EditorialResolution['status'],
-    resolved_by: row.hitl_resolved_by ?? null,
-    decision_reason: row.decision_reason ?? null,
+    review_id: row.review_id,
+    status,
+    resolved_by: row.resolved_by ?? null,
+    decision_reason: row.rationale ?? null,
   }
 }
 

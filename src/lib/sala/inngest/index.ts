@@ -29,8 +29,16 @@ export {
 export {
   getResumeHookMode,
   emitEditorialResolution,
-  buildEditorialResolutionFromReviewRow,
+  buildEditorialResolutionFromDecisionRow,
   type ResumeHookMode,
-  type CaminoReviewRow,
+  type EditorialDecisionRow,
   type EmitEditorialResolutionResult,
 } from './resume-emitter'
+export {
+  EDITORIAL_DECISIONS_TABLE,
+  mapOutcomeToFinalVerdict,
+  verdictToResolutionStatus,
+  persistEditorialDecision,
+  type EditorialVerdict,
+  type PersistEditorialDecisionResult,
+} from './editorial-writeback'

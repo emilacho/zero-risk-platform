@@ -9,7 +9,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   getResumeHookMode,
   emitEditorialResolution,
-  buildEditorialResolutionFromReviewRow,
+  buildEditorialResolutionFromDecisionRow,
   EDITORIAL_DECISION_RESOLVED_EVENT,
   type EditorialResolution,
 } from '../src/lib/sala/inngest'
@@ -89,13 +89,14 @@ describe('emitEditorialResolution · live', () => {
   })
 })
 
-describe('buildEditorialResolutionFromReviewRow', () => {
-  it('maps a terminal review row → resolution', () => {
-    const res = buildEditorialResolutionFromReviewRow({
-      id: 'rev-9',
-      status: 'rejected',
-      hitl_resolved_by: 'editor-en-jefe',
-      decision_reason: 'majority red',
+describe('buildEditorialResolutionFromDecisionRow', () => {
+  it('maps a RESOLVED editorial_decisions row → resolution (REJECT→rejected)', () => {
+    const res = buildEditorialResolutionFromDecisionRow({
+      review_id: 'rev-9',
+      status: 'RESOLVED',
+      final_verdict: 'REJECT',
+      resolved_by: 'editor-en-jefe',
+      rationale: 'majority red',
     })
     expect(res).toEqual({
       review_id: 'rev-9',
@@ -105,18 +106,30 @@ describe('buildEditorialResolutionFromReviewRow', () => {
     })
   })
 
-  it('returns null for a still-pending row (nothing to emit)', () => {
+  it('PASS → approved · ESCALATE → escalated_hitl', () => {
     expect(
-      buildEditorialResolutionFromReviewRow({ id: 'rev-9', status: 'pending' }),
+      buildEditorialResolutionFromDecisionRow({
+        review_id: 'r', status: 'RESOLVED', final_verdict: 'PASS',
+      })?.status,
+    ).toBe('approved')
+    expect(
+      buildEditorialResolutionFromDecisionRow({
+        review_id: 'r', status: 'RESOLVED', final_verdict: 'ESCALATE',
+      })?.status,
+    ).toBe('escalated_hitl')
+  })
+
+  it('returns null for a still-PENDING row (nothing to emit)', () => {
+    expect(
+      buildEditorialResolutionFromDecisionRow({
+        review_id: 'rev-9', status: 'PENDING', final_verdict: null,
+      }),
     ).toBeNull()
   })
 
-  it('accepts escalated_hitl as terminal/resolvable', () => {
-    const res = buildEditorialResolutionFromReviewRow({
-      id: 'rev-9',
-      status: 'escalated_hitl',
-    })
-    expect(res?.status).toBe('escalated_hitl')
-    expect(res?.resolved_by).toBeNull()
+  it('returns null for RESOLVED without a final_verdict', () => {
+    expect(
+      buildEditorialResolutionFromDecisionRow({ review_id: 'rev-9', status: 'RESOLVED' }),
+    ).toBeNull()
   })
 })

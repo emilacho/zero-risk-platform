@@ -29,6 +29,7 @@
  */
 import { inngestClient } from './client'
 import { buildDeadLetterFailureHandler } from './dead-letter-handler'
+import { persistEditorialDecision } from './editorial-writeback'
 
 /** Inngest event that opens the gate · the router/worker sends this when a
  *  Camino III review escalates to HITL and needs durable waiting. */
@@ -152,10 +153,27 @@ export const editorialGateFn = inngestClient.createFunction(
       resolved?.data ?? null,
     )
 
+    // Write-back · stamp the aggregated FINAL verdict on `editorial_decisions`
+    // (CC#2 migration 202606270010 · UNIQUE review_id · row created PENDING by
+    // camino_iii_tabulate with machine_verdict). A durable `step.run` so the
+    // write is memoised across replays · NEVER throws (persistEditorialDecision
+    // returns a tagged result). Non-verdict outcomes (timeout) leave the row
+    // PENDING for re-escalation. Lazy-import the admin client so a cold start
+    // that never opens a gate does not pay the Supabase construction.
+    const writeback = await step.run('writeback-editorial-decision', async () => {
+      let supabase
+      try {
+        const { getSupabaseAdmin } = await import('@/lib/supabase')
+        supabase = getSupabaseAdmin()
+      } catch {
+        return { ok: false, written: false, reason: 'supabase-unconfigured' }
+      }
+      return persistEditorialDecision(supabase, outcome)
+    })
+
     // The outcome is the function's return value. In Model B a separate
-    // write-back step (not wired live here · §144) POSTs this to
-    // `/api/sala/events/append` so the journey's projection advances. Keeping
-    // the write-back OUT of this file keeps the durable-wait concern isolated.
-    return outcome
+    // event-log write-back (POST `/api/sala/events/append`) advances the
+    // journey projection · that adapter is wired in the §144 flip lote.
+    return { ...outcome, writeback }
   },
 )
