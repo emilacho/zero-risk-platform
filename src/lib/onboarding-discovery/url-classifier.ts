@@ -25,13 +25,19 @@ export const DISCOVERY_GUARDRAILS = {
   max_actors_per_run: 3,
 } as const
 
-/** Apify actor functions available in the Service `3lyknrP3PoS2KzUf`. */
+/** Apify actor functions available in the Service `3lyknrP3PoS2KzUf`.
+ *  Logical names · the Apify Service maps each to an actor id ·
+ *    google_maps_scraper → compass/crawler-google-places
+ *    tweet_scraper       → apidojo/tweet-scraper
+ */
 export type ApifyFunction =
   | 'instagram_scraper'
   | 'linkedin_company'
   | 'facebook_ads'
   | 'tiktok_profile'
   | 'google_serp'
+  | 'google_maps_scraper'
+  | 'tweet_scraper'
 
 /** Result of classifying a single URL. */
 export type UrlClassification =
@@ -76,6 +82,15 @@ export function classifyUrl(raw: unknown): UrlClassification {
   }
   if (n.includes('tiktok.com')) {
     return { kind: 'apify', apify_function: 'tiktok_profile', source: 'apify_scrape' }
+  }
+  // twitter.com (substring safe) · x.com matched at host boundary so "fox.com"
+  // / "box.com" do NOT false-positive (normalizeUrl already stripped www).
+  if (n.includes('twitter.com') || n === 'x.com' || n.startsWith('x.com/')) {
+    return { kind: 'apify', apify_function: 'tweet_scraper', source: 'apify_scrape' }
+  }
+  // Google Maps place/listing URL · the local-presence actor.
+  if (n.includes('google.com/maps') || n.includes('maps.google.com') || n.includes('goo.gl/maps')) {
+    return { kind: 'apify', apify_function: 'google_maps_scraper', source: 'apify_scrape' }
   }
   // Generic web URL · no Apify actor · agent web_fetch path.
   return { kind: 'web_generic', apify_function: null, source: 'onboarding_discovery' }
@@ -190,6 +205,30 @@ export function buildFallbackSearchTarget(input: {
   return {
     url: `serp:${query}`,
     apify_function: 'google_serp',
+    source: 'search',
+    trust_level: 'untrusted',
+    type: 'evidence',
+  }
+}
+
+/**
+ * Fallback (extended) · when the webhook has NO website but DOES carry a
+ * location/city, also probe local presence via `google_maps_scraper`
+ * (compass/crawler-google-places). Complements the google_serp fallback ·
+ * returns null when no location is provided (maps needs a place to search).
+ */
+export function buildFallbackMapsTarget(input: {
+  readonly company_name?: string | null
+  readonly industry?: string | null
+  readonly location?: string | null
+}): ScrapeTarget | null {
+  const location = (input.location ?? '').trim()
+  if (location.length === 0) return null
+  const subject = (input.company_name ?? '').trim() || (input.industry ?? '').trim()
+  const query = [subject, location].filter((s) => s.length > 0).join(' ')
+  return {
+    url: `maps:${query}`,
+    apify_function: 'google_maps_scraper',
     source: 'search',
     trust_level: 'untrusted',
     type: 'evidence',

@@ -38,6 +38,10 @@ function classifyUrl(raw) {
     return { kind: 'apify', apify_function: 'facebook_ads', source: 'apify_scrape' };
   if (n.includes('tiktok.com'))
     return { kind: 'apify', apify_function: 'tiktok_profile', source: 'apify_scrape' };
+  if (n.includes('twitter.com') || n === 'x.com' || n.startsWith('x.com/'))
+    return { kind: 'apify', apify_function: 'tweet_scraper', source: 'apify_scrape' };
+  if (n.includes('google.com/maps') || n.includes('maps.google.com') || n.includes('goo.gl/maps'))
+    return { kind: 'apify', apify_function: 'google_maps_scraper', source: 'apify_scrape' };
   return { kind: 'web_generic', apify_function: null, source: 'onboarding_discovery' };
 }
 
@@ -163,12 +167,21 @@ if (primaryIcp) {
 }
 
 // ─── Tarea 2 · FALLBACK · no website AND no actor targets → google_serp ─
+// + extended · if a location/city is provided, ALSO probe local presence via
+//   google_maps_scraper (compass/crawler-google-places).
 const hasWebsite = typeof dealData.website === 'string' && dealData.website.trim().length > 0;
 const hasActorTarget = scrapeTargets.some((t) => t.apify_function);
 if (!hasWebsite && !hasActorTarget) {
   const q = [String(clientName || '').trim() + ' competitors', String(dealData.industry || '').trim()]
     .filter((s) => s.length > 1).join(' ');
   pushTarget('google_serp', { queries: q, resultsPerPage: 5, maxPagesPerQuery: 1 }, 'fallback', 'fallback:serp:' + q, 'search', 'untrusted');
+
+  const location = String(dealData.location || dealData.city || '').trim();
+  if (location.length > 0) {
+    const subject = String(clientName || dealData.industry || '').trim();
+    const mq = [subject, location].filter((s) => s.length > 0).join(' ');
+    pushTarget('google_maps_scraper', { searchStringsArray: [mq], maxCrawledPlacesPerSearch: 5 }, 'fallback', 'fallback:maps:' + mq, 'search', 'untrusted');
+  }
 }
 
 // ─── Shadow-safe · no agent signal AND no deterministic targets → skip ─

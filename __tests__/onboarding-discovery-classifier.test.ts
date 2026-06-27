@@ -11,6 +11,7 @@ import {
   classifyUrl,
   buildScrapeTargets,
   buildFallbackSearchTarget,
+  buildFallbackMapsTarget,
   aggregateDiscoverySources,
 } from '../src/lib/onboarding-discovery/url-classifier'
 
@@ -54,6 +55,19 @@ describe('classifyUrl · canonical host → actor mapping', () => {
   })
   it('tiktok → tiktok_profile', () => {
     expect(classifyUrl('https://tiktok.com/@acme')?.apify_function).toBe('tiktok_profile')
+  })
+  it('twitter / x.com → tweet_scraper', () => {
+    expect(classifyUrl('https://twitter.com/acme')?.apify_function).toBe('tweet_scraper')
+    expect(classifyUrl('https://x.com/acme')?.apify_function).toBe('tweet_scraper')
+    expect(classifyUrl('x.com')?.apify_function).toBe('tweet_scraper')
+  })
+  it('x.com host-boundary guard · fox.com / box.com are NOT tweet_scraper', () => {
+    expect(classifyUrl('https://fox.com')?.apify_function).toBeNull() // web_generic
+    expect(classifyUrl('https://box.com')?.source).toBe('onboarding_discovery')
+  })
+  it('google maps URL → google_maps_scraper', () => {
+    expect(classifyUrl('https://google.com/maps/place/Acme')?.apify_function).toBe('google_maps_scraper')
+    expect(classifyUrl('https://maps.google.com/?q=acme')?.apify_function).toBe('google_maps_scraper')
   })
   it('generic web URL → web_generic / onboarding_discovery (agent web_fetch)', () => {
     const c = classifyUrl('https://acme-corp.com')
@@ -131,6 +145,25 @@ describe('buildFallbackSearchTarget · Tarea 2', () => {
   it('handles missing industry gracefully', () => {
     const t = buildFallbackSearchTarget({ company_name: 'Acme' })
     expect(t.url).toBe('serp:Acme competitors')
+  })
+})
+
+describe('buildFallbackMapsTarget · no-URL + location', () => {
+  it('builds google_maps_scraper target when location present', () => {
+    const t = buildFallbackMapsTarget({ company_name: 'Acme', location: 'Quito' })
+    expect(t).not.toBeNull()
+    expect(t?.apify_function).toBe('google_maps_scraper')
+    expect(t?.source).toBe('search')
+    expect(t?.trust_level).toBe('untrusted')
+    expect(t?.url).toBe('maps:Acme Quito')
+  })
+  it('falls back to industry as subject when no company_name', () => {
+    const t = buildFallbackMapsTarget({ industry: 'cafetería', location: 'Lima' })
+    expect(t?.url).toBe('maps:cafetería Lima')
+  })
+  it('returns null when no location (maps needs a place)', () => {
+    expect(buildFallbackMapsTarget({ company_name: 'Acme' })).toBeNull()
+    expect(buildFallbackMapsTarget({ company_name: 'Acme', location: '   ' })).toBeNull()
   })
 })
 
