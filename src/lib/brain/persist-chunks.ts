@@ -12,8 +12,9 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { generateEmbedding } from './embed'
-import { runIngressFilter, DEFAULT_ROUTE_POLICY, type ProvenanceTag } from '../ingress-filter'
+import { runIngressFilter, type ProvenanceTag } from '../ingress-filter'
 import { buildBrainProvenanceTag, type BrainTrustLevel } from '../client-brain'
+import { brainRoutePolicy, quarantineChunk } from './portero'
 
 export interface BrainChunk {
   section_label: string
@@ -113,19 +114,38 @@ export async function persistChunks(
     ingress_route: 'lib/brain/persist-chunks',
   })
   const ingressSource = toIngressSource(brainSource)
+  const route = brainRoutePolicy()
 
   let tokens = 0
   let upserted = 0
   for (const c of args.chunks) {
     const text = c.chunk_text.slice(0, 6000) // cap to keep tokens bounded
 
-    // FASE C · portero anti-injection (ADR-012) en modo SHADOW · audita ·
-    // NUNCA bloquea (shadow_mode=true · skip_classifier · sin costo LLM).
+    // FASE C · portero anti-injection (ADR-012) · §144-per-flip ·
+    // shadow (default · audita) | enforce (BRAIN_INGRESS_ENFORCE='true' · chunk
+    // bloqueado NO se escribe · va a ingress_quarantine). skip_classifier · sin LLM.
     try {
       const decision = await runIngressFilter(
         { raw_text: text, source: ingressSource, ingress_route: 'lib/brain/persist-chunks', client_id: args.clientId },
-        { route: DEFAULT_ROUTE_POLICY, skip_classifier: true },
+        { route, skip_classifier: true },
       )
+      if (!decision.allow) {
+        // enforce · cuarentena + skip (NO embebe ni escribe al cerebro).
+        await quarantineChunk(supabase, {
+          decision,
+          source: brainSource,
+          trustLevel: args.trustLevel ?? 'untrusted',
+          ingressRoute: 'lib/brain/persist-chunks',
+          sectionLabel: c.section_label,
+          chunkText: text,
+          clientId: args.clientId,
+        })
+        console.warn(
+          `[persist-chunks][ingress-filter][enforce] ${args.sourceTable}/${c.section_label} RECHAZADO → quarantine · ` +
+            `${decision.block_gate ?? 'block'}(${decision.block_severity ?? decision.severity}) · client=${args.clientId}`,
+        )
+        continue
+      }
       if (decision.shadow_blocks.length > 0) {
         console.warn(
           `[persist-chunks][ingress-filter][shadow] ${args.sourceTable}/${c.section_label} bloquearía en enforce · ` +
@@ -133,7 +153,7 @@ export async function persistChunks(
         )
       }
     } catch {
-      // El filtro nunca debe romper la escritura · shadow es best-effort audit.
+      // El filtro nunca debe romper la escritura · best-effort audit/enforce.
     }
 
     const e = await generateEmbedding(text)

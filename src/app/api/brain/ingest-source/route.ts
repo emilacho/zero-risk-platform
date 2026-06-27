@@ -16,8 +16,9 @@ import { NextResponse } from "next/server";
 import { checkInternalKey } from "@/lib/internal-auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { generateEmbeddings, EMBEDDING_DIMENSIONS, estimateCost } from "@/lib/brain/embed";
-import { runIngressFilter, DEFAULT_ROUTE_POLICY, type ProvenanceTag } from "@/lib/ingress-filter";
+import { runIngressFilter, type ProvenanceTag } from "@/lib/ingress-filter";
 import { buildBrainProvenanceTag } from "@/lib/client-brain";
+import { brainEnforceEnabled, brainRoutePolicy, quarantineChunk } from "@/lib/brain/portero";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -150,42 +151,90 @@ export async function POST(request: Request) {
     );
   }
 
-  // FASE C · portero anti-injection (ADR-012 · 5 capas) en modo SHADOW ·
-  // audita por sección · NUNCA rechaza (DEFAULT_ROUTE_POLICY.shadow_mode=true ·
-  // allow siempre true · shadow_blocks registra qué bloquearía en enforce).
-  // Capa 3 (classifier) skip · sin costo LLM · el flip a enforce es §144 aparte.
+  // FASE C · portero anti-injection (ADR-012 · 5 capas) · §144-per-flip ·
+  // shadow (default · audita · NUNCA rechaza) | enforce (BRAIN_INGRESS_ENFORCE=
+  // 'true' · secciones bloqueadas NO se escriben · van a ingress_quarantine).
+  // Capa 3 (classifier) skip · sin costo LLM.
+  const supabase = getSupabaseAdmin();
+  const enforce = brainEnforceEnabled();
+  const route = brainRoutePolicy();
   const ingressSource = toIngressSource(brainSource);
   const filterDecisions = await Promise.all(
     valid.map((s) =>
       runIngressFilter(
-        {
-          raw_text: s.text,
-          source: ingressSource,
-          ingress_route: "/api/brain/ingest-source",
-          client_id: clientId,
-        },
-        { route: DEFAULT_ROUTE_POLICY, skip_classifier: true },
+        { raw_text: s.text, source: ingressSource, ingress_route: "/api/brain/ingest-source", client_id: clientId },
+        { route, skip_classifier: true },
       ),
     ),
   );
+
+  // Lo que bloquearía en enforce (audit · presente en ambos modos).
   const shadowFlagged = filterDecisions
     .map((d, i) => ({ section_label: valid[i].section_label, shadow_blocks: d.shadow_blocks, severity: d.severity }))
     .filter((d) => d.shadow_blocks.length > 0);
-  if (shadowFlagged.length > 0) {
+
+  // Partición · en shadow allow es siempre true (rejected vacío) · en enforce
+  // allow=false para bloqueos ≥ HIGH → esas secciones NO se escriben · cuarentena.
+  const accepted = valid.filter((_, i) => filterDecisions[i].allow);
+  const rejectedPairs = valid
+    .map((s, i) => ({ s, d: filterDecisions[i] }))
+    .filter((x) => !x.d.allow);
+  await Promise.all(
+    rejectedPairs.map(({ s, d }) =>
+      quarantineChunk(supabase, {
+        decision: d,
+        source: brainSource,
+        trustLevel: "untrusted",
+        ingressRoute: "/api/brain/ingest-source",
+        sectionLabel: s.section_label,
+        chunkText: s.text,
+        clientId,
+      }),
+    ),
+  );
+  const rejected = rejectedPairs.map(({ s, d }) => ({
+    section_label: s.section_label,
+    reason: d.block_reason ?? d.block_gate ?? "blocked",
+    severity: d.block_severity ?? d.severity,
+  }));
+
+  if (shadowFlagged.length > 0 || rejected.length > 0) {
     console.warn(
-      `[ingest-source][ingress-filter][shadow] ${shadowFlagged.length}/${valid.length} secciones bloquearían en enforce · client=${clientId} · ` +
-        shadowFlagged.map((d) => `${d.section_label}:${d.shadow_blocks.join("+")}(${d.severity})`).join(" · "),
+      `[ingest-source][ingress-filter][${enforce ? "enforce" : "shadow"}] ` +
+        `flagged=${shadowFlagged.length} rejected=${rejected.length}/${valid.length} · client=${clientId} · ` +
+        (enforce ? rejected : shadowFlagged)
+          .map((d) => `${d.section_label}(${d.severity})`)
+          .join(" · "),
     );
   }
   const ingressFilterAudit = {
-    shadow_mode: true as const,
+    mode: (enforce ? "enforce" : "shadow") as "enforce" | "shadow",
     sections_evaluated: valid.length,
     sections_shadow_flagged: shadowFlagged.length,
-    flagged: shadowFlagged,
+    sections_rejected: rejected.length,
+    quarantined: rejected.length,
+    ...(rejected.length > 0 ? { rejected } : {}),
+    ...(shadowFlagged.length > 0 ? { flagged: shadowFlagged } : {}),
   };
 
-  // Batch embed all section texts (canonical · single OpenAI call)
-  const embed = await generateEmbeddings(valid.map((s) => s.text));
+  // Si enforce rechazó TODAS las secciones · nada que escribir.
+  if (accepted.length === 0) {
+    return NextResponse.json(
+      {
+        ok: true,
+        chunks_upserted: 0,
+        sections_processed: 0,
+        sections_rejected: rejected.length,
+        cost_usd: 0,
+        ingress_filter: ingressFilterAudit,
+        note: rejected.length > 0 ? "all_sections_quarantined" : "no_accepted_sections",
+      },
+      { status: 200 },
+    );
+  }
+
+  // Batch embed las secciones ACEPTADAS (canonical · single OpenAI call)
+  const embed = await generateEmbeddings(accepted.map((s) => s.text));
   if (!embed.ok) {
     return NextResponse.json(
       {
@@ -202,7 +251,6 @@ export async function POST(request: Request) {
   }
 
   // UPSERT rows · ON CONFLICT (client_id, source_table, source_id, section_label) DO UPDATE
-  const supabase = getSupabaseAdmin();
   const nowIso = new Date().toISOString();
   // FASE C · provenance_tag por fila · evidencia · trust por fuente (default
   // untrusted · mapa fuente→untrusted) · el write-back canon (type=canon) es C2.
@@ -213,7 +261,7 @@ export async function POST(request: Request) {
     received_at: nowIso,
     ingress_route: "/api/brain/ingest-source",
   });
-  const rows = valid.map((s, i) => ({
+  const rows = accepted.map((s, i) => ({
     client_id: clientId,
     source_table: sourceTable,
     source_id: sourceId,
@@ -257,7 +305,8 @@ export async function POST(request: Request) {
     {
       ok: true,
       chunks_upserted: (data ?? []).length,
-      sections_processed: valid.length,
+      sections_processed: accepted.length,
+      sections_rejected: rejected.length,
       cost_usd: estimateCost(embed.tokens),
       tokens_used: embed.tokens,
       embedding_model: embed.model,
