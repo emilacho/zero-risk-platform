@@ -42,19 +42,19 @@ describe('classifyUrl · canonical host → actor mapping', () => {
     })
     expect(classifyUrl('http://instagr.am/x')?.apify_function).toBe('instagram_scraper')
   })
-  it('linkedin company → linkedin_company', () => {
+  it('linkedin company → linkedin_company_scraper', () => {
     expect(classifyUrl('https://www.linkedin.com/company/acme')?.apify_function).toBe(
-      'linkedin_company',
+      'linkedin_company_scraper',
     )
   })
   it('linkedin NON-company → web_generic (no company actor)', () => {
     expect(classifyUrl('https://linkedin.com/in/someone')?.source).toBe('onboarding_discovery')
   })
   it('facebook → facebook_ads', () => {
-    expect(classifyUrl('https://facebook.com/acme')?.apify_function).toBe('facebook_ads')
+    expect(classifyUrl('https://facebook.com/acme')?.apify_function).toBe('facebook_ads_library_scraper')
   })
   it('tiktok → tiktok_profile', () => {
-    expect(classifyUrl('https://tiktok.com/@acme')?.apify_function).toBe('tiktok_profile')
+    expect(classifyUrl('https://tiktok.com/@acme')?.apify_function).toBe('tiktok_profile_scraper')
   })
   it('twitter / x.com → tweet_scraper', () => {
     expect(classifyUrl('https://twitter.com/acme')?.apify_function).toBe('tweet_scraper')
@@ -137,7 +137,7 @@ describe('buildScrapeTargets · §150 guardrails', () => {
 describe('buildFallbackSearchTarget · Tarea 2', () => {
   it('builds google_serp / search / untrusted target with query', () => {
     const t = buildFallbackSearchTarget({ company_name: 'Acme', industry: 'fintech' })
-    expect(t.apify_function).toBe('google_serp')
+    expect(t.apify_function).toBe('google_serp_scraper')
     expect(t.source).toBe('search')
     expect(t.trust_level).toBe('untrusted')
     expect(t.url).toBe('serp:Acme competitors fintech')
@@ -171,15 +171,15 @@ describe('aggregateDiscoverySources · Tarea 3 graceful degradation', () => {
   it('marks failed actors but keeps the others · never aborts', () => {
     const r = aggregateDiscoverySources([
       { apify_function: 'instagram_scraper', ok: true, count: 12 },
-      { apify_function: 'linkedin_company', ok: false, error: 'timeout' },
-      { apify_function: 'facebook_ads', ok: true, count: 3 },
+      { apify_function: 'linkedin_company_scraper', ok: false, error: 'timeout' },
+      { apify_function: 'facebook_ads_library_scraper', ok: true, count: 3 },
     ])
     expect(r.ok_count).toBe(2)
     expect(r.failed_count).toBe(1)
     expect(r.total_results).toBe(15)
     expect(r.sources).toHaveLength(3)
     const failed = r.sources.find((s) => s.status === 'failed')
-    expect(failed?.apify_function).toBe('linkedin_company')
+    expect(failed?.apify_function).toBe('linkedin_company_scraper')
     expect(failed?.error).toBe('timeout')
     expect(failed?.count).toBe(0)
   })

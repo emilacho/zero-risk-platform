@@ -33,11 +33,11 @@ function classifyUrl(raw) {
   if (n.includes('instagram.com') || n.includes('instagr.am'))
     return { kind: 'apify', apify_function: 'instagram_scraper', source: 'apify_scrape' };
   if (n.includes('linkedin.com/company'))
-    return { kind: 'apify', apify_function: 'linkedin_company', source: 'apify_scrape' };
+    return { kind: 'apify', apify_function: 'linkedin_company_scraper', source: 'apify_scrape' };
   if (n.includes('facebook.com') || n.includes('fb.com'))
-    return { kind: 'apify', apify_function: 'facebook_ads', source: 'apify_scrape' };
+    return { kind: 'apify', apify_function: 'facebook_ads_library_scraper', source: 'apify_scrape' };
   if (n.includes('tiktok.com'))
-    return { kind: 'apify', apify_function: 'tiktok_profile', source: 'apify_scrape' };
+    return { kind: 'apify', apify_function: 'tiktok_profile_scraper', source: 'apify_scrape' };
   if (n.includes('twitter.com') || n === 'x.com' || n.startsWith('x.com/'))
     return { kind: 'apify', apify_function: 'tweet_scraper', source: 'apify_scrape' };
   if (n.includes('google.com/maps') || n.includes('maps.google.com') || n.includes('goo.gl/maps'))
@@ -122,8 +122,8 @@ function pushTarget(apify_function, params, target_kind, target_label, source, t
 
 // ─── PATH A · agent-derived OWN handles (tenant_trusted · direct client data) ─
 if (ownHandles.instagram) pushTarget('instagram_scraper', { usernames: [String(ownHandles.instagram).replace(/^@/, '')], resultsLimit: 5 }, 'own', 'own:instagram:' + ownHandles.instagram, 'apify_scrape', 'tenant_trusted');
-if (ownHandles.tiktok) pushTarget('tiktok_profile', { usernames: [String(ownHandles.tiktok).replace(/^@/, '')], maxItems: 5 }, 'own', 'own:tiktok:' + ownHandles.tiktok, 'apify_scrape', 'tenant_trusted');
-if (ownHandles.linkedin) pushTarget('linkedin_company', { companies: [ownHandles.linkedin], maxItems: 1 }, 'own', 'own:linkedin:' + ownHandles.linkedin, 'apify_scrape', 'tenant_trusted');
+if (ownHandles.tiktok) pushTarget('tiktok_profile_scraper', { usernames: [String(ownHandles.tiktok).replace(/^@/, '')], maxItems: 5 }, 'own', 'own:tiktok:' + ownHandles.tiktok, 'apify_scrape', 'tenant_trusted');
+if (ownHandles.linkedin) pushTarget('linkedin_company_scraper', { companies: [ownHandles.linkedin], maxItems: 1 }, 'own', 'own:linkedin:' + ownHandles.linkedin, 'apify_scrape', 'tenant_trusted');
 
 // ─── Tarea 1 · classify the client's webhook URLs (website + socials) ─
 // Own data from the webhook = tenant_trusted. Generic website → web_fetch
@@ -152,10 +152,10 @@ for (let i = 0; i < competitors.length; i++) {
   const c = competitors[i];
   if (!c || typeof c !== 'object' || !c.name) continue;
   const cName = c.name; const h = c.handles || {};
-  pushTarget('facebook_ads', { searchTerms: [cName], country: 'US', maxItems: 3 }, 'competitor', 'comp:fb_ads:' + cName, 'apify_scrape', 'untrusted');
+  pushTarget('facebook_ads_library_scraper', { searchTerms: [cName], country: 'US', maxItems: 3 }, 'competitor', 'comp:fb_ads:' + cName, 'apify_scrape', 'untrusted');
   if (h.instagram) pushTarget('instagram_scraper', { usernames: [String(h.instagram).replace(/^@/, '')], resultsLimit: 3 }, 'competitor', 'comp:ig:' + cName, 'apify_scrape', 'untrusted');
-  if (h.tiktok) pushTarget('tiktok_profile', { usernames: [String(h.tiktok).replace(/^@/, '')], maxItems: 3 }, 'competitor', 'comp:tiktok:' + cName, 'apify_scrape', 'untrusted');
-  if (h.linkedin) pushTarget('linkedin_company', { companies: [h.linkedin], maxItems: 1 }, 'competitor', 'comp:linkedin:' + cName, 'apify_scrape', 'untrusted');
+  if (h.tiktok) pushTarget('tiktok_profile_scraper', { usernames: [String(h.tiktok).replace(/^@/, '')], maxItems: 3 }, 'competitor', 'comp:tiktok:' + cName, 'apify_scrape', 'untrusted');
+  if (h.linkedin) pushTarget('linkedin_company_scraper', { companies: [h.linkedin], maxItems: 1 }, 'competitor', 'comp:linkedin:' + cName, 'apify_scrape', 'untrusted');
 }
 
 // ─── SEO · canon icp.industries[] + icp.geography (search · untrusted) ─
@@ -163,7 +163,7 @@ if (primaryIcp) {
   const industry = (Array.isArray(primaryIcp.industries) && primaryIcp.industries.length > 0)
     ? primaryIcp.industries[0] : primaryIcp.audience_segment;
   const geography = primaryIcp.geography || '';
-  if (industry) pushTarget('google_serp', { queries: industry + (geography ? (' ' + geography) : ''), resultsPerPage: 5, maxPagesPerQuery: 1 }, 'seo', 'seo:industry:' + industry, 'search', 'untrusted');
+  if (industry) pushTarget('google_serp_scraper', { queries: industry + (geography ? (' ' + geography) : ''), resultsPerPage: 5, maxPagesPerQuery: 1 }, 'seo', 'seo:industry:' + industry, 'search', 'untrusted');
 }
 
 // ─── Tarea 2 · FALLBACK · no website AND no actor targets → google_serp ─
@@ -174,7 +174,7 @@ const hasActorTarget = scrapeTargets.some((t) => t.apify_function);
 if (!hasWebsite && !hasActorTarget) {
   const q = [String(clientName || '').trim() + ' competitors', String(dealData.industry || '').trim()]
     .filter((s) => s.length > 1).join(' ');
-  pushTarget('google_serp', { queries: q, resultsPerPage: 5, maxPagesPerQuery: 1 }, 'fallback', 'fallback:serp:' + q, 'search', 'untrusted');
+  pushTarget('google_serp_scraper', { queries: q, resultsPerPage: 5, maxPagesPerQuery: 1 }, 'fallback', 'fallback:serp:' + q, 'search', 'untrusted');
 
   const location = String(dealData.location || dealData.city || '').trim();
   if (location.length > 0) {
