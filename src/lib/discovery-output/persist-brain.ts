@@ -86,6 +86,9 @@ export async function persistDiscoveryToBrain(
             sourceTable: 'client_competitive_landscape',
             sourceId,
             chunks,
+            // FASE C · provenance per competidor (taxonomía discovery · PR #199).
+            source: c.source ?? 'onboarding_discovery',
+            trustLevel: c.trust_level ?? 'untrusted',
           })
           if (r.ok) chunksTotal += r.chunks_upserted
           else errors.push(`competitor_chunks_${c.name}: ${r.code}`)
