@@ -11,6 +11,7 @@
  * returns `flag_off` and this consumer surfaces it as the
  * `skipped_dispatcher_off` outcome.
  */
+import { dispatchCostMonitorAlert } from '@/lib/cost-monitor-alert'
 import { buildIdempotencyKey } from '@/lib/sala-event-log'
 import {
   dispatchToWorkflow,
@@ -41,6 +42,53 @@ export type CapSpendQuery = (input: {
   readonly correlation_id: string
 }) => Promise<number>
 
+/**
+ * Canon canonical · §150 #5 cap-breach alert context · the real-time nudge
+ * fired when the per-run cap BLOCKS a dispatch. The durable audit record is
+ * the marker event (orchestrator) · this alert is the human-facing signal.
+ */
+export interface CapAlertContext {
+  readonly tenant_id: string
+  readonly stream_id: string
+  readonly correlation_id: string
+  readonly workflow_id: string
+  readonly cap_usd: number
+  readonly spent_usd: number
+}
+
+/**
+ * Canon canonical · injected alert sink · fired ONLY on a cap BLOCK. Best-
+ * effort · the dispatcher swallows any throw (canon §148 · never block the
+ * safety-net path on a Slack/alert outage). Tests inject a spy · production
+ * defaults to `defaultCapAlerter` (Slack via `dispatchCostMonitorAlert`).
+ */
+export type CapAlerter = (ctx: CapAlertContext) => Promise<void>
+
+/**
+ * Canon canonical · default cap-breach alerter · routes through the §150 G5
+ * Slack dispatcher (`SLACK_WEBHOOK_URL_EQUIPO`). Maps the per-run cap breach
+ * to a `per_run_cap` CostMonitorBreach so the existing alert formatter +
+ * run_id forensics line are reused (single Slack path · canon §150 #5).
+ */
+async function defaultCapAlerter(ctx: CapAlertContext): Promise<void> {
+  await dispatchCostMonitorAlert({
+    breaches: [
+      {
+        type: 'per_run_cap',
+        workflow_id: ctx.workflow_id,
+        spend_usd: ctx.spent_usd,
+        threshold: ctx.cap_usd,
+      },
+    ],
+    aggregate_24h_usd: ctx.spent_usd,
+    aggregate_1h_usd: ctx.spent_usd,
+    invocations_24h: 0,
+    invocations_1h: 0,
+    run_id: ctx.correlation_id,
+    ran_at: new Date().toISOString(),
+  })
+}
+
 export interface DispatchOneInput {
   readonly intake: ParsedIntakeEvent
   readonly enabled?: boolean
@@ -59,6 +107,13 @@ export interface DispatchOneInput {
    * `wireCapSpendQuerySupabase` in orchestrator).
    */
   readonly cap_spend_query?: CapSpendQuery
+  /**
+   * Canon canonical · injected cap-breach alerter · fired ONLY when the
+   * §150 #5 per-run cap BLOCKS. Defaults to `defaultCapAlerter` (Slack via
+   * `dispatchCostMonitorAlert`). Best-effort · a throw here NEVER changes the
+   * `skipped_cap_blocked` outcome. Tests inject a spy to assert it fired.
+   */
+  readonly cap_alerter?: CapAlerter
 }
 
 export interface DispatchOneResult {
@@ -182,6 +237,25 @@ export async function dispatchOneIntake(
       enforce: true,
     })
     if (cap_evaluation.verdict === 'block') {
+      // §150 #5 · real-time alert on cap-block · best-effort. The marker
+      // event (orchestrator) is the durable audit record · this is the
+      // human-facing nudge. NEVER throws · a Slack/alert outage must not
+      // change the skipped_cap_blocked outcome (canon §148 safety-net).
+      // Reached ONLY when enforce ON + Náufrago tenant + over cap → stays
+      // inert in shadow (NO flag flipped by this wire).
+      const alerter = input.cap_alerter ?? defaultCapAlerter
+      try {
+        await alerter({
+          tenant_id: intake.tenant_id,
+          stream_id: intake.stream_id,
+          correlation_id: intake.correlation_id,
+          workflow_id,
+          cap_usd: cap_evaluation.cap_usd,
+          spent_usd: cap_evaluation.spent_usd,
+        })
+      } catch {
+        // swallow · alert is best-effort · the block + audit trail stand.
+      }
       return {
         kind: 'skipped_cap_blocked',
         detail: `cap §150 blocked · spent=$${cap_evaluation.spent_usd.toFixed(2)} >= cap=$${cap_evaluation.cap_usd.toFixed(2)} · tenant=${intake.tenant_id.slice(0, 8)}`,

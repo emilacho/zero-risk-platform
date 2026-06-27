@@ -12,7 +12,7 @@
  * into Supabase.
  */
 export interface CostMonitorBreach {
-  type: 'daily_per_workflow' | 'daily_aggregate' | 'hourly_burst'
+  type: 'daily_per_workflow' | 'daily_aggregate' | 'hourly_burst' | 'per_run_cap'
   workflow_id?: string
   spend_usd: number
   threshold: number
@@ -39,6 +39,7 @@ const BREACH_LABELS: Record<CostMonitorBreach['type'], string> = {
   hourly_burst: 'Pico horario',
   daily_per_workflow: 'Workflow diario',
   daily_aggregate: 'Agregado diario',
+  per_run_cap: 'Tope por corrida (§150 #5)',
 }
 
 function formatBreachLine(b: CostMonitorBreach): string {

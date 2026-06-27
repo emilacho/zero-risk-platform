@@ -129,6 +129,73 @@ describe('dispatch · cap-wire · enforce ON · Náufrago tenant', () => {
   })
 })
 
+describe('dispatch · cap-wire · §150 #5 alert on block', () => {
+  it('fires the injected alerter with cap + spend context when BLOCKED', async () => {
+    const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))
+    const spend = vi.fn(async () => 7.5)
+    const alerter = vi.fn(async () => {})
+    const r = await dispatchOneIntake({
+      intake: intake(),
+      enabled: true,
+      n8n_base_url: 'https://n8n.test',
+      fetcher: fetcher as unknown as typeof fetch,
+      cap_enforce_override: true,
+      cap_spend_query: spend,
+      cap_alerter: alerter,
+    })
+    expect(r.kind).toBe('skipped_cap_blocked')
+    expect(alerter).toHaveBeenCalledTimes(1)
+    expect(alerter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenant_id: NAUFRAGO,
+        cap_usd: 5,
+        spent_usd: 7.5,
+        workflow_id: 'LyVoKcrypS5uLyuu',
+        correlation_id: 'corr-cap-1',
+      }),
+    )
+    expect(fetcher).not.toHaveBeenCalled() // still no dispatch
+  })
+
+  it('does NOT fire the alerter when under cap (pass)', async () => {
+    const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))
+    const spend = vi.fn(async () => 1.0)
+    const alerter = vi.fn(async () => {})
+    const r = await dispatchOneIntake({
+      intake: intake(),
+      enabled: true,
+      n8n_base_url: 'https://n8n.test',
+      fetcher: fetcher as unknown as typeof fetch,
+      cap_enforce_override: true,
+      cap_spend_query: spend,
+      cap_alerter: alerter,
+    })
+    expect(r.kind).toBe('dispatched_ok')
+    expect(alerter).not.toHaveBeenCalled()
+  })
+
+  it('alerter throw is swallowed · block outcome still returned (best-effort)', async () => {
+    const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))
+    const spend = vi.fn(async () => 9.99)
+    const alerter = vi.fn(async () => {
+      throw new Error('slack down')
+    })
+    const r = await dispatchOneIntake({
+      intake: intake(),
+      enabled: true,
+      n8n_base_url: 'https://n8n.test',
+      fetcher: fetcher as unknown as typeof fetch,
+      cap_enforce_override: true,
+      cap_spend_query: spend,
+      cap_alerter: alerter,
+    })
+    expect(r.kind).toBe('skipped_cap_blocked')
+    expect(r.cap_evaluation?.verdict).toBe('block')
+    expect(alerter).toHaveBeenCalledTimes(1)
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+})
+
 describe('dispatch · cap-wire · non-Náufrago tenant', () => {
   it('skips cap query · dispatches normally (other_tenant fast-path)', async () => {
     const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))

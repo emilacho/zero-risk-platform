@@ -18,7 +18,7 @@ import {
   type EventLogStorage,
   type ReadFilters,
 } from '@/lib/sala-event-log'
-import { dispatchOneIntake, type CapSpendQuery } from './dispatch'
+import { dispatchOneIntake, type CapAlerter, type CapSpendQuery } from './dispatch'
 import { buildDispatchMarkerEvent } from './marker'
 import { parseIntakeEvent } from './parsing'
 import { selectPendingIntakeEvents } from './query'
@@ -46,6 +46,10 @@ export interface OrchestratorInput extends ConsumerTickInput {
    *  without flipping the env. Production reads
    *  `SALA_NAUFRAGO_RUN_CAP_ENFORCE` via `isNaufragoCapEnforced()`. */
   readonly cap_enforce_override?: boolean
+  /** Canon canonical · forwarded to dispatch · §150 #5 cap-breach alerter.
+   *  Production omits (defaults to Slack via dispatchCostMonitorAlert) ·
+   *  tests inject a spy. Fired ONLY on a cap BLOCK · best-effort. */
+  readonly cap_alerter?: CapAlerter
 }
 
 /** Canon canonical · runs one tick · TOTAL · cero silent drops. */
@@ -107,6 +111,7 @@ export async function consumeIntakeTick(
       n8n_base_url: input.n8n_base_url,
       fetcher: input.fetcher,
       ...(input.cap_spend_query ? { cap_spend_query: input.cap_spend_query } : {}),
+      ...(input.cap_alerter ? { cap_alerter: input.cap_alerter } : {}),
       ...(input.cap_enforce_override !== undefined
         ? { cap_enforce_override: input.cap_enforce_override }
         : {}),
