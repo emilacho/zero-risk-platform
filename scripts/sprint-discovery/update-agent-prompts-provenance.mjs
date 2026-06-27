@@ -77,7 +77,7 @@ async function patchIdentity(slug, content) {
 }
 
 console.log(`Sprint discovery · prompts provenance · modo · ${APPLY ? '⚠ APPLY (GATED §144)' : 'DRY-RUN (default)'}`)
-if (APPLY && env.A_PROMPTS_CONFIRM_SS144 !== 'yes') {
+if (APPLY && process.env.A_PROMPTS_CONFIRM_SS144 !== 'yes' && env.A_PROMPTS_CONFIRM_SS144 !== 'yes') {
   console.error('\n✋ --apply requiere A_PROMPTS_CONFIRM_SS144=yes (ratificación §144). Abortado.')
   process.exit(2)
 }
