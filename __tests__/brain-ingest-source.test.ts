@@ -28,7 +28,7 @@ const upsertSelectMock = vi.fn(async () => ({
   data: [{ id: 'chunk-1' }, { id: 'chunk-2' }],
   error: null,
 }))
-const upsertSpy = vi.fn(() => ({ select: upsertSelectMock }))
+const upsertSpy = vi.fn((_rows: unknown) => ({ select: upsertSelectMock }))
 const fromMock = vi.fn(() => ({ upsert: upsertSpy }))
 vi.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: vi.fn(() => ({ from: fromMock })),
