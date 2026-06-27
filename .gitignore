@@ -67,3 +67,4 @@ zr-w18-batch/
 .claude/
 logs
 outputs/
+.env.branch

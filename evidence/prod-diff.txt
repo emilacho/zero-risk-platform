@@ -1,0 +1,303 @@
+--- evidence/prod-pre.json	2026-05-31 18:26:26.032361600 +0200
++++ evidence/prod-post.json	2026-05-31 18:27:29.835615600 +0200
+@@ -1,13 +1,13 @@
+ {
+-  "label": "pre-prod",
+-  "started_at": "2026-05-31T16:26:17.445Z",
++  "label": "post-prod",
++  "started_at": "2026-05-31T16:27:21.374Z",
+   "supabase_url": "https://ordaeyxvvvdqsznsecjx...(redacted)",
+   "summary": {
+     "tables_tested": 14,
+     "views_tested": 5,
+     "anon_read": {
+-      "ok_with_data": 2,
+-      "ok_empty": 12,
++      "ok_with_data": 0,
++      "ok_empty": 14,
+       "errored": 0
+     },
+     "anon_write": {
+@@ -19,26 +19,22 @@
+       "failed": 0
+     },
+     "views_anon_read": {
+-      "with_data": 3,
+-      "empty": 2,
++      "with_data": 0,
++      "empty": 5,
+       "errored": 0
+     }
+   },
+   "interpretation": {
+-    "anon_exposed_tables": [
+-      "workflow_checkpoints",
+-      "managed_agents_registry"
+-    ],
++    "anon_exposed_tables": [],
+     "backend_intact": true,
+     "views_filtering_to_anon": [
+-      "v_hitl_inbox",
+-      "v_active_pipelines"
+-    ],
+-    "views_leaking_to_anon": [
+       "active_journeys",
++      "v_hitl_inbox",
++      "v_active_pipelines",
+       "v_agent_scorecards",
+       "v_pending_improvements"
+-    ]
++    ],
++    "views_leaking_to_anon": []
+   },
+   "table_probes": [
+     {
+@@ -52,11 +48,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -75,11 +71,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -98,11 +94,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -121,11 +117,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -144,11 +140,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -167,11 +163,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -190,11 +186,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -213,11 +209,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -231,16 +227,16 @@
+       "policy_count": 0,
+       "anon_select": {
+         "ok": true,
+-        "rows": 1,
++        "rows": 0,
+         "error_code": null
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -259,11 +255,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -282,11 +278,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -305,11 +301,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -323,16 +319,16 @@
+       "policy_count": 0,
+       "anon_select": {
+         "ok": true,
+-        "rows": 1,
++        "rows": 0,
+         "error_code": null
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -351,11 +347,11 @@
+       },
+       "anon_insert": {
+         "ok": false,
+-        "error_code": "23502"
++        "error_code": "42501"
+       },
+       "anon_delete": {
+-        "ok": true,
+-        "error_code": null
++        "ok": false,
++        "error_code": "42501"
+       },
+       "svc_select": {
+         "ok": true,
+@@ -370,7 +366,7 @@
+       "security_invoker": null,
+       "anon_select": {
+         "ok": true,
+-        "rows": 1,
++        "rows": 0,
+         "error_code": null
+       },
+       "svc_select": {
+@@ -412,7 +408,7 @@
+       "security_invoker": null,
+       "anon_select": {
+         "ok": true,
+-        "rows": 1,
++        "rows": 0,
+         "error_code": null
+       },
+       "svc_select": {
+@@ -426,7 +422,7 @@
+       "security_invoker": null,
+       "anon_select": {
+         "ok": true,
+-        "rows": 1,
++        "rows": 0,
+         "error_code": null
+       },
+       "svc_select": {
