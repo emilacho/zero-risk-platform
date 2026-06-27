@@ -62,6 +62,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         vote: v.vote,
         rationale: v.rationale,
         confidence: v.confidence,
+        // Advisors (is_voting=false) are surfaced in tabulation.advisory, not tallied.
+        is_voting: v.is_voting,
       })),
       review.expected_votes_count ?? 3,
     )
