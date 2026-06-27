@@ -39,6 +39,63 @@ export interface QueryClientBrainParams {
   match_count?: number
 }
 
+// ── Provenance tag · Sprint-brain §144 FASE B (ADR-012 §6.6 + dos puertas) ──
+
+/** Brain trust levels · ADR-012 enum + `unknown` para backfill legacy. */
+export type BrainTrustLevel =
+  | 'untrusted'
+  | 'tenant_trusted'
+  | 'system_trusted'
+  | 'unknown'
+
+/**
+ * Provenance tag persisted on every Brain chunk (`client_brain_chunks.provenance_tag`).
+ *
+ * `type` is the two-doors dimension (architecture §3) ·
+ *   - `evidence` = raw/discovery data · context only · NEVER asserted as client fact.
+ *   - `canon`    = jefe/Emilio-approved · trusted for decide/publish (FASE D read rule).
+ *
+ * `source` + ingress fields come from ADR-012 §6.6.1 (anti-injection provenance).
+ */
+export interface BrainProvenanceTag {
+  source: string
+  type: 'evidence' | 'canon'
+  trust_level: BrainTrustLevel
+  ingress_id?: string
+  session_id?: string
+  received_at?: string
+  ingress_route?: string
+}
+
+/**
+ * Canonical default for rows that pre-date ADR-012 (backfill). Matches the
+ * DEFAULT in migration 202606271220. Treat as untrusted evidence.
+ */
+export const LEGACY_PROVENANCE_TAG: BrainProvenanceTag = {
+  source: 'legacy_pre_adr012',
+  trust_level: 'unknown',
+  type: 'evidence',
+}
+
+/**
+ * Build a canonical Brain provenance tag for a NEW write (FASE C writers ·
+ * portero de datos = evidence · write-back Camino III = canon). Defaults to
+ * untrusted evidence — the safe floor — when caller omits fields.
+ */
+export function buildBrainProvenanceTag(
+  input: Partial<BrainProvenanceTag> & { source: string },
+): BrainProvenanceTag {
+  return {
+    source: input.source,
+    type: input.type ?? 'evidence',
+    trust_level: input.trust_level ?? 'untrusted',
+    ...(input.ingress_id ? { ingress_id: input.ingress_id } : {}),
+    ...(input.session_id ? { session_id: input.session_id } : {}),
+    ...(input.received_at ? { received_at: input.received_at } : {}),
+    ...(input.ingress_route ? { ingress_route: input.ingress_route } : {}),
+  }
+}
+
 // ── Embedding helper ─────────────────────────────────────────
 
 /**

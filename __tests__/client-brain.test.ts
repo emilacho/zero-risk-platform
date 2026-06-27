@@ -63,6 +63,8 @@ import {
   buildAgentContext,
   formatGuardrailsForPrompt,
   formatBrainContextForPrompt,
+  buildBrainProvenanceTag,
+  LEGACY_PROVENANCE_TAG,
   type BrainSearchResult,
   type ClientGuardrails,
 } from '../src/lib/client-brain'
@@ -360,5 +362,47 @@ describe('buildAgentContext', () => {
     state.rpc = () => ({ data: [], error: null })
     const out = await buildAgentContext({ client_id: 'c-1', query: 'q' })
     expect(out).toBe('')
+  })
+})
+
+// ──────────────────────────────────────────────────────────
+// provenance tag · Sprint-brain §144 FASE B (ADR-012 §6.6 + dos puertas)
+// ──────────────────────────────────────────────────────────
+describe('buildBrainProvenanceTag', () => {
+  it('defaults to the safe floor: untrusted evidence', () => {
+    const tag = buildBrainProvenanceTag({ source: 'apify_scrape' })
+    expect(tag).toEqual({ source: 'apify_scrape', type: 'evidence', trust_level: 'untrusted' })
+  })
+
+  it('honors explicit canon + trust + optional ingress fields', () => {
+    const tag = buildBrainProvenanceTag({
+      source: 'camino_iii_writeback',
+      type: 'canon',
+      trust_level: 'system_trusted',
+      ingress_id: 'id-1',
+      session_id: 'sess-1',
+      received_at: '2026-06-27T00:00:00Z',
+      ingress_route: 'wf_123',
+    })
+    expect(tag.type).toBe('canon')
+    expect(tag.trust_level).toBe('system_trusted')
+    expect(tag.ingress_id).toBe('id-1')
+    expect(tag.ingress_route).toBe('wf_123')
+  })
+
+  it('omits optional fields when not provided (no undefined leak)', () => {
+    const tag = buildBrainProvenanceTag({ source: 's', type: 'evidence' })
+    expect('ingress_id' in tag).toBe(false)
+    expect('session_id' in tag).toBe(false)
+    expect('received_at' in tag).toBe(false)
+    expect('ingress_route' in tag).toBe(false)
+  })
+
+  it('LEGACY_PROVENANCE_TAG matches the migration DEFAULT (legacy evidence)', () => {
+    expect(LEGACY_PROVENANCE_TAG).toEqual({
+      source: 'legacy_pre_adr012',
+      trust_level: 'unknown',
+      type: 'evidence',
+    })
   })
 })
