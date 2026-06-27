@@ -18,9 +18,14 @@
 /** Exponential backoff delays in ms · 3 attempts total (initial + 2 retries). */
 export const AGENTS_LOG_RETRY_DELAYS_MS = [100, 500, 2000]
 
+// `insert` is typed as PromiseLike (not Promise) so the real Supabase client
+// is structurally assignable · supabase-js `.from().insert()` returns a
+// PostgrestFilterBuilder which is a thenable but NOT a full Promise (no
+// catch/finally/Symbol.toStringTag). `await` only needs `.then()`, so
+// PromiseLike is the precise contract this helper actually uses.
 type SupabaseLike = {
   from: (table: string) => {
-    insert: (row: Record<string, unknown>) => Promise<{ error: { code?: string; message: string } | null }>
+    insert: (row: Record<string, unknown>) => PromiseLike<{ error: { code?: string; message: string } | null }>
   }
 }
 
