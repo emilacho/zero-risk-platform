@@ -49,6 +49,7 @@ import {
   resolveCallbackUrl,
   validateCallbackUrl,
 } from '@/lib/agent-async-callback'
+import { makeCallbackAttemptLogger } from '@/lib/agent-async-callback/persist-attempt'
 import { waitUntil } from '@vercel/functions'
 
 export const runtime = 'nodejs'
@@ -324,6 +325,10 @@ export async function POST(request: Request) {
   if (callbackUrlRaw && validateCallbackUrl(callbackUrlRaw)) {
     const callbackUrl = callbackUrlRaw
     const ackTimestamp = new Date().toISOString()
+    // Track P context · stamped onto the audit trail + Sentry extra.
+    const cbWorkflowId = resolveWorkflowAttribution(body).workflow_id
+    const cbAgentSlug = body.agent ?? null
+    const cbClientId = body.client_id ?? null
     waitUntil(
       (async () => {
         let innerBody: unknown
@@ -339,21 +344,47 @@ export async function POST(request: Request) {
             ack_timestamp: ackTimestamp,
           }
         }
+        // Track P · per-attempt audit logger (fire-and-forget to Supabase
+        // `agent_callback_attempts` · console-only if the table is absent).
+        let attemptLogger: ReturnType<typeof makeCallbackAttemptLogger>
+        try {
+          attemptLogger = makeCallbackAttemptLogger(getSupabaseAdmin())
+        } catch {
+          attemptLogger = undefined // Supabase not configured · console-only path.
+        }
         const cb = await dispatchAsyncCallback({
           callback_url: callbackUrl,
           body:
             innerBody && typeof innerBody === 'object' && !Array.isArray(innerBody)
               ? (innerBody as Record<string, unknown>)
               : { success: false, error: 'inner_response_not_object' },
+          workflow_id: cbWorkflowId,
+          onAttempt: attemptLogger,
         })
         if (cb.ok) {
           console.info(
-            `[run-sdk async-callback Track O] OK ${cb.status_code} · ${cb.duration_ms}ms`,
+            `[run-sdk async-callback Track O/P] OK ${cb.status_code} · ${cb.duration_ms}ms · attempts=${cb.attempts}`,
           )
         } else {
           console.warn(
-            `[run-sdk async-callback Track O] FAIL ${cb.kind} · ${cb.detail}`,
+            `[run-sdk async-callback Track O/P] FAIL ${cb.kind} · ${cb.detail} · attempts=${cb.attempts}`,
           )
+          // Track P · Sentry alarm when EVERY retry failed · the n8n exec is
+          // now stuck on Wait with no other signal. Guardrail 4 observability.
+          if (cb.status === 'all_retries_failed') {
+            Sentry.captureMessage('async_callback_all_retries_failed', {
+              level: 'error',
+              extra: {
+                callback_url: callbackUrl,
+                workflow_id: cbWorkflowId,
+                agent_slug: cbAgentSlug,
+                client_id: cbClientId,
+                attempts: cb.attempts,
+                last_kind: cb.kind,
+                last_detail: cb.detail,
+              },
+            })
+          }
         }
       })(),
     )
