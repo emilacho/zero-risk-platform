@@ -23,7 +23,6 @@ hitl_triggers:
 escalation_path: jefe-marketing
 
 tools:
-  - query_client_brain: "Load brand guidelines, forbidden words, and required terminology"
   - review_content: "Analyze content against quality criteria and brand standards"
   - edit_file: "Make editorial corrections and improvements"
   - read_file: "Access content deliverables and campaign briefs for review"
