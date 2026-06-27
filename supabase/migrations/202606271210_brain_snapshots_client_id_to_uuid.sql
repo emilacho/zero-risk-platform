@@ -7,12 +7,21 @@
 -- el ALTER es trivialmente seguro.
 --
 -- Defensivo · solo altera si la columna existe y NO es ya uuid. Idempotente.
+--
+-- ⚠️ Ground-truth §148 (2026-06-27 · aplicación) · la tabla NO estaba en 0 rows ·
+-- 114 filas · 112 con client_id NO-uuid · TODAS `snapshot_type='rag_query_log'`
+-- con client_ids de prueba (smoke-test ×106 · deploy-probe · zero-risk-ecuador ·
+-- *-test-hitl · etc · Abr 20 – May 2). Son LOGS de observabilidad del stub viejo
+-- de rag-search · cero valor analítico (el stub devolvía vacío) · no son datos de
+-- cliente. Se purgan antes del ALTER (solo filas no-uuid · solo rag_query_log).
 
 BEGIN;
 
 DO $$
 DECLARE
   v_type text;
+  v_uuid_re constant text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+  v_purged int;
 BEGIN
   SELECT data_type INTO v_type
   FROM information_schema.columns
@@ -25,8 +34,21 @@ BEGIN
   ELSIF v_type = 'uuid' THEN
     RAISE NOTICE 'client_brain_snapshots.client_id ya es uuid · skip';
   ELSE
-    -- 0 rows → el USING cast no se ejecuta sobre datos. Si hubiera filas con
-    -- client_id no-uuid, esto fallaría (deseado · fail-loud antes que corromper).
+    -- 1 · purgar SOLO logs de prueba no-uuid (rag_query_log junk · no clientes).
+    --     Scope estricto · NO toca filas con client_id uuid-shaped (clientes reales).
+    EXECUTE format(
+      'DELETE FROM client_brain_snapshots WHERE snapshot_type = ''rag_query_log'' AND client_id !~ %L',
+      v_uuid_re
+    );
+    GET DIAGNOSTICS v_purged = ROW_COUNT;
+    RAISE NOTICE 'purgados % logs de prueba no-uuid', v_purged;
+
+    -- 2 · si quedara CUALQUIER fila no-uuid (no rag_query_log) · fail-loud.
+    IF EXISTS (SELECT 1 FROM client_brain_snapshots WHERE client_id !~ v_uuid_re) THEN
+      RAISE EXCEPTION 'quedan filas con client_id no-uuid fuera de rag_query_log · revisar manual antes de ALTER';
+    END IF;
+
+    -- 3 · ALTER seguro.
     EXECUTE 'ALTER TABLE client_brain_snapshots
              ALTER COLUMN client_id TYPE uuid USING client_id::uuid';
     RAISE NOTICE 'client_brain_snapshots.client_id % → uuid', v_type;
