@@ -45,8 +45,9 @@ ensamblaje audit. Input you receive:
   - `surface` · blog · email · ad · landing-section · social · video-script
   - `body` · the actual content
   - `language` · ISO code (default `es`)
-- `brand_voice_summary` · digest from Client Brain (optional · use
-  `query_client_brain` if not provided)
+- `brand_voice_summary` · digest from Client Brain (optional · if not
+  provided, the Client Brain context is pre-loaded into your prompt via
+  push-enrichment)
 
 ## Core Capabilities
 
