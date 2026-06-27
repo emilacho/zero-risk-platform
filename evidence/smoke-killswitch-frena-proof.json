@@ -1,0 +1,87 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+{
+  "started_at": "2026-06-01T16:42:55.004Z",
+  "burst": 100,
+  "phases": [
+    {
+      "phase": "A",
+      "label": "BASELINE no-false-positive · canon canonical legit traffic",
+      "pass": true,
+      "ms": 1,
+      "stats": {
+        "invocations": 100,
+        "blocked": 0,
+        "shadow_flagged": 0,
+        "unique_request_ids": 100,
+        "allow_rate_pct": 100
+      },
+      "sample_decision": {
+        "allow": true,
+        "shadow_blocks": [],
+        "request_id": "b9fc9cc2-d46e-4ca3-a890-06b041fbbc8b"
+      }
+    },
+    {
+      "phase": "B",
+      "label": "FRENA-evidence shadow · canon decisión-de-corte registrada (NEXUS pattern)",
+      "pass": true,
+      "ms": 0,
+      "stats": {
+        "invocations": 100,
+        "allow_count": 100,
+        "shadow_blocked_validate_workflow_id": 100,
+        "production_blocked": 0,
+        "evidence_capture_pct": 100,
+        "sample_g1_would_reject": true,
+        "sample_g1_enforced": false,
+        "sample_g1_shadow_mode": true
+      },
+      "sample_decision": {
+        "allow": true,
+        "shadow_blocks": [
+          "validate_workflow_id"
+        ],
+        "request_id": "497eecbf-2f5b-4912-a36b-a2bbf5c54f30"
+      }
+    },
+    {
+      "phase": "C",
+      "label": "ENFORCE-flip simulation (process-scoped · NO prod toggle)",
+      "pass": true,
+      "ms": 1,
+      "stats": {
+        "runaway_invocations": 100,
+        "runaway_blocked": 100,
+        "runaway_block_gate_correct": 100,
+        "legit_invocations": 20,
+        "legit_allowed": 20,
+        "block_rate_pct": 100
+      },
+      "sample_decision": {
+        "allow": false,
+        "block_gate": "validate_workflow_id",
+        "block_reason": "Missing or empty workflow_id (§149 violation · all agent invocations must originate from a workflow)",
+        "request_id": "5440759a-25a4-468f-ad3c-3c9e4999a62f"
+      }
+    },
+    {
+      "phase": "D",
+      "label": "cleanup canon · env restore · zero residue",
+      "pass": true,
+      "ms": 0,
+      "stats": {
+        "env_workflow_id_enforce": "unset",
+        "env_safety_enabled": "unset"
+      },
+      "sample_decision": null
+    }
+  ],
+  "summary": {
+    "all_pass": true,
+    "total_ms": 2,
+    "phases_passed": 4,
+    "phases_total": 4
+  }
+}
