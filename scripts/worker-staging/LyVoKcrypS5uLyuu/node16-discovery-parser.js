@@ -9,7 +9,10 @@
 //
 // EMITS A SINGLE consolidated item · Camino III reviews ONE discovery package.
 
-const agentResponse = $input.first().json;
+// BUG7 fix · read the agent's output EXPLICITLY by node name · $input.first()
+// resolves to the WRONG upstream (the connection topology feeds Discovery Parser
+// from Persist Client, not the agent) · this guarantees the discovery_output.
+const agentResponse = $('Call Onboarding Specialist: Auto-Discovery').first().json;
 const responseBody = agentResponse.body || agentResponse;
 const dealData = $('Validate Deal Data').first().json;
 const clientId = dealData.client_id;
