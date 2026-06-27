@@ -1,0 +1,1574 @@
+{
+  "name": "Zero Risk â€” Client Onboarding E2E v2 (Webhook: Deal Won)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/deal-won-onboarding",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-deal-won",
+      "name": "Webhook: Deal Won",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "7b2b7829-0184-4158-9477-093194396e3b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nconst missing = [];\nif (!b.client_name) missing.push('client_name');\nif (!b.website && !b.domain) missing.push('website');\nif (!b.industry) missing.push('industry');\nif (!b.contract_scope) missing.push('contract_scope');\nif (missing.length) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\n// LOTE-C Fix Â· pre-generate client UUID so downstream agent invocations\n// share the same UUID as the persist upsert.\nif (!b.client_id) {\n  b.client_id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n// Gap 1 Â· brand assets passed through unchanged so Persist + Cascade pick them up.\nb.client_logo_url = b.client_logo_url || null;\nb.client_brand_colors = Array.isArray(b.client_brand_colors) ? b.client_brand_colors : null;\nb.client_brand_fonts = Array.isArray(b.client_brand_fonts) ? b.client_brand_fonts : null;\nreturn [{ json: b }];"
+      },
+      "id": "validate-deal",
+      "name": "Validate Deal Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-smoke-test",
+              "value": "={{ ($('Validate Deal Data').item.json.client_id || \"\").startsWith(\"smoke-\") ? \"1\" : \"\" }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"onboarding-specialist\",\n  \"agent_id\": \"onboarding-specialist\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\",\n  \"task\": {{ JSON.stringify('Auto-discover Client Brain for ' + ($('Validate Deal Data').item.json.client_name || 'new client') + ' (industry: ' + ($('Validate Deal Data').item.json.industry || 'unknown') + ', website: ' + ($('Validate Deal Data').item.json.website || 'unknown') + ', client_id: ' + ($('Validate Deal Data').item.json.client_id || '') + ').' + String.fromCharCode(10) + '' + String.fromCharCode(10) + 'Research · brand voice + ICP + competitive landscape + VOC. Use available tools to fetch the website + search social media for handles + identify 3-8 real competitors in the industry/location.' + String.fromCharCode(10) + '' + String.fromCharCode(10) + 'CRITICAL FINAL STEP · when research is complete, you MUST CALL the emit_discovery_output tool with your structured findings. Do NOT just describe them in prose · the tool call is THE canonical way the Discovery output reaches the brain pipeline downstream. If you skip the tool call, your work won\\'t reach the brain · the client_brain_chunks table stays empty · zero downstream value.' + String.fromCharCode(10) + '' + String.fromCharCode(10) + 'Tool input shape (matches CC#3 zod schema · canon §interface) ·' + String.fromCharCode(10) + '{ client_id, own_handles: { instagram, facebook, tiktok, linkedin, youtube · use null for unknown }, competitors: [ { name, handles: {...}, why (1-line) }, ... 3-8 entries · real competitors only ], icp: { audience_segment (REQUIRED string), industries (array of strings), geography (string), pain_points (array), goals (array), jobs_to_be_done (array), objections (array), decision_criteria (array), preferred_channels (array), job_titles (array), company_size (string), buying_process (string), budget_range (string), content_preferences (string), segment_priority (1 primary or 2 secondary) }, competitive_landscape_summary (2-3 paragraphs synthesis) }.' + String.fromCharCode(10) + '' + String.fromCharCode(10) + 'After the tool call, a short prose summary for human readers is welcome but the tool call is what actually feeds the brain. Return discovery report only AFTER the tool was called.') }},\n  \"workflow_id\": \"{{ $('Validate Deal Data').item.json._journey_id || $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"callback_url\": \"{{ $execution.resumeUrl }}\",\n  \"context\": { \"smoke_test\": {{ ($('Validate Deal Data').item.json.client_id || \"\").startsWith(\"smoke-\") }}, \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\", \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name || '' }}\", \"website\": \"{{ $('Validate Deal Data').item.json.website || '' }}\", \"industry\": \"{{ $('Validate Deal Data').item.json.industry || '' }}\" }\n}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "call-onboarding-agent",
+      "name": "Call Onboarding Specialist: Auto-Discovery Dispatch (fire+forget)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        300
+      ],
+      "notes": "[MODELB · Costura B · §149 correlation propagation · CC#4 2026-06-05]\nworkflow_id propagation · prefer sala-dispatched _journey_id (stream_id) · fallback to n8n $workflow.id for legacy Deal Won path. Closes Costura B per SEAM-CLOSE-modelb-shadow-2026-06-05.md. Shadow · worker inactive · NO trigger real.\n----\n\n\n[ADDENDUM 2026-06-05 CC#4] Switched /api/agents/run → /api/agents/run-sdk · §149-enforced canonical entry · STOP-2 Dim 6 clean. workflow_id propagation preserved.\n\n[LAZO PRE-FIRE 2026-06-06 · CC#4]\n(1) Task prompt re-wired · instructs agent to CALL emit_discovery_output tool with structured findings (own_handles · competitors[] · icp · landscape_summary). Canon §interface contract matches CC#3 zod schema.\n(2) options.timeout bumped 180000 → 800000ms (13.3 min · headroom for 5-6 min agent runs). Previous timeout was culprit of exec 19733 abort \"server offline\" at 326s.\nShadow · worker active=True · waiting CC#3 agent-runner ship emit_discovery_output tool registration.\n\n[ICP CANON STRICT 2026-06-06 · CC#4 align CC#3 verdict]\nUpdated icp block in prompt-directive · MCP tool zod is .strict() · old shape (industry/location/segment) was REJECTED · tool call invalid · discovery vacío. New shape · audience_segment (REQUIRED · was \"segment\") · industries (plural array · was \"industry\") · geography (was \"location\") · plus full optional canon fields per PR #182 types.ts DiscoveredIcpSegment."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/notion/create-client-workspace",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name || '' }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\",\n  \"industry\": \"{{ $('Validate Deal Data').item.json.industry || '' }}\",\n  \"parent_page_id\": \"{{ $env.NOTION_PARENT_PAGE_ID || 'stub-parent' }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "create-notion-workspace",
+      "name": "Create Notion Client Workspace",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const discovery = $node['Call Onboarding Specialist: Auto-Discovery'].json.result || {};\nconst scope = $node['Validate Deal Data'].json.contract_scope || [];\n\nconst activationMilestones = [];\nconst ttv_targets = {};\n\nif (scope.includes('paid_ads')) {\n  activationMilestones.push({ channel: 'paid_ads', milestone: 'First campaign launched', day: 14, success_metric: 'First converted lead' });\n  ttv_targets.paid_ads = 14;\n}\nif (scope.includes('content_seo')) {\n  activationMilestones.push({ channel: 'content_seo', milestone: 'Content calendar published', day: 30, success_metric: 'First organic traffic' });\n  ttv_targets.content_seo = 30;\n}\nif (scope.includes('email')) {\n  activationMilestones.push({ channel: 'email', milestone: 'Email sequence deployed', day: 7, success_metric: 'First engagement' });\n  ttv_targets.email = 7;\n}\nif (scope.includes('industrial') || scope.includes('complex')) {\n  ttv_targets.complex = 45;\n}\n\nconst successPlan = {\n  goals: [],\n  success_metrics: [],\n  timeline: activationMilestones,\n  ttv_targets,\n  champion_map: { identified: false, count: 0, stakeholders: [] },\n  status: 'draft'\n};\n\nreturn [{ json: { ...successPlan, discovery_report: discovery } }];"
+      },
+      "id": "build-success-plan",
+      "name": "Build Success Plan Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/notion/create-success-plan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name || '' }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id || '' }}\",\n  \"workspace_id\": \"{{ $json.workspace_id || '' }}\",\n  \"plan\": {{ JSON.stringify($json ?? {}) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "create-success-plan-notion",
+      "name": "Create Success Plan in Notion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/calendar/book",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $('Validate Deal Data').item.json.primary_contact_id || ('stub-contact-' + Date.now()) }}\",\n  \"event_title\": {{ JSON.stringify('Kickoff Call: ' + ($('Validate Deal Data').item.json.client_name || 'new client')) }},\n  \"duration_minutes\": 60,\n  \"scheduled_at\": \"{{ new Date(Date.now() + 3*24*60*60*1000).toISOString() }}\",\n  \"description\": \"Welcome to Zero Risk! Success plan alignment + team intro.\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "schedule-kickoff",
+      "name": "Schedule Kickoff Call (Cal.com)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        300
+      ],
+      "notes": "\n\n[GHL canon-clean rename 2026-06-05 · CC#4 A2] Renamed from \"Schedule Kickoff Call (GHL Calendar)\". URL is canon-clean internal endpoint (NOT GHL). Per drift-hunt-results §2.3 COSMETIC class."
+    },
+    {
+      "parameters": {
+        "jsCode": "const activationHealth = 'Yellow'; // Initial onboarding health always Yellow (assumes basic setup)\nconst championMap = { count: 0, stakeholders: [] }; // To be updated post-kickoff\n\nreturn [{ json: { client_id: $node['Validate Deal Data'].json.client_id, client_name: $node['Validate Deal Data'].json.client_name, activation_health: activationHealth, champion_count: championMap.count, onboarding_status: 'initiated', kickoff_scheduled: true } }];"
+      },
+      "id": "compute-handoff-score",
+      "name": "Compute Handoff Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/client-tasks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id }}\",\n  \"title\": {{ JSON.stringify('Account Manager Handoff: ' + ($('Validate Deal Data').item.json.client_name || 'new client')) }},\n  \"description\": \"Onboarding initiated. Client Brain auto-populated. Success plan drafted. Ready for AM ownership.\",\n  \"due_at\": \"{{ new Date(Date.now() + 5*24*60*60*1000).toISOString() }}\",\n  \"priority\": \"high\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ghl-handoff-task",
+      "name": "Create AM Handoff Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        300
+      ],
+      "notes": "\n\n[GHL canon-clean rename 2026-06-05 · CC#4 A2] Renamed from \"GHL: Create AM Handoff Task\". URL is canon-clean internal endpoint (NOT GHL). Per drift-hunt-results §2.3 COSMETIC class."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL || $env.SLACK_WEBHOOK_URL_EQUIPO || \"{{ $env.SLACK_WEBHOOK_URL_EQUIPO }}\" }}",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": {{ JSON.stringify('ONBOARDING INITIATED\\nClient: ' + ($('Validate Deal Data').item.json.client_name || 'unknown') + '\\nIndustry: ' + ($('Validate Deal Data').item.json.industry || 'unknown') + '\\nContract: ' + (Array.isArray($('Validate Deal Data').item.json.contract_scope) ? ($('Validate Deal Data').item.json.contract_scope.join(', ')) : String($('Validate Deal Data').item.json.contract_scope || ''))) }}\n}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "alert-onboarding-slack",
+      "name": "Alert Slack: Onboarding Initiated",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2320,
+        300
+      ],
+      "disabled": false
+    },
+    {
+      "id": "mc-inbox-5uLyuu",
+      "name": "Notify MC Inbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2560,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-mission-control-production.up.railway.app/api/inbox",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "masterPassword",
+              "value": "zerorisk2026"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"from\":\"client-onboarding\",\"to\":\"leader\",\"type\":\"report\",\"taskId\":\"{{ $json.task_id ?? $json.client_id ?? ('wf-' + $now) }}\",\"subject\":\"Client Onboarding completado\",\"body\":\"client={{ $json.client_id ?? 'unknown' }} | workflow={{ $workflow.name }}\"}",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      }
+    },
+    {
+      "id": "persist-client-supabase",
+      "name": "Persist Client to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        250
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || \"https://zero-risk-platform.vercel.app\" }}/api/clients/upsert",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  client_id: $('Validate Deal Data').item.json.client_id,\n  name: $('Validate Deal Data').item.json.client_name,\n  website: $('Validate Deal Data').item.json.website || $('Validate Deal Data').item.json.domain || null,\n  industry: $('Validate Deal Data').item.json.industry || null,\n  contact_email: $('Validate Deal Data').item.json.email || null,\n  country: $('Validate Deal Data').item.json.country || \"EC\",\n  language: \"es\",\n  status: \"onboarding\",\n  journey: \"ONBOARD\",\n  journey_stage: \"intake\",\n  journey_status: \"active\",\n  trigger_type: \"webhook\",\n  trigger_source: $('Validate Deal Data').item.json.source || \"deal_won_webhook\",\n  trigger_payload: {\n    client_name: $('Validate Deal Data').item.json.client_name,\n    contract_scope: $('Validate Deal Data').item.json.contract_scope\n  },\n  metadata: {\n    workflow: \"Client Onboarding E2E v2\",\n    workflow_id: $workflow.id,\n    execution_id: $execution.id\n  },\n  logo_url: $('Validate Deal Data').item.json.client_logo_url,\n  brand_colors: $('Validate Deal Data').item.json.client_brand_colors,\n  brand_fonts: $('Validate Deal Data').item.json.client_brand_fonts\n}) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "onError": "continueRegularOutput"
+      }
+    },
+    {
+      "id": "trigger-master-journey-ugk3",
+      "name": "Trigger Master Journey ugK3",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1720,
+        250
+      ],
+      "parameters": {
+        "workflowId": "ugK3QrxkWq22Bly5"
+      },
+      "notes": "Sprint 7 C5 cutover Â· 2026-05-23 Â· converted from httpRequest â†’ executeWorkflow â†’ ugK3QrxkWq22Bly5"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || \"https://zero-risk-platform.vercel.app\" }}/api/cascade/onboard",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $('Validate Deal Data').item.json.client_id, scrape_summary: $('Call Onboarding Specialist: Auto-Discovery').item.json.response, caller: \"onboarding-e2e-v2:\" + $execution.id }) }}",
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "run-onboarding-cascade",
+      "name": "Run Onboarding Cascade (Gap 3)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1720,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "spell-check-marker",
+      "name": "Spell Check Pass (in-cascade)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3100,
+        600
+      ],
+      "parameters": {},
+      "notes": "Gap 2 (2026-05-16) Â· marker only Â· the actual spell-check-corrector agent runs INSIDE /api/cascade/onboard between content-creator and editor-en-jefe (see src/lib/cascade-runner.ts SEQUENCE). This noOp documents the stage in n8n UI for operator visibility."
+    },
+    {
+      "id": "apify-wire-load-clients-onboarding_e2e",
+      "name": "[APIFY-WIRE] Discovery Parser · dynamic targets (lazo)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        1000
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Discovery Parser canon · CC#3↔CC#4 convergence PR #182 + Opus Maxx 2026-06-09.\n// AUGMENTED 2026-06-27 (dispatch multi-source) · §144 rama · NO prod ·\n//   + deterministic webhook-URL classifier (Tarea 1)\n//   + source / trust_level / type taxonomy on every scrape_target\n//   + §150 G5 guardrails (max_competitors=10 · max_actors=3 · dedup)\n//   + google_serp fallback when no website (Tarea 2)\n//   + discovery_package.sources[] initialized (filled by Aggregate node · Tarea 3)\n// Mirror of src/lib/onboarding-discovery/url-classifier.ts (tested · keep in sync).\n//\n// EMITS A SINGLE consolidated item · Camino III reviews ONE discovery package.\n\nconst agentResponse = $input.first().json;\nconst responseBody = agentResponse.body || agentResponse;\nconst dealData = $('Validate Deal Data').first().json;\nconst clientId = dealData.client_id;\nconst clientName = dealData.client_name;\nconst journeyId = dealData._journey_id;\n\n// ════════════════════════════════════════════════════════════════════\n// DETERMINISTIC CLASSIFIER + GUARDRAILS (mirror of url-classifier.ts)\n// ════════════════════════════════════════════════════════════════════\nconst GUARDRAILS = { max_competitors_to_scrape: 10, max_actors_per_run: 3 };\n\nfunction normalizeUrl(raw) {\n  if (typeof raw !== 'string') return null;\n  const t = raw.trim().toLowerCase();\n  if (!t) return null;\n  return t.replace(/^https?:\\/\\//, '').replace(/^www\\./, '').replace(/\\/+$/, '');\n}\nfunction classifyUrl(raw) {\n  const n = normalizeUrl(raw);\n  if (!n) return null;\n  if (n.includes('instagram.com') || n.includes('instagr.am'))\n    return { kind: 'apify', apify_function: 'instagram_scraper', source: 'apify_scrape' };\n  if (n.includes('linkedin.com/company'))\n    return { kind: 'apify', apify_function: 'linkedin_company', source: 'apify_scrape' };\n  if (n.includes('facebook.com') || n.includes('fb.com'))\n    return { kind: 'apify', apify_function: 'facebook_ads', source: 'apify_scrape' };\n  if (n.includes('tiktok.com'))\n    return { kind: 'apify', apify_function: 'tiktok_profile', source: 'apify_scrape' };\n  if (n.includes('twitter.com') || n === 'x.com' || n.startsWith('x.com/'))\n    return { kind: 'apify', apify_function: 'tweet_scraper', source: 'apify_scrape' };\n  if (n.includes('google.com/maps') || n.includes('maps.google.com') || n.includes('goo.gl/maps'))\n    return { kind: 'apify', apify_function: 'google_maps_scraper', source: 'apify_scrape' };\n  return { kind: 'web_generic', apify_function: null, source: 'onboarding_discovery' };\n}\n\nconst discoveryOutput =\n  responseBody && typeof responseBody === 'object' && responseBody.discovery_output\n    ? responseBody.discovery_output : null;\nconst discoveryPersist =\n  responseBody && typeof responseBody === 'object' && responseBody.discovery_persist\n    ? responseBody.discovery_persist : null;\n\n// ─── PATH C · HITL branch · canon parse_kind absent/malformed ─────\nif (!discoveryOutput && discoveryPersist) {\n  const parseKind = discoveryPersist.parse_kind || 'unknown';\n  const source = discoveryPersist.source || 'unknown';\n  if (parseKind === 'absent' || parseKind === 'malformed') {\n    const parseFailure = {\n      parse_kind: parseKind, source: source,\n      parse_reason: discoveryPersist.parse_reason || null,\n      tool_emission_count: discoveryPersist.tool_emission_count || 0,\n      errors: discoveryPersist.errors || [],\n      duration_ms: discoveryPersist.duration_ms || null,\n      workflow_execution_id: $execution.id, calling_workflow_id: $workflow.id,\n    };\n    return [{ json: {\n      client_id: clientId, client_name: clientName, _journey_id: journeyId,\n      _hitl_required: true, _discovery_ok: false,\n      _skip_reason: 'discovery_persist_' + parseKind,\n      discovery_package: {\n        competitors: [], scrape_targets: [], icp_signals: [],\n        discovery_summary: 'HITL · agent discovery parse_kind=' + parseKind,\n        own_handles: {}, sources: [], parse_failure: parseFailure,\n      },\n      competitor_count: 0, scrape_target_count: 0, ready_for_review: true,\n      hitl_payload: parseFailure,\n    }}];\n  }\n}\n\nconst ownHandles = (discoveryOutput && discoveryOutput.own_handles) || {};\nconst competitors =\n  discoveryOutput && Array.isArray(discoveryOutput.competitors)\n    ? discoveryOutput.competitors.slice(0, 8) : [];\nconst icpRaw = discoveryOutput && discoveryOutput.icp;\nconst icpSegments = Array.isArray(icpRaw) ? icpRaw : (icpRaw ? [icpRaw] : []);\nconst primaryIcp = icpSegments[0] || null;\nconst discoverySummary = (discoveryOutput && discoveryOutput.competitive_landscape_summary) || '';\n\nconst scrapeTargets = [];\nconst seenLabels = new Set();\nconst actorsUsed = new Set();\nlet droppedCompetitorCap = 0, droppedActorCap = 0, droppedDup = 0;\n\n// pushTarget · canon shape + taxonomy + §150 guardrails enforced here.\n// trust_level · 'tenant_trusted' for the client's OWN data · 'untrusted' for\n// competitors/search/scraped third parties.\nfunction pushTarget(apify_function, params, target_kind, target_label, source, trust_level) {\n  if (seenLabels.has(target_label)) { droppedDup++; return; }\n  if (scrapeTargets.length >= GUARDRAILS.max_competitors_to_scrape) { droppedCompetitorCap++; return; }\n  if (apify_function && !actorsUsed.has(apify_function) && actorsUsed.size >= GUARDRAILS.max_actors_per_run) {\n    droppedActorCap++; return;\n  }\n  seenLabels.add(target_label);\n  if (apify_function) actorsUsed.add(apify_function);\n  scrapeTargets.push({\n    client_id: clientId, client_name: clientName, _journey_id: journeyId,\n    _discovery_ok: true, apify_function, params,\n    target_kind, target_label, destination: 'brain_rag', dry_run: false,\n    source: source, trust_level: trust_level, type: 'evidence',\n    metadata: {\n      calling_workflow_id: $workflow.id,\n      calling_workflow_execution_id: $execution.id,\n      scope: 'onboarding_e2e_lazo_dynamic',\n      sprint: 'discovery-multisource-2026-06-27',\n      target_kind, target_label, source, trust_level,\n    },\n  });\n}\n\n// ─── PATH A · agent-derived OWN handles (tenant_trusted · direct client data) ─\nif (ownHandles.instagram) pushTarget('instagram_scraper', { usernames: [String(ownHandles.instagram).replace(/^@/, '')], resultsLimit: 5 }, 'own', 'own:instagram:' + ownHandles.instagram, 'apify_scrape', 'tenant_trusted');\nif (ownHandles.tiktok) pushTarget('tiktok_profile', { usernames: [String(ownHandles.tiktok).replace(/^@/, '')], maxItems: 5 }, 'own', 'own:tiktok:' + ownHandles.tiktok, 'apify_scrape', 'tenant_trusted');\nif (ownHandles.linkedin) pushTarget('linkedin_company', { companies: [ownHandles.linkedin], maxItems: 1 }, 'own', 'own:linkedin:' + ownHandles.linkedin, 'apify_scrape', 'tenant_trusted');\n\n// ─── Tarea 1 · classify the client's webhook URLs (website + socials) ─\n// Own data from the webhook = tenant_trusted. Generic website → web_fetch\n// (onboarding_discovery · NO apify actor fired).\nconst webhookUrls = [\n  dealData.website, dealData.domain,\n  dealData.instagram, dealData.facebook, dealData.tiktok, dealData.linkedin,\n  ...(dealData.own_social_handles && typeof dealData.own_social_handles === 'object'\n    ? Object.values(dealData.own_social_handles) : []),\n].filter((u) => typeof u === 'string' && u.trim().length > 0);\n\nfor (const url of webhookUrls) {\n  const cls = classifyUrl(url);\n  if (!cls) continue;\n  const norm = normalizeUrl(url);\n  if (cls.kind === 'apify') {\n    pushTarget(cls.apify_function, { startUrls: [{ url: 'https://' + norm }] }, 'own', 'own:web:' + norm, cls.source, 'tenant_trusted');\n  } else {\n    // generic web URL · agent web_fetch · no actor · still recorded as evidence\n    pushTarget(null, { url: 'https://' + norm }, 'own_web', 'own:webfetch:' + norm, cls.source, 'tenant_trusted');\n  }\n}\n\n// ─── COMPETITOR scrapes (untrusted) · canon competitor fields ─────────\nfor (let i = 0; i < competitors.length; i++) {\n  const c = competitors[i];\n  if (!c || typeof c !== 'object' || !c.name) continue;\n  const cName = c.name; const h = c.handles || {};\n  pushTarget('facebook_ads', { searchTerms: [cName], country: 'US', maxItems: 3 }, 'competitor', 'comp:fb_ads:' + cName, 'apify_scrape', 'untrusted');\n  if (h.instagram) pushTarget('instagram_scraper', { usernames: [String(h.instagram).replace(/^@/, '')], resultsLimit: 3 }, 'competitor', 'comp:ig:' + cName, 'apify_scrape', 'untrusted');\n  if (h.tiktok) pushTarget('tiktok_profile', { usernames: [String(h.tiktok).replace(/^@/, '')], maxItems: 3 }, 'competitor', 'comp:tiktok:' + cName, 'apify_scrape', 'untrusted');\n  if (h.linkedin) pushTarget('linkedin_company', { companies: [h.linkedin], maxItems: 1 }, 'competitor', 'comp:linkedin:' + cName, 'apify_scrape', 'untrusted');\n}\n\n// ─── SEO · canon icp.industries[] + icp.geography (search · untrusted) ─\nif (primaryIcp) {\n  const industry = (Array.isArray(primaryIcp.industries) && primaryIcp.industries.length > 0)\n    ? primaryIcp.industries[0] : primaryIcp.audience_segment;\n  const geography = primaryIcp.geography || '';\n  if (industry) pushTarget('google_serp', { queries: industry + (geography ? (' ' + geography) : ''), resultsPerPage: 5, maxPagesPerQuery: 1 }, 'seo', 'seo:industry:' + industry, 'search', 'untrusted');\n}\n\n// ─── Tarea 2 · FALLBACK · no website AND no actor targets → google_serp ─\n// + extended · if a location/city is provided, ALSO probe local presence via\n//   google_maps_scraper (compass/crawler-google-places).\nconst hasWebsite = typeof dealData.website === 'string' && dealData.website.trim().length > 0;\nconst hasActorTarget = scrapeTargets.some((t) => t.apify_function);\nif (!hasWebsite && !hasActorTarget) {\n  const q = [String(clientName || '').trim() + ' competitors', String(dealData.industry || '').trim()]\n    .filter((s) => s.length > 1).join(' ');\n  pushTarget('google_serp', { queries: q, resultsPerPage: 5, maxPagesPerQuery: 1 }, 'fallback', 'fallback:serp:' + q, 'search', 'untrusted');\n\n  const location = String(dealData.location || dealData.city || '').trim();\n  if (location.length > 0) {\n    const subject = String(clientName || dealData.industry || '').trim();\n    const mq = [subject, location].filter((s) => s.length > 0).join(' ');\n    pushTarget('google_maps_scraper', { searchStringsArray: [mq], maxCrawledPlacesPerSearch: 5 }, 'fallback', 'fallback:maps:' + mq, 'search', 'untrusted');\n  }\n}\n\n// ─── Shadow-safe · no agent signal AND no deterministic targets → skip ─\nif (!discoveryOutput && scrapeTargets.length === 0) {\n  return [{ json: {\n    client_id: clientId, client_name: clientName, _journey_id: journeyId,\n    _discovery_ok: false, _skip_reason: 'discovery_output_missing_no_signal',\n    discovery_package: {\n      competitors: [], scrape_targets: [], icp_signals: [],\n      discovery_summary: 'NO_SIGNAL · agent returned neither discovery_output nor discovery_persist · no webhook URLs',\n      own_handles: {}, sources: [],\n    },\n    competitor_count: 0, scrape_target_count: 0, ready_for_review: false,\n  }}];\n}\n\n// ─── Final · single consolidated item ──────────────────────────────\nreturn [{ json: {\n  client_id: clientId, client_name: clientName, _journey_id: journeyId,\n  _discovery_ok: true,\n  discovery_package: {\n    competitors: competitors, scrape_targets: scrapeTargets,\n    icp_signals: icpSegments, discovery_summary: discoverySummary,\n    own_handles: ownHandles,\n    // Tarea 3 · filled by the Aggregate node post-Apify · init here so the\n    // shape is stable for Camino III review even if discovery is shadow.\n    sources: [],\n    guardrails_applied: GUARDRAILS,\n    dropped: { by_competitor_cap: droppedCompetitorCap, by_actor_cap: droppedActorCap, duplicates: droppedDup },\n  },\n  competitor_count: competitors.length,\n  scrape_target_count: scrapeTargets.length,\n  ready_for_review: true,\n}}];\n"
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 30000,
+      "notes": "[LAZO 2026-06-06 · CC#4] Discovery Parser · canon §interface contract.\nLee response de Call Onboarding Specialist · extrae discovery_output JSON.\nEmite 1 item por (target × apify_function). Shadow-safe · si contract no\nsatisfecho · skip marker emitted · APIFY-WIRE downstream se salta gracioso.\nReemplaza el old Load active clients (Supabase REST) · era dry_run-only shadow.\n\n[CANON CONVERGE 2026-06-06 · CC#4 PR #182 align]\nDiscovery Parser canon · reads response.body.discovery_output (path A canon CC#3) · NO re-parse (CC#3 route.ts handles tool_call + text_parser internally). Falls back to response.body.discovery_persist for HITL branch (parse_kind absent/malformed). ICP canon · DiscoveredIcpSegment | DiscoveredIcpSegment[] · industries[] + geography canon. YouTube competitor handle support added."
+    },
+    {
+      "id": "apify-wire-split-clients-onboarding_e2e",
+      "name": "[APIFY-WIRE] Split per scrape target (lazo)",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        600,
+        1000
+      ],
+      "parameters": {
+        "fieldToSplitOut": "discovery_package.scrape_targets",
+        "options": {}
+      },
+      "notes": "[LAZO 2026-06-06 · CC#4] n8n itera 1 item por scrape target (Discovery output).\nNo es por cliente · es por (target × function) tuple emitido por Discovery Parser."
+    },
+    {
+      "id": "apify-wire-filter-functions-onboarding_e2e",
+      "name": "[APIFY-WIRE] Gate · drop skip-markers (lazo)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        1000
+      ],
+      "parameters": {
+        "jsCode": "// Gate · drop items that signaled skip (_discovery_ok=false or _skip_reason)\n// Canon §148 · log skip but never crash the worker · always safe pass.\nconst item = $input.item.json;\nif (item._discovery_ok === false || item._skip_reason) {\n  // Emit nothing · downstream sees zero items, gracefully skips.\n  return [];\n}\nreturn [{ json: item }];"
+      },
+      "notes": "[LAZO 2026-06-06 · CC#4] Gate canónico · cuela items skip-marker · mantiene items reales. Old filter-by-cron logic eliminada (canon ya viene del Discovery)."
+    },
+    {
+      "id": "apify-wire-split-functions-onboarding_e2e",
+      "name": "[APIFY-WIRE] Split per function (onboarding_e2e)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1000,
+        1000
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "disabled": true,
+      "notes": "[LAZO 2026-06-06 · CC#4] DISABLED · Discovery Parser ya emite per-function.\nOld per-function split based on static cron · ya no aplica."
+    },
+    {
+      "id": "apify-wire-call-service-onboarding_e2e",
+      "name": "[APIFY-WIRE] Call Apify Service Workflow (onboarding_e2e)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        1000
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-production-72be.up.railway.app/webhook/apify-service-workflow",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  client_id: $json.client_id,\n  apify_function: $json.apify_function,\n  destination: $json.destination || 'brain_rag',\n  dry_run: $json.dry_run === true,\n  params: $json.params || {},\n  metadata: $json.metadata || {}\n}) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 30000,
+      "onError": "continueRegularOutput",
+      "notes": "[LAZO 2026-06-06 · CC#4] Dynamic body · consume Discovery Parser items.\nparams canonicales del scrape vienen del Discovery agent · NO de static config.\ndry_run default false (per item · canon honest). brain persistence ya OK (transform-sections fix #3 ronda anterior)."
+    },
+    {
+      "id": "apify-wire-aggregate-onboarding_e2e",
+      "name": "[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        1000
+      ],
+      "parameters": {
+        "jsCode": "// Aggregate Service responses · AUGMENTED 2026-06-27 (dispatch multi-source) ·\n// Tarea 3 · graceful degradation + discovery_package.sources[].\n// Mirror of aggregateDiscoverySources() in src/lib/onboarding-discovery/url-classifier.ts.\n//\n// A failed actor is marked status:'failed' and the run CONTINUES · one down\n// source NEVER aborts the whole discovery. The sources[] array (what ran ·\n// status · count · trust_level) is surfaced for Camino III + the brain write.\n\nconst items = $input.all();\nconst summary = { total_calls: items.length, successes: 0, errors: 0, skipped_gate: 0, by_function: {} };\nconst sources = [];\nlet okCount = 0, failedCount = 0, totalResults = 0;\n\nfor (const it of items) {\n  const r = it.json || {};\n  const fn = r.apify_function || 'unknown';\n  summary.by_function[fn] = (summary.by_function[fn] || 0) + 1;\n\n  if (r.status === 'skipped' || r.skip_reason) {\n    summary.skipped_gate++;\n    continue; // gate skip-markers are not a source success/failure\n  }\n\n  const failed = r.success === false || !!r.error;\n  const count =\n    typeof r.result_count === 'number' ? r.result_count\n    : Array.isArray(r.results) ? r.results.length\n    : typeof r.count === 'number' ? r.count : 0;\n\n  if (failed) {\n    summary.errors++;\n    failedCount++;\n    sources.push({\n      apify_function: fn, status: 'failed', count: 0,\n      trust_level: r.trust_level || 'untrusted',\n      source: r.source || 'apify_scrape',\n      error: (r.error && (r.error.message || String(r.error))) || 'actor failed',\n    });\n  } else {\n    summary.successes++;\n    okCount++;\n    totalResults += count;\n    sources.push({\n      apify_function: fn, status: 'ok', count: count,\n      trust_level: r.trust_level || 'untrusted',\n      source: r.source || 'apify_scrape',\n    });\n  }\n}\n\nreturn [{ json: {\n  scope: 'onboarding_e2e',\n  destination_table: 'client_competitive_landscape',\n  summary,\n  // Tarea 3 · top-level sources[] · merged into discovery_package downstream.\n  sources,\n  sources_summary: { ok_count: okCount, failed_count: failedCount, total_results: totalResults },\n  ran_at: new Date().toISOString(),\n} }];\n"
+      }
+    },
+    {
+      "id": "modelb-dispatch-unico-guard",
+      "name": "[MODELB] Dispatch-único Guard · scoped al run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        600
+      ],
+      "disabled": false,
+      "notes": "Model B adapter · DISPATCH-ÚNICO guard. Verifica que el run venga\ndispatchado por la sala (presencia de _sala_correlation_id +\n_journey_id en el body del webhook). Si faltan, throw + halt este\nrun específico (scoped · NO corte global · otros runs siguen igual).\nWiring · entre 'Webhook: Deal Won' y 'Validate Deal Data'.\nActivation · §144 + CC#3 receiver listo. CC#4 spec 2026-06-05.\n\n[OLA 2 WIRE+ENABLE 2026-06-05 · CC#4] Wired into main flow + enabled. SALA_WORKFLOW_DISPATCH_ENABLED flag sigue OFF (Vercel · CIC Ola 1b pending) · NO dispatch real hasta §144 Emilio + flips Ola 3.\n\n[OLA 2 BUGFIX 2026-06-05 · CC#4] Fixed variable-scope bug in jsCode · return now spreads body directly (no shadow vars · no shorthand bug). Smoke confirmed pre-fix: throw path OK · return path crashed with \"_sala_correlation_id is not defined\".",
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Model B · DISPATCH-ÚNICO guard\n// Rechaza runs que no vengan via sala dispatch.\n// Fix Ola 2 2026-06-05 · variable scoping · return reusa `...body` (que ya incluye los _ underscores)\nconst body = $input.first().json.body || $input.first().json;\nif (!body._sala_correlation_id || !body._journey_id) {\n  throw new Error(\n    'DISPATCH_REJECTED · Model B canon · este worker SOLO acepta '+\n    'dispatch via sala. Faltan _sala_correlation_id + _journey_id ' +\n    'en body. Scoped al run · no corta workflow.'\n  );\n}\n// Pasa el body completo (incluye _sala_correlation_id + _journey_id + resto)\nreturn [{ json: { ...body, _modelb_guard: 'passed' } }];"
+      }
+    },
+    {
+      "id": "modelb-phase-boundary-emit",
+      "name": "[MODELB] Phase-boundary Emit · reconciliación OBSERVE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        600
+      ],
+      "disabled": false,
+      "notes": "[MODELB · Costura A · RONDA 2 re-point · CC#4 2026-06-05]\nEndpoint canónico re-pointed to dedicated /api/sala/ingress (CC#3 final decision).\nPrevious V2 pointed to multiplexed /api/sala/events/append (now interno-alterno only).\nShadow · disabled · unwired. Activation gate §144 + CC#3 receiver + wiring sesión.\n----\n[MODELB · Costura A closed · CC#4 2026-06-05]\nEndpoint converged to CC#3 canon · /api/sala/events/append (PR #172).\nSingle endpoint for BOTH event_types · phase_boundary + run_completed.\nPhase boundaries canon · 8 names (CC#3 JOURNEY_WORKFLOW_MAP).\nShadow · disabled · unwired. Activation gate §144 + CC#3 receiver verified.\n----\nModel B adapter · phase-boundary event emitter. POST a la sala\ningress endpoint cuando se cruza una FRONTERA DE FASE (NO los\n24+ nodos individuales · solo fases lógicas Journey B ONBOARD).\nPhase taxonomy · INTAKE → DISCOVERY → WORKSPACE → SCHEDULING →\nNOTIFICATION → CASCADE → APIFY_WIRE → TERMINAL.\nWiring · copy-paste este nodo en cada boundary con phase_name\nparametrizado. Activation · §144 + CC#3 receiver. CC#4 2026-06-05.\n\n[OLA 2 WIRE+ENABLE 2026-06-05 · CC#4] Wired into main flow + enabled. SALA_WORKFLOW_DISPATCH_ENABLED flag sigue OFF (Vercel · CIC Ola 1b pending) · NO dispatch real hasta §144 Emilio + flips Ola 3.",
+      "parameters": {
+        "url": "={{ $env.SALA_INGRESS_URL || 'https://zero-risk-platform.vercel.app/api/sala/ingress' }}",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-source",
+              "value": "n8n-modelb-LyVoKcrypS5uLyuu"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"phase_boundary\",\n  \"_sala_correlation_id\": \"{{ $('Validate Deal Data').item.json._sala_correlation_id }}\",\n  \"_journey_id\": \"{{ $('Validate Deal Data').item.json._journey_id }}\",\n  \"phase_name\": \"deal_won_received\",\n  \"phase_state\": \"completed\",\n  \"worker_id\": \"LyVoKcrypS5uLyuu\",\n  \"tenant_id\": \"{{ $('Validate Deal Data').item.json.tenant_id || $('Validate Deal Data').item.json.client_id }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id }}\",\n  \"ts\": \"{{ $now }}\"\n}",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "modelb-writeback-callback",
+      "name": "[MODELB] Write-back Callback · run terminal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2780,
+        600
+      ],
+      "disabled": false,
+      "notes": "[MODELB · Costura A · RONDA 2 re-point · CC#4 2026-06-05]\nEndpoint canónico re-pointed to dedicated /api/sala/callback (CC#3 final decision).\nPrevious V2 pointed to multiplexed /api/sala/events/append (now interno-alterno only).\nShadow · disabled · unwired. Activation gate §144 + CC#3 receiver + wiring sesión.\n----\n[MODELB · Costura A closed · CC#4 2026-06-05]\nEndpoint converged to CC#3 canon · /api/sala/events/append (PR #172).\nevent_type=run_completed envelope · single endpoint same as phase_boundary.\nShadow · disabled · unwired. Activation gate §144 + CC#3 receiver verified.\n----\nModel B adapter · write-back callback. POST a la sala callback\nendpoint cuando el worker llega al terminal (post 'Notify MC\nInbox'). Cierra el loop OBSERVE · sala marca el run como\ncompleted + reconcilia el state final.\nWiring · post 'Notify MC Inbox' (y/o un branch terminal common).\nActivation · §144 + CC#3 receiver. CC#4 2026-06-05.\n\n[OLA 2 WIRE+ENABLE 2026-06-05 · CC#4] Wired into main flow + enabled. SALA_WORKFLOW_DISPATCH_ENABLED flag sigue OFF (Vercel · CIC Ola 1b pending) · NO dispatch real hasta §144 Emilio + flips Ola 3.",
+      "parameters": {
+        "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-source",
+              "value": "n8n-modelb-LyVoKcrypS5uLyuu"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"run_completed\",\n  \"_sala_correlation_id\": \"{{ $('Validate Deal Data').item.json._sala_correlation_id }}\",\n  \"_journey_id\": \"{{ $('Validate Deal Data').item.json._journey_id }}\",\n  \"worker_id\": \"LyVoKcrypS5uLyuu\",\n  \"worker_name\": \"Zero Risk - Client Onboarding E2E v2\",\n  \"tenant_id\": \"{{ $('Validate Deal Data').item.json.tenant_id || $('Validate Deal Data').item.json.client_id }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id }}\",\n  \"summary\": {\n    \"notion_workspace\": \"{{ $('Create Notion Client Workspace').item.json }}\",\n    \"success_plan\": \"{{ $('Create Success Plan in Notion').item.json }}\",\n    \"handoff_score\": \"{{ $('Compute Handoff Score').item.json }}\",\n    \"mc_inbox\": \"{{ $('Notify MC Inbox').item.json }}\"\n  },\n  \"ts\": \"{{ $now }}\"\n}",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "apify-wire-hitl-if-canon-182",
+      "name": "[APIFY-WIRE] IF · Camino III decision (PASS/REJECT)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3500,
+        700
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "camino-iii-decision",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "PASS",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "notes": "[CANON CONVERGE 2026-06-06 · CC#4 PR #182] IF gate · split HITL items (parse_kind=absent/malformed signal from CC#3 discovery_persist) from real scrape items. TRUE branch → HITL POST · FALSE branch → existing Gate → Apify Service Workflow."
+    },
+    {
+      "id": "apify-wire-hitl-post-canon-182",
+      "name": "[APIFY-WIRE] POST /api/hitl/queue (canon)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3800,
+        850
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  task_type: \"onboarding_review\",\n  agent_name: \"onboarding-specialist\",\n  client_id: $json.client_id,\n  title: \"Onboarding · Camino III review · \" + ($json.client_name || $json.client_id) + \" · \" + ($json.competitor_count || 0) + \" competidores\",\n  priority: \"medium\",\n  client_name: $json.client_name,\n  workflow_id: \"LyVoKcrypS5uLyuu\",\n  workflow_execution_id: $execution.id,\n  payload: $json.staging_package || {},\n  metadata: {\n    source: \"onboarding_e2e_5phase\",\n    journey_id: $json._journey_id,\n    scope: \"onboarding_e2e\",\n    sprint: \"5phase-redesign-2026-06-09\",\n    competitor_count: $json.competitor_count || 0,\n    scrape_target_count: $json.scrape_target_count || 0,\n    staging_timestamp: $json.staging_package ? $json.staging_package.staging_timestamp : null\n  },\n  callback_url: $execution.resumeUrl,\n  dedup_key: $execution.id\n}) }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "notes": "[CANON CONVERGE 2026-06-06 · CC#4 PR #182] HITL inbox enqueue · canon path C. POST /api/hitl/queue with type=discovery_persist_failure · best-effort · neverError. Worker continues normal flow after enqueue (skipping scraping for this run)."
+    },
+    {
+      "id": "build-master-journey-input-canon",
+      "name": "Build Master Journey Input (canon shape)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        250
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Canon shape for Master Journey ugK3QrxkWq22Bly5 sub-workflow input.\n// parse-validate-request (entry) reads $input.first().json.body.\n// Required: journey (one of ACQUIRE|ONBOARD|PRODUCE|ALWAYS_ON|REVIEW)\n//           client_id (string · except ACQUIRE)\n//           trigger_type (string · 'manual' default)\n//           params (object · free-form context)\n// Fix root · Sprint 7 C5 cutover converted httpRequest→executeWorkflow\n// but never wrapped payload as { body: {...} } per webhook entry shape.\n\nconst deal = $('Validate Deal Data').first().json;\nconst cascade = $input.first().json;\n\nreturn [{\n  json: {\n    body: {\n      journey: 'ONBOARD',\n      client_id: deal.client_id,\n      trigger_type: 'deal-won-onboarding',\n      params: {\n        client_name: deal.client_name || null,\n        website: deal.website || null,\n        industry: deal.industry || null,\n        sala_correlation_id: deal._sala_correlation_id || null,\n        journey_id: deal._journey_id || null,\n        cascade_response: (cascade && typeof cascade === 'object') ? cascade : null,\n        upstream_workflow_id: $workflow.id,\n        upstream_execution_id: $execution.id,\n      },\n    },\n  },\n}];\n"
+      },
+      "notes": "CC#4 2026-06-09 rewire P0 · Fix journey_type=undefined at Master Journey ugK3. Shapes payload as { body: { journey: ONBOARD, client_id, trigger_type, params } } per parse-validate-request expectations of ugK3QrxkWq22Bly5 webhook entry."
+    },
+    {
+      "id": "wait-agent-callback",
+      "name": "Wait · agent callback",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        840,
+        300
+      ],
+      "webhookId": "73cc8d06-2bba-40c0-a778-f85fec2ec944",
+      "parameters": {
+        "resume": "webhook",
+        "limitWaitTime": true,
+        "resumeAmount": 900,
+        "resumeUnit": "seconds",
+        "options": {},
+        "httpMethod": "POST"
+      },
+      "notes": "CC#4 2026-06-09 · agent async callback wait · PR #185 pairs with fire-and-forget on Call Onboarding Dispatch node · Vercel /api/agents/run-sdk POSTs to $execution.resumeUrl when agent completes (~4min). Limit wait 900s · timeout cleanly if no callback."
+    },
+    {
+      "id": "unwrap-agent-callback",
+      "name": "Call Onboarding Specialist: Auto-Discovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Canon · unwrap Vercel callback envelope (PR #185 contract) into the same shape\n// the synchronous /api/agents/run-sdk used to return. Name preserved to keep\n// existing references ($('Call Onboarding Specialist: Auto-Discovery').item.json.*)\n// resolving transparently · zero text-edits across downstream consumer nodes.\n//\n// Vercel callback body shape · { status, agent_slug, client_id, result: <agentResult> }\n// where agentResult mirrors sync-mode response body { response, result, discovery_output, ... }.\n// If callback already arrives unwrapped (no `result` envelope) · pass through.\n\nconst cb = $input.first().json;\nconst unwrapped = (cb && typeof cb === 'object' && 'result' in cb) ? cb.result : cb;\nreturn [{ json: unwrapped }];\n"
+      },
+      "notes": "CC#4 2026-06-09 · NAME-PRESERVED unwrap of Vercel callback envelope (PR #185). Inherits the original name \"Call Onboarding Specialist: Auto-Discovery\" so that downstream references like $('Call Onboarding Specialist: Auto-Discovery').item.json.response resolve to the unwrapped agent result without code edits in consumer nodes."
+    },
+    {
+      "id": "wait-camino-decision",
+      "name": "Wait · Camino III decision",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4000,
+        850
+      ],
+      "webhookId": "d6744618-1d7d-4eb9-9e80-a8df05d553b8",
+      "parameters": {
+        "resume": "webhook",
+        "limitWaitTime": true,
+        "resumeAmount": 86400,
+        "resumeUnit": "seconds",
+        "options": {},
+        "httpMethod": "POST"
+      },
+      "notes": "CC#4 2026-06-09 · Camino III decision wait · pareja con POST /api/hitl/queue. Camino III revisa→vota→decide; POSTea callback_url con {decision: \"PASS\" | \"REJECT\"}. Wait reanuda + IF downstream evalúa decision. Limit 86400s (24h) · expira clean si Camino III no responde."
+    },
+    {
+      "id": "end-rejected-camino",
+      "name": "Onboarding rejected · Camino III",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3700,
+        850
+      ],
+      "parameters": {},
+      "notes": "CC#4 2026-06-09 · terminal · onboarding rejected by Camino III · flow stops cleanly · no cascade · no scrape fire."
+    },
+    {
+      "id": "confirm-competitor-list-6b",
+      "name": "Confirm barato · competitor list",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  task_type: \"confirm_competitor_list\",\n  client_id: $json.client_id,\n  client_name: $json.client_name,\n  priority: \"low\",\n  payload: {\n    competitors: $json.discovery_package.competitors || [],\n    scrape_targets: $json.discovery_package.scrape_targets || [],\n    instruction: \"Confirmar que estos competidores son relevantes antes de scrapear\",\n    discovery_summary: $json.discovery_package.discovery_summary || \"\"\n  },\n  callback_url: $execution.resumeUrl,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  dedup_key: $execution.id + \"_competitor_confirm\"\n}) }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "synthesis-staging-node9",
+      "name": "Synthesis Staging · build package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        200
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Synthesis Staging · Fase 3 · spec 5-fases CC#4 2026-06-09\n// Consolida en memoria: agent output + Apify results → staging_package\n// NO hace INSERT/UPDATE a ninguna tabla.\n\nconst discoveryItem = $('Confirm barato · competitor list').first().json;\nconst apifyAggregate = $('[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)').first().json;\nconst dealData = $('Validate Deal Data').first().json;\n\nconst discoveryPkg = discoveryItem.discovery_package || {};\nconst apifyResults = apifyAggregate.results || apifyAggregate.apify_results || [];\n\n// brand_book_draft: conclusiones del agente + evidencia Apify\nconst brandBookDraft = {\n  competitive_landscape: discoveryPkg.discovery_summary || \"\",\n  competitors: discoveryPkg.competitors || [],\n  icp_signals: discoveryPkg.icp_signals || [],\n  own_handles: discoveryPkg.own_handles || {},\n  apify_evidence_count: apifyResults.length,\n  draft_status: \"pre_gate\",\n  source_agent: \"onboarding-specialist\",\n  source_apify: \"discovery_e2e_scrapes\",\n  generated_at: new Date().toISOString()\n};\n\n// icp_draft: señales ICP identificadas\nconst icpSignals = discoveryPkg.icp_signals || [];\nconst icpDraft = {\n  segments: icpSignals,\n  primary_segment: icpSignals[0] || null,\n  segment_count: icpSignals.length,\n  draft_status: \"pre_gate\"\n};\n\n// competitive_analysis_draft\nconst competitiveAnalysisDraft = {\n  competitors: discoveryPkg.competitors || [],\n  scrape_targets_count: discoveryPkg.scrape_targets ? discoveryPkg.scrape_targets.length : 0,\n  apify_results: apifyResults,\n  landscape_summary: discoveryPkg.discovery_summary || \"\",\n  draft_status: \"pre_gate\"\n};\n\nconst stagingPackage = {\n  brand_book_draft: brandBookDraft,\n  icp_draft: icpDraft,\n  competitive_analysis_draft: competitiveAnalysisDraft,\n  evidence_sources: [\"onboarding-specialist\", \"apify\"],\n  staging_timestamp: new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    client_id: dealData.client_id,\n    client_name: dealData.client_name,\n    _journey_id: dealData._journey_id,\n    staging_package: stagingPackage,\n    competitor_count: (discoveryPkg.competitors || []).length,\n    scrape_target_count: (discoveryPkg.scrape_targets || []).length\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "persist-canon-fase5",
+      "name": "Persist Canon · brand_book + ICP + analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        200
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Persist Canon · Fase 5 · solo tras PASS Camino III\n// Escribe brand_book, ICP, análisis competitivo via API.\n// RECIÉN AQUÍ se persisten los datos canonizados.\n\nconst stagingPkg = $json.staging_package || {};\nconst clientId = $('Validate Deal Data').first().json.client_id;\nconst apiUrl = $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app';\nconst apiKey = $env.INTERNAL_API_KEY;\n\nconst headers = {\n  'Content-Type': 'application/json',\n  'x-api-key': apiKey\n};\n\n// 1. POST brand_book\nlet brandBookResult = null;\ntry {\n  const bbResp = await fetch(apiUrl + '/api/clients/' + clientId + '/brand-book', {\n    method: 'POST',\n    headers: headers,\n    body: JSON.stringify({\n      brand_book: stagingPkg.brand_book_draft,\n      source: 'onboarding_e2e_5phase',\n      camino_iii_approved: true,\n      approved_at: new Date().toISOString()\n    })\n  });\n  brandBookResult = { status: bbResp.status, ok: bbResp.ok };\n} catch(e) {\n  brandBookResult = { status: 'error', message: e.message };\n}\n\n// 2. POST ICP\nlet icpResult = null;\ntry {\n  const icpResp = await fetch(apiUrl + '/api/clients/' + clientId + '/icp', {\n    method: 'POST',\n    headers: headers,\n    body: JSON.stringify({\n      icp: stagingPkg.icp_draft,\n      source: 'onboarding_e2e_5phase',\n      camino_iii_approved: true\n    })\n  });\n  icpResult = { status: icpResp.status, ok: icpResp.ok };\n} catch(e) {\n  icpResult = { status: 'error', message: e.message };\n}\n\n// 3. POST competitive analysis al Brain como evidencia CANON (no provisional)\nlet brainResult = null;\ntry {\n  const brainResp = await fetch(apiUrl + '/api/brain/ingest-source', {\n    method: 'POST',\n    headers: headers,\n    body: JSON.stringify({\n      client_id: clientId,\n      source_type: 'competitive_intelligence',\n      content: JSON.stringify(stagingPkg.competitive_analysis_draft),\n      metadata: {\n        provenance: 'onboarding_e2e_5phase_post_camino_iii',\n        confidence: 'canon',\n        type: 'evidencia_canon',\n        camino_iii_approved: true,\n        approved_at: new Date().toISOString()\n      }\n    })\n  });\n  brainResult = { status: brainResp.status, ok: brainResp.ok };\n} catch(e) {\n  brainResult = { status: 'error', message: e.message };\n}\n\nreturn [{\n  json: {\n    ...$json,\n    persist_canon_results: {\n      brand_book: brandBookResult,\n      icp: icpResult,\n      brain_canon: brainResult,\n      persisted_at: new Date().toISOString()\n    }\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "competitor-verdict-runsdk",
+      "name": "Competitor Verdict · run-sdk (INLINE)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"competitive-intelligence-agent\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id }}\",\n  \"workflow_id\": \"LyVoKcrypS5uLyuu\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"task\": {{ JSON.stringify(\"Analizar la lista de competidores detectados y emitir un veredicto. Responde EXCLUSIVAMENTE con JSON: {\\\"veredicto\\\":\\\"confirmar\\\"|\\\"observar\\\",\\\"razones\\\":[string],\\\"confianza\\\":number 0-1}. confirmar = lista razonable para scrapear; observar = dudas, conviene rehacer el descubrimiento.\") }},\n  \"context\": {\n    \"competitor_list\": {{ JSON.stringify($('[APIFY-WIRE] Discovery Parser · dynamic targets (lazo)').item.json.discovery_package.competitors) }},\n    \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name }}\"\n  }\n}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "notes": "[CC#4 OptA] Gate 1 · competitive-intelligence-agent · INLINE. [BUG3 fix 2026-06-27: competitor_list ← Discovery Parser.discovery_package.competitors (era Confirm barato HTTP resp)]"
+    },
+    {
+      "id": "parse-verdict",
+      "name": "Parse veredicto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        120
+      ],
+      "parameters": {
+        "jsCode": "const r = $input.first().json; const body = (r && r.body) ? r.body : r;\nlet txt = ''; if (body && typeof body === 'object') txt = body.response || body.output_summary || ''; else if (typeof body === 'string') txt = body;\nlet veredicto = 'observar', razones = ['default_observar_no_parseable'], confianza = 0;\ntry { const m = (txt || '').match(/\\{[\\s\\S]*\\}/); if (m) { const j = JSON.parse(m[0]);\n  const v = String(j.veredicto || j.verdict || '').toLowerCase();\n  veredicto = (v === 'confirmar' || v === 'confirm') ? 'confirmar' : 'observar';\n  razones = Array.isArray(j.razones) ? j.razones : (Array.isArray(j.reasons) ? j.reasons : []);\n  confianza = typeof j.confianza === 'number' ? j.confianza : (typeof j.confidence === 'number' ? j.confidence : 0);\n} } catch (e) { veredicto = 'observar'; razones = ['parse_error: ' + (e.message || String(e))]; }\nreturn [{ json: { veredicto, razones, confianza,\n  client_id: $('Validate Deal Data').item.json.client_id,\n  client_name: $('Validate Deal Data').item.json.client_name,\n  competitor_list: $('Confirm barato · competitor list').item.json,\n  _verdict_raw: (txt || '').slice(0, 800) } }];"
+      },
+      "notes": "[CC#4 OptA] parse gate-1 · default observar"
+    },
+    {
+      "id": "if-verdict",
+      "name": "IF · veredicto",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c-if-verdict",
+              "leftValue": "={{ $json.veredicto }}",
+              "rightValue": "confirmar",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "[CC#4 OptA] confirmar->Split · observar->re-discovery"
+    },
+    {
+      "id": "rediscover-runsdk",
+      "name": "Re-discovery INLINE (onboarding-specialist)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"onboarding-specialist\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id }}\",\n  \"workflow_id\": \"LyVoKcrypS5uLyuu\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"task\": {{ JSON.stringify(\"Rehace el descubrimiento de competidores aplicando las observaciones de correccion. La lista anterior fue marcada OBSERVAR por el agente de inteligencia competitiva. Usa las observaciones para corregir el criterio y emiti una lista corregida de competidores (JSON con array de competidores).\") }},\n  \"context\": {\n    \"observations\": {{ JSON.stringify($('Parse veredicto').item.json.razones) }},\n    \"previous_competitor_list\": {{ JSON.stringify($('Parse veredicto').item.json.competitor_list) }},\n    \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name }}\"\n  }\n}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "notes": "[CC#4 OptA] OBSERVAR -> re-discovery por el creador (onboarding-specialist). Decision Emilio: correcciones al creador."
+    },
+    {
+      "id": "regate-runsdk",
+      "name": "Re-gate INLINE (competitive-intelligence)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"competitive-intelligence-agent\",\n  \"client_id\": \"{{ $('Validate Deal Data').item.json.client_id }}\",\n  \"workflow_id\": \"LyVoKcrypS5uLyuu\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"task\": {{ JSON.stringify(\"Analizar la lista de competidores detectados y emitir un veredicto. Responde EXCLUSIVAMENTE con JSON: {\\\"veredicto\\\":\\\"confirmar\\\"|\\\"observar\\\",\\\"razones\\\":[string],\\\"confianza\\\":number 0-1}. confirmar = lista razonable para scrapear; observar = dudas, conviene rehacer el descubrimiento.\") }},\n  \"context\": {\n    \"competitor_list\": {{ JSON.stringify($('Re-discovery INLINE (onboarding-specialist)').item.json) }},\n    \"client_name\": \"{{ $('Validate Deal Data').item.json.client_name }}\"\n  }\n}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "notes": "[CC#4 OptA] Gate 2 · re-evalua la lista corregida."
+    },
+    {
+      "id": "parse-regate",
+      "name": "Parse re-gate veredicto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        260
+      ],
+      "parameters": {
+        "jsCode": "const r = $input.first().json; const body = (r && r.body) ? r.body : r;\nlet txt = ''; if (body && typeof body === 'object') txt = body.response || body.output_summary || ''; else if (typeof body === 'string') txt = body;\nlet veredicto = 'observar', razones = ['default_observar_no_parseable'], confianza = 0;\ntry { const m = (txt || '').match(/\\{[\\s\\S]*\\}/); if (m) { const j = JSON.parse(m[0]);\n  const v = String(j.veredicto || j.verdict || '').toLowerCase();\n  veredicto = (v === 'confirmar' || v === 'confirm') ? 'confirmar' : 'observar';\n  razones = Array.isArray(j.razones) ? j.razones : (Array.isArray(j.reasons) ? j.reasons : []);\n  confianza = typeof j.confianza === 'number' ? j.confianza : (typeof j.confidence === 'number' ? j.confidence : 0);\n} } catch (e) { veredicto = 'observar'; razones = ['parse_error: ' + (e.message || String(e))]; }\nreturn [{ json: { veredicto, razones, confianza,\n  client_id: $('Validate Deal Data').item.json.client_id,\n  client_name: $('Validate Deal Data').item.json.client_name,\n  competitor_list: $('Re-discovery INLINE (onboarding-specialist)').item.json,\n  _verdict_raw: (txt || '').slice(0, 800) } }];"
+      },
+      "notes": "[CC#4 OptA] parse gate-2 · lista corregida"
+    },
+    {
+      "id": "if-regate",
+      "name": "IF · re-gate veredicto",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        260
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c-if-regate",
+              "leftValue": "={{ $json.veredicto }}",
+              "rightValue": "confirmar",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "[CC#4 OptA] confirmar->Split · observar otra vez->hitl"
+    },
+    {
+      "id": "escalate-hitl",
+      "name": "Escalate · competitor observar (hitl)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task_type:'confirm_competitor_list', agent_name:'competitive-intelligence-agent', client_id:$json.client_id, title:'Competidores observar tras re-discovery - '+($json.client_name||$json.client_id), priority:'medium', client_name:$json.client_name, workflow_id:'LyVoKcrypS5uLyuu', workflow_execution_id:$execution.id, payload:{ veredicto:$json.veredicto, razones:$json.razones, confianza:$json.confianza, competitor_list:$json.competitor_list }, metadata:{ source:'competitor_checkpoint_auto', reason:'observar_after_rediscovery', retry_note:'cap-1 (cap-3 deferred Fase 2)' } }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "notes": "[CC#4 OptA] OBSERVAR tras re-discovery -> escalacion humana. Non-blocking -> continua."
+    }
+  ],
+  "connections": {
+    "Webhook: Deal Won": {
+      "main": [
+        [
+          {
+            "node": "[MODELB] Dispatch-único Guard · scoped al run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Deal Data": {
+      "main": [
+        [
+          {
+            "node": "Call Onboarding Specialist: Auto-Discovery Dispatch (fire+forget)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Notion Client Workspace",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[MODELB] Phase-boundary Emit · reconciliación OBSERVE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Onboarding Specialist: Auto-Discovery": {
+      "main": [
+        [
+          {
+            "node": "Persist Client to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Notion Client Workspace": {
+      "main": [
+        [
+          {
+            "node": "Build Success Plan Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success Plan Template": {
+      "main": [
+        [
+          {
+            "node": "Create Success Plan in Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Success Plan in Notion": {
+      "main": [
+        [
+          {
+            "node": "Schedule Kickoff Call (Cal.com)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Kickoff Call (Cal.com)": {
+      "main": [
+        [
+          {
+            "node": "Compute Handoff Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Handoff Score": {
+      "main": [
+        [
+          {
+            "node": "Create AM Handoff Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create AM Handoff Task": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack: Onboarding Initiated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Slack: Onboarding Initiated": {
+      "main": [
+        [
+          {
+            "node": "Notify MC Inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Client to Supabase": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Discovery Parser · dynamic targets (lazo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Master Journey ugK3": {
+      "main": [
+        [
+          {
+            "node": "Build Success Plan Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Onboarding Cascade (Gap 3)": {
+      "main": [
+        [
+          {
+            "node": "Build Master Journey Input (canon shape)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Spell Check Pass (in-cascade)": {
+      "main": [
+        [
+          {
+            "node": "Run Onboarding Cascade (Gap 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Split per function (onboarding_e2e)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Call Apify Service Workflow (onboarding_e2e)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Call Apify Service Workflow (onboarding_e2e)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[MODELB] Dispatch-único Guard · scoped al run": {
+      "main": [
+        [
+          {
+            "node": "Validate Deal Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify MC Inbox": {
+      "main": [
+        [
+          {
+            "node": "[MODELB] Write-back Callback · run terminal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Discovery Parser · dynamic targets (lazo)": {
+      "main": [
+        [
+          {
+            "node": "Confirm barato · competitor list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Gate · drop skip-markers (lazo)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Call Apify Service Workflow (onboarding_e2e)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Split per scrape target (lazo)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Gate · drop skip-markers (lazo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Master Journey Input (canon shape)": {
+      "main": [
+        [
+          {
+            "node": "Trigger Master Journey ugK3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Onboarding Specialist: Auto-Discovery Dispatch (fire+forget)": {
+      "main": [
+        [
+          {
+            "node": "Wait · agent callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait · agent callback": {
+      "main": [
+        [
+          {
+            "node": "Call Onboarding Specialist: Auto-Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] IF · Camino III decision (PASS/REJECT)": {
+      "main": [
+        [
+          {
+            "node": "Persist Canon · brand_book + ICP + analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Onboarding rejected · Camino III",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] POST /api/hitl/queue (canon)": {
+      "main": [
+        [
+          {
+            "node": "Wait · Camino III decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait · Camino III decision": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] IF · Camino III decision (PASS/REJECT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)": {
+      "main": [
+        [
+          {
+            "node": "Synthesis Staging · build package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Synthesis Staging · build package": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] POST /api/hitl/queue (canon)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Canon · brand_book + ICP + analysis": {
+      "main": [
+        [
+          {
+            "node": "Spell Check Pass (in-cascade)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm barato · competitor list": {
+      "main": [
+        [
+          {
+            "node": "Competitor Verdict · run-sdk (INLINE)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Competitor Verdict · run-sdk (INLINE)": {
+      "main": [
+        [
+          {
+            "node": "Parse veredicto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse veredicto": {
+      "main": [
+        [
+          {
+            "node": "IF · veredicto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF · veredicto": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Split per scrape target (lazo)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Re-discovery INLINE (onboarding-specialist)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-discovery INLINE (onboarding-specialist)": {
+      "main": [
+        [
+          {
+            "node": "Re-gate INLINE (competitive-intelligence)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-gate INLINE (competitive-intelligence)": {
+      "main": [
+        [
+          {
+            "node": "Parse re-gate veredicto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse re-gate veredicto": {
+      "main": [
+        [
+          {
+            "node": "IF · re-gate veredicto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF · re-gate veredicto": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Split per scrape target (lazo)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Escalate · competitor observar (hitl)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate · competitor observar (hitl)": {
+      "main": [
+        [
+          {
+            "node": "[APIFY-WIRE] Split per scrape target (lazo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveExecutionProgress": true
+  }
+}
