@@ -25,19 +25,25 @@ export const DISCOVERY_GUARDRAILS = {
   max_actors_per_run: 3,
 } as const
 
-/** Apify actor functions available in the Service `3lyknrP3PoS2KzUf`.
- *  Logical names · the Apify Service maps each to an actor id ·
+/** Apify actor function names · MUST match the Apify Service `3lyknrP3PoS2KzUf`
+ *  `Switch · apify_function` cases EXACTLY (verified 2026-06-28 · §148). The
+ *  Service routes on the LONG `*_scraper` names · short names get dropped at the
+ *  Switch default.
+ *
+ *  ⚠️ `google_maps_scraper` + `tweet_scraper` have NO route in the Service yet
+ *  (no Switch case). They are emitted by this classifier but the Service GATES
+ *  them (graceful skip) until it gains the cases + actor nodes ·
  *    google_maps_scraper → compass/crawler-google-places
  *    tweet_scraper       → apidojo/tweet-scraper
  */
 export type ApifyFunction =
   | 'instagram_scraper'
-  | 'linkedin_company'
-  | 'facebook_ads'
-  | 'tiktok_profile'
-  | 'google_serp'
-  | 'google_maps_scraper'
-  | 'tweet_scraper'
+  | 'linkedin_company_scraper'
+  | 'facebook_ads_library_scraper'
+  | 'tiktok_profile_scraper'
+  | 'google_serp_scraper'
+  | 'google_maps_scraper' // no Service route yet
+  | 'tweet_scraper' // no Service route yet
 
 /** Result of classifying a single URL. */
 export type UrlClassification =
@@ -75,13 +81,13 @@ export function classifyUrl(raw: unknown): UrlClassification {
     return { kind: 'apify', apify_function: 'instagram_scraper', source: 'apify_scrape' }
   }
   if (n.includes('linkedin.com/company')) {
-    return { kind: 'apify', apify_function: 'linkedin_company', source: 'apify_scrape' }
+    return { kind: 'apify', apify_function: 'linkedin_company_scraper', source: 'apify_scrape' }
   }
   if (n.includes('facebook.com') || n.includes('fb.com')) {
-    return { kind: 'apify', apify_function: 'facebook_ads', source: 'apify_scrape' }
+    return { kind: 'apify', apify_function: 'facebook_ads_library_scraper', source: 'apify_scrape' }
   }
   if (n.includes('tiktok.com')) {
-    return { kind: 'apify', apify_function: 'tiktok_profile', source: 'apify_scrape' }
+    return { kind: 'apify', apify_function: 'tiktok_profile_scraper', source: 'apify_scrape' }
   }
   // twitter.com (substring safe) · x.com matched at host boundary so "fox.com"
   // / "box.com" do NOT false-positive (normalizeUrl already stripped www).
@@ -204,7 +210,7 @@ export function buildFallbackSearchTarget(input: {
   const query = [`${name} competitors`, industry].filter((s) => s.length > 0).join(' ')
   return {
     url: `serp:${query}`,
-    apify_function: 'google_serp',
+    apify_function: 'google_serp_scraper',
     source: 'search',
     trust_level: 'untrusted',
     type: 'evidence',

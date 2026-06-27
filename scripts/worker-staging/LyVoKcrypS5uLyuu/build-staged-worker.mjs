@@ -21,7 +21,11 @@ const node16Code = readFileSync(join(DIR, 'node16-discovery-parser.js'), 'utf8')
 const aggCode = readFileSync(join(DIR, 'aggregate-service-responses.js'), 'utf8')
 
 const before = (snap.nodes || []).length
-let edited = { node16: false, agg: false, phase: false }
+let edited = { node16: false, agg: false, phase: false, slack: false }
+
+// Canonical Slack webhook expression · $env only · NO hardcoded secret
+// (the live node had a hardcoded fallback URL · §148 · migrate to env).
+const SLACK_ENV_EXPR = "={{ $env.SLACK_WEBHOOK_URL || $env.SLACK_WEBHOOK_URL_EQUIPO || '' }}"
 
 for (const n of snap.nodes || []) {
   if (n.name.includes('Discovery Parser')) {
@@ -30,6 +34,11 @@ for (const n of snap.nodes || []) {
   } else if (n.name.includes('Aggregate Service responses')) {
     n.parameters.jsCode = aggCode
     edited.agg = true
+  } else if (n.name.includes('Alert Slack')) {
+    // Migrate the Slack node url to a clean $env expression · the redacted
+    // snapshot left a broken nested literal · this is the canonical fix.
+    n.parameters.url = SLACK_ENV_EXPR
+    edited.slack = true
   } else if (n.name.includes('Phase-boundary Emit')) {
     const body = n.parameters.jsonBody || ''
     if (body.includes('SET PER CALL SITE')) {
@@ -63,6 +72,7 @@ if (after !== before) errs.push(`node count changed ${before}→${after}`)
 if (!edited.node16) errs.push('node16 not edited')
 if (!edited.agg) errs.push('aggregate node not edited')
 if (!edited.phase) errs.push('phase-boundary not fixed')
+if (!edited.slack) errs.push('slack node not migrated to $env')
 const stillPlaceholder = JSON.stringify(putPayload).includes('SET PER CALL SITE')
 if (stillPlaceholder) errs.push('placeholder still present in PUT payload')
 
