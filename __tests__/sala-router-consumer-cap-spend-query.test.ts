@@ -41,7 +41,7 @@ function makeSupabase(
 }
 
 describe('wireCapSpendQuerySupabase · strategy=correlation (canonical)', () => {
-  it('SUMs cost_usd filtering by tenant_id + correlation_id', async () => {
+  it('SUMs cost_usd filtering by client_id + journey_id (real columns)', async () => {
     const { fake, calls } = makeSupabase([
       { cost_usd: 1.5 },
       { cost_usd: '0.51' },
@@ -51,8 +51,12 @@ describe('wireCapSpendQuerySupabase · strategy=correlation (canonical)', () => 
     const total = await query({ tenant_id: TENANT, stream_id: STREAM, correlation_id: CORR })
     expect(total).toBeCloseTo(2.01)
     expect(calls[0].table).toBe('agent_invocations')
-    expect(calls[0].filters.tenant_id).toBe(TENANT)
-    expect(calls[0].filters.correlation_id).toBe(CORR)
+    // sala params tenant_id/correlation_id map to the REAL columns
+    // client_id/journey_id (agent_invocations has no tenant_id/correlation_id).
+    expect(calls[0].filters.client_id).toBe(TENANT)
+    expect(calls[0].filters.journey_id).toBe(CORR)
+    expect(calls[0].filters.tenant_id).toBeUndefined()
+    expect(calls[0].filters.correlation_id).toBeUndefined()
   })
 
   it('returns 0 when supabase throws / errors', async () => {
@@ -73,7 +77,7 @@ describe('wireCapSpendQuerySupabase · strategy=correlation (canonical)', () => 
 })
 
 describe('wireCapSpendQuerySupabase · strategy=tenant_window', () => {
-  it('filters by tenant_id + started_at gte floor', async () => {
+  it('filters by client_id + started_at gte floor', async () => {
     const { fake, calls } = makeSupabase([{ cost_usd: 0.25 }])
     const query = wireCapSpendQuerySupabase(fake, {
       strategy: 'tenant_window',
@@ -81,7 +85,7 @@ describe('wireCapSpendQuerySupabase · strategy=tenant_window', () => {
     })
     const total = await query({ tenant_id: TENANT, stream_id: STREAM, correlation_id: CORR })
     expect(total).toBe(0.25)
-    expect(calls[0].filters.tenant_id).toBe(TENANT)
+    expect(calls[0].filters.client_id).toBe(TENANT)
     expect(calls[0].filters.started_at).toBe('2026-06-06T00:00:00Z')
   })
 })
