@@ -43,6 +43,10 @@ export const EVENT_TYPES = [
   'judgment_resolved',
   'budget_blocked',
   'dead_letter',
+  // Camino III lazo de corrección (SPEC 2026-06-27) · un REJECT con
+  // correcciones accionables · re-despacha al creador. Migración
+  // 202606271200 agrega el valor al enum sala_event_type_enum.
+  'correction_required',
 ] as const
 
 export type EventType = (typeof EVENT_TYPES)[number]

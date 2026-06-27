@@ -113,6 +113,15 @@ export async function decide(input: DecideInput): Promise<Decision[]> {
     case 'judgment_resolved':
     case 'budget_blocked':
       return resolveDecision(input, libreto, current_step)
+    case 'correction_required':
+      // Camino III lazo de corrección · el evento re-despacha al CREADOR
+      // (SPEC 2026-06-27 §5). Se resuelve como un avance normal · la
+      // proyección dejó `current_step` en el paso productor (vía el
+      // `next_step_rejected` del gate) · resolveDecision re-emite el dispatch
+      // al mismo agente creador. El detalle de las correcciones NO viaja en
+      // el evento (ligero · item_id) · el worker lo lee de editorial_decisions
+      // por su rama "corregir" (correction-branch.ts).
+      return resolveDecision(input, libreto, current_step)
     case 'dead_letter':
       // DLQ Option A · terminal failure already recorded by Inngest
       // onFailure handler · router has NO further routing decision to

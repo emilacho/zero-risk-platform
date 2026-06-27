@@ -36,8 +36,8 @@ describe('EVENT_TYPES · canonical enum extended for DLQ', () => {
     expect(EVENT_TYPES).toContain('dead_letter')
   })
 
-  it('total count is 11 (10 base + dead_letter)', () => {
-    expect(EVENT_TYPES.length).toBe(11)
+  it('total count is 12 (10 base + dead_letter + correction_required)', () => {
+    expect(EVENT_TYPES.length).toBe(12)
   })
 
   it('dead_letter type narrows correctly', () => {
