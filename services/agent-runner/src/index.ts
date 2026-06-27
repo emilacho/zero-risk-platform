@@ -84,6 +84,16 @@ interface RunSdkBody {
   stepName?: unknown
   step_name?: unknown
   /**
+   * Sprint 8D workflow attribution (§149) · the Vercel proxy forwards the
+   * workflow_id / workflow_execution_id it received from n8n. Accepted in
+   * both camelCase + snake_case (same alias pattern as the other fields) ·
+   * normalized at line ~151 and forwarded into AgentRunInput.
+   */
+  workflowId?: unknown
+  workflow_id?: unknown
+  workflowExecutionId?: unknown
+  workflow_execution_id?: unknown
+  /**
    * Sprint 8D tail canon · workflow checkpoint/resume bypass flag. true →
    * skip cache lookup · re-execute SDK call. Default false → use cached
    * `completed` checkpoint if present.
