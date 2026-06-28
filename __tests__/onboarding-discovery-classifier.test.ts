@@ -56,12 +56,12 @@ describe('classifyUrl · canonical host → actor mapping', () => {
   it('tiktok → tiktok_profile', () => {
     expect(classifyUrl('https://tiktok.com/@acme')?.apify_function).toBe('tiktok_profile_scraper')
   })
-  it('twitter / x.com → tweet_scraper', () => {
-    expect(classifyUrl('https://twitter.com/acme')?.apify_function).toBe('tweet_scraper')
-    expect(classifyUrl('https://x.com/acme')?.apify_function).toBe('tweet_scraper')
-    expect(classifyUrl('x.com')?.apify_function).toBe('tweet_scraper')
+  it('twitter / x.com → twitter_scraper', () => {
+    expect(classifyUrl('https://twitter.com/acme')?.apify_function).toBe('twitter_scraper')
+    expect(classifyUrl('https://x.com/acme')?.apify_function).toBe('twitter_scraper')
+    expect(classifyUrl('x.com')?.apify_function).toBe('twitter_scraper')
   })
-  it('x.com host-boundary guard · fox.com / box.com are NOT tweet_scraper', () => {
+  it('x.com host-boundary guard · fox.com / box.com are NOT twitter_scraper', () => {
     expect(classifyUrl('https://fox.com')?.apify_function).toBeNull() // web_generic
     expect(classifyUrl('https://box.com')?.source).toBe('onboarding_discovery')
   })
