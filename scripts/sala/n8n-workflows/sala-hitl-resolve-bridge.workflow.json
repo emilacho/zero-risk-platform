@@ -1,0 +1,70 @@
+{
+  "name": "Zero Risk — Sala HITL Resolve Bridge (Sprint 12 · MC inbox → /api/sala/hitl/resolve)",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Webhook · POST /sala-hitl-resolve-bridge",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 100],
+      "parameters": {
+        "path": "sala-hitl-resolve-bridge",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "notes": "Canon canonical · MC inbox panel POSTs the reviewer's decision here. Body shape: {tenant_id, stream_id, gate_event_id, decision: 'approved'|'rejected'|'edited', feedback?, edited_content?, reviewer?}. The workflow forwards to /api/sala/hitl/resolve with source='n8n-mc-inbox'."
+    },
+    {
+      "id": "invoke-sala-hitl-resolve",
+      "name": "Forward to /api/sala/hitl/resolve",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 100],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SALA_HITL_RESOLVE_BASE_URL || 'https://zero-risk-platform.vercel.app' }}/api/sala/hitl/resolve",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"source\": \"n8n-mc-inbox\",\n  \"tenant_id\": \"{{ $json.body.tenant_id }}\",\n  \"stream_id\": \"{{ $json.body.stream_id }}\",\n  \"gate_event_id\": \"{{ $json.body.gate_event_id }}\",\n  \"decision\": \"{{ $json.body.decision }}\",\n  \"reviewer\": \"{{ $json.body.reviewer || 'mc-inbox:unknown' }}\",\n  \"feedback\": \"{{ $json.body.feedback || '' }}\",\n  \"edited_content\": \"{{ $json.body.edited_content || '' }}\",\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "Canon canonical · forwards to sala endpoint. Auth via INTERNAL_API_KEY (dual-auth · matches checkInternalOrAdmin). Default-OFF on endpoint side · SALA_HITL_RESOLVE_ENABLED must be 'true' on Vercel for the endpoint to accept. retryOnFail handles transient Vercel/network blips."
+    }
+  ],
+  "connections": {
+    "Webhook · POST /sala-hitl-resolve-bridge": {
+      "main": [
+        [
+          {
+            "node": "Forward to /api/sala/hitl/resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
