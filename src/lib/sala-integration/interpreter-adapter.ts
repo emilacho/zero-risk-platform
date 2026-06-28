@@ -15,7 +15,7 @@ import {
   canonicalPredicateRegistry,
   resolveStep,
 } from '@/lib/sala/interpreter'
-import type { Step } from '@/lib/sala/libretos'
+import type { GateStep, Step } from '@/lib/sala/libretos'
 import type {
   NextStepResolution as RouterNextStepResolution,
   ResolveNextStepFn,
@@ -119,6 +119,43 @@ export function createInterpreterAdapter(
 
     const ctx = { event, blackboard }
 
+    // canon canon-canon · Track T (Step 11 resume gap · 2026-06-04) ·
+    // IF current step is a gate AND trigger is gate_resolved · the
+    // outcome (approved/rejected) selects between `gate.next_step` and
+    // `gate.next_step_rejected`. Without this branch, rejected gates
+    // silently follow the approved path · breaking the HITL revise loop.
+    if (
+      (current.step_type === 'gate_camino_iii' ||
+        current.step_type === 'gate_hitl' ||
+        current.step_type === 'gate_144') &&
+      trigger_event.event_type === 'gate_resolved'
+    ) {
+      const outcomeRaw = (trigger_event.payload as Record<string, unknown> | null | undefined)
+        ?.outcome
+      if (outcomeRaw === 'rejected') {
+        const gate = current as GateStep
+        if (!gate.next_step_rejected) {
+          return {
+            kind: 'terminal',
+            outcome: 'failure',
+            step_id: current.step_id,
+          } satisfies RouterNextStepResolution
+        }
+        const rejectedTarget = libreto.steps.find(
+          (s) => s.step_id === gate.next_step_rejected,
+        )
+        if (!rejectedTarget) {
+          return {
+            kind: 'unresolved',
+            reason: `next_step_rejected "${gate.next_step_rejected}" not in libreto`,
+          } satisfies RouterNextStepResolution
+        }
+        return mapTargetToRouter(rejectedTarget)
+      }
+      // outcome === 'approved' (or absent · canon default) · fall
+      // through to the standard next_step resolution path below.
+    }
+
     // canon canon-canon · steps with next_step refs (action · gate · fork)
     const next_step_ref = (current as { next_step?: import('@/lib/sala/libretos').NextStepRef })
       .next_step
@@ -145,25 +182,32 @@ export function createInterpreterAdapter(
       } satisfies RouterNextStepResolution
     }
 
-    if (
-      target.step_type === 'terminal_success' ||
-      target.step_type === 'terminal_failure'
-    ) {
-      return {
-        kind: 'terminal',
-        outcome: target.step_type === 'terminal_success' ? 'success' : 'failure',
-        step_id: target.step_id,
-      } satisfies RouterNextStepResolution
-    }
-    if (
-      target.step_type === 'gate_camino_iii' ||
-      target.step_type === 'gate_hitl' ||
-      target.step_type === 'gate_144'
-    ) {
-      return { kind: 'gate', gate_step: target as Step } satisfies RouterNextStepResolution
-    }
-    return { kind: 'next', next_step: target as Step } satisfies RouterNextStepResolution
+    return mapTargetToRouter(target)
   }
+}
+
+/** Canon canonical · Track T · map a libreto Step to the router's
+ *  NextStepResolution shape · canon canonical-shared between the
+ *  approved-path tail and the rejected-path branch. */
+function mapTargetToRouter(target: Step): RouterNextStepResolution {
+  if (
+    target.step_type === 'terminal_success' ||
+    target.step_type === 'terminal_failure'
+  ) {
+    return {
+      kind: 'terminal',
+      outcome: target.step_type === 'terminal_success' ? 'success' : 'failure',
+      step_id: target.step_id,
+    } satisfies RouterNextStepResolution
+  }
+  if (
+    target.step_type === 'gate_camino_iii' ||
+    target.step_type === 'gate_hitl' ||
+    target.step_type === 'gate_144'
+  ) {
+    return { kind: 'gate', gate_step: target } satisfies RouterNextStepResolution
+  }
+  return { kind: 'next', next_step: target } satisfies RouterNextStepResolution
 }
 
 function resolveRef(

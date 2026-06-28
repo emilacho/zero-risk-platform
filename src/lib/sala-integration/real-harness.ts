@@ -71,6 +71,33 @@ export interface ProcessEventResult {
   }>
 }
 
+/**
+ * Canon canonical · Track T (Step 11 resume gap · 2026-06-04) · external
+ * surface for resolving a gate. The MC inbox UI, the Camino III voting
+ * workflow, or a §144 approval path all call this method to land a
+ * `gate_resolved` event into the log · the projection then pops the
+ * gate and the router re-decides post-gate.
+ *
+ * `gate_event_id` is the event_id of the original `gate_pending` event
+ * (returned by `runUntilHalt` / `processEvent` when a gate was opened).
+ * `outcome` selects between `gate.next_step` (approved) and
+ * `gate.next_step_rejected` (rejected) per the interpreter adapter.
+ *
+ * §148 honest · this method APPENDS the resolution event AND processes
+ * it through the router immediately (single tick). The caller does not
+ * need to re-trigger the loop · the returned `ProcessEventResult` is
+ * the router's reaction to the resume. Use `runUntilHalt` afterwards if
+ * post-gate work involves multiple action steps before the next halt.
+ */
+export interface ResolveGateInput {
+  readonly tenant_id: string
+  readonly stream_id: string
+  readonly gate_event_id: string
+  readonly outcome: 'approved' | 'rejected'
+  readonly resolved_by?: string
+  readonly payload?: Record<string, unknown>
+}
+
 export interface RunUntilHaltResult {
   readonly ticks: number
   readonly halted_by:
@@ -177,6 +204,75 @@ export class RealSalaIntegration {
     }
 
     return { trigger_event: trigger, decisions, events_appended: appended }
+  }
+
+  /**
+   * Canon canonical · Track T (Step 11 resume gap · 2026-06-04) ·
+   * append a `gate_resolved` event and process it through the router.
+   *
+   * Validation · the referenced `gate_event_id` must (a) exist in the
+   * stream, (b) be of `event_type = 'gate_pending'`, (c) not already
+   * have a `gate_resolved` event with `causation_id = gate_event_id`
+   * (replay-idempotency). All three failures throw cero-silent-drop.
+   *
+   * §148 honest · this is the SHADOW path · production use cases must
+   * also write to legacy `pipeline_steps.hitl_status` if MC inbox UI
+   * reads from that table (dual-write window during migration). That
+   * dual-write is the `/api/sala/hitl/resolve` API surface (§144 gated)
+   * and lives outside this harness · this method only owns the canon
+   * event-log side.
+   */
+  async resolveGate(input: ResolveGateInput): Promise<ProcessEventResult> {
+    const rows = await this.storage.select({
+      tenant_id: input.tenant_id,
+      stream_id: input.stream_id,
+    })
+    const gateEvent = rows.find((r) => r.event_id === input.gate_event_id)
+    if (!gateEvent) {
+      throw new Error(
+        `resolveGate · gate event ${input.gate_event_id} not found in stream ${input.stream_id}`,
+      )
+    }
+    if (gateEvent.event_type !== 'gate_pending') {
+      throw new Error(
+        `resolveGate · event ${input.gate_event_id} is ${gateEvent.event_type} · expected gate_pending`,
+      )
+    }
+    const alreadyResolved = rows.some(
+      (r) => r.event_type === 'gate_resolved' && r.causation_id === input.gate_event_id,
+    )
+    if (alreadyResolved) {
+      throw new Error(
+        `resolveGate · gate ${input.gate_event_id} already has a gate_resolved event (replay rejected)`,
+      )
+    }
+
+    const idempotency_key = buildIdempotencyKey({
+      operation_type: `${gateEvent.journey_type}.${gateEvent.step_id ?? 'gate'}.gate_resolved`,
+      client_id: gateEvent.client_id,
+      logical_period: `${gateEvent.logical_period}::resolve::${input.gate_event_id}`,
+    })
+    const resolvedInput: EventAppendInput = {
+      tenant_id: gateEvent.tenant_id,
+      client_id: gateEvent.client_id,
+      stream_id: gateEvent.stream_id,
+      correlation_id: gateEvent.correlation_id,
+      causation_id: gateEvent.event_id,
+      event_type: 'gate_resolved',
+      journey_type: gateEvent.journey_type,
+      operation_type: `${gateEvent.journey_type}.${gateEvent.step_id ?? 'gate'}.gate_resolved`,
+      idempotency_key,
+      logical_period: gateEvent.logical_period,
+      step_id: gateEvent.step_id,
+      payload: {
+        outcome: input.outcome,
+        resolved_by: input.resolved_by ?? 'system',
+        ...(input.payload ?? {}),
+      },
+      gate_type: gateEvent.gate_type,
+    }
+    const appendResult = await append(this.storage, resolvedInput)
+    return await this.processEvent(appendResult.event)
   }
 
   /**
