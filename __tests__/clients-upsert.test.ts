@@ -252,3 +252,47 @@ describe('POST /api/clients/upsert · failure paths', () => {
     expect(mockJourneyInsert).not.toHaveBeenCalled()
   })
 })
+
+describe('POST /api/clients/upsert · retry (502 intermitente transiente)', () => {
+  it('reintenta el upsert de clients en error transiente y tiene éxito (200)', async () => {
+    mockClientsUpsert
+      .mockResolvedValueOnce({ data: null, error: { message: 'fetch failed (transient)' } })
+      .mockResolvedValueOnce({ data: null, error: { message: 'statement timeout' } })
+      .mockResolvedValue({
+        data: { id: 'cid-retry', name: 'R', slug: 'r', status: 'onboarding' },
+        error: null,
+      })
+    mockJourneyInsert.mockResolvedValue({ data: { id: 'js-r' }, error: null })
+
+    const r = await POST(buildReq({ name: 'R' }))
+    expect(r.status).toBe(200)
+    const j = await r.json()
+    expect(j.ok).toBe(true)
+    expect(j.client_id).toBe('cid-retry')
+    // 2 fallos transientes + 1 éxito = 3 intentos
+    expect(mockClientsUpsert).toHaveBeenCalledTimes(3)
+  })
+
+  it('reintenta también ante excepción (throw) y recupera', async () => {
+    mockClientsUpsert
+      .mockRejectedValueOnce(new Error('ECONNRESET'))
+      .mockResolvedValue({ data: { id: 'cid-throw', name: 'T', slug: 't', status: 'onboarding' }, error: null })
+    mockJourneyInsert.mockResolvedValue({ data: { id: 'js-t' }, error: null })
+
+    const r = await POST(buildReq({ name: 'T' }))
+    expect(r.status).toBe(200)
+    const j = await r.json()
+    expect(j.client_id).toBe('cid-throw')
+    expect(mockClientsUpsert).toHaveBeenCalledTimes(2)
+  })
+
+  it('agota 3 reintentos (4 intentos) y devuelve 502 con retries_exhausted', async () => {
+    mockClientsUpsert.mockResolvedValue({ data: null, error: { message: 'persistent DB error' } })
+    const r = await POST(buildReq({ name: 'X' }))
+    expect(r.status).toBe(502)
+    const j = await r.json()
+    expect(j.error).toBe('clients_upsert_failed')
+    expect(j.retries_exhausted).toBe(3)
+    expect(mockClientsUpsert).toHaveBeenCalledTimes(4)
+  })
+})
