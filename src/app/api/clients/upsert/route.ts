@@ -109,11 +109,31 @@ export async function POST(request: Request) {
   if (body.industry) clientRow.industry = body.industry
   if (body.country) clientRow.country = body.country
   if (body.language) clientRow.language = body.language
-  // NOTA · NO forzamos `id` en el payload. El conflict target canónico es `slug`
-  // (clave natural · derivada del name). Forzar un `id` distinto con
-  // on_conflict=slug intentaría cambiar el PK de la fila existente. El client_id
-  // del body solo sirve para resolver/propagar downstream · el id real sale del
-  // resultado del upsert.
+  // ─── BUG11 fix · respetar el client_id del payload para clientes NUEVOS ───
+  // El worker pre-genera el client_id (Validate Deal Data) y lo usa AGUAS ABAJO
+  // (brain chunks · AM Handoff). Si la fila `clients` se crea con un id distinto
+  // (gen_random_uuid() default) esos registros quedan huérfanos → roto.
+  // Fix · para un cliente NUEVO, insertar con el id provisto. Para uno EXISTENTE
+  // (mismo slug · re-onboard) NO tocar el `id` · el upsert(on_conflict=slug) hace
+  // UPDATE idempotente conservando el PK (preserva el fix 502 de #211 · no se
+  // intenta cambiar el PK de la fila existente). check-then-act por slug.
+  const providedClientId =
+    typeof body.client_id === 'string' && body.client_id.trim()
+      ? body.client_id.trim()
+      : null
+  if (providedClientId) {
+    const { data: existingBySlug } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('slug', slug)
+      .maybeSingle()
+    if (!existingBySlug) {
+      // cliente nuevo → la fila usa el id provisto (alineado con los chunks +
+      // AM Handoff que el worker ya creó con ese id).
+      clientRow.id = providedClientId
+    }
+    // existe → no seteamos id · on_conflict=slug actualiza el resto de columnas.
+  }
   // Gap 1 · brand assets persisted at the row level
   if (typeof body.logo_url === 'string' && body.logo_url.trim()) {
     clientRow.logo_url = body.logo_url.trim()
