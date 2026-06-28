@@ -1,0 +1,53 @@
+/**
+ * Tests · shouldForceDiscoveryEmit predicate (Discovery Fix · 2026-06-28 · CC#4).
+ *
+ * The forced-emit fallback re-prompts a Discovery agent's session when it closed
+ * the stream without calling emit_discovery_output. This predicate gates that
+ * fallback · it must fire ONLY when the tool was mounted, the agent did not emit,
+ * and a session is resumable.
+ */
+import { describe, it, expect, vi } from 'vitest'
+
+// Stub the SDK so importing agent-sdk-runner doesn't fail to resolve the runtime
+// package (lives in the workspace pnpm tree · not visible to root vitest config).
+vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
+  query: () => ({}),
+}))
+
+const { shouldForceDiscoveryEmit } = await import('../agent-sdk-runner')
+
+const MOUNTED = { 'discovery-output': { type: 'stdio' }, 'client-brain': { type: 'stdio' } }
+const NOT_MOUNTED = { 'client-brain': { type: 'stdio' } }
+const TOOL_CALL = { input: { client_id: 'c1' }, emission_count: 1 }
+
+describe('shouldForceDiscoveryEmit', () => {
+  it('TRUE · discovery tool mounted + no emission + session present', () => {
+    expect(
+      shouldForceDiscoveryEmit(MOUNTED, { discoveryToolCall: null, sessionId: 'sess-1' }),
+    ).toBe(true)
+  })
+
+  it('FALSE · agent already emitted (discoveryToolCall present)', () => {
+    expect(
+      shouldForceDiscoveryEmit(MOUNTED, { discoveryToolCall: TOOL_CALL, sessionId: 'sess-1' }),
+    ).toBe(false)
+  })
+
+  it('FALSE · discovery tool NOT mounted (non-discovery agent)', () => {
+    expect(
+      shouldForceDiscoveryEmit(NOT_MOUNTED, { discoveryToolCall: null, sessionId: 'sess-1' }),
+    ).toBe(false)
+  })
+
+  it('FALSE · no resumable session', () => {
+    expect(
+      shouldForceDiscoveryEmit(MOUNTED, { discoveryToolCall: null, sessionId: null }),
+    ).toBe(false)
+  })
+
+  it('FALSE · mcpServers undefined', () => {
+    expect(
+      shouldForceDiscoveryEmit(undefined, { discoveryToolCall: null, sessionId: 'sess-1' }),
+    ).toBe(false)
+  })
+})
