@@ -30,11 +30,12 @@ export const DISCOVERY_GUARDRAILS = {
  *  Service routes on the LONG `*_scraper` names · short names get dropped at the
  *  Switch default.
  *
- *  ⚠️ `google_maps_scraper` + `tweet_scraper` have NO route in the Service yet
- *  (no Switch case). They are emitted by this classifier but the Service GATES
- *  them (graceful skip) until it gains the cases + actor nodes ·
- *    google_maps_scraper → compass/crawler-google-places
- *    tweet_scraper       → apidojo/tweet-scraper
+ *  Switch cases verified present 2026-06-28 (§148) · `google_maps_scraper`
+ *  (case 11 → compass/crawler-google-places) and `twitter_scraper`
+ *  (case 15 → apidojo/tweet-scraper) both route in the Service.
+ *  NOTE · the Service Switch case is the LONG `twitter_scraper` name · this
+ *  classifier MUST emit `twitter_scraper` (not `tweet_scraper`) or the target
+ *  falls through the Switch default and the scrape is silently dropped.
  */
 export type ApifyFunction =
   | 'instagram_scraper'
@@ -42,8 +43,8 @@ export type ApifyFunction =
   | 'facebook_ads_library_scraper'
   | 'tiktok_profile_scraper'
   | 'google_serp_scraper'
-  | 'google_maps_scraper' // no Service route yet
-  | 'tweet_scraper' // no Service route yet
+  | 'google_maps_scraper'
+  | 'twitter_scraper'
 
 /** Result of classifying a single URL. */
 export type UrlClassification =
@@ -92,7 +93,7 @@ export function classifyUrl(raw: unknown): UrlClassification {
   // twitter.com (substring safe) · x.com matched at host boundary so "fox.com"
   // / "box.com" do NOT false-positive (normalizeUrl already stripped www).
   if (n.includes('twitter.com') || n === 'x.com' || n.startsWith('x.com/')) {
-    return { kind: 'apify', apify_function: 'tweet_scraper', source: 'apify_scrape' }
+    return { kind: 'apify', apify_function: 'twitter_scraper', source: 'apify_scrape' }
   }
   // Google Maps place/listing URL · the local-presence actor.
   if (n.includes('google.com/maps') || n.includes('maps.google.com') || n.includes('goo.gl/maps')) {
