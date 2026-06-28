@@ -38,6 +38,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { validateWorkflowId } from '@/lib/agent-safety'
 import {
+  ensureClientExists,
   isDiscoveryBrainPushEnabled,
   persistDiscoveryToBrain,
   populateClientConfigFromDiscovery,
@@ -786,6 +787,7 @@ export async function POST(request: Request) {
           brain_chunks_upserted?: number
           config_handles_written?: number
           config_competitors_written?: number
+          client_ensured?: 'existed' | 'created' | 'failed'
           duration_ms?: number
           errors?: readonly string[]
         }
@@ -806,6 +808,17 @@ export async function POST(request: Request) {
         })
         if (resolved.kind === 'ok') {
           const supabase = getSupabaseAdmin()
+          // Ordering fix (Sprint 13 · bug discovery-persist-client-not-found):
+          // el worker dispara discovery fire-and-forget en paralelo con "Persist
+          // Client to Supabase", así que la fila `clients` puede no existir aún
+          // (FK) → client_not_found + brain_chunks_upserted:0. Garantizamos la
+          // fila antes de persistir el brain · idempotente · el upsert posterior
+          // del worker reconcilia vía on_conflict=slug.
+          const ensured = await ensureClientExists({
+            supabase,
+            clientId,
+            task,
+          })
           const brainOutcome = await persistDiscoveryToBrain({
             supabase,
             discovery: resolved.value,
@@ -825,8 +838,12 @@ export async function POST(request: Request) {
             brain_chunks_upserted: brainOutcome.brain_chunks_upserted,
             config_handles_written: configOutcome.handles_written,
             config_competitors_written: configOutcome.competitors_written,
-            duration_ms: brainOutcome.duration_ms,
-            errors: [...brainOutcome.errors, ...configOutcome.errors],
+            client_ensured: ensured.status,
+            errors: [
+              ...brainOutcome.errors,
+              ...configOutcome.errors,
+              ...(ensured.error ? [`ensure_client: ${ensured.error}`] : []),
+            ],
           }
           // Canon canonical · surface the resolved DiscoveryOutput on the
           // response body for the worker. Only when persist succeeded · the
