@@ -124,11 +124,33 @@ export async function POST(request: Request) {
   }
 
   const conflictTarget = body.client_id ? 'id' : 'slug'
-  const { data: clientUpsert, error: clientErr } = await supabase
-    .from('clients')
-    .upsert(clientRow, { onConflict: conflictTarget })
-    .select('id, name, slug, status, industry, website_url, created_at, updated_at')
-    .single()
+
+  // Retry · el 502 intermitente bajo carga del worker (post-Wait largo) era un
+  // error transiente de la capa Supabase/PostgREST en el upsert de `clients`
+  // (no cold-start/timeout · esos darían 504). El upsert es idempotente
+  // (ON CONFLICT slug/id) → reintento seguro. Hasta 3 reintentos · backoff
+  // exponencial 100/200/400ms · antes de devolver 502.
+  const RETRY_DELAYS_MS = [100, 200, 400]
+  let clientUpsert: Record<string, unknown> | null = null
+  let clientErr: { message?: string } | null = null
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      const res = await supabase
+        .from('clients')
+        .upsert(clientRow, { onConflict: conflictTarget })
+        .select('id, name, slug, status, industry, website_url, created_at, updated_at')
+        .single()
+      clientUpsert = (res.data as Record<string, unknown> | null) ?? null
+      clientErr = res.error ?? null
+    } catch (e: unknown) {
+      clientErr = { message: e instanceof Error ? e.message : String(e) }
+      clientUpsert = null
+    }
+    if (!clientErr && clientUpsert) break
+    if (attempt < RETRY_DELAYS_MS.length) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]))
+    }
+  }
 
   if (clientErr || !clientUpsert) {
     return NextResponse.json(
@@ -136,6 +158,7 @@ export async function POST(request: Request) {
         error: 'clients_upsert_failed',
         detail: clientErr?.message?.slice(0, 400) ?? 'unknown error',
         slug,
+        retries_exhausted: RETRY_DELAYS_MS.length,
       },
       { status: 502 },
     )
