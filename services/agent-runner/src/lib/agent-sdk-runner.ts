@@ -21,7 +21,7 @@
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
-import { buildMcpServers } from './agent-mcp-registry.js'
+import { buildMcpServers, DISCOVERY_OUTPUT_ALLOW } from './agent-mcp-registry.js'
 import { insertWithRetry } from './agents-log-retry.js'
 import { insertAgentInvocationWithRetry } from './agent-invocations-log.js'
 import { callSdkWithRetry } from './sdk-call-retry.js'
@@ -645,6 +645,22 @@ export function shouldForceDiscoveryEmit(
 }
 
 /**
+ * Checkpoint-skip usability (Discovery Fix · 2026-06-28 · CC#4). A `completed`
+ * checkpoint is reusable EXCEPT for a Discovery agent whose cached `output_ref`
+ * captured NO emission (`discoveryToolCall` absent). Rehydrating such a cache
+ * yields source:none (degraded discovery · 0 competitors) · so we force a fresh
+ * run instead. Root cause exec 40004 · the re-discovery node's static
+ * `workflow_id` collided with a stale pre-fix checkpoint. Pure · tested.
+ */
+export function isDiscoveryCheckpointUsable(
+  canonicalSlug: string,
+  outputRef: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!DISCOVERY_OUTPUT_ALLOW.has(canonicalSlug)) return true
+  return !!(outputRef && outputRef.discoveryToolCall)
+}
+
+/**
  * Persist execution record to `agents_log` with 3-retry exponential backoff.
  *
  * Combined fix · CC#1 B2 (retry · explicit error handling · log visibility)
@@ -820,10 +836,20 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     )
     if (checkpointDecision.skip && checkpointDecision.checkpoint?.output_ref) {
       const cached = checkpointDecision.checkpoint.output_ref as Record<string, unknown>
-      console.log(
-        `[workflow-checkpoint] SKIP ${canonicalSlug} · client=${input.clientId} · workflow=${input.workflowId} · cached from ${checkpointDecision.checkpoint.updated_at}`,
+      // Discovery Fix · a Discovery-agent checkpoint that did NOT capture an
+      // emission (no `discoveryToolCall`) rehydrates to source:none → degraded
+      // discovery (0 competitors · stale-cache root cause · exec 40004). Run
+      // fresh instead so the agent + forced-emit can attempt. Non-discovery
+      // agents + valid emit-caches still skip normally.
+      if (isDiscoveryCheckpointUsable(canonicalSlug, cached)) {
+        console.log(
+          `[workflow-checkpoint] SKIP ${canonicalSlug} · client=${input.clientId} · workflow=${input.workflowId} · cached from ${checkpointDecision.checkpoint.updated_at}`,
+        )
+        return rehydrateFromCheckpoint(cached, startedAt)
+      }
+      console.warn(
+        `[workflow-checkpoint] DISCOVERY checkpoint has NO emission · running fresh · ${canonicalSlug} · client=${input.clientId} · workflow=${input.workflowId}`,
       )
-      return rehydrateFromCheckpoint(cached, startedAt)
     }
     // Best-effort · mark step in_progress (advisory · concurrent racers may
     // both proceed but unique constraint ensures only 1 row · downstream
@@ -1120,6 +1146,10 @@ function serializeResultForCheckpoint(r: AgentRunResult): Record<string, unknown
     model: r.model,
     brainEnrichment: r.brainEnrichment,
     cacheMetrics: r.cacheMetrics,
+    // Discovery Fix · persist the captured emission so a rehydrated Discovery
+    // checkpoint preserves source:tool_call (was lost · every rehydration came
+    // back source:none regardless of the original emission).
+    ...(r.discoveryToolCall ? { discoveryToolCall: r.discoveryToolCall } : {}),
   }
 }
 
@@ -1160,6 +1190,11 @@ function rehydrateFromCheckpoint(
       cache_creation_5m_tokens: 0,
       cache_creation_1h_tokens: 0,
     },
+    // Discovery Fix · restore the captured emission from the cache so a valid
+    // emit-checkpoint rehydrates as source:tool_call downstream.
+    ...(cached.discoveryToolCall
+      ? { discoveryToolCall: cached.discoveryToolCall as AgentRunResult['discoveryToolCall'] }
+      : {}),
   }
 }
 

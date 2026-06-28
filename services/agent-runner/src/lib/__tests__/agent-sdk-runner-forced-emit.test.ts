@@ -14,7 +14,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: () => ({}),
 }))
 
-const { shouldForceDiscoveryEmit } = await import('../agent-sdk-runner')
+const { shouldForceDiscoveryEmit, isDiscoveryCheckpointUsable } = await import('../agent-sdk-runner')
 
 const MOUNTED = { 'discovery-output': { type: 'stdio' }, 'client-brain': { type: 'stdio' } }
 const NOT_MOUNTED = { 'client-brain': { type: 'stdio' } }
@@ -49,5 +49,28 @@ describe('shouldForceDiscoveryEmit', () => {
     expect(
       shouldForceDiscoveryEmit(undefined, { discoveryToolCall: null, sessionId: 'sess-1' }),
     ).toBe(false)
+  })
+})
+
+const WITH_EMIT = { response: 'x', discoveryToolCall: { input: {}, emission_count: 2 } }
+const NO_EMIT = { response: 'x' }
+
+describe('isDiscoveryCheckpointUsable', () => {
+  it('TRUE · non-discovery agent · any checkpoint is reusable', () => {
+    expect(isDiscoveryCheckpointUsable('competitive-intelligence-agent', NO_EMIT)).toBe(true)
+    expect(isDiscoveryCheckpointUsable('brand-strategist', WITH_EMIT)).toBe(true)
+  })
+
+  it('TRUE · discovery agent · cache captured the emission', () => {
+    expect(isDiscoveryCheckpointUsable('onboarding-specialist', WITH_EMIT)).toBe(true)
+  })
+
+  it('FALSE · discovery agent · cache has NO emission (run fresh · stale-cache root cause)', () => {
+    expect(isDiscoveryCheckpointUsable('onboarding-specialist', NO_EMIT)).toBe(false)
+  })
+
+  it('FALSE · discovery agent · null/undefined output_ref', () => {
+    expect(isDiscoveryCheckpointUsable('onboarding-specialist', null)).toBe(false)
+    expect(isDiscoveryCheckpointUsable('onboarding-specialist', undefined)).toBe(false)
   })
 })

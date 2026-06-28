@@ -95,7 +95,7 @@ const META_ADS_ALLOW: ReadonlySet<string> = new Set([
  * Adding new agents · only when their identity_md declares Discovery emission
  * as a canonical responsibility. Currently · 1 agent (Phase 1 piloto surface).
  */
-const DISCOVERY_OUTPUT_ALLOW: ReadonlySet<string> = new Set([
+export const DISCOVERY_OUTPUT_ALLOW: ReadonlySet<string> = new Set([
   'onboarding-specialist',
 ])
 
