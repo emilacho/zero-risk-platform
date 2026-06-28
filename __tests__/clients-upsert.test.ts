@@ -300,14 +300,19 @@ describe('POST /api/clients/upsert · failure paths', () => {
 
   it('dup-key de slug → fallback idempotente · recupera cliente existente · 200 (no 502)', async () => {
     // El upsert (on_conflict=slug) choca por dup-key residual → fallback fetch-by-slug.
+    // Fix B (2026-06-28): el fallback usa .maybeSingle() (= mockClientsPreSelect).
+    // Primera llamada: pre-check BUG11 (¿existe el slug?) → null (slug todavía no existe).
+    // Segunda llamada: fallback dup-key → retorna el cliente existente → 200 idempotente.
     mockClientsUpsert.mockResolvedValue({
       data: null,
       error: { message: 'duplicate key value violates unique constraint "clients_slug_key"' },
     })
-    mockClientsSelectBySlug.mockResolvedValue({
-      data: { id: 'existing-cid', name: 'X', slug: 'existing', status: 'onboarding' },
-      error: null,
-    })
+    mockClientsPreSelect
+      .mockResolvedValueOnce({ data: null, error: null }) // pre-check: slug no encontrado aún
+      .mockResolvedValueOnce({                            // fallback dup-key: recupera cliente
+        data: { id: 'existing-cid', name: 'X', slug: 'existing', status: 'onboarding' },
+        error: null,
+      })
     mockJourneyInsert.mockResolvedValue({ data: { id: 'js-x' }, error: null })
 
     const r = await POST(buildReq({ name: 'X', slug: 'existing' }))
