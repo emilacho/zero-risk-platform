@@ -29,6 +29,9 @@ export async function POST(request: Request) {
   const supabase = getSupabaseAdmin()
   const row = {
     client_id: body.client_id ?? null,
+    // hitl_queue.agent_name is NOT NULL; the route previously omitted it,
+    // so every insert 500'd (table stayed empty). Read from body, fallback 'system'.
+    agent_name: body.agent_name ?? 'system',
     type: body.type,
     title: body.title,
     priority: body.priority ?? 'medium',
