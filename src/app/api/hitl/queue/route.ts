@@ -29,9 +29,12 @@ export async function POST(request: Request) {
   const supabase = getSupabaseAdmin()
   const row = {
     client_id: body.client_id ?? null,
-    // hitl_queue.agent_name is NOT NULL; the route previously omitted it,
-    // so every insert 500'd (table stayed empty). Read from body, fallback 'system'.
+    // hitl_queue carries legacy V2 NOT-NULL columns (agent_name, risk_type,
+    // output_preview) that the V3 route never supplied → every insert 500'd and
+    // the table stayed empty. Provide all three with sensible fallbacks.
     agent_name: body.agent_name ?? 'system',
+    risk_type: body.risk_type ?? 'strategic_decision',
+    output_preview: body.output_preview ?? body.title ?? '(sin preview)',
     type: body.type,
     title: body.title,
     priority: body.priority ?? 'medium',
