@@ -19,6 +19,7 @@
  */
 
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import { forceEmitViaMessagesApi } from './forced-emit-messages'
 import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
 import { buildMcpServers } from './agent-mcp-registry.js'
@@ -971,7 +972,42 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
             `[forced-emit] ${canonicalSlug} · emission RECOVERED on forced turn · emission_count=${drain.discoveryToolCall?.emission_count}`,
           )
         } else {
-          console.warn(`[forced-emit] ${canonicalSlug} · still NO emission after forced turn`)
+          // Fix C (2026-06-28) · the Agent SDK resume+directive turn STILL did
+          // not emit (the SDK has no tool_choice forcing). Escalate to a direct
+          // Messages API call with tool_choice:{type:'tool'} · the model is
+          // COMPELLED to return the tool call · it cannot narrate. Re-inject the
+          // research the agent already did so the emission is grounded.
+          console.warn(
+            `[forced-emit] ${canonicalSlug} · still NO emission after forced turn · escalating to Messages-API tool_choice`,
+          )
+          try {
+            const forcedInput = await forceEmitViaMessagesApi({
+              model: modelId,
+              systemPrompt,
+              task: input.task,
+              researchText: drain.responseText,
+              clientId: input.clientId ?? null,
+            })
+            if (forcedInput) {
+              drain = {
+                ...drain,
+                discoveryToolCall: { input: forcedInput.input, emission_count: forcedInput.emission_count },
+                inputTokens: drain.inputTokens + forcedInput.inputTokens,
+                outputTokens: drain.outputTokens + forcedInput.outputTokens,
+              }
+              console.log(
+                `[forced-emit] ${canonicalSlug} · emission RECOVERED via Messages-API tool_choice`,
+              )
+            } else {
+              console.warn(
+                `[forced-emit] ${canonicalSlug} · Messages-API tool_choice returned no tool_use block`,
+              )
+            }
+          } catch (me) {
+            console.warn(
+              `[forced-emit] ${canonicalSlug} · Messages-API forced-emit errored: ${me instanceof Error ? me.message : 'unknown'}`,
+            )
+          }
         }
       } catch (e) {
         // Never let the fallback fail the run · the original drain stands.
