@@ -5,7 +5,7 @@
  * Verifies ·
  *   - Per-MCP allow-list canon · default-deny (apify · dataforseo · higgsfield · meta-ads)
  *   - Env presence required (env missing → MCP NOT registered even if slug allowed)
- *   - Client Brain auto-on with clientId (NOT subject to allow-list · per-client design)
+ *   - Client Brain auto-on with clientId · EXCEPT CLIENT_BRAIN_DENY slugs (Fix B1 · onboarding-specialist)
  *   - GHL NOT registered (Stack V4 canon · DEPRECATED)
  *   - Anonymous invocation (no slug) → only client-brain available
  */
@@ -163,6 +163,20 @@ describe("buildMcpServers · default-deny + per-MCP allow-list canon", () => {
   it("client-brain · NOT registered without clientId", () => {
     const servers = buildMcpServers({ agentSlug: "brand-strategist" })
     expect(servers["client-brain"]).toBeUndefined()
+  })
+
+  it("client-brain · DENIED for onboarding-specialist even with clientId (Discovery Fix B1)", () => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "srv_key"
+    const servers = buildMcpServers({ agentSlug: "onboarding-specialist", clientId: "cli_123" })
+    // deprecated MCP tool surface dead-ends the agent → push-enrichment covers context
+    expect(servers["client-brain"]).toBeUndefined()
+  })
+
+  it("client-brain · still registered for non-denied agents with clientId", () => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "srv_key"
+    const servers = buildMcpServers({ agentSlug: "competitive-intelligence-agent", clientId: "cli_123" })
+    expect(servers["client-brain"]).toBeDefined()
+    expect(servers["client-brain"]?.env.CLIENT_ID).toBe("cli_123")
   })
 
   // ── Meta Ads MCP · Sprint 7.7 Track B · allow-list gating (unchanged) ─────────
