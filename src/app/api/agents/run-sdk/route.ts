@@ -220,6 +220,34 @@ interface AgentRunResultProxy {
 // identical 60 s timeout pattern execs 5931, 5933).
 const RAILWAY_FETCH_TIMEOUT_MS = 790_000
 
+// Proxy-hop retry · the Vercel→Railway fetch hits transient 502/conn-fail
+// windows when the agent-runner restarts (deploy swap · ON_FAILURE crash) ·
+// the fire-and-forget discovery dispatch has no retry so a single 502 degrades
+// the whole run (root cause · 502 diag 2026-06-28 · execs 39732/39825/39985).
+// Mirror the async-callback Track O/P cadence · 1 immediate + 2 retries with
+// exponential backoff. Timeouts (abort→504) and graceful agent failures are
+// NEVER retried (see isRetriableRailwayProxyFailure).
+const RAILWAY_PROXY_MAX_ATTEMPTS = 3
+const RAILWAY_PROXY_BACKOFF_MS: readonly number[] = [2_000, 4_000]
+const proxySleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Pure retry classifier for the Vercel→Railway proxy hop. Retriable ONLY when
+ * the failure is a transient infra window · a connection error that is NOT an
+ * abort (abort = our own timeout → 504, re-doing 790s of work is wrong) OR a
+ * genuine upstream 5xx that is NOT a graceful agent failure (success:false
+ * bodies are app errors · pass them through untouched). Exported for unit test.
+ */
+export function isRetriableRailwayProxyFailure(
+  outcome:
+    | { readonly kind: 'conn_error'; readonly isAbort: boolean }
+    | { readonly kind: 'http'; readonly status: number; readonly isGracefulAgentFailure: boolean },
+): boolean {
+  if (outcome.kind === 'conn_error') return !outcome.isAbort
+  return outcome.status >= 500 && !outcome.isGracefulAgentFailure
+}
+
 // Inbound headers we never forward to the Railway service. `host` would
 // confuse the upstream's virtual-host routing; `content-length` would
 // mismatch since we re-stringify the body; `connection` / `keep-alive`
@@ -599,63 +627,87 @@ export async function POST(request: Request) {
       extra: body.extra || undefined,
     }
 
-    const controller = new AbortController()
-    const timeoutHandle = setTimeout(() => controller.abort(), RAILWAY_FETCH_TIMEOUT_MS)
-
+    // Proxy hop with transient-failure retry (1 immediate + up to 2 retries ·
+    // exponential backoff). Retries ONLY transient infra windows (conn-fail /
+    // upstream 5xx · see isRetriableRailwayProxyFailure). A fresh AbortController
+    // per attempt · timeouts (abort→504) and graceful agent failures break out
+    // immediately. railwayResponse + railwayText survive the loop for the parse.
     let railwayResponse: Response
-    try {
-      railwayResponse = await fetch(`${railwayUrl.replace(/\/+$/, '')}/run-sdk`, {
-        method: 'POST',
-        headers: forwardedHeaders,
-        body: JSON.stringify(proxyBody),
-        signal: controller.signal,
-      })
-    } catch (err) {
-      clearTimeout(timeoutHandle)
-      const isAbort = err instanceof Error && err.name === 'AbortError'
-      if (isAbort) {
-        // Hot path · no Sentry noise for routine timeouts.
-        return NextResponse.json({ error: 'agent-runner timeout' }, { status: 504 })
-      }
-      Sentry.captureException(
-        err instanceof Error ? err : new Error(String(err)),
-        { tags: { proxy: 'agent-runner', kind: 'fetch_error' } },
-      )
-      return NextResponse.json(
-        { error: 'agent-runner upstream failed', upstream_status: 0 },
-        { status: 502 },
-      )
-    }
-    clearTimeout(timeoutHandle)
-
-    // Read body once · need it for both the parse and the 5xx Sentry breadcrumb.
-    const railwayText = await railwayResponse.text()
-
-    // Upstream 5xx · log + 502. Skip Sentry for 502 from us (no double-count)
-    // and skip when the body is a well-formed agent failure (those are app
-    // errors, not infra · pass them through to the caller untouched).
-    if (railwayResponse.status >= 500) {
-      let isGracefulAgentFailure = false
+    let railwayText = ''
+    for (let attempt = 1; ; attempt++) {
+      const hasAttemptsLeft = attempt < RAILWAY_PROXY_MAX_ATTEMPTS
+      const controller = new AbortController()
+      const timeoutHandle = setTimeout(() => controller.abort(), RAILWAY_FETCH_TIMEOUT_MS)
       try {
-        const parsed = JSON.parse(railwayText) as { success?: boolean; error?: string }
-        isGracefulAgentFailure = parsed.success === false && typeof parsed.error === 'string'
-      } catch {
-        // non-JSON body · genuine infra failure
-      }
-      if (!isGracefulAgentFailure) {
-        Sentry.captureMessage(
-          `agent-runner upstream 5xx: status=${railwayResponse.status}`,
-          {
-            level: 'error',
-            tags: { proxy: 'agent-runner', kind: 'upstream_5xx' },
-            extra: { body_preview: railwayText.slice(0, 500) },
-          },
+        railwayResponse = await fetch(`${railwayUrl.replace(/\/+$/, '')}/run-sdk`, {
+          method: 'POST',
+          headers: forwardedHeaders,
+          body: JSON.stringify(proxyBody),
+          signal: controller.signal,
+        })
+      } catch (err) {
+        clearTimeout(timeoutHandle)
+        const isAbort = err instanceof Error && err.name === 'AbortError'
+        if (isAbort) {
+          // Hot path · no Sentry noise for routine timeouts · never retried.
+          return NextResponse.json({ error: 'agent-runner timeout' }, { status: 504 })
+        }
+        if (isRetriableRailwayProxyFailure({ kind: 'conn_error', isAbort }) && hasAttemptsLeft) {
+          await proxySleep(RAILWAY_PROXY_BACKOFF_MS[attempt - 1])
+          continue
+        }
+        Sentry.captureException(
+          err instanceof Error ? err : new Error(String(err)),
+          { tags: { proxy: 'agent-runner', kind: 'fetch_error', attempts: String(attempt) } },
         )
         return NextResponse.json(
-          { error: 'agent-runner upstream failed', upstream_status: railwayResponse.status },
+          { error: 'agent-runner upstream failed', upstream_status: 0 },
           { status: 502 },
         )
       }
+      clearTimeout(timeoutHandle)
+
+      // Read body once · need it for both the parse and the 5xx Sentry breadcrumb.
+      railwayText = await railwayResponse.text()
+
+      // Upstream 5xx · retry transient infra · pass graceful agent failures
+      // (success:false bodies) through untouched · they are app errors not infra.
+      if (railwayResponse.status >= 500) {
+        let isGracefulAgentFailure = false
+        try {
+          const parsed = JSON.parse(railwayText) as { success?: boolean; error?: string }
+          isGracefulAgentFailure = parsed.success === false && typeof parsed.error === 'string'
+        } catch {
+          // non-JSON body · genuine infra failure
+        }
+        if (
+          isRetriableRailwayProxyFailure({
+            kind: 'http',
+            status: railwayResponse.status,
+            isGracefulAgentFailure,
+          }) &&
+          hasAttemptsLeft
+        ) {
+          await proxySleep(RAILWAY_PROXY_BACKOFF_MS[attempt - 1])
+          continue
+        }
+        if (!isGracefulAgentFailure) {
+          Sentry.captureMessage(
+            `agent-runner upstream 5xx: status=${railwayResponse.status} · attempts=${attempt}`,
+            {
+              level: 'error',
+              tags: { proxy: 'agent-runner', kind: 'upstream_5xx' },
+              extra: { body_preview: railwayText.slice(0, 500) },
+            },
+          )
+          return NextResponse.json(
+            { error: 'agent-runner upstream failed', upstream_status: railwayResponse.status },
+            { status: 502 },
+          )
+        }
+        // graceful 5xx · fall through to parse + pass-through.
+      }
+      break // usable response (2xx or graceful 5xx) · proceed.
     }
 
     let result: AgentRunResultProxy
