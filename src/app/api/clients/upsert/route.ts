@@ -109,7 +109,11 @@ export async function POST(request: Request) {
   if (body.industry) clientRow.industry = body.industry
   if (body.country) clientRow.country = body.country
   if (body.language) clientRow.language = body.language
-  if (body.client_id) clientRow.id = body.client_id
+  // NOTA · NO forzamos `id` en el payload. El conflict target canónico es `slug`
+  // (clave natural · derivada del name). Forzar un `id` distinto con
+  // on_conflict=slug intentaría cambiar el PK de la fila existente. El client_id
+  // del body solo sirve para resolver/propagar downstream · el id real sale del
+  // resultado del upsert.
   // Gap 1 · brand assets persisted at the row level
   if (typeof body.logo_url === 'string' && body.logo_url.trim()) {
     clientRow.logo_url = body.logo_url.trim()
@@ -123,13 +127,19 @@ export async function POST(request: Request) {
     )
   }
 
-  const conflictTarget = body.client_id ? 'id' : 'slug'
+  // Conflict target canónico = `slug` (clave natural única · clients_slug_key).
+  // Root cause del 502 ~50-75% (CC#4): el worker re-onboardaba el mismo cliente
+  // (mismo name→slug) con un client_id NUEVO → on_conflict=id no dedupeaba el
+  // slug existente → 409 duplicate key (clients_slug_key) → 502 determinista (el
+  // retry no lo arregla). Evidencia · edge_logs 24h · 33×409 sobre
+  // POST /rest/v1/clients?on_conflict=id · 0 5xx de Supabase (no era pool).
+  // on_conflict=slug → re-onboarding = UPDATE idempotente de la fila existente.
+  const conflictTarget = 'slug'
 
-  // Retry · el 502 intermitente bajo carga del worker (post-Wait largo) era un
-  // error transiente de la capa Supabase/PostgREST en el upsert de `clients`
-  // (no cold-start/timeout · esos darían 504). El upsert es idempotente
-  // (ON CONFLICT slug/id) → reintento seguro. Hasta 3 reintentos · backoff
-  // exponencial 100/200/400ms · antes de devolver 502.
+  // Retry · cubre errores TRANSIENTES de la capa Supabase/PostgREST. Hasta 3
+  // reintentos · backoff exponencial 100/200/400ms. (Los conflictos de slug ya
+  // NO ocurren con on_conflict=slug · y si ocurriera uno residual lo absorbe el
+  // fallback idempotente más abajo.)
   const RETRY_DELAYS_MS = [100, 200, 400]
   let clientUpsert: Record<string, unknown> | null = null
   let clientErr: { message?: string } | null = null
@@ -149,6 +159,26 @@ export async function POST(request: Request) {
     if (!clientErr && clientUpsert) break
     if (attempt < RETRY_DELAYS_MS.length) {
       await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]))
+    }
+  }
+
+  // Fallback idempotente · si el upsert falló por conflicto de slug residual
+  // (duplicate key / 409), el cliente YA existe con ese slug → lo recuperamos y
+  // seguimos (re-onboarding idempotente · 200) en vez de 502.
+  if (clientErr || !clientUpsert) {
+    const isDupKey =
+      typeof clientErr?.message === 'string' &&
+      /duplicate key|already exists|conflict|23505/i.test(clientErr.message)
+    if (isDupKey) {
+      const { data: existing } = await supabase
+        .from('clients')
+        .select('id, name, slug, status, industry, website_url, created_at, updated_at')
+        .eq('slug', slug)
+        .single()
+      if (existing) {
+        clientUpsert = existing as Record<string, unknown>
+        clientErr = null
+      }
     }
   }
 
