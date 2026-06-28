@@ -19,7 +19,6 @@
  */
 
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import { forceEmitViaMessagesApi } from './forced-emit-messages'
 import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
 import { buildMcpServers } from './agent-mcp-registry.js'
@@ -981,6 +980,11 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
             `[forced-emit] ${canonicalSlug} · still NO emission after forced turn · escalating to Messages-API tool_choice`,
           )
           try {
+            // Lazy import · keeps `@anthropic-ai/sdk` out of the eager module
+            // graph (it lives in the agent-runner pnpm tree · not resolvable by
+            // the root vitest config that loads agent-sdk-runner). Only loaded
+            // on the forced-emit path · at runtime the dep is present.
+            const { forceEmitViaMessagesApi } = await import('./forced-emit-messages')
             const forcedInput = await forceEmitViaMessagesApi({
               model: modelId,
               systemPrompt,
