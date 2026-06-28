@@ -21,9 +21,11 @@ vi.mock('@/lib/internal-auth', () => ({
 
 const mockClientsUpsert = vi.fn()
 const mockClientsSelectBySlug = vi.fn()
+const mockClientsPreSelect = vi.fn() // BUG11 · pre-check maybeSingle (existe el slug?)
 const mockBrandBooksInsert = vi.fn()
 const mockJourneyInsert = vi.fn()
 const mockGetSupabaseAdmin = vi.fn()
+let capturedClientRow: Record<string, unknown> | null = null
 
 vi.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: () => mockGetSupabaseAdmin(),
@@ -35,15 +37,20 @@ function buildSupabaseMock() {
     from(table: string) {
       if (table === 'clients') {
         return {
-          upsert: () => ({
-            select: () => ({
-              single: () => mockClientsUpsert(),
-            }),
-          }),
-          // Fallback idempotente · SELECT ... WHERE slug = ... (fix on_conflict=slug)
+          upsert: (row: Record<string, unknown>) => {
+            capturedClientRow = row
+            return {
+              select: () => ({
+                single: () => mockClientsUpsert(),
+              }),
+            }
+          },
+          // select().eq() → .single() = fallback idempotente · .maybeSingle() =
+          // BUG11 pre-check (¿existe ya el slug? · para decidir si fijar el id).
           select: () => ({
             eq: () => ({
               single: () => mockClientsSelectBySlug(),
+              maybeSingle: () => mockClientsPreSelect(),
             }),
           }),
         }
@@ -85,6 +92,8 @@ beforeEach(() => {
   mockAuth.mockReset().mockReturnValue({ ok: true })
   mockClientsUpsert.mockReset()
   mockClientsSelectBySlug.mockReset().mockResolvedValue({ data: null, error: null })
+  mockClientsPreSelect.mockReset().mockResolvedValue({ data: null, error: null }) // default · slug nuevo
+  capturedClientRow = null
   mockBrandBooksInsert.mockReset()
   mockJourneyInsert.mockReset()
   mockGetSupabaseAdmin.mockReset().mockReturnValue(buildSupabaseMock())
@@ -191,6 +200,49 @@ describe('POST /api/clients/upsert · happy path', () => {
     expect(r.status).toBe(200)
     const j = await r.json()
     expect(j.client.slug).toBe('zero-risk-ec')
+  })
+})
+
+describe('POST /api/clients/upsert · BUG11 · respetar client_id del payload', () => {
+  it('cliente NUEVO (slug no existe) · usa el client_id provisto en el INSERT', async () => {
+    mockClientsPreSelect.mockResolvedValue({ data: null, error: null }) // slug nuevo
+    mockClientsUpsert.mockResolvedValue({
+      data: { id: 'provided-cid-123', name: 'Náufrago', slug: 'naufrago', status: 'onboarding' },
+      error: null,
+    })
+    mockJourneyInsert.mockResolvedValue({ data: { id: 'js-n' }, error: null })
+
+    const PROVIDED = 'd69100b5-8ad7-4bb0-908c-68b5544065dc'
+    const r = await POST(buildReq({ name: 'Náufrago', client_id: PROVIDED }))
+    expect(r.status).toBe(200)
+    // el row del upsert lleva el id provisto → la fila clients nace con ESE id
+    expect(capturedClientRow?.id).toBe(PROVIDED)
+  })
+
+  it('cliente EXISTENTE (mismo slug) · NO setea id · conserva el PK (re-onboard idempotente)', async () => {
+    mockClientsPreSelect.mockResolvedValue({ data: { id: 'existing-cid' }, error: null })
+    mockClientsUpsert.mockResolvedValue({
+      data: { id: 'existing-cid', name: 'Náufrago', slug: 'naufrago', status: 'onboarding' },
+      error: null,
+    })
+    mockJourneyInsert.mockResolvedValue({ data: { id: 'js-n2' }, error: null })
+
+    // el worker manda un client_id NUEVO en re-onboard · NO debe cambiar el PK
+    const r = await POST(buildReq({ name: 'Náufrago', client_id: '11111111-1111-4111-8111-111111111111' }))
+    expect(r.status).toBe(200)
+    expect(capturedClientRow?.id).toBeUndefined() // no se fuerza id → on_conflict=slug hace UPDATE conservando PK
+  })
+
+  it('sin client_id en el payload · no setea id (comportamiento previo · gen_random_uuid de la DB)', async () => {
+    mockClientsUpsert.mockResolvedValue({
+      data: { id: 'db-generated', name: 'NoId', slug: 'noid', status: 'onboarding' },
+      error: null,
+    })
+    mockJourneyInsert.mockResolvedValue({ data: { id: 'js-x' }, error: null })
+
+    const r = await POST(buildReq({ name: 'NoId' }))
+    expect(r.status).toBe(200)
+    expect(capturedClientRow?.id).toBeUndefined()
   })
 })
 
