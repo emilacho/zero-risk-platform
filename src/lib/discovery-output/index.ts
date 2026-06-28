@@ -45,3 +45,11 @@ export {
   type DiscoveryResolveResult,
   type ResolveDiscoverySourceInput,
 } from './resolve-source'
+
+export {
+  ensureClientExists,
+  parseClientIdentityFromTask,
+  type EnsureClientInput,
+  type EnsureClientResult,
+  type ParsedClientIdentity,
+} from './ensure-client'
