@@ -99,6 +99,32 @@ const DISCOVERY_OUTPUT_ALLOW: ReadonlySet<string> = new Set([
   'onboarding-specialist',
 ])
 
+/**
+ * Client Brain MCP deny-list · Discovery Fix B1 (2026-06-28 · CC#4).
+ *
+ * The `client-brain` MCP server is DEPRECATED (see client-brain-server.js
+ * header · 2026-05-22 Sprint 7.5 A7) · canonical context delivery is
+ * push-enrichment (brain-enrichment.ts injects chunks into the system prompt
+ * BEFORE the first turn · 100% of clientId invocations). The MCP tools are a
+ * secondary fallback whose descriptions nudge the agent to "call before
+ * generating content".
+ *
+ * For `onboarding-specialist` this backfired · the deprecated tools are
+ * surfaced (descriptions tell the agent to call them) but NOT in `allowedTools`
+ * (deriveAllowedTools only whitelists discovery-output) · so under
+ * permissionMode='default' the SDK GATES them · the agent attempts the read,
+ * is blocked, and stalls asking "approve Client Brain access?" — never
+ * reaching `emit_discovery_output`. Result · 0 competitors, silent degradation
+ * (exec 39732 · raw/findings/2026-06-28-discovery-fase2-fix-b-...).
+ *
+ * Denying the mount for this agent removes the dead-end tool surface · the
+ * agent relies on push-enrichment for context + web tools for discovery + emits
+ * autonomously. Scoped to onboarding-specialist · other agents keep RAG access.
+ */
+const CLIENT_BRAIN_DENY: ReadonlySet<string> = new Set([
+  'onboarding-specialist',
+])
+
 export interface AgentMcpContext {
   agentSlug?: string
   clientId?: string
@@ -121,10 +147,11 @@ export function buildMcpServers(
   const servers: Record<string, McpServerConfig> = {}
   const slug = ctx.agentSlug
 
-  // Client Brain · per-client always-on · NOT subject to per-agent allow-list
-  // (canonical existing pattern · every agent invocation with a clientId gets
-  // RAG access · this is design intent · NOT switched to allow-list here).
-  if (ctx.clientId) {
+  // Client Brain · per-client RAG · on for every agent with a clientId EXCEPT
+  // those in CLIENT_BRAIN_DENY (Discovery Fix B1 · onboarding-specialist relies
+  // on push-enrichment · the deprecated MCP tool surface dead-ends it · see set
+  // comment above). Other agents keep RAG access · design intent unchanged.
+  if (ctx.clientId && !(slug && CLIENT_BRAIN_DENY.has(slug))) {
     servers['client-brain'] = {
       type: 'stdio',
       command: 'node',
