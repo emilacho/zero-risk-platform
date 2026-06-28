@@ -42,6 +42,14 @@ export interface ReconcileInput {
   readonly emitted_phase_step_id: string
   readonly last_phase_step_id: string | null
   readonly phase_boundaries: ReadonlyArray<string>
+  /**
+   * R1 · order-tolerant mode (2026-06-28).
+   * When true · any known phase (membership check) is treated as `match`
+   * regardless of order relative to last_phase_step_id. Use for parallel
+   * DAG workers where phase emission order is non-deterministic.
+   * Defaults to false for backward compatibility.
+   */
+  readonly order_tolerant?: boolean
 }
 
 export interface ReconcileResult {
@@ -78,6 +86,18 @@ export function reconcileObserved(input: ReconcileInput): ReconcileResult {
       expected_next: null,
       delta: Number.NaN,
       summary: `emitted "${emitted_phase_step_id}" is NOT in the libreto phase_boundaries`,
+    }
+  }
+
+  // R1 · order-tolerant mode: parallel DAG workers emit phases in
+  // non-deterministic order. Any known phase (membership confirmed above)
+  // is accepted as match regardless of order vs last_phase_step_id.
+  if (input.order_tolerant) {
+    return {
+      kind: 'match',
+      expected_next: phase_boundaries[emittedIdx + 1] ?? null,
+      delta: 0,
+      summary: `R1 order-tolerant · "${emitted_phase_step_id}" is a known libreto phase · accepted regardless of arrival order`,
     }
   }
 

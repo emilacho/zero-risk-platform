@@ -185,19 +185,39 @@ export async function POST(request: Request) {
   // Fallback idempotente · si el upsert falló por conflicto de slug residual
   // (duplicate key / 409), el cliente YA existe con ese slug → lo recuperamos y
   // seguimos (re-onboarding idempotente · 200) en vez de 502.
+  //
+  // Hardening BUG11 (2026-06-28): cuando el payload trae un client_name con
+  // encoding levemente distinto (ej. Git Bash curl inyecta U+FFFD en "Náufrago"
+  // → slugify produce "n-ufrago" ≠ slug almacenado "naufrago"), el SELECT por
+  // el slug malformado devuelve null → el fallback original no recuperaba la
+  // fila y propagaba 502. Fix: si el SELECT por slug falla, intentar recuperar
+  // por el providedClientId (UUID canónico invariante ante encoding drift).
   if (clientErr || !clientUpsert) {
     const isDupKey =
       typeof clientErr?.message === 'string' &&
       /duplicate key|already exists|conflict|23505/i.test(clientErr.message)
     if (isDupKey) {
+      // Intento 1: buscar por el slug derivado del payload (caso nominal)
       const { data: existing } = await supabase
         .from('clients')
         .select('id, name, slug, status, industry, website_url, created_at, updated_at')
         .eq('slug', slug)
-        .single()
+        .maybeSingle()
       if (existing) {
         clientUpsert = existing as Record<string, unknown>
         clientErr = null
+      } else if (providedClientId) {
+        // Intento 2: el slug del payload estaba malformado (encoding drift) pero
+        // el client_id (UUID) es canónico → recuperar por PK directamente.
+        const { data: existingById } = await supabase
+          .from('clients')
+          .select('id, name, slug, status, industry, website_url, created_at, updated_at')
+          .eq('id', providedClientId)
+          .maybeSingle()
+        if (existingById) {
+          clientUpsert = existingById as Record<string, unknown>
+          clientErr = null
+        }
       }
     }
   }

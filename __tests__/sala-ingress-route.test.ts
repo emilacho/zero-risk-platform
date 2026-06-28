@@ -269,7 +269,10 @@ describe('POST /api/sala/ingress · happy path · reconcile + append', () => {
     expect(events[0].step_state).toBe('running')
   })
 
-  it('canon · skipped_ahead still appends · NEVER halts', async () => {
+  it('R1 · out-of-order phase still appends · NEVER halts · kind=match (order_tolerant)', async () => {
+    // R1 (2026-06-28): ingress now uses order_tolerant=true because the
+    // worker LyVoKcrypS5uLyuu has a parallel DAG. Any known phase = match.
+    // Previously expected 'skipped_ahead' — now expect 'match'.
     const { POST } = await importRoute()
     const res = await POST(
       makeReq(validBody({ phase_name: 'SCHEDULING' }), {
@@ -278,7 +281,7 @@ describe('POST /api/sala/ingress · happy path · reconcile + append', () => {
     )
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.reconcile.kind).toBe('skipped_ahead')
+    expect(body.reconcile.kind).toBe('match')
     const events = await sharedStorage.select({
       tenant_id: TENANT,
       stream_id: STREAM,
