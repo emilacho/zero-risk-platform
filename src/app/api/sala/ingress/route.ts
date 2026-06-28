@@ -119,10 +119,13 @@ export async function POST(request: Request) {
     'CASCADE',
     'APIFY_WIRE',
   ]
+  // R1 · order_tolerant=true: worker LyVoKcrypS5uLyuu has a parallel DAG —
+  // phases arrive non-deterministically. Any known phase = match.
   const reconciled = reconcileObserved({
     emitted_phase_step_id: body.phase_name,
     last_phase_step_id,
     phase_boundaries,
+    order_tolerant: true,
   })
 
   // ─── 6 · append event ───
