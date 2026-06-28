@@ -20,6 +20,7 @@ vi.mock('@/lib/internal-auth', () => ({
 }))
 
 const mockClientsUpsert = vi.fn()
+const mockClientsSelectBySlug = vi.fn()
 const mockBrandBooksInsert = vi.fn()
 const mockJourneyInsert = vi.fn()
 const mockGetSupabaseAdmin = vi.fn()
@@ -37,6 +38,12 @@ function buildSupabaseMock() {
           upsert: () => ({
             select: () => ({
               single: () => mockClientsUpsert(),
+            }),
+          }),
+          // Fallback idempotente · SELECT ... WHERE slug = ... (fix on_conflict=slug)
+          select: () => ({
+            eq: () => ({
+              single: () => mockClientsSelectBySlug(),
             }),
           }),
         }
@@ -77,6 +84,7 @@ const buildReq = (body: Record<string, unknown>, headers: Record<string, string>
 beforeEach(() => {
   mockAuth.mockReset().mockReturnValue({ ok: true })
   mockClientsUpsert.mockReset()
+  mockClientsSelectBySlug.mockReset().mockResolvedValue({ data: null, error: null })
   mockBrandBooksInsert.mockReset()
   mockJourneyInsert.mockReset()
   mockGetSupabaseAdmin.mockReset().mockReturnValue(buildSupabaseMock())
@@ -238,16 +246,35 @@ describe('POST /api/clients/upsert · failure paths', () => {
     expect(j.detail).toContain('Supabase admin')
   })
 
-  it('returns 502 when clients upsert fails (hard error, can\'t proceed)', async () => {
+  it('dup-key de slug → fallback idempotente · recupera cliente existente · 200 (no 502)', async () => {
+    // El upsert (on_conflict=slug) choca por dup-key residual → fallback fetch-by-slug.
     mockClientsUpsert.mockResolvedValue({
       data: null,
       error: { message: 'duplicate key value violates unique constraint "clients_slug_key"' },
     })
+    mockClientsSelectBySlug.mockResolvedValue({
+      data: { id: 'existing-cid', name: 'X', slug: 'existing', status: 'onboarding' },
+      error: null,
+    })
+    mockJourneyInsert.mockResolvedValue({ data: { id: 'js-x' }, error: null })
+
     const r = await POST(buildReq({ name: 'X', slug: 'existing' }))
+    expect(r.status).toBe(200)
+    const j = await r.json()
+    expect(j.ok).toBe(true)
+    expect(j.client_id).toBe('existing-cid') // re-onboarding idempotente
+  })
+
+  it('returns 502 cuando el error NO es dup-key y agota reintentos', async () => {
+    mockClientsUpsert.mockResolvedValue({
+      data: null,
+      error: { message: 'connection terminated unexpectedly' },
+    })
+    const r = await POST(buildReq({ name: 'X' }))
     expect(r.status).toBe(502)
     const j = await r.json()
     expect(j.error).toBe('clients_upsert_failed')
-    expect(j.detail).toContain('duplicate key')
+    expect(j.retries_exhausted).toBe(3)
     expect(mockBrandBooksInsert).not.toHaveBeenCalled()
     expect(mockJourneyInsert).not.toHaveBeenCalled()
   })
