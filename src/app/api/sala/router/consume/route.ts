@@ -80,7 +80,14 @@ export async function POST(request: Request) {
     // Canon canonical · production wires the Supabase-backed spend query ·
     // dispatch evaluates per-stream cumulative cost vs §150 cap before
     // dispatching to the worker.
-    cap_spend_query = wireCapSpendQuerySupabase(supabase)
+    //
+    // §150 fix (CC#3 2026-06-28) · Strategy B (`tenant_window`) · sums
+    // cost_usd by client_id + wall-clock window (started_at). Strategy A
+    // (`correlation`) summed by journey_id, but agent_invocations.journey_id
+    // is NEVER populated (the §149 correlation lands in workflow_id) → A
+    // always returned $0 → the cap was blind to real spend (~$2.29 Náufrago
+    // invisible). B does not depend on journey_id · it reflects real cost.
+    cap_spend_query = wireCapSpendQuerySupabase(supabase, { strategy: 'tenant_window' })
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
     return fail(503, 'supabase_unavailable', detail)
