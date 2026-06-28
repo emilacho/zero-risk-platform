@@ -630,6 +630,21 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
 }
 
 /**
+ * Forced-emit decision (Discovery Fix · 2026-06-28 · CC#4). Returns true when a
+ * Discovery agent had the `emit_discovery_output` MCP tool mounted for this run
+ * but closed the stream WITHOUT calling it (`discoveryToolCall === null`) and a
+ * resumable session exists. The caller then re-prompts that session with a hard
+ * directive to force the missed emission · pure predicate · tested in isolation.
+ */
+export function shouldForceDiscoveryEmit(
+  mcpServers: Record<string, unknown> | undefined,
+  drain: Pick<StreamDrainResult, 'discoveryToolCall' | 'sessionId'>,
+): boolean {
+  const discoveryToolMounted = !!(mcpServers && mcpServers['discovery-output'])
+  return discoveryToolMounted && drain.discoveryToolCall === null && !!drain.sessionId
+}
+
+/**
  * Persist execution record to `agents_log` with 3-retry exponential backoff.
  *
  * Combined fix · CC#1 B2 (retry · explicit error handling · log visibility)
@@ -905,6 +920,65 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       }
     } catch (err) {
       return fail(err instanceof Error ? err.message : 'SDK error', startedAt)
+    }
+
+    // 4b. Forced-emit fallback · Discovery agents MUST emit emit_discovery_output ·
+    //     if the agent closed the stream having done research but never called the
+    //     tool (discoveryToolCall === null · root cause of narration-without-emit),
+    //     re-prompt the SAME session (resume · preserves the gathered research
+    //     context) with a hard directive to emit. The Agent SDK has NO tool_choice
+    //     forcing (sdk.d.ts exposes maxTurns/canUseTool/interrupt · no tool_choice) ·
+    //     and a fresh Messages-API tool_choice call would LOSE the session context ·
+    //     so session-resume + directive is the canonical + context-preserving way to
+    //     drive the missed emission. Scoped · only when the discovery-output MCP was
+    //     mounted for this run (i.e. the agent COULD have emitted) · cero overhead
+    //     when the agent already emitted.
+    if (shouldForceDiscoveryEmit(options.mcpServers as Record<string, unknown> | undefined, drain)) {
+      console.warn(
+        `[forced-emit] ${canonicalSlug} closed stream WITHOUT emit_discovery_output · re-prompting session ${drain.sessionId} to force emission`,
+      )
+      try {
+        const forcedOptions: Options = { ...options, resume: drain.sessionId }
+        const forcedPrompt =
+          'STOP. You completed your research but did NOT call the emit_discovery_output tool. ' +
+          'Call emit_discovery_output NOW with the structured findings (own_handles + competitors[] + ' +
+          'icp + competitive_landscape_summary) from the research you just did. The tool call is the ' +
+          'ONLY acceptable output · do NOT reply with prose. Skipping it = empty Client Brain = failed onboarding.'
+        const forced = await callSdkWithRetry(
+          async () => {
+            const stream = (query as unknown as QueryFn)({ prompt: forcedPrompt, options: forcedOptions })
+            return await drainStream(stream)
+          },
+          { canonicalSlug },
+        )
+        if (forced.result.discoveryToolCall) {
+          // Recovered · graft the forced emission onto the original drain · sum
+          // token usage so cost + audit reflect both turns · keep original prose.
+          drain = {
+            ...drain,
+            discoveryToolCall: forced.result.discoveryToolCall,
+            inputTokens: drain.inputTokens + forced.result.inputTokens,
+            outputTokens: drain.outputTokens + forced.result.outputTokens,
+            cacheCreationInputTokens:
+              drain.cacheCreationInputTokens + forced.result.cacheCreationInputTokens,
+            cacheReadInputTokens: drain.cacheReadInputTokens + forced.result.cacheReadInputTokens,
+            cacheCreation5mTokens:
+              drain.cacheCreation5mTokens + forced.result.cacheCreation5mTokens,
+            cacheCreation1hTokens:
+              drain.cacheCreation1hTokens + forced.result.cacheCreation1hTokens,
+          }
+          console.log(
+            `[forced-emit] ${canonicalSlug} · emission RECOVERED on forced turn · emission_count=${drain.discoveryToolCall?.emission_count}`,
+          )
+        } else {
+          console.warn(`[forced-emit] ${canonicalSlug} · still NO emission after forced turn`)
+        }
+      } catch (e) {
+        // Never let the fallback fail the run · the original drain stands.
+        console.warn(
+          `[forced-emit] ${canonicalSlug} · forced turn errored: ${e instanceof Error ? e.message : 'unknown'}`,
+        )
+      }
     }
   }
 
