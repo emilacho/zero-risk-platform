@@ -189,7 +189,9 @@ describe('CC#3↔CC#4 contract · absent paths · worker must handle', () => {
   it('malformed tool_call · still surfaces as malformed source=tool_call', () => {
     const r = resolveDiscoverySource({
       tool_call: {
-        input: { client_id: 'not-uuid', own_handles: {}, competitors: [] },
+        // competitors:not-array is a genuine shape regression · client_id
+        // mismatch is now overridden with the authoritative value.
+        input: { client_id: NAUFRAGO, own_handles: {}, competitors: 'nope' },
         emission_count: 1,
       },
       expected_client_id: NAUFRAGO,
