@@ -11,9 +11,15 @@
  * no crash). Railway env must provide SENTRY_DSN (same value as Vercel).
  */
 import * as Sentry from '@sentry/node'
+import { initBraintrust } from './lib/braintrust.js'
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   environment: process.env.NODE_ENV || 'production',
   tracesSampleRate: 0.1,
 })
+
+// Braintrust · LLM eval + observability (EU). Init aquí (junto a Sentry · antes
+// que cualquier request) para que el wrap del Claude Agent SDK encuentre el
+// logger activo. No-op si BRAINTRUST_API_KEY ausente (env de Railway).
+initBraintrust()

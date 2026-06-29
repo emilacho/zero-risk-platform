@@ -17,6 +17,7 @@ import './instrument.js'
 import * as Sentry from '@sentry/node'
 import express, { type Request, type Response } from 'express'
 import { runAgentViaSDK, type AgentRunInput } from './lib/agent-sdk-runner.js'
+import { flushBraintrust } from './lib/braintrust.js'
 
 /**
  * Capture an agent error in Sentry with canonical context tags. Sprint
@@ -300,6 +301,10 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
       success: false,
       error: err instanceof Error ? err.message : 'Unknown error',
     })
+  } finally {
+    // Braintrust · flush los spans de esta invocación tras responder · no-op si
+    // el tracing está deshabilitado. Va después de res.json · no bloquea al cliente.
+    await flushBraintrust()
   }
 })
 
