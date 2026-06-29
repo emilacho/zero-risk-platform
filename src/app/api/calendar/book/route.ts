@@ -46,6 +46,15 @@ const CAL_API_VERSION = '2024-08-13'
 const DEFAULT_TIME_ZONE = 'America/Guayaquil'
 const DEFAULT_LANGUAGE = 'es'
 
+// Cal.com booking status → calendar_bookings_status_check allowed values.
+const CAL_STATUS_MAP: Record<string, string> = {
+  accepted: 'confirmed',
+  pending: 'pending',
+  awaiting_host: 'pending',
+  cancelled: 'cancelled',
+  rejected: 'cancelled',
+}
+
 interface BookBody {
   client_id?: string
   contact_email?: string
@@ -158,6 +167,10 @@ export async function POST(req: Request) {
 
   const calUid = (calData.uid as string) ?? null
   const calStatus = (calData.status as string) ?? 'accepted'
+  // Map Cal.com booking status → calendar_bookings_status_check allowed set
+  // (pending · confirmed · cancelled · no_show · completed · rescheduled).
+  // Cal.com returns 'accepted' for a created booking → persist 'confirmed'.
+  const dbStatus = CAL_STATUS_MAP[calStatus] ?? 'confirmed'
   const calStart = (calData.start as string) ?? body.scheduled_at
   const calEnd = (calData.end as string) ?? null
   const meetingUrl =
@@ -179,7 +192,7 @@ export async function POST(req: Request) {
         scheduled_start: calStart,
         scheduled_end: calEnd,
         duration_minutes: body.duration_minutes ?? 30,
-        status: calStatus,
+        status: dbStatus,
         // Canon provider value · the calendar_bookings_provider_check CHECK
         // constraint allows 'cal_com' (real bookings) vs 'cal-com-stub' (old
         // stub). Cloud bookings use the canonical 'cal_com'.
