@@ -29,6 +29,12 @@ export interface VoteRecord {
   rationale?: string
   confidence?: number | null
   /**
+   * Per-reviewer correction objects parsed from the agent's JSON output. A
+   * `red` vote MUST carry ≥1 (validated downstream by validateCorrectionsForVote).
+   * Empty array when the agent emitted none.
+   */
+  corrections?: unknown[]
+  /**
    * Whether this record counts toward the gate tally. Defaults to `true`.
    * Non-voting reviewers (e.g. the GPT-5.5 advisor · `qa-advisor-D`) set this
    * to `false` · their review is captured for the editorial record + HITL
@@ -219,5 +225,6 @@ export function parseAgentVoteResponse(
     vote: voteValue as Vote,
     rationale: typeof parsed.rationale === 'string' ? parsed.rationale : '',
     confidence,
+    corrections: Array.isArray(parsed.corrections) ? parsed.corrections : [],
   }
 }
