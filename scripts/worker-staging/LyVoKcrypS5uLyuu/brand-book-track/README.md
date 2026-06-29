@@ -33,9 +33,12 @@ Aggregate Service responses (FASE 2)
 4. CC#4 lidera el worker · el judge es HTTP-via-code (no necesita endpoint nuevo de CC#2).
 
 ## Estado · qué está en este PR vs follow-up
-- ✅ Steps 0,2,3,5,6,7 · nodos + cableado + des-gateo + node code + 15 tests verdes.
-- 🟡 **Step 4 (Lazo A) · el sub-workflow de corrección queda como próximo increment** (consejero §1 lo definió separado). El nodo `[BB] Lazo A` está cableado y gateado por `BB_CORRECTION_SUBWORKFLOW_ID` · sin ese env el track va Consolidador→Judge (la fidelidad igual decide canon · el Lazo A es mejora no-vinculante).
-- 🟡 **Validación E2E real** · post-§144 · al deployar a n8n live · smoke que confirme `client_brand_books` > 0. No testeable en shadow (no toco el worker vivo).
+- ✅ Steps 0,2,3,5,6,7 · nodos + cableado + des-gateo + node code + tests.
+- ✅ **Step 4 (Lazo A) · sub-workflow de corrección construido** · `correction-subworkflow/` (9 nodos · builder `build-correction-subworkflow.mjs` → `correction-subworkflow.json`). Loop self-contained máx 3 ciclos: trigger → review prep → 3 jefes diagnostican (correcciones accionables `{eje,severidad,donde,problema,por_que,cambio_sugerido}`) → merge → IF seguir · true→re-síntesis (consolidador maker)→loop · false→exit. NO vinculante (la fidelidad decide canon). El nodo `[BB] Lazo A` del worker lo invoca vía `BB_CORRECTION_SUBWORKFLOW_ID` (asignado al importar el sub-wf a n8n).
+- 🟡 **Validación E2E real** · post-§144 · al deployar worker + sub-wf a n8n live · smoke que confirme `client_brand_books` > 0. No testeable en shadow (no toco el worker vivo).
+
+## Reconstruir sub-workflow
+`node scripts/worker-staging/LyVoKcrypS5uLyuu/brand-book-track/correction-subworkflow/build-correction-subworkflow.mjs`
 
 ## Reconstruir
 `node scripts/worker-staging/LyVoKcrypS5uLyuu/brand-book-track/build-brand-book-rewire.mjs`

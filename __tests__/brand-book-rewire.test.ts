@@ -107,3 +107,58 @@ describe('brand-book rewire · node code parsea como JS válido', () => {
     })
   }
 })
+
+// ── Lazo A · sub-workflow de corrección (paso 4 · consejero §1) ──────────────
+const SUBDIR = join(DIR, 'correction-subworkflow')
+const subwf = JSON.parse(readFileSync(join(SUBDIR, 'correction-subworkflow.json'), 'utf8')) as {
+  nodes: Array<{ name: string }>
+  connections: Record<string, { main?: Array<Array<{ node: string }>> }>
+}
+const subNode = (n: string) => subwf.nodes.find((x) => x.name === n)
+const subTargets = (from: string, out = 0) =>
+  (subwf.connections[from]?.main?.[out] ?? []).map((c) => c.node)
+const readSub = (f: string) => readFileSync(join(SUBDIR, 'nodes', f), 'utf8')
+
+describe('Lazo A · sub-workflow de corrección', () => {
+  const SUB_NODES = [
+    'Lazo A · trigger (Execute Workflow)', '[BBA] Review prep',
+    'Revisor · brand-strategist', 'Revisor · editor-en-jefe', 'Revisor · jefe-client-success',
+    '[BBA] Merge corrections', '[BBA] IF · seguir corrigiendo', '[BBA] Re-síntesis', '[BBA] Exit · borrador final',
+  ]
+  it('tiene los 9 nodos del lazo', () => {
+    for (const n of SUB_NODES) expect(subNode(n), `falta ${n}`).toBeDefined()
+  })
+  it('trigger → review prep → 3 revisores → merge', () => {
+    expect(subTargets('Lazo A · trigger (Execute Workflow)')).toContain('[BBA] Review prep')
+    expect(subTargets('[BBA] Review prep')).toEqual(
+      expect.arrayContaining(['Revisor · brand-strategist', 'Revisor · editor-en-jefe', 'Revisor · jefe-client-success']),
+    )
+    for (const r of ['Revisor · brand-strategist', 'Revisor · editor-en-jefe', 'Revisor · jefe-client-success']) {
+      expect(subTargets(r)).toContain('[BBA] Merge corrections')
+    }
+  })
+  it('IF seguir · true→re-síntesis · false→exit · y re-síntesis LOOP back a review prep', () => {
+    expect(subTargets('[BBA] Merge corrections')).toContain('[BBA] IF · seguir corrigiendo')
+    expect(subTargets('[BBA] IF · seguir corrigiendo', 0)).toContain('[BBA] Re-síntesis') // true
+    expect(subTargets('[BBA] IF · seguir corrigiendo', 1)).toContain('[BBA] Exit · borrador final') // false
+    expect(subTargets('[BBA] Re-síntesis')).toContain('[BBA] Review prep') // LOOP back-edge
+  })
+  it('merge · cap 3 ciclos + formato accionable + keep_going (creador corrige, no jefes)', () => {
+    const code = readSub('correction-merge.js')
+    expect(code).toContain('MAX_CYCLES = 3')
+    expect(code).toContain('keep_going')
+    for (const k of ['eje', 'severidad', 'donde', 'problema', 'por_que', 'cambio_sugerido']) {
+      expect(code).toContain(k)
+    }
+  })
+  it('review-prep pide el formato accionable · re-síntesis es el consolidador (maker)', () => {
+    expect(readSub('correction-review-prep.js')).toMatch(/cambio_sugerido/)
+    expect(readSub('correction-resynth.js')).toContain('/api/agents/run-sdk')
+  })
+  for (const f of ['correction-review-prep.js', 'correction-merge.js', 'correction-resynth.js']) {
+    it(`${f} es JS sintácticamente válido`, () => {
+      const code = readSub(f)
+      expect(() => new Function('$json', '$', '$env', '$execution', '$input', `return (async()=>{${code}})`)).not.toThrow()
+    })
+  }
+})
