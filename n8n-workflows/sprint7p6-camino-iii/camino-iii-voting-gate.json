@@ -117,7 +117,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  agent_name: 'editor-en-jefe',\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  task_input: {\n    task_type: 'camino_iii_vote',\n    review_id: $('Create review row').first().json.review.id,\n    item_type: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type,\n    item_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id,\n    payload: $('Webhook · POST /camino-iii-voting-gate').first().json.body.payload,\n    instructions: 'Camino III canonical vote · output JSON {\"vote\": \"green|amber|red\", \"rationale\": \"why\", \"confidence\": 0.0-1.0, \"concerns\": []}'\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  agent: 'editor-en-jefe',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  task: 'Sos un revisor Camino III (editor-en-jefe). Emití tu voto sobre el item ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type + ' (id ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id + ', review ' + $('Create review row').first().json.review.id + '). ' + 'Contenido a revisar: ' + JSON.stringify($('Webhook · POST /camino-iii-voting-gate').first().json.body.payload) + '. ' + 'IMPORTANTE: respondé SOLO con un JSON exacto, sin prosa ni markdown: {\"vote\":\"green|amber|red\",\"rationale\":\"motivo breve\",\"confidence\":0.0,\"concerns\":[]}'\n}) }}",
         "options": {
           "timeout": 120000
         }
@@ -151,7 +151,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  agent_name: 'brand-strategist',\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  task_input: {\n    task_type: 'camino_iii_vote',\n    review_id: $('Create review row').first().json.review.id,\n    item_type: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type,\n    item_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id,\n    payload: $('Webhook · POST /camino-iii-voting-gate').first().json.body.payload,\n    instructions: 'Camino III canonical vote · output JSON {\"vote\": \"green|amber|red\", \"rationale\": \"why\", \"confidence\": 0.0-1.0, \"concerns\": []}'\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  agent: 'brand-strategist',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  task: 'Sos un revisor Camino III (brand-strategist). Emití tu voto sobre el item ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type + ' (id ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id + ', review ' + $('Create review row').first().json.review.id + '). ' + 'Contenido a revisar: ' + JSON.stringify($('Webhook · POST /camino-iii-voting-gate').first().json.body.payload) + '. ' + 'IMPORTANTE: respondé SOLO con un JSON exacto, sin prosa ni markdown: {\"vote\":\"green|amber|red\",\"rationale\":\"motivo breve\",\"confidence\":0.0,\"concerns\":[]}'\n}) }}",
         "options": {
           "timeout": 120000
         }
@@ -185,7 +185,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  agent_name: 'jefe-client-success',\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  task_input: {\n    task_type: 'camino_iii_vote',\n    review_id: $('Create review row').first().json.review.id,\n    item_type: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type,\n    item_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id,\n    payload: $('Webhook · POST /camino-iii-voting-gate').first().json.body.payload,\n    instructions: 'Camino III canonical vote · output JSON {\"vote\": \"green|amber|red\", \"rationale\": \"why\", \"confidence\": 0.0-1.0, \"concerns\": []}'\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  agent: 'jefe-client-success',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  task: 'Sos un revisor Camino III (jefe-client-success). Emití tu voto sobre el item ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type + ' (id ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id + ', review ' + $('Create review row').first().json.review.id + '). ' + 'Contenido a revisar: ' + JSON.stringify($('Webhook · POST /camino-iii-voting-gate').first().json.body.payload) + '. ' + 'IMPORTANTE: respondé SOLO con un JSON exacto, sin prosa ni markdown: {\"vote\":\"green|amber|red\",\"rationale\":\"motivo breve\",\"confidence\":0.0,\"concerns\":[]}'\n}) }}",
         "options": {
           "timeout": 120000
         }
@@ -219,7 +219,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'editor-en-jefe',\n  raw_agent_output: JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'editor-en-jefe',\n  raw_agent_output: $json.response || JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
         "options": {
           "timeout": 10000
         }
@@ -253,7 +253,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'brand-strategist',\n  raw_agent_output: JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'brand-strategist',\n  raw_agent_output: $json.response || JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
         "options": {
           "timeout": 10000
         }
@@ -287,7 +287,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'jefe-client-success',\n  raw_agent_output: JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'jefe-client-success',\n  raw_agent_output: $json.response || JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
         "options": {
           "timeout": 10000
         }
