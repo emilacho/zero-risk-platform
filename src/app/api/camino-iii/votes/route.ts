@@ -70,12 +70,18 @@ export async function POST(request: Request) {
   let confidence: number | null = null
   let concerns: unknown[] = []
   let rawOutput: unknown = null
+  // Corrections parsed from the agent's JSON output (raw_agent_output path).
+  // Used as the fallback source for validateCorrectionsForVote so a `red` vote
+  // emitted by an agent (which carries its corrections inline) is accepted
+  // without the n8n node having to re-parse + forward them as body.corrections.
+  let parsedCorrections: unknown = null
 
   if (typeof body.raw_agent_output === 'string' && body.raw_agent_output.length > 0) {
     const parsed = parseAgentVoteResponse(body.raw_agent_output, reviewerAgent)
     vote = parsed.vote
     rationale = parsed.rationale ?? ''
     confidence = parsed.confidence ?? null
+    parsedCorrections = parsed.corrections ?? null
     rawOutput = body.raw_agent_output
   } else {
     const voteRaw = typeof body.vote === 'string' ? body.vote.toLowerCase() : ''
@@ -112,7 +118,7 @@ export async function POST(request: Request) {
   // objetos se persisten en camino_iii_votes.corrections (migración
   // 202606271200) y se consolidan a editorial_decisions para viajar al
   // creador. amber/green pueden adjuntar correcciones (advisory).
-  const correctionsCheck = validateCorrectionsForVote(vote, body.corrections)
+  const correctionsCheck = validateCorrectionsForVote(vote, body.corrections ?? parsedCorrections)
   if (!correctionsCheck.ok) {
     return NextResponse.json(
       {

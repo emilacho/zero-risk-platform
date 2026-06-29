@@ -178,4 +178,21 @@ describe('Camino III · parseAgentVoteResponse', () => {
     const r = parseAgentVoteResponse('{"vote":"green","rationale":"ok","confidence":1.5}', 'editor-en-jefe')
     expect(r.confidence).toBeNull()
   })
+
+  it('extracts corrections[] from a red vote (red+corrections fix)', () => {
+    const raw =
+      '{"vote":"red","rationale":"choca con el posicionamiento","corrections":[' +
+      '{"eje":"posicionamiento","severidad":"red","donde":"headline","problema":"contradice el core",' +
+      '"por_que":"el brand book ancla a cocina costera","cambio_sugerido":"usar brunch costero"}]}'
+    const r = parseAgentVoteResponse(raw, 'brand-strategist')
+    expect(r.vote).toBe('red')
+    expect(Array.isArray(r.corrections)).toBe(true)
+    expect(r.corrections).toHaveLength(1)
+    expect((r.corrections![0] as Record<string, unknown>).eje).toBe('posicionamiento')
+  })
+
+  it('returns empty corrections[] when the agent emits none', () => {
+    const r = parseAgentVoteResponse('{"vote":"green","rationale":"ok"}', 'editor-en-jefe')
+    expect(r.corrections).toEqual([])
+  })
 })
