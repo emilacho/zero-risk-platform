@@ -115,7 +115,7 @@ describe('POST /api/calendar/book · Cal.com Cloud v2', () => {
 
     // Persisted with cloud provider + cal uid
     const inserted = supabaseMock.insert.mock.calls[0][0]
-    expect(inserted.provider).toBe('cal-com-cloud')
+    expect(inserted.provider).toBe('cal_com')
     expect(inserted.provider_booking_id).toBe('cal-uid-1')
     expect(inserted.meeting_url).toBe('https://cal.video/cal-uid-1')
   })

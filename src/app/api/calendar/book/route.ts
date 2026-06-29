@@ -180,7 +180,10 @@ export async function POST(req: Request) {
         scheduled_end: calEnd,
         duration_minutes: body.duration_minutes ?? 30,
         status: calStatus,
-        provider: 'cal-com-cloud',
+        // Canon provider value · the calendar_bookings_provider_check CHECK
+        // constraint allows 'cal_com' (real bookings) vs 'cal-com-stub' (old
+        // stub). Cloud bookings use the canonical 'cal_com'.
+        provider: 'cal_com',
         provider_booking_id: calUid,
         meeting_url: meetingUrl,
         webhook_payload: calData,
