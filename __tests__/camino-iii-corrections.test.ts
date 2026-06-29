@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest'
 import {
   validateCorrectionObject,
   validateCorrectionsForVote,
+  filterValidCorrections,
   consolidateCorrections,
   type CorrectionObject,
 } from '../src/lib/camino-iii/corrections'
@@ -41,6 +42,28 @@ describe('validateCorrectionObject', () => {
   it('rejects non-object', () => {
     expect(validateCorrectionObject(null).ok).toBe(false)
     expect(validateCorrectionObject('x').ok).toBe(false)
+  })
+})
+
+describe('filterValidCorrections · hardening leniente (no dropea el voto)', () => {
+  it('descarta inválidas y conserva las válidas', () => {
+    const r = filterValidCorrections([good, { ...good, cambio_sugerido: '  ' }, { ...good, eje: 'x' }])
+    expect(r.valid).toHaveLength(1)
+    expect(r.dropped).toBe(2)
+    expect(r.valid[0].eje).toBe('factual')
+  })
+  it('todas inválidas → valid vacío + dropped count (el voto se conserva igual aguas arriba)', () => {
+    const r = filterValidCorrections([{ ...good, cambio_sugerido: '' }, 'nope', null])
+    expect(r.valid).toHaveLength(0)
+    expect(r.dropped).toBe(3)
+  })
+  it('todas válidas → dropped 0', () => {
+    const r = filterValidCorrections([good, good])
+    expect(r.valid).toHaveLength(2)
+    expect(r.dropped).toBe(0)
+  })
+  it('no-array → valid vacío · dropped 0', () => {
+    expect(filterValidCorrections(undefined)).toEqual({ valid: [], dropped: 0 })
   })
 })
 
