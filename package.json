@@ -17,7 +17,11 @@
         "current",
         "glibc"
       ]
-    }
+    },
+    "onlyBuiltDependencies": [
+      "braintrust",
+      "esbuild"
+    ]
   },
   "scripts": {
     "dev": "next dev",
@@ -45,6 +49,7 @@
     "@vercel/og": "^0.11.1",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
+    "braintrust": "^3.20.0",
     "framer-motion": "^11.5.0",
     "inngest": "^4.5.0",
     "next": "^14.2.0",
