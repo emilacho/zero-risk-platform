@@ -18,7 +18,14 @@
  * Vercel copy. Keep in sync until a shared package factors this out.
  */
 
-import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
+import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import { instrumentClaudeAgentSdk } from './braintrust.js'
+
+// Braintrust · traza cada `query()` del Claude Agent SDK · pass-through (cero
+// overhead) cuando BRAINTRUST_API_KEY no está en el env de Railway. El wrapper
+// devuelve un Proxy · no muta el namespace.
+const { query } = instrumentClaudeAgentSdk(claudeAgentSdk)
 import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
 import { buildMcpServers, DISCOVERY_OUTPUT_ALLOW } from './agent-mcp-registry.js'
