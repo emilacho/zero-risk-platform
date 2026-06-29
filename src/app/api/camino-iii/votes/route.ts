@@ -19,7 +19,7 @@ import {
   type Vote,
 } from '@/lib/camino-iii/tabulate'
 import { isVotingReviewer } from '@/lib/camino-iii/reviewers'
-import { validateCorrectionsForVote } from '@/lib/camino-iii/corrections'
+import { filterValidCorrections } from '@/lib/camino-iii/corrections'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -112,24 +112,27 @@ export async function POST(request: Request) {
     )
   }
 
-  // ── Camino III lazo de corrección (SPEC 2026-06-27 §2) ───────────────
-  // Un voto `red` (REJECT) DEBE traer al menos un objeto-corrección
-  // accionable · un rechazo sin correcciones es un bug, no un voto. Los
-  // objetos se persisten en camino_iii_votes.corrections (migración
-  // 202606271200) y se consolidan a editorial_decisions para viajar al
-  // creador. amber/green pueden adjuntar correcciones (advisory).
-  const correctionsCheck = validateCorrectionsForVote(vote, body.corrections ?? parsedCorrections)
-  if (!correctionsCheck.ok) {
-    return NextResponse.json(
-      {
-        error: 'validation_error',
-        code: 'E-CAMINO-VOTE-CORRECTIONS',
-        detail: correctionsCheck.reason,
-      },
-      { status: 400 },
+  // ── Camino III lazo de corrección · hardening de seguridad (2026-06-29) ──
+  // Un voto `red` (REJECT) idealmente trae corrections accionables, pero NUNCA
+  // debe dropearse por una corrección malformada: un red perdido = falso
+  // `approved` (el bloqueo del revisor se pierde · bug de seguridad). Filtramos
+  // LENIENTE — descartamos las inválidas, conservamos las válidas — y SIEMPRE
+  // registramos el voto. Las válidas se persisten en camino_iii_votes.corrections
+  // y se consolidan a editorial_decisions para viajar al creador.
+  const { valid: corrections, dropped: droppedCorrections } = filterValidCorrections(
+    body.corrections ?? parsedCorrections,
+  )
+  if (droppedCorrections > 0) {
+    console.warn(
+      `[camino-vote] ${reviewerAgent} · ${droppedCorrections} corrección(es) inválida(s) descartada(s) · vote=${vote}`,
     )
   }
-  const corrections = correctionsCheck.corrections
+  if (vote === 'red' && corrections.length === 0) {
+    // El bloqueo cuenta igual · pero el creador queda sin feedback accionable.
+    console.warn(
+      `[camino-vote] ${reviewerAgent} · voto RED sin corrections válidas · se registra (preserva el bloqueo) · sin feedback para el creador`,
+    )
+  }
 
   const reviewerPosition = resolveReviewerPosition(reviewerAgent)
 

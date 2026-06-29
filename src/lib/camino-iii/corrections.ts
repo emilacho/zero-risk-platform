@@ -114,6 +114,31 @@ export function validateCorrectionsForVote(
 }
 
 /**
+ * Hardening (safety · 2026-06-29): filtrado LENIENTE de corrections. A diferencia
+ * de validateCorrectionsForVote (estricto · rechaza todo el voto al primer objeto
+ * inválido), esta función DESCARTA las corrections malformadas y conserva las
+ * válidas. La usa el endpoint de votos para que un voto `red` NUNCA se dropee por
+ * una corrección incompleta (un red dropeado = falso `approved` · el bloqueo se
+ * pierde). El voto se registra siempre; las inválidas no viajan al creador.
+ */
+export interface FilterCorrectionsResult {
+  readonly valid: CorrectionObject[]
+  readonly dropped: number
+}
+
+export function filterValidCorrections(rawCorrections: unknown): FilterCorrectionsResult {
+  const arr = Array.isArray(rawCorrections) ? rawCorrections : []
+  const valid: CorrectionObject[] = []
+  let dropped = 0
+  for (const raw of arr) {
+    const r = validateCorrectionObject(raw)
+    if (r.ok) valid.push(r.value)
+    else dropped++
+  }
+  return { valid, dropped }
+}
+
+/**
  * Consolidate the per-reviewer correction objects into the single package that
  * persists on `editorial_decisions.corrections` and travels to the creator.
  * Stamps each correction with its source reviewer so the creator (and audit)
