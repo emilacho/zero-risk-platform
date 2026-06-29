@@ -85,17 +85,18 @@ export async function POST(request: Request) {
     )
   }
 
-  const itemType = typeof body.item_type === 'string' ? body.item_type : ''
+  const rawItemType = typeof body.item_type === 'string' ? body.item_type.trim() : ''
   const itemId = typeof body.item_id === 'string' ? body.item_id.trim() : ''
 
-  if (!itemType || !VALID_ITEM_TYPES.includes(itemType)) {
-    return NextResponse.json(
-      {
-        error: 'validation_error',
-        code: 'E-CAMINO-ITEM-TYPE',
-        detail: `item_type required · must be one of · ${VALID_ITEM_TYPES.join(', ')}`,
-      },
-      { status: 400 },
+  // Hardening (P3 · 2026-06-29): un item_type inválido/ausente NO tumba el run ·
+  // cae a 'other' (el run persiste · el valor original queda en metadata para
+  // audit). Evita que un caller con item_type fuera del enum erroree el workflow
+  // entero (camino-iii-voting-gate). item_id sigue siendo requisito duro.
+  const itemTypeCoerced = !VALID_ITEM_TYPES.includes(rawItemType)
+  const itemType = itemTypeCoerced ? 'other' : rawItemType
+  if (itemTypeCoerced) {
+    console.warn(
+      `[camino-review] item_type inválido "${rawItemType}" → fallback 'other' · item_id="${itemId}"`,
     )
   }
 
@@ -129,7 +130,10 @@ export async function POST(request: Request) {
         campaign_id: typeof body.campaign_id === 'string' ? body.campaign_id : null,
         payload: body.payload && typeof body.payload === 'object' ? body.payload : {},
         expected_votes_count: expectedVotes,
-        metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : {},
+        metadata: {
+          ...(body.metadata && typeof body.metadata === 'object' ? body.metadata : {}),
+          ...(itemTypeCoerced ? { original_item_type: rawItemType } : {}),
+        },
       })
       .select()
       .single()
