@@ -859,6 +859,17 @@ export async function POST(request: Request) {
           expected_client_id: clientId,
         })
         if (resolved.kind === 'ok') {
+          // Forensics · the platform overrides the agent's client_id with the
+          // authoritative request value (parse.ts). Surface divergence so an
+          // agent fumbling client_id (placeholder all-zeros · exec 40025) is
+          // visible without blocking the persist.
+          const agentCid = (result.discoveryToolCall?.input as { client_id?: unknown } | undefined)
+            ?.client_id
+          if (typeof agentCid === 'string' && agentCid !== clientId) {
+            console.warn(
+              `[discovery] client_id override · agent=${agentName} emitted=${agentCid} · using authoritative=${clientId}`,
+            )
+          }
           const supabase = getSupabaseAdmin()
           // Ordering fix (Sprint 13 · bug discovery-persist-client-not-found):
           // el worker dispara discovery fire-and-forget en paralelo con "Persist

@@ -56,7 +56,9 @@ describe('resolveDiscoverySource · tool_call WINS · canonical', () => {
     // dangerous · spec says malformed tool_call must surface.
     const r = resolveDiscoverySource({
       tool_call: {
-        input: { client_id: 'not-uuid', own_handles: {}, competitors: [] },
+        // own_handles:null is a genuine shape regression (client_id mismatch is
+        // now overridden · so we trigger malformed via a non-client_id field).
+        input: { client_id: NAUFRAGO, own_handles: null, competitors: [] },
         emission_count: 1,
       },
       agent_response_text: TEXT_WITH_FENCE, // valid here · still rejected
@@ -148,15 +150,15 @@ describe('resolveDiscoverySource · LINCHPIN case · agente emite prosa sin JSON
     }
   })
 
-  it('expected_client_id mismatch rejected at tool_call (defense)', () => {
+  it('expected_client_id mismatch OVERRIDDEN at tool_call (platform owns the binding · exec 40025)', () => {
     const r = resolveDiscoverySource({
       tool_call: { input: CANONICAL_DISCOVERY, emission_count: 1 },
       expected_client_id: '11111111-1111-1111-1111-111111111111',
     })
-    expect(r.kind).toBe('malformed')
-    if (r.kind === 'malformed') {
+    expect(r.kind).toBe('ok')
+    if (r.kind === 'ok') {
       expect(r.source).toBe('tool_call')
-      expect(r.reason).toMatch(/client_id_mismatch/)
+      expect(r.value.client_id).toBe('11111111-1111-1111-1111-111111111111')
     }
   })
 })

@@ -133,10 +133,25 @@ describe('validateDiscoveryShape · rejections', () => {
     if (r.kind === 'malformed') expect(r.reason).toMatch(/client_id_invalid_uuid/)
   })
 
-  it('rejects client_id mismatch with expected', () => {
+  it('OVERRIDES client_id with the authoritative expected value on mismatch (platform owns the binding)', () => {
     const r = validateDiscoveryShape(CANONICAL_DISCOVERY, '11111111-1111-1111-1111-111111111111')
+    expect(r.kind).toBe('ok')
+    if (r.kind === 'ok') expect(r.value.client_id).toBe('11111111-1111-1111-1111-111111111111')
+  })
+
+  it('OVERRIDES an all-zeros placeholder client_id with expected (exec 40025 re-discovery bug)', () => {
+    const r = validateDiscoveryShape(
+      { ...CANONICAL_DISCOVERY, client_id: '00000000-0000-0000-0000-000000000000' },
+      NAUFRAGO,
+    )
+    expect(r.kind).toBe('ok')
+    if (r.kind === 'ok') expect(r.value.client_id).toBe(NAUFRAGO)
+  })
+
+  it('still requires a valid UUID when NO expected id is provided (direct/parser defense)', () => {
+    const r = validateDiscoveryShape({ ...CANONICAL_DISCOVERY, client_id: 'naufrago' })
     expect(r.kind).toBe('malformed')
-    if (r.kind === 'malformed') expect(r.reason).toMatch(/client_id_mismatch/)
+    if (r.kind === 'malformed') expect(r.reason).toMatch(/client_id_invalid_uuid/)
   })
 
   it('rejects non-array competitors', () => {

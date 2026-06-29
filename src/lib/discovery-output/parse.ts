@@ -112,16 +112,23 @@ export function validateDiscoveryShape(
   }
   const obj = raw as Record<string, unknown>
 
-  // client_id · required · UUID · matches expected (if provided)
-  const cid = obj.client_id
-  if (typeof cid !== 'string' || !UUID_RE.test(cid)) {
-    return { kind: 'malformed', reason: 'client_id_invalid_uuid' }
-  }
-  if (expectedClientId && cid !== expectedClientId) {
-    return {
-      kind: 'malformed',
-      reason: `client_id_mismatch · got=${cid} expected=${expectedClientId}`,
+  // client_id · the PLATFORM owns this binding. `expectedClientId` (the
+  // run-sdk request's client_id) is AUTHORITATIVE · the agent's value is
+  // advisory and unreliable (it emits an all-zeros placeholder or fumbles it ·
+  // exec 40025 · re-discovery). When an expected id is provided we OVERRIDE
+  // with it rather than reject otherwise-good discovery data · the agent never
+  // decides which client its findings belong to. Divergence is logged for
+  // forensics at the run-sdk proxy boundary. When NO expected id is provided
+  // (direct/parser path) require a valid UUID from the payload as defense.
+  let cid: string
+  if (expectedClientId) {
+    cid = expectedClientId
+  } else {
+    const rawCid = obj.client_id
+    if (typeof rawCid !== 'string' || !UUID_RE.test(rawCid)) {
+      return { kind: 'malformed', reason: 'client_id_invalid_uuid' }
     }
+    cid = rawCid
   }
 
   // own_handles · required (object · may be empty)
