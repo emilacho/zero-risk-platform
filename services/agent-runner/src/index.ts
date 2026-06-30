@@ -17,6 +17,8 @@ import './instrument.js'
 import * as Sentry from '@sentry/node'
 import express, { type Request, type Response } from 'express'
 import { runAgentViaSDK, type AgentRunInput } from './lib/agent-sdk-runner.js'
+import { getSupabaseAdmin } from './lib/supabase.js'
+import { checkSpendCap } from './lib/spend-gate.js'
 import { flushBraintrust } from './lib/braintrust.js'
 
 /**
@@ -234,6 +236,39 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
       detail: 'canon Sprint 8D · workflowExecutionId / workflow_execution_id required (n8n $execution.id)',
     })
     return
+  }
+
+  // ── §150 spend gate · server-side · covers EVERY caller ───────────────
+  // The deepest door: n8n workflows that hit this Railway endpoint directly
+  // (JOURNEY B · smoke) bypass the Vercel gates (#240 /run-sdk · #244 /run).
+  // Gating here is the only place that protects all callers. Default-OFF
+  // (shadow) until SALA_NAUFRAGO_RUN_CAP_ENFORCE · §148 safety-net: a query
+  // failure never blocks legit traffic. Over-cap → 429 (no SDK call · no cost).
+  try {
+    // `as never` · the supabase-js client's generics are too deep for the
+    // minimal SupabaseLike structural type (TS2589) · the helper only uses
+    // .from().select().eq().gte() which the real client satisfies at runtime.
+    const gate = await checkSpendCap(getSupabaseAdmin() as never, clientId)
+    if (gate.blocked) {
+      console.warn(
+        `[agent-runner] §150 CAP BLOCK · client=${String(clientId).slice(0, 8)} · ` +
+          `spent=$${(gate.spent_usd ?? 0).toFixed(2)} >= cap=$${(gate.cap_usd ?? 0).toFixed(2)}`,
+      )
+      res.status(429).json({
+        success: false,
+        error: 'cost_cap_exceeded',
+        code: 'E-CAP-150',
+        cap_usd: gate.cap_usd,
+        spent_usd: gate.spent_usd,
+        detail:
+          `§150 spend cap · client cumulative $${(gate.spent_usd ?? 0).toFixed(2)} ` +
+          `>= cap $${(gate.cap_usd ?? 0).toFixed(2)} (24h window) · invocation blocked`,
+      })
+      return
+    }
+  } catch (gateErr) {
+    // §148 safety-net · gate failure must not block legit traffic.
+    console.warn('[agent-runner] §150 gate error (fail-open):', gateErr)
   }
   if (
     body.extra !== undefined &&
