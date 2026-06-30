@@ -95,6 +95,23 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
     expect(targets('[BB] IF · ciclos agotados', 0)).toContain('[BB] HITL último recurso (no Emilio)')
     expect(targets('[BB] IF · ciclos agotados', 1)).toContain('[BB] Consolidador')
   })
+  it('Fix 1 · HARD CAP · IF ciclos agotados usa contador independiente _fidelity_cycle >= 3', () => {
+    const ifNode = nodeByName('[BB] IF · ciclos agotados') as { parameters: { conditions?: { conditions?: Array<{ leftValue?: string }> } } }
+    const expr = ifNode.parameters.conditions?.conditions?.[0]?.leftValue || ''
+    expect(expr).toContain('_fidelity_cycle')
+    expect(expr).toContain('>= 3')
+    expect(expr).not.toContain('fidelity.exhausted') // ya NO depende del judge
+  })
+  it('Fix 1 · el consolidador incrementa _fidelity_cycle (independiente del cycle del Lazo A)', () => {
+    const code = readNode('consolidator.js')
+    expect(code).toContain('_fidelity_cycle')
+    expect(code).toMatch(/Number\(\$json\._fidelity_cycle\)\s*\|\|\s*0\)\s*\+\s*1/)
+  })
+  it('Fix 1 · el judge propaga _fidelity_cycle y computa exhausted sobre él', () => {
+    const code = readNode('faithfulness-judge.js')
+    expect(code).toContain('_fidelity_cycle')
+    expect(code).toMatch(/fidelityCycle\s*>=\s*MAX_FIDELITY_CYCLES/)
+  })
 })
 
 describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
@@ -123,6 +140,10 @@ describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
     const code = readNode('faithfulness-judge.js')
     expect(code).toContain('emit_fidelity_scores')
     expect(code).toContain('body.fidelity_scores')
+  })
+  it('Fix 2 · el judge marca extra.fidelity_judge (activa el forced-emit Messages-API)', () => {
+    const code = readNode('faithfulness-judge.js')
+    expect(code).toMatch(/extra:\s*\{\s*fidelity_judge:\s*true/)
   })
 })
 

@@ -14,7 +14,8 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: () => ({}),
 }))
 
-const { shouldForceDiscoveryEmit, isDiscoveryCheckpointUsable } = await import('../agent-sdk-runner')
+const { shouldForceDiscoveryEmit, isDiscoveryCheckpointUsable, shouldForceFidelityEmit } =
+  await import('../agent-sdk-runner')
 
 const MOUNTED = { 'discovery-output': { type: 'stdio' }, 'client-brain': { type: 'stdio' } }
 const NOT_MOUNTED = { 'client-brain': { type: 'stdio' } }
@@ -72,5 +73,28 @@ describe('isDiscoveryCheckpointUsable', () => {
   it('FALSE · discovery agent · null/undefined output_ref', () => {
     expect(isDiscoveryCheckpointUsable('onboarding-specialist', null)).toBe(false)
     expect(isDiscoveryCheckpointUsable('onboarding-specialist', undefined)).toBe(false)
+  })
+})
+
+const BS_MOUNTED = { 'brand-section': { type: 'stdio' } }
+const JUDGE = { fidelity_judge: true }
+
+describe('shouldForceFidelityEmit (Bug 2 · judge forced-emit)', () => {
+  it('TRUE · judge + brand-section montado + sin emisión', () => {
+    expect(shouldForceFidelityEmit(BS_MOUNTED, JUDGE, { fidelityScoresToolCall: null })).toBe(true)
+  })
+  it('FALSE · ya emitió scores', () => {
+    expect(
+      shouldForceFidelityEmit(BS_MOUNTED, JUDGE, {
+        fidelityScoresToolCall: { input: { scores: {} }, emission_count: 1 },
+      }),
+    ).toBe(false)
+  })
+  it('FALSE · NO es judge (una lente · sin extra.fidelity_judge) · no fuerza fidelity', () => {
+    expect(shouldForceFidelityEmit(BS_MOUNTED, {}, { fidelityScoresToolCall: null })).toBe(false)
+    expect(shouldForceFidelityEmit(BS_MOUNTED, undefined, { fidelityScoresToolCall: null })).toBe(false)
+  })
+  it('FALSE · brand-section NO montado', () => {
+    expect(shouldForceFidelityEmit({}, JUDGE, { fidelityScoresToolCall: null })).toBe(false)
   })
 })

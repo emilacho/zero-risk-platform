@@ -68,9 +68,14 @@ const exit = {
   parameters: {
     jsCode:
       "// Lazo A · salida · devuelve el borrador final mejorado al worker caller.\n" +
-      "const j = $json;\nreturn [{ json: { brand_book_draft: j.brand_book_draft, " +
+      "// FIX 2026-06-30 (Bug 1) · preserva `_fidelity_cycle` del TRIGGER (el contador\n" +
+      "// del loop de fidelidad del worker · NO el `cycle` interno del Lazo A) leyéndolo\n" +
+      "// del input original · así el worker hace hard-cap sobre el contador correcto.\n" +
+      "const j = $json;\n" +
+      "let fc = 0; try { fc = Number($('Lazo A · trigger (Execute Workflow)').first().json._fidelity_cycle) || 0; } catch (e) { fc = 0; }\n" +
+      "return [{ json: { brand_book_draft: j.brand_book_draft, " +
       "_grounding_refs: j._grounding_refs, client_id: j.client_id, cycle: j.cycle, " +
-      "corrections: j.corrections || [], _lazo_a_done: true } }];\n",
+      "_fidelity_cycle: fc, corrections: j.corrections || [], _lazo_a_done: true } }];\n",
   },
   id: 'bba-exit', name: '[BBA] Exit · borrador final',
   type: 'n8n-nodes-base.code', typeVersion: 2, position: [1380, 600],

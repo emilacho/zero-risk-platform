@@ -14,6 +14,9 @@ const inJson = $json;
 const draft = inJson.brand_book_draft || {};
 const grounding = inJson._grounding_refs || {};
 const cycle = Number(inJson.cycle) || 1;
+// FIX 2026-06-30 (Bug 1) · contador de fidelidad INDEPENDIENTE (no el `cycle`
+// del Lazo A · que se resetea). El hard-cap del worker decide agotamiento sobre éste.
+const fidelityCycle = Number(inJson._fidelity_cycle) || 1;
 const clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;
 
 // Campos textuales a puntuar (los arrays de reglas se validan aparte por presencia).
@@ -44,6 +47,9 @@ try {
       workflow_execution_id: $execution.id,
       task: judgeTask,
       context: { role: 'faithfulness_judge', threshold: THRESHOLD },
+      // Bug 2 fix · marca la invocación-judge · activa el forced-emit Messages-API
+      // de emit_fidelity_scores en el runner si el agente narra sin llamar el tool.
+      extra: { fidelity_judge: true },
     }),
   });
   const body = await resp.json();
@@ -78,10 +84,13 @@ return [{
       scores: norm,
       low_fields: lowFields,
       cycle,
+      fidelity_cycle: fidelityCycle,
       max_cycles: MAX_FIDELITY_CYCLES,
-      exhausted: !pass && cycle >= MAX_FIDELITY_CYCLES,
+      // exhausted sobre el contador independiente · hard-cap real ≤3 aunque el judge falle.
+      exhausted: !pass && fidelityCycle >= MAX_FIDELITY_CYCLES,
     },
     brand_book_draft: draft,
     cycle,
+    _fidelity_cycle: fidelityCycle,
   },
 }];
