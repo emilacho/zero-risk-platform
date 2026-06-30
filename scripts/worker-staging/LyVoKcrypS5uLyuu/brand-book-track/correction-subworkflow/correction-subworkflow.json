@@ -48,10 +48,10 @@
         "options": {
           "response": {
             "response": {
-              "responseFormat": "json"
+              "neverError": true
             }
           },
-          "timeout": 120000
+          "timeout": 800000
         }
       },
       "id": "bba-rev-brand-strategist",
@@ -86,10 +86,10 @@
         "options": {
           "response": {
             "response": {
-              "responseFormat": "json"
+              "neverError": true
             }
           },
-          "timeout": 120000
+          "timeout": 800000
         }
       },
       "id": "bba-rev-editor-en-jefe",
@@ -124,10 +124,10 @@
         "options": {
           "response": {
             "response": {
-              "responseFormat": "json"
+              "neverError": true
             }
           },
-          "timeout": 120000
+          "timeout": 800000
         }
       },
       "id": "bba-rev-jefe-client-success",

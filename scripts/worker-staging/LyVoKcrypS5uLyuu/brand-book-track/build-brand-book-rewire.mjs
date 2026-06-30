@@ -59,7 +59,11 @@ const lensNode = (lens, agent, [x, y]) => ({
       '  "task": {{ JSON.stringify($json.task) }},\n' +
       '  "context": { "role": "brand_book_lens", "lens": "' + lens + '" }\n' +
       '}',
-    options: { response: { response: { responseFormat: 'json' } }, timeout: 120000 },
+    // FIX-FORWARD 2026-06-30 · timeout 800s + neverError (igual que los run-sdk
+    // existentes) · el agente synthesis puede tardar · 120s lo cortaba
+    // ("connection aborted" exec 41388) · neverError = un 502 transiente no
+    // aborta · el consolidador tolera lentes faltantes (floor seguro).
+    options: { response: { response: { neverError: true } }, timeout: 800000 },
   },
   id: 'bb-lens-' + lens,
   name: 'Lente · ' + lens,

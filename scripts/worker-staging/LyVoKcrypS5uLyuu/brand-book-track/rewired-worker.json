@@ -1504,10 +1504,10 @@
         "options": {
           "response": {
             "response": {
-              "responseFormat": "json"
+              "neverError": true
             }
           },
-          "timeout": 120000
+          "timeout": 800000
         }
       },
       "id": "bb-lens-brand-strategist",
@@ -1542,10 +1542,10 @@
         "options": {
           "response": {
             "response": {
-              "responseFormat": "json"
+              "neverError": true
             }
           },
-          "timeout": 120000
+          "timeout": 800000
         }
       },
       "id": "bb-lens-editor-en-jefe",
@@ -1580,10 +1580,10 @@
         "options": {
           "response": {
             "response": {
-              "responseFormat": "json"
+              "neverError": true
             }
           },
-          "timeout": 120000
+          "timeout": 800000
         }
       },
       "id": "bb-lens-jefe-client-success",

@@ -36,7 +36,8 @@ const reviewer = (slug, [x, y]) => ({
       '={\n  "agent": "{{ $json.agent }}",\n  "client_id": "{{ $json.client_id }}",\n' +
       '  "workflow_id": "{{ $execution.id }}",\n  "workflow_execution_id": "{{ $execution.id }}",\n' +
       '  "task": {{ JSON.stringify($json.task) }},\n  "context": { "role": "brand_book_corrector", "reviewer": "' + slug + '" }\n}',
-    options: { response: { response: { responseFormat: 'json' } }, timeout: 120000 },
+    // FIX-FORWARD 2026-06-30 · timeout 800s + neverError (igual que run-sdk existentes).
+    options: { response: { response: { neverError: true } }, timeout: 800000 },
   },
   id: 'bba-rev-' + slug, name: 'Revisor · ' + slug,
   type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [x, y],
