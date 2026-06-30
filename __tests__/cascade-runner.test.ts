@@ -76,6 +76,36 @@ describe("runCascade · Gap 3", () => {
     expect(result.ok).toBe(true)
   })
 
+  it("propagates client_id top-level AND inside context (Camino III reviewers · §150)", async () => {
+    const bodies: Array<{ client_id?: string; context?: { client_id?: string } }> = []
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          response: `{"ok":true}`,
+          cost_usd: 0.01,
+          model: "claude-sonnet-4-6",
+          session_id: "s-x",
+        }),
+      } as Response
+    }) as unknown as typeof fetch
+
+    await runCascade(baseReq, {
+      baseUrl: "http://localhost",
+      internalApiKey: "test-key",
+      fetchImpl,
+    })
+
+    expect(bodies.length).toBeGreaterThan(0)
+    for (const b of bodies) {
+      expect(b.client_id).toBe("c-1")
+      expect(b.context?.client_id).toBe("c-1")
+    }
+  })
+
   it("chains agent N's parsed output as context for agent N+1", async () => {
     const tasksByAgent: Record<string, string> = {}
     const fetchImpl = (async (_url: string, init?: RequestInit) => {
