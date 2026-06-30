@@ -5,9 +5,13 @@
  * Las 3 lentes emiten su sección vía emit_brand_section · gate idéntico a
  * discovery-output (slug en BRAND_SECTION_ALLOW + SALA_DISCOVERY_BRAIN_PUSH_ENABLED).
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildMcpServers } from '../agent-mcp-registry'
-import { deriveAllowedTools } from '../agent-sdk-runner'
+
+// Stub el SDK · importar agent-sdk-runner (deriveAllowedTools) carga el paquete
+// runtime que el root vitest de CI no resuelve (vive en el pnpm tree del workspace).
+vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: () => ({}) }))
+const { deriveAllowedTools } = await import('../agent-sdk-runner')
 
 const FLAG = 'SALA_DISCOVERY_BRAIN_PUSH_ENABLED'
 
