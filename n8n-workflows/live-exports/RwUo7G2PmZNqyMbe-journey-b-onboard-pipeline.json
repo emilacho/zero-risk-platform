@@ -30,7 +30,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{  $env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app'  }}/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
         "jsonBody": "={\n  \"agent\": \"onboarding-specialist\",\n  \"task\": \"Generar intake form personalizado para nuevo cliente {{  $('Journey B entry (from Master Orchestrator)').first().json.body.client_id  }} · industria + tamaño + objetivos preliminares\",\n  \"client_id\": \"{{  $('Journey B entry (from Master Orchestrator)').first().json.body.client_id  }}\",\n  \"workflow_id\": \"{{  $workflow.id  }}\",\n  \"workflow_execution_id\": \"{{  $execution.id  }}\",\n  \"context\": { \"phase\": \"INTAKE\", \"journey_id\": \"{{  $('Journey B entry (from Master Orchestrator)').first().json.body._journey_id  }}\" }\n}",
         "sendHeaders": true,
         "headerParameters": {
@@ -76,7 +76,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{  $env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app'  }}/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
         "jsonBody": "={{ JSON.stringify({\n  agent: \"brand-strategist\",\n  task: \"Auto-generar Brand Book v1 INFORMED para cliente \" + $('Journey B entry (from Master Orchestrator)').first().json.body.client_id + \". Tu cliente tiene brain RAG enriquecido con intake form (v0) + ICP customer research (v1) + competitive landscape (v2) · usa brainEnrichment para construir Brand Book informed que diferencia del competitive landscape y resuena con ICP. Output: voice, tone, positioning, forbidden_words, required_terminology, visual identity. Scrape web cliente: \" + $('Journey B entry (from Master Orchestrator)').first().json.body.params.client_website_url,\n  client_id: $('Journey B entry (from Master Orchestrator)').first().json.body.client_id,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  context: {\n    phase: \"AUTO_BRAND_BOOK_V1_INFORMED\",\n    client_website_url: $('Journey B entry (from Master Orchestrator)').first().json.body.params.client_website_url,\n    brain_pipeline_state: \"v0+v1+v2 ingested · brand-strategist reads via brainEnrichment\"\n  }\n}) }}",
         "sendHeaders": true,
         "headerParameters": {
@@ -110,7 +110,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{  $env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app'  }}/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
         "jsonBody": "={\n  \"agent\": \"customer-research\",\n  \"task\": \"Generar ICP document v0 basado en intake responses + scrapeo web · 1-3 audience segments · JTBD + objeciones\",\n  \"client_id\": \"{{  $('Journey B entry (from Master Orchestrator)').first().json.body.client_id  }}\",\n  \"workflow_id\": \"{{  $workflow.id  }}\",\n  \"workflow_execution_id\": \"{{  $execution.id  }}\"\n}",
         "sendHeaders": true,
         "headerParameters": {
@@ -140,7 +140,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{  $env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app'  }}/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
         "jsonBody": "={\n  \"agent\": \"competitive-intelligence-agent\",\n  \"task\": \"5-layer competitive landscape para {{  $('Journey B entry (from Master Orchestrator)').first().json.body.client_id  }} en su vertical · top 5 competidores identificados + diferenciación + ad library audit\",\n  \"client_id\": \"{{  $('Journey B entry (from Master Orchestrator)').first().json.body.client_id  }}\",\n  \"workflow_id\": \"{{  $workflow.id  }}\",\n  \"workflow_execution_id\": \"{{  $execution.id  }}\"\n}",
         "sendHeaders": true,
         "headerParameters": {
@@ -206,7 +206,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{  $env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app'  }}/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
         "jsonBody": "={\n  \"agent\": \"web-designer\",\n  \"task\": \"Diseñar layout Notion workspace para {{  $('Journey B entry (from Master Orchestrator)').first().json.body.client_id  }} · sections: Brand Book · Campaigns · Reports · Files · Communication\",\n  \"client_id\": \"{{  $('Journey B entry (from Master Orchestrator)').first().json.body.client_id  }}\",\n  \"workflow_id\": \"{{  $workflow.id  }}\",\n  \"workflow_execution_id\": \"{{  $execution.id  }}\"\n}",
         "sendHeaders": true,
         "headerParameters": {
@@ -270,7 +270,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{  $env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app'  }}/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
         "jsonBody": "={\n  \"agent\": \"sales-enablement\",\n  \"task\": \"Generar kickoff deck para {{  $('Journey B entry (from Master Orchestrator)').first().json.body.client_id  }} · slides: vision · KPIs propuestos · timeline · sprint 1 plan · communication cadence\",\n  \"client_id\": \"{{  $('Journey B entry (from Master Orchestrator)').first().json.body.client_id  }}\",\n  \"workflow_id\": \"{{  $workflow.id  }}\",\n  \"workflow_execution_id\": \"{{  $execution.id  }}\"\n}",
         "sendHeaders": true,
         "headerParameters": {
@@ -371,7 +371,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{  $env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app'  }}/run-sdk",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
         "jsonBody": "={\n  \"agent\": \"jefe-marketing\",\n  \"task\": \"Producir plan del primer sprint · 2-3 deliverables iniciales · deadlines · agentes asignados\",\n  \"client_id\": \"{{  $('Journey B entry (from Master Orchestrator)').first().json.body.client_id  }}\",\n  \"workflow_id\": \"{{  $workflow.id  }}\",\n  \"workflow_execution_id\": \"{{  $execution.id  }}\"\n}",
         "sendHeaders": true,
         "headerParameters": {
