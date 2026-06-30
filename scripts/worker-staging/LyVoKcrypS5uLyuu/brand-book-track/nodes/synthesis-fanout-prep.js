@@ -42,4 +42,13 @@ const lenses = [
     task: base + '\n\nTU SECCIÓN: customer_angle + retention_notes.' },
 ];
 
-return lenses.map((l) => ({ json: { ...l, client_id: clientId, _grounding_refs: grounding } }));
+// FIX-FORWARD 2026-06-30 (Fix B · fan-out routing) · emití UN solo item con las
+// 3 tasks keyed por lente · cada nodo-lente lee SU task ($json.tasks.<lente>).
+// Antes emitía 3 items → n8n mandaba los 3 a cada nodo → mis-routing (solo 1
+// lente emitía · exec 41641). Un item = cada lente corre 1 vez con su task.
+const tasks = {
+  'brand-strategist': lenses[0].task,
+  'editor-en-jefe': lenses[1].task,
+  'jefe-client-success': lenses[2].task,
+};
+return [{ json: { tasks, client_id: clientId, _grounding_refs: grounding } }];

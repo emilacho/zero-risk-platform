@@ -74,6 +74,40 @@ server.registerTool(
   },
 )
 
+// ── Fidelity scores · el JUDGE (editor-en-jefe) emite sus scores estructurados
+// vía tool en vez de narrar (fix exec 41641 · el judge narraba → scores 0).
+const FIDELITY_SCORES_INPUT_SCHEMA = {
+  scores: z
+    .object({
+      positioning: z.number().min(0).max(1).optional(),
+      icp_summary: z.number().min(0).max(1).optional(),
+      voice_description: z.number().min(0).max(1).optional(),
+      customer_angle: z.number().min(0).max(1).optional(),
+      retention_notes: z.number().min(0).max(1).optional(),
+    })
+    .describe('Score 0..1 de groundedness por campo · 1 = soportado por la evidencia · 0 = inventado'),
+}
+
+server.registerTool(
+  'emit_fidelity_scores',
+  {
+    title: 'Emit Fidelity Scores',
+    description:
+      'Emití tus scores de FIDELIDAD (groundedness) por campo del brand book. Cada score ' +
+      '0..1 mide qué tan soportado por la EVIDENCIA real del cliente está el campo. ' +
+      'Llamá esto UNA VEZ al final. NO narres · usá el tool · es la única forma en que tus ' +
+      'scores llegan al decisor de canon.',
+    inputSchema: FIDELITY_SCORES_INPUT_SCHEMA,
+  },
+  async (args) => {
+    const n = Object.keys(args.scores ?? {}).length
+    process.stderr.write(
+      `[brand-section-server] emit_fidelity_scores · campos=${n} · client=${CLIENT_ID || '(none)'}\n`,
+    )
+    return { content: [{ type: 'text', text: `OK · ${n} scores de fidelidad recibidos. Podés parar.` }] }
+  },
+)
+
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)

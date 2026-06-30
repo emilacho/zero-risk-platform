@@ -87,6 +87,7 @@ export interface DryRunFakeResponse {
   discoveryToolCall: null
   /** Brand Book · siempre null en dry-run (no invoca MCP tools). */
   brandSectionToolCall: null
+  fidelityScoresToolCall: null
 }
 
 /**
@@ -120,6 +121,7 @@ export function buildDryRunFakeResponse(
       `NO Anthropic API call · NO MCP tools invoked · NO Client Brain enrichment`,
     discoveryToolCall: null,
     brandSectionToolCall: null,
+    fidelityScoresToolCall: null,
   }
 }
 

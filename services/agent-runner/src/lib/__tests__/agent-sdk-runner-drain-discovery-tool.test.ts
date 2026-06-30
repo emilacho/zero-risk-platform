@@ -163,6 +163,21 @@ describe('drainStream · emit_discovery_output capture', () => {
     expect(drain.brandSectionToolCall).toBeNull()
   })
 
+  it('Brand Book · captura emit_fidelity_scores en fidelityScoresToolCall (el judge)', async () => {
+    const SCORES = { scores: { positioning: 0.9, voice_description: 0.88 } }
+    const stream = streamOf(
+      { type: 'system', subtype: 'init', session_id: 'sess-1' },
+      asAssistant([
+        { type: 'tool_use', name: 'mcp__brand-section__emit_fidelity_scores', input: SCORES },
+      ]),
+      asResult(),
+    )
+    const drain = await drainStream(stream as never)
+    expect(drain.fidelityScoresToolCall).not.toBeNull()
+    expect(drain.fidelityScoresToolCall?.input).toEqual(SCORES)
+    expect(drain.brandSectionToolCall).toBeNull()
+  })
+
   it('preserves responseText accumulation when tool_use also present', async () => {
     const stream = streamOf(
       { type: 'system', subtype: 'init', session_id: 'sess-1' },

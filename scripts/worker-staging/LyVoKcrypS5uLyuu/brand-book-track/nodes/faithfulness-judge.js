@@ -26,8 +26,9 @@ const fieldsForPrompt = SCORED_FIELDS.map((f) => ({ field: f, value: String(draf
 const judgeTask =
   'Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y ' +
   'los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo ' +
-  '(1 = totalmente grounded · 0 = inventado/contradice). Respondé SOLO con JSON: ' +
-  '{"scores": {"<field>": <0..1>, ...}}. Sin prosa.\n\n' +
+  '(1 = totalmente grounded · 0 = inventado/contradice). LLAMÁ EL TOOL `emit_fidelity_scores` ' +
+  'con tus scores (un número 0..1 por campo). NO narres · usá el tool · es la ÚNICA forma en ' +
+  'que tus scores deciden el canon.\n\n' +
   'EVIDENCIA:\n' + JSON.stringify(grounding).slice(0, 6000) + '\n\n' +
   'CAMPOS:\n' + JSON.stringify(fieldsForPrompt).slice(0, 6000);
 
@@ -46,9 +47,16 @@ try {
     }),
   });
   const body = await resp.json();
-  const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);
-  const m = text.match(/\{[\s\S]*\}/);
-  if (m) scores = (JSON.parse(m[0]).scores) || {};
+  // CANON · el judge emite sus scores vía emit_fidelity_scores · el run-sdk los
+  // surface en body.fidelity_scores.scores. Fallback defensivo · parsear texto
+  // si por algún motivo el tool no fue capturado (degradación graceful).
+  if (body.fidelity_scores && body.fidelity_scores.scores) {
+    scores = body.fidelity_scores.scores;
+  } else {
+    const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);
+    const m = text.match(/\{[\s\S]*\}/);
+    if (m) { try { scores = (JSON.parse(m[0]).scores) || {}; } catch (e) {} }
+  }
 } catch (e) {
   scores = {};
 }
