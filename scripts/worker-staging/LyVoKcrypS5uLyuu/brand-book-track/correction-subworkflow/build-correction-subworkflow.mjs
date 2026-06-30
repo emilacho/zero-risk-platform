@@ -99,7 +99,9 @@ link('Revisor · jefe-client-success', '[BBA] Merge corrections')
 link('[BBA] Merge corrections', '[BBA] IF · seguir corrigiendo')
 link('[BBA] IF · seguir corrigiendo', '[BBA] Re-síntesis', 0) // true · seguir
 link('[BBA] IF · seguir corrigiendo', '[BBA] Exit · borrador final', 1) // false · converge/agota
-link('[BBA] Re-síntesis', '[BBA] Review prep') // LOOP back (cap por cycle en merge)
+// FIX 2026-06-30 (Fix B) · Re-síntesis → Exit · SIN loop-back · Lazo A a 1 ciclo
+// (no vinculante · era el multiplicador de costo · antes volvía a Review prep).
+link('[BBA] Re-síntesis', '[BBA] Exit · borrador final')
 
 const wf = {
   name: 'Zero Risk — Brand Book · Lazo A corrección (sub-workflow)',

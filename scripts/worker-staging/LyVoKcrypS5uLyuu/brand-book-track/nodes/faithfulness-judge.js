@@ -45,6 +45,11 @@ try {
       client_id: clientId,
       workflow_id: $execution.id, // por-run · NO colisiona con checkpoint (lección exec 40025)
       workflow_execution_id: $execution.id,
+      // FIX 2026-06-30 (Bug checkpoint collision · causa raíz scores 0) · step_name
+      // DISTINTO del de la lente editor-en-jefe + único por ciclo · sin esto el judge
+      // rehidrataba el output de la lente (brand_section · no scores → 0) y el
+      // forced-emit nunca corría (rehidratación temprana saltea el forced-emit).
+      step_name: 'bb-faithfulness-judge-c' + fidelityCycle,
       task: judgeTask,
       context: { role: 'faithfulness_judge', threshold: THRESHOLD },
       // Bug 2 fix · marca la invocación-judge · activa el forced-emit Messages-API
