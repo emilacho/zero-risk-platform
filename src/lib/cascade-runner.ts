@@ -253,6 +253,12 @@ export async function runCascade(
       workflow_id: request.workflow_id,
       workflow_execution_id: request.workflow_execution_id,
       context: {
+        // Second client_id propagation path · the editor-middleware Camino III
+        // reviewer sub-calls fall back to `context.client_id` when the
+        // top-level resolved value is empty · keeps reviewer
+        // `agent_invocations.client_id` populated (not NULL) so the §150 cap
+        // + cost-by-client see them.
+        client_id: request.client_id,
         scrape_summary: request.scrape_summary,
         brand_assets: request.brand_assets,
         cascade_context: cascadeContext,

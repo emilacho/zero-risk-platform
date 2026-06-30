@@ -9,6 +9,7 @@ import { capture } from '@/lib/posthog'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { enrichClientIdFromContext } from '@/lib/client-id-enricher'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
 import {
   addLegacyDeprecationHeaders,
   legacyJson,
@@ -490,6 +491,39 @@ export async function POST(request: Request) {
       client_id: resolvedClientId,
       has_pipeline_id: !!context.pipeline_id,
     })
+
+    // ── §150 spend gate · second agent-invocation door ──────────────────
+    // This endpoint proxies to the SAME Railway agent-runner as
+    // /api/agents/run-sdk · the #240 gate only covered run-sdk, so spend
+    // bypassed via this route (Camino III cascade fires here). Apply the
+    // identical gate · default-OFF (shadow) until SALA_NAUFRAGO_RUN_CAP_ENFORCE.
+    // §148 safety-net: a query failure never blocks legit traffic.
+    {
+      const gate = await checkRunSdkSpendCap(getSupabaseAdmin(), resolvedClientId)
+      if (gate.blocked) {
+        console.warn(
+          `[agents-run] §150 CAP BLOCK · client=${String(resolvedClientId).slice(0, 8)} · ` +
+            `spent=$${(gate.spent_usd ?? 0).toFixed(2)} >= cap=$${(gate.cap_usd ?? 0).toFixed(2)}`,
+        )
+        capture('agent_run_cap_blocked', String(resolvedClientId || 'system'), {
+          agent_slug: canonicalSlug,
+          spent_usd: gate.spent_usd,
+          cap_usd: gate.cap_usd,
+        })
+        return legacyJson(
+          {
+            error: 'cost_cap_exceeded',
+            code: 'E-CAP-150',
+            cap_usd: gate.cap_usd,
+            spent_usd: gate.spent_usd,
+            detail:
+              `§150 spend cap · client cumulative $${(gate.spent_usd ?? 0).toFixed(2)} ` +
+              `>= cap $${(gate.cap_usd ?? 0).toFixed(2)} (24h window) · invocation blocked`,
+          },
+          { status: 429 },
+        )
+      }
+    }
 
     const railwayUrl = process.env.RAILWAY_AGENT_RUNNER_URL
     if (!railwayUrl) {
