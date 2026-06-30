@@ -37,6 +37,7 @@ import { resolveAgentSlug } from '@/lib/agent-alias-map'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { validateWorkflowId } from '@/lib/agent-safety'
+import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
 import {
   ensureClientExists,
   isDiscoveryBrainPushEnabled,
@@ -533,6 +534,39 @@ export async function POST(request: Request) {
       client_id: clientId,
       has_pipeline_id: !!body.pipeline_id,
     })
+
+    // ── §150 spend gate · REAL brake before invoking the model ───────────
+    // Closes the P0 gap (CC#3 2026-06-30): the cap only lived at the
+    // sala-router dispatch + Slack alerts · run-sdk had none, so spend ran
+    // past the cap. Default-OFF (shadow) until Emilio flips the canon flag
+    // SALA_NAUFRAGO_RUN_CAP_ENFORCE · §148 safety-net: a query failure never
+    // blocks legit traffic. Over-cap → 429 (no model call · no cost).
+    {
+      const gate = await checkRunSdkSpendCap(getSupabaseAdmin(), clientId)
+      if (gate.blocked) {
+        console.warn(
+          `[run-sdk] §150 CAP BLOCK · client=${String(clientId).slice(0, 8)} · ` +
+            `spent=$${(gate.spent_usd ?? 0).toFixed(2)} >= cap=$${(gate.cap_usd ?? 0).toFixed(2)}`,
+        )
+        capture('agent_run_cap_blocked', String(clientId || 'system'), {
+          agent_slug: agentName,
+          spent_usd: gate.spent_usd,
+          cap_usd: gate.cap_usd,
+        })
+        return NextResponse.json(
+          {
+            error: 'cost_cap_exceeded',
+            code: 'E-CAP-150',
+            cap_usd: gate.cap_usd,
+            spent_usd: gate.spent_usd,
+            detail:
+              `§150 spend cap · client cumulative $${(gate.spent_usd ?? 0).toFixed(2)} ` +
+              `>= cap $${(gate.cap_usd ?? 0).toFixed(2)} (24h window) · invocation blocked`,
+          },
+          { status: 429 },
+        )
+      }
+    }
 
     // ── Proxy to Railway agent-runner ────────────────────────────────────
     // The actual SDK invocation lives in services/agent-runner/ on Railway.
