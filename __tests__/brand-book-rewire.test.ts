@@ -145,6 +145,16 @@ describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
     const code = readNode('faithfulness-judge.js')
     expect(code).toMatch(/extra:\s*\{\s*fidelity_judge:\s*true/)
   })
+  it('Fix checkpoint · el judge pasa step_name DISTINTO de la lente (evita rehidratar su output)', () => {
+    const code = readNode('faithfulness-judge.js')
+    expect(code).toMatch(/step_name:\s*'bb-faithfulness-judge-c'\s*\+\s*fidelityCycle/)
+  })
+  it('Fix checkpoint · cada lente pasa step_name distinto (bb-lens-<lente>)', () => {
+    for (const lens of ['brand-strategist', 'editor-en-jefe', 'jefe-client-success']) {
+      const node = nodeByName('Lente · ' + lens) as { parameters: { jsonBody?: string } }
+      expect(node.parameters.jsonBody).toContain('"step_name": "bb-lens-' + lens + '"')
+    }
+  })
 })
 
 describe('brand-book rewire · node code parsea como JS válido', () => {
@@ -186,15 +196,17 @@ describe('Lazo A · sub-workflow de corrección', () => {
       expect(subTargets(r)).toContain('[BBA] Merge corrections')
     }
   })
-  it('IF seguir · true→re-síntesis · false→exit · y re-síntesis LOOP back a review prep', () => {
+  it('Fix B · IF seguir · true→re-síntesis · false→exit · y re-síntesis → EXIT (sin loop-back · 1 ciclo)', () => {
     expect(subTargets('[BBA] Merge corrections')).toContain('[BBA] IF · seguir corrigiendo')
     expect(subTargets('[BBA] IF · seguir corrigiendo', 0)).toContain('[BBA] Re-síntesis') // true
     expect(subTargets('[BBA] IF · seguir corrigiendo', 1)).toContain('[BBA] Exit · borrador final') // false
-    expect(subTargets('[BBA] Re-síntesis')).toContain('[BBA] Review prep') // LOOP back-edge
+    // Fix B · re-síntesis va al EXIT (no vuelve a review prep) · Lazo A a 1 ciclo.
+    expect(subTargets('[BBA] Re-síntesis')).toContain('[BBA] Exit · borrador final')
+    expect(subTargets('[BBA] Re-síntesis')).not.toContain('[BBA] Review prep')
   })
-  it('merge · cap 3 ciclos + formato accionable + keep_going (creador corrige, no jefes)', () => {
+  it('Fix B · merge · cap 1 ciclo (no vinculante · recorte de volumen) + formato accionable', () => {
     const code = readSub('correction-merge.js')
-    expect(code).toContain('MAX_CYCLES = 3')
+    expect(code).toContain('MAX_CYCLES = 1')
     expect(code).toContain('keep_going')
     for (const k of ['eje', 'severidad', 'donde', 'problema', 'por_que', 'cambio_sugerido']) {
       expect(code).toContain(k)

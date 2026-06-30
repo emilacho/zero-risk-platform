@@ -56,6 +56,9 @@ const lensNode = (lens, agent, [x, y]) => ({
       '  "client_id": "{{ $json.client_id }}",\n' +
       '  "workflow_id": "{{ $execution.id }}",\n' +
       '  "workflow_execution_id": "{{ $execution.id }}",\n' +
+      // FIX 2026-06-30 (Bug checkpoint collision) · step_name distinto por lente ·
+      // evita que editor-en-jefe-lente colisione con editor-en-jefe-judge u otros roles.
+      '  "step_name": "bb-lens-' + lens + '",\n' +
       // Fix B · cada lente lee SU task del item único ($json.tasks.<lente>).
       "  \"task\": {{ JSON.stringify($json.tasks['" + lens + "']) }},\n" +
       '  "context": { "role": "brand_book_lens", "lens": "' + lens + '" }\n' +

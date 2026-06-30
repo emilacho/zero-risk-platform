@@ -929,7 +929,12 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       {
         workflowId: input.workflowId,
         clientId: input.clientId,
-        stepName: canonicalSlug,
+        // FIX 2026-06-30 (Bug · checkpoint collision) · usar el step_name EXPLÍCITO
+        // cuando viene · sino el slug. Sin esto, un mismo agente invocado con DOS
+        // roles en una ejecución (ej. editor-en-jefe como LENTE y como JUDGE) colisiona
+        // en (workflow_id, client_id, slug) → el 2º rehidrata el output del 1º. El judge
+        // rehidrataba el brand_section de la lente → scores 0 + forced-emit nunca corría.
+        stepName: input.stepName || canonicalSlug,
       },
       { forceRestart: input.forceRestart === true },
     )
@@ -961,7 +966,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
         workflowId: input.workflowId,
         workflowExecutionId: input.workflowExecutionId ?? null,
         clientId: input.clientId,
-        stepName: canonicalSlug,
+        stepName: input.stepName || canonicalSlug, // misma clave que el skip (Bug checkpoint collision)
         status: 'in_progress',
       })
     }
@@ -1151,6 +1156,20 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     // scores 0 → loop. Gateado por extra.fidelity_judge (solo la invocación-judge ·
     // NO las lentes) + brand-section montado + sin emisión. Messages-API tool_choice
     // COMPELE el tool call (mismo patrón discovery · va directo · sin resume previo).
+    // Diagnóstico (CC#4 2026-06-30) · loguear el estado del gate del judge para
+    // forensics sin smoke · revela si extra llega, si brand-section está montado,
+    // y si el agente ya emitió scores.
+    const extraObj =
+      input.extra && typeof input.extra === 'object' && !Array.isArray(input.extra)
+        ? (input.extra as Record<string, unknown>)
+        : {}
+    if (extraObj.fidelity_judge === true) {
+      console.log(
+        `[fidelity-judge-gate] ${canonicalSlug} · fidelity_judge=${extraObj.fidelity_judge} · ` +
+          `brand_section_mounted=${!!(options.mcpServers as Record<string, unknown> | undefined)?.['brand-section']} · ` +
+          `already_emitted=${drain.fidelityScoresToolCall !== null} · step=${input.stepName || canonicalSlug}`,
+      )
+    }
     if (
       shouldForceFidelityEmit(
         options.mcpServers as Record<string, unknown> | undefined,
@@ -1176,7 +1195,10 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
             inputTokens: drain.inputTokens + forced.inputTokens,
             outputTokens: drain.outputTokens + forced.outputTokens,
           }
-          console.log(`[forced-emit] ${canonicalSlug} (judge) · scores RECUPERADOS vía Messages-API`)
+          console.log(
+            `[forced-emit] ${canonicalSlug} (judge) · scores RECUPERADOS vía Messages-API · ` +
+              JSON.stringify((forced.input as { scores?: unknown }).scores ?? forced.input),
+          )
         } else {
           console.warn(`[forced-emit] ${canonicalSlug} (judge) · Messages-API no devolvió tool_use`)
         }
@@ -1259,7 +1281,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       workflowId: input.workflowId,
       workflowExecutionId: input.workflowExecutionId ?? null,
       clientId: input.clientId,
-      stepName: canonicalSlug,
+      stepName: input.stepName || canonicalSlug, // misma clave que el skip (Bug checkpoint collision)
       status: 'completed',
       outputRef: serializeResultForCheckpoint(result),
       costUsd,

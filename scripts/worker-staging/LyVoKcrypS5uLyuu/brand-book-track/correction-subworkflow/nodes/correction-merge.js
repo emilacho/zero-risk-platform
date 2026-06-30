@@ -5,7 +5,12 @@
 // Input: items de los 3 review-agents (cada uno con `response` = JSON corrections)
 // Output: { brand_book_draft, _grounding_refs, client_id, cycle, corrections, keep_going }
 
-const MAX_CYCLES = 3;
+// FIX 2026-06-30 (Fix B · recorte de volumen) · Lazo A a 1 ciclo. Es NO VINCULANTE
+// (la fidelidad decide canon · no estos votos) · y era el multiplicador de costo
+// (corría 3-4 ciclos × 3 revisores POR cada ciclo de fidelidad → ~60 invocaciones).
+// Ahora · 1 pasada de diagnóstico + a lo sumo 1 re-síntesis · Re-síntesis → Exit
+// (sin loop-back · ver build-correction-subworkflow.mjs).
+const MAX_CYCLES = 1;
 const items = $input.all();
 
 // recupera draft/grounding/cycle del primer item (todos lo comparten).
@@ -50,9 +55,10 @@ for (const it of items) {
   }
 }
 
-// seguir si hay correcciones accionables Y no agotamos ciclos.
+// Re-sintetizar UNA vez si hay correcciones accionables · Re-síntesis → Exit
+// (no hay loop-back · el cap de 1 ciclo lo da el wiring, no este contador).
 const hasActionable = corrections.some((c) => c.cambio_sugerido.trim().length > 0);
-const keepGoing = hasActionable && cycle < MAX_CYCLES;
+const keepGoing = hasActionable;
 
 return [{ json: {
   brand_book_draft: draft,
