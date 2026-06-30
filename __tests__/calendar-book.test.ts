@@ -118,6 +118,8 @@ describe('POST /api/calendar/book · Cal.com Cloud v2', () => {
     expect(inserted.provider).toBe('cal_com')
     expect(inserted.provider_booking_id).toBe('cal-uid-1')
     expect(inserted.meeting_url).toBe('https://cal.video/cal-uid-1')
+    // Cal.com 'accepted' → mapped to constraint-allowed 'confirmed'
+    expect(inserted.status).toBe('confirmed')
   })
 
   it('2 · 401 when x-api-key missing', async () => {
