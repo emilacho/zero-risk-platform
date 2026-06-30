@@ -27,7 +27,9 @@ const grounding = {
 // solo los 3 contribuyentes relevantes · NO los 38 · §150).
 const base =
   'Construí TU sección del brand book SOLO desde la evidencia real del cliente abajo ' +
-  '(web/redes/discovery/Apify). NO inventes. Emití JSON estructurado en `structured`. ' +
+  '(web/redes/discovery/Apify). NO inventes. CUANDO TENGAS TU SECCIÓN LISTA, LLAMÁ EL TOOL ' +
+  '`emit_brand_section` con tus campos (pasá `lens` con tu nombre de lente). NO narres la ' +
+  'respuesta · usá el tool · es la ÚNICA forma en que tu sección llega al consolidador. ' +
   'Grounding cada afirmación en la evidencia.\n\nEVIDENCIA:\n' +
   JSON.stringify(grounding).slice(0, 8000);
 

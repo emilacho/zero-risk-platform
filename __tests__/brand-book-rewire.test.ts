@@ -44,9 +44,23 @@ describe('brand-book rewire · nodos del nuevo track', () => {
 })
 
 describe('brand-book rewire · cableado del track (fuera del gate Camino III)', () => {
-  const AGG = '[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)'
-  it('Aggregate (FASE 2) dispara el Fan-out prep · track propio', () => {
-    expect(targets(AGG)).toContain('[BB] Fan-out prep')
+  const TRIGGER = 'Confirm barato · competitor list'
+  it('el track branchea desde un nodo INCONDICIONAL post-discovery (no Aggregate · fix 40856)', () => {
+    // corre siempre tras el Discovery Parser · independiente del competitor verdict.
+    expect(targets(TRIGGER)).toContain('[BB] Fan-out prep')
+    // NO desde Aggregate (que hereda el gate "proceder" y no corre en "observar"→HITL).
+    expect(targets('[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)')).not.toContain('[BB] Fan-out prep')
+  })
+  it('Cal.com kickoff tiene continueOnFail (un error no aborta el journey · fix 40856)', () => {
+    const cal = nodeByName('Schedule Kickoff Call (Cal.com)') as { continueOnFail?: boolean } | undefined
+    expect(cal?.continueOnFail).toBe(true)
+  })
+  it('las 3 lentes mandan auth x-api-key a run-sdk (fix exec 41381 "Authorization failed")', () => {
+    for (const l of ['Lente · brand-strategist', 'Lente · editor-en-jefe', 'Lente · jefe-client-success']) {
+      const hp = JSON.stringify((nodeByName(l) as { parameters: { headerParameters?: unknown } }).parameters.headerParameters ?? {})
+      expect(hp).toContain('x-api-key')
+      expect(hp).toContain('INTERNAL_API_KEY')
+    }
   })
   it('Fan-out → 3 lentes en paralelo', () => {
     const t = targets('[BB] Fan-out prep')

@@ -38,6 +38,16 @@ const lensNode = (lens, agent, [x, y]) => ({
   parameters: {
     method: 'POST',
     url: "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    // FIX-FORWARD 2026-06-30 · run-sdk requiere auth interna · mismo patrón que
+    // los nodos run-sdk existentes (Re-discovery/Competitor Verdict · exec 41381
+    // erroró "Authorization failed" sin esto).
+    sendHeaders: true,
+    headerParameters: {
+      parameters: [
+        { name: 'Content-Type', value: 'application/json' },
+        { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' },
+      ],
+    },
     sendBody: true,
     specifyBody: 'json',
     jsonBody:
@@ -49,7 +59,11 @@ const lensNode = (lens, agent, [x, y]) => ({
       '  "task": {{ JSON.stringify($json.task) }},\n' +
       '  "context": { "role": "brand_book_lens", "lens": "' + lens + '" }\n' +
       '}',
-    options: { response: { response: { responseFormat: 'json' } }, timeout: 120000 },
+    // FIX-FORWARD 2026-06-30 · timeout 800s + neverError (igual que los run-sdk
+    // existentes) · el agente synthesis puede tardar · 120s lo cortaba
+    // ("connection aborted" exec 41388) · neverError = un 502 transiente no
+    // aborta · el consolidador tolera lentes faltantes (floor seguro).
+    options: { response: { response: { neverError: true } }, timeout: 800000 },
   },
   id: 'bb-lens-' + lens,
   name: 'Lente · ' + lens,
@@ -121,9 +135,16 @@ const link = (from, to, fromOut = 'main', idx = 0) => {
   conns[from][fromOut][idx].push({ node: to, type: 'main', index: 0 })
 }
 
-const AGG = '[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)'
-// (0/7) NUEVO TRACK: Aggregate → Fan-out (en paralelo al path existente · no lo rompe)
-link(AGG, '[BB] Fan-out prep')
+// (0/7) NUEVO TRACK · FIX-FORWARD 2026-06-30: branchear desde un nodo
+// INCONDICIONAL post-discovery, NO desde Aggregate. Aggregate solo corre en el
+// path "proceder" del competitor verdict · con verdict "observar"→HITL (caso común)
+// nunca corría → el track no se disparaba (exec 40856 · 0/9 nodos). `Confirm
+// barato · competitor list` corre SIEMPRE tras el Discovery Parser (antes del
+// verdict) y ya tiene el `discovery_package` que el fan-out prep necesita. El
+// Apify aggregate es opcional (fan-out prep tiene fallback graceful).
+const TRIGGER = 'Confirm barato · competitor list'
+// en paralelo al path existente (→ Competitor Verdict) · no lo rompe.
+link(TRIGGER, '[BB] Fan-out prep')
 // Fan-out → 3 lentes (cada item del split va a cada lente por separado)
 link('[BB] Fan-out prep', 'Lente · brand-strategist')
 link('[BB] Fan-out prep', 'Lente · editor-en-jefe')
@@ -153,6 +174,16 @@ if (oldPersist && typeof oldPersist.parameters.jsCode === 'string') {
     '// Camino III PASS · nunca corría). El brand_book lo escribe el track propio\n' +
     "// '[BB] Promote → canon' por FIDELIDAD PASS. ICP/competitive mantienen su path.\n" +
     oldPersist.parameters.jsCode
+}
+
+// FIX-FORWARD 2026-06-30 · continueOnFail en el nodo Cal.com: un error del
+// servicio (caído · canon §6 · "contact_email_required" en exec 40856) NO debe
+// abortar el journey ni matar el track de brand book. El journey sigue con el
+// resto (handoff, notify) aunque el kickoff falle.
+const calcom = nodes.find((n) => n.name === 'Schedule Kickoff Call (Cal.com)')
+if (calcom) {
+  calcom.continueOnFail = true
+  calcom.onError = 'continueRegularOutput'
 }
 
 base.nodes = nodes.concat(newNodes)

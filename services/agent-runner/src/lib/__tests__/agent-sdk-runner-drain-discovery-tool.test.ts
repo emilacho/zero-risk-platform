@@ -138,6 +138,31 @@ describe('drainStream · emit_discovery_output capture', () => {
     expect(drain.discoveryToolCall).toBeNull()
   })
 
+  it('Brand Book · captura emit_brand_section en brandSectionToolCall (no cruza con discovery)', async () => {
+    const SECTION = { lens: 'brand-strategist', positioning: 'P', icp_summary: 'I' }
+    const stream = streamOf(
+      { type: 'system', subtype: 'init', session_id: 'sess-1' },
+      asAssistant([
+        { type: 'tool_use', name: 'mcp__brand-section__emit_brand_section', input: SECTION },
+      ]),
+      asResult(),
+    )
+    const drain = await drainStream(stream as never)
+    expect(drain.brandSectionToolCall).not.toBeNull()
+    expect(drain.brandSectionToolCall?.input).toEqual(SECTION)
+    expect(drain.discoveryToolCall).toBeNull()
+  })
+
+  it('Brand Book · brandSectionToolCall null cuando la lente narra sin emitir', async () => {
+    const stream = streamOf(
+      { type: 'system', subtype: 'init', session_id: 'sess-1' },
+      asAssistant([{ type: 'text', text: 'Voy a investigar... (narración)' }]),
+      asResult(),
+    )
+    const drain = await drainStream(stream as never)
+    expect(drain.brandSectionToolCall).toBeNull()
+  })
+
   it('preserves responseText accumulation when tool_use also present', async () => {
     const stream = streamOf(
       { type: 'system', subtype: 'init', session_id: 'sess-1' },

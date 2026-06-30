@@ -190,7 +190,9 @@
         2640,
         400
       ],
-      "notes": "\n\n[GHL canon-clean rename 2026-06-05 · CC#4 A2] Renamed from \"Schedule Kickoff Call (GHL Calendar)\". URL is canon-clean internal endpoint (NOT GHL). Per drift-hunt-results §2.3 COSMETIC class."
+      "notes": "\n\n[GHL canon-clean rename 2026-06-05 · CC#4 A2] Renamed from \"Schedule Kickoff Call (GHL Calendar)\". URL is canon-clean internal endpoint (NOT GHL). Per drift-hunt-results §2.3 COSMETIC class.",
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -1468,7 +1470,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Brand Book · Fan-out prep · paso 2 · arma el grounding compartido para las 3\n// lentes (brand-strategist · editor-en-jefe · jefe-client-success). Corre DESPUÉS\n// de FASE 2 (Aggregate Apify listo) · fuera del gate Camino III. NO INSERT.\n\nconst dealData = $('Validate Deal Data').first().json;\nconst clientId = dealData.client_id;\nconst discoveryPkg =\n  ($('Confirm barato · competitor list').first().json.discovery_package) || {};\nconst apifyAgg = (() => {\n  try { return $('[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)').first().json; }\n  catch (e) { return {}; }\n})();\n\n// Evidencia real ya en el brain · es el grounding de las 3 lentes (cero invención).\nconst grounding = {\n  client_id: clientId,\n  client_name: dealData.client_name,\n  industry: dealData.industry,\n  website: dealData.website,\n  discovery_summary: discoveryPkg.discovery_summary || '',\n  competitors: (discoveryPkg.competitors || []).slice(0, 8),\n  icp_signals: discoveryPkg.icp_signals || discoveryPkg.icp || null,\n  apify_sources: (apifyAgg.sources || apifyAgg.results || []).slice(0, 10),\n};\n\n// Un item por lente · cada uno con su task scoped a su skill (disciplina de fan-out:\n// solo los 3 contribuyentes relevantes · NO los 38 · §150).\nconst base =\n  'Construí TU sección del brand book SOLO desde la evidencia real del cliente abajo ' +\n  '(web/redes/discovery/Apify). NO inventes. Emití JSON estructurado en `structured`. ' +\n  'Grounding cada afirmación en la evidencia.\\n\\nEVIDENCIA:\\n' +\n  JSON.stringify(grounding).slice(0, 8000);\n\nconst lenses = [\n  { lens: 'brand-strategist', agent: 'brand-strategist',\n    task: base + '\\n\\nTU SECCIÓN: positioning + icp (audience_segment, pains, goals).' },\n  { lens: 'editor-en-jefe', agent: 'editor-en-jefe',\n    task: base + '\\n\\nTU SECCIÓN: voice_description + forbidden_words[] + required_terminology[].' },\n  { lens: 'jefe-client-success', agent: 'jefe-client-success',\n    task: base + '\\n\\nTU SECCIÓN: customer_angle + retention_notes.' },\n];\n\nreturn lenses.map((l) => ({ json: { ...l, client_id: clientId, _grounding_refs: grounding } }));\n"
+        "jsCode": "// Brand Book · Fan-out prep · paso 2 · arma el grounding compartido para las 3\r\n// lentes (brand-strategist · editor-en-jefe · jefe-client-success). Corre DESPUÉS\r\n// de FASE 2 (Aggregate Apify listo) · fuera del gate Camino III. NO INSERT.\r\n\r\nconst dealData = $('Validate Deal Data').first().json;\r\nconst clientId = dealData.client_id;\r\nconst discoveryPkg =\r\n  ($('Confirm barato · competitor list').first().json.discovery_package) || {};\r\nconst apifyAgg = (() => {\r\n  try { return $('[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)').first().json; }\r\n  catch (e) { return {}; }\r\n})();\r\n\r\n// Evidencia real ya en el brain · es el grounding de las 3 lentes (cero invención).\r\nconst grounding = {\r\n  client_id: clientId,\r\n  client_name: dealData.client_name,\r\n  industry: dealData.industry,\r\n  website: dealData.website,\r\n  discovery_summary: discoveryPkg.discovery_summary || '',\r\n  competitors: (discoveryPkg.competitors || []).slice(0, 8),\r\n  icp_signals: discoveryPkg.icp_signals || discoveryPkg.icp || null,\r\n  apify_sources: (apifyAgg.sources || apifyAgg.results || []).slice(0, 10),\r\n};\r\n\r\n// Un item por lente · cada uno con su task scoped a su skill (disciplina de fan-out:\r\n// solo los 3 contribuyentes relevantes · NO los 38 · §150).\r\nconst base =\r\n  'Construí TU sección del brand book SOLO desde la evidencia real del cliente abajo ' +\r\n  '(web/redes/discovery/Apify). NO inventes. CUANDO TENGAS TU SECCIÓN LISTA, LLAMÁ EL TOOL ' +\r\n  '`emit_brand_section` con tus campos (pasá `lens` con tu nombre de lente). NO narres la ' +\r\n  'respuesta · usá el tool · es la ÚNICA forma en que tu sección llega al consolidador. ' +\r\n  'Grounding cada afirmación en la evidencia.\\n\\nEVIDENCIA:\\n' +\r\n  JSON.stringify(grounding).slice(0, 8000);\r\n\r\nconst lenses = [\r\n  { lens: 'brand-strategist', agent: 'brand-strategist',\r\n    task: base + '\\n\\nTU SECCIÓN: positioning + icp (audience_segment, pains, goals).' },\r\n  { lens: 'editor-en-jefe', agent: 'editor-en-jefe',\r\n    task: base + '\\n\\nTU SECCIÓN: voice_description + forbidden_words[] + required_terminology[].' },\r\n  { lens: 'jefe-client-success', agent: 'jefe-client-success',\r\n    task: base + '\\n\\nTU SECCIÓN: customer_angle + retention_notes.' },\r\n];\r\n\r\nreturn lenses.map((l) => ({ json: { ...l, client_id: clientId, _grounding_refs: grounding } }));\r\n"
       },
       "id": "bb--bb-fan-out-prep",
       "name": "[BB] Fan-out prep",
@@ -1483,16 +1485,29 @@
       "parameters": {
         "method": "POST",
         "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"agent\": \"brand-strategist\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"task\": {{ JSON.stringify($json.task) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"brand-strategist\" }\n}",
         "options": {
           "response": {
             "response": {
-              "responseFormat": "json"
+              "neverError": true
             }
           },
-          "timeout": 120000
+          "timeout": 800000
         }
       },
       "id": "bb-lens-brand-strategist",
@@ -1508,16 +1523,29 @@
       "parameters": {
         "method": "POST",
         "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"task\": {{ JSON.stringify($json.task) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"editor-en-jefe\" }\n}",
         "options": {
           "response": {
             "response": {
-              "responseFormat": "json"
+              "neverError": true
             }
           },
-          "timeout": 120000
+          "timeout": 800000
         }
       },
       "id": "bb-lens-editor-en-jefe",
@@ -1533,16 +1561,29 @@
       "parameters": {
         "method": "POST",
         "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"agent\": \"jefe-client-success\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"task\": {{ JSON.stringify($json.task) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"jefe-client-success\" }\n}",
         "options": {
           "response": {
             "response": {
-              "responseFormat": "json"
+              "neverError": true
             }
           },
-          "timeout": 120000
+          "timeout": 800000
         }
       },
       "id": "bb-lens-jefe-client-success",
@@ -1556,7 +1597,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Brand Book · Consolidador (maker) · paso 3 + re-síntesis del lazo A (paso 4)\n// Funde las 3 lentes de los jefes en UN brand_book_draft · cada campo grounded\n// en evidencia real (discovery_summary + ICP + competitive del brain). NO INSERT.\n//\n// Inputs (vía $items / referencias de nodos):\n//   - brand-strategist  → posicionamiento + ICP\n//   - editor-en-jefe    → voz/tono + forbidden_words + required_terminology\n//   - jefe-client-success → ángulo cliente / retención\n//   - corrections (opcional · lazo A) → array de {eje,severidad,donde,problema,cambio_sugerido}\n//\n// Output: { brand_book_draft, cycle, _grounding_refs }\n\nconst dealData = $('Validate Deal Data').first().json;\nconst clientId = dealData.client_id;\n\n// Cada lente llega como respuesta run-sdk · tomamos su `response` (texto) o\n// `structured` si el agente emitió JSON. Defensive · floors seguros.\nfunction lensOutput(nodeName) {\n  try {\n    const j = $(nodeName).first().json;\n    const body = j.body || j;\n    // preferimos un bloque estructurado si el agente lo emitió; si no, el texto.\n    return {\n      structured: body.structured || body.brand_book_section || null,\n      text: typeof body.response === 'string' ? body.response : '',\n    };\n  } catch (e) {\n    return { structured: null, text: '' };\n  }\n}\n\nconst strat = lensOutput('Lente · brand-strategist');\nconst editor = lensOutput('Lente · editor-en-jefe');\nconst cs = lensOutput('Lente · jefe-client-success');\n\n// Correcciones acumuladas del lazo A (si venimos de una re-síntesis).\nlet corrections = [];\ntry {\n  corrections = $json.corrections || $json.staging_package?.corrections || [];\n} catch (e) { corrections = []; }\nconst cycle = (Number($json.cycle) || 0) + 1;\n\n// pick · usa structured cuando exista, fallback a texto.\nconst pick = (lens, key) =>\n  (lens.structured && lens.structured[key]) || lens.text || '';\n\nconst brandBookDraft = {\n  client_id: clientId,\n  // posicionamiento + ICP (brand-strategist)\n  positioning: pick(strat, 'positioning'),\n  icp_summary: pick(strat, 'icp'),\n  // voz/tono + reglas (editor-en-jefe)\n  voice_description: pick(editor, 'voice_description'),\n  forbidden_words: (editor.structured && editor.structured.forbidden_words) || [],\n  required_terminology: (editor.structured && editor.structured.required_terminology) || [],\n  // ángulo cliente / retención (jefe-client-success)\n  customer_angle: pick(cs, 'customer_angle'),\n  retention_notes: pick(cs, 'retention_notes'),\n  // metadata de build\n  _build: {\n    source: 'onboarding_collaborative_build',\n    lenses: ['brand-strategist', 'editor-en-jefe', 'jefe-client-success'],\n    cycle,\n    corrections_applied: corrections.length,\n  },\n};\n\n// Referencias de grounding · qué evidencia respalda el borrador (para el judge).\nconst grounding = {\n  discovery_summary:\n    ($('Confirm barato · competitor list').first().json.discovery_package || {}).discovery_summary || '',\n  client_id: clientId,\n};\n\nreturn [{ json: { brand_book_draft: brandBookDraft, cycle, corrections, _grounding_refs: grounding } }];\n"
+        "jsCode": "// Brand Book · Consolidador (maker) · paso 3 + re-síntesis del lazo A (paso 4)\r\n// Funde las 3 lentes de los jefes en UN brand_book_draft · cada campo grounded\r\n// en evidencia real (discovery_summary + ICP + competitive del brain). NO INSERT.\r\n//\r\n// Inputs (vía $items / referencias de nodos):\r\n//   - brand-strategist  → posicionamiento + ICP\r\n//   - editor-en-jefe    → voz/tono + forbidden_words + required_terminology\r\n//   - jefe-client-success → ángulo cliente / retención\r\n//   - corrections (opcional · lazo A) → array de {eje,severidad,donde,problema,cambio_sugerido}\r\n//\r\n// Output: { brand_book_draft, cycle, _grounding_refs }\r\n\r\nconst dealData = $('Validate Deal Data').first().json;\r\nconst clientId = dealData.client_id;\r\n\r\n// Cada lente llega como respuesta run-sdk · tomamos su `response` (texto) o\r\n// `structured` si el agente emitió JSON. Defensive · floors seguros.\r\nfunction lensOutput(nodeName) {\r\n  try {\r\n    const j = $(nodeName).first().json;\r\n    const body = j.body || j;\r\n    // CANON · la lente emite su sección vía emit_brand_section · el run-sdk la\r\n    // surface en body.brand_section (estructurado · NO texto narrativo).\r\n    // Fallbacks defensivos: intenta parsear JSON del response si por algún\r\n    // motivo el tool no fue capturado (degradación graceful).\r\n    let structured = body.brand_section || body.structured || null;\r\n    if (!structured && typeof body.response === 'string') {\r\n      const m = body.response.match(/\\{[\\s\\S]*\\}/);\r\n      if (m) { try { structured = JSON.parse(m[0]); } catch (e) {} }\r\n    }\r\n    return {\r\n      structured: structured || null,\r\n      text: typeof body.response === 'string' ? body.response : '',\r\n    };\r\n  } catch (e) {\r\n    return { structured: null, text: '' };\r\n  }\r\n}\r\n\r\nconst strat = lensOutput('Lente · brand-strategist');\r\nconst editor = lensOutput('Lente · editor-en-jefe');\r\nconst cs = lensOutput('Lente · jefe-client-success');\r\n\r\n// Correcciones acumuladas del lazo A (si venimos de una re-síntesis).\r\nlet corrections = [];\r\ntry {\r\n  corrections = $json.corrections || $json.staging_package?.corrections || [];\r\n} catch (e) { corrections = []; }\r\nconst cycle = (Number($json.cycle) || 0) + 1;\r\n\r\n// pick · usa structured cuando exista, fallback a texto.\r\nconst pick = (lens, key) =>\r\n  (lens.structured && lens.structured[key]) || lens.text || '';\r\n\r\nconst brandBookDraft = {\r\n  client_id: clientId,\r\n  // posicionamiento + ICP (brand-strategist)\r\n  positioning: pick(strat, 'positioning'),\r\n  icp_summary: pick(strat, 'icp_summary'),\r\n  // voz/tono + reglas (editor-en-jefe)\r\n  voice_description: pick(editor, 'voice_description'),\r\n  forbidden_words: (editor.structured && editor.structured.forbidden_words) || [],\r\n  required_terminology: (editor.structured && editor.structured.required_terminology) || [],\r\n  // ángulo cliente / retención (jefe-client-success)\r\n  customer_angle: pick(cs, 'customer_angle'),\r\n  retention_notes: pick(cs, 'retention_notes'),\r\n  // metadata de build\r\n  _build: {\r\n    source: 'onboarding_collaborative_build',\r\n    lenses: ['brand-strategist', 'editor-en-jefe', 'jefe-client-success'],\r\n    cycle,\r\n    corrections_applied: corrections.length,\r\n  },\r\n};\r\n\r\n// Referencias de grounding · qué evidencia respalda el borrador (para el judge).\r\nconst grounding = {\r\n  discovery_summary:\r\n    ($('Confirm barato · competitor list').first().json.discovery_package || {}).discovery_summary || '',\r\n  client_id: clientId,\r\n};\r\n\r\nreturn [{ json: { brand_book_draft: brandBookDraft, cycle, corrections, _grounding_refs: grounding } }];\r\n"
       },
       "id": "bb--bb-consolidador",
       "name": "[BB] Consolidador",
@@ -1583,7 +1624,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Brand Book · Faithfulness judge · paso 5 · ESTO decide canon (no votos)\n// LLM-judge DIY in-stack (consejero §2: NO RAGAS/DeepEval · Python/§151).\n// Por CADA campo del brand_book_draft: ¿está soportado por la evidencia real\n// del cliente? score 0..1 · umbral ≥0.85. NO depende de paquete nuevo.\n//\n// Output: { fidelity: { pass, threshold, scores, low_fields }, brand_book_draft, cycle }\n\nconst apiUrl = $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app';\nconst apiKey = $env.INTERNAL_API_KEY;\nconst THRESHOLD = 0.85;\nconst MAX_FIDELITY_CYCLES = 3;\n\nconst inJson = $json;\nconst draft = inJson.brand_book_draft || {};\nconst grounding = inJson._grounding_refs || {};\nconst cycle = Number(inJson.cycle) || 1;\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\n\n// Campos textuales a puntuar (los arrays de reglas se validan aparte por presencia).\nconst SCORED_FIELDS = [\n  'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',\n];\n\n// Prompt del judge · pide UN JSON con score por campo · cero prosa.\nconst fieldsForPrompt = SCORED_FIELDS.map((f) => ({ field: f, value: String(draft[f] || '') }));\nconst judgeTask =\n  'Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y ' +\n  'los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo ' +\n  '(1 = totalmente grounded · 0 = inventado/contradice). Respondé SOLO con JSON: ' +\n  '{\"scores\": {\"<field>\": <0..1>, ...}}. Sin prosa.\\n\\n' +\n  'EVIDENCIA:\\n' + JSON.stringify(grounding).slice(0, 6000) + '\\n\\n' +\n  'CAMPOS:\\n' + JSON.stringify(fieldsForPrompt).slice(0, 6000);\n\nlet scores = {};\ntry {\n  const resp = await fetch(apiUrl + '/api/agents/run-sdk', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n    body: JSON.stringify({\n      agent: 'editor-en-jefe', // jefe con criterio editorial · juez de fidelidad\n      client_id: clientId,\n      workflow_id: $execution.id, // por-run · NO colisiona con checkpoint (lección exec 40025)\n      workflow_execution_id: $execution.id,\n      task: judgeTask,\n      context: { role: 'faithfulness_judge', threshold: THRESHOLD },\n    }),\n  });\n  const body = await resp.json();\n  const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);\n  const m = text.match(/\\{[\\s\\S]*\\}/);\n  if (m) scores = (JSON.parse(m[0]).scores) || {};\n} catch (e) {\n  scores = {};\n}\n\n// Floor seguro · campo sin score = 0 (no-grounded · fuerza re-síntesis o HITL).\nconst norm = {};\nfor (const f of SCORED_FIELDS) {\n  const v = Number(scores[f]);\n  norm[f] = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;\n}\nconst lowFields = SCORED_FIELDS.filter((f) => norm[f] < THRESHOLD);\nconst pass = lowFields.length === 0;\n\nreturn [{\n  json: {\n    fidelity: {\n      pass,\n      threshold: THRESHOLD,\n      scores: norm,\n      low_fields: lowFields,\n      cycle,\n      max_cycles: MAX_FIDELITY_CYCLES,\n      exhausted: !pass && cycle >= MAX_FIDELITY_CYCLES,\n    },\n    brand_book_draft: draft,\n    cycle,\n  },\n}];\n"
+        "jsCode": "// Brand Book · Faithfulness judge · paso 5 · ESTO decide canon (no votos)\r\n// LLM-judge DIY in-stack (consejero §2: NO RAGAS/DeepEval · Python/§151).\r\n// Por CADA campo del brand_book_draft: ¿está soportado por la evidencia real\r\n// del cliente? score 0..1 · umbral ≥0.85. NO depende de paquete nuevo.\r\n//\r\n// Output: { fidelity: { pass, threshold, scores, low_fields }, brand_book_draft, cycle }\r\n\r\nconst apiUrl = $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app';\r\nconst apiKey = $env.INTERNAL_API_KEY;\r\nconst THRESHOLD = 0.85;\r\nconst MAX_FIDELITY_CYCLES = 3;\r\n\r\nconst inJson = $json;\r\nconst draft = inJson.brand_book_draft || {};\r\nconst grounding = inJson._grounding_refs || {};\r\nconst cycle = Number(inJson.cycle) || 1;\r\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\r\n\r\n// Campos textuales a puntuar (los arrays de reglas se validan aparte por presencia).\r\nconst SCORED_FIELDS = [\r\n  'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',\r\n];\r\n\r\n// Prompt del judge · pide UN JSON con score por campo · cero prosa.\r\nconst fieldsForPrompt = SCORED_FIELDS.map((f) => ({ field: f, value: String(draft[f] || '') }));\r\nconst judgeTask =\r\n  'Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y ' +\r\n  'los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo ' +\r\n  '(1 = totalmente grounded · 0 = inventado/contradice). Respondé SOLO con JSON: ' +\r\n  '{\"scores\": {\"<field>\": <0..1>, ...}}. Sin prosa.\\n\\n' +\r\n  'EVIDENCIA:\\n' + JSON.stringify(grounding).slice(0, 6000) + '\\n\\n' +\r\n  'CAMPOS:\\n' + JSON.stringify(fieldsForPrompt).slice(0, 6000);\r\n\r\nlet scores = {};\r\ntry {\r\n  const resp = await fetch(apiUrl + '/api/agents/run-sdk', {\r\n    method: 'POST',\r\n    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\r\n    body: JSON.stringify({\r\n      agent: 'editor-en-jefe', // jefe con criterio editorial · juez de fidelidad\r\n      client_id: clientId,\r\n      workflow_id: $execution.id, // por-run · NO colisiona con checkpoint (lección exec 40025)\r\n      workflow_execution_id: $execution.id,\r\n      task: judgeTask,\r\n      context: { role: 'faithfulness_judge', threshold: THRESHOLD },\r\n    }),\r\n  });\r\n  const body = await resp.json();\r\n  const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);\r\n  const m = text.match(/\\{[\\s\\S]*\\}/);\r\n  if (m) scores = (JSON.parse(m[0]).scores) || {};\r\n} catch (e) {\r\n  scores = {};\r\n}\r\n\r\n// Floor seguro · campo sin score = 0 (no-grounded · fuerza re-síntesis o HITL).\r\nconst norm = {};\r\nfor (const f of SCORED_FIELDS) {\r\n  const v = Number(scores[f]);\r\n  norm[f] = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;\r\n}\r\nconst lowFields = SCORED_FIELDS.filter((f) => norm[f] < THRESHOLD);\r\nconst pass = lowFields.length === 0;\r\n\r\nreturn [{\r\n  json: {\r\n    fidelity: {\r\n      pass,\r\n      threshold: THRESHOLD,\r\n      scores: norm,\r\n      low_fields: lowFields,\r\n      cycle,\r\n      max_cycles: MAX_FIDELITY_CYCLES,\r\n      exhausted: !pass && cycle >= MAX_FIDELITY_CYCLES,\r\n    },\r\n    brand_book_draft: draft,\r\n    cycle,\r\n  },\r\n}];\r\n"
       },
       "id": "bb--bb-faithfulness-judge",
       "name": "[BB] Faithfulness judge",
@@ -1654,7 +1695,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Brand Book · Promote staging → canon · paso 6+7 · disparado por FIDELIDAD PASS\n// (NO por Camino III PASS · ese gobierna CONTENIDO, no el cimiento). El borrador\n// vivió en memoria (consejero §3 · sin tabla nueva) · recién aquí escribe canon.\n// Reusa el endpoint canónico POST /api/clients/{id}/brand-book.\n\nconst apiUrl = $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app';\nconst apiKey = $env.INTERNAL_API_KEY;\nconst headers = { 'Content-Type': 'application/json', 'x-api-key': apiKey };\n\nconst inJson = $json;\nconst fidelity = inJson.fidelity || {};\nconst draft = inJson.brand_book_draft || {};\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\n\n// Guardia · NUNCA persistir sin PASS de fidelidad (invariante 5 de la spec).\nif (!fidelity.pass) {\n  return [{ json: {\n    persisted: false,\n    reason: fidelity.exhausted ? 'fidelity_exhausted_hitl_last_resort' : 'fidelity_not_passed',\n    fidelity,\n    client_id: clientId,\n  } }];\n}\n\nlet result = null;\ntry {\n  const resp = await fetch(apiUrl + '/api/clients/' + clientId + '/brand-book', {\n    method: 'POST',\n    headers,\n    body: JSON.stringify({\n      brand_book: draft,\n      source: 'onboarding_collaborative_build',\n      // CANON por fidelidad · NO por firma humana ni voto Camino III.\n      fidelity_passed: true,\n      fidelity_scores: fidelity.scores,\n      fidelity_threshold: fidelity.threshold,\n      approved_by: 'faithfulness_check',\n      approved_at: new Date().toISOString(),\n    }),\n  });\n  let body = null;\n  try { body = await resp.json(); } catch (e) { body = null; }\n  result = { status: resp.status, ok: resp.ok, body };\n} catch (e) {\n  result = { status: 'error', message: e.message };\n}\n\nreturn [{ json: {\n  persisted: !!(result && result.ok),\n  brand_book_write: result,\n  fidelity,\n  client_id: clientId,\n} }];\n"
+        "jsCode": "// Brand Book · Promote staging → canon · paso 6+7 · disparado por FIDELIDAD PASS\r\n// (NO por Camino III PASS · ese gobierna CONTENIDO, no el cimiento). El borrador\r\n// vivió en memoria (consejero §3 · sin tabla nueva) · recién aquí escribe canon.\r\n// Reusa el endpoint canónico POST /api/clients/{id}/brand-book.\r\n\r\nconst apiUrl = $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app';\r\nconst apiKey = $env.INTERNAL_API_KEY;\r\nconst headers = { 'Content-Type': 'application/json', 'x-api-key': apiKey };\r\n\r\nconst inJson = $json;\r\nconst fidelity = inJson.fidelity || {};\r\nconst draft = inJson.brand_book_draft || {};\r\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\r\n\r\n// Guardia · NUNCA persistir sin PASS de fidelidad (invariante 5 de la spec).\r\nif (!fidelity.pass) {\r\n  return [{ json: {\r\n    persisted: false,\r\n    reason: fidelity.exhausted ? 'fidelity_exhausted_hitl_last_resort' : 'fidelity_not_passed',\r\n    fidelity,\r\n    client_id: clientId,\r\n  } }];\r\n}\r\n\r\nlet result = null;\r\ntry {\r\n  const resp = await fetch(apiUrl + '/api/clients/' + clientId + '/brand-book', {\r\n    method: 'POST',\r\n    headers,\r\n    body: JSON.stringify({\r\n      brand_book: draft,\r\n      source: 'onboarding_collaborative_build',\r\n      // CANON por fidelidad · NO por firma humana ni voto Camino III.\r\n      fidelity_passed: true,\r\n      fidelity_scores: fidelity.scores,\r\n      fidelity_threshold: fidelity.threshold,\r\n      approved_by: 'faithfulness_check',\r\n      approved_at: new Date().toISOString(),\r\n    }),\r\n  });\r\n  let body = null;\r\n  try { body = await resp.json(); } catch (e) { body = null; }\r\n  result = { status: resp.status, ok: resp.ok, body };\r\n} catch (e) {\r\n  result = { status: 'error', message: e.message };\r\n}\r\n\r\nreturn [{ json: {\r\n  persisted: !!(result && result.ok),\r\n  brand_book_write: result,\r\n  fidelity,\r\n  client_id: clientId,\r\n} }];\r\n"
       },
       "id": "bb--bb-promote-canon",
       "name": "[BB] Promote → canon",
@@ -2048,11 +2089,6 @@
             "node": "[MODELB] Phase-boundary Emit · APIFY_WIRE",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "[BB] Fan-out prep",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -2084,6 +2120,11 @@
         [
           {
             "node": "Competitor Verdict · run-sdk (INLINE)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[BB] Fan-out prep",
             "type": "main",
             "index": 0
           }

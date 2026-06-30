@@ -25,12 +25,19 @@ const reviewer = (slug, [x, y]) => ({
   parameters: {
     method: 'POST',
     url: "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    // FIX-FORWARD 2026-06-30 · auth interna run-sdk (igual que los nodos existentes).
+    sendHeaders: true,
+    headerParameters: { parameters: [
+      { name: 'Content-Type', value: 'application/json' },
+      { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' },
+    ] },
     sendBody: true, specifyBody: 'json',
     jsonBody:
       '={\n  "agent": "{{ $json.agent }}",\n  "client_id": "{{ $json.client_id }}",\n' +
       '  "workflow_id": "{{ $execution.id }}",\n  "workflow_execution_id": "{{ $execution.id }}",\n' +
       '  "task": {{ JSON.stringify($json.task) }},\n  "context": { "role": "brand_book_corrector", "reviewer": "' + slug + '" }\n}',
-    options: { response: { response: { responseFormat: 'json' } }, timeout: 120000 },
+    // FIX-FORWARD 2026-06-30 · timeout 800s + neverError (igual que run-sdk existentes).
+    options: { response: { response: { neverError: true } }, timeout: 800000 },
   },
   id: 'bba-rev-' + slug, name: 'Revisor · ' + slug,
   type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [x, y],
