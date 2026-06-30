@@ -9,12 +9,41 @@ import {
   evaluateNaufragoRunCap,
   getNaufragoCapSnapshot,
   isNaufragoCapEnforced,
+  resolveNaufragoCapUsd,
   NAUFRAGO_DAILY_ALERT_USD,
   NAUFRAGO_PHASE1_RUN_CAP_USD,
   NAUFRAGO_TENANT_ID_HINT,
   NAUFRAGO_TENANT_ID_UUID,
   NAUFRAGO_TENANT_IDS,
 } from '@/lib/sala-journey-dispatch'
+
+describe('Náufrago cap · SALA_NAUFRAGO_CAP_USD env override', () => {
+  afterEach(() => {
+    delete process.env.SALA_NAUFRAGO_CAP_USD
+  })
+  it('default · no env → falls back to constant ($5)', () => {
+    delete process.env.SALA_NAUFRAGO_CAP_USD
+    expect(resolveNaufragoCapUsd()).toBe(NAUFRAGO_PHASE1_RUN_CAP_USD)
+  })
+  it('env override · SALA_NAUFRAGO_CAP_USD=30 → cap is $30', () => {
+    process.env.SALA_NAUFRAGO_CAP_USD = '30'
+    expect(resolveNaufragoCapUsd()).toBe(30)
+  })
+  it('env override · invalid value → falls back to default', () => {
+    process.env.SALA_NAUFRAGO_CAP_USD = 'not-a-number'
+    expect(resolveNaufragoCapUsd()).toBe(NAUFRAGO_PHASE1_RUN_CAP_USD)
+  })
+  it('eval · $14.05 spend · cap raised to $30 → PASS (no longer blocks)', () => {
+    process.env.SALA_NAUFRAGO_CAP_USD = '30'
+    const r = evaluateNaufragoRunCap({
+      tenant_id: NAUFRAGO_TENANT_ID_UUID,
+      spent_usd: 14.05,
+      enforce: true,
+    })
+    expect(r.verdict).toBe('pass')
+    expect(r.reason).toBe('under_cap')
+  })
+})
 
 describe('Náufrago cost cap · canon constants', () => {
   it('canon · USD 5.00 per-run cap (Emilio §144 2026-06-05)', () => {
