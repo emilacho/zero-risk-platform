@@ -38,6 +38,16 @@ const lensNode = (lens, agent, [x, y]) => ({
   parameters: {
     method: 'POST',
     url: "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    // FIX-FORWARD 2026-06-30 · run-sdk requiere auth interna · mismo patrón que
+    // los nodos run-sdk existentes (Re-discovery/Competitor Verdict · exec 41381
+    // erroró "Authorization failed" sin esto).
+    sendHeaders: true,
+    headerParameters: {
+      parameters: [
+        { name: 'Content-Type', value: 'application/json' },
+        { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' },
+      ],
+    },
     sendBody: true,
     specifyBody: 'json',
     jsonBody:

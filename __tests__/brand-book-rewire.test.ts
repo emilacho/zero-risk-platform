@@ -55,6 +55,13 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
     const cal = nodeByName('Schedule Kickoff Call (Cal.com)') as { continueOnFail?: boolean } | undefined
     expect(cal?.continueOnFail).toBe(true)
   })
+  it('las 3 lentes mandan auth x-api-key a run-sdk (fix exec 41381 "Authorization failed")', () => {
+    for (const l of ['Lente · brand-strategist', 'Lente · editor-en-jefe', 'Lente · jefe-client-success']) {
+      const hp = JSON.stringify((nodeByName(l) as { parameters: { headerParameters?: unknown } }).parameters.headerParameters ?? {})
+      expect(hp).toContain('x-api-key')
+      expect(hp).toContain('INTERNAL_API_KEY')
+    }
+  })
   it('Fan-out → 3 lentes en paralelo', () => {
     const t = targets('[BB] Fan-out prep')
     expect(t).toEqual(
