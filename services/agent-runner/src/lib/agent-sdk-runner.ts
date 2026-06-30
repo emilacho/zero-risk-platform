@@ -794,9 +794,11 @@ function logExecution(
     costUsd: number
     brainEnrichment: BrainEnrichmentResultMeta
     cacheMetrics: CacheMetricsMeta
+    /** Brand Book · outcome durable del forced-emit del judge · undefined si no fue judge. */
+    fidelityForcedEmit?: Record<string, unknown>
   },
 ): void {
-  const { canonicalSlug, input, skills, drain, modelId, startedAtMs, durationMs, costUsd, brainEnrichment, cacheMetrics } = args
+  const { canonicalSlug, input, skills, drain, modelId, startedAtMs, durationMs, costUsd, brainEnrichment, cacheMetrics, fidelityForcedEmit } = args
   const row = {
     agent_name: canonicalSlug,
     action: 'agent_sdk_run',
@@ -902,6 +904,9 @@ function logExecution(
       // flag is true returned canonical fake responses · NO Anthropic call ·
       // forensics + post-deploy compliance queries should filter on this.
       dry_run: input.dryRun === true,
+      // LOGGING DURABLE (CC#4 2026-07-01) · outcome del forced-emit del judge ·
+      // solo presente en invocaciones-judge · revela gate_fired / outcome / scores / error.
+      ...(fidelityForcedEmit ? { fidelity_forced_emit: fidelityForcedEmit } : {}),
     },
   }
   void insertAgentInvocationWithRetry(supabase, invocationRow, canonicalSlug)
@@ -1028,6 +1033,10 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   //    zero token inputs. See dry-run-mode.ts for activation patterns +
   //    canon guards.
   let drain: StreamDrainResult
+  // LOGGING DURABLE (CC#4 2026-07-01) · outcome del forced-emit del judge de fidelidad ·
+  // se persiste en agent_invocations.metadata.fidelity_forced_emit (función-scope para
+  // que logExecution lo lea). undefined = no fue una invocación-judge.
+  let fidelityForcedEmitDebug: Record<string, unknown> | undefined
   if (input.dryRun === true) {
     drain = buildDryRunFakeResponse(canonicalSlug, input.task ?? '')
     console.log(
@@ -1163,10 +1172,23 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       input.extra && typeof input.extra === 'object' && !Array.isArray(input.extra)
         ? (input.extra as Record<string, unknown>)
         : {}
+    const brandSectionMounted = !!(options.mcpServers as Record<string, unknown> | undefined)?.[
+      'brand-section'
+    ]
     if (extraObj.fidelity_judge === true) {
+      // LOGGING DURABLE (CC#4 2026-07-01) · el console.log rota muy rápido en Railway ·
+      // este objeto se persiste en agent_invocations.metadata.fidelity_forced_emit (vía
+      // logExecution) · forensics definitivas de por qué el judge retorna 0.
+      fidelityForcedEmitDebug = {
+        fidelity_judge: true,
+        brand_section_mounted: brandSectionMounted,
+        agent_emitted_on_own: drain.fidelityScoresToolCall !== null,
+        gate_fired: false,
+        outcome: 'not_attempted',
+        model: modelId,
+      }
       console.log(
-        `[fidelity-judge-gate] ${canonicalSlug} · fidelity_judge=${extraObj.fidelity_judge} · ` +
-          `brand_section_mounted=${!!(options.mcpServers as Record<string, unknown> | undefined)?.['brand-section']} · ` +
+        `[fidelity-judge-gate] ${canonicalSlug} · brand_section_mounted=${brandSectionMounted} · ` +
           `already_emitted=${drain.fidelityScoresToolCall !== null} · step=${input.stepName || canonicalSlug}`,
       )
     }
@@ -1177,6 +1199,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
         drain,
       )
     ) {
+      if (fidelityForcedEmitDebug) fidelityForcedEmitDebug.gate_fired = true
       console.warn(
         `[forced-emit] ${canonicalSlug} (judge) cerró SIN emit_fidelity_scores · forzando vía Messages-API tool_choice`,
       )
@@ -1195,17 +1218,25 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
             inputTokens: drain.inputTokens + forced.inputTokens,
             outputTokens: drain.outputTokens + forced.outputTokens,
           }
+          if (fidelityForcedEmitDebug) {
+            fidelityForcedEmitDebug.outcome = 'recovered'
+            fidelityForcedEmitDebug.scores = (forced.input as { scores?: unknown }).scores ?? forced.input
+          }
           console.log(
             `[forced-emit] ${canonicalSlug} (judge) · scores RECUPERADOS vía Messages-API · ` +
               JSON.stringify((forced.input as { scores?: unknown }).scores ?? forced.input),
           )
         } else {
+          if (fidelityForcedEmitDebug) fidelityForcedEmitDebug.outcome = 'no_tool_use'
           console.warn(`[forced-emit] ${canonicalSlug} (judge) · Messages-API no devolvió tool_use`)
         }
       } catch (fe) {
-        console.warn(
-          `[forced-emit] ${canonicalSlug} (judge) · forced fidelity errored: ${fe instanceof Error ? fe.message : 'unknown'}`,
-        )
+        const msg = fe instanceof Error ? fe.message : 'unknown'
+        if (fidelityForcedEmitDebug) {
+          fidelityForcedEmitDebug.outcome = 'error'
+          fidelityForcedEmitDebug.error = msg
+        }
+        console.warn(`[forced-emit] ${canonicalSlug} (judge) · forced fidelity errored: ${msg}`)
       }
     }
   }
@@ -1243,6 +1274,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     canonicalSlug, input, skills, drain, modelId, startedAtMs: startedAt, durationMs, costUsd,
     brainEnrichment: brainEnrichmentMeta,
     cacheMetrics: cacheMetricsMeta,
+    fidelityForcedEmit: fidelityForcedEmitDebug,
   })
 
   const result: AgentRunResult = {
