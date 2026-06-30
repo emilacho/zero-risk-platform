@@ -38,11 +38,12 @@ describe('brand-section MCP · activation gate', () => {
     expect(buildMcpServers({ agentSlug: 'onboarding-specialist' })['brand-section']).toBeUndefined()
   })
 
-  it('deriveAllowedTools incluye emit_brand_section cuando el server está montado', () => {
+  it('deriveAllowedTools incluye emit_brand_section + emit_fidelity_scores cuando el server está montado', () => {
     process.env[FLAG] = 'true'
     const servers = buildMcpServers({ agentSlug: 'brand-strategist' })
     const tools = deriveAllowedTools(servers as unknown as Record<string, unknown>)
     expect(tools).toContain('mcp__brand-section__emit_brand_section')
+    expect(tools).toContain('mcp__brand-section__emit_fidelity_scores')
   })
 
   it('deriveAllowedTools NO incluye el tool cuando el server no está montado', () => {

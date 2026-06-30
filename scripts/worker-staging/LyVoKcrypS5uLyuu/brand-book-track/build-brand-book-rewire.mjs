@@ -56,7 +56,8 @@ const lensNode = (lens, agent, [x, y]) => ({
       '  "client_id": "{{ $json.client_id }}",\n' +
       '  "workflow_id": "{{ $execution.id }}",\n' +
       '  "workflow_execution_id": "{{ $execution.id }}",\n' +
-      '  "task": {{ JSON.stringify($json.task) }},\n' +
+      // Fix B · cada lente lee SU task del item único ($json.tasks.<lente>).
+      "  \"task\": {{ JSON.stringify($json.tasks['" + lens + "']) }},\n" +
       '  "context": { "role": "brand_book_lens", "lens": "' + lens + '" }\n' +
       '}',
     // FIX-FORWARD 2026-06-30 · timeout 800s + neverError (igual que los run-sdk

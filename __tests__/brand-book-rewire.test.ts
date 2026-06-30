@@ -68,6 +68,15 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
       expect.arrayContaining(['Lente · brand-strategist', 'Lente · editor-en-jefe', 'Lente · jefe-client-success']),
     )
   })
+  it('Fix B · cada lente lee SU task del item único ($json.tasks.<lente>) · no mis-routing', () => {
+    for (const lens of ['brand-strategist', 'editor-en-jefe', 'jefe-client-success']) {
+      const node = nodeByName('Lente · ' + lens) as { parameters: { jsonBody?: string } }
+      expect(node.parameters.jsonBody).toContain("$json.tasks['" + lens + "']")
+    }
+    // el prep emite UN item con `tasks` (no 3 items que n8n manda a todos los nodos).
+    const prep = readNode('synthesis-fanout-prep.js')
+    expect(prep).toContain('return [{ json: { tasks')
+  })
   it('3 lentes → consolidador (maker)', () => {
     for (const l of ['Lente · brand-strategist', 'Lente · editor-en-jefe', 'Lente · jefe-client-success']) {
       expect(targets(l)).toContain('[BB] Consolidador')
@@ -109,6 +118,11 @@ describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
     // consejero §2 · LLM-judge DIY in-stack (gateway run-sdk) · NO paquete Python.
     expect(code).toContain('/api/agents/run-sdk')
     expect(code).not.toMatch(/require\(['"][^'"]*(ragas|deepeval)|import[^\n]*(ragas|deepeval)/i)
+  })
+  it('Fix A · el judge emite scores vía emit_fidelity_scores y los lee de body.fidelity_scores', () => {
+    const code = readNode('faithfulness-judge.js')
+    expect(code).toContain('emit_fidelity_scores')
+    expect(code).toContain('body.fidelity_scores')
   })
 })
 

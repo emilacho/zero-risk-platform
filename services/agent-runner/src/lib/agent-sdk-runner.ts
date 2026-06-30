@@ -225,6 +225,8 @@ export interface AgentRunResult {
   discoveryToolCall?: DiscoveryToolCallCapture
   /** Brand Book · sección estructurada emitida por la lente vía emit_brand_section. */
   brandSectionToolCall?: DiscoveryToolCallCapture
+  /** Brand Book · scores de fidelidad emitidos por el judge vía emit_fidelity_scores. */
+  fidelityScoresToolCall?: DiscoveryToolCallCapture
   error?: string
 }
 
@@ -433,13 +435,22 @@ const MCP_ALLOWED_TOOLS_BY_SERVER: Record<string, readonly string[]> = {
   // Brand Book · emit_brand_section · cada lente (brand-strategist · editor-en-jefe
   // · jefe-client-success) emite SU sección estructurada vía tool call · mismo
   // patrón que emit_discovery_output (CC#4 2026-06-30 · fix narración-vs-estructurado).
-  'brand-section': ['mcp__brand-section__emit_brand_section'],
+  'brand-section': [
+    'mcp__brand-section__emit_brand_section',
+    'mcp__brand-section__emit_fidelity_scores',
+  ],
 }
 
 /** Brand Book · nombres del tool_use de emit_brand_section (namespace + bare). */
 export const BRAND_SECTION_TOOL_USE_NAMES: ReadonlySet<string> = new Set([
   'mcp__brand-section__emit_brand_section',
   'emit_brand_section',
+])
+
+/** Brand Book · nombres del tool_use de emit_fidelity_scores (el judge). */
+export const FIDELITY_SCORES_TOOL_USE_NAMES: ReadonlySet<string> = new Set([
+  'mcp__brand-section__emit_fidelity_scores',
+  'emit_fidelity_scores',
 ])
 
 /**
@@ -566,6 +577,8 @@ export interface StreamDrainResult {
   discoveryToolCall: DiscoveryToolCallCapture | null
   /** Brand Book · captura del emit_brand_section de la lente · null si narró sin emitir. */
   brandSectionToolCall: DiscoveryToolCallCapture | null
+  /** Brand Book · scores de fidelidad del judge vía emit_fidelity_scores · null si narró. */
+  fidelityScoresToolCall: DiscoveryToolCallCapture | null
 }
 
 /**
@@ -589,6 +602,9 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
   // Brand Book · captura paralela del emit_brand_section (cada lente emite su sección).
   let brandSectionEmissionCount = 0
   let lastBrandSectionInput: Record<string, unknown> | null = null
+  // Brand Book · captura del emit_fidelity_scores (el judge emite scores estructurados).
+  let fidelityScoresEmissionCount = 0
+  let lastFidelityScoresInput: Record<string, unknown> | null = null
 
   for await (const rawMsg of stream) {
     const msg = rawMsg as SDKStreamMessage
@@ -631,6 +647,17 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
             // keep the LAST emission · args pre-validados por el zod del MCP.
             brandSectionEmissionCount++
             lastBrandSectionInput = block.input
+          } else if (
+            block.type === 'tool_use' &&
+            typeof block.name === 'string' &&
+            FIDELITY_SCORES_TOOL_USE_NAMES.has(block.name) &&
+            block.input &&
+            typeof block.input === 'object' &&
+            !Array.isArray(block.input)
+          ) {
+            // Brand Book · el judge emitió sus scores de fidelidad vía tool.
+            fidelityScoresEmissionCount++
+            lastFidelityScoresInput = block.input
           }
         }
       }
@@ -667,6 +694,13 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
         ? {
             input: lastBrandSectionInput,
             emission_count: brandSectionEmissionCount,
+          }
+        : null,
+    fidelityScoresToolCall:
+      lastFidelityScoresInput !== null
+        ? {
+            input: lastFidelityScoresInput,
+            emission_count: fidelityScoresEmissionCount,
           }
         : null,
   }
@@ -1142,6 +1176,9 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       : {}),
     ...(drain.brandSectionToolCall
       ? { brandSectionToolCall: drain.brandSectionToolCall }
+      : {}),
+    ...(drain.fidelityScoresToolCall
+      ? { fidelityScoresToolCall: drain.fidelityScoresToolCall }
       : {}),
   }
 

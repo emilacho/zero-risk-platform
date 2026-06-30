@@ -210,6 +210,7 @@ interface AgentRunResultProxy {
   cacheMetrics?: CacheMetricsProxyMeta
   discoveryToolCall?: DiscoveryToolCallProxyMeta
   brandSectionToolCall?: DiscoveryToolCallProxyMeta
+  fidelityScoresToolCall?: DiscoveryToolCallProxyMeta
   error?: string
 }
 
@@ -836,6 +837,23 @@ export async function POST(request: Request) {
               typeof rawBrandSection.emission_count === 'number' ? rawBrandSection.emission_count : 1,
           }
         : undefined
+    // Brand Book · captura paralela de los scores de fidelidad del judge.
+    const rawFidelityScores = (result as { fidelityScoresToolCall?: unknown }).fidelityScoresToolCall as
+      | Record<string, unknown>
+      | undefined
+    const fidelityScoresToolCall: DiscoveryToolCallProxyMeta | undefined =
+      rawFidelityScores &&
+      typeof rawFidelityScores === 'object' &&
+      !Array.isArray(rawFidelityScores) &&
+      rawFidelityScores.input &&
+      typeof rawFidelityScores.input === 'object' &&
+      !Array.isArray(rawFidelityScores.input)
+        ? {
+            input: rawFidelityScores.input as Record<string, unknown>,
+            emission_count:
+              typeof rawFidelityScores.emission_count === 'number' ? rawFidelityScores.emission_count : 1,
+          }
+        : undefined
     result = {
       success: !!result.success,
       response: typeof result.response === 'string' ? result.response : '',
@@ -849,6 +867,7 @@ export async function POST(request: Request) {
       cacheMetrics,
       ...(discoveryToolCall ? { discoveryToolCall } : {}),
       ...(brandSectionToolCall ? { brandSectionToolCall } : {}),
+      ...(fidelityScoresToolCall ? { fidelityScoresToolCall } : {}),
       error: result.error,
     }
 
@@ -1011,6 +1030,11 @@ export async function POST(request: Request) {
       // el worker (consolidador) la lee de response.body.brand_section (NO del texto).
       ...(result.brandSectionToolCall
         ? { brand_section: result.brandSectionToolCall.input }
+        : {}),
+      // Brand Book · scores de fidelidad que el judge emitió vía emit_fidelity_scores ·
+      // el worker los lee de response.body.fidelity_scores (NO del texto narrativo).
+      ...(result.fidelityScoresToolCall
+        ? { fidelity_scores: result.fidelityScoresToolCall.input }
         : {}),
     }
 
