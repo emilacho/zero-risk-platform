@@ -21,10 +21,22 @@
  * of cost (subject to G6 bucket caps which stay enforce-live).
  */
 
-/** Canon canonical · per-run cap for Náufrago piloto · USD 5.00.
- *  Decision Emilio §144 2026-06-05 · conservative for first run ·
- *  adjustable post-measurement. */
+/** Canon canonical · per-run cap DEFAULT for Náufrago piloto · USD 5.00.
+ *  Decision Emilio §144 2026-06-05 · conservative for first run.
+ *  This is the FALLBACK · the live value is env-tunable via
+ *  `SALA_NAUFRAGO_CAP_USD` (no redeploy of code to retune · §144 GO
+ *  2026-06-30 raised effective cap to $30). */
 export const NAUFRAGO_PHASE1_RUN_CAP_USD = 5.0
+
+/** Canon canonical · resolve the live cap · `SALA_NAUFRAGO_CAP_USD` env
+ *  override (positive finite number) else the default constant. Single
+ *  source of truth read by both enforcement points (run-sdk gate +
+ *  sala-router dispatch). */
+export function resolveNaufragoCapUsd(): number {
+  const raw = process.env.SALA_NAUFRAGO_CAP_USD
+  const n = raw != null && raw !== '' ? Number(raw) : NaN
+  return Number.isFinite(n) && n > 0 ? n : NAUFRAGO_PHASE1_RUN_CAP_USD
+}
 
 /** Canon canonical · per-day alarm threshold · matches G5 canon (CLAUDE.md §150).
  *  This is INFORMATIONAL only · the actual G5 cron alert is in n8n
@@ -103,7 +115,7 @@ export function evaluateNaufragoRunCap(
   if (!NAUFRAGO_TENANT_IDS.has(input.tenant_id)) {
     return { verdict: 'pass', reason: 'other_tenant' }
   }
-  const cap = input.cap_usd ?? NAUFRAGO_PHASE1_RUN_CAP_USD
+  const cap = input.cap_usd ?? resolveNaufragoCapUsd()
   if (input.spent_usd >= cap) {
     return {
       verdict: 'block',
@@ -120,7 +132,9 @@ export function evaluateNaufragoRunCap(
  *  to confirm the value is wired. */
 export function getNaufragoCapSnapshot() {
   return {
-    cap_usd: NAUFRAGO_PHASE1_RUN_CAP_USD,
+    cap_usd: resolveNaufragoCapUsd(),
+    cap_usd_default: NAUFRAGO_PHASE1_RUN_CAP_USD,
+    cap_env_var: 'SALA_NAUFRAGO_CAP_USD',
     daily_alert_usd: NAUFRAGO_DAILY_ALERT_USD,
     tenant_id_uuid: NAUFRAGO_TENANT_ID_UUID,
     tenant_id_hint: NAUFRAGO_TENANT_ID_HINT,
