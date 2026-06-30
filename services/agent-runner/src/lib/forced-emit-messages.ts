@@ -98,6 +98,90 @@ export const EMIT_DISCOVERY_OUTPUT_TOOL = {
   },
 } as const
 
+// ── Brand Book · forced-emit del judge de fidelidad (CC#4 2026-06-30 · Bug 2) ──
+// El judge (editor-en-jefe) narraba en vez de llamar emit_fidelity_scores → scores 0
+// → loop. Messages-API tool_choice COMPELE el tool call. Mismo patrón que discovery.
+export const EMIT_FIDELITY_SCORES_TOOL_NAME = 'emit_fidelity_scores'
+
+export const EMIT_FIDELITY_SCORES_TOOL = {
+  name: EMIT_FIDELITY_SCORES_TOOL_NAME,
+  description:
+    'Emit your per-field FIDELITY (groundedness) scores for the brand book. Each score 0..1 ' +
+    'measures how well the field is supported by the real client evidence (1 = fully grounded, ' +
+    '0 = invented/contradicts).',
+  input_schema: {
+    type: 'object',
+    required: ['scores'],
+    properties: {
+      scores: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          positioning: { type: 'number', minimum: 0, maximum: 1 },
+          icp_summary: { type: 'number', minimum: 0, maximum: 1 },
+          voice_description: { type: 'number', minimum: 0, maximum: 1 },
+          customer_angle: { type: 'number', minimum: 0, maximum: 1 },
+          retention_notes: { type: 'number', minimum: 0, maximum: 1 },
+        },
+      },
+    },
+  },
+} as const
+
+export interface ForceFidelityArgs {
+  model: string
+  systemPrompt: string
+  task: string
+  researchText: string
+  /** Injectable for tests · defaults to a real Anthropic client. */
+  createClient?: () => Pick<Anthropic, 'messages'>
+}
+
+/**
+ * Force the fidelity-scores emission via the Messages API tool_choice. Returns the
+ * parsed tool input ({ scores: {...} }) or null if no tool_use block came back.
+ * Caller wraps in try/catch (a repair failure must not fail the run).
+ */
+export async function forceFidelityEmitViaMessagesApi(
+  args: ForceFidelityArgs,
+): Promise<ForceEmitOutcome | null> {
+  const client = args.createClient ? args.createClient() : buildAnthropicClient()
+  const work = args.researchText?.trim() || '(judging completed but not captured as text)'
+
+  const resp = await client.messages.create({
+    model: args.model,
+    max_tokens: 2000,
+    system: args.systemPrompt,
+    messages: [
+      { role: 'user', content: args.task },
+      { role: 'assistant', content: work },
+      {
+        role: 'user',
+        content:
+          'Emit your fidelity scores NOW by calling the emit_fidelity_scores tool. ' +
+          'One number 0..1 per field, grounded in the evidence and the fields above.',
+      },
+    ],
+    tools: [EMIT_FIDELITY_SCORES_TOOL as unknown as Anthropic.Tool],
+    tool_choice: { type: 'tool', name: EMIT_FIDELITY_SCORES_TOOL_NAME },
+  })
+
+  const block = (resp.content ?? []).find(
+    (b): b is Anthropic.ToolUseBlock =>
+      b.type === 'tool_use' && b.name === EMIT_FIDELITY_SCORES_TOOL_NAME,
+  )
+  if (!block || !block.input || typeof block.input !== 'object' || Array.isArray(block.input)) {
+    return null
+  }
+  return {
+    input: { ...(block.input as Record<string, unknown>) },
+    emission_count: 1,
+    source: 'forced_messages_api',
+    inputTokens: resp.usage?.input_tokens ?? 0,
+    outputTokens: resp.usage?.output_tokens ?? 0,
+  }
+}
+
 export interface ForceEmitArgs {
   model: string
   systemPrompt: string

@@ -722,6 +722,28 @@ export function shouldForceDiscoveryEmit(
 }
 
 /**
+ * Forced-emit decision para el JUDGE de fidelidad (Brand Book Bug 2 · CC#4
+ * 2026-06-30). True cuando · (a) el caller marcó `extra.fidelity_judge` (es una
+ * invocación-judge · NO una lente · que también tiene brand-section montado) · (b)
+ * el brand-section MCP estaba montado (el agente PUDO emitir) · (c) NO emitió
+ * (`fidelityScoresToolCall === null`). Va directo a Messages-API tool_choice ·
+ * NO requiere sessionId (no usa session-resume). Pure · testeado en aislamiento.
+ */
+export function shouldForceFidelityEmit(
+  mcpServers: Record<string, unknown> | undefined,
+  extra: unknown,
+  drain: Pick<StreamDrainResult, 'fidelityScoresToolCall'>,
+): boolean {
+  const isJudge =
+    !!extra &&
+    typeof extra === 'object' &&
+    !Array.isArray(extra) &&
+    (extra as Record<string, unknown>).fidelity_judge === true
+  const brandSectionMounted = !!(mcpServers && mcpServers['brand-section'])
+  return isJudge && brandSectionMounted && drain.fidelityScoresToolCall === null
+}
+
+/**
  * Checkpoint-skip usability (Discovery Fix · 2026-06-28 · CC#4). A `completed`
  * checkpoint is reusable EXCEPT for a Discovery agent whose cached `output_ref`
  * captured NO emission (`discoveryToolCall` absent). Rehydrating such a cache
@@ -1120,6 +1142,47 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
         // Never let the fallback fail the run · the original drain stands.
         console.warn(
           `[forced-emit] ${canonicalSlug} · forced turn errored: ${e instanceof Error ? e.message : 'unknown'}`,
+        )
+      }
+    }
+
+    // Brand Book · Bug 2 (CC#4 2026-06-30) · forced-emit del judge de fidelidad.
+    // El judge (editor-en-jefe) narraba en vez de llamar emit_fidelity_scores →
+    // scores 0 → loop. Gateado por extra.fidelity_judge (solo la invocación-judge ·
+    // NO las lentes) + brand-section montado + sin emisión. Messages-API tool_choice
+    // COMPELE el tool call (mismo patrón discovery · va directo · sin resume previo).
+    if (
+      shouldForceFidelityEmit(
+        options.mcpServers as Record<string, unknown> | undefined,
+        input.extra,
+        drain,
+      )
+    ) {
+      console.warn(
+        `[forced-emit] ${canonicalSlug} (judge) cerró SIN emit_fidelity_scores · forzando vía Messages-API tool_choice`,
+      )
+      try {
+        const { forceFidelityEmitViaMessagesApi } = await import('./forced-emit-messages')
+        const forced = await forceFidelityEmitViaMessagesApi({
+          model: modelId,
+          systemPrompt,
+          task: input.task,
+          researchText: drain.responseText,
+        })
+        if (forced) {
+          drain = {
+            ...drain,
+            fidelityScoresToolCall: { input: forced.input, emission_count: forced.emission_count },
+            inputTokens: drain.inputTokens + forced.inputTokens,
+            outputTokens: drain.outputTokens + forced.outputTokens,
+          }
+          console.log(`[forced-emit] ${canonicalSlug} (judge) · scores RECUPERADOS vía Messages-API`)
+        } else {
+          console.warn(`[forced-emit] ${canonicalSlug} (judge) · Messages-API no devolvió tool_use`)
+        }
+      } catch (fe) {
+        console.warn(
+          `[forced-emit] ${canonicalSlug} (judge) · forced fidelity errored: ${fe instanceof Error ? fe.message : 'unknown'}`,
         )
       }
     }

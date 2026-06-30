@@ -25,6 +25,9 @@ const {
   buildAnthropicClient,
   EMIT_DISCOVERY_OUTPUT_TOOL,
   EMIT_DISCOVERY_OUTPUT_TOOL_NAME,
+  forceFidelityEmitViaMessagesApi,
+  EMIT_FIDELITY_SCORES_TOOL,
+  EMIT_FIDELITY_SCORES_TOOL_NAME,
 } = await import('../forced-emit-messages')
 
 const CID = 'd69100b5-8ad7-4bb0-908c-68b5544065dc'
@@ -128,5 +131,46 @@ describe('forceEmitViaMessagesApi', () => {
     expect(out).not.toBeNull()
     expect(injected.messages.create).toHaveBeenCalledOnce()
     expect(createMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('forceFidelityEmitViaMessagesApi (Bug 2 · judge)', () => {
+  const FID_ARGS = {
+    model: 'claude-sonnet-4-6',
+    systemPrompt: 'Sos el editor en jefe · juez de fidelidad.',
+    task: 'Puntuá la fidelidad de los campos del brand book.',
+    researchText: 'Evalué cada campo contra la evidencia.',
+  }
+
+  it('schema · scores 0..1 por campo · scores required', () => {
+    const s = EMIT_FIDELITY_SCORES_TOOL.input_schema
+    expect(EMIT_FIDELITY_SCORES_TOOL.name).toBe('emit_fidelity_scores')
+    expect(s.required).toEqual(['scores'])
+    expect(Object.keys(s.properties.scores.properties).sort()).toEqual(
+      ['customer_angle', 'icp_summary', 'positioning', 'retention_notes', 'voice_description'].sort(),
+    )
+    expect(s.properties.scores.properties.positioning).toEqual({ type: 'number', minimum: 0, maximum: 1 })
+  })
+
+  it('fuerza tool_choice emit_fidelity_scores + parsea los scores', async () => {
+    createMock.mockResolvedValue({
+      content: [
+        { type: 'text', text: 'prosa ignorada' },
+        { type: 'tool_use', name: EMIT_FIDELITY_SCORES_TOOL_NAME, input: { scores: { positioning: 0.9, voice_description: 0.88 } } },
+      ],
+      usage: { input_tokens: 500, output_tokens: 80 },
+    })
+    const out = await forceFidelityEmitViaMessagesApi(FID_ARGS)
+    expect(out).not.toBeNull()
+    expect((out!.input as { scores: Record<string, number> }).scores.positioning).toBe(0.9)
+    expect(out!.source).toBe('forced_messages_api')
+    const call = createMock.mock.calls[0][0]
+    expect(call.tool_choice).toEqual({ type: 'tool', name: 'emit_fidelity_scores' })
+    expect(call.messages[call.messages.length - 1].role).toBe('user')
+  })
+
+  it('returns null cuando no hay tool_use block', async () => {
+    createMock.mockResolvedValue({ content: [{ type: 'text', text: 'solo prosa' }], usage: {} })
+    expect(await forceFidelityEmitViaMessagesApi(FID_ARGS)).toBeNull()
   })
 })

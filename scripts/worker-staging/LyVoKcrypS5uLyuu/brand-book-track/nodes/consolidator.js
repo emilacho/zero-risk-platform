@@ -47,6 +47,11 @@ try {
   corrections = $json.corrections || $json.staging_package?.corrections || [];
 } catch (e) { corrections = []; }
 const cycle = (Number($json.cycle) || 0) + 1;
+// FIX 2026-06-30 (Bug 1 · loop infinito) · contador de fidelidad INDEPENDIENTE del
+// `cycle` del Lazo A (que el sub-wf resetea con su ciclo interno). Se incrementa
+// cada vez que el consolidador corre = cada iteración del loop de fidelidad del
+// worker principal. El IF · ciclos agotados hace hard-cap sobre ESTE contador.
+const fidelityCycle = (Number($json._fidelity_cycle) || 0) + 1;
 
 // pick · usa structured cuando exista, fallback a texto.
 const pick = (lens, key) =>
@@ -80,4 +85,4 @@ const grounding = {
   client_id: clientId,
 };
 
-return [{ json: { brand_book_draft: brandBookDraft, cycle, corrections, _grounding_refs: grounding } }];
+return [{ json: { brand_book_draft: brandBookDraft, cycle, _fidelity_cycle: fidelityCycle, corrections, _grounding_refs: grounding } }];

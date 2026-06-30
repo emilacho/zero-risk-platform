@@ -109,7 +109,10 @@ const correctionLoop = {
 }
 const judge = codeNode('[BB] Faithfulness judge', 'faithfulness-judge.js', [1280, Y])
 const ifFidelity = ifNode('[BB] IF · fidelidad PASS', '={{ $json.fidelity.pass }}', true, [1540, Y])
-const ifExhausted = ifNode('[BB] IF · ciclos agotados', '={{ $json.fidelity.exhausted }}', true, [1540, Y + 300])
+// FIX 2026-06-30 (Bug 1) · HARD CAP numérico sobre el contador INDEPENDIENTE
+// `_fidelity_cycle` (no `fidelity.exhausted` · que dependía del judge). Mata el
+// loop sí o sí tras 3 iteraciones del consolidador aunque el judge falle siempre.
+const ifExhausted = ifNode('[BB] IF · ciclos agotados', '={{ (Number($json._fidelity_cycle) || 0) >= 3 }}', true, [1540, Y + 300])
 const promote = codeNode('[BB] Promote → canon', 'promote-to-canon.js', [1800, Y - 150])
 const hitl = {
   parameters: {
