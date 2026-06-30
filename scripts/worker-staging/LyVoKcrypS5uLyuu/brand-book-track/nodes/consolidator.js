@@ -19,9 +19,17 @@ function lensOutput(nodeName) {
   try {
     const j = $(nodeName).first().json;
     const body = j.body || j;
-    // preferimos un bloque estructurado si el agente lo emitió; si no, el texto.
+    // CANON · la lente emite su sección vía emit_brand_section · el run-sdk la
+    // surface en body.brand_section (estructurado · NO texto narrativo).
+    // Fallbacks defensivos: intenta parsear JSON del response si por algún
+    // motivo el tool no fue capturado (degradación graceful).
+    let structured = body.brand_section || body.structured || null;
+    if (!structured && typeof body.response === 'string') {
+      const m = body.response.match(/\{[\s\S]*\}/);
+      if (m) { try { structured = JSON.parse(m[0]); } catch (e) {} }
+    }
     return {
-      structured: body.structured || body.brand_book_section || null,
+      structured: structured || null,
       text: typeof body.response === 'string' ? body.response : '',
     };
   } catch (e) {
@@ -48,7 +56,7 @@ const brandBookDraft = {
   client_id: clientId,
   // posicionamiento + ICP (brand-strategist)
   positioning: pick(strat, 'positioning'),
-  icp_summary: pick(strat, 'icp'),
+  icp_summary: pick(strat, 'icp_summary'),
   // voz/tono + reglas (editor-en-jefe)
   voice_description: pick(editor, 'voice_description'),
   forbidden_words: (editor.structured && editor.structured.forbidden_words) || [],

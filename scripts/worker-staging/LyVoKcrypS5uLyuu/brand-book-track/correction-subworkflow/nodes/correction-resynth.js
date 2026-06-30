@@ -16,9 +16,10 @@ const nextCycle = (Number(inp.cycle) || 0) + 1;
 const task =
   'Sos el consolidador del brand book (el MAKER · no un revisor). Mejorá el BORRADOR ' +
   'aplicando SOLO las CORRECCIONES de los jefes, grounded en la EVIDENCIA. NO inventes ' +
-  'campos nuevos · mantené la estructura. Emití SOLO JSON: {"brand_book_draft": {...}} ' +
-  'con los mismos campos (positioning, icp_summary, voice_description, forbidden_words[], ' +
-  'required_terminology[], customer_angle, retention_notes).\n\n' +
+  'campos nuevos · mantené la estructura. LLAMÁ EL TOOL `emit_brand_section` (pasá ' +
+  'lens:"brand-strategist") con TODOS los campos mejorados (positioning, icp_summary, ' +
+  'voice_description, forbidden_words[], required_terminology[], customer_angle, ' +
+  'retention_notes). NO narres · usá el tool.\n\n' +
   'EVIDENCIA:\n' + JSON.stringify(grounding).slice(0, 5000) + '\n\n' +
   'BORRADOR:\n' + JSON.stringify(draft).slice(0, 5000) + '\n\n' +
   'CORRECCIONES:\n' + JSON.stringify(corrections).slice(0, 5000);
@@ -38,13 +39,13 @@ try {
     }),
   });
   const body = await resp.json();
-  const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);
-  const m = text.match(/\{[\s\S]*\}/);
-  if (m) {
-    const parsed = JSON.parse(m[0]);
-    const cand = parsed.brand_book_draft || parsed;
-    if (cand && typeof cand === 'object') improved = { ...draft, ...cand, client_id: clientId };
+  // CANON · la sección mejorada llega vía emit_brand_section (body.brand_section).
+  let cand = body.brand_section || null;
+  if (!cand && typeof body.response === 'string') {
+    const m = body.response.match(/\{[\s\S]*\}/);
+    if (m) { try { const p = JSON.parse(m[0]); cand = p.brand_book_draft || p; } catch (e) {} }
   }
+  if (cand && typeof cand === 'object') improved = { ...draft, ...cand, client_id: clientId };
 } catch (e) {
   // floor seguro · si el re-synth falla, conserva el borrador previo · el lazo
   // sigue (la fidelidad decide canon · Lazo A es no-vinculante).

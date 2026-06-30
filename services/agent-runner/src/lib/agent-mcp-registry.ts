@@ -100,6 +100,16 @@ export const DISCOVERY_OUTPUT_ALLOW: ReadonlySet<string> = new Set([
 ])
 
 /**
+ * Brand Book · las 3 lentes que emiten su sección estructurada vía
+ * `emit_brand_section` (SPEC brand-book colaborativo · CC#4 2026-06-30).
+ */
+export const BRAND_SECTION_ALLOW: ReadonlySet<string> = new Set([
+  'brand-strategist',
+  'editor-en-jefe',
+  'jefe-client-success',
+])
+
+/**
  * Client Brain MCP deny-list · Discovery Fix B1 (2026-06-28 · CC#4).
  *
  * The `client-brain` MCP server is DEPRECATED (see client-brain-server.js
@@ -262,6 +272,25 @@ export function buildMcpServers(
       type: 'stdio',
       command: 'node',
       args: [pathResolve(process.cwd(), 'src/lib/mcp/discovery-output-server.js')],
+      env: {
+        ...(ctx.clientId ? { CLIENT_ID: ctx.clientId } : {}),
+        PATH: process.env.PATH ?? '',
+      },
+    }
+  }
+
+  // Brand Section MCP · las 3 lentes emiten su sección estructurada vía
+  // `emit_brand_section` (fix narración-vs-estructurado · CC#4 2026-06-30).
+  // Mismo gate que discovery (reusa el toggle de la capa de síntesis).
+  if (
+    slug &&
+    BRAND_SECTION_ALLOW.has(slug) &&
+    process.env.SALA_DISCOVERY_BRAIN_PUSH_ENABLED === 'true'
+  ) {
+    servers['brand-section'] = {
+      type: 'stdio',
+      command: 'node',
+      args: [pathResolve(process.cwd(), 'src/lib/mcp/brand-section-server.js')],
       env: {
         ...(ctx.clientId ? { CLIENT_ID: ctx.clientId } : {}),
         PATH: process.env.PATH ?? '',

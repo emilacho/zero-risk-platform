@@ -223,6 +223,8 @@ export interface AgentRunResult {
    * case the platform falls back to the text parser).
    */
   discoveryToolCall?: DiscoveryToolCallCapture
+  /** Brand Book · sección estructurada emitida por la lente vía emit_brand_section. */
+  brandSectionToolCall?: DiscoveryToolCallCapture
   error?: string
 }
 
@@ -428,7 +430,17 @@ export function _buildSystemPrompt(
  */
 const MCP_ALLOWED_TOOLS_BY_SERVER: Record<string, readonly string[]> = {
   'discovery-output': ['mcp__discovery-output__emit_discovery_output'],
+  // Brand Book · emit_brand_section · cada lente (brand-strategist · editor-en-jefe
+  // · jefe-client-success) emite SU sección estructurada vía tool call · mismo
+  // patrón que emit_discovery_output (CC#4 2026-06-30 · fix narración-vs-estructurado).
+  'brand-section': ['mcp__brand-section__emit_brand_section'],
 }
+
+/** Brand Book · nombres del tool_use de emit_brand_section (namespace + bare). */
+export const BRAND_SECTION_TOOL_USE_NAMES: ReadonlySet<string> = new Set([
+  'mcp__brand-section__emit_brand_section',
+  'emit_brand_section',
+])
 
 /**
  * Canon canonical · the SDK tool_use block names the Claude Agent SDK emits
@@ -552,6 +564,8 @@ export interface StreamDrainResult {
    * that emitted prose-only). Surfaced to AgentRunResult.discoveryToolCall.
    */
   discoveryToolCall: DiscoveryToolCallCapture | null
+  /** Brand Book · captura del emit_brand_section de la lente · null si narró sin emitir. */
+  brandSectionToolCall: DiscoveryToolCallCapture | null
 }
 
 /**
@@ -572,6 +586,9 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
   // surfaces forensics when the agent emits more than once.
   let discoveryEmissionCount = 0
   let lastDiscoveryInput: Record<string, unknown> | null = null
+  // Brand Book · captura paralela del emit_brand_section (cada lente emite su sección).
+  let brandSectionEmissionCount = 0
+  let lastBrandSectionInput: Record<string, unknown> | null = null
 
   for await (const rawMsg of stream) {
     const msg = rawMsg as SDKStreamMessage
@@ -602,6 +619,18 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
             // DISCOVERY_TOOL_USE_NAMES set canonical.
             discoveryEmissionCount++
             lastDiscoveryInput = block.input
+          } else if (
+            block.type === 'tool_use' &&
+            typeof block.name === 'string' &&
+            BRAND_SECTION_TOOL_USE_NAMES.has(block.name) &&
+            block.input &&
+            typeof block.input === 'object' &&
+            !Array.isArray(block.input)
+          ) {
+            // Brand Book · la lente emitió su sección estructurada vía tool ·
+            // keep the LAST emission · args pre-validados por el zod del MCP.
+            brandSectionEmissionCount++
+            lastBrandSectionInput = block.input
           }
         }
       }
@@ -631,6 +660,13 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
         ? {
             input: lastDiscoveryInput,
             emission_count: discoveryEmissionCount,
+          }
+        : null,
+    brandSectionToolCall:
+      lastBrandSectionInput !== null
+        ? {
+            input: lastBrandSectionInput,
+            emission_count: brandSectionEmissionCount,
           }
         : null,
   }
@@ -1103,6 +1139,9 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     cacheMetrics: cacheMetricsMeta,
     ...(drain.discoveryToolCall
       ? { discoveryToolCall: drain.discoveryToolCall }
+      : {}),
+    ...(drain.brandSectionToolCall
+      ? { brandSectionToolCall: drain.brandSectionToolCall }
       : {}),
   }
 

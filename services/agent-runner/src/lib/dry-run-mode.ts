@@ -85,6 +85,8 @@ export interface DryRunFakeResponse {
    * surface stays canonical so downstream typing stays simple).
    */
   discoveryToolCall: null
+  /** Brand Book · siempre null en dry-run (no invoca MCP tools). */
+  brandSectionToolCall: null
 }
 
 /**
@@ -117,6 +119,7 @@ export function buildDryRunFakeResponse(
       `[DRY_RUN] agent=${slug} · task="${taskExcerpt}" · canonical fake response · ` +
       `NO Anthropic API call · NO MCP tools invoked · NO Client Brain enrichment`,
     discoveryToolCall: null,
+    brandSectionToolCall: null,
   }
 }
 

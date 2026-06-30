@@ -208,6 +208,7 @@ interface AgentRunResultProxy {
   brainEnrichment?: BrainEnrichmentProxyMeta
   cacheMetrics?: CacheMetricsProxyMeta
   discoveryToolCall?: DiscoveryToolCallProxyMeta
+  brandSectionToolCall?: DiscoveryToolCallProxyMeta
   error?: string
 }
 
@@ -784,6 +785,23 @@ export async function POST(request: Request) {
                 : 1,
           }
         : undefined
+    // Brand Book · captura paralela de la sección estructurada de la lente.
+    const rawBrandSection = (result as { brandSectionToolCall?: unknown }).brandSectionToolCall as
+      | Record<string, unknown>
+      | undefined
+    const brandSectionToolCall: DiscoveryToolCallProxyMeta | undefined =
+      rawBrandSection &&
+      typeof rawBrandSection === 'object' &&
+      !Array.isArray(rawBrandSection) &&
+      rawBrandSection.input &&
+      typeof rawBrandSection.input === 'object' &&
+      !Array.isArray(rawBrandSection.input)
+        ? {
+            input: rawBrandSection.input as Record<string, unknown>,
+            emission_count:
+              typeof rawBrandSection.emission_count === 'number' ? rawBrandSection.emission_count : 1,
+          }
+        : undefined
     result = {
       success: !!result.success,
       response: typeof result.response === 'string' ? result.response : '',
@@ -796,6 +814,7 @@ export async function POST(request: Request) {
       brainEnrichment,
       cacheMetrics,
       ...(discoveryToolCall ? { discoveryToolCall } : {}),
+      ...(brandSectionToolCall ? { brandSectionToolCall } : {}),
       error: result.error,
     }
 
@@ -954,6 +973,11 @@ export async function POST(request: Request) {
       // serves as durable backup record + dashboards source.
       ...(discoveryOutputResolved ? { discovery_output: discoveryOutputResolved } : {}),
       ...(discoveryPersist ? { discovery_persist: discoveryPersist } : {}),
+      // Brand Book · la sección estructurada que la lente emitió vía emit_brand_section ·
+      // el worker (consolidador) la lee de response.body.brand_section (NO del texto).
+      ...(result.brandSectionToolCall
+        ? { brand_section: result.brandSectionToolCall.input }
+        : {}),
     }
 
     // DUAL REVIEWER MIDDLEWARE — mirrors /api/agents/run lines 478-503 so workflows
