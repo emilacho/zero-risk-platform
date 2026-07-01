@@ -128,6 +128,11 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
     expect(targets('[BB] IF · ciclos agotados', 0)).toContain('[BB] HITL último recurso (no Emilio)')
     expect(targets('[BB] IF · ciclos agotados', 1)).toContain('[BB] Consolidador')
   })
+  it('Fix HITL · el nodo HITL manda auth x-api-key + neverError (no ensucia el exec con error)', () => {
+    const h = nodeByName('[BB] HITL último recurso (no Emilio)') as { parameters: { headerParameters?: unknown; options?: { response?: { response?: { neverError?: boolean } } } } }
+    expect(JSON.stringify(h.parameters.headerParameters)).toContain('x-api-key')
+    expect(h.parameters.options?.response?.response?.neverError).toBe(true)
+  })
   it('Fix 1 · HARD CAP · IF ciclos agotados usa contador independiente _fidelity_cycle >= 3', () => {
     const ifNode = nodeByName('[BB] IF · ciclos agotados') as { parameters: { conditions?: { conditions?: Array<{ leftValue?: string }> } } }
     const expr = ifNode.parameters.conditions?.conditions?.[0]?.leftValue || ''
