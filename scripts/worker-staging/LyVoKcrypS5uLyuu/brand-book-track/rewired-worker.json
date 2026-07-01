@@ -1626,20 +1626,6 @@
     },
     {
       "parameters": {
-        "workflowId": "={{ $env.BB_CORRECTION_SUBWORKFLOW_ID || '' }}",
-        "options": {}
-      },
-      "id": "bb-correction-subwf",
-      "name": "[BB] Lazo A · corrección (sub-wf)",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1,
-      "position": [
-        1020,
-        1800
-      ]
-    },
-    {
-      "parameters": {
         "jsCode": "// Brand Book · Judge prep · arma el task de fidelidad + metadata para el nodo HTTP.\r\n// FIX 2026-07-01 (judge no llegaba al runner) · el fetch del Code node NO llegaba\r\n// al runner en el contexto n8n (no creaba fila ni checkpoint → scores 0). Ahora la\r\n// llamada run-sdk se hace en un nodo HTTP Request (timeout 800s + neverError · mismo\r\n// patrón que lentes/revisores que SÍ funcionan). Este nodo solo prepara el task.\r\nconst THRESHOLD = 0.85;\r\nconst inJson = $json;\r\nconst draft = inJson.brand_book_draft || {};\r\nconst grounding = inJson._grounding_refs || {};\r\nconst cycle = Number(inJson.cycle) || 1;\r\nconst fidelityCycle = Number(inJson._fidelity_cycle) || 1;\r\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\r\n\r\nconst SCORED_FIELDS = [\r\n  'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',\r\n];\r\nconst fieldsForPrompt = SCORED_FIELDS.map((f) => ({ field: f, value: String(draft[f] || '') }));\r\n\r\n// FIX 2026-07-01 (judge puntuaba 0 · evidencia rota) · construir la EVIDENCIA como\r\n// PROSA LEGIBLE (no JSON.stringify().slice() que cortaba a mitad de estructura · el\r\n// judge no la podía verificar → 0). Con evidencia limpia el mismo agente puntuó 0.92.\r\nconst g = grounding || {};\r\nconst icp = g.icp_signals || g.icp || {};\r\nconst arr = (x) => (Array.isArray(x) ? x : x ? [x] : []);\r\nconst line = (label, v) => {\r\n  const items = arr(v).map((s) => (typeof s === 'string' ? s : (s && (s.name || s.audience_segment)) || '')).filter(Boolean);\r\n  return items.length ? '- ' + label + ': ' + items.slice(0, 8).join(' · ') + '\\n' : '';\r\n};\r\nconst evidencia = (\r\n  'Cliente: ' + (g.client_name || '') + ' · Industria: ' + (g.industry || '') + '\\n' +\r\n  'Resumen de descubrimiento (evidencia real del brain/discovery):\\n' +\r\n  String(g.discovery_summary || '').slice(0, 2200) + '\\n\\n' +\r\n  line('Competidores', (g.competitors || []).map((c) => c.name)) +\r\n  line('Segmentos ICP', icp.segments) +\r\n  line('Dolores', icp.pain_points) +\r\n  line('Objetivos', icp.goals) +\r\n  line('Objeciones', icp.objections) +\r\n  line('Canales preferidos', icp.preferred_channels)\r\n).slice(0, 4000);\r\n\r\n// run-sdk RECHAZA task > 8000 chars · guard final ≤7900.\r\nconst judgeTask = (\r\n  'Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y ' +\r\n  'los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo ' +\r\n  '(1 = totalmente grounded · 0 = inventado/contradice). LLAMÁ EL TOOL `emit_fidelity_scores` ' +\r\n  'con tus scores (un número 0..1 por campo). NO narres · usá el tool · es la ÚNICA forma en ' +\r\n  'que tus scores deciden el canon.\\n\\n' +\r\n  'EVIDENCIA:\\n' + evidencia + '\\n\\n' +\r\n  'CAMPOS:\\n' + JSON.stringify(fieldsForPrompt).slice(0, 3500)\r\n).slice(0, 7900);\r\n\r\nreturn [{ json: {\r\n  judge_task: judgeTask,\r\n  judge_step_name: 'bb-faithfulness-judge-c' + fidelityCycle,\r\n  client_id: clientId,\r\n  brand_book_draft: draft,\r\n  _grounding_refs: grounding,\r\n  cycle,\r\n  _fidelity_cycle: fidelityCycle,\r\n  threshold: THRESHOLD,\r\n} }];\r\n"
       },
       "id": "bb--bb-judge-prep",
@@ -2377,17 +2363,6 @@
       ]
     },
     "[BB] Consolidador": {
-      "main": [
-        [
-          {
-            "node": "[BB] Lazo A · corrección (sub-wf)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "[BB] Lazo A · corrección (sub-wf)": {
       "main": [
         [
           {

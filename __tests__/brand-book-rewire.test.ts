@@ -27,7 +27,6 @@ const NEW_NODES = [
   'Lente · jefe-client-success',
   '[BB] Merge lentes (esperar 3)',
   '[BB] Consolidador',
-  '[BB] Lazo A · corrección (sub-wf)',
   '[BB] Judge prep',
   '[BB] Judge · run-sdk',
   '[BB] Faithfulness judge',
@@ -41,8 +40,10 @@ describe('brand-book rewire · nodos del nuevo track', () => {
   it('agrega los 11 nodos del track colaborativo', () => {
     for (const n of NEW_NODES) expect(nodeByName(n), `falta nodo ${n}`).toBeDefined()
   })
-  it('preserva los 51 nodos base (no borra nada del worker) · total 65 (+Merge +Judge prep/http)', () => {
-    expect(worker.nodes.length).toBe(65)
+  it('preserva los 51 nodos base (no borra nada del worker) · total 64 (Merge +Judge prep/http · Lazo A bypasseado)', () => {
+    expect(worker.nodes.length).toBe(64)
+    // el Lazo A ya NO está en el track (bypasseado · borraba el draft).
+    expect(nodeByName('[BB] Lazo A · corrección (sub-wf)')).toBeUndefined()
   })
 })
 
@@ -94,9 +95,11 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
     expect(m.type).toBe('n8n-nodes-base.merge')
     expect(m.parameters.numberInputs).toBe(3)
   })
-  it('consolidador → lazo A → Judge prep → Judge run-sdk (HTTP) → Faithfulness judge (scoring)', () => {
-    expect(targets('[BB] Consolidador')).toContain('[BB] Lazo A · corrección (sub-wf)')
-    expect(targets('[BB] Lazo A · corrección (sub-wf)')).toContain('[BB] Judge prep')
+  it('Bypass Lazo A · consolidador → Judge prep DIRECTO → Judge run-sdk (HTTP) → Faithfulness judge', () => {
+    // el Lazo A borraba el draft (correction-merge lo leía de las respuestas de los
+    // revisores HTTP que no lo preservan) · bypasseado · es no vinculante.
+    expect(targets('[BB] Consolidador')).toContain('[BB] Judge prep')
+    expect(targets('[BB] Consolidador')).not.toContain('[BB] Lazo A · corrección (sub-wf)')
     expect(targets('[BB] Judge prep')).toContain('[BB] Judge · run-sdk')
     expect(targets('[BB] Judge · run-sdk')).toContain('[BB] Faithfulness judge')
   })
