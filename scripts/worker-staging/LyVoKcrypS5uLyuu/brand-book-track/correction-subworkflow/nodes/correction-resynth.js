@@ -13,16 +13,18 @@ const corrections = inp.corrections || [];
 const clientId = inp.client_id || draft.client_id;
 const nextCycle = (Number(inp.cycle) || 0) + 1;
 
-const task =
+// FIX 2026-07-01 (límite 8000 chars run-sdk) · slices reducidos + guard final ≤7900.
+const task = (
   'Sos el consolidador del brand book (el MAKER · no un revisor). Mejorá el BORRADOR ' +
   'aplicando SOLO las CORRECCIONES de los jefes, grounded en la EVIDENCIA. NO inventes ' +
   'campos nuevos · mantené la estructura. LLAMÁ EL TOOL `emit_brand_section` (pasá ' +
   'lens:"brand-strategist") con TODOS los campos mejorados (positioning, icp_summary, ' +
   'voice_description, forbidden_words[], required_terminology[], customer_angle, ' +
   'retention_notes). NO narres · usá el tool.\n\n' +
-  'EVIDENCIA:\n' + JSON.stringify(grounding).slice(0, 5000) + '\n\n' +
-  'BORRADOR:\n' + JSON.stringify(draft).slice(0, 5000) + '\n\n' +
-  'CORRECCIONES:\n' + JSON.stringify(corrections).slice(0, 5000);
+  'EVIDENCIA:\n' + JSON.stringify(grounding).slice(0, 2500) + '\n\n' +
+  'BORRADOR:\n' + JSON.stringify(draft).slice(0, 2500) + '\n\n' +
+  'CORRECCIONES:\n' + JSON.stringify(corrections).slice(0, 2500)
+).slice(0, 7900);
 
 let improved = draft;
 try {

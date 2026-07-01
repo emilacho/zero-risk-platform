@@ -19,19 +19,21 @@ const FORMAT =
   '- Regla: NO emitas "rojo" sin un objeto-corrección accionable. Sin prosa.\n' +
   '- Si el borrador ya está bien en TU eje, devolvé {"corrections":[]}.';
 
+// FIX 2026-07-01 (límite 8000 chars run-sdk) · slices reducidos + guard final ≤7900.
 const base =
   'Sos revisor de un borrador de BRAND BOOK. Diagnosticá (NO reescribas) contra la ' +
   'EVIDENCIA real del cliente. Tu rol corrige solo TU eje.\n\n' +
-  'EVIDENCIA:\n' + JSON.stringify(grounding).slice(0, 6000) + '\n\n' +
-  'BORRADOR:\n' + JSON.stringify(draft).slice(0, 6000) + '\n\n' + FORMAT;
+  'EVIDENCIA:\n' + JSON.stringify(grounding).slice(0, 3000) + '\n\n' +
+  'BORRADOR:\n' + JSON.stringify(draft).slice(0, 3500) + '\n\n' + FORMAT;
 
+const cap = (t) => t.slice(0, 7900);
 const reviewers = [
   { reviewer: 'brand-strategist', agent: 'brand-strategist',
-    task: base + '\n\nTU EJE: posicionamiento + ICP · ¿el posicionamiento contradice la evidencia? ¿ICP refleja la data?' },
+    task: cap(base + '\n\nTU EJE: posicionamiento + ICP · ¿el posicionamiento contradice la evidencia? ¿ICP refleja la data?') },
   { reviewer: 'editor-en-jefe', agent: 'editor-en-jefe',
-    task: base + '\n\nTU EJE: voz · ¿los principios de voz son concretos/testeables? ¿forbidden_words/required_terminology coherentes?' },
+    task: cap(base + '\n\nTU EJE: voz · ¿los principios de voz son concretos/testeables? ¿forbidden_words/required_terminology coherentes?') },
   { reviewer: 'jefe-client-success', agent: 'jefe-client-success',
-    task: base + '\n\nTU EJE: cliente · ¿el ICP/ángulo refleja la retención? ¿algo no aterriza en valor cliente?' },
+    task: cap(base + '\n\nTU EJE: cliente · ¿el ICP/ángulo refleja la retención? ¿algo no aterriza en valor cliente?') },
 ];
 
 return reviewers.map((r) => ({

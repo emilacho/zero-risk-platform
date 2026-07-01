@@ -149,6 +149,14 @@ describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
     const code = readNode('faithfulness-judge.js')
     expect(code).toMatch(/step_name:\s*'bb-faithfulness-judge-c'\s*\+\s*fidelityCycle/)
   })
+  it('Fix 8000 · judge + lentes cap el task ≤7900 (run-sdk rechaza >8000 · causa raíz judge=0)', () => {
+    // judge · guard final .slice(0, 7900)
+    expect(readNode('faithfulness-judge.js')).toMatch(/\)\s*\.slice\(0,\s*7900\)/)
+    // lentes · cap() aplicado a cada task
+    const prep = readNode('synthesis-fanout-prep.js')
+    expect(prep).toMatch(/slice\(0,\s*7900\)/)
+    expect(prep).toMatch(/task:\s*cap\(/)
+  })
   it('Fix checkpoint · cada lente pasa step_name distinto (bb-lens-<lente>)', () => {
     for (const lens of ['brand-strategist', 'editor-en-jefe', 'jefe-client-success']) {
       const node = nodeByName('Lente · ' + lens) as { parameters: { jsonBody?: string } }
@@ -215,6 +223,10 @@ describe('Lazo A · sub-workflow de corrección', () => {
   it('review-prep pide el formato accionable · re-síntesis es el consolidador (maker)', () => {
     expect(readSub('correction-review-prep.js')).toMatch(/cambio_sugerido/)
     expect(readSub('correction-resynth.js')).toContain('/api/agents/run-sdk')
+  })
+  it('Fix 8000 · revisores + re-síntesis cap el task ≤7900 (run-sdk rechaza >8000)', () => {
+    expect(readSub('correction-review-prep.js')).toMatch(/slice\(0,\s*7900\)/)
+    expect(readSub('correction-resynth.js')).toMatch(/\)\s*\.slice\(0,\s*7900\)/)
   })
   for (const f of ['correction-review-prep.js', 'correction-merge.js', 'correction-resynth.js']) {
     it(`${f} es JS sintácticamente válido`, () => {
