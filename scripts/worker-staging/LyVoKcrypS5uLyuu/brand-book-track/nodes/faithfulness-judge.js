@@ -26,14 +26,18 @@ const SCORED_FIELDS = [
 
 // Prompt del judge · pide UN JSON con score por campo · cero prosa.
 const fieldsForPrompt = SCORED_FIELDS.map((f) => ({ field: f, value: String(draft[f] || '') }));
-const judgeTask =
+// FIX 2026-07-01 (CAUSA RAÍZ judge=0) · run-sdk RECHAZA task > 8000 chars
+// (E-INPUT-INVALID). El judge task (6000 grounding + 6000 campos ≈ 12000) se rechazaba
+// SIEMPRE → el judge atrapaba el error → scores 0. Slices reducidos + guard final ≤7900.
+const judgeTask = (
   'Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y ' +
   'los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo ' +
   '(1 = totalmente grounded · 0 = inventado/contradice). LLAMÁ EL TOOL `emit_fidelity_scores` ' +
   'con tus scores (un número 0..1 por campo). NO narres · usá el tool · es la ÚNICA forma en ' +
   'que tus scores deciden el canon.\n\n' +
-  'EVIDENCIA:\n' + JSON.stringify(grounding).slice(0, 6000) + '\n\n' +
-  'CAMPOS:\n' + JSON.stringify(fieldsForPrompt).slice(0, 6000);
+  'EVIDENCIA:\n' + JSON.stringify(grounding).slice(0, 3000) + '\n\n' +
+  'CAMPOS:\n' + JSON.stringify(fieldsForPrompt).slice(0, 3500)
+).slice(0, 7900);
 
 let scores = {};
 try {

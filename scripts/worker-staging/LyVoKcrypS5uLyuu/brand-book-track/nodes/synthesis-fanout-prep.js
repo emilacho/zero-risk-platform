@@ -30,16 +30,20 @@ const base =
   '(web/redes/discovery/Apify). NO inventes. CUANDO TENGAS TU SECCIÓN LISTA, LLAMÁ EL TOOL ' +
   '`emit_brand_section` con tus campos (pasá `lens` con tu nombre de lente). NO narres la ' +
   'respuesta · usá el tool · es la ÚNICA forma en que tu sección llega al consolidador. ' +
+  // FIX 2026-07-01 (límite 8000 chars run-sdk) · grounding 8000→6800 · deja margen
+  // para la prosa base + la instrucción de sección · el guard final garantiza ≤7900.
   'Grounding cada afirmación en la evidencia.\n\nEVIDENCIA:\n' +
-  JSON.stringify(grounding).slice(0, 8000);
+  JSON.stringify(grounding).slice(0, 6800);
 
+// guard final · run-sdk rechaza task > 8000 chars (E-INPUT-INVALID) · garantiza ≤7900.
+const cap = (t) => t.slice(0, 7900);
 const lenses = [
   { lens: 'brand-strategist', agent: 'brand-strategist',
-    task: base + '\n\nTU SECCIÓN: positioning + icp (audience_segment, pains, goals).' },
+    task: cap(base + '\n\nTU SECCIÓN: positioning + icp (audience_segment, pains, goals).') },
   { lens: 'editor-en-jefe', agent: 'editor-en-jefe',
-    task: base + '\n\nTU SECCIÓN: voice_description + forbidden_words[] + required_terminology[].' },
+    task: cap(base + '\n\nTU SECCIÓN: voice_description + forbidden_words[] + required_terminology[].') },
   { lens: 'jefe-client-success', agent: 'jefe-client-success',
-    task: base + '\n\nTU SECCIÓN: customer_angle + retention_notes.' },
+    task: cap(base + '\n\nTU SECCIÓN: customer_angle + retention_notes.') },
 ];
 
 // FIX-FORWARD 2026-06-30 (Fix B · fan-out routing) · emití UN solo item con las
