@@ -159,6 +159,14 @@ describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
     expect(code).toContain('low_fields')
     expect(code).not.toMatch(/require\(['"][^'"]*(ragas|deepeval)|import[^\n]*(ragas|deepeval)/i)
   })
+  it('Fix gate (Opción 1) · el pase se decide SOLO sobre positioning + icp_summary (fácticos)', () => {
+    const code = readNode('faithfulness-judge.js')
+    // GATED_FIELDS = solo los fácticos · los estilísticos se puntúan pero NO bloquean.
+    expect(code).toMatch(/GATED_FIELDS\s*=\s*\[\s*'positioning',\s*'icp_summary'\s*\]/)
+    expect(code).toMatch(/lowFields\s*=\s*GATED_FIELDS\.filter/)
+    // los 5 se siguen puntuando (transparencia).
+    expect(code).toMatch(/for\s*\(const f of SCORED_FIELDS\)/)
+  })
   it('Fix A · el judge-prep pide emit_fidelity_scores y el scoring lee body.fidelity_scores', () => {
     expect(readNode('judge-prep.js')).toContain('emit_fidelity_scores')
     expect(readNode('faithfulness-judge.js')).toContain('body.fidelity_scores')

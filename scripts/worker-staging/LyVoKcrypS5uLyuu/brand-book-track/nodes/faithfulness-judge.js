@@ -9,9 +9,16 @@
 
 const THRESHOLD = 0.85;
 const MAX_FIDELITY_CYCLES = 3;
+// Todos los campos se PUNTÚAN + registran (transparencia · dashboards).
 const SCORED_FIELDS = [
   'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',
 ];
+// FIX 2026-07-01 (consejero · Opción 1) · el GATE solo exige groundedness en los campos
+// FÁCTICOS (positioning + icp_summary · verificables contra la evidencia de discovery).
+// voice/customer_angle/retention_notes son DERIVACIONES CREATIVAS de marca (voz, ángulo,
+// retención) · no hechos que se puedan "grounded" contra competidores/ICP · se puntúan
+// pero NO bloquean el canon. El gate frena hechos inventados, no decisiones de marca.
+const GATED_FIELDS = ['positioning', 'icp_summary'];
 
 const prep = $('[BB] Judge prep').first().json;
 const draft = prep.brand_book_draft || {};
@@ -36,7 +43,8 @@ for (const f of SCORED_FIELDS) {
   const v = Number(scores[f]);
   norm[f] = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
 }
-const lowFields = SCORED_FIELDS.filter((f) => norm[f] < THRESHOLD);
+// El pase se decide SOLO sobre los campos fácticos gateados (Opción 1 · consejero).
+const lowFields = GATED_FIELDS.filter((f) => norm[f] < THRESHOLD);
 const pass = lowFields.length === 0;
 
 return [{
@@ -45,7 +53,8 @@ return [{
       pass,
       threshold: THRESHOLD,
       scores: norm,
-      low_fields: lowFields,
+      gated_fields: GATED_FIELDS, // solo éstos deciden el pase (Opción 1)
+      low_fields: lowFields, // campos GATEADOS bajo umbral (los que bloquean)
       cycle,
       fidelity_cycle: fidelityCycle,
       max_cycles: MAX_FIDELITY_CYCLES,
