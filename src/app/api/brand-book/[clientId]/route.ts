@@ -7,6 +7,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 export const runtime = 'nodejs'
 
@@ -70,9 +71,9 @@ export async function POST(req: Request, { params }: RouteContext) {
   if (!clientId) {
     return NextResponse.json({ error: 'missing_client_id' }, { status: 400 })
   }
-  const provided = req.headers.get('x-api-key')
-  if (!process.env.INTERNAL_API_KEY || provided !== process.env.INTERNAL_API_KEY) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const auth = checkInternalKey(req)
+  if (!auth.ok) {
+    return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   }
 
   let body: Record<string, unknown> = {}
