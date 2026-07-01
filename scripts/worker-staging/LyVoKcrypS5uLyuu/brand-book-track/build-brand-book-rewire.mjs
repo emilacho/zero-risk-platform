@@ -182,7 +182,9 @@ const hitl = {
   position: [1800, Y + 300],
 }
 
-const newNodes = [fanout, lensStrat, lensEditor, lensCS, mergeLentes, consolidator, correctionLoop, judgePrep, judgeHttp, judge, ifFidelity, ifExhausted, promote, hitl]
+// FIX 2026-07-01 · Lazo A (correctionLoop) BYPASSEADO · sacado del track (borraba el draft ·
+// no vinculante). Se deja definido arriba pero NO se incluye en el worker.
+const newNodes = [fanout, lensStrat, lensEditor, lensCS, mergeLentes, consolidator, judgePrep, judgeHttp, judge, ifFidelity, ifExhausted, promote, hitl]
 
 // ── connection surgery ──────────────────────────────────────────────────────
 // toIdx · índice de ENTRADA del nodo destino (default 0) · necesario para el
@@ -215,10 +217,12 @@ link('Lente · brand-strategist', '[BB] Merge lentes (esperar 3)', 'main', 0, 0)
 link('Lente · editor-en-jefe', '[BB] Merge lentes (esperar 3)', 'main', 0, 1)
 link('Lente · jefe-client-success', '[BB] Merge lentes (esperar 3)', 'main', 0, 2)
 link('[BB] Merge lentes (esperar 3)', '[BB] Consolidador')
-// consolidador → lazo A corrección → judge
-link('[BB] Consolidador', '[BB] Lazo A · corrección (sub-wf)')
-// FIX 2026-07-01 · Lazo A → Judge prep → Judge run-sdk (HTTP) → Faithfulness judge (scoring).
-link('[BB] Lazo A · corrección (sub-wf)', '[BB] Judge prep')
+// FIX 2026-07-01 · BYPASS Lazo A · Consolidador → Judge prep DIRECTO. El Lazo A
+// (no vinculante · la fidelidad decide canon) BORRABA el draft · su correction-merge
+// leía el brand_book_draft de la respuesta de los revisores (nodos HTTP que NO lo
+// preservan) → devolvía draft vacío → el judge recibía vacío → 0. El draft del
+// consolidador (de las 3 lentes) es el canon · el judge lo evalúa directo.
+link('[BB] Consolidador', '[BB] Judge prep')
 link('[BB] Judge prep', '[BB] Judge · run-sdk')
 link('[BB] Judge · run-sdk', '[BB] Faithfulness judge')
 // judge → IF fidelidad · PASS(true)→promote · FAIL(false)→IF ciclos agotados
