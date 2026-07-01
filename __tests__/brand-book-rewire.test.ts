@@ -173,6 +173,13 @@ describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
     expect(prep).toMatch(/slice\(0,\s*7900\)/)
     expect(prep).toMatch(/task:\s*cap\(/)
   })
+  it('Fix evidencia · judge-prep arma evidencia LEGIBLE (prosa) · no JSON.stringify(grounding).slice', () => {
+    const code = readNode('judge-prep.js')
+    expect(code).toContain('Resumen de descubrimiento')
+    expect(code).toContain('discovery_summary')
+    // ya NO usa el blob JSON truncado que rompía la verificación del judge.
+    expect(code).not.toMatch(/JSON\.stringify\(grounding\)\.slice/)
+  })
   it('Fix checkpoint · cada lente pasa step_name distinto (bb-lens-<lente>)', () => {
     for (const lens of ['brand-strategist', 'editor-en-jefe', 'jefe-client-success']) {
       const node = nodeByName('Lente · ' + lens) as { parameters: { jsonBody?: string } }
