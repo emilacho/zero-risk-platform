@@ -28,9 +28,11 @@ function supabaseWith(result: { data: unknown; error: unknown }) {
 
 beforeEach(() => {
   delete process.env.SALA_NAUFRAGO_RUN_CAP_ENFORCE
+  delete process.env.SALA_NAUFRAGO_CAP_USD
 })
 afterEach(() => {
   delete process.env.SALA_NAUFRAGO_RUN_CAP_ENFORCE
+  delete process.env.SALA_NAUFRAGO_CAP_USD
   vi.restoreAllMocks()
 })
 
@@ -86,5 +88,32 @@ describe('§150 run-sdk spend gate', () => {
     const r = await checkRunSdkSpendCap(sb, null)
     expect(r.blocked).toBe(false)
     expect(r.reason).toBe('no_client')
+  })
+
+  it('7 · FIX · SALA_NAUFRAGO_CAP_USD override · sube el cap · spend bajo el env cap → pass', async () => {
+    process.env.SALA_NAUFRAGO_RUN_CAP_ENFORCE = 'true'
+    process.env.SALA_NAUFRAGO_CAP_USD = '10'
+    const sb = supabaseWith({ data: [{ cost_usd: 6.5 }], error: null }) // 6.5 >= 5 (hardcode) pero < 10 (env)
+    const r = await checkRunSdkSpendCap(sb, NAUFRAGO_TENANT_ID_UUID)
+    expect(r.blocked).toBe(false)
+    expect(r.reason).toBe('under_cap')
+  })
+
+  it('8 · FIX · SALA_NAUFRAGO_CAP_USD override · bloquea con el cap del env (no el hardcode)', async () => {
+    process.env.SALA_NAUFRAGO_RUN_CAP_ENFORCE = 'true'
+    process.env.SALA_NAUFRAGO_CAP_USD = '10'
+    const sb = supabaseWith({ data: [{ cost_usd: 12 }], error: null }) // 12 >= 10 (env cap)
+    const r = await checkRunSdkSpendCap(sb, NAUFRAGO_TENANT_ID_UUID)
+    expect(r.blocked).toBe(true)
+    expect(r.cap_usd).toBe(10) // el cap del env · NO el hardcode 5.0
+  })
+
+  it('9 · FIX · env inválido/vacío → fallback al hardcode $5', async () => {
+    process.env.SALA_NAUFRAGO_RUN_CAP_ENFORCE = 'true'
+    process.env.SALA_NAUFRAGO_CAP_USD = 'abc'
+    const sb = supabaseWith({ data: [{ cost_usd: 6 }], error: null }) // 6 >= 5 hardcode
+    const r = await checkRunSdkSpendCap(sb, NAUFRAGO_TENANT_ID_UUID)
+    expect(r.blocked).toBe(true)
+    expect(r.cap_usd).toBe(NAUFRAGO_PHASE1_RUN_CAP_USD)
   })
 })

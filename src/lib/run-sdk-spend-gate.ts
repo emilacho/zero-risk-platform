@@ -75,10 +75,17 @@ export async function checkRunSdkSpendCap(
       return acc + (Number.isFinite(n) ? Number(n) : 0)
     }, 0)
 
+    // FIX 2026-07-01 (CC#4) · el cap ahora es CONFIGURABLE vía env var
+    // SALA_NAUFRAGO_CAP_USD (antes hardcode $5 · ignoraba el env). Setear la
+    // variable a N → cap $N. Si no está seteada o es inválida, fallback al
+    // hardcode NAUFRAGO_PHASE1_RUN_CAP_USD (5.0) vía evaluateNaufragoRunCap.
+    const capEnv = Number(process.env.SALA_NAUFRAGO_CAP_USD)
+    const capOverride = Number.isFinite(capEnv) && capEnv > 0 ? capEnv : undefined
     const verdict = evaluateNaufragoRunCap({
       tenant_id: String(clientId),
       spent_usd: spent,
       enforce: true,
+      cap_usd: capOverride,
     })
     if (verdict.verdict === 'block') {
       return {
