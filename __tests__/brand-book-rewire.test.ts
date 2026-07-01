@@ -32,6 +32,7 @@ const NEW_NODES = [
   '[BB] Faithfulness judge',
   '[BB] IF · fidelidad PASS',
   '[BB] IF · ciclos agotados',
+  '[BB] Promote prep',
   '[BB] Promote → canon',
   '[BB] HITL último recurso (no Emilio)',
 ]
@@ -40,8 +41,8 @@ describe('brand-book rewire · nodos del nuevo track', () => {
   it('agrega los 11 nodos del track colaborativo', () => {
     for (const n of NEW_NODES) expect(nodeByName(n), `falta nodo ${n}`).toBeDefined()
   })
-  it('preserva los 51 nodos base (no borra nada del worker) · total 64 (Merge +Judge prep/http · Lazo A bypasseado)', () => {
-    expect(worker.nodes.length).toBe(64)
+  it('preserva los 51 nodos base (no borra nada del worker) · total 65 (Merge +Judge/Promote prep+http · Lazo A bypasseado)', () => {
+    expect(worker.nodes.length).toBe(65)
     // el Lazo A ya NO está en el track (bypasseado · borraba el draft).
     expect(nodeByName('[BB] Lazo A · corrección (sub-wf)')).toBeUndefined()
   })
@@ -111,10 +112,17 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
     expect(jh.parameters.jsonBody).toContain('"fidelity_judge": true') // extra activa el forced-emit
     expect(jh.parameters.jsonBody).toContain('$json.judge_step_name') // step_name distinto (del prep)
   })
-  it('judge → IF fidelidad · PASS(true)→promote · FAIL(false)→IF ciclos agotados', () => {
+  it('judge → IF fidelidad · PASS(true)→Promote prep→Promote canon · FAIL(false)→IF ciclos agotados', () => {
     expect(targets('[BB] Faithfulness judge')).toContain('[BB] IF · fidelidad PASS')
-    expect(targets('[BB] IF · fidelidad PASS', 0)).toContain('[BB] Promote → canon') // true
+    expect(targets('[BB] IF · fidelidad PASS', 0)).toContain('[BB] Promote prep') // true
+    expect(targets('[BB] Promote prep')).toContain('[BB] Promote → canon')
     expect(targets('[BB] IF · fidelidad PASS', 1)).toContain('[BB] IF · ciclos agotados') // false
+  })
+  it('Fix promote-http · el POST del Promote es un HTTP node (fetch no existe en Code nodes)', () => {
+    const p = nodeByName('[BB] Promote → canon') as { type: string; parameters: { url?: string; options?: { timeout?: number } } }
+    expect(p.type).toBe('n8n-nodes-base.httpRequest')
+    expect(p.parameters.url).toContain('/brand-book')
+    expect(p.parameters.options?.timeout).toBe(800000)
   })
   it('ciclos agotados? sí→HITL último recurso · no→re-síntesis (back-edge al consolidador)', () => {
     expect(targets('[BB] IF · ciclos agotados', 0)).toContain('[BB] HITL último recurso (no Emilio)')
@@ -140,13 +148,15 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
 })
 
 describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
-  it('Promote → canon escribe brand_book gateado por fidelity.pass (no camino_iii)', () => {
-    const code = readNode('promote-to-canon.js')
+  it('Promote prep arma brand_book gateado por fidelity.pass (no camino_iii) · POST via HTTP a /brand-book', () => {
+    const code = readNode('promote-prep.js')
     expect(code).toContain('fidelity.pass')
-    expect(code).toContain('/api/clients/')
-    expect(code).toContain('/brand-book')
-    expect(code).toContain('fidelity_passed: true')
+    expect(code).toContain('fidelity_passed')
     expect(code).not.toMatch(/camino_iii_approved:\s*true/)
+    // el endpoint canónico está en el nodo HTTP.
+    const p = nodeByName('[BB] Promote → canon') as { parameters: { url?: string } }
+    expect(p.parameters.url).toContain('/api/clients/')
+    expect(p.parameters.url).toContain('/brand-book')
   })
   it('el viejo Persist Canon ya NO persiste brand_book (marcado deprecado)', () => {
     const old = nodeByName('Persist Canon · brand_book + ICP + analysis')
