@@ -1640,14 +1640,65 @@
     },
     {
       "parameters": {
-        "jsCode": "// Brand Book · Faithfulness judge · paso 5 · ESTO decide canon (no votos)\r\n// LLM-judge DIY in-stack (consejero §2: NO RAGAS/DeepEval · Python/§151).\r\n// Por CADA campo del brand_book_draft: ¿está soportado por la evidencia real\r\n// del cliente? score 0..1 · umbral ≥0.85. NO depende de paquete nuevo.\r\n//\r\n// Output: { fidelity: { pass, threshold, scores, low_fields }, brand_book_draft, cycle }\r\n\r\nconst apiUrl = $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app';\r\nconst apiKey = $env.INTERNAL_API_KEY;\r\nconst THRESHOLD = 0.85;\r\nconst MAX_FIDELITY_CYCLES = 3;\r\n\r\nconst inJson = $json;\r\nconst draft = inJson.brand_book_draft || {};\r\nconst grounding = inJson._grounding_refs || {};\r\nconst cycle = Number(inJson.cycle) || 1;\r\n// FIX 2026-06-30 (Bug 1) · contador de fidelidad INDEPENDIENTE (no el `cycle`\r\n// del Lazo A · que se resetea). El hard-cap del worker decide agotamiento sobre éste.\r\nconst fidelityCycle = Number(inJson._fidelity_cycle) || 1;\r\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\r\n\r\n// Campos textuales a puntuar (los arrays de reglas se validan aparte por presencia).\r\nconst SCORED_FIELDS = [\r\n  'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',\r\n];\r\n\r\n// Prompt del judge · pide UN JSON con score por campo · cero prosa.\r\nconst fieldsForPrompt = SCORED_FIELDS.map((f) => ({ field: f, value: String(draft[f] || '') }));\r\n// FIX 2026-07-01 (CAUSA RAÍZ judge=0) · run-sdk RECHAZA task > 8000 chars\r\n// (E-INPUT-INVALID). El judge task (6000 grounding + 6000 campos ≈ 12000) se rechazaba\r\n// SIEMPRE → el judge atrapaba el error → scores 0. Slices reducidos + guard final ≤7900.\r\nconst judgeTask = (\r\n  'Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y ' +\r\n  'los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo ' +\r\n  '(1 = totalmente grounded · 0 = inventado/contradice). LLAMÁ EL TOOL `emit_fidelity_scores` ' +\r\n  'con tus scores (un número 0..1 por campo). NO narres · usá el tool · es la ÚNICA forma en ' +\r\n  'que tus scores deciden el canon.\\n\\n' +\r\n  'EVIDENCIA:\\n' + JSON.stringify(grounding).slice(0, 3000) + '\\n\\n' +\r\n  'CAMPOS:\\n' + JSON.stringify(fieldsForPrompt).slice(0, 3500)\r\n).slice(0, 7900);\r\n\r\nlet scores = {};\r\ntry {\r\n  const resp = await fetch(apiUrl + '/api/agents/run-sdk', {\r\n    method: 'POST',\r\n    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\r\n    body: JSON.stringify({\r\n      agent: 'editor-en-jefe', // jefe con criterio editorial · juez de fidelidad\r\n      client_id: clientId,\r\n      workflow_id: $execution.id, // por-run · NO colisiona con checkpoint (lección exec 40025)\r\n      workflow_execution_id: $execution.id,\r\n      // FIX 2026-06-30 (Bug checkpoint collision · causa raíz scores 0) · step_name\r\n      // DISTINTO del de la lente editor-en-jefe + único por ciclo · sin esto el judge\r\n      // rehidrataba el output de la lente (brand_section · no scores → 0) y el\r\n      // forced-emit nunca corría (rehidratación temprana saltea el forced-emit).\r\n      step_name: 'bb-faithfulness-judge-c' + fidelityCycle,\r\n      task: judgeTask,\r\n      context: { role: 'faithfulness_judge', threshold: THRESHOLD },\r\n      // Bug 2 fix · marca la invocación-judge · activa el forced-emit Messages-API\r\n      // de emit_fidelity_scores en el runner si el agente narra sin llamar el tool.\r\n      extra: { fidelity_judge: true },\r\n    }),\r\n  });\r\n  const body = await resp.json();\r\n  // CANON · el judge emite sus scores vía emit_fidelity_scores · el run-sdk los\r\n  // surface en body.fidelity_scores.scores. Fallback defensivo · parsear texto\r\n  // si por algún motivo el tool no fue capturado (degradación graceful).\r\n  if (body.fidelity_scores && body.fidelity_scores.scores) {\r\n    scores = body.fidelity_scores.scores;\r\n  } else {\r\n    const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);\r\n    const m = text.match(/\\{[\\s\\S]*\\}/);\r\n    if (m) { try { scores = (JSON.parse(m[0]).scores) || {}; } catch (e) {} }\r\n  }\r\n} catch (e) {\r\n  scores = {};\r\n}\r\n\r\n// Floor seguro · campo sin score = 0 (no-grounded · fuerza re-síntesis o HITL).\r\nconst norm = {};\r\nfor (const f of SCORED_FIELDS) {\r\n  const v = Number(scores[f]);\r\n  norm[f] = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;\r\n}\r\nconst lowFields = SCORED_FIELDS.filter((f) => norm[f] < THRESHOLD);\r\nconst pass = lowFields.length === 0;\r\n\r\nreturn [{\r\n  json: {\r\n    fidelity: {\r\n      pass,\r\n      threshold: THRESHOLD,\r\n      scores: norm,\r\n      low_fields: lowFields,\r\n      cycle,\r\n      fidelity_cycle: fidelityCycle,\r\n      max_cycles: MAX_FIDELITY_CYCLES,\r\n      // exhausted sobre el contador independiente · hard-cap real ≤3 aunque el judge falle.\r\n      exhausted: !pass && fidelityCycle >= MAX_FIDELITY_CYCLES,\r\n    },\r\n    brand_book_draft: draft,\r\n    cycle,\r\n    _fidelity_cycle: fidelityCycle,\r\n  },\r\n}];\r\n"
+        "jsCode": "// Brand Book · Judge prep · arma el task de fidelidad + metadata para el nodo HTTP.\n// FIX 2026-07-01 (judge no llegaba al runner) · el fetch del Code node NO llegaba\n// al runner en el contexto n8n (no creaba fila ni checkpoint → scores 0). Ahora la\n// llamada run-sdk se hace en un nodo HTTP Request (timeout 800s + neverError · mismo\n// patrón que lentes/revisores que SÍ funcionan). Este nodo solo prepara el task.\nconst THRESHOLD = 0.85;\nconst inJson = $json;\nconst draft = inJson.brand_book_draft || {};\nconst grounding = inJson._grounding_refs || {};\nconst cycle = Number(inJson.cycle) || 1;\nconst fidelityCycle = Number(inJson._fidelity_cycle) || 1;\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\n\nconst SCORED_FIELDS = [\n  'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',\n];\nconst fieldsForPrompt = SCORED_FIELDS.map((f) => ({ field: f, value: String(draft[f] || '') }));\n// run-sdk RECHAZA task > 8000 chars · slices reducidos + guard final ≤7900.\nconst judgeTask = (\n  'Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y ' +\n  'los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo ' +\n  '(1 = totalmente grounded · 0 = inventado/contradice). LLAMÁ EL TOOL `emit_fidelity_scores` ' +\n  'con tus scores (un número 0..1 por campo). NO narres · usá el tool · es la ÚNICA forma en ' +\n  'que tus scores deciden el canon.\\n\\n' +\n  'EVIDENCIA:\\n' + JSON.stringify(grounding).slice(0, 3000) + '\\n\\n' +\n  'CAMPOS:\\n' + JSON.stringify(fieldsForPrompt).slice(0, 3500)\n).slice(0, 7900);\n\nreturn [{ json: {\n  judge_task: judgeTask,\n  judge_step_name: 'bb-faithfulness-judge-c' + fidelityCycle,\n  client_id: clientId,\n  brand_book_draft: draft,\n  _grounding_refs: grounding,\n  cycle,\n  _fidelity_cycle: fidelityCycle,\n  threshold: THRESHOLD,\n} }];\n"
+      },
+      "id": "bb--bb-judge-prep",
+      "name": "[BB] Judge prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"{{ $json.judge_step_name }}\",\n  \"task\": {{ JSON.stringify($json.judge_task) }},\n  \"context\": { \"role\": \"faithfulness_judge\", \"threshold\": 0.85 },\n  \"extra\": { \"fidelity_judge\": true }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-judge-http",
+      "name": "[BB] Judge · run-sdk",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Brand Book · Faithfulness judge · SCORING · paso 5 · ESTO decide canon (no votos).\n// FIX 2026-07-01 · la llamada run-sdk se movió a un nodo HTTP previo ([BB] Judge · run-sdk)\n// porque el fetch del Code node NO llegaba al runner en n8n (scores 0). Este nodo SOLO\n// lee la respuesta del HTTP node (body.fidelity_scores) y computa la fidelidad.\n//\n// Input · $json = respuesta de [BB] Judge · run-sdk (body con fidelity_scores).\n// Datos del draft/ciclo · via referencia a [BB] Judge prep.\n// Output: { fidelity: { pass, threshold, scores, low_fields }, brand_book_draft, cycle }\n\nconst THRESHOLD = 0.85;\nconst MAX_FIDELITY_CYCLES = 3;\nconst SCORED_FIELDS = [\n  'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',\n];\n\nconst prep = $('[BB] Judge prep').first().json;\nconst draft = prep.brand_book_draft || {};\nconst cycle = Number(prep.cycle) || 1;\nconst fidelityCycle = Number(prep._fidelity_cycle) || 1;\n\n// La respuesta del nodo HTTP · el run-sdk surface los scores en body.fidelity_scores.scores.\nconst body = ($json && ($json.body || $json)) || {};\nlet scores = {};\nif (body.fidelity_scores && body.fidelity_scores.scores) {\n  scores = body.fidelity_scores.scores;\n} else {\n  // Fallback defensivo · parsear texto si el tool no fue capturado.\n  const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);\n  const m = text.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { scores = (JSON.parse(m[0]).scores) || {}; } catch (e) {} }\n}\n\n// Floor seguro · campo sin score = 0 (no-grounded · fuerza re-síntesis o HITL).\nconst norm = {};\nfor (const f of SCORED_FIELDS) {\n  const v = Number(scores[f]);\n  norm[f] = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;\n}\nconst lowFields = SCORED_FIELDS.filter((f) => norm[f] < THRESHOLD);\nconst pass = lowFields.length === 0;\n\nreturn [{\n  json: {\n    fidelity: {\n      pass,\n      threshold: THRESHOLD,\n      scores: norm,\n      low_fields: lowFields,\n      cycle,\n      fidelity_cycle: fidelityCycle,\n      max_cycles: MAX_FIDELITY_CYCLES,\n      // exhausted sobre el contador independiente · hard-cap real ≤3 aunque el judge falle.\n      exhausted: !pass && fidelityCycle >= MAX_FIDELITY_CYCLES,\n    },\n    brand_book_draft: draft,\n    cycle,\n    _fidelity_cycle: fidelityCycle,\n  },\n}];\n"
       },
       "id": "bb--bb-faithfulness-judge",
       "name": "[BB] Faithfulness judge",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1280,
+        1500,
         1800
       ]
     },
@@ -2337,6 +2388,28 @@
       ]
     },
     "[BB] Lazo A · corrección (sub-wf)": {
+      "main": [
+        [
+          {
+            "node": "[BB] Judge prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Judge prep": {
+      "main": [
+        [
+          {
+            "node": "[BB] Judge · run-sdk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Judge · run-sdk": {
       "main": [
         [
           {

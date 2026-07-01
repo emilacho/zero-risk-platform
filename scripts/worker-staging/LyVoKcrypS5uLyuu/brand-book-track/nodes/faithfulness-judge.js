@@ -1,79 +1,33 @@
-// Brand Book · Faithfulness judge · paso 5 · ESTO decide canon (no votos)
-// LLM-judge DIY in-stack (consejero §2: NO RAGAS/DeepEval · Python/§151).
-// Por CADA campo del brand_book_draft: ¿está soportado por la evidencia real
-// del cliente? score 0..1 · umbral ≥0.85. NO depende de paquete nuevo.
+// Brand Book · Faithfulness judge · SCORING · paso 5 · ESTO decide canon (no votos).
+// FIX 2026-07-01 · la llamada run-sdk se movió a un nodo HTTP previo ([BB] Judge · run-sdk)
+// porque el fetch del Code node NO llegaba al runner en n8n (scores 0). Este nodo SOLO
+// lee la respuesta del HTTP node (body.fidelity_scores) y computa la fidelidad.
 //
+// Input · $json = respuesta de [BB] Judge · run-sdk (body con fidelity_scores).
+// Datos del draft/ciclo · via referencia a [BB] Judge prep.
 // Output: { fidelity: { pass, threshold, scores, low_fields }, brand_book_draft, cycle }
 
-const apiUrl = $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app';
-const apiKey = $env.INTERNAL_API_KEY;
 const THRESHOLD = 0.85;
 const MAX_FIDELITY_CYCLES = 3;
-
-const inJson = $json;
-const draft = inJson.brand_book_draft || {};
-const grounding = inJson._grounding_refs || {};
-const cycle = Number(inJson.cycle) || 1;
-// FIX 2026-06-30 (Bug 1) · contador de fidelidad INDEPENDIENTE (no el `cycle`
-// del Lazo A · que se resetea). El hard-cap del worker decide agotamiento sobre éste.
-const fidelityCycle = Number(inJson._fidelity_cycle) || 1;
-const clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;
-
-// Campos textuales a puntuar (los arrays de reglas se validan aparte por presencia).
 const SCORED_FIELDS = [
   'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',
 ];
 
-// Prompt del judge · pide UN JSON con score por campo · cero prosa.
-const fieldsForPrompt = SCORED_FIELDS.map((f) => ({ field: f, value: String(draft[f] || '') }));
-// FIX 2026-07-01 (CAUSA RAÍZ judge=0) · run-sdk RECHAZA task > 8000 chars
-// (E-INPUT-INVALID). El judge task (6000 grounding + 6000 campos ≈ 12000) se rechazaba
-// SIEMPRE → el judge atrapaba el error → scores 0. Slices reducidos + guard final ≤7900.
-const judgeTask = (
-  'Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y ' +
-  'los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo ' +
-  '(1 = totalmente grounded · 0 = inventado/contradice). LLAMÁ EL TOOL `emit_fidelity_scores` ' +
-  'con tus scores (un número 0..1 por campo). NO narres · usá el tool · es la ÚNICA forma en ' +
-  'que tus scores deciden el canon.\n\n' +
-  'EVIDENCIA:\n' + JSON.stringify(grounding).slice(0, 3000) + '\n\n' +
-  'CAMPOS:\n' + JSON.stringify(fieldsForPrompt).slice(0, 3500)
-).slice(0, 7900);
+const prep = $('[BB] Judge prep').first().json;
+const draft = prep.brand_book_draft || {};
+const cycle = Number(prep.cycle) || 1;
+const fidelityCycle = Number(prep._fidelity_cycle) || 1;
 
+// La respuesta del nodo HTTP · el run-sdk surface los scores en body.fidelity_scores.scores.
+const body = ($json && ($json.body || $json)) || {};
 let scores = {};
-try {
-  const resp = await fetch(apiUrl + '/api/agents/run-sdk', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
-    body: JSON.stringify({
-      agent: 'editor-en-jefe', // jefe con criterio editorial · juez de fidelidad
-      client_id: clientId,
-      workflow_id: $execution.id, // por-run · NO colisiona con checkpoint (lección exec 40025)
-      workflow_execution_id: $execution.id,
-      // FIX 2026-06-30 (Bug checkpoint collision · causa raíz scores 0) · step_name
-      // DISTINTO del de la lente editor-en-jefe + único por ciclo · sin esto el judge
-      // rehidrataba el output de la lente (brand_section · no scores → 0) y el
-      // forced-emit nunca corría (rehidratación temprana saltea el forced-emit).
-      step_name: 'bb-faithfulness-judge-c' + fidelityCycle,
-      task: judgeTask,
-      context: { role: 'faithfulness_judge', threshold: THRESHOLD },
-      // Bug 2 fix · marca la invocación-judge · activa el forced-emit Messages-API
-      // de emit_fidelity_scores en el runner si el agente narra sin llamar el tool.
-      extra: { fidelity_judge: true },
-    }),
-  });
-  const body = await resp.json();
-  // CANON · el judge emite sus scores vía emit_fidelity_scores · el run-sdk los
-  // surface en body.fidelity_scores.scores. Fallback defensivo · parsear texto
-  // si por algún motivo el tool no fue capturado (degradación graceful).
-  if (body.fidelity_scores && body.fidelity_scores.scores) {
-    scores = body.fidelity_scores.scores;
-  } else {
-    const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);
-    const m = text.match(/\{[\s\S]*\}/);
-    if (m) { try { scores = (JSON.parse(m[0]).scores) || {}; } catch (e) {} }
-  }
-} catch (e) {
-  scores = {};
+if (body.fidelity_scores && body.fidelity_scores.scores) {
+  scores = body.fidelity_scores.scores;
+} else {
+  // Fallback defensivo · parsear texto si el tool no fue capturado.
+  const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);
+  const m = text.match(/\{[\s\S]*\}/);
+  if (m) { try { scores = (JSON.parse(m[0]).scores) || {}; } catch (e) {} }
 }
 
 // Floor seguro · campo sin score = 0 (no-grounded · fuerza re-síntesis o HITL).
