@@ -153,10 +153,10 @@ describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
     expect(code).toContain('fidelity.pass')
     expect(code).toContain('fidelity_passed')
     expect(code).not.toMatch(/camino_iii_approved:\s*true/)
-    // el endpoint canónico está en el nodo HTTP.
+    // el endpoint canónico de ESCRITURA está en el nodo HTTP · /api/brand-book/{clientId}.
     const p = nodeByName('[BB] Promote → canon') as { parameters: { url?: string } }
-    expect(p.parameters.url).toContain('/api/clients/')
-    expect(p.parameters.url).toContain('/brand-book')
+    expect(p.parameters.url).toContain('/api/brand-book/')
+    expect(p.parameters.url).not.toContain('/api/clients/') // path viejo (404) corregido
   })
   it('el viejo Persist Canon ya NO persiste brand_book (marcado deprecado)', () => {
     const old = nodeByName('Persist Canon · brand_book + ICP + analysis')

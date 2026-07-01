@@ -1,0 +1,595 @@
+{
+  "name": "Zero Risk — Brand Book · SMOKE AISLADO (track only · CC#4)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/bb-isolated-smoke",
+        "responseMode": "onReceived"
+      },
+      "id": "iso-trigger",
+      "name": "Webhook · smoke trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { client_id: \"d69100b5-8ad7-4bb0-908c-68b5544065dc\", client_name: 'Náufrago', industry: 'restaurante / hospitality', website: 'https://www.instagram.com/naufrago.ec/' } }];"
+      },
+      "id": "iso-validate",
+      "name": "Validate Deal Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { client_id: \"d69100b5-8ad7-4bb0-908c-68b5544065dc\", discovery_package: {\"discovery_summary\":\"Náufrago es un restaurante de mariscos en Olón (Santa Elena, costa de Ecuador · Ruta del Spondylus), especializado en encebollado y pescado fresco frente al mar. Segmentos ICP reales (del brain): Viajero extranjero en Ruta del Spondylus / Turista playero ecuatoriano con nostalgia culinaria / Turista internacional y expatriado residente en Olón / Turista doméstico ecuatoriano en la costa. Dolores: Barrera de idioma para entender el menú y platos típicos ecuatorianos Desconfianza sobre higiene y frescura del pescado en restaurantes de playa Baja presencia en TripAdvisor y Google en inglés dificulta generar confianza No saber qué es el encebollado ni cómo pedirlo · No saber dónde comer auténtico sin caer en trampa turística o restaurante genérico Incertidumbre sobre frescura del pescado y calidad del encebollado Dificultad para encontrar el restaurante: baja visibilidad digital y señalética Confusión con otros establecimientos que llevan el nombre Náufrago en redes sociales. Objetivos: Probar gastronomía local auténtica como parte de la experiencia cultural del viaje Documentar experiencia gastronómica para blog de viajes o redes sociales Comer bien a precio accesible comparado con estándares internacionales · Vivir experiencia gastronómica costera auténtica durante la visita a Olón Compartir foto o video del plato en Instagram o WhatsApp como recomendación Encontrar buen comer a precio justo en destino playero Repetir visita y recomendar el restaurante a conocidos. Objeciones: ¿Hablan inglés? ¿Tienen menú en inglés? ¿Qué tan seguro es comer mariscos en restaurante pequeño de playa? Pocas reseñas en inglés en TripAdvisor — baja confianza para turista extranjero · ¿Están abiertos hoy? — horario limitado (cerrado martes-miércoles) genera incertidumbre ¿El pescado es fresco o congelado? ¿Habrá lugar disponible en restaurante pequeño? Confusión con otros Náufrago en Google Maps o Instagram. Canales: TripAdvisor Google Maps Instagram blogs de viaje · Instagram WhatsApp Google Maps TikTok boca a boca. Preferencias de contenido: Fotos del plato con contexto cultural (qué es el encebollado y cómo se come), ambiente del restaurante, vista al mar, autenticidad local visible · Video corto del producto (vapor del encebollado, textura del caldo, proceso de preparación con pescado fresco), fotos de ambiente playero + plato, Stories geolocalizadas, contenido detrás de cámara y cocina real, narrativa del náufrago atrapado por el sabor del mar.\",\"own_handles\":{\"facebook\":\"mariscos.naufrago.2025\",\"instagram\":\"@naufrago.ec\"},\"competitors\":[{\"name\":\"Rasimar Restaurante\",\"website\":\"https://www.tripadvisor.com/Restaurant_Review-g2025921-d6777459-Reviews-Rasimar_Restaurante-Olon_Santa_Elena_Province.html\",\"competitor_type\":\"direct\"},{\"name\":\"Cabaña D' Jerry\",\"website\":\"https://www.tripadvisor.com/Restaurant_Review-g2025921-d4473899-Reviews-Cabana_D_Jerry-Olon_Santa_Elena_Province.html\",\"competitor_type\":\"direct\"},{\"name\":\"MOMO Restaurante y Deli\",\"website\":\"https://www.tripadvisor.com/Restaurant_Review-g2025921-d13369611-Reviews-MOMO_Restaurante_y_Deli-Olon_Santa_Elena_Province.html\",\"competitor_type\":\"direct\"},{\"name\":\"Marisquería El Náufrago (Gualaceo)\",\"handles\":{\"facebook\":\"https://www.facebook.com/people/Marisquer%C3%ADa-El-Naufrago/100090053940830/\"},\"competitor_type\":\"indirect\"},{\"name\":\"La Calderada Montañita\",\"competitor_type\":\"indirect\"},{\"name\":\"Delfín Mágico (Isla Salango)\",\"website\":\"https://www.tripadvisor.es/ShowUserReviews-g1486788-d3207134-r156064256-Delfin_Magico-Isla_Salango_Manabi_Province.html\",\"competitor_type\":\"alternative\"}],\"icp_signals\":{\"segments\":[\"Viajero extranjero en Ruta del Spondylus\",\"Turista playero ecuatoriano con nostalgia culinaria\",\"Turista internacional y expatriado residente en Olón\",\"Turista doméstico ecuatoriano en la costa\"],\"pain_points\":[\"Barrera de idioma para entender el menú y platos típicos ecuatorianos Desconfianza sobre higiene y frescura del pescado en restaurantes de playa Baja presencia en TripAdvisor y Google en inglés dificulta generar confianza No saber qué es el encebollado ni cómo pedirlo\",\"No saber dónde comer auténtico sin caer en trampa turística o restaurante genérico Incertidumbre sobre frescura del pescado y calidad del encebollado Dificultad para encontrar el restaurante: baja visibilidad digital y señalética Confusión con otros establecimientos que llevan el nombre Náufrago en redes sociales\",\"Desconexión cultural con la gastronomía local — no saben qué es auténtico Barrera idiomática para descubrir negocios locales no digitalizados Exceso de oferta gastronómica genérica o turística sin identidad local\",\"Difícil encontrar comida costeña auténtica de calidad en zonas turísticas sin pagar precio turístico inflado Restaurantes de playa percibidos como poco higiénicos o poco confiables para comer pescado fresco Poca visibilidad digital de restaurantes locales auténticos — no aparecen en búsquedas ni Maps Menús turísticos estandarizados que no reflejan la gastronomía local real\"],\"goals\":[\"Probar gastronomía local auténtica como parte de la experiencia cultural del viaje Documentar experiencia gastronómica para blog de viajes o redes sociales Comer bien a precio accesible comparado con estándares internacionales\",\"Vivir experiencia gastronómica costera auténtica durante la visita a Olón Compartir foto o video del plato en Instagram o WhatsApp como recomendación Encontrar buen comer a precio justo en destino playero Repetir visita y recomendar el restaurante a conocidos\",\"Descubrir la gastronomía ecuatoriana auténtica como parte de la experiencia cultural Conectar con el territorio y la identidad local durante la estadía Tener un 'spot local favorito' durante su estadía en Olón\",\"Vivir la experiencia gastronómica costeña auténtica durante el viaje Comer bien a buen precio cerca del mar antes o después de la playa Compartir el momento en redes sociales con contenido visualmente atractivo Descubrir joyas locales desconocidas para recomendar a amigos\"],\"objections\":[\"¿Hablan inglés? ¿Tienen menú en inglés? ¿Qué tan seguro es comer mariscos en restaurante pequeño de playa? Pocas reseñas en inglés en TripAdvisor — baja confianza para turista extranjero\",\"¿Están abiertos hoy? — horario limitado (cerrado martes-miércoles) genera incertidumbre ¿El pescado es fresco o congelado? ¿Habrá lugar disponible en restaurante pequeño? Confusión con otros Náufrago en Google Maps o Instagram\",\"No sé si el restaurante tiene menú en inglés No estoy seguro de los estándares de higiene Prefiero restaurantes con mayor presencia digital y reseñas internacionales\",\"No sé si el pescado es realmente fresco No conozco el restaurante y prefiero ir a uno que ya tenga reseñas El local parece pequeño o sin imagen profesional No sé si tienen opciones para todos en el grupo\"],\"jobs_to_be_done\":[\"Descubrir el plato icónico ecuatoriano (encebollado) en contexto costero auténtico Generar contenido de viaje auténtico para compartir en redes internacionales Alimentarse satisfactoriamente durante tránsito por la Ruta del Spondylus\",\"Comer encebollado tradicional ecuatoriano metros del mar después de la playa Satisfacer hambre post-surf o post-playa con plato caliente y reconfortante Crear contenido food-share en redes que muestre lo auténtico del viaje Descubrir el lugar secreto local que no está en las guías turísticas masivas\",\"Probar el plato estrella de la cocina costeña ecuatoriana (encebollado) en su lugar de origen Recomendar el local a otros viajeros en grupos de expats o foros de viaje Tener un restaurante de confianza que visitar regularmente durante la estadía\",\"Desayunar o almorzar con un encebollado fresco y contundente antes de ir a la playa Encontrar rápidamente el 'mejor encebollado de Olón' en Google Maps o Instagram Generar contenido para Stories o Reels durante el viaje Sorprender a sus acompañantes con una experiencia gastronómica local memorable\"],\"decision_criteria\":[\"Reseñas en TripAdvisor o Google en inglés Fotos atractivas del plato en Instagram o Google Maps Recomendación de hospedaje local (hostales de Olón) Precio accesible en dólares\",\"Recomendación boca a boca de amigos o familia Presencia en Instagram con fotos reales del plato y el lugar Reseñas positivas en Google Maps y TripAdvisor Ubicación próxima al malecón y fácil acceso desde la playa Precio percibido como justo\",\"Recomendaciones en grupos de Facebook de expats en Ecuador Reseñas en TripAdvisor o Google en inglés Presencia visual en Instagram que refleje autenticidad y calidad Precio accesible y cercanía al alojamiento\",\"Recomendaciones de amigos o influencers (boca a boca + redes sociales) Fotos apetitosas en Instagram o Google Maps Proximidad al malecón o la playa Precio accesible y porciones generosas Reseñas positivas en Google / TripAdvisor\"],\"preferred_channels\":[\"TripAdvisor Google Maps Instagram blogs de viaje\",\"Instagram WhatsApp Google Maps TikTok boca a boca\",\"TripAdvisor Instagram Facebook grupos de expats Google Maps Airbnb Experiences\",\"Instagram TikTok WhatsApp Google Maps Google Search Recomendaciones boca a boca\"],\"content_preferences\":[\"Fotos del plato con contexto cultural (qué es el encebollado y cómo se come), ambiente del restaurante, vista al mar, autenticidad local visible\",\"Video corto del producto (vapor del encebollado, textura del caldo, proceso de preparación con pescado fresco), fotos de ambiente playero + plato, Stories geolocalizadas, contenido detrás de cámara y cocina real, narrativa del náufrago atrapado por el sabor del mar\",\"Fotos auténticas del plato con el entorno playero visible, video mostrando el proceso de preparación, reseñas positivas de otros turistas, contenido bilingüe (español/inglés) que explique el encebollado como plato cultural\",\"Video corto de producto (vapor del encebollado, textura del caldo, proceso de preparación con pescado fresco), fotos de ambiente playero + plato, Stories geolocalizadas, contenido detrás de cámara y cocina real, narrativa del 'náufrago atrapado por el sabor del mar'\",\"Fotos de plato con contexto cultural, video de proceso de preparación con historia del encebollado como plato nacional, contenido bilingüe (español/inglés) ocasional\"]},\"_source\":\"isolated_smoke_real_data\"} } }];"
+      },
+      "id": "iso-confirm",
+      "name": "Confirm barato · competitor list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Brand Book · Fan-out prep · paso 2 · arma el grounding compartido para las 3\r\n// lentes (brand-strategist · editor-en-jefe · jefe-client-success). Corre DESPUÉS\r\n// de FASE 2 (Aggregate Apify listo) · fuera del gate Camino III. NO INSERT.\r\n\r\nconst dealData = $('Validate Deal Data').first().json;\r\nconst clientId = dealData.client_id;\r\nconst discoveryPkg =\r\n  ($('Confirm barato · competitor list').first().json.discovery_package) || {};\r\nconst apifyAgg = (() => {\r\n  try { return $('[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)').first().json; }\r\n  catch (e) { return {}; }\r\n})();\r\n\r\n// Evidencia real ya en el brain · es el grounding de las 3 lentes (cero invención).\r\nconst grounding = {\r\n  client_id: clientId,\r\n  client_name: dealData.client_name,\r\n  industry: dealData.industry,\r\n  website: dealData.website,\r\n  discovery_summary: discoveryPkg.discovery_summary || '',\r\n  competitors: (discoveryPkg.competitors || []).slice(0, 8),\r\n  icp_signals: discoveryPkg.icp_signals || discoveryPkg.icp || null,\r\n  apify_sources: (apifyAgg.sources || apifyAgg.results || []).slice(0, 10),\r\n};\r\n\r\n// Un item por lente · cada uno con su task scoped a su skill (disciplina de fan-out:\r\n// solo los 3 contribuyentes relevantes · NO los 38 · §150).\r\nconst base =\r\n  'Construí TU sección del brand book SOLO desde la evidencia real del cliente abajo ' +\r\n  '(web/redes/discovery/Apify). NO inventes. CUANDO TENGAS TU SECCIÓN LISTA, LLAMÁ EL TOOL ' +\r\n  '`emit_brand_section` con tus campos (pasá `lens` con tu nombre de lente). NO narres la ' +\r\n  'respuesta · usá el tool · es la ÚNICA forma en que tu sección llega al consolidador. ' +\r\n  // FIX 2026-07-01 (límite 8000 chars run-sdk) · grounding 8000→6800 · deja margen\r\n  // para la prosa base + la instrucción de sección · el guard final garantiza ≤7900.\r\n  'Grounding cada afirmación en la evidencia.\\n\\nEVIDENCIA:\\n' +\r\n  JSON.stringify(grounding).slice(0, 6800);\r\n\r\n// guard final · run-sdk rechaza task > 8000 chars (E-INPUT-INVALID) · garantiza ≤7900.\r\nconst cap = (t) => t.slice(0, 7900);\r\nconst lenses = [\r\n  { lens: 'brand-strategist', agent: 'brand-strategist',\r\n    task: cap(base + '\\n\\nTU SECCIÓN: positioning + icp (audience_segment, pains, goals).') },\r\n  { lens: 'editor-en-jefe', agent: 'editor-en-jefe',\r\n    task: cap(base + '\\n\\nTU SECCIÓN: voice_description + forbidden_words[] + required_terminology[].') },\r\n  { lens: 'jefe-client-success', agent: 'jefe-client-success',\r\n    task: cap(base + '\\n\\nTU SECCIÓN: customer_angle + retention_notes.') },\r\n];\r\n\r\n// FIX-FORWARD 2026-06-30 (Fix B · fan-out routing) · emití UN solo item con las\r\n// 3 tasks keyed por lente · cada nodo-lente lee SU task ($json.tasks.<lente>).\r\n// Antes emitía 3 items → n8n mandaba los 3 a cada nodo → mis-routing (solo 1\r\n// lente emitía · exec 41641). Un item = cada lente corre 1 vez con su task.\r\nconst tasks = {\r\n  'brand-strategist': lenses[0].task,\r\n  'editor-en-jefe': lenses[1].task,\r\n  'jefe-client-success': lenses[2].task,\r\n};\r\nreturn [{ json: { tasks, client_id: clientId, _grounding_refs: grounding } }];\r\n"
+      },
+      "id": "bb--bb-fan-out-prep",
+      "name": "[BB] Fan-out prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"brand-strategist\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-brand-strategist\",\n  \"task\": {{ JSON.stringify($json.tasks['brand-strategist']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"brand-strategist\" }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-lens-brand-strategist",
+      "name": "Lente · brand-strategist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-editor-en-jefe\",\n  \"task\": {{ JSON.stringify($json.tasks['editor-en-jefe']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"editor-en-jefe\" }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-lens-editor-en-jefe",
+      "name": "Lente · editor-en-jefe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"jefe-client-success\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-jefe-client-success\",\n  \"task\": {{ JSON.stringify($json.tasks['jefe-client-success']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"jefe-client-success\" }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-lens-jefe-client-success",
+      "name": "Lente · jefe-client-success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        2000
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "id": "bb-merge-lentes",
+      "name": "[BB] Merge lentes (esperar 3)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        820,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Brand Book · Consolidador (maker) · paso 3 + re-síntesis del lazo A (paso 4)\r\n// Funde las 3 lentes de los jefes en UN brand_book_draft · cada campo grounded\r\n// en evidencia real (discovery_summary + ICP + competitive del brain). NO INSERT.\r\n//\r\n// Inputs (vía $items / referencias de nodos):\r\n//   - brand-strategist  → posicionamiento + ICP\r\n//   - editor-en-jefe    → voz/tono + forbidden_words + required_terminology\r\n//   - jefe-client-success → ángulo cliente / retención\r\n//   - corrections (opcional · lazo A) → array de {eje,severidad,donde,problema,cambio_sugerido}\r\n//\r\n// Output: { brand_book_draft, cycle, _grounding_refs }\r\n\r\nconst dealData = $('Validate Deal Data').first().json;\r\nconst clientId = dealData.client_id;\r\n\r\n// Cada lente llega como respuesta run-sdk · tomamos su `response` (texto) o\r\n// `structured` si el agente emitió JSON. Defensive · floors seguros.\r\nfunction lensOutput(nodeName) {\r\n  try {\r\n    const j = $(nodeName).first().json;\r\n    const body = j.body || j;\r\n    // CANON · la lente emite su sección vía emit_brand_section · el run-sdk la\r\n    // surface en body.brand_section (estructurado · NO texto narrativo).\r\n    // Fallbacks defensivos: intenta parsear JSON del response si por algún\r\n    // motivo el tool no fue capturado (degradación graceful).\r\n    let structured = body.brand_section || body.structured || null;\r\n    if (!structured && typeof body.response === 'string') {\r\n      const m = body.response.match(/\\{[\\s\\S]*\\}/);\r\n      if (m) { try { structured = JSON.parse(m[0]); } catch (e) {} }\r\n    }\r\n    return {\r\n      structured: structured || null,\r\n      text: typeof body.response === 'string' ? body.response : '',\r\n    };\r\n  } catch (e) {\r\n    return { structured: null, text: '' };\r\n  }\r\n}\r\n\r\nconst strat = lensOutput('Lente · brand-strategist');\r\nconst editor = lensOutput('Lente · editor-en-jefe');\r\nconst cs = lensOutput('Lente · jefe-client-success');\r\n\r\n// Correcciones acumuladas del lazo A (si venimos de una re-síntesis).\r\nlet corrections = [];\r\ntry {\r\n  corrections = $json.corrections || $json.staging_package?.corrections || [];\r\n} catch (e) { corrections = []; }\r\nconst cycle = (Number($json.cycle) || 0) + 1;\r\n// FIX 2026-06-30 (Bug 1 · loop infinito) · contador de fidelidad INDEPENDIENTE del\r\n// `cycle` del Lazo A (que el sub-wf resetea con su ciclo interno). Se incrementa\r\n// cada vez que el consolidador corre = cada iteración del loop de fidelidad del\r\n// worker principal. El IF · ciclos agotados hace hard-cap sobre ESTE contador.\r\nconst fidelityCycle = (Number($json._fidelity_cycle) || 0) + 1;\r\n\r\n// pick · usa structured cuando exista, fallback a texto.\r\nconst pick = (lens, key) =>\r\n  (lens.structured && lens.structured[key]) || lens.text || '';\r\n\r\nconst brandBookDraft = {\r\n  client_id: clientId,\r\n  // posicionamiento + ICP (brand-strategist)\r\n  positioning: pick(strat, 'positioning'),\r\n  icp_summary: pick(strat, 'icp_summary'),\r\n  // voz/tono + reglas (editor-en-jefe)\r\n  voice_description: pick(editor, 'voice_description'),\r\n  forbidden_words: (editor.structured && editor.structured.forbidden_words) || [],\r\n  required_terminology: (editor.structured && editor.structured.required_terminology) || [],\r\n  // ángulo cliente / retención (jefe-client-success)\r\n  customer_angle: pick(cs, 'customer_angle'),\r\n  retention_notes: pick(cs, 'retention_notes'),\r\n  // metadata de build\r\n  _build: {\r\n    source: 'onboarding_collaborative_build',\r\n    lenses: ['brand-strategist', 'editor-en-jefe', 'jefe-client-success'],\r\n    cycle,\r\n    corrections_applied: corrections.length,\r\n  },\r\n};\r\n\r\n// Referencias de grounding · qué evidencia respalda el borrador (para el judge).\r\nconst grounding = {\r\n  discovery_summary:\r\n    ($('Confirm barato · competitor list').first().json.discovery_package || {}).discovery_summary || '',\r\n  client_id: clientId,\r\n};\r\n\r\nreturn [{ json: { brand_book_draft: brandBookDraft, cycle, _fidelity_cycle: fidelityCycle, corrections, _grounding_refs: grounding } }];\r\n"
+      },
+      "id": "bb--bb-consolidador",
+      "name": "[BB] Consolidador",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Brand Book · Judge prep · arma el task de fidelidad + metadata para el nodo HTTP.\r\n// FIX 2026-07-01 (judge no llegaba al runner) · el fetch del Code node NO llegaba\r\n// al runner en el contexto n8n (no creaba fila ni checkpoint → scores 0). Ahora la\r\n// llamada run-sdk se hace en un nodo HTTP Request (timeout 800s + neverError · mismo\r\n// patrón que lentes/revisores que SÍ funcionan). Este nodo solo prepara el task.\r\nconst THRESHOLD = 0.85;\r\nconst inJson = $json;\r\nconst draft = inJson.brand_book_draft || {};\r\nconst grounding = inJson._grounding_refs || {};\r\nconst cycle = Number(inJson.cycle) || 1;\r\nconst fidelityCycle = Number(inJson._fidelity_cycle) || 1;\r\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\r\n\r\nconst SCORED_FIELDS = [\r\n  'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',\r\n];\r\nconst fieldsForPrompt = SCORED_FIELDS.map((f) => ({ field: f, value: String(draft[f] || '') }));\r\n\r\n// FIX 2026-07-01 (judge puntuaba 0 · evidencia rota) · construir la EVIDENCIA como\r\n// PROSA LEGIBLE (no JSON.stringify().slice() que cortaba a mitad de estructura · el\r\n// judge no la podía verificar → 0). Con evidencia limpia el mismo agente puntuó 0.92.\r\nconst g = grounding || {};\r\nconst icp = g.icp_signals || g.icp || {};\r\nconst arr = (x) => (Array.isArray(x) ? x : x ? [x] : []);\r\nconst line = (label, v) => {\r\n  const items = arr(v).map((s) => (typeof s === 'string' ? s : (s && (s.name || s.audience_segment)) || '')).filter(Boolean);\r\n  return items.length ? '- ' + label + ': ' + items.slice(0, 8).join(' · ') + '\\n' : '';\r\n};\r\nconst evidencia = (\r\n  'Cliente: ' + (g.client_name || '') + ' · Industria: ' + (g.industry || '') + '\\n' +\r\n  'Resumen de descubrimiento (evidencia real del brain/discovery):\\n' +\r\n  String(g.discovery_summary || '').slice(0, 2200) + '\\n\\n' +\r\n  line('Competidores', (g.competitors || []).map((c) => c.name)) +\r\n  line('Segmentos ICP', icp.segments) +\r\n  line('Dolores', icp.pain_points) +\r\n  line('Objetivos', icp.goals) +\r\n  line('Objeciones', icp.objections) +\r\n  line('Canales preferidos', icp.preferred_channels)\r\n).slice(0, 4000);\r\n\r\n// run-sdk RECHAZA task > 8000 chars · guard final ≤7900.\r\nconst judgeTask = (\r\n  'Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y ' +\r\n  'los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo ' +\r\n  '(1 = totalmente grounded · 0 = inventado/contradice). LLAMÁ EL TOOL `emit_fidelity_scores` ' +\r\n  'con tus scores (un número 0..1 por campo). NO narres · usá el tool · es la ÚNICA forma en ' +\r\n  'que tus scores deciden el canon.\\n\\n' +\r\n  'EVIDENCIA:\\n' + evidencia + '\\n\\n' +\r\n  'CAMPOS:\\n' + JSON.stringify(fieldsForPrompt).slice(0, 3500)\r\n).slice(0, 7900);\r\n\r\nreturn [{ json: {\r\n  judge_task: judgeTask,\r\n  judge_step_name: 'bb-faithfulness-judge-c' + fidelityCycle,\r\n  client_id: clientId,\r\n  brand_book_draft: draft,\r\n  _grounding_refs: grounding,\r\n  cycle,\r\n  _fidelity_cycle: fidelityCycle,\r\n  threshold: THRESHOLD,\r\n} }];\r\n"
+      },
+      "id": "bb--bb-judge-prep",
+      "name": "[BB] Judge prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"{{ $json.judge_step_name }}\",\n  \"task\": {{ JSON.stringify($json.judge_task) }},\n  \"context\": { \"role\": \"faithfulness_judge\", \"threshold\": 0.85 },\n  \"extra\": { \"fidelity_judge\": true }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-judge-http",
+      "name": "[BB] Judge · run-sdk",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Brand Book · Faithfulness judge · SCORING · paso 5 · ESTO decide canon (no votos).\r\n// FIX 2026-07-01 · la llamada run-sdk se movió a un nodo HTTP previo ([BB] Judge · run-sdk)\r\n// porque el fetch del Code node NO llegaba al runner en n8n (scores 0). Este nodo SOLO\r\n// lee la respuesta del HTTP node (body.fidelity_scores) y computa la fidelidad.\r\n//\r\n// Input · $json = respuesta de [BB] Judge · run-sdk (body con fidelity_scores).\r\n// Datos del draft/ciclo · via referencia a [BB] Judge prep.\r\n// Output: { fidelity: { pass, threshold, scores, low_fields }, brand_book_draft, cycle }\r\n\r\nconst THRESHOLD = 0.85;\r\nconst MAX_FIDELITY_CYCLES = 3;\r\n// Todos los campos se PUNTÚAN + registran (transparencia · dashboards).\r\nconst SCORED_FIELDS = [\r\n  'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',\r\n];\r\n// FIX 2026-07-01 (consejero · Opción 1) · el GATE solo exige groundedness en los campos\r\n// FÁCTICOS (positioning + icp_summary · verificables contra la evidencia de discovery).\r\n// voice/customer_angle/retention_notes son DERIVACIONES CREATIVAS de marca (voz, ángulo,\r\n// retención) · no hechos que se puedan \"grounded\" contra competidores/ICP · se puntúan\r\n// pero NO bloquean el canon. El gate frena hechos inventados, no decisiones de marca.\r\nconst GATED_FIELDS = ['positioning', 'icp_summary'];\r\n\r\nconst prep = $('[BB] Judge prep').first().json;\r\nconst draft = prep.brand_book_draft || {};\r\nconst cycle = Number(prep.cycle) || 1;\r\nconst fidelityCycle = Number(prep._fidelity_cycle) || 1;\r\n\r\n// La respuesta del nodo HTTP · el run-sdk surface los scores en body.fidelity_scores.scores.\r\nconst body = ($json && ($json.body || $json)) || {};\r\nlet scores = {};\r\nif (body.fidelity_scores && body.fidelity_scores.scores) {\r\n  scores = body.fidelity_scores.scores;\r\n} else {\r\n  // Fallback defensivo · parsear texto si el tool no fue capturado.\r\n  const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);\r\n  const m = text.match(/\\{[\\s\\S]*\\}/);\r\n  if (m) { try { scores = (JSON.parse(m[0]).scores) || {}; } catch (e) {} }\r\n}\r\n\r\n// Floor seguro · campo sin score = 0 (no-grounded · fuerza re-síntesis o HITL).\r\nconst norm = {};\r\nfor (const f of SCORED_FIELDS) {\r\n  const v = Number(scores[f]);\r\n  norm[f] = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;\r\n}\r\n// El pase se decide SOLO sobre los campos fácticos gateados (Opción 1 · consejero).\r\nconst lowFields = GATED_FIELDS.filter((f) => norm[f] < THRESHOLD);\r\nconst pass = lowFields.length === 0;\r\n\r\nreturn [{\r\n  json: {\r\n    fidelity: {\r\n      pass,\r\n      threshold: THRESHOLD,\r\n      scores: norm,\r\n      gated_fields: GATED_FIELDS, // solo éstos deciden el pase (Opción 1)\r\n      low_fields: lowFields, // campos GATEADOS bajo umbral (los que bloquean)\r\n      cycle,\r\n      fidelity_cycle: fidelityCycle,\r\n      max_cycles: MAX_FIDELITY_CYCLES,\r\n      // exhausted sobre el contador independiente · hard-cap real ≤3 aunque el judge falle.\r\n      exhausted: !pass && fidelityCycle >= MAX_FIDELITY_CYCLES,\r\n    },\r\n    brand_book_draft: draft,\r\n    cycle,\r\n    _fidelity_cycle: fidelityCycle,\r\n  },\r\n}];\r\n"
+      },
+      "id": "bb--bb-faithfulness-judge",
+      "name": "[BB] Faithfulness judge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.fidelity.pass }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "bb-if--bb-if-fidelidad-pass",
+      "name": "[BB] IF · fidelidad PASS",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ (Number($json._fidelity_cycle) || 0) >= 3 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "bb-if--bb-if-ciclos-agotados",
+      "name": "[BB] IF · ciclos agotados",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        2100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Brand Book · Promote prep · arma el body para el POST /brand-book.\n// FIX 2026-07-01 · el nodo Promote era un Code node con fetch() · pero `fetch` NO existe\n// en los Code nodes de n8n (\"fetch is not defined\") → no persistía. El POST se movió a un\n// nodo HTTP Request (mismo patrón que el judge). Este nodo solo prepara el body.\n//\n// Corre SOLO en el branch PASS del IF de fidelidad (ya gateado) · igual guardamos el\n// invariante 5 (nunca persistir sin PASS) por defensa.\nconst fidelity = ($json && $json.fidelity) || {};\nconst draft = ($json && $json.brand_book_draft) || {};\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\n\nconst promote_body = {\n  brand_book: draft,\n  source: 'onboarding_collaborative_build',\n  // CANON por fidelidad · NO por firma humana ni voto Camino III.\n  fidelity_passed: !!fidelity.pass,\n  fidelity_scores: fidelity.scores,\n  fidelity_threshold: fidelity.threshold,\n  approved_by: 'faithfulness_check',\n  // Date.now() está OK en Code nodes n8n (no es un workflow script del harness).\n  approved_at: new Date().toISOString(),\n};\n\nreturn [{ json: {\n  promote_body,\n  client_id: clientId,\n  should_persist: !!fidelity.pass, // el HTTP corre igual (el IF ya gatea) · defensa extra.\n  fidelity,\n} }];\n"
+      },
+      "id": "bb--bb-promote-prep",
+      "name": "[BB] Promote prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        1650
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/clients/' + $json.client_id + '/brand-book' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.promote_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-promote-http",
+      "name": "[BB] Promote → canon",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2180,
+        1650
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"brand_book_fidelity_last_resort\",\n  \"client_id\": \"{{ $json.brand_book_draft.client_id }}\",\n  \"fidelity\": {{ JSON.stringify($json.fidelity) }}\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "bb-hitl-lastresort",
+      "name": "[BB] HITL último recurso (no Emilio)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        2100
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook · smoke trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Deal Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Deal Data": {
+      "main": [
+        [
+          {
+            "node": "Confirm barato · competitor list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm barato · competitor list": {
+      "main": [
+        [
+          {
+            "node": "[BB] Fan-out prep",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[BB] Fan-out prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Fan-out prep": {
+      "main": [
+        [
+          {
+            "node": "Lente · brand-strategist",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lente · editor-en-jefe",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lente · jefe-client-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lente · brand-strategist": {
+      "main": [
+        [
+          {
+            "node": "[BB] Merge lentes (esperar 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lente · editor-en-jefe": {
+      "main": [
+        [
+          {
+            "node": "[BB] Merge lentes (esperar 3)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Lente · jefe-client-success": {
+      "main": [
+        [
+          {
+            "node": "[BB] Merge lentes (esperar 3)",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "[BB] Merge lentes (esperar 3)": {
+      "main": [
+        [
+          {
+            "node": "[BB] Consolidador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Consolidador": {
+      "main": [
+        [
+          {
+            "node": "[BB] Judge prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Judge prep": {
+      "main": [
+        [
+          {
+            "node": "[BB] Judge · run-sdk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Judge · run-sdk": {
+      "main": [
+        [
+          {
+            "node": "[BB] Faithfulness judge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Faithfulness judge": {
+      "main": [
+        [
+          {
+            "node": "[BB] IF · fidelidad PASS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] IF · fidelidad PASS": {
+      "main": [
+        [
+          {
+            "node": "[BB] Promote prep",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[BB] IF · ciclos agotados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Promote prep": {
+      "main": [
+        [
+          {
+            "node": "[BB] Promote → canon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] IF · ciclos agotados": {
+      "main": [
+        [
+          {
+            "node": "[BB] HITL último recurso (no Emilio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[BB] Consolidador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

@@ -174,7 +174,7 @@ const promotePrep = codeNode('[BB] Promote prep', 'promote-prep.js', [1780, Y - 
 const promote = {
   parameters: {
     method: 'POST',
-    url: "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/clients/' + $json.client_id + '/brand-book' }}",
+    url: "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/brand-book/' + $json.client_id }}",
     sendHeaders: true,
     headerParameters: {
       parameters: [
