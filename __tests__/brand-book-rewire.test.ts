@@ -25,6 +25,7 @@ const NEW_NODES = [
   'Lente · brand-strategist',
   'Lente · editor-en-jefe',
   'Lente · jefe-client-success',
+  '[BB] Merge lentes (esperar 3)',
   '[BB] Consolidador',
   '[BB] Lazo A · corrección (sub-wf)',
   '[BB] Faithfulness judge',
@@ -38,8 +39,8 @@ describe('brand-book rewire · nodos del nuevo track', () => {
   it('agrega los 11 nodos del track colaborativo', () => {
     for (const n of NEW_NODES) expect(nodeByName(n), `falta nodo ${n}`).toBeDefined()
   })
-  it('preserva los 51 nodos base (no borra nada del worker) · total 62', () => {
-    expect(worker.nodes.length).toBe(62)
+  it('preserva los 51 nodos base (no borra nada del worker) · total 63 (+Merge lentes)', () => {
+    expect(worker.nodes.length).toBe(63)
   })
 })
 
@@ -77,10 +78,19 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
     const prep = readNode('synthesis-fanout-prep.js')
     expect(prep).toContain('return [{ json: { tasks')
   })
-  it('3 lentes → consolidador (maker)', () => {
-    for (const l of ['Lente · brand-strategist', 'Lente · editor-en-jefe', 'Lente · jefe-client-success']) {
-      expect(targets(l)).toContain('[BB] Consolidador')
+  it('Fix Merge · las 3 lentes → Merge (inputs 0/1/2) → consolidador · fuerza que las 3 corran', () => {
+    const inIdx = (l: string) => {
+      const arr = (worker.connections['Lente · ' + l]?.main?.[0] ?? []) as Array<{ node: string; index: number }>
+      return arr.find((c) => c.node === '[BB] Merge lentes (esperar 3)')?.index
     }
+    expect(inIdx('brand-strategist')).toBe(0)
+    expect(inIdx('editor-en-jefe')).toBe(1)
+    expect(inIdx('jefe-client-success')).toBe(2)
+    expect(targets('[BB] Merge lentes (esperar 3)')).toContain('[BB] Consolidador')
+    // el Merge node espera 3 inputs (combineByPosition)
+    const m = nodeByName('[BB] Merge lentes (esperar 3)') as { type: string; parameters: { numberInputs?: number } }
+    expect(m.type).toBe('n8n-nodes-base.merge')
+    expect(m.parameters.numberInputs).toBe(3)
   })
   it('consolidador → lazo A corrección → judge', () => {
     expect(targets('[BB] Consolidador')).toContain('[BB] Lazo A · corrección (sub-wf)')

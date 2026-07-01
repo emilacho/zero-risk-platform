@@ -1597,6 +1597,22 @@
     },
     {
       "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "id": "bb-merge-lentes",
+      "name": "[BB] Merge lentes (esperar 3)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        620,
+        1800
+      ]
+    },
+    {
+      "parameters": {
         "jsCode": "// Brand Book · Consolidador (maker) · paso 3 + re-síntesis del lazo A (paso 4)\r\n// Funde las 3 lentes de los jefes en UN brand_book_draft · cada campo grounded\r\n// en evidencia real (discovery_summary + ICP + competitive del brain). NO INSERT.\r\n//\r\n// Inputs (vía $items / referencias de nodos):\r\n//   - brand-strategist  → posicionamiento + ICP\r\n//   - editor-en-jefe    → voz/tono + forbidden_words + required_terminology\r\n//   - jefe-client-success → ángulo cliente / retención\r\n//   - corrections (opcional · lazo A) → array de {eje,severidad,donde,problema,cambio_sugerido}\r\n//\r\n// Output: { brand_book_draft, cycle, _grounding_refs }\r\n\r\nconst dealData = $('Validate Deal Data').first().json;\r\nconst clientId = dealData.client_id;\r\n\r\n// Cada lente llega como respuesta run-sdk · tomamos su `response` (texto) o\r\n// `structured` si el agente emitió JSON. Defensive · floors seguros.\r\nfunction lensOutput(nodeName) {\r\n  try {\r\n    const j = $(nodeName).first().json;\r\n    const body = j.body || j;\r\n    // CANON · la lente emite su sección vía emit_brand_section · el run-sdk la\r\n    // surface en body.brand_section (estructurado · NO texto narrativo).\r\n    // Fallbacks defensivos: intenta parsear JSON del response si por algún\r\n    // motivo el tool no fue capturado (degradación graceful).\r\n    let structured = body.brand_section || body.structured || null;\r\n    if (!structured && typeof body.response === 'string') {\r\n      const m = body.response.match(/\\{[\\s\\S]*\\}/);\r\n      if (m) { try { structured = JSON.parse(m[0]); } catch (e) {} }\r\n    }\r\n    return {\r\n      structured: structured || null,\r\n      text: typeof body.response === 'string' ? body.response : '',\r\n    };\r\n  } catch (e) {\r\n    return { structured: null, text: '' };\r\n  }\r\n}\r\n\r\nconst strat = lensOutput('Lente · brand-strategist');\r\nconst editor = lensOutput('Lente · editor-en-jefe');\r\nconst cs = lensOutput('Lente · jefe-client-success');\r\n\r\n// Correcciones acumuladas del lazo A (si venimos de una re-síntesis).\r\nlet corrections = [];\r\ntry {\r\n  corrections = $json.corrections || $json.staging_package?.corrections || [];\r\n} catch (e) { corrections = []; }\r\nconst cycle = (Number($json.cycle) || 0) + 1;\r\n// FIX 2026-06-30 (Bug 1 · loop infinito) · contador de fidelidad INDEPENDIENTE del\r\n// `cycle` del Lazo A (que el sub-wf resetea con su ciclo interno). Se incrementa\r\n// cada vez que el consolidador corre = cada iteración del loop de fidelidad del\r\n// worker principal. El IF · ciclos agotados hace hard-cap sobre ESTE contador.\r\nconst fidelityCycle = (Number($json._fidelity_cycle) || 0) + 1;\r\n\r\n// pick · usa structured cuando exista, fallback a texto.\r\nconst pick = (lens, key) =>\r\n  (lens.structured && lens.structured[key]) || lens.text || '';\r\n\r\nconst brandBookDraft = {\r\n  client_id: clientId,\r\n  // posicionamiento + ICP (brand-strategist)\r\n  positioning: pick(strat, 'positioning'),\r\n  icp_summary: pick(strat, 'icp_summary'),\r\n  // voz/tono + reglas (editor-en-jefe)\r\n  voice_description: pick(editor, 'voice_description'),\r\n  forbidden_words: (editor.structured && editor.structured.forbidden_words) || [],\r\n  required_terminology: (editor.structured && editor.structured.required_terminology) || [],\r\n  // ángulo cliente / retención (jefe-client-success)\r\n  customer_angle: pick(cs, 'customer_angle'),\r\n  retention_notes: pick(cs, 'retention_notes'),\r\n  // metadata de build\r\n  _build: {\r\n    source: 'onboarding_collaborative_build',\r\n    lenses: ['brand-strategist', 'editor-en-jefe', 'jefe-client-success'],\r\n    cycle,\r\n    corrections_applied: corrections.length,\r\n  },\r\n};\r\n\r\n// Referencias de grounding · qué evidencia respalda el borrador (para el judge).\r\nconst grounding = {\r\n  discovery_summary:\r\n    ($('Confirm barato · competitor list').first().json.discovery_package || {}).discovery_summary || '',\r\n  client_id: clientId,\r\n};\r\n\r\nreturn [{ json: { brand_book_draft: brandBookDraft, cycle, _fidelity_cycle: fidelityCycle, corrections, _grounding_refs: grounding } }];\r\n"
       },
       "id": "bb--bb-consolidador",
@@ -1604,7 +1620,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        760,
+        820,
         1800
       ]
     },
@@ -2269,7 +2285,7 @@
       "main": [
         [
           {
-            "node": "[BB] Consolidador",
+            "node": "[BB] Merge lentes (esperar 3)",
             "type": "main",
             "index": 0
           }
@@ -2280,14 +2296,25 @@
       "main": [
         [
           {
-            "node": "[BB] Consolidador",
+            "node": "[BB] Merge lentes (esperar 3)",
             "type": "main",
-            "index": 0
+            "index": 1
           }
         ]
       ]
     },
     "Lente · jefe-client-success": {
+      "main": [
+        [
+          {
+            "node": "[BB] Merge lentes (esperar 3)",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "[BB] Merge lentes (esperar 3)": {
       "main": [
         [
           {

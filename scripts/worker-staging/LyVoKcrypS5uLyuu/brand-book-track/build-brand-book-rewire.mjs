@@ -97,7 +97,20 @@ const fanout = codeNode('[BB] Fan-out prep', 'synthesis-fanout-prep.js', [200, Y
 const lensStrat = lensNode('brand-strategist', 'brand-strategist', [460, Y - 200])
 const lensEditor = lensNode('editor-en-jefe', 'editor-en-jefe', [460, Y])
 const lensCS = lensNode('jefe-client-success', 'jefe-client-success', [460, Y + 200])
-const consolidator = codeNode('[BB] Consolidador', 'consolidator.js', [760, Y])
+// FIX 2026-07-01 (Bloqueador · solo 1/3 lentes ejecutaba) · nodo Merge que ESPERA
+// los 3 outputs de las lentes antes de continuar al consolidador. Sin esto, n8n
+// corría el consolidador apenas llegaba brand-strategist y NO volvía a las otras 2
+// lentes (topología fan-out→3-paralelas→consolidador con loop-back). El Merge
+// (combineByPosition · 3 inputs) fuerza que las 3 lentes corran + junta sus items.
+const mergeLentes = {
+  parameters: { mode: 'combine', combineBy: 'combineByPosition', numberInputs: 3, options: {} },
+  id: 'bb-merge-lentes',
+  name: '[BB] Merge lentes (esperar 3)',
+  type: 'n8n-nodes-base.merge',
+  typeVersion: 3,
+  position: [620, Y],
+}
+const consolidator = codeNode('[BB] Consolidador', 'consolidator.js', [820, Y])
 // Lazo A · correction sub-workflow (Execute Workflow · automático · consejero §1).
 const correctionLoop = {
   parameters: {
@@ -132,14 +145,16 @@ const hitl = {
   position: [1800, Y + 300],
 }
 
-const newNodes = [fanout, lensStrat, lensEditor, lensCS, consolidator, correctionLoop, judge, ifFidelity, ifExhausted, promote, hitl]
+const newNodes = [fanout, lensStrat, lensEditor, lensCS, mergeLentes, consolidator, correctionLoop, judge, ifFidelity, ifExhausted, promote, hitl]
 
 // ── connection surgery ──────────────────────────────────────────────────────
-const link = (from, to, fromOut = 'main', idx = 0) => {
+// toIdx · índice de ENTRADA del nodo destino (default 0) · necesario para el
+// Merge node donde cada lente entra por un input distinto (0/1/2).
+const link = (from, to, fromOut = 'main', idx = 0, toIdx = 0) => {
   conns[from] = conns[from] || {}
   conns[from][fromOut] = conns[from][fromOut] || []
   while (conns[from][fromOut].length <= idx) conns[from][fromOut].push([])
-  conns[from][fromOut][idx].push({ node: to, type: 'main', index: 0 })
+  conns[from][fromOut][idx].push({ node: to, type: 'main', index: toIdx })
 }
 
 // (0/7) NUEVO TRACK · FIX-FORWARD 2026-06-30: branchear desde un nodo
@@ -157,9 +172,12 @@ link('[BB] Fan-out prep', 'Lente · brand-strategist')
 link('[BB] Fan-out prep', 'Lente · editor-en-jefe')
 link('[BB] Fan-out prep', 'Lente · jefe-client-success')
 // lentes → consolidador (merge implícito por referencia de nodos en el código)
-link('Lente · brand-strategist', '[BB] Consolidador')
-link('Lente · editor-en-jefe', '[BB] Consolidador')
-link('Lente · jefe-client-success', '[BB] Consolidador')
+// FIX 2026-07-01 · las 3 lentes → Merge (cada una a su input 0/1/2) → consolidador.
+// El Merge espera los 3 · fuerza que editor-en-jefe + jefe-client-success corran.
+link('Lente · brand-strategist', '[BB] Merge lentes (esperar 3)', 'main', 0, 0)
+link('Lente · editor-en-jefe', '[BB] Merge lentes (esperar 3)', 'main', 0, 1)
+link('Lente · jefe-client-success', '[BB] Merge lentes (esperar 3)', 'main', 0, 2)
+link('[BB] Merge lentes (esperar 3)', '[BB] Consolidador')
 // consolidador → lazo A corrección → judge
 link('[BB] Consolidador', '[BB] Lazo A · corrección (sub-wf)')
 link('[BB] Lazo A · corrección (sub-wf)', '[BB] Faithfulness judge')
