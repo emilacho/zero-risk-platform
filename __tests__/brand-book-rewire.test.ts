@@ -28,6 +28,8 @@ const NEW_NODES = [
   '[BB] Merge lentes (esperar 3)',
   '[BB] Consolidador',
   '[BB] Lazo A · corrección (sub-wf)',
+  '[BB] Judge prep',
+  '[BB] Judge · run-sdk',
   '[BB] Faithfulness judge',
   '[BB] IF · fidelidad PASS',
   '[BB] IF · ciclos agotados',
@@ -39,8 +41,8 @@ describe('brand-book rewire · nodos del nuevo track', () => {
   it('agrega los 11 nodos del track colaborativo', () => {
     for (const n of NEW_NODES) expect(nodeByName(n), `falta nodo ${n}`).toBeDefined()
   })
-  it('preserva los 51 nodos base (no borra nada del worker) · total 63 (+Merge lentes)', () => {
-    expect(worker.nodes.length).toBe(63)
+  it('preserva los 51 nodos base (no borra nada del worker) · total 65 (+Merge +Judge prep/http)', () => {
+    expect(worker.nodes.length).toBe(65)
   })
 })
 
@@ -92,9 +94,19 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
     expect(m.type).toBe('n8n-nodes-base.merge')
     expect(m.parameters.numberInputs).toBe(3)
   })
-  it('consolidador → lazo A corrección → judge', () => {
+  it('consolidador → lazo A → Judge prep → Judge run-sdk (HTTP) → Faithfulness judge (scoring)', () => {
     expect(targets('[BB] Consolidador')).toContain('[BB] Lazo A · corrección (sub-wf)')
-    expect(targets('[BB] Lazo A · corrección (sub-wf)')).toContain('[BB] Faithfulness judge')
+    expect(targets('[BB] Lazo A · corrección (sub-wf)')).toContain('[BB] Judge prep')
+    expect(targets('[BB] Judge prep')).toContain('[BB] Judge · run-sdk')
+    expect(targets('[BB] Judge · run-sdk')).toContain('[BB] Faithfulness judge')
+  })
+  it('Fix judge-http · la llamada run-sdk del judge es un HTTP node (timeout 800s + auth · el Code fetch no llegaba al runner)', () => {
+    const jh = nodeByName('[BB] Judge · run-sdk') as { type: string; parameters: { options?: { timeout?: number }; headerParameters?: unknown; jsonBody?: string } }
+    expect(jh.type).toBe('n8n-nodes-base.httpRequest')
+    expect(jh.parameters.options?.timeout).toBe(800000)
+    expect(JSON.stringify(jh.parameters.headerParameters)).toContain('x-api-key')
+    expect(jh.parameters.jsonBody).toContain('"fidelity_judge": true') // extra activa el forced-emit
+    expect(jh.parameters.jsonBody).toContain('$json.judge_step_name') // step_name distinto (del prep)
   })
   it('judge → IF fidelidad · PASS(true)→promote · FAIL(false)→IF ciclos agotados', () => {
     expect(targets('[BB] Faithfulness judge')).toContain('[BB] IF · fidelidad PASS')
@@ -138,31 +150,25 @@ describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
     expect(old).toBeDefined()
     expect(String(old!.parameters.jsCode)).toContain('[BB-REWIRE 2026-06-29]')
   })
-  it('faithfulness judge usa umbral ≥0.85 y per-field (LLM-judge DIY)', () => {
+  it('faithfulness judge (scoring) usa umbral ≥0.85 y per-field (LLM-judge DIY)', () => {
     const code = readNode('faithfulness-judge.js')
     expect(code).toContain('0.85')
     expect(code).toContain('low_fields')
-    // consejero §2 · LLM-judge DIY in-stack (gateway run-sdk) · NO paquete Python.
-    expect(code).toContain('/api/agents/run-sdk')
     expect(code).not.toMatch(/require\(['"][^'"]*(ragas|deepeval)|import[^\n]*(ragas|deepeval)/i)
   })
-  it('Fix A · el judge emite scores vía emit_fidelity_scores y los lee de body.fidelity_scores', () => {
-    const code = readNode('faithfulness-judge.js')
-    expect(code).toContain('emit_fidelity_scores')
-    expect(code).toContain('body.fidelity_scores')
+  it('Fix A · el judge-prep pide emit_fidelity_scores y el scoring lee body.fidelity_scores', () => {
+    expect(readNode('judge-prep.js')).toContain('emit_fidelity_scores')
+    expect(readNode('faithfulness-judge.js')).toContain('body.fidelity_scores')
   })
-  it('Fix 2 · el judge marca extra.fidelity_judge (activa el forced-emit Messages-API)', () => {
-    const code = readNode('faithfulness-judge.js')
-    expect(code).toMatch(/extra:\s*\{\s*fidelity_judge:\s*true/)
+  it('Fix 2 · el judge-http marca extra.fidelity_judge (activa el forced-emit Messages-API)', () => {
+    const jh = nodeByName('[BB] Judge · run-sdk') as { parameters: { jsonBody?: string } }
+    expect(jh.parameters.jsonBody).toContain('"fidelity_judge": true')
   })
-  it('Fix checkpoint · el judge pasa step_name DISTINTO de la lente (evita rehidratar su output)', () => {
-    const code = readNode('faithfulness-judge.js')
-    expect(code).toMatch(/step_name:\s*'bb-faithfulness-judge-c'\s*\+\s*fidelityCycle/)
+  it('Fix checkpoint · el judge-prep arma step_name DISTINTO de la lente + único por ciclo', () => {
+    expect(readNode('judge-prep.js')).toMatch(/'bb-faithfulness-judge-c'\s*\+\s*fidelityCycle/)
   })
-  it('Fix 8000 · judge + lentes cap el task ≤7900 (run-sdk rechaza >8000 · causa raíz judge=0)', () => {
-    // judge · guard final .slice(0, 7900)
-    expect(readNode('faithfulness-judge.js')).toMatch(/\)\s*\.slice\(0,\s*7900\)/)
-    // lentes · cap() aplicado a cada task
+  it('Fix 8000 · judge-prep + lentes cap el task ≤7900 (run-sdk rechaza >8000)', () => {
+    expect(readNode('judge-prep.js')).toMatch(/\)\s*\.slice\(0,\s*7900\)/)
     const prep = readNode('synthesis-fanout-prep.js')
     expect(prep).toMatch(/slice\(0,\s*7900\)/)
     expect(prep).toMatch(/task:\s*cap\(/)
@@ -176,7 +182,7 @@ describe('brand-book rewire · canon por fidelidad, NO por Camino III', () => {
 })
 
 describe('brand-book rewire · node code parsea como JS válido', () => {
-  for (const f of ['synthesis-fanout-prep.js', 'consolidator.js', 'faithfulness-judge.js', 'promote-to-canon.js']) {
+  for (const f of ['synthesis-fanout-prep.js', 'consolidator.js', 'judge-prep.js', 'faithfulness-judge.js', 'promote-to-canon.js']) {
     it(`${f} es JS sintácticamente válido`, () => {
       const code = readNode(f)
       // los Code nodes corren como cuerpo async · envolvemos para validar sintaxis.

@@ -123,7 +123,44 @@ const correctionLoop = {
   typeVersion: 1,
   position: [1020, Y],
 }
-const judge = codeNode('[BB] Faithfulness judge', 'faithfulness-judge.js', [1280, Y])
+// FIX 2026-07-01 · el judge era un Code node que hacía fetch() a run-sdk · pero ese
+// fetch NO llegaba al runner en el contexto n8n (no creaba fila ni checkpoint → scores 0).
+// Split · judge-prep (arma task) → nodo HTTP Request run-sdk (timeout 800s + neverError ·
+// mismo patrón que lentes/revisores que SÍ funcionan) → judge scoring (lee la respuesta).
+const judgePrep = codeNode('[BB] Judge prep', 'judge-prep.js', [1180, Y])
+const judgeHttp = {
+  parameters: {
+    method: 'POST',
+    url: "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    sendHeaders: true,
+    headerParameters: {
+      parameters: [
+        { name: 'Content-Type', value: 'application/json' },
+        { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' },
+      ],
+    },
+    sendBody: true,
+    specifyBody: 'json',
+    jsonBody:
+      '={\n' +
+      '  "agent": "editor-en-jefe",\n' +
+      '  "client_id": "{{ $json.client_id }}",\n' +
+      '  "workflow_id": "{{ $execution.id }}",\n' +
+      '  "workflow_execution_id": "{{ $execution.id }}",\n' +
+      '  "step_name": "{{ $json.judge_step_name }}",\n' +
+      '  "task": {{ JSON.stringify($json.judge_task) }},\n' +
+      '  "context": { "role": "faithfulness_judge", "threshold": 0.85 },\n' +
+      '  "extra": { "fidelity_judge": true }\n' +
+      '}',
+    options: { response: { response: { neverError: true } }, timeout: 800000 },
+  },
+  id: 'bb-judge-http',
+  name: '[BB] Judge · run-sdk',
+  type: 'n8n-nodes-base.httpRequest',
+  typeVersion: 4.2,
+  position: [1340, Y],
+}
+const judge = codeNode('[BB] Faithfulness judge', 'faithfulness-judge.js', [1500, Y])
 const ifFidelity = ifNode('[BB] IF · fidelidad PASS', '={{ $json.fidelity.pass }}', true, [1540, Y])
 // FIX 2026-06-30 (Bug 1) · HARD CAP numérico sobre el contador INDEPENDIENTE
 // `_fidelity_cycle` (no `fidelity.exhausted` · que dependía del judge). Mata el
@@ -145,7 +182,7 @@ const hitl = {
   position: [1800, Y + 300],
 }
 
-const newNodes = [fanout, lensStrat, lensEditor, lensCS, mergeLentes, consolidator, correctionLoop, judge, ifFidelity, ifExhausted, promote, hitl]
+const newNodes = [fanout, lensStrat, lensEditor, lensCS, mergeLentes, consolidator, correctionLoop, judgePrep, judgeHttp, judge, ifFidelity, ifExhausted, promote, hitl]
 
 // ── connection surgery ──────────────────────────────────────────────────────
 // toIdx · índice de ENTRADA del nodo destino (default 0) · necesario para el
@@ -180,7 +217,10 @@ link('Lente · jefe-client-success', '[BB] Merge lentes (esperar 3)', 'main', 0,
 link('[BB] Merge lentes (esperar 3)', '[BB] Consolidador')
 // consolidador → lazo A corrección → judge
 link('[BB] Consolidador', '[BB] Lazo A · corrección (sub-wf)')
-link('[BB] Lazo A · corrección (sub-wf)', '[BB] Faithfulness judge')
+// FIX 2026-07-01 · Lazo A → Judge prep → Judge run-sdk (HTTP) → Faithfulness judge (scoring).
+link('[BB] Lazo A · corrección (sub-wf)', '[BB] Judge prep')
+link('[BB] Judge prep', '[BB] Judge · run-sdk')
+link('[BB] Judge · run-sdk', '[BB] Faithfulness judge')
 // judge → IF fidelidad · PASS(true)→promote · FAIL(false)→IF ciclos agotados
 link('[BB] Faithfulness judge', '[BB] IF · fidelidad PASS')
 link('[BB] IF · fidelidad PASS', '[BB] Promote → canon', 'main', 0) // true
