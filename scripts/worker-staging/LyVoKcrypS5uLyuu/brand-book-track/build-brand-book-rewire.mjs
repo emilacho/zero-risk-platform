@@ -166,7 +166,33 @@ const ifFidelity = ifNode('[BB] IF · fidelidad PASS', '={{ $json.fidelity.pass 
 // `_fidelity_cycle` (no `fidelity.exhausted` · que dependía del judge). Mata el
 // loop sí o sí tras 3 iteraciones del consolidador aunque el judge falle siempre.
 const ifExhausted = ifNode('[BB] IF · ciclos agotados', '={{ (Number($json._fidelity_cycle) || 0) >= 3 }}', true, [1540, Y + 300])
-const promote = codeNode('[BB] Promote → canon', 'promote-to-canon.js', [1800, Y - 150])
+// FIX 2026-07-01 · el Promote era un Code node con fetch() · pero `fetch` NO existe en
+// los Code nodes de n8n ("fetch is not defined") → no persistía el brand book (la
+// fidelidad PASABA pero el POST fallaba). Split · Promote prep (arma body) → Promote →
+// canon (HTTP Request · POST /brand-book · timeout 800s + neverError · patrón judge/lentes).
+const promotePrep = codeNode('[BB] Promote prep', 'promote-prep.js', [1780, Y - 150])
+const promote = {
+  parameters: {
+    method: 'POST',
+    url: "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/clients/' + $json.client_id + '/brand-book' }}",
+    sendHeaders: true,
+    headerParameters: {
+      parameters: [
+        { name: 'Content-Type', value: 'application/json' },
+        { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' },
+      ],
+    },
+    sendBody: true,
+    specifyBody: 'json',
+    jsonBody: '={{ JSON.stringify($json.promote_body) }}',
+    options: { response: { response: { neverError: true } }, timeout: 800000 },
+  },
+  id: 'bb-promote-http',
+  name: '[BB] Promote → canon',
+  type: 'n8n-nodes-base.httpRequest',
+  typeVersion: 4.2,
+  position: [1980, Y - 150],
+}
 const hitl = {
   parameters: {
     method: 'POST',
@@ -184,7 +210,7 @@ const hitl = {
 
 // FIX 2026-07-01 · Lazo A (correctionLoop) BYPASSEADO · sacado del track (borraba el draft ·
 // no vinculante). Se deja definido arriba pero NO se incluye en el worker.
-const newNodes = [fanout, lensStrat, lensEditor, lensCS, mergeLentes, consolidator, judgePrep, judgeHttp, judge, ifFidelity, ifExhausted, promote, hitl]
+const newNodes = [fanout, lensStrat, lensEditor, lensCS, mergeLentes, consolidator, judgePrep, judgeHttp, judge, ifFidelity, ifExhausted, promotePrep, promote, hitl]
 
 // ── connection surgery ──────────────────────────────────────────────────────
 // toIdx · índice de ENTRADA del nodo destino (default 0) · necesario para el
@@ -227,7 +253,9 @@ link('[BB] Judge prep', '[BB] Judge · run-sdk')
 link('[BB] Judge · run-sdk', '[BB] Faithfulness judge')
 // judge → IF fidelidad · PASS(true)→promote · FAIL(false)→IF ciclos agotados
 link('[BB] Faithfulness judge', '[BB] IF · fidelidad PASS')
-link('[BB] IF · fidelidad PASS', '[BB] Promote → canon', 'main', 0) // true
+// FIX 2026-07-01 · PASS → Promote prep (arma body) → Promote → canon (HTTP POST).
+link('[BB] IF · fidelidad PASS', '[BB] Promote prep', 'main', 0) // true
+link('[BB] Promote prep', '[BB] Promote → canon')
 link('[BB] IF · fidelidad PASS', '[BB] IF · ciclos agotados', 'main', 1) // false
 // ciclos agotados? sí→HITL último recurso · no→re-síntesis (vuelve al consolidador)
 link('[BB] IF · ciclos agotados', '[BB] HITL último recurso (no Emilio)', 'main', 0) // true
