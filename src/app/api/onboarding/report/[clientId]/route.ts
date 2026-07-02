@@ -33,6 +33,8 @@ import {
   assembleCompetitors,
   type ReportInput,
 } from '@/lib/onboarding-report'
+import { mintGoogleAccessToken } from '@/lib/google-sa-auth'
+import { renderOnboardingReport } from '@/lib/onboarding-slides-render'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -99,6 +101,36 @@ export async function POST(req: Request, { params }: RouteContext) {
     }
 
     const report = buildReportSlides(input)
+
+    // ── Render to Google Slides + Drive (gated on the service-account cred) ──
+    // If GOOGLE_SERVICE_ACCOUNT_JSON is absent the endpoint still returns the
+    // model (graceful · the render is the only part that needs the credential).
+    const cuentasFolderId = process.env.DRIVE_CUENTAS_FOLDER_ID
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON && cuentasFolderId) {
+      // Render is best-effort · a Google infra failure (Slides API not enabled,
+      // service-account storage quota on a personal Drive · see PR notes) must
+      // NOT break the onboarding response · the model is still returned.
+      try {
+        const accessToken = await mintGoogleAccessToken(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
+        const rendered = await renderOnboardingReport(report, { accessToken, cuentasFolderId })
+        await supabase.from('clients').update({ report_url: rendered.url }).eq('id', clientId)
+        return NextResponse.json({
+          ok: true,
+          report,
+          slides_url: rendered.url,
+          drive_folder_id: rendered.folderId,
+          mode: 'rendered',
+        })
+      } catch (renderErr) {
+        return NextResponse.json({
+          ok: true,
+          report,
+          render: 'error',
+          render_error: renderErr instanceof Error ? renderErr.message : 'render_failed',
+        })
+      }
+    }
+
     return NextResponse.json({ ok: true, report, render: 'deferred_pending_google_credential' })
   } catch (e) {
     return NextResponse.json(
