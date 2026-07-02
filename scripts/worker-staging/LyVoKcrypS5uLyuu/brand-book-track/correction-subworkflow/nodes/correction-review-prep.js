@@ -12,6 +12,17 @@ const grounding = inp._grounding_refs || {};
 const clientId = inp.client_id || draft.client_id;
 const cycle = Number(inp.cycle) || 0;
 
+// [GUARD P0 · CC#2 2026-07-02] Skip degenerado · si la EVIDENCIA o el BORRADOR
+// están vacíos ({} / sin keys) no hay nada que revisar → emitir 0 items (los 3
+// revisores no reciben input · no corren · el loop termina sin invocaciones).
+// Cierra el sangrado de reviews-de-nada (kSSAvCbEfHs2Hoa0 · evidence+draft vacíos).
+const _draftEmpty = !draft || typeof draft !== 'object' || Object.keys(draft).length === 0;
+const _groundingEmpty = !grounding || typeof grounding !== 'object' || Object.keys(grounding).length === 0;
+if (_draftEmpty || _groundingEmpty) {
+  console.warn('[BBA][guard] skip review · brand_book_draft o _grounding_refs vacios · client=' + (clientId || '?') + ' cycle=' + cycle);
+  return [];
+}
+
 const FORMAT =
   'Emití SOLO JSON: {"corrections":[{eje,severidad,donde,problema,por_que,cambio_sugerido}]}.\n' +
   '- eje: "factual"|"voz"|"posicionamiento"|"cliente"\n' +
