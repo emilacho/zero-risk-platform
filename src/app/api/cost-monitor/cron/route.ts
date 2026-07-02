@@ -4,9 +4,12 @@
  * Triggered hourly by Vercel Cron (see vercel.json `crons[]`). Aggregates
  * `agent_invocations.cost_usd` over two windows and evaluates three canonical
  * thresholds · daily per-workflow ($10), daily aggregate ($100), hourly
- * burst ($5). The hourly burst threshold is the one that would have caught
- * the 2026-05-24 NEXUS spam incident (≈$19/day · ≈659 invocations · burst
- * pattern · daily-only monitoring missed it).
+ * burst ($30 · subido de $5 el 2026-07-02 · decisión Emilio §144). El $5
+ * original cazaba el patrón NEXUS 24-may (≈$19/día · burst), pero con gasto
+ * diario legítimo $26-38 (cientos de invocaciones reales) era ruido constante
+ * que tapaba señales. La cobertura fina de ese patrón queda en los umbrales
+ * DIARIOS ($10/workflow · $100 agregado). El hard-stop §150 (SALA_NAUFRAGO_CAP_USD)
+ * es OTRA cosa · no se toca acá.
  *
  * MODES · gated by env var `COST_MONITOR_SHADOW_MODE` (default: "1" = shadow).
  *  - SHADOW ("1") · detect breaches and write audit row, do NOT dispatch any
@@ -39,7 +42,7 @@ export const maxDuration = 30 // seconds · aggregation is light
 // historical rows stay interpretable when thresholds tune later.
 const THRESHOLD_DAILY_PER_WORKFLOW_USD = 10
 const THRESHOLD_DAILY_AGGREGATE_USD    = 100
-const THRESHOLD_HOURLY_BURST_USD       = 5
+const THRESHOLD_HOURLY_BURST_USD       = 30 // subido de $5 el 2026-07-02 (Emilio §144) · alerta, NO el hard-stop §150
 
 interface InvocationRow {
   workflow_id: string | null
