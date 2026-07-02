@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildReportSlides,
+  buildSlidesBatchRequests,
   extractDraft,
   assembleCompetitors,
   firstLines,
@@ -76,6 +77,22 @@ describe('buildReportSlides', () => {
     expect(m.slides[1].body[0]).toContain('pendiente')
     expect(m.slides[3].body[0]).toContain('pendiente')
     expect(m.slides).toHaveLength(6)
+  })
+})
+
+describe('buildSlidesBatchRequests (n8n Slides node · OAuth-as-user)', () => {
+  it('emits createSlide + title/body shape + insertText per slide (6 slides)', () => {
+    const model = buildReportSlides(baseInput)
+    const reqs = buildSlidesBatchRequests(model) as Array<Record<string, unknown>>
+    expect(reqs).toHaveLength(30) // 5 requests × 6 slides
+    expect(reqs.filter((r) => 'createSlide' in r)).toHaveLength(6)
+    expect(reqs.filter((r) => 'createShape' in r)).toHaveLength(12)
+    expect(reqs.filter((r) => 'insertText' in r)).toHaveLength(12)
+    const firstInsert = reqs.find((r) => 'insertText' in r) as {
+      insertText: { text: string; objectId: string }
+    }
+    expect(firstInsert.insertText.objectId).toBe('s1_title')
+    expect(firstInsert.insertText.text).toContain('Náufrago')
   })
 })
 

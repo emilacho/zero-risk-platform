@@ -7,10 +7,12 @@
  * final onboarding step) · the caller is the brand-book Promote node (HTTP
  * Request node · never `fetch` in a Code node · postmortem rule H).
  *
- * The Google Slides/Drive RENDER is deferred: the platform has NO Google
- * service-account credential today (CC#3 pre-smoke audit) · this endpoint
- * produces the durable, provider-agnostic model · the render layer plugs in
- * once a credential exists.
+ * Render · Camino A (Emilio 2026-07-02) · OAuth-as-user in n8n. This endpoint
+ * produces the model + the ready-to-use Slides `batchUpdate` requests · the
+ * n8n workflow renders with Emilio's Google credential (files owned by him ·
+ * avoids the service-account storageQuotaExceeded on a personal Drive) and
+ * persists clients.report_url. Service-account render was abandoned (a SA has
+ * no Drive quota + Slides API was not enabled · CC#3 smoke 2026-07-02).
  *
  * Data-mapping (verified vs prod):
  *   - positioning/icp_summary/customer_angle ← content_text.brand_book_draft.*
@@ -18,7 +20,7 @@
  *   - competitors ← client_brain_chunks (source_table='client_competitive_landscape')
  *
  * Responses ·
- *   200 · { ok, report: ReportModel }
+ *   200 · { ok, report: ReportModel, slides_batch_requests, render:'n8n_oauth' }
  *   400 · client_id_required
  *   401 · unauthorized
  *   404 · brand_book_not_found (client not onboarded yet)
@@ -29,12 +31,11 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import {
   buildReportSlides,
+  buildSlidesBatchRequests,
   extractDraft,
   assembleCompetitors,
   type ReportInput,
 } from '@/lib/onboarding-report'
-import { mintGoogleAccessToken } from '@/lib/google-sa-auth'
-import { renderOnboardingReport } from '@/lib/onboarding-slides-render'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -102,36 +103,17 @@ export async function POST(req: Request, { params }: RouteContext) {
 
     const report = buildReportSlides(input)
 
-    // ── Render to Google Slides + Drive (gated on the service-account cred) ──
-    // If GOOGLE_SERVICE_ACCOUNT_JSON is absent the endpoint still returns the
-    // model (graceful · the render is the only part that needs the credential).
-    const cuentasFolderId = process.env.DRIVE_CUENTAS_FOLDER_ID
-    if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON && cuentasFolderId) {
-      // Render is best-effort · a Google infra failure (Slides API not enabled,
-      // service-account storage quota on a personal Drive · see PR notes) must
-      // NOT break the onboarding response · the model is still returned.
-      try {
-        const accessToken = await mintGoogleAccessToken(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
-        const rendered = await renderOnboardingReport(report, { accessToken, cuentasFolderId })
-        await supabase.from('clients').update({ report_url: rendered.url }).eq('id', clientId)
-        return NextResponse.json({
-          ok: true,
-          report,
-          slides_url: rendered.url,
-          drive_folder_id: rendered.folderId,
-          mode: 'rendered',
-        })
-      } catch (renderErr) {
-        return NextResponse.json({
-          ok: true,
-          report,
-          render: 'error',
-          render_error: renderErr instanceof Error ? renderErr.message : 'render_failed',
-        })
-      }
-    }
-
-    return NextResponse.json({ ok: true, report, render: 'deferred_pending_google_credential' })
+    // Camino A (Emilio 2026-07-02) · OAuth-as-user render in n8n. The endpoint
+    // produces the model + the ready-to-use Slides `batchUpdate` requests · the
+    // n8n workflow (Google credential = Emilio's account · files owned by him ·
+    // avoids the service-account storageQuotaExceeded) creates the presentation
+    // in Drive Cuentas/[client]/, applies the requests, and persists report_url.
+    return NextResponse.json({
+      ok: true,
+      report,
+      slides_batch_requests: buildSlidesBatchRequests(report),
+      render: 'n8n_oauth',
+    })
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : 'unknown' },

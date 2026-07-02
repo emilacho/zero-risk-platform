@@ -191,3 +191,49 @@ export function assembleCompetitors(chunks: readonly BrainChunkRow[]): Competito
   }
   return out
 }
+
+// ── Slides batchUpdate requests (pure · consumed by the n8n Google Slides ──
+// node · OAuth-as-user render · Camino A 2026-07-02). One BLANK slide per
+// model slide + a title/body TEXT_BOX (deterministic objectIds) + insertText.
+// Provider-agnostic: this is the exact `requests` array the Slides API v1
+// `presentations.batchUpdate` expects · n8n feeds it to the Slides node.
+
+function slideBodyText(slide: Slide): string {
+  return Array.isArray(slide.body) ? slide.body.join('\n') : String(slide.body)
+}
+
+export function buildSlidesBatchRequests(model: ReportModel): object[] {
+  const reqs: object[] = []
+  model.slides.forEach((slide, i) => {
+    const sid = `slide_${slide.n}`
+    const titleId = `s${slide.n}_title`
+    const bodyId = `s${slide.n}_body`
+    reqs.push({ createSlide: { objectId: sid, slideLayoutReference: { predefinedLayout: 'BLANK' } } })
+    reqs.push({
+      createShape: {
+        objectId: titleId,
+        shapeType: 'TEXT_BOX',
+        elementProperties: {
+          pageObjectId: sid,
+          size: { width: { magnitude: 8000000, unit: 'EMU' }, height: { magnitude: 1000000, unit: 'EMU' } },
+          transform: { scaleX: 1, scaleY: 1, translateX: 500000, translateY: 400000, unit: 'EMU' },
+        },
+      },
+    })
+    const titleText = i === 0 && slide.subtitle ? `${slide.title}\n${slide.subtitle}` : slide.title
+    reqs.push({ insertText: { objectId: titleId, text: titleText, insertionIndex: 0 } })
+    reqs.push({
+      createShape: {
+        objectId: bodyId,
+        shapeType: 'TEXT_BOX',
+        elementProperties: {
+          pageObjectId: sid,
+          size: { width: { magnitude: 8000000, unit: 'EMU' }, height: { magnitude: 3500000, unit: 'EMU' } },
+          transform: { scaleX: 1, scaleY: 1, translateX: 500000, translateY: 1600000, unit: 'EMU' },
+        },
+      },
+    })
+    reqs.push({ insertText: { objectId: bodyId, text: slideBodyText(slide), insertionIndex: 0 } })
+  })
+  return reqs
+}
