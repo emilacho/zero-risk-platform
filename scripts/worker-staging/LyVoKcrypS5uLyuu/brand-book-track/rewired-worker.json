@@ -1748,7 +1748,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Brand Book · Promote prep · arma el body para el POST /brand-book.\n// FIX 2026-07-01 · el nodo Promote era un Code node con fetch() · pero `fetch` NO existe\n// en los Code nodes de n8n (\"fetch is not defined\") → no persistía. El POST se movió a un\n// nodo HTTP Request (mismo patrón que el judge). Este nodo solo prepara el body.\n//\n// Corre SOLO en el branch PASS del IF de fidelidad (ya gateado) · igual guardamos el\n// invariante 5 (nunca persistir sin PASS) por defensa.\nconst fidelity = ($json && $json.fidelity) || {};\nconst draft = ($json && $json.brand_book_draft) || {};\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\n\nconst promote_body = {\n  brand_book: draft,\n  source: 'onboarding_collaborative_build',\n  // CANON por fidelidad · NO por firma humana ni voto Camino III.\n  fidelity_passed: !!fidelity.pass,\n  fidelity_scores: fidelity.scores,\n  fidelity_threshold: fidelity.threshold,\n  approved_by: 'faithfulness_check',\n  // Date.now() está OK en Code nodes n8n (no es un workflow script del harness).\n  approved_at: new Date().toISOString(),\n};\n\nreturn [{ json: {\n  promote_body,\n  client_id: clientId,\n  should_persist: !!fidelity.pass, // el HTTP corre igual (el IF ya gatea) · defensa extra.\n  fidelity,\n} }];\n"
+        "jsCode": "// Brand Book · Promote prep · arma el body para el POST /brand-book.\r\n// FIX 2026-07-01 · el nodo Promote era un Code node con fetch() · pero `fetch` NO existe\r\n// en los Code nodes de n8n (\"fetch is not defined\") → no persistía. El POST se movió a un\r\n// nodo HTTP Request (mismo patrón que el judge). Este nodo solo prepara el body.\r\n//\r\n// Corre SOLO en el branch PASS del IF de fidelidad (ya gateado) · igual guardamos el\r\n// invariante 5 (nunca persistir sin PASS) por defensa.\r\nconst fidelity = ($json && $json.fidelity) || {};\r\nconst draft = ($json && $json.brand_book_draft) || {};\r\nconst clientId = draft.client_id || $('Validate Deal Data').first().json.client_id;\r\n\r\nconst promote_body = {\r\n  brand_book: draft,\r\n  source: 'onboarding_collaborative_build',\r\n  // CANON por fidelidad · NO por firma humana ni voto Camino III.\r\n  fidelity_passed: !!fidelity.pass,\r\n  fidelity_scores: fidelity.scores,\r\n  fidelity_threshold: fidelity.threshold,\r\n  approved_by: 'faithfulness_check',\r\n  // Date.now() está OK en Code nodes n8n (no es un workflow script del harness).\r\n  approved_at: new Date().toISOString(),\r\n};\r\n\r\nreturn [{ json: {\r\n  promote_body,\r\n  client_id: clientId,\r\n  should_persist: !!fidelity.pass, // el HTTP corre igual (el IF ya gatea) · defensa extra.\r\n  fidelity,\r\n} }];\r\n"
       },
       "id": "bb--bb-promote-prep",
       "name": "[BB] Promote prep",
@@ -1801,10 +1801,28 @@
       "parameters": {
         "method": "POST",
         "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"type\": \"brand_book_fidelity_last_resort\",\n  \"client_id\": \"{{ $json.brand_book_draft.client_id }}\",\n  \"fidelity\": {{ JSON.stringify($json.fidelity) }}\n}",
         "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
           "timeout": 15000
         }
       },

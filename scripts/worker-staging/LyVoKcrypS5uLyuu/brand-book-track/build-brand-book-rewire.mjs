@@ -197,10 +197,19 @@ const hitl = {
   parameters: {
     method: 'POST',
     url: "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+    // FIX 2026-07-01 · faltaba auth interna → el nodo tiraba "Authorization failed" y
+    // ensuciaba el exec con error. + neverError · el último recurso NUNCA aborta el exec.
+    sendHeaders: true,
+    headerParameters: {
+      parameters: [
+        { name: 'Content-Type', value: 'application/json' },
+        { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' },
+      ],
+    },
     sendBody: true, specifyBody: 'json',
     jsonBody:
       '={\n  "type": "brand_book_fidelity_last_resort",\n  "client_id": "{{ $json.brand_book_draft.client_id }}",\n  "fidelity": {{ JSON.stringify($json.fidelity) }}\n}',
-    options: { timeout: 15000 },
+    options: { response: { response: { neverError: true } }, timeout: 15000 },
   },
   id: 'bb-hitl-lastresort',
   name: '[BB] HITL último recurso (no Emilio)',

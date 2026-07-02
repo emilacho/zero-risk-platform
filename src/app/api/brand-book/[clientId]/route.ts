@@ -87,6 +87,27 @@ export async function POST(req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: 'missing_brand_book' }, { status: 400 })
   }
 
+  const supabase = getSupabaseAdmin()
+
+  // FIX 2026-07-01 · IDEMPOTENCIA · el loop de fidelidad puede correr ciclos extra tras
+  // persistir (judge no-determinístico · pasa un ciclo, falla otro). Si YA existe un brand
+  // book para el cliente, devolvemos el existente SIN crear duplicado (detect persist=true).
+  const existing = await supabase
+    .from('client_brand_books')
+    .select('id')
+    .eq('client_id', clientId)
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (existing.data?.id) {
+    return NextResponse.json({
+      persisted: true,
+      already_existed: true,
+      id: existing.data.id,
+      client_id: clientId,
+    })
+  }
+
   const row: Record<string, unknown> = {
     client_id: clientId,
     voice_description: bb.voice_description ?? null,
@@ -110,7 +131,6 @@ export async function POST(req: Request, { params }: RouteContext) {
     version: 1,
   }
 
-  const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('client_brand_books')
     .insert(row)

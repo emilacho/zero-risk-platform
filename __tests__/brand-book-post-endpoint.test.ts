@@ -6,9 +6,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const insertSingle = vi.fn()
+const existingMaybeSingle = vi.fn()
 vi.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: () => ({
     from: () => ({
+      // idempotencia · select existing → eq → order → limit → maybeSingle
+      select: () => ({
+        eq: () => ({ order: () => ({ limit: () => ({ maybeSingle: existingMaybeSingle }) }) }),
+      }),
+      // insert nuevo → select → single
       insert: () => ({ select: () => ({ single: insertSingle }) }),
     }),
   }),
@@ -27,6 +33,8 @@ const req = (headers: Record<string, string>, body: unknown) =>
 
 beforeEach(() => {
   insertSingle.mockReset()
+  existingMaybeSingle.mockReset()
+  existingMaybeSingle.mockResolvedValue({ data: null, error: null }) // default · no existe
   process.env.INTERNAL_API_KEY = 'test-key'
 })
 afterEach(() => { delete process.env.INTERNAL_API_KEY })
@@ -57,5 +65,16 @@ describe('POST /api/brand-book/[clientId]', () => {
     const res = await POST(req({ 'x-api-key': 'test-key' }, { brand_book: { positioning: 'x' } }), ctx)
     expect(res.status).toBe(500)
     expect((await res.json()).persisted).toBe(false)
+  })
+
+  it('IDEMPOTENTE · si ya existe un brand book · devuelve el existente SIN insertar (loop exit)', async () => {
+    existingMaybeSingle.mockResolvedValue({ data: { id: 'bb-existing' }, error: null })
+    const res = await POST(req({ 'x-api-key': 'test-key' }, { brand_book: { positioning: 'x' } }), ctx)
+    expect(res.status).toBe(200)
+    const j = await res.json()
+    expect(j.persisted).toBe(true)
+    expect(j.already_existed).toBe(true)
+    expect(j.id).toBe('bb-existing')
+    expect(insertSingle).not.toHaveBeenCalled() // NO crea duplicado
   })
 })
