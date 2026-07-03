@@ -1,13 +1,15 @@
 /**
- * Tests · onboarding report LLM few-shot adaptation (endpoint stays $0 · the
- * model call runs in n8n · these test the pure prompt/parse/overlay helpers).
+ * Tests · onboarding report LLM few-shot adaptation · PER-SLIDE (endpoint $0 ·
+ * the model calls run in n8n · these test the pure prompt/parse/overlay).
  */
 import { describe, it, expect } from 'vitest'
 import { buildReportSlides } from '../src/lib/onboarding-report'
 import {
-  buildAdaptationPrompt,
-  parseAdaptation,
+  buildAdaptationTasks,
+  buildSlideAdaptationPrompt,
+  parseSlideAdaptation,
   applyAdaptation,
+  ADAPTABLE_KINDS,
 } from '../src/lib/onboarding-report-adaptation'
 
 const model = buildReportSlides({
@@ -20,60 +22,60 @@ const model = buildReportSlides({
   competitors: [{ name: 'Rasimar', why: 'lidera' }],
 })
 
-describe('buildAdaptationPrompt', () => {
-  it('includes client name, rules, few-shot example, and all slide texts', () => {
-    const p = buildAdaptationPrompt(model)
-    expect(p).toContain('Náufrago')
-    expect(p).toContain('≤14 palabras')
-    expect(p).toContain('EJEMPLO')
-    expect(p).toContain('encebollado') // slide notes are embedded
-    expect(p).toContain('"slides"') // requests JSON shape
+describe('buildAdaptationTasks', () => {
+  it('one short prompt per content slide (5) · skips cover + next_steps', () => {
+    const tasks = buildAdaptationTasks(model)
+    expect(tasks.map((t) => t.kind).sort()).toEqual([...ADAPTABLE_KINDS].sort())
+    expect(tasks.every((t) => t.n >= 2 && t.n <= 6)).toBe(true)
+  })
+  it('each prompt is well under the run-sdk 8000-char limit', () => {
+    for (const t of buildAdaptationTasks(model)) expect(t.prompt.length).toBeLessThan(8000)
+  })
+  it('prompt carries the field text + few-shot + JSON shape', () => {
+    const p = buildSlideAdaptationPrompt(model.slides[1], 'Náufrago')
+    expect(p).toContain('encebollado')
+    expect(p).toContain('EJEMPLOS')
+    expect(p).toContain('"headline"')
   })
 })
 
-describe('parseAdaptation', () => {
+describe('parseSlideAdaptation', () => {
   it('parses plain JSON', () => {
-    const out = parseAdaptation('{"slides":[{"n":2,"headline":"H","bullets":["a","b"]}]}')
-    expect(out).toEqual([{ n: 2, headline: 'H', bullets: ['a', 'b'] }])
+    expect(parseSlideAdaptation('{"headline":"H","bullets":["a","b"]}')).toEqual({
+      headline: 'H',
+      bullets: ['a', 'b'],
+    })
   })
-  it('parses ```json fenced output', () => {
-    const raw = 'Aquí tenés:\n```json\n{"slides":[{"n":3,"headline":"X","bullets":["y"]}]}\n```\ngracias'
-    expect(parseAdaptation(raw)).toEqual([{ n: 3, headline: 'X', bullets: ['y'] }])
+  it('parses ```json fences', () => {
+    expect(parseSlideAdaptation('ok:\n```json\n{"headline":"X","bullets":["y"]}\n```')).toEqual({
+      headline: 'X',
+      bullets: ['y'],
+    })
   })
-  it('parses JSON embedded in prose (braces slice)', () => {
-    const raw = 'blah {"slides":[{"n":1,"headline":"C","bullets":["z"]}]} end'
-    expect(parseAdaptation(raw)[0].headline).toBe('C')
+  it('parses JSON embedded in prose', () => {
+    expect(parseSlideAdaptation('blah {"headline":"C","bullets":["z"]} end')?.headline).toBe('C')
   })
-  it('returns [] on garbage / missing shape', () => {
-    expect(parseAdaptation('not json')).toEqual([])
-    expect(parseAdaptation('{"nope":1}')).toEqual([])
-    expect(parseAdaptation('')).toEqual([])
-  })
-  it('drops malformed slide entries', () => {
-    const out = parseAdaptation('{"slides":[{"n":2,"headline":"ok","bullets":["a"]},{"headline":"no-n"}]}')
-    expect(out).toHaveLength(1)
+  it('null on garbage / empty bullets / missing shape', () => {
+    expect(parseSlideAdaptation('not json')).toBeNull()
+    expect(parseSlideAdaptation('{"headline":"H","bullets":[]}')).toBeNull()
+    expect(parseSlideAdaptation('{"nope":1}')).toBeNull()
   })
 })
 
 describe('applyAdaptation', () => {
   it('overrides headline+bullets, keeps notes + kind', () => {
-    const adapted = [{ n: 2, headline: 'Punchy takeaway', bullets: ['corto uno', 'corto dos'] }]
-    const out = applyAdaptation(model, adapted)
+    const out = applyAdaptation(model, [{ n: 2, headline: 'Punchy', bullets: ['uno', 'dos'] }])
     const s2 = out.slides[1]
-    expect(s2.headline).toBe('Punchy takeaway')
-    expect(s2.bullets).toEqual(['corto uno', 'corto dos'])
+    expect(s2.headline).toBe('Punchy')
+    expect(s2.bullets).toEqual(['uno', 'dos'])
     expect(s2.kind).toBe('positioning')
-    expect(s2.notes).toBe(model.slides[1].notes) // full text preserved
+    expect(s2.notes).toBe(model.slides[1].notes)
   })
-  it('slides not adapted keep the deterministic version', () => {
+  it('non-adapted slides keep deterministic version', () => {
     const out = applyAdaptation(model, [{ n: 2, headline: 'H', bullets: ['x'] }])
-    expect(out.slides[3]).toEqual(model.slides[3]) // competitive untouched
+    expect(out.slides[3]).toEqual(model.slides[3])
   })
-  it('empty bullets → keep deterministic (safe fallback)', () => {
-    const out = applyAdaptation(model, [{ n: 2, headline: 'H', bullets: [] }])
-    expect(out.slides[1]).toEqual(model.slides[1])
-  })
-  it('total slide count unchanged (still 7)', () => {
-    expect(applyAdaptation(model, []).slides).toHaveLength(7)
+  it('empty adaptation → deterministic, still 7 slides', () => {
+    expect(applyAdaptation(model, []).slides).toEqual(model.slides)
   })
 })

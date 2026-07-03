@@ -37,8 +37,7 @@ import {
   type ReportInput,
 } from '@/lib/onboarding-report'
 import {
-  buildAdaptationPrompt,
-  parseAdaptation,
+  buildAdaptationTasks,
   applyAdaptation,
   type AdaptedSlide,
 } from '@/lib/onboarding-report-adaptation'
@@ -116,8 +115,15 @@ export async function POST(req: Request, { params }: RouteContext) {
     let adaptedSlides: AdaptedSlide[] = []
     try {
       const body = (await req.json().catch(() => ({}))) as { adapted_slides?: unknown }
-      if (Array.isArray(body.adapted_slides))
-        adaptedSlides = parseAdaptation(JSON.stringify({ slides: body.adapted_slides }))
+      if (Array.isArray(body.adapted_slides)) {
+        adaptedSlides = body.adapted_slides.filter(
+          (s): s is AdaptedSlide =>
+            !!s &&
+            typeof (s as AdaptedSlide).n === 'number' &&
+            typeof (s as AdaptedSlide).headline === 'string' &&
+            Array.isArray((s as AdaptedSlide).bullets),
+        )
+      }
     } catch {
       /* no body · deterministic */
     }
@@ -131,7 +137,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       ok: true,
       report,
       slides_batch_requests: buildSlidesBatchRequests(report),
-      adaptation_prompt: buildAdaptationPrompt(deterministic),
+      adaptation_tasks: buildAdaptationTasks(deterministic),
       adaptation_applied: adaptedSlides.length > 0,
       render: 'n8n_oauth',
     })
