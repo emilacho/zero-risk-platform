@@ -36,6 +36,12 @@ import {
   assembleCompetitors,
   type ReportInput,
 } from '@/lib/onboarding-report'
+import {
+  buildAdaptationPrompt,
+  parseAdaptation,
+  applyAdaptation,
+  type AdaptedSlide,
+} from '@/lib/onboarding-report-adaptation'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -101,17 +107,32 @@ export async function POST(req: Request, { params }: RouteContext) {
       competitors,
     }
 
-    const report = buildReportSlides(input)
+    const deterministic = buildReportSlides(input)
+
+    // LLM few-shot adaptation (Emilio 2026-07-03) · runs as a run-sdk node in
+    // n8n (endpoint stays $0) · n8n POSTs the parsed `adapted_slides` back here
+    // and this overlays them onto the deterministic model (keeps notes + kind).
+    // Absent → deterministic model (safe fallback).
+    let adaptedSlides: AdaptedSlide[] = []
+    try {
+      const body = (await req.json().catch(() => ({}))) as { adapted_slides?: unknown }
+      if (Array.isArray(body.adapted_slides))
+        adaptedSlides = parseAdaptation(JSON.stringify({ slides: body.adapted_slides }))
+    } catch {
+      /* no body · deterministic */
+    }
+    const report = adaptedSlides.length ? applyAdaptation(deterministic, adaptedSlides) : deterministic
 
     // Camino A (Emilio 2026-07-02) · OAuth-as-user render in n8n. The endpoint
     // produces the model + the ready-to-use Slides `batchUpdate` requests · the
-    // n8n workflow (Google credential = Emilio's account · files owned by him ·
-    // avoids the service-account storageQuotaExceeded) creates the presentation
-    // in Drive Cuentas/[client]/, applies the requests, and persists report_url.
+    // n8n workflow (Google credential = Emilio's account) creates the
+    // presentation in Drive Cuentas/[client]/ and persists report_url.
     return NextResponse.json({
       ok: true,
       report,
       slides_batch_requests: buildSlidesBatchRequests(report),
+      adaptation_prompt: buildAdaptationPrompt(deterministic),
+      adaptation_applied: adaptedSlides.length > 0,
       render: 'n8n_oauth',
     })
   } catch (e) {
