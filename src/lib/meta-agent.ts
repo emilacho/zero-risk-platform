@@ -16,12 +16,14 @@
  *   6. Sends summary to MC inbox → Emilio reviews
  *   7. Emilio approves/rejects each proposal → /api/analytics/proposals/[id]/resolve
  *
- * Model: claude-sonnet-4-20250514 (cost-effective for analysis)
+ * Model: current Sonnet via the central config (src/lib/models.ts · was the
+ * drifted `claude-sonnet-4-20250514` → 404 · CC#3 2026-07-04).
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { FeedbackCollector } from './feedback-collector'
 import { MissionControlBridge } from './mc-bridge'
+import { resolveModel } from './models'
 
 // ============================================================
 // Types
@@ -64,7 +66,7 @@ export interface MetaAgentRunResult {
 }
 
 interface MetaAgentConfig {
-  model?: string              // Default: claude-sonnet-4-20250514
+  model?: string              // Default: current Sonnet (src/lib/models.ts)
   maxOutcomes?: number        // Default: 100
   sinceDays?: number          // Default: 7
   runType?: 'weekly' | 'manual' | 'triggered'
@@ -102,7 +104,7 @@ export class MetaAgent {
     const runType = config.runType || 'weekly'
     const maxOutcomes = config.maxOutcomes || 100
     const sinceDays = config.sinceDays || 7
-    const model = config.model || 'claude-sonnet-4-20250514'
+    const model = resolveModel(config.model)
 
     // Step 1: Create meta_agent_runs record
     const { data: run, error: runError } = await this.supabase

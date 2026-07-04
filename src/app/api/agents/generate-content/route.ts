@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabase, getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString } from '@/lib/validation'
+import { DEFAULT_ANALYSIS_MODEL } from '@/lib/models'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
 import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
@@ -112,7 +113,7 @@ Responde en JSON con este formato:
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: DEFAULT_ANALYSIS_MODEL,
         max_tokens: 2000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],

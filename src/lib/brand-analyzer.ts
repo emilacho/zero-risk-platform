@@ -7,11 +7,13 @@
  * This module is the "intelligence" layer of auto-discovery.
  * WebDiscovery scrapes → BrandAnalyzer interprets → Client Brain populated.
  *
- * Model: claude-sonnet-4-20250514 (good balance of quality + cost for analysis)
+ * Model: current Sonnet via the central config (src/lib/models.ts · was the
+ * drifted `claude-sonnet-4-20250514` → 404 · CC#3 2026-07-04).
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { DiscoveryResult, CompetitorScrapeResult } from './web-discovery'
+import { resolveModel } from './models'
 
 // ============================================================
 // Types
@@ -94,7 +96,7 @@ export class BrandAnalyzer {
   constructor(supabase: SupabaseClient, options?: { model?: string }) {
     this.supabase = supabase
     this.claudeApiKey = process.env.CLAUDE_API_KEY || ''
-    this.model = options?.model || 'claude-sonnet-4-20250514'
+    this.model = resolveModel(options?.model)
   }
 
   // ----------------------------------------------------------
