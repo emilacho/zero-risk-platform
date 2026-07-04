@@ -67,7 +67,12 @@ const C = {}
 const link = (from, to, idx = 0, toIdx = 0) => {
   C[from] = C[from] || { main: [] }
   while (C[from].main.length <= idx) C[from].main.push([])
-  C[from].main[idx].push({ node: to, type: 'main', index: toIdx })
+  // F1.3 · dedupe · el link explícito (Confirm→Fan-out prep) + el copy-loop de las
+  // conexiones del worker abajo agregaban la MISMA edge 2× → Fan-out prep recibía
+  // el item duplicado → el track corría 2 veces = ciclo extra "post-promote" (el 2º
+  // run dispara tras el promote del 1º). Idempotente · corta el residuo de raíz.
+  const exists = C[from].main[idx].some((e) => e.node === to && e.index === toIdx)
+  if (!exists) C[from].main[idx].push({ node: to, type: 'main', index: toIdx })
 }
 link('Webhook · smoke trigger', 'Validate Deal Data')
 link('Validate Deal Data', 'Confirm barato · competitor list')
