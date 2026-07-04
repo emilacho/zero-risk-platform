@@ -87,7 +87,10 @@ export async function persistDiscoveryToBrain(
             sourceId,
             chunks,
             // FASE C · provenance per competidor (taxonomía discovery · PR #199).
-            source: c.source ?? 'onboarding_discovery',
+            // F1.1 · data de competidores viene del scrape Apify → default
+            // 'apify_scrape' (antes 'onboarding_discovery' genérico) · respeta
+            // c.source si el discovery output lo especifica. Aditivo · reversible.
+            source: c.source ?? 'apify_scrape',
             trustLevel: c.trust_level ?? 'untrusted',
           })
           if (r.ok) chunksTotal += r.chunks_upserted
@@ -145,6 +148,8 @@ export async function persistDiscoveryToBrain(
           clientId: input.discovery.client_id,
           sourceTable: 'client_competitive_landscape',
           sourceId: summarySourceId,
+          // F1.1 · el resumen de landscape se sintetiza de scrapes Apify → apify_scrape.
+          source: 'apify_scrape',
           chunks: [
             {
               section_label: 'landscape_summary',
