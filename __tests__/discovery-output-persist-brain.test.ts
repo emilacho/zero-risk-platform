@@ -169,6 +169,33 @@ describe('persistDiscoveryToBrain · flag ON · happy path', () => {
     expect(r.brain_chunks_upserted).toBe(chunksUpserted.length)
   })
 
+  // ── F1.1 · contract · etiqueta de procedencia de scrapes ──────────────
+  it('F1.1 · scrape writes (competitive_landscape) llevan provenance source apify_scrape', async () => {
+    const { fake, chunksUpserted } = makeFakeSupabase()
+    await persistDiscoveryToBrain({ supabase: fake, discovery: DISCOVERY, enabled: true })
+
+    // Competidores + landscape summary = data scrapeada por Apify → apify_scrape.
+    const scrapeChunks = chunksUpserted.filter(
+      (row) => row.source_table === 'client_competitive_landscape',
+    )
+    expect(scrapeChunks.length).toBeGreaterThan(0)
+    for (const row of scrapeChunks) {
+      const pt = row.provenance_tag as { source?: string; trust_level?: string }
+      expect(pt.source).toBe('apify_scrape')
+      expect(pt.trust_level).toBe('untrusted') // piso de confianza intacto (FASE C)
+    }
+
+    // ICP es DERIVADO (no scrape) → mantiene onboarding_discovery · no se toca.
+    const icpChunkRows = chunksUpserted.filter(
+      (row) => row.source_table === 'client_icp_documents',
+    )
+    expect(icpChunkRows.length).toBeGreaterThan(0)
+    for (const row of icpChunkRows) {
+      const pt = row.provenance_tag as { source?: string }
+      expect(pt.source).toBe('onboarding_discovery')
+    }
+  })
+
   it('handles discovery without ICP gracefully', async () => {
     const { fake } = makeFakeSupabase()
     const { icp: _icp, ...withoutIcp } = DISCOVERY
