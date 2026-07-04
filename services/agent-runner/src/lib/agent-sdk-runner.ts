@@ -887,6 +887,13 @@ function logExecution(
     metadata: {
       source: 'agent-runner-railway',
       caller: 'agent-runner',
+      // F1.2 (CC#4 2026-07-04) · CONDICIÓN DE HONESTIDAD del consejero (mismo principio que
+      // #266) · el modelo REAL que corrió · el slug del agente puede ser engañoso · p.ej.
+      // `gpt-5.5-advisor` corre en Sonnet 4.6 porque el runner NO rutea gpt-5.5 (MODEL_MAP
+      // solo tiene modelos Claude · fallback). La traza debe decir el modelo EFECTIVO, no el
+      // nominal que sugiere el slug.
+      effective_model: modelId,
+      nominal_agent: canonicalSlug,
       task_text: input.task.substring(0, 200),
       step_name: input.stepName ?? null,
       pipeline_id: input.pipelineId ?? null,
@@ -1279,6 +1286,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
         absDeltas.length > 0 ? absDeltas.reduce((a, b) => a + b, 0) / absDeltas.length : null
       fidelityForcedEmitDebug.shadow_scoring = {
         shadow_agent: canonicalSlug,
+        // honestidad · el modelo REAL del sombra (Sonnet · no gpt-5.5 · el runner no lo rutea)
+        effective_model: modelId,
         judge_scores: judgeScores,
         shadow_scores: shadowScores,
         delta_per_field: deltaPerField,
