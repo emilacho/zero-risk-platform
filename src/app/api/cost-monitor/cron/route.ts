@@ -2,11 +2,13 @@
  * POST/GET /api/cost-monitor/cron · §150 G5 cost monitor · SHADOW-first
  *
  * Triggered hourly by Vercel Cron (see vercel.json `crons[]`). Aggregates
- * `agent_invocations.cost_usd` over two windows and evaluates three canonical
- * thresholds · daily per-workflow ($10), daily aggregate ($100), hourly
- * burst ($5). The hourly burst threshold is the one that would have caught
- * the 2026-05-24 NEXUS spam incident (≈$19/day · ≈659 invocations · burst
- * pattern · daily-only monitoring missed it).
+ * `agent_invocations.cost_usd` over two windows and evaluates canonical
+ * thresholds · números canónicos del sprint 2026-07-03 (L2) · **$15/hora +
+ * $50/día**. Concretamente: daily per-workflow ($10), daily aggregate platform
+ * ($100), daily total ($50 · el número canónico de alerta diaria), hourly
+ * burst ($15 · subido de $5 · el $5 era ruido con gasto diario legítimo
+ * $26-38). El hard-stop §150 (SALA_NAUFRAGO_CAP_USD) es OTRA cosa · no se
+ * toca acá. (Corrige el número $30 que venía de un doc deprecado 07-02.)
  *
  * MODES · gated by env var `COST_MONITOR_SHADOW_MODE` (default: "1" = shadow).
  *  - SHADOW ("1") · detect breaches and write audit row, do NOT dispatch any
@@ -39,7 +41,8 @@ export const maxDuration = 30 // seconds · aggregation is light
 // historical rows stay interpretable when thresholds tune later.
 const THRESHOLD_DAILY_PER_WORKFLOW_USD = 10
 const THRESHOLD_DAILY_AGGREGATE_USD    = 100
-const THRESHOLD_HOURLY_BURST_USD       = 5
+const THRESHOLD_DAILY_USD              = 50 // canónico sprint 2026-07-03 · alerta sobre el agregado 24h
+const THRESHOLD_HOURLY_BURST_USD       = 15 // canónico $15/h (corrige $30 de doc deprecado) · alerta, NO el hard-stop §150
 
 interface InvocationRow {
   workflow_id: string | null
@@ -47,7 +50,7 @@ interface InvocationRow {
 }
 
 interface Breach {
-  type: 'daily_per_workflow' | 'daily_aggregate' | 'hourly_burst'
+  type: 'daily_per_workflow' | 'daily_aggregate' | 'daily_total' | 'hourly_burst'
   workflow_id?: string
   spend_usd: number
   threshold: number
@@ -161,6 +164,16 @@ async function runMonitor(req: Request) {
       threshold: THRESHOLD_DAILY_AGGREGATE_USD,
     })
   }
+  // Alerta diaria canónica ($50/día · sprint 2026-07-03) sobre el mismo agregado
+  // 24h. Umbral más fino que daily_aggregate ($100) · pensado para captar el
+  // gasto diario total antes de que llegue al techo platform-wide.
+  if (aggregate24h > THRESHOLD_DAILY_USD) {
+    breaches.push({
+      type: 'daily_total',
+      spend_usd: aggregate24h,
+      threshold: THRESHOLD_DAILY_USD,
+    })
+  }
   if (aggregate1h > THRESHOLD_HOURLY_BURST_USD) {
     breaches.push({
       type: 'hourly_burst',
@@ -192,6 +205,7 @@ async function runMonitor(req: Request) {
         breaches,
         invocations_24h: rows24.length,
         invocations_1h: rows1.length,
+        threshold_daily_usd: THRESHOLD_DAILY_USD,
       },
       shadow_mode: shadowMode,
       alert_dispatched: false,

@@ -6,7 +6,7 @@
  *  - 401 when Bearer secret mismatched
  *  - 200 + correct JSON shape with no breaches when costs are below thresholds
  *  - detects daily_per_workflow breach when one workflow > $10/24h
- *  - detects hourly_burst breach when 1h aggregate > $5
+ *  - detects hourly_burst breach when 1h aggregate > $30
  *  - detects daily_aggregate breach when 24h aggregate > $100
  *  - alert_dispatched is ALWAYS false (SHADOW-first guarantee)
  *  - INSERT into cost_monitor_runs happens with is_breach + details JSONB
@@ -146,7 +146,7 @@ describe('GET/POST /api/cost-monitor/cron · SHADOW-first guarantee', () => {
       { workflow_id: 'spammy-wf', cost_usd: 50 }, // >$10 daily_per_workflow
     ]
     stubRows1h = [
-      { workflow_id: 'spammy-wf', cost_usd: 10 }, // >$5 hourly burst
+      { workflow_id: 'spammy-wf', cost_usd: 40 }, // >$30 hourly burst
     ]
     const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
     expect(res.status).toBe(200)
@@ -173,7 +173,7 @@ describe('GET/POST /api/cost-monitor/cron · SHADOW-first guarantee', () => {
 
   it('shadow=true + breach · dispatch NOT called (SHADOW guard)', async () => {
     process.env.COST_MONITOR_SHADOW_MODE = '1'
-    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 8 }] // > $5 burst
+    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 35 }] // > $30 burst
     const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
     const json = (await res.json()) as Record<string, unknown>
     expect(json.is_breach).toBe(true)
@@ -188,7 +188,7 @@ describe('GET/POST /api/cost-monitor/cron · alert-live dispatch (shadow=0)', ()
   })
 
   it('shadow=false + breach · dispatch called + alert_dispatched=true in response', async () => {
-    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 8 }] // > $5 burst
+    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 35 }] // > $30 burst
     const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
     const json = (await res.json()) as Record<string, unknown>
     expect(json.is_breach).toBe(true)
@@ -201,7 +201,7 @@ describe('GET/POST /api/cost-monitor/cron · alert-live dispatch (shadow=0)', ()
   })
 
   it('shadow=false + breach · cost_monitor_runs.alert_dispatched flipped to true via UPDATE', async () => {
-    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 8 }]
+    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 35 }]
     await POST(req({ authorization: 'Bearer test-secret-1234' }))
     // The initial INSERT writes alert_dispatched: false (audit trail first),
     // then the UPDATE flips it to true after successful dispatch.
@@ -215,7 +215,7 @@ describe('GET/POST /api/cost-monitor/cron · alert-live dispatch (shadow=0)', ()
       dispatched: false,
       reason: 'webhook returned 500 internal',
     })
-    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 8 }]
+    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 35 }]
     const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
     expect(res.status).toBe(200)
     const json = (await res.json()) as Record<string, unknown>
@@ -260,18 +260,18 @@ describe('GET/POST /api/cost-monitor/cron · threshold breaches', () => {
     expect(breaches.some((b) => b.type === 'daily_per_workflow' && b.workflow_id === 'spammy-wf')).toBe(true)
   })
 
-  it('detects hourly_burst breach (>$5/1h aggregate · the 24-may pattern)', async () => {
+  it('detects hourly_burst breach (>$30/1h aggregate)', async () => {
     stubRows24h = []
     stubRows1h = [
-      { workflow_id: 'wf-a', cost_usd: 3.5 },
-      { workflow_id: 'wf-b', cost_usd: 2.5 }, // sum=6 > $5 burst threshold
+      { workflow_id: 'wf-a', cost_usd: 20 },
+      { workflow_id: 'wf-b', cost_usd: 15 }, // sum=35 > $30 burst threshold
     ]
     const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
     const json = (await res.json()) as Record<string, unknown>
     const breaches = json.breaches as Array<Record<string, unknown>>
     expect(breaches.some((b) => b.type === 'hourly_burst')).toBe(true)
-    // This is exactly the threshold that would have caught NEXUS 24-may
-    // (≈$19/day spam loop · burst hours hit $5+ easily).
+    // Umbral de alerta subido a $30 el 2026-07-02 (Emilio §144) · el patrón
+    // fino NEXUS-style (≈$19/día) queda cubierto por los umbrales DIARIOS.
   })
 
   it('detects daily_aggregate breach (>$100/24h platform-wide)', async () => {
@@ -286,13 +286,33 @@ describe('GET/POST /api/cost-monitor/cron · threshold breaches', () => {
     expect(breaches.some((b) => b.type === 'daily_aggregate')).toBe(true)
   })
 
+  it('detects daily_total breach (>$50/24h · canónico) sin tocar daily_aggregate ($100)', async () => {
+    // 10 workflows × $6 = $60 · ningún workflow >$10 (no per_workflow) · sum
+    // >$50 (daily_total) pero <$100 (no daily_aggregate) · 1h vacío (no burst).
+    stubRows24h = Array.from({ length: 10 }, (_, i) => ({
+      workflow_id: `wf-${i}`,
+      cost_usd: 6,
+    }))
+    stubRows1h = []
+    const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
+    const json = (await res.json()) as Record<string, unknown>
+    const breaches = json.breaches as Array<Record<string, unknown>>
+    const total = breaches.find((b) => b.type === 'daily_total')
+    expect(total).toBeDefined()
+    expect(total!.threshold).toBe(50)
+    expect(total!.spend_usd).toBe(60)
+    // $60 < $100 → NO dispara el agregado platform-wide
+    expect(breaches.some((b) => b.type === 'daily_aggregate')).toBe(false)
+    expect(breaches.some((b) => b.type === 'hourly_burst')).toBe(false)
+  })
+
   it('three breach types can co-occur in one run', async () => {
     stubRows24h = Array.from({ length: 12 }, (_, i) =>
       i === 0
         ? { workflow_id: 'spammy', cost_usd: 50 } // triggers daily_per_workflow
         : { workflow_id: `wf-${i}`, cost_usd: 9 }, // sum drives daily_aggregate >100
     )
-    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 8 }] // triggers hourly_burst
+    stubRows1h = [{ workflow_id: 'spammy', cost_usd: 35 }] // triggers hourly_burst (>$30)
     const res = await POST(req({ authorization: 'Bearer test-secret-1234' }))
     const json = (await res.json()) as Record<string, unknown>
     expect(json.breach_count).toBeGreaterThanOrEqual(3)
@@ -329,7 +349,8 @@ describe('GET/POST /api/cost-monitor/cron · audit trail INSERT (§150 G4)', () 
     const row = monitorInserts[0]
     expect(row.threshold_daily_per_workflow_usd).toBe(10)
     expect(row.threshold_daily_aggregate_usd).toBe(100)
-    expect(row.threshold_hourly_burst_usd).toBe(5)
+    expect(row.threshold_hourly_burst_usd).toBe(15)
+    expect((row.details as Record<string, unknown>).threshold_daily_usd).toBe(50)
   })
 })
 
