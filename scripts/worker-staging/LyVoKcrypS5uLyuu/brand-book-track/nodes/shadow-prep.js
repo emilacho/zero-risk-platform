@@ -1,7 +1,7 @@
 // F1.2 (CC#4 2026-07-04) · Shadow scorer prep · arma el task del SEGUNDO scorer de
-// groundedness (sombra · gpt-5.5-advisor · sin rol en Lazo A) + adjunta los scores del
-// judge para medir el acuerdo. El sombra puntúa el MISMO draft de forma INDEPENDIENTE ·
-// NO ve los scores del judge (van en extra solo para el delta) · NO decide nada.
+// groundedness (sombra · market_research_analyst · agente registrado sin rol en Lazo A) +
+// adjunta los scores del judge para medir el acuerdo. El sombra puntúa el MISMO draft de
+// forma INDEPENDIENTE · NO ve los scores del judge (van en extra solo para el delta) · NO decide.
 //
 // Corre en paralelo al judge · dead-end (no alimenta el IF de fidelidad).
 const jp = $('[BB] Judge prep').first().json;

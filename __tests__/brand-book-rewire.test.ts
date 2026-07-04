@@ -123,7 +123,7 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
     expect(targets('[BB] Shadow · run-sdk')).toHaveLength(0)
     const sh = nodeByName('[BB] Shadow · run-sdk') as { type: string; parameters: { options?: { timeout?: number }; jsonBody?: string } }
     expect(sh.type).toBe('n8n-nodes-base.httpRequest')
-    expect(sh.parameters.jsonBody).toContain('"gpt-5.5-advisor"') // agente sin rol en Lazo A
+    expect(sh.parameters.jsonBody).toContain('"market_research_analyst"') // agente REAL registrado, sin rol en Lazo A
     expect(sh.parameters.jsonBody).toContain('"fidelity_shadow": true') // dispara el cómputo del delta en el runner
     expect(sh.parameters.jsonBody).toContain('$json.judge_scores') // scores del judge para el delta
   })
