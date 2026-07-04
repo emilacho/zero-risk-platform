@@ -217,9 +217,47 @@ const hitl = {
   position: [1800, Y + 300],
 }
 
+// F1.2 (CC#4 2026-07-04) · SCORER SOMBRA · segundo scorer de groundedness (gpt-5.5-advisor ·
+// sin rol en Lazo A) corre EN PARALELO al judge · puntúa el MISMO draft independiente · NO
+// decide nada (dead-end · no alimenta el IF). El runner computa el delta judge-vs-sombra y lo
+// registra en agent_invocations.metadata.fidelity_forced_emit.shadow_scoring (extra.judge_scores).
+const shadowPrep = codeNode('[BB] Shadow prep', 'shadow-prep.js', [1780, Y + 480])
+const shadowHttp = {
+  parameters: {
+    method: 'POST',
+    url: "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    sendHeaders: true,
+    headerParameters: {
+      parameters: [
+        { name: 'Content-Type', value: 'application/json' },
+        { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' },
+      ],
+    },
+    sendBody: true,
+    specifyBody: 'json',
+    jsonBody:
+      '={\n' +
+      '  "agent": "gpt-5.5-advisor",\n' +
+      '  "client_id": "{{ $json.client_id }}",\n' +
+      '  "workflow_id": "{{ $execution.id }}",\n' +
+      '  "workflow_execution_id": "{{ $execution.id }}",\n' +
+      '  "step_name": "{{ $json.shadow_step_name }}",\n' +
+      '  "task": {{ JSON.stringify($json.shadow_task) }},\n' +
+      '  "context": { "role": "faithfulness_shadow_scorer", "threshold": 0.85 },\n' +
+      '  "extra": { "fidelity_judge": true, "fidelity_shadow": true, "judge_scores": {{ JSON.stringify($json.judge_scores) }} }\n' +
+      '}',
+    options: { response: { response: { neverError: true } }, timeout: 800000 },
+  },
+  id: 'bb-shadow-http',
+  name: '[BB] Shadow · run-sdk',
+  type: 'n8n-nodes-base.httpRequest',
+  typeVersion: 4.2,
+  position: [1980, Y + 480],
+}
+
 // FIX 2026-07-01 · Lazo A (correctionLoop) BYPASSEADO · sacado del track (borraba el draft ·
 // no vinculante). Se deja definido arriba pero NO se incluye en el worker.
-const newNodes = [fanout, lensStrat, lensEditor, lensCS, mergeLentes, consolidator, judgePrep, judgeHttp, judge, ifFidelity, ifExhausted, promotePrep, promote, hitl]
+const newNodes = [fanout, lensStrat, lensEditor, lensCS, mergeLentes, consolidator, judgePrep, judgeHttp, judge, ifFidelity, ifExhausted, promotePrep, promote, hitl, shadowPrep, shadowHttp]
 
 // ── connection surgery ──────────────────────────────────────────────────────
 // toIdx · índice de ENTRADA del nodo destino (default 0) · necesario para el
@@ -262,6 +300,10 @@ link('[BB] Judge prep', '[BB] Judge · run-sdk')
 link('[BB] Judge · run-sdk', '[BB] Faithfulness judge')
 // judge → IF fidelidad · PASS(true)→promote · FAIL(false)→IF ciclos agotados
 link('[BB] Faithfulness judge', '[BB] IF · fidelidad PASS')
+// F1.2 · rama SOMBRA en paralelo · Faithfulness judge → Shadow prep → Shadow run-sdk ·
+// dead-end (NO alimenta ningún IF · NO decide) · solo registra el delta en metadata.
+link('[BB] Faithfulness judge', '[BB] Shadow prep')
+link('[BB] Shadow prep', '[BB] Shadow · run-sdk')
 // FIX 2026-07-01 · PASS → Promote prep (arma body) → Promote → canon (HTTP POST).
 link('[BB] IF · fidelidad PASS', '[BB] Promote prep', 'main', 0) // true
 link('[BB] Promote prep', '[BB] Promote → canon')

@@ -35,14 +35,17 @@ const NEW_NODES = [
   '[BB] Promote prep',
   '[BB] Promote → canon',
   '[BB] HITL último recurso (no Emilio)',
+  // F1.2 · scorer sombra (segundo groundedness · gpt-5.5-advisor · sin decisión)
+  '[BB] Shadow prep',
+  '[BB] Shadow · run-sdk',
 ]
 
 describe('brand-book rewire · nodos del nuevo track', () => {
   it('agrega los 11 nodos del track colaborativo', () => {
     for (const n of NEW_NODES) expect(nodeByName(n), `falta nodo ${n}`).toBeDefined()
   })
-  it('preserva los 51 nodos base (no borra nada del worker) · total 65 (Merge +Judge/Promote prep+http · Lazo A bypasseado)', () => {
-    expect(worker.nodes.length).toBe(65)
+  it('preserva los 51 nodos base (no borra nada del worker) · total 67 (Merge +Judge/Promote prep+http +Shadow prep+http · Lazo A bypasseado)', () => {
+    expect(worker.nodes.length).toBe(67)
     // el Lazo A ya NO está en el track (bypasseado · borraba el draft).
     expect(nodeByName('[BB] Lazo A · corrección (sub-wf)')).toBeUndefined()
   })
@@ -111,6 +114,18 @@ describe('brand-book rewire · cableado del track (fuera del gate Camino III)', 
     expect(JSON.stringify(jh.parameters.headerParameters)).toContain('x-api-key')
     expect(jh.parameters.jsonBody).toContain('"fidelity_judge": true') // extra activa el forced-emit
     expect(jh.parameters.jsonBody).toContain('$json.judge_step_name') // step_name distinto (del prep)
+  })
+  it('F1.2 · scorer SOMBRA en paralelo · Faithfulness judge → Shadow prep → Shadow run-sdk · dead-end (NO decide)', () => {
+    // el sombra sale del MISMO judge, en paralelo al IF de fidelidad
+    expect(targets('[BB] Faithfulness judge')).toContain('[BB] Shadow prep')
+    expect(targets('[BB] Shadow prep')).toContain('[BB] Shadow · run-sdk')
+    // dead-end · el sombra NO alimenta ningún nodo (no decide nada)
+    expect(targets('[BB] Shadow · run-sdk')).toHaveLength(0)
+    const sh = nodeByName('[BB] Shadow · run-sdk') as { type: string; parameters: { options?: { timeout?: number }; jsonBody?: string } }
+    expect(sh.type).toBe('n8n-nodes-base.httpRequest')
+    expect(sh.parameters.jsonBody).toContain('"gpt-5.5-advisor"') // agente sin rol en Lazo A
+    expect(sh.parameters.jsonBody).toContain('"fidelity_shadow": true') // dispara el cómputo del delta en el runner
+    expect(sh.parameters.jsonBody).toContain('$json.judge_scores') // scores del judge para el delta
   })
   it('judge → IF fidelidad · PASS(true)→Promote prep→Promote canon · FAIL(false)→IF ciclos agotados', () => {
     expect(targets('[BB] Faithfulness judge')).toContain('[BB] IF · fidelidad PASS')

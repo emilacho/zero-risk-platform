@@ -1239,6 +1239,56 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
         console.warn(`[forced-emit] ${canonicalSlug} (judge) · forced fidelity errored: ${msg}`)
       }
     }
+
+    // F1.2 (CC#4 2026-07-04) · SCORER SOMBRA · si esta invocación es el segundo scorer de
+    // groundedness (extra.fidelity_shadow), computa el acuerdo judge-vs-judge · el delta
+    // por campo entre los scores del judge (extra.judge_scores) y los del sombra (los que
+    // acaba de emitir este agente) · se registra en agent_invocations.metadata.
+    // fidelity_forced_emit.shadow_scoring. NO decide nada · solo se mide.
+    if (extraObj.fidelity_shadow === true && fidelityForcedEmitDebug) {
+      const shadowScores =
+        (drain.fidelityScoresToolCall?.input as { scores?: Record<string, unknown> } | undefined)
+          ?.scores || {}
+      const judgeScores =
+        extraObj.judge_scores &&
+        typeof extraObj.judge_scores === 'object' &&
+        !Array.isArray(extraObj.judge_scores)
+          ? (extraObj.judge_scores as Record<string, unknown>)
+          : {}
+      const FIELDS = [
+        'positioning',
+        'icp_summary',
+        'voice_description',
+        'customer_angle',
+        'retention_notes',
+      ]
+      const deltaPerField: Record<string, number | null> = {}
+      const absDeltas: number[] = []
+      for (const f of FIELDS) {
+        const j = Number(judgeScores[f])
+        const s = Number((shadowScores as Record<string, unknown>)[f])
+        if (Number.isFinite(j) && Number.isFinite(s)) {
+          const d = Math.abs(j - s)
+          deltaPerField[f] = d
+          absDeltas.push(d)
+        } else {
+          deltaPerField[f] = null
+        }
+      }
+      const meanAbsDelta =
+        absDeltas.length > 0 ? absDeltas.reduce((a, b) => a + b, 0) / absDeltas.length : null
+      fidelityForcedEmitDebug.shadow_scoring = {
+        shadow_agent: canonicalSlug,
+        judge_scores: judgeScores,
+        shadow_scores: shadowScores,
+        delta_per_field: deltaPerField,
+        mean_abs_delta: meanAbsDelta,
+        fields_compared: absDeltas.length,
+      }
+      console.log(
+        `[fidelity-shadow] ${canonicalSlug} · mean_abs_delta=${meanAbsDelta} · fields=${absDeltas.length}`,
+      )
+    }
   }
 
   const durationMs = Date.now() - startedAt
