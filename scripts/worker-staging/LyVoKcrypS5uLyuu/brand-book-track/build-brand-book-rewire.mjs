@@ -217,10 +217,11 @@ const hitl = {
   position: [1800, Y + 300],
 }
 
-// F1.2 (CC#4 2026-07-04) · SCORER SOMBRA · segundo scorer de groundedness (gpt-5.5-advisor ·
-// sin rol en Lazo A) corre EN PARALELO al judge · puntúa el MISMO draft independiente · NO
-// decide nada (dead-end · no alimenta el IF). El runner computa el delta judge-vs-sombra y lo
-// registra en agent_invocations.metadata.fidelity_forced_emit.shadow_scoring (extra.judge_scores).
+// F1.2 (CC#4 2026-07-04) · SCORER SOMBRA · segundo scorer de groundedness (market_research_analyst ·
+// agente REAL registrado · sin rol en Lazo A · `gpt-5.5-advisor` no era loadable vía run-sdk) corre
+// EN PARALELO al judge · puntúa el MISMO draft independiente · NO decide nada (dead-end · no alimenta
+// el IF). El runner computa el delta judge-vs-sombra y lo registra en
+// agent_invocations.metadata.fidelity_forced_emit.shadow_scoring (extra.judge_scores).
 const shadowPrep = codeNode('[BB] Shadow prep', 'shadow-prep.js', [1780, Y + 480])
 const shadowHttp = {
   parameters: {
@@ -237,7 +238,7 @@ const shadowHttp = {
     specifyBody: 'json',
     jsonBody:
       '={\n' +
-      '  "agent": "gpt-5.5-advisor",\n' +
+      '  "agent": "market_research_analyst",\n' +
       '  "client_id": "{{ $json.client_id }}",\n' +
       '  "workflow_id": "{{ $execution.id }}",\n' +
       '  "workflow_execution_id": "{{ $execution.id }}",\n' +

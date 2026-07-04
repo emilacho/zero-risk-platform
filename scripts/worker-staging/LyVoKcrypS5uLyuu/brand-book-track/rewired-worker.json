@@ -1837,7 +1837,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// F1.2 (CC#4 2026-07-04) · Shadow scorer prep · arma el task del SEGUNDO scorer de\n// groundedness (sombra · gpt-5.5-advisor · sin rol en Lazo A) + adjunta los scores del\n// judge para medir el acuerdo. El sombra puntúa el MISMO draft de forma INDEPENDIENTE ·\n// NO ve los scores del judge (van en extra solo para el delta) · NO decide nada.\n//\n// Corre en paralelo al judge · dead-end (no alimenta el IF de fidelidad).\nconst jp = $('[BB] Judge prep').first().json;\nconst judgeTask = jp.judge_task;\nconst clientId = jp.client_id;\nconst cycle = Number(jp._fidelity_cycle) || 1;\n\nlet judgeScores = {};\ntry {\n  judgeScores = $('[BB] Faithfulness judge').first().json.fidelity.scores || {};\n} catch (e) {\n  judgeScores = {};\n}\n\nreturn [{ json: {\n  shadow_task: judgeTask,\n  judge_scores: judgeScores,\n  client_id: clientId,\n  shadow_step_name: 'bb-fidelity-shadow-c' + cycle,\n} }];\n"
+        "jsCode": "// F1.2 (CC#4 2026-07-04) · Shadow scorer prep · arma el task del SEGUNDO scorer de\n// groundedness (sombra · market_research_analyst · agente registrado sin rol en Lazo A) +\n// adjunta los scores del judge para medir el acuerdo. El sombra puntúa el MISMO draft de\n// forma INDEPENDIENTE · NO ve los scores del judge (van en extra solo para el delta) · NO decide.\n//\n// Corre en paralelo al judge · dead-end (no alimenta el IF de fidelidad).\nconst jp = $('[BB] Judge prep').first().json;\nconst judgeTask = jp.judge_task;\nconst clientId = jp.client_id;\nconst cycle = Number(jp._fidelity_cycle) || 1;\n\nlet judgeScores = {};\ntry {\n  judgeScores = $('[BB] Faithfulness judge').first().json.fidelity.scores || {};\n} catch (e) {\n  judgeScores = {};\n}\n\nreturn [{ json: {\n  shadow_task: judgeTask,\n  judge_scores: judgeScores,\n  client_id: clientId,\n  shadow_step_name: 'bb-fidelity-shadow-c' + cycle,\n} }];\n"
       },
       "id": "bb--bb-shadow-prep",
       "name": "[BB] Shadow prep",
@@ -1867,7 +1867,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"gpt-5.5-advisor\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"{{ $json.shadow_step_name }}\",\n  \"task\": {{ JSON.stringify($json.shadow_task) }},\n  \"context\": { \"role\": \"faithfulness_shadow_scorer\", \"threshold\": 0.85 },\n  \"extra\": { \"fidelity_judge\": true, \"fidelity_shadow\": true, \"judge_scores\": {{ JSON.stringify($json.judge_scores) }} }\n}",
+        "jsonBody": "={\n  \"agent\": \"market_research_analyst\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"{{ $json.shadow_step_name }}\",\n  \"task\": {{ JSON.stringify($json.shadow_task) }},\n  \"context\": { \"role\": \"faithfulness_shadow_scorer\", \"threshold\": 0.85 },\n  \"extra\": { \"fidelity_judge\": true, \"fidelity_shadow\": true, \"judge_scores\": {{ JSON.stringify($json.judge_scores) }} }\n}",
         "options": {
           "response": {
             "response": {
