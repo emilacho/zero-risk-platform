@@ -63,16 +63,21 @@ export async function GET(request: Request, context: RouteContext) {
   try {
     const supabase = getSupabaseAdmin()
 
-    let q = supabase
+    // NOTE (CC#3 2026-07-05): apply ALL `.eq()` filters BEFORE `.order()/.limit()`.
+    // In supabase-js, once a transform (order/limit) is chained the builder no
+    // longer composes a trailing `.eq()` correctly → the filter silently
+    // malforms the query and returns 0 rows (caused a false `ready:false` that
+    // hung the poll until timeout). Filters first, transforms last.
+    let filtered = supabase
       .from('agent_invocations')
       .select('status, output_summary, cost_usd, workflow_id, started_at')
       .eq('client_id', clientId)
       .eq('agent_name', 'onboarding-specialist')
+    if (workflowId) filtered = filtered.eq('workflow_id', workflowId)
+
+    const { data: invRows, error: invErr } = await filtered
       .order('started_at', { ascending: false })
       .limit(1)
-    if (workflowId) q = q.eq('workflow_id', workflowId)
-
-    const { data: invRows, error: invErr } = await q
     if (invErr) {
       return NextResponse.json(
         { error: 'invocation_query_failed', detail: invErr.message },
