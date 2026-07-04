@@ -107,6 +107,9 @@ export const BRAND_SECTION_ALLOW: ReadonlySet<string> = new Set([
   'brand-strategist',
   'editor-en-jefe',
   'jefe-client-success',
+  // F1.2 (CC#4 2026-07-04) · scorer SOMBRA de groundedness · sin rol en Lazo A ·
+  // necesita emit_fidelity_scores + el gate de forced-emit para puntuar como el judge.
+  'gpt-5.5-advisor',
 ])
 
 /**

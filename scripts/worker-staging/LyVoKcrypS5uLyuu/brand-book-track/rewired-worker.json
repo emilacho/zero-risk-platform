@@ -1834,6 +1834,57 @@
         1800,
         2100
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// F1.2 (CC#4 2026-07-04) · Shadow scorer prep · arma el task del SEGUNDO scorer de\n// groundedness (sombra · gpt-5.5-advisor · sin rol en Lazo A) + adjunta los scores del\n// judge para medir el acuerdo. El sombra puntúa el MISMO draft de forma INDEPENDIENTE ·\n// NO ve los scores del judge (van en extra solo para el delta) · NO decide nada.\n//\n// Corre en paralelo al judge · dead-end (no alimenta el IF de fidelidad).\nconst jp = $('[BB] Judge prep').first().json;\nconst judgeTask = jp.judge_task;\nconst clientId = jp.client_id;\nconst cycle = Number(jp._fidelity_cycle) || 1;\n\nlet judgeScores = {};\ntry {\n  judgeScores = $('[BB] Faithfulness judge').first().json.fidelity.scores || {};\n} catch (e) {\n  judgeScores = {};\n}\n\nreturn [{ json: {\n  shadow_task: judgeTask,\n  judge_scores: judgeScores,\n  client_id: clientId,\n  shadow_step_name: 'bb-fidelity-shadow-c' + cycle,\n} }];\n"
+      },
+      "id": "bb--bb-shadow-prep",
+      "name": "[BB] Shadow prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        2280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"gpt-5.5-advisor\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"{{ $json.shadow_step_name }}\",\n  \"task\": {{ JSON.stringify($json.shadow_task) }},\n  \"context\": { \"role\": \"faithfulness_shadow_scorer\", \"threshold\": 0.85 },\n  \"extra\": { \"fidelity_judge\": true, \"fidelity_shadow\": true, \"judge_scores\": {{ JSON.stringify($json.judge_scores) }} }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-shadow-http",
+      "name": "[BB] Shadow · run-sdk",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        2280
+      ]
     }
   ],
   "connections": {
@@ -2456,6 +2507,22 @@
         [
           {
             "node": "[BB] IF · fidelidad PASS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[BB] Shadow prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Shadow prep": {
+      "main": [
+        [
+          {
+            "node": "[BB] Shadow · run-sdk",
             "type": "main",
             "index": 0
           }
