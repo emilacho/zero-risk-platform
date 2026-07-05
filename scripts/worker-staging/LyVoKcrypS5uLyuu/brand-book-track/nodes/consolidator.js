@@ -79,9 +79,21 @@ const brandBookDraft = {
 };
 
 // Referencias de grounding · qué evidencia respalda el borrador (para el judge).
+// FIX 2026-07-05 (CC#3 · Sprint JEFATURA item 1 · precondición HARD F2.2): el judge
+// de fidelidad (judge-prep.js:22-38) puntúa cada campo del brand book contra
+// client_name / industry / competitors / icp_signals ADEMÁS del discovery_summary.
+// Antes acá solo se pasaba discovery_summary + client_id → esos campos llegaban
+// vacíos al juez = garbage-in (fidelidad medida sobre evidencia recortada). Se pasan
+// los campos ricos desde el MISMO discovery_package + dealData que ya usa
+// synthesis-fanout-prep.js:20-22 (mismo contrato · sin fuente de datos nueva).
+const discoveryPkg =
+  ($('Confirm barato · competitor list').first().json.discovery_package) || {};
 const grounding = {
-  discovery_summary:
-    ($('Confirm barato · competitor list').first().json.discovery_package || {}).discovery_summary || '',
+  client_name: dealData.client_name || '',
+  industry: dealData.industry || '',
+  discovery_summary: discoveryPkg.discovery_summary || '',
+  competitors: (discoveryPkg.competitors || []).slice(0, 8),
+  icp_signals: discoveryPkg.icp_signals || discoveryPkg.icp || null,
   client_id: clientId,
 };
 
