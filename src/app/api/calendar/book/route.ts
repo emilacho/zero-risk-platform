@@ -43,8 +43,85 @@ export const dynamic = 'force-dynamic'
 
 const CALCOM_API_BASE = 'https://api.cal.com/v2'
 const CAL_API_VERSION = '2024-08-13'
+const CAL_SLOTS_API_VERSION = '2024-09-04' // /slots requires this version
 const DEFAULT_TIME_ZONE = 'America/Guayaquil'
 const DEFAULT_LANGUAGE = 'es'
+const SLOT_SEARCH_DAYS = 21 // look this many days ahead for an available slot
+
+/**
+ * Find the first available slot for an event type, searching forward from
+ * `fromISO`. Cal.com `/v2/slots` (version 2024-09-04) returns
+ * `{ status:'success', data: { 'YYYY-MM-DD': [{ start }, ...], ... } }`.
+ * Returns the earliest slot `start` ISO, or null if none / on error.
+ */
+async function findFirstAvailableSlot(
+  apiKey: string,
+  eventTypeId: number,
+  fromISO: string,
+  timeZone: string,
+): Promise<string | null> {
+  try {
+    const start = new Date(fromISO)
+    if (Number.isNaN(start.getTime())) return null
+    const end = new Date(start.getTime() + SLOT_SEARCH_DAYS * 24 * 3600 * 1000)
+    const url =
+      `${CALCOM_API_BASE}/slots?eventTypeId=${eventTypeId}` +
+      `&start=${encodeURIComponent(start.toISOString())}` +
+      `&end=${encodeURIComponent(end.toISOString())}` +
+      `&timeZone=${encodeURIComponent(timeZone)}`
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}`, 'cal-api-version': CAL_SLOTS_API_VERSION },
+    })
+    const json = (await res.json().catch(() => ({}))) as {
+      status?: string
+      data?: Record<string, Array<{ start?: string }>>
+    }
+    if (!res.ok || json.status !== 'success' || !json.data) return null
+    const days = Object.keys(json.data).sort()
+    for (const day of days) {
+      const slots = json.data[day]
+      if (Array.isArray(slots) && slots[0]?.start) return slots[0].start
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/** POST a booking to Cal.com Cloud for a concrete start time. */
+async function createCalBooking(
+  apiKey: string,
+  startISO: string,
+  eventTypeId: number,
+  attendee: Record<string, unknown>,
+  metadata: Record<string, string>,
+): Promise<
+  | { ok: true; data: Record<string, unknown> }
+  | { ok: false; upstream_status: number; detail: unknown }
+> {
+  try {
+    const res = await fetch(`${CALCOM_API_BASE}/bookings`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'cal-api-version': CAL_API_VERSION,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ start: startISO, eventTypeId, attendee, metadata }),
+    })
+    const json = (await res.json().catch(() => ({}))) as {
+      status?: string
+      data?: Record<string, unknown>
+      error?: unknown
+    }
+    if (!res.ok || json.status !== 'success' || !json.data) {
+      return { ok: false, upstream_status: res.status, detail: json.error ?? json }
+    }
+    return { ok: true, data: json.data }
+  } catch (e) {
+    return { ok: false, upstream_status: 0, detail: e instanceof Error ? e.message : 'fetch_error' }
+  }
+}
 
 // Cal.com booking status → calendar_bookings_status_check allowed values.
 const CAL_STATUS_MAP: Record<string, string> = {
@@ -113,57 +190,53 @@ export async function POST(req: Request) {
     )
 
   // ── Create the booking on Cal.com Cloud (API v2) ───────────────────────
-  const calPayload = {
-    start: new Date(body.scheduled_at).toISOString(),
-    eventTypeId,
-    attendee: {
-      name: body.contact_name ?? 'Guest',
-      email: body.contact_email,
-      timeZone: body.time_zone ?? DEFAULT_TIME_ZONE,
-      language: DEFAULT_LANGUAGE,
-    },
-    metadata: (body.metadata ?? {}) as Record<string, string>,
+  // The upstream workflow passes an arbitrary `scheduled_at` (typically now+3d
+  // at the current time-of-day). That slot is frequently OUTSIDE the event
+  // type's availability (working hours) or already booked → Cal.com rejects
+  // with 400 "User either already has booking at this time or is not available"
+  // → previously surfaced as a hard 502 that broke onboarding (CC#3 2026-07-05).
+  // FIX · on an availability rejection, query /slots for the first real
+  // available slot and re-book there. Retrying the SAME slot never helps.
+  const timeZone = body.time_zone ?? DEFAULT_TIME_ZONE
+  const attendee = {
+    name: body.contact_name ?? 'Guest',
+    email: body.contact_email,
+    timeZone,
+    language: DEFAULT_LANGUAGE,
+  }
+  const metadata = (body.metadata ?? {}) as Record<string, string>
+
+  let bookedStart = new Date(body.scheduled_at).toISOString()
+  let slotAdjusted = false
+  let result = await createCalBooking(apiKey, bookedStart, eventTypeId, attendee, metadata)
+
+  // Availability rejections come back as HTTP 400. Fall back to the first real
+  // open slot from the requested time forward.
+  if (!result.ok && result.upstream_status === 400) {
+    const slot = await findFirstAvailableSlot(apiKey, eventTypeId, bookedStart, timeZone)
+    if (slot) {
+      const retryStart = new Date(slot).toISOString()
+      const retry = await createCalBooking(apiKey, retryStart, eventTypeId, attendee, metadata)
+      if (retry.ok) {
+        result = retry
+        bookedStart = retryStart
+        slotAdjusted = true
+      }
+    }
   }
 
-  let calData: Record<string, unknown>
-  try {
-    const calRes = await fetch(`${CALCOM_API_BASE}/bookings`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'cal-api-version': CAL_API_VERSION,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(calPayload),
-    })
-    const calJson = (await calRes.json().catch(() => ({}))) as {
-      status?: string
-      data?: Record<string, unknown>
-      error?: unknown
-    }
-    if (!calRes.ok || calJson.status !== 'success' || !calJson.data) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'cal_com_upstream_failed',
-          upstream_status: calRes.status,
-          detail: calJson.error ?? calJson,
-        },
-        { status: 502 },
-      )
-    }
-    calData = calJson.data
-  } catch (e) {
+  if (!result.ok) {
     return NextResponse.json(
       {
         ok: false,
         error: 'cal_com_upstream_failed',
-        upstream_status: 0,
-        detail: e instanceof Error ? e.message : 'fetch_error',
+        upstream_status: result.upstream_status,
+        detail: result.detail,
       },
       { status: 502 },
     )
   }
+  const calData: Record<string, unknown> = result.data
 
   const calUid = (calData.uid as string) ?? null
   const calStatus = (calData.status as string) ?? 'accepted'
@@ -171,7 +244,7 @@ export async function POST(req: Request) {
   // (pending · confirmed · cancelled · no_show · completed · rescheduled).
   // Cal.com returns 'accepted' for a created booking → persist 'confirmed'.
   const dbStatus = CAL_STATUS_MAP[calStatus] ?? 'confirmed'
-  const calStart = (calData.start as string) ?? body.scheduled_at
+  const calStart = (calData.start as string) ?? bookedStart
   const calEnd = (calData.end as string) ?? null
   const meetingUrl =
     (calData.meetingUrl as string) ?? (calData.location as string) ?? null
@@ -188,7 +261,7 @@ export async function POST(req: Request) {
         attendee_email: body.contact_email,
         attendee_name: body.contact_name ?? null,
         event_title: body.event_title ?? 'Untitled Event',
-        scheduled_at: body.scheduled_at,
+        scheduled_at: bookedStart,
         scheduled_start: calStart,
         scheduled_end: calEnd,
         duration_minutes: body.duration_minutes ?? 30,
@@ -225,6 +298,10 @@ export async function POST(req: Request) {
       booking: data,
       cal: { uid: calUid, status: calStatus },
       mode: 'cal-com-cloud',
+      // true when the requested slot was unavailable and we booked the next
+      // real open slot instead. Lets the caller surface the adjusted time.
+      slot_adjusted: slotAdjusted,
+      booked_start: bookedStart,
     })
   } catch (e) {
     return NextResponse.json(
