@@ -38,6 +38,22 @@ export interface EnrichmentResult {
   brain_query_ms: number
   tokens_used: number
   cost_usd: number
+  /**
+   * ADR-020 Anexo M1 · claim→chunk linkage substrate. The chunk_ids of the
+   * CEREBRO chunks retrieved for this enrichment (the grounding material).
+   * Surfaced from the RPC (which already returns `chunk_id`) so the Jefatura
+   * trace can populate `metadata.jefatura.evidence_refs[]`.
+   */
+  evidence_refs: string[]
+  /**
+   * ADR-020 Anexo M1 · honesty marker. `prose_only` = the chunks were
+   * retrieved and injected as PROSE context, but NO claim→chunk matching
+   * exists yet (a specific claim is not linked to a specific chunk). We
+   * declare this instead of pretending groundedness (a fidelity score over
+   * prose passing as groundedness = the same false-green as dry_run≠real).
+   * Flips to `chunk_linked` only when real claim→chunk matching is built.
+   */
+  grounding: 'chunk_linked' | 'prose_only'
   error?: string // present only when something soft-failed
 }
 
@@ -114,6 +130,8 @@ export async function enrichSystemPromptWithClientBrain(args: {
     brain_query_ms: 0,
     tokens_used: 0,
     cost_usd: 0,
+    evidence_refs: [],
+    grounding: 'prose_only',
   }
 
   if (!args.clientId) return empty
@@ -150,6 +168,12 @@ export async function enrichSystemPromptWithClientBrain(args: {
       brain_query_ms: brainQueryMs,
       tokens_used: queryText.length / 4, // rough estimate · 4 chars per token
       cost_usd: 0.00002 * (queryText.length / 4000), // ~$0.00002 per 1K tokens
+      // ADR-020 M1 · surface the retrieved chunk_ids (substrate for
+      // evidence_refs). grounding stays `prose_only` until real claim→chunk
+      // matching exists · the chunks are injected as prose, not linked to
+      // specific claims (honest · NO over-sell).
+      evidence_refs: rows.map((r) => r.chunk_id).filter((id): id is string => typeof id === 'string'),
+      grounding: 'prose_only',
     }
   } catch (e) {
     return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: e instanceof Error ? e.message : 'unknown' }

@@ -17,6 +17,8 @@ export type BrainSection =
   | 'historical_outputs'
 
 export interface BrainSearchResult {
+  /** ADR-020 M1 · the CEREBRO chunk id · substrate for evidence_refs (claim→chunk linkage). */
+  chunk_id: string
   source_table: BrainSection
   source_id: string
   label: string
@@ -190,6 +192,7 @@ export async function queryClientBrain(
   const stripPrefix = (t: string): BrainSection =>
     (t.startsWith('client_') ? t.slice('client_'.length) : t) as BrainSection
   let rows = ((data ?? []) as RpcRow[]).map<BrainSearchResult>((r) => ({
+    chunk_id: r.chunk_id, // ADR-020 M1 · surface (was discarded here)
     source_table: stripPrefix(r.source_table),
     source_id: r.source_id,
     label: r.section_label,

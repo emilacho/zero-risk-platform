@@ -76,6 +76,7 @@ const FAKE_EMBED = Array.from({ length: 1536 }, () => 0.001)
 
 const FAKE_RESULTS: BrainSearchResult[] = [
   {
+    chunk_id: 'ch-1',
     source_table: 'brand_books',
     source_id: 'bb-1',
     label: 'Brand Book v2',
@@ -83,6 +84,7 @@ const FAKE_RESULTS: BrainSearchResult[] = [
     similarity: 0.92,
   },
   {
+    chunk_id: 'ch-2',
     source_table: 'icp_documents',
     source_id: 'icp-1',
     label: 'ICP: SMB',
@@ -155,6 +157,8 @@ describe('queryClientBrain', () => {
 
     // Mapped: section_label→label · chunk_text→content_text · source_table de-prefixed
     expect(out).toEqual(FAKE_RESULTS)
+    // ADR-020 M1 · chunk_id is now SURFACED (was discarded before) · substrate for evidence_refs
+    expect(out.map((r) => r.chunk_id)).toEqual(['ch-1', 'ch-2'])
     expect(state.embedCalls[0].text).toBe('voice for social')
     expect(state.rpcCalls).toHaveLength(1)
     expect(state.rpcCalls[0].name).toBe('query_client_brain')
