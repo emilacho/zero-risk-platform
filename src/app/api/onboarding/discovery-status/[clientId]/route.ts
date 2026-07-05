@@ -31,7 +31,6 @@
  *   500 · internal error
  */
 import { NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 
 export const runtime = 'nodejs'
@@ -61,29 +60,41 @@ export async function GET(request: Request, context: RouteContext) {
   const workflowId = url.searchParams.get('workflow_id')
 
   try {
-    const supabase = getSupabaseAdmin()
+    // NOTE (CC#3 2026-07-05): read via DIRECT PostgREST fetch, NOT supabase-js.
+    // The supabase-js admin client persistently failed to return freshly-written
+    // `agent_invocations` rows in the Vercel runtime (row visible via raw REST +
+    // service key, invisible via `getSupabaseAdmin().from(...)` for minutes ·
+    // 6/6 consistent) which hung the poll. A plain `fetch` to /rest/v1 with the
+    // service key — the exact call that works from any client — sidesteps the
+    // js-client-specific staleness. Keep this over supabase-js here.
+    const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    if (!baseUrl || !serviceKey) {
+      return NextResponse.json({ error: 'supabase_not_configured' }, { status: 500 })
+    }
+    const restHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
 
-    // NOTE (CC#3 2026-07-05): apply ALL `.eq()` filters BEFORE `.order()/.limit()`.
-    // In supabase-js, once a transform (order/limit) is chained the builder no
-    // longer composes a trailing `.eq()` correctly → the filter silently
-    // malforms the query and returns 0 rows (caused a false `ready:false` that
-    // hung the poll until timeout). Filters first, transforms last.
-    let filtered = supabase
-      .from('agent_invocations')
-      .select('status, output_summary, cost_usd, workflow_id, started_at')
-      .eq('client_id', clientId)
-      .eq('agent_name', 'onboarding-specialist')
-    if (workflowId) filtered = filtered.eq('workflow_id', workflowId)
+    let invQuery =
+      `${baseUrl}/rest/v1/agent_invocations` +
+      `?client_id=eq.${encodeURIComponent(clientId)}` +
+      `&agent_name=eq.onboarding-specialist` +
+      `&select=status,output_summary,cost_usd,workflow_id,started_at` +
+      `&order=started_at.desc&limit=1`
+    if (workflowId) invQuery += `&workflow_id=eq.${encodeURIComponent(workflowId)}`
 
-    const { data: invRows, error: invErr } = await filtered
-      .order('started_at', { ascending: false })
-      .limit(1)
-    if (invErr) {
+    const invResp = await fetch(invQuery, { headers: restHeaders, cache: 'no-store' })
+    if (!invResp.ok) {
       return NextResponse.json(
-        { error: 'invocation_query_failed', detail: invErr.message },
+        { error: 'invocation_query_failed', detail: `rest ${invResp.status}` },
         { status: 500 },
       )
     }
+    const invRows = (await invResp.json()) as Array<{
+      status?: string
+      output_summary?: string
+      cost_usd?: number
+      workflow_id?: string
+    }>
 
     const inv = invRows?.[0]
     const ready = !!inv && TERMINAL.has(String(inv.status))
@@ -99,18 +110,20 @@ export async function GET(request: Request, context: RouteContext) {
 
     // Agent done · assemble the discovery payload from the durable DB state.
     let discoveryOutput: { own_handles?: unknown; competitors?: unknown } = {}
-    const { data: clientRow } = await supabase
-      .from('clients')
-      .select('config')
-      .eq('id', clientId)
-      .maybeSingle()
-    const apify = (clientRow?.config as Record<string, unknown> | null)?.apify as
-      | Record<string, unknown>
-      | undefined
-    if (apify) {
-      discoveryOutput = {
-        own_handles: apify.own_handles ?? null,
-        competitors: apify.competitor_list ?? [],
+    const clientResp = await fetch(
+      `${baseUrl}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=config`,
+      { headers: restHeaders, cache: 'no-store' },
+    )
+    if (clientResp.ok) {
+      const clientRows = (await clientResp.json()) as Array<{ config?: Record<string, unknown> }>
+      const apify = (clientRows?.[0]?.config?.apify ?? undefined) as
+        | Record<string, unknown>
+        | undefined
+      if (apify) {
+        discoveryOutput = {
+          own_handles: apify.own_handles ?? null,
+          competitors: apify.competitor_list ?? [],
+        }
       }
     }
 
