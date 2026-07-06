@@ -167,6 +167,10 @@ export interface BrainEnrichmentResultMeta {
   brain_chunks_count: number
   brain_query_ms: number
   brain_cost_usd: number
+  /** ADR-020 M1 · chunk_ids retrieved as grounding · substrate for evidence_refs. */
+  brain_evidence_refs: string[]
+  /** ADR-020 M1 · `prose_only` until real claim→chunk matching exists (honest · NO over-sell). */
+  brain_grounding: 'chunk_linked' | 'prose_only'
   brain_error?: string
 }
 
@@ -824,6 +828,11 @@ function logExecution(
       brain_chunks_count: brainEnrichment.brain_chunks_count,
       brain_query_ms: brainEnrichment.brain_query_ms,
       brain_cost_usd: brainEnrichment.brain_cost_usd,
+      // ADR-020 M1 · claim→chunk substrate + honest grounding marker (prose_only
+      // until real claim→chunk matching exists · a fidelity score over prose is
+      // NOT groundedness · same false-green as dry_run≠real).
+      evidence_refs: brainEnrichment.brain_evidence_refs,
+      grounding: brainEnrichment.brain_grounding,
       ...(brainEnrichment.brain_error ? { brain_error: brainEnrichment.brain_error } : {}),
       // Sprint 8 cache observability · SDK auto-caches with 1h TTL default
       // (per upstream issue #188). Zeros are normal for first-time calls
@@ -904,6 +913,11 @@ function logExecution(
       brain_chunks_count: brainEnrichment.brain_chunks_count,
       brain_query_ms: brainEnrichment.brain_query_ms,
       brain_cost_usd: brainEnrichment.brain_cost_usd,
+      // ADR-020 M1 · claim→chunk substrate + honest grounding marker (prose_only
+      // until real claim→chunk matching exists · a fidelity score over prose is
+      // NOT groundedness · same false-green as dry_run≠real).
+      evidence_refs: brainEnrichment.brain_evidence_refs,
+      grounding: brainEnrichment.brain_grounding,
       ...(brainEnrichment.brain_error ? { brain_error: brainEnrichment.brain_error } : {}),
       cache_creation_5m_tokens: cacheMetrics.cache_creation_5m_tokens,
       cache_creation_1h_tokens: cacheMetrics.cache_creation_1h_tokens,
@@ -1315,6 +1329,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     brain_chunks_count: enrichment.brain_chunks_count,
     brain_query_ms: enrichment.brain_query_ms,
     brain_cost_usd: enrichment.cost_usd,
+    brain_evidence_refs: enrichment.evidence_refs, // ADR-020 M1
+    brain_grounding: enrichment.grounding, // ADR-020 M1 · prose_only until claim→chunk real
     ...(enrichment.error ? { brain_error: enrichment.error } : {}),
   }
 
