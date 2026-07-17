@@ -24,8 +24,9 @@
 /** Canon canonical · per-run cap DEFAULT for Náufrago piloto · USD 5.00.
  *  Decision Emilio §144 2026-06-05 · conservative for first run.
  *  This is the FALLBACK · the live value is env-tunable via
- *  `SALA_NAUFRAGO_CAP_USD` (no redeploy of code to retune · §144 GO
- *  2026-06-30 raised effective cap to $30). */
+ *  `SALA_NAUFRAGO_CAP_USD` (no redeploy of code to retune · §144
+ *  2026-07-09 · canon hard-cap = $25 · prod value env-set, no se toca
+ *  en código · alertas $15/h+$50/día son otra cosa, sin cambio). */
 export const NAUFRAGO_PHASE1_RUN_CAP_USD = 5.0
 
 /** Canon canonical · resolve the live cap · `SALA_NAUFRAGO_CAP_USD` env
