@@ -182,6 +182,8 @@ export interface BuildVerdictInput {
   evidenceRefs?: JefaturaEvidenceRef[]
   costUsd: number
   braintrustExported?: boolean
+  /** malfunciones del driver §148-queryable · boca que lanzó (H1) / score fuera de rango (H2). */
+  extraViolations?: readonly string[]
 }
 
 /**
@@ -205,6 +207,8 @@ export function buildJefaturaVerdictMeta(input: BuildVerdictInput): JefaturaVerd
     violations.push('cimiento_prose_only')
   }
   if (input.costUsd < 0) violations.push('negative_cost')
+  // malfunciones del driver (H1 boca lanzó · H2 score fuera de rango) · el error queda EN la traza.
+  if (input.extraViolations) violations.push(...input.extraViolations)
 
   return {
     review_id: input.reviewId,

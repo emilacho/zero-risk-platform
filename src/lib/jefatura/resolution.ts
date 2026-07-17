@@ -17,7 +17,7 @@ import type {
   JefaturaOutput,
   JefaturaVerdict,
 } from './contract'
-import { triageCorrections, decideConvergence, detectIrreconcilable, type CycleState } from './correction-loop'
+import { triageCorrections, decideConvergence, detectIrreconcilable, validateFidelity, type CycleState } from './correction-loop'
 import {
   buildJefaturaInvocationMeta,
   buildJefaturaVerdictMeta,
@@ -90,6 +90,12 @@ const VERDICT_KIND: Record<JefaturaVerdict, JefaturaVerdictKind> = {
   ESCALATE: 'escalate',
 }
 
+/** Mensaje honesto de una boca que lanzó (H1) · el error queda EN la traza, no se pierde. */
+function errMsg(err: unknown): string {
+  if (err instanceof Error) return err.message || err.name || 'Error'
+  return String(err)
+}
+
 export interface RunOptions {
   readonly topN?: number
   readonly gateRelevantEjes?: ReadonlySet<JefaturaCorrection['eje']>
@@ -112,7 +118,12 @@ export function runResolution(
   let prevFidelity: number | undefined
   let bestFidelity = -Infinity
   let bestDraft = draft
+  // stop_best §7.6 · la traza reporta el score DEL bestDraft elegido, no el del último ciclo.
+  let bestScores: Record<string, number> = {}
+  let bestEvidence: readonly JefaturaEvidenceRef[] = []
   let totalCost = 0
+  // malfunciones del driver (H1 boca lanzó · H2 score fuera de rango) · quedan EN la traza §148.
+  const malfunctions: string[] = []
   const invocationTraces: JefaturaInvocationMeta[] = []
 
   const snapshot = {
@@ -153,20 +164,49 @@ export function runResolution(
   // guard duro contra loop infinito (además del cap · el harness prueba caps chicos)
   const HARD_STOP = policy.max_cycles + 2
   for (;;) {
-    // 1 · la VARA puntúa
-    const s = deps.score(draft, cycle)
+    // 1 · la VARA puntúa · H1 · la boca va envuelta · si lanza/timeout → ESCALATE, nunca tumba.
+    let s: ScorerResult
+    try {
+      s = deps.score(draft, cycle)
+    } catch (err) {
+      malfunctions.push(`boca_threw:score:${errMsg(err)}`)
+      verdict = 'ESCALATE'
+      break
+    }
     totalCost += s.cost_usd
     traceInvocation(isCimiento ? 'fidelity_scorer' : 'votante', s.nominal_agent, s.effective_model)
     lastScores = s.scores
     lastEvidence = s.evidence_refs ?? []
     lastVoteTally = s.voteTally
-    if (isCimiento && typeof s.fidelity === 'number' && s.fidelity > bestFidelity) {
-      bestFidelity = s.fidelity
-      bestDraft = draft
+
+    // H2 · la vara valida su propio score ANTES de decidir · fuera de [0,1]/NaN/Inf = malfunción →
+    // ESCALATE, JAMÁS PASS (no se clampea la basura · solo el ruido trivial 1.0000001→1.0).
+    let fidelity = s.fidelity
+    if (isCimiento && typeof s.fidelity === 'number') {
+      const v = validateFidelity(s.fidelity)
+      if (!v.ok) {
+        malfunctions.push(`score_out_of_range:${v.reason}`)
+        verdict = 'ESCALATE'
+        break
+      }
+      fidelity = v.value
+      if (fidelity > bestFidelity) {
+        bestFidelity = fidelity
+        bestDraft = draft
+        bestScores = s.scores
+        bestEvidence = lastEvidence
+      }
     }
 
-    // 2 · los jefes DIAGNOSTICAN (corrección siempre encendida · advisory aun en pass)
-    const jefeOuts = deps.emitCorrections(draft, cycle)
+    // 2 · los jefes DIAGNOSTICAN (corrección siempre encendida · advisory aun en pass) · H1 envuelto.
+    let jefeOuts: readonly JefeCorrectionOut[]
+    try {
+      jefeOuts = deps.emitCorrections(draft, cycle)
+    } catch (err) {
+      malfunctions.push(`boca_threw:emitCorrections:${errMsg(err)}`)
+      verdict = 'ESCALATE'
+      break
+    }
     const corrections = jefeOuts.flatMap((j) => j.corrections)
     lastCorrections = corrections
     for (const j of jefeOuts) {
@@ -182,20 +222,32 @@ export function runResolution(
     })
     const irreconcilable = detectIrreconcilable(corrections).irreconcilable
 
-    // 4 · la VARA decide (§7.5/§7.6)
-    const state: CycleState = { cycle, fidelity: s.fidelity, votePassed: s.votePassed, prevFidelity }
+    // 4 · la VARA decide (§7.5/§7.6) · con el score YA validado.
+    const state: CycleState = { cycle, fidelity, votePassed: s.votePassed, prevFidelity }
     const action = decideConvergence(state, triage, policy, irreconcilable)
 
     if (action.action !== 'correct') {
       verdict = VERDICT_MAP[action.action]
-      if (action.action === 'stop_best') draft = bestDraft
+      if (action.action === 'stop_best') {
+        // §7.6 · se toma el mejor draft · la traza reporta SU score, no el del último ciclo.
+        draft = bestDraft
+        lastScores = bestScores
+        lastEvidence = bestEvidence
+      }
       break
     }
-    // 5 · el CREADOR re-sintetiza (integra · no los jefes)
-    const rs = deps.reSynth(draft, triage.blocking, cycle)
+    // 5 · el CREADOR re-sintetiza (integra · no los jefes) · H1 envuelto.
+    let rs: ReSynthResult
+    try {
+      rs = deps.reSynth(draft, triage.blocking, cycle)
+    } catch (err) {
+      malfunctions.push(`boca_threw:reSynth:${errMsg(err)}`)
+      verdict = 'ESCALATE'
+      break
+    }
     totalCost += rs.cost_usd
     draft = rs.draft
-    prevFidelity = s.fidelity
+    prevFidelity = fidelity
     cycle++
     if (cycle > HARD_STOP) {
       verdict = 'ESCALATE'
@@ -215,13 +267,14 @@ export function runResolution(
     correctionsRef: null,
     evidenceRefs: [...lastEvidence],
     costUsd: totalCost,
+    extraViolations: malfunctions,
   })
 
   const output: JefaturaOutput = {
     corrections: [...lastCorrections],
     verdict,
     scores: isCimiento
-      ? { fidelity: typeof lastScores._aggregate === 'number' ? lastScores._aggregate : bestFidelity }
+      ? { fidelity: typeof lastScores._aggregate === 'number' ? lastScores._aggregate : (Number.isFinite(bestFidelity) ? bestFidelity : 0) }
       : { votes: lastVoteTally ? { ...lastVoteTally, total: lastVoteTally.green + lastVoteTally.amber + lastVoteTally.red } : undefined },
     trace_id: ids.reviewId,
   }

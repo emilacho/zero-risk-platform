@@ -261,10 +261,10 @@ describe('A1 · parada monótona §7.6 (100 casos · fidelidad no-creciente bajo
       expect(res.output.verdict).toBe('ESCALATE') // stop_best se reporta como ESCALATE (lo cierra el humano)
       // sin progreso · la fidelidad reportada JAMÁS cruza el umbral (nunca falso-verde)
       expect(res.output.scores.fidelity as number).toBeLessThan(THRESHOLD)
-      // NOTA-hallazgo (§144 · reportar, no arreglar): stop_best fija draft=bestDraft (la mejor versión)
-      // pero reporta scores.fidelity = _aggregate del ÚLTIMO ciclo (el peor de una secuencia decreciente).
-      // Es conservador (sub-reporta · no infla) → no es falso-verde · queda como quirk de reporte a revisar en F2.
-      expect(res.output.scores.fidelity as number).toBeCloseTo(fidelity[1], 5)
+      // stop_best §7.6 (fix consejero · P0 fix pack) · la traza reporta el score DEL bestDraft
+      // elegido = la MEJOR versión (el máximo de una secuencia no-creciente = fidelity[0]), NO el
+      // del último ciclo. Corrige el quirk de reporte que este fuzz había capturado como NOTA-hallazgo.
+      expect(res.output.scores.fidelity as number).toBeCloseTo(fidelity[0], 5)
     }
   })
 
