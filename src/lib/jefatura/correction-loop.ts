@@ -152,6 +152,33 @@ export function buildCreatorReSynthInput(
   }
 }
 
+// ─── §7.2 · validación de rango del score (H2 · la vara valida ANTES de decidir) ─────
+/** Ruido trivial de punto flotante que SÍ se clampa (1.0000001→1.0) · el grueso NO. */
+export const FIDELITY_EPSILON = 1e-6
+
+export type FidelityValidation =
+  | { readonly ok: true; readonly value: number }
+  | { readonly ok: false; readonly reason: string }
+
+/**
+ * §7.2 · un PASS exige un score VÁLIDO en [0,1]. Score fuera de rango / NaN / Inf = malfunción
+ * de la vara → ESCALATE, JAMÁS PASS (ruling consejero 10-jul). Clampear 5→1 haría PASAR la
+ * basura = lo PEOR → NO se clampea lo grueso. Único clamp permitido: el ruido trivial de punto
+ * flotante (1.0000001→1.0 · -1e-9→0). Todo lo demás fuera de [0,1] es malfunción → ESCALATE.
+ */
+export function validateFidelity(raw: number): FidelityValidation {
+  if (!Number.isFinite(raw)) {
+    return { ok: false, reason: `fidelidad no-finita (${raw}) · malfunción de la vara → ESCALATE, JAMÁS PASS (§7.2)` }
+  }
+  // clamp SOLO el ruido trivial de punto flotante · el grueso es basura → malfunción.
+  if (raw > 1 && raw <= 1 + FIDELITY_EPSILON) return { ok: true, value: 1 }
+  if (raw < 0 && raw >= 0 - FIDELITY_EPSILON) return { ok: true, value: 0 }
+  if (raw < 0 || raw > 1) {
+    return { ok: false, reason: `fidelidad fuera de [0,1] (${raw}) · malfunción de la vara → ESCALATE, JAMÁS PASS (§7.2)` }
+  }
+  return { ok: true, value: raw }
+}
+
 // ─── §7.5 + §7.6 · decisión de convergencia (la vara decide, no los jefes) ────
 export interface CycleState {
   /** contador 0-based (el `cycle` del namespace M1). */
