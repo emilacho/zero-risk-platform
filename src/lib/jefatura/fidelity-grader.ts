@@ -79,6 +79,74 @@ const clamp01 = (v: unknown): number => {
   return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0
 }
 
+/** Los 5 campos que el judge puntúa vía `emit_fidelity_scores`. */
+export const FIDELITY_SCORE_FIELDS = [
+  'positioning',
+  'icp_summary',
+  'voice_description',
+  'customer_angle',
+  'retention_notes',
+] as const
+
+/**
+ * Normaliza la EMISIÓN de scores del judge ANTES de que el consumidor la indexe.
+ *
+ * Quirk de Haiku (observado en la sonda P2): el judge a veces emite `scores` como un STRING
+ * pseudo-JSON con centinelas `<UNKNOWN>` en los campos que no puntúa, en vez de un objeto. Si
+ * el consumidor (worker `faithfulness-judge.js:41-45` · o `grade-cimiento`→`clamp01`) indexa un
+ * string, `scores[campo]` es undefined para TODOS los campos → todo se pisa a 0 → over-ESCALATE
+ * de un cimiento legítimo → desperdicia la corrida pagada. Esta función recupera los scores
+ * numéricos reales que el modelo SÍ emitió dentro del string.
+ *
+ * CONSERVADOR · nunca fabrica: solo devuelve valores que el modelo emitió como número. Un valor
+ * no-numérico (`<UNKNOWN>`), no-parseable o ausente se OMITE → cae al floor-0 seguro del consumidor
+ * (jamás falso-verde). Un objeto se devuelve tal cual (sin coerce). String no-recuperable → `{}`.
+ */
+export function normalizeFidelityScores(raw: unknown): Record<string, number> {
+  let obj: Record<string, unknown> | null = null
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    obj = raw as Record<string, unknown>
+  } else if (typeof raw === 'string') {
+    // 1 · intento honesto de JSON.parse (string bien-formado sin centinelas).
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        obj = parsed as Record<string, unknown>
+      }
+    } catch {
+      // string con `<UNKNOWN>` u otro token inválido → extracción tolerante por campo abajo.
+    }
+    // 2 · extracción tolerante · solo pares campo:número (omite `<UNKNOWN>`/no-numérico).
+    if (!obj) {
+      obj = {}
+      for (const f of FIDELITY_SCORE_FIELDS) {
+        const m = raw.match(new RegExp('"' + f + '"\\s*:\\s*"?(-?\\d+(?:\\.\\d+)?)"?'))
+        if (m) obj[f] = m[1]
+      }
+    }
+  }
+  if (!obj) return {}
+  // coerción final · SOLO sobreviven los valores numéricos-finito · un `<UNKNOWN>`/no-numérico
+  // se OMITE (cae al floor-0 seguro del consumidor · nunca falso-verde). Nunca fabrica.
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(obj)) {
+    const n = Number(v)
+    if (Number.isFinite(n)) out[k] = n
+  }
+  return out
+}
+
+/**
+ * Normaliza el objeto emitido por el tool (`{ scores, ... }`) preservando el resto de claves ·
+ * garantiza que `scores` sea siempre un objeto de números antes de surface-arlo al consumidor.
+ */
+export function normalizeFidelityToolInput(
+  input: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return { scores: {} }
+  return { ...input, scores: normalizeFidelityScores((input as { scores?: unknown }).scores) }
+}
+
 /** eje de corrección por campo · factual salvo posicionamiento. */
 function ejeFor(field: string): JefaturaCorrection['eje'] {
   return field === 'positioning' ? 'posicionamiento' : 'factual'

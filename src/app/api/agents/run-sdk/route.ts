@@ -37,6 +37,7 @@ import { resolveAgentSlug } from '@/lib/agent-alias-map'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { validateWorkflowId } from '@/lib/agent-safety'
+import { normalizeFidelityToolInput } from '@/lib/jefatura/fidelity-grader'
 import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
 import {
   ensureClientExists,
@@ -1033,8 +1034,11 @@ export async function POST(request: Request) {
         : {}),
       // Brand Book · scores de fidelidad que el judge emitió vía emit_fidelity_scores ·
       // el worker los lee de response.body.fidelity_scores (NO del texto narrativo).
+      // Hardening pre-P3 (CC#3) · normalizamos la emisión ANTES de surface-arla · Haiku a veces
+      // emite `scores` como string pseudo-JSON con `<UNKNOWN>` → si el consumidor indexa el string,
+      // todo se pisa a 0 → over-ESCALATE de un cimiento legítimo → desperdicia la corrida pagada.
       ...(result.fidelityScoresToolCall
-        ? { fidelity_scores: result.fidelityScoresToolCall.input }
+        ? { fidelity_scores: normalizeFidelityToolInput(result.fidelityScoresToolCall.input) }
         : {}),
     }
 
