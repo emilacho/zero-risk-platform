@@ -538,12 +538,15 @@ export async function POST(request: Request) {
       has_pipeline_id: !!body.pipeline_id,
     })
 
-    // ── §150 spend gate · REAL brake before invoking the model ───────────
+    // ── §150 spend gate · GENERIC real brake before invoking the model ────
     // Closes the P0 gap (CC#3 2026-06-30): the cap only lived at the
     // sala-router dispatch + Slack alerts · run-sdk had none, so spend ran
-    // past the cap. Default-OFF (shadow) until Emilio flips the canon flag
-    // SALA_NAUFRAGO_RUN_CAP_ENFORCE · §148 safety-net: a query failure never
-    // blocks legit traffic. Over-cap → 429 (no model call · no cost).
+    // past the cap. Re-plan go-live paso (c) 2026-07-18: the gate is now
+    // GENERIC — caps the run's own client_id (no hardcoded tenants), enforce
+    // ON by default (kill-switch RUN_SPEND_CAP_ENFORCE=false), run-scoped
+    // ceiling ~$8 (env RUN_SPEND_CAP_USD) below the $25 canon → brakes early.
+    // §148 safety-net: a query failure never blocks legit traffic. Over-cap
+    // → 429 (no model call · no cost).
     {
       const gate = await checkRunSdkSpendCap(getSupabaseAdmin(), clientId)
       if (gate.blocked) {
