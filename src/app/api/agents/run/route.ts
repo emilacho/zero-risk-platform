@@ -496,8 +496,10 @@ export async function POST(request: Request) {
     // This endpoint proxies to the SAME Railway agent-runner as
     // /api/agents/run-sdk · the #240 gate only covered run-sdk, so spend
     // bypassed via this route (Camino III cascade fires here). Apply the
-    // identical gate · default-OFF (shadow) until SALA_NAUFRAGO_RUN_CAP_ENFORCE.
-    // §148 safety-net: a query failure never blocks legit traffic.
+    // identical GENERIC gate (re-plan go-live paso c 2026-07-18) · enforce ON
+    // by default (kill-switch RUN_SPEND_CAP_ENFORCE=false) · run-scoped ~$8
+    // (env RUN_SPEND_CAP_USD) · caps the run's own client_id, no hardcoded
+    // tenants. §148 safety-net: a query failure never blocks legit traffic.
     {
       const gate = await checkRunSdkSpendCap(getSupabaseAdmin(), resolvedClientId)
       if (gate.blocked) {
