@@ -147,7 +147,7 @@ describe('B2 · el flip del CEREBRO se propaga a la promoción PROVISIONAL (end-
 
   it('cobertura PARCIAL (1 de 2) → prose_only conservador → PROVISIONAL (sin sobre-venta)', async () => {
     state.byQuery.set('positioning claim', [{ chunk_id: 'ch-A', source_table: 'competitive_landscape', similarity: 0.9 }])
-    state.byQuery.set('icp claim', [{ chunk_id: 'ch-Z', source_table: 'icp_documents', similarity: 0.4 }]) // < 0.75
+    state.byQuery.set('icp claim', [{ chunk_id: 'ch-Z', source_table: 'icp_documents', similarity: 0.4 }]) // < 0.72 (v1 calibrado)
     const match = await matchClaimsToChunks({ client_id: 'c1', claims: CLAIMS })
     expect(match.grounding).toBe('prose_only')
     expect(match.coverage).toBe(0.5)
@@ -185,7 +185,7 @@ describe('B2 · el threshold flipea la cadena entera (sensibilidad end-to-end)',
     state.byQuery.set('positioning claim', [{ chunk_id: 'ch-A', source_table: 'competitive_landscape', similarity: 0.82 }])
     state.byQuery.set('icp claim', [{ chunk_id: 'ch-B', source_table: 'icp_documents', similarity: 0.82 }])
 
-    const lax = await matchClaimsToChunks({ client_id: 'c1', claims: CLAIMS }) // default 0.75
+    const lax = await matchClaimsToChunks({ client_id: 'c1', claims: CLAIMS }) // default 0.72 (v1 calibrado E2)
     expect(lax.grounding).toBe('chunk_linked')
     const rLax = await gradeWith(refsFromMatch(lax))
     expect(rLax.provisional).toBe(false)
