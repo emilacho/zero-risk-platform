@@ -60,4 +60,42 @@ export class ApifyClient {
     }
     throw new Error(`Apify actor ${runId} timeout after ${timeoutMs}ms`)
   }
+
+  /**
+   * Como `runActorAndWait` pero devuelve TAMBIÉN el `runId` y el `datasetId` junto a
+   * los items · el scrape de competidor los necesita para la procedencia real
+   * (`apify_scrape` · run_id + dataset_id en `deep_scan_data`). Construido sobre los
+   * mismos primitivos (POST run · GET status · GET dataset items).
+   */
+  async runActorAndCollect(
+    actorId: string,
+    input: unknown,
+    timeoutMs = 120_000,
+    pollIntervalMs = 3000,
+    itemLimit = 100,
+  ): Promise<{ runId: string; datasetId: string | null; items: unknown[] }> {
+    const runRes = (await this.post(`/acts/${encodeURIComponent(actorId)}/runs`, input)) as {
+      data: { id: string }
+    }
+    const runId = runRes.data.id
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+      const statusRes = (await this.get(`/actor-runs/${runId}`)) as {
+        data: { status: string; defaultDatasetId?: string }
+      }
+      const st = statusRes.data.status
+      if (st === 'SUCCEEDED') {
+        const datasetId = statusRes.data.defaultDatasetId ?? null
+        const items = datasetId
+          ? await this.get(`/datasets/${datasetId}/items`, { limit: String(itemLimit) })
+          : []
+        return { runId, datasetId, items: Array.isArray(items) ? items : [] }
+      }
+      if (['FAILED', 'TIMED-OUT', 'ABORTED'].includes(st)) {
+        throw new Error(`Apify actor ${runId} ${st}`)
+      }
+      await new Promise((r) => setTimeout(r, pollIntervalMs))
+    }
+    throw new Error(`Apify actor ${runId} timeout after ${timeoutMs}ms`)
+  }
 }

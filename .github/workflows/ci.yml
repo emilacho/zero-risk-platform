@@ -53,3 +53,31 @@ jobs:
         # cleanly on ubuntu-latest. Canon §4.3 "verify CI verde POST-push"
         # now includes test pass as a real gate.
         run: pnpm test
+
+  # ciclo CANDADO #1 (2026-07-19) · el paquete `packages/apify-mcp-server` está
+  # EXCLUIDO del tsconfig/vitest root (standalone · NodeNext · su propio toolchain).
+  # Sin este job su código no lo cubre ningún gate. Lo compilamos + testeamos con su
+  # propio tsc + vitest para que "CI verde" REALMENTE valide el MCP Apify. §148.
+  apify-mcp-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/apify-mcp-server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.11.0
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build (tsc)
+        run: npm run build
+
+      - name: Test (vitest)
+        run: npm test

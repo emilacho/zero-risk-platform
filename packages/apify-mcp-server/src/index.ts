@@ -8,10 +8,14 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { ApifyClient } from './client.js'
 import * as apifyGetDataset from './tools/apify-get-dataset.js'
 import * as apifyRunActor from './tools/apify-run-actor.js'
+import * as apifyGetRunStatus from './tools/apify-get-run-status.js'
+import * as apifyScrapeCompetitorProfile from './tools/apify-scrape-competitor-profile.js'
 
-const TOKEN = process.env.APIFY_TOKEN ?? ''
+// El env real del proyecto es `APIFY_API_TOKEN` · aceptamos `APIFY_TOKEN` como alias
+// legacy (el scaffold original lo leía · mismatch detectado 2026-07-19).
+const TOKEN = process.env.APIFY_API_TOKEN ?? process.env.APIFY_TOKEN ?? ''
 if (!TOKEN) {
-  console.error('[apify-mcp] Missing APIFY_TOKEN env')
+  console.error('[apify-mcp] Missing APIFY_API_TOKEN (o APIFY_TOKEN) env')
   process.exit(1)
 }
 
@@ -20,6 +24,9 @@ const client = new ApifyClient({ token: TOKEN })
 const HANDLERS: Record<string, (args: unknown) => Promise<unknown>> = {
   [apifyGetDataset.name]: (args) => apifyGetDataset.handler(client, args),
   [apifyRunActor.name]: (args) => apifyRunActor.handler(client, args),
+  [apifyGetRunStatus.name]: (args) => apifyGetRunStatus.handler(client, args),
+  [apifyScrapeCompetitorProfile.name]: (args) =>
+    apifyScrapeCompetitorProfile.handler(client, args),
 }
 
 interface ToolDef {
@@ -35,6 +42,7 @@ const TOOLS: ToolDef[] = [
   { name: 'apify_run_actor', description: 'Run an arbitrary Apify actor and optionally wait for completion', inputSchema: shape(['actor_id', 'input'], { actor_id: 'string', input: 'object', wait_for_finish: 'boolean' }) },
   { name: 'apify_get_run_status', description: 'Get the status of an actor run', inputSchema: shape(['run_id'], { run_id: 'string' }) },
   { name: 'apify_get_dataset', description: 'Fetch items from a dataset', inputSchema: shape(['dataset_id'], { dataset_id: 'string', limit: 'number' }) },
+  { name: 'apify_scrape_competitor_profile', description: 'Scrape a competitor profile (Instagram/web) → normalized competitor with real apify_scrape provenance + deep_scan_data', inputSchema: shape(['name'], { name: 'string', handle: 'string', website: 'string', platform: 'string', actor_id: 'string', competitor_type: 'string' }) },
 ]
 
 function shape(required: string[], props: Record<string, string>): Record<string, unknown> {
