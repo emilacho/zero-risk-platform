@@ -86,12 +86,17 @@ export async function persistDiscoveryToBrain(
             sourceTable: 'client_competitive_landscape',
             sourceId,
             chunks,
-            // FASE C · provenance per competidor (taxonomía discovery · PR #199).
-            // F1.1 · data de competidores viene del scrape Apify → default
-            // 'apify_scrape' (antes 'onboarding_discovery' genérico) · respeta
-            // c.source si el discovery output lo especifica. Aditivo · reversible.
-            source: c.source ?? 'apify_scrape',
+            // CANDADO#1 · integridad de procedencia (ADR-012 · revierte F1.1).
+            // Un competidor de AUTO-DISCOVERY es INFERIDO, no scrapeado · el
+            // default JAMÁS puede asertar un scrape (bug Peniche: 22 competidores
+            // auto_discovery quedaron 'apify_scrape' por este default). Sólo se
+            // etiqueta scrape si el discovery output lo especifica Y trae traza
+            // real (scrapeTrace · lo cablea la wiring del nodo Apify de CC#3).
+            source: c.source ?? 'onboarding_discovery',
             trustLevel: c.trust_level ?? 'untrusted',
+            // scrapeTrace queda sin setear (falla-cerrado): hasta que la wiring
+            // Apify pruebe evidencia real (DiscoveryOutput.sources[] status=ok),
+            // cualquier c.source='apify_scrape' se degrada a auto_discovery.
           })
           if (r.ok) chunksTotal += r.chunks_upserted
           else errors.push(`competitor_chunks_${c.name}: ${r.code}`)
@@ -148,8 +153,11 @@ export async function persistDiscoveryToBrain(
           clientId: input.discovery.client_id,
           sourceTable: 'client_competitive_landscape',
           sourceId: summarySourceId,
-          // F1.1 · el resumen de landscape se sintetiza de scrapes Apify → apify_scrape.
-          source: 'apify_scrape',
+          // CANDADO#1 · integridad de procedencia (revierte F1.1 · bug Peniche
+          // exacto). El resumen de landscape es PROSA SINTETIZADA (inferencia),
+          // NO un scrape · jamás puede asertar apify_scrape. Fue este hardcode el
+          // que produjo el chunk landscape_summary mal-etiquetado de Peniche.
+          source: 'onboarding_discovery',
           chunks: [
             {
               section_label: 'landscape_summary',

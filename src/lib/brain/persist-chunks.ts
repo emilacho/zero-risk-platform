@@ -97,6 +97,10 @@ export async function persistChunks(
     source?: string
     /** FASE C · confianza · default 'untrusted' (evidencia de terceros). */
     trustLevel?: BrainTrustLevel
+    /** CANDADO#1 · prueba de scrape real · requerido para que un `source` de
+     *  scrape (apify_scrape · dataforseo_scrape) NO se degrade a auto_discovery.
+     *  Default false (falla-cerrado · honesto). */
+    scrapeTrace?: boolean
   },
 ): Promise<PersistResult> {
   if (!args.clientId || !args.sourceId || args.chunks.length === 0) {
@@ -112,6 +116,8 @@ export async function persistChunks(
     trust_level: args.trustLevel ?? 'untrusted',
     received_at: nowIso,
     ingress_route: 'lib/brain/persist-chunks',
+    // CANDADO#1 · sin prueba de scrape real un source de scrape se degrada.
+    scrape_trace: args.scrapeTrace,
   })
   const ingressSource = toIngressSource(brainSource)
   const route = brainRoutePolicy()

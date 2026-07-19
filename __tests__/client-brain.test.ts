@@ -374,8 +374,29 @@ describe('buildAgentContext', () => {
 // ──────────────────────────────────────────────────────────
 describe('buildBrainProvenanceTag', () => {
   it('defaults to the safe floor: untrusted evidence', () => {
+    const tag = buildBrainProvenanceTag({ source: 'onboarding_discovery' })
+    expect(tag).toEqual({ source: 'onboarding_discovery', type: 'evidence', trust_level: 'untrusted' })
+  })
+
+  // CANDADO#1 · integridad de procedencia (ADR-012)
+  it('CANDADO#1 · degrada un source de scrape SIN scrape_trace → auto_discovery', () => {
     const tag = buildBrainProvenanceTag({ source: 'apify_scrape' })
-    expect(tag).toEqual({ source: 'apify_scrape', type: 'evidence', trust_level: 'untrusted' })
+    expect(tag).toEqual({ source: 'auto_discovery', type: 'evidence', trust_level: 'untrusted' })
+  })
+
+  it('CANDADO#1 · degrada dataforseo_scrape SIN scrape_trace → auto_discovery', () => {
+    const tag = buildBrainProvenanceTag({ source: 'dataforseo_scrape', trust_level: 'untrusted' })
+    expect(tag.source).toBe('auto_discovery')
+  })
+
+  it('CANDADO#1 · preserva un source de scrape CON scrape_trace real', () => {
+    const tag = buildBrainProvenanceTag({ source: 'apify_scrape', scrape_trace: true })
+    expect(tag.source).toBe('apify_scrape')
+  })
+
+  it('CANDADO#1 · un source no-scrape nunca se toca (aunque no traiga trace)', () => {
+    const tag = buildBrainProvenanceTag({ source: 'tally_form' })
+    expect(tag.source).toBe('tally_form')
   })
 
   it('honors explicit canon + trust + optional ingress fields', () => {

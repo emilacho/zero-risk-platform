@@ -136,13 +136,16 @@ describe('POST /api/brain/ingest-source', () => {
   })
 
   // ── FASE C · portero (provenance + filtro shadow) ────────────────────────
-  it('FASE C · estampa provenance_tag evidence/untrusted en cada fila + lo devuelve', async () => {
+  it('FASE C · estampa provenance_tag evidence/untrusted en cada fila + lo devuelve (scrape real · scrape_trace)', async () => {
     const { POST } = await importRoute()
     const res = await POST(makeReq({
       client_id: VALID_UUID,
       source_table: 'client_competitive_landscape',
       source_id: SRC_UUID,
       source: 'apify_scrape',
+      // CANDADO#1 · un scrape REAL (#266 deep-report) declara scrape_trace → el
+      // source de scrape se preserva.
+      scrape_trace: true,
       sections: [{ section_label: 'why_competitor', text: 'Competidor directo en el mismo nicho de delivery.' }],
     }))
     expect(res.status).toBe(200)
@@ -154,6 +157,22 @@ describe('POST /api/brain/ingest-source', () => {
     expect(rows[0].provenance_tag.type).toBe('evidence')
     expect(rows[0].provenance_tag.trust_level).toBe('untrusted')
     expect(rows[0].provenance_tag.source).toBe('apify_scrape')
+  })
+
+  it('CANDADO#1 · source de scrape SIN scrape_trace → degrada a auto_discovery (no miente el CEREBRO)', async () => {
+    const { POST } = await importRoute()
+    const res = await POST(makeReq({
+      client_id: VALID_UUID,
+      source_table: 'client_competitive_landscape',
+      source_id: SRC_UUID,
+      source: 'apify_scrape', // sin scrape_trace = claim sin evidencia
+      sections: [{ section_label: 'why_competitor', text: 'Competidor inferido sin scrape real.' }],
+    }))
+    expect(res.status).toBe(200)
+    const j = await res.json()
+    expect(j.provenance_tag.source).toBe('auto_discovery')
+    const rows = upsertSpy.mock.calls[0][0] as Array<{ provenance_tag: { source: string } }>
+    expect(rows[0].provenance_tag.source).toBe('auto_discovery')
   })
 
   it('FASE C · source ausente → default onboarding_discovery (floor untrusted/evidence)', async () => {

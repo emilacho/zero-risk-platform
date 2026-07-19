@@ -80,15 +80,55 @@ export const LEGACY_PROVENANCE_TAG: BrainProvenanceTag = {
 }
 
 /**
+ * CANDADO#1 · integridad de procedencia (ADR-012). Fuentes que ASERTAN un
+ * scrape real — etiquetar un chunk con una de éstas es un CLAIM: "este dato
+ * vino de un scrape que efectivamente corrió y recolectó evidencia". Nunca se
+ * pueden estampar sin traza de scrape real (ver `scrape_trace`).
+ */
+export const SCRAPE_ASSERTING_SOURCES: ReadonlySet<string> = new Set([
+  'apify_scrape',
+  'dataforseo_scrape',
+])
+
+/** Label honesto de fallback cuando un source de scrape no trae traza real ·
+ *  = inferido, no scrapeado (coincide con `analysis_source` de auto-discovery). */
+export const NO_SCRAPE_FALLBACK_SOURCE = 'auto_discovery'
+
+export interface BuildBrainProvenanceTagInput extends Partial<BrainProvenanceTag> {
+  source: string
+  /**
+   * CANDADO#1 · un `source` de scrape (ver {@link SCRAPE_ASSERTING_SOURCES})
+   * SOLO es honesto si el caller PRUEBA que hubo scrape real (evidencia
+   * recolectada · p.ej. `DiscoveryOutput.sources[]` con status='ok' + count>0 ·
+   * `evidence:{followers,…}` · `deep_scan_data` no vacío). Sin esta bandera el
+   * source de scrape se DEGRADA a `auto_discovery` (la verdad: el dato fue
+   * inferido). Falla-CERRADO: el default (undefined) = sin traza = degrada.
+   */
+  scrape_trace?: boolean
+}
+
+/**
  * Build a canonical Brain provenance tag for a NEW write (FASE C writers ·
  * portero de datos = evidence · write-back Camino III = canon). Defaults to
  * untrusted evidence — the safe floor — when caller omits fields.
+ *
+ * CANDADO#1 guard · ningún chunk puede llevar un source de scrape sin traza de
+ * scrape real → se degrada a `auto_discovery`. Protege la honestidad de todo lo
+ * que consume el CEREBRO (re-gate, RAG, auditoría).
  */
 export function buildBrainProvenanceTag(
-  input: Partial<BrainProvenanceTag> & { source: string },
+  input: BuildBrainProvenanceTagInput,
 ): BrainProvenanceTag {
+  let source = input.source
+  if (SCRAPE_ASSERTING_SOURCES.has(source) && input.scrape_trace !== true) {
+    console.warn(
+      `[provenance-guard][CANDADO#1] source='${source}' sin scrape_trace real → ` +
+        `degradado a '${NO_SCRAPE_FALLBACK_SOURCE}' (integridad ADR-012)`,
+    )
+    source = NO_SCRAPE_FALLBACK_SOURCE
+  }
   return {
-    source: input.source,
+    source,
     type: input.type ?? 'evidence',
     trust_level: input.trust_level ?? 'untrusted',
     ...(input.ingress_id ? { ingress_id: input.ingress_id } : {}),

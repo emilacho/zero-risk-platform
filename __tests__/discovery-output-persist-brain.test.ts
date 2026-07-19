@@ -169,20 +169,24 @@ describe('persistDiscoveryToBrain · flag ON · happy path', () => {
     expect(r.brain_chunks_upserted).toBe(chunksUpserted.length)
   })
 
-  // ── F1.1 · contract · etiqueta de procedencia de scrapes ──────────────
-  it('F1.1 · scrape writes (competitive_landscape) llevan provenance source apify_scrape', async () => {
+  // ── CANDADO#1 · contract · procedencia HONESTA de competidores ────────
+  // (revierte F1.1 · un competidor auto-discovery es INFERIDO, no scrapeado ·
+  //  el default jamás asierta apify_scrape · bug Peniche.)
+  it('CANDADO#1 · competidores sin scrape real (default) llevan onboarding_discovery, NO apify_scrape', async () => {
     const { fake, chunksUpserted } = makeFakeSupabase()
+    // DISCOVERY.competitors NO declaran source ni traen traza de scrape.
     await persistDiscoveryToBrain({ supabase: fake, discovery: DISCOVERY, enabled: true })
 
-    // Competidores + landscape summary = data scrapeada por Apify → apify_scrape.
-    const scrapeChunks = chunksUpserted.filter(
+    const landscapeChunks = chunksUpserted.filter(
       (row) => row.source_table === 'client_competitive_landscape',
     )
-    expect(scrapeChunks.length).toBeGreaterThan(0)
-    for (const row of scrapeChunks) {
+    expect(landscapeChunks.length).toBeGreaterThan(0)
+    for (const row of landscapeChunks) {
       const pt = row.provenance_tag as { source?: string; trust_level?: string }
-      expect(pt.source).toBe('apify_scrape')
-      expect(pt.trust_level).toBe('untrusted') // piso de confianza intacto (FASE C)
+      // Honesto: inferido → onboarding_discovery. JAMÁS un source de scrape.
+      expect(pt.source).toBe('onboarding_discovery')
+      expect(pt.source).not.toBe('apify_scrape')
+      expect(pt.trust_level).toBe('untrusted')
     }
 
     // ICP es DERIVADO (no scrape) → mantiene onboarding_discovery · no se toca.

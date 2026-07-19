@@ -65,6 +65,9 @@ interface IngestBody {
   /** FASE C · etiqueta de fuente para provenance del Brain (taxonomía discovery ·
    *  ej. 'apify_scrape' | 'onboarding_discovery' | 'search'). Default seguro. */
   source?: string;
+  /** CANDADO#1 · prueba de scrape real · sin esto un `source` de scrape se
+   *  degrada a auto_discovery (integridad ADR-012). Default false. */
+  scrape_trace?: boolean;
 }
 
 export async function POST(request: Request) {
@@ -97,6 +100,9 @@ export async function POST(request: Request) {
   const brainSource = typeof body.source === "string" && body.source.trim().length > 0
     ? body.source.trim()
     : "onboarding_discovery";
+  // CANDADO#1 · prueba de scrape real · un source de scrape sin esta bandera se
+  // degrada a auto_discovery en buildBrainProvenanceTag (integridad ADR-012).
+  const scrapeTrace = body.scrape_trace === true;
 
   if (!clientId || !sourceTable || !sourceId) {
     return NextResponse.json(
@@ -260,6 +266,7 @@ export async function POST(request: Request) {
     trust_level: "untrusted",
     received_at: nowIso,
     ingress_route: "/api/brain/ingest-source",
+    scrape_trace: scrapeTrace,
   });
   const rows = accepted.map((s, i) => ({
     client_id: clientId,
