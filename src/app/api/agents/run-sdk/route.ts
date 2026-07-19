@@ -40,6 +40,11 @@ import { validateWorkflowId } from '@/lib/agent-safety'
 import { normalizeFidelityToolInput } from '@/lib/jefatura/fidelity-grader'
 import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
 import {
+  recordDispatchIntent,
+  markDispatchRunning,
+  markDispatchTerminal,
+} from '@/lib/agent-dispatch-ledger'
+import {
   ensureClientExists,
   isDiscoveryBrainPushEnabled,
   persistDiscoveryToBrain,
@@ -359,16 +364,63 @@ export async function POST(request: Request) {
     const callbackUrl = callbackUrlRaw
     const ackTimestamp = new Date().toISOString()
     // Track P context · stamped onto the audit trail + Sentry extra.
-    const cbWorkflowId = resolveWorkflowAttribution(body).workflow_id
+    const cbAttr = resolveWorkflowAttribution(body)
+    const cbWorkflowId = cbAttr.workflow_id
     const cbAgentSlug = body.agent ?? null
     const cbClientId = body.client_id ?? null
+
+    // ── Fix raíz (a) · INSERT SÍNCRONO de la intención ANTES del 202 ──────────
+    // Ledger SEPARADO `agent_dispatches` · si el registro no confirma → 5xx, JAMÁS
+    // 202-sin-fila (mata la clase "accepted-sin-invocación" · forense CC#4). El
+    // INSERT de `agent_invocations` sigue viviendo en el trabajo (waitUntil) e
+    // intacto (completed-only). dispatch_key idempotente anclado en workflow_id.
+    let dispatchKey: string
+    try {
+      const rec = await recordDispatchIntent(getSupabaseAdmin(), {
+        dispatch_key: (body as { dispatch_key?: string | null }).dispatch_key ?? null,
+        workflow_id: cbWorkflowId,
+        workflow_execution_id: cbAttr.workflow_execution_id ?? null,
+        agent_name: cbAgentSlug,
+        client_id: cbClientId,
+        metadata: { track: 'O' },
+      })
+      dispatchKey = rec.dispatch_key
+    } catch (e) {
+      // La intención NO quedó durable → NO devolvemos 202 (5xx explícito).
+      Sentry.captureMessage('dispatch_intent_record_failed', {
+        level: 'error',
+        extra: {
+          workflow_id: cbWorkflowId,
+          agent_slug: cbAgentSlug,
+          client_id: cbClientId,
+          detail: e instanceof Error ? e.message : String(e),
+        },
+      })
+      return NextResponse.json(
+        {
+          error: 'dispatch_intent_not_recorded',
+          code: 'E-DISPATCH-LEDGER',
+          detail:
+            'dispatch intent could not be durably recorded before ack · not accepted (no 202 without a ledger row)',
+        },
+        { status: 503 },
+      )
+    }
+
     waitUntil(
       (async () => {
+        // running PROMPT (segundos · D2) · el trabajo arrancó · señal temprana.
+        await markDispatchRunning(getSupabaseAdmin(), dispatchKey)
         let innerBody: unknown
+        let innerOk = false
         try {
           const innerRequest = buildInnerRequestWithoutCallback(request, body)
           const innerResponse = await POST(innerRequest)
           innerBody = await innerResponse.json()
+          innerOk =
+            !!innerBody &&
+            typeof innerBody === 'object' &&
+            (innerBody as { success?: boolean }).success !== false
         } catch (e) {
           innerBody = {
             success: false,
@@ -377,6 +429,12 @@ export async function POST(request: Request) {
             ack_timestamp: ackTimestamp,
           }
         }
+        // Cierre del ledger (best-effort · agent_invocations = fuente del resultado).
+        await markDispatchTerminal(
+          getSupabaseAdmin(),
+          dispatchKey,
+          innerOk ? 'completed' : 'error',
+        )
         // Track P · per-attempt audit logger (fire-and-forget to Supabase
         // `agent_callback_attempts` · console-only if the table is absent).
         let attemptLogger: ReturnType<typeof makeCallbackAttemptLogger>
@@ -427,6 +485,7 @@ export async function POST(request: Request) {
         will_callback: true,
         callback_url: callbackUrl,
         ack_timestamp: ackTimestamp,
+        dispatch_key: dispatchKey,
       },
       { status: 202 },
     )

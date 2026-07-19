@@ -100,11 +100,34 @@ export async function GET(request: Request, context: RouteContext) {
     const ready = !!inv && TERMINAL.has(String(inv.status))
 
     if (!ready) {
+      // Fix raíz (a) 2026-07-19 · el ledger `agent_dispatches` es la señal DURABLE
+      // de "el dispatch existe y está en vuelo": la intención se registra SÍNCRONA
+      // antes del 202, así que accepted/running ⇒ ready:false SIN falso-timeout (el
+      // caller sabe que es un dispatch real en curso, no uno perdido). La ausencia de
+      // fila de ledger para un workflow_id conocido delata una intención perdida.
+      let dispatchStatus: string | null = null
+      if (workflowId) {
+        try {
+          const dispResp = await fetch(
+            `${baseUrl}/rest/v1/agent_dispatches` +
+              `?workflow_id=eq.${encodeURIComponent(workflowId)}` +
+              `&select=status&order=created_at.desc&limit=1`,
+            { headers: restHeaders, cache: 'no-store' },
+          )
+          if (dispResp.ok) {
+            const dispRows = (await dispResp.json()) as Array<{ status?: string }>
+            dispatchStatus = dispRows?.[0]?.status ?? null
+          }
+        } catch {
+          /* best-effort · la señal de invocación sigue siendo válida sin esto */
+        }
+      }
       return NextResponse.json({
         ok: true,
         ready: false,
         client_id: clientId,
         invocation_status: inv?.status ?? null,
+        dispatch_status: dispatchStatus,
       })
     }
 
