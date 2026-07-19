@@ -55,7 +55,7 @@ describe('persistChunks · FASE C portero', () => {
     expect(row.provenance_tag.source).toBe('onboarding_discovery')
   })
 
-  it('respeta source + trustLevel pasados por el caller (ej. discovery competidor)', async () => {
+  it('respeta source + trustLevel pasados por el caller · scrape REAL con scrapeTrace (ej. discovery competidor scrapeado)', async () => {
     await persistChunks(makeSupabase(), {
       clientId: CLIENT,
       sourceTable: 'client_competitive_landscape',
@@ -63,9 +63,24 @@ describe('persistChunks · FASE C portero', () => {
       chunks: [{ section_label: 'why_competitor', chunk_text: 'Competidor directo en delivery de mariscos.' }],
       source: 'apify_scrape',
       trustLevel: 'untrusted',
+      scrapeTrace: true, // CANDADO#1 · scrape real declarado → source se preserva
     })
     const row = upsertSpy.mock.calls[0][0] as { provenance_tag: { source: string; trust_level: string } }
     expect(row.provenance_tag.source).toBe('apify_scrape')
+    expect(row.provenance_tag.trust_level).toBe('untrusted')
+  })
+
+  it('CANDADO#1 · source de scrape SIN scrapeTrace → degrada a auto_discovery (no miente el CEREBRO)', async () => {
+    await persistChunks(makeSupabase(), {
+      clientId: CLIENT,
+      sourceTable: 'client_competitive_landscape',
+      sourceId: SRC,
+      chunks: [{ section_label: 'why_competitor', chunk_text: 'Competidor inferido, no scrapeado.' }],
+      source: 'apify_scrape', // sin scrapeTrace = claim sin evidencia
+      trustLevel: 'untrusted',
+    })
+    const row = upsertSpy.mock.calls[0][0] as { provenance_tag: { source: string; trust_level: string } }
+    expect(row.provenance_tag.source).toBe('auto_discovery')
     expect(row.provenance_tag.trust_level).toBe('untrusted')
   })
 
