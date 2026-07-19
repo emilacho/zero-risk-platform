@@ -24,16 +24,33 @@ vi.mock('@/lib/brain/persist-chunks', () => ({
   persistChunks: (...a: unknown[]) => persistChunksMock(...a),
 }))
 
-// supabase stub · match-then-upsert · devuelve un id para landscape
+// supabase stub STATEFUL · match-then-upsert · trackea inserts/updates para probar
+// idempotencia (Lenovo agregado 2: 2 llamadas + count · verificalo, no lo asumas).
+const dbState = { existingId: null as string | null, inserts: 0, updates: 0 }
 const supabaseStub = {
   from: () => ({
     select: () => ({
       eq: () => ({
-        eq: () => ({ maybeSingle: () => ({ data: null }) }),
+        eq: () => ({
+          maybeSingle: () => ({ data: dbState.existingId ? { id: dbState.existingId } : null }),
+        }),
       }),
     }),
-    update: () => ({ eq: () => ({ data: null }) }),
-    insert: () => ({ select: () => ({ single: () => ({ data: { id: 'landscape-1' } }) }) }),
+    update: () => ({
+      eq: () => {
+        dbState.updates++
+        return { data: null }
+      },
+    }),
+    insert: () => ({
+      select: () => ({
+        single: () => {
+          dbState.inserts++
+          dbState.existingId = 'landscape-1' // fila ahora existe → 2ª llamada la encuentra
+          return { data: { id: 'landscape-1' } }
+        },
+      }),
+    }),
   }),
 }
 vi.mock('@/lib/supabase', () => ({
@@ -74,7 +91,11 @@ const scrapedResult = {
 beforeEach(() => {
   scrapeMock.mockReset()
   persistChunksMock.mockClear()
+  dbState.existingId = null
+  dbState.inserts = 0
+  dbState.updates = 0
   process.env.APIFY_API_TOKEN = 'apify_test_token'
+  delete process.env.SCRAPE_VERIFY_TIMEOUT_MS
 })
 
 describe('POST /api/competitors/scrape-verify', () => {
@@ -146,6 +167,30 @@ describe('POST /api/competitors/scrape-verify', () => {
     expect(json.degraded_count).toBe(1)
     const bySource = json.competitors.map((c: { source: string }) => c.source).sort()
     expect(bySource).toEqual(['apify_scrape', 'auto_discovery'])
+  })
+
+  it('IDEMPOTENCIA (Lenovo 2 · 2 llamadas + count): re-correr NO duplica · 1 insert + 1 update', async () => {
+    scrapeMock.mockResolvedValue(scrapedResult)
+    const call = () =>
+      POST(req({ client_id: 'client-1', competitors: [{ name: 'Peniche Surf Camp', handle: 'penichesurfcamp' }] }))
+    await call() // 1ª: fila no existe → INSERT
+    await call() // 2ª: fila ya existe (match) → UPDATE, NO 2º insert
+    expect(dbState.inserts).toBe(1) // ← count: una sola fila creada
+    expect(dbState.updates).toBe(1) // ← la 2ª tomó el camino idempotente (update)
+  })
+
+  it('TIMEOUT→advisory (Lenovo 1): scrape que no responde a tiempo → degrada a auto_discovery (no cuelga)', async () => {
+    process.env.SCRAPE_VERIFY_TIMEOUT_MS = '30'
+    // scrape que resuelve DESPUÉS del tope → el withTimeout gana → degradación honesta
+    scrapeMock.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(scrapedResult), 200)),
+    )
+    const res = await POST(req({ client_id: 'client-1', competitors: [{ name: 'Slow', handle: 'slow' }] }))
+    const json = await res.json()
+    expect(res.status).toBe(200) // el alta NO se cae
+    expect(json.competitors[0].source).toBe('auto_discovery')
+    expect(json.scraped_count).toBe(0)
+    expect(persistChunksMock).not.toHaveBeenCalled()
   })
 
   it('rechaza sin client_id', async () => {

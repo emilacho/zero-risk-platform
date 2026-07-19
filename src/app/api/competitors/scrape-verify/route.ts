@@ -33,8 +33,11 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
-/** Tope de tiempo por competidor (Lenovo agregado 1) · vencido → degrada honesto. */
-const PER_COMPETITOR_TIMEOUT_MS = 110_000
+/** Tope de tiempo por competidor (Lenovo agregado 1) · vencido → degrada honesto.
+ *  Se lee por request (no module-const) · override por env `SCRAPE_VERIFY_TIMEOUT_MS`. */
+function perCompetitorTimeoutMs(): number {
+  return Number(process.env.SCRAPE_VERIFY_TIMEOUT_MS) || 110_000
+}
 /** Tope de competidores por llamada (contrato · acota gasto para el tope $2). */
 const MAX_COMPETITORS = 5
 
@@ -210,6 +213,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const apify = new ApifyClient({ token })
   const supabase = getSupabaseAdmin()
+  const timeoutMs = perCompetitorTimeoutMs()
 
   // Scrapes en PARALELO · cada uno con su tope de tiempo (advisory) · fallo/timeout →
   // degradación honesta · nunca throwea al request.
@@ -222,9 +226,9 @@ export async function POST(request: Request): Promise<Response> {
             handle: c.handle,
             website: c.website,
             competitor_type: c.competitor_type,
-            timeout_ms: PER_COMPETITOR_TIMEOUT_MS,
+            timeout_ms: timeoutMs,
           }),
-          PER_COMPETITOR_TIMEOUT_MS,
+          timeoutMs,
         )
 
         if ('__timeout' in scraped) return degraded(c, 'error')
