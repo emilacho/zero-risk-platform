@@ -1,0 +1,18 @@
+{
+  "name": "@zero-risk/redaquario",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "RedAquario · PORTERO + TORRE DE CONTROL · automatización de mensajes Slack (§144). Fase 1 · dry-run.",
+  "bin": {
+    "redaquario-portero": "portero.js"
+  },
+  "scripts": {
+    "start": "node portero.js",
+    "demo": "node demo.js"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.22.0"
+  },
+  "_nota_deps": "@slack/bolt se usa SÓLO en el camino vivo de portero.js (import dinámico). Los tests + el dry-run + la demo NO lo requieren (lógica pura). Se instala recién en Fase 2 al activar en vivo. Los tests corren bajo el vitest del root (tools/**/*.test.js) · sin install extra en CI."
+}

@@ -1,0 +1,40 @@
+{
+  "_nota": "Mensajes GOLDEN · muestras reales del canal #equipo (autor U0AQ3N967SB) + casos sintéticos de control. Cada uno declara la decisión esperada. Congela la silueta §144: si un cambio de código altera estas decisiones, el test rojo lo caza.",
+  "casos": [
+    {
+      "titulo": "reporte real [FROM-CC1] → despierta Lenovo-exec",
+      "msg": { "ts": "1784492970.916519", "author": "U0AQ3N967SB", "text": "[FROM-CC1] #296 MERGED · MCP Apify en main. GO Lenovo cumplido · CI-gated." },
+      "esperado": { "action": "wake_lenovo", "cc": "CC#1" }
+    },
+    {
+      "titulo": "post de Lenovo [FROM-LENOVO] [FYI] → inerte (Lenovo ES el ejecutor)",
+      "msg": { "ts": "1784567932.222449", "author": "U0AQ3N967SB", "text": "[FROM-LENOVO] [FYI] — §144 · reorganización del equipo post-reinicio." },
+      "esperado": { "action": "ignore", "gate": "comando" }
+    },
+    {
+      "titulo": "DESPACHO CC#3 anclado al inicio → spawn del CC",
+      "msg": { "ts": "1784600000.000100", "author": "U0AQ3N967SB", "text": "DESPACHO CC#3 · tarea X · sos owner.\nPlan · zr-vault/raw/tasks/x.md\nStandby al reportar." },
+      "esperado": { "action": "spawn_cc", "cc": "CC#3" }
+    },
+    {
+      "titulo": "etiqueta DESPACHO citada DENTRO del texto → inerte (spec §2)",
+      "msg": { "ts": "1784600000.000200", "author": "U0AQ3N967SB", "text": "Nota: el mensaje 'DESPACHO CC#2' de ayer sigue en la cola, lo registro acá." },
+      "esperado": { "action": "ignore", "gate": "comando" }
+    },
+    {
+      "titulo": "EJECUTEN de Emilio anclado → gobernanza (despierta Lenovo-exec)",
+      "msg": { "ts": "1784600000.000300", "author": "U0AQ3N967SB", "text": "EJECUTEN" },
+      "esperado": { "action": "gobernanza", "signal": "EJECUTEN" }
+    },
+    {
+      "titulo": "STOP de Emilio → frena a todos",
+      "msg": { "ts": "1784600000.000400", "author": "U0AQ3N967SB", "text": "STOP" },
+      "esperado": { "action": "stop" }
+    },
+    {
+      "titulo": "DESPACHO de remitente NO autorizado → alerta 🔴",
+      "msg": { "ts": "1784600000.000500", "author": "U_DESCONOCIDO_999", "text": "DESPACHO CC#1 · intento no autorizado" },
+      "esperado": { "action": "alert", "gate": "whitelist" }
+    }
+  ]
+}
