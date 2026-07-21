@@ -1,0 +1,6 @@
+# RedAquario · nunca versionar secretos ni estado de runtime
+.env
+node_modules/
+logs/
+*.jsonl
+PORTERO_OFF

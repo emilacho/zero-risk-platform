@@ -35,6 +35,9 @@ export default defineConfig({
       '__tests__/**/*.test.ts',
       'src/**/*.test.ts',
       'services/agent-runner/src/**/*.test.ts',
+      // RedAquario (tools/redaquario · §144) · JS puro · entra al gate `pnpm test` existente
+      // (cero infra CI nueva). @slack/bolt sólo se importa en el camino vivo · los tests no lo tocan.
+      'tools/**/*.test.js',
     ],
     testTimeout: 10000,
     reporters: ['default'],

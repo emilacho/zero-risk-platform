@@ -1,0 +1,28 @@
+{
+  "_nota": "RedAquario Fase 1 · SIN SECRETOS aquí. Los 2 tokens van SOLO en variables de entorno (ver INSTRUCTIVO.md). dry_run=true es el default seguro: loguea lo que HARÍA, no despierta a nadie. El flip a vivo (dry_run=false) es Fase 2 · requiere GO explícito de Lenovo.",
+
+  "dry_run": true,
+
+  "canal_equipo": "C0B2QCDMV7Y",
+  "canal_torre": "REEMPLAZAR_CON_ID_DE_#torre-de-control",
+
+  "remitentes_autorizados": ["U0AQ3N967SB", "REEMPLAZAR_CON_USER_ID_DEL_BOT_DEL_EQUIPO"],
+  "cuentas_emilio": ["U0AQ3N967SB"],
+
+  "cc_worktrees": {
+    "CC#1": "AJUSTAR/ruta/al/worktree/de/CC1",
+    "CC#2": "AJUSTAR/ruta/al/worktree/de/CC2",
+    "CC#3": "AJUSTAR/ruta/al/worktree/de/CC3"
+  },
+  "lenovo_exec_cwd": "AJUSTAR/ruta/al/checkout/del/ejecutor/Lenovo",
+
+  "claude_cmd": "claude",
+
+  "topes": { "arranques_por_hora": 4 },
+  "cronometro_demora_min": 30,
+
+  "kill_switch_file": "PORTERO_OFF",
+
+  "latido_intervalo_min": 5,
+  "audit_log": "tools/redaquario/logs/redaquario-audit.jsonl"
+}
