@@ -95,7 +95,10 @@ export async function POST(request: Request) {
         brandBookDraft: body.brand_book_draft ?? {},
         evidence: body.evidence ?? {},
         evidenceRefs: body.evidence_refs ?? [],
-        fidelityCycle: body.fidelity_cycle ?? 1,
+        // §144 · default 0 (pasada fresca) · el `?? 1` previo escalaba al primer grade sin
+        // recorrect (exec 62841). El caller manda cycle EXPLÍCITO (0 pasada 1 · 1 pasada 2);
+        // el default 0 es la red para callers desnudos (defensa en profundidad · ~40 workflows).
+        fidelityCycle: body.fidelity_cycle ?? 0,
         cycle: body.cycle ?? 0,
       },
       deps,
