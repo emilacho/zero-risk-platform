@@ -4,9 +4,9 @@
   "dry_run": true,
 
   "canal_equipo": "C0B2QCDMV7Y",
-  "canal_torre": "REEMPLAZAR_CON_ID_DE_#torre-de-control",
+  "canal_torre": "C0BJX6Y0CBG",
 
-  "remitentes_autorizados": ["U0AQ3N967SB", "REEMPLAZAR_CON_USER_ID_DEL_BOT_DEL_EQUIPO"],
+  "remitentes_autorizados": ["U0AQ3N967SB", "B0B3671T4UT"],
   "cuentas_emilio": ["U0AQ3N967SB"],
 
   "cc_worktrees": {
