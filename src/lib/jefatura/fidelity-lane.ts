@@ -46,7 +46,12 @@ export function makeFidelityCanonGrader(scorer: FidelityScorer): CanonGrader {
       const scores = await scorer.score(input, policy)
       const graded = gradeFidelity({
         scores,
-        fidelityCycle: Number(payload.fidelity_cycle) || 1,
+        // §144 · el ciclo es INTELIGENCIA DEL MÓDULO, no memoria del caller · default 0 (pasada
+        // fresca) y aceptar el 0 EXPLÍCITO (el `|| 1` previo coerce 0→1 · resucita el bug
+        // cap-agotado-al-primer-grade · exec 62841). Un caller desnudo NO puede escalar directo.
+        fidelityCycle: Number.isFinite(Number(payload.fidelity_cycle))
+          ? Number(payload.fidelity_cycle)
+          : 0,
         maxCycles: policy.max_cycles,
         evidenceRefs: payload.evidence_refs,
         threshold: policy.fidelity_threshold ?? DEFAULT_FIDELITY_THRESHOLD,
