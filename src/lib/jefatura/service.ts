@@ -114,9 +114,14 @@ export async function gradeArtifact(
   let verdict: JefaturaVerdict =
     result.verdict === 'REJECT' && corrections.length === 0 ? 'ESCALATE' : result.verdict
 
-  // Loop-cap central · si el artefacto pide otro ciclo (CORRECTED) pero ya se
-  // agotó el cap, NO se puede seguir corrigiendo → decide humano.
-  if (verdict === 'CORRECTED' && atLoopCap(cycle + 1, policy)) {
+  // Loop-cap central · si el artefacto YA está en el cap (cycle ≥ max_cycles) y aún
+  // pide otro ciclo (CORRECTED), NO se puede seguir corrigiendo → decide humano.
+  // §144 · `atLoopCap(cycle)` (NO `cycle + 1`): con `max_cycles = N`, el cap central
+  // debe coincidir con el fidelity-grader (`fidelityCycle >= maxCycles`) · el `+ 1`
+  // previo escalaba en el PRIMER grade (cycle 0 · max_cycles 1 → 1>=1) · resucita el
+  // bug cap-agotado-al-primer-grade que #301 sólo tapó en el otro contador. Ahora
+  // max_cycles=1 = EXACTAMENTE 1 recorrect (cycle 0 → recorrect · cycle 1 → escalate).
+  if (verdict === 'CORRECTED' && atLoopCap(cycle, policy)) {
     verdict = 'ESCALATE'
   }
 

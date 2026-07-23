@@ -141,13 +141,24 @@ describe('JEFATURA núcleo · gradeArtifact', () => {
     expect((await gradeArtifact(input, deps)).verdict).toBe('REJECT')
   })
 
-  it('loop-cap central · CORRECTED en el cap → ESCALATE', async () => {
+  it('loop-cap central · CORRECTED en cycle 0 (bajo cap) → recorrect · §144 · NO escala al primer grade', async () => {
     const deps = makeDeps({
       policy: policy({ max_cycles: 1 }),
       fidelity: { verdict: 'CORRECTED', scores: {}, corrections: [CORRECTION] },
     })
-    // cycle 0 · cycle+1=1 >= max_cycles 1 → cap alcanzado
+    // cycle 0 · atLoopCap(0, max_cycles 1) = false → bajo el cap → deja recorregir
+    // (antes: `cycle + 1` escalaba en el primer grade · bug cap-agotado-al-primer-grade).
     const out = await gradeArtifact(input, deps, 0)
+    expect(out.verdict).toBe('CORRECTED')
+  })
+
+  it('loop-cap central · CORRECTED en el cap (cycle ≥ max_cycles) → ESCALATE', async () => {
+    const deps = makeDeps({
+      policy: policy({ max_cycles: 1 }),
+      fidelity: { verdict: 'CORRECTED', scores: {}, corrections: [CORRECTION] },
+    })
+    // cycle 1 · atLoopCap(1, max_cycles 1) = true → cap alcanzado → humano (tras 1 recorrect)
+    const out = await gradeArtifact(input, deps, 1)
     expect(out.verdict).toBe('ESCALATE')
   })
 
