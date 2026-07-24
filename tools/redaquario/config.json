@@ -9,12 +9,13 @@
   "remitentes_autorizados": ["U0AQ3N967SB", "B0B3671T4UT"],
   "cuentas_emilio": ["U0AQ3N967SB"],
 
+  "_nota_worktrees": "Rutas de arranque por empleado. Default = checkout primario (siempre válido). Lenovo puede apuntar cada CC a su worktree dedicado para honrar el aislamiento worktree-per-CC antes del régimen.",
   "cc_worktrees": {
-    "CC#1": "AJUSTAR/ruta/al/worktree/de/CC1",
-    "CC#2": "AJUSTAR/ruta/al/worktree/de/CC2",
-    "CC#3": "AJUSTAR/ruta/al/worktree/de/CC3"
+    "CC#1": "C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform",
+    "CC#2": "C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform",
+    "CC#3": "C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform"
   },
-  "lenovo_exec_cwd": "AJUSTAR/ruta/al/checkout/del/ejecutor/Lenovo",
+  "lenovo_exec_cwd": "C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform",
 
   "claude_cmd": "claude",
 
