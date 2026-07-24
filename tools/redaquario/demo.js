@@ -35,7 +35,7 @@ const ejemplos = [
     },
   },
   {
-    titulo: '2 · [FROM-CC1] reporte (despertaría al ejecutor Lenovo)',
+    titulo: '2 · [FROM-CC1] reporte (aterriza el vuelo · NO despierta a nadie · reporte-no-gatilla)',
     msg: {
       ts: '1784662102.000002',
       author: 'U0AQ3N967SB',

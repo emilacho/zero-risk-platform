@@ -71,7 +71,24 @@ function manejarMensaje(msg, state, config, deps = {}) {
     torrePost?.(`🔴 RedAquario · despertar FALLÓ · ${m}`);
     if (deps.auditPath) appendAudit(deps.auditPath, { action: 'spawn_error', ts: msg.ts, detail: m, dryRun }, isoDe(now));
   };
-  const spawnOpts = { dryRun, logger: log, spawnFn: deps.spawnFn || spawn, shell: deps.spawnShell, onError: onSpawnError };
+  // PILAR B · gritar, no morir callado: TODA salida de una sesión despertada emite veredicto
+  // a la torre + queda auditada. Antes el despertar era ciego (stdio ignore · sin on('exit')).
+  const onSpawnExit = (v) => {
+    const texto = `${v.nivel} RedAquario · ${v.cc} · ${v.motivo}${v.bitacora ? `\nbitácora · ${v.bitacora}` : ''}`;
+    log(texto);
+    torrePost?.(texto);
+    if (v.nivel !== '✅') deps.torre?.colgado?.(v.cc, v.estado, 'revisión humana');
+    if (deps.auditPath) {
+      appendAudit(deps.auditPath, { action: 'spawn_exit', ts: msg.ts, cc: v.cc, nivel: v.nivel,
+        estado: v.estado, code: v.code, signal: v.signal, seg: v.seg, reporto: v.reporto,
+        bitacora: v.bitacora, dryRun }, isoDe(deps.now_epoch ?? state.now_epoch));
+    }
+  };
+  const spawnOpts = {
+    dryRun, logger: log, spawnFn: deps.spawnFn || spawn, shell: deps.spawnShell,
+    onError: onSpawnError, onExit: onSpawnExit,
+    logDir: deps.logDir, umbralMuerteRapidaSeg: config.muerte_rapida_seg ?? 45,
+  };
 
   switch (decision.action) {
     case 'ignore':
@@ -127,11 +144,12 @@ function manejarMensaje(msg, state, config, deps = {}) {
       break;
     }
 
-    case 'wake_lenovo': {
-      const plan = planWakeLenovo(decision.cc, config);
-      execSpawn({ ...plan, cc: 'Lenovo-exec' }, spawnOpts);
+    // reporte-no-gatilla (§144 · Emilio 18:12) · un [FROM-CC#N] es TELEMETRÍA: aterriza el vuelo
+    // en la torre y NADA MÁS. CERO spawn · cero cadena auto-alimentada · cero gasto sin orden humana.
+    // La única etiqueta que despierta a un empleado es DESPACHO CC#N.
+    case 'reporte': {
       if (deps.torre) { const p = deps.torre.aterrizo(decision.cc, 'reporte recibido', 0, now); log(p); torrePost?.(p); }
-      registrarArranque(state, 'reporte', now);
+      log(`   ↳ reporte de ${decision.cc} registrado · NO despierta a nadie (reporte-no-gatilla).`);
       state.processed_ts.add(msg.ts);
       state.last_ts = msg.ts;
       break;
@@ -203,6 +221,8 @@ async function main() {
   };
   const torre = new Torre(runCfg);
   const auditPath = path.join(__dirname, 'logs', 'redaquario-audit.jsonl');
+  // PILAR B · una bitácora por despacho (stdout+stderr de la sesión despertada).
+  const logDir = path.join(__dirname, runCfg.logs_despachos_dir || 'logs/despachos');
 
   // Telemetría → #torre-de-control (solo en vivo · mecánica · cero LLM).
   const torrePost = dryRun
@@ -221,7 +241,7 @@ async function main() {
       const msg = { ts: message.ts, author: message.user, text: message.text || '' };
       state.now_epoch = Math.floor(Date.now() / 1000);
       manejarMensaje(msg, state, runCfg, {
-        torre, auditPath, torrePost, spawnFn: spawn, spawnShell: exec.shell, logger: (s) => console.log(s),
+        torre, auditPath, logDir, torrePost, spawnFn: spawn, spawnShell: exec.shell, logger: (s) => console.log(s),
       });
     } catch (e) {
       console.error(`🔴 error procesando mensaje · portero SIGUE VIVO · ${e?.message || e}`);

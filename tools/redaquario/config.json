@@ -24,6 +24,13 @@
 
   "kill_switch_file": "PORTERO_OFF",
 
+  "_nota_pilar_a": "exigir_doc_vault=true → un DESPACHO sin puntero a un .md del vault NO despierta a nadie (canon §4.1 · doc autosuficiente). El rechazo grita 🔴 a la torre, no queda mudo.",
+  "exigir_doc_vault": true,
+
+  "_nota_pilar_b": "muerte_rapida_seg → una sesión despertada que muere ANTES de ese umbral se considera 🔴 (ni alcanzó a trabajar: saldo agotado, crash, negativa). Cada despacho deja su bitácora propia con stdout+stderr en logs_despachos_dir.",
+  "muerte_rapida_seg": 45,
+  "logs_despachos_dir": "logs/despachos",
+
   "latido_intervalo_min": 5,
   "audit_log": "tools/redaquario/logs/redaquario-audit.jsonl"
 }
