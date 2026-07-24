@@ -6,3 +6,8 @@ logs/
 PORTERO_OFF
 
 pruebas/out/
+
+# salidas de diagnóstico / pruebas vivas (throwaway)
+.tmp-*
+*.out
+*.err
