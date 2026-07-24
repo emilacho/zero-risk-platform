@@ -1,14 +1,17 @@
 // RedAquario · PORTERO · entry point (spec §Pieza A).
 // Slack Bolt Socket Mode (túnel saliente · sin puertos abiertos). Escucha #equipo,
-// pasa cada mensaje por las 7 compuertas (lib/gates.js) y actúa. DRY-RUN por default:
-// loguea lo que HARÍA · no despierta a nadie · no postea pings. Flip a vivo = Fase 2.
+// pasa cada mensaje por las 7 compuertas (lib/gates.js) y actúa.
 //
-// JAMÁS toca run-sdk ni n8n (spec). Sólo Slack + child_process (en vivo) + log local.
+// MODO por default = DRY-RUN (config.dry_run=true en el repo · loguea, no despierta).
+// LIVE se activa por ENV explícito (REDAQUARIO_LIVE=1) → el default committeado queda SEGURO:
+// ningún arranque accidental sin la intención explícita + GO. (spec: "flip a vivo = config explícita + GO").
 //
-// Uso:  node tools/redaquario/portero.js
-// Requiere (SOLO en vivo · dry-run no los necesita para arrancar la lógica):
-//   SLACK_APP_TOKEN=xapp-...   (app-level · connections:write)
-//   SLACK_BOT_TOKEN=xoxb-...   (bot · lecturas del canal)
+// JAMÁS toca run-sdk ni n8n (spec). Sólo Slack + child_process (en vivo) + log local + latido.
+//
+// Uso:
+//   node tools/redaquario/portero.js                 (DRY-RUN · escucha, no despierta)
+//   REDAQUARIO_LIVE=1 REDAQUARIO_CAP_HORA=1 node tools/redaquario/portero.js   (VIVO supervisado)
+// Requiere en vivo (.env): SLACK_APP_TOKEN=xapp-… · SLACK_BOT_TOKEN=xoxb-… · HEALTHCHECKS_PING_URL=…
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,11 +19,25 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
 import { evaluate } from './lib/gates.js';
-import { planSpawn, planWakeLenovo, execSpawn } from './lib/spawner.js';
+import { planSpawn, planWakeLenovo, execSpawn, resolveExecutable } from './lib/spawner.js';
 import { Torre, pingCosto } from './lib/torre.js';
+import { arrancarLatido } from './latido.js';
 import { appendAudit } from './lib/audit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function cargarEnv() {
+  const p = path.join(__dirname, '.env');
+  if (!fs.existsSync(p)) return;
+  for (const linea of fs.readFileSync(p, 'utf8').split('\n')) {
+    const t = linea.trim();
+    if (!t || t.startsWith('#')) continue;
+    const i = t.indexOf('=');
+    if (i === -1) continue;
+    const k = t.slice(0, i).trim();
+    if (process.env[k] === undefined) process.env[k] = t.slice(i + 1).trim();
+  }
+}
 
 function loadConfig() {
   const p = path.join(__dirname, 'config.json');
@@ -35,11 +52,11 @@ function killSwitchPresente(config) {
 /**
  * manejarMensaje — el núcleo reutilizable (lo comparten portero vivo, demo y tests).
  * Corre evaluate() y ejecuta la acción respetando dry_run. Devuelve la decisión + logs.
+ * deps.torrePost(texto) → postea el ping de telemetría a #torre-de-control (solo en vivo).
  */
 function manejarMensaje(msg, state, config, deps = {}) {
   const logger = deps.logger || ((s) => console.log(s));
   const dryRun = config.dry_run !== false;
-  const spawnFn = deps.spawnFn || spawn;
   const now = deps.now_epoch ?? state.now_epoch;
 
   state.now_epoch = now;
@@ -48,26 +65,52 @@ function manejarMensaje(msg, state, config, deps = {}) {
   const decision = evaluate(msg, state, config);
   const logs = [];
   const log = (s) => { logs.push(s); logger(s); };
+  const torrePost = deps.torrePost;
+  // Fallo-seguro: si un despertar falla, alerta a la torre + audita · el portero SIGUE VIVO.
+  const onSpawnError = (m) => {
+    torrePost?.(`🔴 RedAquario · despertar FALLÓ · ${m}`);
+    if (deps.auditPath) appendAudit(deps.auditPath, { action: 'spawn_error', ts: msg.ts, detail: m, dryRun }, isoDe(now));
+  };
+  // PILAR B · gritar, no morir callado: TODA salida de una sesión despertada emite veredicto
+  // a la torre + queda auditada. Antes el despertar era ciego (stdio ignore · sin on('exit')).
+  const onSpawnExit = (v) => {
+    const texto = `${v.nivel} RedAquario · ${v.cc} · ${v.motivo}${v.bitacora ? `\nbitácora · ${v.bitacora}` : ''}`;
+    log(texto);
+    torrePost?.(texto);
+    if (v.nivel !== '✅') deps.torre?.colgado?.(v.cc, v.estado, 'revisión humana');
+    if (deps.auditPath) {
+      appendAudit(deps.auditPath, { action: 'spawn_exit', ts: msg.ts, cc: v.cc, nivel: v.nivel,
+        estado: v.estado, code: v.code, signal: v.signal, seg: v.seg, reporto: v.reporto,
+        bitacora: v.bitacora, dryRun }, isoDe(deps.now_epoch ?? state.now_epoch));
+    }
+  };
+  const spawnOpts = {
+    dryRun, logger: log, spawnFn: deps.spawnFn || spawn, shell: deps.spawnShell,
+    onError: onSpawnError, onExit: onSpawnExit,
+    logDir: deps.logDir, umbralMuerteRapidaSeg: config.muerte_rapida_seg ?? 45,
+  };
 
   switch (decision.action) {
     case 'ignore':
-      // Silencio deliberado. No se audita (ruido) salvo comando bloqueado por gate duro.
       break;
 
     case 'alert':
       log(`${decision.emoji || '🔴'} ALERTA · ${decision.reason}`);
+      torrePost?.(`${decision.emoji || '🔴'} RedAquario · ${decision.reason}`);
       break;
 
     case 'stop':
       state.stopped = true;
-      log(`🛑 STOP de Emilio · portero FRENADO · se reactiva solo con GO de Emilio.`);
+      log('🛑 STOP de Emilio · portero FRENADO · se reactiva solo con GO de Emilio.');
+      torrePost?.('🛑 RedAquario · STOP de Emilio · despertadas FRENADAS hasta GO.');
       state.processed_ts.add(msg.ts);
       state.last_ts = msg.ts;
       break;
 
     case 'go':
       state.stopped = false;
-      log(`✅ GO de Emilio · portero REACTIVADO.`);
+      log('✅ GO de Emilio · portero REACTIVADO.');
+      torrePost?.('✅ RedAquario · GO de Emilio · despertadas REACTIVADAS.');
       state.processed_ts.add(msg.ts);
       state.last_ts = msg.ts;
       break;
@@ -77,7 +120,7 @@ function manejarMensaje(msg, state, config, deps = {}) {
       if (decision.signal === 'EJECUTEN' || decision.signal === 'APROBADO_EJECUTEN') state.frenado = false;
       {
         const plan = planWakeLenovo('Lenovo-exec', config);
-        execSpawn({ ...plan, cc: 'Lenovo-exec' }, { dryRun, logger: log, spawnFn });
+        execSpawn({ ...plan, cc: 'Lenovo-exec' }, spawnOpts);
         log(`   ↳ señal de mando: ${decision.signal}`);
       }
       registrarArranque(state, 'gobernanza', now);
@@ -93,26 +136,26 @@ function manejarMensaje(msg, state, config, deps = {}) {
         break;
       }
       const plan = planSpawn(decision.cc, decision.payload, config);
-      execSpawn(plan, { dryRun, logger: log, spawnFn });
-      if (deps.torre) log(deps.torre.despego(decision.cc, primeraLinea(decision.payload), now));
+      execSpawn(plan, spawnOpts);
+      if (deps.torre) { const p = deps.torre.despego(decision.cc, primeraLinea(decision.payload), now); log(p); torrePost?.(p); }
       registrarArranque(state, 'despacho', now);
       state.processed_ts.add(msg.ts);
       state.last_ts = msg.ts;
       break;
     }
 
-    case 'wake_lenovo': {
-      const plan = planWakeLenovo(decision.cc, config);
-      execSpawn({ ...plan, cc: 'Lenovo-exec' }, { dryRun, logger: log, spawnFn });
-      if (deps.torre) log(deps.torre.aterrizo(decision.cc, 'reporte recibido', 0, now));
-      registrarArranque(state, 'reporte', now);
+    // reporte-no-gatilla (§144 · Emilio 18:12) · un [FROM-CC#N] es TELEMETRÍA: aterriza el vuelo
+    // en la torre y NADA MÁS. CERO spawn · cero cadena auto-alimentada · cero gasto sin orden humana.
+    // La única etiqueta que despierta a un empleado es DESPACHO CC#N.
+    case 'reporte': {
+      if (deps.torre) { const p = deps.torre.aterrizo(decision.cc, 'reporte recibido', 0, now); log(p); torrePost?.(p); }
+      log(`   ↳ reporte de ${decision.cc} registrado · NO despierta a nadie (reporte-no-gatilla).`);
       state.processed_ts.add(msg.ts);
       state.last_ts = msg.ts;
       break;
     }
   }
 
-  // Audit de toda acción no-ignorada (spec §Audit trail).
   if (decision.action !== 'ignore' && deps.auditPath) {
     appendAudit(deps.auditPath, { action: decision.action, ts: msg.ts, author: msg.author,
       gate: decision.gate, cc: decision.cc, signal: decision.signal, dryRun }, isoDe(now));
@@ -134,48 +177,94 @@ function isoDe(epochSec) {
 
 // ── Arranque vivo (Socket Mode) · sólo se ejecuta si se corre el archivo directo ──
 async function main() {
+  cargarEnv();
   const config = loadConfig();
-  const dryRun = config.dry_run !== false;
-  console.log(`RedAquario · PORTERO arrancando · MODO=${dryRun ? 'DRY-RUN (loguea, no despierta)' : 'VIVO'}`);
+
+  // LIVE sólo con intención EXPLÍCITA por env · el default committeado (dry_run:true) queda seguro.
+  const liveEnv = process.env.REDAQUARIO_LIVE === '1';
+  const dryRun = liveEnv ? false : config.dry_run !== false;
+  const capHora = process.env.REDAQUARIO_CAP_HORA
+    ? Number(process.env.REDAQUARIO_CAP_HORA)
+    : (config.topes?.arranques_por_hora ?? 4);
+
+  console.log(`RedAquario · PORTERO arrancando · MODO=${dryRun ? 'DRY-RUN (escucha · no despierta)' : 'VIVO'} · tope=${capHora}/hora`);
 
   const appToken = process.env.SLACK_APP_TOKEN;
   const botToken = process.env.SLACK_BOT_TOKEN;
   if (!appToken || !botToken) {
-    console.error('Faltan SLACK_APP_TOKEN / SLACK_BOT_TOKEN en el entorno. Ver INSTRUCTIVO.md.');
+    console.error('Faltan SLACK_APP_TOKEN / SLACK_BOT_TOKEN. Ver INSTRUCTIVO.md.');
     process.exit(1);
   }
 
-  // Import dinámico: @slack/bolt SÓLO se carga en el camino vivo (dry-run demo/tests no lo tocan).
+  // Guardas a NIVEL PROCESO · un error inesperado JAMÁS tumba al portero (§144 · fallo-seguro).
+  process.on('uncaughtException', (e) => console.error(`🔴 uncaughtException · portero SIGUE VIVO · ${e?.stack || e?.message || e}`));
+  process.on('unhandledRejection', (e) => console.error(`🔴 unhandledRejection · portero SIGUE VIVO · ${e?.message || e}`));
+
+  // Resolución del ejecutable (Windows-aware · .exe directo o .cmd con shell).
+  const exec = resolveExecutable(config.claude_cmd);
+  console.log(`RedAquario · ejecutable resuelto · ${exec.file} (shell=${exec.shell})`);
+
   const { App } = await import('@slack/bolt');
   const app = new App({ token: botToken, appToken, socketMode: true });
 
+  // Config de corrida: aplica el tope + el modo + el ejecutable resuelto (sin mutar config.json).
+  const runCfg = { ...config, dry_run: dryRun, claude_cmd: exec.file, topes: { ...config.topes, arranques_por_hora: capHora } };
+
+  // Estado PERSISTENTE entre mensajes (NO spread · para que STOP/dedup/cap sobrevivan).
   const state = {
     processed_ts: new Set(),
     last_ts: String(Math.floor(Date.now() / 1000)), // marca de agua: sólo lo nuevo
     stopped: false,
     frenado: false,
     arranques: [],
+    now_epoch: Math.floor(Date.now() / 1000),
   };
-  const torre = new Torre(config);
-  const auditPath = path.join(__dirname, config.audit_log ? path.basename(config.audit_log) : 'redaquario-audit.jsonl');
+  const torre = new Torre(runCfg);
+  const auditPath = path.join(__dirname, 'logs', 'redaquario-audit.jsonl');
+  // PILAR B · una bitácora por despacho (stdout+stderr de la sesión despertada).
+  const logDir = path.join(__dirname, runCfg.logs_despachos_dir || 'logs/despachos');
+
+  // Telemetría → #torre-de-control (solo en vivo · mecánica · cero LLM).
+  const torrePost = dryRun
+    ? undefined
+    : async (texto) => {
+        try { await app.client.chat.postMessage({ channel: runCfg.canal_torre, text: texto }); }
+        catch (e) { console.error('torre post fail ·', e?.data?.error || e?.message); }
+      };
 
   app.message(async ({ message }) => {
-    if (message.subtype) return; // ignora ediciones/joins/etc.
-    if (message.channel !== config.canal_equipo) return;
-    const msg = { ts: message.ts, author: message.user, text: message.text || '' };
-    manejarMensaje(msg, { ...state, now_epoch: Math.floor(Date.now() / 1000) }, config, {
-      torre, auditPath, logger: (s) => console.log(s),
-    });
+    // Handler BLINDADO: cualquier error al procesar un mensaje → se loguea, el portero SIGUE VIVO.
+    try {
+      if (message.subtype) return; // ignora ediciones/joins/etc.
+      if (message.channel !== runCfg.canal_equipo) return; // comandos solo desde #equipo
+      console.log(`👂 oído #equipo · autor=${message.user} · "${(message.text || '').slice(0, 55)}"`);
+      const msg = { ts: message.ts, author: message.user, text: message.text || '' };
+      state.now_epoch = Math.floor(Date.now() / 1000);
+      manejarMensaje(msg, state, runCfg, {
+        torre, auditPath, logDir, torrePost, spawnFn: spawn, spawnShell: exec.shell, logger: (s) => console.log(s),
+      });
+    } catch (e) {
+      console.error(`🔴 error procesando mensaje · portero SIGUE VIVO · ${e?.message || e}`);
+    }
   });
 
   await app.start();
-  console.log(`RedAquario · escuchando #equipo (${config.canal_equipo}). ${pingCosto('operación $0 · Socket Mode')}`);
+
+  // LATIDO · ping a Healthchecks cada N min (dead-man switch · spec §Pieza C).
+  const hcUrl = process.env.HEALTHCHECKS_PING_URL || config.healthchecks_ping_url;
+  arrancarLatido({
+    url: hcUrl,
+    intervaloMin: config.latido_intervalo_min ?? 5,
+    dryRun,
+    logger: (s) => console.log(s),
+  });
+
+  console.log(`RedAquario · VIVO=${!dryRun} · escuchando #equipo (${runCfg.canal_equipo}) · latido→${hcUrl ? 'ON' : 'sin-URL'} · ${pingCosto('operación $0 · Socket Mode')}`);
 }
 
-// Ejecutar main() sólo si se corre el archivo directamente (no en import de tests).
 const esEntry = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (esEntry) {
   main().catch((e) => { console.error(e); process.exit(1); });
 }
 
-export { manejarMensaje, loadConfig, killSwitchPresente };
+export { manejarMensaje, loadConfig, killSwitchPresente, cargarEnv };

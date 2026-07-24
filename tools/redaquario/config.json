@@ -4,17 +4,18 @@
   "dry_run": true,
 
   "canal_equipo": "C0B2QCDMV7Y",
-  "canal_torre": "REEMPLAZAR_CON_ID_DE_#torre-de-control",
+  "canal_torre": "C0BJX6Y0CBG",
 
-  "remitentes_autorizados": ["U0AQ3N967SB", "REEMPLAZAR_CON_USER_ID_DEL_BOT_DEL_EQUIPO"],
+  "remitentes_autorizados": ["U0AQ3N967SB", "B0B3671T4UT"],
   "cuentas_emilio": ["U0AQ3N967SB"],
 
+  "_nota_worktrees": "Rutas de arranque por empleado. Default = checkout primario (siempre válido). Lenovo puede apuntar cada CC a su worktree dedicado para honrar el aislamiento worktree-per-CC antes del régimen.",
   "cc_worktrees": {
-    "CC#1": "AJUSTAR/ruta/al/worktree/de/CC1",
-    "CC#2": "AJUSTAR/ruta/al/worktree/de/CC2",
-    "CC#3": "AJUSTAR/ruta/al/worktree/de/CC3"
+    "CC#1": "C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform",
+    "CC#2": "C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform",
+    "CC#3": "C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform"
   },
-  "lenovo_exec_cwd": "AJUSTAR/ruta/al/checkout/del/ejecutor/Lenovo",
+  "lenovo_exec_cwd": "C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform",
 
   "claude_cmd": "claude",
 
@@ -22,6 +23,13 @@
   "cronometro_demora_min": 30,
 
   "kill_switch_file": "PORTERO_OFF",
+
+  "_nota_pilar_a": "exigir_doc_vault=true → un DESPACHO sin puntero a un .md del vault NO despierta a nadie (canon §4.1 · doc autosuficiente). El rechazo grita 🔴 a la torre, no queda mudo.",
+  "exigir_doc_vault": true,
+
+  "_nota_pilar_b": "muerte_rapida_seg → una sesión despertada que muere ANTES de ese umbral se considera 🔴 (ni alcanzó a trabajar: saldo agotado, crash, negativa). Cada despacho deja su bitácora propia con stdout+stderr en logs_despachos_dir.",
+  "muerte_rapida_seg": 45,
+  "logs_despachos_dir": "logs/despachos",
 
   "latido_intervalo_min": 5,
   "audit_log": "tools/redaquario/logs/redaquario-audit.jsonl"

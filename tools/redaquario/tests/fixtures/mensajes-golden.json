@@ -2,9 +2,19 @@
   "_nota": "Mensajes GOLDEN · muestras reales del canal #equipo (autor U0AQ3N967SB) + casos sintéticos de control. Cada uno declara la decisión esperada. Congela la silueta §144: si un cambio de código altera estas decisiones, el test rojo lo caza.",
   "casos": [
     {
-      "titulo": "reporte real [FROM-CC1] → despierta Lenovo-exec",
+      "titulo": "reporte real [FROM-CC1] → aterriza el vuelo · NO despierta a nadie (reporte-no-gatilla)",
       "msg": { "ts": "1784492970.916519", "author": "U0AQ3N967SB", "text": "[FROM-CC1] #296 MERGED · MCP Apify en main. GO Lenovo cumplido · CI-gated." },
-      "esperado": { "action": "wake_lenovo", "cc": "CC#1" }
+      "esperado": { "action": "reporte", "cc": "CC#1" }
+    },
+    {
+      "titulo": "reporte con la grafía del protocolo [FROM-CC#3] → también es reporte · NO despierta",
+      "msg": { "ts": "1784492971.000100", "author": "U0AQ3N967SB", "text": "[FROM-CC#3] alta del cliente lista · evidencia §148 en el vault." },
+      "esperado": { "action": "reporte", "cc": "CC#3" }
+    },
+    {
+      "titulo": "reporte que CITA un DESPACHO en el cuerpo → sigue siendo reporte · NO despierta",
+      "msg": { "ts": "1784492971.000200", "author": "U0AQ3N967SB", "text": "[FROM-CC#1] cerré el encargo.\nEl mensaje original decía: DESPACHO CC#2 · hacé Y." },
+      "esperado": { "action": "reporte", "cc": "CC#1" }
     },
     {
       "titulo": "post de Lenovo [FROM-LENOVO] [FYI] → inerte (Lenovo ES el ejecutor)",

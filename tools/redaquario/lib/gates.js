@@ -7,7 +7,10 @@
 // Menciones dentro del texto (citas · colas · registros) = inertes.
 
 const RE_DESPACHO = /^DESPACHO\s+CC#(\d+)\b/;
-const RE_REPORTE = /^\[FROM-CC(\d+)\]/;
+// Acepta las DOS grafías que circulan en #equipo: `[FROM-CC1]` y `[FROM-CC#1]`.
+// (La línea de protocolo pide `[FROM-CC#N]` · el vocabulario original sólo matcheaba sin `#`,
+//  así que media flota de reportes caía como 'inerte'. Ahora ambas son REPORTE · y REPORTE NO despierta.)
+const RE_REPORTE = /^\[FROM-CC#?(\d+)\]/;
 // Vocabulario §144 de Emilio (solo su cuenta · anclado al inicio):
 const RE_APROBADO_EJECUTEN = /^APROBADO\s*,?\s*EJECUTEN\b/;
 const RE_APROBADO = /^APROBADO\b/;
@@ -99,7 +102,14 @@ function checkStopState(state) {
  *   'go'          → Emilio reactivó · limpia state.stopped
  *   'gobernanza'  → señal de Emilio (APROBADO/EJECUTEN/FRENEN) → despierta a Lenovo-exec
  *   'spawn_cc'    → DESPACHO CC#N → despertaría al CC (dry-run lo loguea)
- *   'wake_lenovo' → [FROM-CC#N] → despertaría al ejecutor Lenovo headless
+ *   'reporte'     → [FROM-CC#N] → SOLO aterriza el vuelo en la torre · NO despierta a NADIE
+ *
+ * REGLA reporte-no-gatilla (§144 · Emilio 18:12 · cierra el bug de las 17:36):
+ * un reporte es TELEMETRÍA, no una orden. La ÚNICA etiqueta que despierta a un empleado es
+ * `DESPACHO CC#N`. Antes, un `[FROM-CC1]` disparaba un Lenovo-exec headless (acción 'wake_lenovo'
+ * · 4 arranques reales en el log de auditoría del 2026-07-24) → cadena auto-alimentada + gasto
+ * sin orden humana. El eslabón "seguí la cadena" queda SOLO en el vocabulario de mando de Emilio
+ * (APROBADO / EJECUTEN / FRENEN → 'gobernanza'), que sí es una decisión humana explícita.
  */
 function evaluate(msg, state, config) {
   const cmd = parseCommand(msg.text);
@@ -177,8 +187,9 @@ function evaluate(msg, state, config) {
     return { action: 'spawn_cc', gate: null, cc: cmd.cc, payload: cmd.payload,
       reason: `DESPACHO ${cmd.cc} · despertaría al empleado`, cmd };
   }
-  return { action: 'wake_lenovo', gate: null, cc: cmd.cc,
-    reason: `reporte de ${cmd.cc} · despertaría al ejecutor Lenovo`, cmd };
+  // reporte-no-gatilla · aterriza el vuelo y NADA MÁS. Cero spawn.
+  return { action: 'reporte', gate: null, cc: cmd.cc,
+    reason: `reporte de ${cmd.cc} · aterriza el vuelo · NO despierta a nadie`, cmd };
 }
 
 export {
