@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
 import { evaluate } from './lib/gates.js';
-import { planSpawn, planWakeLenovo, execSpawn } from './lib/spawner.js';
+import { planSpawn, planWakeLenovo, execSpawn, resolveExecutable } from './lib/spawner.js';
 import { Torre, pingCosto } from './lib/torre.js';
 import { arrancarLatido } from './latido.js';
 import { appendAudit } from './lib/audit.js';
@@ -57,7 +57,6 @@ function killSwitchPresente(config) {
 function manejarMensaje(msg, state, config, deps = {}) {
   const logger = deps.logger || ((s) => console.log(s));
   const dryRun = config.dry_run !== false;
-  const spawnFn = deps.spawnFn || spawn;
   const now = deps.now_epoch ?? state.now_epoch;
 
   state.now_epoch = now;
@@ -67,6 +66,12 @@ function manejarMensaje(msg, state, config, deps = {}) {
   const logs = [];
   const log = (s) => { logs.push(s); logger(s); };
   const torrePost = deps.torrePost;
+  // Fallo-seguro: si un despertar falla, alerta a la torre + audita · el portero SIGUE VIVO.
+  const onSpawnError = (m) => {
+    torrePost?.(`🔴 RedAquario · despertar FALLÓ · ${m}`);
+    if (deps.auditPath) appendAudit(deps.auditPath, { action: 'spawn_error', ts: msg.ts, detail: m, dryRun }, isoDe(now));
+  };
+  const spawnOpts = { dryRun, logger: log, spawnFn: deps.spawnFn || spawn, shell: deps.spawnShell, onError: onSpawnError };
 
   switch (decision.action) {
     case 'ignore':
@@ -98,7 +103,7 @@ function manejarMensaje(msg, state, config, deps = {}) {
       if (decision.signal === 'EJECUTEN' || decision.signal === 'APROBADO_EJECUTEN') state.frenado = false;
       {
         const plan = planWakeLenovo('Lenovo-exec', config);
-        execSpawn({ ...plan, cc: 'Lenovo-exec' }, { dryRun, logger: log, spawnFn });
+        execSpawn({ ...plan, cc: 'Lenovo-exec' }, spawnOpts);
         log(`   ↳ señal de mando: ${decision.signal}`);
       }
       registrarArranque(state, 'gobernanza', now);
@@ -114,7 +119,7 @@ function manejarMensaje(msg, state, config, deps = {}) {
         break;
       }
       const plan = planSpawn(decision.cc, decision.payload, config);
-      execSpawn(plan, { dryRun, logger: log, spawnFn });
+      execSpawn(plan, spawnOpts);
       if (deps.torre) { const p = deps.torre.despego(decision.cc, primeraLinea(decision.payload), now); log(p); torrePost?.(p); }
       registrarArranque(state, 'despacho', now);
       state.processed_ts.add(msg.ts);
@@ -124,7 +129,7 @@ function manejarMensaje(msg, state, config, deps = {}) {
 
     case 'wake_lenovo': {
       const plan = planWakeLenovo(decision.cc, config);
-      execSpawn({ ...plan, cc: 'Lenovo-exec' }, { dryRun, logger: log, spawnFn });
+      execSpawn({ ...plan, cc: 'Lenovo-exec' }, spawnOpts);
       if (deps.torre) { const p = deps.torre.aterrizo(decision.cc, 'reporte recibido', 0, now); log(p); torrePost?.(p); }
       registrarArranque(state, 'reporte', now);
       state.processed_ts.add(msg.ts);
@@ -173,11 +178,19 @@ async function main() {
     process.exit(1);
   }
 
+  // Guardas a NIVEL PROCESO · un error inesperado JAMÁS tumba al portero (§144 · fallo-seguro).
+  process.on('uncaughtException', (e) => console.error(`🔴 uncaughtException · portero SIGUE VIVO · ${e?.stack || e?.message || e}`));
+  process.on('unhandledRejection', (e) => console.error(`🔴 unhandledRejection · portero SIGUE VIVO · ${e?.message || e}`));
+
+  // Resolución del ejecutable (Windows-aware · .exe directo o .cmd con shell).
+  const exec = resolveExecutable(config.claude_cmd);
+  console.log(`RedAquario · ejecutable resuelto · ${exec.file} (shell=${exec.shell})`);
+
   const { App } = await import('@slack/bolt');
   const app = new App({ token: botToken, appToken, socketMode: true });
 
-  // Config de corrida: aplica el tope de esta fase + el modo (sin mutar config.json).
-  const runCfg = { ...config, dry_run: dryRun, topes: { ...config.topes, arranques_por_hora: capHora } };
+  // Config de corrida: aplica el tope + el modo + el ejecutable resuelto (sin mutar config.json).
+  const runCfg = { ...config, dry_run: dryRun, claude_cmd: exec.file, topes: { ...config.topes, arranques_por_hora: capHora } };
 
   // Estado PERSISTENTE entre mensajes (NO spread · para que STOP/dedup/cap sobrevivan).
   const state = {
@@ -200,12 +213,19 @@ async function main() {
       };
 
   app.message(async ({ message }) => {
-    if (message.subtype) return; // ignora ediciones/joins/etc.
-    if (message.channel !== runCfg.canal_equipo) return; // comandos solo desde #equipo
-    console.log(`👂 oído #equipo · autor=${message.user} · "${(message.text || '').slice(0, 55)}"`);
-    const msg = { ts: message.ts, author: message.user, text: message.text || '' };
-    state.now_epoch = Math.floor(Date.now() / 1000);
-    manejarMensaje(msg, state, runCfg, { torre, auditPath, torrePost, spawnFn: spawn, logger: (s) => console.log(s) });
+    // Handler BLINDADO: cualquier error al procesar un mensaje → se loguea, el portero SIGUE VIVO.
+    try {
+      if (message.subtype) return; // ignora ediciones/joins/etc.
+      if (message.channel !== runCfg.canal_equipo) return; // comandos solo desde #equipo
+      console.log(`👂 oído #equipo · autor=${message.user} · "${(message.text || '').slice(0, 55)}"`);
+      const msg = { ts: message.ts, author: message.user, text: message.text || '' };
+      state.now_epoch = Math.floor(Date.now() / 1000);
+      manejarMensaje(msg, state, runCfg, {
+        torre, auditPath, torrePost, spawnFn: spawn, spawnShell: exec.shell, logger: (s) => console.log(s),
+      });
+    } catch (e) {
+      console.error(`🔴 error procesando mensaje · portero SIGUE VIVO · ${e?.message || e}`);
+    }
   });
 
   await app.start();
