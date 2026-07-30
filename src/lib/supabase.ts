@@ -38,10 +38,29 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
  * Fuera de Next (scripts, tests, runtime del agente) `cache` es una opción
  * estándar de `RequestInit` que undici acepta y trata como no-op.
  *
- * REGLA: los datos operativos se leen VIVOS. Si algún día una lectura quiere
- * caché a propósito, se declara en ESA ruta (`export const revalidate = N`),
- * nunca aflojando esta política. Ver
- * `zr-vault/raw/findings/2026-07-30-CC2-lectura-congelada-cache-global.md`.
+ * REGLA REAL — leer con atención, es más estricta de lo que parece
+ * (corrección del Consejero · 2ª opinión 2026-07-30):
+ *
+ * Las lecturas de Supabase son **incondicionalmente vivas**. El `no-store` que
+ * se clava acá GANA sobre cualquier `export const revalidate = N` de una ruta:
+ * `no-store` fuerza `curRevalidate = 0` (`patch-fetch.js:305`) sin mirar el
+ * `revalidate` del store. **No existe opt-back-in a caché por ruta** — poner
+ * `revalidate = 3600` en una ruta pesada de tablero para bajar carga **no hace
+ * absolutamente nada** sobre estas lecturas, y lo haría en silencio.
+ *
+ * (Una versión anterior de este comentario prometía justamente esa escotilla.
+ * Era falsa: la guarda de `next.revalidate` de acá abajo la cierra. Un comentario
+ * que promete lo que el código no hace es el mismo bug que el sprint "Onboarding
+ * honesto" está matando — por eso queda escrito así de explícito.)
+ *
+ * Si algún día SÍ se necesita caché para una lectura (Fase 2 multi-tenant, donde
+ * cada tablero pegando siempre a PostgREST sí pesa), la salida limpia es
+ * construir un **cliente cacheable SEPARADO y explícito** para ese caso puntual
+ * — nunca aflojar esta política central, que es la que sostiene que ningún
+ * tablero vuelva a servir una foto congelada.
+ *
+ * Ver `zr-vault/raw/findings/2026-07-30-CC2-lectura-congelada-cache-global.md`
+ * y `2026-07-30-CONSEJERO-2da-opinion-PR304-cache-global.md` §2 y §4-N1.
  */
 type NextFetchInit = RequestInit & { next?: { revalidate?: number | false; tags?: string[] } }
 
