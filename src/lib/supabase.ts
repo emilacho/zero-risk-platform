@@ -25,9 +25,15 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
  *
  * El arreglo va acá y no en cada ruta (eran 36 rutas afectadas de 110
  * lectoras) porque este archivo es el único lugar del repo donde se crea un
- * cliente de Supabase. `cache: 'no-store'` fuerza `revalidate = 0`
+ * cliente `createClient` de datos. `cache: 'no-store'` fuerza `revalidate = 0`
  * (`patch-fetch.js:305`) y la respuesta deja de ser cacheable, en cualquier
  * versión de Next y sin depender de que cada ruta se acuerde.
+ *
+ * (Precisión · caza CC#3: existen 4 `createServerClient` de `@supabase/ssr`
+ * — `supabase-server.ts` · `auth-middleware.ts` · `api/auth/route.ts` ·
+ * `middleware.ts` — que NO pasan por acá. No son un hueco: ningún `route.ts`
+ * los importa, `supabase-server.ts` no tiene importadores, y `middleware.ts`
+ * corre en Edge, donde no hay Data Cache. Son sesión/auth, no lectura de datos.)
  *
  * Fuera de Next (scripts, tests, runtime del agente) `cache` es una opción
  * estándar de `RequestInit` que undici acepta y trata como no-op.
@@ -37,8 +43,25 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
  * nunca aflojando esta política. Ver
  * `zr-vault/raw/findings/2026-07-30-CC2-lectura-congelada-cache-global.md`.
  */
-export const noStoreFetch: typeof fetch = (input, init) =>
-  fetch(input, { ...init, cache: 'no-store' })
+type NextFetchInit = RequestInit & { next?: { revalidate?: number | false; tags?: string[] } }
+
+export const noStoreFetch: typeof fetch = (input, init) => {
+  const { next, ...rest } = (init ?? {}) as NextFetchInit
+
+  // Guarda (caza CC#3 · `patch-fetch.js:295-302`): si el llamador manda
+  // `next.revalidate` JUNTO al `cache`, Next descarta el `cache` con un warn y
+  // la política se apaga sola, en silencio. supabase-js no lo hace hoy, pero la
+  // vía existe — así que la cerramos acá en vez de confiar en que nadie la use.
+  // `tags` sí se respeta: no entra en conflicto con `cache`.
+  const safeNext = next ? { ...next } : undefined
+  if (safeNext) delete safeNext.revalidate
+
+  return fetch(input, {
+    ...rest,
+    ...(safeNext && Object.keys(safeNext).length > 0 ? { next: safeNext } : {}),
+    cache: 'no-store',
+  } as NextFetchInit)
+}
 
 const noStoreOptions = { global: { fetch: noStoreFetch } }
 

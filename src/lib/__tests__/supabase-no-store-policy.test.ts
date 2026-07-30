@@ -105,14 +105,20 @@ describe('política global de caché · lectura viva, nunca foto congelada', () 
     expect(init.signal).toBe(controller.signal)
   })
 
-  it('la respuesta refleja la base VIVA, no la primera lectura (el bug de la bandeja)', async () => {
+  /**
+   * Nombre honesto (caza CC#3): con un `fetch` de mentira NO existe el Data
+   * Cache de Next, así que estas dos lecturas darían distinto aunque el arreglo
+   * no estuviera. Lo que este test protege de verdad es que el `no-store` viaje
+   * en CADA lectura y no solo en la primera — que es la parte que sí falla sin
+   * el arreglo. La vivacidad real la prueba el A/B post-publicación, no esta suite.
+   */
+  it('manda no-store en CADA lectura, no solo en la primera', async () => {
     const { getSupabaseAdmin } = await importSupabaseLib()
     const supabase = getSupabaseAdmin()
 
     rows = [{ id: 'viejo', status: 'expired' }]
     const primera = await supabase.from('hitl_pending_approvals').select('*')
 
-    // la base cambia entre lecturas · sin no-store el Data Cache devolvería la 1ª
     rows = [{ id: 'nuevo', status: 'pending' }]
     const segunda = await supabase.from('hitl_pending_approvals').select('*')
 
@@ -120,5 +126,74 @@ describe('política global de caché · lectura viva, nunca foto congelada', () 
     expect(segunda.data).toEqual([{ id: 'nuevo', status: 'pending' }])
     expect(captured).toHaveLength(2)
     expect(captured.every((c) => c.init.cache === 'no-store')).toBe(true)
+  })
+
+  /**
+   * Guarda (caza CC#3 · `patch-fetch.js:295-302`): si un llamador manda
+   * `next.revalidate` junto al `cache`, Next tira el `cache` con un warn y la
+   * política se apaga sola. `noStoreFetch` desarma esa vía.
+   */
+  it('un next.revalidate del llamador NO puede apagar la política', async () => {
+    const { noStoreFetch } = await importSupabaseLib()
+
+    await noStoreFetch('https://ejemplo.test/x', {
+      next: { revalidate: 60, tags: ['clientes'] },
+    } as RequestInit)
+
+    const init = captured[0].init as RequestInit & { next?: { revalidate?: number; tags?: string[] } }
+    expect(init.cache).toBe('no-store')
+    expect(init.next?.revalidate).toBeUndefined()
+    // `tags` no compite con `cache` · se respeta
+    expect(init.next?.tags).toEqual(['clientes'])
+  })
+
+  it('no inventa un next vacío cuando el llamador no mandó ninguno', async () => {
+    const { noStoreFetch } = await importSupabaseLib()
+
+    await noStoreFetch('https://ejemplo.test/x')
+
+    expect('next' in captured[0].init).toBe(false)
+    expect(captured[0].init.cache).toBe('no-store')
+  })
+})
+
+/**
+ * CANARIO DE VERSIÓN (caza CC#3 · P3).
+ *
+ * La suite de arriba protege la implementación ("el string no-store viaja en el
+ * init"), no el comportamiento ("Next no cachea") — el Data Cache no es
+ * testeable sin levantar Next. Riesgo concreto: si mañana se sube de major,
+ * cambia la semántica de `cache` y los tests siguen TODOS verdes mientras el
+ * bug vuelve en silencio.
+ *
+ * Este canario hace que esa subida NO pueda pasar desapercibida: falla y manda
+ * a re-verificar la política contra el código nuevo de Next. Si falla por una
+ * subida legítima, la acción NO es borrarlo — es re-verificar y actualizarlo.
+ */
+describe('canario · la política depende de la semántica de Next', () => {
+  it('Next sigue en el major verificado y conserva la rama no-store → revalidate 0', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { createRequire } = await import('node:module')
+    const path = await import('node:path')
+
+    const require_ = createRequire(import.meta.url)
+    const nextPkgPath = require_.resolve('next/package.json')
+    const { version } = JSON.parse(readFileSync(nextPkgPath, 'utf8')) as { version: string }
+
+    expect(
+      version.startsWith('14.'),
+      `Next pasó a ${version}. La política no-store de src/lib/supabase.ts se verificó contra 14.x ` +
+        `(patch-fetch.js:305 · module.js:242). Re-verificá el mecanismo contra el código nuevo ` +
+        `— Next 15 invierte el default de fetch — y recién ahí actualizá este canario.`
+    ).toBe(true)
+
+    const patchFetch = readFileSync(
+      path.join(path.dirname(nextPkgPath), 'dist/server/lib/patch-fetch.js'),
+      'utf8'
+    )
+    expect(
+      /_cache === "no-store"[\s\S]{0,200}curRevalidate = 0/.test(patchFetch),
+      'patch-fetch.js ya no mapea cache:"no-store" a revalidate 0. La política dejó de tener efecto: re-verificá.'
+    ).toBe(true)
   })
 })
