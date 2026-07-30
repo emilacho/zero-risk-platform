@@ -1,0 +1,8 @@
+21c21
+< ├ ○ /api/agents/status 0 B
+---
+> ├ ƒ /api/agents/status 0 B
+94c94
+< ├ ○ /api/dashboard 0 B
+---
+> ├ ƒ /api/dashboard 0 B

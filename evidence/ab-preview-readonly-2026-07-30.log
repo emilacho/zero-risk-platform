@@ -1,0 +1,28 @@
+# A/B solo-lectura · 2026-07-30T19:21:50.299Z
+prod=https://zero-risk-platform.vercel.app
+preview=https://zero-risk-platform-git-fix-supabase-no-store-cache-zero-risk1.vercel.app
+
+## PASO 2 · verdad en la base
+filas pending (tope 100): 100
+
+## PASOS 1+3 · endpoint vs verdad
+A · PRODUCCIÓN (sin arreglo)
+  count=100 · estados servidos={"pending":100}
+  coincidencia con la verdad: 100/100 = 100.0%
+B · VISTA PREVIA (con arreglo)
+  count=100 · estados servidos={"pending":100}
+  coincidencia con la verdad: 100/100 = 100.0%
+
+## PASOS 5+6 · otras rutas afectadas · prod vs vista previa
+/api/dashboard
+  prod HTTP 200 (124b) · preview HTTP 200 (124b) · cuerpos idénticos: false
+/api/agents/status
+  prod HTTP 200 (24263b) · preview HTTP 200 (24232b) · cuerpos idénticos: false
+/api/dashboard/metrics
+  prod HTTP 200 (472b) · preview HTTP 200 (472b) · cuerpos idénticos: false
+/api/agent-invocations/recent?limit=5
+  prod HTTP 200 (2196b) · preview HTTP 200 (2196b) · cuerpos idénticos: true
+/api/cost-usage
+  prod HTTP 200 (17240b) · preview HTTP 200 (17240b) · cuerpos idénticos: true
+
+## PASO 4 · NO EJECUTADO (es una escritura · diferido a momento controlado)

@@ -4,15 +4,95 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
+/**
+ * POLÍTICA GLOBAL DE CACHÉ DE LECTURA — un solo punto para todo el repo.
+ *
+ * Problema que arregla (medido · bandeja HITL ciega 2026-07-29):
+ * supabase-js no trae fetch propio — usa el `fetch` global
+ * (`resolveFetch`: `if (customFetch) ... else return (...args) => fetch(...args)`).
+ * Dentro de la app publicada ese global lo parchea Next para el Data Cache.
+ * Para un route handler que exporta SOLO GET, Next 14.2 deja
+ * `staticGenerationStore.revalidate = userland.revalidate ?? false`
+ * (`server/future/route-modules/app-route/module.js:242`), y con `false`
+ * el fetch entra por la rama `"auto cache"` con `revalidate = false`
+ * → `isCacheableRevalidate = true` → la respuesta de PostgREST se cachea
+ * (`server/lib/patch-fetch.js:364-388`). Resultado: el endpoint sirve una
+ * foto congelada por más que la base haya cambiado.
+ *
+ * `export const dynamic = 'force-dynamic'` NO alcanza: en un route handler
+ * solo pone `staticGenerationStore.forceDynamic = true`
+ * (`module.js:215-219`) — no toca `fetchCache` ni el `revalidate` del store.
+ *
+ * El arreglo va acá y no en cada ruta (eran 36 rutas afectadas de 110
+ * lectoras) porque este archivo es el único lugar del repo donde se crea un
+ * cliente `createClient` de datos. `cache: 'no-store'` fuerza `revalidate = 0`
+ * (`patch-fetch.js:305`) y la respuesta deja de ser cacheable, en cualquier
+ * versión de Next y sin depender de que cada ruta se acuerde.
+ *
+ * (Precisión · caza CC#3: existen 4 `createServerClient` de `@supabase/ssr`
+ * — `supabase-server.ts` · `auth-middleware.ts` · `api/auth/route.ts` ·
+ * `middleware.ts` — que NO pasan por acá. No son un hueco: ningún `route.ts`
+ * los importa, `supabase-server.ts` no tiene importadores, y `middleware.ts`
+ * corre en Edge, donde no hay Data Cache. Son sesión/auth, no lectura de datos.)
+ *
+ * Fuera de Next (scripts, tests, runtime del agente) `cache` es una opción
+ * estándar de `RequestInit` que undici acepta y trata como no-op.
+ *
+ * REGLA REAL — leer con atención, es más estricta de lo que parece
+ * (corrección del Consejero · 2ª opinión 2026-07-30):
+ *
+ * Las lecturas de Supabase son **incondicionalmente vivas**. El `no-store` que
+ * se clava acá GANA sobre cualquier `export const revalidate = N` de una ruta:
+ * `no-store` fuerza `curRevalidate = 0` (`patch-fetch.js:305`) sin mirar el
+ * `revalidate` del store. **No existe opt-back-in a caché por ruta** — poner
+ * `revalidate = 3600` en una ruta pesada de tablero para bajar carga **no hace
+ * absolutamente nada** sobre estas lecturas, y lo haría en silencio.
+ *
+ * (Una versión anterior de este comentario prometía justamente esa escotilla.
+ * Era falsa: la guarda de `next.revalidate` de acá abajo la cierra. Un comentario
+ * que promete lo que el código no hace es el mismo bug que el sprint "Onboarding
+ * honesto" está matando — por eso queda escrito así de explícito.)
+ *
+ * Si algún día SÍ se necesita caché para una lectura (Fase 2 multi-tenant, donde
+ * cada tablero pegando siempre a PostgREST sí pesa), la salida limpia es
+ * construir un **cliente cacheable SEPARADO y explícito** para ese caso puntual
+ * — nunca aflojar esta política central, que es la que sostiene que ningún
+ * tablero vuelva a servir una foto congelada.
+ *
+ * Ver `zr-vault/raw/findings/2026-07-30-CC2-lectura-congelada-cache-global.md`
+ * y `2026-07-30-CONSEJERO-2da-opinion-PR304-cache-global.md` §2 y §4-N1.
+ */
+type NextFetchInit = RequestInit & { next?: { revalidate?: number | false; tags?: string[] } }
+
+export const noStoreFetch: typeof fetch = (input, init) => {
+  const { next, ...rest } = (init ?? {}) as NextFetchInit
+
+  // Guarda (caza CC#3 · `patch-fetch.js:295-302`): si el llamador manda
+  // `next.revalidate` JUNTO al `cache`, Next descarta el `cache` con un warn y
+  // la política se apaga sola, en silencio. supabase-js no lo hace hoy, pero la
+  // vía existe — así que la cerramos acá en vez de confiar en que nadie la use.
+  // `tags` sí se respeta: no entra en conflicto con `cache`.
+  const safeNext = next ? { ...next } : undefined
+  if (safeNext) delete safeNext.revalidate
+
+  return fetch(input, {
+    ...rest,
+    ...(safeNext && Object.keys(safeNext).length > 0 ? { next: safeNext } : {}),
+    cache: 'no-store',
+  } as NextFetchInit)
+}
+
+const noStoreOptions = { global: { fetch: noStoreFetch } }
+
 // Client-side: uses anon key (subject to RLS)
 export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, noStoreOptions)
   : null
 
 // Server-side: uses service role key (bypasses RLS)
 // Use this for API routes that need to insert/update data
 const supabaseAdmin = supabaseUrl && supabaseServiceKey
-  ? createClient(supabaseUrl, supabaseServiceKey)
+  ? createClient(supabaseUrl, supabaseServiceKey, noStoreOptions)
   : null
 
 export function getSupabase() {
