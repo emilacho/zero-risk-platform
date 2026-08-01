@@ -1,4 +1,4 @@
-# Lazo A · código APLICADO (arreglos 1-5 + 8.a) · para revisión del Consejero
+# Lazo A · código APLICADO (arreglos 1-5 + reviewers_ok CC#3) · para revisión
 
 **11 nodos** · generado desde el payload compuesto · para revisión
 
@@ -386,7 +386,9 @@ const task = (
 ).slice(0, 7900);
 
 return [{ json: { task, brand_book_draft: draft, _grounding_refs: grounding, client_id: clientId,
-  cycle: nextCycle, corrections: inp.corrections || [], _fidelity_cycle: inp._fidelity_cycle } }];
+  cycle: nextCycle, corrections: inp.corrections || [], _fidelity_cycle: inp._fidelity_cycle,
+  // CC#3 §3 · reviewers_ok se perdía justo en el camino CORREGIDO
+  reviewers_ok: inp.reviewers_ok } }];
 ```
 
 ## [BBA] Re-síntesis · run-sdk
@@ -449,6 +451,8 @@ return [{ json: {
   cycle: src.cycle,
   corrections: src.corrections || [],
   resynth_ok,
+  // CC#3 §3 · misma inversión de telemetría que ya se cerró para corrections
+  reviewers_ok: src.reviewers_ok,
 } }];
 ```
 

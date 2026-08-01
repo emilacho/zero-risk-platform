@@ -1,4 +1,4 @@
-# ssLtw · código APLICADO (arreglos 6-8) · para revisión del Consejero
+# ssLtw · código APLICADO (arreglos 6-8 + fix falla-falso CC#3) · para revisión
 
 **22 nodos** · generado desde el payload compuesto · para revisión
 
@@ -721,16 +721,33 @@ return [{ json: {
 // Contrato de retorno al parent (CC#3 F2.2 · gate único = grade-cimiento en el parent).
 // Track = PRODUCTOR: corre lentes→Consolidador→Judge y DEVUELVE scores+draft · NO decide/persiste.
 // Retorna en TODAS las salidas (PASS y ciclos-agotados) · sin dead-end (cond.3).
-const fj = $('[BB] Faithfulness judge').first().json;
+// 2026-08-01 · CC#3 §2 · FALLA-FALSO. Con el ciclo, [BB] Faithfulness judge corre DOS veces
+// (pasada 1 + pasada 2 tras la corrección) y este nodo corre UNA sola ⇒
+// `$('[BB] Faithfulness judge').first()` puede resolver al runIndex 0 = LA PASADA 1 ⇒
+// reportaría track_pass:false JUSTO CUANDO la corrección funcionó, con el manual ya escrito.
+// Es el espejo del "listo falso": un FALLA-FALSO.
+//
+// Se prefiere la fuente DIRECTA del camino recorrido, que no depende de alinear runIndex:
+//   · agotado → $json ES la salida del juez de la pasada 2 (viene por IF ciclos agotados out#0)
+//   · PASS    → $('[BB] Promote prep') · corre UNA sola vez y emite `fidelity`
+// El juez por referencia queda como ÚLTIMO recurso, no como fuente principal.
+let src = null; let _return_source = 'ninguno';
+if ($json && $json.fidelity) { src = $json; _return_source = 'json_directo'; }
+if (!src) { try { const pp = $('[BB] Promote prep').first().json;
+  if (pp && pp.fidelity) { src = pp; _return_source = 'promote_prep'; } } catch (e) {} }
+if (!src) { try { src = $('[BB] Faithfulness judge').first().json; _return_source = 'juez_referencia'; }
+  catch (e) { src = {}; _return_source = 'vacio'; } }
+const fj = src;
 const fid = fj.fidelity || {};
-const draft = fj.brand_book_draft || {};
+const draft = fj.brand_book_draft || (fj.promote_body && fj.promote_body.brand_book) || {};
 return [{ json: {
   fidelity_scores: fid.scores || {},
   brand_book_draft: fj.best_draft || draft,   // §7.6 · se devuelve la MEJOR versión registrada
-  client_id: draft.client_id || null,
+  client_id: draft.client_id || fj.client_id || null,
   track_pass: !!fid.pass,
   track_exhausted: !!fid.exhausted,
   fidelity_cycle: Number(fj._fidelity_cycle || fid.fidelity_cycle || 1),
+  _return_source,        // observabilidad · de qué fuente salió el veredicto (chequeo #6 del humo)
   _cimiento_return: true
 } }];
 ```

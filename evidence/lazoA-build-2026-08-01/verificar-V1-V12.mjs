@@ -56,7 +56,7 @@ const TOC_SS = ['[BB] IF · ciclos agotados', '[BB] Faithfulness judge', 'Return
   L(`V11 camino del manual     : LyVoK ${MANUAL.every((n) => A.has(n)) ? '✅' : '❌'} (alcanzables ${A.size}) · ssLtw ciclo alcanzable ${['[BB] Lazo A prep', '[BB] Execute Lazo A corrección'].every((n) => Ass.has(n)) ? '✅' : '❌'} (${Ass.size}/${ss.nodes.length})`);
   let sx = true;
   for (const [al, w] of [['LazoA', la], ['ssLtw', ss]]) for (const n of w.nodes.filter((x) => x.type === 'n8n-nodes-base.code')) {
-    try { new vm.Script('(async()=>{' + n.parameters.jsCode + '})'); } catch (e) { L(`V12 ❌ ${al} · ${n.name} → ${e.message}`); sx = false; }
+    try { new vm.Script('(async()=>{' + n.parameters.jsCode + String.fromCharCode(10) + '})'); } catch (e) { L(`V12 ❌ ${al} · ${n.name} → ${e.message}`); sx = false; }
   }
   L(`V12 sintaxis de TODOS los nodos Code de los 2 workflows: ${sx ? '✅ compilan' : '❌'}`);
   L(`\n════ CICLO COMPLETO (vivo) ════`);
