@@ -74,13 +74,24 @@ export async function GET(request: Request, context: RouteContext) {
     }
     const restHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
 
+    // FIX 2026-08-08 (CC#1 · rompió el tiro exec 85117) · el acotado por corrida
+    // filtraba la columna EQUIVOCADA. n8n manda `$execution.id` — un NÚMERO — y ese
+    // valor vive en `workflow_execution_id`; la columna `workflow_id` guarda el UUID
+    // del despacho (verificado: exec 85117 → workflow_id `e72653b8-…`,
+    // workflow_execution_id `85117`). El filtro `workflow_id=eq.85117` no coincidía
+    // NUNCA → `invocation_status:null` durante 31 polls → POLL_TIMEOUT con el
+    // descubrimiento ya terminado y el ICP escrito. Se elige la columna por la FORMA
+    // del valor: numérico ⇒ execution id · lo demás (UUID / `rediscovery-<n>`) ⇒ workflow_id.
+    const scopeCol =
+      workflowId && /^\d+$/.test(workflowId) ? 'workflow_execution_id' : 'workflow_id'
+
     let invQuery =
       `${baseUrl}/rest/v1/agent_invocations` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
       `&agent_name=eq.onboarding-specialist` +
-      `&select=status,output_summary,cost_usd,workflow_id,started_at` +
+      `&select=status,output_summary,cost_usd,workflow_id,workflow_execution_id,started_at` +
       `&order=started_at.desc&limit=1`
-    if (workflowId) invQuery += `&workflow_id=eq.${encodeURIComponent(workflowId)}`
+    if (workflowId) invQuery += `&${scopeCol}=eq.${encodeURIComponent(workflowId)}`
 
     const invResp = await fetch(invQuery, { headers: restHeaders, cache: 'no-store' })
     if (!invResp.ok) {
@@ -108,9 +119,11 @@ export async function GET(request: Request, context: RouteContext) {
       let dispatchStatus: string | null = null
       if (workflowId) {
         try {
+          // Misma corrección que arriba · el ledger guarda el execution id numérico
+          // en `workflow_execution_id` y el UUID del despacho en `workflow_id`.
           const dispResp = await fetch(
             `${baseUrl}/rest/v1/agent_dispatches` +
-              `?workflow_id=eq.${encodeURIComponent(workflowId)}` +
+              `?${scopeCol}=eq.${encodeURIComponent(workflowId)}` +
               `&select=status&order=created_at.desc&limit=1`,
             { headers: restHeaders, cache: 'no-store' },
           )
