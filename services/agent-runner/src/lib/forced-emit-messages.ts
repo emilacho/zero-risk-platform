@@ -20,16 +20,29 @@ import Anthropic from '@anthropic-ai/sdk'
 /** Bare tool name (NOT the `mcp__discovery-output__` SDK namespace). */
 export const EMIT_DISCOVERY_OUTPUT_TOOL_NAME = 'emit_discovery_output'
 
+// FIX 2026-08-09 (CC#1) · `['string','null']` · espejo del `.nullish()` que se
+// aplicó al esquema zod vivo (discovery-output-server.js · PR #307). El agente
+// manda `null` para la red social que NO encontró · declarar sólo `'string'`
+// invita al modelo a inventar o a omitir la llamada, y en el camino zod tumbaba
+// la emisión ENTERA por una sola cuenta faltante (MCP -32602). Los dos esquemas
+// DEBEN aceptar las mismas formas (ver nota de sincronización abajo).
 const SOCIAL_HANDLES_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    instagram: { type: 'string' },
-    facebook: { type: 'string' },
-    tiktok: { type: 'string' },
-    linkedin: { type: 'string' },
-    youtube: { type: 'string' },
+    instagram: { type: ['string', 'null'] },
+    facebook: { type: ['string', 'null'] },
+    tiktok: { type: ['string', 'null'] },
+    linkedin: { type: ['string', 'null'] },
+    youtube: { type: ['string', 'null'] },
   },
+} as const
+
+/** Igual que el anterior pero admite el objeto entero nulo · espejo de `socialHandles.nullish()`. */
+const SOCIAL_HANDLES_SCHEMA_NULLABLE = {
+  type: ['object', 'null'],
+  additionalProperties: false,
+  properties: SOCIAL_HANDLES_SCHEMA.properties,
 } as const
 
 const ICP_SEGMENT_SCHEMA = {
@@ -82,8 +95,8 @@ export const EMIT_DISCOVERY_OUTPUT_TOOL = {
           required: ['name'],
           properties: {
             name: { type: 'string', minLength: 1 },
-            website: { type: 'string', format: 'uri' },
-            handles: SOCIAL_HANDLES_SCHEMA,
+            website: { type: ['string', 'null'], format: 'uri' },
+            handles: SOCIAL_HANDLES_SCHEMA_NULLABLE,
             why: { type: 'string' },
             competitor_type: { type: 'string', enum: ['direct', 'indirect', 'aspirational', 'alternative'] },
             positioning: { type: 'string' },
