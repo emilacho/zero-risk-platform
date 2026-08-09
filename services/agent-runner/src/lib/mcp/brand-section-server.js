@@ -26,10 +26,43 @@ const CLIENT_ID = process.env.CLIENT_ID || ''
 // ── zod schema · campos del brand book draft (todos opcionales · cada lente
 // llena SU sección · el consolidador funde las 3). Mirror del shape que lee
 // el nodo consolidador del worker.
+// ── FASE 1 (CC#1 2026-08-09) · los 6 campos NUEVOS + el estampado ──────────
+//
+// POR QUÉ DECLARARLOS · el esquema es ABIERTO (`additionalProperties` sin
+// declarar · medido con el propio SDK), así que una clave no declarada NO se
+// rechaza — pero el modelo tampoco la ve en el contrato del tool, así que su
+// emisión dependía SOLO del prompt: no medida, no confiable. Declararlas la
+// vuelve parte del contrato.
+//
+// POR QUÉ SON UNIÓN Y NO TIPO PLANO · el lector del Consolidador (`tomar()`,
+// plan Fase 1 de CC#2) es TOLERANTE a propósito: acepta el valor plano O el
+// objeto `{valor, fuente, confianza}` y normaliza la procedencia a
+// `_field_meta`. Declarar `mision: z.string()` a secas ROMPERÍA justo eso:
+// verificado en vivo · un objeto donde el esquema pide cadena NO se descarta,
+// se rechaza la entrega COMPLETA con `MCP -32602` (mismo modo de falla que
+// tumbó el descubrimiento el 08-ago). La unión admite las DOS formas.
+//
+// NOTA · el transporte lleva el `input` VERBATIM (el runner captura el bloque
+// `tool_use` sin validar · `agent-sdk-runner.ts`), así que este esquema NO
+// decide qué dato llega: decide QUÉ SE RECHAZA y qué ve el modelo. De ahí que
+// sea deliberadamente permisivo — su trabajo es no rechazar nada razonable.
+const PROV = (valor) =>
+  z.union([
+    valor,
+    z.object({
+      valor: z.union([valor, z.null()]).optional(),
+      fuente: z.string().optional(),
+      confianza: z.union([z.number(), z.string(), z.null()]).optional(),
+    }),
+  ])
+/** Lista de textos · admite también un texto suelto (el modelo a veces manda uno). */
+const LISTA = z.union([z.array(z.string()), z.string()])
+
 const BRAND_SECTION_INPUT_SCHEMA = {
   lens: z
     .enum(['brand-strategist', 'editor-en-jefe', 'jefe-client-success'])
     .describe('Qué lente sos · determina qué campos llenás'),
+  // ── GATEADOS · NO SE TOCAN (Consejero §77 · el gate se queda en 2) ────────
   // brand-strategist
   positioning: z.string().optional().describe('Posicionamiento · 1-2 frases grounded en la evidencia'),
   icp_summary: z.string().optional().describe('Resumen del ICP · audience_segment + pains + goals'),
@@ -40,6 +73,38 @@ const BRAND_SECTION_INPUT_SCHEMA = {
   // jefe-client-success
   customer_angle: z.string().optional().describe('Ángulo cliente · qué valora / por qué se queda'),
   retention_notes: z.string().optional().describe('Notas de retención'),
+
+  // ── FASE 1 · PROVISIONALES · 2 por lente · NO entran al gate ─────────────
+  // Cada uno admite el valor plano O `{valor, fuente, confianza}`.
+  // brand-strategist
+  mision: PROV(z.string())
+    .optional()
+    .describe('Misión · qué hace la marca y para quién · PROVISIONAL (no gateado)'),
+  propuestas_de_valor: PROV(LISTA)
+    .optional()
+    .describe('Propuestas de valor · lista · PROVISIONAL (no gateado)'),
+  // editor-en-jefe
+  personalidad: PROV(LISTA)
+    .optional()
+    .describe('Personalidad de marca · rasgos · PROVISIONAL (no gateado)'),
+  tagline_opciones: PROV(LISTA)
+    .optional()
+    .describe('2-3 OPCIONES de tagline · es una ELECCIÓN humana, no un hecho · PROVISIONAL'),
+  // jefe-client-success
+  mensajes_clave: PROV(LISTA)
+    .optional()
+    .describe('Mensajes clave · lista · PROVISIONAL (no gateado)'),
+  proposito: PROV(z.string())
+    .optional()
+    .describe('Propósito · por qué existe la marca más allá de vender · PROVISIONAL (no gateado)'),
+
+  // Estampado por campo · alternativa a la forma-objeto: en vez de envolver
+  // cada valor, se manda la procedencia junta acá. El Consolidador la fusiona
+  // con la que derive de los `{valor,fuente,confianza}`. Permisivo a propósito.
+  _field_meta: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Procedencia por campo · { <campo>: { fuente, confianza } } · opcional'),
 }
 
 const server = new McpServer({ name: 'brand-section', version: '1.0.0' })
