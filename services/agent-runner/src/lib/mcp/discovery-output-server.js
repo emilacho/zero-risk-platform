@@ -38,21 +38,30 @@ const CLIENT_ID = process.env.CLIENT_ID || ''
 // IMPORTANT · keep in sync · validateDiscoveryShape (TS) and this schema
 // (JS) must accept the SAME shapes · tests cover round-trip equivalence.
 
+// FIX 2026-08-09 (CC#1) · `.nullish()` en vez de `.optional()`.
+// El agente manda `null` para la red social que NO encontró (lo natural), pero
+// `.optional()` acepta AUSENTE y rechaza NULO → `MCP error -32602` tumbaba la
+// emisión ENTERA por una sola cuenta faltante (traza Braintrust 2026-08-08
+// 13:52:19 · own_handles.instagram/tiktok/linkedin/youtube + competitors[0]
+// .website + .handles.instagram, todos "expected string, received null").
+// El consumidor TS ya tolera null — `sanitizeHandles` (src/lib/discovery-output/
+// parse.ts) filtra por `typeof v === 'string'` y descarta el resto en silencio ·
+// así que aceptar null acá NO cambia nada aguas abajo, sólo deja de rechazar.
 const socialHandles = z
   .object({
-    instagram: z.string().optional(),
-    facebook: z.string().optional(),
-    tiktok: z.string().optional(),
-    linkedin: z.string().optional(),
-    youtube: z.string().optional(),
+    instagram: z.string().nullish(),
+    facebook: z.string().nullish(),
+    tiktok: z.string().nullish(),
+    linkedin: z.string().nullish(),
+    youtube: z.string().nullish(),
   })
   .strict()
 
 const competitorSchema = z
   .object({
     name: z.string().min(1).describe('Canonical competitor name'),
-    website: z.string().url().optional(),
-    handles: socialHandles.optional(),
+    website: z.string().url().nullish(),
+    handles: socialHandles.nullish(),
     why: z
       .string()
       .optional()
