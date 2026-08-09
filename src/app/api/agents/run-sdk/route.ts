@@ -242,17 +242,61 @@ const proxySleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
+ * DOUBLE-DISPATCH FIX 2026-08-09 (CC#1) · retry window.
+ *
+ * A retry of this hop is NOT free and NOT idempotent: the agent-runner starts a
+ * REAL, BILLED agent run the moment it receives the POST. Retrying after the
+ * upstream has already accepted the request spawns a SECOND run while the first
+ * keeps executing — both complete, both bill, and the LATE one overwrites state
+ * the graph already consumed.
+ *
+ * Observed twice (exec 87035 · 2026-08-09 and exec 85860 · 2026-08-08): one
+ * `[RD] Dispatch` produced TWO `onboarding-specialist` runs starting ~302-303 s
+ * apart. The graph did NOT re-fire (`[RD] Re-fire Dispatch` never executed) —
+ * the connection dropped ~300 s in (upstream edge), which is a `conn_error`
+ * that is NOT our AbortController (that fires at 790 s), so it classified as
+ * retriable and the proxy re-POSTed. Cost on 09-ago: an extra $0.5476 run that
+ * finished 4 min late and rewrote `clients.config.apify.competitor_list` with
+ * 4 competitors nobody scraped (QA exec 87035).
+ *
+ * Rule · retry ONLY inside a short window where the work provably has not
+ * started: a fast connection failure (DNS · refused · container swapping mid
+ * deploy) never reached the agent. Past this window the run IS in flight, so we
+ * stop and let the DURABLE signal do its job — the worker polls
+ * `/api/onboarding/discovery-status` against `agent_invocations`, so a run that
+ * completes is still picked up even though this hop gave up.
+ */
+const RAILWAY_PROXY_RETRY_WINDOW_MS = 30_000
+
+/**
  * Pure retry classifier for the Vercel→Railway proxy hop. Retriable ONLY when
  * the failure is a transient infra window · a connection error that is NOT an
  * abort (abort = our own timeout → 504, re-doing 790s of work is wrong) OR a
  * genuine upstream 5xx that is NOT a graceful agent failure (success:false
- * bodies are app errors · pass them through untouched). Exported for unit test.
+ * bodies are app errors · pass them through untouched).
+ *
+ * AND the attempt must have failed FAST (`elapsedMs` under the retry window) ·
+ * see RAILWAY_PROXY_RETRY_WINDOW_MS · a late failure means the agent is already
+ * running and a retry would duplicate a paid, non-idempotent run.
+ * Exported for unit test.
  */
 export function isRetriableRailwayProxyFailure(
   outcome:
-    | { readonly kind: 'conn_error'; readonly isAbort: boolean }
-    | { readonly kind: 'http'; readonly status: number; readonly isGracefulAgentFailure: boolean },
+    | { readonly kind: 'conn_error'; readonly isAbort: boolean; readonly elapsedMs?: number }
+    | {
+        readonly kind: 'http'
+        readonly status: number
+        readonly isGracefulAgentFailure: boolean
+        readonly elapsedMs?: number
+      },
 ): boolean {
+  // The work is in flight · a second POST = a second billed agent run.
+  if (
+    typeof outcome.elapsedMs === 'number' &&
+    outcome.elapsedMs >= RAILWAY_PROXY_RETRY_WINDOW_MS
+  ) {
+    return false
+  }
   if (outcome.kind === 'conn_error') return !outcome.isAbort
   return outcome.status >= 500 && !outcome.isGracefulAgentFailure
 }
@@ -737,6 +781,9 @@ export async function POST(request: Request) {
       const hasAttemptsLeft = attempt < RAILWAY_PROXY_MAX_ATTEMPTS
       const controller = new AbortController()
       const timeoutHandle = setTimeout(() => controller.abort(), RAILWAY_FETCH_TIMEOUT_MS)
+      // Double-dispatch fix · how long THIS attempt lived before failing decides
+      // whether retrying is safe (see RAILWAY_PROXY_RETRY_WINDOW_MS).
+      const attemptStartedAt = Date.now()
       try {
         railwayResponse = await fetch(`${railwayUrl.replace(/\/+$/, '')}/run-sdk`, {
           method: 'POST',
@@ -751,9 +798,26 @@ export async function POST(request: Request) {
           // Hot path · no Sentry noise for routine timeouts · never retried.
           return NextResponse.json({ error: 'agent-runner timeout' }, { status: 504 })
         }
-        if (isRetriableRailwayProxyFailure({ kind: 'conn_error', isAbort }) && hasAttemptsLeft) {
+        const attemptElapsedMs = Date.now() - attemptStartedAt
+        if (
+          isRetriableRailwayProxyFailure({
+            kind: 'conn_error',
+            isAbort,
+            elapsedMs: attemptElapsedMs,
+          }) &&
+          hasAttemptsLeft
+        ) {
           await proxySleep(RAILWAY_PROXY_BACKOFF_MS[attempt - 1])
           continue
+        }
+        if (attemptElapsedMs >= RAILWAY_PROXY_RETRY_WINDOW_MS && hasAttemptsLeft) {
+          // Double-dispatch fix · loud, because this is the case that used to
+          // silently spawn a second billed run. The agent is still executing on
+          // Railway · the worker's DB poll is the durable signal.
+          console.warn(
+            `[run-sdk] proxy conn_error after ${attemptElapsedMs}ms · NO retry (run in flight · ` +
+              `retry would duplicate a billed agent run) · agent=${agentName} · attempt=${attempt}`,
+          )
         }
         Sentry.captureException(
           err instanceof Error ? err : new Error(String(err)),
@@ -784,6 +848,9 @@ export async function POST(request: Request) {
             kind: 'http',
             status: railwayResponse.status,
             isGracefulAgentFailure,
+            // Double-dispatch fix · a 5xx that arrives LATE also means the run
+            // already happened upstream · retrying duplicates a billed run.
+            elapsedMs: Date.now() - attemptStartedAt,
           }) &&
           hasAttemptsLeft
         ) {
