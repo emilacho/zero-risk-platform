@@ -38,3 +38,25 @@ export {
   allowAllBudgetStub,
   denyByKeyBudgetStub,
 } from './stubs'
+
+// =====================================================================
+// Escalón 3 · shadow handler wire-up
+// =====================================================================
+//
+// Reads an event → derives journey-state projection → calls decide() →
+// LOGS every decision via a structured logger. NO enqueue, NO dispatch,
+// NO executor call. Escalón 4 (G6 live) + escalón 5 (flip enforce) wire
+// on top.
+
+export {
+  processSalaEventShadow,
+  consoleShadowLogger,
+  createInMemoryShadowLogger,
+} from './shadow-handler'
+export type {
+  ShadowDecisionLog,
+  ShadowLogger,
+  ShadowHandlerConfig,
+  ShadowHandlerResult,
+  InMemoryShadowLogger,
+} from './shadow-handler'
