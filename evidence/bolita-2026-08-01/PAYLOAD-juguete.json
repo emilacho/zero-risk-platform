@@ -1,0 +1,15 @@
+{
+  "client_id": "00000000-0000-4000-8000-000000000001",
+  "client_name": "Cliente Juguete",
+  "industry": "prueba de plomeria",
+  "website": "https://ejemplo.invalid",
+  "discovery_package": {
+    "discovery_summary": "Resumen sintetico de descubrimiento para la prueba de plomeria del lazo de correccion. No representa a ningun cliente real.",
+    "competitors": [],
+    "icp_signals": {},
+    "own_handles": {}
+  },
+  "_fidelity_cycle": null,
+  "_journey_id": "00000000-0000-4000-8000-000000000002",
+  "_sala_correlation_id": "00000000-0000-4000-8000-000000000003"
+}

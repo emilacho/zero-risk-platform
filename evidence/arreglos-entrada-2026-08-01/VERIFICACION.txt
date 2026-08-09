@@ -1,0 +1,35 @@
+=== BASELINE (punto de retorno) ===
+nodos 73 · conexiones 58 · active false · versionId 8aa7da18-71e3-4eb3-a862-91b3f86b4a82
+huella de los 71 NO editados: 0bf9ed3e92db92c0646aa53a76c3c2658a99ac7422e54ce6e9c9b8127383a7ee
+alcanzables hoy: 53
+
+arreglo 1 · guardia: rechazo → minteo ✅
+arreglo 2 · Validate: obligatorios → mínimo + defaults "unknown" ✅
+arreglo 3 · arista quitada de índice 0 · destinos de Synthesis Staging: 2 → 1 ✅
+             REVERSIÓN N3: re-insertar { node: '[APIFY-WIRE] POST /api/hitl/queue (canon)', type: 'main', index: 0 } en el ÍNDICE 0 del arreglo
+
+=== VERIFICACIÓN ===
+V1 nodos                 : 73 (73) ✅
+V2 claves conexiones     : 58 (58) ✅
+V3 aristas colgando      : 0 ✅
+V4 huella de los 71      : 0bf9ed3e92db92c0646aa53a76c3c2658a99ac7422e54ce6e9c9b8127383a7ee
+     ✅ IDÉNTICA · solo se tocaron los 2 declarados
+V5 nodos editados        : [MODELB] Dispatch-único Guard · scoped al run · Validate Deal Data (2, declarados)
+V6 alcanzables           : 49 (esperado 49) ✅
+V7 rama del Wait fuera   : ✅ los 4 inalcanzables
+V8 camino del manual     : ✅ intacto
+V9 efectos externos      : ✅ siguen frenados
+
+>>> VEREDICTO LOCAL: ✅ VERDE
+portón · waiting: 0
+portón · running: 0
+
+PUT · HTTP 200 · nodos 73 · conexiones 58 · versionId 0105c7b1-0ea8-4e28-98bb-560b05c12ec3 · active false
+
+=== CONTRA EL VIVO ===
+nodos 73 · conexiones 58 · active false · versionId 0105c7b1-0ea8-4e28-98bb-560b05c12ec3
+huella de los 71: 0bf9ed3e92db92c0646aa53a76c3c2658a99ac7422e54ce6e9c9b8127383a7ee
+  ✅ IDÉNTICA al baseline
+alcanzables 49 · aristas colgando 0
+camino del manual ✅ · externos ✅ frenados · rama Wait ✅ fuera
+settings vs baseline: sin diferencias ✅ · pausado ✅
