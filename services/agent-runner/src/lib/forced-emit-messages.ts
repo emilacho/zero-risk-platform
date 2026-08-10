@@ -195,6 +195,127 @@ export async function forceFidelityEmitViaMessagesApi(
   }
 }
 
+// ── Brand Book · forced-emit de la SECCIÓN (CC#1 2026-08-10 · tiro Peniche 88922) ──
+// Mismo patrón que el judge, para la otra mitad del problema: la RE-SÍNTESIS del Lazo A
+// narró en vez de llamar `emit_brand_section` → el borrador no cambió → ciclo estéril
+// (`track_reason: ciclo_esteril:resintesis_sin_tool`) → ciclos agotados → el manual NO se
+// escribió, tras $2,93 de corrida. El descubrimiento y las notas de fidelidad ya tenían
+// esta red; la sección de marca era la única que no.
+export const EMIT_BRAND_SECTION_TOOL_NAME = 'emit_brand_section'
+
+/** Valor plano O `{valor, fuente, confianza}` · espejo del `PROV()` del esquema zod vivo. */
+const PROV_SCHEMA = (valor: object) => ({
+  anyOf: [
+    valor,
+    {
+      type: 'object',
+      properties: {
+        valor,
+        fuente: { type: 'string' },
+        confianza: { type: ['number', 'string', 'null'] },
+      },
+    },
+  ],
+})
+const TEXTO = { type: 'string' } as const
+const LISTA_SCHEMA = { anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] }
+
+/**
+ * Espejo en JSON Schema del zod vivo de `brand-section-server.js`. Los 7 GATEADOS
+ * conservan su tipo plano exacto (el gate no se toca) · los 6 de Fase 1 admiten las dos
+ * formas · `_field_meta` libre.
+ */
+export const EMIT_BRAND_SECTION_TOOL = {
+  name: EMIT_BRAND_SECTION_TOOL_NAME,
+  description:
+    'Emit YOUR structured section of the brand book. Fill only the fields of your lens; ' +
+    'leave the rest out. This tool call is the ONLY way your section reaches the consolidator.',
+  input_schema: {
+    type: 'object',
+    required: ['lens'],
+    properties: {
+      lens: { type: 'string', enum: ['brand-strategist', 'editor-en-jefe', 'jefe-client-success'] },
+      // GATEADOS · tipo plano · byte-equivalentes al zod
+      positioning: TEXTO,
+      icp_summary: TEXTO,
+      voice_description: TEXTO,
+      forbidden_words: { type: 'array', items: { type: 'string' } },
+      required_terminology: { type: 'array', items: { type: 'string' } },
+      customer_angle: TEXTO,
+      retention_notes: TEXTO,
+      // FASE 1 · provisionales · valor plano o con procedencia
+      mision: PROV_SCHEMA(TEXTO),
+      propuestas_de_valor: PROV_SCHEMA(LISTA_SCHEMA),
+      personalidad: PROV_SCHEMA(LISTA_SCHEMA),
+      tagline_opciones: PROV_SCHEMA(LISTA_SCHEMA),
+      mensajes_clave: PROV_SCHEMA(LISTA_SCHEMA),
+      proposito: PROV_SCHEMA(TEXTO),
+      _field_meta: { type: 'object' },
+    },
+  },
+} as const
+
+export interface ForceBrandSectionArgs {
+  model: string
+  systemPrompt: string
+  task: string
+  /** Lo que el agente alcanzó a narrar · es el material del que se destila la sección. */
+  researchText: string
+  /** Qué lente es · se le recuerda para que no se equivoque de campos. */
+  lens?: string | null
+  /** Injectable for tests · defaults to a real Anthropic client. */
+  createClient?: () => Pick<Anthropic, 'messages'>
+}
+
+/**
+ * Compele el `emit_brand_section` vía Messages-API `tool_choice`. Devuelve el input del
+ * tool parseado, o null si no vino ningún `tool_use`. El llamador envuelve en try/catch:
+ * que falle la reparación NUNCA debe romper la corrida.
+ */
+export async function forceBrandSectionEmitViaMessagesApi(
+  args: ForceBrandSectionArgs,
+): Promise<ForceEmitOutcome | null> {
+  const client = args.createClient ? args.createClient() : buildAnthropicClient()
+  const work = args.researchText?.trim() || '(section drafted but not captured as text)'
+
+  const resp = await client.messages.create({
+    model: args.model,
+    // 8.000 como el de descubrimiento (no 2.000 como el del judge): una sección puede
+    // traer 7-13 campos de texto largo · el borrador real medido fue de 9.874 caracteres.
+    max_tokens: 8000,
+    system: args.systemPrompt,
+    messages: [
+      { role: 'user', content: args.task },
+      { role: 'assistant', content: work },
+      {
+        role: 'user',
+        content:
+          'Emit your brand book section NOW by calling the emit_brand_section tool' +
+          (args.lens ? ` with lens:"${args.lens}"` : '') +
+          '. Use the content you just produced above. Prose is NOT an acceptable output — ' +
+          'the tool call is the only way your section reaches the consolidator.',
+      },
+    ],
+    tools: [EMIT_BRAND_SECTION_TOOL as unknown as Anthropic.Tool],
+    tool_choice: { type: 'tool', name: EMIT_BRAND_SECTION_TOOL_NAME },
+  })
+
+  const block = (resp.content ?? []).find(
+    (b): b is Anthropic.ToolUseBlock =>
+      b.type === 'tool_use' && b.name === EMIT_BRAND_SECTION_TOOL_NAME,
+  )
+  if (!block || !block.input || typeof block.input !== 'object' || Array.isArray(block.input)) {
+    return null
+  }
+  return {
+    input: { ...(block.input as Record<string, unknown>) },
+    emission_count: 1,
+    source: 'forced_messages_api',
+    inputTokens: resp.usage?.input_tokens ?? 0,
+    outputTokens: resp.usage?.output_tokens ?? 0,
+  }
+}
+
 export interface ForceEmitArgs {
   model: string
   systemPrompt: string
