@@ -255,6 +255,82 @@ export const EMIT_BRAND_SECTION_TOOL = {
   },
 } as const
 
+/**
+ * Los 7 campos GATEADOS y su tipo declarado. Son los que decide el gate: nada que no sea
+ * del tipo declarado puede entrar acá.
+ */
+const GATEADOS_TEXTO = [
+  'positioning',
+  'icp_summary',
+  'voice_description',
+  'customer_angle',
+  'retention_notes',
+] as const
+const GATEADOS_LISTA = ['forbidden_words', 'required_terminology'] as const
+
+/**
+ * Normaliza los 7 GATEADOS de una emisión FORZADA antes de injertarla.
+ *
+ * POR QUÉ · el camino forzado NO pasa por zod: es una llamada Messages-API, no una llamada
+ * al MCP, así que la validación del servidor no corre y el injerto es verbatim. Si el
+ * modelo devolviera un gateado en forma-objeto PESE al esquema, entraría tal cual y el
+ * consolidador metería un objeto en el eje del gate → de ahí al juez y al manual.
+ *
+ * REGLA · (a) del tipo declarado ⇒ pasa · (b) envuelto en `{valor}` con el tipo correcto
+ * adentro ⇒ se DESENVUELVE (es un valor legítimo con la forma equivocada · recuperarlo es
+ * mejor que perderlo, y perderlo vacía el eje del gate, que es justo lo que evitamos) ·
+ * (c) cualquier otra cosa ⇒ **se DESCARTA el campo**. Nunca basura al eje.
+ *
+ * Los 6 campos de Fase 1, `lens`, `_field_meta` y cualquier clave desconocida pasan
+ * INTACTOS · su lector es tolerante a propósito y no los decide el gate.
+ */
+export function normalizarGateadosForzados(
+  input: Record<string, unknown>,
+): { input: Record<string, unknown>; desenvueltos: string[]; descartados: string[] } {
+  const out: Record<string, unknown> = { ...input }
+  const desenvueltos: string[] = []
+  const descartados: string[] = []
+  const envuelto = (v: unknown): unknown =>
+    v && typeof v === 'object' && !Array.isArray(v) && 'valor' in (v as Record<string, unknown>)
+      ? (v as Record<string, unknown>).valor
+      : undefined
+
+  for (const k of GATEADOS_TEXTO) {
+    if (!(k in out)) continue
+    const v = out[k]
+    if (typeof v === 'string') {
+      if (!v.trim()) {
+        delete out[k] // vacío = no lo llenó · que se note como AUSENTE, no como "lo dijo vacío"
+        descartados.push(k)
+      }
+      continue
+    }
+    const dentro = envuelto(v)
+    if (typeof dentro === 'string' && dentro.trim()) {
+      out[k] = dentro
+      desenvueltos.push(k)
+    } else {
+      delete out[k]
+      descartados.push(k)
+    }
+  }
+
+  for (const k of GATEADOS_LISTA) {
+    if (!(k in out)) continue
+    const v = out[k]
+    const arr = Array.isArray(v) ? v : Array.isArray(envuelto(v)) ? (envuelto(v) as unknown[]) : null
+    if (!arr) {
+      delete out[k]
+      descartados.push(k)
+      continue
+    }
+    if (!Array.isArray(v)) desenvueltos.push(k)
+    out[k] = arr.filter((x): x is string => typeof x === 'string')
+  }
+
+  return { input: out, desenvueltos, descartados }
+}
+
 export interface ForceBrandSectionArgs {
   model: string
   systemPrompt: string
