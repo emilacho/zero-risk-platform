@@ -1319,7 +1319,9 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
         `[forced-emit] ${canonicalSlug} cerró SIN emit_brand_section · forzando vía Messages-API tool_choice · step=${input.stepName || canonicalSlug}`,
       )
       try {
-        const { forceBrandSectionEmitViaMessagesApi } = await import('./forced-emit-messages')
+        const { forceBrandSectionEmitViaMessagesApi, normalizarGateadosForzados } = await import(
+          './forced-emit-messages'
+        )
         const lente =
           (input.extra && typeof input.extra === 'object' && !Array.isArray(input.extra)
             ? ((input.extra as Record<string, unknown>).lens as string | undefined)
@@ -1332,15 +1334,24 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
           lens: lente,
         })
         if (forced) {
+          // El camino forzado NO pasa por zod (Messages-API, no MCP) · sin esto, un gateado
+          // en forma-objeto entraría verbatim y metería un objeto en el eje del gate.
+          const norm = normalizarGateadosForzados(forced.input)
+          if (norm.desenvueltos.length || norm.descartados.length) {
+            console.warn(
+              `[forced-emit] ${canonicalSlug} · normalización de gateados · ` +
+                `desenvueltos=[${norm.desenvueltos.join(',')}] descartados=[${norm.descartados.join(',')}]`,
+            )
+          }
           drain = {
             ...drain,
-            brandSectionToolCall: { input: forced.input, emission_count: forced.emission_count },
+            brandSectionToolCall: { input: norm.input, emission_count: forced.emission_count },
             inputTokens: drain.inputTokens + forced.inputTokens,
             outputTokens: drain.outputTokens + forced.outputTokens,
           }
           console.log(
             `[forced-emit] ${canonicalSlug} · sección RECUPERADA vía Messages-API · campos=` +
-              Object.keys(forced.input).filter((k) => k !== 'lens').join(','),
+              Object.keys(norm.input).filter((k) => k !== 'lens').join(','),
           )
         } else {
           console.warn(`[forced-emit] ${canonicalSlug} · Messages-API no devolvió tool_use`)

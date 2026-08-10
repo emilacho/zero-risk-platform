@@ -21,8 +21,12 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: () => ({}),
 }))
 
-const { forceBrandSectionEmitViaMessagesApi, EMIT_BRAND_SECTION_TOOL, EMIT_BRAND_SECTION_TOOL_NAME } =
-  await import('../forced-emit-messages')
+const {
+  forceBrandSectionEmitViaMessagesApi,
+  EMIT_BRAND_SECTION_TOOL,
+  EMIT_BRAND_SECTION_TOOL_NAME,
+  normalizarGateadosForzados,
+} = await import('../forced-emit-messages')
 const { shouldForceBrandSectionEmit } = await import('../agent-sdk-runner')
 
 const ARGS = {
@@ -116,6 +120,76 @@ describe('forceBrandSectionEmitViaMessagesApi · compele el tool', () => {
     const r = await forceBrandSectionEmitViaMessagesApi({ ...ARGS, researchText: '' })
     expect(r?.input).toEqual(SECCION)
     expect(createMock.mock.calls[0][0].messages[1].content).toContain('not captured')
+  })
+})
+
+describe('normalizarGateadosForzados · nunca basura al eje del gate', () => {
+  // El camino forzado NO pasa por zod (Messages-API, no MCP) · el injerto sería verbatim.
+  it('deja pasar intactos los gateados bien formados', () => {
+    const r = normalizarGateadosForzados({
+      lens: 'brand-strategist',
+      positioning: 'P',
+      icp_summary: 'I',
+      forbidden_words: ['a', 'b'],
+    })
+    expect(r.input.positioning).toBe('P')
+    expect(r.input.icp_summary).toBe('I')
+    expect(r.input.forbidden_words).toEqual(['a', 'b'])
+    expect(r.desenvueltos).toEqual([])
+    expect(r.descartados).toEqual([])
+  })
+
+  it('DESENVUELVE un gateado que vino en forma-objeto · recupera en vez de perder', () => {
+    const r = normalizarGateadosForzados({
+      positioning: { valor: 'P real', fuente: 'chunk#3', confianza: 0.9 },
+      required_terminology: { valor: ['x', 'y'] },
+    })
+    expect(r.input.positioning).toBe('P real')
+    expect(r.input.required_terminology).toEqual(['x', 'y'])
+    expect(r.desenvueltos).toEqual(expect.arrayContaining(['positioning', 'required_terminology']))
+  })
+
+  it('DESCARTA el gateado que no es del tipo declarado · no lo deja entrar deformado', () => {
+    const r = normalizarGateadosForzados({
+      lens: 'editor-en-jefe',
+      positioning: 123,
+      icp_summary: { sin_valor: true },
+      voice_description: ['no', 'es', 'texto'],
+      forbidden_words: 'no es lista',
+      customer_angle: '   ',
+    })
+    for (const k of ['positioning', 'icp_summary', 'voice_description', 'forbidden_words', 'customer_angle']) {
+      expect(r.input).not.toHaveProperty(k)
+    }
+    expect(r.descartados).toEqual(
+      expect.arrayContaining(['positioning', 'icp_summary', 'voice_description', 'forbidden_words', 'customer_angle']),
+    )
+    expect(r.input.lens).toBe('editor-en-jefe')
+  })
+
+  it('NO toca los 6 de Fase 1 · su lector es tolerante y el gate no los decide', () => {
+    const meta = { mision: { fuente: 'web' } }
+    const r = normalizarGateadosForzados({
+      lens: 'brand-strategist',
+      mision: { valor: 'M', fuente: 'a', confianza: 1 },
+      personalidad: ['cercana'],
+      _field_meta: meta,
+    })
+    expect(r.input.mision).toEqual({ valor: 'M', fuente: 'a', confianza: 1 })
+    expect(r.input.personalidad).toEqual(['cercana'])
+    expect(r.input._field_meta).toBe(meta)
+    expect(r.descartados).toEqual([])
+  })
+
+  it('limpia elementos no-texto dentro de una lista gateada', () => {
+    const r = normalizarGateadosForzados({ forbidden_words: ['ok', 7, null, 'bien'] })
+    expect(r.input.forbidden_words).toEqual(['ok', 'bien'])
+  })
+
+  it('no inventa campos ausentes', () => {
+    const r = normalizarGateadosForzados({ lens: 'jefe-client-success' })
+    expect(Object.keys(r.input)).toEqual(['lens'])
+    expect(r.descartados).toEqual([])
   })
 })
 
