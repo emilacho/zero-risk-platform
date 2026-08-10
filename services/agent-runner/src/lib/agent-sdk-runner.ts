@@ -733,6 +733,33 @@ export function shouldForceDiscoveryEmit(
  * (`fidelityScoresToolCall === null`). Va directo a Messages-API tool_choice ·
  * NO requiere sessionId (no usa session-resume). Pure · testeado en aislamiento.
  */
+/**
+ * Brand Book · forced-emit de la SECCIÓN (CC#1 2026-08-10 · tiro Peniche `exec 88922`).
+ *
+ * La re-síntesis del Lazo A narró en vez de llamar `emit_brand_section` ⇒ el borrador no
+ * cambió ⇒ `ciclo_esteril:resintesis_sin_tool` ⇒ ciclos agotados ⇒ **el manual no se
+ * escribió**, después de $2,93 de corrida. El descubrimiento y las notas de fidelidad ya
+ * tenían esta red; la sección de marca era la única sin ella.
+ *
+ * Alcance · CUALQUIER agente con el MCP `brand-section` montado que cierre SIN emitir:
+ * cubre la re-síntesis y también las 3 lentes (el mismo modo de falla). Se excluye la
+ * invocación-judge, que tiene su propia red (`shouldForceFidelityEmit`) y NO debe emitir
+ * sección. Coste cero cuando el agente ya emitió.
+ */
+export function shouldForceBrandSectionEmit(
+  mcpServers: Record<string, unknown> | undefined,
+  extra: unknown,
+  drain: Pick<StreamDrainResult, 'brandSectionToolCall'>,
+): boolean {
+  const isJudge =
+    !!extra &&
+    typeof extra === 'object' &&
+    !Array.isArray(extra) &&
+    (extra as Record<string, unknown>).fidelity_judge === true
+  const brandSectionMounted = !!(mcpServers && mcpServers['brand-section'])
+  return brandSectionMounted && !isJudge && drain.brandSectionToolCall === null
+}
+
 export function shouldForceFidelityEmit(
   mcpServers: Record<string, unknown> | undefined,
   extra: unknown,
@@ -1272,6 +1299,57 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
           fidelityForcedEmitDebug.error = msg
         }
         console.warn(`[forced-emit] ${canonicalSlug} (judge) · forced fidelity errored: ${msg}`)
+      }
+    }
+
+    // Brand Book · forced-emit de la SECCIÓN (CC#1 2026-08-10 · tiro Peniche 88922).
+    // La re-síntesis narró en vez de llamar el tool → borrador sin cambio → ciclo estéril
+    // → el manual NO se escribió. Misma red que ya tenían descubrimiento y fidelidad.
+    // El resultado se injerta en `drain`, así que TODO lo de aguas abajo (la captura que
+    // viaja a `body.brand_section`, la persistencia en metadata para el rescate, el
+    // consolidador) lo ve como si el agente lo hubiera emitido solo.
+    if (
+      shouldForceBrandSectionEmit(
+        options.mcpServers as Record<string, unknown> | undefined,
+        input.extra,
+        drain,
+      )
+    ) {
+      console.warn(
+        `[forced-emit] ${canonicalSlug} cerró SIN emit_brand_section · forzando vía Messages-API tool_choice · step=${input.stepName || canonicalSlug}`,
+      )
+      try {
+        const { forceBrandSectionEmitViaMessagesApi } = await import('./forced-emit-messages')
+        const lente =
+          (input.extra && typeof input.extra === 'object' && !Array.isArray(input.extra)
+            ? ((input.extra as Record<string, unknown>).lens as string | undefined)
+            : undefined) ?? null
+        const forced = await forceBrandSectionEmitViaMessagesApi({
+          model: modelId,
+          systemPrompt,
+          task: input.task,
+          researchText: drain.responseText,
+          lens: lente,
+        })
+        if (forced) {
+          drain = {
+            ...drain,
+            brandSectionToolCall: { input: forced.input, emission_count: forced.emission_count },
+            inputTokens: drain.inputTokens + forced.inputTokens,
+            outputTokens: drain.outputTokens + forced.outputTokens,
+          }
+          console.log(
+            `[forced-emit] ${canonicalSlug} · sección RECUPERADA vía Messages-API · campos=` +
+              Object.keys(forced.input).filter((k) => k !== 'lens').join(','),
+          )
+        } else {
+          console.warn(`[forced-emit] ${canonicalSlug} · Messages-API no devolvió tool_use`)
+        }
+      } catch (be) {
+        // Que falle la reparación NUNCA debe romper la corrida · el drain original vale.
+        console.warn(
+          `[forced-emit] ${canonicalSlug} · forced brand section errored: ${be instanceof Error ? be.message : 'unknown'}`,
+        )
       }
     }
 
