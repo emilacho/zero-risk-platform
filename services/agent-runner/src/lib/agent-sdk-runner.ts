@@ -928,6 +928,20 @@ function logExecution(
       // LOGGING DURABLE (CC#4 2026-07-01) · outcome del forced-emit del judge ·
       // solo presente en invocaciones-judge · revela gate_fired / outcome / scores / error.
       ...(fidelityForcedEmit ? { fidelity_forced_emit: fidelityForcedEmit } : {}),
+      // RED DE RESCATE (CC#1 2026-08-10 · exec 87625) · la sección estructurada,
+      // DURABLE. Sin esto la fila prueba que la lente corrió y cuánto costó, pero
+      // NO qué produjo: `output_summary` sólo guarda la narración (409 ch en 87625).
+      //
+      // POR QUÉ · cuando la respuesta HTTP de la lente muere (500 de plataforma a
+      // los 59,6 s) el agente YA terminó y YA se cobró ($0,7581), pero el
+      // consolidador se queda sin sección → `positioning` e `icp_summary` salen
+      // VACÍOS → se anula el eje del gate y la corrida sigue gastando sobre nada.
+      // Persistiéndola acá, el grafo puede RECUPERARLA de la base — el mismo
+      // patrón que ya usa el poll del descubrimiento: la base como señal durable,
+      // no la respuesta HTTP. Coste extra $0 · no se repite el trabajo.
+      ...(drain.brandSectionToolCall
+        ? { brand_section: drain.brandSectionToolCall.input }
+        : {}),
     },
   }
   void insertAgentInvocationWithRetry(supabase, invocationRow, canonicalSlug)
