@@ -15,6 +15,12 @@ vi.mock('@anthropic-ai/sdk', () => ({
   },
 }))
 
+// Igual que `agent-sdk-runner-forced-emit.test.ts` · el paquete del SDK de agentes vive
+// en el árbol pnpm del workspace y NO lo ve el vitest de la raíz (así falló CI la 1ª vez).
+vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
+  query: () => ({}),
+}))
+
 const { forceBrandSectionEmitViaMessagesApi, EMIT_BRAND_SECTION_TOOL, EMIT_BRAND_SECTION_TOOL_NAME } =
   await import('../forced-emit-messages')
 const { shouldForceBrandSectionEmit } = await import('../agent-sdk-runner')
