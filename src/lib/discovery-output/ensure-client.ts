@@ -64,7 +64,25 @@ export function parseClientIdentityFromTask(
     return out
   }
   const loose = /\bfor\s+(.+?)\s*\(/i.exec(task)
-  if (loose && loose[1].trim()) out.name = loose[1].trim()
+  if (loose && loose[1].trim()) {
+    out.name = loose[1].trim()
+    return out
+  }
+
+  // FIX 2026-08-11 (CC#1 · ficha fantasma del tiro Peniche) · la tarea del
+  // RE-descubrimiento está en ESPAÑOL y no dice «for <nombre> (», así que ninguno
+  // de los dos patrones de arriba calzaba y la ficha nacía anónima:
+  //   "Rehacé el descubrimiento de competidores de Peniche Surf Escape (https://…)"
+  // → `Cliente 53b05ecb`, país por defecto, sin web (exec 88922 · fila creada
+  // 19:49:18, un segundo después de que terminara la re-invocación).
+  // El nombre SÍ estaba en el texto; sólo faltaba saber leerlo.
+  const es = /\bde\s+competidores\s+de\s+(.+?)\s*[(·\n]/i.exec(task)
+  if (es && es[1].trim()) {
+    out.name = es[1].trim()
+    const web = /\((https?:\/\/[^\s)]+)\)/i.exec(task)
+    if (web) out.website = web[1]
+    return out
+  }
   return out
 }
 
@@ -103,10 +121,36 @@ export async function ensureClientExists(
   const name = ident.name && ident.name.length > 0
     ? ident.name
     : `Cliente ${clientId.slice(0, 8)}`
+  // FIX 2026-08-11 (CC#1) · el `slug` se comporta como ÚNICO (el upsert canónico
+  // usa on_conflict=slug). Ahora que el nombre SÍ se lee de la tarea del
+  // re-descubrimiento, el slug natural puede chocar con la ficha REAL del mismo
+  // cliente —que es justo el caso de Peniche: `peniche-surf-escape` ya existía en
+  // `e388a370`—. Este upsert va con on_conflict=**id**, así que un choque de slug
+  // NO se ignora: devolvería error y se perdería la garantía de FK que esta función
+  // existe para dar. Si el slug está tomado por OTRA fila, se desambigua.
+  //
+  // Ojo · desambiguar NO unifica las dos fichas: sólo evita el choque y deja la
+  // duplicación VISIBLE (nombre real + sufijo) en vez de escondida tras un
+  // `Cliente xxxxxxxx`. La causa de fondo —el alta pre-inventa un UUID mientras el
+  // upsert resuelve por slug, dos autoridades de identidad— se arregla aguas arriba.
+  const base = slugify(name)
+  let slug = base
+  const { data: choque } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('slug', base)
+    .maybeSingle()
+  if (choque && (choque as { id?: string }).id !== clientId) {
+    slug = `${base}-${clientId.slice(0, 8)}`
+    console.warn(
+      `[ensure-client] slug "${base}" ya lo usa ${String((choque as { id?: string }).id).slice(0, 8)} · ` +
+        `se crea "${slug}" para ${clientId.slice(0, 8)} · DOS fichas para el mismo cliente`,
+    )
+  }
   const row: Record<string, unknown> = {
     id: clientId,
     name,
-    slug: slugify(name),
+    slug,
     status: 'onboarding',
   }
   if (ident.website) row.website_url = ident.website
