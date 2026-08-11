@@ -741,15 +741,28 @@ export function shouldForceDiscoveryEmit(
  * escribió**, después de $2,93 de corrida. El descubrimiento y las notas de fidelidad ya
  * tenían esta red; la sección de marca era la única sin ella.
  *
- * Alcance · CUALQUIER agente con el MCP `brand-section` montado que cierre SIN emitir:
- * cubre la re-síntesis y también las 3 lentes (el mismo modo de falla). Se excluye la
- * invocación-judge, que tiene su propia red (`shouldForceFidelityEmit`) y NO debe emitir
- * sección. Coste cero cuando el agente ya emitió.
+ * Alcance · SÓLO quien de verdad debía emitir una sección: la re-síntesis y las 3 lentes.
+ *
+ * EXCLUIDOS · (a) la invocación-judge, que tiene su propia red y no emite sección ·
+ * (b) **la invocación-REVISOR**: los 3 jefes tienen el MCP montado también cuando actúan
+ * de revisores en el Lazo A, pero su contrato es devolver `{"corrections":[…]}` como TEXTO
+ * y el nodo lo parsea de la prosa. Forzarlos gastaba 3 llamadas de más por ciclo
+ * (~$1 · medido en `exec 89028`: 4 emisiones forzadas donde correspondía 1).
+ *
+ * CÓMO SE DISTINGUE · por lo que la TAREA pidió. `context.role` **no llega** al motor (el
+ * proxy sólo reenvía `extra`), así que gatear por rol exigiría tocar el grafo. El marcador
+ * honesto y sin dependencias es el propio nombre del tool en la tarea: **si se lo pedimos
+ * y no lo llamó, se fuerza; si nunca se lo pedimos, no.** Verificado contra lo que los
+ * agentes recibieron de verdad (`exec 89028` + la corrida de Peniche): los 3 revisores NO
+ * lo mencionan · la re-síntesis y las 3 lentes SÍ.
+ *
+ * Coste cero cuando el agente ya emitió.
  */
 export function shouldForceBrandSectionEmit(
   mcpServers: Record<string, unknown> | undefined,
   extra: unknown,
   drain: Pick<StreamDrainResult, 'brandSectionToolCall'>,
+  task?: string,
 ): boolean {
   const isJudge =
     !!extra &&
@@ -757,7 +770,8 @@ export function shouldForceBrandSectionEmit(
     !Array.isArray(extra) &&
     (extra as Record<string, unknown>).fidelity_judge === true
   const brandSectionMounted = !!(mcpServers && mcpServers['brand-section'])
-  return brandSectionMounted && !isJudge && drain.brandSectionToolCall === null
+  const laTareaLoPidio = typeof task === 'string' && task.includes('emit_brand_section')
+  return brandSectionMounted && !isJudge && laTareaLoPidio && drain.brandSectionToolCall === null
 }
 
 export function shouldForceFidelityEmit(
@@ -1313,6 +1327,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
         options.mcpServers as Record<string, unknown> | undefined,
         input.extra,
         drain,
+        input.task,
       )
     ) {
       console.warn(

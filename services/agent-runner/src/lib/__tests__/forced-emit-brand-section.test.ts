@@ -47,27 +47,62 @@ describe('shouldForceBrandSectionEmit · el guarda', () => {
   const sinEmitir = { brandSectionToolCall: null }
   const yaEmitio = { brandSectionToolCall: { input: SECCION, emission_count: 1 } }
   const montado = { 'brand-section': {} }
+  // Textos REALES · tomados de lo que los agentes recibieron en exec 89028 / Peniche.
+  const TAREA_RESINTESIS =
+    'Sos el consolidador del brand book (el MAKER · no un revisor). Mejorá el BORRADOR ' +
+    'aplicando las CORRECCIONES. LLAMÁ EL TOOL `emit_brand_section` (pasá lens:"brand-strategist")…'
+  const TAREA_LENTE =
+    'Construí TU sección del brand book SOLO desde la evidencia real. CUANDO TENGAS TU ' +
+    'SECCIÓN LISTA, LLAMÁ EL TOOL `emit_brand_section` con tus campos…'
+  const TAREA_REVISOR =
+    'Sos revisor de un borrador de BRAND BOOK. Diagnosticá (NO reescribas) contra la ' +
+    'EVIDENCIA real del cliente. Emití SOLO JSON: {"corrections":[{eje,severidad,…}]}…'
 
-  it('dispara cuando el tool está montado y el agente NO emitió (el caso 88922)', () => {
-    expect(shouldForceBrandSectionEmit(montado, undefined, sinEmitir)).toBe(true)
+  it('dispara para la RE-SÍNTESIS que no emitió (el caso 88922)', () => {
+    expect(shouldForceBrandSectionEmit(montado, undefined, sinEmitir, TAREA_RESINTESIS)).toBe(true)
+  })
+
+  it('dispara para una LENTE que no emitió', () => {
+    expect(shouldForceBrandSectionEmit(montado, { lens: 'editor-en-jefe' }, sinEmitir, TAREA_LENTE)).toBe(true)
+  })
+
+  it('NO dispara para la invocación-REVISOR · su contrato es texto, no sección (exec 89028)', () => {
+    expect(shouldForceBrandSectionEmit(montado, undefined, sinEmitir, TAREA_REVISOR)).toBe(false)
+  })
+
+  it('NO dispara si la tarea no pidió el tool · sin marcador, no se fuerza', () => {
+    expect(shouldForceBrandSectionEmit(montado, undefined, sinEmitir, 'hacé cualquier cosa')).toBe(false)
+    expect(shouldForceBrandSectionEmit(montado, undefined, sinEmitir, undefined)).toBe(false)
+    expect(shouldForceBrandSectionEmit(montado, undefined, sinEmitir, '')).toBe(false)
   })
 
   it('NO dispara si el agente ya emitió solo · coste cero en el camino sano', () => {
-    expect(shouldForceBrandSectionEmit(montado, undefined, yaEmitio)).toBe(false)
+    expect(shouldForceBrandSectionEmit(montado, undefined, yaEmitio, TAREA_RESINTESIS)).toBe(false)
   })
 
   it('NO dispara si el tool no está montado (el agente no podía emitir)', () => {
-    expect(shouldForceBrandSectionEmit({}, undefined, sinEmitir)).toBe(false)
-    expect(shouldForceBrandSectionEmit(undefined, undefined, sinEmitir)).toBe(false)
+    expect(shouldForceBrandSectionEmit({}, undefined, sinEmitir, TAREA_RESINTESIS)).toBe(false)
+    expect(shouldForceBrandSectionEmit(undefined, undefined, sinEmitir, TAREA_RESINTESIS)).toBe(false)
   })
 
-  it('NO dispara para la invocación-judge · ésa tiene su propia red y no emite sección', () => {
-    expect(shouldForceBrandSectionEmit(montado, { fidelity_judge: true }, sinEmitir)).toBe(false)
+  it('NO dispara para la invocación-judge · ésa tiene su propia red', () => {
+    expect(
+      shouldForceBrandSectionEmit(montado, { fidelity_judge: true }, sinEmitir, TAREA_RESINTESIS),
+    ).toBe(false)
   })
 
-  it('sí dispara para las lentes y la re-síntesis (extra sin fidelity_judge)', () => {
-    expect(shouldForceBrandSectionEmit(montado, { lens: 'editor-en-jefe' }, sinEmitir)).toBe(true)
-    expect(shouldForceBrandSectionEmit(montado, {}, sinEmitir)).toBe(true)
+  it('el ciclo completo del Lazo A · 1 forzada, no 4 (lo que costó ~$1 de más)', () => {
+    const invocaciones = [
+      { rol: 'revisor', task: TAREA_REVISOR },
+      { rol: 'revisor', task: TAREA_REVISOR },
+      { rol: 'revisor', task: TAREA_REVISOR },
+      { rol: 're-síntesis', task: TAREA_RESINTESIS },
+    ]
+    const forzadas = invocaciones.filter((i) =>
+      shouldForceBrandSectionEmit(montado, undefined, sinEmitir, i.task),
+    )
+    expect(forzadas).toHaveLength(1)
+    expect(forzadas[0].rol).toBe('re-síntesis')
   })
 })
 
