@@ -236,6 +236,22 @@ const RAILWAY_FETCH_TIMEOUT_MS = 790_000
 // Mirror the async-callback Track O/P cadence · 1 immediate + 2 retries with
 // exponential backoff. Timeouts (abort→504) and graceful agent failures are
 // NEVER retried (see isRetriableRailwayProxyFailure).
+/**
+ * Tope de caracteres de `task` en este endpoint · 8.000 → **16.000** (CC#1 2026-08-11).
+ *
+ * ⚠️ CONTRATO REAL · `sanitizeString` **RECORTA EN SILENCIO** (`trimmed.slice(0, max)`).
+ * **NO rechaza, no devuelve 400, no avisa.** El postmortem del 01-jul lo documentó al revés
+ * —*"Task >8000 chars — rechazado en route antes de llegar al agente"*— y esa creencia
+ * sobrevivió: una tarea más larga **no falla**, llega **cortada a mitad de frase** y el
+ * agente trabaja con menos contexto del que le mandaron, sin que nadie se entere.
+ *
+ * El tope es COMPARTIDO por todos los llamadores del endpoint (las 3 lentes, los 3
+ * revisores y la re-síntesis). Subirlo **no alarga nada por sí solo**: hoy los nodos del
+ * grafo ya recortan su propio prompt en 7.900, muy por debajo. Este cambio sólo levanta
+ * el techo del endpoint para que el paso 2 (los topes del grafo) tenga lugar donde crecer.
+ */
+export const TASK_MAX_CHARS = 16_000
+
 const RAILWAY_PROXY_MAX_ATTEMPTS = 3
 const RAILWAY_PROXY_BACKOFF_MS: readonly number[] = [2_000, 4_000]
 const proxySleep = (ms: number): Promise<void> =>
@@ -537,7 +553,7 @@ export async function POST(request: Request) {
 
   try {
     const agentName = sanitizeString(body.agent, 50)
-    const task = sanitizeString(body.task, 8000)
+    const task = sanitizeString(body.task, TASK_MAX_CHARS)
 
     if (!agentName || !task) {
       return NextResponse.json({ error: 'Missing required fields: agent, task' }, { status: 400 })
