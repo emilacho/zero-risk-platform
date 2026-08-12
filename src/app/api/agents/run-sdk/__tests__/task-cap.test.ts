@@ -10,6 +10,35 @@
 import { describe, it, expect } from 'vitest'
 import { sanitizeString } from '@/lib/validation'
 import { TASK_MAX_CHARS } from '../route'
+import contrato from '@/lib/contracts/inputs/agents-run-sdk.json'
+
+/**
+ * EL TOPE QUE MANDA · lección del tiro de Almai (exec 90406 · $0.98 perdidos).
+ *
+ * Hay DOS topes en este camino y el que decide es el PRIMERO:
+ *   1. contrato JSON Schema `agents-run-sdk.json` → 400 `E-INPUT-INVALID` · RECHAZA
+ *   2. `sanitizeString(body.task, TASK_MAX_CHARS)` en route.ts · RECORTA en silencio
+ * Subir sólo el (2) no sirve de nada: una tarea larga muere en el (1) y nunca llega.
+ * Este test los ATA para que no puedan volver a divergir.
+ */
+describe('los DOS topes del camino · atados', () => {
+  const delContrato = (contrato as { properties: { task: { maxLength: number } } }).properties.task
+    .maxLength
+
+  it('el contrato (el que RECHAZA) también está en 16.000', () => {
+    expect(delContrato).toBe(16_000)
+  })
+
+  it('contrato y route.ts coinciden · si alguien mueve uno, este test cae', () => {
+    expect(delContrato).toBe(TASK_MAX_CHARS)
+  })
+
+  it('la tarea del juez que se perdió (9.049) ahora entra por los dos', () => {
+    const JUEZ_ALMAI = 9_049
+    expect(JUEZ_ALMAI).toBeLessThanOrEqual(delContrato) // antes: 8000 → 400 E-INPUT-INVALID
+    expect(JUEZ_ALMAI).toBeLessThanOrEqual(TASK_MAX_CHARS)
+  })
+})
 
 describe('TASK_MAX_CHARS · el tope del endpoint', () => {
   it('es 16.000 · el doble del anterior', () => {
