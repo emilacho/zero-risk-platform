@@ -78,7 +78,8 @@ describe('input-validator', () => {
     })
 
     it('rejects task exceeding maxLength', async () => {
-      const longTask = 'a'.repeat(9000)
+      // El tope subió a 16.000 (2026-08-12) · antes eran 8.000.
+      const longTask = 'a'.repeat(16_001)
       const req = makeRequest({ agent: 'x', task: longTask })
       const v = await validateInput(req, 'agents-run-sdk')
       expect(v.ok).toBe(false)
@@ -87,6 +88,16 @@ describe('input-validator', () => {
         const body = await v.response.json()
         expect(body.code).toBe('E-INPUT-INVALID')
       }
+    })
+
+    it('ACEPTA una tarea de 9.000 · la que perdió el tiro de Almai (exec 90406)', async () => {
+      // Regresión del incidente · con el tope viejo de 8.000 esta misma tarea daba
+      // 400 E-INPUT-INVALID, el juez nunca corría, las 5 notas volvían null y no había
+      // manual. La tarea real del juez medía 9.049 caracteres.
+      const tareaDelJuez = 'a'.repeat(9_049)
+      const req = makeRequest({ agent: 'x', task: tareaDelJuez })
+      const v = await validateInput(req, 'agents-run-sdk')
+      expect(v.ok).toBe(true)
     })
   })
 

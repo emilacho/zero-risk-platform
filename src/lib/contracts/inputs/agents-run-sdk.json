@@ -15,7 +15,7 @@
     "task": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 8000,
+      "maxLength": 16000,
       "description": "Instruction the agent should execute"
     },
     "resume_session_id": {
