@@ -53,6 +53,7 @@ function extractSections(row: SourceRow, sourceTable: SourceTable): { section_la
       "writing_style", "tagline", "elevator_pitch", "key_messages",
       "value_propositions", "imagery_style", "forbidden_words",
       "required_terminology",
+      "positioning", // H1.2 · columna propia desde 2026-08-20
     ];
     for (const f of fields) {
       const v = row[f];

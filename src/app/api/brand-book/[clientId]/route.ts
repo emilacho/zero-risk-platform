@@ -56,6 +56,45 @@ export async function GET(_req: Request, { params }: RouteContext) {
 }
 
 /**
+ * Arma la fila que se inserta en `client_brand_books`.
+ *
+ * Extraído del handler para poder probarlo sin HTTP ni Supabase (mismo patrón que
+ * `isRetriableRailwayProxyFailure` en agents/run-sdk). Función pura · sin efectos.
+ */
+export function buildBrandBookRow(
+  clientId: string,
+  bb: Record<string, unknown>,
+  body: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    client_id: clientId,
+    voice_description: bb.voice_description ?? null,
+    forbidden_words: bb.forbidden_words ?? [],
+    required_terminology: bb.required_terminology ?? [],
+    // H1.2 (2026-08-20) · el posicionamiento tiene columna propia. Antes se guardaba
+    // prestado en `elevator_pitch` ("encaja", decía el comentario) · el cerebro lo
+    // indexaba con el rótulo equivocado. Son dos cosas distintas y ahora van separadas.
+    // REQUIERE la migración 202608201200_client_brand_books_positioning.sql aplicada.
+    positioning: bb.positioning ?? null,
+    elevator_pitch: bb.elevator_pitch ?? null,
+    // el draft completo (incl. icp_summary/customer_angle/retention_notes que no tienen
+    // columna) se preserva en content_text como JSON · nada se pierde.
+    content_text: JSON.stringify({
+      brand_book_draft: bb,
+      fidelity_passed: body.fidelity_passed === true,
+      fidelity_scores: body.fidelity_scores ?? null,
+      fidelity_threshold: body.fidelity_threshold ?? null,
+      approved_by: body.approved_by ?? 'faithfulness_check',
+      approved_at: body.approved_at ?? new Date().toISOString(),
+    }),
+    auto_generated: true,
+    auto_generated_from: body.source ?? 'onboarding_collaborative_build',
+    human_validated: false,
+    version: 1,
+  }
+}
+
+/**
  * POST /api/brand-book/[clientId]
  *
  * Persiste un brand book en `client_brand_books` (paso Promote → canon del track
@@ -108,28 +147,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     })
   }
 
-  const row: Record<string, unknown> = {
-    client_id: clientId,
-    voice_description: bb.voice_description ?? null,
-    forbidden_words: bb.forbidden_words ?? [],
-    required_terminology: bb.required_terminology ?? [],
-    // positioning es un statement de posicionamiento · encaja en elevator_pitch.
-    elevator_pitch: bb.positioning ?? null,
-    // el draft completo (incl. icp_summary/customer_angle/retention_notes que no tienen
-    // columna) se preserva en content_text como JSON · nada se pierde.
-    content_text: JSON.stringify({
-      brand_book_draft: bb,
-      fidelity_passed: body.fidelity_passed === true,
-      fidelity_scores: body.fidelity_scores ?? null,
-      fidelity_threshold: body.fidelity_threshold ?? null,
-      approved_by: body.approved_by ?? 'faithfulness_check',
-      approved_at: body.approved_at ?? new Date().toISOString(),
-    }),
-    auto_generated: true,
-    auto_generated_from: body.source ?? 'onboarding_collaborative_build',
-    human_validated: false,
-    version: 1,
-  }
+  const row = buildBrandBookRow(clientId, bb, body)
 
   const { data, error } = await supabase
     .from('client_brand_books')

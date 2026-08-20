@@ -182,6 +182,8 @@ export interface ClientBrandBook {
   tagline: string | null
   key_messages: string[] | null
   elevator_pitch: string | null
+  /** Statement de posicionamiento · columna propia desde H1.2 (2026-08-20). */
+  positioning: string | null
   primary_colors: string[] | null
   logo_url: string | null
   typography_notes: string | null
