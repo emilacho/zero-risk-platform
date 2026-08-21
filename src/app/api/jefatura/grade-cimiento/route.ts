@@ -111,6 +111,15 @@ export async function POST(request: Request) {
       corrections: result.output.corrections,
       grounding: result.grounding,
       provisional: result.provisional,
+      // H1.4 · la procedencia ahora se VERIFICA contra evidencia de descubrimiento
+      // (el manual no puede fundamentarse en sí mismo) · se expone el respaldo para
+      // que el veredicto sea auditable y no haya que creerle (ADR-020 M1).
+      grounding_verified: result.groundingResult.verified,
+      evidence_refs: result.groundingResult.evidence_refs,
+      factual_coverage: result.groundingResult.factual_coverage,
+      factual_matched: result.groundingResult.factual_matched,
+      factual_total: result.groundingResult.factual_total,
+      match_threshold: result.groundingResult.threshold,
       trace_id: result.output.trace_id,
     })
   } catch (e) {
