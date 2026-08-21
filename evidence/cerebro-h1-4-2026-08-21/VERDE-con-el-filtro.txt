@@ -1,0 +1,22 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform[39m
+
+ [32m✓[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · EL AGUJERO · lo que declaraba el camino viejo (SIN el filtro)[2m > [22mcon la referencia envenenada, el derivador viejo declara chunk_linked · ése es el auto-fundamento[32m 2[2mms[22m[39m
+ [32m✓[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · EL AGUJERO · lo que declaraba el camino viejo (SIN el filtro)[2m > [22mel derivador viejo no distingue evidencia real de auto-fundamento · da lo MISMO en ambos[32m 1[2mms[22m[39m
+ [32m✓[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · una afirmación NO puede fundamentarse en el propio manual[2m > [22mbrand_books @1.000 · el auto-fundamento NO cuenta · queda prose_only[32m 2[2mms[22m[39m
+ [32m✓[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · una afirmación NO puede fundamentarse en el propio manual[2m > [22mevidencia REAL de descubrimiento · sí funda · chunk_linked[32m 1[2mms[22m[39m
+ [32m✓[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · una afirmación NO puede fundamentarse en el propio manual[2m > [22mel auto-fundamento NO tapa a la evidencia real que viene detrás[32m 1[2mms[22m[39m
+ [32m✓[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · trampa 1 · el umbral es 0.72 · no se toca[2m > [22mel módulo declara 0.72 y el enchufe no lo pisa[32m 0[2mms[22m[39m
+ [32m✓[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · trampa 1 · el umbral es 0.72 · no se toca[2m > [22m0.74 funda (soporte real medido) · 0.69 no (ruido medido)[32m 0[2mms[22m[39m
+ [32m✓[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · trampa 2 · gatea SOLO campos fácticos[2m > [22mlas reglas de voz NO bloquean el grounding · si no, el manual queda en borrador para siempre[32m 1[2mms[22m[39m
+ [32m✓[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · sin poder verificar, no se afirma lo que no se sabe[2m > [22msin cliente no se puede consultar el cerebro ⇒ prose_only, aunque las refs digan lo contrario[32m 0[2mms[22m[39m
+ [32m✓[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · sin poder verificar, no se afirma lo que no se sabe[2m > [22msin campos fácticos en el borrador ⇒ prose_only · no hay nada que fundar[32m 1[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m10 passed[39m[22m[90m (10)[39m
+[2m   Start at [22m 14:26:14
+[2m   Duration [22m 1.92s[2m (transform 103ms, setup 0ms, collect 141ms, tests 10ms, environment 0ms, prepare 216ms)[22m
+

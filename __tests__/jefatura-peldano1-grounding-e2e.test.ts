@@ -101,13 +101,17 @@ const CLAIMS: readonly ClaimInput[] = [
   { field: 'positioning', text: 'positioning claim' },
   { field: 'icp_summary', text: 'icp claim' },
 ]
-const gradeWith = async (refs: FidelityEvidenceRef[]) =>
+// H1.4 · el borrador lleva los MISMOS textos que indexa el CEREBRO simulado: la
+// calificacion ahora RE-DERIVA la procedencia consultando el cerebro, en vez de creerle
+// a las refs. Eso convierte esto en un end-to-end de verdad.
+const gradeWith = async (refs: FidelityEvidenceRef[], matchThreshold?: number) =>
   gradeOnboardingCimiento(
     {
       clientId: 'c1',
       journeyId: 'j1',
       artifactId: 'bb-1',
-      brandBookDraft: { positioning: 'x', icp_summary: 'y' },
+      brandBookDraft: { positioning: 'positioning claim', icp_summary: 'icp claim' },
+      matchThreshold,
       evidence: { client_name: 'Peniche' },
       evidenceRefs: refs,
       fidelityCycle: 1,
@@ -194,7 +198,7 @@ describe('B2 · el threshold flipea la cadena entera (sensibilidad end-to-end)',
     state.byQuery.set('icp claim', [{ chunk_id: 'ch-B', source_table: 'icp_documents', similarity: 0.82 }])
     const strict = await matchClaimsToChunks({ client_id: 'c1', claims: CLAIMS, threshold: 0.85 })
     expect(strict.grounding).toBe('prose_only')
-    const rStrict = await gradeWith(refsFromMatch(strict))
+    const rStrict = await gradeWith(refsFromMatch(strict), 0.85)
     expect(rStrict.provisional).toBe(true)
   })
 })
