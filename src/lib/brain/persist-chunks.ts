@@ -58,7 +58,9 @@ export function chunksFromBrandBook(row: Record<string, unknown>): BrainChunk[] 
   const out: BrainChunk[] = []
   const textFields = [
     'brand_purpose', 'brand_vision', 'brand_mission', 'brand_personality',
-    'voice_description', 'writing_style', 'tagline', 'elevator_pitch',
+    // `positioning` desde H1.2 · tiene columna propia · antes viajaba rotulado
+    // como elevator_pitch (§ raw/findings/2026-08-20-CC1-H0.1-mapeo-del-escritor.md)
+    'voice_description', 'writing_style', 'tagline', 'elevator_pitch', 'positioning',
     'imagery_style', 'competitor_mentions_policy', 'compliance_notes',
   ]
   for (const f of textFields) {

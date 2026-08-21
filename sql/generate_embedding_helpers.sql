@@ -30,6 +30,10 @@ BEGIN
     COALESCE('Voice: ' || voice_description || E'\n', '') ||
     COALESCE('Writing Style: ' || writing_style || E'\n', '') ||
     COALESCE('Tagline: ' || tagline || E'\n', '') ||
+    -- H1.2 (2026-08-20) · `positioning` tiene columna propia · antes viajaba
+    -- prestado dentro de elevator_pitch. Son dos campos distintos: si falta acá,
+    -- el posicionamiento no entra al texto que se embebe.
+    COALESCE('Positioning: ' || positioning || E'\n', '') ||
     COALESCE('Elevator Pitch: ' || elevator_pitch || E'\n', '') ||
     COALESCE('Imagery Style: ' || imagery_style || E'\n', '') ||
     COALESCE('Values: ' || brand_values::TEXT || E'\n', '') ||
@@ -40,10 +44,23 @@ BEGIN
   FROM client_brand_books
   WHERE id = p_brand_book_id;
 
-  -- Also update content_text in the row
+  -- ⛔ CUIDADO (H1.2 · 2026-08-20) · `content_text` TIENE DOS DUEÑOS.
+  -- Esta función lo usa como texto plano para embeber, pero el escritor del manual
+  -- (src/app/api/brand-book/[clientId]/route.ts) guarda ahí el BORRADOR COMPLETO en
+  -- JSON — y el reporte de alta lee el posicionamiento de ese JSON
+  -- (src/lib/onboarding-report.ts). Pisarlo con texto plano DESTRUYE el borrador.
+  --
+  -- Por eso el UPDATE ahora se saltea las filas cuyo content_text es un borrador JSON.
+  -- Sin esta guarda, una sola corrida de esta función sobre un manual nuevo borra
+  -- icp_summary, customer_angle, retention_notes y los campos de Fase 1 · sin aviso.
+  --
+  -- Hoy la función NO tiene llamador vivo (el único uso está comentado en
+  -- sql/sample_data_client_1.sql:27). Resolver el conflicto de dueños del campo
+  -- es tarea aparte · esta guarda sólo impide la destrucción silenciosa mientras tanto.
   UPDATE client_brand_books
   SET content_text = v_content
-  WHERE id = p_brand_book_id;
+  WHERE id = p_brand_book_id
+    AND COALESCE(content_text, '') NOT LIKE '%"brand_book_draft"%';
 
   RETURN v_content;
 END;
