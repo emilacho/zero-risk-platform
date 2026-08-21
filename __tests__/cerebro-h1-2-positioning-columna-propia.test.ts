@@ -16,8 +16,13 @@
  *   - «el cerebro rotula positioning» falla (no estaba en textFields)
  */
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { buildBrandBookRow } from '../src/app/api/brand-book/[clientId]/route'
 import { chunksFromBrandBook } from '../src/lib/brain/persist-chunks'
+
+const raiz = join(__dirname, '..')
+const leer = (p: string) => readFileSync(join(raiz, p), 'utf8')
 
 const CID = 'd69100b5-8ad7-4bb0-908c-68b5544065dc'
 
@@ -83,5 +88,59 @@ describe('H1.2 · el cerebro indexa el posicionamiento con su propio rótulo', (
 
     expect(chunks.find((c) => c.section_label === 'positioning')?.chunk_text).toBe(POSITIONING)
     expect(chunks.find((c) => c.section_label === 'elevator_pitch')?.chunk_text).toBe(PITCH)
+  })
+})
+
+/**
+ * C2 del Consejero · el defecto de fondo NO era el campo: eran CINCO listas paralelas
+ * de campos del manual, mantenidas a mano. Yo arreglé 3 y me salté 2 — el ayudante de
+ * SQL y el guionista del re-llenado. Esta prueba fija las cinco: el próximo campo nuevo
+ * no se puede colar en cuatro y faltar en la quinta.
+ */
+describe('H1.2 · C2 · las 5 listas de campos del manual no se desincronizan', () => {
+  const LISTAS: ReadonlyArray<readonly [string, string]> = [
+    ['src/lib/brain/persist-chunks.ts', 'escritura al cerebro · vía alta + descubrimiento'],
+    ['src/app/api/brain/reindex-stale/route.ts', 're-indexado de lo viejo'],
+    ['src/app/api/brain/reembed-source-row/route.ts', 're-embebido de una fila'],
+    ['sql/generate_embedding_helpers.sql', 'ayudante de SQL · arma el texto a embeber'],
+    ['scripts/sprint7p5-backfill-client-brain-embeddings.mjs', 'guionista del re-llenado'],
+  ]
+
+  it.each(LISTAS)('%s incluye positioning (%s)', (archivo) => {
+    expect(leer(archivo)).toContain('positioning')
+  })
+
+  it('las 4 listas de JS/TS nombran positioning junto a elevator_pitch', () => {
+    // si alguien agrega el campo suelto en otro lado del archivo la prueba de arriba
+    // pasaría igual · esta exige que esté en la MISMA lista que el pitch
+    for (const [archivo] of LISTAS.slice(0, 3)) {
+      const texto = leer(archivo)
+      const iPitch = texto.indexOf("'elevator_pitch'") >= 0
+        ? texto.indexOf("'elevator_pitch'")
+        : texto.indexOf('"elevator_pitch"')
+      const iPos = texto.indexOf("'positioning'") >= 0
+        ? texto.indexOf("'positioning'")
+        : texto.indexOf('"positioning"')
+      expect(iPitch, `${archivo} · no encontré elevator_pitch`).toBeGreaterThan(-1)
+      expect(iPos, `${archivo} · no encontré positioning en la lista`).toBeGreaterThan(-1)
+      // vecinos · a lo sumo ~400 caracteres de distancia (la lista entera es más corta)
+      expect(Math.abs(iPos - iPitch), `${archivo} · positioning está lejos de la lista`).toBeLessThan(400)
+    }
+  })
+})
+
+/**
+ * C2 · el segundo defecto del ayudante de SQL, que el Consejero nombró aparte:
+ * NO alcanza con sumarle el campo · esa función además PISA `content_text`, que es
+ * donde el escritor guarda el borrador completo en JSON y de donde el reporte de alta
+ * lee el posicionamiento. Una corrida = borrador destruido, sin aviso.
+ */
+describe('H1.2 · C2 · el ayudante de SQL no se come el borrador', () => {
+  it('el UPDATE de content_text saltea las filas que tienen un borrador JSON', () => {
+    const sql = leer('sql/generate_embedding_helpers.sql')
+
+    expect(sql).toContain('SET content_text = v_content')
+    // la guarda · sin ella el UPDATE es incondicional y destruye el borrador
+    expect(sql).toContain(`NOT LIKE '%"brand_book_draft"%'`)
   })
 })

@@ -110,6 +110,11 @@ function chunksFromBrandBook(row) {
   if (row.writing_style)
     out.push({ section_label: 'writing_style', chunk_text: row.writing_style })
   if (row.tagline) out.push({ section_label: 'tagline', chunk_text: row.tagline })
+  // H1.2 (2026-08-20) · `positioning` tiene columna propia · antes viajaba prestado
+  // dentro de elevator_pitch. Debe quedar en sincronía con la lista canónica de
+  // src/lib/brain/persist-chunks.ts · si falta acá, el re-llenado deja el
+  // posicionamiento fuera del cerebro.
+  if (row.positioning) out.push({ section_label: 'positioning', chunk_text: row.positioning })
   if (row.elevator_pitch)
     out.push({ section_label: 'elevator_pitch', chunk_text: row.elevator_pitch })
   if (row.imagery_style)
