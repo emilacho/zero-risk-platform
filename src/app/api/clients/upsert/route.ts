@@ -252,6 +252,11 @@ export async function POST(request: Request) {
       tone_guidelines: bb.tone_guidelines ?? {},
       writing_style: bb.writing_style ?? null,
       tagline: bb.tagline ?? null,
+      // El posicionamiento tiene columna propia desde H1.2 (2026-08-21) · antes viajaba
+      // prestado dentro de elevator_pitch. Son dos cosas distintas: el pitch presenta,
+      // el posicionamiento ubica frente a la competencia. Emparejado contra la rama 1
+      // (`brand-book/[clientId]/route.ts`), que es la forma correcta ya en producción.
+      positioning: bb.positioning ?? null,
       elevator_pitch: bb.elevator_pitch ?? null,
       key_messages: bb.key_messages ?? [],
       value_propositions: bb.value_propositions ?? [],
