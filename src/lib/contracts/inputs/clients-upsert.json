@@ -49,6 +49,10 @@
         "writing_style": { "type": "string" },
         "tagline": { "type": "string" },
         "elevator_pitch": { "type": "string" },
+        "positioning": {
+          "type": ["string", "null"],
+          "description": "Statement de posicionamiento. Campo PROPIO · NO es el elevator_pitch: el pitch presenta, el posicionamiento ubica frente a la competencia. Antes viajaba prestado dentro de elevator_pitch (H1.2 le dio columna propia el 2026-08-21). Admite null a propósito -aunque sus hermanos sean solo string- porque los escritores lo normalizan con `?? null` y declararlo mas estricto rechazaria a un productor que hoy pasa."
+        },
         "key_messages": { "type": "array", "items": { "type": "string" } },
         "value_propositions": { "type": "array", "items": { "type": "string" } },
         "primary_colors": { "type": "array", "items": { "type": "string" } },
