@@ -20,8 +20,37 @@
  * necesitaría la misma base que acaba de fallar.
  */
 
-/** Fallos consecutivos tolerados antes de dejar de dejar pasar. */
+/**
+ * Fallos consecutivos tolerados antes de dejar de dejar pasar.
+ *
+ * ── (a) POR QUÉ 3 · la cuenta en plata, para poder re-calibrarla con evidencia ──
+ * Costo observado por invocación de empleado (medición CC#3 · corridas reales de
+ * agosto): **~$0,6 a $0,8**. Con K=3, lo máximo que se fuga mientras el freno está
+ * ciego es:
+ *
+ *     K × costo_por_invocación = 3 × ~$0,7 ≈ **~$2 por instancia**
+ *
+ * Ese ~$2 es la cota que se está comprando, y es del mismo orden que el techo del
+ * cubo `system` ($2) · no es una coincidencia buscada, pero sirve de referencia.
+ * Si el costo por invocación sube (modelos más caros, tareas más largas), **K hay
+ * que bajarlo**: la cota es K × costo, no K a secas.
+ *
+ * ── (b) DISPARADOR DE REVISIÓN · esto NO es una cota global ──
+ * 🔴 La cuenta vive por proceso. **Si alguna vez corren VARIAS ALTAS EN PARALELO,
+ * esta cota se multiplica por la cantidad de instancias y hay que revisarla.**
+ * Con 5 instancias simultáneas la fuga posible pasa de ~$2 a ~$10 · con 10, a ~$20.
+ * Hoy el alta corre de a una (los tres procesos están pausados · CC#3 2026-08-23),
+ * así que la cota vale. **El día que eso cambie, este número deja de valer.**
+ */
 export const DEFAULT_FAIL_STREAK_LIMIT = 3
+
+/** Costo observado por invocación de empleado · base de la aritmética de arriba. */
+export const COSTO_OBSERVADO_POR_INVOCACION_USD = 0.7
+
+/** La cota de fuga que compra el K vigente · POR INSTANCIA (ver disparador arriba). */
+export function fugaAcotadaUsd(costoPorInvocacionUsd = COSTO_OBSERVADO_POR_INVOCACION_USD): number {
+  return resolveFailStreakLimit() * costoPorInvocacionUsd
+}
 
 /** Qué freno lleva la cuenta · son roturas distintas y se cuentan aparte. */
 export type GateScope = 'run-sdk' | 'sala-router'

@@ -43,6 +43,9 @@ export interface SpendGateAlertInput {
   readonly agent_slug?: string | null
   readonly spent_usd?: number
   readonly cap_usd?: number
+  /** (b) La racha va en el aviso · se lee "racha 2/3" y se entiende sin abrir nada. */
+  readonly streak?: number
+  readonly streak_limit?: number
   /** Inyectables para prueba · nunca se pasan en producción. */
   readonly fetchImpl?: typeof fetch
   readonly webhookUrl?: string
@@ -61,7 +64,7 @@ const KIND_LABELS: Record<SpendGateAlertKind, string> = {
   query_error: 'El freno de gasto no pudo medir · dejó pasar',
   query_error_streak: 'FALLO SOSTENIDO del freno · deja de dejar pasar (fallo abierto acotado)',
   system_bucket_agent: 'Corrida paga SIN cliente · cubo system',
-  system_bucket_over_cap: 'El cubo system alcanzó su techo',
+  system_bucket_over_cap: 'cubo system agotado',
   canonical_lookup_degraded: 'No se pudo resolver la ficha canónica · el gasto puede contarse partido',
 }
 
@@ -85,6 +88,9 @@ export function buildSpendGateAlertText(input: SpendGateAlertInput): string {
   if (input.agent_slug) meta.push(`empleado \`${input.agent_slug}\``)
   if (typeof input.spent_usd === 'number') meta.push(`gastado $${input.spent_usd.toFixed(4)}`)
   if (typeof input.cap_usd === 'number') meta.push(`techo $${input.cap_usd.toFixed(2)}`)
+  if (typeof input.streak === 'number') {
+    meta.push(`racha ${input.streak}/${input.streak_limit ?? '?'}`)
+  }
   meta.push(`causa \`${input.kind}\``)
   parts.push(meta.join(' · '))
   return parts.join('\n')

@@ -48,6 +48,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { notifySpendGateDegradation } from './spend-gate-alert'
 import {
+  fugaAcotadaUsd,
   recordGateFailure,
   recordGateSuccess,
   isFailStreakExhausted,
@@ -109,6 +110,32 @@ export function resolveRunSpendCapUsd(): number {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_RUN_SPEND_CAP_USD
 }
 
+/**
+ * (d) CONVENCIÓN BARATA PARA IDENTIFICARSE · `system:<qué-es>` · ej. `system:health`.
+ *
+ * El cubo `system` es COMPARTIDO y **no tiene lista de exentos, a propósito**: no se
+ * le regala techo infinito a lo que no sabemos nombrar. Pero una sonda de salud
+ * legítima sí puede dejar de ser anónima, y eso cuesta una línea en quien la llama:
+ * mandar `agent` = `system:health` en vez de nada.
+ *
+ * **Qué compra identificarse · y qué NO:**
+ *   ✅ el aviso y las métricas la distinguen del anónimo · cuando el cubo se agote se
+ *      ve de un vistazo quién se lo comió
+ *   ✅ habilita la decisión: darle cubo propio o subir el techo, **con firma**
+ *   ❌ **NO la exime.** Identificarse no cambia el techo. Sigue contando y sigue
+ *      bloqueándose al agotarse.
+ *
+ * El orden es deliberado: **subir el techo es lo que necesita firma; identificarse es
+ * gratis.** Si lo barato fuera el atajo (una lista de exentos), el techo se vaciaría
+ * solo — cualquiera se agregaría a la lista y nadie firmaría nada.
+ */
+export const SYSTEM_SLUG_PREFIX = 'system:'
+
+/** ¿La llamada sin cliente se identificó con la convención? · NO la exime de nada. */
+export function esLlamadaIdentificada(agentSlug: string | null | undefined): boolean {
+  return typeof agentSlug === 'string' && agentSlug.startsWith(SYSTEM_SLUG_PREFIX)
+}
+
 /** Techo del cubo `system` · env `RUN_SPEND_CAP_SYSTEM_USD` > default $2. */
 export function resolveSystemSpendCapUsd(): number {
   const n = Number(process.env.RUN_SPEND_CAP_SYSTEM_USD)
@@ -127,11 +154,15 @@ function onQueryFailure(
 ): SpendGateResult {
   const streak = recordGateFailure('run-sdk')
   const agotado = isFailStreakExhausted('run-sdk', streak)
+  const limite = resolveFailStreakLimit()
   void notify({
     kind: agotado ? 'query_error_streak' : 'query_error',
     detail: agotado
-      ? `${detail} · ${streak} fallos seguidos (limite ${resolveFailStreakLimit()}) ⇒ el freno DEJA DE DEJAR PASAR.`
-      : `${detail} · fallo ${streak} de ${resolveFailStreakLimit()}.`,
+      ? `${detail} · ${streak} fallos SEGUIDOS ⇒ no es una caída, es una rotura · el freno DEJA DE DEJAR PASAR. ` +
+        `Fuga máxima acotada ≈ $${fugaAcotadaUsd().toFixed(2)} por instancia.`
+      : `${detail} · la corrida pasa · si el próximo también falla se acerca al corte.`,
+    streak,
+    streak_limit: limite,
     ...ctx,
   })
   return agotado
@@ -249,10 +280,24 @@ export async function checkRunSdkSpendCap(
 
       // El caso que importa · una corrida paga sin cliente. Siempre avisa,
       // bloquee o no: que el caso quede VISIBLE, no bloqueado a ciegas.
+      // (c) ACOPLAMIENTO que hay que poder leer en el canal · el cubo `system` es
+      // COMPARTIDO: una corrida anónima descontrolada lo agota y, a partir de ahí,
+      // bloquea también las sondas de salud. Eso se lee como "la plataforma está
+      // caída" cuando en realidad es "alguien sin nombre se comió el cubo". El
+      // aviso tiene que decirlo, o el diagnóstico se va para el lado equivocado.
       void notify({
         kind: spent >= cap ? 'system_bucket_over_cap' : 'system_bucket_agent',
         detail:
-          'Una corrida de empleado entró sin cliente asignado y se midió contra el cubo de sistema.',
+          spent >= cap
+            ? 'Cubo system agotado · desde ahora se bloquea TODO lo que entre sin cliente, ' +
+              'incluidas las sondas de salud. Si el tablero parece caído, mirá primero quién ' +
+              'agotó el cubo: es compartido. Identificarse (ver convención `system:health`) ' +
+              'permite distinguir la sonda del anónimo · subir el techo requiere firma.'
+            : esLlamadaIdentificada(agentSlug)
+              ? 'Llamada de sistema IDENTIFICADA sin cliente · medida contra el cubo compartido ' +
+                '(identificarse no la exime · sigue contando).'
+              : 'Corrida ANÓNIMA sin cliente asignado · medida contra el cubo de sistema. ' +
+                'Si es una sonda legítima, que se identifique como `system:<qué-es>`.',
         agent_slug: agentSlug,
         spent_usd: spent,
         cap_usd: cap,

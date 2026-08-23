@@ -17,7 +17,14 @@ import {
   resolveSystemSpendCapUsd,
   DEFAULT_SYSTEM_SPEND_CAP_USD,
 } from '../run-sdk-spend-gate'
-import { resetGateFailStreaks, DEFAULT_FAIL_STREAK_LIMIT } from '../spend-gate-fail-streak'
+import {
+  resetGateFailStreaks,
+  DEFAULT_FAIL_STREAK_LIMIT,
+  fugaAcotadaUsd,
+  COSTO_OBSERVADO_POR_INVOCACION_USD,
+} from '../spend-gate-fail-streak'
+import { buildSpendGateAlertText } from '../spend-gate-alert'
+import { esLlamadaIdentificada, SYSTEM_SLUG_PREFIX } from '../run-sdk-spend-gate'
 import { wireCapSpendQuerySupabase } from '../sala-router-consumer/cap-spend-query'
 
 // ── El par REAL, tal como está en producción (medido 2026-08-22) ──────────────
@@ -93,10 +100,23 @@ function stubSupabase(opts: {
 }
 
 /** Avisador falso · registra cada aviso para poder EXIGIRLO. */
+type AvisoVisto = {
+  kind: string
+  agent_slug?: string | null
+  detail?: string
+  streak?: number
+  streak_limit?: number
+}
 function espiaAvisos() {
-  const vistos: { kind: string; agent_slug?: string | null }[] = []
-  const notify = vi.fn(async (i: { kind: string; agent_slug?: string | null }) => {
-    vistos.push({ kind: i.kind, agent_slug: i.agent_slug })
+  const vistos: AvisoVisto[] = []
+  const notify = vi.fn(async (i: AvisoVisto) => {
+    vistos.push({
+      kind: i.kind,
+      agent_slug: i.agent_slug,
+      detail: i.detail,
+      streak: i.streak,
+      streak_limit: i.streak_limit,
+    })
     return { dispatched: true as const }
   })
   return { vistos, notify: notify as any }
@@ -357,5 +377,79 @@ describe('EL CUBO system BLOQUEA al tocar el techo · no sólo avisa', () => {
       expect(r.blocked).toBe(true)
       expect(r.reason).toBe('system_over_cap')
     }
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Las cuatro adiciones pedidas por el Consejero · 2026-08-23
+// ═══════════════════════════════════════════════════════════════════════════
+describe('adiciones del Consejero', () => {
+  // (a) ROJO si: K cambia sin re-hacer la cuenta en plata.
+  it('(a) la cota de fuga que compra K=3 está calculada, no intuida', () => {
+    expect(COSTO_OBSERVADO_POR_INVOCACION_USD).toBeCloseTo(0.7, 2)
+    // K × costo_por_invocación ≈ $2 por instancia
+    expect(fugaAcotadaUsd()).toBeCloseTo(2.1, 2)
+    expect(fugaAcotadaUsd()).toBeCloseTo(DEFAULT_FAIL_STREAK_LIMIT * 0.7, 5)
+    // si el costo por invocación sube, la cota sube: K hay que BAJARLO
+    expect(fugaAcotadaUsd(1.5)).toBeCloseTo(4.5, 2)
+  })
+
+  // (b) ROJO si: se deja de mandar la racha al aviso.
+  it('(b) la racha viaja en el aviso · se lee "racha 2/3"', async () => {
+    const { vistos, notify } = espiaAvisos()
+    const roto = () => stubSupabase({ errorInvocaciones: true, canonicalDe: {}, hermanasDe: {} })
+    await checkRunSdkSpendCap(roto(), PENICHE_CANONICA, { notify })
+    await checkRunSdkSpendCap(roto(), PENICHE_CANONICA, { notify })
+
+    expect(vistos[1].streak).toBe(2)
+    expect(vistos[1].streak_limit).toBe(3)
+    // y se ve así en el canal
+    expect(
+      buildSpendGateAlertText({ kind: 'query_error', detail: 'x', streak: 2, streak_limit: 3 }),
+    ).toContain('racha 2/3')
+  })
+
+  // (c) ROJO si: el aviso al agotar deja de nombrar el acoplamiento.
+  it('(c) al agotarse dice "cubo system agotado" y avisa que arrastra a las sondas', async () => {
+    const { vistos, notify } = espiaAvisos()
+    await checkRunSdkSpendCap(stubSupabase({ invocaciones: () => [{ cost_usd: 2.5 }] }), null, {
+      notify,
+      agentSlug: 'brand-strategist',
+    })
+    const aviso = vistos.find((v) => v.kind === 'system_bucket_over_cap')
+    expect(aviso).toBeDefined()
+    expect(buildSpendGateAlertText({ kind: 'system_bucket_over_cap', detail: '' })).toContain(
+      'cubo system agotado',
+    )
+    // el acoplamiento, explícito: agotarlo bloquea también las sondas de salud
+    expect(aviso!.detail).toContain('sondas de salud')
+    expect(aviso!.detail).toContain('compartido')
+  })
+
+  // (d) ROJO si: identificarse pasa a eximir (el atajo que NO queremos).
+  it('(d) identificarse distingue en el aviso · pero NO exime del techo', async () => {
+    expect(esLlamadaIdentificada('system:health')).toBe(true)
+    expect(esLlamadaIdentificada('brand-strategist')).toBe(false)
+    expect(SYSTEM_SLUG_PREFIX).toBe('system:')
+
+    const { notify } = espiaAvisos()
+    const r = await checkRunSdkSpendCap(
+      stubSupabase({ invocaciones: () => [{ cost_usd: 2.5 }] }),
+      null,
+      { notify, agentSlug: 'system:health' },
+    )
+    // identificada y aun así bloqueada · subir el techo es lo que necesita firma
+    expect(r.blocked).toBe(true)
+    expect(r.reason).toBe('system_over_cap')
+  })
+
+  it('(d) la llamada anónima se nombra como tal y se le pide identificarse', async () => {
+    const { vistos, notify } = espiaAvisos()
+    await checkRunSdkSpendCap(stubSupabase({ invocaciones: () => [{ cost_usd: 0.5 }] }), null, {
+      notify,
+      agentSlug: 'brand-strategist',
+    })
+    expect(vistos[0].detail).toContain('ANÓNIMA')
+    expect(vistos[0].detail).toContain('system:')
   })
 })
