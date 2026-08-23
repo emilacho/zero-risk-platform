@@ -32,6 +32,10 @@ export interface BrandAnalysis {
   writing_style: string
   // Messaging
   tagline: string | null
+  /** Statement de posicionamiento · campo PROPIO. NO es el elevator_pitch: el pitch
+   *  presenta, el posicionamiento ubica frente a la competencia. Columna propia desde
+   *  H1.2 (2026-08-21). Opcional porque un analysis viejo puede no traerlo. */
+  positioning?: string | null
   elevator_pitch: string
   key_messages: string[]
   value_propositions: string[]
@@ -156,6 +160,7 @@ Genera un JSON con esta estructura exacta:
   "tone_guidelines": {"social_media": "...", "email": "...", "blog": "...", "ads": "..."},
   "writing_style": "Estilo de escritura preferido",
   "tagline": "Tagline de la empresa o null",
+  "positioning": "Statement de posicionamiento: donde se ubica la marca frente a su competencia. NO repitas el elevator_pitch aqui, son dos cosas distintas.",
   "elevator_pitch": "Pitch de 2 oraciones",
   "key_messages": ["mensaje clave 1", "mensaje clave 2", "..."],
   "value_propositions": ["propuesta de valor 1", "..."],
@@ -432,6 +437,7 @@ Genera JSON:
         tone_guidelines: analysis.tone_guidelines,
         writing_style: analysis.writing_style,
         tagline: analysis.tagline,
+        positioning: analysis.positioning ?? null,
         elevator_pitch: analysis.elevator_pitch,
         key_messages: analysis.key_messages,
         value_propositions: analysis.value_propositions,
