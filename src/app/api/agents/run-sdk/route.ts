@@ -667,7 +667,9 @@ export async function POST(request: Request) {
     // §148 safety-net: a query failure never blocks legit traffic. Over-cap
     // → 429 (no model call · no cost).
     {
-      const gate = await checkRunSdkSpendCap(getSupabaseAdmin(), clientId)
+      const gate = await checkRunSdkSpendCap(getSupabaseAdmin(), clientId, {
+        agentSlug: agentName,
+      })
       if (gate.blocked) {
         console.warn(
           `[run-sdk] §150 CAP BLOCK · client=${String(clientId).slice(0, 8)} · ` +

@@ -18,6 +18,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { generateEmbeddings, EMBEDDING_DIMENSIONS, estimateCost } from "@/lib/brain/embed";
 import { runIngressFilter, type ProvenanceTag } from "@/lib/ingress-filter";
 import { buildBrainProvenanceTag } from "@/lib/client-brain";
+import { recordEmbedCost } from "@/lib/brain/embed-cost-ledger";
 import { brainEnforceEnabled, brainRoutePolicy, quarantineChunk } from "@/lib/brain/portero";
 
 export const dynamic = "force-dynamic";
@@ -307,6 +308,21 @@ export async function POST(request: Request) {
       { status: 502 },
     );
   }
+
+  // D1 · el costo del embebido se REGISTRA · antes sólo viajaba en la respuesta y
+  // el vigía de $8/día no lo veía. Nunca rompe el ingreso (ver embed-cost-ledger).
+  await recordEmbedCost(supabase, {
+    client_id: clientId,
+    source_table: sourceTable,
+    source_id: sourceId,
+    sections_count: accepted.length,
+    chars_count: accepted.reduce((acc, s) => acc + s.text.length, 0),
+    tokens_count: embed.tokens,
+    cost_usd: estimateCost(embed.tokens),
+    embedding_model: embed.model,
+    ingress_route: "/api/brain/ingest-source",
+    metadata: { chunks_upserted: (data ?? []).length, brain_source: brainSource },
+  });
 
   return NextResponse.json(
     {

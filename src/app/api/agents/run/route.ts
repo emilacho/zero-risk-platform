@@ -501,7 +501,9 @@ export async function POST(request: Request) {
     // (env RUN_SPEND_CAP_USD) · caps the run's own client_id, no hardcoded
     // tenants. §148 safety-net: a query failure never blocks legit traffic.
     {
-      const gate = await checkRunSdkSpendCap(getSupabaseAdmin(), resolvedClientId)
+      const gate = await checkRunSdkSpendCap(getSupabaseAdmin(), resolvedClientId, {
+        agentSlug: resolvedAgentName,
+      })
       if (gate.blocked) {
         console.warn(
           `[agents-run] §150 CAP BLOCK · client=${String(resolvedClientId).slice(0, 8)} · ` +

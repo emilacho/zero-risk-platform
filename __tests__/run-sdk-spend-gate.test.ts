@@ -98,10 +98,30 @@ describe('§150 run-sdk spend gate · GENÉRICO', () => {
     expect(r.spent_usd).toBeCloseTo(8.5)
   })
 
-  it('9 · no client_id → pass (no_client)', async () => {
-    const r = await checkRunSdkSpendCap(supabaseWith({ data: [], error: null }), null)
+  /**
+   * CONTRATO ACTUALIZADO · agujero A · plan 2026-08-15 · firmado por Emilio 2026-08-23.
+   *
+   * Antes esta prueba fijaba `reason:'no_client'`, que significaba **sin techo**:
+   * cualquier corrida paga sin cliente pasaba libre. Eso ERA el agujero — y no es
+   * teórico: el 10-ago `brand-strategist` corrió sin cliente y gastó $0,6147
+   * (medición CC#3 2026-08-22).
+   *
+   * Ahora cae en el cubo `system`, con techo propio ($2 · `RUN_SPEND_CAP_SYSTEM_USD`)
+   * y avisando. NO se bloquea a secas, porque un `client_id` nulo es legítimo para
+   * llamadas de sistema: el caso queda VISIBLE, no bloqueado a ciegas.
+   */
+  it('9 · sin client_id → NO pasa libre · se mide contra el cubo system', async () => {
+    const chain = {
+      select: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockResolvedValue({ data: [{ cost_usd: 0.6147 }], error: null }),
+    }
+    const sb = { from: vi.fn(() => chain) } as never
+    const r = await checkRunSdkSpendCap(sb, null, { notify: async () => ({ dispatched: true }) })
     expect(r.blocked).toBe(false)
-    expect(r.reason).toBe('no_client')
+    expect(r.reason).toBe('system_under_cap')
+    expect(r.cap_usd).toBe(2)
+    expect(r.spent_usd).toBeCloseTo(0.6147, 4)
   })
 
   it('10 · query error → NOT blocked (§148 safety-net)', async () => {

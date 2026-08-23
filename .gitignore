@@ -69,3 +69,7 @@ logs
 outputs/
 .env.branch
 .patch-out/
+
+# pnpm regenera este archivo en instalaciones locales y CI falla con
+# "packages field missing or empty" (ya pasó dos veces · b1c2fa3 y PR #320).
+pnpm-workspace.yaml
