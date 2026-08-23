@@ -24,8 +24,15 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CapSpendQuery } from './dispatch'
+import { notifySpendGateDegradation } from '../spend-gate-alert'
 
 export interface WireCapSpendQueryOptions {
+  /**
+   * Agujero C (plan 15-ago) · el `return 0` de abajo deja pasar en SILENCIO.
+   * La politica no cambia — un fallo de base no frena la agencia — pero ahora
+   * avisa. Inyectable para prueba.
+   */
+  readonly notify?: typeof notifySpendGateDegradation
   /** Canon canonical · strategy A (correlation_id) is canonical. */
   readonly strategy?: 'correlation' | 'tenant_window'
   /**
@@ -44,6 +51,7 @@ export function wireCapSpendQuerySupabase(
   options: WireCapSpendQueryOptions = {},
 ): CapSpendQuery {
   const strategy = options.strategy ?? 'correlation'
+  const notify = options.notify ?? notifySpendGateDegradation
   return async ({ tenant_id, correlation_id }) => {
     try {
       if (strategy === 'correlation') {
@@ -57,7 +65,15 @@ export function wireCapSpendQuerySupabase(
           .select('cost_usd')
           .eq('client_id', tenant_id)
           .eq('journey_id', correlation_id)
-        if (error) return 0
+        if (error) {
+          void notify({
+            kind: 'query_error',
+            detail:
+              'El freno del router no pudo medir el gasto por corriente (estrategia A) y dejo pasar.',
+            client_id: String(tenant_id),
+          })
+          return 0
+        }
         return sumCost(data)
       }
       // Strategy B · SUM by client_id since window floor (started_at).
@@ -68,9 +84,22 @@ export function wireCapSpendQuerySupabase(
         .select('cost_usd')
         .eq('client_id', tenant_id)
         .gte('started_at', floor)
-      if (error) return 0
+      if (error) {
+        void notify({
+          kind: 'query_error',
+          detail:
+            'El freno del router no pudo medir el gasto por ventana (estrategia B) y dejo pasar.',
+          client_id: String(tenant_id),
+        })
+        return 0
+      }
       return sumCost(data)
     } catch {
+      void notify({
+        kind: 'query_error',
+        detail: 'Excepcion en el freno del router · dejo pasar sin medir.',
+        client_id: String(tenant_id),
+      })
       return 0
     }
   }
