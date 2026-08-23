@@ -25,6 +25,35 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CapSpendQuery } from './dispatch'
 import { notifySpendGateDegradation } from '../spend-gate-alert'
+import {
+  recordGateFailure,
+  recordGateSuccess,
+  isFailStreakExhausted,
+  resolveFailStreakLimit,
+} from '../spend-gate-fail-streak'
+
+/**
+ * Fallo abierto ACOTADO (Consejero · 2026-08-23). Este freno devuelve un NÚMERO de
+ * gasto, no una decisión · así que la forma de dejar de dejar pasar es devolver
+ * `Infinity`: el dispatch compara `spent_usd >= cap_usd` y bloquea.
+ * Un fallo aislado sigue devolviendo 0 (pasa). K seguidos, no.
+ */
+function gastoTrasFallo(
+  notify: typeof notifySpendGateDegradation,
+  detail: string,
+  tenant_id: unknown,
+): number {
+  const streak = recordGateFailure('sala-router')
+  const agotado = isFailStreakExhausted('sala-router', streak)
+  void notify({
+    kind: agotado ? 'query_error_streak' : 'query_error',
+    detail: agotado
+      ? `${detail} · ${streak} fallos seguidos (limite ${resolveFailStreakLimit()}) ⇒ el freno del router DEJA DE DEJAR PASAR.`
+      : `${detail} · fallo ${streak} de ${resolveFailStreakLimit()}.`,
+    client_id: String(tenant_id),
+  })
+  return agotado ? Number.POSITIVE_INFINITY : 0
+}
 
 export interface WireCapSpendQueryOptions {
   /**
@@ -66,14 +95,13 @@ export function wireCapSpendQuerySupabase(
           .eq('client_id', tenant_id)
           .eq('journey_id', correlation_id)
         if (error) {
-          void notify({
-            kind: 'query_error',
-            detail:
-              'El freno del router no pudo medir el gasto por corriente (estrategia A) y dejo pasar.',
-            client_id: String(tenant_id),
-          })
-          return 0
+          return gastoTrasFallo(
+            notify,
+            'El freno del router no pudo medir el gasto por corriente (estrategia A).',
+            tenant_id,
+          )
         }
+        recordGateSuccess('sala-router')
         return sumCost(data)
       }
       // Strategy B · SUM by client_id since window floor (started_at).
@@ -85,22 +113,16 @@ export function wireCapSpendQuerySupabase(
         .eq('client_id', tenant_id)
         .gte('started_at', floor)
       if (error) {
-        void notify({
-          kind: 'query_error',
-          detail:
-            'El freno del router no pudo medir el gasto por ventana (estrategia B) y dejo pasar.',
-          client_id: String(tenant_id),
-        })
-        return 0
+        return gastoTrasFallo(
+          notify,
+          'El freno del router no pudo medir el gasto por ventana (estrategia B).',
+          tenant_id,
+        )
       }
+      recordGateSuccess('sala-router')
       return sumCost(data)
     } catch {
-      void notify({
-        kind: 'query_error',
-        detail: 'Excepcion en el freno del router · dejo pasar sin medir.',
-        client_id: String(tenant_id),
-      })
-      return 0
+      return gastoTrasFallo(notify, 'Excepcion en el freno del router.', tenant_id)
     }
   }
 }

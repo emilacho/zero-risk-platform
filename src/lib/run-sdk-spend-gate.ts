@@ -47,6 +47,12 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { notifySpendGateDegradation } from './spend-gate-alert'
+import {
+  recordGateFailure,
+  recordGateSuccess,
+  isFailStreakExhausted,
+  resolveFailStreakLimit,
+} from './spend-gate-fail-streak'
 
 const WINDOW_MS = 24 * 60 * 60 * 1000
 
@@ -66,6 +72,8 @@ export interface SpendGateResult {
     | 'under_cap'
     | 'over_cap'
     | 'query_error'
+    /** Fallo abierto ACOTADO · K fallos seguidos ⇒ deja de dejar pasar. */
+    | 'query_error_streak'
     /** Corrida sin `client_id` · medida contra el techo del cubo `system`. */
     | 'system_under_cap'
     | 'system_over_cap'
@@ -105,6 +113,30 @@ export function resolveRunSpendCapUsd(): number {
 export function resolveSystemSpendCapUsd(): number {
   const n = Number(process.env.RUN_SPEND_CAP_SYSTEM_USD)
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_SYSTEM_SPEND_CAP_USD
+}
+
+/**
+ * Fallo abierto ACOTADO (Consejero · 2026-08-23). Un fallo aislado pasa; K fallos
+ * SEGUIDOS ya no son una caída sino una rotura, y ahí dejar pasar es gasto sin
+ * techo por tiempo indefinido.
+ */
+function onQueryFailure(
+  notify: typeof notifySpendGateDegradation,
+  detail: string,
+  ctx: { client_id?: string | null; agent_slug?: string | null },
+): SpendGateResult {
+  const streak = recordGateFailure('run-sdk')
+  const agotado = isFailStreakExhausted('run-sdk', streak)
+  void notify({
+    kind: agotado ? 'query_error_streak' : 'query_error',
+    detail: agotado
+      ? `${detail} · ${streak} fallos seguidos (limite ${resolveFailStreakLimit()}) ⇒ el freno DEJA DE DEJAR PASAR.`
+      : `${detail} · fallo ${streak} de ${resolveFailStreakLimit()}.`,
+    ...ctx,
+  })
+  return agotado
+    ? { blocked: true, reason: 'query_error_streak' }
+    : { blocked: false, reason: 'query_error' }
 }
 
 function sumCost(rows: unknown[] | null | undefined): number {
@@ -206,14 +238,14 @@ export async function checkRunSdkSpendCap(
         .is('client_id', null)
         .gte('started_at', floor)
       if (error) {
-        void notify({
-          kind: 'query_error',
-          detail: 'Falló la consulta del cubo system · la corrida sigue SIN techo medido.',
-          agent_slug: agentSlug,
-        })
-        return { blocked: false, reason: 'query_error' }
+        return onQueryFailure(
+          notify,
+          'Falló la consulta del cubo system · la corrida sigue SIN techo medido.',
+          { agent_slug: agentSlug },
+        )
       }
       const spent = sumCost(data)
+      recordGateSuccess('run-sdk')
 
       // El caso que importa · una corrida paga sin cliente. Siempre avisa,
       // bloquee o no: que el caso quede VISIBLE, no bloqueado a ciegas.
@@ -231,12 +263,11 @@ export async function checkRunSdkSpendCap(
       }
       return { blocked: false, reason: 'system_under_cap', cap_usd: cap, spent_usd: spent }
     } catch {
-      void notify({
-        kind: 'query_error',
-        detail: 'Excepción midiendo el cubo system · la corrida sigue SIN techo medido.',
-        agent_slug: agentSlug,
-      })
-      return { blocked: false, reason: 'query_error' }
+      return onQueryFailure(
+        notify,
+        'Excepción midiendo el cubo system · la corrida sigue SIN techo medido.',
+        { agent_slug: agentSlug },
+      )
     }
   }
 
@@ -252,16 +283,15 @@ export async function checkRunSdkSpendCap(
     const { data, error } = await scoped_.gte('started_at', floor)
     // §148 safety-net · un error de query no debe bloquear tráfico legítimo…
     if (error) {
-      // …pero C · ya no en silencio.
-      void notify({
-        kind: 'query_error',
-        detail: 'Falló la consulta del gasto acumulado · la corrida pasa SIN techo medido.',
-        client_id: String(clientId),
-        agent_slug: agentSlug,
-      })
-      return { blocked: false, reason: 'query_error' }
+      // …pero C · ya no en silencio · y ACOTADO: K seguidos y deja de pasar.
+      return onQueryFailure(
+        notify,
+        'Falló la consulta del gasto acumulado · la corrida pasa SIN techo medido.',
+        { client_id: String(clientId), agent_slug: agentSlug },
+      )
     }
     const spent = sumCost(data)
+    recordGateSuccess('run-sdk')
 
     const cap = resolveRunSpendCapUsd()
     const base = {
@@ -273,12 +303,10 @@ export async function checkRunSdkSpendCap(
     if (spent >= cap) return { blocked: true, reason: 'over_cap', ...base }
     return { blocked: false, reason: 'under_cap', ...base }
   } catch {
-    void notify({
-      kind: 'query_error',
-      detail: 'Excepción midiendo el gasto acumulado · la corrida pasa SIN techo medido.',
-      client_id: String(clientId),
-      agent_slug: agentSlug,
-    })
-    return { blocked: false, reason: 'query_error' }
+    return onQueryFailure(
+      notify,
+      'Excepción midiendo el gasto acumulado · la corrida pasa SIN techo medido.',
+      { client_id: String(clientId), agent_slug: agentSlug },
+    )
   }
 }

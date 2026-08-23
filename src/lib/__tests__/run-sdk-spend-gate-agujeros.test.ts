@@ -17,6 +17,8 @@ import {
   resolveSystemSpendCapUsd,
   DEFAULT_SYSTEM_SPEND_CAP_USD,
 } from '../run-sdk-spend-gate'
+import { resetGateFailStreaks, DEFAULT_FAIL_STREAK_LIMIT } from '../spend-gate-fail-streak'
+import { wireCapSpendQuerySupabase } from '../sala-router-consumer/cap-spend-query'
 
 // ── El par REAL, tal como está en producción (medido 2026-08-22) ──────────────
 const PENICHE_CANONICA = 'e388a370-910f-4ee7-9a48-4a79393b8cb4' // "Peniche Surf Escape"
@@ -104,6 +106,8 @@ beforeEach(() => {
   delete process.env.RUN_SPEND_CAP_ENFORCE
   delete process.env.RUN_SPEND_CAP_USD
   delete process.env.RUN_SPEND_CAP_SYSTEM_USD
+  delete process.env.RUN_SPEND_CAP_FAIL_STREAK
+  resetGateFailStreaks()
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -240,5 +244,118 @@ describe('B1 · el techo suma por la familia · PAR REAL de Peniche', () => {
     expect(fam.degraded).toBe(true)
     expect(fam.family).toEqual([PENICHE_FANTASMA])
     expect(vistos.map((v) => v.kind)).toContain('canonical_lookup_degraded')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Criterio del Consejero · aceptado 2026-08-23
+// ═══════════════════════════════════════════════════════════════════════════
+describe('FALLO ABIERTO ACOTADO · un fallo pasa · K seguidos NO', () => {
+  const roto = () => stubSupabase({ errorInvocaciones: true, canonicalDe: {}, hermanasDe: {} })
+
+  it('el límite por default son 3 fallos seguidos', () => {
+    expect(DEFAULT_FAIL_STREAK_LIMIT).toBe(3)
+  })
+
+  // ROJO si: el camino de error vuelve a devolver siempre `{blocked:false}`.
+  // Razón del Consejero · una consulta que falla SIEMPRE no es una caída, es una
+  // rotura · y ahí dejar pasar es gasto sin techo por tiempo indefinido.
+  it('los 2 primeros fallos DEJAN PASAR · el 3º FRENA', async () => {
+    const { notify } = espiaAvisos()
+    const r1 = await checkRunSdkSpendCap(roto(), PENICHE_CANONICA, { notify })
+    const r2 = await checkRunSdkSpendCap(roto(), PENICHE_CANONICA, { notify })
+    const r3 = await checkRunSdkSpendCap(roto(), PENICHE_CANONICA, { notify })
+
+    expect([r1.blocked, r2.blocked]).toEqual([false, false]) // la caída pasajera pasa
+    expect(r1.reason).toBe('query_error')
+    expect(r3.blocked).toBe(true) // la rotura, no
+    expect(r3.reason).toBe('query_error_streak')
+  })
+
+  it('el aviso distingue la caída de la rotura', async () => {
+    const { vistos, notify } = espiaAvisos()
+    for (let i = 0; i < 3; i++) await checkRunSdkSpendCap(roto(), PENICHE_CANONICA, { notify })
+    expect(vistos.slice(0, 2).map((v) => v.kind)).toEqual(['query_error', 'query_error'])
+    expect(vistos[2].kind).toBe('query_error_streak')
+  })
+
+  // ROJO si: se quita `recordGateSuccess` de los caminos exitosos.
+  it('un solo ÉXITO reinicia la cuenta · no se acumulan fallos de días distintos', async () => {
+    const { notify } = espiaAvisos()
+    const sano = () =>
+      stubSupabase({ invocaciones: () => [{ cost_usd: 0.1 }], canonicalDe: {}, hermanasDe: {} })
+
+    await checkRunSdkSpendCap(roto(), PENICHE_CANONICA, { notify })
+    await checkRunSdkSpendCap(roto(), PENICHE_CANONICA, { notify })
+    await checkRunSdkSpendCap(sano(), PENICHE_CANONICA, { notify }) // ← reinicia
+    const r = await checkRunSdkSpendCap(roto(), PENICHE_CANONICA, { notify })
+
+    expect(r.blocked).toBe(false)
+    expect(r.reason).toBe('query_error')
+  })
+
+  it('el límite es configurable por env', async () => {
+    process.env.RUN_SPEND_CAP_FAIL_STREAK = '1'
+    const { notify } = espiaAvisos()
+    const r = await checkRunSdkSpendCap(roto(), PENICHE_CANONICA, { notify })
+    expect(r.blocked).toBe(true)
+    expect(r.reason).toBe('query_error_streak')
+  })
+
+  // El freno del router devuelve un NÚMERO · su forma de frenar es Infinity,
+  // porque el dispatch compara `spent_usd >= cap_usd`.
+  it('el freno del ROUTER también se acota · K fallos ⇒ Infinity (el dispatch bloquea)', async () => {
+    const { notify } = espiaAvisos()
+    const roto_ = {
+      from: () => ({
+        select: () => ({ eq: () => ({ eq: async () => ({ data: null, error: { message: 'x' } }) }) }),
+      }),
+    } as never
+    const q = wireCapSpendQuerySupabase(roto_, { notify })
+    const a = await q({ tenant_id: 't', stream_id: 's', correlation_id: 'c' })
+    const b = await q({ tenant_id: 't', stream_id: 's', correlation_id: 'c' })
+    const c = await q({ tenant_id: 't', stream_id: 's', correlation_id: 'c' })
+    expect([a, b]).toEqual([0, 0]) // fallo aislado · pasa
+    expect(c).toBe(Number.POSITIVE_INFINITY) // rotura · frena
+  })
+})
+
+describe('EL CUBO system BLOQUEA al tocar el techo · no sólo avisa', () => {
+  // ROJO si: el `if (spent >= cap)` del cubo system se degrada a sólo-avisar.
+  it('exactamente $2 · frontera · BLOQUEA', async () => {
+    const { notify } = espiaAvisos()
+    const r = await checkRunSdkSpendCap(
+      stubSupabase({ invocaciones: () => [{ cost_usd: 2 }] }),
+      null,
+      { notify, agentSlug: 'brand-strategist' },
+    )
+    expect(r.spent_usd).toBe(2)
+    expect(r.blocked).toBe(true)
+    expect(r.reason).toBe('system_over_cap')
+  })
+
+  it('apenas debajo del techo · pasa y queda visible', async () => {
+    const { vistos, notify } = espiaAvisos()
+    const r = await checkRunSdkSpendCap(
+      stubSupabase({ invocaciones: () => [{ cost_usd: 1.99 }] }),
+      null,
+      { notify, agentSlug: 'brand-strategist' },
+    )
+    expect(r.blocked).toBe(false)
+    expect(vistos.map((v) => v.kind)).toContain('system_bucket_agent')
+  })
+
+  // No se le regala techo infinito a lo que no sabemos nombrar (Consejero).
+  it('NO hay lista de exentos · todo lo que entra sin cliente comparte el mismo cubo', async () => {
+    const { notify } = espiaAvisos()
+    for (const slug of ['health-probe', 'smoke-test', null]) {
+      const r = await checkRunSdkSpendCap(
+        stubSupabase({ invocaciones: () => [{ cost_usd: 2.5 }] }),
+        null,
+        { notify, agentSlug: slug },
+      )
+      expect(r.blocked).toBe(true)
+      expect(r.reason).toBe('system_over_cap')
+    }
   })
 })

@@ -26,6 +26,8 @@
 export type SpendGateAlertKind =
   /** La consulta del tope falló · el freno dejó pasar sin poder medir. */
   | 'query_error'
+  /** K fallos SEGUIDOS · ya no es una caída, es una rotura · el freno deja de dejar pasar. */
+  | 'query_error_streak'
   /** Una invocación de agente REAL corrió sin `client_id` (cubo `system`). */
   | 'system_bucket_agent'
   /** El cubo `system` alcanzó su techo. */
@@ -57,6 +59,7 @@ export const ALERT_MIN_INTERVAL_MS = 5 * 60 * 1000
 
 const KIND_LABELS: Record<SpendGateAlertKind, string> = {
   query_error: 'El freno de gasto no pudo medir · dejó pasar',
+  query_error_streak: 'FALLO SOSTENIDO del freno · deja de dejar pasar (fallo abierto acotado)',
   system_bucket_agent: 'Corrida paga SIN cliente · cubo system',
   system_bucket_over_cap: 'El cubo system alcanzó su techo',
   canonical_lookup_degraded: 'No se pudo resolver la ficha canónica · el gasto puede contarse partido',
