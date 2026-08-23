@@ -85,9 +85,29 @@ interface JourneyOutcome {
  * `promote` o `escalate_hitl`. El loop-cap vive en el núcleo (`gradeArtifact`) · acá hay un
  * guard duro anti-runaway (el test verifica que el núcleo corta ANTES).
  */
+/** H1.4 · verificacion simulada: la procedencia SI traza a evidencia de descubrimiento. */
+const matcherVerificado = (async () => ({
+  matches: [],
+  evidence_refs: ['c-competencia', 'c-icp'],
+  grounding: 'chunk_linked' as const,
+  coverage: 1,
+  factual_coverage: 1,
+  factual_matched: 2,
+  factual_total: 2,
+  threshold: 0.72,
+  grounding_coverage_min: 1,
+})) as never
+
 async function runOnboardingJourney(
   scorer: FidelityScorer,
-  opts: { evidenceRefs?: readonly FidelityEvidenceRef[]; policyOver?: Partial<JefaturaGradingPolicy> } = {},
+  opts: {
+    evidenceRefs?: readonly FidelityEvidenceRef[]
+    policyOver?: Partial<JefaturaGradingPolicy>
+    /** H1.4 · la procedencia ya no se le cree a las refs: se VERIFICA contra el CEREBRO.
+     *  Acá se inyecta esa verificacion para no salir a la red ($0). Sin matcher, el
+     *  enganche no puede verificar y devuelve prose_only (que es lo honesto). */
+    matcher?: never
+  } = {},
 ): Promise<JourneyOutcome> {
   const deps = makeDeps(scorer, opts.policyOver)
   const maxCycles = cimientoPolicy(opts.policyOver).max_cycles
@@ -102,6 +122,7 @@ async function runOnboardingJourney(
         brandBookDraft: { positioning: `borrador-v${cycle}`, icp_summary: 'surfers' },
         evidence: { client_name: 'Peniche', industry: 'surf' },
         evidenceRefs: opts.evidenceRefs ?? [],
+        matcher: opts.matcher,
         fidelityCycle: cycle + 1, // 1-based · el productor lo lleva
         cycle, // 0-based · loop-cap del núcleo
       },
@@ -127,6 +148,7 @@ describe('journey onboarding → Jefatura · ruta feliz (golden E2E)', () => {
   it('scores ≥0.85 al primer intento → PROMUEVE en 1 paso · 0 re-corrección', async () => {
     const j = await runOnboardingJourney(goldenScorer({ 1: { positioning: 0.93, icp_summary: 0.9 } }), {
       evidenceRefs: linkedRefs,
+      matcher: matcherVerificado,
     })
     expect(j.actions).toEqual(['promote'])
     expect(j.final.output.verdict).toBe('PASS')
@@ -138,7 +160,7 @@ describe('journey onboarding → Jefatura · ruta feliz (golden E2E)', () => {
   it('falla, el creador re-sintetiza, PASA en ciclo 1 → [recorrect, promote]', async () => {
     const j = await runOnboardingJourney(
       goldenScorer({ 1: { positioning: 0.6, icp_summary: 0.8 }, 2: { positioning: 0.9, icp_summary: 0.9 } }),
-      { evidenceRefs: linkedRefs },
+      { evidenceRefs: linkedRefs, matcher: matcherVerificado },
     )
     expect(j.actions).toEqual(['recorrect', 'promote'])
     expect(j.final.output.verdict).toBe('PASS')
@@ -152,6 +174,7 @@ describe('journey onboarding → Jefatura · rutas de FALLA', () => {
   it('scores por debajo hasta agotar el cap → ESCALATE a humano (nunca auto-promueve)', async () => {
     const j = await runOnboardingJourney(goldenScorer({ 1: { positioning: 0.5, icp_summary: 0.6 } }), {
       evidenceRefs: linkedRefs,
+      matcher: matcherVerificado,
     })
     // recorrect en cada ciclo con presupuesto, terminal escalate_hitl al agotar el cap
     expect(j.final.action).toBe('escalate_hitl')
@@ -166,6 +189,7 @@ describe('journey onboarding → Jefatura · rutas de FALLA', () => {
     const j = await runOnboardingJourney(goldenScorer({ 1: { positioning: 0.4, icp_summary: 0.5 } }), {
       policyOver: { max_cycles: 1 },
       evidenceRefs: linkedRefs,
+      matcher: matcherVerificado,
     })
     expect(j.actions).toEqual(['escalate_hitl'])
     expect(j.final.output.verdict).toBe('ESCALATE')
@@ -188,6 +212,7 @@ describe('journey onboarding → Jefatura · invariantes §8-2 + no-circularidad
     const j = await runOnboardingJourney(goldenScorer({ 1: { positioning: 0.99, icp_summary: 0.99 } }), {
       policyOver: { judgment_enabled: true },
       evidenceRefs: linkedRefs,
+      matcher: matcherVerificado,
     })
     expect(j.actions).toEqual(['escalate_hitl']) // el cimiento NUNCA se juzga · defensa del núcleo
     expect(j.final.action).toBe('escalate_hitl')
@@ -196,7 +221,7 @@ describe('journey onboarding → Jefatura · invariantes §8-2 + no-circularidad
   it('la secuencia de acciones es monótona: recorrect* seguido de UN terminal', async () => {
     const j = await runOnboardingJourney(
       goldenScorer({ 1: { positioning: 0.6, icp_summary: 0.7 }, 2: { positioning: 0.7, icp_summary: 0.72 }, 3: { positioning: 0.95, icp_summary: 0.95 } }),
-      { evidenceRefs: linkedRefs },
+      { evidenceRefs: linkedRefs, matcher: matcherVerificado },
     )
     const terminal = ['promote', 'escalate_hitl']
     // todos menos el último son recorrect · el último es terminal · uno solo

@@ -1,0 +1,115 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform[39m
+
+ [31m❯[39m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts [2m([22m[2m8 tests[22m[2m | [22m[31m7 failed[39m[2m)[22m[32m 9[2mms[22m[39m
+[31m   [31m×[31m H1.4 · una afirmación NO puede fundamentarse en el propio manual[2m > [22mbrand_books @1.000 · el auto-fundamento NO cuenta · queda prose_only[39m[32m 5[2mms[22m[39m
+[31m     → resolveCimientoGrounding is not a function[39m
+[31m   [31m×[31m H1.4 · una afirmación NO puede fundamentarse en el propio manual[2m > [22mevidencia REAL de descubrimiento · sí funda · chunk_linked[39m[32m 0[2mms[22m[39m
+[31m     → resolveCimientoGrounding is not a function[39m
+[31m   [31m×[31m H1.4 · una afirmación NO puede fundamentarse en el propio manual[2m > [22mel auto-fundamento NO tapa a la evidencia real que viene detrás[39m[32m 0[2mms[22m[39m
+[31m     → resolveCimientoGrounding is not a function[39m
+   [32m✓[39m H1.4 · trampa 1 · el umbral es 0.72 · no se toca[2m > [22mel módulo declara 0.72 y el enchufe no lo pisa[32m 0[2mms[22m[39m
+[31m   [31m×[31m H1.4 · trampa 1 · el umbral es 0.72 · no se toca[2m > [22m0.74 funda (soporte real medido) · 0.69 no (ruido medido)[39m[32m 0[2mms[22m[39m
+[31m     → resolveCimientoGrounding is not a function[39m
+[31m   [31m×[31m H1.4 · trampa 2 · gatea SOLO campos fácticos[2m > [22mlas reglas de voz NO bloquean el grounding · si no, el manual queda en borrador para siempre[39m[32m 0[2mms[22m[39m
+[31m     → resolveCimientoGrounding is not a function[39m
+[31m   [31m×[31m H1.4 · sin poder verificar, no se afirma lo que no se sabe[2m > [22msin cliente no se puede consultar el cerebro ⇒ prose_only, aunque las refs digan lo contrario[39m[32m 0[2mms[22m[39m
+[31m     → resolveCimientoGrounding is not a function[39m
+[31m   [31m×[31m H1.4 · sin poder verificar, no se afirma lo que no se sabe[2m > [22msin campos fácticos en el borrador ⇒ prose_only · no hay nada que fundar[39m[32m 0[2mms[22m[39m
+[31m     → resolveCimientoGrounding is not a function[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 7 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · una afirmación NO puede fundamentarse en el propio manual[2m > [22mbrand_books @1.000 · el auto-fundamento NO cuenta · queda prose_only
+[31m[1mTypeError[22m: resolveCimientoGrounding is not a function[39m
+[36m [2m❯[22m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts:[2m73:21[22m[39m
+    [90m 71| [39m    ])
+    [90m 72| [39m
+    [90m 73| [39m    [35mconst[39m r [33m=[39m [35mawait[39m [34mresolveCimientoGrounding[39m({
+    [90m   | [39m                    [31m^[39m
+    [90m 74| [39m      clientId[33m:[39m [33mCLIENTE[39m[33m,[39m
+    [90m 75| [39m      brandBookDraft[33m:[39m borrador[33m,[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · una afirmación NO puede fundamentarse en el propio manual[2m > [22mevidencia REAL de descubrimiento · sí funda · chunk_linked
+[31m[1mTypeError[22m: resolveCimientoGrounding is not a function[39m
+[36m [2m❯[22m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts:[2m92:21[22m[39m
+    [90m 90| [39m    ])
+    [90m 91| [39m
+    [90m 92| [39m    const r = await resolveCimientoGrounding({ clientId: CLIENTE, bran…
+    [90m   | [39m                    [31m^[39m
+    [90m 93| [39m
+    [90m 94| [39m    [34mexpect[39m(r[33m.[39mgrounding)[33m.[39m[34mtoBe[39m([32m'chunk_linked'[39m)
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · una afirmación NO puede fundamentarse en el propio manual[2m > [22mel auto-fundamento NO tapa a la evidencia real que viene detrás
+[31m[1mTypeError[22m: resolveCimientoGrounding is not a function[39m
+[36m [2m❯[22m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts:[2m109:21[22m[39m
+    [90m107| [39m    ])
+    [90m108| [39m
+    [90m109| [39m    const r = await resolveCimientoGrounding({ clientId: CLIENTE, bran…
+    [90m   | [39m                    [31m^[39m
+    [90m110| [39m
+    [90m111| [39m    [34mexpect[39m(r[33m.[39mgrounding)[33m.[39m[34mtoBe[39m([32m'chunk_linked'[39m)
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · trampa 1 · el umbral es 0.72 · no se toca[2m > [22m0.74 funda (soporte real medido) · 0.69 no (ruido medido)
+[31m[1mTypeError[22m: resolveCimientoGrounding is not a function[39m
+[36m [2m❯[22m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts:[2m130:21[22m[39m
+    [90m128| [39m    ])
+    [90m129| [39m
+    [90m130| [39m    const r = await resolveCimientoGrounding({ clientId: CLIENTE, bran…
+    [90m   | [39m                    [31m^[39m
+    [90m131| [39m
+    [90m132| [39m    expect(r.factual_matched).toBe(1)                       // sólo el…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · trampa 2 · gatea SOLO campos fácticos[2m > [22mlas reglas de voz NO bloquean el grounding · si no, el manual queda en borrador para siempre
+[31m[1mTypeError[22m: resolveCimientoGrounding is not a function[39m
+[36m [2m❯[22m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts:[2m150:21[22m[39m
+    [90m148| [39m    cerebro.porConsulta.set(VOZ, [])   // sin evidencia · es correcto …
+    [90m149| [39m
+    [90m150| [39m    [35mconst[39m r [33m=[39m [35mawait[39m [34mresolveCimientoGrounding[39m({
+    [90m   | [39m                    [31m^[39m
+    [90m151| [39m      clientId[33m:[39m [33mCLIENTE[39m[33m,[39m
+    [90m152| [39m      brandBookDraft[33m:[39m { [33m...[39mborrador[33m,[39m voice_description[33m:[39m [33mVOZ[39m }[33m,[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · sin poder verificar, no se afirma lo que no se sabe[2m > [22msin cliente no se puede consultar el cerebro ⇒ prose_only, aunque las refs digan lo contrario
+[31m[1mTypeError[22m: resolveCimientoGrounding is not a function[39m
+[36m [2m❯[22m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts:[2m162:21[22m[39m
+    [90m160| [39mdescribe('H1.4 · sin poder verificar, no se afirma lo que no se sabe',…
+    [90m161| [39m  it('sin cliente no se puede consultar el cerebro ⇒ prose_only, aunqu…
+    [90m162| [39m    [35mconst[39m r [33m=[39m [35mawait[39m [34mresolveCimientoGrounding[39m({
+    [90m   | [39m                    [31m^[39m
+    [90m163| [39m      clientId[33m:[39m [35mnull[39m[33m,[39m
+    [90m164| [39m      brandBookDraft[33m:[39m borrador[33m,[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts[2m > [22mH1.4 · sin poder verificar, no se afirma lo que no se sabe[2m > [22msin campos fácticos en el borrador ⇒ prose_only · no hay nada que fundar
+[31m[1mTypeError[22m: resolveCimientoGrounding is not a function[39m
+[36m [2m❯[22m __tests__/cerebro-h1-4-filtro-auto-fundamento.test.ts:[2m173:21[22m[39m
+    [90m171| [39m
+    [90m172| [39m  it('sin campos fácticos en el borrador ⇒ prose_only · no hay nada qu…
+    [90m173| [39m    [35mconst[39m r [33m=[39m [35mawait[39m [34mresolveCimientoGrounding[39m({
+    [90m   | [39m                    [31m^[39m
+    [90m174| [39m      clientId[33m:[39m [33mCLIENTE[39m[33m,[39m
+    [90m175| [39m      brandBookDraft[33m:[39m { voice_description[33m:[39m [32m'tono cercano'[39m }[33m,[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m7 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (8)[39m
+[2m   Start at [22m 14:23:59
+[2m   Duration [22m 13.88s[2m (transform 116ms, setup 0ms, collect 145ms, tests 9ms, environment 0ms, prepare 1.05s)[22m
+

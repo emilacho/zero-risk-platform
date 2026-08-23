@@ -105,13 +105,40 @@ describe('grounding prose_only ⇒ promoción PROVISIONAL (§8-2)', () => {
     expect(r.provisional).toBe(true)
   })
 
-  it('PASS + evidence_refs chunk_linked → provisional=false', async () => {
+  // H1.4 (2026-08-21) · CAMBIO DE CONTRATO, deliberado.
+  // Antes bastaba con que `evidence_refs` dijera `chunk_linked` para dar por
+  // fundamentado el cimiento. Esa confianza era el agujero: la ref NO lleva la tabla de
+  // origen, así que un calce del manual contra el manual mismo @1.000 pasaba igual.
+  // Ahora la procedencia se VERIFICA contra evidencia de descubrimiento.
+  it('PASS + evidence_refs chunk_linked SIN verificar → sigue siendo provisional', async () => {
     const deps = makeDeps({ positioning: 0.92, icp_summary: 0.9 })
     const refs = [{ field: 'positioning', chunk_id: 'ch-1', grounding: 'chunk_linked' as const }]
     const r = await gradeOnboardingCimiento(baseParams({ evidenceRefs: refs }), deps)
     expect(r.action).toBe('promote')
+    expect(r.grounding).toBe('prose_only')      // la ref sola ya no alcanza
+    expect(r.provisional).toBe(true)
+    expect(r.groundingResult.verified).toBe(false)
+  })
+
+  it('PASS + procedencia VERIFICADA contra evidencia → provisional=false', async () => {
+    const deps = makeDeps({ positioning: 0.92, icp_summary: 0.9 })
+    // matcher inyectado · simula la verificación real contra el CEREBRO ($0 · sin red)
+    const matcher = (async () => ({
+      matches: [],
+      evidence_refs: ['c-competencia', 'c-icp'],
+      grounding: 'chunk_linked' as const,
+      coverage: 1,
+      factual_coverage: 1,
+      factual_matched: 2,
+      factual_total: 2,
+      threshold: 0.72,
+      grounding_coverage_min: 1,
+    })) as never
+    const r = await gradeOnboardingCimiento(baseParams({ matcher }), deps)
+    expect(r.action).toBe('promote')
     expect(r.grounding).toBe('chunk_linked')
     expect(r.provisional).toBe(false)
+    expect(r.groundingResult.evidence_refs).toEqual(['c-competencia', 'c-icp'])
   })
 })
 
