@@ -669,6 +669,9 @@ export async function POST(request: Request) {
     {
       const gate = await checkRunSdkSpendCap(getSupabaseAdmin(), clientId, {
         agentSlug: agentName,
+        // VARA POR CORRIDA · el identificador ya está resuelto arriba (L574) y el
+        // enforcement de L604 garantiza que no sea nulo acá.
+        runId: wfAttr.workflow_execution_id,
       })
       if (gate.blocked) {
         console.warn(

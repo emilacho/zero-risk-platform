@@ -503,6 +503,10 @@ export async function POST(request: Request) {
     {
       const gate = await checkRunSdkSpendCap(getSupabaseAdmin(), resolvedClientId, {
         agentSlug: resolvedAgentName,
+        // VARA POR CORRIDA · el identificador ya está resuelto arriba (L149) y el
+        // enforcement de L156 garantiza que no sea nulo acá. Simétrico con run-sdk:
+        // si una puerta lo pasa y la otra no, la vara protege un camino y deja el otro.
+        runId: wfExecCandidate,
       })
       if (gate.blocked) {
         console.warn(
