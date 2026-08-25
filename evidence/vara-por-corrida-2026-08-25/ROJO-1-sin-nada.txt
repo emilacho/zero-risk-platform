@@ -1,0 +1,518 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform[39m
+
+ [31m❯[39m __tests__/vara-por-corrida.test.ts [2m([22m[2m9 tests[22m[2m | [22m[31m6 failed[39m[2m)[22m[32m 61[2mms[22m[39m
+[31m   [31m×[31m vara por corrida · CONDUCTA[2m > [22m🔴 EL ROJO DE ACEPTACIÓN · una corrida que el $5 bloquea y el $8 NO[39m[32m 45[2mms[22m[39m
+[31m     → la vara por corrida no bloqueó: expected false to be true // Object.is equality[39m
+   [32m✓[39m vara por corrida · CONDUCTA[2m > [22muna corrida legítima ($2,88 · la más cara jamás registrada) NO se corta[32m 1[2mms[22m[39m
+   [32m✓[39m vara por corrida · CONDUCTA[2m > [22mla acumulación la sigue atrapando el $8 · 3 corridas de $2,80 pasan una a una[32m 1[2mms[22m[39m
+[31m   [31m×[31m vara por corrida · CONDUCTA[2m > [22msólo suma la corrida propia · el gasto de otra corrida NO cuenta contra la vara[39m[32m 1[2mms[22m[39m
+[31m     → contó gasto de otra corrida: expected undefined to be 1 // Object.is equality[39m
+[31m   [31m×[31m vara por corrida · CONDUCTA[2m > [22m🔴 REGLA DEL CAMINO RUIDOSO · corrida NO identificable no cuenta como $0 · avisa[39m[32m 1[2mms[22m[39m
+[31m     → expected undefined to be true // Object.is equality[39m
+[31m   [31m×[31m vara por corrida · CABLEADO · las dos puertas le pasan el identificador[2m > [22msrc/app/api/agents/run-sdk/route.ts le pasa el identificador al freno (wfAttr.workflow_execution_id · el punto firmado)[39m[32m 3[2mms[22m[39m
+[31m     → src/app/api/agents/run-sdk/route.ts · el freno se llama SIN runId · la vara está desconectada: expected 'checkRunSdkSpendCap(getSupabaseAdmin(…' to contain 'runId'[39m
+[31m   [31m×[31m vara por corrida · CABLEADO · las dos puertas le pasan el identificador[2m > [22msrc/app/api/agents/run/route.ts le pasa el identificador al freno (wfExecCandidate · el hermano)[39m[32m 1[2mms[22m[39m
+[31m     → src/app/api/agents/run/route.ts · el freno se llama SIN runId · la vara está desconectada: expected 'checkRunSdkSpendCap(getSupabaseAdmin(…' to contain 'runId'[39m
+   [32m✓[39m vara por corrida · CABLEADO · las dos puertas le pasan el identificador[2m > [22mninguna de las dos usa journey_id · está vacío al 100 % y daría un freno que nunca dispara[32m 1[2mms[22m[39m
+[31m   [31m×[31m vara por corrida · lo que va ESCRITO al lado del default[2m > [22mel margen real, el disparador de recalibración y la regla del camino ruidoso[39m[32m 6[2mms[22m[39m
+[31m     → falta el default de la vara: expected '/**\r\n * §150 spend gate · freno de …' to contain 'DEFAULT_RUN_SCOPED_CAP_USD = 5.0'[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 6 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m __tests__/vara-por-corrida.test.ts[2m > [22mvara por corrida · CONDUCTA[2m > [22m🔴 EL ROJO DE ACEPTACIÓN · una corrida que el $5 bloquea y el $8 NO
+[31m[1mAssertionError[22m: la vara por corrida no bloqueó: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m __tests__/vara-por-corrida.test.ts:[2m79:57[22m[39m
+    [90m 77| [39m    })
+    [90m 78| [39m
+    [90m 79| [39m    [34mexpect[39m(r[33m.[39mblocked[33m,[39m [32m'la vara por corrida no bloqueó'[39m)[33m.[39m[34mtoBe[39m([35mtrue[39m)
+    [90m   | [39m                                                        [31m^[39m
+    [90m 80| [39m    [34mexpect[39m(r[33m.[39mreason)[33m.[39m[34mtoBe[39m([32m'run_over_cap'[39m)
+    [90m 81| [39m    [34mexpect[39m(r[33m.[39mrun_spent_usd)[33m.[39m[34mtoBe[39m([34m5.0[39m)
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/vara-por-corrida.test.ts[2m > [22mvara por corrida · CONDUCTA[2m > [22msólo suma la corrida propia · el gasto de otra corrida NO cuenta contra la vara
+[31m[1mAssertionError[22m: contó gasto de otra corrida: expected undefined to be 1 // Object.is equality[39m
+
+[32m- Expected:[39m 
+1
+
+[31m+ Received:[39m 
+undefined
+
+[36m [2m❯[22m __tests__/vara-por-corrida.test.ts:[2m126:60[22m[39m
+    [90m124| [39m      notify[33m:[39m (() [33m=>[39m {}) [35mas[39m never[33m,[39m
+    [90m125| [39m    })
+    [90m126| [39m    [34mexpect[39m(r[33m.[39mrun_spent_usd[33m,[39m [32m'contó gasto de otra corrida'[39m)[33m.[39m[34mtoBe[39m([34m1.0[39m)
+    [90m   | [39m                                                           [31m^[39m
+    [90m127| [39m    [34mexpect[39m(r[33m.[39mblocked)[33m.[39m[34mtoBe[39m([35mfalse[39m)
+    [90m128| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/vara-por-corrida.test.ts[2m > [22mvara por corrida · CONDUCTA[2m > [22m🔴 REGLA DEL CAMINO RUIDOSO · corrida NO identificable no cuenta como $0 · avisa
+[31m[1mAssertionError[22m: expected undefined to be true // Object.is equality[39m
+
+[32m- Expected:[39m 
+true
+
+[31m+ Received:[39m 
+undefined
+
+[36m [2m❯[22m __tests__/vara-por-corrida.test.ts:[2m142:32[22m[39m
+    [90m140| [39m    [90m// NO se inventa un $0 que diga "bajo el tope"[39m
+    [90m141| [39m    expect(r.run_spent_usd, 'fabricó un $0 para una corrida que no pud…
+    [90m142| [39m    [34mexpect[39m(r[33m.[39mrun_unidentified)[33m.[39m[34mtoBe[39m([35mtrue[39m)
+    [90m   | [39m                               [31m^[39m
+    [90m143| [39m    [90m// y hace ruido[39m
+    [90m144| [39m    expect(avisos.some((a) => String(a.kind).includes('unidentified'))…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/vara-por-corrida.test.ts[2m > [22mvara por corrida · CABLEADO · las dos puertas le pasan el identificador[2m > [22msrc/app/api/agents/run-sdk/route.ts le pasa el identificador al freno (wfAttr.workflow_execution_id · el punto firmado)
+[31m[1mAssertionError[22m: src/app/api/agents/run-sdk/route.ts · el freno se llama SIN runId · la vara está desconectada: expected 'checkRunSdkSpendCap(getSupabaseAdmin(…' to contain 'runId'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- runId[39m
+[31m+ checkRunSdkSpendCap(getSupabaseAdmin(), clientId, {[39m
+[31m+         agentSlug: agentName,[39m
+[31m+       })[39m
+[31m+       if (gate.blocked) {[39m
+[31m+         console.warn([39m
+[31m+           `[run-sdk] §150 CAP BLOCK · client=${String(clientId).slice(0, 8)} · ` +[39m
+[31m+             `spent=$${(gate.spent_usd ?? 0).toFixed(2)} >= cap=$${(gate.cap_usd ?? 0).toFixed(2)}`,[39m
+[31m+         )[39m
+[31m+         capture('agent_run_cap_blocked', String(clientId || [39m
+
+[36m [2m❯[22m __tests__/vara-por-corrida.test.ts:[2m167:93[22m[39m
+    [90m165| [39m    // la llamada completa · desde el nombre hasta el cierre del objet…
+    [90m166| [39m    [35mconst[39m llamada [33m=[39m texto[33m.[39m[34mslice[39m(i[33m,[39m i [33m+[39m [34m400[39m)
+    [90m167| [39m    expect(llamada, `${archivo} · el freno se llama SIN runId · la var…
+    [90m   | [39m                                                                                            [31m^[39m
+    [90m168| [39m    expect(llamada, `${archivo} · runId no viene del identificador de …
+    [90m169| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/vara-por-corrida.test.ts[2m > [22mvara por corrida · CABLEADO · las dos puertas le pasan el identificador[2m > [22msrc/app/api/agents/run/route.ts le pasa el identificador al freno (wfExecCandidate · el hermano)
+[31m[1mAssertionError[22m: src/app/api/agents/run/route.ts · el freno se llama SIN runId · la vara está desconectada: expected 'checkRunSdkSpendCap(getSupabaseAdmin(…' to contain 'runId'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- runId[39m
+[31m+ checkRunSdkSpendCap(getSupabaseAdmin(), resolvedClientId, {[39m
+[31m+         agentSlug: resolvedAgentName,[39m
+[31m+       })[39m
+[31m+       if (gate.blocked) {[39m
+[31m+         console.warn([39m
+[31m+           `[agents-run] §150 CAP BLOCK · client=${String(resolvedClientId).slice(0, 8)} · ` +[39m
+[31m+             `spent=$${(gate.spent_usd ?? 0).toFixed(2)} >= cap=$${(gate.cap_usd ?? 0).toFixed(2)}`,[39m
+[31m+         )[39m
+[31m+         capture('agent_run_cap_bl[39m
+
+[36m [2m❯[22m __tests__/vara-por-corrida.test.ts:[2m167:93[22m[39m
+    [90m165| [39m    // la llamada completa · desde el nombre hasta el cierre del objet…
+    [90m166| [39m    [35mconst[39m llamada [33m=[39m texto[33m.[39m[34mslice[39m(i[33m,[39m i [33m+[39m [34m400[39m)
+    [90m167| [39m    expect(llamada, `${archivo} · el freno se llama SIN runId · la var…
+    [90m   | [39m                                                                                            [31m^[39m
+    [90m168| [39m    expect(llamada, `${archivo} · runId no viene del identificador de …
+    [90m169| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/vara-por-corrida.test.ts[2m > [22mvara por corrida · lo que va ESCRITO al lado del default[2m > [22mel margen real, el disparador de recalibración y la regla del camino ruidoso
+[31m[1mAssertionError[22m: falta el default de la vara: expected '/**\r\n * §150 spend gate · freno de …' to contain 'DEFAULT_RUN_SCOPED_CAP_USD = 5.0'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [7mDEFAULT_RUN_SCO[27mPED_CAP_USD[7m = 5.0[27m[39m
+[31m+ /**[39m
+[31m+  * §150 spend gate · freno de gasto GENÉRICO en el hot path de agentes.[39m
+[31m+  *[39m
+[31m+  * Diagnóstico (CC#3 2026-06-30 · P0): el cap §150 sólo existía en el dispatch del[39m
+[31m+  * sala-router-consumer (`dispatch.ts`) y como alertas Slack. `/api/agents/run-sdk`[39m
+[31m+  * — el path por el que fluye TODA invocación de agente — no tenía freno.[39m
+[31m+  *[39m
+[31m+  * Re-plan del go-live · paso (c) · ruling consejero 2026-07-18 13:41 ─────────────[39m
+[31m+  * El freno anterior era un AGUJERO LATENTE para todo cliente futuro: estaba[39m
+[31m+  * (a) default-OFF (shadow) y (b) tenant-scoped SÓLO a Náufrago (`NAUFRAGO_TENANT_IDS`),[39m
+[31m+  * así que Peniche / cualquier `other_tenant` corría SIN red automática. "Un humano[39m
+[31m+  * mirando NO es un freno" (el incidente de $19 pasó exactamente por eso). Este módulo[39m
+[31m+  * lo vuelve GENÉRICO:[39m
+[31m+  *   (1) el cap aplica por el cliente/tenant DE LA CORRIDA · SIN UUIDs hardcodeados.[39m
+[31m+  *   (2) enforce ON por default (deja de ser default-OFF · sólo se apaga con un[39m
+[31m+  *       kill-switch explícito `RUN_SPEND_CAP_ENFORCE=false`).[39m
+[31m+  *   (3) techo run-scoped ~$8 (encima de los ~$2-3 esperados · debajo del $25 canon)[39m
+[31m+  *       → frena TEMPRANO. Configurable por env `RUN_SPEND_CAP_USD`.[39m
+[31m+  * El watch manual en vivo queda como SEGUNDA capa, nunca la única.[39m
+[31m+  *[39m
+[31m+  * ── Arreglo de los tres agujeros · plan 2026-08-15 · firmado por Emilio 2026-08-23 ──[39m
+[31m+  *[39m
+[31m+  * **C · el freno se rendía en silencio.** Un fallo de consulta seguía dejando pasar[39m
+[31m+  * (eso NO cambia · una caída de base no debe frenar la agencia) pero ahora AVISA.[39m
+[31m+  * *Un freno que se rinde en silencio no es un freno, es un adorno.*[39m
+[31m+  *[39m
+[31m+  * **A · sin `client_id` no había techo.** Un `client_id` nulo es legítimo para[39m
+[31m+  * llamadas de sistema, así que bloquear a secas rompía eso. Ahora cae en un cubo[39m
+[31m+  * `system` con techo propio (`RUN_SPEND_CAP_SYSTEM_USD` · $2 por default) y AVISA.[39m
+[31m+  * El techo se dimensionó con el dato: el peor día sin cliente de toda la historia[39m
+[31m+  * fue $0,6147 (CC#3 2026-08-22) · $2 deja tres veces ese pico.[39m
+[31m+  * Toda invocación que llega hasta acá ya pasó el enforcement de `workflow_id`[39m
+[31m+  * (`run-sdk/route.ts`), o sea que ES una corrida de agente real dentro de un[39m
+[31m+  * workflow · por eso el aviso no necesita consultar el registro de empleados.[39m
+[31m+  *[39m
+[31m+  * **B1 · el techo acumulaba por `client_id`, que se duplica.** Ahora suma por la[39m
+[31m+  * FAMILIA canónica: `canonical_client_id` declarado. El caso vivo es Peniche, con[39m
+[31m+  * dos fichas (`e388a370` real + `53b05ecb` fantasma) cuyo gasto se contaba partido[39m
+[31m+  * ($18,65 y $5,37 · ninguna llegaba al techo). Una clave DERIVADA (slug/dominio) NO[39m
+[31m+  * sirve y está medido: las dos fichas no comparten slug, ni nombre, ni dominio[39m
+[31m+  * (vacío en toda la base), ni sitio (nulo en una) — la información no está en la[39m
+[31m+  * fila, por eso el vínculo se DECLARA.[39m
+[31m+  *[39m
+[31m+  * §148 safety-net · un fallo de query NUNCA bloquea tráfico legítimo (devuelve[39m
+[31m+  * not-blocked) · el cap es un backstop, no un punto único de falla. Lo que cambió[39m
+[31m+  * es que ahora se entera alguien.[39m
+[31m+  */[39m
+[31m+ import type { SupabaseClient } from '@supabase/supabase-js'[39m
+[31m+ import { notifySpendGateDegradation } from './spend-gate-alert'[39m
+[31m+ import {[39m
+[31m+   fugaAcotadaUsd,[39m
+[31m+   recordGateFailure,[39m
+[31m+   recordGateSuccess,[39m
+[31m+   isFailStreakExhausted,[39m
+[31m+   resolveFailStreakLimit,[39m
+[31m+ } from './spend-gate-fail-streak'[39m
+[31m+ [39m
+[31m+ const WINDOW_MS = 24 * 60 * 60 * 1000[39m
+[31m+ [39m
+[31m+ /** Techo run-scoped genérico por default · $8 (encima de ~$2-3 esperado · debajo del[39m
+[31m+ [7m *  $25 canon). TUNABLE por env `RUN_S[27mPE[7mN[27mD_CAP_USD[7m`. */[27m[39m
+[31m+ export const DEFAULT_RUN_SPEND_CAP_USD = 8.0[39m
+[31m+ [39m
+[31m+ /** Techo del cubo `system` (corridas sin `client_id`) · firmado por Emilio 2026-08-23.[39m
+[31m+  *  TUNABLE por env `RUN_SPEND_CAP_SYSTEM_USD`. */[39m
+[31m+ export const DEFAULT_SYSTEM_SPEND_CAP_USD = 2.0[39m
+[31m+ [39m
+[31m+ export interface SpendGateResult {[39m
+[31m+   readonly blocked: boolean[39m
+[31m+   readonly reason:[39m
+[31m+     | 'disabled'[39m
+[31m+     | 'no_client'[39m
+[31m+     | 'under_cap'[39m
+[31m+     | 'over_cap'[39m
+[31m+     | 'query_error'[39m
+[31m+     /** Fallo abierto ACOTADO · K fallos seguidos ⇒ deja de dejar pasar. */[39m
+[31m+     | 'query_error_streak'[39m
+[31m+     /** Corrida sin `client_id` · medida contra el techo del cubo `system`. */[39m
+[31m+     | 'system_under_cap'[39m
+[31m+     | 'system_over_cap'[39m
+[31m+   readonly cap_usd?: number[39m
+[31m+   readonly spent_usd?: number[39m
+[31m+   /** Ficha canónica contra la que se acumuló (B1) · útil para forense. */[39m
+[31m+   readonly canonical_client_id?: string | null[39m
+[31m+   /** Cuántas fichas entraron en la suma · >1 significa que había duplicación. */[39m
+[31m+   readonly family_size?: number[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ export interface SpendGateOptions {[39m
+[31m+   readonly nowMs?: number[39m
+[31m+   /** Empleado de la corrida · sólo para que el aviso diga quién fue. */[39m
+[31m+   readonly agentSlug?: string | null[39m
+[31m+   /** Inyectable para prueba · en producción se usa el real. */[39m
+[31m+   readonly notify?: typeof notifySpendGateDegradation[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ /**[39m
+[31m+  * enforce ON por default (ruling consejero 18-jul · paso c). El freno automático es[39m
+[31m+  * la PRIMERA capa · sólo se desactiva con un kill-switch EXPLÍCITO[39m
+[31m+  * `RUN_SPEND_CAP_ENFORCE` en 'false' / '0' / 'off'. Un env ausente = ON.[39m
+[31m+  */[39m
+[31m+ export function isRunSpendCapEnforced(): boolean {[39m
+[31m+   const raw = (process.env.RUN_SPEND_CAP_ENFORCE ?? '').trim().toLowerCase()[39m
+[31m+   return !(raw === 'false' || raw === '0' || raw === 'off' || raw === 'no')[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ /** Resuelve el techo · env `RUN_SPEND_CAP_USD` (número positivo) > default $8. */[39m
+[31m+ export function resolveRunSpendCapUsd(): number {[39m
+[31m+   const n = Number(process.env.RUN_SPEND_CAP_USD)[39m
+[31m+   return Number.isFinite(n) && n > 0 ? n : DEFAULT_RUN_SPEND_CAP_USD[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ /**[39m
+[31m+  * (d) CONVENCIÓN BARATA PARA IDENTIFICARSE · `system:<qué-es>` · ej. `system:health`.[39m
+[31m+  *[39m
+[31m+  * El cubo `system` es COMPARTIDO y **no tiene lista de exentos, a propósito**: no se[39m
+[31m+  * le regala techo infinito a lo que no sabemos nombrar. Pero una sonda de salud[39m
+[31m+  * legítima sí puede dejar de ser anónima, y eso cuesta una línea en quien la llama:[39m
+[31m+  * mandar `agent` = `system:health` en vez de nada.[39m
+[31m+  *[39m
+[31m+  * **Qué compra identificarse · y qué NO:**[39m
+[31m+  *   ✅ el aviso y las métricas la distinguen del anónimo · cuando el cubo se agote se[39m
+[31m+  *      ve de un vistazo quién se lo comió[39m
+[31m+  *   ✅ habilita la decisión: darle cubo propio o subir el techo, **con firma**[39m
+[31m+  *   ❌ **NO la exime.** Identificarse no cambia el techo. Sigue contando y sigue[39m
+[31m+  *      bloqueándose al agotarse.[39m
+[31m+  *[39m
+[31m+  * El orden es deliberado: **subir el techo es lo que necesita firma; identificarse es[39m
+[31m+  * gratis.** Si lo barato fuera el atajo (una lista de exentos), el techo se vaciaría[39m
+[31m+  * solo — cualquiera se agregaría a la lista y nadie firmaría nada.[39m
+[31m+  */[39m
+[31m+ export const SYSTEM_SLUG_PREFIX = 'system:'[39m
+[31m+ [39m
+[31m+ /** ¿La llamada sin cliente se identificó con la convención? · NO la exime de nada. */[39m
+[31m+ export function esLlamadaIdentificada(agentSlug: string | null | undefined): boolean {[39m
+[31m+   return typeof agentSlug === 'string' && agentSlug.startsWith(SYSTEM_SLUG_PREFIX)[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ /** Techo del cubo `system` · env `RUN_SPEND_CAP_SYSTEM_USD` > default $2. */[39m
+[31m+ export function resolveSystemSpendCapUsd(): number {[39m
+[31m+   const n = Number(process.env.RUN_SPEND_CAP_SYSTEM_USD)[39m
+[31m+   return Number.isFinite(n) && n > 0 ? n : DEFAULT_SYSTEM_SPEND_CAP_USD[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ /**[39m
+[31m+  * Fallo abierto ACOTADO (Consejero · 2026-08-23). Un fallo aislado pasa; K fallos[39m
+[31m+  * SEGUIDOS ya no son una caída sino una rotura, y ahí dejar pasar es gasto sin[39m
+[31m+  * techo por tiempo indefinido.[39m
+[31m+  */[39m
+[31m+ function onQueryFailure([39m
+[31m+   notify: typeof notifySpendGateDegradation,[39m
+[31m+   detail: string,[39m
+[31m+   ctx: { client_id?: string | null; agent_slug?: string | null },[39m
+[31m+ ): SpendGateResult {[39m
+[31m+   const streak = recordGateFailure('run-sdk')[39m
+[31m+   const agotado = isFailStreakExhausted('run-sdk', streak)[39m
+[31m+   const limite = resolveFailStreakLimit()[39m
+[31m+   void notify({[39m
+[31m+     kind: agotado ? 'query_error_streak' : 'query_error',[39m
+[31m+     detail: agotado[39m
+[31m+       ? `${detail} · ${streak} fallos SEGUIDOS ⇒ no es una caída, es una rotura · el freno DEJA DE DEJAR PASAR. ` +[39m
+[31m+         `Fuga máxima acotada ≈ $${fugaAcotadaUsd().toFixed(2)} por instancia.`[39m
+[31m+       : `${detail} · la corrida pasa · si el próximo también falla se acerca al corte.`,[39m
+[31m+     streak,[39m
+[31m+     streak_limit: limite,[39m
+[31m+     ...ctx,[39m
+[31m+   })[39m
+[31m+   return agotado[39m
+[31m+     ? { blocked: true, reason: 'query_error_streak' }[39m
+[31m+     : { blocked: false, reason: 'query_error' }[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ function sumCost(rows: unknown[] | null | undefined): number {[39m
+[31m+   return (rows ?? []).reduce<number>((acc, r) => {[39m
+[31m+     const v = (r as { cost_usd?: number | string | null }).cost_usd[39m
+[31m+     const n = typeof v === 'string' ? Number(v) : (v ?? 0)[39m
+[31m+     return acc + (Number.isFinite(n) ? Number(n) : 0)[39m
+[31m+   }, 0)[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ /**[39m
+[31m+  * B1 · resuelve la FAMILIA de fichas que representan al mismo negocio.[39m
+[31m+  *[39m
+[31m+  * Devuelve el id canónico y todos los ids que apuntan a él. Si la columna[39m
+[31m+  * `canonical_client_id` todavía no existe en la base (migración sin aplicar), la[39m
+[31m+  * consulta falla y se degrada al id suelto **avisando** — la lección de H1.2:[39m
+[31m+  * el código no puede romperse por una migración que aún no llegó.[39m
+[31m+  */[39m
+[31m+ export async function resolveClientFamily([39m
+[31m+   supabase: SupabaseClient,[39m
+[31m+   clientId: string,[39m
+[31m+   notify: typeof notifySpendGateDegradation,[39m
+[31m+ ): Promise<{ canonical: string; family: string[]; degraded: boolean }> {[39m
+[31m+   const solo = { canonical: clientId, family: [clientId], degraded: true }[39m
+[31m+   try {[39m
+[31m+     const { data: own, error: ownErr } = await supabase[39m
+[31m+       .from('clients')[39m
+[31m+       .select('canonical_client_id')[39m
+[31m+       .eq('id', clientId)[39m
+[31m+       .maybeSingle()[39m
+[31m+     if (ownErr) {[39m
+[31m+       void notify({[39m
+[31m+         kind: 'canonical_lookup_degraded',[39m
+[31m+         detail: 'No se pudo leer la ficha canónica · el gasto se cuenta sólo por esta ficha.',[39m
+[31m+         client_id: clientId,[39m
+[31m+       })[39m
+[31m+       return solo[39m
+[31m+     }[39m
+[31m+     const canonical =[39m
+[31m+       (own as { canonical_client_id?: string | null } | null)?.canonical_client_id || clientId[39m
+[31m+ [39m
+[31m+     const { data: kin, error: kinErr } = await supabase[39m
+[31m+       .from('clients')[39m
+[31m+       .select('id')[39m
+[31m+       .or(`id.eq.${canonical},canonical_client_id.eq.${canonical}`)[39m
+[31m+     if (kinErr) {[39m
+[31m+       void notify({[39m
+[31m+         kind: 'canonical_lookup_degraded',[39m
+[31m+         detail: 'No se pudo listar las fichas hermanas · el gasto se cuenta sólo por esta ficha.',[39m
+[31m+         client_id: clientId,[39m
+[31m+       })[39m
+[31m+       return { canonical, family: [clientId], degraded: true }[39m
+[31m+     }[39m
+[31m+     const family = Array.from([39m
+[31m+       new Set([clientId, canonical, ...((kin ?? []) as { id: string }[]).map((r) => r.id)]),[39m
+[31m+     )[39m
+[31m+     return { canonical, family, degraded: false }[39m
+[31m+   } catch {[39m
+[31m+     void notify({[39m
+[31m+       kind: 'canonical_lookup_degraded',[39m
+[31m+       detail: 'Excepción al resolver la ficha canónica · el gasto se cuenta sólo por esta ficha.',[39m
+[31m+       client_id: clientId,[39m
+[31m+     })[39m
+[31m+     return solo[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ /**[39m
+[31m+  * Evalúa el freno de gasto §150 GENÉRICO para una invocación de run-sdk.[39m
+[31m+  *[39m
+[31m+  * Compatibilidad · el tercer parámetro acepta el `nowMs` histórico (número) o el[39m
+[31m+  * objeto de opciones nuevo, así los dos llamadores existentes siguen andando.[39m
+[31m+  */[39m
+[31m+ export async function checkRunSdkSpendCap([39m
+[31m+   supabase: SupabaseClient,[39m
+[31m+   clientId: string | null | undefined,[39m
+[31m+   optsOrNow: number | SpendGateOptions = {},[39m
+[31m+ ): Promise<SpendGateResult> {[39m
+[31m+   const opts: SpendGateOptions = typeof optsOrNow === 'number' ? { nowMs: optsOrNow } : optsOrNow[39m
+[31m+   const nowMs = opts.nowMs ?? Date.now()[39m
+[31m+   const notify = opts.notify ?? notifySpendGateDegradation[39m
+[31m+   const agentSlug = opts.agentSlug ?? null[39m
+[31m+ [39m
+[31m+   // Kill-switch explícito · default ON (paso c · deja de ser default-OFF).[39m
+[31m+   if (!isRunSpendCapEnforced()) return { blocked: false, reason: 'disabled' }[39m
+[31m+ [39m
+[31m+   const floor = new Date(nowMs - WINDOW_MS).toISOString()[39m
+[31m+ [39m
+[31m+   // ── A · cubo `system` · corridas sin cliente ──────────────────────────────[39m
+[31m+   // Toda invocación que llega acá ya pasó el enforcement de `workflow_id`, así[39m
+[31m+   // que es una corrida de agente real. Se mide, se avisa, y se bloquea sólo si[39m
+[31m+   // el cubo pasó su propio techo.[39m
+[31m+   if (!clientId) {[39m
+[31m+     const cap = resolveSystemSpendCapUsd()[39m
+[31m+     try {[39m
+[31m+       const { data, error } = await supabase[39m
+[31m+         .from('agent_invocations')[39m
+[31m+         .select('cost_usd')[39m
+[31m+         .is('client_id', null)[39m
+[31m+         .gte('started_at', floor)[39m
+[31m+       if (error) {[39m
+[31m+         return onQueryFailure([39m
+[31m+           notify,[39m
+[31m+           'Falló la consulta del cubo system · la corrida sigue SIN techo medido.',[39m
+[31m+           { agent_slug: agentSlug },[39m
+[31m+         )[39m
+[31m+       }[39m
+[31m+       const spent = sumCost(data)[39m
+[31m+       recordGateSuccess('run-sdk')[39m
+[31m+ [39m
+[31m+       // El caso que importa · una corrida paga sin cliente. Siempre avisa,[39m
+[31m+       // bloquee o no: que el caso quede VISIBLE, no bloqueado a ciegas.[39m
+[31m+       // (c) ACOPLAMIENTO que hay que poder leer en el canal · el cubo `system` es[39m
+[31m+       // COMPARTIDO: una corrida anónima descontrolada lo agota y, a partir de ahí,[39m
+[31m+       // bloquea también las sondas de salud. Eso se lee como "la plataforma está[39m
+[31m+       // caída" cuando en realidad es "alguien sin nombre se comió el cubo". El[39m
+[31m+       // aviso tiene que decirlo, o el diagnóstico se va para el lado equivocado.[39m
+[31m+       void notify({[39m
+[31m+         kind: spent >= cap ? 'system_bucket_over_cap' : 'system_bucket_agent',[39m
+[31m+         detail:[39m
+[31m+           spent >= cap[39m
+[31m+             ? 'Cubo system agotado · desde ahora se bloquea TODO lo que entre sin cliente, ' +[39m
+[31m+               'incluidas las sondas de salud. Si el tablero parece caído, mirá primero quién ' +[39m
+[31m+               'agotó el cubo: es compartido. Identificarse (ver convención `system:health`) ' +[39m
+[31m+               'permite distinguir la sonda del anónimo · subir el techo requiere firma.'[39m
+[31m+             : esLlamadaIdentificada(agentSlug)[39m
+[31m+               ? 'Llamada de sistema IDENTIFICADA sin cliente · medida contra el cubo compartido ' +[39m
+[31m+                 '(identificarse no la exime · sigue contando).'[39m
+[31m+               : 'Corrida ANÓNIMA sin cliente asignado · medida contra el cubo de sistema. ' +[39m
+[31m+                 'Si es una sonda legítima, que se identifique como `system:<qué-es>`.',[39m
+[31m+         agent_slug: agentSlug,[39m
+[31m+         spent_usd: spent,[39m
+[31m+         cap_usd: cap,[39m
+[31m+       })[39m
+[31m+ [39m
+[31m+       if (spent >= cap) {[39m
+[31m+         return { blocked: true, reason: 'system_over_cap', cap_usd: cap, spent_usd: spent }[39m
+[31m+       }[39m
+[31m+       return { blocked: false, reason: 'system_under_cap', cap_usd: cap, spent_usd: spent }[39m
+[31m+     } catch {[39m
+[31m+       return onQueryFailure([39m
+[31m+         notify,[39m
+[31m+         'Excepción midiendo el cubo system · la corrida sigue SIN techo medido.',[39m
+[31m+         { agent_slug: agentSlug },[39m
+[31m+       )[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+ [39m
+[31m+   // ── B1 · suma por la FAMILIA canónica, no por el id suelto ────────────────[39m
+[31m+   try {[39m
+[31m+     const { canonical, family } = await resolveClientFamily(supabase, String(clientId), notify)[39m
+[31m+ [39m
+[31m+     // Una sola ficha (el caso normal) sigue usando `.eq` · `.in` sólo cuando hay[39m
+[31m+     // familia declarada. Misma consulta de antes cuando no hay duplicación.[39m
+[31m+     const base_ = supabase.from('agent_invocations').select('cost_usd')[39m
+[31m+     const scoped_ =[39m
+[31m+       family.length > 1 ? base_.in('client_id', family) : base_.eq('client_id', String(clientId))[39m
+[31m+     const { data, error } = await scoped_.gte('started_at', floor)[39m
+[31m+     // §148 safety-net · un error de query no debe bloquear tráfico legítimo…[39m
+[31m+     if (error) {[39m
+[31m+       // …pero C · ya no en silencio · y ACOTADO: K seguidos y deja de pasar.[39m
+[31m+       return onQueryFailure([39m
+[31m+         notify,[39m
+[31m+         'Falló la consulta del gasto acumulado · la corrida pasa SIN techo medido.',[39m
+[31m+         { client_id: String(clientId), agent_slug: agentSlug },[39m
+[31m+       )[39m
+[31m+     }[39m
+[31m+     const spent = sumCost(data)[39m
+[31m+     recordGateSuccess('run-sdk')[39m
+[31m+ [39m
+[31m+     const cap = resolveRunSpendCapUsd()[39m
+[31m+     const base = {[39m
+[31m+       cap_usd: cap,[39m
+[31m+       spent_usd: spent,[39m
+[31m+       canonical_client_id: canonical,[39m
+[31m+       family_size: family.length,[39m
+[31m+     }[39m
+[31m+     if (spent >= cap) return { blocked: true, reason: 'over_cap', ...base }[39m
+[31m+     return { blocked: false, reason: 'under_cap', ...base }[39m
+[31m+   } catch {[39m
+[31m+     return onQueryFailure([39m
+[31m+       notify,[39m
+[31m+       'Excepción midiendo el gasto acumulado · la corrida pasa SIN techo medido.',[39m
+[31m+       { client_id: String(clientId), agent_slug: agentSlug },[39m
+[31m+     )[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+
+[36m [2m❯[22m __tests__/vara-por-corrida.test.ts:[2m184:48[22m[39m
+    [90m182| [39m    [35mconst[39m src [33m=[39m [34mleer[39m([32m'src/lib/run-sdk-spend-gate.ts'[39m)
+    [90m183| [39m
+    [90m184| [39m    expect(src, 'falta el default de la vara').toContain('DEFAULT_RUN_…
+    [90m   | [39m                                               [31m^[39m
+    [90m185| [39m    [90m// la aritmética del margen · como la de K=3[39m
+    [90m186| [39m    [34mexpect[39m(src[33m,[39m [32m'falta el margen real medido'[39m)[33m.[39m[34mtoMatch[39m([36m/2[.,]88/[39m)
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m6 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[90m (9)[39m
+[2m   Start at [22m 05:42:53
+[2m   Duration [22m 964ms[2m (transform 48ms, setup 0ms, collect 34ms, tests 61ms, environment 0ms, prepare 140ms)[22m
+

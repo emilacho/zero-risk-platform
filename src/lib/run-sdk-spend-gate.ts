@@ -65,6 +65,49 @@ export const DEFAULT_RUN_SPEND_CAP_USD = 8.0
  *  TUNABLE por env `RUN_SPEND_CAP_SYSTEM_USD`. */
 export const DEFAULT_SYSTEM_SPEND_CAP_USD = 2.0
 
+/**
+ * ── LA VARA POR CORRIDA · $5 · firmada por el Arquitecto 2026-08-25 02:45 UTC ──
+ *
+ * Segunda vara sobre el MISMO punto de corte y la MISMA consulta que el techo de $8.
+ * No es un módulo aparte, y no tiene política de fallo propia: hereda la de acá abajo
+ * (fallo abierto ACOTADO · K=3 · `onQueryFailure`).
+ *
+ * QUÉ ATRAPA QUE EL $8 NO VE · una SOLA corrida desbocada. El techo por cliente/24 h
+ * sólo se entera cuando la suma del día cruza $8, y para entonces ya se gastó de más.
+ *   cliente con $2,90 acumulado + una corrida que se va a $5
+ *     → por cliente/24h · 7,90 < 8  ⇒ NO bloquea
+ *     → por corrida     · 5,00 ≥ 5  ⇒ BLOQUEA          ← el caso del incidente de $19
+ * Y al revés, prueba de que no se pisan: 3 corridas legítimas de $2,80 pasan una a una
+ * y la acumulación ($8,40) la corta el techo de $8.
+ *
+ * LA ARITMÉTICA DEL NÚMERO · medida, no intuida (`agent_invocations`, 27 corridas):
+ *   corrida más cara jamás registrada ·  $2,88  (exacto $2,8778)
+ *   promedio por corrida ·               $1,26  (exacto $1,2625)
+ *   ⇒ margen real del $5 ·               1,74×
+ * (Un alta son DOS corridas · $2,37 en total el 13-ago. La unidad es la CORRIDA, no el
+ *  alta: medir por alta infla el margen y es el error que hubo que corregir.)
+ *
+ * 🔴 DISPARADOR DE RECALIBRACIÓN · textual del Arquitecto ·
+ *   "Si alguna corrida LEGÍTIMA supera los ~$3,50 (margen por debajo de ~1,4×),
+ *    el número se revisa."
+ *   Su motivo, que importa más que el número: el $5 se justificó contra un historial
+ *   CORTO y BARATO, medido sobre un sistema casi siempre pausado. Cuando arranque la
+ *   producción real, el margen de 1,74× se come solo sin que nadie lo note.
+ *
+ * IDENTIFICADOR · `workflow_execution_id` (poblado en 50/50 · 100 %).
+ * **NO `journey_id`**: está vacío en 96 de 96 invocaciones de toda la historia ⇒ una
+ * vara medida contra esa columna suma siempre $0 y NO DISPARA NUNCA. Es exactamente el
+ * bug que este archivo existe para no repetir.
+ *
+ * 🔴 REGLA DEL CAMINO RUIDOSO · una corrida que no se puede identificar NO cuenta como
+ * $0. Hoy no ocurre —las DOS puertas (`run-sdk` L604 · `run` L156) rechazan con 403 si
+ * falta el identificador— así que esto es RED DE RESPALDO, no el caso frecuente. Si
+ * pasara, la vara no se evalúa (no se inventa un "bajo el tope") y AVISA.
+ *
+ * TUNABLE por env `RUN_SCOPED_CAP_USD`.
+ */
+export const DEFAULT_RUN_SCOPED_CAP_USD = 5.0
+
 export interface SpendGateResult {
   readonly blocked: boolean
   readonly reason:
@@ -78,18 +121,29 @@ export interface SpendGateResult {
     /** Corrida sin `client_id` · medida contra el techo del cubo `system`. */
     | 'system_under_cap'
     | 'system_over_cap'
+    /** La VARA POR CORRIDA cortó · una sola corrida paso su techo (§ arriba). */
+    | 'run_over_cap'
   readonly cap_usd?: number
   readonly spent_usd?: number
   /** Ficha canónica contra la que se acumuló (B1) · útil para forense. */
   readonly canonical_client_id?: string | null
   /** Cuántas fichas entraron en la suma · >1 significa que había duplicación. */
   readonly family_size?: number
+  /** Techo de la VARA POR CORRIDA vigente. */
+  readonly run_cap_usd?: number
+  /** Gasto acumulado de ESTA corrida · `undefined` si no se pudo identificar (NUNCA 0). */
+  readonly run_spent_usd?: number
+  /** true si la corrida no traía identificador · la vara no se evaluó y se AVISÓ. */
+  readonly run_unidentified?: boolean
 }
 
 export interface SpendGateOptions {
   readonly nowMs?: number
   /** Empleado de la corrida · sólo para que el aviso diga quién fue. */
   readonly agentSlug?: string | null
+  /** Identificador de ESTA corrida · `workflow_execution_id`. Lo pasan las dos puertas,
+   *  que ya lo tienen resuelto en ámbito. Ausente ⇒ camino ruidoso (§ vara por corrida). */
+  readonly runId?: string | null
   /** Inyectable para prueba · en producción se usa el real. */
   readonly notify?: typeof notifySpendGateDegradation
 }
@@ -102,6 +156,12 @@ export interface SpendGateOptions {
 export function isRunSpendCapEnforced(): boolean {
   const raw = (process.env.RUN_SPEND_CAP_ENFORCE ?? '').trim().toLowerCase()
   return !(raw === 'false' || raw === '0' || raw === 'off' || raw === 'no')
+}
+
+/** Resuelve el techo POR CORRIDA · env `RUN_SCOPED_CAP_USD` > default $5. */
+export function resolveRunScopedCapUsd(): number {
+  const n = Number(process.env.RUN_SCOPED_CAP_USD)
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_RUN_SCOPED_CAP_USD
 }
 
 /** Resuelve el techo · env `RUN_SPEND_CAP_USD` (número positivo) > default $8. */
@@ -168,6 +228,16 @@ function onQueryFailure(
   return agotado
     ? { blocked: true, reason: 'query_error_streak' }
     : { blocked: false, reason: 'query_error' }
+}
+
+/** Suma el costo SÓLO de las filas de esta corrida · el identificador es
+ *  `workflow_execution_id` (100 % poblado) · NUNCA `journey_id` (vacío al 100 %). */
+function sumCostOfRun(rows: unknown[] | null | undefined, runId: string): number {
+  return sumCost(
+    (rows ?? []).filter(
+      (r) => String((r as { workflow_execution_id?: unknown }).workflow_execution_id ?? '') === runId,
+    ),
+  )
 }
 
 function sumCost(rows: unknown[] | null | undefined): number {
@@ -322,7 +392,9 @@ export async function checkRunSdkSpendCap(
 
     // Una sola ficha (el caso normal) sigue usando `.eq` · `.in` sólo cuando hay
     // familia declarada. Misma consulta de antes cuando no hay duplicación.
-    const base_ = supabase.from('agent_invocations').select('cost_usd')
+    // UNA sola consulta para las DOS varas · trae el identificador junto al costo, así
+    // la suma por cliente/24h y la suma de ESTA corrida salen del mismo viaje a la base.
+    const base_ = supabase.from('agent_invocations').select('cost_usd, workflow_execution_id')
     const scoped_ =
       family.length > 1 ? base_.in('client_id', family) : base_.eq('client_id', String(clientId))
     const { data, error } = await scoped_.gte('started_at', floor)
@@ -339,14 +411,41 @@ export async function checkRunSdkSpendCap(
     recordGateSuccess('run-sdk')
 
     const cap = resolveRunSpendCapUsd()
+    const runCap = resolveRunScopedCapUsd()
+    const runId = opts.runId ?? null
     const base = {
       cap_usd: cap,
       spent_usd: spent,
       canonical_client_id: canonical,
       family_size: family.length,
+      run_cap_usd: runCap,
     }
-    if (spent >= cap) return { blocked: true, reason: 'over_cap', ...base }
-    return { blocked: false, reason: 'under_cap', ...base }
+
+    // ── VARA POR CORRIDA · se evalúa PRIMERO porque su trabajo es cortar ANTES ──
+    if (!runId) {
+      // REGLA DEL CAMINO RUIDOSO · no se inventa un $0. La vara queda SIN evaluar y
+      // se avisa · hoy no debería ocurrir (las dos puertas rechazan sin identificador).
+      void notify({
+        kind: 'run_scoped_unidentified',
+        detail:
+          'Corrida SIN identificador · la vara por corrida NO se pudo evaluar y NO se cuenta ' +
+          'como $0. Las dos puertas deberían rechazar antes de llegar acá: si esto aparece, ' +
+          'hay un camino que esquiva el enforcement de workflow_execution_id.',
+        client_id: String(clientId),
+        agent_slug: agentSlug,
+      } as never)
+      if (spent >= cap) return { blocked: true, reason: 'over_cap', ...base, run_unidentified: true }
+      return { blocked: false, reason: 'under_cap', ...base, run_unidentified: true }
+    }
+
+    const runSpent = sumCostOfRun(data, runId)
+    if (runSpent >= runCap) {
+      return { blocked: true, reason: 'run_over_cap', ...base, run_spent_usd: runSpent }
+    }
+
+    // ── VARA POR CLIENTE / 24 h · la acumulación ──
+    if (spent >= cap) return { blocked: true, reason: 'over_cap', ...base, run_spent_usd: runSpent }
+    return { blocked: false, reason: 'under_cap', ...base, run_spent_usd: runSpent }
   } catch {
     return onQueryFailure(
       notify,
