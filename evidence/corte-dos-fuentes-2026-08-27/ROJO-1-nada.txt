@@ -1,0 +1,30 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform[39m
+
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Suites 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m __tests__/corte-dos-fuentes-y-canario.test.ts[2m [ __tests__/corte-dos-fuentes-y-canario.test.ts ][22m
+[31m[1mError[22m: Cannot find module '../src/lib/canario-invocaciones-sin-id' imported from 'C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform/__tests__/corte-dos-fuentes-y-canario.test.ts'[39m
+[36m [2m❯[22m __tests__/corte-dos-fuentes-y-canario.test.ts:[2m34:1[22m[39m
+    [90m 32| [39m[35mimport[39m { join } [35mfrom[39m [32m'node:path'[39m
+    [90m 33| [39mimport { resolveAttributionForInsert } from '../src/app/api/agents/run…
+    [90m 34| [39mimport { contarInvocacionesSinIdentificador } from '../src/lib/canario…
+    [90m   | [39m[31m^[39m
+    [90m 35| [39m
+    [90m 36| [39mconst leer = (p: string) => readFileSync(join(__dirname, '..', p), 'ut…
+
+[31m[1mCaused by: Error[22m: Failed to load url ../src/lib/canario-invocaciones-sin-id (resolved id: ../src/lib/canario-invocaciones-sin-id) in C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform/__tests__/corte-dos-fuentes-y-canario.test.ts. Does the file exist?[39m
+[90m [2m❯[22m loadAndTransform ../../Agentic%20Business%20Agency/zero-risk-platform/node_modules/.pnpm/vite@7.3.3_@types+node@22.1_d0bf00e2d23ce151f24729316c8163dc/node_modules/vite/dist/node/chunks/config.js:[2m22679:33[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [2mno tests[22m
+[2m   Start at [22m 13:56:09
+[2m   Duration [22m 19.37s[2m (transform 329ms, setup 0ms, collect 0ms, tests 0ms, environment 0ms, prepare 1.23s)[22m
+

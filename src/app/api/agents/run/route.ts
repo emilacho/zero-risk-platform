@@ -64,6 +64,56 @@ function computeCostUsd(modelId: string, inputTokens: number, outputTokens: numb
 // window so the §144 pre-rankeada migration list ranks by real usage · NOT
 // the static sweep. Pure additive · does NOT change request handling.
 
+/**
+ * Resuelve la atribución que se ESCRIBE en `agent_invocations`.
+ *
+ * 🔴 EL CORTE DE DOS FUENTES · arreglado 2026-08-27 (firma del Arquitecto 09:14:29 UTC).
+ *
+ * El freno (`wfExecCandidate`, L~149) acepta el identificador **ARRIBA o anidado**.
+ * Este registro leía **SÓLO el anidado** ⇒ quien lo mandaba arriba pasaba la guarda de
+ * los 403, el freno comparaba bien, y **su fila quedaba con el id en NULO**. A partir de
+ * ahí la vara por corrida sumaba $0 para siempre y **no disparaba nunca** — el mismo bug
+ * de `journey_id` con otra cara: sumar contra algo que no calza.
+ *
+ * Lo que lo volvía probable, no exótico: **el propio mensaje de rechazo enseña la forma de
+ * arriba** ("pass workflow_id + workflow_execution_id top-level OR nested under context").
+ * Publicar la vara sin esta línea era publicar un freno con su modo de falla documentado
+ * como uso correcto.
+ *
+ * DECISIÓN, textual: **que funcionen LAS DOS.** No se rechaza la forma de arriba — *"el
+ * propio mensaje se la enseñó a los llamadores, y romperlos por un defecto nuestro es
+ * cobrarles nuestro error."* ⇒ **el registro lee el identificador DE DONDE LO LEE EL FRENO**,
+ * con la MISMA precedencia (arriba gana).
+ *
+ * Extraído del handler para poder probarlo sin HTTP ni base (mismo patrón que
+ * `buildBrandBookRow`). Función pura · sin efectos.
+ */
+export function resolveAttributionForInsert(
+  body: Record<string, unknown>,
+  context: Record<string, unknown>,
+): {
+  workflow_id: string | null
+  workflow_execution_id: string | null
+  task_id: string | null
+  journey_id: string | null
+} {
+  // MISMA precedencia que el freno · arriba primero, después anidado, si no null.
+  const elegir = (clave: string): string | null => {
+    const arriba = body?.[clave]
+    if (typeof arriba === 'string' && arriba.length > 0) return arriba
+    const anidado = context?.[clave]
+    if (typeof anidado === 'string' && anidado.length > 0) return anidado
+    return null
+  }
+  return {
+    workflow_id: elegir('workflow_id'),
+    workflow_execution_id: elegir('workflow_execution_id'),
+    task_id: (context.pipeline_id as string | null) || (context.task_id as string | null) || null,
+    journey_id:
+      (context.journey_id as string | null) || (context._journey_id as string | null) || null,
+  }
+}
+
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)
   if (!auth.ok) return legacyJson({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
@@ -663,11 +713,13 @@ export async function POST(request: Request) {
     // Si body NO trajo client_id but FK columns (workflow_execution_id ·
     // journey_id · task_id · session_id) están presentes · DB lookup chain
     // recovers cliente attribution. Cierra 23.5% billing gap del rollup audit.
-    const taskIdForInsert =
-      (context.pipeline_id as string | null) || (context.task_id as string | null) || null
-    const workflowExecutionIdForInsert = (context.workflow_execution_id as string | null) || null
-    const journeyIdForInsert =
-      (context.journey_id as string | null) || (context._journey_id as string | null) || null
+    const attr = resolveAttributionForInsert(
+      body as unknown as Record<string, unknown>,
+      context as unknown as Record<string, unknown>,
+    )
+    const taskIdForInsert = attr.task_id
+    const workflowExecutionIdForInsert = attr.workflow_execution_id
+    const journeyIdForInsert = attr.journey_id
     const sessionIdForInsert =
       (claudeData?.id as string | undefined) || `run-${startTime}-${Math.random().toString(36).slice(2, 8)}`
     const enrichment = await enrichClientIdFromContext(supabase, resolvedClientId, {
@@ -686,7 +738,7 @@ export async function POST(request: Request) {
         agent_name: (agentConfig.display_name as string) || canonicalSlug,
         command: null,
         task_id: taskIdForInsert,
-        workflow_id: (context.workflow_id as string | null) || null,
+        workflow_id: attr.workflow_id,
         workflow_execution_id: workflowExecutionIdForInsert,
         client_id: enrichedClientId,
         journey_id: journeyIdForInsert,

@@ -1,0 +1,406 @@
+npm warn Unknown project config "supportedArchitectures.os". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.cpu". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "supportedArchitectures.libc". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform[39m
+
+ [31m❯[39m __tests__/corte-dos-fuentes-y-canario.test.ts [2m([22m[2m12 tests[22m[2m | [22m[31m5 failed[39m[2m)[22m[32m 23[2mms[22m[39m
+[31m   [31m×[31m (a) EL CORTE · la forma de ARRIBA · lo que HOY queda en NULO[2m > [22m🔴 identificador de corrida ARRIBA · con contexto VACÍO · la fila lo lleva[39m[32m 8[2mms[22m[39m
+[31m     → la fila queda con el id en NULO · la vara sumará 0 para siempre: expected null to be '92833' // Object.is equality[39m
+[31m   [31m×[31m (a) EL CORTE · la forma de ARRIBA · lo que HOY queda en NULO[2m > [22m🔴 identificador de flujo ARRIBA · con contexto VACÍO · la fila lo lleva[39m[32m 1[2mms[22m[39m
+[31m     → el identificador de flujo también quedaba en NULO: expected null to be 'LyVoKcrypS5uLyuu' // Object.is equality[39m
+[31m   [31m×[31m (a) EL CORTE · la forma de ARRIBA · lo que HOY queda en NULO[2m > [22m🔴 los dos ARRIBA a la vez · como los manda el mensaje de rechazo[39m[32m 0[2mms[22m[39m
+[31m     → expected null to be 'LyVoKcrypS5uLyuu' // Object.is equality[39m
+[31m   [31m×[31m (a) EL CORTE · la forma de ARRIBA · lo que HOY queda en NULO[2m > [22m🔴 el registro NO puede leer de otra fuente que el freno · misma precedencia[39m[32m 3[2mms[22m[39m
+[31m     → la precedencia difiere de la del freno: expected 'ANIDADO' to be 'DE-ARRIBA' // Object.is equality[39m
+   [32m✓[39m (a) NO-REGRESIÓN · la forma anidada · pasa ANTES y DESPUÉS[2m > [22manidado sigue funcionando[32m 0[2mms[22m[39m
+   [32m✓[39m (a) NO-REGRESIÓN · la forma anidada · pasa ANTES y DESPUÉS[2m > [22msin ninguno de los dos · null, no cadena vacía[32m 0[2mms[22m[39m
+   [32m✓[39m (a) NO-REGRESIÓN · la forma anidada · pasa ANTES y DESPUÉS[2m > [22mlos otros dos campos del registro no cambian de fuente[32m 0[2mms[22m[39m
+   [32m✓[39m (a) CABLEADO · el registro USA el resolvedor, no el contexto suelto[2m > [22mel insert no vuelve a leer `context.workflow_execution_id` por su cuenta[32m 2[2mms[22m[39m
+   [32m✓[39m (b) EL CANARIO · cuenta los nulos · no toca la vara[2m > [22mhoy hay 0 · no avisa[32m 0[2mms[22m[39m
+   [32m✓[39m (b) EL CANARIO · cuenta los nulos · no toca la vara[2m > [22m🔴 si sube de 0 · avisa · cualquier valor > 0 es señal, no ruido[32m 0[2mms[22m[39m
+   [32m✓[39m (b) EL CANARIO · cuenta los nulos · no toca la vara[2m > [22msi NO puede contar · NO reporta 0 · lo declara[32m 0[2mms[22m[39m
+[31m   [31m×[31m (b) EL CANARIO · cuenta los nulos · no toca la vara[2m > [22mel cron horario lo consulta · si no, el canario no canta[39m[32m 6[2mms[22m[39m
+[31m     → el canario no está enganchado al cron: expected '/**\r\n * POST/GET /api/cost-monitor/…' to contain 'contarInvocacionesSinIdentificador'[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 5 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m __tests__/corte-dos-fuentes-y-canario.test.ts[2m > [22m(a) EL CORTE · la forma de ARRIBA · lo que HOY queda en NULO[2m > [22m🔴 identificador de corrida ARRIBA · con contexto VACÍO · la fila lo lleva
+[31m[1mAssertionError[22m: la fila queda con el id en NULO · la vara sumará 0 para siempre: expected null to be '92833' // Object.is equality[39m
+
+[32m- Expected:[39m 
+"92833"
+
+[31m+ Received:[39m 
+null
+
+[36m [2m❯[22m __tests__/corte-dos-fuentes-y-canario.test.ts:[2m47:7[22m[39m
+    [90m 45| [39m      r[33m.[39mworkflow_execution_id[33m,[39m
+    [90m 46| [39m      'la fila queda con el id en NULO · la vara sumará 0 para siempre…
+    [90m 47| [39m    )[33m.[39m[34mtoBe[39m([33mEJEC[39m)
+    [90m   | [39m      [31m^[39m
+    [90m 48| [39m  })
+    [90m 49| [39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/corte-dos-fuentes-y-canario.test.ts[2m > [22m(a) EL CORTE · la forma de ARRIBA · lo que HOY queda en NULO[2m > [22m🔴 identificador de flujo ARRIBA · con contexto VACÍO · la fila lo lleva
+[31m[1mAssertionError[22m: el identificador de flujo también quedaba en NULO: expected null to be 'LyVoKcrypS5uLyuu' // Object.is equality[39m
+
+[32m- Expected:[39m 
+"LyVoKcrypS5uLyuu"
+
+[31m+ Received:[39m 
+null
+
+[36m [2m❯[22m __tests__/corte-dos-fuentes-y-canario.test.ts:[2m53:80[22m[39m
+    [90m 51| [39m    // el mismo corte, en la línea de al lado · el encargo nombra uno,…
+    [90m 52| [39m    [35mconst[39m r [33m=[39m [34mresolveAttributionForInsert[39m({ workflow_id[33m:[39m [33mFLUJO[39m }[33m,[39m {})
+    [90m 53| [39m    expect(r.workflow_id, 'el identificador de flujo también quedaba e…
+    [90m   | [39m                                                                               [31m^[39m
+    [90m 54| [39m  })
+    [90m 55| [39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/corte-dos-fuentes-y-canario.test.ts[2m > [22m(a) EL CORTE · la forma de ARRIBA · lo que HOY queda en NULO[2m > [22m🔴 los dos ARRIBA a la vez · como los manda el mensaje de rechazo
+[31m[1mAssertionError[22m: expected null to be 'LyVoKcrypS5uLyuu' // Object.is equality[39m
+
+[32m- Expected:[39m 
+"LyVoKcrypS5uLyuu"
+
+[31m+ Received:[39m 
+null
+
+[36m [2m❯[22m __tests__/corte-dos-fuentes-y-canario.test.ts:[2m61:27[22m[39m
+    [90m 59| [39m      {}[33m,[39m
+    [90m 60| [39m    )
+    [90m 61| [39m    [34mexpect[39m(r[33m.[39mworkflow_id)[33m.[39m[34mtoBe[39m([33mFLUJO[39m)
+    [90m   | [39m                          [31m^[39m
+    [90m 62| [39m    [34mexpect[39m(r[33m.[39mworkflow_execution_id)[33m.[39m[34mtoBe[39m([33mEJEC[39m)
+    [90m 63| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/corte-dos-fuentes-y-canario.test.ts[2m > [22m(a) EL CORTE · la forma de ARRIBA · lo que HOY queda en NULO[2m > [22m🔴 el registro NO puede leer de otra fuente que el freno · misma precedencia
+[31m[1mAssertionError[22m: la precedencia difiere de la del freno: expected 'ANIDADO' to be 'DE-ARRIBA' // Object.is equality[39m
+
+Expected: [32m"DE-ARRIBA"[39m
+Received: [31m"ANIDADO"[39m
+
+[36m [2m❯[22m __tests__/corte-dos-fuentes-y-canario.test.ts:[2m71:79[22m[39m
+    [90m 69| [39m      { workflow_execution_id[33m:[39m [32m'ANIDADO'[39m }[33m,[39m
+    [90m 70| [39m    )
+    [90m 71| [39m    expect(r.workflow_execution_id, 'la precedencia difiere de la del …
+    [90m   | [39m                                                                              [31m^[39m
+    [90m 72| [39m  })
+    [90m 73| [39m})
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m __tests__/corte-dos-fuentes-y-canario.test.ts[2m > [22m(b) EL CANARIO · cuenta los nulos · no toca la vara[2m > [22mel cron horario lo consulta · si no, el canario no canta
+[31m[1mAssertionError[22m: el canario no está enganchado al cron: expected '/**\r\n * POST/GET /api/cost-monitor/…' to contain 'contarInvocacionesSinIdentificador'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- contarInvocacionesSinIdentificador[39m
+[31m+ /**[39m
+[31m+  * POST/GET /api/cost-monitor/cron · §150 G5 cost monitor · SHADOW-first[39m
+[31m+  *[39m
+[31m+  * Triggered hourly by Vercel Cron (see vercel.json `crons[]`). Aggregates[39m
+[31m+  * `agent_invocations.cost_usd` over two windows and evaluates canonical[39m
+[31m+  * thresholds · números canónicos del sprint 2026-07-03 (L2) · **$15/hora +[39m
+[31m+  * $50/día**. Concretamente: daily per-workflow ($10), daily aggregate platform[39m
+[31m+  * ($100), daily total ($50 · el número canónico de alerta diaria), hourly[39m
+[31m+  * burst ($15 · subido de $5 · el $5 era ruido con gasto diario legítimo[39m
+[31m+  * $26-38). El hard-stop §150 (SALA_NAUFRAGO_CAP_USD) es OTRA cosa · no se[39m
+[31m+  * toca acá. (Corrige el número $30 que venía de un doc deprecado 07-02.)[39m
+[31m+  *[39m
+[31m+  * MODES · gated by env var `COST_MONITOR_SHADOW_MODE` (default: "1" = shadow).[39m
+[31m+  *  - SHADOW ("1") · detect breaches and write audit row, do NOT dispatch any[39m
+[31m+  *    Slack alert. Use during baseline · build confidence in thresholds.[39m
+[31m+  *  - ALERT-LIVE ("0") · on breach, also POST to `SLACK_WEBHOOK_URL_EQUIPO`.[39m
+[31m+  *    The audit row is still always written; `alert_dispatched` reflects[39m
+[31m+  *    whether the webhook POST succeeded. Best-effort · a webhook failure[39m
+[31m+  *    does NOT fail the cron (cleanup canonical · audit > ping).[39m
+[31m+  *[39m
+[31m+  * Auth · accepts EITHER `Authorization: Bearer <CRON_SECRET>` (Vercel Cron[39m
+[31m+  * default header) OR `x-api-key: <CRON_SECRET>` (manual smoke trigger). Both[39m
+[31m+  * compare timing-safe against `process.env.CRON_SECRET`.[39m
+[31m+  *[39m
+[31m+  * Canon · §150 G4 audit trail · every run writes a row, breach or not.[39m
+[31m+  * Canon · §150 G5 cost monitor · this is the missing piece (CC#3 audit[39m
+[31m+  *         2026-05-30 confirmed G5 was unimplemented pre-this-PR).[39m
+[31m+  * Canon · §148 honest reporting · returns structured JSON with the[39m
+[31m+  *         aggregations so smoke tests can assert the exact values.[39m
+[31m+  */[39m
+[31m+ import { NextResponse } from 'next/server'[39m
+[31m+ import crypto from 'node:crypto'[39m
+[31m+ import { getSupabaseAdmin } from '@/lib/supabase'[39m
+[31m+ import { dispatchCostMonitorAlert } from '@/lib/cost-monitor-alert'[39m
+[31m+ [39m
+[31m+ export const runtime = 'nodejs'[39m
+[31m+ export const dynamic = 'force-dynamic'[39m
+[31m+ export const maxDuration = 30 // seconds · aggregation is light[39m
+[31m+ [39m
+[31m+ // Canonical thresholds (USD). Snapshotted into each cost_monitor_runs row so[39m
+[31m+ // historical rows stay interpretable when thresholds tune later.[39m
+[31m+ const THRESHOLD_DAILY_PER_WORKFLOW_USD = 10[39m
+[31m+ const THRESHOLD_DAILY_AGGREGATE_USD    = 100[39m
+[31m+ const THRESHOLD_DAILY_USD              = 50 // canónico sprint 2026-07-03 · alerta sobre el agregado 24h[39m
+[31m+ const THRESHOLD_HOURLY_BURST_USD       = 15 // canónico $15/h (corrige $30 de doc deprecado) · alerta, NO el hard-stop §150[39m
+[31m+ [39m
+[31m+ interface InvocationRow {[39m
+[31m+   workflow_id: string | null[39m
+[31m+   cost_usd: number | null[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ interface Breach {[39m
+[31m+   type: 'daily_per_workflow' | 'daily_aggregate' | 'daily_total' | 'hourly_burst'[39m
+[31m+   workflow_id?: string[39m
+[31m+   spend_usd: number[39m
+[31m+   threshold: number[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ function checkAuth(req: Request): { ok: true } | { ok: false; reason: string } {[39m
+[31m+   const expected = process.env.CRON_SECRET[39m
+[31m+   if (!expected) {[39m
+[31m+     return { ok: false, reason: 'CRON_SECRET env var not configured' }[39m
+[31m+   }[39m
+[31m+   const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? ''[39m
+[31m+   const apiKey = req.headers.get('x-api-key') ?? ''[39m
+[31m+   const got = bearer || apiKey[39m
+[31m+   if (!got) return { ok: false, reason: 'Missing Authorization Bearer or x-api-key header' }[39m
+[31m+ [39m
+[31m+   const a = Buffer.from(got)[39m
+[31m+   const b = Buffer.from(expected)[39m
+[31m+   if (a.length !== b.length) return { ok: false, reason: 'Invalid secret' }[39m
+[31m+   if (!crypto.timingSafeEqual(a, b)) return { ok: false, reason: 'Invalid secret' }[39m
+[31m+   return { ok: true }[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ function aggregateByWorkflow(rows: InvocationRow[]): Record<string, number> {[39m
+[31m+   const map: Record<string, number> = {}[39m
+[31m+   for (const r of rows) {[39m
+[31m+     const wf = r.workflow_id ?? '__null_workflow__'[39m
+[31m+     map[wf] = (map[wf] ?? 0) + (r.cost_usd ?? 0)[39m
+[31m+   }[39m
+[31m+   return map[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ function sumAll(rows: InvocationRow[]): number {[39m
+[31m+   return rows.reduce((s, r) => s + (r.cost_usd ?? 0), 0)[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ async function runMonitor(req: Request) {[39m
+[31m+   const auth = checkAuth(req)[39m
+[31m+   if (!auth.ok) {[39m
+[31m+     return NextResponse.json([39m
+[31m+       { error: 'unauthorized', detail: auth.reason },[39m
+[31m+       { status: 401 },[39m
+[31m+     )[39m
+[31m+   }[39m
+[31m+ [39m
+[31m+   const shadowMode = (process.env.COST_MONITOR_SHADOW_MODE ?? '1') !== '0'[39m
+[31m+   const supabase = getSupabaseAdmin()[39m
+[31m+   const now = new Date()[39m
+[31m+   const since24h = new Date(now.getTime() - 24 * 3600_000).toISOString()[39m
+[31m+   const since1h = new Date(now.getTime() - 3600_000).toISOString()[39m
+[31m+ [39m
+[31m+   // Pull rows from agent_invocations · the canonical source of truth. We use[39m
+[31m+   // started_at (not created_at) because the writers use started_at for the[39m
+[31m+   // actual invocation moment.[39m
+[31m+   const [{ data: rows24h, error: e24 }, { data: rows1h, error: e1 }] =[39m
+[31m+     await Promise.all([[39m
+[31m+       supabase[39m
+[31m+         .from('agent_invocations')[39m
+[31m+         .select('workflow_id, cost_usd')[39m
+[31m+         .gte('started_at', since24h),[39m
+[31m+       supabase[39m
+[31m+         .from('agent_invocations')[39m
+[31m+         .select('workflow_id, cost_usd')[39m
+[31m+         .gte('started_at', since1h),[39m
+[31m+     ])[39m
+[31m+ [39m
+[31m+   if (e24 || e1) {[39m
+[31m+     const errMsg = e24?.message || e1?.message || 'unknown supabase error'[39m
+[31m+     // Best-effort audit row · the cron fired but the aggregation failed.[39m
+[31m+     await supabase.from('cost_monitor_runs').insert({[39m
+[31m+       ran_at: now.toISOString(),[39m
+[31m+       aggregate_24h_usd: 0,[39m
+[31m+       aggregate_1h_usd: 0,[39m
+[31m+       threshold_daily_per_workflow_usd: THRESHOLD_DAILY_PER_WORKFLOW_USD,[39m
+[31m+       threshold_daily_aggregate_usd: THRESHOLD_DAILY_AGGREGATE_USD,[39m
+[31m+       threshold_hourly_burst_usd: THRESHOLD_HOURLY_BURST_USD,[39m
+[31m+       is_breach: false,[39m
+[31m+       breach_count: 0,[39m
+[31m+       details: { error: errMsg },[39m
+[31m+       shadow_mode: shadowMode,[39m
+[31m+       alert_dispatched: false,[39m
+[31m+       error_message: errMsg.slice(0, 400),[39m
+[31m+     })[39m
+[31m+     return NextResponse.json([39m
+[31m+       { error: 'aggregation_failed', detail: errMsg.slice(0, 200) },[39m
+[31m+       { status: 500 },[39m
+[31m+     )[39m
+[31m+   }[39m
+[31m+ [39m
+[31m+   const rows24 = (rows24h ?? []) as InvocationRow[][39m
+[31m+   const rows1 = (rows1h ?? []) as InvocationRow[][39m
+[31m+ [39m
+[31m+   const perWorkflow24h = aggregateByWorkflow(rows24)[39m
+[31m+   const aggregate24h = Number(sumAll(rows24).toFixed(4))[39m
+[31m+   const aggregate1h = Number(sumAll(rows1).toFixed(4))[39m
+[31m+ [39m
+[31m+   const breaches: Breach[] = [][39m
+[31m+   for (const [wfId, cost] of Object.entries(perWorkflow24h)) {[39m
+[31m+     if (cost > THRESHOLD_DAILY_PER_WORKFLOW_USD) {[39m
+[31m+       breaches.push({[39m
+[31m+         type: 'daily_per_workflow',[39m
+[31m+         workflow_id: wfId,[39m
+[31m+         spend_usd: Number(cost.toFixed(4)),[39m
+[31m+         threshold: THRESHOLD_DAILY_PER_WORKFLOW_USD,[39m
+[31m+       })[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+   if (aggregate24h > THRESHOLD_DAILY_AGGREGATE_USD) {[39m
+[31m+     breaches.push({[39m
+[31m+       type: 'daily_aggregate',[39m
+[31m+       spend_usd: aggregate24h,[39m
+[31m+       threshold: THRESHOLD_DAILY_AGGREGATE_USD,[39m
+[31m+     })[39m
+[31m+   }[39m
+[31m+   // Alerta diaria canónica ($50/día · sprint 2026-07-03) sobre el mismo agregado[39m
+[31m+   // 24h. Umbral más fino que daily_aggregate ($100) · pensado para captar el[39m
+[31m+   // gasto diario total antes de que llegue al techo platform-wide.[39m
+[31m+   if (aggregate24h > THRESHOLD_DAILY_USD) {[39m
+[31m+     breaches.push({[39m
+[31m+       type: 'daily_total',[39m
+[31m+       spend_usd: aggregate24h,[39m
+[31m+       threshold: THRESHOLD_DAILY_USD,[39m
+[31m+     })[39m
+[31m+   }[39m
+[31m+   if (aggregate1h > THRESHOLD_HOURLY_BURST_USD) {[39m
+[31m+     breaches.push({[39m
+[31m+       type: 'hourly_burst',[39m
+[31m+       spend_usd: aggregate1h,[39m
+[31m+       threshold: THRESHOLD_HOURLY_BURST_USD,[39m
+[31m+     })[39m
+[31m+   }[39m
+[31m+ [39m
+[31m+   const isBreach = breaches.length > 0[39m
+[31m+ [39m
+[31m+   // Audit row · always inserted, breach or not. Forensics view. We insert[39m
+[31m+   // FIRST (with alert_dispatched: false) so the row exists even if the Slack[39m
+[31m+   // dispatch hangs or throws · then update the flag in-place if dispatch[39m
+[31m+   // succeeds. Audit trail is the canonical source · Slack is the ping.[39m
+[31m+   const ranAtIso = now.toISOString()[39m
+[31m+   const { data: insertedRow, error: insertErr } = await supabase[39m
+[31m+     .from('cost_monitor_runs')[39m
+[31m+     .insert({[39m
+[31m+       ran_at: ranAtIso,[39m
+[31m+       aggregate_24h_usd: aggregate24h,[39m
+[31m+       aggregate_1h_usd: aggregate1h,[39m
+[31m+       threshold_daily_per_workflow_usd: THRESHOLD_DAILY_PER_WORKFLOW_USD,[39m
+[31m+       threshold_daily_aggregate_usd: THRESHOLD_DAILY_AGGREGATE_USD,[39m
+[31m+       threshold_hourly_burst_usd: THRESHOLD_HOURLY_BURST_USD,[39m
+[31m+       is_breach: isBreach,[39m
+[31m+       breach_count: breaches.length,[39m
+[31m+       details: {[39m
+[31m+         per_workflow_24h: perWorkflow24h,[39m
+[31m+         breaches,[39m
+[31m+         invocations_24h: rows24.length,[39m
+[31m+         invocations_1h: rows1.length,[39m
+[31m+         threshold_daily_usd: THRESHOLD_DAILY_USD,[39m
+[31m+       },[39m
+[31m+       shadow_mode: shadowMode,[39m
+[31m+       alert_dispatched: false,[39m
+[31m+     })[39m
+[31m+     .select()[39m
+[31m+     .single()[39m
+[31m+ [39m
+[31m+   if (insertErr) {[39m
+[31m+     // Non-fatal · log to console so Vercel surfaces it, but still return the[39m
+[31m+     // computed aggregations to the caller (smoke tests can still assert).[39m
+[31m+     console.warn('[cost-monitor-cron] cost_monitor_runs insert failed:', insertErr.message)[39m
+[31m+   }[39m
+[31m+ [39m
+[31m+   // Slack alert dispatch · gated by NOT-shadow-mode AND breach. Best-effort ·[39m
+[31m+   // a webhook failure does not fail the cron. Audit row is the canonical[39m
+[31m+   // record · alert_dispatched flag tracks whether the ping went out.[39m
+[31m+   let alertDispatched = false[39m
+[31m+   let alertReason: string | undefined[39m
+[31m+   if (!shadowMode && isBreach) {[39m
+[31m+     const dispatchResult = await dispatchCostMonitorAlert({[39m
+[31m+       breaches,[39m
+[31m+       aggregate_24h_usd: aggregate24h,[39m
+[31m+       aggregate_1h_usd: aggregate1h,[39m
+[31m+       invocations_24h: rows24.length,[39m
+[31m+       invocations_1h: rows1.length,[39m
+[31m+       run_id: insertedRow?.id ?? null,[39m
+[31m+       ran_at: ranAtIso,[39m
+[31m+     })[39m
+[31m+     alertDispatched = dispatchResult.dispatched[39m
+[31m+     alertReason = dispatchResult.reason[39m
+[31m+     if (alertDispatched && insertedRow?.id) {[39m
+[31m+       const { error: updErr } = await supabase[39m
+[31m+         .from('cost_monitor_runs')[39m
+[31m+         .update({ alert_dispatched: true })[39m
+[31m+         .eq('id', insertedRow.id)[39m
+[31m+       if (updErr) {[39m
+[31m+         console.warn('[cost-monitor-cron] alert_dispatched update failed:', updErr.message)[39m
+[31m+       }[39m
+[31m+     } else if (!alertDispatched && alertReason) {[39m
+[31m+       console.warn('[cost-monitor-cron] alert NOT dispatched:', alertReason)[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+ [39m
+[31m+   return NextResponse.json({[39m
+[31m+     ok: true,[39m
+[31m+     ran_at: ranAtIso,[39m
+[31m+     shadow_mode: shadowMode,[39m
+[31m+     alert_dispatched: alertDispatched,[39m
+[31m+     alert_reason: alertReason,[39m
+[31m+     aggregate_24h_usd: aggregate24h,[39m
+[31m+     aggregate_1h_usd: aggregate1h,[39m
+[31m+     invocations_24h: rows24.length,[39m
+[31m+     invocations_1h: rows1.length,[39m
+[31m+     is_breach: isBreach,[39m
+[31m+     breach_count: breaches.length,[39m
+[31m+     breaches,[39m
+[31m+     thresholds: {[39m
+[31m+       daily_per_workflow_usd: THRESHOLD_DAILY_PER_WORKFLOW_USD,[39m
+[31m+       daily_aggregate_usd: THRESHOLD_DAILY_AGGREGATE_USD,[39m
+[31m+       hourly_burst_usd: THRESHOLD_HOURLY_BURST_USD,[39m
+[31m+     },[39m
+[31m+     run_id: insertedRow?.id ?? null,[39m
+[31m+   })[39m
+[31m+ }[39m
+[31m+ [39m
+[31m+ // Vercel Cron fires GET by default. We accept POST too so manual smoke[39m
+[31m+ // triggers via curl/scripts can use either verb.[39m
+[31m+ export async function GET(req: Request) {[39m
+[31m+   return runMonitor(req)[39m
+[31m+ }[39m
+[31m+ export async function POST(req: Request) {[39m
+[31m+   return runMonitor(req)[39m
+[31m+ }[39m
+[31m+[39m
+
+[36m [2m❯[22m __tests__/corte-dos-fuentes-y-canario.test.ts:[2m146:58[22m[39m
+    [90m144| [39m  it('el cron horario lo consulta · si no, el canario no canta', () =>…
+    [90m145| [39m    [35mconst[39m src [33m=[39m [34mleer[39m([32m'src/app/api/cost-monitor/cron/route.ts'[39m)
+    [90m146| [39m    [34mexpect[39m(src[33m,[39m [32m'el canario no está enganchado al cron'[39m)[33m.[39m[34mtoContain[39m(
+    [90m   | [39m                                                         [31m^[39m
+    [90m147| [39m      [32m'contarInvocacionesSinIdentificador'[39m[33m,[39m
+    [90m148| [39m    )
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m5 failed[39m[22m[2m | [22m[1m[32m7 passed[39m[22m[90m (12)[39m
+[2m   Start at [22m 13:57:50
+[2m   Duration [22m 1.26s[2m (transform 175ms, setup 0ms, collect 550ms, tests 23ms, environment 0ms, prepare 199ms)[22m
+

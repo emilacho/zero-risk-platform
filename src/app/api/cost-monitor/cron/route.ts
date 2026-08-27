@@ -29,6 +29,7 @@
  *         aggregations so smoke tests can assert the exact values.
  */
 import { NextResponse } from 'next/server'
+import { contarInvocacionesSinIdentificador } from '@/lib/canario-invocaciones-sin-id'
 import crypto from 'node:crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { dispatchCostMonitorAlert } from '@/lib/cost-monitor-alert'
@@ -249,10 +250,32 @@ async function runMonitor(req: Request) {
     }
   }
 
+  // ── CANARIO · invocaciones sin identificador de corrida · instrumento (1) ──
+  // Va acá porque este cron ya corre cada hora y ya consulta `agent_invocations`:
+  // NO se abre una puerta nueva para colgarlo.
+  //
+  // NO respeta `shadow_mode` a propósito, y el motivo importa: el modo sombra existe
+  // para no hacer ruido mientras se calibran umbrales de costo. El canario NO tiene
+  // umbral que calibrar — su línea base está MEDIDA y es exacta (0 nulos en 96 de 96
+  // filas de toda la historia) ⇒ cualquier valor > 0 es señal, no ruido. Silenciarlo
+  // en sombra sería apagar justo lo que no se puede confundir con ruido.
+  const canario = await contarInvocacionesSinIdentificador(supabase)
+  if (canario.alerta) {
+    console.error('[cost-monitor-cron][canario] ' + canario.detalle)
+  } else if (!canario.medido) {
+    console.warn('[cost-monitor-cron][canario] ' + canario.detalle)
+  }
+
   return NextResponse.json({
     ok: true,
     ran_at: ranAtIso,
     shadow_mode: shadowMode,
+    canario_invocaciones_sin_id: {
+      nulos: canario.nulos,
+      medido: canario.medido,
+      alerta: canario.alerta,
+      ...(canario.detalle ? { detalle: canario.detalle } : {}),
+    },
     alert_dispatched: alertDispatched,
     alert_reason: alertReason,
     aggregate_24h_usd: aggregate24h,
