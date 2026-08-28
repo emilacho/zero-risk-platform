@@ -1,0 +1,509 @@
+{
+  "updatedAt": "2026-08-28T19:03:20.815Z",
+  "createdAt": "2026-08-28T19:03:20.815Z",
+  "id": "wu1DUAXIuEG5nNTX",
+  "name": "Zero Risk — Alta · Segunda Fase (Notion + Plan + Agenda + Cierre)",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-segunda-fase",
+      "name": "Datos del alta",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "notes": "Carga del llamado · lo que el alta debe mandar. MEDIDO sobre LyVoKcrypS5uLyuu (raw/findings/2026-08-28-CC3-la-carga-del-llamado...): client_id · client_name · industry · contract_scope · _journey_id · _sala_correlation_id llegan hoy. tenant_id · primary_contact_id · contact_email · contact_name NO llegan hoy (el flujo viejo ya los lee vacíos). Ver README."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/notion/create-client-workspace",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_name\": \"{{ $('Datos del alta').item.json.client_name || '' }}\",\n  \"client_id\": \"{{ $('Datos del alta').item.json.client_id || '' }}\",\n  \"industry\": \"{{ $('Datos del alta').item.json.industry || '' }}\",\n  \"parent_page_id\": \"{{ $env.NOTION_PARENT_PAGE_ID || 'stub-parent' }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "create-notion-workspace",
+      "name": "Create Notion Client Workspace",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SALA_INGRESS_URL || 'https://zero-risk-platform.vercel.app/api/sala/ingress' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-source",
+              "value": "n8n-modelb-LyVoKcrypS5uLyuu"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"phase_boundary\",\n  \"_sala_correlation_id\": \"{{ $('Datos del alta').item.json._sala_correlation_id }}\",\n  \"_journey_id\": \"{{ $('Datos del alta').item.json._journey_id }}\",\n  \"phase_name\": \"WORKSPACE\",\n  \"phase_state\": \"completed\",\n  \"worker_id\": \"LyVoKcrypS5uLyuu\",\n  \"tenant_id\": \"{{ $('Datos del alta').item.json.tenant_id || $('Datos del alta').item.json.client_id }}\",\n  \"client_id\": \"{{ $('Datos del alta').item.json.client_id }}\",\n  \"ts\": \"{{ $now }}\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "6b358133-d549-41f6-ba74-d96d2b9ee8bf",
+      "name": "[MODELB] Phase-boundary Emit · notion_workspace_created",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        480
+      ],
+      "notes": "\n\n[R1 CANON RENAME 2026-06-28 · CC#2] phase_name → MAYÚSCULA canónica. Display name legacy preservado (no referenciado · evita cirugía connection-keys). Order-tolerant reconciliation PR #217 cubre orden DAG paralelo."
+    },
+    {
+      "parameters": {
+        "jsCode": "const discovery = $('Datos del alta').item.json.discovery_result || {};\nconst scope = $('Datos del alta').item.json.contract_scope || [];\n\nconst activationMilestones = [];\nconst ttv_targets = {};\n\nif (scope.includes('paid_ads')) {\n  activationMilestones.push({ channel: 'paid_ads', milestone: 'First campaign launched', day: 14, success_metric: 'First converted lead' });\n  ttv_targets.paid_ads = 14;\n}\nif (scope.includes('content_seo')) {\n  activationMilestones.push({ channel: 'content_seo', milestone: 'Content calendar published', day: 30, success_metric: 'First organic traffic' });\n  ttv_targets.content_seo = 30;\n}\nif (scope.includes('email')) {\n  activationMilestones.push({ channel: 'email', milestone: 'Email sequence deployed', day: 7, success_metric: 'First engagement' });\n  ttv_targets.email = 7;\n}\nif (scope.includes('industrial') || scope.includes('complex')) {\n  ttv_targets.complex = 45;\n}\n\nconst successPlan = {\n  goals: [],\n  success_metrics: [],\n  timeline: activationMilestones,\n  ttv_targets,\n  champion_map: { identified: false, count: 0, stakeholders: [] },\n  status: 'draft'\n};\n\nreturn [{ json: { ...successPlan, discovery_report: discovery } }];"
+      },
+      "id": "build-success-plan",
+      "name": "Build Success Plan Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/notion/create-success-plan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_name\": \"{{ $('Datos del alta').item.json.client_name || '' }}\",\n  \"client_id\": \"{{ $('Datos del alta').item.json.client_id || '' }}\",\n  \"workspace_id\": \"{{ $json.workspace_id || '' }}\",\n  \"plan\": {{ JSON.stringify($json ?? {}) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "create-success-plan-notion",
+      "name": "Create Success Plan in Notion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SALA_INGRESS_URL || 'https://zero-risk-platform.vercel.app/api/sala/ingress' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-source",
+              "value": "n8n-modelb-LyVoKcrypS5uLyuu"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"phase_boundary\",\n  \"_sala_correlation_id\": \"{{ $('Datos del alta').item.json._sala_correlation_id }}\",\n  \"_journey_id\": \"{{ $('Datos del alta').item.json._journey_id }}\",\n  \"phase_name\": \"WORKSPACE\",\n  \"phase_state\": \"completed\",\n  \"worker_id\": \"LyVoKcrypS5uLyuu\",\n  \"tenant_id\": \"{{ $('Datos del alta').item.json.tenant_id || $('Datos del alta').item.json.client_id }}\",\n  \"client_id\": \"{{ $('Datos del alta').item.json.client_id }}\",\n  \"ts\": \"{{ $now }}\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "37856f77-704b-455f-bd87-d216e79b7ae9",
+      "name": "[MODELB] Phase-boundary Emit · success_plan_built",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        480
+      ],
+      "notes": "\n\n[R1 CANON RENAME 2026-06-28 · CC#2] phase_name → MAYÚSCULA canónica. Display name legacy preservado (no referenciado · evita cirugía connection-keys). Order-tolerant reconciliation PR #217 cubre orden DAG paralelo."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/calendar/book",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": \"{{ $('Datos del alta').item.json.primary_contact_id || ('stub-contact-' + Date.now()) }}\",\n  \"event_title\": {{ JSON.stringify('Kickoff Call: ' + ($('Datos del alta').item.json.client_name || 'new client')) }},\n  \"contact_email\": \"{{ $('Datos del alta').item.json.contact_email }}\",\n  \"contact_name\": \"{{ $('Datos del alta').item.json.contact_name || $('Datos del alta').item.json.client_name }}\",\n  \"duration_minutes\": 60,\n  \"scheduled_at\": \"{{ new Date(Date.now() + 3*24*60*60*1000).toISOString() }}\",\n  \"description\": \"Welcome to Zero Risk! Success plan alignment + team intro.\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "schedule-kickoff",
+      "name": "Schedule Kickoff Call (Cal.com)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        300
+      ],
+      "notes": "\n\n[GHL canon-clean rename 2026-06-05 · CC#4 A2] Renamed from \"Schedule Kickoff Call (GHL Calendar)\". URL is canon-clean internal endpoint (NOT GHL). Per drift-hunt-results §2.3 COSMETIC class.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SALA_INGRESS_URL || 'https://zero-risk-platform.vercel.app/api/sala/ingress' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-source",
+              "value": "n8n-modelb-LyVoKcrypS5uLyuu"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"phase_boundary\",\n  \"_sala_correlation_id\": \"{{ $('Datos del alta').item.json._sala_correlation_id }}\",\n  \"_journey_id\": \"{{ $('Datos del alta').item.json._journey_id }}\",\n  \"phase_name\": \"SCHEDULING\",\n  \"phase_state\": \"completed\",\n  \"worker_id\": \"LyVoKcrypS5uLyuu\",\n  \"tenant_id\": \"{{ $('Datos del alta').item.json.tenant_id || $('Datos del alta').item.json.client_id }}\",\n  \"client_id\": \"{{ $('Datos del alta').item.json.client_id }}\",\n  \"ts\": \"{{ $now }}\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "18de1149-d6ee-43c2-93b0-535b640390c6",
+      "name": "[MODELB] Phase-boundary Emit · kickoff_scheduled",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        480
+      ],
+      "notes": "\n\n[R1 CANON RENAME 2026-06-28 · CC#2] phase_name → MAYÚSCULA canónica. Display name legacy preservado (no referenciado · evita cirugía connection-keys). Order-tolerant reconciliation PR #217 cubre orden DAG paralelo."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL || $env.SLACK_WEBHOOK_URL_EQUIPO || '' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": {{ JSON.stringify('ONBOARDING INITIATED\\nClient: ' + ($('Datos del alta').item.json.client_name || 'unknown') + '\\nIndustry: ' + ($('Datos del alta').item.json.industry || 'unknown') + '\\nContract: ' + (Array.isArray($('Datos del alta').item.json.contract_scope) ? ($('Datos del alta').item.json.contract_scope.join(', ')) : String($('Datos del alta').item.json.contract_scope || ''))) }}\n}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "alert-onboarding-slack",
+      "name": "Alert Slack: Onboarding Initiated",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-source",
+              "value": "n8n-modelb-LyVoKcrypS5uLyuu"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"run_completed\",\n  \"_sala_correlation_id\": \"{{ $('Datos del alta').item.json._sala_correlation_id }}\",\n  \"_journey_id\": \"{{ $('Datos del alta').item.json._journey_id }}\",\n  \"worker_id\": \"LyVoKcrypS5uLyuu\",\n  \"worker_name\": \"Zero Risk - Client Onboarding E2E v2\",\n  \"tenant_id\": \"{{ $('Datos del alta').item.json.tenant_id || $('Datos del alta').item.json.client_id }}\",\n  \"client_id\": \"{{ $('Datos del alta').item.json.client_id }}\",\n  \"summary\": {\n    \"notion_workspace\": \"{{ $('Create Notion Client Workspace').item.json }}\",\n    \"success_plan\": \"{{ $('Create Success Plan in Notion').item.json }}\"\n  },\n  \"ts\": \"{{ $now }}\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "modelb-writeback-callback",
+      "name": "[MODELB] Write-back Callback · run terminal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        300
+      ],
+      "notes": "Cierra la corrida del alta (run_completed a /api/sala/callback). Cableado NUEVO: cuelga de \"Alert Slack: Onboarding Initiated\". El resumen ya NO incluye handoff_score ni mc_inbox: esos nodos son de la fase B y no existen en este flujo. Lo esencial (_journey_id, _sala_correlation_id, tenant_id, client_id) viaja en la carga del llamado."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SALA_INGRESS_URL || 'https://zero-risk-platform.vercel.app/api/sala/ingress' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-source",
+              "value": "n8n-modelb-LyVoKcrypS5uLyuu"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event_type\": \"phase_boundary\",\n  \"_sala_correlation_id\": \"{{ $('Datos del alta').item.json._sala_correlation_id }}\",\n  \"_journey_id\": \"{{ $('Datos del alta').item.json._journey_id }}\",\n  \"phase_name\": \"journey_completed\",\n  \"phase_state\": \"completed\",\n  \"worker_id\": \"LyVoKcrypS5uLyuu\",\n  \"tenant_id\": \"{{ $('Datos del alta').item.json.tenant_id || $('Datos del alta').item.json.client_id }}\",\n  \"client_id\": \"{{ $('Datos del alta').item.json.client_id }}\",\n  \"ts\": \"{{ $now }}\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "12ebf79d-156a-48b3-ac81-461d854b11fb",
+      "name": "[MODELB] Phase-boundary Emit · journey_completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        480
+      ],
+      "disabled": false,
+      "notes": "\n\n[R1 CANON 2026-06-28 · CC#2] DISABLED · journey_completed NO es phase_boundary · terminal cubierto por Write-back Callback run_completed."
+    }
+  ],
+  "connections": {
+    "Datos del alta": {
+      "main": [
+        [
+          {
+            "node": "Create Notion Client Workspace",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Notion Client Workspace": {
+      "main": [
+        [
+          {
+            "node": "Build Success Plan Template",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[MODELB] Phase-boundary Emit · notion_workspace_created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success Plan Template": {
+      "main": [
+        [
+          {
+            "node": "Create Success Plan in Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Success Plan in Notion": {
+      "main": [
+        [
+          {
+            "node": "Schedule Kickoff Call (Cal.com)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[MODELB] Phase-boundary Emit · success_plan_built",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Kickoff Call (Cal.com)": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack: Onboarding Initiated",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[MODELB] Phase-boundary Emit · kickoff_scheduled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Slack: Onboarding Initiated": {
+      "main": [
+        [
+          {
+            "node": "[MODELB] Write-back Callback · run terminal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[MODELB] Write-back Callback · run terminal": {
+      "main": [
+        [
+          {
+            "node": "[MODELB] Phase-boundary Emit · journey_completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "02bb6477-3fda-4f8a-81bb-fc97cc90b933",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "shared": [
+    {
+      "updatedAt": "2026-08-28T19:03:20.815Z",
+      "createdAt": "2026-08-28T19:03:20.815Z",
+      "role": "workflow:owner",
+      "workflowId": "wu1DUAXIuEG5nNTX",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "updatedAt": "2026-04-18T13:51:26.012Z",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

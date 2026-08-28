@@ -35,11 +35,16 @@ type Flujo = {
   connections: Record<string, { main?: Array<Array<{ node: string }> | null> }>
 }
 
-const vivo: Flujo = leer('live-worker-2026-08-28.json')
-const nuevo: Flujo = leer('segunda-fase-workflow.json')
-const llamador = leer('nodo-que-llama.json') as {
-  parameters: { workflowId?: string; workflowInputs?: { value?: Record<string, string> } }
-}
+/**
+ * 🔴 Los tres se leen DESCARGADOS de n8n · no son archivos de autor.
+ * `live-worker-2026-08-28.json` es el retrato PREVIO y se conserva para contraste.
+ */
+const previo: Flujo = leer('live-worker-2026-08-28.json')
+const vivo: Flujo = leer('live-worker-POST-PUT-2026-08-28.json')
+const nuevo: Flujo = leer('segunda-fase-workflow-CREADO.json')
+
+const ARMAR = 'Armar carga · segunda fase'
+const LLAMAR = 'Llamar · Segunda Fase del alta'
 
 const salidas = (f: Flujo, de: string): string[] =>
   (f.connections[de]?.main ?? []).flatMap((rama) => (rama ?? []).map((c) => c.node))
@@ -82,8 +87,12 @@ const AFUERA = [
 // CONTROL POSITIVO · si esto falla, el instrumento está roto y ningún rojo vale.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('control positivo · las fotos se leen y son las que creemos', () => {
-  it('el worker vivo tiene 73 nodos', () => {
-    expect(vivo.nodes.length).toBe(73)
+  it('el retrato PREVIO tenia 73 nodos', () => {
+    expect(previo.nodes.length).toBe(73)
+  })
+
+  it('el vivo DESCARGADO tiene 75 (los 73 + los 2 nuevos)', () => {
+    expect(vivo.nodes.length).toBe(75)
   })
 
   it('la primera mitad del worker SÍ está cableada (el instrumento ve aristas reales)', () => {
@@ -158,26 +167,32 @@ describe('el flujo nuevo · los 9 nodos de Emilio + el cierre', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // LA CARGA · el único riesgo real. Enumerada, no muestreada.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('la carga del llamado · los 11 datos enumerados', () => {
-  const enviados = Object.keys(llamador.parameters.workflowInputs?.value ?? {})
+describe('la carga del llamado · los 11 datos · leída del nodo VIVO', () => {
+  const armar = nodo(vivo, ARMAR)
+  const codigo = String((armar?.parameters as { jsCode?: string })?.jsCode ?? '')
 
-  it('el nodo que llama manda LOS 11, sin faltar ninguno', () => {
-    for (const c of CARGA) expect(enviados, `falta ${c} en la carga`).toContain(c)
+  it('el nodo que ARMA la carga existe en el vivo y es de código', () => {
+    expect(armar?.type).toBe('n8n-nodes-base.code')
   })
 
-  it('no manda de más (la lista es exacta)', () => {
-    expect(enviados.sort()).toEqual([...CARGA].sort())
+  it('arma LOS 11, sin faltar ninguno', () => {
+    for (const c of CARGA) expect(codigo, `falta ${c} en la carga`).toContain(`${c}:`)
+  })
+
+  it('lee de los DOS orígenes (por eso hace falta este nodo)', () => {
+    expect(codigo).toContain("$('Validate Deal Data')")
+    expect(codigo).toContain("$('Call Onboarding Specialist: Auto-Discovery')")
   })
 
   it('los 4 que hoy NO llegan van con respaldo explícito (para no reventar)', () => {
-    const v = llamador.parameters.workflowInputs?.value ?? {}
     for (const c of ['tenant_id', 'primary_contact_id', 'contact_email', 'contact_name']) {
-      expect(v[c], `${c} debería llevar respaldo ||`).toContain('||')
+      const linea = codigo.split(/\r?\n/).find((l) => l.trim().startsWith(`${c}:`)) ?? ''
+      expect(linea, `${c} debería llevar respaldo ||`).toContain('||')
     }
   })
 
   it('`discovery_result` viaja · era el dato que la primera enumeración se perdió', () => {
-    expect(enviados).toContain('discovery_result')
+    expect(codigo).toContain('discovery_result')
     expect(JSON.stringify(nuevo)).toContain('discovery_result')
   })
 })
@@ -185,26 +200,41 @@ describe('la carga del llamado · los 11 datos enumerados', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔴 LO QUE FALTA · espera firma. Contra el estado de HOY tiene que dar ROJO.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('🔴 falta · el flujo nuevo no está creado en n8n', () => {
-  it('el flujo nuevo tiene id asignado por n8n (ROJO hasta que se cree)', () => {
-    expect(nuevo.id, 'el flujo todavía es un plan, no existe en n8n').toBeDefined()
+describe('el flujo nuevo EXISTE en n8n (era ROJO)', () => {
+  it('tiene id asignado por n8n', () => {
+    expect(nuevo.id).toBe('wu1DUAXIuEG5nNTX')
   })
 
-  it('el nodo que llama apunta a un workflowId real (ROJO hasta que exista)', () => {
-    expect(llamador.parameters.workflowId, 'sin id: el flujo nuevo no existe aún').toBeTruthy()
+  it('queda INACTIVO · publicar no es encender', () => {
+    expect((nuevo as unknown as { active: boolean }).active).toBe(false)
+  })
+
+  it('el nodo que llama apunta a ese id', () => {
+    expect(JSON.stringify(nodo(vivo, LLAMAR)?.parameters)).toContain('wu1DUAXIuEG5nNTX')
   })
 })
 
-describe('🔴 falta · el alta todavía no llama a la segunda fase', () => {
-  it('`cimiento.promoted` TIENE salida (hoy es TERMINAL · ahí se corta el alta)', () => {
+describe('el alta YA llama a la segunda fase (era ROJO)', () => {
+  it('`cimiento.promoted` TIENE salida · ya no es terminal', () => {
+    expect(salidas(previo, PROMOVIDO).length).toBe(0)   // antes: cortado
     expect(salidas(vivo, PROMOVIDO).length).toBeGreaterThan(0)
   })
 
-  it('`cimiento.promoted` cuelga del nodo que llama a la segunda fase', () => {
-    expect(salidas(vivo, PROMOVIDO)).toContain('Llamar · Segunda Fase del alta')
+  it('la cadena es cimiento.promoted -> armar -> llamar', () => {
+    expect(salidas(vivo, PROMOVIDO)).toContain(ARMAR)
+    expect(salidas(vivo, ARMAR)).toContain(LLAMAR)
   })
 
-  it('el worker vivo tiene el nodo que llama', () => {
-    expect(nodo(vivo, 'Llamar · Segunda Fase del alta')).toBeDefined()
+  it('el vivo tiene los dos nodos nuevos', () => {
+    expect(nodo(vivo, ARMAR)).toBeDefined()
+    expect(nodo(vivo, LLAMAR)).toBeDefined()
+  })
+
+  it('nada de los 73 anteriores se borró', () => {
+    for (const n of previo.nodes) expect(nodo(vivo, n.name), `se borró ${n.name}`).toBeDefined()
+  })
+
+  it('el alta sigue PAUSADA · publicar no es encender', () => {
+    expect((vivo as unknown as { active: boolean }).active).toBe(false)
   })
 })
