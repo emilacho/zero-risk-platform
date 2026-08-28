@@ -1,0 +1,47 @@
+{
+  "_comentario": [
+    "EL ÚNICO cambio a LyVoKcrypS5uLyuu: un nodo que llama al flujo nuevo.",
+    "Va colgado de '[MODELB] Emit · cimiento.promoted', que HOY es terminal.",
+    "workflowId queda VACÍO a propósito: el flujo nuevo todavía no existe en n8n",
+    "(crearlo es una escritura y espera la misma firma que el PUT).",
+    "",
+    "LA CARGA · 11 datos, medidos uno por uno sobre el flujo vivo.",
+    "  LLEGAN HOY (6):  client_id · client_name · industry · contract_scope ·",
+    "                   _journey_id · _sala_correlation_id",
+    "  NO LLEGAN (4):   tenant_id · primary_contact_id · contact_email · contact_name",
+    "                   -> el flujo VIEJO ya los lee vacíos. No es una regresión nueva:",
+    "                      es un defecto que se hereda si se copia sin mirar.",
+    "                      Evidencia: tenant_id == client_id en 87/87 filas del registro",
+    "                      (el respaldo 'tenant_id || client_id' actúa siempre), y las",
+    "                      15 reservas de agenda tienen client_id NULO.",
+    "  NUEVO (1):       discovery_result -> lo lee 'Build Success Plan Template' con la",
+    "                   sintaxis $node['...'], que mi primera enumeración NO vio."
+  ],
+  "parameters": {
+    "workflowId": "",
+    "options": {},
+    "mode": "each",
+    "workflowInputs": {
+      "mappingMode": "defineBelow",
+      "value": {
+        "client_id": "={{ $('Validate Deal Data').item.json.client_id }}",
+        "client_name": "={{ $('Validate Deal Data').item.json.client_name }}",
+        "industry": "={{ $('Validate Deal Data').item.json.industry }}",
+        "contract_scope": "={{ $('Validate Deal Data').item.json.contract_scope }}",
+        "_journey_id": "={{ $('Validate Deal Data').item.json._journey_id }}",
+        "_sala_correlation_id": "={{ $('Validate Deal Data').item.json._sala_correlation_id }}",
+        "tenant_id": "={{ $('Validate Deal Data').item.json.tenant_id || $('Validate Deal Data').item.json.client_id }}",
+        "primary_contact_id": "={{ $('Validate Deal Data').item.json.primary_contact_id || '' }}",
+        "contact_email": "={{ $('Validate Deal Data').item.json.contact_email || '' }}",
+        "contact_name": "={{ $('Validate Deal Data').item.json.contact_name || '' }}",
+        "discovery_result": "={{ $('Call Onboarding Specialist: Auto-Discovery').item.json.result }}"
+      }
+    }
+  },
+  "id": "llamar-segunda-fase",
+  "name": "Llamar · Segunda Fase del alta",
+  "type": "n8n-nodes-base.executeWorkflow",
+  "typeVersion": 1.2,
+  "position": [6080, 1100],
+  "notes": "Cuelga de '[MODELB] Emit · cimiento.promoted'. Carga enumerada: 11 datos. 4 de ellos NO llegan hoy (tenant_id · primary_contact_id · contact_email · contact_name) y van con respaldo explícito para que el flujo nuevo no reviente; arreglarlos de verdad es decisión aparte."
+}

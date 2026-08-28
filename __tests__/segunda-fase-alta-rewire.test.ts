@@ -1,187 +1,210 @@
 /**
- * Tests · Segunda fase del alta · re-cableado (worker LyVoKcrypS5uLyuu · CC#3 2026-08-28).
+ * Tests · Segunda fase del alta · flujo NUEVO (CC#3 2026-08-28).
  *
- * CONTEXTO MEDIDO (raw/findings/2026-08-28-CC3-AUDITORIA-ADVERSARIAL-el-alta-esta-cortada-a-la-mitad.md
- * y raw/findings/2026-08-28-CC3-el-orden-real-de-la-cola-y-que-rompe-el-recorte.md):
+ * SUPERSEDE el plan de empalmes (b2a1bd9). Emilio: «SIMPLEMENTE ARMA OTRO WORKFLOW».
+ * En vez de 3 empalmes dentro del worker de 73 nodos, se arma un flujo aparte con los
+ * 9 nodos elegidos (+ el cierre del recorrido) y en `LyVoK` UN SOLO nodo que lo llama.
  *
- *   - 24 de 73 nodos son INALCANZABLES desde el webhook.
- *   - `[MODELB] Emit · cimiento.promoted` es TERMINAL: el alta promueve el cimiento y se acaba.
- *   - Último alta completa de un cliente real: 21-jul 20:35 UTC. Ninguna en 38 días.
- *   - Los 4 nodos de «fase B» (ejecutivo de cuenta + bandeja) están INTERCALADOS en la cola,
- *     no al final: `Alert Slack` cuelga de `AM Handoff`, y `Write-back Callback` cuelga de
- *     `Notify MC Inbox`. Cortarlos sin empalmar se lleva el aviso a Emilio Y el cierre.
- *   - Además `Write-back Callback` LEE `$('Compute Handoff Score')` y `$('Notify MC Inbox')`
- *     dentro de `summary`: en n8n, leer un nodo que no corrió revienta la corrida.
+ * 🔴 EL RIESGO REAL es la CARGA DEL LLAMADO: hoy esos nodos leen datos de nodos que
+ * quedan atrás. En el flujo nuevo no existen. La carga está ENUMERADA, no muestreada:
  *
- * ALCANCE (DECISION-EMILIO-alcance-de-la-segunda-fase): entran 9 nodos + `journey_completed`.
- * Salen a fase B los 4 del ejecutivo/bandeja. Sale la cascada (5 nodos, `Spell Check Pass`
- * incluido: es un `noOp` marcador · el corrector real corre dentro de /api/cascade/onboard).
+ *   LLEGAN HOY (6) · client_id · client_name · industry · contract_scope ·
+ *                    _journey_id · _sala_correlation_id
+ *   NO LLEGAN (4)  · tenant_id · primary_contact_id · contact_email · contact_name
+ *                    (el worker VIEJO ya los lee vacíos · 87/87 filas del registro
+ *                     tienen tenant_id == client_id, o sea el respaldo actuando;
+ *                     y las 15 reservas de agenda tienen client_id NULO)
+ *   NUEVO (1)      · discovery_result · lo lee `Build Success Plan Template` con la
+ *                    sintaxis `$node['...']`, que la primera enumeración NO vio.
  *
- * §148 honest · esta suite lee el JSON EXPORTADO del worker vivo · NO toca producción.
- * 🔴 Los tests del bloque «objetivo» DEBEN DAR ROJO contra el JSON de hoy. Un test que
- * pasa antes del arreglo está mirando otra cosa.
+ * §148 honest · esta suite lee JSON exportado/armado · NO toca producción.
+ * 🔴 El bloque «falta» DEBE DAR ROJO: el flujo nuevo no está creado en n8n y `LyVoK`
+ * todavía no lo llama. Las dos cosas esperan firma.
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const DIR = join(process.cwd(), 'scripts/worker-staging/LyVoKcrypS5uLyuu/segunda-fase')
-const worker = JSON.parse(readFileSync(join(DIR, 'live-worker-2026-08-28.json'), 'utf8')) as {
+const leer = (f: string) => JSON.parse(readFileSync(join(DIR, f), 'utf8'))
+
+type Flujo = {
+  id?: string
+  name: string
   nodes: Array<{ name: string; type: string; disabled?: boolean; parameters: Record<string, unknown> }>
   connections: Record<string, { main?: Array<Array<{ node: string }> | null> }>
 }
 
-const nodeByName = (n: string) => worker.nodes.find((x) => x.name === n)
-const targets = (from: string): string[] =>
-  (worker.connections[from]?.main ?? []).flatMap((rama) => (rama ?? []).map((c) => c.node))
-
-/** Alcanzables desde un nodo, siguiendo `main` en cualquier salida. */
-function alcanzables(desde: string): Set<string> {
-  const vistos = new Set<string>([desde])
-  const pila = [desde]
-  while (pila.length) {
-    const n = pila.pop() as string
-    for (const t of targets(n)) if (!vistos.has(t)) { vistos.add(t); pila.push(t) }
-  }
-  return vistos
+const vivo: Flujo = leer('live-worker-2026-08-28.json')
+const nuevo: Flujo = leer('segunda-fase-workflow.json')
+const llamador = leer('nodo-que-llama.json') as {
+  parameters: { workflowId?: string; workflowInputs?: { value?: Record<string, string> } }
 }
 
-// ── nombres canónicos (tal cual están en el worker vivo) ──────────────────────
-const ENTRADA = 'Webhook: Deal Won'
+const salidas = (f: Flujo, de: string): string[] =>
+  (f.connections[de]?.main ?? []).flatMap((rama) => (rama ?? []).map((c) => c.node))
+const nodo = (f: Flujo, n: string) => f.nodes.find((x) => x.name === n)
+
 const PROMOVIDO = '[MODELB] Emit · cimiento.promoted'
-const WORKSPACE = 'Create Notion Client Workspace'
-const PLAN_TPL = 'Build Success Plan Template'
-const PLAN = 'Create Success Plan in Notion'
-const AGENDA = 'Schedule Kickoff Call (Cal.com)'
-const SLACK = 'Alert Slack: Onboarding Initiated'
-const CIERRE = '[MODELB] Write-back Callback · run terminal'
-const FIN = '[MODELB] Phase-boundary Emit · journey_completed'
+const DISPARADOR = 'Datos del alta'
 
-/** Los 4 que Emilio saca a «fase B»: se DESCONECTAN, no se borran. */
-const FASE_B = [
-  'Compute Handoff Score',
-  'AM Handoff → SALA event (am_handoff)',
-  'Notify MC Inbox',
-  '[MODELB] Phase-boundary Emit · mc_inbox_notified',
-]
-
-/** Los 5 de la cascada: quedan fuera del alcance («ese cascade es otro tema»). */
-const CASCADA = [
-  'Spell Check Pass (in-cascade)',
-  'Run Onboarding Cascade (Gap 3)',
-  'Build Master Journey Input (canon shape)',
-  'Trigger Master Journey ugK3',
-  '[MODELB] Phase-boundary Emit · CASCADE',
-]
-
-/** Los 10 que entran (los 9 de Emilio + el cierre del recorrido). */
-const SEGUNDA_FASE = [
-  WORKSPACE,
+/** Los 9 de Emilio + el cierre del recorrido, en orden. */
+const ORDEN = [
+  'Create Notion Client Workspace',
   '[MODELB] Phase-boundary Emit · notion_workspace_created',
-  PLAN_TPL,
-  PLAN,
+  'Build Success Plan Template',
+  'Create Success Plan in Notion',
   '[MODELB] Phase-boundary Emit · success_plan_built',
-  AGENDA,
+  'Schedule Kickoff Call (Cal.com)',
   '[MODELB] Phase-boundary Emit · kickoff_scheduled',
-  SLACK,
-  CIERRE,
-  FIN,
+  'Alert Slack: Onboarding Initiated',
+  '[MODELB] Write-back Callback · run terminal',
+  '[MODELB] Phase-boundary Emit · journey_completed',
+]
+
+/** La carga enumerada · los 11 datos que deben viajar. */
+const CARGA = [
+  'client_id', 'client_name', 'industry', 'contract_scope',
+  '_journey_id', '_sala_correlation_id',
+  'tenant_id', 'primary_contact_id', 'contact_email', 'contact_name',
+  'discovery_result',
+]
+
+/** Nodos que NO existen en el flujo nuevo · nadie puede leerlos. */
+const AFUERA = [
+  'Validate Deal Data',
+  'Call Onboarding Specialist: Auto-Discovery',
+  'Compute Handoff Score',
+  'Notify MC Inbox',
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONTROL POSITIVO · si esto falla, el instrumento está roto y nada más vale.
-// Debe estar VERDE hoy y después del arreglo.
+// CONTROL POSITIVO · si esto falla, el instrumento está roto y ningún rojo vale.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('control positivo · la foto del worker se lee y es la que creemos', () => {
-  it('el worker exportado tiene 73 nodos', () => {
-    expect(worker.nodes.length).toBe(73)
+describe('control positivo · las fotos se leen y son las que creemos', () => {
+  it('el worker vivo tiene 73 nodos', () => {
+    expect(vivo.nodes.length).toBe(73)
   })
 
-  it('los 10 nodos de la segunda fase EXISTEN en el worker', () => {
-    for (const n of SEGUNDA_FASE) expect(nodeByName(n), `falta nodo ${n}`).toBeDefined()
-  })
-
-  it('la primera mitad SÍ está cableada (el instrumento ve aristas reales)', () => {
-    const vivos = alcanzables(ENTRADA)
-    expect(vivos.has('Validate Deal Data')).toBe(true)
-    expect(vivos.has('[JEFATURA] Execute Cimiento Track')).toBe(true)
-    expect(vivos.has(PROMOVIDO)).toBe(true)
+  it('la primera mitad del worker SÍ está cableada (el instrumento ve aristas reales)', () => {
+    expect(salidas(vivo, 'Webhook: Deal Won').length).toBeGreaterThan(0)
+    expect(salidas(vivo, '[JEFATURA] Execute Cimiento Track')).toContain(
+      'IF track_pass (¿el cimiento pasó de verdad?)'
+    )
   })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔴 ROJO OBLIGATORIO · el estado OBJETIVO. Contra el JSON de hoy TIENE que fallar.
+// EL FLUJO NUEVO · lo construido en este commit. Verde.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('🔴 objetivo · la segunda fase cuelga del cimiento promovido', () => {
-  it('`cimiento.promoted` TIENE salida (hoy es terminal · ROJO esperado)', () => {
-    expect(targets(PROMOVIDO).length).toBeGreaterThan(0)
+describe('el flujo nuevo · los 9 nodos de Emilio + el cierre', () => {
+  it('tiene el disparador y los 10 nodos', () => {
+    expect(nodo(nuevo, DISPARADOR)?.type).toBe('n8n-nodes-base.executeWorkflowTrigger')
+    for (const n of ORDEN) expect(nodo(nuevo, n), `falta ${n}`).toBeDefined()
+    expect(nuevo.nodes.length).toBe(11)
   })
 
-  it('`cimiento.promoted` entra a `Create Notion Client Workspace`', () => {
-    expect(targets(PROMOVIDO)).toContain(WORKSPACE)
+  it('está encadenado en el orden que eligió Emilio', () => {
+    expect(salidas(nuevo, DISPARADOR)).toEqual(['Create Notion Client Workspace'])
+    expect(salidas(nuevo, 'Create Notion Client Workspace')).toContain('Build Success Plan Template')
+    expect(salidas(nuevo, 'Build Success Plan Template')).toEqual(['Create Success Plan in Notion'])
+    expect(salidas(nuevo, 'Create Success Plan in Notion')).toContain('Schedule Kickoff Call (Cal.com)')
+    expect(salidas(nuevo, 'Schedule Kickoff Call (Cal.com)')).toContain('Alert Slack: Onboarding Initiated')
+    expect(salidas(nuevo, 'Alert Slack: Onboarding Initiated')).toEqual([
+      '[MODELB] Write-back Callback · run terminal',
+    ])
+    expect(salidas(nuevo, '[MODELB] Write-back Callback · run terminal')).toEqual([
+      '[MODELB] Phase-boundary Emit · journey_completed',
+    ])
   })
 
-  it('la segunda fase entera queda ALCANZABLE desde el webhook', () => {
-    const vivos = alcanzables(ENTRADA)
-    for (const n of SEGUNDA_FASE) expect(vivos.has(n), `${n} sigue inalcanzable`).toBe(true)
+  it('NO trae los 4 de fase B ni los 5 de la cascada', () => {
+    for (const n of ['Compute Handoff Score', 'Notify MC Inbox', 'Spell Check Pass (in-cascade)']) {
+      expect(nodo(nuevo, n), `no debería estar ${n}`).toBeUndefined()
+    }
+  })
+
+  it('NINGÚN nodo lee de un nodo que no existe en este flujo', () => {
+    // sólo `parameters` · es lo que se EJECUTA. Las `notes` son prosa y pueden nombrar
+    // el cableado viejo para explicarlo (de hecho lo hacen, a propósito).
+    const ejecutable = JSON.stringify(nuevo.nodes.map((n) => n.parameters))
+    for (const n of AFUERA) expect(ejecutable, `sigue leyendo ${n}`).not.toContain(n)
+    for (const campo of ['handoff_score', 'mc_inbox']) {
+      expect(ejecutable, `el cierre sigue armando ${campo}`).not.toContain(campo)
+    }
+  })
+
+  it('los 11 datos de la carga se USAN de verdad (no sobra ninguno)', () => {
+    const ejecutable = JSON.stringify(nuevo.nodes.map((n) => n.parameters))
+    for (const c of CARGA) {
+      expect(ejecutable, `la carga manda ${c} pero el flujo no lo lee`).toContain(`item.json.${c}`)
+    }
+  })
+
+  it('todo lo que necesita sale del disparador', () => {
+    expect(JSON.stringify(nuevo)).toContain(`$('${DISPARADOR}')`)
+  })
+
+  it('el nombre se crea BIEN codificado (no se arrastra el mojibake de n8n)', () => {
+    expect(nuevo.name).not.toMatch(/â€|Ã/)
+    expect(vivo.name).toMatch(/â€/) // el viejo sigue mal · no se toca
+  })
+
+  it('no lleva credenciales embebidas', () => {
+    expect(nuevo.nodes.some((n) => 'credentials' in n)).toBe(false)
   })
 })
 
-describe('🔴 objetivo · los dos empalmes que saltean la fase B', () => {
-  it('`Schedule Kickoff Call` empalma directo a `Alert Slack` (saltea el ejecutivo de cuenta)', () => {
-    expect(targets(AGENDA)).toContain(SLACK)
+// ─────────────────────────────────────────────────────────────────────────────
+// LA CARGA · el único riesgo real. Enumerada, no muestreada.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('la carga del llamado · los 11 datos enumerados', () => {
+  const enviados = Object.keys(llamador.parameters.workflowInputs?.value ?? {})
+
+  it('el nodo que llama manda LOS 11, sin faltar ninguno', () => {
+    for (const c of CARGA) expect(enviados, `falta ${c} en la carga`).toContain(c)
   })
 
-  it('`Alert Slack` empalma directo al cierre (saltea la bandeja)', () => {
-    expect(targets(SLACK)).toContain(CIERRE)
+  it('no manda de más (la lista es exacta)', () => {
+    expect(enviados.sort()).toEqual([...CARGA].sort())
   })
 
-  it('el cierre ya NO cuelga de `Notify MC Inbox`', () => {
-    expect(targets('Notify MC Inbox')).not.toContain(CIERRE)
+  it('los 4 que hoy NO llegan van con respaldo explícito (para no reventar)', () => {
+    const v = llamador.parameters.workflowInputs?.value ?? {}
+    for (const c of ['tenant_id', 'primary_contact_id', 'contact_email', 'contact_name']) {
+      expect(v[c], `${c} debería llevar respaldo ||`).toContain('||')
+    }
   })
 
-  it('`Alert Slack` ya NO cuelga de `AM Handoff`', () => {
-    expect(targets('AM Handoff → SALA event (am_handoff)')).not.toContain(SLACK)
-  })
-})
-
-describe('🔴 objetivo · el cierre no lee datos de nodos que no van a correr', () => {
-  const cuerpoCierre = JSON.stringify(nodeByName(CIERRE)?.parameters ?? {})
-
-  it('el cierre NO referencia `Compute Handoff Score`', () => {
-    expect(cuerpoCierre).not.toContain("$('Compute Handoff Score')")
-  })
-
-  it('el cierre NO referencia `Notify MC Inbox`', () => {
-    expect(cuerpoCierre).not.toContain("$('Notify MC Inbox')")
-  })
-
-  it('el cierre SÍ conserva lo que necesita de la primera mitad', () => {
-    expect(cuerpoCierre).toContain("$('Validate Deal Data')")
+  it('`discovery_result` viaja · era el dato que la primera enumeración se perdió', () => {
+    expect(enviados).toContain('discovery_result')
+    expect(JSON.stringify(nuevo)).toContain('discovery_result')
   })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GUARDIAS · lo que el re-cableado NO puede romper. Verde hoy y después.
+// 🔴 LO QUE FALTA · espera firma. Contra el estado de HOY tiene que dar ROJO.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('guardias · el recorte desconecta, no borra', () => {
-  it('los 4 nodos de fase B SIGUEN EXISTIENDO (Emilio: «no se borra»)', () => {
-    for (const n of FASE_B) expect(nodeByName(n), `se borró ${n}`).toBeDefined()
+describe('🔴 falta · el flujo nuevo no está creado en n8n', () => {
+  it('el flujo nuevo tiene id asignado por n8n (ROJO hasta que se cree)', () => {
+    expect(nuevo.id, 'el flujo todavía es un plan, no existe en n8n').toBeDefined()
   })
 
-  it('los 5 nodos de la cascada SIGUEN EXISTIENDO', () => {
-    for (const n of CASCADA) expect(nodeByName(n), `se borró ${n}`).toBeDefined()
+  it('el nodo que llama apunta a un workflowId real (ROJO hasta que exista)', () => {
+    expect(llamador.parameters.workflowId, 'sin id: el flujo nuevo no existe aún').toBeTruthy()
+  })
+})
+
+describe('🔴 falta · el alta todavía no llama a la segunda fase', () => {
+  it('`cimiento.promoted` TIENE salida (hoy es TERMINAL · ahí se corta el alta)', () => {
+    expect(salidas(vivo, PROMOVIDO).length).toBeGreaterThan(0)
   })
 
-  it('`Spell Check Pass` es un marcador sin parámetros (no revisa nada · se va con la cascada)', () => {
-    const n = nodeByName('Spell Check Pass (in-cascade)')
-    expect(n?.type).toBe('n8n-nodes-base.noOp')
-    expect(Object.keys(n?.parameters ?? {})).toHaveLength(0)
+  it('`cimiento.promoted` cuelga del nodo que llama a la segunda fase', () => {
+    expect(salidas(vivo, PROMOVIDO)).toContain('Llamar · Segunda Fase del alta')
   })
 
-  it('la cascada DESEMBOCA en `Build Success Plan Template` (no cuelga de ella)', () => {
-    // por eso sacar la cascada no corta la cola: el otro predecesor la sostiene.
-    expect(targets('Trigger Master Journey ugK3')).toContain(PLAN_TPL)
-    expect(targets(WORKSPACE)).toContain(PLAN_TPL)
+  it('el worker vivo tiene el nodo que llama', () => {
+    expect(nodo(vivo, 'Llamar · Segunda Fase del alta')).toBeDefined()
   })
 })
