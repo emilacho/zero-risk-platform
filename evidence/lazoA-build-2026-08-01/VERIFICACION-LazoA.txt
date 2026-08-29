@@ -1,0 +1,26 @@
+=== BASELINE Lazo A · 9 nodos · versionId 8f23e10e-21b9-4b30-b59b-63c5bd5bb201 · active false ===
+huella de los NO tocados (2): c872395fd1ac53f6d060c7ae0d91f23306eb2e8cadbb0874a8781289ebf91781
+arreglo 1 + 8.a · Review prep → 1 ítem indexado + ranura low_fields ✅
+arreglo 2 · Revisor · brand-strategist → agente fijo 'brand-strategist' + su tarea ✅
+arreglo 2 · Revisor · editor-en-jefe → agente fijo 'editor-en-jefe' + su tarea ✅
+arreglo 2 · Revisor · jefe-client-success → agente fijo 'jefe-client-success' + su tarea ✅
+arreglo 3 · Merge: borrador del trigger + §7.3 (rojo/eje gateado/top-5) + reviewers_ok parseable ✅
+arreglo 4 · Re-síntesis → prep → HTTP → parse (fuera el fetch del Code) ✅
+arreglo 5 · Exit → 3 pisos fail-closed ✅
+
+=== VERIFICACIÓN Lazo A ===
+V1 nodos                : 9 → 11 (esperado 11) ✅
+V5 aristas colgando     : 0 ✅
+V4 huella NO tocados    : c872395fd1ac53f6d060c7ae0d91f23306eb2e8cadbb0874a8781289ebf91781
+     ✅ IDÉNTICA
+V12 sintaxis de los nodos Code:
+     ✅ [BBA] Review prep
+     ✅ [BBA] Merge corrections
+     ✅ [BBA] Exit · borrador final
+     ✅ [BBA] Re-síntesis prep
+     ✅ [BBA] Re-síntesis parse
+
+>>> VEREDICTO: ✅ VERDE
+
+PUT · HTTP 200 · nodos 11 · versionId 256713ea-2186-49df-86c0-d371d4844634 · active false
+vivo: 11 nodos · huella NO tocados c872395fd1ac53f6d060c7ae0d91f23306eb2e8cadbb0874a8781289ebf91781 · active false

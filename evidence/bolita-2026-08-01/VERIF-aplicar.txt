@@ -1,0 +1,20 @@
+=== BOLITA v2 · variante A ===
+  apagado · ssLtw · Lente · brand-strategist
+  apagado · ssLtw · Lente · editor-en-jefe
+  apagado · ssLtw · Lente · jefe-client-success
+  apagado · ssLtw · [BB] Judge · run-sdk
+  apagado · ssLtw · [BB] Promote → canon
+  apagado · LazoA · Revisor · brand-strategist
+  apagado · LazoA · Revisor · editor-en-jefe
+  apagado · LazoA · Revisor · jefe-client-success
+  apagado · LazoA · [BBA] Re-síntesis · run-sdk
+  >>> 9 nodos apagados (esperado 9) ✅
+  T1 · Merge: keep_going ruteado + _lazo_a con el valor REAL + toy_forced ✅
+  T2/T3 · juez: TOY_PASS_ON_2=false + passFinal en los 3 usos ✅
+
+V12 sintaxis: ✅
+V-pre httpRequest HABILITADOS: 0 ✅ CERO · $0 por construcción
+>>> ✅ VERDE
+PUT ssLtw · HTTP 200 · versionId 4cc0a2a8-aebc-4413-8d22-c52ed3e452d3
+PUT LazoA · HTTP 200 · versionId 3b283366-d630-468e-9812-322e8024016a
+V-pre CONTRA EL VIVO · httpRequest habilitados: 0 ✅
