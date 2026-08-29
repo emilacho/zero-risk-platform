@@ -216,7 +216,12 @@ function execSpawn(plan, opts = {}) {
     const argsReal = shell ? plan.args.map(cmdQuote) : plan.args;
     const child = spawnFn(cmdReal, argsReal, {
       cwd: plan.cwd,
-      detached: true,
+      // SPAWN INVISIBLE (§144 · 2026-07-24): `detached:true` era la causa REAL de la ventana ·
+      // en Windows DETACHED_PROCESS crea una CONSOLA NUEVA visible, y `windowsHide` (CREATE_NO_WINDOW)
+      // NO la tapa porque son flags de creación en conflicto → gana el detached. `detached:false` deja
+      // que `windowsHide:true` sí oculte la ventana. El despertar es invisible · no bloquea a Emilio.
+      // Bonus: el portero queda de padre del hijo → observa su 'exit' (PILAR B) de forma confiable.
+      detached: false,
       // PILAR B · la salida del empleado va a SU bitácora (antes: 'ignore' → punto ciego total).
       stdio: bitacora ? ['ignore', bitacora.fd, bitacora.fd] : 'ignore',
       shell,
