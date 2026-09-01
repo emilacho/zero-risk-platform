@@ -28,10 +28,15 @@
  *   2. Reconcile vs libreto's expected next phase · mismatch logs +
  *      Slack #equipo alert · NEVER halt the worker
  *
- * Dedup · operation_type = `sala-ingress.{phase_name}.{phase_state}` ·
- * combined with client_id + logical_period via `buildIdempotencyKey`
- * yields a unique key per (correlation_id-stream, phase_name, phase_state)
- * tuple · UNIQUE constraint on `sala_event_log` catches replays.
+ * Dedup · DOS capas ·
+ *   a) mismo escritor · operation_type = `sala-ingress.{phase_name}.{phase_state}`
+ *      combinado con client_id + logical_period via `buildIdempotencyKey` ·
+ *      la restriccion UNIQUE de `sala_event_log` corta los reintentos.
+ *   b) DOS ESCRITORES, UN HECHO · la llave de (a) mezcla `operation_type`, asi
+ *      que NO ve el mismo hecho llegando por otra puerta. La guardia de gemelo
+ *      logico (`lib/sala-event-log-twin-guard.ts`) mira
+ *      (tenant_id, stream_id, correlation_id, step_id, event_type) y devuelve
+ *      el `event_id` que ya existe en vez de escribir una segunda fila.
  */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
@@ -42,6 +47,7 @@ import {
   type EventType,
 } from '@/lib/sala-event-log'
 import { readJourneyState } from '@/lib/sala-journey-state'
+import { findLogicalTwin } from '@/lib/sala-event-log-twin-guard'
 import {
   buildIngressIdempotencyOperationType,
   checkSalaWebhookAuth,
@@ -168,6 +174,40 @@ export async function POST(request: Request) {
     gate_type: null,
   }
 
+  // ─── 6b · guardia de GEMELO LOGICO · dos escritores, un hecho ─────────
+  // La llave de idempotencia mezcla `operation_type`, asi que NO ve el caso en
+  // que el MISMO hecho llega por dos puertas distintas. Paso medido: el cierre
+  // del alta de GoEuropeAdventure (2026-09-01) quedo DOS VECES en el registro,
+  // `sala-callback.run_completed` a las 20:29:20 y
+  // `sala-ingress.journey_completed.completed` a las 20:29:21, con tenant,
+  // stream, correlacion, step_id y event_type identicos.
+  //
+  // Esta guardia SUMA: no toca al otro escritor, no borra nada y no cambia el
+  // camino cuando no hay gemelo. Si la consulta falla (`degraded`) se escribe
+  // igual que hoy · §148, la red de seguridad no puede ser un punto de falla.
+  const twin = await findLogicalTwin(supabase, {
+    tenant_id,
+    stream_id,
+    correlation_id: body._sala_correlation_id,
+    step_id: body.phase_name,
+    event_type,
+  })
+  if (twin.found && twin.event_id) {
+    return ok200({
+      event_id: twin.event_id,
+      via: auth.via,
+      duplicate_suppressed: true,
+      suppressed_by: twin.operation_type,
+      detail:
+        'gemelo logico ya registrado por otro escritor · no se agrega una segunda fila',
+      reconcile: {
+        kind: reconciled.kind,
+        delta: reconciled.delta,
+        expected_next: reconciled.expected_next,
+      },
+    })
+  }
+
   let appended_event_id: string
   try {
     const result = await storage.insert(eventInput)
@@ -220,5 +260,8 @@ export async function GET() {
       ts: 'ISO 8601',
     },
     dedup_key: '(correlation_id, phase_name, phase_state)',
+    twin_guard:
+      'gemelo logico · (tenant_id, stream_id, correlation_id, step_id, event_type) · ' +
+      'corta el mismo hecho escrito por otra puerta · responde 200 con duplicate_suppressed',
   })
 }
