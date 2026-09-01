@@ -86,7 +86,19 @@ export function buildBrandBookRow(
       fidelity_threshold: body.fidelity_threshold ?? null,
       approved_by: body.approved_by ?? 'faithfulness_check',
       approved_at: body.approved_at ?? new Date().toISOString(),
+      // (e) · el detalle del veredicto sigue viviendo acá · la columna de abajo
+      // es para poder VERLO sin abrir el JSON fila por fila.
+      gate_outcome: body.gate_outcome ?? null,
+      gate_nota: body.gate_nota ?? null,
     }),
+    // Sprint B · pieza (e) · 2026-08-28 (§144 Emilio) · el manual sale SIEMPRE, y el
+    // que no alcanzó la vara sale MARCADO. Antes se retenía en silencio para una
+    // revisión humana que nadie dispara: 0 manuales en 2 de 2 corridas del lazo.
+    // Va en COLUMNA y no sólo dentro de `content_text` porque «sale marcado»
+    // significa que la marca se ve listando la tabla, no parseando JSON.
+    // REQUIERE la migración 202608281400_client_brand_books_gate_outcome.sql aplicada.
+    // 'paso_la_vara' | 'salio_al_tope' · null = fila anterior a esta pieza.
+    gate_outcome: body.gate_outcome ?? null,
     auto_generated: true,
     auto_generated_from: body.source ?? 'onboarding_collaborative_build',
     human_validated: false,
@@ -133,7 +145,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   // book para el cliente, devolvemos el existente SIN crear duplicado (detect persist=true).
   const existing = await supabase
     .from('client_brand_books')
-    .select('id')
+    .select('id, gate_outcome')
     .eq('client_id', clientId)
     .order('version', { ascending: false })
     .limit(1)
@@ -144,6 +156,10 @@ export async function POST(req: Request, { params }: RouteContext) {
       already_existed: true,
       id: existing.data.id,
       client_id: clientId,
+      // el recibo del corte de idempotencia dice la marca de la fila que YA estaba ·
+      // sin esto, un manual que salió sin marca la sigue teniendo vacía para siempre
+      // y la corrida que lo reintenta recibe el mismo verde de siempre.
+      gate_outcome: existing.data.gate_outcome ?? null,
     })
   }
 
@@ -152,7 +168,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   const { data, error } = await supabase
     .from('client_brand_books')
     .insert(row)
-    .select('id')
+    .select('id, gate_outcome')
     .single()
 
   if (error) {
@@ -161,5 +177,15 @@ export async function POST(req: Request, { params }: RouteContext) {
       { status: 500 },
     )
   }
-  return NextResponse.json({ persisted: true, id: data?.id, client_id: clientId })
+  // EL RECIBO DICE QUÉ QUEDÓ ESCRITO (2026-09-01 · corrida 118856).
+  // El escritor anterior a la pieza (e) aceptaba `gate_outcome` en el cuerpo, lo
+  // descartaba y devolvía este mismo `persisted: true`. La marca se perdió entera y
+  // la corrida recibió un recibo verde: nadie mintió, nadie preguntó. Lo que se
+  // devuelve es lo que la BASE contestó tras el insert · no una copia del cuerpo.
+  return NextResponse.json({
+    persisted: true,
+    id: data?.id,
+    client_id: clientId,
+    gate_outcome: data?.gate_outcome ?? null,
+  })
 }
