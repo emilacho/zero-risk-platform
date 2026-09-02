@@ -33,8 +33,15 @@
  *
  * Costo medido del empuje · **$0,0000089 por manual** (3 secciones · 1.400
  * caracteres · `text-embedding-3-small`), tomado de `brain_embed_costs`.
+ *
+ * ── Y SI EL EMPUJE FALLA, SE OYE (2026-09-02) ─────────────────────────────
+ * El estado viaja en el recibo, pero **el recibo lo consume un nodo de n8n que
+ * no lo lee**. Un empuje que falla en silencio deja el manual fuera del cerebro
+ * hasta el barrido del día siguiente — el defecto original, disfrazado. Los tres
+ * fallos posibles tocan la campana de `#equipo`: ver `empuje-alerta.ts`.
  */
 import { waitUntil } from '@vercel/functions'
+import { avisarFalloDelEmpuje } from './empuje-alerta'
 
 /** Qué se hizo con el empuje · va en el recibo, para que nunca sea silencioso. */
 export type EmpujeEstado =
@@ -95,6 +102,12 @@ export function empujarManualAlCerebro(entrada: EmpujeEntrada): EmpujeResultado 
   }
   const key = process.env.INTERNAL_API_KEY
   if (!key) {
+    // SE OYE · sin llave el empuje no ocurre NUNCA, para ningun manual. Es el
+    // fallo mas silencioso de todos: no hay ni intento que mirar.
+    void avisarFalloDelEmpuje({
+      motivo: 'sin_configurar', client_id, source_id: source_id ?? null,
+      detalle: 'INTERNAL_API_KEY ausente', fetchImpl: entrada.fetchImpl,
+    })
     return { estado: 'sin_configurar', detalle: 'INTERNAL_API_KEY ausente · no se puede llamar a la puerta' }
   }
 
@@ -117,20 +130,23 @@ export function empujarManualAlCerebro(entrada: EmpujeEntrada): EmpujeResultado 
           })
           const t = await r.text().catch(() => '')
           if (!r.ok) {
-            console.warn(
-              `[cerebro-al-terminar] la puerta contestó ${r.status} · client=${client_id.slice(0, 8)} · ${t.slice(0, 200)}`,
-            )
+            // SE OYE · el manual quedo fuera del cerebro y nadie mira el recibo.
+            await avisarFalloDelEmpuje({
+              motivo: 'puerta_no_2xx', client_id, source_id: source_id ?? null,
+              status: r.status, detalle: t, fetchImpl: entrada.fetchImpl,
+            })
           } else {
             console.info(
               `[cerebro-al-terminar] manual ${String(source_id).slice(0, 8)} empujado al cerebro · ${t.slice(0, 200)}`,
             )
           }
         } catch (e) {
-          // §148 · el empuje es una mejora, jamás un punto de falla nuevo.
-          console.warn(
-            `[cerebro-al-terminar] no se pudo empujar · client=${client_id.slice(0, 8)} · ` +
-              (e instanceof Error ? e.message : String(e)),
-          )
+          // §148 · el empuje es una mejora, jamás un punto de falla nuevo · pero
+          // que sea best-effort no significa que sea MUDO.
+          await avisarFalloDelEmpuje({
+            motivo: 'puerta_inalcanzable', client_id, source_id: source_id ?? null,
+            detalle: e instanceof Error ? e.message : String(e), fetchImpl: entrada.fetchImpl,
+          })
         }
       })(),
     )
