@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { sanitizeProseFields } from '@/lib/brand-book-caveat-extractor'
 
 export const runtime = 'nodejs'
 
@@ -66,21 +67,42 @@ export function buildBrandBookRow(
   bb: Record<string, unknown>,
   body: Record<string, unknown>,
 ): Record<string, unknown> {
+  // La advertencia que el empleado escribe sobre su propio trabajo sale de la
+  // PROSA y pasa a ser un dato. No se borra: se mueve a `_caveats`. Medido en la
+  // corrida de GoEuropeAdventure (manual 5648b126), donde `voice_description`
+  // terminaba con "ADVERTENCIA DE CONFIANZA BAJA: ... (apify_sources vacio)".
+  // Un manual sin advertencias sale byte-identico al de hoy.
+  const prose = sanitizeProseFields(bb)
+  const clean = (field: string, fallback: unknown) =>
+    Object.prototype.hasOwnProperty.call(prose.cleaned, field) ? prose.cleaned[field] : fallback
+
   return {
     client_id: clientId,
-    voice_description: bb.voice_description ?? null,
+    voice_description: clean('voice_description', bb.voice_description ?? null),
     forbidden_words: bb.forbidden_words ?? [],
     required_terminology: bb.required_terminology ?? [],
     // H1.2 (2026-08-20) · el posicionamiento tiene columna propia. Antes se guardaba
     // prestado en `elevator_pitch` ("encaja", decía el comentario) · el cerebro lo
     // indexaba con el rótulo equivocado. Son dos cosas distintas y ahora van separadas.
     // REQUIERE la migración 202608201200_client_brand_books_positioning.sql aplicada.
-    positioning: bb.positioning ?? null,
-    elevator_pitch: bb.elevator_pitch ?? null,
+    positioning: clean('positioning', bb.positioning ?? null),
+    elevator_pitch: clean('elevator_pitch', bb.elevator_pitch ?? null),
     // el draft completo (incl. icp_summary/customer_angle/retention_notes que no tienen
     // columna) se preserva en content_text como JSON · nada se pierde.
     content_text: JSON.stringify({
+      // VERBATIM a proposito · registro forense de lo que produjeron las lentes.
+      // Lo que se limpia son las COLUMNAS, que es lo que leen el cerebro, el
+      // visor y el cliente. Aca no se pierde ni un caracter.
       brand_book_draft: bb,
+      // Las advertencias rescatadas de la prosa · dato consultable en vez de
+      // frase suelta. Ausente cuando el manual no traia ninguna.
+      ...(Object.keys(prose.caveats).length > 0 ? { _caveats: prose.caveats } : {}),
+      // Identificadores internos que se colaron igual · se DECLARAN, no se borran
+      // (borrar a ciegas mutila la frase). Sirve para enterarse sin leer manual
+      // por manual.
+      ...(Object.keys(prose.leaked).length > 0
+        ? { _leaked_internal_terms: prose.leaked }
+        : {}),
       fidelity_passed: body.fidelity_passed === true,
       fidelity_scores: body.fidelity_scores ?? null,
       fidelity_threshold: body.fidelity_threshold ?? null,
