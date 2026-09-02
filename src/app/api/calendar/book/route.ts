@@ -12,7 +12,7 @@
  *
  * Body ·
  *   {
- *     client_id?: string,
+ *     client_id?: string,          // opcional · si falta se resuelve por nombre (C7)
  *     contact_email: string,        // required · Cal.com attendee email
  *     contact_name?: string,
  *     event_title?: string,
@@ -37,6 +37,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { resolveCalendarClientId } from '@/lib/calendar-client-resolver'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -252,10 +253,19 @@ export async function POST(req: Request) {
   // ── Persist the confirmed booking · receipt for the upstream workflow ──
   try {
     const supabase = getSupabaseAdmin()
+    // C7 · la reunion no puede quedar suelta. Si el que llama mando `client_id`
+    // se usa tal cual (camino de hoy, cero consultas); si no, se resuelve por
+    // nombre EXACTO con lo que ya llega. Nunca adivina, nunca lanza, y ante
+    // ambiguedad deja NULL igual que hoy. Ver `lib/calendar-client-resolver.ts`.
+    const resolution = await resolveCalendarClientId(supabase, {
+      client_id: body.client_id,
+      contact_name: body.contact_name,
+      event_title: body.event_title,
+    })
     const { data, error } = await supabase
       .from('calendar_bookings')
       .insert({
-        client_id: body.client_id ?? null,
+        client_id: resolution.client_id,
         contact_email: body.contact_email,
         contact_name: body.contact_name ?? null,
         attendee_email: body.contact_email,
@@ -273,7 +283,16 @@ export async function POST(req: Request) {
         provider_booking_id: calUid,
         meeting_url: meetingUrl,
         webhook_payload: calData,
-        metadata: body.metadata ?? {},
+        metadata: {
+          ...(body.metadata ?? {}),
+          // Rastro de COMO se ato (o por que no) · auditable sin re-correr nada.
+          client_id_resolution: {
+            source: resolution.source,
+            candidates_tried: resolution.candidates_tried,
+            ambiguous: resolution.ambiguous,
+            ...(resolution.detail ? { detail: resolution.detail } : {}),
+          },
+        },
       })
       .select()
       .single()
@@ -298,6 +317,8 @@ export async function POST(req: Request) {
       booking: data,
       cal: { uid: calUid, status: calStatus },
       mode: 'cal-com-cloud',
+      // C7 · el que llama puede ver si la reunion quedo atada, sin ir a la base.
+      client_id_resolution: resolution,
       // true when the requested slot was unavailable and we booked the next
       // real open slot instead. Lets the caller surface the adjusted time.
       slot_adjusted: slotAdjusted,
