@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { sanitizeProseFields } from '@/lib/brand-book-caveat-extractor'
+import { empujarManualAlCerebro } from '@/lib/brain/push-al-terminar'
 
 export const runtime = 'nodejs'
 
@@ -204,10 +205,18 @@ export async function POST(req: Request, { params }: RouteContext) {
   // descartaba y devolvía este mismo `persisted: true`. La marca se perdió entera y
   // la corrida recibió un recibo verde: nadie mintió, nadie preguntó. Lo que se
   // devuelve es lo que la BASE contestó tras el insert · no una copia del cuerpo.
+  // LO QUE TERMINA EMPUJA (Emilio 2026-09-02) · el manual entra al cerebro AHORA,
+  // no manana a las 07:00. Va DESPUES del insert exitoso y NO se espera: el recibo
+  // vuelve antes de que el empuje arranque, asi que la fila del manual no queda
+  // colgada de que el cerebro conteste. Ver `lib/brain/push-al-terminar.ts`.
+  const brain_push = empujarManualAlCerebro({ client_id: clientId, source_id: data?.id })
+
   return NextResponse.json({
     persisted: true,
     id: data?.id,
     client_id: clientId,
     gate_outcome: data?.gate_outcome ?? null,
+    // El recibo DICE que se empujo (o por que no) · nunca silencioso.
+    brain_push,
   })
 }
