@@ -86,7 +86,7 @@ const sinMarca = despues.filter((f) => f.gate_outcome === null || f.gate_outcome
 console.log(`filas: ${filas.length} · ${antes.length} antes del corte (${CORTE}) · ${despues.length} después`)
 
 if (sinMarca.length === 0) {
-  console.log(`✓ las ${despues.length} filas escritas después del corte llevan la marca del veredicto`)
+  console.log(`✓ ${despues.length} de ${despues.length} filas escritas después del corte llevan la marca del veredicto`)
   process.exit(0)
 }
 
