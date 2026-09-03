@@ -42,6 +42,7 @@ import {
   registrarIntentoDeReserva,
   type ResultadoIntento,
 } from '@/lib/calendar/registrar-intento'
+import { avisarAtascoDeAgenda } from '@/lib/calendar/aviso-agenda'
 import { resolveCalendarClientId } from '@/lib/calendar-client-resolver'
 
 export const runtime = 'nodejs'
@@ -292,7 +293,9 @@ export async function POST(req: Request) {
   // 409 el 03-sep · misma frase). Se decide por la FAMILIA, no por un número — ver
   // `esRechazoDeHorario` arriba. Reintentar el MISMO horario no ayuda nunca: se busca
   // el primer hueco real desde la hora pedida hacia adelante.
+  let seBuscoHueco = false
   if (!result.ok && esRechazoDeHorario(result.upstream_status, result.detail)) {
+    seBuscoHueco = true
     const slot = await findFirstAvailableSlot(apiKey, eventTypeId, bookedStart, timeZone)
     if (slot) {
       const retryStart = new Date(slot).toISOString()
@@ -307,6 +310,27 @@ export async function POST(req: Request) {
   }
 
   if (!result.ok) {
+    // QUE EL ATASCO SUENE (03-sep · pedido de Emilio al firmar el arreglo).
+    // El aviso honesto deja la fase «en curso» en vez de mentir «completada» — pero
+    // una fase en curso que nadie mira es un atasco silencioso, y cambiar una mentira
+    // callada por un atasco callado no sirve. Misma campana que el empuje al cerebro:
+    // Slack #equipo, la única REALMENTE conectada (medido 02-sep).
+    const d = leerDetalleCalcom(result.detail)
+    await avisarAtascoDeAgenda({
+      motivo:
+        result.upstream_status === 0
+          ? 'proveedor_inalcanzable'
+          : esRechazoDeHorario(result.upstream_status, result.detail)
+            ? 'sin_hueco'
+            : 'rechazo_no_de_horario',
+      client_id: body.client_id ?? null,
+      contact_email: body.contact_email as string,
+      requested_start: bookedStart,
+      upstream_status: result.upstream_status,
+      upstream_code: d.code,
+      upstream_message: d.message,
+      se_busco_hueco: seBuscoHueco,
+    })
     return NextResponse.json(
       {
         ok: false,

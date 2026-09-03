@@ -200,6 +200,8 @@ beforeEach(() => {
   process.env.INTERNAL_API_KEY = 'test-key'
   process.env.CALCOM_API_KEY = 'llave-de-prueba'
   process.env.CALCOM_EVENT_TYPE_ID = '6157933'
+  // sin campana en los casos que miden la puerta · el aviso se prueba aparte
+  delete process.env.SLACK_WEBHOOK_URL_EQUIPO
 })
 afterEach(() => {
   delete process.env.INTERNAL_API_KEY
@@ -310,4 +312,95 @@ describe('la expresión del aviso decide bien en los dos casos', () => {
       expect(evaluar(expresionDe(f), { ok: false, cal: { uid: 'u1' } })).toBe('started')
     })
   }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔴→🟢 que el ATASCO suene · pedido de Emilio al firmar (03-sep)
+// ─────────────────────────────────────────────────────────────────────────────
+import { avisarAtascoDeAgenda, construirMensajeAgenda } from '../src/lib/calendar/aviso-agenda'
+
+describe('la agenda atascada toca la campana de #equipo', () => {
+  it('el mensaje dice qué pasó, con quién y que la fase queda EN CURSO', () => {
+    const { text } = construirMensajeAgenda({
+      motivo: 'sin_hueco',
+      client_id: 'a7ad4331-b7d6-48c8-8846-c53063495bd3',
+      contact_email: 'cliente@ejemplo.com',
+      requested_start: '2026-09-06T10:25:00.000Z',
+      upstream_status: 409,
+      upstream_code: 'ConflictException',
+      upstream_message: 'User either already has booking at this time or is not available',
+      se_busco_hueco: true,
+    })
+    expect(text).toContain('NO quedó agendada')
+    expect(text).toContain('a7ad4331')
+    expect(text).toContain('409')
+    expect(text).toContain('ConflictException')
+    expect(text).toContain('en curso')
+    expect(text).toContain('próximo hueco libre')
+  })
+
+  it('sin campana configurada NO se inventa un canal · y no rompe', async () => {
+    const r = await avisarAtascoDeAgenda({
+      motivo: 'proveedor_inalcanzable',
+      client_id: null,
+      contact_email: 'x@y.z',
+      requested_start: '2026-09-06T10:25:00.000Z',
+      upstream_status: 0,
+      se_busco_hueco: false,
+      webhookUrl: undefined,
+    })
+    expect(r.avisado).toBe(false)
+    expect(r.razon).toBe('sin_campana')
+  })
+
+  it('si el envío falla, se declara · NUNCA lanza', async () => {
+    const rompe = vi.fn(async () => { throw new Error('red caída') })
+    const r = await avisarAtascoDeAgenda({
+      motivo: 'sin_hueco',
+      client_id: 'c1',
+      contact_email: 'x@y.z',
+      requested_start: '2026-09-06T10:25:00.000Z',
+      upstream_status: 409,
+      se_busco_hueco: true,
+      webhookUrl: 'https://hooks.slack.test/equipo',
+      fetchImpl: rompe as unknown as typeof fetch,
+    })
+    expect(r).toEqual({ avisado: false, razon: 'excepcion' })
+  })
+
+  it('cuando el rescate TAMPOCO consigue hueco · la campana suena de verdad', async () => {
+    const campana: string[] = []
+    const fake = vi.fn(async (url: unknown, init?: { method?: string; body?: string }) => {
+      const u = String(url)
+      if (u.includes('hooks.slack')) {
+        campana.push(String(init?.body ?? ''))
+        return { ok: true, status: 200, json: async () => ({}) }
+      }
+      if (u.includes('/slots')) return { ok: true, status: 200, json: async () => ({ status: 'success', data: {} }) }
+      return { ok: false, status: 409, json: async () => ({ error: CONFLICTO }) }
+    })
+    vi.stubGlobal('fetch', fake)
+    process.env.SLACK_WEBHOOK_URL_EQUIPO = 'https://hooks.slack.test/equipo'
+    const res = await POST(req(CUERPO))
+    expect(res.status).toBe(502)
+    expect(campana.length, 'la agenda se atascó y nadie tocó la campana').toBe(1)
+    expect(campana[0]).toContain('NO qued')
+    expect(campana[0]).toContain('409')
+    delete process.env.SLACK_WEBHOOK_URL_EQUIPO
+  })
+
+  it('cuando la reserva SÍ sale, la campana NO suena', async () => {
+    const campana: string[] = []
+    const { fake } = calcomQueRechazaCon(409)
+    const conCampana = vi.fn(async (url: unknown, init?: { method?: string; body?: string }) => {
+      if (String(url).includes('hooks.slack')) { campana.push(String(init?.body ?? '')); return { ok: true, status: 200, json: async () => ({}) } }
+      return fake(url, init)
+    })
+    vi.stubGlobal('fetch', conCampana)
+    process.env.SLACK_WEBHOOK_URL_EQUIPO = 'https://hooks.slack.test/equipo'
+    const res = await POST(req(CUERPO))
+    expect((await res.json()).ok).toBe(true)
+    expect(campana.length, 'sonó la campana con la reserva hecha · ruido falso').toBe(0)
+    delete process.env.SLACK_WEBHOOK_URL_EQUIPO
+  })
 })
