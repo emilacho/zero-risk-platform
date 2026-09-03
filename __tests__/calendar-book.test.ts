@@ -17,12 +17,27 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+// 2026-09-03 · la ruta ahora escribe en DOS tablas: la reserva (`calendar_bookings`)
+// y el intento (`calendar_booking_attempts`, una fila por llamada a Cal.com). El
+// simulacro anota la tabla de cada insert para que las afirmaciones sigan mirando
+// la fila de la RESERVA y no la del intento.
+const filasInsertadas: Array<{ tabla: string; fila: Record<string, unknown> }> = []
+let tablaEnCurso = ''
 const supabaseMock = {
-  from: vi.fn().mockReturnThis(),
-  insert: vi.fn().mockReturnThis(),
+  from: vi.fn((tabla: string) => {
+    tablaEnCurso = tabla
+    return supabaseMock
+  }),
+  insert: vi.fn((fila: Record<string, unknown>) => {
+    filasInsertadas.push({ tabla: tablaEnCurso, fila })
+    return supabaseMock
+  }),
   select: vi.fn().mockReturnThis(),
   single: vi.fn(),
 }
+/** La fila que se mandó a `calendar_bookings` (la reserva), ignorando los intentos. */
+const filaDeLaReserva = () =>
+  filasInsertadas.find((f) => f.tabla === 'calendar_bookings')?.fila as Record<string, unknown>
 
 vi.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: () => supabaseMock,
@@ -32,12 +47,19 @@ const fetchMock = vi.fn()
 
 beforeEach(() => {
   vi.clearAllMocks()
+  filasInsertadas.length = 0
   process.env.INTERNAL_API_KEY = 'test-internal-key'
   process.env.CALCOM_API_KEY = 'cal_live_test'
   process.env.CALCOM_EVENT_TYPE_ID = '6157933'
   global.fetch = fetchMock as unknown as typeof fetch
-  supabaseMock.from.mockReturnThis()
-  supabaseMock.insert.mockReturnThis()
+  supabaseMock.from.mockImplementation((tabla: string) => {
+    tablaEnCurso = tabla
+    return supabaseMock
+  })
+  supabaseMock.insert.mockImplementation((fila: Record<string, unknown>) => {
+    filasInsertadas.push({ tabla: tablaEnCurso, fila })
+    return supabaseMock
+  })
   supabaseMock.select.mockReturnThis()
   supabaseMock.single.mockResolvedValue({
     data: { id: 'row-uuid', provider: 'cal-com-cloud', provider_booking_id: 'cal-uid-1' },
@@ -114,7 +136,7 @@ describe('POST /api/calendar/book · Cal.com Cloud v2', () => {
     expect(sent.attendee.timeZone).toBe('America/Guayaquil')
 
     // Persisted with cloud provider + cal uid
-    const inserted = supabaseMock.insert.mock.calls[0][0]
+    const inserted = filaDeLaReserva()
     expect(inserted.provider).toBe('cal_com')
     expect(inserted.provider_booking_id).toBe('cal-uid-1')
     expect(inserted.meeting_url).toBe('https://cal.video/cal-uid-1')
