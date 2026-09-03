@@ -37,6 +37,12 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
+import {
+  leerDetalleCalcom,
+  registrarIntentoDeReserva,
+  type ResultadoIntento,
+} from '@/lib/calendar/registrar-intento'
+import { avisarAtascoDeAgenda } from '@/lib/calendar/aviso-agenda'
 import { resolveCalendarClientId } from '@/lib/calendar-client-resolver'
 
 export const runtime = 'nodejs'
@@ -97,7 +103,7 @@ async function createCalBooking(
   attendee: Record<string, unknown>,
   metadata: Record<string, string>,
 ): Promise<
-  | { ok: true; data: Record<string, unknown> }
+  | { ok: true; upstream_status: number; data: Record<string, unknown> }
   | { ok: false; upstream_status: number; detail: unknown }
 > {
   try {
@@ -118,10 +124,41 @@ async function createCalBooking(
     if (!res.ok || json.status !== 'success' || !json.data) {
       return { ok: false, upstream_status: res.status, detail: json.error ?? json }
     }
-    return { ok: true, data: json.data }
+    return { ok: true, upstream_status: res.status, data: json.data }
   } catch (e) {
     return { ok: false, upstream_status: 0, detail: e instanceof Error ? e.message : 'fetch_error' }
   }
+}
+
+/**
+ * ¿El rechazo de Cal.com significa «ese horario no se puede reservar»?
+ *
+ * EL PORQUÉ (medido 2026-09-03 · hallazgo del 409) · el 05-jul esta misma condición
+ * llegaba como **400** y el 03-sep llegó como **409 ConflictException**, con la frase
+ * IDÉNTICA: "User either already has booking at this time or is not available".
+ * Cambió la etiqueta, no la condición — y Cal.com **no documenta ningún error** de
+ * este punto (su referencia publica sólo el 201), así que cualquier número que
+ * escuchemos es una observación nuestra, no un contrato suyo.
+ *
+ * Por eso la puerta escucha la FAMILIA y no un código:
+ *   · la frase manda · si dice conflicto/no disponible, se rescata sea cual sea el número
+ *   · si no hay frase reconocible, se rescata ante cualquier 4xx que NO sea de otra cosa
+ *   · quedan fuera credencial (401/403), destino inexistente (404) y demasiadas
+ *     llamadas (429): buscar otro horario no arregla ninguna de las tres
+ *   · quedan fuera los 5xx y el 0 de red: ahí el proveedor está roto, no el horario
+ *
+ * Buscar el próximo hueco libre es el remedio correcto para las DOS causas que Cal.com
+ * mezcla en su propia frase (ocupado · fuera de disponibilidad), así que no hace falta
+ * distinguirlas para actuar bien.
+ */
+const NO_ES_CUESTION_DE_HORARIO = new Set([401, 403, 404, 429])
+const FRASE_DE_HORARIO = /already has booking|not available|no available|conflict|fully booked|no slots?/i
+
+export function esRechazoDeHorario(upstreamStatus: number, detail?: unknown): boolean {
+  const { code, message } = leerDetalleCalcom(detail ?? null)
+  if (FRASE_DE_HORARIO.test(`${code ?? ''} ${message ?? ''}`)) return true
+  if (NO_ES_CUESTION_DE_HORARIO.has(upstreamStatus)) return false
+  return upstreamStatus >= 400 && upstreamStatus < 500
 }
 
 // Cal.com booking status → calendar_bookings_status_check allowed values.
@@ -209,15 +246,61 @@ export async function POST(req: Request) {
 
   let bookedStart = new Date(body.scheduled_at).toISOString()
   let slotAdjusted = false
-  let result = await createCalBooking(apiKey, bookedStart, eventTypeId, attendee, metadata)
 
-  // Availability rejections come back as HTTP 400. Fall back to the first real
-  // open slot from the requested time forward.
-  if (!result.ok && result.upstream_status === 400) {
+  /**
+   * Registro del intento · una fila por llamada, con su código. Nunca lanza y nunca
+   * bloquea la reserva. Existe porque el 03-sep no se pudo contestar «¿desde cuándo
+   * llega 409?»: un rechazo no dejaba rastro en ningún lado.
+   */
+  const anotarIntento = async (
+    intento: {
+      requested_start: string
+      attempt_number: number
+      rescatado: boolean
+    } & (
+      | { ok: true; upstream_status: number; data: Record<string, unknown> }
+      | { ok: false; upstream_status: number; detail: unknown }
+    ),
+  ): Promise<void> => {
+    try {
+      const d = intento.ok ? { code: null, message: null } : leerDetalleCalcom(intento.detail)
+      const outcome: ResultadoIntento = intento.ok
+        ? 'reservado'
+        : intento.upstream_status === 0
+          ? 'error_de_red'
+          : 'rechazado'
+      await registrarIntentoDeReserva(getSupabaseAdmin(), {
+        client_id: body.client_id ?? null,
+        contact_email: body.contact_email as string,
+        requested_start: intento.requested_start,
+        attempt_number: intento.attempt_number,
+        outcome,
+        upstream_status: intento.upstream_status,
+        upstream_code: d.code,
+        upstream_message: d.message,
+        rescatado: intento.rescatado,
+        provider_booking_id: intento.ok ? ((intento.data.uid as string) ?? null) : null,
+      })
+    } catch {
+      /* el registro es de mejor esfuerzo · la reserva manda */
+    }
+  }
+
+  let result = await createCalBooking(apiKey, bookedStart, eventTypeId, attendee, metadata)
+  await anotarIntento({ ...result, requested_start: bookedStart, attempt_number: 1, rescatado: false })
+
+  // El rechazo de horario llega con etiquetas distintas según el día (400 el 05-jul ·
+  // 409 el 03-sep · misma frase). Se decide por la FAMILIA, no por un número — ver
+  // `esRechazoDeHorario` arriba. Reintentar el MISMO horario no ayuda nunca: se busca
+  // el primer hueco real desde la hora pedida hacia adelante.
+  let seBuscoHueco = false
+  if (!result.ok && esRechazoDeHorario(result.upstream_status, result.detail)) {
+    seBuscoHueco = true
     const slot = await findFirstAvailableSlot(apiKey, eventTypeId, bookedStart, timeZone)
     if (slot) {
       const retryStart = new Date(slot).toISOString()
       const retry = await createCalBooking(apiKey, retryStart, eventTypeId, attendee, metadata)
+      await anotarIntento({ ...retry, requested_start: retryStart, attempt_number: 2, rescatado: true })
       if (retry.ok) {
         result = retry
         bookedStart = retryStart
@@ -227,6 +310,27 @@ export async function POST(req: Request) {
   }
 
   if (!result.ok) {
+    // QUE EL ATASCO SUENE (03-sep · pedido de Emilio al firmar el arreglo).
+    // El aviso honesto deja la fase «en curso» en vez de mentir «completada» — pero
+    // una fase en curso que nadie mira es un atasco silencioso, y cambiar una mentira
+    // callada por un atasco callado no sirve. Misma campana que el empuje al cerebro:
+    // Slack #equipo, la única REALMENTE conectada (medido 02-sep).
+    const d = leerDetalleCalcom(result.detail)
+    await avisarAtascoDeAgenda({
+      motivo:
+        result.upstream_status === 0
+          ? 'proveedor_inalcanzable'
+          : esRechazoDeHorario(result.upstream_status, result.detail)
+            ? 'sin_hueco'
+            : 'rechazo_no_de_horario',
+      client_id: body.client_id ?? null,
+      contact_email: body.contact_email as string,
+      requested_start: bookedStart,
+      upstream_status: result.upstream_status,
+      upstream_code: d.code,
+      upstream_message: d.message,
+      se_busco_hueco: seBuscoHueco,
+    })
     return NextResponse.json(
       {
         ok: false,

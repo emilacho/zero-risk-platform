@@ -29,11 +29,25 @@ import {
 let clientRowsByName: Record<string, Array<{ id: string }>> = {}
 let lookupShouldFail = false
 
+// 2026-09-03 · la ruta escribe en DOS tablas: la reserva y el intento (una fila por
+// llamada a Cal.com). Se anota la tabla de cada insert para que las afirmaciones
+// sigan mirando la fila de la RESERVA.
+const filasInsertadas: Array<{ tabla: string; fila: Record<string, unknown> }> = []
+let tablaEnCurso = ''
 const insertChain = {
-  insert: vi.fn().mockReturnThis(),
+  insert: vi.fn((fila: Record<string, unknown>) => {
+    filasInsertadas.push({ tabla: tablaEnCurso, fila })
+    return insertChain
+  }),
   select: vi.fn().mockReturnThis(),
   single: vi.fn(),
 }
+/** La fila que se mandó a `calendar_bookings`, ignorando las de intentos. */
+type FilaDeReserva = Record<string, unknown> & {
+  metadata: { client_id_resolution: { source: string } }
+}
+const filaDeLaReserva = () =>
+  filasInsertadas.find((f) => f.tabla === 'calendar_bookings')?.fila as FilaDeReserva
 
 function clientsQuery() {
   const state: { name?: string } = {}
@@ -58,7 +72,10 @@ function clientsQuery() {
 }
 
 const supabaseMock = {
-  from: vi.fn((table: string) => (table === 'clients' ? clientsQuery() : insertChain)),
+  from: vi.fn((table: string) => {
+    tablaEnCurso = table
+    return table === 'clients' ? clientsQuery() : insertChain
+  }),
 }
 
 vi.mock('@/lib/supabase', () => ({
@@ -69,16 +86,21 @@ const fetchMock = vi.fn()
 
 beforeEach(() => {
   vi.clearAllMocks()
+  filasInsertadas.length = 0
   clientRowsByName = {}
   lookupShouldFail = false
   process.env.INTERNAL_API_KEY = 'test-internal-key'
   process.env.CALCOM_API_KEY = 'cal_live_test'
   process.env.CALCOM_EVENT_TYPE_ID = '6157933'
   global.fetch = fetchMock as unknown as typeof fetch
-  supabaseMock.from.mockImplementation((table: string) =>
-    table === 'clients' ? clientsQuery() : insertChain,
-  )
-  insertChain.insert.mockReturnThis()
+  supabaseMock.from.mockImplementation((table: string) => {
+    tablaEnCurso = table
+    return table === 'clients' ? clientsQuery() : insertChain
+  })
+  insertChain.insert.mockImplementation((fila: Record<string, unknown>) => {
+    filasInsertadas.push({ tabla: tablaEnCurso, fila })
+    return insertChain
+  })
   insertChain.select.mockReturnThis()
   insertChain.single.mockResolvedValue({ data: { id: 'row-uuid' }, error: null })
 })
@@ -199,7 +221,7 @@ describe('C7 · POST /api/calendar/book · la reserva queda atada', () => {
       }),
     )
     expect(res.status).toBe(200)
-    const inserted = insertChain.insert.mock.calls[0][0]
+    const inserted = filaDeLaReserva()
     expect(inserted.client_id).toBe(GOEURO)
     expect(inserted.metadata.client_id_resolution.source).toBe('contact_name')
   })
@@ -216,7 +238,7 @@ describe('C7 · POST /api/calendar/book · la reserva queda atada', () => {
       }),
     )
     expect(res.status).toBe(200)
-    const inserted = insertChain.insert.mock.calls[0][0]
+    const inserted = filaDeLaReserva()
     expect(inserted.client_id).toBe(GOEURO)
     expect(inserted.metadata.client_id_resolution.source).toBe('event_title')
   })
@@ -239,7 +261,7 @@ describe('C7 · POST /api/calendar/book · la reserva queda atada', () => {
       }),
     )
     expect(res.status).toBe(200)
-    const inserted = insertChain.insert.mock.calls[0][0]
+    const inserted = filaDeLaReserva()
     expect(inserted.client_id).toBe('client-1')
     expect(inserted.provider).toBe('cal_com')
   })
@@ -282,7 +304,7 @@ describe('C7 · POST /api/calendar/book · la reserva queda atada', () => {
     const json = await res.json()
     expect(json.ok).toBe(true)
     expect(json.client_id_resolution.client_id).toBe(GOEURO)
-    const inserted = insertChain.insert.mock.calls[0][0]
+    const inserted = filaDeLaReserva()
     expect(inserted.client_id).toBe(GOEURO)
     // la reserva en Cal.com no cambia · sigue siendo la misma llamada de hoy
     expect(inserted.provider).toBe('cal_com')
@@ -301,7 +323,7 @@ describe('C7 · POST /api/calendar/book · la reserva queda atada', () => {
       }),
     )
     expect(res.status).toBe(200)
-    const inserted = insertChain.insert.mock.calls[0][0]
+    const inserted = filaDeLaReserva()
     expect(inserted.client_id).toBeNull()
     expect(inserted.provider_booking_id).toBe('pRSJHjKFKPqYEj8GSXaViE')
   })
@@ -320,7 +342,7 @@ describe('C7 · POST /api/calendar/book · la reserva queda atada', () => {
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.ok).toBe(true)
-    const inserted = insertChain.insert.mock.calls[0][0]
+    const inserted = filaDeLaReserva()
     expect(inserted.client_id).toBeNull()
   })
 })
