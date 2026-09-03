@@ -20,7 +20,11 @@
 --   psql ... < 202609031500_calendar_booking_attempts.sql
 -- NO usar `db push` (riesgo de deriva).
 --
--- §148 honesto · esta migración NO está aplicada al escribirse este archivo.
+-- §148 honesto · APLICADA en producción el 2026-09-03 (Emilio firmó la publicación).
+-- Verificado contra la base viva: 13 columnas · 4 índices · RLS encendida · lectura y
+-- escritura del rol de servicio por PostgREST devolviendo 200. El bloque de PERMISOS
+-- del final se agregó DESPUÉS del primer aplique, porque sin él la tabla quedaba
+-- creada y muda (403 · 42501): ver su comentario.
 
 -- ─── PRE-CHECK ──────────────────────────────────────────────────────
 -- Se niega a correr si la tabla ya existe con otra forma · canon es ESTE esquema.
@@ -93,3 +97,24 @@ CREATE INDEX IF NOT EXISTS idx_calendar_attempts_cliente
 
 CREATE INDEX IF NOT EXISTS idx_calendar_attempts_fecha
   ON public.calendar_booking_attempts (attempted_at DESC);
+
+-- ─── PERMISOS ───────────────────────────────────────────────────────
+-- MEDIDO AL APLICAR (2026-09-03) · sin esto la tabla queda creada y **muda**: la
+-- ruta escribe con el rol de servicio a través de PostgREST y recibía
+--   403 · 42501 · "permission denied for table calendar_booking_attempts"
+-- Los privilegios por defecto de este proyecto sólo dan REFERENCES/TRIGGER/TRUNCATE
+-- a los roles de la API · las tablas hermanas (`calendar_bookings`,
+-- `agent_callback_attempts`) tienen el DML concedido explícitamente.
+--
+-- Se concede SÓLO al rol de servicio (menos privilegio que las hermanas, que además
+-- se lo dan a anon/authenticated): esta tabla la escribe el servidor y nadie más.
+-- Con RLS encendida y sin políticas, anon/authenticated quedan denegados aunque
+-- alguien les conceda DML por error más adelante.
+
+ALTER TABLE public.calendar_booking_attempts ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON public.calendar_booking_attempts FROM PUBLIC;
+REVOKE ALL ON public.calendar_booking_attempts FROM anon;
+REVOKE ALL ON public.calendar_booking_attempts FROM authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.calendar_booking_attempts TO service_role;
