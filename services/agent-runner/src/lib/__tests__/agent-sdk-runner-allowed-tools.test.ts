@@ -82,3 +82,19 @@ describe('deriveAllowedTools · combined registrations', () => {
     expect(deriveAllowedTools(input)).toEqual(deriveAllowedTools(input))
   })
 })
+
+// ── MIRAR AFUERA · 2026-09-05 ────────────────────────────────────────────────
+// Se prueba ACÁ y no en `mirar-afuera.test.ts` porque este archivo ya simula el
+// SDK: `agent-sdk-runner` lo importa y el paquete no resuelve desde la raíz.
+describe('deriveAllowedTools · mirar-afuera', () => {
+  it('🔴 el empleado puede USAR la herramienta, no sólo verla', () => {
+    const tools = deriveAllowedTools({ 'mirar-afuera': {} })
+    // Medido en una corrida REAL (2026-09-05): sin este permiso el empleado
+    // contestó "el usuario denegó el permiso · no se realizó ninguna llamada".
+    expect(tools).toContain('mcp__mirar-afuera__mirar_afuera')
+  })
+
+  it('CONTROL POSITIVO · sin ese servidor montado, no se permite nada nuevo', () => {
+    expect(deriveAllowedTools({})).not.toContain('mcp__mirar-afuera__mirar_afuera')
+  })
+})
