@@ -443,6 +443,12 @@ const MCP_ALLOWED_TOOLS_BY_SERVER: Record<string, readonly string[]> = {
     'mcp__brand-section__emit_brand_section',
     'mcp__brand-section__emit_fidelity_scores',
   ],
+  // MIRAR AFUERA (2026-09-05) · sin esto el empleado VE la herramienta y NO puede
+  // usarla: el propio corredor lo dejó escrito el 06-jun («el agente vio la
+  // herramienta y se negó a invocarla sin permiso del usuario»). Medido hoy en
+  // una corrida real: contestó *"el usuario denegó el permiso... no se realizó
+  // ninguna llamada"*. Montarla sin este renglón es montarla muda.
+  'mirar-afuera': ['mcp__mirar-afuera__mirar_afuera'],
 }
 
 /** Brand Book · nombres del tool_use de emit_brand_section (namespace + bare). */
