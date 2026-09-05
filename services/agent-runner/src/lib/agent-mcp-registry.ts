@@ -65,6 +65,17 @@ const APIFY_ALLOW: ReadonlySet<string> = new Set([
   'competitive-intelligence-agent',
   'market-research',
 ])
+/**
+ * MIRAR AFUERA · quién puede pedir un raspado bajo demanda (2026-09-05).
+ * Default-deny como el resto. Se abre a los que necesitan datos de la calle:
+ * el que investiga competencia, el que investiga mercado, y el que escribe el
+ * plan — que hasta hoy afirmaba de memoria porque no tenía cómo mirar.
+ */
+const MIRAR_AFUERA_ALLOW: ReadonlySet<string> = new Set([
+  'competitive-intelligence-agent',
+  'market-research',
+  'campaign-brief-agent',
+])
 const DATAFORSEO_ALLOW: ReadonlySet<string> = new Set([
   'market-research',
   'seo-specialist',
@@ -185,6 +196,11 @@ export function buildMcpServers(
 
   // Apify · 2 tools (apify_run_actor · apify_get_dataset) · ad library scrape
   // primitives. Allow-list canon default-deny · agents NOT in APIFY_ALLOW skip.
+  // ⚰️ MUERTO desde siempre, medido 2026-09-05 · apuntaba a
+  // `packages/apify-mcp-server/dist/index.js`, carpeta que el Dockerfile del
+  // corredor NO COPIA a la imagen ⇒ el proceso nunca pudo arrancar. Además
+  // pedía `APIFY_TOKEN` y la casa usa `APIFY_API_TOKEN`. Se reemplaza por el
+  // montaje de abajo, que vive donde viven los que sí funcionan.
   if (process.env.APIFY_TOKEN && slug && APIFY_ALLOW.has(slug)) {
     servers.apify = {
       type: 'stdio',
@@ -192,6 +208,28 @@ export function buildMcpServers(
       args: [resolveMcpEntrypoint('apify-mcp-server')],
       env: {
         APIFY_TOKEN: process.env.APIFY_TOKEN,
+        PATH: process.env.PATH ?? '',
+      },
+    }
+  }
+
+  // MIRAR AFUERA (2026-09-05) · el empleado pide un dato público y lo recibe.
+  // Entra por la MISMA puerta que los flujos (el Servicio de Apify), así hereda
+  // permiso por cliente, rechazo honesto, libreta y clasificación del cero.
+  // No necesita la llave de Apify: la tiene el Servicio.
+  // Se exige `clientId`: mirar afuera es mirar A NOMBRE DE ALGUIEN. Sin cliente
+  // no hay permiso que consultar ni libreta donde anotar, y el Servicio lo
+  // rechazaría igual. Además respeta la regla de la casa que ya estaba probada:
+  // sin contexto no se monta ninguna herramienta.
+  if (ctx.clientId && slug && MIRAR_AFUERA_ALLOW.has(slug)) {
+    servers['mirar-afuera'] = {
+      type: 'stdio',
+      command: 'node',
+      args: [pathResolve(process.cwd(), 'src/lib/mcp/apify-service-server.js')],
+      env: {
+        CLIENT_ID: ctx.clientId,
+        AGENT_SLUG: slug,
+        APIFY_SERVICE_URL: process.env.APIFY_SERVICE_URL ?? '',
         PATH: process.env.PATH ?? '',
       },
     }
