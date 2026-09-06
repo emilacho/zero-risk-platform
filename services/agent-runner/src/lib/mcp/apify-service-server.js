@@ -140,10 +140,18 @@ server.registerTool(
       // 🔴 la distinción que el plan necesita · viene clasificada del Servicio
       cero: j.cero || (j.sin_resultados ? { clase: 'sin_clasificar', motivo: j.motivo_cero } : null),
       datos: j.datos || null,
+      // 🔴 CANON (Emilio · 2026-09-06) · el cerebro guarda el OUTPUT exitoso de los
+      // trabajos del cliente. Una web raspada es MATERIA PRIMA y NO entra al cerebro:
+      // vive en su tabla. Decirle al empleado "quedó en el cerebro" cuando no es así
+      // sería una mentira chica que después se cita como si fuera cierta.
+      guardado_en: j.guardado_en || null,
       nota:
-        (j.chunks_count ?? 0) > 0
-          ? 'Lo encontrado quedó también en el cerebro del cliente.'
-          : 'No se encontró nada · mirá el campo `cero` antes de afirmar que no existe.',
+        (j.chunks_count ?? 0) === 0
+          ? 'No se encontró nada · mirá el campo `cero` antes de afirmar que no existe.'
+          : j.materia_prima === true
+            ? 'Esto es MATERIA PRIMA: quedó guardado en su tabla (' + (j.guardado_en || 'client_web_pages') +
+              '), NO en el cerebro. Usalo de esta respuesta.'
+            : 'Lo encontrado quedó también en el cerebro del cliente.',
     })
   },
 )
