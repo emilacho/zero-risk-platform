@@ -52,6 +52,13 @@ const CATALOGO = {
     funcion: 'trustpilot_scraper',
     params: (a) => ({ searchTerms: [a.de_quien] }),
   },
+  leer_el_sitio: {
+    para: 'el sitio del cliente o de un competidor · lo que dice su web, en texto',
+    funcion: 'website_content_scraper',
+    // el navegador de verdad es obligatorio: medido el 06-sep, la web de Naufrago
+    // devuelve 144 caracteres sin el, y parece vacia.
+    params: (a) => ({ url: String(a.de_quien).replace(/^https?:\/\//, ''), maxCrawlPages: 10 }),
+  },
   trafico_del_sitio: {
     para: 'tamaño y tráfico estimado del sitio',
     funcion: 'similarweb_scraper',

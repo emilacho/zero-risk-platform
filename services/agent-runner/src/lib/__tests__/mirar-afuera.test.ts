@@ -30,6 +30,8 @@ const FUNCIONES_DEL_SERVICIO = new Set([
   'tiktok_creative_center_scraper', 'youtube_channel_scraper', 'youtube_video_scraper',
   'youtube_comments_scraper', 'google_serp_scraper', 'google_maps_scraper',
   'similarweb_scraper', 'trustpilot_scraper', 'software_review_scraper', 'twitter_scraper',
+  // 17ª · 2026-09-06 · leer el sitio del cliente
+  'website_content_scraper',
 ])
 
 const ctx = { agentSlug: 'campaign-brief-agent', clientId: 'cli-1' }
@@ -99,5 +101,16 @@ describe('el catálogo · lo que el empleado pide, traducido', () => {
       expect(clave).not.toMatch(/scraper|apify|actor/i)
       expect(CATALOGO[clave].para.length).toBeGreaterThan(15)
     }
+  })
+})
+
+describe('leer el sitio · la 17ª, desde el empleado', () => {
+  it('🔴 ROJO · el empleado puede pedir que se lea un sitio', () => {
+    expect(CATALOGO.leer_el_sitio).toBeDefined()
+    expect(CATALOGO.leer_el_sitio.funcion).toBe('website_content_scraper')
+  })
+
+  it('le saca el esquema a la direccion · el Servicio se lo vuelve a poner', () => {
+    expect(CATALOGO.leer_el_sitio.params({ de_quien: 'https://naufrago.ec' }).url).toBe('naufrago.ec')
   })
 })

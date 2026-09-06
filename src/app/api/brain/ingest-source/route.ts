@@ -50,7 +50,22 @@ const ALLOWED_SOURCE_TABLES = new Set([
   "client_voc_library",
   "client_competitive_landscape",
   "client_historical_outputs",
+  // 2026-09-06 · la web del cliente · medido: 861 fragmentos en el cerebro y páginas
+  // web CERO, nunca. Esta lista es UNA de las dos puertas: la base tiene el mismo
+  // límite como CHECK (migración 202609060300). Cambiar sólo ésta hace que la puerta
+  // acepte y la base rechace al escribir · fallo tardío y silencioso.
+  "client_web_pages",
 ]);
+
+/**
+ * El cerebro guarda `source_id` como `uuid NOT NULL`. Una URL NO sirve.
+ *
+ * Acepta las DOS formas que acepta Postgres: con guiones y sin guiones (32 hex).
+ * No es un detalle: el backfill de sub-páginas manda identificadores de Notion, que
+ * llegan sin guiones. Una comprobación más estricta que la base rompería un camino
+ * que hoy funciona — el error sería MÍO, no del que llama.
+ */
+const ES_UUID = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
 
 interface IngestSection {
   section_label: string;
@@ -111,6 +126,19 @@ export async function POST(request: Request) {
         error: "validation_error",
         code: "E-BRAIN-INGEST-MISSING",
         detail: "client_id + source_table + source_id required",
+      },
+      { status: 400 },
+    );
+  }
+  // 🔴 2026-09-06 · antes se aceptaba cualquier texto como identificador y la BASE
+  // lo rechazaba al escribir (columna uuid). Es la misma trampa de las dos puertas:
+  // el error aparecía tarde y sin decir por qué. Ahora se rechaza acá, con el motivo.
+  if (!ES_UUID.test(sourceId)) {
+    return NextResponse.json(
+      {
+        error: "validation_error",
+        code: "E-BRAIN-INGEST-SOURCE-ID",
+        detail: "source_id debe ser un uuid · una URL no sirve: el cerebro lo guarda como uuid",
       },
       { status: 400 },
     );

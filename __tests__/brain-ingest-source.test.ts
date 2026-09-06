@@ -261,3 +261,50 @@ describe('POST /api/brain/ingest-source', () => {
     expect(j.sections_processed).toBe(1)
   })
 })
+
+// ── EL ATERRIZAJE DE LA WEB DEL CLIENTE · 2026-09-06 ─────────────────────────
+// EL ROJO · contra el estado de hoy estas afirmaciones tienen que FALLAR:
+//   1. «la puerta acepta una página web como origen» → hoy: 5 tablas, ninguna web
+//   2. «la puerta rechaza una URL como identificador» → hoy: la acepta y la BASE la
+//      rechaza después (columna uuid) · el error aparece tarde y sin decir por qué
+// EL CONTROL POSITIVO · «las 5 tablas de siempre siguen entrando» y «un uuid sin
+// guiones sigue entrando» (el backfill de Notion los manda así) · verdes hoy y después.
+describe('la web del cliente aterriza en el cerebro', () => {
+  const SECC = [{ section_label: 'home', text: 'x'.repeat(60) }]
+
+  it('🔴 ROJO · acepta `client_web_pages` como origen', async () => {
+    const { POST } = await importRoute()
+    const res = await POST(makeReq({ client_id: VALID_UUID, source_table: 'client_web_pages', source_id: SRC_UUID, sections: SECC }))
+    expect(res.status).toBe(200)
+  })
+
+  it('🔴 ROJO · rechaza una URL como identificador, y dice por qué', async () => {
+    const { POST } = await importRoute()
+    const res = await POST(makeReq({ client_id: VALID_UUID, source_table: 'client_web_pages', source_id: 'https://naufrago.ec', sections: SECC }))
+    expect(res.status).toBe(400)
+    const j = await res.json()
+    expect(j.code).toBe('E-BRAIN-INGEST-SOURCE-ID')
+    expect(String(j.detail)).toContain('uuid')
+  })
+
+  it('CONTROL POSITIVO · las 5 tablas de siempre siguen entrando', async () => {
+    for (const t of ['client_brand_books', 'client_icp_documents', 'client_voc_library', 'client_competitive_landscape', 'client_historical_outputs']) {
+      const { POST } = await importRoute()
+    const res = await POST(makeReq({ client_id: VALID_UUID, source_table: t, source_id: SRC_UUID, sections: SECC }))
+      expect(res.status, t).toBe(200)
+    }
+  })
+
+  it('CONTROL POSITIVO · un identificador sin guiones entra · así los manda Notion', async () => {
+    const sinGuiones = SRC_UUID.replace(/-/g, '')
+    const { POST } = await importRoute()
+    const res = await POST(makeReq({ client_id: VALID_UUID, source_table: 'client_historical_outputs', source_id: sinGuiones, sections: SECC }))
+    expect(res.status).toBe(200)
+  })
+
+  it('una tabla inventada sigue rechazada · la lista blanca no se aflojó', async () => {
+    const { POST } = await importRoute()
+    const res = await POST(makeReq({ client_id: VALID_UUID, source_table: 'client_lo_que_sea', source_id: SRC_UUID, sections: SECC }))
+    expect(res.status).toBe(400)
+  })
+})
