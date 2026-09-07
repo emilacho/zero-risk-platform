@@ -173,8 +173,17 @@ describe('consumeIntakeTick · multiple events · per-event isolation', () => {
   })
 })
 
-describe('consumeIntakeTick · dispatched_failed isolation · still marker', () => {
-  it('writes marker even when dispatch fails · prevents retry loop', async () => {
+// REGLA CAMBIADA · 2026-09-07 · Lenovo, por orden de Emilio:
+// "sólo se marca lo que efectivamente se despachó".
+// Esta prueba decía antes «writes marker even when dispatch fails · prevents
+// retry loop» y afirmaba `router.dispatch.*` = 1 con el disparo FALLIDO. Eso
+// era la forma escrita del defecto: el fallo quedaba registrado como hecho y
+// el sobre se perdía para siempre. Se actualiza —no se borra— para que quede
+// el rastro de qué regla regía antes y cuál rige ahora.
+// El tope de reintentos es lo que ahora evita el bucle · ver
+// `sala-router-consumer-marca-honesta.test.ts`.
+describe('consumeIntakeTick · dispatched_failed · NO se marca como despachado', () => {
+  it('un disparo fallido NO escribe router.dispatch.* · escribe un intento', async () => {
     const storage = new InMemoryEventLogStorage()
     await seedIntakeEvent(storage)
     const fetcher = vi.fn(async () => new Response('boom', { status: 502 }))
@@ -189,13 +198,16 @@ describe('consumeIntakeTick · dispatched_failed isolation · still marker', () 
     expect(r.outcomes[0].marker_event_id).not.toBeNull()
     const events = await storage.select({ tenant_id: TENANT })
     const markers = events.filter((e) => e.step_id?.startsWith('router.dispatch.'))
-    expect(markers.length).toBe(1)
-    expect(markers[0].payload!.dispatch_kind).toBe('dispatched_failed')
+    expect(markers.length).toBe(0) // ← antes era 1 · ésa era la mentira
+    const intentos = events.filter((e) => e.step_id?.startsWith('router.attempt.'))
+    expect(intentos.length).toBe(1)
+    expect(intentos[0].payload!.dispatch_kind).toBe('dispatched_failed')
+    expect(intentos[0].payload!.despachado).toBe(false)
   })
 })
 
-describe('consumeIntakeTick · skipped_dispatcher_off · canon-OFF still marks', () => {
-  it('marks the intake as processed even when dispatcher is off', async () => {
+describe('consumeIntakeTick · skipped_dispatcher_off · NO cuenta como despachado', () => {
+  it('el repartidor apagado deja intento · el sobre vuelve a la fila', async () => {
     const storage = new InMemoryEventLogStorage()
     await seedIntakeEvent(storage)
     const r = await consumeIntakeTick({

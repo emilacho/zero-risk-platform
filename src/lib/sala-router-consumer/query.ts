@@ -12,9 +12,32 @@
  */
 import type { PersistedEvent } from '@/lib/sala-event-log'
 import {
+  ATTEMPT_MARKER_PREFIX,
   DISPATCH_MARKER_PREFIX,
+  GIVEUP_MARKER_PREFIX,
   INTAKE_STEP_PREFIX,
 } from './types'
+
+/**
+ * Canon canonical · cuántos intentos fallidos lleva cada hilo.
+ * Regla de Lenovo 2026-09-07 · lo que NO se despachó vuelve a la fila,
+ * pero con contador: un reintento sin límite es otro problema.
+ */
+export function countAttemptsByStream(
+  events: ReadonlyArray<PersistedEvent>,
+): ReadonlyMap<string, number> {
+  const n = new Map<string, number>()
+  for (const e of events) {
+    if (
+      e.event_type === 'step_completed' &&
+      typeof e.step_id === 'string' &&
+      e.step_id.startsWith(ATTEMPT_MARKER_PREFIX)
+    ) {
+      n.set(e.stream_id, (n.get(e.stream_id) ?? 0) + 1)
+    }
+  }
+  return n
+}
 
 export interface PendingIntakeQueryInput {
   readonly events: ReadonlyArray<PersistedEvent>
@@ -27,12 +50,17 @@ export interface PendingIntakeQueryInput {
 export function selectPendingIntakeEvents(
   input: PendingIntakeQueryInput,
 ): ReadonlyArray<PersistedEvent> {
+  // Regla de Lenovo 2026-09-07 · SÓLO excluyen dos cosas:
+  //   · router.dispatch.* → se despachó de verdad (terminal correcto)
+  //   · router.giveup.*   → se agotó el tope y quedó declarado el motivo
+  // El intento fallido (router.attempt.*) YA NO excluye: vuelve a la fila.
   const dispatched_streams = new Set<string>()
   for (const e of input.events) {
     if (
       e.event_type === 'step_completed' &&
       typeof e.step_id === 'string' &&
-      e.step_id.startsWith(DISPATCH_MARKER_PREFIX)
+      (e.step_id.startsWith(DISPATCH_MARKER_PREFIX) ||
+        e.step_id.startsWith(GIVEUP_MARKER_PREFIX))
     ) {
       dispatched_streams.add(e.stream_id)
     }

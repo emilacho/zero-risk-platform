@@ -19,9 +19,13 @@ import {
   type ReadFilters,
 } from '@/lib/sala-event-log'
 import { dispatchOneIntake, type CapAlerter, type CapSpendQuery } from './dispatch'
-import { buildDispatchMarkerEvent } from './marker'
+import { buildDispatchMarkerEvent, type MarkerClass } from './marker'
 import { parseIntakeEvent } from './parsing'
-import { selectPendingIntakeEvents } from './query'
+import { countAttemptsByStream, selectPendingIntakeEvents } from './query'
+import {
+  DISPATCHED_KIND,
+  MAX_DISPATCH_ATTEMPTS,
+} from './types'
 import type {
   ConsumerTickInput,
   ConsumerTickResult,
@@ -84,6 +88,8 @@ export async function consumeIntakeTick(
   const events = await input.storage.select(filters)
 
   // ─── 2 · filter pending intake events ───
+  // Regla de Lenovo 2026-09-07 · cuántos intentos lleva cada hilo
+  const attempts_by_stream = countAttemptsByStream(events)
   const pending = selectPendingIntakeEvents({
     events,
     limit: batch_size,
@@ -118,10 +124,29 @@ export async function consumeIntakeTick(
     })
 
     // ─── 4 · write marker event ───
+    // 🔴 Regla de Lenovo 2026-09-07 · SÓLO SE MARCA LO QUE SE DESPACHÓ.
+    // Antes esto escribía la marca de despacho para cinco de los seis
+    // desenlaces —incluido `dispatched_failed`— y esa marca excluye el hilo
+    // para siempre: un disparo fallido quedaba escrito como hecho.
+    // Ahora: éxito → dispatch · fallo → attempt (vuelve a la fila) ·
+    // fallo con el tope agotado → giveup (excluye, pero DECLARA el motivo).
+    const fue_despachado = result.kind === DISPATCHED_KIND
+    const intentos_previos = attempts_by_stream.get(parsed.value.stream_id) ?? 0
+    const attempt_no = intentos_previos + 1
+    const tope_agotado = !fue_despachado && attempt_no >= MAX_DISPATCH_ATTEMPTS
+    const marker_class: MarkerClass = fue_despachado
+      ? 'dispatch'
+      : tope_agotado
+        ? 'giveup'
+        : 'attempt'
     const marker_input = buildDispatchMarkerEvent({
       intake: parsed.value,
       kind: result.kind,
-      detail: result.detail,
+      marker_class,
+      attempt_no,
+      detail: tope_agotado
+        ? `NO PUDE DESPACHAR · tope de ${MAX_DISPATCH_ATTEMPTS} intentos agotado · último motivo: ${result.detail}`
+        : result.detail,
       dispatch_result: result.workflow_dispatch_result as
         | Record<string, unknown>
         | undefined,
