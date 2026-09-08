@@ -42,6 +42,37 @@ export const INTAKE_STEP_PREFIX = 'intake.'
  *  matching marker by (stream_id, source, intent). */
 export const DISPATCH_MARKER_PREFIX = 'router.dispatch.'
 
+// ---------------------------------------------------------------------
+// Regla de Lenovo · 2026-09-07 · "sólo se marca lo que efectivamente se
+// despachó". Antes la marca de arriba se escribía en CINCO de los seis
+// desenlaces —incluido cuando el disparo FALLABA— y como el SELECT de
+// pendientes excluye por ese prefijo, el sobre quedaba consumido para
+// siempre: un fallo se leía igual que un éxito. Medido 2026-09-07 (CC#2).
+//
+// Ahora hay TRES espacios de nombres y cada uno dice una cosa distinta:
+//   router.dispatch.*  → SE DESPACHÓ · excluye el hilo (terminal, correcto)
+//   router.attempt.*   → NO se despachó · NO excluye · CUENTA el intento
+//   router.giveup.*    → se agotó el tope · excluye · y deja el MOTIVO visible
+// ---------------------------------------------------------------------
+
+/** Canon canonical · prefijo del evento de INTENTO fallido. NO excluye el
+ *  hilo: el sobre vuelve a la fila en el próximo tick. Sólo cuenta. */
+export const ATTEMPT_MARKER_PREFIX = 'router.attempt.'
+
+/** Canon canonical · prefijo del abandono declarado. Excluye el hilo —
+ *  pero a diferencia de la marca de despacho, dice en su payload que NO
+ *  se despachó y por qué. Un fallo callado es peor que un fallo. */
+export const GIVEUP_MARKER_PREFIX = 'router.giveup.'
+
+/** Canon canonical · tope de intentos por sobre antes de abandonar.
+ *  §150 · un reintento sin límite es otro problema, no la solución.
+ *  3 = mismo tope que el resto del sistema (retries cap = 3). */
+export const MAX_DISPATCH_ATTEMPTS = 3
+
+/** Canon canonical · el ÚNICO desenlace que puede escribir la marca de
+ *  despacho. Todo lo demás cuenta como intento (o abandono al tope). */
+export const DISPATCHED_KIND = 'dispatched_ok'
+
 // =====================================================================
 // Parsed intake event · what the consumer extracts from a PersistedEvent
 // =====================================================================
