@@ -36,20 +36,43 @@ export const CAMPOS_META_NO_PUBLICADOS = ['spend', 'impressions', 'reach'] as co
  * y el envoltorio lo tiraba a la basura** ⇒ el plan escribiría «el competidor
  * no tiene X» cuando la verdad es que nadie preguntó.
  *
- * Los campos son los que el Servicio emite hoy (medido sobre el flujo vivo
- * `3lyknrP3PoS2KzUf`, nodos `transform-sections` · `skipped-response`):
- *   skipped: true          → SALTEADO · el cliente no tiene permiso · nadie preguntó
- *   clase: 'no_pude_ver'   → hubo descartes o ceguera · no se pudo ver
- *   clase: 'ensayo'        → dry-run · no es una mirada real
- *   clase: 'no_existe'     → se miró de verdad y no hay
- *   se_miro_de_verdad      → la bandera que resume las tres de arriba
+ * 🔴 Y DÓNDE viven esos campos · medido sobre el flujo vivo `3lyknrP3PoS2KzUf`
+ * (nodos `transform-sections` · `skipped-response` · `final-response-ok`):
+ *
+ *   AL RAS      skipped · skip_reason · motivo · sin_resultados · datos · chunks_count
+ *   ANIDADO     cero: { clase · motivo · se_miro_de_verdad · registros_descartados }
+ *               ↑ y `cero` es null cuando SÍ hubo resultados
+ *
+ * La primera versión de este envoltorio leía `clase` y `se_miro_de_verdad` AL RAS
+ * —donde no están— así que las tres ramas de «nadie miró» estaban MUERTAS y todo
+ * volvía a caer en «fui, miré y no hay». Corregido 2026-09-09.
  */
-export interface RespuestaServicioApify {
-  readonly skipped?: boolean
+export interface CeroClasificado {
   readonly clase?: 'no_pude_ver' | 'no_existe' | 'ensayo' | string
-  readonly se_miro_de_verdad?: boolean
   readonly motivo?: string | null
+  readonly se_miro_de_verdad?: boolean
+  readonly registros_descartados?: number
+}
+
+export interface RespuestaServicioApify {
+  readonly ok?: boolean
+  readonly skipped?: boolean
+  readonly skip_reason?: string | null
+  readonly motivo?: string | null
+  readonly sin_resultados?: boolean
   readonly motivo_cero?: string | null
+  readonly datos?: string | null
+  readonly chunks_count?: number
+  /**
+   * 🔴 EL CERO CLASIFICADO VIENE ANIDADO ACÁ · no al ras.
+   * Corregido 2026-09-09 tras el aviso de Lenovo: la primera version leia
+   * `clase` y `se_miro_de_verdad` en la raiz — donde NO estan — asi que las
+   * tres ramas de «nadie miro» estaban MUERTAS y todo caia en «fui, mire y no
+   * hay». Medido sobre el nodo `transform-sections` del flujo vivo.
+   * `cero` es `null` cuando SI hubo resultados.
+   */
+  readonly cero?: CeroClasificado | null
+  /** compatibilidad · algunos llamadores arman filas por su cuenta */
   readonly filas?: ReadonlyArray<Record<string, unknown>>
 }
 
@@ -57,6 +80,8 @@ export async function brazoApify(args: {
   objetivo: string
   fuente: string
   encendido?: boolean
+  limite_ms?: number
+  proposito?: string
   /** Devuelve el SOBRE del Servicio, no sólo las filas: la distinción viene
    *  adentro y tirarla es el defecto que esta pieza existe para impedir. */
   consultar: () => Promise<RespuestaServicioApify | ReadonlyArray<Record<string, unknown>>>
@@ -65,6 +90,8 @@ export async function brazoApify(args: {
     brazo: 'apify',
     objetivo: args.objetivo,
     fuente: args.fuente,
+    ...(args.limite_ms !== undefined ? { limite_ms: args.limite_ms } : {}),
+    ...(args.proposito ? { proposito: args.proposito } : {}),
     ...(args.encendido !== undefined ? { encendido: args.encendido } : {}),
     ejecutar: async () => {
       const r = await args.consultar()
@@ -86,6 +113,19 @@ export async function brazoApify(args: {
       // `Array.isArray` no estrecha un `readonly T[]` en el else · se hace explícito.
       const sobre = r as RespuestaServicioApify
       const filas = sobre.filas ?? []
+      // UNA LINEA POR RAMA · el cero clasificado vive anidado en `cero`.
+      const cero = sobre.cero ?? null
+      const clase = cero?.clase ?? (sobre as { clase?: string }).clase
+      const seMiro = cero?.se_miro_de_verdad ?? (sobre as { se_miro_de_verdad?: boolean }).se_miro_de_verdad
+      // el anidado manda; lo de al ras queda SOLO como red (ver nota arriba).
+      // `sobre.motivo` va al final y es seguro: la rama `skipped` —la unica que
+      // usa ese campo con otro sentido— ya devolvio antes de llegar aca.
+      const motivoCero = cero?.motivo ?? sobre.motivo_cero ?? sobre.motivo
+      // «hay dato» lo dice el Servicio, no el largo de un arreglo que quiza no manda
+      const hayDato = sobre.sin_resultados === false ||
+        (sobre.chunks_count ?? 0) > 0 ||
+        (typeof sobre.datos === 'string' && sobre.datos.length > 0) ||
+        filas.length > 0
       // ① nadie preguntó · el Servicio lo saltó
       if (sobre.skipped === true) {
         return {
@@ -95,29 +135,36 @@ export async function brazoApify(args: {
         }
       }
       // ② no se pudo ver · hubo ceguera o descartes
-      if (sobre.clase === 'no_pude_ver') {
+      if (clase === 'no_pude_ver') {
         return {
           hay: false as const,
           noSeMiro: true,
-          motivo: `NO SE PUDO VER${sobre.motivo ? ' · ' + sobre.motivo : ''}`,
+          motivo: `NO SE PUDO VER${motivoCero ? ' · ' + motivoCero : ''}`,
         }
       }
       // ③ ensayo · no es una mirada real
-      if (sobre.clase === 'ensayo' || sobre.se_miro_de_verdad === false) {
+      if (clase === 'ensayo' || seMiro === false) {
         return {
           hay: false as const,
           noSeMiro: true,
-          motivo: `NO SE MIRÓ DE VERDAD${sobre.clase === 'ensayo' ? ' · fue un ensayo (dry-run)' : ''}${sobre.motivo_cero ? ' · ' + sobre.motivo_cero : ''}`,
+          motivo: `NO SE MIRÓ DE VERDAD${clase === 'ensayo' ? ' · fue un ensayo (dry-run)' : ''}${motivoCero ? ' · ' + motivoCero : ''}`,
         }
       }
       // ④ se miró de verdad · acá SÍ vale «fui, miré y no hay»
-      if (filas.length === 0) {
+      if (!hayDato) {
         return {
           hay: false as const,
-          motivo: `fui, miré y no hay${sobre.motivo_cero ? ' · ' + sobre.motivo_cero : ': el raspador terminó sin registros'}`,
+          motivo: `fui, miré y no hay${motivoCero ? ' · ' + motivoCero : ' · el raspador terminó sin registros'}`,
         }
       }
-      return { hay: true as const, datos: { filas, cantidad: filas.length } }
+      return {
+        hay: true as const,
+        datos: {
+          ...(filas.length ? { filas, cantidad: filas.length } : {}),
+          ...(sobre.datos ? { texto: sobre.datos } : {}),
+          ...(sobre.chunks_count !== undefined ? { chunks_count: sobre.chunks_count } : {}),
+        },
+      }
     },
   })
 }
@@ -156,12 +203,16 @@ export async function brazoPostHog(args: {
   objetivo: string
   fuente: string
   clienteConfigurado: boolean
+  limite_ms?: number
+  proposito?: string
   consultar: () => Promise<Record<string, unknown> | null>
 }): Promise<RespuestaBrazo> {
   return envolverBrazo({
     brazo: 'posthog',
     objetivo: args.objetivo,
     fuente: args.fuente,
+    ...(args.limite_ms !== undefined ? { limite_ms: args.limite_ms } : {}),
+    ...(args.proposito ? { proposito: args.proposito } : {}),
     encendido: args.clienteConfigurado,
     ejecutar: async () => {
       const r = await args.consultar()
@@ -187,12 +238,16 @@ export async function brazoPostHog(args: {
 export async function brazoCerebro(args: {
   objetivo: string
   fuente: string
+  limite_ms?: number
+  proposito?: string
   buscar: () => Promise<ReadonlyArray<unknown>>
 }): Promise<RespuestaBrazo> {
   return envolverBrazo({
     brazo: 'cerebro',
     objetivo: args.objetivo,
     fuente: args.fuente,
+    ...(args.limite_ms !== undefined ? { limite_ms: args.limite_ms } : {}),
+    ...(args.proposito ? { proposito: args.proposito } : {}),
     ejecutar: async () => {
       const fragmentos = await args.buscar()
       if (!fragmentos || fragmentos.length === 0) {

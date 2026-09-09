@@ -55,6 +55,24 @@ export interface RespuestaBrazo {
   readonly medido_en: string
   /** 🔴 obligatorio siempre que `estado !== 'trajo'`. */
   readonly motivo?: string
+  // -------------------------------------------------------------------
+  // AGREGADOS 2026-09-09 · decisión de Lenovo. Son ADITIVOS: no tocan los
+  // tres estados ni ninguno de los siete campos de arriba.
+  // -------------------------------------------------------------------
+  /**
+   * Cuánto tiempo se le dio al brazo, en milisegundos.
+   * Sin esto, un `sin_respuesta` no se puede leer: no es lo mismo rendirse a
+   * los 2 segundos que a los 15 minutos, y hoy el techo de la casa es 900.000.
+   * Es además lo único que hace calibrable el §7 en C3 — se calibra contra lo
+   * que se dio, no contra lo que se cree que se dio.
+   */
+  readonly limite_ms?: number
+  /**
+   * Para qué se pidió este dato · en una línea, en lenguaje del plan.
+   * `objetivo` dice QUÉ se fue a buscar; `proposito` dice PARA QUÉ sirve en el
+   * plan. Un `sin_dato` sin propósito obliga a adivinar si el hueco importa.
+   */
+  readonly proposito?: string
 }
 
 const ahora = (medido_en?: string) => medido_en ?? new Date().toISOString()
@@ -66,6 +84,8 @@ export function trajo(args: {
   datos: Record<string, unknown>
   fuente: string
   medido_en?: string
+  limite_ms?: number
+  proposito?: string
 }): RespuestaBrazo {
   return {
     brazo: args.brazo,
@@ -74,6 +94,8 @@ export function trajo(args: {
     datos: args.datos,
     fuente: args.fuente,
     medido_en: ahora(args.medido_en),
+    ...(args.limite_ms !== undefined ? { limite_ms: args.limite_ms } : {}),
+    ...(args.proposito ? { proposito: args.proposito } : {}),
   }
 }
 
@@ -85,6 +107,8 @@ export function sinDato(args: {
   objetivo: string
   fuente: string
   motivo: string
+  limite_ms?: number
+  proposito?: string
   datos?: Record<string, unknown>
   medido_en?: string
 }): RespuestaBrazo {
@@ -96,6 +120,8 @@ export function sinDato(args: {
     fuente: args.fuente,
     medido_en: ahora(args.medido_en),
     motivo: args.motivo,
+    ...(args.limite_ms !== undefined ? { limite_ms: args.limite_ms } : {}),
+    ...(args.proposito ? { proposito: args.proposito } : {}),
   }
 }
 
@@ -105,6 +131,8 @@ export function sinRespuesta(args: {
   objetivo: string
   fuente: string
   motivo: string
+  limite_ms?: number
+  proposito?: string
   medido_en?: string
 }): RespuestaBrazo {
   return {
@@ -115,6 +143,8 @@ export function sinRespuesta(args: {
     fuente: args.fuente,
     medido_en: ahora(args.medido_en),
     motivo: args.motivo,
+    ...(args.limite_ms !== undefined ? { limite_ms: args.limite_ms } : {}),
+    ...(args.proposito ? { proposito: args.proposito } : {}),
   }
 }
 
@@ -184,6 +214,10 @@ export async function envolverBrazo(args: {
   brazo: Brazo
   objetivo: string
   fuente: string
+  /** cuánto tiempo se le dio · viaja a la respuesta (agregado 09-sep) */
+  limite_ms?: number
+  /** para qué se pidió · viaja a la respuesta (agregado 09-sep) */
+  proposito?: string
   /** `false` ⇒ el brazo está apagado · sale `sin_respuesta`, no `sin_dato`. */
   encendido?: boolean
   ejecutar: () => Promise<
@@ -198,7 +232,13 @@ export async function envolverBrazo(args: {
   >
   medido_en?: string
 }): Promise<RespuestaBrazo> {
-  const base = { brazo: args.brazo, objetivo: args.objetivo, fuente: args.fuente }
+  const base = {
+    brazo: args.brazo,
+    objetivo: args.objetivo,
+    fuente: args.fuente,
+    ...(args.limite_ms !== undefined ? { limite_ms: args.limite_ms } : {}),
+    ...(args.proposito ? { proposito: args.proposito } : {}),
+  }
   if (args.encendido === false) {
     return sinRespuesta({
       ...base,
