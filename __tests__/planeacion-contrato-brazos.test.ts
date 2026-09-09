@@ -332,3 +332,41 @@ describe('🟢 los dos campos nuevos · aditivos, no tocan los tres estados', ()
     expect(r.proposito).toBeUndefined()
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🟠 EL NARANJA DE CC#3 · cerrado 2026-09-09 en C2. El sobre es el que CC#3
+// copió del nodo `skipped-response` vivo, no uno inventado.
+// ─────────────────────────────────────────────────────────────────────────
+describe('🟠 la llamada RECHAZADA · no es «fui, miré y no hay»', () => {
+  const rechazada = {
+    ok: false, rechazado: true, skipped: false, skip_reason: null,
+    motivo: 'la llamada no es válida · falta · competitor_id',
+  }
+  it('sale sin_respuesta · no sin_dato', async () => {
+    const r = await brazoApify({ objetivo: 'competidores', fuente: FUENTE, consultar: async () => rechazada })
+    expect(r.estado).toBe('sin_respuesta')
+  })
+  it('🔴 y el motivo NO se contradice a sí mismo', async () => {
+    const r = await brazoApify({ objetivo: 'competidores', fuente: FUENTE, consultar: async () => rechazada })
+    expect(r.motivo).not.toMatch(/fui, miré/)
+    expect(r.motivo).toMatch(/LA LLAMADA NO SE PUDO HACER/)
+  })
+  it('la razón real del Servicio viaja pegada · no se pierde', async () => {
+    const r = await brazoApify({ objetivo: 'competidores', fuente: FUENTE, consultar: async () => rechazada })
+    expect(r.motivo).toMatch(/falta · competitor_id/)
+  })
+  it('🔴 y NO se ve igual que las otras cuatro formas de cero', async () => {
+    const h = (c: unknown) => brazoApify({ objetivo: 'x', fuente: FUENTE, consultar: async () => c as never })
+    const rs = await Promise.all([
+      h(rechazada),
+      h({ skipped: true, motivo: 'sin permiso' }),
+      h({ ok: true, sin_resultados: true, cero: { clase: 'no_pude_ver', motivo: 'm1', se_miro_de_verdad: false } }),
+      h({ ok: true, sin_resultados: true, cero: { clase: 'ensayo', motivo: 'm2', se_miro_de_verdad: false } }),
+      h({ ok: true, sin_resultados: true, cero: { clase: 'no_existe', motivo: 'm3', se_miro_de_verdad: true } }),
+    ])
+    expect(new Set(rs.map((r) => r.motivo)).size).toBe(5)
+    expect(rs.map((r) => r.estado)).toEqual(
+      ['sin_respuesta', 'sin_respuesta', 'sin_respuesta', 'sin_respuesta', 'sin_dato'],
+    )
+  })
+})

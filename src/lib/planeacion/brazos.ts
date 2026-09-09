@@ -56,6 +56,10 @@ export interface CeroClasificado {
 
 export interface RespuestaServicioApify {
   readonly ok?: boolean
+  /** 🔴 el CUARTO cero · `skipped-response` contesta DOS cosas distintas y ésta
+   *  es la otra: la llamada estaba MAL ARMADA. No es `skipped` y no trae `cero`.
+   *  Lo encontró CC#3 al certificar B2-bis (09-sep). */
+  readonly rechazado?: boolean
   readonly skipped?: boolean
   readonly skip_reason?: string | null
   readonly motivo?: string | null
@@ -126,6 +130,18 @@ export async function brazoApify(args: {
         (sobre.chunks_count ?? 0) > 0 ||
         (typeof sobre.datos === 'string' && sobre.datos.length > 0) ||
         filas.length > 0
+      // ⓪ LA LLAMADA ESTABA MAL ARMADA · el naranja de CC#3 (09-sep).
+      // Va PRIMERO y por eso mismo: sin esta línea caía en la rama ④ y salía
+      // rotulada «fui, miré y no hay · la llamada no es válida» — una frase que
+      // se contradice sola, y con el `estado` equivocado, que es lo que lee una
+      // máquina. Nadie miró nada: no se llegó ni a preguntar.
+      if (sobre.rechazado === true) {
+        return {
+          hay: false as const,
+          noSeMiro: true,
+          motivo: `LA LLAMADA NO SE PUDO HACER · estaba mal armada${sobre.motivo ? ' · ' + sobre.motivo : ''}`,
+        }
+      }
       // ① nadie preguntó · el Servicio lo saltó
       if (sobre.skipped === true) {
         return {
