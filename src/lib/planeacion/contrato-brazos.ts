@@ -188,7 +188,13 @@ export async function envolverBrazo(args: {
   encendido?: boolean
   ejecutar: () => Promise<
     | { hay: true; datos: Record<string, unknown>; fuente?: string }
-    | { hay: false; motivo: string; fuente?: string }
+    /**
+     * `hay:false` es «no hay dato». `noSeMiro:true` dice ADEMÁS que **nadie
+     * miró** — nadie preguntó, no se pudo ver, o fue un ensayo. Sin esa
+     * bandera un vacío se rotula «fui, miré y no hay», que es afirmar una
+     * mirada que no ocurrió (condición de CC#3, 09-sep).
+     */
+    | { hay: false; motivo: string; fuente?: string; noSeMiro?: boolean }
   >
   medido_en?: string
 }): Promise<RespuestaBrazo> {
@@ -208,6 +214,16 @@ export async function envolverBrazo(args: {
         ...base,
         fuente,
         datos: r.datos,
+        ...(args.medido_en ? { medido_en: args.medido_en } : {}),
+      })
+    }
+    // 🔴 nadie miró ⇒ es un HUECO, no información. Rotularlo `sin_dato`
+    // sería afirmar una mirada que no ocurrió.
+    if (r.noSeMiro === true) {
+      return sinRespuesta({
+        ...base,
+        fuente,
+        motivo: r.motivo,
         ...(args.medido_en ? { medido_en: args.medido_en } : {}),
       })
     }

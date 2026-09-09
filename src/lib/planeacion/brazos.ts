@@ -27,16 +27,39 @@ export const CAMPOS_META_NO_PUBLICADOS = ['spend', 'impressions', 'reach'] as co
 /**
  * Canon canonical · brazo APIFY · raspado de competencia, redes y web propia.
  *
- * `consultar` devuelve las filas que trajo el Servicio. La distinción que
- * importa la hace ACÁ y no el envoltorio: cero filas tras una llamada
- * exitosa es `sin_dato` con motivo; una llamada que se rompe o un brazo
- * apagado es `sin_respuesta`.
+ * 🔴 Lo que el Servicio de Apify YA distingue · y que este envoltorio tiraba.
+ *
+ * Condición de certificación de CC#3 (09-sep), cerrada acá: la primera versión
+ * recibía SÓLO las filas y rotulaba «fui, miré y no hay» **aunque nadie hubiera
+ * mirado**. Es el caso Meta un piso más arriba y peor: en Meta la fuente nunca
+ * publicó el dato; acá **el Servicio ya había hecho el trabajo de distinguirlo
+ * y el envoltorio lo tiraba a la basura** ⇒ el plan escribiría «el competidor
+ * no tiene X» cuando la verdad es que nadie preguntó.
+ *
+ * Los campos son los que el Servicio emite hoy (medido sobre el flujo vivo
+ * `3lyknrP3PoS2KzUf`, nodos `transform-sections` · `skipped-response`):
+ *   skipped: true          → SALTEADO · el cliente no tiene permiso · nadie preguntó
+ *   clase: 'no_pude_ver'   → hubo descartes o ceguera · no se pudo ver
+ *   clase: 'ensayo'        → dry-run · no es una mirada real
+ *   clase: 'no_existe'     → se miró de verdad y no hay
+ *   se_miro_de_verdad      → la bandera que resume las tres de arriba
  */
+export interface RespuestaServicioApify {
+  readonly skipped?: boolean
+  readonly clase?: 'no_pude_ver' | 'no_existe' | 'ensayo' | string
+  readonly se_miro_de_verdad?: boolean
+  readonly motivo?: string | null
+  readonly motivo_cero?: string | null
+  readonly filas?: ReadonlyArray<Record<string, unknown>>
+}
+
 export async function brazoApify(args: {
   objetivo: string
   fuente: string
   encendido?: boolean
-  consultar: () => Promise<ReadonlyArray<Record<string, unknown>>>
+  /** Devuelve el SOBRE del Servicio, no sólo las filas: la distinción viene
+   *  adentro y tirarla es el defecto que esta pieza existe para impedir. */
+  consultar: () => Promise<RespuestaServicioApify | ReadonlyArray<Record<string, unknown>>>
 }): Promise<RespuestaBrazo> {
   return envolverBrazo({
     brazo: 'apify',
@@ -44,11 +67,54 @@ export async function brazoApify(args: {
     fuente: args.fuente,
     ...(args.encendido !== undefined ? { encendido: args.encendido } : {}),
     ejecutar: async () => {
-      const filas = await args.consultar()
-      if (!filas || filas.length === 0) {
+      const r = await args.consultar()
+      // Compatibilidad · si llega un array pelado, no hay distinción que
+      // preservar y NO se puede afirmar que se miró. Se dice así.
+      if (Array.isArray(r)) {
+        if (r.length === 0) {
+          return {
+            hay: false as const,
+            motivo:
+              'el llamador entregó filas sueltas, sin el sobre del Servicio: ' +
+              'CERO filas NO alcanza para afirmar que se miró',
+            noSeMiro: true,
+          }
+        }
+        return { hay: true as const, datos: { filas: r, cantidad: r.length } }
+      }
+
+      // `Array.isArray` no estrecha un `readonly T[]` en el else · se hace explícito.
+      const sobre = r as RespuestaServicioApify
+      const filas = sobre.filas ?? []
+      // ① nadie preguntó · el Servicio lo saltó
+      if (sobre.skipped === true) {
         return {
           hay: false as const,
-          motivo: 'fui, miré y no hay: el raspador respondió y devolvió cero filas',
+          noSeMiro: true,
+          motivo: `NADIE PREGUNTÓ · el Servicio salteó esta función${sobre.motivo ? ' · ' + sobre.motivo : ''}`,
+        }
+      }
+      // ② no se pudo ver · hubo ceguera o descartes
+      if (sobre.clase === 'no_pude_ver') {
+        return {
+          hay: false as const,
+          noSeMiro: true,
+          motivo: `NO SE PUDO VER${sobre.motivo ? ' · ' + sobre.motivo : ''}`,
+        }
+      }
+      // ③ ensayo · no es una mirada real
+      if (sobre.clase === 'ensayo' || sobre.se_miro_de_verdad === false) {
+        return {
+          hay: false as const,
+          noSeMiro: true,
+          motivo: `NO SE MIRÓ DE VERDAD${sobre.clase === 'ensayo' ? ' · fue un ensayo (dry-run)' : ''}${sobre.motivo_cero ? ' · ' + sobre.motivo_cero : ''}`,
+        }
+      }
+      // ④ se miró de verdad · acá SÍ vale «fui, miré y no hay»
+      if (filas.length === 0) {
+        return {
+          hay: false as const,
+          motivo: `fui, miré y no hay${sobre.motivo_cero ? ' · ' + sobre.motivo_cero : ': el raspador terminó sin registros'}`,
         }
       }
       return { hay: true as const, datos: { filas, cantidad: filas.length } }

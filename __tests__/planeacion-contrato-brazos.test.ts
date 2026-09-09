@@ -67,8 +67,15 @@ describe('🔴 EL ROJO · apagado ≠ vacío · y la corrida NO se cae', () => {
     expect(validarRespuesta(r)).toEqual([])
   })
 
-  it('vacío LEGÍTIMO → sin_dato · con motivo "fui, miré y no hay"', async () => {
-    const r = await brazoApify({ objetivo: 'competidores', fuente: FUENTE, consultar: async () => [] })
+  // ACTUALIZADA 09-sep por la condición de CC#3 · antes esta prueba pasaba
+  // `[]` pelado y esperaba `sin_dato`: encodificaba el defecto — afirmaba una
+  // mirada que nadie hizo. Un vacío legítimo exige que el Servicio DECLARE
+  // que se miró de verdad.
+  it('vacío LEGÍTIMO (el Servicio declara que miró) → sin_dato', async () => {
+    const r = await brazoApify({
+      objetivo: 'competidores', fuente: FUENTE,
+      consultar: async () => ({ clase: 'no_existe', se_miro_de_verdad: true, filas: [] }),
+    })
     expect(r.estado).toBe('sin_dato')
     expect(r.motivo).toMatch(/fui, miré y no hay/)
   })
@@ -162,5 +169,71 @@ describe('🔴 el contrato SE HACE CUMPLIR · no es documentación', () => {
     })
     expect(r.estado).toBe('sin_respuesta')
     expect(r.motivo).toMatch(/string pelado/)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// CONDICIÓN DE CC#3 · cerrada 2026-09-09 · «el envoltorio dice "miré y no
+// hay" cuando nadie miró». Los nombres de campo son los que el Servicio
+// emite hoy (medido sobre el flujo vivo 3lyknrP3PoS2KzUf).
+// ─────────────────────────────────────────────────────────────────────────
+describe('🔴 CONDICIÓN CC#3 · "nadie miró" NO puede salir como "miré y no hay"', () => {
+  it('skipped:true (nadie preguntó) → sin_respuesta', async () => {
+    const r = await brazoApify({
+      objetivo: 'competidores', fuente: FUENTE,
+      consultar: async () => ({ skipped: true, motivo: 'el cliente no tiene permiso', filas: [] }),
+    })
+    expect(r.estado).toBe('sin_respuesta')
+    expect(r.motivo).toMatch(/NADIE PREGUNTÓ/)
+    expect(r.motivo).not.toMatch(/fui, miré/)
+  })
+
+  it('clase "no_pude_ver" → sin_respuesta, con el motivo del Servicio', async () => {
+    const r = await brazoApify({
+      objetivo: 'redes', fuente: FUENTE,
+      consultar: async () => ({ clase: 'no_pude_ver', motivo: 'actor devolvió 403', filas: [] }),
+    })
+    expect(r.estado).toBe('sin_respuesta')
+    expect(r.motivo).toMatch(/NO SE PUDO VER.*403/)
+  })
+
+  it('un ENSAYO (dry-run) no es una mirada → sin_respuesta', async () => {
+    const r = await brazoApify({
+      objetivo: 'competidores', fuente: FUENTE,
+      consultar: async () => ({ clase: 'ensayo', se_miro_de_verdad: false, filas: [] }),
+    })
+    expect(r.estado).toBe('sin_respuesta')
+    expect(r.motivo).toMatch(/NO SE MIRÓ DE VERDAD/)
+  })
+
+  it('🟢 se_miro_de_verdad + cero filas → AHÍ SÍ es sin_dato', async () => {
+    const r = await brazoApify({
+      objetivo: 'competidores', fuente: FUENTE,
+      consultar: async () => ({
+        clase: 'no_existe', se_miro_de_verdad: true, filas: [],
+        motivo_cero: 'el raspador terminó sin registros utilizables',
+      }),
+    })
+    expect(r.estado).toBe('sin_dato')
+    expect(r.motivo).toMatch(/fui, miré y no hay/)
+  })
+
+  it('🔴 los cuatro casos NO se ven iguales', async () => {
+    const hacer = (c: Record<string, unknown>) =>
+      brazoApify({ objetivo: 'x', fuente: FUENTE, consultar: async () => c })
+    const nadie = await hacer({ skipped: true, filas: [] })
+    const ciego = await hacer({ clase: 'no_pude_ver', motivo: 'm', filas: [] })
+    const ensayo = await hacer({ clase: 'ensayo', se_miro_de_verdad: false, filas: [] })
+    const noHay = await hacer({ clase: 'no_existe', se_miro_de_verdad: true, filas: [] })
+    expect(noHay.estado).toBe('sin_dato')
+    for (const r of [nadie, ciego, ensayo]) expect(r.estado).toBe('sin_respuesta')
+    const motivos = new Set([nadie.motivo, ciego.motivo, ensayo.motivo, noHay.motivo])
+    expect(motivos.size).toBe(4) // cuatro motivos distintos, no cuatro veces el mismo
+  })
+
+  it('filas sueltas sin el sobre · NO se puede afirmar que se miró', async () => {
+    const r = await brazoApify({ objetivo: 'x', fuente: FUENTE, consultar: async () => [] })
+    expect(r.estado).toBe('sin_respuesta')
+    expect(r.motivo).toMatch(/NO alcanza para afirmar que se miró/)
   })
 })
