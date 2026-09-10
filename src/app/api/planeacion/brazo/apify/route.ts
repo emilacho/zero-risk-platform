@@ -86,19 +86,53 @@ function paramsDe(p: PedidoPuerta, funcion: FuncionProveedor): Record<string, un
  *   (interpretar es mentir) ni inventa el motivo: sólo declara la ausencia.
  * ⚠️ Si el pedido NO trae `por_funcion`, no hay nada declarado y todo sigue igual.
  */
-function sinConQueApuntar(p: PedidoPuerta, funcion: FuncionProveedor): RespuestaBrazo | null {
+function sinConQueApuntar(p: PedidoPuerta, corrida: Corrida): RespuestaBrazo | null {
   const porFuncion = p.params?.por_funcion as Record<string, unknown> | undefined
   if (!porFuncion || typeof porFuncion !== 'object') return null
-  if (porFuncion[funcion]) return null
+  if (porFuncion[corrida.funcion]) return null
   return sinRespuesta({
-    brazo: 'apify', objetivo: p.objetivo as string, fuente: FUENTE + ' · ' + funcion, ...extraDe(p),
-    motivo: 'el pedido no trae parámetros para `' + funcion + '` · quien pide declaró a qué podía apuntar y ésta no estaba · NO se preguntó · no es que no haya dato',
+    brazo: 'apify', objetivo: p.objetivo as string, fuente: FUENTE + ' · ' + corrida.etiqueta, ...extraDe(p),
+    motivo: 'el pedido no trae parámetros para `' + corrida.funcion + '` · quien pide declaró a qué podía apuntar y ésta no estaba · NO se preguntó · no es que no haya dato',
   })
 }
 
-/** una corrida · una función del proveedor · el sobre entero al brazo */
-async function correr(p: PedidoPuerta, funcion: FuncionProveedor, firma: { workflow_id: string; workflow_execution_id: string }, puerta: string): Promise<RespuestaBrazo> {
-  const fuente = FUENTE + ' · ' + funcion
+/**
+ * 🔴 Canon canonical · UNA CORRIDA · una llamada al proveedor con SUS parámetros.
+ *
+ * Hasta acá una corrida era «una función». No alcanza: `competidores_precio` es
+ * UNA función del proveedor (`competitor_website_scraper`) repetida **una vez por
+ * competidor**, cada una con su sitio y con **su identificador** —que el proveedor
+ * exige para no archivar la página del competidor como si fuera del cliente—.
+ * ⇒ la corrida es (función + parámetros + etiqueta), y la etiqueta es lo que
+ *   permite leer el resultado competidor por competidor.
+ */
+interface Corrida {
+  readonly funcion: FuncionProveedor
+  /** cómo se lee en la respuesta · la función, o la función y el competidor */
+  readonly etiqueta: string
+  readonly params: Record<string, unknown>
+}
+
+/**
+ * Canon canonical · de un pedido salen sus corridas.
+ * `por_competidor` sólo se abre cuando el objetivo es UNA sola función: es una
+ * lista de a quién apuntar, no una lista de qué usar.
+ */
+function corridasDe(p: PedidoPuerta, funciones: ReadonlyArray<FuncionProveedor>): Corrida[] {
+  const porCompetidor = p.params?.por_competidor
+  if (funciones.length === 1 && Array.isArray(porCompetidor) && porCompetidor.length > 0) {
+    return porCompetidor.map((c, i) => {
+      const uno = (c ?? {}) as Record<string, unknown>
+      const quien = uno.competitor_id ?? uno.nombre ?? i + 1
+      return { funcion: funciones[0], etiqueta: funciones[0] + '#' + String(quien), params: uno }
+    })
+  }
+  return funciones.map((f) => ({ funcion: f, etiqueta: f, params: paramsDe(p, f) }))
+}
+
+/** una corrida · el sobre entero al brazo */
+async function correr(p: PedidoPuerta, corrida: Corrida, firma: { workflow_id: string; workflow_execution_id: string }, puerta: string): Promise<RespuestaBrazo> {
+  const fuente = FUENTE + ' · ' + corrida.etiqueta
   return brazoApify({
     objetivo: p.objetivo as string,
     fuente,
@@ -109,12 +143,12 @@ async function correr(p: PedidoPuerta, funcion: FuncionProveedor, firma: { workf
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           client_id: p.client_id,
-          apify_function: funcion,
+          apify_function: corrida.funcion,
           ...(p.callback_url
             ? { destination: DESTINO_CON_VUELTA, callback_url: p.callback_url }
             : { destination: DESTINO_SIN_VUELTA }),
           dry_run: p.dry_run,
-          params: paramsDe(p, funcion),
+          params: corrida.params,
           metadata: {
             scope: 'planeacion',
             // 🔴 la firma REAL de quien llama · lo único que hace cruzable el gasto
@@ -171,9 +205,10 @@ function ensayoNoEsTrajo(p: PedidoPuerta, r: RespuestaBrazo): RespuestaBrazo {
  *   · el resto            ⇒ `sin_respuesta` · alcanza UNA que nadie miró para que
  *                            «no hay» sea una afirmación que no se puede hacer.
  */
-function unir(p: PedidoPuerta, funciones: ReadonlyArray<FuncionProveedor>, partes: ReadonlyArray<RespuestaBrazo>): RespuestaBrazo {
+function unir(p: PedidoPuerta, corridas: ReadonlyArray<Corrida>, partes: ReadonlyArray<RespuestaBrazo>): RespuestaBrazo {
   const objetivo = p.objetivo as string
   const extra = extraDe(p)
+  const funciones = corridas.map((c) => c.etiqueta)
   const fuente = FUENTE + ' · ' + funciones.join(' + ')
   const por_funcion = Object.fromEntries(funciones.map((f, i) => [f, {
     estado: partes[i].estado,
@@ -260,14 +295,15 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   }
 
   try {
-    const crudas = await enParalelo(t.funciones, CUPO_EN_VUELO, async (f) =>
+    const corridas = corridasDe(p, t.funciones)
+    const crudas = await enParalelo(corridas, CUPO_EN_VUELO, async (c) =>
       // 🔴 lo que no se puede apuntar no se pregunta · ver arriba
-      sinConQueApuntar(p, f) ?? correr(p, f, firma, puerta),
+      sinConQueApuntar(p, c) ?? correr(p, c, firma, puerta),
     )
     // 🔴 un ensayo nunca sale como «trajo» · ver arriba
     const partes = crudas.map((r) => ensayoNoEsTrajo(p, r))
-    // una sola función ⇒ su respuesta ES la respuesta · no hay nada que unir
-    return t.funciones.length === 1 ? partes[0] : unir(p, t.funciones, partes)
+    // una sola corrida ⇒ su respuesta ES la respuesta · no hay nada que unir
+    return corridas.length === 1 ? partes[0] : unir(p, corridas, partes)
   } catch (e) {
     return seRompio('apify', FUENTE, p, e)
   }

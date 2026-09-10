@@ -420,6 +420,62 @@ describe('🔴 el vocabulario · el plan y el proveedor hablan distinto', () => 
     expect(json.motivo).toMatch(/fui, miré y no hay en las 5/)
   })
 
+  it('🔴 `competidores_precio` es UNA función y UNA corrida POR COMPETIDOR', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'competidores_precio', params: {
+      por_competidor: [
+        { url: 'https://uno.test', competitor_id: 'c-1', nombre: 'Uno' },
+        { url: 'https://dos.test', competitor_id: 'c-2', nombre: 'Dos' },
+        { url: 'https://tres.test', competitor_id: 'c-3', nombre: 'Tres' },
+      ],
+    } }))
+    const cuerpos = espia.mock.calls.map((c: any) => JSON.parse(c[1].body))
+    expect(cuerpos).toHaveLength(3)
+    // la MISMA función, tres veces, con su propio sitio y su propio identificador
+    expect(new Set(cuerpos.map((b: any) => b.apify_function))).toEqual(new Set(['competitor_website_scraper']))
+    expect(cuerpos.map((b: any) => b.params.competitor_id).sort()).toEqual(['c-1', 'c-2', 'c-3'])
+    expect(cuerpos.map((b: any) => b.params.url).sort()).toEqual(['https://dos.test', 'https://tres.test', 'https://uno.test'])
+    // y vuelve UNA sola respuesta del contrato, legible competidor por competidor
+    expect(json.estado).toBe('trajo')
+    expect(Object.keys(json.datos.por_funcion).sort()).toEqual([
+      'competitor_website_scraper#c-1', 'competitor_website_scraper#c-2', 'competitor_website_scraper#c-3',
+    ])
+    expect(validarRespuesta(json)).toEqual([])
+  })
+
+  it('🔴 si un competidor no se pudo ver, NO se puede leer como el total', async () => {
+    let n = 0
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      n++
+      return new Response(JSON.stringify(n === 1 ? sobreOk : { ok: true, sin_resultados: true, cero: { clase: 'no_pude_ver', motivo: 'el sitio no contestó' } }), { status: 200 })
+    }))
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'competidores_precio', params: {
+      por_competidor: [{ url: 'https://uno.test', competitor_id: 'c-1' }, { url: 'https://dos.test', competitor_id: 'c-2' }],
+    } }))
+    expect(json.estado).toBe('trajo')
+    expect(json.datos.huecos).toEqual(['competitor_website_scraper#c-2'])
+    expect(String(json.datos.aviso)).toMatch(/de 1 de 2 no se sabe/)
+  })
+
+  it('un solo competidor ⇒ una corrida · la respuesta es la suya, sin envoltorio', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 })))
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'competidores_precio', params: {
+      por_competidor: [{ url: 'https://uno.test', competitor_id: 'c-1' }],
+    } }))
+    expect(json.estado).toBe('trajo')
+    expect(json.datos.por_funcion).toBeUndefined()
+    expect(json.fuente).toMatch(/competitor_website_scraper#c-1/)
+  })
+
+  it('sin `por_competidor`, el objetivo sale como una sola corrida de siempre', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'competidores_precio', params: { url: 'https://x.test', competitor_id: 'c-9' } })
+    expect(espia).toHaveBeenCalledTimes(1)
+    expect(JSON.parse((espia.mock.calls[0] as any)[1].body).params.competitor_id).toBe('c-9')
+  })
+
   it('🔴 una palabra que el proveedor no conoce NO se manda · se dice', async () => {
     const espia = vi.fn(async () => new Response('{}', { status: 200 }))
     vi.stubGlobal('fetch', espia)
