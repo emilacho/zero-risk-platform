@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { validarRespuesta, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
 import { TOPE_PEDIDOS } from '@/lib/planeacion/puertas'
+import { traducir, FUNCIONES_DEL_PROVEEDOR } from '@/lib/planeacion/vocabulario'
 
 const supabaseMock = {
   from: vi.fn(),
@@ -142,14 +143,14 @@ describe('🔴 ① la puerta recibe la LISTA y contesta UNA respuesta POR PEDIDO
       ...PEDIDO_APIFY,
       objetivo: undefined,
       proposito: 'para el plan',
-      pedidos: [{ objetivo: 'a' }, { objetivo: 'b' }],
+      pedidos: [{ objetivo: 'sitio_propio' }, { objetivo: 'biblioteca_anuncios' }],
     }))
     expect(sobre.respuestas).toHaveLength(2)
     expect(sobre.respuestas.every((r) => r.estado === 'trajo')).toBe(true)
     expect(sobre.respuestas[0].proposito).toBe('para el plan')
     // el cliente y la firma se pusieron UNA vez y valieron para los dos
     const cuerpos = espia.mock.calls.map((c: any) => JSON.parse(c[1].body))
-    expect(cuerpos.map((b) => b.apify_function)).toEqual(['a', 'b'])
+    expect(cuerpos.map((b) => b.apify_function)).toEqual(['website_content_scraper', 'facebook_ads_library_scraper'])
     expect(cuerpos.every((b) => b.client_id === 'c')).toBe(true)
   })
 
@@ -251,7 +252,6 @@ describe('🔴 ③ la corrida de raspado se firma de VERDAD · o no corre', () =
     ['sin workflow_id', { workflow_id: undefined }, /firma de la corrida[\s\S]*workflow_id/],
     ['sin workflow_execution_id', { workflow_execution_id: undefined }, /firma de la corrida[\s\S]*workflow_execution_id/],
     ['sin dry_run explícito', { dry_run: undefined }, /el ensayo se decide, no se asume/],
-    ['sin callback_url', { callback_url: undefined }, /callback_url/],
   ]
   for (const [etq, quitar, esperado] of faltantes) {
     it(etq + ' ⇒ sin_respuesta · y NO se llama al Servicio (no se gasta)', async () => {
@@ -296,6 +296,153 @@ describe('🔴 ③ la corrida de raspado se firma de VERDAD · o no corre', () =
     // y un ensayo NO se rotula «fui, miré y no hay»
     expect(json.estado).toBe('sin_respuesta')
     expect(json.motivo).toMatch(/NO SE MIRÓ DE VERDAD/)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL TERCER DESTINO · devolver la respuesta a quien preguntó
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🔴 el tercer destino · sin escribir en el cerebro y sin llamar a nadie', () => {
+  const sobreOk = { ok: true, sin_resultados: false, chunks_count: 1, datos: '#' }
+
+  it('sin dirección de vuelta ⇒ destino `respuesta` · NO `brain_rag`, NO punto de recepción propio', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, callback_url: undefined }))
+    const cuerpo = JSON.parse((espia.mock.calls[0] as any)[1].body)
+    expect(cuerpo.destination).toBe('respuesta')
+    expect(cuerpo).not.toHaveProperty('callback_url')
+    expect(json.estado).toBe('trajo')
+  })
+
+  it('con dirección de vuelta ⇒ se respeta el destino viejo · aditivo, no reemplazo', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    await pedir(apify, PEDIDO_APIFY)
+    const cuerpo = JSON.parse((espia.mock.calls[0] as any)[1].body)
+    expect(cuerpo.destination).toBe('callback_url')
+    expect(cuerpo.callback_url).toBe(PEDIDO_APIFY.callback_url)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL VOCABULARIO · los objetivos del plan → los 20 nombres del proveedor
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🔴 el vocabulario · el plan y el proveedor hablan distinto', () => {
+  const sobreOk = { ok: true, sin_resultados: false, chunks_count: 1, datos: '#' }
+  const funcionesPedidas = (espia: any): string[] =>
+    espia.mock.calls.map((c: any) => JSON.parse(c[1].body).apify_function)
+
+  it('la tabla cubre los objetivos de raspado que `elegir brazos` emite de verdad', () => {
+    // medido · salidas reales de B1 (09-sep · consultora + gimnasio)
+    for (const o of ['sitio_propio', 'ficha_mapa', 'redes_sociales', 'biblioteca_anuncios', 'tendencias_busqueda', 'competidores_precio']) {
+      const t = traducir(o)
+      expect(t.ok, o).toBe(true)
+      if (t.ok) for (const f of t.funciones) expect(FUNCIONES_DEL_PROVEEDOR).toContain(f)
+    }
+  })
+
+  it('`sitio_propio` sale traducido · el Servicio recibe el nombre que entiende', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'sitio_propio' })
+    expect(funcionesPedidas(espia)).toEqual(['website_content_scraper'])
+  })
+
+  it('🔴 la ficha del mapa es la PROPIA · no la del competidor', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'ficha_mapa' })
+    expect(funcionesPedidas(espia)).toEqual(['own_google_maps_profile'])
+    expect(funcionesPedidas(espia)).not.toContain('google_maps_scraper')
+  })
+
+  it('🔴 `redes_sociales` son CINCO corridas · con YouTube adentro (canon)', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'redes_sociales' }))
+    const fs = funcionesPedidas(espia)
+    expect(fs).toHaveLength(5)
+    expect([...fs].sort()).toEqual([
+      'facebook_page_scraper', 'instagram_scraper', 'linkedin_company_scraper',
+      'tiktok_profile_scraper', 'youtube_channel_scraper',
+    ])
+    // y las cinco vuelven en UNA sola respuesta del contrato
+    expect(json.estado).toBe('trajo')
+    expect(Object.keys(json.datos.por_funcion)).toHaveLength(5)
+    expect(validarRespuesta(json)).toEqual([])
+  })
+
+  it('🔴 tres traen y dos no se pudieron ver ⇒ trajo, PERO el hueco viaja pegado', async () => {
+    let n = 0
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      n++
+      return new Response(JSON.stringify(n <= 3 ? sobreOk : { ok: true, sin_resultados: true, cero: { clase: 'no_pude_ver', motivo: 'sin credencial' } }), { status: 200 })
+    }))
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'redes_sociales' }))
+    expect(json.estado).toBe('trajo')
+    expect(json.datos.trajeron).toHaveLength(3)
+    expect(json.datos.huecos).toHaveLength(2)
+    expect(String(json.datos.aviso)).toMatch(/no se sabe/)
+  })
+
+  it('🔴 una sola que nadie miró alcanza para que NO se pueda decir «no hay»', async () => {
+    let n = 0
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      n++
+      return new Response(JSON.stringify(n === 1
+        ? { ok: true, skipped: true, skip_reason: 'function_null_per_tier' }
+        : { ok: true, sin_resultados: true, cero: { clase: 'no_existe', motivo: 'no publica', se_miro_de_verdad: true } }), { status: 200 })
+    }))
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'redes_sociales' }))
+    expect(json.estado).toBe('sin_respuesta')
+    expect(json.motivo).toMatch(/NO es que no haya dato/)
+  })
+
+  it('las cinco miraron y ninguna tenía ⇒ sin_dato · recién ahí es información', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true, sin_resultados: true, cero: { clase: 'no_existe', motivo: 'no publica', se_miro_de_verdad: true } }), { status: 200 })))
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'redes_sociales' }))
+    expect(json.estado).toBe('sin_dato')
+    expect(json.motivo).toMatch(/fui, miré y no hay en las 5/)
+  })
+
+  it('🔴 una palabra que el proveedor no conoce NO se manda · se dice', async () => {
+    const espia = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'lo_que_sea' }))
+    expect(json.estado).toBe('sin_respuesta')
+    expect(json.motivo).toMatch(/no existe en el vocabulario/)
+    expect(json.motivo).not.toMatch(/fui, mir/i)
+    expect(espia).not.toHaveBeenCalled()
+  })
+
+  it('un objetivo de OTRO brazo dice de cuál · no se convierte en hueco mudo', async () => {
+    const espia = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'analitica_propia' }))
+    expect(json.motivo).toMatch(/es del brazo posthog/)
+    expect(espia).not.toHaveBeenCalled()
+  })
+
+  it('un objetivo sin herramienta lo declara · «no hay con qué» ≠ «no hay dato»', async () => {
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'velocidad_sitio' }))
+    expect(json.motivo).toMatch(/no tiene herramienta/)
+    expect(json.motivo).toMatch(/NO es que no haya dato/)
+  })
+
+  it('cada red puede llevar sus propios parámetros', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'redes_sociales', params: {
+      por_funcion: { instagram_scraper: { directUrls: ['ig'] }, youtube_channel_scraper: { startUrls: ['yt'] } },
+    } })
+    const cuerpos = espia.mock.calls.map((c: any) => JSON.parse(c[1].body))
+    const ig = cuerpos.find((b: any) => b.apify_function === 'instagram_scraper')
+    const yt = cuerpos.find((b: any) => b.apify_function === 'youtube_channel_scraper')
+    expect(ig.params).toEqual({ directUrls: ['ig'] })
+    expect(yt.params).toEqual({ startUrls: ['yt'] })
+    // y `por_funcion` no se le cuela al proveedor como si fuera un parámetro suyo
+    for (const b of cuerpos) expect(b.params).not.toHaveProperty('por_funcion')
   })
 })
 
