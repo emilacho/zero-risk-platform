@@ -11,8 +11,13 @@
  * escribe «el cliente no corre pauta» cuando nadie preguntó (B2-bis, 09-sep).
  *
  * 🔴 ENTRA UNA LISTA · SALE UNA RESPUESTA POR PEDIDO (Lenovo · 10-sep).
- * Cada pedido es una corrida que se PAGA: se atienden de a `CUPO_EN_VUELO`,
- * en el orden en que llegaron, y ninguno tumba a los otros.
+ * Cada corrida se PAGA: se atienden de a `CUPO_EN_VUELO`, en el orden en que
+ * llegaron, y ninguna tumba a las otras.
+ *
+ * 🔴 Y SE TRADUCE ANTES DE SALIR (Lenovo · 10-sep · `vocabulario.ts`): el plan
+ * dice `sitio_propio`, el proveedor entiende `website_content_scraper`. Sin esa
+ * traducción el Servicio contesta `rechazado` y el plan lo lee como un hueco de
+ * la fuente, que es mentira: la palabra estaba mal.
  */
 import { checkInternalKey } from '@/lib/internal-auth'
 import { brazoApify } from '@/lib/planeacion/brazos'
@@ -29,7 +34,8 @@ import {
   sobreInvalido,
   type PedidoPuerta,
 } from '@/lib/planeacion/puertas'
-import { sinRespuesta, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
+import { traducir, type FuncionProveedor } from '@/lib/planeacion/vocabulario'
+import { sinDato, sinRespuesta, trajo, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -38,28 +44,149 @@ export const maxDuration = 300
 const FUENTE = 'servicio apify · n8n 3lyknrP3PoS2KzUf'
 
 /**
- * 🔴 POR QUÉ `callback_url` Y NO `brain_rag` · medido sobre el flujo vivo.
+ * 🔴 EL DESTINO · el tercero es el obvio, y hasta el 10-sep no existía.
  *
- * El Servicio admite tres destinos y los tres hacen algo distinto:
- *   `brain_rag` / `both` ⇒ **ESCRIBE en el cerebro del cliente** (nodo
- *      `IF should_brain?` → `HTTP · /api/brain/ingest-source`).
- *   `callback_url`       ⇒ `guardado_en: 'sólo la respuesta'` · no escribe.
- * `planeación` LEE el cerebro, no lo escribe (canon 06-sep) ⇒ el único destino
- * admisible acá es `callback_url`.
+ * El Servicio sabía dos: `brain_rag`/`both` **ESCRIBE en el cerebro del cliente**
+ * (`IF should_brain?` → `/api/brain/ingest-source`), y `callback_url` llama de
+ * vuelta a una dirección. `planeación` no quiere ninguna de las dos: quiere lo
+ * que encontró, en la mano, ahora.
  *
- * ⚠️ Y el Servicio EXIGE la dirección de vuelta cuando el destino es ése
- * (nodo `Validate Body`: «callback_url required for destination=callback_url»).
- * La primera versión mandaba el destino sin la dirección ⇒ el Servicio
- * contestaba `rechazado` SIEMPRE. La puerta ahora lo corta antes de salir:
- * no se inventa una dirección de vuelta, se dice que falta.
+ * ⇒ `respuesta` · ADITIVO · no escribe y no llama a nadie. Todo el camino de
+ *   abajo ya lo soportaba (las dos banderas dan false y el flujo sale derecho a
+ *   contestar): lo único que faltaba era que la lista de destinos lo dejara pasar.
+ *
+ * 🔴 Y NO se hace un punto de recepción propio: obligaría a pausar y retomar la
+ * corrida, y esa maquinaria sirve verdes falsos.
+ *
+ * ⚠️ Si quien llama trae su propia dirección de vuelta, se respeta y se usa el
+ * destino viejo — eso funciona hoy, sin depender del cambio en el Servicio.
  */
-const DESTINO = 'callback_url' as const
+const DESTINO_SIN_VUELTA = 'respuesta' as const
+const DESTINO_CON_VUELTA = 'callback_url' as const
+
+/** los params que le tocan a esta función · `por_funcion` manda, si está */
+function paramsDe(p: PedidoPuerta, funcion: FuncionProveedor): Record<string, unknown> {
+  const base = p.params ?? {}
+  const porFuncion = base.por_funcion as Record<string, Record<string, unknown>> | undefined
+  if (porFuncion && porFuncion[funcion]) return porFuncion[funcion]
+  const { por_funcion: _fuera, ...resto } = base
+  return resto
+}
+
+/** una corrida · una función del proveedor · el sobre entero al brazo */
+async function correr(p: PedidoPuerta, funcion: FuncionProveedor, firma: { workflow_id: string; workflow_execution_id: string }, puerta: string): Promise<RespuestaBrazo> {
+  const fuente = FUENTE + ' · ' + funcion
+  return brazoApify({
+    objetivo: p.objetivo as string,
+    fuente,
+    ...extraDe(p),
+    consultar: () => conLimite(p.limite_ms, async () => {
+      const resp = await fetch(puerta, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          client_id: p.client_id,
+          apify_function: funcion,
+          ...(p.callback_url
+            ? { destination: DESTINO_CON_VUELTA, callback_url: p.callback_url }
+            : { destination: DESTINO_SIN_VUELTA }),
+          dry_run: p.dry_run,
+          params: paramsDe(p, funcion),
+          metadata: {
+            scope: 'planeacion',
+            // 🔴 la firma REAL de quien llama · lo único que hace cruzable el gasto
+            calling_workflow_id: firma.workflow_id,
+            calling_workflow_execution_id: firma.workflow_execution_id,
+          },
+        }),
+      })
+      const txt = await resp.text()
+      // 🔴 un HTTP feo NO es «no hay»: se deja que el brazo lo lea como hueco
+      if (!resp.ok) throw new Error('el Servicio contestó HTTP ' + resp.status + ' · ' + txt.slice(0, 200))
+      try {
+        return JSON.parse(txt)
+      } catch {
+        throw new Error('el Servicio no contestó JSON · ' + txt.slice(0, 200))
+      }
+    }),
+  })
+}
+
+/**
+ * 🔴 Canon canonical · UN objetivo del plan, VARIAS corridas ⇒ UNA respuesta.
+ *
+ * `redes_sociales` son cinco corridas. Aplastarlas en un estado suelto miente en
+ * las dos direcciones: si tres trajeron y dos no se pudieron ver, ni «trajo» a
+ * secas ni «no hay» describen eso.
+ *
+ * Las reglas, y el porqué de cada una:
+ *   · alguna trajo        ⇒ `trajo`, **y los huecos viajan adentro** · el plan
+ *                            nunca puede leer «tiene tres redes» sin ver que de
+ *                            las otras dos no se sabe.
+ *   · TODAS «miré y no hay» ⇒ `sin_dato` · recién ahí la ausencia es información.
+ *   · el resto            ⇒ `sin_respuesta` · alcanza UNA que nadie miró para que
+ *                            «no hay» sea una afirmación que no se puede hacer.
+ */
+function unir(p: PedidoPuerta, funciones: ReadonlyArray<FuncionProveedor>, partes: ReadonlyArray<RespuestaBrazo>): RespuestaBrazo {
+  const objetivo = p.objetivo as string
+  const extra = extraDe(p)
+  const fuente = FUENTE + ' · ' + funciones.join(' + ')
+  const por_funcion = Object.fromEntries(funciones.map((f, i) => [f, {
+    estado: partes[i].estado,
+    ...(partes[i].motivo ? { motivo: partes[i].motivo } : {}),
+    datos: partes[i].datos,
+    fuente: partes[i].fuente,
+  }]))
+  const de = (e: string) => funciones.filter((_, i) => partes[i].estado === e)
+  const trajeron = de('trajo')
+  const sinDatos = de('sin_dato')
+  const huecos = de('sin_respuesta')
+
+  if (trajeron.length) {
+    return trajo({
+      brazo: 'apify', objetivo, fuente, ...extra,
+      datos: {
+        por_funcion,
+        trajeron,
+        // 🔴 los huecos viajan PEGADOS al dato · no se pueden saltear
+        sin_dato: sinDatos,
+        huecos,
+        ...(huecos.length
+          ? { aviso: 'de ' + huecos.length + ' de ' + funciones.length + ' no se sabe: ' + huecos.join(', ') + ' · NO se puede leer esto como el total' }
+          : {}),
+      },
+    })
+  }
+  if (sinDatos.length === funciones.length) {
+    return sinDato({
+      brazo: 'apify', objetivo, fuente, ...extra,
+      datos: { por_funcion },
+      motivo: 'fui, miré y no hay en las ' + funciones.length + ': ' + funciones.join(', '),
+    })
+  }
+  return sinRespuesta({
+    brazo: 'apify', objetivo, fuente, ...extra,
+    motivo: 'no se pudo saber · ' + huecos.length + ' de ' + funciones.length + ' sin respuesta (' + huecos.join(', ') + ')' +
+      (sinDatos.length ? ' · y ' + sinDatos.length + ' miró y no había (' + sinDatos.join(', ') + ')' : '') +
+      ' · NO es que no haya dato',
+  })
+}
 
 async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   const objetivo = p.objetivo as string
   const extra = extraDe(p)
 
   if (!p.client_id) return pedidoInvalido('apify', FUENTE, p, 'falta client_id')
+
+  // 🔴 la palabra del plan se traduce ANTES de salir · una palabra sin traducir
+  // vuelve `rechazado` y se lee como un hueco de la fuente, que es mentira
+  const t = traducir(objetivo)
+  if (!t.ok) {
+    return sinRespuesta({
+      brazo: 'apify', objetivo, fuente: FUENTE, ...extra,
+      motivo: t.motivo + ' · NO se preguntó · no es que no haya dato',
+    })
+  }
 
   // 🔴 la firma de la corrida NO se inventa · sin ella no se gasta
   const firma = firmaDeLaCorrida(p)
@@ -80,13 +207,6 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
     })
   }
 
-  if (!p.callback_url) {
-    return sinRespuesta({
-      brazo: 'apify', objetivo, fuente: FUENTE, ...extra,
-      motivo: 'falta `callback_url` · el Servicio la exige para devolver sin escribir en el cerebro · NO se preguntó · no es que no haya dato',
-    })
-  }
-
   const puerta = process.env.APIFY_SERVICE_WEBHOOK_URL
   if (!puerta) {
     return sinRespuesta({
@@ -96,39 +216,9 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   }
 
   try {
-    return await brazoApify({
-      objetivo,
-      fuente: FUENTE,
-      ...extra,
-      consultar: () => conLimite(p.limite_ms, async () => {
-        const resp = await fetch(puerta, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            client_id: p.client_id,
-            apify_function: objetivo,
-            destination: DESTINO,
-            callback_url: p.callback_url,
-            dry_run: p.dry_run,
-            params: p.params ?? {},
-            metadata: {
-              scope: 'planeacion',
-              // 🔴 la firma REAL de quien llama · lo único que hace cruzable el gasto
-              calling_workflow_id: firma.workflow_id,
-              calling_workflow_execution_id: firma.workflow_execution_id,
-            },
-          }),
-        })
-        const txt = await resp.text()
-        // 🔴 un HTTP feo NO es «no hay»: se deja que el brazo lo lea como hueco
-        if (!resp.ok) throw new Error('el Servicio contestó HTTP ' + resp.status + ' · ' + txt.slice(0, 200))
-        try {
-          return JSON.parse(txt)
-        } catch {
-          throw new Error('el Servicio no contestó JSON · ' + txt.slice(0, 200))
-        }
-      }),
-    })
+    const partes = await enParalelo(t.funciones, CUPO_EN_VUELO, (f) => correr(p, f, firma, puerta))
+    // una sola función ⇒ su respuesta ES la respuesta · no hay nada que unir
+    return t.funciones.length === 1 ? partes[0] : unir(p, t.funciones, partes)
   } catch (e) {
     return seRompio('apify', FUENTE, p, e)
   }
