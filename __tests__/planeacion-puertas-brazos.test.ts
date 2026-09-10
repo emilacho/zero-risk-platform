@@ -413,6 +413,23 @@ describe('🔴 el vocabulario · el plan y el proveedor hablan distinto', () => 
     expect(json.motivo).toMatch(/NO es que no haya dato/)
   })
 
+  it('🔴 el hueco DICE POR QUÉ falló cada corrida · un hueco mudo no se puede leer', async () => {
+    let n = 0
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      n++
+      return new Response(JSON.stringify(n === 1
+        ? { ok: true, skipped: true, skip_reason: "function_null_per_tier" }
+        : { ok: true, sin_resultados: true, cero: { clase: "no_pude_ver", motivo: "el sitio no contestó" } }), { status: 200 })
+    }))
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: "competidores_precio", params: {
+      por_competidor: [{ url: "https://uno.test", competitor_id: "c-1" }, { url: "https://dos.test", competitor_id: "c-2" }],
+    } }))
+    expect(json.estado).toBe("sin_respuesta")
+    expect(json.motivo).toMatch(/POR QUÉ/)
+    expect(json.motivo).toMatch(/NADIE PREGUNTÓ/)
+    expect(json.motivo).toMatch(/el sitio no contestó/)
+  })
+
   it('las cinco miraron y ninguna tenía ⇒ sin_dato · recién ahí es información', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true, sin_resultados: true, cero: { clase: 'no_existe', motivo: 'no publica', se_miro_de_verdad: true } }), { status: 200 })))
     const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'redes_sociales' }))
