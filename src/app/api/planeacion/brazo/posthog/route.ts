@@ -29,10 +29,23 @@
  * Por qué es así y no es un descuido: **decidimos no tocarle el sitio al
  * cliente.** Sin medición puesta ahí, no hay forma de atribuir. Es una
  * consecuencia de una decisión, no una falla.
+ *
+ * 🔴 ENTRA UNA LISTA · SALE UNA RESPUESTA POR PEDIDO (Lenovo · 10-sep).
  */
 import { checkInternalKey } from '@/lib/internal-auth'
-import { conLimite, leerPedido, pedidoInvalido, responder, seRompio } from '@/lib/planeacion/puertas'
-import { envolverBrazo, sinRespuesta } from '@/lib/planeacion/contrato-brazos'
+import {
+  conLimite,
+  CUPO_EN_VUELO,
+  enParalelo,
+  extraDe,
+  leerSobre,
+  pedidoInvalido,
+  responderLista,
+  seRompio,
+  sobreInvalido,
+  type PedidoPuerta,
+} from '@/lib/planeacion/puertas'
+import { envolverBrazo, sinRespuesta, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -45,39 +58,29 @@ export const LIMITACION =
 
 interface Consulta { readonly results?: ReadonlyArray<ReadonlyArray<unknown>> }
 
-export async function POST(req: Request) {
-  const auth = checkInternalKey(req)
-  if (!auth.ok) {
-    return responder(sinRespuesta({
-      brazo: 'posthog', objetivo: '(sin objetivo)', fuente: FUENTE,
-      motivo: 'la puerta rechazó la llamada · ' + auth.reason + ' · NO se consultó a la fuente',
-    }))
-  }
-  const leido = await leerPedido(req)
-  if (!leido.ok) return pedidoInvalido('posthog', FUENTE, undefined, leido.motivo)
-  const { objetivo, proposito, limite_ms, params } = leido.pedido
-  const extra = { ...(limite_ms !== undefined ? { limite_ms } : {}), ...(proposito ? { proposito } : {}) }
-  const obj = objetivo || 'analitica_propia'
+async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
+  const obj = p.objetivo as string
+  const extra = extraDe(p)
 
-  const dominio = String((params?.dominio ?? params?.host ?? params?.website ?? '') || '')
+  const dominio = String((p.params?.dominio ?? p.params?.host ?? p.params?.website ?? '') || '')
     .replace(/^https?:\/\//i, '').replace(/\/.*$/, '').trim()
   if (!dominio) {
     // sin dominio no hay ni siquiera aproximación · es un hueco, no un «no hay»
-    return pedidoInvalido('posthog', FUENTE, obj,
-      'falta `params.dominio` · sin dominio no hay forma de acercarse: los eventos del sitio no llevan client_id', extra)
+    return pedidoInvalido('posthog', FUENTE, p,
+      'falta `params.dominio` · sin dominio no hay forma de acercarse: los eventos del sitio no llevan client_id')
   }
 
   const proyecto = process.env.POSTHOG_PROJECT_ID
   const llave = process.env.POSTHOG_PERSONAL_API_KEY
   const host = (process.env.POSTHOG_API_URL || 'https://us.posthog.com').replace(/\/+$/, '')
   if (!proyecto || !llave) {
-    return responder(sinRespuesta({
+    return sinRespuesta({
       brazo: 'posthog', objetivo: obj, fuente: FUENTE, ...extra,
       motivo: 'PostHog no está configurado para lectura (falta POSTHOG_PROJECT_ID o POSTHOG_PERSONAL_API_KEY) · NO se preguntó · no es que el cliente no tenga visitas',
-    }))
+    })
   }
 
-  const dias = Number(params?.dias ?? 90) || 90
+  const dias = Number(p.params?.dias ?? 90) || 90
   const consultar = async (sql: string) => {
     const r = await fetch(host + '/api/projects/' + proyecto + '/query/', {
       method: 'POST',
@@ -91,12 +94,12 @@ export async function POST(req: Request) {
   const escapado = dominio.replace(/'/g, "''")
 
   try {
-    const r = await envolverBrazo({
+    return await envolverBrazo({
       brazo: 'posthog',
       objetivo: obj,
       fuente: FUENTE + ' · dominio ' + dominio + ' · últimos ' + dias + ' días',
       ...extra,
-      ejecutar: () => conLimite(limite_ms, async () => {
+      ejecutar: () => conLimite(p.limite_ms, async () => {
         const q = await consultar(
           "select event, count() as n, count(distinct distinct_id) as personas from events " +
           "where timestamp > now() - interval " + dias + " day " +
@@ -127,8 +130,21 @@ export async function POST(req: Request) {
         }
       }),
     })
-    return responder(r)
   } catch (e) {
-    return seRompio('posthog', FUENTE, obj, e, extra)
+    return seRompio('posthog', FUENTE, p, e)
   }
+}
+
+export async function POST(req: Request) {
+  const auth = checkInternalKey(req)
+  if (!auth.ok) {
+    return sobreInvalido('posthog', FUENTE, 'la puerta rechazó la llamada · ' + auth.reason)
+  }
+  const leido = await leerSobre(req)
+  if (!leido.ok) return sobreInvalido('posthog', FUENTE, leido.motivo)
+
+  const rs = await enParalelo(leido.sobre.pedidos, CUPO_EN_VUELO, async (l) =>
+    l.ok ? atender(l.pedido) : pedidoInvalido('posthog', FUENTE, l.pedido, l.motivo),
+  )
+  return responderLista(rs)
 }

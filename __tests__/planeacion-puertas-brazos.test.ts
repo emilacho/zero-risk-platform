@@ -4,14 +4,22 @@
  * 🔴 El rojo: antes de esto los tres endpoints daban 404. Acá se prueba lo que
  * un 404 no puede dar: que contesten SIEMPRE el contrato, que un problema salga
  * como HUECO y no como «no hay», y que PostHog DIGA que no puede atribuir.
+ *
+ * 🔴 Lo que agregó la corrección del 10-sep (tres puntos de Lenovo):
+ *   ① la puerta recibe la LISTA y contesta UNA respuesta POR PEDIDO
+ *   ② el cerebro busca por PARECIDO de verdad · no entrega los más nuevos
+ *   ③ la corrida de raspado se firma con la firma REAL de quien llama, o no corre
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { validarRespuesta, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
+import { TOPE_PEDIDOS } from '@/lib/planeacion/puertas'
 
 const supabaseMock = {
   from: vi.fn(),
 }
+const brain = vi.hoisted(() => ({ queryClientBrain: vi.fn() }))
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => supabaseMock }))
+vi.mock('@/lib/client-brain', () => ({ queryClientBrain: brain.queryClientBrain }))
 vi.mock('@/lib/internal-auth', () => ({
   checkInternalKey: (r: Request) =>
     r.headers.get('x-api-key') === 'ok' ? { ok: true } : { ok: false, reason: 'Invalid x-api-key' },
@@ -27,19 +35,44 @@ const pedir = (fn: (r: Request) => Promise<Response>, cuerpo: unknown, llave = '
     body: typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo),
   }))
 type Leida = RespuestaBrazo & { datos: Record<string, any> }
-const leer = async (r: Response) => ({ status: r.status, json: (await r.json()) as Leida })
+type Sobre = { respuestas: Leida[]; resumen: Record<string, any> }
+/** el sobre entero · `respuestas[i]` es la respuesta de `pedidos[i]` */
+const leerSobre = async (r: Response) => ({ status: r.status, sobre: (await r.json()) as Sobre })
+/** atajo para los casos de un solo pedido */
+const leer = async (r: Response) => {
+  const { status, sobre } = await leerSobre(r)
+  return { status, json: sobre.respuestas[0], sobre }
+}
 
 const cadenaSupabase = (resultado: { data?: unknown[]; error?: { message: string } }) => {
-  const q: Record<string, unknown> = {}
+  const q: Record<string, any> = {}
   for (const m of ['select', 'eq', 'order', 'limit', 'in']) q[m] = vi.fn(() => q)
   q.then = (res: (v: unknown) => void) => res(resultado)
   supabaseMock.from.mockReturnValue(q)
+  return q
 }
+
+/** el pedido de raspado COMPLETO · con firma real, ensayo decidido y vuelta */
+const PEDIDO_APIFY = {
+  client_id: 'c',
+  objetivo: 'facebook_ads_library_scraper',
+  workflow_id: 'PLAN3ac10nWf',
+  workflow_execution_id: '127323',
+  dry_run: false,
+  callback_url: 'https://n8n.test/webhook-waiting/1',
+}
+
+const fragmento = (over: Record<string, unknown> = {}) => ({
+  chunk_id: 'ch1', source_table: 'brand_books', source_id: 's1',
+  label: 'voz', content_text: 'x'.repeat(10), similarity: 0.82, ...over,
+})
 
 beforeEach(() => {
   vi.restoreAllMocks()
   supabaseMock.from.mockReset()
-  process.env.APIFY_SERVICE_WEBHOOK_URL = 'https://n8n.test/webhook/apify'
+  brain.queryClientBrain.mockReset()
+  brain.queryClientBrain.mockResolvedValue([])
+  process.env.APIFY_SERVICE_WEBHOOK_URL = 'https://n8n.test/webhook/apify-service-workflow'
   process.env.POSTHOG_PROJECT_ID = '1'
   process.env.POSTHOG_PERSONAL_API_KEY = 'k'
   process.env.POSTHOG_API_URL = 'https://ph.test'
@@ -50,7 +83,9 @@ describe('🔴 EL ROJO · las tres puertas EXISTEN y contestan el contrato', () 
     it(nombre + ' · existe, es POST, y contesta 200 con las claves de §4.2', async () => {
       cadenaSupabase({ data: [] })
       vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ results: [] }), { status: 200 })))
-      const { status, json } = await leer(await pedir(fn, { client_id: 'c', objetivo: 'x', params: { dominio: 'a.test' } }))
+      const { status, json } = await leer(await pedir(fn, {
+        ...PEDIDO_APIFY, objetivo: 'x', params: { dominio: 'a.test', query: 'la voz de la marca' },
+      }))
       expect(status).toBe(200)
       for (const k of ['brazo', 'objetivo', 'estado', 'datos', 'fuente', 'medido_en']) expect(json).toHaveProperty(k)
       expect(json.brazo).toBe(nombre)
@@ -59,12 +94,93 @@ describe('🔴 EL ROJO · las tres puertas EXISTEN y contestan el contrato', () 
   }
 })
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ① LA LISTA · decisión de Lenovo 10-sep · el abanico lo decide `elegir brazos`
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🔴 ① la puerta recibe la LISTA y contesta UNA respuesta POR PEDIDO', () => {
+  it('tres pedidos ⇒ tres respuestas · en el MISMO orden', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ results: [] }), { status: 200 })))
+    const { sobre } = await leerSobre(await pedir(posthog, {
+      client_id: 'c',
+      pedidos: [
+        { objetivo: 'uno', orden: 1, params: { dominio: 'a.test' } },
+        { objetivo: 'dos', orden: 2, params: { dominio: 'b.test' } },
+        { objetivo: 'tres', orden: 3, params: { dominio: 'c.test' } },
+      ],
+    }))
+    expect(sobre.respuestas).toHaveLength(3)
+    expect(sobre.respuestas.map((r) => r.objetivo)).toEqual(['uno', 'dos', 'tres'])
+    expect(sobre.resumen.pedidos).toBe(3)
+  })
+
+  it('🔴 un pedido que no sirve NO tumba a los demás · ocupa SU lugar', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      results: [['$pageview', 3, 2]],
+    }), { status: 200 })))
+    const { sobre } = await leerSobre(await pedir(posthog, {
+      client_id: 'c',
+      pedidos: [
+        { objetivo: 'bueno', params: { dominio: 'a.test' } },
+        { orden: 2 },                       // sin objetivo
+        { objetivo: 'sin_dominio', params: {} },
+      ],
+    }))
+    expect(sobre.respuestas).toHaveLength(3)
+    expect(sobre.respuestas[0].estado).toBe('trajo')
+    expect(sobre.respuestas[1].estado).toBe('sin_respuesta')
+    expect(sobre.respuestas[1].motivo).toMatch(/falta objetivo/)
+    expect(sobre.respuestas[2].estado).toBe('sin_respuesta')
+    expect(sobre.respuestas[2].motivo).toMatch(/dominio/)
+    // y ninguna de las tres rompe el contrato
+    for (const r of sobre.respuestas) expect(validarRespuesta(r)).toEqual([])
+  })
+
+  it('lo del sobre se HEREDA a cada pedido que no lo trae', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify({ ok: true, sin_resultados: false, chunks_count: 1, datos: '#' }), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    const { sobre } = await leerSobre(await pedir(apify, {
+      ...PEDIDO_APIFY,
+      objetivo: undefined,
+      proposito: 'para el plan',
+      pedidos: [{ objetivo: 'a' }, { objetivo: 'b' }],
+    }))
+    expect(sobre.respuestas).toHaveLength(2)
+    expect(sobre.respuestas.every((r) => r.estado === 'trajo')).toBe(true)
+    expect(sobre.respuestas[0].proposito).toBe('para el plan')
+    // el cliente y la firma se pusieron UNA vez y valieron para los dos
+    const cuerpos = espia.mock.calls.map((c: any) => JSON.parse(c[1].body))
+    expect(cuerpos.map((b) => b.apify_function)).toEqual(['a', 'b'])
+    expect(cuerpos.every((b) => b.client_id === 'c')).toBe(true)
+  })
+
+  it('`pedidos: []` ⇒ hueco · no hay nada que preguntar', async () => {
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', pedidos: [] }))
+    expect(json.estado).toBe('sin_respuesta')
+    expect(json.motivo).toMatch(/vacío/)
+  })
+
+  it('pasarse del tope ⇒ hueco · una factura no se decide por accidente', async () => {
+    const muchos = Array.from({ length: TOPE_PEDIDOS + 1 }, (_, i) => ({ objetivo: 'o' + i }))
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, pedidos: muchos }))
+    expect(json.estado).toBe('sin_respuesta')
+    expect(json.motivo).toMatch(new RegExp(String(TOPE_PEDIDOS)))
+  })
+
+  it('un pedido suelto (sin `pedidos`) sigue valiendo · y vuelve en la lista', async () => {
+    cadenaSupabase({ data: [] })
+    brain.queryClientBrain.mockResolvedValue([fragmento()])
+    const { sobre } = await leerSobre(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
+    expect(sobre.respuestas).toHaveLength(1)
+    expect(sobre.respuestas[0].estado).toBe('trajo')
+  })
+})
+
 describe('🔴 una puerta NUNCA se cae · y un problema es HUECO, no «no hay»', () => {
   const casos: ReadonlyArray<[string, (r: Request) => Promise<Response>, unknown, string]> = [
-    ['sin llave', apify, { client_id: 'c', objetivo: 'x' }, 'x-api-key'],
+    ['sin llave', apify, PEDIDO_APIFY, 'x-api-key'],
     ['cuerpo que no es JSON', apify, '{roto', 'no es JSON'],
     ['cuerpo vacío', posthog, '', 'vacío'],
-    ['sin client_id', cerebro, { objetivo: 'x' }, 'client_id'],
+    ['sin client_id', cerebro, { objetivo: 'x', params: { query: 'q' } }, 'client_id'],
   ]
   for (const [etq, fn, cuerpo, esperado] of casos) {
     it(etq + ' ⇒ sin_respuesta · 200 · y dice que NO se consultó', async () => {
@@ -80,7 +196,7 @@ describe('🔴 una puerta NUNCA se cae · y un problema es HUECO, no «no hay»'
 
   it('la fuente caída ⇒ sin_respuesta · nunca 500', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED') }))
-    const { status, json } = await leer(await pedir(apify, { client_id: 'c', objetivo: 'x' }))
+    const { status, json } = await leer(await pedir(apify, PEDIDO_APIFY))
     expect(status).toBe(200)
     expect(json.estado).toBe('sin_respuesta')
     expect(json.motivo).toMatch(/ECONNREFUSED/)
@@ -88,7 +204,7 @@ describe('🔴 una puerta NUNCA se cae · y un problema es HUECO, no «no hay»'
 
   it('sin credencial ⇒ sin_respuesta · «no se preguntó», NO «no hay»', async () => {
     delete process.env.APIFY_SERVICE_WEBHOOK_URL
-    const { json } = await leer(await pedir(apify, { client_id: 'c', objetivo: 'x' }))
+    const { json } = await leer(await pedir(apify, PEDIDO_APIFY))
     expect(json.estado).toBe('sin_respuesta')
     expect(json.motivo).toMatch(/no está configurado/)
     expect(json.motivo).toMatch(/no es que no haya dato|NO se preguntó/)
@@ -96,7 +212,7 @@ describe('🔴 una puerta NUNCA se cae · y un problema es HUECO, no «no hay»'
 
   it('el techo de tiempo se CUMPLE, no sólo se declara', async () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => { /* nunca contesta */ })))
-    const { json } = await leer(await pedir(apify, { client_id: 'c', objetivo: 'x', limite_ms: 60 }))
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, limite_ms: 60 }))
     expect(json.estado).toBe('sin_respuesta')
     expect(json.motivo).toMatch(/se agotó el tiempo dado · 60 ms/)
     expect(json.limite_ms).toBe(60)
@@ -106,7 +222,7 @@ describe('🔴 una puerta NUNCA se cae · y un problema es HUECO, no «no hay»'
 describe('apify · los cuatro casos del Servicio llegan enteros', () => {
   const conSobre = async (sobre: unknown) => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(sobre), { status: 200 })))
-    return (await leer(await pedir(apify, { client_id: 'c', objetivo: 'biblioteca_anuncios' }))).json
+    return (await leer(await pedir(apify, PEDIDO_APIFY))).json
   }
   it('salteado ⇒ sin_respuesta', async () => {
     expect((await conSobre({ ok: true, skipped: true, skip_reason: 'function_null_per_tier' })).estado).toBe('sin_respuesta')
@@ -124,6 +240,62 @@ describe('apify · los cuatro casos del Servicio llegan enteros', () => {
   it('con datos ⇒ trajo', async () => {
     const r = await conSobre({ ok: true, skipped: false, sin_resultados: false, chunks_count: 2, datos: '## Record 1' })
     expect(r.estado).toBe('trajo')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ③ LA FIRMA DE LA CORRIDA · no se inventa, o no se gasta
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🔴 ③ la corrida de raspado se firma de VERDAD · o no corre', () => {
+  const faltantes: ReadonlyArray<[string, Record<string, unknown>, RegExp]> = [
+    ['sin workflow_id', { workflow_id: undefined }, /firma de la corrida[\s\S]*workflow_id/],
+    ['sin workflow_execution_id', { workflow_execution_id: undefined }, /firma de la corrida[\s\S]*workflow_execution_id/],
+    ['sin dry_run explícito', { dry_run: undefined }, /el ensayo se decide, no se asume/],
+    ['sin callback_url', { callback_url: undefined }, /callback_url/],
+  ]
+  for (const [etq, quitar, esperado] of faltantes) {
+    it(etq + ' ⇒ sin_respuesta · y NO se llama al Servicio (no se gasta)', async () => {
+      const espia = vi.fn(async () => new Response('{}', { status: 200 }))
+      vi.stubGlobal('fetch', espia)
+      const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, ...quitar }))
+      expect(json.estado).toBe('sin_respuesta')
+      expect(json.motivo).toMatch(esperado)
+      expect(json.motivo).not.toMatch(/fui, mir/i)
+      expect(espia).not.toHaveBeenCalled()
+    })
+  }
+
+  it('🔴 con firma ⇒ el Servicio la recibe REAL · y NO un identificador inventado', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify({ ok: true, sin_resultados: false, chunks_count: 1, datos: '#' }), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    await pedir(apify, PEDIDO_APIFY)
+    const cuerpo = JSON.parse((espia.mock.calls[0] as any)[1].body)
+    expect(cuerpo.metadata.calling_workflow_id).toBe('PLAN3ac10nWf')
+    expect(cuerpo.metadata.calling_workflow_execution_id).toBe('127323')
+    // el defecto viejo, clavado como prueba: la puerta NO fabrica la firma
+    expect(cuerpo.metadata.calling_workflow_id).not.toBe('planeacion')
+    expect(String(cuerpo.metadata.calling_workflow_execution_id)).not.toMatch(/^puerta-/)
+  })
+
+  it('🔴 el destino NO escribe en el cerebro · y va con su dirección de vuelta', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify({ ok: true, sin_resultados: false, chunks_count: 1, datos: '#' }), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    await pedir(apify, PEDIDO_APIFY)
+    const cuerpo = JSON.parse((espia.mock.calls[0] as any)[1].body)
+    // `brain_rag`/`both` haría que el Servicio ESCRIBA en el cerebro del cliente
+    expect(cuerpo.destination).toBe('callback_url')
+    expect(cuerpo.callback_url).toBe(PEDIDO_APIFY.callback_url)
+    expect(typeof cuerpo.dry_run).toBe('boolean')
+  })
+
+  it('el ensayo se pasa tal cual se decidió · true viaja true', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify({ ok: true, sin_resultados: true, cero: { clase: 'ensayo', se_miro_de_verdad: false } }), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, dry_run: true }))
+    expect(JSON.parse((espia.mock.calls[0] as any)[1].body).dry_run).toBe(true)
+    // y un ensayo NO se rotula «fui, miré y no hay»
+    expect(json.estado).toBe('sin_respuesta')
+    expect(json.motivo).toMatch(/NO SE MIRÓ DE VERDAD/)
   })
 })
 
@@ -147,7 +319,7 @@ describe('🔴 posthog · DECLARA que no puede atribuir · en TODOS los caminos'
 
   it('sin eventos ⇒ sin_dato · y el motivo TAMBIÉN dice la limitación', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ results: [] }), { status: 200 })))
-    const { json } = await leer(await pedir(posthog, { params: { dominio: 'vacio.test' } }))
+    const { json } = await leer(await pedir(posthog, { objetivo: 'analitica_propia', params: { dominio: 'vacio.test' } }))
     expect(json.estado).toBe('sin_dato')
     expect(json.motivo).toMatch(/fui, miré y no hay/)
     expect(String(json.motivo)).toMatch(LIM)
@@ -162,39 +334,86 @@ describe('🔴 posthog · DECLARA que no puede atribuir · en TODOS los caminos'
 
   it('sin credencial de lectura ⇒ sin_respuesta · NO «el cliente no tiene visitas»', async () => {
     delete process.env.POSTHOG_PERSONAL_API_KEY
-    const { json } = await leer(await pedir(posthog, { params: { dominio: 'a.test' } }))
+    const { json } = await leer(await pedir(posthog, { objetivo: 'analitica_propia', params: { dominio: 'a.test' } }))
     expect(json.estado).toBe('sin_respuesta')
     expect(json.motivo).toMatch(/no es que el cliente no tenga visitas/)
   })
 })
 
-describe('cerebro · se LEE, y el vacío es información', () => {
-  it('con fragmentos ⇒ trajo · con su procedencia', async () => {
-    cadenaSupabase({ data: [{ section_label: 's', source_table: 't', chunk_text: 'x'.repeat(10), provenance_tag: { trust: 'evidencia' }, created_at: 'ayer' }] })
-    const { json } = await leer(await pedir(cerebro, { client_id: 'c' }))
-    expect(json.estado).toBe('trajo')
-    expect(json.datos.cantidad).toBe(1)
-    expect(json.datos.fragmentos[0].procedencia).toEqual({ trust: 'evidencia' })
+// ═══════════════════════════════════════════════════════════════════════════
+// ② EL CEREBRO · por PARECIDO, no por fecha
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🔴 ② el cerebro busca por PARECIDO · no entrega «los más nuevos»', () => {
+  it('usa la búsqueda semántica que YA existe · con el texto de la pregunta', async () => {
+    const q = cadenaSupabase({ data: [] })
+    brain.queryClientBrain.mockResolvedValue([fragmento()])
+    await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: '¿qué tono usamos?', k: 5, secciones: ['brand_books'] } })
+    expect(brain.queryClientBrain).toHaveBeenCalledWith(expect.objectContaining({
+      client_id: 'c', query: '¿qué tono usamos?', match_count: 5, sections: ['brand_books'],
+    }))
+    // 🔴 el defecto viejo, clavado: ya NO se ordena por fecha de carga
+    expect(q.order).not.toHaveBeenCalled()
   })
 
-  it('sin fragmentos ⇒ sin_dato · «todavía no tiene conocimiento cargado»', async () => {
+  it('cada fragmento vuelve con su PARECIDO medido · y con su procedencia', async () => {
+    cadenaSupabase({ data: [{ id: 'ch1', provenance_tag: { trust: 'evidencia' }, created_at: 'ayer' }] })
+    brain.queryClientBrain.mockResolvedValue([fragmento({ similarity: 0.91 })])
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
+    expect(json.estado).toBe('trajo')
+    expect(json.datos.cantidad).toBe(1)
+    expect(json.datos.fragmentos[0].similitud).toBe(0.91)
+    expect(json.datos.fragmentos[0].procedencia).toEqual({ trust: 'evidencia' })
+    // y la fuente DICE con qué texto se buscó · un número sin de dónde es un supuesto
+    expect(json.fuente).toMatch(/texto buscado/)
+    expect(json.fuente).toMatch(/tono/)
+  })
+
+  it('sin pregunta propia, busca por el OBJETIVO · y lo declara', async () => {
     cadenaSupabase({ data: [] })
-    const { json } = await leer(await pedir(cerebro, { client_id: 'c' }))
+    brain.queryClientBrain.mockResolvedValue([fragmento()])
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'competidores_precio' }))
+    expect(brain.queryClientBrain).toHaveBeenCalledWith(expect.objectContaining({ query: 'competidores_precio' }))
+    expect(json.fuente).toMatch(/texto buscado: «competidores_precio»/)
+  })
+
+  it('un objetivo de puros espacios NO es un objetivo ⇒ hueco', async () => {
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: '   ', params: { query: '  ' } }))
+    expect(json.estado).toBe('sin_respuesta')
+    expect(json.motivo).toMatch(/falta objetivo/)
+    expect(json.objetivo).toBe('(sin objetivo)')
+    expect(brain.queryClientBrain).not.toHaveBeenCalled()
+  })
+
+  it('si la procedencia no se puede leer, el fragmento igual vuelve · y se DECLARA', async () => {
+    cadenaSupabase({ error: { message: 'permission denied' } })
+    brain.queryClientBrain.mockResolvedValue([fragmento()])
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
+    expect(json.estado).toBe('trajo')
+    expect(json.datos.fragmentos[0].procedencia_leida).toBe(false)
+    expect(json.datos.fragmentos[0].procedencia).toBeNull()
+  })
+})
+
+describe('cerebro · se LEE, y el vacío es información', () => {
+  it('sin fragmentos ⇒ sin_dato · «todavía no tiene conocimiento cargado»', async () => {
+    brain.queryClientBrain.mockResolvedValue([])
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
     expect(json.estado).toBe('sin_dato')
     expect(json.motivo).toMatch(/fui, miré y no hay/)
   })
 
-  it('🔴 un error de la base NO es «el cliente no tiene conocimiento»', async () => {
-    cadenaSupabase({ error: { message: 'connection reset' } })
-    const { json } = await leer(await pedir(cerebro, { client_id: 'c' }))
+  it('🔴 un error de la búsqueda NO es «el cliente no tiene conocimiento»', async () => {
+    brain.queryClientBrain.mockRejectedValue(new Error('connection reset'))
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
     expect(json.estado).toBe('sin_respuesta')
     expect(json.motivo).toMatch(/connection reset/)
     expect(json.motivo).not.toMatch(/fui, mir/i)
   })
 
   it('el texto largo se recorta Y SE DECLARA', async () => {
-    cadenaSupabase({ data: [{ section_label: 's', source_table: 't', chunk_text: 'y'.repeat(5000), created_at: 'hoy' }] })
-    const { json } = await leer(await pedir(cerebro, { client_id: 'c' }))
+    cadenaSupabase({ data: [] })
+    brain.queryClientBrain.mockResolvedValue([fragmento({ content_text: 'y'.repeat(5000) })])
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
     expect(json.datos.fragmentos[0].texto).toHaveLength(2000)
     expect(json.datos.fragmentos[0].recortado).toBe(true)
   })
@@ -202,8 +421,8 @@ describe('cerebro · se LEE, y el vacío es información', () => {
 
 describe('los dos campos opcionales viajan por las tres puertas', () => {
   it('limite_ms y proposito vuelven en la respuesta', async () => {
-    cadenaSupabase({ data: [] })
-    const { json } = await leer(await pedir(cerebro, { client_id: 'c', limite_ms: 5000, proposito: 'no repetir trabajo' }))
+    brain.queryClientBrain.mockResolvedValue([])
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', limite_ms: 5000, proposito: 'no repetir trabajo' }))
     expect(json.limite_ms).toBe(5000)
     expect(json.proposito).toBe('no repetir trabajo')
   })
