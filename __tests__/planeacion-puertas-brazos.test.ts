@@ -288,6 +288,20 @@ describe('🔴 ③ la corrida de raspado se firma de VERDAD · o no corre', () =
     expect(typeof cuerpo.dry_run).toBe('boolean')
   })
 
+  it('🔴 un ENSAYO que vuelve con datos NO es `trajo` · el Servicio los inventa', async () => {
+    // el Servicio en ensayo contesta con moldes sintéticos («Synthetic Competitor»)
+    // y sin `cero` ⇒ el brazo lo leería como `trajo`. Medido en producción 10-sep.
+    const espia = vi.fn(async () => new Response(JSON.stringify({ ok: true, sin_resultados: false, chunks_count: 1, datos: 'Synthetic Competitor · 12345 seguidores' }), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    const real = await leer(await pedir(apify, { ...PEDIDO_APIFY, dry_run: false }))
+    expect(real.json.estado).toBe('trajo')
+    const ensayo = await leer(await pedir(apify, { ...PEDIDO_APIFY, dry_run: true }))
+    expect(ensayo.json.estado).toBe('sin_respuesta')
+    expect(ensayo.json.motivo).toMatch(/FUE UN ENSAYO/)
+    expect(ensayo.json.motivo).toMatch(/SINTÉTICOS/)
+    expect(ensayo.json.datos).toEqual({})
+  })
+
   it('el ensayo se pasa tal cual se decidió · true viaja true', async () => {
     const espia = vi.fn(async () => new Response(JSON.stringify({ ok: true, sin_resultados: true, cero: { clase: 'ensayo', se_miro_de_verdad: false } }), { status: 200 }))
     vi.stubGlobal('fetch', espia)
