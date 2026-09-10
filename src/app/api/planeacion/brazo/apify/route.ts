@@ -113,6 +113,27 @@ async function correr(p: PedidoPuerta, funcion: FuncionProveedor, firma: { workf
 }
 
 /**
+ * 🔴 Canon canonical · UN ENSAYO NUNCA ES `trajo` · medido en producción 10-sep.
+ *
+ * El Servicio, en ensayo, contesta con datos SINTÉTICOS (nodo `dry-run-synthetic`:
+ * «Synthetic Competitor» · «12345 seguidores») para las funciones que tienen molde.
+ * Esa respuesta llega con datos y sin `cero`, así que el brazo —que sólo mira el
+ * sobre— la rotula `trajo`. Medido en la verificación del tercer destino: un ensayo
+ * de `redes_sociales` volvió con Instagram en `trajo` y seguidores inventados.
+ *
+ * ⇒ Es un VERDE FALSO, y del peor tipo: el plan recibiría un número que nadie midió.
+ *   La puerta SÍ sabe que fue un ensayo —lo exigió ella misma— así que lo corrige
+ *   donde se puede corregir. **Un ensayo es un hueco, siempre.**
+ */
+function ensayoNoEsTrajo(p: PedidoPuerta, r: RespuestaBrazo): RespuestaBrazo {
+  if (p.dry_run !== true || r.estado !== 'trajo') return r
+  return sinRespuesta({
+    brazo: 'apify', objetivo: r.objetivo, fuente: r.fuente, ...extraDe(p),
+    motivo: 'FUE UN ENSAYO · el Servicio devolvió datos SINTÉTICOS, no medidos · no se miró de verdad · no es que no haya dato',
+  })
+}
+
+/**
  * 🔴 Canon canonical · UN objetivo del plan, VARIAS corridas ⇒ UNA respuesta.
  *
  * `redes_sociales` son cinco corridas. Aplastarlas en un estado suelto miente en
@@ -216,7 +237,9 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   }
 
   try {
-    const partes = await enParalelo(t.funciones, CUPO_EN_VUELO, (f) => correr(p, f, firma, puerta))
+    const crudas = await enParalelo(t.funciones, CUPO_EN_VUELO, (f) => correr(p, f, firma, puerta))
+    // 🔴 un ensayo nunca sale como «trajo» · ver arriba
+    const partes = crudas.map((r) => ensayoNoEsTrajo(p, r))
     // una sola función ⇒ su respuesta ES la respuesta · no hay nada que unir
     return t.funciones.length === 1 ? partes[0] : unir(p, t.funciones, partes)
   } catch (e) {
