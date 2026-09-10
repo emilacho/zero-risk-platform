@@ -73,6 +73,29 @@ function paramsDe(p: PedidoPuerta, funcion: FuncionProveedor): Record<string, un
   return resto
 }
 
+/**
+ * 🔴 Canon canonical · NO SE PREGUNTA LO QUE NO SE PUEDE APUNTAR (10-sep · Lenovo).
+ *
+ * Cuando quien pide declara sus parámetros POR FUNCIÓN (`params.por_funcion`),
+ * está diciendo a qué puede apuntar y a qué no. Una función que no figura ahí no
+ * tiene con qué salir: el proveedor la rechazaría por falta de parámetros y
+ * volvería como «la llamada estaba mal armada» — un motivo que culpa a la llamada
+ * cuando lo que falta es un dato en la ficha del cliente.
+ *
+ * ⇒ no se llama, y se dice qué pasó de verdad. La puerta no inventa parámetros
+ *   (interpretar es mentir) ni inventa el motivo: sólo declara la ausencia.
+ * ⚠️ Si el pedido NO trae `por_funcion`, no hay nada declarado y todo sigue igual.
+ */
+function sinConQueApuntar(p: PedidoPuerta, funcion: FuncionProveedor): RespuestaBrazo | null {
+  const porFuncion = p.params?.por_funcion as Record<string, unknown> | undefined
+  if (!porFuncion || typeof porFuncion !== 'object') return null
+  if (porFuncion[funcion]) return null
+  return sinRespuesta({
+    brazo: 'apify', objetivo: p.objetivo as string, fuente: FUENTE + ' · ' + funcion, ...extraDe(p),
+    motivo: 'el pedido no trae parámetros para `' + funcion + '` · quien pide declaró a qué podía apuntar y ésta no estaba · NO se preguntó · no es que no haya dato',
+  })
+}
+
 /** una corrida · una función del proveedor · el sobre entero al brazo */
 async function correr(p: PedidoPuerta, funcion: FuncionProveedor, firma: { workflow_id: string; workflow_execution_id: string }, puerta: string): Promise<RespuestaBrazo> {
   const fuente = FUENTE + ' · ' + funcion
@@ -237,7 +260,10 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   }
 
   try {
-    const crudas = await enParalelo(t.funciones, CUPO_EN_VUELO, (f) => correr(p, f, firma, puerta))
+    const crudas = await enParalelo(t.funciones, CUPO_EN_VUELO, async (f) =>
+      // 🔴 lo que no se puede apuntar no se pregunta · ver arriba
+      sinConQueApuntar(p, f) ?? correr(p, f, firma, puerta),
+    )
     // 🔴 un ensayo nunca sale como «trajo» · ver arriba
     const partes = crudas.map((r) => ensayoNoEsTrajo(p, r))
     // una sola función ⇒ su respuesta ES la respuesta · no hay nada que unir

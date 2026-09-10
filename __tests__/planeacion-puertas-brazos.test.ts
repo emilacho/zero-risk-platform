@@ -444,6 +444,35 @@ describe('🔴 el vocabulario · el plan y el proveedor hablan distinto', () => 
     expect(json.motivo).toMatch(/NO es que no haya dato/)
   })
 
+  it('🔴 la red sin cuenta NO se pregunta · y el motivo dice la verdad', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    // así lo manda `elegir brazos`: sólo las redes que la ficha puede apuntar
+    const { json } = await leer(await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'redes_sociales', params: {
+      por_funcion: { instagram_scraper: { directUrls: ['https://instagram.com/x'] } },
+      redes_con_cuenta: ['instagram'],
+      redes_sin_cuenta: ['facebook', 'tiktok', 'linkedin', 'youtube'],
+    } }))
+    // una sola llamada, no cinco
+    expect(funcionesPedidas(espia)).toEqual(['instagram_scraper'])
+    // y las otras cuatro vuelven declaradas, no como «la llamada estaba mal armada»
+    const pf = json.datos.por_funcion
+    expect(pf.instagram_scraper.estado).toBe('trajo')
+    for (const f of ['facebook_page_scraper', 'tiktok_profile_scraper', 'linkedin_company_scraper', 'youtube_channel_scraper']) {
+      expect(pf[f].estado).toBe('sin_respuesta')
+      expect(String(pf[f].motivo)).toMatch(/no trae parámetros/)
+      expect(String(pf[f].motivo)).not.toMatch(/mal armada/)
+    }
+    expect(String(json.datos.aviso)).toMatch(/de 4 de 5 no se sabe/)
+  })
+
+  it('sin `por_funcion` declarado, no cambia nada · se pregunta todo', async () => {
+    const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
+    vi.stubGlobal('fetch', espia)
+    await pedir(apify, { ...PEDIDO_APIFY, objetivo: 'redes_sociales', params: { usernames: ['x'] } })
+    expect(funcionesPedidas(espia)).toHaveLength(5)
+  })
+
   it('cada red puede llevar sus propios parámetros', async () => {
     const espia = vi.fn(async () => new Response(JSON.stringify(sobreOk), { status: 200 }))
     vi.stubGlobal('fetch', espia)
