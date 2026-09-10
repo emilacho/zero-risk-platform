@@ -243,11 +243,18 @@ function unir(p: PedidoPuerta, corridas: ReadonlyArray<Corrida>, partes: Readonl
       motivo: 'fui, miré y no hay en las ' + funciones.length + ': ' + funciones.join(', '),
     })
   }
+  // 🔴 un hueco que no dice POR QUÉ no se puede leer · y acá se pierde el detalle
+  // de cada corrida, porque un `sin_respuesta` no lleva datos. Va en el motivo:
+  // no es lo mismo «fue un ensayo» que «el sitio no contestó», y quien lea el plan
+  // tiene que poder distinguirlos sin abrir el registro.
+  const detalle = funciones
+    .map((f, i) => (partes[i].estado !== 'trajo' && partes[i].motivo ? f + ' → ' + partes[i].motivo : ''))
+    .filter(Boolean).join(' · ').slice(0, 700)
   return sinRespuesta({
     brazo: 'apify', objetivo, fuente, ...extra,
     motivo: 'no se pudo saber · ' + huecos.length + ' de ' + funciones.length + ' sin respuesta (' + huecos.join(', ') + ')' +
       (sinDatos.length ? ' · y ' + sinDatos.length + ' miró y no había (' + sinDatos.join(', ') + ')' : '') +
-      ' · NO es que no haya dato',
+      ' · NO es que no haya dato' + (detalle ? ' · POR QUÉ: ' + detalle : ''),
   })
 }
 
