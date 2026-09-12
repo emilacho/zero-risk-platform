@@ -237,20 +237,42 @@ const RAILWAY_FETCH_TIMEOUT_MS = 790_000
 // exponential backoff. Timeouts (abort→504) and graceful agent failures are
 // NEVER retried (see isRetriableRailwayProxyFailure).
 /**
- * Tope de caracteres de `task` en este endpoint · 8.000 → **16.000** (CC#1 2026-08-11).
+ * Tope de caracteres de `task` en este endpoint · 8.000 → 16.000 (CC#1 2026-08-11)
+ * → **120.000** (CC#2 · E8 · 2026-09-12 · firma de Emilio: «no se recorta, se recibe
+ * más material»).
  *
- * ⚠️ CONTRATO REAL · `sanitizeString` **RECORTA EN SILENCIO** (`trimmed.slice(0, max)`).
- * **NO rechaza, no devuelve 400, no avisa.** El postmortem del 01-jul lo documentó al revés
- * —*"Task >8000 chars — rechazado en route antes de llegar al agente"*— y esa creencia
- * sobrevivió: una tarea más larga **no falla**, llega **cortada a mitad de frase** y el
- * agente trabaja con menos contexto del que le mandaron, sin que nadie se entere.
+ * ⚠️ QUÉ PASA DE VERDAD CUANDO LA TAREA SE PASA · corregido 2026-09-12.
+ * Hay DOS topes en este camino y **decide el primero**:
+ *   1. el contrato JSON Schema `agents-run-sdk.json` → **RECHAZA con 400
+ *      `E-INPUT-INVALID`**, en ~400 ms, antes de tocar el modelo. Es gratis.
+ *   2. `sanitizeString(body.task, TASK_MAX_CHARS)` acá abajo → recorta en silencio.
+ * El comentario anterior decía que el endpoint «NO rechaza, no devuelve 400»: era
+ * cierto de `sanitizeString` aislado y **falso del endpoint**, porque el contrato
+ * corta antes. Medido: 16.000 → 200 · 16.001 → 400. Los dos números se mueven
+ * juntos y hay un test que los ata.
  *
- * El tope es COMPARTIDO por todos los llamadores del endpoint (las 3 lentes, los 3
- * revisores y la re-síntesis). Subirlo **no alarga nada por sí solo**: hoy los nodos del
- * grafo ya recortan su propio prompt en 7.900, muy por debajo. Este cambio sólo levanta
- * el techo del endpoint para que el paso 2 (los topes del grafo) tenga lugar donde crecer.
+ * ── DE DÓNDE SALE 120.000 · techos MEDIDOS el 12-sep, no elegidos ────────────
+ *   corredor (Express `json({limit:'1mb'})`)  977 KB → 200 · 1,17 MB → **413**
+ *                                             ⇒ techo duro ≈ 1.000.000 caracteres
+ *   plataforma (Vercel)                       4,88 MB → **413 FUNCTION_PAYLOAD_TOO_LARGE**
+ *   reloj de este salto                       790 s (`RAILWAY_FETCH_TIMEOUT_MS`)
+ *   modelo                                    ventana de 200k fichas ≈ 600-800k caracteres
+ *
+ * 🔴 **El 502 no es de tamaño.** Barrido en ensayo de 15.900 → 1.000.000 caracteres:
+ * **ni un 502**, todo 200 entre 0,3 y 1,5 s. Y una tarea REAL de 58.599 caracteres
+ * cruzó y la contestó el modelo en **5,9 s**. Los 502 del 28-jun son el corredor
+ * reiniciándose (deploy swap · crash), como dice el bloque de reintento de arriba.
+ *
+ * ⇒ 120.000 queda **8× por debajo del techo duro más bajo** (el 1 MB del corredor),
+ * es **6,8× el pedido real de hoy** (17.744 · corrida 132800) y deja lugar para el
+ * documento de referencia del redactor, que hoy viaja vacío. Por encima de este
+ * número el rechazo sigue siendo el 400 gratis del contrato — nunca un 502 a mitad
+ * de corrida paga.
+ *
+ * El tope es COMPARTIDO por todos los llamadores (44 nodos en el motor · los nodos
+ * del grafo ya recortan su propio prompt en 7.900 y no cambian con esto).
  */
-export const TASK_MAX_CHARS = 16_000
+export const TASK_MAX_CHARS = 120_000
 
 const RAILWAY_PROXY_MAX_ATTEMPTS = 3
 const RAILWAY_PROXY_BACKOFF_MS: readonly number[] = [2_000, 4_000]

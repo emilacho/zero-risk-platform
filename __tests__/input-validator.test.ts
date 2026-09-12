@@ -19,6 +19,7 @@ import {
   validateObject,
   _resetValidatorCache,
 } from '../src/lib/input-validator'
+import contrato from '@/lib/contracts/inputs/agents-run-sdk.json'
 
 function makeRequest(body: unknown): Request {
   return new Request('http://localhost/test', {
@@ -78,8 +79,13 @@ describe('input-validator', () => {
     })
 
     it('rejects task exceeding maxLength', async () => {
-      // El tope subió a 16.000 (2026-08-12) · antes eran 8.000.
-      const longTask = 'a'.repeat(16_001)
+      // 8.000 → 16.000 (2026-08-12) → 120.000 (E8 · 2026-09-12). El número sale
+      // DEL CONTRATO, no de una copia acá: si alguien lo mueve, esta prueba lo sigue
+      // y se mantiene probando lo que importa — que por encima del tope el rechazo
+      // es un 400 gratis, nunca un 502 a mitad de corrida.
+      const tope = (contrato as { properties: { task: { maxLength: number } } }).properties.task
+        .maxLength
+      const longTask = 'a'.repeat(tope + 1)
       const req = makeRequest({ agent: 'x', task: longTask })
       const v = await validateInput(req, 'agents-run-sdk')
       expect(v.ok).toBe(false)
