@@ -1,11 +1,12 @@
 /**
- * Tests · tope de `task` en /api/agents/run-sdk (CC#1 2026-08-11).
+ * Tests · tope de `task` en /api/agents/run-sdk.
+ *  8.000 → 16.000 (CC#1 2026-08-11) → **120.000** (CC#2 · E8 · 2026-09-12).
  *
- * Dos cosas a la vez:
- *  (a) el tope subió de 8.000 a 16.000 · es COMPARTIDO (lentes · revisores · re-síntesis);
- *  (b) el contrato real es **RECORTE SILENCIOSO**, no rechazo. El postmortem del 01-jul
- *      afirmaba lo contrario ("rechazado en route antes de llegar al agente") y esa
- *      creencia sobrevivió: una tarea larga NO falla, llega CORTADA sin aviso.
+ * Tres cosas a la vez:
+ *  (a) el tope es COMPARTIDO (lentes · revisores · re-síntesis · el redactor del plan);
+ *  (b) el que DECIDE es el contrato JSON Schema: **rechaza con 400**, gratis, antes del
+ *      modelo. `sanitizeString` recorta, pero nunca llega a verse para tareas largas;
+ *  (c) el pedido REAL del redactor (17.744 · corrida 132800) tiene que ATRAVESAR.
  */
 import { describe, it, expect } from 'vitest'
 import { sanitizeString } from '@/lib/validation'
@@ -25,8 +26,8 @@ describe('los DOS topes del camino · atados', () => {
   const delContrato = (contrato as { properties: { task: { maxLength: number } } }).properties.task
     .maxLength
 
-  it('el contrato (el que RECHAZA) también está en 16.000', () => {
-    expect(delContrato).toBe(16_000)
+  it('el contrato (el que RECHAZA) también está en 120.000', () => {
+    expect(delContrato).toBe(120_000)
   })
 
   it('contrato y route.ts coinciden · si alguien mueve uno, este test cae', () => {
@@ -40,9 +41,28 @@ describe('los DOS topes del camino · atados', () => {
   })
 })
 
+const delContratoTask = (contrato as { properties: { task: { maxLength: number } } }).properties
+  .task.maxLength
+
 describe('TASK_MAX_CHARS · el tope del endpoint', () => {
-  it('es 16.000 · el doble del anterior', () => {
-    expect(TASK_MAX_CHARS).toBe(16_000)
+  it('es 120.000 · techo medido (1 MB del corredor) con 8× de margen', () => {
+    expect(TASK_MAX_CHARS).toBe(120_000)
+  })
+
+  /**
+   * 🔴 EL ROJO DE E8 · contra el tope de 16.000 este test CAE.
+   * El pedido del redactor medido en la corrida real 132800 · y el documento de
+   * referencia todavía viaja VACÍO: cuando se cablee, crece.
+   */
+  it('🔴 el pedido REAL del redactor (17.744) entra por los DOS topes', () => {
+    const PEDIDO_REAL_132800 = 17_744
+    expect(PEDIDO_REAL_132800).toBeLessThanOrEqual(delContratoTask)
+    expect(PEDIDO_REAL_132800).toBeLessThanOrEqual(TASK_MAX_CHARS)
+  })
+
+  it('queda MUY por debajo del techo duro medido · el 1 MB del corredor', () => {
+    const TECHO_DURO_CORREDOR = 1_000_000 // medido: 977 KB → 200 · 1,17 MB → 413
+    expect(TASK_MAX_CHARS).toBeLessThan(TECHO_DURO_CORREDOR / 8)
   })
 
   it('deja lugar sobre los 7.900 con que el grafo ya recorta sus prompts', () => {
@@ -51,15 +71,15 @@ describe('TASK_MAX_CHARS · el tope del endpoint', () => {
 })
 
 describe('el contrato REAL de sanitizeString · recorta, NO rechaza', () => {
-  it('una tarea de 20.000 NO se rechaza · vuelve recortada a 16.000', () => {
-    const larga = 'x'.repeat(20_000)
+  it('una tarea por encima del tope NO se rechaza acá · vuelve recortada', () => {
+    const larga = 'x'.repeat(TASK_MAX_CHARS + 4_000)
     const r = sanitizeString(larga, TASK_MAX_CHARS)
     expect(r).not.toBeNull() // ← si rechazara, sería null y el endpoint daría 400
     expect(r).toHaveLength(TASK_MAX_CHARS)
   })
 
   it('el recorte es MUDO · no hay señal de que faltó texto', () => {
-    const larga = 'A'.repeat(16_000) + 'ESTO-SE-PIERDE'
+    const larga = 'A'.repeat(TASK_MAX_CHARS) + 'ESTO-SE-PIERDE'
     const r = sanitizeString(larga, TASK_MAX_CHARS)
     expect(r).toHaveLength(TASK_MAX_CHARS)
     expect(r).not.toContain('ESTO-SE-PIERDE')

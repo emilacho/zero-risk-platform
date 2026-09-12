@@ -15,8 +15,8 @@
     "task": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 16000,
-      "description": "Instruction the agent should execute"
+      "maxLength": 120000,
+      "description": "Instruction the agent should execute · tope medido 2026-09-12 (E8) · ver TASK_MAX_CHARS"
     },
     "resume_session_id": {
       "type": ["string", "null"],
