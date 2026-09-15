@@ -113,7 +113,27 @@ export async function populateClientConfigFromDiscovery(
     last_populated_from_discovery_at: new Date().toISOString(),
     last_populated_source: 'auto_discovery_agent',
   }
-  const nextConfig = { ...currentConfig, apify: nextApify }
+  // ─── Step 4b · business_model · E36 (CC#2 2026-09-15) ───
+  // Vive al lado de `apify`, NO adentro: no es un objetivo de raspado, es qué
+  // ES el negocio. Sin migración · `config` es texto libre estructurado y este
+  // UPDATE ya preserva lo que había.
+  // 🔴 `clients.industry` NO se toca (hoy dice "turismo europeo") · es una
+  // categoría, no un modelo, y pisarla borraría un dato de otra procedencia.
+  // Si el empleado NO contesta, la respuesta anterior NO se borra: un silencio
+  // no puede desmentir a una respuesta.
+  const businessModel =
+    typeof input.discovery.business_model === 'string' &&
+    input.discovery.business_model.trim().length > 0
+      ? {
+          business_model: {
+            text: input.discovery.business_model.trim(),
+            source: 'auto_discovery_agent',
+            captured_at: new Date().toISOString(),
+          },
+        }
+      : {}
+
+  const nextConfig = { ...currentConfig, apify: nextApify, ...businessModel }
 
   const { error: writeError } = await input.supabase
     .from('clients')

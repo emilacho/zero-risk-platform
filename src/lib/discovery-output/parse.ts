@@ -212,6 +212,21 @@ export function validateDiscoveryShape(
     summary = obj.competitive_landscape_summary
   }
 
+  // business_model · optional · string · E36 (CC#2 2026-09-15).
+  // 🔴 Esta es la pieza que decide: este filtro NO valida y deja pasar, sino
+  // que RECONSTRUYE el objeto copiando nombre por nombre · lo que no se copia
+  // acá desaparece sin error y sin registro, aunque los dos esquemas lo
+  // declaren (medido en E31). Se rechaza el tipo equivocado en vez de
+  // tragárselo, y el texto en blanco NO viaja como si fuera una respuesta.
+  let businessModel: string | undefined
+  if (obj.business_model !== undefined && obj.business_model !== null) {
+    if (typeof obj.business_model !== 'string') {
+      return { kind: 'malformed', reason: 'business_model_not_string' }
+    }
+    const trimmed = obj.business_model.trim()
+    if (trimmed.length > 0) businessModel = trimmed
+  }
+
   // sources · optional · per-source execution summary (Apify actors etc) ·
   // tolerante · filtra entradas malformadas en vez de fallar (aditivo no-breaking).
   let sources: DiscoveryOutput['sources']
@@ -237,6 +252,7 @@ export function validateDiscoveryShape(
     competitors,
     ...(icp !== undefined ? { icp } : {}),
     ...(summary !== undefined ? { competitive_landscape_summary: summary } : {}),
+    ...(businessModel !== undefined ? { business_model: businessModel } : {}),
     ...(sources !== undefined ? { sources } : {}),
   }
   return { kind: 'ok', value }
