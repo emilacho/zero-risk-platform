@@ -91,6 +91,16 @@ export interface DiscoveryOutput {
   /** Optional · 1-2 paragraph competitive landscape · chunked verbatim. */
   readonly competitive_landscape_summary?: string
   /**
+   * E36 (CC#2 2026-09-15) · QUÉ ES el negocio · quién paga · quién presta el
+   * servicio · si hay más de un lado. Declarada el MISMO día en los dos
+   * espejos (acá y en `discovery-output-server.js · DISCOVERY_INPUT_SCHEMA`)
+   * porque una casilla declarada de un solo lado se borra en silencio y
+   * devuelve éxito · medido en E31. La prueba
+   * `__tests__/discovery-output-casilla-negocio.test.ts` exige que sobreviva
+   * de punta a punta, y falla si alguno de los dos espejos la pierde.
+   */
+  readonly business_model?: string
+  /**
    * Sprint multi-source discovery · resumen de ejecución por fuente (qué actores
    * Apify corrieron y con qué resultado) · para transparencia + el veredicto del
    * competitive-intelligence-agent. Optional · aditivo no-breaking.

@@ -123,6 +123,20 @@ const DISCOVERY_INPUT_SCHEMA = {
     .describe(
       '1-2 paragraph summary of the competitive landscape · chunked verbatim into the brain',
     ),
+  // E36 (CC#2 2026-09-15) · la casilla que faltaba. Medido en E31/E24 · el
+  // contrato NO tenía dónde poner QUÉ ES el negocio, así que la respuesta
+  // viajaba en prosa dentro de `competitive_landscape_summary` —una casilla
+  // rotulada «panorama COMPETITIVO»— y salía al revés: a GEA, que es una
+  // plataforma de reservas, la describió como «operador», y eligió como
+  // competidores a los negocios que son su propia oferta.
+  // El rótulo manda: por eso esta casilla es SUYA y no se reusa otra.
+  business_model: z
+    .string()
+    .optional()
+    .describe(
+      'Say WHAT the business IS: who pays, who delivers the service, and whether there is more than one side. ' +
+        'If it is a platform or an intermediary where third parties offer their services, say so explicitly.',
+    ),
 }
 
 // ── MCP server ──
@@ -175,7 +189,19 @@ async function main() {
   )
 }
 
-main().catch((err) => {
-  process.stderr.write(`[discovery-output-server] Fatal: ${err.message}\n`)
-  process.exit(1)
-})
+// E36 (CC#2 2026-09-15) · el esquema se EXPORTA para que una prueba pueda
+// comprobar, sin encender nada, que una casilla declarada acá sobrevive hasta
+// el otro espejo (`src/lib/discovery-output/parse.ts`). El comentario de
+// arriba dice "keep in sync" desde hace semanas · `sources` prueba que un
+// comentario no alcanza. El arranque queda detrás del guarda `require.main`
+// para que importar el módulo NO abra el transporte stdio · el servidor se
+// lanza siempre como `node <archivo>` (agent-mcp-registry.ts), donde
+// `require.main === module` es verdadero, así que el arranque no cambia.
+module.exports = { DISCOVERY_INPUT_SCHEMA }
+
+if (require.main === module) {
+  main().catch((err) => {
+    process.stderr.write(`[discovery-output-server] Fatal: ${err.message}\n`)
+    process.exit(1)
+  })
+}
