@@ -20,6 +20,7 @@ import { runAgentViaSDK, type AgentRunInput } from './lib/agent-sdk-runner.js'
 import { getSupabaseAdmin } from './lib/supabase.js'
 import { checkSpendCap } from './lib/spend-gate.js'
 import { flushBraintrust } from './lib/braintrust.js'
+import { abrirLatido, intervaloDelLatido } from './lib/latido.js'
 
 /**
  * Capture an agent error in Sentry with canonical context tags. Sprint
@@ -316,6 +317,43 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }
 
+  // ── EL LATIDO · E44 (CC#3 · 15-sep) ───────────────────────────────────────
+  // El borde público de Railway cierra un pedido tras 5 MINUTOS SIN DATOS, y da
+  // 15 si el dato sigue fluyendo (regla de la plataforma · NO configurable).
+  // Este servicio mandaba UN solo paquete al final ⇒ toda corrida de más de
+  // ~302 s moría con 502 y el trabajo se cobraba igual. Ver `lib/latido.ts`.
+  //
+  // 🔴 EL PRECIO, DICHO: el código HTTP se decide ANTES del primer byte. Con el
+  // latido encendido la respuesta se compromete en 200 al arrancar el empleado,
+  // así que un fallo POSTERIOR viaja como 200 con `success:false` en vez de 500.
+  // Medido que no rompe nada: el proxy de Vercel re-deriva el código DESDE EL
+  // CUERPO (`route.ts` · `if (!result.success) … status: 500`), y los 43
+  // llamadores que pasan por él siguen viendo su 500. El único llamador directo
+  // es el nodo terminal de la prueba de humo.
+  //
+  // Se apaga sin desplegar con AGENT_RUNNER_HEARTBEAT_MS=0 (vuelve a la conducta
+  // de siempre, códigos incluidos): este servicio lo comparten 44 llamadores y
+  // un despliegue reinicia el contenedor.
+  const latidoMs = intervaloDelLatido(process.env)
+  const latido = latidoMs > 0 ? (() => {
+    res.status(200).set('Content-Type', 'application/json; charset=utf-8')
+    res.flushHeaders()
+    const l = abrirLatido(res, latidoMs)
+    // si el que llamó se va, no tiene sentido seguir latiendo
+    res.on('close', () => l.detener())
+    return l
+  })() : null
+
+  /** Contesta por el camino que corresponda · con latido ya hay cabecera puesta. */
+  const responder = (cuerpo: unknown, estadoSinLatido: number): void => {
+    if (latido) {
+      latido.detener()
+      if (!res.writableEnded) res.end(JSON.stringify(cuerpo))
+      return
+    }
+    res.status(estadoSinLatido).json(cuerpo)
+  }
+
   try {
     const result = await runAgentViaSDK(input)
     // The SDK runner already builds a typed AgentRunResult with success+error.
@@ -325,17 +363,20 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
       // Handled agent failure (the SDK runner returns success:false rather than
       // throwing) — this is the common agent-error path · capture it with context.
       captureAgentError(new Error(result.error ?? 'agent run failed'), input)
-      res.status(500).json(result)
+      responder(result, 500)
       return
     }
-    res.status(200).json(result)
+    responder(result, 200)
   } catch (err) {
     console.error('[agent-runner] unexpected error in /run-sdk:', err)
     captureAgentError(err, input)
-    res.status(500).json({
-      success: false,
-      error: err instanceof Error ? err.message : 'Unknown error',
-    })
+    responder(
+      {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      },
+      500,
+    )
   } finally {
     // Braintrust · flush los spans de esta invocación tras responder · no-op si
     // el tracing está deshabilitado. Va después de res.json · no bloquea al cliente.
