@@ -6,6 +6,9 @@
  * (STOP-2 (b)) · idempotency token (STOP-2 (a)) · happy-path + failure
  * modes (network throw · non-2xx response) · logger calls.
  */
+// ACTUALIZADA · E57 (CC#2 2026-09-16) · el ejemplo de «recorrido SIN destino» pasa de
+// PRODUCE —que desde E57 SI tiene destino (planeación)— a ACQUIRE, que sigue sin tenerlo.
+// La propiedad que se prueba NO cambió: un recorrido sin entrada en el mapa no se despacha.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   buildDispatchIdempotencyToken,
@@ -170,7 +173,7 @@ describe('dispatchToWorkflow · decision validation', () => {
   it('canon · unmapped journey returns no_journey_target · NO fetch', async () => {
     const fetcher = vi.fn()
     const res = await dispatchToWorkflow({
-      decision: workflowDispatch({ journey_type: 'PRODUCE' }),
+      decision: workflowDispatch({ journey_type: 'ACQUIRE' }),
       enabled: true,
       fetcher: fetcher as unknown as typeof fetch,
     })
@@ -321,7 +324,7 @@ describe('dispatchToWorkflow · custom target override (tests + smoke)', () => {
   it('canon · explicit target override skips JOURNEY_WORKFLOW_MAP lookup', async () => {
     const fetcher = vi.fn(async () => new Response('ok', { status: 200 }))
     const res = await dispatchToWorkflow({
-      decision: workflowDispatch({ journey_type: 'PRODUCE' }), // unmapped
+      decision: workflowDispatch({ journey_type: 'ACQUIRE' }), // unmapped
       enabled: true,
       target: {
         workflow_id: 'TestWorkflowId123',

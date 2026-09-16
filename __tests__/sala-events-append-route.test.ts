@@ -4,6 +4,9 @@
  * Exercises auth + feature flag + body validation + reconciliation
  * + append-to-log + Slack alert (mocked) + GET info endpoint.
  */
+// ACTUALIZADA · E57 (CC#2 2026-09-16) · el ejemplo de «recorrido SIN destino» pasa de
+// PRODUCE —que desde E57 SI tiene destino (planeación)— a ACQUIRE, que sigue sin tenerlo.
+// La propiedad que se prueba NO cambió: un recorrido sin entrada en el mapa no se despacha.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   InMemoryEventLogStorage,
@@ -170,7 +173,7 @@ describe('POST /api/sala/events/append · auth + body validation', () => {
           tenant_id: TENANT,
           client_id: CLIENT,
           stream_id: STREAM,
-          journey_type: 'PRODUCE', // unmapped
+          journey_type: 'ACQUIRE', // unmapped · E57: PRODUCE ya tiene destino
           phase_step_id: 'phase_1',
         },
         { 'x-api-key': 'test-key' },

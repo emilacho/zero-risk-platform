@@ -5,6 +5,9 @@
  * (target='workflow') and surfaces the dispatcher's typed result
  * (dispatched_ok / skipped_dispatcher_off / dispatched_failed).
  */
+// ACTUALIZADA · E57 (CC#2 2026-09-16) · el ejemplo de «recorrido SIN destino» pasa de
+// PRODUCE —que desde E57 SI tiene destino (planeación)— a ACQUIRE, que sigue sin tenerlo.
+// La propiedad que se prueba NO cambió: un recorrido sin entrada en el mapa no se despacha.
 import { describe, it, expect, vi } from 'vitest'
 import { dispatchOneIntake, type ParsedIntakeEvent } from '@/lib/sala-router-consumer'
 import type { PersistedEvent } from '@/lib/sala-event-log'
@@ -53,12 +56,12 @@ function intake(overrides: Partial<ParsedIntakeEvent> = {}): ParsedIntakeEvent {
 describe('dispatchOneIntake · skipped_unknown_journey', () => {
   it('skips when journey_type has no JOURNEY_WORKFLOW_MAP entry', async () => {
     const r = await dispatchOneIntake({
-      intake: intake({ journey_type: 'PRODUCE' }),
+      intake: intake({ journey_type: 'ACQUIRE' }), // E57 · PRODUCE ya tiene destino
       enabled: true,
       n8n_base_url: 'https://n8n.test',
     })
     expect(r.kind).toBe('skipped_unknown_journey')
-    expect(r.detail).toMatch(/PRODUCE/)
+    expect(r.detail).toMatch(/ACQUIRE/)
   })
 })
 
