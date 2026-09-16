@@ -73,6 +73,13 @@ export interface JourneyWorkflowTarget {
    *  for the same stream MUST collapse to one webhook fire (STOP-2
    *  dimension (a) · dispatch-único). */
   readonly idempotency_suffix: string
+  /** E67 (CC#1 2026-09-16) · el obrero exige la LLAVE DE DESPACHO en la
+   *  cabecera `x-sala-dispatch-key` (valor de `SALA_DISPATCH_KEY`). Si es
+   *  `true` y la llave no está en el entorno, el despachador NO dispara
+   *  (fail-closed · `dispatch_key_missing`): mejor un sobre que vuelve a la
+   *  fila con motivo que un webhook que rechaza en silencio. La marca
+   *  `trigger_source` sigue viajando: es rastro, no llave. */
+  readonly dispatch_key_required?: boolean
 }
 
 /**
@@ -89,6 +96,9 @@ export const JOURNEY_WORKFLOW_MAP: Readonly<
     worker_name: 'Client Onboarding E2E v2 (Webhook Deal Won)',
     phase_boundaries: CANONICAL_PHASES_LyVoKcrypS5uLyuu,
     idempotency_suffix: 'onboard-worker-dispatch',
+    // E67 · la puerta del alta lleva llave real desde 2026-09-16 · sin
+    // `SALA_DISPATCH_KEY` en el entorno el despachador no dispara.
+    dispatch_key_required: true,
   },
   // E57 (CC#2 2026-09-16) · el destino de `planeación`, que no existía.
   //

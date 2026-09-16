@@ -11,6 +11,7 @@
 // La propiedad que se prueba NO cambió: un recorrido sin entrada en el mapa no se despacha.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
+  JOURNEY_WORKFLOW_MAP,
   buildDispatchIdempotencyToken,
   dispatchToWorkflow,
   isWorkflowDispatchEnabled,
@@ -431,5 +432,98 @@ describe('dispatchToWorkflow · Phase 1.1 gap #1 · business_payload spread', ()
       logger: silentLogger(),
     })
     expect(capturedBody!._journey_id).toBe(STREAM)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────
+// E67 (CC#1 2026-09-16) · LA LLAVE DE DESPACHO · la marca `trigger_source`
+// era firma adivinable, no llave. Ahora el obrero exige `x-sala-dispatch-key`
+// y el despachador es fail-closed: sin llave, ONBOARD NO dispara.
+// ─────────────────────────────────────────────────────────────────────
+describe('E67 · llave de despacho · x-sala-dispatch-key', () => {
+  const originalKey = process.env.SALA_DISPATCH_KEY
+  let capturedHeaders: Record<string, string> = {}
+  const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+    capturedHeaders = { ...((init?.headers as Record<string, string>) ?? {}) }
+    return new Response(JSON.stringify({ ok: true }), { status: 202 })
+  })
+  beforeEach(() => {
+    capturedHeaders = {}
+    fetcher.mockClear()
+  })
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.SALA_DISPATCH_KEY
+    else process.env.SALA_DISPATCH_KEY = originalKey
+  })
+
+  it('canon · ONBOARD sin SALA_DISPATCH_KEY → dispatch_key_missing · NO fetch (fail-closed)', async () => {
+    delete process.env.SALA_DISPATCH_KEY
+    const res = await dispatchToWorkflow({
+      decision: workflowDispatch(),
+      enabled: true,
+      n8n_base_url: 'https://n8n.test',
+      fetcher: fetcher as unknown as typeof fetch,
+      logger: silentLogger(),
+    })
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.reason).toBe('dispatch_key_missing')
+      expect(res.detail).toMatch(/SALA_DISPATCH_KEY/)
+    }
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('canon · llave vacía (solo espacios) cuenta como ausente', async () => {
+    process.env.SALA_DISPATCH_KEY = '   '
+    const res = await dispatchToWorkflow({
+      decision: workflowDispatch(),
+      enabled: true,
+      n8n_base_url: 'https://n8n.test',
+      fetcher: fetcher as unknown as typeof fetch,
+      logger: silentLogger(),
+    })
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.reason).toBe('dispatch_key_missing')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('canon · con llave → viaja en la CABECERA x-sala-dispatch-key, nunca en el cuerpo', async () => {
+    process.env.SALA_DISPATCH_KEY = 'llave-de-prueba-e67'
+    let body: Record<string, unknown> = {}
+    const f = vi.fn(async (_url: string, init?: RequestInit) => {
+      capturedHeaders = { ...((init?.headers as Record<string, string>) ?? {}) }
+      body = JSON.parse((init?.body as string) ?? '{}')
+      return new Response('', { status: 202 })
+    })
+    const res = await dispatchToWorkflow({
+      decision: workflowDispatch(),
+      enabled: true,
+      n8n_base_url: 'https://n8n.test',
+      fetcher: f as unknown as typeof fetch,
+      logger: silentLogger(),
+    })
+    expect(res.ok).toBe(true)
+    expect(capturedHeaders['x-sala-dispatch-key']).toBe('llave-de-prueba-e67')
+    expect(JSON.stringify(body)).not.toContain('llave-de-prueba-e67')
+    // la marca sigue viajando: es rastro, no llave
+    expect(body.trigger_source).toBe('sala-router-dispatch')
+  })
+
+  it('canon · el obrero que NO exige llave (PRODUCE) despacha sin ella', async () => {
+    delete process.env.SALA_DISPATCH_KEY
+    const res = await dispatchToWorkflow({
+      decision: workflowDispatch({ journey_type: 'PRODUCE' }),
+      enabled: true,
+      n8n_base_url: 'https://n8n.test',
+      fetcher: fetcher as unknown as typeof fetch,
+      logger: silentLogger(),
+    })
+    expect(res.ok).toBe(true)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(capturedHeaders['x-sala-dispatch-key']).toBeUndefined()
+  })
+
+  it('canon · el mapa declara la llave obligatoria para el alta (ONBOARD)', () => {
+    expect(JOURNEY_WORKFLOW_MAP.ONBOARD?.dispatch_key_required).toBe(true)
   })
 })
