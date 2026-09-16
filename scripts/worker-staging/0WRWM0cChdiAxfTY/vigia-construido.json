@@ -1,0 +1,361 @@
+{
+  "name": "Zero Risk — Vigía del silencio de la sala (E59 · CC#1)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "vigia-reloj",
+      "name": "Reloj · cada 6 horas",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/settings?select=key,value&key=eq.sala.silencio_max_horas&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "vigia-el-umbral-del-silencio",
+      "name": "El umbral del silencio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        140
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.N8N_BASE_URL || 'https://n8n-production-72be.up.railway.app' }}/api/v1/workflows/z2nS8Up115EA9TKz",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-API-KEY",
+              "value": "={{ $env.N8N_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "vigia-el-reloj-de-la-sala",
+      "name": "El reloj de la sala",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        300
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/sala_event_log?select=event_id,stream_id,client_id,journey_type,step_id,step_state,occurred_at&order=occurred_at.desc&limit=500",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "vigia-el-libro-de-la-sala",
+      "name": "El libro de la sala",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        460
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// [SALA] Vigía del silencio · el que DECIDE · E59 · CC#1 · 2026-09-16\n//\n// 🔴 POR QUÉ EXISTE: la regla 4 del manual del 30-may decía «siete días sin\n// novedad → archivar y avisar a un humano». Se perdió entre un documento y el\n// siguiente y NUNCA se construyó. Costo: ~26.700 vueltas de reloj en verde con\n// CERO despachos, tres meses, y nadie se enteró.\n//\n// 🔴 LO QUE MIRA: lo que NO pasó. Los otros 48 avisos de la casa miran lo que sí\n// ocurrió; el único que mira silencio mira el equivocado (procesos colgados EN\n// corrida), no una corrida que terminó bien y cuyo despacho siguiente nunca fue.\n//\n// 🔴 LO QUE NO TIENE, A PROPÓSITO: interruptor de silencio. No hay «apagar\n// alarma», no hay «no molestar», y un umbral ilegible NO la apaga: usa el de\n// fábrica y lo DICE. Canon: «un freno que no frena es peor que ninguno».\n// E62 · CC#1 · 2026-09-16 · post certificación E60 (CC#3 ×2): forzar_aviso se lee\n// de la PUERTA (no de $input) · un libro ilegible es NO_SE_PUDO_SABER, nunca un hecho ·\n// el lunes grita en UNA vuelta · la causa del aviso es la MEDIDA en esta corrida.\nconst HORAS_POR_DEFECTO = 48;\n\nconst ahora = new Date();\n// ── ⓪ ¿me pidieron gritar? · SOLO existe cuando entra por la puerta · en la vuelta del\n// reloj ese nodo no corrió y $('Puerta…') lanza ⇒ try/catch obligatorio.\nlet entrada = {};\ntry { const p = $('Puerta · preguntar a pedido').first().json; entrada = (p && p.body) || {}; } catch (e) { entrada = {}; }\nconst forzado = String(entrada.forzar_aviso) === 'true';\n// la vuelta diaria del reloj · cron 0 */6 en la zona del motor (America/New_York) ⇒\n// 04/10/16/22 UTC · la de las 04 UTC (00 NY) es la única que grita en los estados con freno.\nconst vueltaDiaria = ahora.getUTCHours() < 6;\n\n// ── ① el umbral · vive en UNA fila de `settings`, cambiable sin desplegar ──\nlet horas = HORAS_POR_DEFECTO;\nlet umbralDeDonde = 'el de fábrica · NO se pudo leer la fila `sala.silencio_max_horas`';\ntry {\n  const fila = $('El umbral del silencio').first().json;\n  const f = Array.isArray(fila) ? (fila[0] || {}) : (fila || {});\n  const crudo = f.value;\n  // regla estricta y declarada · no se adivina el formato (lección del % de la casa)\n  if (crudo !== undefined && crudo !== null && /^[0-9]+(\\.[0-9]+)?$/.test(String(crudo))) {\n    const n = Number(crudo);\n    // 🔴 un umbral de cero o gigante NO apaga la alarma: se ignora y se declara.\n    if (n > 0 && n <= 720) {\n      horas = n;\n      umbralDeDonde = 'settings · sala.silencio_max_horas = ' + crudo;\n    } else {\n      umbralDeDonde = 'la fila decia ' + JSON.stringify(crudo) + ' · fuera de rango (0 < h <= 720) · uso el de fabrica';\n    }\n  } else if (crudo !== undefined) {\n    umbralDeDonde = 'la fila decia ' + JSON.stringify(crudo) + ' · no es un numero · uso el de fabrica';\n  }\n} catch (e) {\n  umbralDeDonde = 'no se pudo leer el nodo del umbral · ' + e.message + ' · uso el de fabrica';\n}\n\n// ── ② ¿la sala está ENCENDIDA o APAGADA? · hueco ③ de E54 ──\n// Lo que hace latir a la sala es el reloj del repartidor. Si ese flujo está\n// apagado, la sala está muda A PROPÓSITO y esta alarma NO grita.\nlet relojEncendido = null;\nlet relojDetalle = 'no se pudo leer el estado del reloj del repartidor';\ntry {\n  const r = $('El reloj de la sala').first().json;\n  const w = Array.isArray(r) ? (r[0] || {}) : (r || {});\n  if (typeof w.active === 'boolean') {\n    relojEncendido = w.active;\n    relojDetalle = 'flujo ' + (w.id || 'z2nS8Up115EA9TKz') + ' · activo=' + w.active;\n  } else {\n    // la causa MEDIDA en esta corrida, no una fija\n    relojDetalle = 'no se pudo leer el estado del reloj del repartidor · el motor respondio: ' + JSON.stringify(w).slice(0, 160);\n  }\n} catch (e) {\n  relojDetalle = 'no se pudo leer el estado del reloj · ' + e.message;\n}\n\n// ── ③ el latido POR RECORRIDO · cuándo se movió por última vez cada uno ──\n// 🔴 el nodo del libro devuelve la respuesta ENTERA ({statusCode, body}) · un error de la\n// base NO es un asiento y una tabla vacia NO es un error: se distinguen aca, con nombre.\nlet eventos = [];\nlet libroLegible = false;\nlet libroDetalle = 'no se pudo leer el nodo del libro';\ntry {\n  const r = $('El libro de la sala').first().json || {};\n  const sc = Number(r.statusCode);\n  const body = r.body;\n  const esAsiento = function (e) { return e && typeof e === 'object' && Object.prototype.hasOwnProperty.call(e, 'occurred_at'); };\n  if (sc >= 200 && sc < 300 && Array.isArray(body) && body.every(esAsiento)) {\n    eventos = body;\n    libroLegible = true;\n    libroDetalle = 'HTTP ' + sc + ' · ' + body.length + ' asientos';\n  } else {\n    libroDetalle = 'HTTP ' + (isNaN(sc) ? '?' : sc) + ' · la respuesta NO es un libro · ' + JSON.stringify(body === undefined ? r : body).slice(0, 160);\n  }\n} catch (e) {\n  libroDetalle = 'no se pudo leer el nodo del libro · ' + e.message;\n}\nconst latido = {};\nfor (const e of eventos) {\n  const j = e.journey_type || 'SIN_RECORRIDO';\n  const t = e.occurred_at || e.created_at;\n  if (!t) continue;\n  if (!latido[j] || new Date(t) > new Date(latido[j])) latido[j] = t;\n}\nconst horasDesde = function (t) { return t ? (ahora - new Date(t)) / 36e5 : null; };\n\n// ── ④ lo que NO pasó ──\nconst esIntake = function (e) { return typeof e.step_id === 'string' && e.step_id.indexOf('intake.') === 0; };\nconst esDespacho = function (e) { return typeof e.step_id === 'string' && e.step_id.indexOf('router.dispatch.') === 0; };\nconst esRendicion = function (e) { return typeof e.step_id === 'string' && e.step_id.indexOf('router.giveup.') === 0; };\n\nconst cerrados = {};\nfor (const e of eventos) { if (esDespacho(e) || esRendicion(e)) cerrados[e.stream_id] = true; }\nconst sobresSinDespachar = eventos\n  .filter(esIntake)\n  .filter(function (e) { return !cerrados[e.stream_id]; })\n  .filter(function (e) { return horasDesde(e.occurred_at) > horas; });\n\nconst despachos = eventos.filter(esDespacho).map(function (e) { return e.occurred_at; }).sort();\nconst ultimoDespacho = despachos.length ? despachos[despachos.length - 1] : null;\nconst horasSinDespachar = ultimoDespacho ? horasDesde(ultimoDespacho) : null;\n\n// ── ⑤ el veredicto ──\n// 🔴 La regla que da sentido a todo esto: un verde que no distingue «no habia\n// nada que hacer» de «no despache nada» NO es un verde.\nlet estado, grita = false, titulo = '', detalle = '', queHacer = '';\n\nif (!libroLegible) {\n  // 🔴 la enfermedad de la casa: una consulta que falla y se lee como tranquilidad.\n  // Un libro que no se pudo leer NO es un libro con un asiento ni un libro vacio: es NO SE.\n  estado = 'NO_SE_PUDO_SABER';\n  grita = vueltaDiaria || forzado;\n  titulo = 'NO SE PUDO LEER EL LIBRO DE LA SALA';\n  detalle = 'libro: ' + libroDetalle + ' · reloj: ' + relojDetalle;\n  queHacer = 'esta alarma no puede afirmar nada sobre la sala sin el libro · mira la respuesta de la base (permisos, tabla, timeout) antes de confiar en cualquier verde.';\n} else if (relojEncendido === false) {\n  estado = 'APAGADA_A_PROPOSITO';\n  titulo = 'la sala esta apagada · no grito';\n  detalle = relojDetalle;\n  queHacer = 'nada · si tenia que estar encendida, encende el reloj del repartidor';\n} else if (sobresSinDespachar.length > 0) {\n  estado = 'TRABAJO_SIN_DESPACHAR';\n  grita = true;\n  titulo = 'HAY TRABAJO SIN DESPACHAR · ' + sobresSinDespachar.length + ' sobre(s) esperando hace mas de ' + horas + ' h';\n  detalle = sobresSinDespachar.slice(0, 5).map(function (e) {\n    return '· ' + e.step_id + ' · cliente ' + String(e.client_id).slice(0, 8) + ' · hace ' + Math.round(horasDesde(e.occurred_at)) + ' h';\n  }).join('\\n');\n  queHacer = 'mira el registro del repartidor: o el destino no esta en el mapa, o el despacho falla. Si hay marcas `router.giveup.*`, el motivo esta escrito ahi.';\n} else if (relojEncendido === true && ultimoDespacho === null) {\n  // el caso EXACTO que nos paso: reloj girando, cero despachos, todo verde\n  const fechas = eventos.map(function (e) { return e.occurred_at; }).filter(Boolean).sort();\n  const dias = fechas.length ? Math.round(horasDesde(fechas[0]) / 24) : 0;\n  estado = 'ENCENDIDA_Y_MUDA';\n  // 🔴 grita UNA VEZ POR SEMANA, no todos los dias: una alarma de silencio\n  // ruidosa se silencia, y el dia que grite de verdad nadie la mira.\n  grita = (ahora.getUTCDay() === 1 && vueltaDiaria) || forzado;  // UNA vuelta: lunes 04 UTC (00 NY)\n  titulo = 'LA SALA ESTA ENCENDIDA Y NUNCA DESPACHO NADA';\n  detalle = 'el reloj late cada 3 minutos · el libro tiene ' + eventos.length + ' asientos y CERO despachos'\n    + (dias ? ' · el asiento mas viejo es de hace ' + dias + ' dias' : '');\n  queHacer = 'esto NO es «no habia nada que hacer»: es que nadie dejo un sobre. Comproba que el que deberia dejarlo (el alta al terminar) lo este dejando.';\n} else if (relojEncendido === true && horasSinDespachar !== null && horasSinDespachar > horas) {\n  estado = 'SIN_DESPACHAR_HACE_RATO';\n  grita = true;\n  titulo = 'la sala no despacha hace ' + Math.round(horasSinDespachar) + ' h (umbral ' + horas + ' h)';\n  detalle = 'ultimo despacho: ' + ultimoDespacho;\n  queHacer = 'si se esperaban sobres en este tiempo, algo dejo de dejarlos. Si no se esperaban, baja el umbral o deja constancia.';\n} else if (relojEncendido === null) {\n  estado = 'NO_SE_PUDO_SABER';\n  // 🔴 no saber NO es estar bien: grita. Pero UNA VEZ POR DIA (la vuelta de las\n  // 00 UTC), no en las cuatro vueltas: una alarma repetida se silencia, y el dia\n  // que grite de verdad nadie la mira. Sigue sin haber forma de apagarla.\n  grita = vueltaDiaria || forzado;\n  titulo = 'NO SE PUDO SABER SI LA SALA ESTA VIVA';\n  detalle = relojDetalle;\n  queHacer = 'la lectura del reloj del repartidor fallo · si el motor respondio «X-N8N-API-KEY header required», '\n    + 'falta la credencial del motor en su propio entorno · hasta que se lea, esta alarma NO puede '\n    + 'distinguir «apagada a proposito» de «rota», y lo dice en vez de suponer.';\n} else {\n  estado = 'AL_DIA';\n  titulo = 'la sala despacho hace ' + Math.round(horasSinDespachar) + ' h · dentro del umbral';\n  detalle = 'ultimo despacho: ' + ultimoDespacho;\n  queHacer = '';\n}\n\nreturn [{ json: {\n  estado: estado, grita: grita, titulo: titulo, detalle: detalle, que_hacer: queHacer,\n  umbral_horas: horas, umbral_de_donde: umbralDeDonde,\n  reloj: relojDetalle,\n  libro: libroDetalle,\n  pedido_forzado: forzado,\n  latido_por_recorrido: Object.keys(latido).map(function (j) {\n    return { recorrido: j, ultimo_movimiento: latido[j], hace_horas: Math.round(horasDesde(latido[j])) };\n  }),\n  sobres_sin_despachar: sobresSinDespachar.length,\n  ultimo_despacho: ultimoDespacho,\n  asientos_leidos: eventos.length,\n  medido_en: ahora.toISOString(),\n} }];\n",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "vigia-decide",
+      "name": "[SALA] Vigía · decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "grita",
+              "leftValue": "={{ $json.grita }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "vigia-if",
+      "name": "¿Grita?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: \"C0B7XUUEBHA\", text: \"🔴 LA SALA · \" + $json.titulo, blocks: [ { type: \"section\", text: { type: \"mrkdwn\", text: \"*🔴 LA SALA · \" + $json.titulo + \"*\" } }, { type: \"section\", text: { type: \"mrkdwn\", text: $json.detalle || \"(sin detalle)\" } }, { type: \"section\", text: { type: \"mrkdwn\", text: \"*QUÉ HACER:* \" + ($json.que_hacer || \"revisar\") } }, { type: \"context\", elements: [ { type: \"mrkdwn\", text: \"estado `\" + $json.estado + \"` · umbral \" + $json.umbral_horas + \" h (\" + $json.umbral_de_donde + \") · \" + $json.reloj + \" · libro: \" + $json.libro + \" · vigía del silencio (E59/E62)\" } ] } ] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "vigia-slack",
+      "name": "AVISO · #alertas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        220
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔴 el silencio legítimo TAMBIÉN deja rastro · si nadie ve esto, nadie puede\n// afirmar que la alarma corrió. No manda aviso: sólo queda en el registro.\nconst v = $input.first().json;\nconsole.log('[vigia-silencio] ' + v.estado + ' · ' + v.titulo + ' · umbral ' + v.umbral_horas + ' h · ' + v.umbral_de_donde);\nreturn [{ json: v }];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "vigia-callado",
+      "name": "Queda en el registro (no grita)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/vigia-sala",
+        "options": {}
+      },
+      "id": "vigia-puerta",
+      "name": "Puerta · preguntar a pedido",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        520
+      ],
+      "webhookId": "a7c1f2d4-vigia-sala-0001"
+    },
+    {
+      "id": "vigia-cierre-aviso",
+      "name": "Cierre · el aviso llegó o la corrida falla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        220
+      ],
+      "parameters": {
+        "jsCode": "// [SALA] Vigía · el aviso llegó o la corrida falla · E68 · CC#2 · 2026-09-16\n//\n// 🔴 POR QUÉ EXISTE: el nodo `AVISO · #alertas` tiene `onError: continueRegularOutput`\n// y `alwaysOutputData`. Con eso, un rechazo de Slack NO rompía nada:\n//   · Slack rechaza con 200 + `ok:false` (token, canal…) → item normal → corrida VERDE\n//   · 4xx / 5xx / tiempo agotado → `continueRegularOutput` lo vuelve item → corrida VERDE\n// Nadie miraba `ok`. Un aviso que no llega es un silencio, y éste es el vigía del silencio\n// (E66 · CC#3 · A-DEFECTO). Mismo patrón que el cierre del reconciliador (E63).\n//\n// 🔴 LA REGLA: sólo cuenta como avisado lo que Slack confirmó con `ok:true`. Todo lo demás\n// —incluido «no llegó ninguna respuesta»— termina la corrida en ERROR.\nconst v = $('[SALA] Vigía · decide').first().json || {};\nconst respuestas = $input.all().map(function (i) { return i.json || {}; });\n\nconst confirmadas = respuestas.filter(function (r) { return r.ok === true; });\nif (respuestas.length === 0 || confirmadas.length !== respuestas.length) {\n  const r = respuestas.find(function (x) { return x.ok !== true; }) || {};\n  const causa = r.error\n    ? (typeof r.error === 'string' ? r.error : (r.error.message || JSON.stringify(r.error)))\n    : (respuestas.length === 0 ? 'Slack no devolvio respuesta' : 'Slack no confirmo ok:true · ' + JSON.stringify(r).slice(0, 200));\n  throw new Error('[vigia-silencio] el aviso NO llego a #alertas · ' + String(causa).slice(0, 300) +\n    ' · estado ' + v.estado + ' · ' + v.titulo);\n}\n\nconsole.log('[vigia-silencio] aviso confirmado por Slack · ts ' + confirmadas[0].ts + ' · ' + v.estado);\nreturn [{ json: Object.assign({}, v, { aviso_ts: confirmadas[0].ts, aviso_canal: confirmadas[0].channel }) }];\n",
+        "mode": "runOnceForAllItems"
+      }
+    }
+  ],
+  "connections": {
+    "Reloj · cada 6 horas": {
+      "main": [
+        [
+          {
+            "node": "El umbral del silencio",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "El reloj de la sala",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "El libro de la sala",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "El libro de la sala": {
+      "main": [
+        [
+          {
+            "node": "[SALA] Vigía · decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[SALA] Vigía · decide": {
+      "main": [
+        [
+          {
+            "node": "¿Grita?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Grita?": {
+      "main": [
+        [
+          {
+            "node": "AVISO · #alertas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Queda en el registro (no grita)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Puerta · preguntar a pedido": {
+      "main": [
+        [
+          {
+            "node": "El umbral del silencio",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "El reloj de la sala",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "El libro de la sala",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AVISO · #alertas": {
+      "main": [
+        [
+          {
+            "node": "Cierre · el aviso llegó o la corrida falla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  }
+}
