@@ -8,6 +8,9 @@
  *
  * Estas pruebas fallan contra el código viejo y pasan contra el nuevo.
  */
+// ACTUALIZADA · E57 (CC#2 2026-09-16) · el ejemplo de «recorrido SIN destino» pasa de
+// PRODUCE —que desde E57 SI tiene destino (planeación)— a ACQUIRE, que sigue sin tenerlo.
+// La propiedad que se prueba NO cambió: un recorrido sin entrada en el mapa no se despacha.
 import { describe, it, expect } from 'vitest'
 import {
   append,
@@ -134,9 +137,9 @@ describe('🔴 la marca de despacho NO se escribe cuando el disparo falla', () =
 })
 
 describe('🔴 un viaje sin mapear se rechaza RUIDOSAMENTE, no se marca como hecho', () => {
-  it('PRODUCE no está en el mapa · deja intento, no despacho, y vuelve', async () => {
+  it('ACQUIRE no está en el mapa · deja intento, no despacho, y vuelve', async () => {
     const storage = new InMemoryEventLogStorage()
-    await sembrarSobre(storage, 'produce1', 'PRODUCE')
+    await sembrarSobre(storage, 'acquire1', 'ACQUIRE')
 
     const t1 = await consumeIntakeTick({
       tenant_id: TENANT, enabled: true, n8n_base_url: 'https://n8n.test',

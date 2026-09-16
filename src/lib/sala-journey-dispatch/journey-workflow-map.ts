@@ -90,7 +90,31 @@ export const JOURNEY_WORKFLOW_MAP: Readonly<
     phase_boundaries: CANONICAL_PHASES_LyVoKcrypS5uLyuu,
     idempotency_suffix: 'onboard-worker-dispatch',
   },
-  // PRODUCE, ACQUIRE, ALWAYS_ON, REVIEW, GROWTH · intentionally
+  // E57 (CC#2 2026-09-16) · el destino de `planeación`, que no existía.
+  //
+  // 🔴 POR QUÉ SE REUSA `PRODUCE` Y NO SE CREA UN TIPO NUEVO: el encargo pide
+  // «el mínimo indispensable, sin abrir la taxonomía entera». `JourneyType` es
+  // una unión CERRADA de seis y el lector del repartidor rechaza cualquier
+  // valor fuera de ella (`journey_type not in canonical set`) · agregar un
+  // séptimo toca la taxonomía, que está reservada a Emilio (§144 · `GROWTH`
+  // lleva desde el 04-jun en `pending_144` esperando esa misma firma).
+  // `PRODUCE` ya está en la unión y estaba deliberadamente sin destino.
+  //
+  // ⚠️ EL PRECIO, DICHO: `planeación` queda rotulada «PRODUCE». Es el mismo
+  // defecto de rótulo que en E24/E31 costó el manual de GEA · se elige a
+  // sabiendas y se declara. El día que se abra la taxonomía, esto se renombra
+  // y NADA MÁS cambia: el destino vive sólo acá.
+  PRODUCE: {
+    workflow_id: 'X9F0zp6LQ2xGEYVS',
+    webhook_path: 'zero-risk/planeacion',
+    worker_name: 'planeacion (plan de 90 días)',
+    // `planeación` sólo emite el cierre · medido en `sala_event_log` (3 filas
+    // `journey_completed` con worker_name="planeacion", 09-sep). NO comparte
+    // la taxonomía de 7 fases del alta · por eso lista propia y no la constante.
+    phase_boundaries: Object.freeze(['journey_completed']),
+    idempotency_suffix: 'planeacion-worker-dispatch',
+  },
+  // ACQUIRE, ALWAYS_ON, REVIEW, GROWTH · intentionally
   // unmapped until each journey gets its §144 opt-in. The router will
   // emit `target='agent'` (default) for them, matching legacy behavior.
 })
