@@ -1,0 +1,252 @@
+{
+  "name": "Zero Risk — Reconciliador execs waiting colgados (CC#3)",
+  "nodes": [
+    {
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        400,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "6ad24841-b1e1-436f-9507-998b8b71992e"
+    },
+    {
+      "id": "e63-puerta-0001-0000-000000000001",
+      "name": "Puerta · preguntar a pedido",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        400,
+        500
+      ],
+      "webhookId": "e63-reconciliador-colgados",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/reconciliador-colgados",
+        "options": {}
+      }
+    },
+    {
+      "name": "Query waiting execs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        620,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.N8N_BASE_URL || 'https://n8n-production-72be.up.railway.app' }}/api/v1/executions?status=waiting&limit=100",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-API-KEY",
+              "value": "={{ $env.N8N_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "ff56cf33-28c9-463e-83be-08b20a8fc113",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Find stuck (>20min)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// [RECONCILIADOR] decide · E63 · CC#2 · 2026-09-16\n//\n// 🔴 POR QUÉ SE REESCRIBIÓ: la versión anterior leía `($input.first().json.data) || []`.\n// Cuando el motor contestaba `'X-N8N-API-KEY' header required`, eso se convertía en\n// «0 colgados» y la corrida terminaba en `success`. 30 de 30 corridas en verde el\n// 16-sep, sin haber visto nada nunca (E60 · CC#3 · corrida 139378).\n// Canon: una consulta que falla y se lee como tranquilidad es el defecto que perseguimos.\n//\n// 🔴 LA REGLA: «no pude leer» NO es «cero colgados». Es `NO_SE_PUDO_LEER`, y:\n//   · la corrida TERMINA EN ERROR (lo hace el nodo de cierre) · siempre, cada 15 min\n//   · el aviso a #alertas sale UNA VEZ AL DÍA · la vuelta de las 13:00 UTC (08:00 Ecuador)\n//     o a pedido con `forzar_aviso: true` por la puerta\n//\n// 🔴 LO QUE NO TIENE, A PROPÓSITO: interruptor de silencio, fila de settings, memoria.\n// No hay nada que editar para callarla. La única forma de que deje de avisar es que\n// la lectura vuelva a funcionar.\nconst UMBRAL_MIN = 20;\nconst HORA_AVISO_CIEGO_UTC = 13;\n\nconst ahora = new Date();\n\n// ── ① lo que contestó el motor · con o sin respuesta completa, con o sin error de red ──\nconst crudo = $input.first().json || {};\nconst status = typeof crudo.statusCode === 'number' ? crudo.statusCode : null;\nconst cuerpo = crudo.body !== undefined && crudo.statusCode !== undefined ? crudo.body : crudo;\n\nlet motivo = null;\nif (crudo.error !== undefined && crudo.statusCode === undefined) {\n  // el nodo falló entero (red, tiempo agotado) y siguió por `onError: continueRegularOutput`\n  motivo = 'la consulta al motor fallo · ' + String((crudo.error && crudo.error.message) || crudo.error).slice(0, 200);\n} else if (status !== null && (status < 200 || status >= 300)) {\n  motivo = 'el motor contesto ' + status + ' · ' + String((cuerpo && cuerpo.message) || '').slice(0, 200);\n} else if (!cuerpo || typeof cuerpo !== 'object' || !Array.isArray(cuerpo.data)) {\n  // sin `data` como lista no hay lectura, aunque el código sea 200\n  motivo = 'el motor no devolvio una lista de ejecuciones · ' +\n    String((cuerpo && (cuerpo.message || cuerpo.error)) || JSON.stringify(cuerpo)).slice(0, 200);\n} else if (cuerpo.nextCursor) {\n  // más de 100 en espera: leí sólo la primera página, no puedo afirmar «ninguna más»\n  motivo = 'lectura parcial · hay mas de ' + cuerpo.data.length + ' ejecuciones en espera y solo se leyo la primera pagina';\n}\n\n// ── ② ¿pidieron el aviso a mano? · se lee de la PUERTA, no de $input (lección E60 del vigía) ──\n// try/catch obligatorio: en la vuelta del reloj la puerta no corrió y nombrarla lanza.\nlet forzado = false;\ntry {\n  const p = $('Puerta · preguntar a pedido').first().json || {};\n  const b = p.body || {};\n  forzado = String(b.forzar_aviso) === 'true';\n} catch (e) {\n  forzado = false;\n}\n\n// ── ③ el veredicto ──\nif (motivo !== null) {\n  const esLaVueltaDelDia = ahora.getUTCHours() === HORA_AVISO_CIEGO_UTC && ahora.getUTCMinutes() < 15;\n  const faltaLlave = /X-N8N-API-KEY/i.test(motivo);\n  return [{ json: {\n    estado: 'NO_SE_PUDO_LEER',\n    lectura_ok: false,\n    grita: esLaVueltaDelDia || forzado,\n    por_que_grita: forzado ? 'pedido a mano (forzar_aviso)' : (esLaVueltaDelDia ? 'vuelta diaria de las 13 UTC' : 'no grita · solo avisa en la vuelta de las 13 UTC'),\n    stuck_count: null,\n    stuck: [],\n    titulo: 'EL RECONCILIADOR DE COLGADOS NO PUDO LEER · NO SE SI HAY PROCESOS COLGADOS',\n    detalle: 'Motivo medido en esta corrida: ' + motivo,\n    que_hacer: faltaLlave\n      ? 'poner `N8N_API_KEY` en el entorno del motor · hasta entonces este vigia NO ve nada y cada corrida queda en error'\n      : 'revisar la consulta al motor · hasta que lea, cada corrida queda en error y NO significa «cero colgados»',\n    medido_en: ahora.toISOString(),\n  } }];\n}\n\nconst stuck = cuerpo.data\n  .filter(function (e) { return e && e.startedAt && (ahora - new Date(e.startedAt)) > UMBRAL_MIN * 60 * 1000; })\n  .map(function (e) {\n    return { id: e.id, workflowId: e.workflowId, startedAt: e.startedAt, mins: Math.round((ahora - new Date(e.startedAt)) / 60000) };\n  });\n\nif (stuck.length > 0) {\n  return [{ json: {\n    estado: 'HAY_COLGADOS',\n    lectura_ok: true,\n    grita: true,\n    por_que_grita: 'hay ejecuciones en espera hace mas de ' + UMBRAL_MIN + ' min',\n    stuck_count: stuck.length,\n    stuck: stuck,\n    titulo: 'PROCESOS COLGADOS · ' + stuck.length + ' ejecucion(es) en espera hace mas de ' + UMBRAL_MIN + ' min',\n    detalle: stuck.slice(0, 10).map(function (s) { return '• exec ' + s.id + ' · wf ' + s.workflowId + ' · ' + s.mins + ' min'; }).join('\\n'),\n    que_hacer: 'revisar esas ejecuciones · con el resume por sondeo del alta (LyVoKcrypS5uLyuu) no deberia colgarse nada · esto detecta regresiones',\n    medido_en: ahora.toISOString(),\n  } }];\n}\n\nreturn [{ json: {\n  estado: 'SIN_COLGADOS',\n  lectura_ok: true,\n  grita: false,\n  por_que_grita: 'no grita · leyo ' + cuerpo.data.length + ' ejecucion(es) en espera y ninguna pasa de ' + UMBRAL_MIN + ' min',\n  stuck_count: 0,\n  stuck: [],\n  titulo: 'sin colgados',\n  detalle: 'leidas ' + cuerpo.data.length + ' en espera',\n  que_hacer: 'nada',\n  medido_en: ahora.toISOString(),\n} }];\n"
+      },
+      "id": "83d31ad3-1821-4e67-8ff8-d4f3b1eba998"
+    },
+    {
+      "id": "e63-grita-00001-0000-000000000002",
+      "name": "¿Grita?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1060,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "grita",
+              "leftValue": "={{ $json.grita }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e63-aviso-00001-0000-000000000003",
+      "name": "AVISO · #alertas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: \"C0B7XUUEBHA\", text: \"🔴 RECONCILIADOR · \" + $json.titulo, blocks: [ { type: \"section\", text: { type: \"mrkdwn\", text: \"*🔴 RECONCILIADOR DE COLGADOS · \" + $json.titulo + \"*\" } }, { type: \"section\", text: { type: \"mrkdwn\", text: $json.detalle || \"(sin detalle)\" } }, { type: \"section\", text: { type: \"mrkdwn\", text: \"*QUÉ HACER:* \" + ($json.que_hacer || \"revisar\") } }, { type: \"context\", elements: [ { type: \"mrkdwn\", text: \"estado `\" + $json.estado + \"` · \" + $json.por_que_grita + \" · \" + $json.medido_en + \" · reconciliador nKEU5hx0O2eMtJYP (E63)\" } ] } ] }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "e63-cierre-0001-0000-000000000004",
+      "name": "Cierre · no saber no es verde",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// [RECONCILIADOR] cierre · E63 · CC#2 · 2026-09-16\n//\n// 🔴 Una corrida que no pudo leer NO termina en verde. Nunca. Se lanza aquí, DESPUÉS\n// del aviso, para que el aviso salga primero y la corrida quede `error` en la lista.\n// 🔴 Y un aviso que Slack rechazó tampoco es un aviso: `chat.postMessage` contesta 200\n// con `ok:false` (misma enfermedad en el canal). Si no llegó, la corrida queda `error`.\nconst v = $('Find stuck (>20min)').first().json;\n\nlet slack = null;\ntry {\n  slack = $('AVISO · #alertas').first().json;\n} catch (e) {\n  slack = null; // no gritó en esta corrida · el nodo no corrió\n}\n\nif (v.grita === true && (!slack || slack.ok !== true)) {\n  throw new Error('[reconciliador] el aviso NO llego a #alertas · ' + ((slack && slack.error) || 'sin respuesta de Slack') + ' · estado ' + v.estado);\n}\n\nif (v.lectura_ok !== true) {\n  throw new Error('[reconciliador] NO SE PUDO LEER · ' + v.detalle + ' · esto NO es «cero colgados» · aviso ' + (v.grita ? 'enviado' : 'no enviado en esta vuelta (' + v.por_que_grita + ')'));\n}\n\nconsole.log('[reconciliador] ' + v.estado + ' · ' + v.por_que_grita);\nreturn [{ json: v }];\n",
+        "mode": "runOnceForAllItems"
+      }
+    }
+  ],
+  "connections": {
+    "Every 15 min": {
+      "main": [
+        [
+          {
+            "node": "Query waiting execs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Puerta · preguntar a pedido": {
+      "main": [
+        [
+          {
+            "node": "Query waiting execs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query waiting execs": {
+      "main": [
+        [
+          {
+            "node": "Find stuck (>20min)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find stuck (>20min)": {
+      "main": [
+        [
+          {
+            "node": "¿Grita?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Grita?": {
+      "main": [
+        [
+          {
+            "node": "AVISO · #alertas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cierre · no saber no es verde",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AVISO · #alertas": {
+      "main": [
+        [
+          {
+            "node": "Cierre · no saber no es verde",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

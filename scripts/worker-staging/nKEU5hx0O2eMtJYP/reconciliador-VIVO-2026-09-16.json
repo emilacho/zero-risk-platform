@@ -1,0 +1,179 @@
+{
+  "id": "nKEU5hx0O2eMtJYP",
+  "name": "Zero Risk — Reconciliador execs waiting colgados (CC#3)",
+  "versionId": "214433ec-2b18-4e26-8c28-d40b811aafaa",
+  "activeVersionId": "214433ec-2b18-4e26-8c28-d40b811aafaa",
+  "updatedAt": "2026-07-04T23:25:14.294Z",
+  "nodes": [
+    {
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        400,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "6ad24841-b1e1-436f-9507-998b8b71992e"
+    },
+    {
+      "name": "Query waiting execs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        620,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.N8N_BASE_URL || 'https://n8n-production-72be.up.railway.app' }}/api/v1/executions?status=waiting&limit=100",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-API-KEY",
+              "value": "={{ $env.N8N_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "ff56cf33-28c9-463e-83be-08b20a8fc113"
+    },
+    {
+      "name": "Find stuck (>20min)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const now = Date.now();\nconst rows = ($input.first().json.data) || [];\nconst THRESHOLD_MIN = 20;\nconst stuck = rows.filter(e => {\n  const st = e.startedAt ? new Date(e.startedAt).getTime() : now;\n  return (now - st) > THRESHOLD_MIN*60*1000;\n}).map(e => ({ id: e.id, workflowId: e.workflowId, startedAt: e.startedAt, mins: Math.round((now - new Date(e.startedAt).getTime())/60000) }));\nreturn [{ json: { stuck_count: stuck.length, stuck } }];"
+      },
+      "id": "83d31ad3-1821-4e67-8ff8-d4f3b1eba998"
+    },
+    {
+      "name": "Any stuck?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1060,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "stuck-gt-0",
+              "leftValue": "={{ $json.stuck_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0c6559db-8a6a-4cab-865a-e1a16e82f30a"
+    },
+    {
+      "name": "Alert Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: ':warning: *Reconciliador · execs n8n colgados en waiting* · ' + $json.stuck_count + ' ejecucion(es) > 20 min sin resumir\n' + ($json.stuck || []).map(s => '• exec ' + s.id + ' · wf ' + s.workflowId + ' · ' + s.mins + ' min').join('\n') + '\n(revisar · con el resume por sondeo LyVoKcrypS5uLyuu no deberia colgarse · esto detecta regresiones)' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "c1c29af0-f16d-434e-ac29-f4d5b81416b1"
+    }
+  ],
+  "connections": {
+    "Every 15 min": {
+      "main": [
+        [
+          {
+            "node": "Query waiting execs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query waiting execs": {
+      "main": [
+        [
+          {
+            "node": "Find stuck (>20min)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find stuck (>20min)": {
+      "main": [
+        [
+          {
+            "node": "Any stuck?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any stuck?": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
