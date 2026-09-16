@@ -39,6 +39,8 @@ export default defineConfig({
       // (cero infra CI nueva). @slack/bolt sólo se importa en el camino vivo · los tests no lo tocan.
       'tools/**/*.test.js',
     ],
+    // E67 · llave de despacho de prueba para el camino feliz del despachador
+    setupFiles: ["__tests__/_setup/e67-dispatch-key.ts"],
     testTimeout: 10000,
     reporters: ['default'],
   },

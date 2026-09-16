@@ -81,6 +81,7 @@ export type WorkflowDispatchResult =
         | 'webhook_failed'
         | 'fetch_threw'
         | 'invalid_journey_type'
+        | 'dispatch_key_missing'
       readonly detail?: string
       readonly status_code?: number
     }
@@ -174,6 +175,26 @@ export async function dispatchToWorkflow(
   }
   const webhook_url = `${base}/webhook/${target.webhook_path}`
 
+  // ─── Gate 4 · E67 · la llave de despacho ───
+  // El obrero (hoy el alta) exige `x-sala-dispatch-key` = `SALA_DISPATCH_KEY`.
+  // La marca `trigger_source` (abajo) es RASTRO adivinable, no llave: un POST
+  // con la marca copiada arrancaba una corrida paga. Si el obrero la exige y
+  // el entorno no la tiene, NO se dispara (fail-closed): el sobre vuelve a la
+  // fila con motivo visible en vez de morir en el guarda del obrero.
+  const dispatch_key = (process.env.SALA_DISPATCH_KEY ?? '').trim()
+  if (target.dispatch_key_required && !dispatch_key) {
+    logger.error('dispatch key missing · fail-closed', {
+      workflow_id: target.workflow_id,
+      worker_name: target.worker_name,
+    })
+    return {
+      ok: false,
+      dispatched: false,
+      reason: 'dispatch_key_missing',
+      detail: `SALA_DISPATCH_KEY not set · worker '${target.worker_name}' requires it · fail-closed (E67)`,
+    }
+  }
+
   // ─── Build webhook body · §149 correlation (STOP-2 (b)) ───
   // `_journey_id = stream_id` propagates to every agent call inside the
   // worker · `_sala_correlation_id` keeps end-to-end traza · the worker
@@ -218,7 +239,12 @@ export async function dispatchToWorkflow(
   try {
     res = await fetcher(webhook_url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // E67 · la llave viaja en cabecera, nunca en el cuerpo (el cuerpo se
+        // guarda en la corrida del obrero y se lee en 12 nodos).
+        ...(dispatch_key ? { 'x-sala-dispatch-key': dispatch_key } : {}),
+      },
       body: JSON.stringify(body),
     })
   } catch (e) {
