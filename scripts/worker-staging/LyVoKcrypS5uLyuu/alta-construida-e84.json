@@ -1,16 +1,5 @@
 {
- "id": "LyVoKcrypS5uLyuu",
  "name": "Zero Risk â€” Client Onboarding E2E v2 (Webhook: Deal Won)",
- "description": null,
- "active": false,
- "activeVersionId": null,
- "createdAt": "2026-04-18T15:45:06.415Z",
- "updatedAt": "2026-09-17T05:28:08.180Z",
- "isArchived": false,
- "versionId": "a9de5dd1-3acc-4725-ac8e-9d99cc19fa61",
- "versionCounter": 227,
- "sourceWorkflowId": null,
- "triggerCount": 1,
  "nodes": [
   {
    "id": "webhook-deal-won",
@@ -3305,7 +3294,6 @@
    ]
   }
  },
- "nodeGroups": [],
  "settings": {
   "executionOrder": "v1",
   "saveManualExecutions": true,
@@ -3316,30 +3304,5 @@
   "saveExecutionProgress": true,
   "binaryMode": "separate",
   "errorWorkflow": "5fkPLbZvQsQa1bcd"
- },
- "staticData": null,
- "pinData": {},
- "meta": null,
- "tags": [],
- "shared": [
-  {
-   "role": "workflow:owner",
-   "workflowId": "LyVoKcrypS5uLyuu",
-   "projectId": "xKBOyp07nrGbu4ob",
-   "project": {
-    "id": "xKBOyp07nrGbu4ob",
-    "name": "Emilio  Perez  <emilacho@hotmail.com>",
-    "type": "personal",
-    "icon": null,
-    "description": null,
-    "customTelemetryTags": [],
-    "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
-    "createdAt": "2026-04-18T13:41:21.856Z",
-    "updatedAt": "2026-04-18T13:51:26.012Z"
-   },
-   "createdAt": "2026-04-18T15:45:06.415Z",
-   "updatedAt": "2026-04-18T15:45:06.415Z"
-  }
- ],
- "activeVersion": null
+ }
 }

@@ -5,10 +5,10 @@
  "active": false,
  "activeVersionId": null,
  "createdAt": "2026-04-18T15:45:06.415Z",
- "updatedAt": "2026-09-17T05:28:08.180Z",
+ "updatedAt": "2026-09-17T00:34:38.285Z",
  "isArchived": false,
- "versionId": "a9de5dd1-3acc-4725-ac8e-9d99cc19fa61",
- "versionCounter": 227,
+ "versionId": "c84f8516-ec74-4d23-87c3-9c44c8f6fa34",
+ "versionCounter": 226,
  "sourceWorkflowId": null,
  "triggerCount": 1,
  "nodes": [
@@ -2102,7 +2102,7 @@
     1100
    ],
    "parameters": {
-    "errorMessage": "={{ ($json.error !== undefined && $json.discovery_package !== undefined) ? 'CIMIENTO MURIÓ · ' + String($json.error).slice(0, 700) + ' · el manual NO se escribió · la causa viene de la corrida del cimiento (ssLtwYPt7zxuvnM2 · el motor la borra en ~4 h)' : 'CIMIENTO NO PROMOVIDO · track_pass=' + $('[JEFATURA] Execute Cimiento Track').first().json.track_pass + ' · ciclos_agotados=' + $('[JEFATURA] Execute Cimiento Track').first().json.track_exhausted + ' · el manual NO se escribió · retención para revisión humana (NO se despacha nada).' }}"
+    "errorMessage": "=CIMIENTO NO PROMOVIDO · track_pass={{ $json.track_pass }} · ciclos_agotados={{ $json.track_exhausted }} · el manual NO se escribió · retención para revisión humana (NO se despacha nada)."
    }
   },
   {
