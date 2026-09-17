@@ -15,6 +15,7 @@ import {
   analizar,
   veredicto,
   huecos,
+  guardaSeComporta,
   sucesores,
   compararConMotor,
   HUERFANOS_CONOCIDOS,
@@ -71,9 +72,25 @@ describe(`E71 · alcanzabilidad del alta · foto ${ultima} · versionId ${r.vers
     expect(guarda, `falta «${GUARDA}»`).toBeDefined()
     expect(guarda?.disabled).not.toBe(true)
     expect(sucesores(alta, SOBRE)).toEqual([GUARDA])
-    expect(guarda?.parameters?.jsCode).toMatch(/ok !== true/)
-    expect(guarda?.parameters?.jsCode).toMatch(/throw new Error/)
+    // E75 · comportamiento, no palabras: la guarda se EJECUTA en banco
+    const g = guardaSeComporta(String(guarda?.parameters?.jsCode ?? ''))
+    expect(g.lanza_con_rechazo, 'la GUARDA no lanza con ok:false').toBe(true)
+    expect(g.pasa_con_duplicate, 'la GUARDA no deja pasar un duplicate').toBe(true)
     expect(huecos(alta, r)).toEqual([])
+  })
+
+  it('E75 · una guarda NEUTRALIZADA que conserva las palabras en comentarios ya NO pasa (H2c de E74)', () => {
+    const neutralizada = [
+      '// antes: if (cuerpo.ok !== true) { throw new Error("SOBRE_RECHAZADO") }',
+      'const r = $input.first().json;',
+      'return [{ json: { dejado_en_la_puerta: true, kind: (r.body || r).kind } }];',
+    ].join('\n')
+    const g = guardaSeComporta(neutralizada)
+    expect(g.lanza_con_rechazo).toBe(false)
+    const mutada = JSON.parse(JSON.stringify(alta)) as typeof alta
+    const gm = (mutada.nodes as Array<{ name: string; parameters: { jsCode?: string } }>).find((n) => n.name === GUARDA)!
+    gm.parameters.jsCode = neutralizada
+    expect(huecos(mutada, analizar(mutada)).some((p) => /ya no lanza/.test(p))).toBe(true)
   })
 
   it('E73 · hueco 3 · la foto es la misma versión que el motor (sólo con N8N_API_KEY · secreto de GitHub)', async () => {

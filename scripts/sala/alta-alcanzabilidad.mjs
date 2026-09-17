@@ -104,6 +104,26 @@ export const GUARDA = 'GUARDA · si la puerta rechazó el pedido de planeación'
  *     y «Llamar» tiene que ESPERAR a la segunda fase (waitForSubWorkflow no puede estar en false);
  *   - sin la GUARDA, un rechazo de la puerta vuelve a ser «200 y silencio» ⇒ la GUARDA tiene que existir,
  *     ser la salida del sobre, y lanzar cuando `ok !== true`. */
+/** E75 · ejecuta el código de una GUARDA de n8n en un banco mínimo ($input con un ítem) y mide su
+ *  COMPORTAMIENTO: con un rechazo de la puerta (ok:false) tiene que lanzar; con un `duplicate`
+ *  (ok:true) tiene que dejar pasar. Buscar palabras en el código no sirve: un comentario las conserva. */
+export function guardaSeComporta(code) {
+  const correr = (json) => {
+    const $input = { first: () => ({ json }), all: () => [{ json }] }
+    const $ = () => ({ first: () => ({ json: {} }), all: () => [] })
+    const $env = {}
+    try { new Function('$input', '$', '$env', '$json', code)($input, $, $env, json); return { lanzo: false } }
+    catch (e) { return { lanzo: true, msg: String(e && e.message || e) } }
+  }
+  try {
+    const rechazo = correr({ ok: false, code: 'unauthorized', detail: 'banco' })
+    const dup = correr({ ok: true, kind: 'duplicate', event_id: 'e', stream_id: 's' })
+    return { lanza_con_rechazo: rechazo.lanzo, pasa_con_duplicate: !dup.lanzo, error: dup.lanzo ? dup.msg : null }
+  } catch (e) {
+    return { lanza_con_rechazo: false, pasa_con_duplicate: false, error: String(e && e.message || e) }
+  }
+}
+
 export function huecos(workflow, r) {
   const byName = new Map((workflow.nodes ?? []).map((n) => [n.name, n]))
   const problemas = []
@@ -117,7 +137,10 @@ export function huecos(workflow, r) {
     const salidas = sucesores(workflow, SOBRE)
     if (!salidas.includes(GUARDA)) problemas.push(`«${GUARDA}» no es la salida del sobre (salidas: ${salidas.join(', ') || 'ninguna'})`)
     const code = String(guarda.parameters?.jsCode ?? '')
-    if (!/ok !== true/.test(code) || !/throw new Error/.test(code)) problemas.push(`«${GUARDA}» ya no lanza cuando ok !== true`)
+    // E75 · no se buscan palabras (un comentario las conserva): se EJECUTA la guarda en un banco
+    const g = guardaSeComporta(code)
+    if (!g.lanza_con_rechazo) problemas.push(`«${GUARDA}» ya no lanza con un rechazo de la puerta (ok:false)${g.error ? ' · ' + g.error : ''}`)
+    if (!g.pasa_con_duplicate) problemas.push(`«${GUARDA}» ya no deja pasar un duplicate (ok:true · kind duplicate)`)
     if (guarda.disabled) problemas.push(`«${GUARDA}» está desactivada`)
   }
   return problemas
