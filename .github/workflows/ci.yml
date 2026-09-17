@@ -52,6 +52,13 @@ jobs:
         # (handles `.mjs` script imports), the full 896/896 suite runs
         # cleanly on ubuntu-latest. Canon §4.3 "verify CI verde POST-push"
         # now includes test pass as a real gate.
+        # E73 (CC#1 2026-09-17) · con el secreto N8N_API_KEY la prueba de alcanzabilidad del
+        # alta compara la foto commiteada con el MOTOR (hueco 3 de E72: una foto desalineada
+        # dejaba CI en verde). Sin el secreto avisa en el log y no compara. Crear el secreto
+        # en GitHub → Settings → Secrets → Actions → N8N_API_KEY · manos de Emilio · nunca por chat.
+        env:
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+          N8N_BASE_URL: https://n8n-production-72be.up.railway.app
         run: pnpm test
 
   # ciclo CANDADO #1 (2026-07-19) · el paquete `packages/apify-mcp-server` está

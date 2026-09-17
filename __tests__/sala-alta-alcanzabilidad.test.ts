@@ -14,10 +14,14 @@ import { join } from 'node:path'
 import {
   analizar,
   veredicto,
+  huecos,
+  sucesores,
+  compararConMotor,
   HUERFANOS_CONOCIDOS,
   SOBRE,
   FINAL_REAL,
   DISPARADOR,
+  GUARDA,
 } from '../scripts/sala/alta-alcanzabilidad.mjs'
 
 const DIR = join(__dirname, '..', 'scripts', 'worker-staging', 'LyVoKcrypS5uLyuu')
@@ -51,6 +55,35 @@ describe(`E71 · alcanzabilidad del alta · foto ${ultima} · versionId ${r.vers
   })
 
   it('el veredicto del script coincide', () => {
-    expect(veredicto(r)).toEqual({ ok: true, problemas: [] })
+    expect(veredicto(r, alta)).toEqual({ ok: true, problemas: [] })
+  })
+
+  // ── E73 · los huecos de E72 (CC#2) ──
+  it('E73 · hueco 1 · ningún nodo del camino está DESACTIVADO y «Llamar» espera a la segunda fase', () => {
+    const byName = new Map((alta.nodes as Array<{ name: string; disabled?: boolean; parameters?: { options?: { waitForSubWorkflow?: boolean } } }>).map((n) => [n.name, n]))
+    const desactivados = r.camino.filter((n) => byName.get(n)?.disabled)
+    expect(desactivados, `desactivados en el camino: ${desactivados.join(' · ')}`).toEqual([])
+    expect(byName.get(FINAL_REAL)?.parameters?.options?.waitForSubWorkflow).not.toBe(false)
+  })
+
+  it('E73 · hueco 2 · la GUARDA existe, es la salida del sobre y lanza cuando ok !== true', () => {
+    const guarda = (alta.nodes as Array<{ name: string; disabled?: boolean; parameters?: { jsCode?: string } }>).find((n) => n.name === GUARDA)
+    expect(guarda, `falta «${GUARDA}»`).toBeDefined()
+    expect(guarda?.disabled).not.toBe(true)
+    expect(sucesores(alta, SOBRE)).toEqual([GUARDA])
+    expect(guarda?.parameters?.jsCode).toMatch(/ok !== true/)
+    expect(guarda?.parameters?.jsCode).toMatch(/throw new Error/)
+    expect(huecos(alta, r)).toEqual([])
+  })
+
+  it('E73 · hueco 3 · la foto es la misma versión que el motor (sólo con N8N_API_KEY · secreto de GitHub)', async () => {
+    const c = await compararConMotor(alta)
+    if (c === null) {
+      console.warn(`[E73] N8N_API_KEY ausente · la foto ${ultima} (${r.versionId}) NO se comparó con el motor · CI no puede ver una foto desalineada hasta que exista el secreto`)
+      return
+    }
+    expect(c.versionId_motor, `la foto (${c.versionId_foto}) y el motor (${c.versionId_motor}) no son la misma versión · refrescar con --foto`).toBe(c.versionId_foto)
+    expect(c.iguales).toBe(true)
+    expect(veredicto(analizar(c.vivo), c.vivo)).toEqual({ ok: true, problemas: [] })
   })
 })
