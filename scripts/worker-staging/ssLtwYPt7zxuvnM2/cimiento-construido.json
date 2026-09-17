@@ -1,0 +1,1031 @@
+{
+  "name": "Zero Risk — Brand Book · Cimiento Grading (sub-workflow productivo · CC#3 F2.2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/bb-isolated-smoke",
+        "responseMode": "lastNode"
+      },
+      "id": "iso-trigger",
+      "name": "Webhook · smoke trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        400
+      ],
+      "webhookId": "3d544e04-6c5a-4be0-83b0-37b909f66552",
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// De-smoke go-live F2.2 (CC#3) · lee data REAL del cliente del Execute Workflow Trigger.\n// SIN hardcode de cliente · SIN fallback enlatado (cond.1 BINDING): ausente/malformado → FALLA RUIDOSA.\nconst inp = ($json && $json.body && typeof $json.body === \"object\") ? $json.body : ($json || {});\nconst missing = [];\nfor (const f of ['client_id','client_name','industry']) if (!inp[f]) missing.push(f);\n// Pieza B (Emilio 2026-07-30) · website OPCIONAL: sin web el cimiento sale PROVISIONAL, no se para.\nconst _sin_web = !inp.website && !inp.domain;\nconst dp = inp.discovery_package;\nif (!dp || typeof dp !== 'object' || !dp.discovery_summary) missing.push('discovery_package');\nif (missing.length) {\n  throw new Error('CIMIENTO_INPUT_INVALIDO · faltan campos reales: ' + missing.join(', ') + ' · se PARA (no se sustituye por otro cliente · cond.1 BINDING)');\n}\nreturn [{ json: { client_id: inp.client_id, client_name: inp.client_name, industry: inp.industry,\n  website: inp.website || inp.domain || null, _sin_web, discovery_package: dp,\n  corrections: Array.isArray(inp.corrections) ? inp.corrections : [], _fidelity_cycle: (inp._fidelity_cycle ?? null),\n  _sala_correlation_id: inp._sala_correlation_id || null, _journey_id: inp._journey_id || null } }];"
+      },
+      "id": "iso-validate",
+      "name": "Validate Deal Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// De-smoke go-live F2.2 (CC#3) · usa el discovery_package REAL del parent (validado). SIN enlatado.\nconst inp = $('Validate Deal Data').first().json;\nconst dp = inp.discovery_package;\nif (!dp || typeof dp !== 'object' || !dp.discovery_summary) {\n  throw new Error('CIMIENTO_DISCOVERY_INVALIDO · discovery_package real ausente/malformado · se PARA (cond.1 BINDING)');\n}\nreturn [{ json: { client_id: inp.client_id, discovery_package: dp } }];"
+      },
+      "id": "iso-confirm",
+      "name": "Confirm barato · competitor list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Brand Book · Fan-out prep · paso 2 · arma el grounding compartido para las 3\n// lentes (brand-strategist · editor-en-jefe · jefe-client-success). Corre DESPUÉS\n// de FASE 2 (Aggregate Apify listo) · fuera del gate Camino III. NO INSERT.\n\nconst dealData = $('Validate Deal Data').first().json;\nconst clientId = dealData.client_id;\nconst discoveryPkg =\n  ($('Confirm barato · competitor list').first().json.discovery_package) || {};\nconst apifyAgg = (() => {\n  try { return $('[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)').first().json; }\n  catch (e) { return {}; }\n})();\n\n// 2026-08-04 (diff v2) · EL ICP LLEGA POR LA BASE, NO POR LA MEMORIA.\n// En el tiro 76543 `discovery_package.icp_signals` vino con los 8 arreglos VACÍOS mientras\n// `client_icp_documents` SÍ tenía el dato (el pain de la barrera idiomática). El escritor\n// inventaba el ICP y el juez no podía fundamentarlo. Se carga de la base ANTES del fan-out\n// para que la evidencia llegue PRIMERO al que escribe y después al que juzga.\n//\n// Lector `.all()` (🔴 CC#2): n8n parte los arrays de respuesta en ÍTEMS · con limit=5 el nodo\n// emite 5 ítems y `.first()` tomaría 1 de 5 ⇒ el arreglo quedaría INERTE, degradando en verde.\n// El `.filter` descarta además el {} de `alwaysOutputData` y el ítem de paso de `continueRegularOutput`.\nconst icpRows = (() => { try {\n  return $('[BB] Load ICP (canon)').all()\n    .map((i) => i.json)\n    .filter((r) => r && (r.audience_segment || r.pain_points || r.goals));\n} catch (e) { return []; } })();\n// tope POR TAMAÑO, no sólo por cantidad · el presupuesto real del juez es ~1.735 chars\nconst capTxt = (s, n) => String(s == null ? '' : s).replace(/\\s+/g, ' ').trim().slice(0, n);\n// 2026-08-07 (A · el recorte tiraba el segmento que el borrador AFIRMA) · el tope era 3 sobre\n// 5 filas: se caian \"Turista nacional ecuatoriano\" y \"Residente local y visitante recurrente\n// de Olon\". El borrador real de 76543 afirma un \"SEGMENTO 3 · Comensal local / habitual de\n// encebollado\" = la fila 5. El juez veia el reclamo SIN la evidencia y lo castigaba\n// (icp_summary 0.72/0.68). Tope 3->5 = el `limit=5` del lector: no puede haber mas filas.\nconst TOPE_ICP = 5;\n// Reparto POR RONDA, no aplanado: aplanando, los 5 primeros dolores salian TODOS de las filas\n// 1-2 y los segmentos 3-5 llegaban con nombre pero sin dolores ni objetivos (media reparacion).\n// La ronda toma 1 por fila y da la vuelta => los 5 segmentos representados por 21 chars mas.\n// Medido contra las 5 filas reales: 1345->1366 ch, tope 1700 (margen 334).\n// 2026-08-08 (ATRIBUCION) · el juez veia 5 dolores en lista PLANA sin saber de que segmento era\n// cada uno ⇒ no podia verificar \"SEGMENTO 3 · Comensal local · pains: ...\" ⇒ techo medido 0.845\n// (8 muestras · 4/8 cruzan). Ahora cada dato viaja con su etiqueta [Sn].\n// DEDUP fusionando etiquetas: un dato declarado por dos segmentos sale UNA vez como [S2,3] ·\n// mas informativo y mas corto que repetirlo. CC#2: sin numeros repetidos + etiquetas ordenadas.\nconst flatIcp = (k) => {\n  const porFila = icpRows.slice(0, TOPE_ICP)\n    .map((s) => (Array.isArray(s[k]) ? s[k] : (s[k] ? [s[k]] : [])).filter(Boolean));\n  const vistos = new Map();                       // texto -> [segmentos que lo declaran]\n  for (let v = 0; vistos.size < TOPE_ICP; v++) {\n    let sumo = false;\n    for (let i = 0; i < porFila.length; i++) {\n      if (porFila[i][v] === undefined) continue;\n      sumo = true;\n      const t = capTxt(porFila[i][v], 110);\n      if (vistos.has(t)) { const a = vistos.get(t); if (a.indexOf(i + 1) === -1) a.push(i + 1); }\n      else if (vistos.size < TOPE_ICP) vistos.set(t, [i + 1]);\n    }\n    if (!sumo) break;   // ninguna fila tiene el indice v => se agotaron => termina\n  }\n  return [...vistos.entries()].map(([t, ss]) => '[S' + ss.slice().sort((a, b) => a - b).join(',') + '] ' + t);\n};\n// ── LOS DOS CAMPOS QUE FALTABAN (2026-09-02 · GO Emilio) ──────────────────\n// De los 11 campos que el descubrimiento recolecta para el perfil, al redactor\n// le viajaban 5. Medido: el manual de GoEurope tiene EXACTAMENTE los 4 campos\n// que se le pasan (dolores, metas, objeciones, canales) y nada mas. No fue el\n// empleado ni el codigo: el pedido nunca los pidio, en NINGUNA version.\n//\n// Entran DOS, y por que:\n//   decision_criteria  = \"por que te eligen a vos\" · materia prima de las\n//                        propuestas de valor y los mensajes clave, que hoy\n//                        salen provisionales (confianza 0,60). Solape con lo\n//                        que ya viaja: 0,14 ⇒ aporta nuevo.\n//   buying_process     = el camino real hasta la compra · materia prima del\n//                        angulo de cliente (0,68) y la retencion (0,42), dos\n//                        de las tres secciones mas flojas. Solape: 0,30.\n// NO entran (medidos y descartados):\n//   jobs_to_be_done    = las metas en otra gramatica · el mas caro (429 ch)\n//   budget_range       = el precio YA le llega por el descubrimiento (CHF ...)\n//   information_sources / key_messages_for_segment = VACIOS en 58 de 58 fichas\n//\n// ── EL FRENO DE PRESUPUESTO · por que existe ──────────────────────────────\n// El tope de ~1.700 que menciona el comentario de arriba NO esta en el codigo:\n// es una nota de medicion del 08-ago, tomada contra un pedido que desde\n// entonces crecio de 8.419 a 10.199 caracteres sin que nadie la re-midiera.\n// Los topes que SI se aplican son duros y silenciosos:\n//     JSON.stringify(grounding).slice(0, 6800)   y   task.slice(0, 7900)\n// Medido en la corrida real de GoEurope (exec 118856):\n//     grounding 6.098/6.800 (margen 702) · pedido mas largo 7.314/7.900 (586)\n// A 5 items x 110 los dos campos cuestan +768 ⇒ REVIENTAN los dos topes y el\n// recorte parte el JSON por la mitad, en silencio. A 3 x 110 cuestan +578 y\n// entran por OCHO caracteres. Ocho no es un margen: es una casualidad.\n// Por eso el tamano no se fija, se PRESUPUESTA: se arma a 3 x 110 y si no\n// entra en el presupuesto se recorta SOLO lo nuevo, nunca lo que ya viajaba.\nconst TOPE_ICP_NUEVOS = 3;\nconst CAP_ICP_NUEVOS = 110;\n// 520 ch = el costo JSON de los dos a 3x110 medido en GoEurope (578) menos un\n// margen deliberado. Sube o baja este numero y no se toca nada mas.\nconst PRESUPUESTO_ICP_NUEVOS = 520;\n// Igual que flatIcp pero con tope y cap propios · misma forma de etiquetas [Sn].\nconst flatIcpNuevo = (k) => {\n  const porFila = icpRows.slice(0, TOPE_ICP)\n    .map((s) => (Array.isArray(s[k]) ? s[k] : (s[k] ? [s[k]] : [])).filter(Boolean));\n  const vistos = new Map();\n  for (let v = 0; vistos.size < TOPE_ICP_NUEVOS; v++) {\n    let sumo = false;\n    for (let i = 0; i < porFila.length; i++) {\n      if (porFila[i][v] === undefined) continue;\n      sumo = true;\n      const t = capTxt(porFila[i][v], CAP_ICP_NUEVOS);\n      if (vistos.has(t)) { const a = vistos.get(t); if (a.indexOf(i + 1) === -1) a.push(i + 1); }\n      else if (vistos.size < TOPE_ICP_NUEVOS) vistos.set(t, [i + 1]);\n    }\n    if (!sumo) break;\n  }\n  return [...vistos.entries()].map(([t, ss]) => '[S' + ss.slice().sort((a, b) => a - b).join(',') + '] ' + t);\n};\n// Costo REAL en el JSON que se recorta (clave + comillas + comas), no el largo del texto.\nconst _costoJson = (clave, arr) => (arr.length ? JSON.stringify({ [clave]: arr }).length - 2 : 0);\n// Recorta SOLO los dos nuevos hasta entrar. Prioridad medida: los criterios de\n// decision valen mas que el proceso de compra (solape 0,14 vs 0,30), asi que el\n// que pierde items primero es el proceso de compra. Si aun asi no entra, se\n// vacian los dos: el pedido queda EXACTAMENTE como hoy, nunca truncado.\nconst _ajustarNuevos = (crit, compra) => {\n  let c = crit.slice(), p = compra.slice();\n  const costo = () => _costoJson('decision_criteria', c) + _costoJson('buying_process', p);\n  while (costo() > PRESUPUESTO_ICP_NUEVOS && (c.length || p.length)) {\n    if (p.length >= c.length && p.length) p.pop();\n    else if (c.length) c.pop();\n  }\n  return { decision_criteria: c, buying_process: p, _recortado: (c.length !== crit.length || p.length !== compra.length) };\n};\nconst _nuevosIcp = _ajustarNuevos(flatIcpNuevo('decision_criteria'), flatIcpNuevo('buying_process'));\n\nconst icpDesdeBase = icpRows.length ? {\n  // CC#2 · la etiqueta se ata a la POSICION DE FILA, no al orden despues de filtrar: un\n  // audience_segment vacio correria los indices y [S3] dejaria de ser la fila 3. Y toda fila\n  // recibe etiqueta (con nombre o sin el) ⇒ NUNCA una [Sn] huerfana en dolores/objetivos.\n  segments: icpRows.slice(0, TOPE_ICP).map((s, i) => '[S' + (i + 1) + '] ' +\n    (s.audience_segment ? capTxt(s.audience_segment, 90) : '(segmento sin nombre)')),\n  pain_points: flatIcp('pain_points'),\n  goals: flatIcp('goals'),\n  objections: flatIcp('objections'),\n  preferred_channels: flatIcp('preferred_channels'),\n  // Los dos nuevos van AL FINAL y solo si tienen contenido: un cliente sin\n  // estos datos produce un bloque byte-identico al de hoy.\n  ...(_nuevosIcp.decision_criteria.length ? { decision_criteria: _nuevosIcp.decision_criteria } : {}),\n  ...(_nuevosIcp.buying_process.length ? { buying_process: _nuevosIcp.buying_process } : {}),\n} : null;\n// preferencia: lo de la CORRIDA si vino poblado · la base como fuente cuando no\nconst _icpMem = discoveryPkg.icp_signals || discoveryPkg.icp || null;\nconst _memTieneAlgo = !!_icpMem && Object.keys(_icpMem).some((k) => Array.isArray(_icpMem[k]) && _icpMem[k].length);\nconst icpFinal = _memTieneAlgo ? _icpMem : icpDesdeBase;\n\n// centinelas · 'unknown' NO es evidencia · se filtra EN EL ORIGEN porque el que inventa\n// es el ESCRITOR (las lentes), no sólo el juez · cubre a los dos consumidores de una vez.\nconst SENTINELAS = new Set(['unknown', 'no especificado', 'n/a', 'na', '-', '']);\nconst ev = (v) => { const s = String(v == null ? '' : v).trim().toLowerCase(); return SENTINELAS.has(s) ? '' : String(v).trim(); };\n\n// Evidencia real ya en el brain · es el grounding de las 3 lentes (cero invención).\nconst grounding = {\n  client_id: clientId,\n  client_name: ev(dealData.client_name),\n  industry: ev(dealData.industry),\n  website: ev(dealData.website),\n  discovery_summary: discoveryPkg.discovery_summary || '',\n  // E39 (CC#2 2026-09-15) · tercer y ultimo filtro · aca la casilla entra a la\n  // EVIDENCIA de las tres lentes. NO figura en _SACRIFICIO_EV a proposito: el\n  // resumen es sacrificable, que ES el negocio no.\n  business_model: discoveryPkg.business_model || '',\n  competitors: (discoveryPkg.competitors || []).slice(0, 8),\n  icp_signals: icpFinal,\n  apify_sources: (apifyAgg.sources || apifyAgg.results || []).slice(0, 10),\n  _icp_source: _memTieneAlgo ? 'corrida' : (icpRows.length ? 'client_icp_documents' : 'ninguna'),\n  _icp_rows: icpRows.length,\n};\n\n// Un item por lente · cada uno con su task scoped a su skill (disciplina de fan-out:\n// solo los 3 contribuyentes relevantes · NO los 38 · §150).\nconst _PROSA =\n  'Construí TU sección del brand book SOLO desde la evidencia real del cliente abajo ' +\n  '(web/redes/discovery/Apify). NO inventes. CUANDO TENGAS TU SECCIÓN LISTA, LLAMÁ EL TOOL ' +\n  '`emit_brand_section` con tus campos (pasá `lens` con tu nombre de lente). NO narres la ' +\n  'respuesta · usá el tool · es la ÚNICA forma en que tu sección llega al consolidador. ' +\n  // 2026-08-08 (LINEA DEL ESCRITOR) · la leyenda de las [Sn] vivia SOLO en [BB] Judge prep: el\n  // escritor recibia la notacion sin explicacion NI instruccion. Dos riesgos: (1) tener que\n  // inferir el mapeo, (2) COPIAR las etiquetas al manual ⇒ el artefacto que se promueve a canon\n  // saldria contaminado con notacion interna. Superficie estrenada 07-ago · la prueba de $0.20\n  // no la cubre (inyecta el borrador viejo con las lentes apagadas) ⇒ correria 1a vez en el tiro.\n  'Las etiquetas [Sn] del ICP indican a qué segmento pertenece cada dato (un dato puede ' +\n  'pertenecer a varios) · usalas para NO mezclar segmentos · NUNCA las copies al texto del ' +\n  'brand book. ' +\n  'Grounding cada afirmación en la evidencia.';\n// FASE 1 p2 (2026-08-09) · se parte la prosa de la evidencia para poder poner la INSTRUCCION\n// ANTES de la evidencia en las lentes que crecen (H2). `base` se reconstruye IDENTICO a como\n// estaba: brand-strategist lo sigue usando y su tarea sale BYTE-IDENTICA (Q2b · protege el gate).\n// ── TOPE REAL · 14.000 · copiado del gemelo [BB] Judge prep (2026-09-03) ──────────\n// Acá vivía: «guard final · run-sdk rechaza task > 8000 chars (E-INPUT-INVALID)».\n// Era falso DOS veces y sobrevivió tres semanas:\n//  (1) el endpoint NUNCA rechazó · sanitizeString RECORTA EN SILENCIO\n//      (src/lib/validation.ts:15-20 · documentado en run-sdk/route.ts:241-247);\n//  (2) desde el 11-ago los DOS topes reales están en 16.000 y atados por una prueba\n//      (contracts/inputs/agents-run-sdk.json:18 · TASK_MAX_CHARS · task-cap.test.ts).\n// El número NO se inventa: el gemelo [BB] Judge prep midió 12.770 de pedido entero y\n// eligió 14.000 — ~10% sobre lo medido y 2.000 de colchón contra el techo del endpoint.\n// Mismo criterio, mismo número.\nconst TOPE_TASK = 14000;\nconst CAB_EV = '\\n\\nEVIDENCIA:\\n';\n\n// Las tres secciones a constantes: hay que conocer su largo ANTES de presupuestar la\n// evidencia. El TEXTO de cada una queda byte-idéntico al de hoy.\nconst _SEC_BS = '\\n\\nTU SECCIÓN: positioning + icp (audience_segment, pains, goals).';\nconst _SEC_EJ = '\\n\\nTU SECCIÓN: voice_description + forbidden_words[] + required_terminology[]'\n  + ' + personalidad[] (3-6 rasgos de la voz OBSERVADA en la evidencia · no aspiracionales)'\n  + ' + tagline_opciones[] (2-3 · destilación del positioning · es una ELECCIÓN, no un hecho)'\n  + ' + mensajes_clave[] (3-5 · desde los dolores/objetivos del ICP + el positioning).';\nconst _SEC_JCS = '\\n\\nTU SECCIÓN: customer_angle + retention_notes'\n  + ' + mision (qué hace el negocio y para quién · 1-2 frases)'\n  + ' + proposito (el \"por qué\", inferido de la evidencia · aspiracional · 1 frase)'\n  + ' + propuestas_de_valor[] (3-5 · diferenciadores REALES contra los competidores de la evidencia).';\n\n// FASE 1 p2 · Q2(b) del Consejero: los 6 campos nuevos van a las DOS lentes NO gateadas.\n// brand-strategist NO se toca: emite los mismos 2 campos que hoy ⇒ un truncado de salida\n// (P5) NO puede desplazar positioning/icp_summary, porque su carga util no cambio ni un byte.\n// El estampado viaja en _meta (propiedad PARALELA · CC#1 la declaro en el esquema): ningun\n// campo existente cambia de tipo ⇒ el gate queda byte-identico tambien a nivel de esquema.\nconst REGLA_PROV = '\\nPara los campos NUEVOS agregá `_meta` con { fuente, confianza } por campo: `fuente` cita el fragmento de la EVIDENCIA que lo sostiene y `confianza` es 0..1. Si la evidencia NO alcanza para un campo, devolvelo VACÍO con confianza 0 · NUNCA lo inventes. Un campo vacío es un resultado honesto y esperado.';\n\n// ── EVIDENCIA POR PRIORIDAD · ENTERA O NADA · nunca a mitad de cadena ────────────\n// Antes había DOS recortes ciegos en fila: JSON.stringify(grounding).slice(0,6800) y\n// después task.slice(0,7900). El 03-sep (exec 121007) partieron decision_criteria a\n// mitad de cadena en DOS de las tres lentes — JSON roto — y NADA lo declaró.\n// Método copiado del gemelo [BB] Judge prep (los NO gateados · enteros o nada · lo que\n// no entra se declara): se arma por CLAVES · cada clave entra COMPLETA o no entra.\n// icp_signals NO figura en el orden de sacrificio: es el bloque que las tres lentes\n// tienen INSTRUCCIÓN de usar y adentro viven los campos nuevos. Ése es el ÚNICO cambio\n// deliberado de prioridad frente al recorte ciego de hoy (hoy icp_signals muere ANTES\n// que competitors sólo por su posición dentro del objeto, no por su valor).\nconst _SACRIFICIO_EV = ['apify_sources', 'competitors', 'discovery_summary'];\nconst _evidencia_omitida = [];\n// El presupuesto se mide contra la lente MÁS APRETADA para que las tres sigan recibiendo\n// la MISMA evidencia · propiedad de hoy que no se cambia.\nconst _FIJO_MAX = Math.max(\n  _PROSA.length + _SEC_BS.length,\n  _PROSA.length + _SEC_EJ.length + REGLA_PROV.length,\n  _PROSA.length + _SEC_JCS.length + REGLA_PROV.length\n);\nconst _PRESUP_EV = TOPE_TASK - _FIJO_MAX - CAB_EV.length;\nconst _evidencia = (() => {\n  const g = {};\n  for (const k of Object.keys(grounding)) g[k] = grounding[k];\n  for (const k of _SACRIFICIO_EV) {\n    if (JSON.stringify(g).length <= _PRESUP_EV) break;\n    if (!(k in g)) continue;\n    delete g[k];\n    _evidencia_omitida.push(k);\n  }\n  return g;\n})();\nconst _EV = CAB_EV + JSON.stringify(_evidencia);\nconst base = _PROSA + _EV;   // <- forma de HOY · brand-strategist sin cambios\n\n// guard de ÚLTIMO RECURSO · con el reparto de arriba no debería morder nunca.\n// Si muerde, se DECLARA (igual que _task_recortado del gemelo): nunca un corte mudo.\nconst _lentes_recortadas = [];\nconst cap = (t, lente) => {\n  if (t.length <= TOPE_TASK) return t;\n  _lentes_recortadas.push({ lente: lente, pedia: t.length, entro: TOPE_TASK });\n  return t.slice(0, TOPE_TASK);\n};\n\nconst lenses = [\n  { lens: 'brand-strategist', agent: 'brand-strategist',\n    task: cap(base + _SEC_BS, 'brand-strategist') },\n  { lens: 'editor-en-jefe', agent: 'editor-en-jefe',\n    task: cap(_PROSA + _SEC_EJ + REGLA_PROV + _EV, 'editor-en-jefe') },\n  { lens: 'jefe-client-success', agent: 'jefe-client-success',\n    task: cap(_PROSA + _SEC_JCS + REGLA_PROV + _EV, 'jefe-client-success') },\n];\n\n// FIX-FORWARD 2026-06-30 (Fix B · fan-out routing) · emití UN solo item con las\n// 3 tasks keyed por lente · cada nodo-lente lee SU task ($json.tasks.<lente>).\n// Antes emitía 3 items → n8n mandaba los 3 a cada nodo → mis-routing (solo 1\n// lente emitía · exec 41641). Un item = cada lente corre 1 vez con su task.\nconst tasks = {\n  'brand-strategist': lenses[0].task,\n  'editor-en-jefe': lenses[1].task,\n  'jefe-client-success': lenses[2].task,\n};\n\n// ── EL CORTE SE DECLARA · 2026-09-03 ─────────────────────────────────────────────\n// _recortado se calculaba desde el 02-sep (L130) y NO SE USABA en ninguna parte: una\n// única aparición en todo el nodo. Acá se usa por fin. Un corte silencioso de este nodo\n// no vuelve a pasar: si algo se cede, sale en el dato y se puede avisar.\nconst _margen = (t) => TOPE_TASK - t.length;\nconst _corte = {\n  hubo: _evidencia_omitida.length > 0 || _lentes_recortadas.length > 0 || _nuevosIcp._recortado === true,\n  tope: TOPE_TASK,\n  evidencia_omitida: _evidencia_omitida,\n  lentes_recortadas: _lentes_recortadas,\n  icp_nuevos_recortados: _nuevosIcp._recortado === true,\n  chars_por_lente: {\n    'brand-strategist': tasks['brand-strategist'].length,\n    'editor-en-jefe': tasks['editor-en-jefe'].length,\n    'jefe-client-success': tasks['jefe-client-success'].length,\n  },\n  margen_por_lente: {\n    'brand-strategist': _margen(tasks['brand-strategist']),\n    'editor-en-jefe': _margen(tasks['editor-en-jefe']),\n    'jefe-client-success': _margen(tasks['jefe-client-success']),\n  },\n  client_id: clientId,\n};\n_corte.detalle = _corte.hubo\n  ? ('CORTE en el armado del pedido · cliente ' + clientId\n     + (_evidencia_omitida.length ? ' · evidencia omitida: ' + _evidencia_omitida.join(', ') : '')\n     + (_lentes_recortadas.length ? ' · lentes recortadas: ' + _lentes_recortadas.map(function (x) { return x.lente + ' (' + x.pedia + '-' + x.entro + ')'; }).join(', ') : '')\n     + (_nuevosIcp._recortado === true ? ' · campos ICP nuevos recortados por presupuesto' : ''))\n  : '';\nreturn [{ json: { tasks, client_id: clientId, _grounding_refs: grounding, _corte: _corte } }];"
+      },
+      "id": "bb--bb-fan-out-prep",
+      "name": "[BB] Fan-out prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"brand-strategist\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-brand-strategist\",\n  \"task\": {{ JSON.stringify($json.tasks['brand-strategist']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"brand-strategist\" }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-lens-brand-strategist",
+      "name": "Lente · brand-strategist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-editor-en-jefe\",\n  \"task\": {{ JSON.stringify($json.tasks['editor-en-jefe']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"editor-en-jefe\" }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-lens-editor-en-jefe",
+      "name": "Lente · editor-en-jefe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"jefe-client-success\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-jefe-client-success\",\n  \"task\": {{ JSON.stringify($json.tasks['jefe-client-success']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"jefe-client-success\" }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-lens-jefe-client-success",
+      "name": "Lente · jefe-client-success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        2000
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "id": "bb-merge-lentes",
+      "name": "[BB] Merge lentes (esperar 3)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        820,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Brand Book · Consolidador (maker) · paso 3 + re-síntesis del lazo A (paso 4)\n// Funde las 3 lentes de los jefes en UN brand_book_draft · cada campo grounded\n// en evidencia real (discovery_summary + ICP + competitive del brain). NO INSERT.\n//\n// Inputs (vía $items / referencias de nodos):\n//   - brand-strategist  → posicionamiento + ICP\n//   - editor-en-jefe    → voz/tono + forbidden_words + required_terminology\n//   - jefe-client-success → ángulo cliente / retención\n//   - corrections (opcional · lazo A) → array de {eje,severidad,donde,problema,cambio_sugerido}\n//\n// Output: { brand_book_draft, cycle, _grounding_refs }\n\nconst dealData = $('Validate Deal Data').first().json;\nconst clientId = dealData.client_id;\n\n// Cada lente llega como respuesta run-sdk · tomamos su `response` (texto) o\n// `structured` si el agente emitió JSON. Defensive · floors seguros.\n// RED TRIPLE (CC#1 2026-08-10) · la sección puede venir RESCATADA (de la base o del\n// reintento) cuando la respuesta HTTP de la lente murió. `[BB] Rescate · red 3 · fusionar o PARAR`\n// ya garantizó que estén las 3 (si no, PARÓ). Se prefiere la rescatada; si el nodo no\n// existe (grafo viejo) el $() lanza y cae al camino de siempre · retrocompatible.\nconst _SLUG_POR_NODO = {\n  'Lente · brand-strategist': 'brand-strategist',\n  'Lente · editor-en-jefe': 'editor-en-jefe',\n  'Lente · jefe-client-success': 'jefe-client-success',\n};\nlet _rescatadas = {};\ntry { _rescatadas = $('[BB] Rescate · red 3 · fusionar o PARAR').first().json.secciones || {}; } catch (e) { _rescatadas = {}; }\n\nfunction lensOutput(nodeName) {\n  const _s = _rescatadas[_SLUG_POR_NODO[nodeName]];\n  if (_s) return { structured: _s, text: '' };\n  try {\n    const j = $(nodeName).first().json;\n    const body = j.body || j;\n    // CANON · la lente emite su sección vía emit_brand_section · el run-sdk la\n    // surface en body.brand_section (estructurado · NO texto narrativo).\n    // Fallbacks defensivos: intenta parsear JSON del response si por algún\n    // motivo el tool no fue capturado (degradación graceful).\n    let structured = body.brand_section || body.structured || null;\n    if (!structured && typeof body.response === 'string') {\n      const m = body.response.match(/\\{[\\s\\S]*\\}/);\n      if (m) { try { structured = JSON.parse(m[0]); } catch (e) {} }\n    }\n    return {\n      structured: structured || null,\n      text: typeof body.response === 'string' ? body.response : '',\n    };\n  } catch (e) {\n    return { structured: null, text: '' };\n  }\n}\n\nconst strat = lensOutput('Lente · brand-strategist');\nconst editor = lensOutput('Lente · editor-en-jefe');\nconst cs = lensOutput('Lente · jefe-client-success');\n\n// Correcciones acumuladas del lazo A (si venimos de una re-síntesis).\nlet corrections = [];\ntry {\n  corrections = (Array.isArray(dealData.corrections) && dealData.corrections.length) ? dealData.corrections : ($json.corrections || $json.staging_package?.corrections || []);\n} catch (e) { corrections = []; }\nconst cycle = (Number($json.cycle) || 0) + 1;\n// FIX 2026-06-30 (Bug 1 · loop infinito) · contador de fidelidad INDEPENDIENTE del\n// `cycle` del Lazo A (que el sub-wf resetea con su ciclo interno). Se incrementa\n// cada vez que el consolidador corre = cada iteración del loop de fidelidad del\n// worker principal. El IF · ciclos agotados hace hard-cap sobre ESTE contador.\nconst fidelityCycle = (Number($json._fidelity_cycle) || 0) + 1;\n\n// pick · usa structured cuando exista, fallback a texto.\nconst pick = (lens, key) =>\n  (lens.structured && lens.structured[key]) || lens.text || '';\n\n// FASE 1 p2 · lector de los 6 campos nuevos + ESTAMPADO por campo (3 estados).\n// El estampado llega en `_meta` (propiedad paralela del tool · CC#1). Es OPCIONAL: si el\n// modelo no la emite, el campo queda con fuente:\"\" y sigue ⇒ degrada, no rompe.\n// 3er balde \"ausente\" (H-A del Consejero): un campo SIN SEÑAL no es \"provisional\" (que\n// implica redactado) · es la lista de compras de la Fase 3.\nconst _meta = {};\n// FIX 2026-08-09 (VF8 · exec 87625) · el lector buscaba `_meta` y no desenvolvia la forma-objeto.\n// DATO de la corrida: las lentes emiten el estampado en `_field_meta` (el nombre que declaro CC#1)\n// Y ADEMAS pueden mandar el campo como { valor, fuente, confianza }. El editor uso la forma-objeto\n// (personalidad/tagline/mensajes) y el de cliente la forma plana: LAS DOS son validas y el esquema\n// las acepta. Sin desenvolver, el borrador se quedaba con \"[object Object]\" (15 ch) en 3 campos y\n// con TODAS las fuentes vacias, aunque las lentes las habian citado bien. Se acepta todo:\n//   (1) campo = { valor, fuente, confianza }   (2) _field_meta[campo]   (3) _meta[campo] (alias)\nconst _nuevo = (lens, key, lensName, vacio) => {\n  const st = lens.structured || {};\n  let raw = st[key];\n  let m = {};\n  if (raw && typeof raw === \"object\" && !Array.isArray(raw) && (\"valor\" in raw)) { m = raw; raw = raw.valor; }\n  const top = (st._field_meta && typeof st._field_meta === \"object\" && st._field_meta[key])\n           || (st._meta && typeof st._meta === \"object\" && st._meta[key]) || {};\n  if (!m.fuente && !Number.isFinite(Number(m.confianza))) m = top;\n  else if (!m.fuente && top.fuente) m = Object.assign({}, top, m);\n  const valor = (raw === undefined || raw === null) ? vacio : raw;\n  const vacioReal = Array.isArray(valor) ? valor.length === 0 : !String(valor || \"\").trim();\n  const c = Number(m.confianza);\n  _meta[key] = { estado: vacioReal ? \"ausente\" : \"provisional\", provisional: true, gateado: false,\n    fuente: typeof m.fuente === \"string\" ? m.fuente.slice(0, 200) : \"\",\n    confianza: Number.isFinite(c) ? Math.max(0, Math.min(1, c)) : null,\n    lente: lensName };\n  return valor;\n};\n// P5c · que un TRUNCADO no se lea como MALA CALIDAD. Si la lente no emitio structured, el\n// pick() cae al texto crudo: en VF8 eso baja el score y se leeria como \"los campos nuevos\n// distrajeron a la lente\" (P1) cuando el bug es el TOPE DE SALIDA (P5). Se EXPONE, no se actua\n// (actuar sobre el gate es Fase 1.b · Q3 del Consejero).\nconst structured_ok = { \"brand-strategist\": !!strat.structured, \"editor-en-jefe\": !!editor.structured, \"jefe-client-success\": !!cs.structured };\n\n\n// UNION DE LAS 3 LENTES (2026-09-02 · CC#3) · dedup sin distinguir mayusculas,\n// respetando el orden de llegada (editor primero, porque el campo es suyo).\n// NUNCA quita: el resultado siempre contiene todo lo que el editor traia.\n// Verificado contra exec 118856 (GoEuropeAdventure).\nconst _listaUnion = (key) => {\n  const vistos = new Set(); const out = [];\n  for (const l of [editor, strat, cs]) {\n    const arr = (l.structured && l.structured[key]) || [];\n    if (!Array.isArray(arr)) continue;\n    for (const raw of arr) {\n      const v = String(raw == null ? '' : raw).trim();\n      if (!v) continue;\n      const k = v.toLowerCase();\n      if (vistos.has(k)) continue;\n      vistos.add(k); out.push(v);\n    }\n  }\n  return out;\n};\n\nconst brandBookDraft = {\n  client_id: clientId,\n  // posicionamiento + ICP (brand-strategist)\n  positioning: pick(strat, 'positioning'),\n  icp_summary: pick(strat, 'icp_summary'),\n  // voz/tono + reglas (editor-en-jefe)\n  voice_description: pick(editor, 'voice_description'),\n  // UNION DE LAS 3 LENTES (2026-09-02) · antes esto leia SOLO al editor-en-jefe.\n  // Medido en la corrida real de GoEuropeAdventure (exec 118856): el editor mando\n  // forbidden_words: [] y el brand-strategist mando 12 palabras reales y bien\n  // razonadas ('el mejor de Zermatt', 'barato', 'luxury resort', 'certificado\n  // IFMGA'...). Las 12 se tiraban en silencio y el manual salio con CERO palabras\n  // prohibidas · unico de los 6 manuales sin ninguna (los otros tienen 12 a 23).\n  // Y el posicionamiento de ese mismo manual dice que compite \"sin afiliacion\n  // institucional\": las prohibiciones que protegian esa afirmacion eran justo las\n  // descartadas. Misma familia que \"4 correcciones emitidas, 4 descartadas\".\n  // SOLO AGREGA · si el editor ya trae la lista y nadie mas aporta, IDENTICO a hoy.\n  forbidden_words: _listaUnion('forbidden_words'),\n  required_terminology: _listaUnion('required_terminology'),\n  // ángulo cliente / retención (jefe-client-success)\n  customer_angle: pick(cs, 'customer_angle'),\n  retention_notes: pick(cs, 'retention_notes'),\n  // FASE 1 p2 · los 6 provisionales · NO entran a SCORED_FIELDS ni a GATED_FIELDS.\n  personalidad:        _nuevo(editor, 'personalidad',        'editor-en-jefe',      []),\n  tagline_opciones:    _nuevo(editor, 'tagline_opciones',    'editor-en-jefe',      []),\n  mensajes_clave:      _nuevo(editor, 'mensajes_clave',      'editor-en-jefe',      []),\n  mision:              _nuevo(cs,     'mision',              'jefe-client-success', ''),\n  proposito:           _nuevo(cs,     'proposito',           'jefe-client-success', ''),\n  propuestas_de_valor: _nuevo(cs,     'propuestas_de_valor', 'jefe-client-success', []),\n  _field_meta: _meta,\n  // metadata de build\n  _build: {\n    source: 'onboarding_collaborative_build',\n    lenses: ['brand-strategist', 'editor-en-jefe', 'jefe-client-success'],\n    cycle,\n    corrections_applied: corrections.length,\n    structured_ok,\n    structured_ok_all: structured_ok[\"brand-strategist\"] && structured_ok[\"editor-en-jefe\"] && structured_ok[\"jefe-client-success\"],\n  },\n};\n\n// Referencias de grounding · qué evidencia respalda el borrador (para el judge).\n// 2026-08-04 (diff v2) · el juez arma 8 casillas de evidencia y acá se le pasaban 2 (y usaba 1).\n// [BB] Fan-out prep YA construyó el grounding completo (nombre · industria · competidores ·\n// ICP desde la base): se REUSA, no se reconstruye. Antes se descartaba y el juez terminaba\n// puntuando el icp_summary de un restaurante contra un párrafo que describe un pueblo.\nlet _base = {};\ntry { _base = $('[BB] Fan-out prep').first().json._grounding_refs || {}; } catch (e) { _base = {}; }\nconst grounding = Object.assign({}, _base, {\n  discovery_summary: _base.discovery_summary ||\n    (($('Confirm barato · competitor list').first().json.discovery_package || {}).discovery_summary || ''),\n  client_id: clientId,\n});\n\nreturn [{ json: { brand_book_draft: brandBookDraft, cycle, _fidelity_cycle: fidelityCycle, corrections, _grounding_refs: grounding } }];\n"
+      },
+      "id": "bb--bb-consolidador",
+      "name": "[BB] Consolidador",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Brand Book · Judge prep · arma el task de fidelidad + metadata para el nodo HTTP.\n// FIX 2026-07-01 (judge no llegaba al runner) · el fetch del Code node NO llegaba\n// al runner en el contexto n8n (no creaba fila ni checkpoint → scores 0). Ahora la\n// llamada run-sdk se hace en un nodo HTTP Request (timeout 800s + neverError · mismo\n// patrón que lentes/revisores que SÍ funcionan). Este nodo solo prepara el task.\nconst THRESHOLD = 0.85;\nconst inJson = $json;\nconst draft = inJson.brand_book_draft || {};\nconst grounding = inJson._grounding_refs || {};\nconst cycle = Number(inJson.cycle) || 1;\nconst fidelityCycle = Number(inJson._fidelity_cycle) || 1;\n// P3 (endurecido 2026-07-30) · la fuente VALIDADA manda · el borrador del modelo NUNCA\n// controla la dirección de escritura. Antes era al revés (draft primero).\nconst clientId = $('Validate Deal Data').first().json.client_id || draft.client_id;\n\nconst SCORED_FIELDS = [\n  'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',\n];\nconst fieldsForPrompt = SCORED_FIELDS.map((f) => ({ field: f, value: String(draft[f] || '') }));\n\n// FIX 2026-07-01 (judge puntuaba 0 · evidencia rota) · construir la EVIDENCIA como\n// PROSA LEGIBLE (no JSON.stringify().slice() que cortaba a mitad de estructura · el\n// judge no la podía verificar → 0). Con evidencia limpia el mismo agente puntuó 0.92.\nconst g = grounding || {};\nconst icp = g.icp_signals || g.icp || {};\nconst arr = (x) => (Array.isArray(x) ? x : x ? [x] : []);\nconst line = (label, v) => {\n  const items = arr(v).map((s) => (typeof s === 'string' ? s : (s && (s.name || s.audience_segment)) || '')).filter(Boolean);\n  return items.length ? '- ' + label + ': ' + items.slice(0, 8).join(' · ') + '\\n' : '';\n};\n// 2026-08-04 (diff v2) · centinelas: 'unknown' NO es evidencia · si el campo es centinela se\n// OMITE la línea entera (una etiqueta sin valor también es ruido para el juez). 2ª capa: la 1ª\n// vive en [BB] Fan-out prep, que es donde el escritor lo consume.\nconst SENTINELAS = new Set(['unknown', 'no especificado', 'n/a', 'na', '-', '']);\nconst ev = (v) => { const s = String(v == null ? '' : v).trim().toLowerCase(); return SENTINELAS.has(s) ? '' : String(v).trim(); };\n// cap PROPIO del bloque ICP · el recorte global de 4.000 no debe llegar a morder nunca ·\n// y si un día muerde, _icp_chars lo delata en el dato en vez de aparecer como un score raro.\n// CC#2 · la LEYENDA va PRIMERO: si Omega recorta (siempre por la cola), lo ultimo que se pierde\n// es la llave de las [Sn]. Al reves, un recorte dejaria etiquetas sin explicacion.\nconst LEYENDA = '(cada [Sn] indica a que segmento pertenece el dato · un dato puede pertenecer a varios)\\n';\nconst icpCuerpo = (\n  line('Segmentos ICP', icp.segments) +\n  line('Dolores', icp.pain_points) +\n  line('Objetivos', icp.goals) +\n  line('Objeciones', icp.objections) +\n  line('Canales preferidos', icp.preferred_channels)\n);\nconst icpCrudo = icpCuerpo ? (LEYENDA + icpCuerpo) : '';\n// la evidencia SIN el ICP · es la parte que NO cede\nconst evBase = (\n  (ev(g.client_name) ? 'Cliente: ' + ev(g.client_name) + '\\n' : '') +\n  (ev(g.industry) ? 'Industria: ' + ev(g.industry) + '\\n' : '') +\n  'Resumen de descubrimiento (evidencia real del brain/discovery):\\n' +\n  String(g.discovery_summary || '').slice(0, 2200) + '\\n\\n' +\n  line('Competidores', (g.competitors || []).map((c) => c && c.name))\n);\n\n// 2026-08-08 (GUARDA OMEGA · presupuesto con PRIORIDAD) · el guard final era un slice(7900)\n// CIEGO sobre la COLA del prompt — y la cola son los CAMPOS, o sea EL ARTEFACTO QUE SE JUZGA.\n// Peor caso medido con atribucion: 7962 ⇒ el juez habria puntuado un borrador TRUNCADO sin que\n// nadie se entere (hoy, sin atribucion, ya estabamos a 32 chars del precipicio).\n// Ahora cede la evidencia COMPLEMENTARIA (el bloque ICP) y los CAMPOS nunca · y si cede, se ve.\n// El tope intermedio de 4000 sobre `evidencia` se ELIMINA: ya no manda, Omega calcula contra el\n// unico limite real (TOPE_TASK · el endpoint admite 16.000 desde PR #316).\nconst PROSA =\n  'Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y ' +\n  'los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo ' +\n  '(1 = totalmente grounded · 0 = inventado/contradice). LLAMÁ EL TOOL `emit_fidelity_scores` ' +\n  'con tus scores (un número 0..1 por campo). NO narres · usá el tool · es la ÚNICA forma en ' +\n  'que tus scores deciden el canon.\\n\\n';\nconst CAB_EV = 'EVIDENCIA:\\n';\nconst CAB_CAMPOS = '\\n\\nCAMPOS:\\n';\n// 2026-08-11 (TOPE NO CIEGO · Omega un nivel mas abajo) · el `slice(0, 3500)` sobre los CAMPOS\n// cortaba el JSON A MITAD DE CADENA y se comia los ultimos campos SIN DECIRLO.\n// Medido en 90184 (Peniche): customer_angle y retention_notes NO llegaron al prompt y el juez,\n// obligado por el tool a dar 5 notas, les puso 0 · CEROS FANTASMA sobre campos con 867 y 1193\n// chars de contenido real. Los dos manuales ya promovidos (hijas 85282 y 87049) tienen el mismo\n// corte, con `null` en esos dos campos. Y el 3500 era FIJO: en Peniche SOBRABAN 991 chars del\n// presupuesto y se recorto igual. Peor: el orden es fijo, asi que un positioning largo tumbaba\n// icp_summary — que SI esta gateado ⇒ manual bueno reprobado por un 0 que nadie leyo.\n//\n// Prioridad explicita: (1) los GATEADOS entran SIEMPRE · (2) el bloque ICP (lo necesita para\n// calificar icp_summary) · (3) los no gateados ENTEROS mientras quepan · lo que no entra se\n// DECLARA en `_campos_cortados` y NUNCA se puntua ([BB] Faithfulness judge lo fuerza a null).\n// 2026-08-11 (paso 2 · la ventana real) · el tope era 7900 porque se creia que run-sdk RECHAZABA\n// >8000. No rechazaba: RECORTABA en silencio (sanitizeString = slice). CC#1 subio el tope del\n// endpoint a 16.000 (PR #316 · en origin/main). Medido sobre 3 corridas reales, el prompt ENTERO\n// sin ningun recorte pide 12.770 chars como maximo (87049 Zero Risk) ⇒ 14.000 da 10% de margen\n// sobre lo medido y deja 2.000 de colchon contra el techo del endpoint.\n// Omega y el reparto por campo entero NO se sacan: dejan de morder y quedan de red.\nconst TOPE_TASK = 14000;\nconst GATED_FIELDS = ['positioning', 'icp_summary'];\nconst FIJO = PROSA.length + CAB_EV.length + CAB_CAMPOS.length + evBase.length;\nconst entrada = (f) => ({ field: f, value: String(draft[f] || '') });\nconst _campos_cortados = [];\nlet _campo_truncado = null;\n\n// 1 · los gateados · innegociables\nlet lista = GATED_FIELDS.filter((f) => SCORED_FIELDS.indexOf(f) !== -1).map(entrada);\nlet camposTxt = JSON.stringify(lista);\n// piso duro · si los gateados SOLOS no entran se recorta el VALOR del mas largo y se DECLARA.\n// Nunca se descarta un campo gateado: sin el, el gate juzgaria a ciegas.\nlet _g = 0;\nwhile (FIJO + camposTxt.length > TOPE_TASK && _g++ < 20) {\n  let peor = 0;\n  for (let k = 1; k < lista.length; k++) if (lista[k].value.length > lista[peor].value.length) peor = k;\n  const exceso = (FIJO + camposTxt.length) - TOPE_TASK;\n  const nuevoLargo = Math.max(200, lista[peor].value.length - exceso - 40);\n  if (nuevoLargo >= lista[peor].value.length) break;\n  lista[peor] = { field: lista[peor].field, value: lista[peor].value.slice(0, nuevoLargo) + ' …[RECORTADO]' };\n  _campo_truncado = lista[peor].field;\n  camposTxt = JSON.stringify(lista);\n}\n\n// 2 · el bloque ICP · con lo que queda tras los gateados\nconst espacioIcp = Math.max(0, TOPE_TASK - (FIJO + camposTxt.length));\nconst _omega_sin_espacio = espacioIcp === 0;   // CC#2 · patologico: ni un char para el ICP\nconst icpBlock = icpCrudo.slice(0, Math.min(1900, espacioIcp));\nconst _icp_chars = icpBlock.length;\nconst _icp_recortado = icpBlock.length < icpCrudo.length;   // ← nunca silencioso\n\n// 3 · los NO gateados · enteros o nada · lo que no entra se declara\nfor (const f of SCORED_FIELDS) {\n  if (GATED_FIELDS.indexOf(f) !== -1) continue;\n  const prueba = JSON.stringify(lista.concat([entrada(f)]));\n  if (FIJO + icpBlock.length + prueba.length <= TOPE_TASK) { lista = lista.concat([entrada(f)]); camposTxt = prueba; }\n  else _campos_cortados.push(f);\n}\n// orden canonico para el juez (el armado fue por prioridad, no por orden de lectura)\nlista.sort((a, b) => SCORED_FIELDS.indexOf(a.field) - SCORED_FIELDS.indexOf(b.field));\ncamposTxt = JSON.stringify(lista);\n\nconst evidencia = evBase + icpBlock;\nconst _crudo = PROSA + CAB_EV + evidencia + CAB_CAMPOS + camposTxt;\n// ultimo recurso · con el reparto de arriba NO deberia morder nunca · si muerde, se DECLARA.\nconst _task_recortado = _crudo.length > TOPE_TASK;\nconst judgeTask = _crudo.slice(0, TOPE_TASK);\n\n// 2026-08-08 (F.b) · la señal del Lazo A moria en la frontera. En el ciclo 2 este $json ES la\n// salida del Lazo A (wiring: [BB] Execute Lazo A corrección → [BB] Judge prep) ⇒ se recoge y se\n// lleva hasta el contrato del padre. Aditivo: no toca ningun calculo.\nconst _lazo = (inJson._lazo_a_done === true) ? {\n  esteril: (inJson._lazo_esteril === undefined ? null : inJson._lazo_esteril),\n  detalle: inJson._esteril_detalle || null,\n  reviewers_ok: (inJson.reviewers_ok === undefined ? null : inJson.reviewers_ok),\n  resynth_ran: inJson.resynth_ran === true,\n  resynth_ok: inJson.resynth_ok === true,\n  scope: inJson._resynth_scope || null,\n  scope_ausente: inJson._scope_ausente === true,\n  fuera_de_alcance: inJson._fuera_de_alcance || [],\n  draft_sin_cambio: inJson._draft_sin_cambio === true,\n} : null;\n\nreturn [{ json: {\n  judge_task: judgeTask,\n  _lazo,\n  _icp_chars,\n  // 2026-08-07 (CC#2) · el margen contra TOPE_TASK se MIDE, no se asume: los 6999 del\n  // diseno estan medidos con competitors:[] y en el tiro real suben. Que viva en el dato.\n  _judge_task_chars: judgeTask.length,\n  _icp_recortado,\n  _omega_sin_espacio,\n  _campos_cortados,     // campos que NO entraron al prompt · nunca se puntuan\n  _campo_truncado,      // campo GATEADO cuyo valor hubo que recortar (patologico)\n  _task_recortado,      // el guard de ultimo recurso mordio (no deberia)\n  _evidencia_chars: evidencia.length,\n  judge_step_name: 'bb-faithfulness-judge-c' + fidelityCycle,\n  client_id: clientId,\n  brand_book_draft: draft,\n  _grounding_refs: grounding,\n  cycle,\n  _fidelity_cycle: fidelityCycle,\n  threshold: THRESHOLD,\n} }];\n"
+      },
+      "id": "bb--bb-judge-prep",
+      "name": "[BB] Judge prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"{{ $json.judge_step_name }}\",\n  \"task\": {{ JSON.stringify($json.judge_task) }},\n  \"context\": { \"role\": \"faithfulness_judge\", \"threshold\": 0.85 },\n  \"extra\": { \"fidelity_judge\": true }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-judge-http",
+      "name": "[BB] Judge · run-sdk",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Brand Book · Faithfulness judge · SCORING · paso 5 · ESTO decide canon (no votos).\n// FIX 2026-07-01 · la llamada run-sdk se movió a un nodo HTTP previo ([BB] Judge · run-sdk)\n// porque el fetch del Code node NO llegaba al runner en n8n (scores 0). Este nodo SOLO\n// lee la respuesta del HTTP node (body.fidelity_scores) y computa la fidelidad.\n//\n// Input · $json = respuesta de [BB] Judge · run-sdk (body con fidelity_scores).\n// Datos del draft/ciclo · via referencia a [BB] Judge prep.\n// Output: { fidelity: { pass, threshold, scores, low_fields }, brand_book_draft, cycle }\n\nconst THRESHOLD = 0.85;\nconst MAX_FIDELITY_CYCLES = 2;   // pasadas de juez · cap=1 ⇒ 2 pasadas (CC#2 F2.1 · antes 1 mentía en `exhausted`)\n// Todos los campos se PUNTÚAN + registran (transparencia · dashboards).\nconst SCORED_FIELDS = [\n  'positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes',\n];\n// FIX 2026-07-01 (consejero · Opción 1) · el GATE solo exige groundedness en los campos\n// FÁCTICOS (positioning + icp_summary · verificables contra la evidencia de discovery).\n// voice/customer_angle/retention_notes son DERIVACIONES CREATIVAS de marca (voz, ángulo,\n// retención) · no hechos que se puedan \"grounded\" contra competidores/ICP · se puntúan\n// pero NO bloquean el canon. El gate frena hechos inventados, no decisiones de marca.\nconst GATED_FIELDS = ['positioning', 'icp_summary'];\n\nconst prep = $('[BB] Judge prep').first().json;\nconst draft = prep.brand_book_draft || {};\nconst cycle = Number(prep.cycle) || 1;\nconst fidelityCycle = Number(prep._fidelity_cycle) || 1;\n\n// La respuesta del nodo HTTP · el run-sdk surface los scores en body.fidelity_scores.scores.\nconst body = ($json && ($json.body || $json)) || {};\nlet scores = {};\nif (body.fidelity_scores && body.fidelity_scores.scores) {\n  scores = body.fidelity_scores.scores;\n} else {\n  // Fallback defensivo · parsear texto si el tool no fue capturado.\n  const text = typeof body.response === 'string' ? body.response : JSON.stringify(body);\n  const m = text.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { scores = (JSON.parse(m[0]).scores) || {}; } catch (e) {} }\n}\n\n// 2026-08-07 (B.7) · el juez a veces emite `scores` como STRING pseudo-JSON con centinelas\n// `<UNKNOWN>` en los campos que no puntua (quirk documentado · sonda P2 ·\n// src/lib/jefatura/fidelity-grader.ts:94-136 `normalizeFidelityScores`). Indexar el string da\n// undefined en TODOS los campos => con el piso viejo, cimiento legitimo REPROBADO y corrida\n// pagada quemada. Se porta la extraccion tolerante de la plataforma.\n// CONSERVADORA · NUNCA fabrica: lo no-numerico se OMITE => queda AUSENTE (que es justo lo que\n// B sabe tratar) · jamas falso-verde.\n// NOTA · SCORED_FIELDS de este nodo debe permanecer == FIDELITY_SCORE_FIELDS de\n// fidelity-grader.ts (misma lista, mismo orden). Si una se toca, la otra tambien.\nfunction normalizarScores(raw) {\n  let obj = null;\n  if (raw && typeof raw === 'object' && !Array.isArray(raw)) obj = raw;\n  else if (typeof raw === 'string') {\n    try { const p = JSON.parse(raw); if (p && typeof p === 'object' && !Array.isArray(p)) obj = p; } catch (e) {}\n    if (!obj) {\n      obj = {};\n      for (const f of SCORED_FIELDS) {\n        const m = raw.match(new RegExp('\"' + f + '\"\\\\s*:\\\\s*\"?(-?\\\\d+(?:\\\\.\\\\d+)?)\"?'));\n        if (m) obj[f] = m[1];\n      }\n    }\n  }\n  if (!obj) return {};\n  const out = {};\n  for (const k of Object.keys(obj)) {\n    const v = obj[k];\n    // CC#2 · '' / null / [] / booleanos coaccionan a numero FINITO (0, 0, 0, 0/1) y FABRICARIAN\n    // un score. Solo se aceptan numeros reales y strings numericos: el resto se OMITE => AUSENTE.\n    if (typeof v === 'number') { if (Number.isFinite(v)) out[k] = v; continue; }\n    if (typeof v === 'string' && v.trim() !== '') { const n = Number(v); if (Number.isFinite(n)) out[k] = n; }\n  }\n  return out;\n}\nscores = normalizarScores(scores);\n\n// 2026-08-07 (B · ausente != cero) · un campo que el juez NO puntuo no es un campo reprobado:\n// es un juez que no contesto. El piso a 0 disfrazaba una falla de EMISION de mala CALIDAD,\n// disparaba una correccion incapaz de arreglar nada (no hay defecto) y podia reprobar un\n// manual bueno. Precedente: 76543 emitio 3 de 5 campos.\n// DEUDA GEMELA · src/lib/jefatura/fidelity-grader.ts:77-80 (`clamp01`, usado en L184-185) tiene\n// EXACTAMENTE este bug. Hoy el flujo corre por ESTE nodo, asi que no bloquea; pero desde este\n// cambio las dos versiones DIVERGEN (null honesto aca · 0 reprobado alla). Si el gate se mueve\n// a la plataforma, este arreglo hay que portarlo o el defecto re-entra por la puerta de al lado.\n// 2026-08-11 · un campo que NO ENTRO al prompt no es un campo malo: es un campo NO EVALUADO.\n// En 90184 el juez devolvio 0 para customer_angle y retention_notes porque el tool le exige 5\n// notas y esos dos no estaban en los CAMPOS. Ese 0 se registraba como si fuera una calificacion.\n// Ahora [BB] Judge prep declara `_campos_cortados` y aca se FUERZA a no-evaluado, aunque el\n// juez haya inventado un numero.\nconst _no_evaluados = Array.isArray(prep._campos_cortados) ? prep._campos_cortados : [];\nconst norm = {};\nconst ausentes = [];\nfor (const f of SCORED_FIELDS) {\n  if (_no_evaluados.indexOf(f) !== -1) { ausentes.push(f); norm[f] = null; continue; }\n  const raw = scores[f];\n  const v = Number(raw);\n  if (raw === undefined || raw === null || raw === '' || !Number.isFinite(v)) { ausentes.push(f); norm[f] = null; }\n  else norm[f] = Math.max(0, Math.min(1, v));\n}\nconst gated_ausentes = GATED_FIELDS.filter((f) => ausentes.indexOf(f) !== -1);\n// red de seguridad · un gateado NUNCA deberia quedar fuera del prompt (entran primero por\n// diseno). Si pasara, el gate no puede aprobar: no leyo lo que tenia que calificar.\nconst judge_incomplete = gated_ausentes.length > 0;\n// BAJO solo aplica a los gateados que el juez SI puntuo.\nconst lowFields = GATED_FIELDS.filter((f) => norm[f] !== null && norm[f] < THRESHOLD);\n// ADR-020 §7.6 · progreso monótono · una re-síntesis que NO sube la fidelidad → STOP + mejor versión.\n// try/catch OBLIGATORIO (CC#2 F1): en la 1ª pasada '[BB] Lazo A prep' NO se ejecutó y referenciarlo\n// LANZA · el || no salva (Number(undefined)=NaN ⇒ falsy ⇒ evalúa el 2º operando ⇒ lanza).\n// Es el idioma que [BBA] Exit ya usa con el trigger.\n// media SOLO sobre los gateados que el juez puntuo (antes los null sumaban como 0).\nconst gatedConScore = GATED_FIELDS.filter((f) => norm[f] !== null);\nconst gated_mean = gatedConScore.length ? gatedConScore.reduce((a, f) => a + norm[f], 0) / gatedConScore.length : 0;\nlet prev_best = Number($json.best_gated_mean) || 0;\nlet prev_draft = null;\ntry {\n  const lp = $('[BB] Lazo A prep').first().json || {};\n  prev_best = prev_best || Number(lp.best_gated_mean) || 0;\n  prev_draft = lp.best_draft || null;\n} catch (e) { /* 1ª pasada · el nodo del reintento todavía no corrió · piso 0 */ }\nconst improved = gated_mean > prev_best;\nconst pass = !judge_incomplete && lowFields.length === 0;\n\nconst no_progress = !pass && fidelityCycle > 1 && !improved;\n// no contaminar la mejor version con una corrida en la que el juez no contesto.\nconst best_gated_mean_out = judge_incomplete ? prev_best : Math.max(gated_mean, prev_best);\nconst best_draft_out = (!judge_incomplete && improved) ? draft : (prev_draft || draft);\nreturn [{\n  json: {\n    judge_incomplete,   // raiz · lo lee [BB] IF · ciclos agotados\n    no_progress,\n    best_gated_mean: best_gated_mean_out,\n    best_draft: best_draft_out,\n    gated_mean,\n    fidelity: {\n      pass,\n      threshold: THRESHOLD,\n      scores: norm,\n      gated_fields: GATED_FIELDS, // solo éstos deciden el pase (Opción 1)\n      low_fields: lowFields, // campos GATEADOS bajo umbral (los que bloquean)\n      _lazo: (prep._lazo || null),   // F.b · pasa de largo · NO entra en ningun calculo\n      judge_incomplete,      // el juez no puntuo algun campo GATEADO\n      ausentes,              // todos los no puntuados (transparencia)\n      no_evaluados: _no_evaluados,   // los que NO llegaron al prompt · distinto de \"el juez no contesto\"\n      campo_truncado: (prep._campo_truncado || null),\n      gated_ausentes,        // los que bloquean el pase\n      cycle,\n      fidelity_cycle: fidelityCycle,\n      max_cycles: MAX_FIDELITY_CYCLES,\n      // exhausted sobre el contador independiente · hard-cap real ≤3 aunque el judge falle.\n      exhausted: !pass && fidelityCycle >= MAX_FIDELITY_CYCLES,\n    },\n    brand_book_draft: draft,\n    cycle,\n    _fidelity_cycle: fidelityCycle,\n  },\n}];\n"
+      },
+      "id": "bb--bb-faithfulness-judge",
+      "name": "[BB] Faithfulness judge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.fidelity.pass }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "bb-if--bb-if-fidelidad-pass",
+      "name": "[BB] IF · fidelidad PASS",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ (Number($json._fidelity_cycle) || 0) >= 2 || $json.no_progress === true || $json.judge_incomplete === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "bb-if--bb-if-ciclos-agotados",
+      "name": "[BB] IF · ciclos agotados",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        2100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// CANDADO · LISTA BLANCA (C1 · Consejero 16-ago). Prohibir UN valor dejaba pasar undefined,\n// vacio, o un tercer valor futuro. Se exige lo PERMITIDO. Y el try/catch no es decorativo:\n// si alguien borra o renombra la Guardia, el $() lanza, _proc queda null, y null !== \"padre\"\n// ⇒ BLOQUEA. Falla cerrado tambien contra C3 (el candado cuelga de un nombre de nodo).\nlet _proc = null;\ntry { _proc = $(\"[BB] Guardia de procedencia\").first().json._procedencia; } catch (e) { _proc = null; }\nif (_proc !== \"padre\") {\n  throw new Error(\"CIMIENTO_PROMOCION_SIN_PADRE · procedencia=\\\"\" + String(_proc) + \"\\\" · solo promueve a canon una corrida invocada por el proceso padre. Diagnostico y ejecucion manual corren enteros pero NO escriben canon.\");\n}\n\n// Brand Book · Promote prep · arma el body para el POST /brand-book.\n// FIX 2026-07-01 · el nodo Promote era un Code node con fetch() · pero `fetch` NO existe\n// en los Code nodes de n8n (\"fetch is not defined\") → no persistía. El POST se movió a un\n// nodo HTTP Request (mismo patrón que el judge). Este nodo solo prepara el body.\n//\n// Corre SOLO en el branch PASS del IF de fidelidad (ya gateado) · igual guardamos el\n// invariante 5 (nunca persistir sin PASS) por defensa.\nconst fidelity = ($json && $json.fidelity) || {};\nconst draft = ($json && $json.brand_book_draft) || {};\n// P3 (endurecido 2026-07-30) · la fuente VALIDADA manda · el borrador del modelo NUNCA\n// controla la dirección de escritura. Antes era al revés (draft primero).\nconst clientId = $('Validate Deal Data').first().json.client_id || draft.client_id;\n\nconst promote_body = {\n  // HOOK DE HONESTIDAD (Emilio 2026-07-30 · dentro de brand_book · top-level lo descarta el endpoint):\n  // el registro dice QUÉ se calificó de verdad. voz/ángulo/retención NO están gateados.\n  brand_book: Object.assign({}, draft, {\n    gated_fields_only: true,\n    // FASE 1 p2 (H-A) · TRES baldes. Sin el 3ro, un campo SIN SEÑAL entraria como\n    // \"provisional\" (que implica redactado) y el canon mentiria por omision. \"ausente\"\n    // es ademas la lista de campos a pedirle a Emilio/cliente en la Fase 3.\n    campos_gateados: ['positioning', 'icp_summary'],\n    campos_provisionales: Object.keys(draft._field_meta || {}).filter((k) => (draft._field_meta[k] || {}).estado === \"provisional\"),\n    campos_ausentes: Object.keys(draft._field_meta || {}).filter((k) => (draft._field_meta[k] || {}).estado === \"ausente\"),\n    lentes_ok: (draft._build || {}).structured_ok || null,\n    provisional: !!$('Validate Deal Data').first().json._sin_web,\n  }),\n  source: 'onboarding_collaborative_build',\n  // CANON por fidelidad · NO por firma humana ni voto Camino III.\n  fidelity_passed: !!fidelity.pass,\n  // 2026-08-28 (pieza e · §144 Emilio) · este nodo ya no corre sólo en la rama\n  // aprobada: el tope agotado también publica. El manual SALE SIEMPRE · el que no\n  // alcanzó la vara sale MARCADO. Antes se retenía en silencio para una revisión\n  // humana que nadie dispara: 0 manuales en 2 de 2 corridas del lazo.\n  gate_outcome: fidelity.pass ? 'paso_la_vara' : 'salio_al_tope',\n  gate_nota: fidelity.pass ? null : 'salió al tope, no alcanzó la vara',\n  fidelity_scores: fidelity.scores,\n  fidelity_threshold: fidelity.threshold,\n  // firmar 'faithfulness_check' un manual que NO pasó la vara sería una mentira\n  // en el registro · la firma dice quién lo dejó pasar, y al tope no lo dejó pasar\n  // nadie: se agotaron las vueltas.\n  approved_by: (fidelity.pass ? 'faithfulness_check' : 'cap_agotado'),\n  // Date.now() está OK en Code nodes n8n (no es un workflow script del harness).\n  approved_at: new Date().toISOString(),\n};\n\nreturn [{ json: {\n  promote_body,\n  client_id: clientId,\n  // 2026-08-28 (e) · los DOS casos persisten · lo que cambia es la marca, no si sale.\n  should_persist: true,\n  gate_outcome: fidelity.pass ? 'paso_la_vara' : 'salio_al_tope',\n  fidelity,\n} }];\n"
+      },
+      "id": "bb--bb-promote-prep",
+      "name": "[BB] Promote prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        1650
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/brand-book/' + $json.client_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.promote_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-promote-http",
+      "name": "[BB] Promote → canon",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2180,
+        1650
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/hitl/queue",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"brand_book_fidelity_last_resort\",\n  \"client_id\": \"{{ $json.brand_book_draft.client_id }}\",\n  \"fidelity\": {{ JSON.stringify($json.fidelity) }}\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "bb-hitl-lastresort",
+      "name": "[BB] HITL último recurso (no Emilio)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        2100
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-production-72be.up.railway.app/webhook/onboarding-report",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"client_id\": $('[BB] Promote prep').item.json.client_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "name": "[BB] Trigger Onboarding Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        1650
+      ],
+      "id": "bb-trigger-onboarding-report",
+      "disabled": true
+    },
+    {
+      "id": "cc3-ewt-cimiento-f22",
+      "name": "Execute Workflow Trigger (productivo · CC#3 F2.2)",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        600
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "notes": "NO RENOMBRAR · el candado de procedencia de \"[BB] Guardia de procedencia\" depende de este nombre exacto (CC#2 · 2026-08-16 · C3 del Consejero).",
+      "notesInFlow": true
+    },
+    {
+      "id": "cc3-return-scores-f22",
+      "name": "Return scores a parent (grade-cimiento gate)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        1800
+      ],
+      "parameters": {
+        "jsCode": "// Contrato de retorno al parent (CC#3 F2.2 · gate único = grade-cimiento en el parent).\n// Track = PRODUCTOR: corre lentes→Consolidador→Judge y DEVUELVE scores+draft · NO decide/persiste.\n// Retorna en TODAS las salidas (PASS y ciclos-agotados) · sin dead-end (cond.3).\n// 2026-08-01 · CC#3 §2 · FALLA-FALSO. Con el ciclo, [BB] Faithfulness judge corre DOS veces\n// (pasada 1 + pasada 2 tras la corrección) y este nodo corre UNA sola ⇒\n// `$('[BB] Faithfulness judge').first()` puede resolver al runIndex 0 = LA PASADA 1 ⇒\n// reportaría track_pass:false JUSTO CUANDO la corrección funcionó, con el manual ya escrito.\n// Es el espejo del \"listo falso\": un FALLA-FALSO.\n//\n// Se prefiere la fuente DIRECTA del camino recorrido, que no depende de alinear runIndex:\n//   · agotado → $json ES la salida del juez de la pasada 2 (viene por IF ciclos agotados out#0)\n//   · PASS    → $('[BB] Promote prep') · corre UNA sola vez y emite `fidelity`\n// El juez por referencia queda como ÚLTIMO recurso, no como fuente principal.\nlet src = null; let _return_source = 'ninguno';\nif ($json && $json.fidelity) { src = $json; _return_source = 'json_directo'; }\nif (!src) { try { const pp = $('[BB] Promote prep').first().json;\n  if (pp && pp.fidelity) { src = pp; _return_source = 'promote_prep'; } } catch (e) {} }\nif (!src) { try { src = $('[BB] Faithfulness judge').first().json; _return_source = 'juez_referencia'; }\n  catch (e) { src = {}; _return_source = 'vacio'; } }\nconst fj = src;\nconst fid = fj.fidelity || {};\nconst draft = fj.brand_book_draft || (fj.promote_body && fj.promote_body.brand_book) || {};\nreturn [{ json: {\n  fidelity_scores: fid.scores || {},\n  brand_book_draft: fj.best_draft || draft,   // §7.6 · se devuelve la MEJOR versión registrada\n  client_id: draft.client_id || fj.client_id || null,\n  track_pass: !!fid.pass,          // ¿alcanzó la vara? · sigue siendo el dato honesto\n  // 2026-08-28 (e) · «alcanzó la vara» y «se publicó» dejaron de ser lo mismo. El\n  // padre necesita el segundo · si mirara el primero, un manual publicado al tope\n  // no promovería el cimiento y la segunda fase nunca correría.\n  track_published: !!(fj.promote_body || fid.pass || fid.exhausted),\n  track_marked: !fid.pass,         // salió, pero no alcanzó · Emilio ve la marca\n  track_exhausted: !!fid.exhausted,\n  fidelity_cycle: Number(fj._fidelity_cycle || fid.fidelity_cycle || 1),\n  // 2026-08-07 (B.4) · sin esto la distincion ausente/reprobado muere en la frontera y el padre\n  // imprime ciclos_agotados=false sin explicar nada. En el carril del CIMIENTO no hay rechazo ni\n  // bandeja humana: cap agotado => falla honesta + RETENCION (artefacto esencial · §16).\n  // 2026-08-08 (F.b) · \"el manual no alcanzo\" y \"la maquinaria no funciono\" son OPUESTOS y\n  // hasta hoy imprimian el mismo mensaje. El ciclo esteril gana sobre ciclos_agotados.\n  track_reason: fid.judge_incomplete ? 'juez_incompleto'\n              : (fid.pass ? 'pass'\n              : ((fid._lazo && fid._lazo.esteril) ? 'ciclo_esteril:' + fid._lazo.esteril\n              : (fid.exhausted ? 'ciclos_agotados' : 'fidelidad_baja'))),\n  lazo_a: (fid._lazo || null),\n  judge_incomplete: !!fid.judge_incomplete,\n  _return_source,        // observabilidad · de qué fuente salió el veredicto (chequeo #6 del humo)\n  _cimiento_return: true\n} }];"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// [BB] Lazo A prep · code · SIN LLM · prepara la invocación del ciclo de corrección.\n// Hace 4 cosas, las 4 necesarias:\n//  (1) completa _grounding_refs — el juez NO lo emite y el guard P0 del Lazo A salta sin él\n//  (2) INCREMENTA _fidelity_cycle (+1) — el Consolidador ya no está en este camino:\n//      sin este +1 el lazo NO TERMINA. El contador vive ACÁ, nunca dentro del sub-proceso.\n//  (3) pasa low_fields/scores para que el revisor sepa QUÉ falló (arreglo 8.a)\n//  (4) arrastra la mejor versión registrada (§7.6 progreso monótono)\nconst j = $json;\nconst fid = j.fidelity || {};\nconst draft = j.brand_book_draft || {};\nlet grounding = {};\ntry { grounding = $('[BB] Judge prep').first().json._grounding_refs || {}; } catch (e) { grounding = {}; }\n\n// piso · nunca invocar la corrección sin artefacto (dispararía el guard P0 y volvería {})\nif (!draft || Object.keys(draft).length === 0) {\n  throw new Error('LAZO_A_SIN_BORRADOR · no se invoca la corrección sin artefacto');\n}\n// CC#2 F4 · simétrico · el guard P0 del Lazo A salta si el borrador O la evidencia vienen\n// vacíos ⇒ Merge se queda sin ítems ⇒ Exit tampoco corre ⇒ el fail-closed no puede atrapar.\n// Mejor fallar ruidoso ANTES de gastar que devolver nada en silencio después de 4 llamadas.\nif (!grounding || Object.keys(grounding).length === 0) {\n  throw new Error('LAZO_A_SIN_EVIDENCIA · no se invoca la corrección sin evidencia · el revisor diagnosticaría a ciegas');\n}\n\nreturn [{ json: {\n  brand_book_draft: draft,\n  _grounding_refs: grounding,\n  client_id: draft.client_id || $('Validate Deal Data').first().json.client_id,\n  cycle: Number(j.cycle) || 1,\n  _fidelity_cycle: (Number(j._fidelity_cycle) || 0) + 1,\n  low_fields: fid.low_fields || [],\n  scores: fid.scores || {},\n  best_draft: j.best_draft || draft,\n  best_gated_mean: Number(j.best_gated_mean) || 0,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        2020
+      ],
+      "id": "f7e0cf93-6e1a-4f9f-a6c7-9d37e4dee0ec",
+      "name": "[BB] Lazo A prep"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "kSSAvCbEfHs2Hoa0",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2140,
+        2020
+      ],
+      "id": "2ca8206a-6310-41bd-ab84-80a18bb57032",
+      "name": "[BB] Execute Lazo A corrección"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/client_icp_documents?client_id=eq.{{ $('Validate Deal Data').first().json.client_id }}&select=audience_segment,pain_points,goals,objections,preferred_channels,decision_criteria,buying_process,segment_priority&order=created_at.desc,segment_priority.asc&limit=5",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        200,
+        1960
+      ],
+      "id": "bb-load-icp-canon",
+      "name": "[BB] Load ICP (canon)"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/agent_invocations?workflow_execution_id=eq.{{ $execution.id }}&agent_name=in.(brand-strategist,editor-en-jefe,jefe-client-success)&status=eq.completed&select=agent_name,metadata,started_at&order=started_at.desc&limit=20",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "bb-rescate-leer",
+      "name": "[BB] Rescate · leer invocaciones",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -140,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// RED TRIPLE contra el 500 de lente (CC#1 2026-08-10 · exec 87625).\n// El 500 de plataforma mata la RESPUESTA pero el agente YA terminó y YA se cobró\n// ($0,7581 en 87625) · sin red, `positioning` e `icp_summary` salen VACÍOS y se\n// anula el eje del gate mientras la corrida sigue gastando.\n// RED 1 · la sección DURABLE de la base (agent_invocations.metadata.brand_section).\nconst LENTES = [\n  ['brand-strategist',    'Lente · brand-strategist',    'bb-lens-brand-strategist'],\n  ['editor-en-jefe',      'Lente · editor-en-jefe',      'bb-lens-editor-en-jefe'],\n  ['jefe-client-success', 'Lente · jefe-client-success', 'bb-lens-jefe-client-success'],\n];\nconst seccionDirecta = (nodo) => {\n  try { const j = $(nodo).first().json; const b = (j && j.body) || j; return (b && b.brand_section) || null; }\n  catch (e) { return null; }\n};\nlet filas = [];\ntry {\n  const r = $('[BB] Rescate · leer invocaciones').first().json;\n  filas = Array.isArray(r) ? r : (Array.isArray(r && r.body) ? r.body : []);\n} catch (e) { filas = []; }\nconst seccionDeLaBase = (slug) => {\n  for (const f of filas) {\n    if (f && f.agent_name === slug && f.metadata && f.metadata.brand_section) return f.metadata.brand_section;\n  }\n  return null;\n};\nconst secciones = {}, origen = {}, faltan = [];\nfor (const [slug, nodo, step] of LENTES) {\n  let s = seccionDirecta(nodo), o = 'http';\n  if (!s) { s = seccionDeLaBase(slug); o = s ? 'rescate_base' : null; }\n  if (s) { secciones[slug] = s; origen[slug] = o; } else { faltan.push({ slug, nodo, step }); }\n}\nfor (const k of Object.keys(origen)) {\n  if (origen[k] === 'rescate_base') console.warn('[rescate] RED 1 · ' + k + ' recuperada de la base (la respuesta HTTP se perdió)');\n}\nconst cid = $('Validate Deal Data').first().json.client_id;\nlet tasks = {};\ntry { tasks = $('[BB] Fan-out prep').first().json.tasks || {}; } catch (e) { tasks = {}; }\nif (!faltan.length) return [{ json: { secciones, origen, _faltan: [], client_id: cid } }];\nconsole.warn('[rescate] RED 2 · faltan tras la base: ' + faltan.map((f) => f.slug).join(', ') + ' → reintento 1 vez');\nreturn faltan.map((f) => ({ json: {\n  secciones, origen, _faltan: faltan.map((x) => x.slug), client_id: cid,\n  _lente: f.slug, _step: f.step, _task: String(tasks[f.slug] || ''),\n} }));"
+      },
+      "id": "bb-rescate-triaje",
+      "name": "[BB] Rescate · red 1 · triaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        60,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "faltan",
+              "leftValue": "={{ ($json._faltan || []).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "bb-rescate-if",
+      "name": "[BB] Rescate · ¿falta alguna?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        260,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent\": \"{{ $json._lente }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"{{ $json._step }}-reintento\",\n  \"task\": {{ JSON.stringify($json._task) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"{{ $json._lente }}\", \"reintento\": true }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json",
+              "outputPropertyName": "reintento"
+            }
+          },
+          "timeout": 800000
+        }
+      },
+      "id": "bb-rescate-reintento",
+      "name": "[BB] Rescate · red 2 · reintento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// RED 3 · última red · fusiona lo que trajo el reintento y, si TODAVÍA falta\n// alguna lente, PARA RUIDOSO. Nunca entregar vacío disfrazado de \"no dijo nada\":\n// ese disfraz es lo que anuló el eje del gate en exec 87625.\n//\n// 🔴 E84 · CC#3 · 2026-09-17 · lo que mató la bolita (cimiento 140150):\n// la red 1 recuperó 2 de 3, la red 2 reintentó bien la tercera, y esta red leía\n// `secciones` e `_lente` DEL ÍTEM QUE LE LLEGA. Por el camino del reintento ese ítem\n// es la respuesta CRUDA del nodo HTTP de la red 2 (con respuesta JSON el motor reemplaza\n// el ítem entero; `outputPropertyName` no lo envuelve) ⇒ sin `secciones`, sin `_lente`\n// ⇒ «faltan las TRES» ⇒ paraba con las tres secciones en la mano.\n// AHORA: el estado reparado se lee de la red 1 (que siempre corre antes); de la entrada\n// sólo se toma la sección del reintento, y se atribuye por el ítem emparejado.\nconst LENTES = [\n  ['brand-strategist',    'Lente · brand-strategist',    'bb-lens-brand-strategist'],\n  ['editor-en-jefe',      'Lente · editor-en-jefe',      'bb-lens-editor-en-jefe'],\n  ['jefe-client-success', 'Lente · jefe-client-success', 'bb-lens-jefe-client-success'],\n];\nconst SLUGS = LENTES.map((l) => l[0]);\n\n// ① el estado ya reparado por la red 1 · un ítem por lente faltante (o uno solo si no faltaba ninguna)\nlet triaje = [];\ntry { triaje = $('[BB] Rescate · red 1 · triaje').all().map((i) => i.json || {}); } catch (e) { triaje = []; }\nconst base = triaje[0] || {};\nconst secciones = Object.assign({}, base.secciones || {});\nconst origen = Object.assign({}, base.origen || {});\nconst faltantes = triaje.map((t) => t && t._lente).filter(Boolean);\n\n// ② la entrada · camino directo: ítems del triaje · camino reintento: respuestas crudas de la red 2\nconst seccionDe = (x) => {\n  if (!x || typeof x !== 'object') return null;\n  const b = (x.body && typeof x.body === 'object') ? x.body : x;\n  return (b && b.brand_section && typeof b.brand_section === 'object') ? b.brand_section : null;\n};\nconst entrada = $input.all();\nentrada.forEach((item, i) => {\n  const j = item.json || {};\n  if (j.secciones) {                      // ítem del triaje (camino directo) · ya contado en ①\n    Object.assign(secciones, Object.fromEntries(Object.entries(j.secciones).filter(([k]) => !secciones[k])));\n    return;\n  }\n  // forma vieja (por si algún día el motor sí envuelve en `reintento`)\n  const envuelto = j.reintento !== undefined;\n  const s = envuelto ? seccionDe(j.reintento) : seccionDe(j);\n  if (!s) return;                         // reintento fallido · se declara abajo como faltante\n  const agente = envuelto ? j._lente : ((j.body && j.body.agent) || j.agent);\n  const pi = Array.isArray(item.pairedItem) ? item.pairedItem[0] : item.pairedItem;\n  const porPar = pi && Number.isInteger(pi.item) ? faltantes[pi.item] : undefined;\n  let lente = null;\n  if (typeof agente === 'string' && SLUGS.includes(agente)) lente = agente;\n  else if (porPar) lente = porPar;\n  else if (faltantes[i]) lente = faltantes[i];\n  if (!lente && typeof s.lens === 'string' && SLUGS.includes(s.lens)) lente = s.lens;\n  if (lente && !secciones[lente]) { secciones[lente] = s; origen[lente] = 'reintento'; }\n});\n\nconst faltan = SLUGS.filter((slug) => !secciones[slug]);\nif (faltan.length) {\n  throw new Error(\n    'LENTE_SIN_SECCION · ' + faltan.join(', ') + ' · la red triple no pudo recuperar su sección ' +\n    '(HTTP falló · no había fila en la base · el reintento tampoco). Se PARA a propósito: ' +\n    'seguir entregaría campos VACÍOS disfrazados de \"la lente no dijo nada\" y anularía el eje del gate.' +\n    ' · origen de las recuperadas: ' + JSON.stringify(origen)\n  );\n}\nconsole.log('[rescate] origen por lente · ' + JSON.stringify(origen));\nreturn [{ json: { secciones, origen, _rescate_ok: true } }];\n"
+      },
+      "id": "bb-rescate-red3",
+      "name": "[BB] Rescate · red 3 · fusionar o PARAR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// CANDADO DE PROCEDENCIA (2026-08-16 · encargo Emilio · REEMPLAZA la credencial, descartada).\n// HECHO MEDIDO (R1 · 16-ago): 2 de los 5 manuales reales se escribieron corriendo este worker\n// SUELTO. El manual sale bien, pero NO emite, NO despacha y NO deja rastro en la Sala. No fue\n// un intruso: fue un re-disparo interno. La credencial no lo arreglaba (los empleados la tendrian).\n//\n// LA SENAL (verificada contra 4 trazas · 90184/91545/92833/90415): corre EXACTAMENTE UNO de los\n// dos disparadores. Un POST al webhook NO PUEDE hacer correr al Execute Workflow Trigger ⇒\n// procedencia por CONSTRUCCION, no un texto que se compara ni un secreto que se filtra.\n// C2 (Consejero): el modo MANUAL de la interfaz no corre NINGUNO ⇒ tercer estado, con mensaje\n// propio, para que se diagnostique en vez de confundirse con un disparo suelto.\nlet _quien = \"desconocido\";\ntry { $(\"Execute Workflow Trigger (productivo · CC#3 F2.2)\").first(); _quien = \"padre\"; } catch (e) {\n  try { $(\"Webhook · smoke trigger\").first(); _quien = \"webhook\"; } catch (e2) { _quien = \"desconocido\"; }\n}\nconst inp = ($json && $json.body && typeof $json.body === \"object\") ? $json.body : ($json || {});\n// E67 (CC#1 · 2026-09-16): la salida declarada por webhook corría el cimiento entero (~US$ 1,2)\n// con solo declarar quien y motivo, SIN credencial. Ahora, si entro por el webhook, exige ADEMAS\n// la llave de despacho (cabecera x-sala-dispatch-key = SALA_DISPATCH_KEY del motor). Sin llave\n// en el motor, el webhook queda CERRADO. El disparo por el padre (Execute Workflow) no cambia:\n// el padre ya pago su propia llave en la puerta del alta.\nif (_quien === \"webhook\") {\n  const _esperada = String($env.SALA_DISPATCH_KEY || \"\").trim();\n  if (!_esperada) {\n    throw new Error(\"CIMIENTO_CERRADO · el motor no tiene la llave de despacho en su entorno (SALA_DISPATCH_KEY) · el webhook de diagnostico queda cerrado hasta que exista · E67.\");\n  }\n  const _h = ($json && $json.headers && typeof $json.headers === \"object\") ? $json.headers : {};\n  const _recibida = String(_h[\"x-sala-dispatch-key\"] || \"\");\n  let _ok = _recibida.length === _esperada.length;\n  for (let _i = 0; _i < _esperada.length; _i++) { _ok = (_recibida.charCodeAt(_i) === _esperada.charCodeAt(_i)) && _ok; }\n  if (!_ok) {\n    throw new Error(\"CIMIENTO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · el webhook de diagnostico exige la llave del motor · E67.\");\n  }\n}\nconst _d = (inp._diagnostico && typeof inp._diagnostico === \"object\") ? inp._diagnostico : null;\nconst _declarado = !!(_d && String(_d.quien || \"\").trim() && String(_d.motivo || \"\").trim());\n// SALIDA DECLARADA · explicita, nombrada y VISIBLE en la traza. Existe para que el diagnostico\n// no se haga por la puerta de atras. Exige decir QUIEN y POR QUE: sin eso, no pasa.\nif (_quien !== \"padre\" && !_declarado) {\n  if (_quien === \"desconocido\") {\n    throw new Error(\"CIMIENTO_PROCEDENCIA_MANUAL · corrida manual desde la interfaz (no corrio ningun disparador). Corre desde el proceso padre (Client Onboarding E2E · LyVoKcrypS5uLyuu), o fija _diagnostico:{quien,motivo} en los datos del nodo: la corrida queda marcada y NO promueve a canon.\");\n  }\n  throw new Error(\"CIMIENTO_PROCEDENCIA_INVALIDA · este worker solo corre invocado por el proceso padre (Client Onboarding E2E · LyVoKcrypS5uLyuu). Corrio por webhook suelto sin salida declarada (falta quien y motivo). Motivo del candado · R1 2026-08-16: 2 de 5 manuales se escribieron por este camino, sin despacho y sin rastro en la Sala.\");\n}\nreturn [{ json: Object.assign({}, $json, {\n  _procedencia: _quien === \"padre\" ? \"padre\" : \"diagnostico_declarado\",\n  _quien_disparo: _quien,\n  _diagnostico: _quien === \"padre\" ? null : { quien: String(_d.quien).slice(0, 80), motivo: String(_d.motivo).slice(0, 200) },\n}) }];"
+      },
+      "id": "45d5f490-e23c-4547-9e73-4f131492c7f2",
+      "name": "[BB] Guardia de procedencia",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        40,
+        520
+      ]
+    },
+    {
+      "id": "bb-manual-a-drive",
+      "name": "[BB] Manual → Drive (PDF)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2180,
+        1850
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-production-72be.up.railway.app/webhook/zero-risk/manual-a-drive",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $('[BB] Promote prep').item.json.client_id }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 15000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook · smoke trigger": {
+      "main": [
+        [
+          {
+            "node": "[BB] Guardia de procedencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Deal Data": {
+      "main": [
+        [
+          {
+            "node": "Confirm barato · competitor list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm barato · competitor list": {
+      "main": [
+        [
+          {
+            "node": "[BB] Load ICP (canon)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Fan-out prep": {
+      "main": [
+        [
+          {
+            "node": "Lente · brand-strategist",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lente · editor-en-jefe",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lente · jefe-client-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lente · brand-strategist": {
+      "main": [
+        [
+          {
+            "node": "[BB] Merge lentes (esperar 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lente · editor-en-jefe": {
+      "main": [
+        [
+          {
+            "node": "[BB] Merge lentes (esperar 3)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Lente · jefe-client-success": {
+      "main": [
+        [
+          {
+            "node": "[BB] Merge lentes (esperar 3)",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "[BB] Merge lentes (esperar 3)": {
+      "main": [
+        [
+          {
+            "node": "[BB] Rescate · leer invocaciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Consolidador": {
+      "main": [
+        [
+          {
+            "node": "[BB] Judge prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Judge prep": {
+      "main": [
+        [
+          {
+            "node": "[BB] Judge · run-sdk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Judge · run-sdk": {
+      "main": [
+        [
+          {
+            "node": "[BB] Faithfulness judge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Faithfulness judge": {
+      "main": [
+        [
+          {
+            "node": "[BB] IF · fidelidad PASS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] IF · fidelidad PASS": {
+      "main": [
+        [
+          {
+            "node": "[BB] Promote prep",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[BB] IF · ciclos agotados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Promote prep": {
+      "main": [
+        [
+          {
+            "node": "[BB] Promote → canon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] IF · ciclos agotados": {
+      "main": [
+        [
+          {
+            "node": "[BB] Promote prep",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[BB] Lazo A prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Promote → canon": {
+      "main": [
+        [
+          {
+            "node": "Return scores a parent (grade-cimiento gate)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[BB] Manual → Drive (PDF)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger (productivo · CC#3 F2.2)": {
+      "main": [
+        [
+          {
+            "node": "[BB] Guardia de procedencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Lazo A prep": {
+      "main": [
+        [
+          {
+            "node": "[BB] Execute Lazo A corrección",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Execute Lazo A corrección": {
+      "main": [
+        [
+          {
+            "node": "[BB] Judge prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Load ICP (canon)": {
+      "main": [
+        [
+          {
+            "node": "[BB] Fan-out prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Rescate · leer invocaciones": {
+      "main": [
+        [
+          {
+            "node": "[BB] Rescate · red 1 · triaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Rescate · red 1 · triaje": {
+      "main": [
+        [
+          {
+            "node": "[BB] Rescate · ¿falta alguna?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Rescate · ¿falta alguna?": {
+      "main": [
+        [
+          {
+            "node": "[BB] Rescate · red 2 · reintento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[BB] Rescate · red 3 · fusionar o PARAR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Rescate · red 2 · reintento": {
+      "main": [
+        [
+          {
+            "node": "[BB] Rescate · red 3 · fusionar o PARAR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Rescate · red 3 · fusionar o PARAR": {
+      "main": [
+        [
+          {
+            "node": "[BB] Consolidador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[BB] Guardia de procedencia": {
+      "main": [
+        [
+          {
+            "node": "Validate Deal Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  }
+}
