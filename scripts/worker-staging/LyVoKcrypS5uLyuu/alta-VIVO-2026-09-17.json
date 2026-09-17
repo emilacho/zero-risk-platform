@@ -5,10 +5,10 @@
  "active": false,
  "activeVersionId": null,
  "createdAt": "2026-04-18T15:45:06.415Z",
- "updatedAt": "2026-09-17T18:14:50.299Z",
+ "updatedAt": "2026-09-17T21:09:35.924Z",
  "isArchived": false,
- "versionId": "302b855b-bda4-49e6-a41e-a208fe84d671",
- "versionCounter": 228,
+ "versionId": "fae3046f-8e95-47d1-b791-109fbc514cf7",
+ "versionCounter": 229,
  "sourceWorkflowId": null,
  "triggerCount": 1,
  "nodes": [
@@ -2108,7 +2108,7 @@
   {
    "id": "cc3-armar-carga-2fase",
    "name": "Armar carga · segunda fase",
-   "notes": "Arma los 11 datos de la segunda fase leyendo de Validate Deal Data y del descubridor. Existe porque ningun nodo unico los tiene: la salida de cimiento.promoted es {ok,event_id,via,reconcile}.",
+   "notes": "Arma los 11 datos de la segunda fase leyendo de Validate Deal Data y del descubridor. Existe porque ningun nodo unico los tiene: la salida de cimiento.promoted es {ok,event_id,via,reconcile}.\nE93 · la carga declara si el descubrimiento llegó entero (response_complete) · sin inventar nada.",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "position": [
@@ -2116,7 +2116,7 @@
     1100
    ],
    "parameters": {
-    "jsCode": "// Arma la carga de la segunda fase del alta · CC#3 2026-08-28.\n// Los 11 datos nacen en DOS nodos distintos: por eso este nodo existe.\n// Medido en raw/findings/2026-08-28-CC3-PARADA-paso-2-...md\nconst v = $('Validate Deal Data').item.json;\nconst d = $('Call Onboarding Specialist: Auto-Discovery').item.json || {};\nreturn [{ json: {\n  client_id: v.client_id,\n  client_name: v.client_name,\n  industry: v.industry,\n  contract_scope: v.contract_scope,\n  _journey_id: v._journey_id,\n  _sala_correlation_id: v._sala_correlation_id,\n  // los cuatro que NO llegan hoy · respaldo explicito para no reventar\n  tenant_id: v.tenant_id || v.client_id,\n  primary_contact_id: v.primary_contact_id || '',\n  contact_email: v.contact_email || '',\n  contact_name: v.contact_name || '',\n  // nace en el descubridor, mucho despues que el validador\n  discovery_result: d.discovery_output || d.response || null,\n} }];"
+    "jsCode": "// Arma la carga de la segunda fase del alta · CC#3 2026-08-28.\n// Los 11 datos nacen en DOS nodos distintos: por eso este nodo existe.\n// Medido en raw/findings/2026-08-28-CC3-PARADA-paso-2-...md\nconst v = $('Validate Deal Data').item.json;\nconst d = $('Call Onboarding Specialist: Auto-Discovery').item.json || {};\nreturn [{ json: {\n  client_id: v.client_id,\n  client_name: v.client_name,\n  industry: v.industry,\n  contract_scope: v.contract_scope,\n  _journey_id: v._journey_id,\n  _sala_correlation_id: v._sala_correlation_id,\n  // los cuatro que NO llegan hoy · respaldo explicito para no reventar\n  tenant_id: v.tenant_id || v.client_id,\n  primary_contact_id: v.primary_contact_id || '',\n  contact_email: v.contact_email || '',\n  contact_name: v.contact_name || '',\n  // nace en el descubridor, mucho despues que el validador\n  discovery_result: d.discovery_output || d.response || null,\n  // E93 (CC#1 2026-09-17) · quien lee el descubrimiento sabe qué le llegó: el punto de consulta\n  // declara si el texto guardado está entero (response_complete) · si discovery_result cayó al\n  // texto y ese texto está recortado, la carga lo dice · NUNCA un texto recortado como entero.\n  discovery_response_complete: (typeof d.response_complete === 'boolean') ? d.response_complete : null,\n  discovery_response_length_real: (typeof d.response_length_real === 'number') ? d.response_length_real : null,\n  discovery_response_length_stored: (typeof d.response_length_stored === 'number') ? d.response_length_stored : null,\n  discovery_result_note: (!d.discovery_output && d.response && d.response_complete !== true)\n    ? ('DISCOVERY_RESULT ES TEXTO ' + (d.response_complete === false ? 'RECORTADO' : 'DE LARGO DESCONOCIDO') + ' · ' + String(d.response_note || '') + ' · no leerlo como entero')\n    : (d.response_note || null),\n} }];"
    }
   },
   {
