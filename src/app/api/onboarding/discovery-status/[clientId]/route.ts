@@ -89,7 +89,7 @@ export async function GET(request: Request, context: RouteContext) {
       `${baseUrl}/rest/v1/agent_invocations` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
       `&agent_name=eq.onboarding-specialist` +
-      `&select=status,output_summary,cost_usd,workflow_id,workflow_execution_id,started_at` +
+      `&select=status,output_summary,metadata,cost_usd,workflow_id,workflow_execution_id,started_at` +
       `&order=started_at.desc&limit=1`
     if (workflowId) invQuery += `&${scopeCol}=eq.${encodeURIComponent(workflowId)}`
 
@@ -103,6 +103,7 @@ export async function GET(request: Request, context: RouteContext) {
     const invRows = (await invResp.json()) as Array<{
       status?: string
       output_summary?: string
+      metadata?: Record<string, unknown> | null
       cost_usd?: number
       workflow_id?: string
     }>
@@ -163,6 +164,13 @@ export async function GET(request: Request, context: RouteContext) {
       }
     }
 
+    // E93 (CC#1 2026-09-17) · el punto de consulta NUNCA entrega un texto recortado como
+    // si fuera entero. `output_summary` se guarda recortado (E91 · 34 % de las filas · el
+    // descubridor 18/18) y en la bolita el alta recibió 2.001 caracteres de 22.888 sin
+    // enterarse. La fila declara cuánto medía de verdad (`metadata.response_length`);
+    // acá se compara y se DECLARA. La respuesta viaja igual (no se inventa nada), pero
+    // marcada: quien la lee sabe qué le llegó.
+    const estado = describeStoredResponse(inv.output_summary, inv.metadata)
     return NextResponse.json({
       ok: true,
       ready: true,
@@ -171,6 +179,11 @@ export async function GET(request: Request, context: RouteContext) {
       // `response` preserves the field the worker's unwrap node forwards to the
       // downstream cascade ($('Call Onboarding Specialist: Auto-Discovery').item.json.response).
       response: inv.output_summary ?? '',
+      response_complete: estado.complete,
+      response_truncated: estado.truncated,
+      response_length_stored: estado.stored_length,
+      response_length_real: estado.real_length,
+      response_note: estado.note,
       discovery_output: discoveryOutput,
       cost_usd: inv.cost_usd ?? null,
     })
@@ -179,5 +192,54 @@ export async function GET(request: Request, context: RouteContext) {
       { error: 'internal_error', detail: e instanceof Error ? e.message : String(e) },
       { status: 500 },
     )
+  }
+}
+
+/**
+ * E93 · ¿lo guardado es lo entero? · se decide fila por fila con lo que la propia fila
+ * declara (`metadata.response_length` = largo real de la respuesta del empleado).
+ *   complete   true  → guardado == real · se puede leer como entera
+ *              false → guardado < real · RECORTADA · no se lee como entera
+ *              null  → la fila no declara el largo real (filas viejas) · «no sé» · se avisa
+ * El marcador «…» al final es una pista, no una prueba: sólo cuenta el largo declarado.
+ * Exportada para la prueba (evidencia real de 140135: 2.001 de 4.545 · 2.001 de 22.888 · 1.730 de 1.730).
+ */
+export function describeStoredResponse(
+  stored: string | null | undefined,
+  metadata: Record<string, unknown> | null | undefined,
+): {
+  complete: boolean | null
+  truncated: boolean | null
+  stored_length: number
+  real_length: number | null
+  note: string | null
+} {
+  const text = typeof stored === 'string' ? stored : ''
+  const stored_length = text.length
+  const raw = metadata && typeof metadata === 'object' ? (metadata as { response_length?: unknown }).response_length : undefined
+  const real_length = typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : null
+  const endsWithEllipsis = /(…|\.\.\.)\s*$/.test(text)
+  if (real_length === null) {
+    return {
+      complete: null,
+      truncated: null,
+      stored_length,
+      real_length: null,
+      note:
+        'RESPUESTA DE LARGO DESCONOCIDO · la fila no declara response_length · no se puede afirmar que esté entera' +
+        (endsWithEllipsis ? ' · termina en «…» (probablemente recortada)' : ''),
+    }
+  }
+  // lo guardado lleva un «…» de marca cuando se recortó: se compara sin él
+  const storedSinMarca = endsWithEllipsis ? text.replace(/(…|\.\.\.)\s*$/, '').length : stored_length
+  const truncated = storedSinMarca < real_length
+  return {
+    complete: !truncated,
+    truncated,
+    stored_length,
+    real_length,
+    note: truncated
+      ? `RESPUESTA RECORTADA · guardados ${storedSinMarca} de ${real_length} caracteres (${Math.round((storedSinMarca / real_length) * 100)} %) · NO leer como entera · la parte perdida no se recupera de esta fila`
+      : null,
   }
 }
