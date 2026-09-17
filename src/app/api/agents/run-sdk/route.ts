@@ -307,6 +307,82 @@ const proxySleep = (ms: number): Promise<void> =>
 const RAILWAY_PROXY_RETRY_WINDOW_MS = 30_000
 
 /**
+ * E88 · CC#3 · 2026-09-17 · LA LÍNEA DE REGISTRO DE LA CAUSA (mide · NO arregla el corte).
+ *
+ * Medido en la bolita E83 (17-sep): dos llamadas en línea a este endpoint se cortaron
+ * (28 s y 40 s) con `terminated` del lado del cliente y **500 sin mensaje** en los registros.
+ * E86 (CC#2) cerró que el borde del corredor entregó la respuesta completa y que la función
+ * no se cayó: lo que se pierde es la conexión, y el 500 sale mudo porque `railwayResponse.text()`
+ * se leía FUERA del `try` del salto ⇒ el error caía en el `catch` final, que sólo imprime
+ * `error.message` (`terminated`) y tira `err.cause`.
+ *
+ * Esto lee el cuerpo en trozos DENTRO de la protección y, si la conexión se cae, deja UNA línea
+ * con: en qué segundo se perdió (del intento y de la propia lectura), cuántos bytes se habían
+ * leído, y el error exacto con su cadena de causas. Después **vuelve a lanzar el mismo error**:
+ * el comportamiento hacia afuera no cambia (mismo 500 del catch final).
+ *
+ * Se lee en los registros de Vercel · `vercel logs -p zero-risk-platform -q "cuerpo_perdido"`.
+ * Exportada para la prueba.
+ */
+export async function leerCuerpoRegistrandoLaCausa(
+  res: Pick<Response, 'text'> & { body?: ReadableStream<Uint8Array> | null },
+  ctx: {
+    agent: string
+    step?: string | null
+    workflowId?: string | null
+    executionId?: string | null
+    intento: number
+    intentoEmpezoEnMs: number
+    status?: number
+  },
+): Promise<string> {
+  const lecturaEmpezoEnMs = Date.now()
+  let bytes = 0
+  try {
+    if (!res.body) return await res.text()
+    const lector = res.body.getReader()
+    const trozos: Uint8Array[] = []
+    for (;;) {
+      const { done, value } = await lector.read()
+      if (done) break
+      if (value) {
+        bytes += value.byteLength
+        trozos.push(value)
+      }
+    }
+    const todo = new Uint8Array(bytes)
+    let offset = 0
+    for (const t of trozos) {
+      todo.set(t, offset)
+      offset += t.byteLength
+    }
+    return new TextDecoder().decode(todo)
+  } catch (err) {
+    const cadena: string[] = []
+    let actual: unknown = err
+    for (let i = 0; i < 4 && actual; i++) {
+      const e = actual as { name?: string; message?: string; code?: string; cause?: unknown }
+      cadena.push(`${e.name ?? typeof actual}: ${e.message ?? String(actual)}${e.code ? ` (${e.code})` : ''}`)
+      actual = e.cause
+    }
+    console.error(
+      `[run-sdk] cuerpo_perdido · la conexión con el corredor se cayó MIENTRAS se leía la respuesta · ` +
+        `agent=${ctx.agent} · step=${ctx.step ?? '-'} · wf=${ctx.workflowId ?? '-'} · exec=${ctx.executionId ?? '-'} · ` +
+        `intento=${ctx.intento} · status=${ctx.status ?? '-'} · ` +
+        `s_desde_el_intento=${((Date.now() - ctx.intentoEmpezoEnMs) / 1000).toFixed(1)} · ` +
+        `s_leyendo=${((Date.now() - lecturaEmpezoEnMs) / 1000).toFixed(1)} · ` +
+        `bytes_leidos=${bytes} · causa=${cadena.join(' ⇐ ')}`,
+    )
+    Sentry.captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { proxy: 'agent-runner', kind: 'body_read_error', attempts: String(ctx.intento) },
+      extra: { bytes_leidos: bytes, agent: ctx.agent, step: ctx.step ?? null, status: ctx.status ?? null },
+    })
+    // el comportamiento no cambia · el mismo error sigue subiendo al catch final
+    throw err
+  }
+}
+
+/**
  * Pure retry classifier for the Vercel→Railway proxy hop. Retriable ONLY when
  * the failure is a transient infra window · a connection error that is NOT an
  * abort (abort = our own timeout → 504, re-doing 790s of work is wrong) OR a
@@ -874,7 +950,18 @@ export async function POST(request: Request) {
       clearTimeout(timeoutHandle)
 
       // Read body once · need it for both the parse and the 5xx Sentry breadcrumb.
-      railwayText = await railwayResponse.text()
+      // E88 · la lectura va DENTRO de la protección de errores (antes caía en el
+      // catch final y salía un 500 mudo) · el comportamiento NO cambia: se registra
+      // la causa y se vuelve a lanzar el mismo error.
+      railwayText = await leerCuerpoRegistrandoLaCausa(railwayResponse, {
+        agent: agentName,
+        step: body.step_name ?? null,
+        workflowId: wfAttr.workflow_id,
+        executionId: wfAttr.workflow_execution_id,
+        intento: attempt,
+        intentoEmpezoEnMs: attemptStartedAt,
+        status: railwayResponse.status,
+      })
 
       // Upstream 5xx · retry transient infra · pass graceful agent failures
       // (success:false bodies) through untouched · they are app errors not infra.
