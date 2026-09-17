@@ -179,9 +179,32 @@ export async function POST(request: Request) {
         ? new Date(new Date(endedAt).getTime() - durationMs).toISOString()
         : endedAt
 
-  // Output summary canon · truncate response_text 2000 chars
+  // ── E92 · CC#3 · 2026-09-17 · EL ALMACÉN SANO (decisión de Lenovo · opción A) ──
+  // Antes el tope era 2.000 caracteres: medido el 17-sep, **39 de 115 filas desde el 1-ago
+  // estaban recortadas (34 %)** · el descubridor **18 de 18** · peor caso 22.888 → 2.001
+  // (se perdió el 91 %). Sobre ese almacén no se puede recuperar una respuesta pagada
+  // (E91 · parada), y el sondeo del descubrimiento ya servía el texto cortado como entero.
+  //
+  // Tope nuevo · 100.000 caracteres · POR QUÉ: la respuesta más larga medida son 27.750
+  // (un plan de campaña) ⇒ 3,6× de aire. `output_summary` es texto libre en Postgres (1 GB
+  // teórico), así que no hay límite de esquema; el tope existe para que una respuesta
+  // desbocada no reviente la fila ni el ancho de banda de los lectores. **Sin tope no es
+  // «sano»: es otra forma de romperse.**
+  //
+  // Y si aun así se recorta, **la fila lo DECLARA**: `response_truncated` + lo que medía y
+  // lo que se guardó. Una respuesta recortada no puede volver a leerse como entera.
+  const RESPONSE_MAX_CHARS = 100_000
   const responseText = typeof body.response_text === 'string' ? body.response_text : ''
-  const outputSummary = responseText.length > 2000 ? responseText.slice(0, 2000) + '…' : responseText || null
+  const responseTruncated = responseText.length > RESPONSE_MAX_CHARS
+  const outputSummary = responseTruncated
+    ? responseText.slice(0, RESPONSE_MAX_CHARS) + '…'
+    : responseText || null
+  if (responseTruncated) {
+    console.warn(
+      `[log-invocation] respuesta_recortada · agent=${agentName} · medía=${responseText.length} · ` +
+        `guardado=${RESPONSE_MAX_CHARS} · tope=${RESPONSE_MAX_CHARS} · la fila lo declara (response_truncated)`,
+    )
+  }
 
   // Build canonical row
   const row = {
@@ -213,6 +236,12 @@ export async function POST(request: Request) {
       canonical_pattern: 'log-invocation-local-session',
       logged_via: 'log-invocation-endpoint',
       logged_at: nowIso,
+      // E92 · lo que mide la respuesta y lo que quedó guardado · quien lea la fila puede
+      // saber si está entera SIN depender de que el llamador haya mandado `response_length`.
+      response_length_real: responseText.length,
+      response_stored_length: outputSummary ? outputSummary.length : 0,
+      response_truncated: responseTruncated,
+      response_max_chars: RESPONSE_MAX_CHARS,
     },
   }
 

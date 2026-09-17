@@ -143,15 +143,46 @@ describe('POST /api/agents/log-invocation · canon §149 enforcement', () => {
     expect(meta.source).toBe('mission-control-daemon')
   })
 
-  it('truncates response_text > 2000 chars into output_summary', async () => {
+  // 🔴 E92 · CC#3 · 2026-09-17 · el tope pasó de 2.000 a 100.000 (decisión de Lenovo · opción A).
+  // El rojo que lo motivó, medido en E91: 39 de 115 filas desde el 1-ago estaban recortadas
+  // (el descubridor 18 de 18 · peor caso 22.888 → 2.001) y sobre ese almacén no se puede
+  // recuperar una respuesta ya pagada. Esta prueba fija el canon nuevo.
+  it('E92 · una respuesta de 2.500 caracteres se guarda ENTERA (antes se cortaba a 2.001)', async () => {
     const { POST } = await importRoute()
-    const longText = 'x'.repeat(2500)
-    const res = await POST(makeReq({ ...HAPPY_BODY, response_text: longText }))
+    const texto = 'x'.repeat(2500)
+    const res = await POST(makeReq({ ...HAPPY_BODY, response_text: texto }))
     expect(res.status).toBe(200)
     const inserted = (insertMock.mock.calls[0] as unknown as [Array<Record<string, unknown>>])[0]
     const summary = inserted[0]!.output_summary as string
-    expect(summary.length).toBe(2001)
+    expect(summary).toBe(texto)
+    const meta = inserted[0]!.metadata as Record<string, unknown>
+    expect(meta.response_truncated).toBe(false)
+    expect(meta.response_length_real).toBe(2500)
+    expect(meta.response_stored_length).toBe(2500)
+  })
+
+  it('E92 · el peor caso medido (22.888) entra entero', async () => {
+    const { POST } = await importRoute()
+    const texto = 'y'.repeat(22_888)
+    await POST(makeReq({ ...HAPPY_BODY, response_text: texto }))
+    const inserted = (insertMock.mock.calls[0] as unknown as [Array<Record<string, unknown>>])[0]
+    expect((inserted[0]!.output_summary as string).length).toBe(22_888)
+    expect((inserted[0]!.metadata as Record<string, unknown>).response_truncated).toBe(false)
+  })
+
+  it('E92 · pasado el tope nuevo SÍ se recorta, y la fila lo DECLARA (nunca se lee como entera)', async () => {
+    const { POST } = await importRoute()
+    const texto = 'z'.repeat(100_001)
+    await POST(makeReq({ ...HAPPY_BODY, response_text: texto }))
+    const inserted = (insertMock.mock.calls[0] as unknown as [Array<Record<string, unknown>>])[0]
+    const summary = inserted[0]!.output_summary as string
+    expect(summary.length).toBe(100_001) // 100.000 + «…»
     expect(summary.endsWith('…')).toBe(true)
+    const meta = inserted[0]!.metadata as Record<string, unknown>
+    expect(meta.response_truncated).toBe(true)
+    expect(meta.response_length_real).toBe(100_001)
+    expect(meta.response_stored_length).toBe(100_001)
+    expect(meta.response_max_chars).toBe(100_000)
   })
 
   it('persist_failed · 500 E-PERSIST-FAILED on supabase error', async () => {
