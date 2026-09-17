@@ -2,7 +2,7 @@
 /**
  * E79 · LA PRUEBA GRATIS DE LA ENTRADA DE TRATO CERRADO (llamador IXF3mOG0PRZlNR4a).
  *
- *   1. pedido SIN llave            → muere MUDO en «PORTERO · llave del trato cerrado» · 0 ítems · SIN aviso · 0 gasto
+ *   1. pedido SIN llave            → corrida en ERROR con motivo (E81) · no llega a la puerta · se cuenta en settings · aviso (freno 10 min) · 0 gasto
  *   2. pedido CON llave · cliente INVENTADO (uuid al azar) → rechazo RUIDOSO en «GUARDA · el cliente existe» · 0 gasto ·
  *      CON aviso (o suprimido por el freno si hubo otro igual hace <10 min) · el sobre NUNCA llega a la puerta de la sala
  *   ⚠️ NUNCA manda llave + cliente real: eso deja un sobre en la sala y, con la cadena encendida, paga.
@@ -49,8 +49,12 @@ async function sonda(nombre, body, headers, esperado) {
 }
 
 const resultados = []
+// E81 · el rechazo del portero YA NO es mudo: la corrida termina en ERROR con el motivo (nodo «Rechazo · lanzar
+// con motivo»), el rechazo se cuenta en settings (trato_cerrado.rechazos_portero · durable) y avisa a #alertas
+// (1 cada 10 min por el freno). Sigue sin llegar a la puerta de la sala y sin gasto.
+const LANZAR = 'Rechazo · lanzar con motivo'
 resultados.push(await sonda('1 · sin llave', { client_id: randomUUID(), tenant_id: randomUUID(), client_name: 'sonda-e79', deal_id: 'E79-SONDA' }, {},
-  (r) => r.status === 'success' && r.ultimo_nodo === PORTERO && !r.llego_a_la_puerta && !r.aviso_nuevo))
+  (r) => r.status === 'error' && r.ultimo_nodo === LANZAR && r.nodos_corridos.includes(PORTERO) && !r.llego_a_la_puerta && /RECHAZADO_EN_EL_PORTERO|ENTRADA_CERRADA/.test(r.motivo ?? '')))
 if (CON_LLAVE) {
   const k = process.env.DEAL_WON_WEBHOOK_KEY
   if (!k) console.error('--con-llave pedido pero falta DEAL_WON_WEBHOOK_KEY en el entorno')
@@ -59,5 +63,5 @@ if (CON_LLAVE) {
 }
 for (const r of resultados) console.log(JSON.stringify(r, null, 2))
 const ok = resultados.every((r) => r.ok)
-console.log('\nVEREDICTO ·', ok ? 'ENTRADA CERRADA · sin llave muere mudo y sin aviso · cliente inventado no llega a la puerta · 0 gasto' : '🔴 LA ENTRADA NO CIERRA · NO HAY BOLITA')
+console.log('\nVEREDICTO ·', ok ? 'ENTRADA CERRADA · sin llave muere con motivo, contado y avisado · cliente inventado no llega a la puerta · 0 gasto' : '🔴 LA ENTRADA NO CIERRA · NO HAY BOLITA')
 process.exit(ok ? 0 : 1)
