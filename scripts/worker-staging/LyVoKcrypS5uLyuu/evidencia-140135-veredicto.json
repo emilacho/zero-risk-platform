@@ -1,0 +1,30 @@
+{
+ "fuente": "raw/evidencia/2026-09-17-E83-bolita/ejecucion-140135.json · alta a9de5dd1",
+ "veredicto_perdido": {
+  "error": "terminated"
+ },
+ "regate_real": {
+  "success": true,
+  "agent": "competitive-intelligence-agent",
+  "response": "```json\n{\n  \"veredicto\": \"confirmar\",\n  \"razones\": [\n    \"5 de 8 competidores tienen source: 'apify_scrape' con datos directos de Instagram — condición suficiente para emitir confirmar según §144.\",\n    \"Pure Surf Camp Peniche (66.225 seguidores, 2.555 posts, source: apify_scrape) y Baleal Surf Camp (9.145 seguidores, 550 posts, source: apify_scrape) proveen evidencia real y robusta del landscape competitivo.\",\n    \"Sharks Lodge (2.232 seguidores, 384 posts, source: apify_scrape) confirma presencia activa en segmento fitness-surf Peniche.\",\n    \"The Salty Peniche muestra datos anómalos (2 seguidores, 0 following, 1 post, source: apify_scrape): scrape corrió y se_miro_de_verdad, pero la cuenta encontrada es casi seguro incorrecta o inactiva — se declara el hueco, no se afirma inexistencia.\",\n    \"PKSC Surf Camp fue scrapeado (apify_scrape) pero sin métricas de followers disponibles en el payload — evidencia parcial.\",\n    \"3 competidores (Alex Surf School, RIDE Surf Resort, Peniche Surf Lodge) permanecen source: 'auto_discovery', sin scrape directo — son inferencia, no evidencia real; no deben usarse como base para afirmaciones concretas.\"\n  ],\n  \"confianza\": 0.68\n}\n```",
+  "session_id": "fbfdad2b-c1c7-4873-880f-50f95a6fc4c4",
+  "model": "claude-sonnet-4-6",
+  "input_tokens": 3,
+  "output_tokens": 1269,
+  "cost_usd": 0.05610615,
+  "duration_ms": 24064,
+  "brain_enrichment": {
+   "brain_hit": true,
+   "brain_chunks_count": 5,
+   "brain_query_ms": 1526,
+   "brain_cost_usd": 0.000011265000000000001
+  },
+  "cache_metrics": {
+   "cache_creation_input_tokens": 8861,
+   "cache_read_input_tokens": 12778,
+   "cache_creation_5m_tokens": 8861,
+   "cache_creation_1h_tokens": 0
+  }
+ },
+ "parse_viejo": "const r = $input.first().json; const body = (r && r.body) ? r.body : r;\nlet txt = ''; if (body && typeof body === 'object') txt = body.response || body.output_summary || ''; else if (typeof body === 'string') txt = body;\nlet veredicto = 'observar', razones = ['default_observar_no_parseable'], confianza = 0;\ntry { const m = (txt || '').match(/\\{[\\s\\S]*\\}/); if (m) { const j = JSON.parse(m[0]);\n  const v = String(j.veredicto || j.verdict || '').toLowerCase();\n  veredicto = (v === 'confirmar' || v === 'confirm') ? 'confirmar' : 'observar';\n  razones = Array.isArray(j.razones) ? j.razones : (Array.isArray(j.reasons) ? j.reasons : []);\n  confianza = typeof j.confianza === 'number' ? j.confianza : (typeof j.confidence === 'number' ? j.confidence : 0);\n} } catch (e) { veredicto = 'observar'; razones = ['parse_error: ' + (e.message || String(e))]; }\nreturn [{ json: { veredicto, razones, confianza,\n  client_id: $('Validate Deal Data').item.json.client_id,\n  client_name: $('Validate Deal Data').item.json.client_name,\n  competitor_list: $('Confirm barato · competitor list').item.json,\n  _verdict_raw: (txt || '').slice(0, 800) } }];"
+}

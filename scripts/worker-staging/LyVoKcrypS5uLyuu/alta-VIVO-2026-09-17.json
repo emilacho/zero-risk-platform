@@ -5,10 +5,10 @@
  "active": false,
  "activeVersionId": null,
  "createdAt": "2026-04-18T15:45:06.415Z",
- "updatedAt": "2026-09-17T05:28:08.180Z",
+ "updatedAt": "2026-09-17T18:14:50.299Z",
  "isArchived": false,
- "versionId": "a9de5dd1-3acc-4725-ac8e-9d99cc19fa61",
- "versionCounter": 227,
+ "versionId": "302b855b-bda4-49e6-a41e-a208fe84d671",
+ "versionCounter": 228,
  "sourceWorkflowId": null,
  "triggerCount": 1,
  "nodes": [
@@ -850,7 +850,7 @@
   {
    "id": "parse-verdict",
    "name": "Parse veredicto",
-   "notes": "[CC#4 OptA] parse gate-1 · default observar",
+   "notes": "E87 · respuesta perdida = no_se (nunca observar) · sólo cuenta success:true + JSON con veredicto.",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "position": [
@@ -858,7 +858,7 @@
     220
    ],
    "parameters": {
-    "jsCode": "const r = $input.first().json; const body = (r && r.body) ? r.body : r;\nlet txt = ''; if (body && typeof body === 'object') txt = body.response || body.output_summary || ''; else if (typeof body === 'string') txt = body;\nlet veredicto = 'observar', razones = ['default_observar_no_parseable'], confianza = 0;\ntry { const m = (txt || '').match(/\\{[\\s\\S]*\\}/); if (m) { const j = JSON.parse(m[0]);\n  const v = String(j.veredicto || j.verdict || '').toLowerCase();\n  veredicto = (v === 'confirmar' || v === 'confirm') ? 'confirmar' : 'observar';\n  razones = Array.isArray(j.razones) ? j.razones : (Array.isArray(j.reasons) ? j.reasons : []);\n  confianza = typeof j.confianza === 'number' ? j.confianza : (typeof j.confidence === 'number' ? j.confidence : 0);\n} } catch (e) { veredicto = 'observar'; razones = ['parse_error: ' + (e.message || String(e))]; }\nreturn [{ json: { veredicto, razones, confianza,\n  client_id: $('Validate Deal Data').item.json.client_id,\n  client_name: $('Validate Deal Data').item.json.client_name,\n  competitor_list: $('Confirm barato · competitor list').item.json,\n  _verdict_raw: (txt || '').slice(0, 800) } }];"
+    "jsCode": "// E87 · CC#1 · 2026-09-17 · «Parse veredicto» y «Parse re-gate veredicto» del alta · MISMO código en los dos\n// (cambia sólo el nodo del que se lee `competitor_list` · lo fija el armador).\n//\n// 🔴 ANTES: cualquier respuesta sin JSON legible caía en `observar · default_observar_no_parseable`.\n// En la bolita (E83) la respuesta del veredicto se perdió por el camino (`{\"error\":\"terminated\"}` · E86),\n// el flujo la leyó como «observar» y pagó un re-descubrimiento que sobraba (US$ 0,59) · el veredicto real,\n// «confirmar», estaba entero en agent_invocations 18 s después.\n//\n// AHORA: una respuesta perdida es «no sé», NUNCA un valor. Sólo cuenta como veredicto lo que viene con\n// `success:true` Y trae un JSON con `veredicto`/`verdict` legible. Todo lo demás ⇒ `no_se` + motivo, y\n// el nodo siguiente («¿Veredicto legible?») PARA ruidoso (el avisador lo lleva a #alertas).\nconst r = $input.first().json;\nconst body = (r && r.body) ? r.body : r;\n\nlet veredicto = 'no_se';\nlet razones = [];\nlet confianza = 0;\nlet perdida = null;   // por qué es «no sé» · null si el veredicto es legible\n\nif (!body || typeof body !== 'object' || Array.isArray(body)) {\n  perdida = 'respuesta_no_es_objeto';\n} else if (body.success !== true) {\n  perdida = 'respuesta_sin_success_true' + (body.error ? ' · ' + String(body.error).slice(0, 120) : '');\n} else {\n  const txt = typeof body.response === 'string' ? body.response : (typeof body.output_summary === 'string' ? body.output_summary : '');\n  const m = (txt || '').match(/\\{[\\s\\S]*\\}/);\n  if (!m) {\n    perdida = 'respuesta_sin_json';\n  } else {\n    try {\n      const j = JSON.parse(m[0]);\n      const v = String(j.veredicto || j.verdict || '').toLowerCase();\n      if (v === 'confirmar' || v === 'confirm') veredicto = 'confirmar';\n      else if (v === 'observar' || v === 'observe') veredicto = 'observar';\n      else perdida = 'veredicto_desconocido: ' + JSON.stringify(v).slice(0, 40);\n      razones = Array.isArray(j.razones) ? j.razones : (Array.isArray(j.reasons) ? j.reasons : []);\n      confianza = typeof j.confianza === 'number' ? j.confianza : (typeof j.confidence === 'number' ? j.confidence : 0);\n    } catch (e) {\n      perdida = 'json_invalido: ' + (e.message || String(e)).slice(0, 80);\n    }\n  }\n}\nif (perdida) { veredicto = 'no_se'; razones = ['respuesta_perdida: ' + perdida]; confianza = 0; }\n\nconst txtRaw = (body && typeof body === 'object') ? (body.response || body.output_summary || (body.error ? 'error: ' + body.error : '')) : (typeof body === 'string' ? body : '');\nreturn [{ json: { veredicto, razones, confianza, _perdida: perdida,\n  client_id: $('Validate Deal Data').item.json.client_id,\n  client_name: $('Validate Deal Data').item.json.client_name,\n  competitor_list: $('Confirm barato · competitor list').item.json,\n  _verdict_raw: String(txtRaw || '').slice(0, 800) } }];\n"
    }
   },
   {
@@ -868,7 +868,7 @@
    "type": "n8n-nodes-base.if",
    "typeVersion": 2,
    "position": [
-    5910,
+    6080,
     220
    ],
    "parameters": {
@@ -952,7 +952,7 @@
   {
    "id": "parse-regate",
    "name": "Parse re-gate veredicto",
-   "notes": "[CC#4 OptA] parse gate-2 · lista corregida",
+   "notes": "E87 · respuesta perdida = no_se (nunca observar) · sólo cuenta success:true + JSON con veredicto.",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "position": [
@@ -960,7 +960,7 @@
     400
    ],
    "parameters": {
-    "jsCode": "const r = $input.first().json; const body = (r && r.body) ? r.body : r;\nlet txt = ''; if (body && typeof body === 'object') txt = body.response || body.output_summary || ''; else if (typeof body === 'string') txt = body;\nlet veredicto = 'observar', razones = ['default_observar_no_parseable'], confianza = 0;\ntry { const m = (txt || '').match(/\\{[\\s\\S]*\\}/); if (m) { const j = JSON.parse(m[0]);\n  const v = String(j.veredicto || j.verdict || '').toLowerCase();\n  veredicto = (v === 'confirmar' || v === 'confirm') ? 'confirmar' : 'observar';\n  razones = Array.isArray(j.razones) ? j.razones : (Array.isArray(j.reasons) ? j.reasons : []);\n  confianza = typeof j.confianza === 'number' ? j.confianza : (typeof j.confidence === 'number' ? j.confidence : 0);\n} } catch (e) { veredicto = 'observar'; razones = ['parse_error: ' + (e.message || String(e))]; }\nreturn [{ json: { veredicto, razones, confianza,\n  client_id: $('Validate Deal Data').item.json.client_id,\n  client_name: $('Validate Deal Data').item.json.client_name,\n  competitor_list: $('[ANCHOR] Guard geo+canonical').item.json,\n  _verdict_raw: (txt || '').slice(0, 800) } }];"
+    "jsCode": "// E87 · CC#1 · 2026-09-17 · «Parse veredicto» y «Parse re-gate veredicto» del alta · MISMO código en los dos\n// (cambia sólo el nodo del que se lee `competitor_list` · lo fija el armador).\n//\n// 🔴 ANTES: cualquier respuesta sin JSON legible caía en `observar · default_observar_no_parseable`.\n// En la bolita (E83) la respuesta del veredicto se perdió por el camino (`{\"error\":\"terminated\"}` · E86),\n// el flujo la leyó como «observar» y pagó un re-descubrimiento que sobraba (US$ 0,59) · el veredicto real,\n// «confirmar», estaba entero en agent_invocations 18 s después.\n//\n// AHORA: una respuesta perdida es «no sé», NUNCA un valor. Sólo cuenta como veredicto lo que viene con\n// `success:true` Y trae un JSON con `veredicto`/`verdict` legible. Todo lo demás ⇒ `no_se` + motivo, y\n// el nodo siguiente («¿Veredicto legible?») PARA ruidoso (el avisador lo lleva a #alertas).\nconst r = $input.first().json;\nconst body = (r && r.body) ? r.body : r;\n\nlet veredicto = 'no_se';\nlet razones = [];\nlet confianza = 0;\nlet perdida = null;   // por qué es «no sé» · null si el veredicto es legible\n\nif (!body || typeof body !== 'object' || Array.isArray(body)) {\n  perdida = 'respuesta_no_es_objeto';\n} else if (body.success !== true) {\n  perdida = 'respuesta_sin_success_true' + (body.error ? ' · ' + String(body.error).slice(0, 120) : '');\n} else {\n  const txt = typeof body.response === 'string' ? body.response : (typeof body.output_summary === 'string' ? body.output_summary : '');\n  const m = (txt || '').match(/\\{[\\s\\S]*\\}/);\n  if (!m) {\n    perdida = 'respuesta_sin_json';\n  } else {\n    try {\n      const j = JSON.parse(m[0]);\n      const v = String(j.veredicto || j.verdict || '').toLowerCase();\n      if (v === 'confirmar' || v === 'confirm') veredicto = 'confirmar';\n      else if (v === 'observar' || v === 'observe') veredicto = 'observar';\n      else perdida = 'veredicto_desconocido: ' + JSON.stringify(v).slice(0, 40);\n      razones = Array.isArray(j.razones) ? j.razones : (Array.isArray(j.reasons) ? j.reasons : []);\n      confianza = typeof j.confianza === 'number' ? j.confianza : (typeof j.confidence === 'number' ? j.confidence : 0);\n    } catch (e) {\n      perdida = 'json_invalido: ' + (e.message || String(e)).slice(0, 80);\n    }\n  }\n}\nif (perdida) { veredicto = 'no_se'; razones = ['respuesta_perdida: ' + perdida]; confianza = 0; }\n\nconst txtRaw = (body && typeof body === 'object') ? (body.response || body.output_summary || (body.error ? 'error: ' + body.error : '')) : (typeof body === 'string' ? body : '');\nreturn [{ json: { veredicto, razones, confianza, _perdida: perdida,\n  client_id: $('Validate Deal Data').item.json.client_id,\n  client_name: $('Validate Deal Data').item.json.client_name,\n  competitor_list: $('[ANCHOR] Guard geo+canonical').item.json,\n  _verdict_raw: String(txtRaw || '').slice(0, 800) } }];\n"
    }
   },
   {
@@ -970,7 +970,7 @@
    "type": "n8n-nodes-base.if",
    "typeVersion": 2,
    "position": [
-    5910,
+    6080,
     400
    ],
    "parameters": {
@@ -2408,6 +2408,98 @@
    "parameters": {
     "jsCode": "// E71 · GUARDA · la puerta de la sala contesta 200 hasta cuando RECHAZA (canon §150 G4).\n// Sin este nodo, un pedido de planeación rechazado (sin regla, sin credencial, sobre mal\n// armado) se veria EXACTAMENTE igual que uno aceptado: 200 y silencio. Misma lección que\n// el primer llamador (E57 · IXF3). Aca la corrida del alta termina en ERROR VISIBLE, sin\n// deshacer nada: el alta ya termino; lo que fallo es pedir el paso siguiente.\nconst r = $input.first().json;\nconst cuerpo = r.body || r;\nif (cuerpo.ok !== true) {\n  throw new Error('PEDIDO_DE_PLANEACION_RECHAZADO · la puerta de la sala no acepto el sobre · code=' + (cuerpo.code || '?') + ' · ' + (cuerpo.detail || 'sin detalle'));\n}\n// `duplicate` NO es un error: el mismo recorrido pidiendo dos veces es un solo pedido.\nreturn [{ json: { pedido_dejado_en_la_puerta: true, kind: cuerpo.kind, event_id: cuerpo.event_id || null, stream_id: cuerpo.stream_id || null, journey_type: cuerpo.journey_type || null, worker_workflow_id: cuerpo.worker_workflow_id || null } }];"
    }
+  },
+  {
+   "id": "e87-veredicto-legible",
+   "name": "¿Veredicto legible?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    5860,
+    220
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "legible",
+       "leftValue": "={{ $json.veredicto }}",
+       "rightValue": "no_se",
+       "operator": {
+        "type": "string",
+        "operation": "notEquals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "e87-veredicto-parar",
+   "name": "Veredicto perdido · parar ruidoso",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    6080,
+    420
+   ],
+   "parameters": {
+    "jsCode": "// E87 · CC#1 · 2026-09-17 · el veredicto de competidores (veredicto) se PERDIÓ: no es «observar», es «no sé».\n// Antes el flujo lo leía como «observar» y pagaba un re-descubrimiento que sobraba (E83 · US$ 0,59).\n// Se PARA ruidoso (el avisador lo lleva a #alertas con esta causa). La respuesta ya pagada suele estar\n// entera en agent_invocations (output_summary) · recuperarla es el arreglo A (E86), pendiente.\nconst v = $input.first().json || {};\nthrow new Error('VEREDICTO_PERDIDO · veredicto · no se · ' + String((v.razones || [])[0] || v._perdida || 'sin motivo').slice(0, 200)\n  + ' · cliente ' + String(v.client_id || '(sin cliente)').slice(0, 8) + ' · corrida ' + $execution.id\n  + ' · la respuesta pagada puede estar en agent_invocations.output_summary (workflow_execution_id=' + $execution.id + ') · NO se inventa un veredicto.');\n"
+   }
+  },
+  {
+   "id": "e87-re-gate-legible",
+   "name": "¿Re-gate legible?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    5860,
+    400
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "legible",
+       "leftValue": "={{ $json.veredicto }}",
+       "rightValue": "no_se",
+       "operator": {
+        "type": "string",
+        "operation": "notEquals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "e87-re-gate-parar",
+   "name": "Re-gate perdido · parar ruidoso",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    6080,
+    600
+   ],
+   "parameters": {
+    "jsCode": "// E87 · CC#1 · 2026-09-17 · el veredicto de competidores (re-gate) se PERDIÓ: no es «observar», es «no sé».\n// Antes el flujo lo leía como «observar» y pagaba un re-descubrimiento que sobraba (E83 · US$ 0,59).\n// Se PARA ruidoso (el avisador lo lleva a #alertas con esta causa). La respuesta ya pagada suele estar\n// entera en agent_invocations (output_summary) · recuperarla es el arreglo A (E86), pendiente.\nconst v = $input.first().json || {};\nthrow new Error('VEREDICTO_PERDIDO · re-gate · no se · ' + String((v.razones || [])[0] || v._perdida || 'sin motivo').slice(0, 200)\n  + ' · cliente ' + String(v.client_id || '(sin cliente)').slice(0, 8) + ' · corrida ' + $execution.id\n  + ' · la respuesta pagada puede estar en agent_invocations.output_summary (workflow_execution_id=' + $execution.id + ') · NO se inventa un veredicto.');\n"
+   }
   }
  ],
  "connections": {
@@ -2780,7 +2872,7 @@
    "main": [
     [
      {
-      "node": "IF · veredicto",
+      "node": "¿Veredicto legible?",
       "type": "main",
       "index": 0
      }
@@ -2831,7 +2923,7 @@
    "main": [
     [
      {
-      "node": "IF · re-gate veredicto",
+      "node": "¿Re-gate legible?",
       "type": "main",
       "index": 0
      }
@@ -3298,6 +3390,42 @@
     [
      {
       "node": "GUARDA · si la puerta rechazó el pedido de planeación",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿Veredicto legible?": {
+   "main": [
+    [
+     {
+      "node": "IF · veredicto",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Veredicto perdido · parar ruidoso",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿Re-gate legible?": {
+   "main": [
+    [
+     {
+      "node": "IF · re-gate veredicto",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Re-gate perdido · parar ruidoso",
       "type": "main",
       "index": 0
      }
