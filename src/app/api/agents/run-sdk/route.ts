@@ -575,10 +575,13 @@ export async function POST(request: Request) {
           const innerRequest = buildInnerRequestWithoutCallback(request, body)
           const innerResponse = await POST(innerRequest)
           innerBody = await innerResponse.json()
-          innerOk =
-            !!innerBody &&
-            typeof innerBody === 'object' &&
-            (innerBody as { success?: boolean }).success !== false
+          // E87 (CC#1 2026-09-17) · una respuesta perdida NO es éxito. Antes bastaba
+          // `success !== false`: `{"error":"terminated"}` (la conexión al corredor se
+          // perdió · E86) marcaba el ledger «completed» 21 s ANTES de que el empleado
+          // terminara y viajaba al flujo como si fuera la respuesta. Ahora sólo cuenta
+          // `success === true`; todo lo demás es «no sé» y viaja marcado.
+          innerOk = innerResponseIsSuccess(innerBody)
+          if (!innerOk) innerBody = markInnerBodyAsNotSuccess(innerBody)
         } catch (e) {
           innerBody = {
             success: false,
@@ -1403,10 +1406,57 @@ export async function POST(request: Request) {
         : finalResponse,
     )
   } catch (error) {
+    // E87 (CC#1 2026-09-17) · la respuesta de error sale MARCADA: `success:false`.
+    // Antes salía `{error}` pelado y todo el que miraba `success !== false` la
+    // leía como éxito (raíz del ledger «completed» antes de tiempo · E86 ③-d).
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        error_kind: 'unhandled',
+      },
       { status: 500 },
     )
+  }
+}
+
+/**
+ * E87 · una respuesta del corredor SÓLO es éxito si lo dice: `success === true`.
+ * `{"error":"terminated"}` (conexión perdida · E86), `{}`, un texto, `null` ⇒ NO.
+ * Exportada para que la prueba fije el caso con la evidencia real de la bolita.
+ */
+export function innerResponseIsSuccess(body: unknown): boolean {
+  return (
+    !!body &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    (body as { success?: unknown }).success === true
+  )
+}
+
+/**
+ * E87 · lo que viaja al flujo (callback) y al ledger cuando la respuesta NO es
+ * éxito: siempre `success:false` + `error` + `error_kind`, y el cuerpo original
+ * adjunto en `inner` para diagnóstico. Nunca un cuerpo que se parezca a un dato.
+ */
+export function markInnerBodyAsNotSuccess(body: unknown): Record<string, unknown> {
+  const obj =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : null
+  if (obj && obj.success === false) return obj
+  const error =
+    obj && typeof obj.error === 'string' && obj.error
+      ? obj.error
+      : 'inner response without success:true · respuesta perdida o no confirmada'
+  return {
+    success: false,
+    error,
+    error_kind:
+      obj && typeof obj.error === 'string' && /terminated|aborted|socket|ECONN|fetch failed/i.test(obj.error)
+        ? 'response_lost'
+        : 'response_not_success',
+    inner: obj ?? body ?? null,
   }
 }
 
