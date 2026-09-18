@@ -1,16 +1,5 @@
 {
-  "id": "LyVoKcrypS5uLyuu",
   "name": "Zero Risk â€” Client Onboarding E2E v2 (Webhook: Deal Won)",
-  "description": null,
-  "active": false,
-  "activeVersionId": null,
-  "createdAt": "2026-04-18T15:45:06.415Z",
-  "updatedAt": "2026-09-18T13:49:34.277Z",
-  "isArchived": false,
-  "versionId": "2ebb4d47-cdfd-4768-a9cb-09a7e24c803b",
-  "versionCounter": 231,
-  "sourceWorkflowId": null,
-  "triggerCount": 1,
   "nodes": [
     {
       "id": "webhook-deal-won",
@@ -221,10 +210,6 @@
       "notes": "[GHL canon-clean rename 2026-06-05 · CC#4 A2] Renamed from \"GHL: Create AM Handoff Task\". URL is canon-clean internal endpoint (NOT GHL). Per drift-hunt-results §2.3 COSMETIC class.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE (cola vieja · sin aviso).",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueRegularOutput",
       "position": [
         3120,
         400
@@ -260,18 +245,17 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "alert-onboarding-slack",
       "name": "Alert Slack: Onboarding Initiated",
-      "notes": "E101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE (cola vieja · sin aviso).",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueRegularOutput",
       "position": [
         3360,
         400
@@ -290,7 +274,12 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput",
+      "notes": "E101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE (cola vieja · sin aviso)."
     },
     {
       "id": "mc-inbox-5uLyuu",
@@ -553,10 +542,6 @@
       "notes": "[MODELB · Costura A · RONDA 2 re-point · CC#4 2026-06-05]\nEndpoint canónico re-pointed to dedicated /api/sala/ingress (CC#3 final decision).\nPrevious V2 pointed to multiplexed /api/sala/events/append (now interno-alterno only).\nShadow · disabled · unwired. Activation gate §144 + CC#3 receiver + wiring sesión.\n----\n[MODELB · Costura A closed · CC#4 2026-06-05]\nEndpoint converged to CC#3 canon · /api/sala/events/append (PR #172).\nSingle endpoint for BOTH event_types · phase_boundary + run_completed.\nPhase boundaries canon · 8 names (CC#3 JOURNEY_WORKFLOW_MAP).\nShadow · disabled · unwired. Activation gate §144 + CC#3 receiver verified.\n----\nModel B adapter · phase-boundary event emitter. POST a la sala\ningress endpoint cuando se cruza una FRONTERA DE FASE (NO los\n24+ nodos individuales · solo fases lógicas Journey B ONBOARD).\nPhase taxonomy · INTAKE → DISCOVERY → WORKSPACE → SCHEDULING →\nNOTIFICATION → CASCADE → APIFY_WIRE → TERMINAL.\nWiring · copy-paste este nodo en cada boundary con phase_name\nparametrizado. Activation · §144 + CC#3 receiver. CC#4 2026-06-05.\n\n[OLA 2 WIRE+ENABLE 2026-06-05 · CC#4] Wired into main flow + enabled. SALA_WORKFLOW_DISPATCH_ENABLED flag sigue OFF (Vercel · CIC Ola 1b pending) · NO dispatch real hasta §144 Emilio + flips Ola 3.\n\n[R1 CANON RENAME 2026-06-28 · CC#2] phase_name → MAYÚSCULA canónica. Display name legacy preservado (no referenciado · evita cirugía connection-keys). Order-tolerant reconciliation PR #217 cubre orden DAG paralelo.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE y «Nota perdida» avisa.",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueErrorOutput",
       "position": [
         720,
         120
@@ -592,12 +577,15 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
     },
     {
       "id": "e101-nota-perdida-reconciliaci-n-observe",
       "name": "Nota perdida · reconciliación OBSERVE",
-      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador.",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -606,7 +594,8 @@
       ],
       "parameters": {
         "jsCode": "// E101 (CC#3 2026-09-18) · una nota que no decide nada no puede matar la corrida.\n// Este nodo cuelga de la SALIDA DE ERROR de «[MODELB] Phase-boundary Emit · reconciliación OBSERVE» (tras 2 intentos y 25 s de tope): la nota se perdió,\n// la corrida SIGUE con {ok:false, code:'nota_perdida'} hacia el mismo sucesor de siempre, y queda constancia:\n// el mismo ítem viaja al avisador (5fkPLbZvQsQa1bcd) sin esperar · título «SE PERDIÓ UNA NOTA · la corrida SIGUE».\nconst base = String(($env && $env.N8N_BASE_URL) || 'https://n8n-production-72be.up.railway.app').replace(/\\/+$/, '');\nconst nodo = \"[MODELB] Phase-boundary Emit · reconciliación OBSERVE\";\nreturn $input.all().map((i) => {\n  const e = (i.json && i.json.error) || {};\n  const msg = String(typeof e === 'string' ? e : (e.message || e.description || (Object.keys(e).length ? JSON.stringify(e) : '') || 'sin mensaje')).slice(0, 400);\n  const exId = String(($execution && $execution.id) || '?');\n  const wfId = String(($workflow && $workflow.id) || '?');\n  console.log('[nota-perdida] ' + nodo + ' · ' + msg + ' · la corrida SIGUE · corrida ' + exId);\n  return { json: {\n    ok: false, code: 'nota_perdida', nota_perdida: true, nodo, error: msg,\n    execution: { id: exId, url: base + '/workflow/' + wfId + '/executions/' + exId, mode: ($execution && $execution.mode) || '?', lastNodeExecuted: nodo,\n      error: { message: 'SE PERDIÓ UNA NOTA · la corrida SIGUE · ' + nodo + ' · ' + msg, node: { name: nodo } } },\n    workflow: { id: wfId, name: ($workflow && $workflow.name) || '?' },\n  } };\n});"
-      }
+      },
+      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador."
     },
     {
       "id": "modelb-writeback-callback",
@@ -614,10 +603,6 @@
       "notes": "[MODELB · Costura A · RONDA 2 re-point · CC#4 2026-06-05]\nEndpoint canónico re-pointed to dedicated /api/sala/callback (CC#3 final decision).\nPrevious V2 pointed to multiplexed /api/sala/events/append (now interno-alterno only).\nShadow · disabled · unwired. Activation gate §144 + CC#3 receiver + wiring sesión.\n----\n[MODELB · Costura A closed · CC#4 2026-06-05]\nEndpoint converged to CC#3 canon · /api/sala/events/append (PR #172).\nevent_type=run_completed envelope · single endpoint same as phase_boundary.\nShadow · disabled · unwired. Activation gate §144 + CC#3 receiver verified.\n----\nModel B adapter · write-back callback. POST a la sala callback\nendpoint cuando el worker llega al terminal (post 'Notify MC\nInbox'). Cierra el loop OBSERVE · sala marca el run como\ncompleted + reconcilia el state final.\nWiring · post 'Notify MC Inbox' (y/o un branch terminal common).\nActivation · §144 + CC#3 receiver. CC#4 2026-06-05.\n\n[OLA 2 WIRE+ENABLE 2026-06-05 · CC#4] Wired into main flow + enabled. SALA_WORKFLOW_DISPATCH_ENABLED flag sigue OFF (Vercel · CIC Ola 1b pending) · NO dispatch real hasta §144 Emilio + flips Ola 3.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE (cola vieja · sin aviso).",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueRegularOutput",
       "position": [
         3840,
         400
@@ -653,7 +638,11 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "apify-wire-hitl-if-canon-182",
@@ -1074,10 +1063,6 @@
       "notes": "[R1 CANON RENAME 2026-06-28 · CC#2] phase_name → MAYÚSCULA canónica. Display name legacy preservado (no referenciado · evita cirugía connection-keys). Order-tolerant reconciliation PR #217 cubre orden DAG paralelo.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE y «Nota perdida» avisa.",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueErrorOutput",
       "position": [
         1920,
         120
@@ -1113,12 +1098,15 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
     },
     {
       "id": "e101-nota-perdida-onboarding-specialist-done",
       "name": "Nota perdida · onboarding_specialist_done",
-      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador.",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -1127,7 +1115,8 @@
       ],
       "parameters": {
         "jsCode": "// E101 (CC#3 2026-09-18) · una nota que no decide nada no puede matar la corrida.\n// Este nodo cuelga de la SALIDA DE ERROR de «[MODELB] Phase-boundary Emit · onboarding_specialist_done» (tras 2 intentos y 25 s de tope): la nota se perdió,\n// la corrida SIGUE con {ok:false, code:'nota_perdida'} hacia el mismo sucesor de siempre, y queda constancia:\n// el mismo ítem viaja al avisador (5fkPLbZvQsQa1bcd) sin esperar · título «SE PERDIÓ UNA NOTA · la corrida SIGUE».\nconst base = String(($env && $env.N8N_BASE_URL) || 'https://n8n-production-72be.up.railway.app').replace(/\\/+$/, '');\nconst nodo = \"[MODELB] Phase-boundary Emit · onboarding_specialist_done\";\nreturn $input.all().map((i) => {\n  const e = (i.json && i.json.error) || {};\n  const msg = String(typeof e === 'string' ? e : (e.message || e.description || (Object.keys(e).length ? JSON.stringify(e) : '') || 'sin mensaje')).slice(0, 400);\n  const exId = String(($execution && $execution.id) || '?');\n  const wfId = String(($workflow && $workflow.id) || '?');\n  console.log('[nota-perdida] ' + nodo + ' · ' + msg + ' · la corrida SIGUE · corrida ' + exId);\n  return { json: {\n    ok: false, code: 'nota_perdida', nota_perdida: true, nodo, error: msg,\n    execution: { id: exId, url: base + '/workflow/' + wfId + '/executions/' + exId, mode: ($execution && $execution.mode) || '?', lastNodeExecuted: nodo,\n      error: { message: 'SE PERDIÓ UNA NOTA · la corrida SIGUE · ' + nodo + ' · ' + msg, node: { name: nodo } } },\n    workflow: { id: wfId, name: ($workflow && $workflow.name) || '?' },\n  } };\n});"
-      }
+      },
+      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador."
     },
     {
       "id": "6b358133-d549-41f6-ba74-d96d2b9ee8bf",
@@ -1135,10 +1124,6 @@
       "notes": "[R1 CANON RENAME 2026-06-28 · CC#2] phase_name → MAYÚSCULA canónica. Display name legacy preservado (no referenciado · evita cirugía connection-keys). Order-tolerant reconciliation PR #217 cubre orden DAG paralelo.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE (cola vieja · sin aviso).",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueRegularOutput",
       "position": [
         1200,
         120
@@ -1174,7 +1159,11 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "37856f77-704b-455f-bd87-d216e79b7ae9",
@@ -1182,10 +1171,6 @@
       "notes": "[R1 CANON RENAME 2026-06-28 · CC#2] phase_name → MAYÚSCULA canónica. Display name legacy preservado (no referenciado · evita cirugía connection-keys). Order-tolerant reconciliation PR #217 cubre orden DAG paralelo.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE (cola vieja · sin aviso).",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueRegularOutput",
       "position": [
         2160,
         120
@@ -1221,7 +1206,11 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "18de1149-d6ee-43c2-93b0-535b640390c6",
@@ -1229,10 +1218,6 @@
       "notes": "[R1 CANON RENAME 2026-06-28 · CC#2] phase_name → MAYÚSCULA canónica. Display name legacy preservado (no referenciado · evita cirugía connection-keys). Order-tolerant reconciliation PR #217 cubre orden DAG paralelo.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE (cola vieja · sin aviso).",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueRegularOutput",
       "position": [
         2640,
         120
@@ -1268,7 +1253,11 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "6b16108c-f040-42ee-acb7-fa32282c4728",
@@ -1276,10 +1265,6 @@
       "notes": "[R1 CANON RENAME 2026-06-28 · CC#2] phase_name → MAYÚSCULA canónica. Display name legacy preservado (no referenciado · evita cirugía connection-keys). Order-tolerant reconciliation PR #217 cubre orden DAG paralelo.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE y «Nota perdida» avisa.",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueErrorOutput",
       "position": [
         2400,
         120
@@ -1315,12 +1300,15 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
     },
     {
       "id": "e101-nota-perdida-cliente-persisted",
       "name": "Nota perdida · cliente_persisted",
-      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador.",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -1329,7 +1317,8 @@
       ],
       "parameters": {
         "jsCode": "// E101 (CC#3 2026-09-18) · una nota que no decide nada no puede matar la corrida.\n// Este nodo cuelga de la SALIDA DE ERROR de «[MODELB] Phase-boundary Emit · cliente_persisted» (tras 2 intentos y 25 s de tope): la nota se perdió,\n// la corrida SIGUE con {ok:false, code:'nota_perdida'} hacia el mismo sucesor de siempre, y queda constancia:\n// el mismo ítem viaja al avisador (5fkPLbZvQsQa1bcd) sin esperar · título «SE PERDIÓ UNA NOTA · la corrida SIGUE».\nconst base = String(($env && $env.N8N_BASE_URL) || 'https://n8n-production-72be.up.railway.app').replace(/\\/+$/, '');\nconst nodo = \"[MODELB] Phase-boundary Emit · cliente_persisted\";\nreturn $input.all().map((i) => {\n  const e = (i.json && i.json.error) || {};\n  const msg = String(typeof e === 'string' ? e : (e.message || e.description || (Object.keys(e).length ? JSON.stringify(e) : '') || 'sin mensaje')).slice(0, 400);\n  const exId = String(($execution && $execution.id) || '?');\n  const wfId = String(($workflow && $workflow.id) || '?');\n  console.log('[nota-perdida] ' + nodo + ' · ' + msg + ' · la corrida SIGUE · corrida ' + exId);\n  return { json: {\n    ok: false, code: 'nota_perdida', nota_perdida: true, nodo, error: msg,\n    execution: { id: exId, url: base + '/workflow/' + wfId + '/executions/' + exId, mode: ($execution && $execution.mode) || '?', lastNodeExecuted: nodo,\n      error: { message: 'SE PERDIÓ UNA NOTA · la corrida SIGUE · ' + nodo + ' · ' + msg, node: { name: nodo } } },\n    workflow: { id: wfId, name: ($workflow && $workflow.name) || '?' },\n  } };\n});"
-      }
+      },
+      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador."
     },
     {
       "id": "9cc22328-17bd-4b7b-88ef-e3aa46980fae",
@@ -1337,10 +1326,6 @@
       "notes": "[R1 CANON RENAME 2026-06-28 · CC#2] phase_name → MAYÚSCULA canónica. Display name legacy preservado (no referenciado · evita cirugía connection-keys). Order-tolerant reconciliation PR #217 cubre orden DAG paralelo.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE (cola vieja · sin aviso).",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueRegularOutput",
       "position": [
         3600,
         120
@@ -1376,7 +1361,11 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "12ebf79d-156a-48b3-ac81-461d854b11fb",
@@ -1385,10 +1374,6 @@
       "notes": "[R1 CANON 2026-06-28 · CC#2] DISABLED · journey_completed NO es phase_boundary · terminal cubierto por Write-back Callback run_completed.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE (cola vieja · sin aviso).",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueRegularOutput",
       "position": [
         3840,
         120
@@ -1424,7 +1409,11 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "cc2-emit-cascade-20260628",
@@ -1433,10 +1422,6 @@
       "notes": "[R1 CANON NEW EMIT 2026-06-28 · CC#2] Fase CASCADE · sin equivalente en los 8 viejos · emit nuevo. Leaf · POST sala ingress.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE (cola vieja · sin aviso).",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueRegularOutput",
       "position": [
         4540,
         160
@@ -1472,7 +1457,11 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "cc2-emit-apifywire-20260628",
@@ -1481,10 +1470,6 @@
       "notes": "[R1 CANON NEW EMIT 2026-06-28 · CC#2] Fase APIFY_WIRE · sin equivalente en los 8 viejos · emit nuevo. Leaf · POST sala ingress.\nE101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE y «Nota perdida» avisa.",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueErrorOutput",
       "position": [
         1500,
         920
@@ -1520,12 +1505,15 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
     },
     {
       "id": "e101-nota-perdida-apify-wire",
       "name": "Nota perdida · APIFY_WIRE",
-      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador.",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -1534,7 +1522,8 @@
       ],
       "parameters": {
         "jsCode": "// E101 (CC#3 2026-09-18) · una nota que no decide nada no puede matar la corrida.\n// Este nodo cuelga de la SALIDA DE ERROR de «[MODELB] Phase-boundary Emit · APIFY_WIRE» (tras 2 intentos y 25 s de tope): la nota se perdió,\n// la corrida SIGUE con {ok:false, code:'nota_perdida'} hacia el mismo sucesor de siempre, y queda constancia:\n// el mismo ítem viaja al avisador (5fkPLbZvQsQa1bcd) sin esperar · título «SE PERDIÓ UNA NOTA · la corrida SIGUE».\nconst base = String(($env && $env.N8N_BASE_URL) || 'https://n8n-production-72be.up.railway.app').replace(/\\/+$/, '');\nconst nodo = \"[MODELB] Phase-boundary Emit · APIFY_WIRE\";\nreturn $input.all().map((i) => {\n  const e = (i.json && i.json.error) || {};\n  const msg = String(typeof e === 'string' ? e : (e.message || e.description || (Object.keys(e).length ? JSON.stringify(e) : '') || 'sin mensaje')).slice(0, 400);\n  const exId = String(($execution && $execution.id) || '?');\n  const wfId = String(($workflow && $workflow.id) || '?');\n  console.log('[nota-perdida] ' + nodo + ' · ' + msg + ' · la corrida SIGUE · corrida ' + exId);\n  return { json: {\n    ok: false, code: 'nota_perdida', nota_perdida: true, nodo, error: msg,\n    execution: { id: exId, url: base + '/workflow/' + wfId + '/executions/' + exId, mode: ($execution && $execution.mode) || '?', lastNodeExecuted: nodo,\n      error: { message: 'SE PERDIÓ UNA NOTA · la corrida SIGUE · ' + nodo + ' · ' + msg, node: { name: nodo } } },\n    workflow: { id: wfId, name: ($workflow && $workflow.name) || '?' },\n  } };\n});"
-      }
+      },
+      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador."
     },
     {
       "id": "091ae5aa-6700-4758-9bf3-bc63dd503ac5",
@@ -2085,13 +2074,8 @@
     {
       "id": "modelb-emit-cimiento-promoted",
       "name": "[MODELB] Emit · cimiento.promoted",
-      "notes": "E101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE y «Nota perdida» avisa.",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueErrorOutput",
       "position": [
         6160,
         1740
@@ -2127,12 +2111,16 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput",
+      "notes": "E101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE y «Nota perdida» avisa."
     },
     {
       "id": "e101-nota-perdida-cimiento-promoted",
       "name": "Nota perdida · cimiento.promoted",
-      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador.",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -2141,7 +2129,8 @@
       ],
       "parameters": {
         "jsCode": "// E101 (CC#3 2026-09-18) · una nota que no decide nada no puede matar la corrida.\n// Este nodo cuelga de la SALIDA DE ERROR de «[MODELB] Emit · cimiento.promoted» (tras 2 intentos y 25 s de tope): la nota se perdió,\n// la corrida SIGUE con {ok:false, code:'nota_perdida'} hacia el mismo sucesor de siempre, y queda constancia:\n// el mismo ítem viaja al avisador (5fkPLbZvQsQa1bcd) sin esperar · título «SE PERDIÓ UNA NOTA · la corrida SIGUE».\nconst base = String(($env && $env.N8N_BASE_URL) || 'https://n8n-production-72be.up.railway.app').replace(/\\/+$/, '');\nconst nodo = \"[MODELB] Emit · cimiento.promoted\";\nreturn $input.all().map((i) => {\n  const e = (i.json && i.json.error) || {};\n  const msg = String(typeof e === 'string' ? e : (e.message || e.description || (Object.keys(e).length ? JSON.stringify(e) : '') || 'sin mensaje')).slice(0, 400);\n  const exId = String(($execution && $execution.id) || '?');\n  const wfId = String(($workflow && $workflow.id) || '?');\n  console.log('[nota-perdida] ' + nodo + ' · ' + msg + ' · la corrida SIGUE · corrida ' + exId);\n  return { json: {\n    ok: false, code: 'nota_perdida', nota_perdida: true, nodo, error: msg,\n    execution: { id: exId, url: base + '/workflow/' + wfId + '/executions/' + exId, mode: ($execution && $execution.mode) || '?', lastNodeExecuted: nodo,\n      error: { message: 'SE PERDIÓ UNA NOTA · la corrida SIGUE · ' + nodo + ' · ' + msg, node: { name: nodo } } },\n    workflow: { id: wfId, name: ($workflow && $workflow.name) || '?' },\n  } };\n});"
-      }
+      },
+      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador."
     },
     {
       "id": "6e56b7bf-827e-4790-a9ea-e5a5b784555f",
@@ -2181,13 +2170,8 @@
     {
       "id": "fb500be7-1e55-4c33-a3f8-bd3af5185561",
       "name": "[MODELB] Emit · cimiento.failed (honesto)",
-      "notes": "E101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE y «Nota perdida» avisa.",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000,
-      "onError": "continueErrorOutput",
       "position": [
         6160,
         1940
@@ -2223,12 +2207,16 @@
           },
           "timeout": 25000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput",
+      "notes": "E101 · ANOTA, no decide: tope 25 s · 2 intentos · si falla, la corrida SIGUE y «Nota perdida» avisa."
     },
     {
       "id": "e101-nota-perdida-cimiento-failed-honesto-",
       "name": "Nota perdida · cimiento.failed (honesto)",
-      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador.",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -2237,7 +2225,8 @@
       ],
       "parameters": {
         "jsCode": "// E101 (CC#3 2026-09-18) · una nota que no decide nada no puede matar la corrida.\n// Este nodo cuelga de la SALIDA DE ERROR de «[MODELB] Emit · cimiento.failed (honesto)» (tras 2 intentos y 25 s de tope): la nota se perdió,\n// la corrida SIGUE con {ok:false, code:'nota_perdida'} hacia el mismo sucesor de siempre, y queda constancia:\n// el mismo ítem viaja al avisador (5fkPLbZvQsQa1bcd) sin esperar · título «SE PERDIÓ UNA NOTA · la corrida SIGUE».\nconst base = String(($env && $env.N8N_BASE_URL) || 'https://n8n-production-72be.up.railway.app').replace(/\\/+$/, '');\nconst nodo = \"[MODELB] Emit · cimiento.failed (honesto)\";\nreturn $input.all().map((i) => {\n  const e = (i.json && i.json.error) || {};\n  const msg = String(typeof e === 'string' ? e : (e.message || e.description || (Object.keys(e).length ? JSON.stringify(e) : '') || 'sin mensaje')).slice(0, 400);\n  const exId = String(($execution && $execution.id) || '?');\n  const wfId = String(($workflow && $workflow.id) || '?');\n  console.log('[nota-perdida] ' + nodo + ' · ' + msg + ' · la corrida SIGUE · corrida ' + exId);\n  return { json: {\n    ok: false, code: 'nota_perdida', nota_perdida: true, nodo, error: msg,\n    execution: { id: exId, url: base + '/workflow/' + wfId + '/executions/' + exId, mode: ($execution && $execution.mode) || '?', lastNodeExecuted: nodo,\n      error: { message: 'SE PERDIÓ UNA NOTA · la corrida SIGUE · ' + nodo + ' · ' + msg, node: { name: nodo } } },\n    workflow: { id: wfId, name: ($workflow && $workflow.name) || '?' },\n  } };\n});"
-      }
+      },
+      "notes": "E101 · cuelga de la salida de error del emisor · la corrida sigue · el aviso va al avisador."
     },
     {
       "id": "207a96ea-3052-4897-a877-7f54f30b970e",
@@ -2667,10 +2656,8 @@
     {
       "id": "e101-avisar-nota-perdida",
       "name": "Avisar nota perdida → avisador",
-      "notes": "E101 · reusa el avisador de errores (E73) · sin esperar · si el aviso falla, la corrida sigue igual.",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "onError": "continueRegularOutput",
       "position": [
         1020,
         480
@@ -2684,7 +2671,9 @@
         "options": {
           "waitForSubWorkflow": false
         }
-      }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "E101 · reusa el avisador de errores (E73) · sin esperar · si el aviso falla, la corrida sigue igual."
     }
   ],
   "connections": {
@@ -3767,41 +3756,12 @@
       ]
     }
   },
-  "nodeGroups": [],
   "settings": {
-    "executionOrder": "v1",
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false,
-    "saveDataSuccessExecution": "all",
-    "saveDataErrorExecution": "all",
     "saveExecutionProgress": true,
-    "binaryMode": "separate",
-    "errorWorkflow": "5fkPLbZvQsQa1bcd"
-  },
-  "staticData": null,
-  "pinData": {},
-  "meta": null,
-  "tags": [],
-  "shared": [
-    {
-      "role": "workflow:owner",
-      "workflowId": "LyVoKcrypS5uLyuu",
-      "projectId": "xKBOyp07nrGbu4ob",
-      "project": {
-        "id": "xKBOyp07nrGbu4ob",
-        "name": "Emilio  Perez  <emilacho@hotmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "customTelemetryTags": [],
-        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
-        "createdAt": "2026-04-18T13:41:21.856Z",
-        "updatedAt": "2026-04-18T13:51:26.012Z"
-      },
-      "createdAt": "2026-04-18T15:45:06.415Z",
-      "updatedAt": "2026-04-18T15:45:06.415Z"
-    }
-  ],
-  "activeVersion": null
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "5fkPLbZvQsQa1bcd",
+    "executionOrder": "v1"
+  }
 }
