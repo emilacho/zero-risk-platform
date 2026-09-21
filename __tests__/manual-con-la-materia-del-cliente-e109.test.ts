@@ -73,6 +73,7 @@ describe('① + ② el Gate · todos los válidos pasan · own_web no va al Serv
     const out = correr(codigo(ALTA_HOY, GATE), { nodos: {}, input: EV32.split_targets })
     expect(out.map((o) => o.json.target_label)).toEqual(['own:web:instagram.com/naufrago.ec'])
     expect(out[0].json).toMatchObject({ apify_function: 'instagram_scraper', target_kind: 'own', _discovery_ok: true })
+    expect((out[0] as any).pairedItem).toEqual({ item: 1 })
   })
   it('con muchos objetivos: pasan TODOS los que tienen función · los marcados «saltar» no · los own_web no', () => {
     const entrada = [
@@ -85,6 +86,8 @@ describe('① + ② el Gate · todos los válidos pasan · own_web no va al Serv
     ]
     const out = correr(codigo(ALTA_HOY, GATE), { nodos: {}, input: entrada })
     expect(out.map((o) => o.json.target_label)).toEqual(['own:ig', 'comp:ig:a', 'comp:tt:b'])
+    // E109b · cada ítem que pasa lleva pairedItem con su índice de ENTRADA (146661 murió sin esto)
+    expect(out.map((o: any) => o.pairedItem)).toEqual([{ item: 1 }, { item: 2 }, { item: 3 }])
   })
   it('sin objetivos válidos devuelve vacío (no revienta)', () => {
     expect(correr(codigo(ALTA_HOY, GATE), { nodos: {}, input: [] })).toEqual([])
