@@ -1,16 +1,5 @@
 {
-  "id": "LyVoKcrypS5uLyuu",
   "name": "Zero Risk â€” Client Onboarding E2E v2 (Webhook: Deal Won)",
-  "description": null,
-  "active": false,
-  "activeVersionId": null,
-  "createdAt": "2026-04-18T15:45:06.415Z",
-  "updatedAt": "2026-09-21T22:25:29.823Z",
-  "isArchived": false,
-  "versionId": "f07d38db-2415-49a1-92bd-a78d15b57cd8",
-  "versionCounter": 234,
-  "sourceWorkflowId": null,
-  "triggerCount": 1,
   "nodes": [
     {
       "id": "webhook-deal-won",
@@ -1665,7 +1654,6 @@
     {
       "id": "cc3-jf-transform",
       "name": "[JEFATURA] Transform discovery→package",
-      "notes": "E109 · discovery_package.materia_cliente: sitio_texto + instagram propio (con tope) + idioma.",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -1674,7 +1662,8 @@
       ],
       "parameters": {
         "jsCode": "// CC#3 F2.2 · mapea el discovery real del parent a la forma discovery_package que el track\n// (downstream probado) espera. Validado contra el oráculo ($0). Robusto a discovery_output crudo\n// Y discovery_package ensamblado. FALLA RUIDOSA si no hay discovery real (→ Execute Workflow error → HITL).\nconst dealData = $('Validate Deal Data').first().json;\nconst parserPkg = ($('[APIFY-WIRE] Discovery Parser · dynamic targets (lazo)').first().json.discovery_package) || {};\nlet loadedSummary = '';\ntry { const _rows = $('[JEFATURA] Load landscape_summary (canon)').first().json; loadedSummary = (Array.isArray(_rows) ? (_rows[0] && _rows[0].content_text) : (_rows && _rows.content_text)) || ''; } catch (e) { loadedSummary = ''; }\nconst src = Object.assign({}, parserPkg, { discovery_summary: parserPkg.discovery_summary || parserPkg.competitive_landscape_summary || loadedSummary });\nconst rawIcp = src.icp_signals != null ? src.icp_signals : src.icp;\nconst icpArr = Array.isArray(rawIcp) ? rawIcp : (rawIcp && typeof rawIcp === 'object' ? [rawIcp] : []);\nconst flat = (k) => icpArr.flatMap((s)=> Array.isArray(s&&s[k]) ? s[k] : (s&&s[k] ? [s[k]] : [])).filter(Boolean);\nconst discovery_summary = String(src.discovery_summary || src.competitive_landscape_summary || '');\nif (!discovery_summary) { throw new Error('CIMIENTO_NO_DISCOVERY · sin discovery real para calificar · se PARA (→HITL)'); }\n// FIX B (2026-08-08 CC#2) el CABLE DE SALIDA de Apify al escritor y al juez.\n// Antes: `competitors` salía SOLO del parser = la lista del AGENTE de descubrimiento,\n// anterior a cualquier scrape. La verificación de Apify no tenía consumidor:\n//   . [APIFY] Enrich competitors -> lista VERIFICADA (source/trust_level/scraped/\n//     positioning/evidence) . solo la leía el re-gate . rama «observar» únicamente.\n//   . [APIFY-WIRE] Aggregate Service responses -> PROCEDENCIA del scraping\n//     (sources[]/sources_summary) . moría en Synthesis Staging, que nadie lee.\n// CORRECCION AL DISENO: Aggregate NO emite competidores (verificado en su codigo),\n// emite PROCEDENCIA. Por eso el cable son DOS piezas, no una:\n//   (1) CONTENIDO verificado <- Enrich . fusionado POR NOMBRE sobre la lista del parser,\n//       que sigue siendo la BASE => ningun competidor se pierde si Enrich no corrio.\n//   (2) PROCEDENCIA <- Aggregate . en LAS DOS ramas => el juez sabe cuanto scraping\n//       hubo de verdad y si fallo.\n// Los dos con try/catch: en «confirmar» el nodo Enrich NO se ejecuta y el $() lanza.\n// Conservador: NO se agregan competidores que solo existan en Enrich, se CUENTAN\n// (_solo_en_enrich) para decidirlo con dato.\nlet _enrichByName = {}; let _apify_enriched = 0; let _solo_en_enrich = 0;\ntry {\n  const _e = $('[APIFY] Enrich competitors').first().json;\n  const _list = Array.isArray(_e && _e.competitors) ? _e.competitors : [];\n  for (const c of _list) {\n    const k = String((c && c.name) || '').trim().toLowerCase();\n    if (k) { _enrichByName[k] = c; if (c.scraped === true) _apify_enriched++; }\n  }\n} catch (e) { _enrichByName = {}; }\nlet _apify_sources = []; let _apify_summary = null;\ntry {\n  const _a = $('[APIFY-WIRE] Aggregate Service responses (onboarding_e2e)').first().json || {};\n  _apify_sources = Array.isArray(_a.sources) ? _a.sources : [];\n  _apify_summary = _a.sources_summary || null;\n} catch (e) { _apify_sources = []; _apify_summary = null; }\n// FIX 2026-08-09 (CC#1) · metadatos (website/tipo) de los competidores CANÓNICOS,\n// para poder PROMOVER al paquete los que sólo existen en Enrich (Enrich no trae website).\n// Fuentes en orden: Scrape-Verify (trae website + deep_scan) → ANCHOR (lista corregida).\n// Las dos con try/catch · en la rama «confirmar» esos nodos NO corren y el $() lanza.\nlet _metaByName = {};\nfor (const _n of ['[APIFY] Scrape-Verify', '[ANCHOR] Guard geo+canonical']) {\n  try {\n    const _j = $(_n).first().json || {};\n    const _l = Array.isArray(_j.competitors) ? _j.competitors\n             : (_j.discovery_output && Array.isArray(_j.discovery_output.competitors) ? _j.discovery_output.competitors : []);\n    for (const c of _l) {\n      const k = String((c && c.name) || '').trim().toLowerCase();\n      if (k && !_metaByName[k]) _metaByName[k] = c;\n    }\n  } catch (e) { /* nodo no ejecutado en esta rama */ }\n}\nconst _nombresParser = {};\nfor (const c of (src.competitors || [])) { _nombresParser[String((c && c.name) || '').trim().toLowerCase()] = true; }\nfor (const k of Object.keys(_enrichByName)) { if (!_nombresParser[k]) _solo_en_enrich++; }\nconst discovery_package = {\n  discovery_summary,\n  // E39 (CC#2 2026-09-15) · segundo filtro que copia nombre por nombre · sin este\n  // renglon la casilla muere aca aunque el parser la haya traido.\n  business_model: String(src.business_model || ''),\n  own_handles: { facebook: (src.own_handles&&src.own_handles.facebook)||'', instagram: (src.own_handles&&src.own_handles.instagram)||'' },\n  competitors: (function(){\n    const _fila = (c)=>{\n      const base = { name:String(c&&c.name||''), website:String(c&&c.website||''), competitor_type:String(c&&c.competitor_type||'') };\n      const v = _enrichByName[base.name.trim().toLowerCase()];\n      if (!v) return base;\n      base.source = v.source || 'auto_discovery';\n      base.trust_level = v.trust_level || 'untrusted';\n      base.scraped = v.scraped === true;\n      if (typeof v.positioning === 'string' && v.positioning) base.positioning = String(v.positioning).slice(0, 150);\n      if (v.evidence && typeof v.evidence === 'object' && Object.keys(v.evidence).length) base.evidence = v.evidence;\n      return base;\n    };\n    const _out = (src.competitors||[]).map(_fila);\n    // FIX 2026-08-09 (CC#1) · EL CABLE QUE FALTABA. Antes esta lista era SÓLO la del parser\n    // y los que existían únicamente en Enrich se CONTABAN (_solo_en_enrich) sin entrar nunca.\n    // Con la base del parser vacía (exec 87035: parser 0 · enrich 6 · enriched 5) el escritor\n    // recibía competitors:[] y escribía de la prosa. Ahora se PROMUEVEN, tomando website/tipo\n    // de la lista canónica (Scrape-Verify/ANCHOR) y la evidencia de Enrich.\n    for (const k of Object.keys(_enrichByName)) {\n      if (_nombresParser[k]) continue;\n      const meta = _metaByName[k] || {};\n      const v = _enrichByName[k];\n      _out.push(_fila({ name: v.name || meta.name || '', website: meta.website || '', competitor_type: v.competitor_type || meta.competitor_type || '' }));\n    }\n    return _out;\n  })(),\n  icp_signals: { segments: icpArr.map((s)=>s&&s.audience_segment).filter(Boolean), pain_points: flat('pain_points'), goals: flat('goals'), objections: flat('objections'), jobs_to_be_done: flat('jobs_to_be_done'), decision_criteria: flat('decision_criteria'), preferred_channels: flat('preferred_channels'), content_preferences: flat('content_preferences') },\n  _apify: { enriched_count: _apify_enriched, solo_en_enrich: _solo_en_enrich, promoted_from_enrich: _solo_en_enrich, sources: _apify_sources, sources_summary: _apify_summary },\n  _source: 'onboarding_e2e_discovery_real',\n};\n\n// E109 (CC#1 2026-09-21) · LA MATERIA DEL CLIENTE viaja en el paquete: el texto del sitio (ya leído por\n// «El texto del sitio, o el hueco» · guardado en client_web_pages) y lo raspado del Instagram propio (la llamada del\n// Servicio Apify cuyo objetivo fue own:instagram) · con tope · más la línea de idioma. Sin esto las lentes\n// escribían «no hay textos web» con el sitio leído (146544). No se reescribe ninguna lente ni el juez.\nconst materia_cliente = (() => {\n  const m = { idioma: \"español de Ecuador · sin voseo (tú, no vos: «sabes», «pides», «pagas»)\", sitio_estado: null, sitio_texto: '', sitio_caracteres_total: 0, instagram_propio: '', instagram_estado: null };\n  try {\n    const s = $('El texto del sitio, o el hueco').first().json || {};\n    m.sitio_estado = s.sitio_estado || null;\n    m.sitio_caracteres_total = Number(s.sitio_caracteres) || 0;\n    m.sitio_texto = String(s.sitio_texto || '').slice(0, 3500);\n  } catch (e) { m.sitio_estado = 'no_disponible'; }\n  try {\n    const gate = $('[APIFY-WIRE] Gate · drop skip-markers (lazo)').all();\n    const calls = $('[APIFY-WIRE] Call Apify Service Workflow (onboarding_e2e)').all();\n    calls.forEach((c, i) => {\n      const t = (gate[i] && gate[i].json) || {};\n      const r = c.json || {};\n      if (t.target_kind === 'own' && t.apify_function === 'instagram_scraper') {\n        m.instagram_estado = r.ok === true ? 'trajo' : 'sin_respuesta';\n        if (r.ok === true) m.instagram_propio = String(r.datos || '').slice(0, 1000);\n      }\n    });\n    if (m.instagram_estado === null) m.instagram_estado = 'no_pedido';\n  } catch (e) { m.instagram_estado = 'no_disponible'; }\n  return m;\n})();\ndiscovery_package.materia_cliente = materia_cliente;\nreturn [{ json: {\n  client_id: dealData.client_id, client_name: dealData.client_name, industry: dealData.industry,\n  website: dealData.website || dealData.domain, discovery_package,\n  _journey_id: dealData._journey_id || $workflow.id,\n  _sala_correlation_id: (($('Validate Deal Data').first().json._sala_correlation_id) || (dealData._sala_correlation_id) || $execution.id)\n} }];"
-      }
+      },
+      "notes": "E109 · discovery_package.materia_cliente: sitio_texto + instagram propio (con tope) + idioma."
     },
     {
       "id": "cc3-jf-exec",
@@ -3771,41 +3760,12 @@
       ]
     }
   },
-  "nodeGroups": [],
   "settings": {
-    "executionOrder": "v1",
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false,
-    "saveDataSuccessExecution": "all",
-    "saveDataErrorExecution": "all",
     "saveExecutionProgress": true,
-    "binaryMode": "separate",
-    "errorWorkflow": "5fkPLbZvQsQa1bcd"
-  },
-  "staticData": null,
-  "pinData": {},
-  "meta": null,
-  "tags": [],
-  "shared": [
-    {
-      "role": "workflow:owner",
-      "workflowId": "LyVoKcrypS5uLyuu",
-      "projectId": "xKBOyp07nrGbu4ob",
-      "project": {
-        "id": "xKBOyp07nrGbu4ob",
-        "name": "Emilio  Perez  <emilacho@hotmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "customTelemetryTags": [],
-        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
-        "createdAt": "2026-04-18T13:41:21.856Z",
-        "updatedAt": "2026-04-18T13:51:26.012Z"
-      },
-      "createdAt": "2026-04-18T15:45:06.415Z",
-      "updatedAt": "2026-04-18T15:45:06.415Z"
-    }
-  ],
-  "activeVersion": null
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "5fkPLbZvQsQa1bcd",
+    "executionOrder": "v1"
+  }
 }
