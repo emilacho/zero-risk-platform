@@ -1,0 +1,1276 @@
+{
+  "origen": "146544 (E107 · cimiento real) · salidas grabadas nodo por nodo · para la prueba E110 del Judge prep",
+  "nodos": {
+    "Validate Deal Data": {
+      "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+      "client_name": "Náufrago",
+      "industry": "restaurante de comida costera",
+      "website": "https://www.naufrago.ec",
+      "_sin_web": false,
+      "discovery_package": {
+        "discovery_summary": "El mercado de encebollado y ceviche en Guayaquil es uno de los más saturados y culturalmente arraigados del Ecuador, con oferta que va desde huecas de barrio históricas hasta ghost kitchens nativas-digitales. Los actores dominantes se dividen en tres capas: (1) cadenas multi-local consolidadas con delivery activo — La Casa del Encebollado (53K IG, 10+ puntos, Rappi/PedidosYa) y Pez Azul (\"Campeones Mundiales 2017\", 10+ locales, triple cobertura en apps) concentran la mayor masa crítica digital y física en encebollado; (2) operadores digitales de ceviche con presencia relevante — Cevichería Pepe 3 (43K IG, 3 locales, \"ceviche manaba\") y Cevichería Lobo Marino (46K IG, 2 locales en Urdesa y Kennedy) lideran el segmento ceviche-delivery; (3) actores delivery-first o multi-punto en expansión — Encebollado Cuarto de Libra (4+ locales, servicio 24h en Alborada) y Encebollados Factory (ghost kitchen Uber Eats) compiten directamente en el canal principal de Náufrago. El precio medio del encebollado oscila entre $3–$6 y el ceviche entre $5–$9, ubicando a Náufrago en el rango medio-alto con diferenciación posible por origen del marisco. CORRECCIÓN APLICADA: Ecuaviche y Manabiche fueron excluidos por operar en Quito — su inclusión previa constituía un error de ancla geográfica. El Encebollado Rosado (688 seguidores IG, precio $1.75, sin delivery evidente) se clasifica como amenaza baja por nula presencia digital y segmento de precio inferior al de Náufrago.\n\nLa oportunidad estratégica de Náufrago reside en un eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena) combinada con una experiencia de marca aspiracional (\"alma de playa\") y modelo híbrido ghost kitchen + local físico en origen. La amenaza más urgente es La Casa del Encebollado, que ya tiene masa crítica digital y delivery consolidado y puede absorber el mismo cliente si Náufrago no construye diferenciación de marca consistente. En el eje ceviche, Lobo Marino y Pepe 3 tienen ventaja de seguidores y red de locales; Náufrago debe contraatacar con la narrativa de autenticidad costera y contenido de origen (Olón) que ninguno de ellos puede replicar desde Guayaquil.",
+        "business_model": "",
+        "own_handles": {
+          "facebook": "",
+          "instagram": ""
+        },
+        "competitors": [
+          {
+            "name": "El Pez Volador",
+            "website": "https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "Estrella/oro en la Feria Raíces2014\nBicentenario2020👩‍🍳Angelita\n🔱Luque y José mascote\n📍Bamboo Plaza\n📍Chile y 9oct \n📍Ébanos y Víctor Emilio Estra",
+            "evidence": {
+              "followers_count": 10103,
+              "following_count": 1299,
+              "posts_count": 154,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "La Casa del Encebollado",
+            "website": "https://lacasadelencebollado.ec",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "🔥Representantes del Encebollado 2026 🐟🏆\n🛵Realiza tu pedido vía WhatsApp⬇️",
+            "evidence": {
+              "followers_count": 55556,
+              "following_count": 641,
+              "posts_count": 920,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "Pez Azul",
+            "website": "http://www.pezazul.com.ec",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "Los platos más icónicos del Ecuador. 🇪🇨\n📍 16 locales cerca de ti.\n🌟 Desde 1988.\n#LaMarcaDelEncebollado\n@rappi.ecuador \n@ubereats \n@pedidosya.ecuad",
+            "evidence": {
+              "followers_count": 13731,
+              "following_count": 714,
+              "posts_count": 2057,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "El Encebollado Rosado",
+            "website": "",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "El auténtico de Guayaquil.\n📍Tungurahua 4508 entre Sedala y Callejón Parra(actual Blacio Potes) \n#ElAuténticoDeDonAmador 💯\n#ElAuténticoDelSur",
+            "evidence": {
+              "followers_count": 775,
+              "following_count": 129,
+              "posts_count": 25,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "El Rincón del Ceviche",
+            "website": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio\nCombo Ceviche de Pulpo en Salsa Roja\nCeviche tipo cóctel, cebolla perla y yerbita, incluy",
+            "evidence": {
+              "platform": "web"
+            }
+          },
+          {
+            "name": "Encebollados Factory",
+            "website": "https://www.ubereats.com/ec-en/store/encebollados-factory-guayaquil/_MHorYDrWG2sJ05VxM2a0w",
+            "competitor_type": "direct",
+            "source": "auto_discovery",
+            "trust_level": "untrusted",
+            "scraped": false
+          },
+          {
+            "name": "Encebollado de Dieguito",
+            "website": "https://www.ubereats.com/ec-en/store/encebollado-de-dieguito-guayaquil/KteJwwzwQYKbrymGhytWvg",
+            "competitor_type": "direct",
+            "source": "auto_discovery",
+            "trust_level": "untrusted",
+            "scraped": false
+          }
+        ],
+        "icp_signals": {
+          "segments": [],
+          "pain_points": [],
+          "goals": [],
+          "objections": [],
+          "jobs_to_be_done": [],
+          "decision_criteria": [],
+          "preferred_channels": [],
+          "content_preferences": []
+        },
+        "_apify": {
+          "enriched_count": 5,
+          "solo_en_enrich": 7,
+          "promoted_from_enrich": 7,
+          "sources": [
+            {
+              "apify_function": "unknown",
+              "status": "failed",
+              "count": 0,
+              "trust_level": "untrusted",
+              "source": "apify_scrape",
+              "error": "apify_function invalid"
+            }
+          ],
+          "sources_summary": {
+            "ok_count": 0,
+            "failed_count": 1,
+            "total_results": 0
+          }
+        },
+        "_source": "onboarding_e2e_discovery_real"
+      },
+      "corrections": [],
+      "_fidelity_cycle": null,
+      "_sala_correlation_id": "96cd4e87-f042-4942-8df6-602065a1b585",
+      "_journey_id": "628716ab-25f8-5044-92e1-161ddc7b5321"
+    },
+    "[BB] Fan-out prep": {
+      "tasks": {
+        "brand-strategist": "Construí TU sección del brand book SOLO desde la evidencia real del cliente abajo (web/redes/discovery/Apify). NO inventes. CUANDO TENGAS TU SECCIÓN LISTA, LLAMÁ EL TOOL `emit_brand_section` con tus campos (pasá `lens` con tu nombre de lente). NO narres la respuesta · usá el tool · es la ÚNICA forma en que tu sección llega al consolidador. Las etiquetas [Sn] del ICP indican a qué segmento pertenece cada dato (un dato puede pertenecer a varios) · usalas para NO mezclar segmentos · NUNCA las copies al texto del brand book. Grounding cada afirmación en la evidencia.\n\nEVIDENCIA:\n{\"client_id\":\"0736401b-8a9c-4e57-9ab0-e4bad25cb630\",\"client_name\":\"Náufrago\",\"industry\":\"restaurante de comida costera\",\"website\":\"https://www.naufrago.ec\",\"discovery_summary\":\"El mercado de encebollado y ceviche en Guayaquil es uno de los más saturados y culturalmente arraigados del Ecuador, con oferta que va desde huecas de barrio históricas hasta ghost kitchens nativas-digitales. Los actores dominantes se dividen en tres capas: (1) cadenas multi-local consolidadas con delivery activo — La Casa del Encebollado (53K IG, 10+ puntos, Rappi/PedidosYa) y Pez Azul (\\\"Campeones Mundiales 2017\\\", 10+ locales, triple cobertura en apps) concentran la mayor masa crítica digital y física en encebollado; (2) operadores digitales de ceviche con presencia relevante — Cevichería Pepe 3 (43K IG, 3 locales, \\\"ceviche manaba\\\") y Cevichería Lobo Marino (46K IG, 2 locales en Urdesa y Kennedy) lideran el segmento ceviche-delivery; (3) actores delivery-first o multi-punto en expansión — Encebollado Cuarto de Libra (4+ locales, servicio 24h en Alborada) y Encebollados Factory (ghost kitchen Uber Eats) compiten directamente en el canal principal de Náufrago. El precio medio del encebollado oscila entre $3–$6 y el ceviche entre $5–$9, ubicando a Náufrago en el rango medio-alto con diferenciación posible por origen del marisco. CORRECCIÓN APLICADA: Ecuaviche y Manabiche fueron excluidos por operar en Quito — su inclusión previa constituía un error de ancla geográfica. El Encebollado Rosado (688 seguidores IG, precio $1.75, sin delivery evidente) se clasifica como amenaza baja por nula presencia digital y segmento de precio inferior al de Náufrago.\\n\\nLa oportunidad estratégica de Náufrago reside en un eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena) combinada con una experiencia de marca aspiracional (\\\"alma de playa\\\") y modelo híbrido ghost kitchen + local físico en origen. La amenaza más urgente es La Casa del Encebollado, que ya tiene masa crítica digital y delivery consolidado y puede absorber el mismo cliente si Náufrago no construye diferenciación de marca consistente. En el eje ceviche, Lobo Marino y Pepe 3 tienen ventaja de seguidores y red de locales; Náufrago debe contraatacar con la narrativa de autenticidad costera y contenido de origen (Olón) que ninguno de ellos puede replicar desde Guayaquil.\",\"business_model\":\"\",\"competitors\":[{\"name\":\"El Pez Volador\",\"website\":\"https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"Estrella/oro en la Feria Raíces2014\\nBicentenario2020👩‍🍳Angelita\\n🔱Luque y José mascote\\n📍Bamboo Plaza\\n📍Chile y 9oct \\n📍Ébanos y Víctor Emilio Estra\",\"evidence\":{\"followers_count\":10103,\"following_count\":1299,\"posts_count\":154,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"La Casa del Encebollado\",\"website\":\"https://lacasadelencebollado.ec\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"🔥Representantes del Encebollado 2026 🐟🏆\\n🛵Realiza tu pedido vía WhatsApp⬇️\",\"evidence\":{\"followers_count\":55556,\"following_count\":641,\"posts_count\":920,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"Pez Azul\",\"website\":\"http://www.pezazul.com.ec\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"Los platos más icónicos del Ecuador. 🇪🇨\\n📍 16 locales cerca de ti.\\n🌟 Desde 1988.\\n#LaMarcaDelEncebollado\\n@rappi.ecuador \\n@ubereats \\n@pedidosya.ecuad\",\"evidence\":{\"followers_count\":13731,\"following_count\":714,\"posts_count\":2057,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"El Encebollado Rosado\",\"website\":\"\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"El auténtico de Guayaquil.\\n📍Tungurahua 4508 entre Sedala y Callejón Parra(actual Blacio Potes) \\n#ElAuténticoDeDonAmador 💯\\n#ElAuténticoDelSur\",\"evidence\":{\"followers_count\":775,\"following_count\":129,\"posts_count\":25,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"El Rincón del Ceviche\",\"website\":\"https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio\\nCombo Ceviche de Pulpo en Salsa Roja\\nCeviche tipo cóctel, cebolla perla y yerbita, incluy\",\"evidence\":{\"platform\":\"web\"}},{\"name\":\"Encebollados Factory\",\"website\":\"https://www.ubereats.com/ec-en/store/encebollados-factory-guayaquil/_MHorYDrWG2sJ05VxM2a0w\",\"competitor_type\":\"direct\",\"source\":\"auto_discovery\",\"trust_level\":\"untrusted\",\"scraped\":false},{\"name\":\"Encebollado de Dieguito\",\"website\":\"https://www.ubereats.com/ec-en/store/encebollado-de-dieguito-guayaquil/KteJwwzwQYKbrymGhytWvg\",\"competitor_type\":\"direct\",\"source\":\"auto_discovery\",\"trust_level\":\"untrusted\",\"scraped\":false}],\"icp_signals\":{\"segments\":[\"[S1] Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténti\",\"[S2] Guayaquileño urbano consumidor de encebollado y ceviche a domicilio\",\"[S3] Familias guayaquileñas 30-50 años que buscan comida costera para ocasiones de fin de seman\",\"[S4] Adultos urbanos guayaquileños 25-45 años que buscan desayuno/almuerzo costero auténtico a \"],\"pain_points\":[\"[S1] No conoce las huecas locales de confianza\",\"[S2] Desconfianza en la frescura del marisco en delivery\",\"[S3] Organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable\",\"[S4] No tienen tiempo ni acceso fácil a la playa para comer marisco fresco\",\"[S1] Dificultad para distinguir calidad entre la oferta masiva de delivery\"],\"goals\":[\"[S1] Probar comida costera auténtica durante visita a Guayaquil\",\"[S2] Satisfacer antojo de comida costera sin salir de casa\",\"[S3] Compartir una comida costeña auténtica con la familia sin desplazarse\",\"[S4] Disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina\",\"[S1] Vivir una experiencia de sabor local con historia y origen verificable\"],\"objections\":[\"[S3] ¿El pedido para varias personas llegará completo y caliente?\",\"[S4] ¿El marisco llegará fresco después del delivery?\",\"[S3] ¿El precio por persona sigue siendo accesible en pedidos grandes?\",\"[S4] ¿Por qué pagar $7-$9 si puedo ir a una hueca local más barata?\",\"[S4] No conozco la marca / no tengo reseñas de referencia\"],\"preferred_channels\":[\"[S1] Google Maps\",\"[S1,2,3,4] Instagram\",\"[S2,3,4] WhatsApp\",\"[S1] TripAdvisor\",\"[S2,4] Uber Eats\"],\"decision_criteria\":[\"[S1] Rating y reseñas en Google y TripAdvisor\",\"[S2] Rating y reseñas en app de delivery\",\"[S3] Cantidad y variedad del menú para grupos\"],\"buying_process\":[\"[S1] Búsqueda en Google o Instagram → lectura de reseñas → pedido delivery o visita al local\",\"[S2] Descubrimiento en Instagram o app de delivery → revisión de reseñas y fotos → pedido directo en app o WhatsApp\",\"[S3] Referencia de boca en boca o Instagram → WhatsApp para consultar pedido familiar → pago contra entrega o trans\"]},\"apify_sources\":[],\"_icp_source\":\"client_icp_documents\",\"_icp_rows\":4}\n\nTU SECCIÓN: positioning + icp (audience_segment, pains, goals).",
+        "editor-en-jefe": "Construí TU sección del brand book SOLO desde la evidencia real del cliente abajo (web/redes/discovery/Apify). NO inventes. CUANDO TENGAS TU SECCIÓN LISTA, LLAMÁ EL TOOL `emit_brand_section` con tus campos (pasá `lens` con tu nombre de lente). NO narres la respuesta · usá el tool · es la ÚNICA forma en que tu sección llega al consolidador. Las etiquetas [Sn] del ICP indican a qué segmento pertenece cada dato (un dato puede pertenecer a varios) · usalas para NO mezclar segmentos · NUNCA las copies al texto del brand book. Grounding cada afirmación en la evidencia.\n\nTU SECCIÓN: voice_description + forbidden_words[] + required_terminology[] + personalidad[] (3-6 rasgos de la voz OBSERVADA en la evidencia · no aspiracionales) + tagline_opciones[] (2-3 · destilación del positioning · es una ELECCIÓN, no un hecho) + mensajes_clave[] (3-5 · desde los dolores/objetivos del ICP + el positioning).\nPara los campos NUEVOS agregá `_meta` con { fuente, confianza } por campo: `fuente` cita el fragmento de la EVIDENCIA que lo sostiene y `confianza` es 0..1. Si la evidencia NO alcanza para un campo, devolvelo VACÍO con confianza 0 · NUNCA lo inventes. Un campo vacío es un resultado honesto y esperado.\n\nEVIDENCIA:\n{\"client_id\":\"0736401b-8a9c-4e57-9ab0-e4bad25cb630\",\"client_name\":\"Náufrago\",\"industry\":\"restaurante de comida costera\",\"website\":\"https://www.naufrago.ec\",\"discovery_summary\":\"El mercado de encebollado y ceviche en Guayaquil es uno de los más saturados y culturalmente arraigados del Ecuador, con oferta que va desde huecas de barrio históricas hasta ghost kitchens nativas-digitales. Los actores dominantes se dividen en tres capas: (1) cadenas multi-local consolidadas con delivery activo — La Casa del Encebollado (53K IG, 10+ puntos, Rappi/PedidosYa) y Pez Azul (\\\"Campeones Mundiales 2017\\\", 10+ locales, triple cobertura en apps) concentran la mayor masa crítica digital y física en encebollado; (2) operadores digitales de ceviche con presencia relevante — Cevichería Pepe 3 (43K IG, 3 locales, \\\"ceviche manaba\\\") y Cevichería Lobo Marino (46K IG, 2 locales en Urdesa y Kennedy) lideran el segmento ceviche-delivery; (3) actores delivery-first o multi-punto en expansión — Encebollado Cuarto de Libra (4+ locales, servicio 24h en Alborada) y Encebollados Factory (ghost kitchen Uber Eats) compiten directamente en el canal principal de Náufrago. El precio medio del encebollado oscila entre $3–$6 y el ceviche entre $5–$9, ubicando a Náufrago en el rango medio-alto con diferenciación posible por origen del marisco. CORRECCIÓN APLICADA: Ecuaviche y Manabiche fueron excluidos por operar en Quito — su inclusión previa constituía un error de ancla geográfica. El Encebollado Rosado (688 seguidores IG, precio $1.75, sin delivery evidente) se clasifica como amenaza baja por nula presencia digital y segmento de precio inferior al de Náufrago.\\n\\nLa oportunidad estratégica de Náufrago reside en un eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena) combinada con una experiencia de marca aspiracional (\\\"alma de playa\\\") y modelo híbrido ghost kitchen + local físico en origen. La amenaza más urgente es La Casa del Encebollado, que ya tiene masa crítica digital y delivery consolidado y puede absorber el mismo cliente si Náufrago no construye diferenciación de marca consistente. En el eje ceviche, Lobo Marino y Pepe 3 tienen ventaja de seguidores y red de locales; Náufrago debe contraatacar con la narrativa de autenticidad costera y contenido de origen (Olón) que ninguno de ellos puede replicar desde Guayaquil.\",\"business_model\":\"\",\"competitors\":[{\"name\":\"El Pez Volador\",\"website\":\"https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"Estrella/oro en la Feria Raíces2014\\nBicentenario2020👩‍🍳Angelita\\n🔱Luque y José mascote\\n📍Bamboo Plaza\\n📍Chile y 9oct \\n📍Ébanos y Víctor Emilio Estra\",\"evidence\":{\"followers_count\":10103,\"following_count\":1299,\"posts_count\":154,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"La Casa del Encebollado\",\"website\":\"https://lacasadelencebollado.ec\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"🔥Representantes del Encebollado 2026 🐟🏆\\n🛵Realiza tu pedido vía WhatsApp⬇️\",\"evidence\":{\"followers_count\":55556,\"following_count\":641,\"posts_count\":920,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"Pez Azul\",\"website\":\"http://www.pezazul.com.ec\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"Los platos más icónicos del Ecuador. 🇪🇨\\n📍 16 locales cerca de ti.\\n🌟 Desde 1988.\\n#LaMarcaDelEncebollado\\n@rappi.ecuador \\n@ubereats \\n@pedidosya.ecuad\",\"evidence\":{\"followers_count\":13731,\"following_count\":714,\"posts_count\":2057,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"El Encebollado Rosado\",\"website\":\"\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"El auténtico de Guayaquil.\\n📍Tungurahua 4508 entre Sedala y Callejón Parra(actual Blacio Potes) \\n#ElAuténticoDeDonAmador 💯\\n#ElAuténticoDelSur\",\"evidence\":{\"followers_count\":775,\"following_count\":129,\"posts_count\":25,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"El Rincón del Ceviche\",\"website\":\"https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio\\nCombo Ceviche de Pulpo en Salsa Roja\\nCeviche tipo cóctel, cebolla perla y yerbita, incluy\",\"evidence\":{\"platform\":\"web\"}},{\"name\":\"Encebollados Factory\",\"website\":\"https://www.ubereats.com/ec-en/store/encebollados-factory-guayaquil/_MHorYDrWG2sJ05VxM2a0w\",\"competitor_type\":\"direct\",\"source\":\"auto_discovery\",\"trust_level\":\"untrusted\",\"scraped\":false},{\"name\":\"Encebollado de Dieguito\",\"website\":\"https://www.ubereats.com/ec-en/store/encebollado-de-dieguito-guayaquil/KteJwwzwQYKbrymGhytWvg\",\"competitor_type\":\"direct\",\"source\":\"auto_discovery\",\"trust_level\":\"untrusted\",\"scraped\":false}],\"icp_signals\":{\"segments\":[\"[S1] Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténti\",\"[S2] Guayaquileño urbano consumidor de encebollado y ceviche a domicilio\",\"[S3] Familias guayaquileñas 30-50 años que buscan comida costera para ocasiones de fin de seman\",\"[S4] Adultos urbanos guayaquileños 25-45 años que buscan desayuno/almuerzo costero auténtico a \"],\"pain_points\":[\"[S1] No conoce las huecas locales de confianza\",\"[S2] Desconfianza en la frescura del marisco en delivery\",\"[S3] Organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable\",\"[S4] No tienen tiempo ni acceso fácil a la playa para comer marisco fresco\",\"[S1] Dificultad para distinguir calidad entre la oferta masiva de delivery\"],\"goals\":[\"[S1] Probar comida costera auténtica durante visita a Guayaquil\",\"[S2] Satisfacer antojo de comida costera sin salir de casa\",\"[S3] Compartir una comida costeña auténtica con la familia sin desplazarse\",\"[S4] Disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina\",\"[S1] Vivir una experiencia de sabor local con historia y origen verificable\"],\"objections\":[\"[S3] ¿El pedido para varias personas llegará completo y caliente?\",\"[S4] ¿El marisco llegará fresco después del delivery?\",\"[S3] ¿El precio por persona sigue siendo accesible en pedidos grandes?\",\"[S4] ¿Por qué pagar $7-$9 si puedo ir a una hueca local más barata?\",\"[S4] No conozco la marca / no tengo reseñas de referencia\"],\"preferred_channels\":[\"[S1] Google Maps\",\"[S1,2,3,4] Instagram\",\"[S2,3,4] WhatsApp\",\"[S1] TripAdvisor\",\"[S2,4] Uber Eats\"],\"decision_criteria\":[\"[S1] Rating y reseñas en Google y TripAdvisor\",\"[S2] Rating y reseñas en app de delivery\",\"[S3] Cantidad y variedad del menú para grupos\"],\"buying_process\":[\"[S1] Búsqueda en Google o Instagram → lectura de reseñas → pedido delivery o visita al local\",\"[S2] Descubrimiento en Instagram o app de delivery → revisión de reseñas y fotos → pedido directo en app o WhatsApp\",\"[S3] Referencia de boca en boca o Instagram → WhatsApp para consultar pedido familiar → pago contra entrega o trans\"]},\"apify_sources\":[],\"_icp_source\":\"client_icp_documents\",\"_icp_rows\":4}",
+        "jefe-client-success": "Construí TU sección del brand book SOLO desde la evidencia real del cliente abajo (web/redes/discovery/Apify). NO inventes. CUANDO TENGAS TU SECCIÓN LISTA, LLAMÁ EL TOOL `emit_brand_section` con tus campos (pasá `lens` con tu nombre de lente). NO narres la respuesta · usá el tool · es la ÚNICA forma en que tu sección llega al consolidador. Las etiquetas [Sn] del ICP indican a qué segmento pertenece cada dato (un dato puede pertenecer a varios) · usalas para NO mezclar segmentos · NUNCA las copies al texto del brand book. Grounding cada afirmación en la evidencia.\n\nTU SECCIÓN: customer_angle + retention_notes + mision (qué hace el negocio y para quién · 1-2 frases) + proposito (el \"por qué\", inferido de la evidencia · aspiracional · 1 frase) + propuestas_de_valor[] (3-5 · diferenciadores REALES contra los competidores de la evidencia).\nPara los campos NUEVOS agregá `_meta` con { fuente, confianza } por campo: `fuente` cita el fragmento de la EVIDENCIA que lo sostiene y `confianza` es 0..1. Si la evidencia NO alcanza para un campo, devolvelo VACÍO con confianza 0 · NUNCA lo inventes. Un campo vacío es un resultado honesto y esperado.\n\nEVIDENCIA:\n{\"client_id\":\"0736401b-8a9c-4e57-9ab0-e4bad25cb630\",\"client_name\":\"Náufrago\",\"industry\":\"restaurante de comida costera\",\"website\":\"https://www.naufrago.ec\",\"discovery_summary\":\"El mercado de encebollado y ceviche en Guayaquil es uno de los más saturados y culturalmente arraigados del Ecuador, con oferta que va desde huecas de barrio históricas hasta ghost kitchens nativas-digitales. Los actores dominantes se dividen en tres capas: (1) cadenas multi-local consolidadas con delivery activo — La Casa del Encebollado (53K IG, 10+ puntos, Rappi/PedidosYa) y Pez Azul (\\\"Campeones Mundiales 2017\\\", 10+ locales, triple cobertura en apps) concentran la mayor masa crítica digital y física en encebollado; (2) operadores digitales de ceviche con presencia relevante — Cevichería Pepe 3 (43K IG, 3 locales, \\\"ceviche manaba\\\") y Cevichería Lobo Marino (46K IG, 2 locales en Urdesa y Kennedy) lideran el segmento ceviche-delivery; (3) actores delivery-first o multi-punto en expansión — Encebollado Cuarto de Libra (4+ locales, servicio 24h en Alborada) y Encebollados Factory (ghost kitchen Uber Eats) compiten directamente en el canal principal de Náufrago. El precio medio del encebollado oscila entre $3–$6 y el ceviche entre $5–$9, ubicando a Náufrago en el rango medio-alto con diferenciación posible por origen del marisco. CORRECCIÓN APLICADA: Ecuaviche y Manabiche fueron excluidos por operar en Quito — su inclusión previa constituía un error de ancla geográfica. El Encebollado Rosado (688 seguidores IG, precio $1.75, sin delivery evidente) se clasifica como amenaza baja por nula presencia digital y segmento de precio inferior al de Náufrago.\\n\\nLa oportunidad estratégica de Náufrago reside en un eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena) combinada con una experiencia de marca aspiracional (\\\"alma de playa\\\") y modelo híbrido ghost kitchen + local físico en origen. La amenaza más urgente es La Casa del Encebollado, que ya tiene masa crítica digital y delivery consolidado y puede absorber el mismo cliente si Náufrago no construye diferenciación de marca consistente. En el eje ceviche, Lobo Marino y Pepe 3 tienen ventaja de seguidores y red de locales; Náufrago debe contraatacar con la narrativa de autenticidad costera y contenido de origen (Olón) que ninguno de ellos puede replicar desde Guayaquil.\",\"business_model\":\"\",\"competitors\":[{\"name\":\"El Pez Volador\",\"website\":\"https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"Estrella/oro en la Feria Raíces2014\\nBicentenario2020👩‍🍳Angelita\\n🔱Luque y José mascote\\n📍Bamboo Plaza\\n📍Chile y 9oct \\n📍Ébanos y Víctor Emilio Estra\",\"evidence\":{\"followers_count\":10103,\"following_count\":1299,\"posts_count\":154,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"La Casa del Encebollado\",\"website\":\"https://lacasadelencebollado.ec\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"🔥Representantes del Encebollado 2026 🐟🏆\\n🛵Realiza tu pedido vía WhatsApp⬇️\",\"evidence\":{\"followers_count\":55556,\"following_count\":641,\"posts_count\":920,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"Pez Azul\",\"website\":\"http://www.pezazul.com.ec\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"Los platos más icónicos del Ecuador. 🇪🇨\\n📍 16 locales cerca de ti.\\n🌟 Desde 1988.\\n#LaMarcaDelEncebollado\\n@rappi.ecuador \\n@ubereats \\n@pedidosya.ecuad\",\"evidence\":{\"followers_count\":13731,\"following_count\":714,\"posts_count\":2057,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"El Encebollado Rosado\",\"website\":\"\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"El auténtico de Guayaquil.\\n📍Tungurahua 4508 entre Sedala y Callejón Parra(actual Blacio Potes) \\n#ElAuténticoDeDonAmador 💯\\n#ElAuténticoDelSur\",\"evidence\":{\"followers_count\":775,\"following_count\":129,\"posts_count\":25,\"is_verified\":false,\"platform\":\"instagram\"}},{\"name\":\"El Rincón del Ceviche\",\"website\":\"https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche\",\"competitor_type\":\"direct\",\"source\":\"apify_scrape\",\"trust_level\":\"untrusted\",\"scraped\":true,\"positioning\":\"El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio\\nCombo Ceviche de Pulpo en Salsa Roja\\nCeviche tipo cóctel, cebolla perla y yerbita, incluy\",\"evidence\":{\"platform\":\"web\"}},{\"name\":\"Encebollados Factory\",\"website\":\"https://www.ubereats.com/ec-en/store/encebollados-factory-guayaquil/_MHorYDrWG2sJ05VxM2a0w\",\"competitor_type\":\"direct\",\"source\":\"auto_discovery\",\"trust_level\":\"untrusted\",\"scraped\":false},{\"name\":\"Encebollado de Dieguito\",\"website\":\"https://www.ubereats.com/ec-en/store/encebollado-de-dieguito-guayaquil/KteJwwzwQYKbrymGhytWvg\",\"competitor_type\":\"direct\",\"source\":\"auto_discovery\",\"trust_level\":\"untrusted\",\"scraped\":false}],\"icp_signals\":{\"segments\":[\"[S1] Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténti\",\"[S2] Guayaquileño urbano consumidor de encebollado y ceviche a domicilio\",\"[S3] Familias guayaquileñas 30-50 años que buscan comida costera para ocasiones de fin de seman\",\"[S4] Adultos urbanos guayaquileños 25-45 años que buscan desayuno/almuerzo costero auténtico a \"],\"pain_points\":[\"[S1] No conoce las huecas locales de confianza\",\"[S2] Desconfianza en la frescura del marisco en delivery\",\"[S3] Organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable\",\"[S4] No tienen tiempo ni acceso fácil a la playa para comer marisco fresco\",\"[S1] Dificultad para distinguir calidad entre la oferta masiva de delivery\"],\"goals\":[\"[S1] Probar comida costera auténtica durante visita a Guayaquil\",\"[S2] Satisfacer antojo de comida costera sin salir de casa\",\"[S3] Compartir una comida costeña auténtica con la familia sin desplazarse\",\"[S4] Disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina\",\"[S1] Vivir una experiencia de sabor local con historia y origen verificable\"],\"objections\":[\"[S3] ¿El pedido para varias personas llegará completo y caliente?\",\"[S4] ¿El marisco llegará fresco después del delivery?\",\"[S3] ¿El precio por persona sigue siendo accesible en pedidos grandes?\",\"[S4] ¿Por qué pagar $7-$9 si puedo ir a una hueca local más barata?\",\"[S4] No conozco la marca / no tengo reseñas de referencia\"],\"preferred_channels\":[\"[S1] Google Maps\",\"[S1,2,3,4] Instagram\",\"[S2,3,4] WhatsApp\",\"[S1] TripAdvisor\",\"[S2,4] Uber Eats\"],\"decision_criteria\":[\"[S1] Rating y reseñas en Google y TripAdvisor\",\"[S2] Rating y reseñas en app de delivery\",\"[S3] Cantidad y variedad del menú para grupos\"],\"buying_process\":[\"[S1] Búsqueda en Google o Instagram → lectura de reseñas → pedido delivery o visita al local\",\"[S2] Descubrimiento en Instagram o app de delivery → revisión de reseñas y fotos → pedido directo en app o WhatsApp\",\"[S3] Referencia de boca en boca o Instagram → WhatsApp para consultar pedido familiar → pago contra entrega o trans\"]},\"apify_sources\":[],\"_icp_source\":\"client_icp_documents\",\"_icp_rows\":4}"
+      },
+      "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+      "_grounding_refs": {
+        "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+        "client_name": "Náufrago",
+        "industry": "restaurante de comida costera",
+        "website": "https://www.naufrago.ec",
+        "discovery_summary": "El mercado de encebollado y ceviche en Guayaquil es uno de los más saturados y culturalmente arraigados del Ecuador, con oferta que va desde huecas de barrio históricas hasta ghost kitchens nativas-digitales. Los actores dominantes se dividen en tres capas: (1) cadenas multi-local consolidadas con delivery activo — La Casa del Encebollado (53K IG, 10+ puntos, Rappi/PedidosYa) y Pez Azul (\"Campeones Mundiales 2017\", 10+ locales, triple cobertura en apps) concentran la mayor masa crítica digital y física en encebollado; (2) operadores digitales de ceviche con presencia relevante — Cevichería Pepe 3 (43K IG, 3 locales, \"ceviche manaba\") y Cevichería Lobo Marino (46K IG, 2 locales en Urdesa y Kennedy) lideran el segmento ceviche-delivery; (3) actores delivery-first o multi-punto en expansión — Encebollado Cuarto de Libra (4+ locales, servicio 24h en Alborada) y Encebollados Factory (ghost kitchen Uber Eats) compiten directamente en el canal principal de Náufrago. El precio medio del encebollado oscila entre $3–$6 y el ceviche entre $5–$9, ubicando a Náufrago en el rango medio-alto con diferenciación posible por origen del marisco. CORRECCIÓN APLICADA: Ecuaviche y Manabiche fueron excluidos por operar en Quito — su inclusión previa constituía un error de ancla geográfica. El Encebollado Rosado (688 seguidores IG, precio $1.75, sin delivery evidente) se clasifica como amenaza baja por nula presencia digital y segmento de precio inferior al de Náufrago.\n\nLa oportunidad estratégica de Náufrago reside en un eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena) combinada con una experiencia de marca aspiracional (\"alma de playa\") y modelo híbrido ghost kitchen + local físico en origen. La amenaza más urgente es La Casa del Encebollado, que ya tiene masa crítica digital y delivery consolidado y puede absorber el mismo cliente si Náufrago no construye diferenciación de marca consistente. En el eje ceviche, Lobo Marino y Pepe 3 tienen ventaja de seguidores y red de locales; Náufrago debe contraatacar con la narrativa de autenticidad costera y contenido de origen (Olón) que ninguno de ellos puede replicar desde Guayaquil.",
+        "business_model": "",
+        "competitors": [
+          {
+            "name": "El Pez Volador",
+            "website": "https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "Estrella/oro en la Feria Raíces2014\nBicentenario2020👩‍🍳Angelita\n🔱Luque y José mascote\n📍Bamboo Plaza\n📍Chile y 9oct \n📍Ébanos y Víctor Emilio Estra",
+            "evidence": {
+              "followers_count": 10103,
+              "following_count": 1299,
+              "posts_count": 154,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "La Casa del Encebollado",
+            "website": "https://lacasadelencebollado.ec",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "🔥Representantes del Encebollado 2026 🐟🏆\n🛵Realiza tu pedido vía WhatsApp⬇️",
+            "evidence": {
+              "followers_count": 55556,
+              "following_count": 641,
+              "posts_count": 920,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "Pez Azul",
+            "website": "http://www.pezazul.com.ec",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "Los platos más icónicos del Ecuador. 🇪🇨\n📍 16 locales cerca de ti.\n🌟 Desde 1988.\n#LaMarcaDelEncebollado\n@rappi.ecuador \n@ubereats \n@pedidosya.ecuad",
+            "evidence": {
+              "followers_count": 13731,
+              "following_count": 714,
+              "posts_count": 2057,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "El Encebollado Rosado",
+            "website": "",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "El auténtico de Guayaquil.\n📍Tungurahua 4508 entre Sedala y Callejón Parra(actual Blacio Potes) \n#ElAuténticoDeDonAmador 💯\n#ElAuténticoDelSur",
+            "evidence": {
+              "followers_count": 775,
+              "following_count": 129,
+              "posts_count": 25,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "El Rincón del Ceviche",
+            "website": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio\nCombo Ceviche de Pulpo en Salsa Roja\nCeviche tipo cóctel, cebolla perla y yerbita, incluy",
+            "evidence": {
+              "platform": "web"
+            }
+          },
+          {
+            "name": "Encebollados Factory",
+            "website": "https://www.ubereats.com/ec-en/store/encebollados-factory-guayaquil/_MHorYDrWG2sJ05VxM2a0w",
+            "competitor_type": "direct",
+            "source": "auto_discovery",
+            "trust_level": "untrusted",
+            "scraped": false
+          },
+          {
+            "name": "Encebollado de Dieguito",
+            "website": "https://www.ubereats.com/ec-en/store/encebollado-de-dieguito-guayaquil/KteJwwzwQYKbrymGhytWvg",
+            "competitor_type": "direct",
+            "source": "auto_discovery",
+            "trust_level": "untrusted",
+            "scraped": false
+          }
+        ],
+        "icp_signals": {
+          "segments": [
+            "[S1] Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténti",
+            "[S2] Guayaquileño urbano consumidor de encebollado y ceviche a domicilio",
+            "[S3] Familias guayaquileñas 30-50 años que buscan comida costera para ocasiones de fin de seman",
+            "[S4] Adultos urbanos guayaquileños 25-45 años que buscan desayuno/almuerzo costero auténtico a "
+          ],
+          "pain_points": [
+            "[S1] No conoce las huecas locales de confianza",
+            "[S2] Desconfianza en la frescura del marisco en delivery",
+            "[S3] Organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable",
+            "[S4] No tienen tiempo ni acceso fácil a la playa para comer marisco fresco",
+            "[S1] Dificultad para distinguir calidad entre la oferta masiva de delivery"
+          ],
+          "goals": [
+            "[S1] Probar comida costera auténtica durante visita a Guayaquil",
+            "[S2] Satisfacer antojo de comida costera sin salir de casa",
+            "[S3] Compartir una comida costeña auténtica con la familia sin desplazarse",
+            "[S4] Disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina",
+            "[S1] Vivir una experiencia de sabor local con historia y origen verificable"
+          ],
+          "objections": [
+            "[S3] ¿El pedido para varias personas llegará completo y caliente?",
+            "[S4] ¿El marisco llegará fresco después del delivery?",
+            "[S3] ¿El precio por persona sigue siendo accesible en pedidos grandes?",
+            "[S4] ¿Por qué pagar $7-$9 si puedo ir a una hueca local más barata?",
+            "[S4] No conozco la marca / no tengo reseñas de referencia"
+          ],
+          "preferred_channels": [
+            "[S1] Google Maps",
+            "[S1,2,3,4] Instagram",
+            "[S2,3,4] WhatsApp",
+            "[S1] TripAdvisor",
+            "[S2,4] Uber Eats"
+          ],
+          "decision_criteria": [
+            "[S1] Rating y reseñas en Google y TripAdvisor",
+            "[S2] Rating y reseñas en app de delivery",
+            "[S3] Cantidad y variedad del menú para grupos"
+          ],
+          "buying_process": [
+            "[S1] Búsqueda en Google o Instagram → lectura de reseñas → pedido delivery o visita al local",
+            "[S2] Descubrimiento en Instagram o app de delivery → revisión de reseñas y fotos → pedido directo en app o WhatsApp",
+            "[S3] Referencia de boca en boca o Instagram → WhatsApp para consultar pedido familiar → pago contra entrega o trans"
+          ]
+        },
+        "apify_sources": [],
+        "_icp_source": "client_icp_documents",
+        "_icp_rows": 4
+      },
+      "_corte": {
+        "hubo": false,
+        "tope": 14000,
+        "evidencia_omitida": [],
+        "lentes_recortadas": [],
+        "icp_nuevos_recortados": false,
+        "chars_por_lente": {
+          "brand-strategist": 7950,
+          "editor-en-jefe": 8519,
+          "jefe-client-success": 8465
+        },
+        "margen_por_lente": {
+          "brand-strategist": 6050,
+          "editor-en-jefe": 5481,
+          "jefe-client-success": 5535
+        },
+        "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+        "detalle": ""
+      }
+    },
+    "[BB] Consolidador": {
+      "brand_book_draft": {
+        "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+        "positioning": "Náufrago es la única marca de encebollado y ceviche en Guayaquil con origen costero verificable — marisco fresco de Olón, Santa Elena — combinado con una experiencia aspiracional de \"alma de playa\" que los competidores urbanos consolidados (La Casa del Encebollado, Pez Azul, Lobo Marino, Pepe 3) no pueden replicar desde la ciudad. Su modelo híbrido ghost kitchen en Guayaquil + local físico en origen sustenta una propuesta de autenticidad real en el rango medio-alto del mercado ($5–$9 ceviche, $3–$6 encebollado), donde la diferenciación por procedencia del marisco es el eje competitivo no ocupado por ningún actor de primera línea.",
+        "icp_summary": "SEGMENTO 1 — Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténtica. Pains: no conoce las huecas locales de confianza; dificultad para distinguir calidad entre la oferta masiva de delivery. Goals: probar comida costera auténtica durante su visita; vivir una experiencia de sabor local con historia y origen verificable. Canales: Google Maps, Instagram, TripAdvisor. Criterio de decisión: rating y reseñas en Google y TripAdvisor.\n\nSEGMENTO 2 — Guayaquileño urbano consumidor de encebollado y ceviche a domicilio. Pains: desconfianza en la frescura del marisco en delivery. Goals: satisfacer antojo de comida costera sin salir de casa. Canales: Instagram, WhatsApp, Uber Eats. Criterio de decisión: rating y reseñas en app de delivery.\n\nSEGMENTO 3 — Familias guayaquileñas 30–50 años que buscan comida costera para ocasiones de fin de semana. Pains: organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable. Goals: compartir una comida costeña auténtica con la familia sin desplazarse. Canales: Instagram, WhatsApp. Criterio de decisión: cantidad y variedad del menú para grupos. Objeciones clave: ¿el pedido para varias personas llegará completo y caliente? ¿El precio por persona sigue siendo accesible en pedidos grandes?\n\nSEGMENTO 4 — Adultos urbanos guayaquileños 25–45 años que buscan desayuno/almuerzo costero auténtico a domicilio. Pains: no tienen tiempo ni acceso fácil a la playa para comer marisco fresco. Goals: disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina. Canales: Instagram, WhatsApp, Uber Eats. Objeciones clave: ¿el marisco llegará fresco después del delivery? ¿Por qué pagar $7–$9 si puedo ir a una hueca local más barata? No conozco la marca / no tengo reseñas de referencia.",
+        "voice_description": "La evidencia directa de copy propio de Náufrago es nula en este dataset — no hay posts de Instagram, textos web ni piezas reales de la marca. Lo inferible desde el nombre \"Náufrago\" y la descripción estratégica de discovery es: voz que ancla autenticidad en coordenadas reales (Olón, Santa Elena) en lugar de adjetivos genéricos; tono directo, sin rodeos corporativos; registro informal-cercano adecuado a delivery urbano; evita la hipérbole competitiva (\"Campeones Mundiales\", \"Representantes del Encebollado\") y apuesta por la especificidad geográfica como argumento. El concepto \"alma de playa\" sugiere aspiracionalidad costero-escapista sin pretensión gastronómica. CONFIANZA BAJA — requiere validación con copy real.",
+        "forbidden_words": [
+          "auténtico",
+          "auténtica",
+          "el auténtico de Guayaquil",
+          "representantes",
+          "campeones",
+          "garantizado",
+          "frescura garantizada",
+          "el mejor",
+          "sin igual",
+          "de calidad",
+          "realiza tu pedido",
+          "haz tu pedido ya",
+          "delicioso",
+          "exquisito",
+          "lo mejor del mar",
+          "hueca",
+          "barato",
+          "económico",
+          "industrial",
+          "congelado",
+          "procesado",
+          "cadena",
+          "franquicia",
+          "fast food",
+          "comida rápida"
+        ],
+        "required_terminology": [
+          "Olón",
+          "Santa Elena",
+          "marisco fresco",
+          "origen costero",
+          "alma de playa",
+          "encebollado",
+          "ceviche",
+          "costera",
+          "origen verificable",
+          "desde la costa",
+          "costa",
+          "del mar a tu mesa"
+        ],
+        "customer_angle": "El cliente de Náufrago resuelve una tensión real: quiere el sabor genuino del mar pero vive y trabaja en la ciudad. El driver de conversión es la confianza en la frescura del marisco — la objeción más frecuente ('¿llegará fresco después del delivery?') colapsa cuando el origen es verificable y visible. El cliente que permanece es quien conecta con la narrativa de autenticidad costera, no solo con la comida: valora saber de dónde viene lo que come. Para familias (S3) y adultos en rutina delivery (S2/S4), el precio medio-alto se justifica cuando la propuesta de origen es creíble y consistente. La ausencia de reseñas y reconocimiento de marca es la barrera crítica de adquisición, especialmente para S4 y el turista S1, cuyo proceso de compra arranca en Google Maps o Instagram antes de cualquier otro paso.",
+        "retention_notes": "Driver #1 de retención: consistencia en frescura del marisco — encebollado y ceviche son hábitos de consumo frecuente en Guayaquil; un producto que cumple genera repetición de compra natural. Riesgo de churn principal: La Casa del Encebollado (55K IG, delivery consolidado) y Pez Azul (16 locales, desde 1988) pueden absorber al cliente antes de que Náufrago construya reconocimiento de marca — la ventana de diferenciación es estrecha. Canal de retención clave: WhatsApp (S2, S3, S4) reduce dependencia de apps de delivery y sus comisiones; es donde se construye lealtad directa y se captura el pedido recurrente. Loyalty trigger para familias (S3): pedidos grupales completos y puntuales generan recurrencia en ocasiones de fin de semana — packaging y completitud del pedido son puntos de quiebre de satisfacción o abandono. Gap crítico de onboarding: la falta de reseñas (objeción S4: 'No conozco la marca / no tengo reseñas de referencia') requiere estrategia activa de generación de primeras reseñas en Google Maps y apps de delivery — sin esto el funnel de adquisición se cierra antes de comenzar. Palanca de expansión natural: S4 (adultos 25–45, delivery rutinario) tiene potencial de pasar de compra ocasional a hábito semanal si la experiencia es consistente — el encebollado como desayuno o almuerzo de semana es una rutina ya instalada en la cultura guayaquileña.",
+        "personalidad": [
+          "Costero-específico: la autenticidad tiene nombre de lugar (Olón), no es un adjetivo vacío",
+          "Directo-sin rodeos: el argumento es el origen, no la hipérbole",
+          "Aspiracional-accesible: evoca playa sin ser pretencioso ni inaccesible en precio",
+          "Verificable: las afirmaciones son comprobables por el cliente (origen, proveedor, ruta)"
+        ],
+        "tagline_opciones": [
+          "Del mar a tu mesa. Desde Olón.",
+          "El mar que llega. Náufrago.",
+          "La costa en tu puerta."
+        ],
+        "mensajes_clave": [
+          "Marisco fresco de Olón — sin que tengas que manejar hasta la playa. [S4: sin acceso fácil a la costa]",
+          "Sabés exactamente de dónde viene lo que comés: Olón, Santa Elena. [S2/S4: desconfianza en frescura del marisco en delivery]",
+          "El encebollado que vale lo que pagás — porque el marisco llegó hoy, no ayer. [S4: objeción precio vs. hueca local]",
+          "Para la comida costeña familiar del fin de semana, sin complicaciones de coordinación. [S3: organizar pedido familiar]",
+          "Si estás de visita en Guayaquil y querés el sabor costero real, acá está el origen. [S1: turista buscando experiencia gastronómica local verificable]"
+        ],
+        "mision": "Náufrago acerca el encebollado y el ceviche de origen costero verificable (Olón, Santa Elena) al consumidor urbano de Guayaquil, mediante un modelo híbrido de ghost kitchen y presencia física en la costa, para quienes quieren el sabor auténtico de la playa sin desplazarse.",
+        "proposito": "Demostrar que la autenticidad del mar no se improvisa — se trae directamente desde el origen.",
+        "propuestas_de_valor": [
+          "Origen costero verificable: marisco fresco de Olón, Santa Elena — trazabilidad que ningún competidor urbano consolidado (La Casa del Encebollado, Pez Azul, Lobo Marino) puede replicar.",
+          "Modelo híbrido ghost kitchen + local físico en origen: la presencia real en la costa respalda la narrativa de autenticidad y convierte el delivery en un puente tangible entre la playa y la ciudad.",
+          "Posicionamiento aspiracional 'alma de playa' en un mercado de precio: en el rango medio-alto ($7–9 ceviche), Náufrago compite por experiencia y origen, no por volumen ni precio bajo.",
+          "Contenido de origen como activo competitivo estructural: imágenes y videos desde Olón son imposibles de replicar por operadores 100% urbanos — ventaja duradera en Instagram y Google.",
+          "Canal directo vía WhatsApp: reduce dependencia de comisiones de apps de delivery y habilita una relación de lealtad directa con el cliente habitual."
+        ],
+        "_field_meta": {
+          "personalidad": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "Inferido de: nombre de marca 'Náufrago' (connotación costero-rawness) + discovery_summary: 'alma de playa', 'narrativa de origen costero verificable'. No hay copy real de la marca en la evidencia.",
+            "confianza": 0.3,
+            "lente": "editor-en-jefe"
+          },
+          "tagline_opciones": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "Síntesis creativa del positioning en discovery_summary: modelo híbrido origen-costa + delivery Guayaquil; no hay tagline real evidenciado en ninguna fuente del dataset.",
+            "confianza": 0.25,
+            "lente": "editor-en-jefe"
+          },
+          "mensajes_clave": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "ICP pain points y goals documentados en icp_signals del dataset: [S1-S4] mapeados directamente a cada mensaje.",
+            "confianza": 0.55,
+            "lente": "editor-en-jefe"
+          },
+          "mision": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena)' + 'modelo híbrido ghost kitchen + local físico en origen'; icp_signals.goals S2/S4: 'Satisfacer antoj",
+            "confianza": 0.82,
+            "lente": "jefe-client-success"
+          },
+          "proposito": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable'",
+            "confianza": 0.7,
+            "lente": "jefe-client-success"
+          },
+          "propuestas_de_valor": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'oportunidad estratégica... eje que ningún competidor de primera línea ocupa'; icp_signals.pain_points S2: 'Desconfianza en la frescura del marisco en delivery'; icp_signals.preferr",
+            "confianza": 0.8,
+            "lente": "jefe-client-success"
+          }
+        },
+        "_build": {
+          "source": "onboarding_collaborative_build",
+          "lenses": [
+            "brand-strategist",
+            "editor-en-jefe",
+            "jefe-client-success"
+          ],
+          "cycle": 1,
+          "corrections_applied": 0,
+          "structured_ok": {
+            "brand-strategist": true,
+            "editor-en-jefe": true,
+            "jefe-client-success": true
+          },
+          "structured_ok_all": true
+        }
+      },
+      "cycle": 1,
+      "_fidelity_cycle": 1,
+      "corrections": [],
+      "_grounding_refs": {
+        "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+        "client_name": "Náufrago",
+        "industry": "restaurante de comida costera",
+        "website": "https://www.naufrago.ec",
+        "discovery_summary": "El mercado de encebollado y ceviche en Guayaquil es uno de los más saturados y culturalmente arraigados del Ecuador, con oferta que va desde huecas de barrio históricas hasta ghost kitchens nativas-digitales. Los actores dominantes se dividen en tres capas: (1) cadenas multi-local consolidadas con delivery activo — La Casa del Encebollado (53K IG, 10+ puntos, Rappi/PedidosYa) y Pez Azul (\"Campeones Mundiales 2017\", 10+ locales, triple cobertura en apps) concentran la mayor masa crítica digital y física en encebollado; (2) operadores digitales de ceviche con presencia relevante — Cevichería Pepe 3 (43K IG, 3 locales, \"ceviche manaba\") y Cevichería Lobo Marino (46K IG, 2 locales en Urdesa y Kennedy) lideran el segmento ceviche-delivery; (3) actores delivery-first o multi-punto en expansión — Encebollado Cuarto de Libra (4+ locales, servicio 24h en Alborada) y Encebollados Factory (ghost kitchen Uber Eats) compiten directamente en el canal principal de Náufrago. El precio medio del encebollado oscila entre $3–$6 y el ceviche entre $5–$9, ubicando a Náufrago en el rango medio-alto con diferenciación posible por origen del marisco. CORRECCIÓN APLICADA: Ecuaviche y Manabiche fueron excluidos por operar en Quito — su inclusión previa constituía un error de ancla geográfica. El Encebollado Rosado (688 seguidores IG, precio $1.75, sin delivery evidente) se clasifica como amenaza baja por nula presencia digital y segmento de precio inferior al de Náufrago.\n\nLa oportunidad estratégica de Náufrago reside en un eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena) combinada con una experiencia de marca aspiracional (\"alma de playa\") y modelo híbrido ghost kitchen + local físico en origen. La amenaza más urgente es La Casa del Encebollado, que ya tiene masa crítica digital y delivery consolidado y puede absorber el mismo cliente si Náufrago no construye diferenciación de marca consistente. En el eje ceviche, Lobo Marino y Pepe 3 tienen ventaja de seguidores y red de locales; Náufrago debe contraatacar con la narrativa de autenticidad costera y contenido de origen (Olón) que ninguno de ellos puede replicar desde Guayaquil.",
+        "business_model": "",
+        "competitors": [
+          {
+            "name": "El Pez Volador",
+            "website": "https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "Estrella/oro en la Feria Raíces2014\nBicentenario2020👩‍🍳Angelita\n🔱Luque y José mascote\n📍Bamboo Plaza\n📍Chile y 9oct \n📍Ébanos y Víctor Emilio Estra",
+            "evidence": {
+              "followers_count": 10103,
+              "following_count": 1299,
+              "posts_count": 154,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "La Casa del Encebollado",
+            "website": "https://lacasadelencebollado.ec",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "🔥Representantes del Encebollado 2026 🐟🏆\n🛵Realiza tu pedido vía WhatsApp⬇️",
+            "evidence": {
+              "followers_count": 55556,
+              "following_count": 641,
+              "posts_count": 920,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "Pez Azul",
+            "website": "http://www.pezazul.com.ec",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "Los platos más icónicos del Ecuador. 🇪🇨\n📍 16 locales cerca de ti.\n🌟 Desde 1988.\n#LaMarcaDelEncebollado\n@rappi.ecuador \n@ubereats \n@pedidosya.ecuad",
+            "evidence": {
+              "followers_count": 13731,
+              "following_count": 714,
+              "posts_count": 2057,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "El Encebollado Rosado",
+            "website": "",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "El auténtico de Guayaquil.\n📍Tungurahua 4508 entre Sedala y Callejón Parra(actual Blacio Potes) \n#ElAuténticoDeDonAmador 💯\n#ElAuténticoDelSur",
+            "evidence": {
+              "followers_count": 775,
+              "following_count": 129,
+              "posts_count": 25,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "El Rincón del Ceviche",
+            "website": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio\nCombo Ceviche de Pulpo en Salsa Roja\nCeviche tipo cóctel, cebolla perla y yerbita, incluy",
+            "evidence": {
+              "platform": "web"
+            }
+          },
+          {
+            "name": "Encebollados Factory",
+            "website": "https://www.ubereats.com/ec-en/store/encebollados-factory-guayaquil/_MHorYDrWG2sJ05VxM2a0w",
+            "competitor_type": "direct",
+            "source": "auto_discovery",
+            "trust_level": "untrusted",
+            "scraped": false
+          },
+          {
+            "name": "Encebollado de Dieguito",
+            "website": "https://www.ubereats.com/ec-en/store/encebollado-de-dieguito-guayaquil/KteJwwzwQYKbrymGhytWvg",
+            "competitor_type": "direct",
+            "source": "auto_discovery",
+            "trust_level": "untrusted",
+            "scraped": false
+          }
+        ],
+        "icp_signals": {
+          "segments": [
+            "[S1] Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténti",
+            "[S2] Guayaquileño urbano consumidor de encebollado y ceviche a domicilio",
+            "[S3] Familias guayaquileñas 30-50 años que buscan comida costera para ocasiones de fin de seman",
+            "[S4] Adultos urbanos guayaquileños 25-45 años que buscan desayuno/almuerzo costero auténtico a "
+          ],
+          "pain_points": [
+            "[S1] No conoce las huecas locales de confianza",
+            "[S2] Desconfianza en la frescura del marisco en delivery",
+            "[S3] Organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable",
+            "[S4] No tienen tiempo ni acceso fácil a la playa para comer marisco fresco",
+            "[S1] Dificultad para distinguir calidad entre la oferta masiva de delivery"
+          ],
+          "goals": [
+            "[S1] Probar comida costera auténtica durante visita a Guayaquil",
+            "[S2] Satisfacer antojo de comida costera sin salir de casa",
+            "[S3] Compartir una comida costeña auténtica con la familia sin desplazarse",
+            "[S4] Disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina",
+            "[S1] Vivir una experiencia de sabor local con historia y origen verificable"
+          ],
+          "objections": [
+            "[S3] ¿El pedido para varias personas llegará completo y caliente?",
+            "[S4] ¿El marisco llegará fresco después del delivery?",
+            "[S3] ¿El precio por persona sigue siendo accesible en pedidos grandes?",
+            "[S4] ¿Por qué pagar $7-$9 si puedo ir a una hueca local más barata?",
+            "[S4] No conozco la marca / no tengo reseñas de referencia"
+          ],
+          "preferred_channels": [
+            "[S1] Google Maps",
+            "[S1,2,3,4] Instagram",
+            "[S2,3,4] WhatsApp",
+            "[S1] TripAdvisor",
+            "[S2,4] Uber Eats"
+          ],
+          "decision_criteria": [
+            "[S1] Rating y reseñas en Google y TripAdvisor",
+            "[S2] Rating y reseñas en app de delivery",
+            "[S3] Cantidad y variedad del menú para grupos"
+          ],
+          "buying_process": [
+            "[S1] Búsqueda en Google o Instagram → lectura de reseñas → pedido delivery o visita al local",
+            "[S2] Descubrimiento en Instagram o app de delivery → revisión de reseñas y fotos → pedido directo en app o WhatsApp",
+            "[S3] Referencia de boca en boca o Instagram → WhatsApp para consultar pedido familiar → pago contra entrega o trans"
+          ]
+        },
+        "apify_sources": [],
+        "_icp_source": "client_icp_documents",
+        "_icp_rows": 4
+      }
+    },
+    "[BB] Judge prep": {
+      "judge_task": "Sos un evaluador de FIDELIDAD (groundedness). Dada la EVIDENCIA real del cliente y los CAMPOS de un brand book, puntuá 0..1 qué tan soportado por la evidencia está cada campo (1 = totalmente grounded · 0 = inventado/contradice). LLAMÁ EL TOOL `emit_fidelity_scores` con tus scores (un número 0..1 por campo). NO narres · usá el tool · es la ÚNICA forma en que tus scores deciden el canon.\n\nEVIDENCIA:\nCliente: Náufrago\nIndustria: restaurante de comida costera\nResumen de descubrimiento (evidencia real del brain/discovery):\nEl mercado de encebollado y ceviche en Guayaquil es uno de los más saturados y culturalmente arraigados del Ecuador, con oferta que va desde huecas de barrio históricas hasta ghost kitchens nativas-digitales. Los actores dominantes se dividen en tres capas: (1) cadenas multi-local consolidadas con delivery activo — La Casa del Encebollado (53K IG, 10+ puntos, Rappi/PedidosYa) y Pez Azul (\"Campeones Mundiales 2017\", 10+ locales, triple cobertura en apps) concentran la mayor masa crítica digital y física en encebollado; (2) operadores digitales de ceviche con presencia relevante — Cevichería Pepe 3 (43K IG, 3 locales, \"ceviche manaba\") y Cevichería Lobo Marino (46K IG, 2 locales en Urdesa y Kennedy) lideran el segmento ceviche-delivery; (3) actores delivery-first o multi-punto en expansión — Encebollado Cuarto de Libra (4+ locales, servicio 24h en Alborada) y Encebollados Factory (ghost kitchen Uber Eats) compiten directamente en el canal principal de Náufrago. El precio medio del encebollado oscila entre $3–$6 y el ceviche entre $5–$9, ubicando a Náufrago en el rango medio-alto con diferenciación posible por origen del marisco. CORRECCIÓN APLICADA: Ecuaviche y Manabiche fueron excluidos por operar en Quito — su inclusión previa constituía un error de ancla geográfica. El Encebollado Rosado (688 seguidores IG, precio $1.75, sin delivery evidente) se clasifica como amenaza baja por nula presencia digital y segmento de precio inferior al de Náufrago.\n\nLa oportunidad estratégica de Náufrago reside en un eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena) combinada con una experiencia de marca aspiracional (\"alma de playa\") y modelo híbrido ghost kitchen + local físico en origen. La amenaza más urgente es La Casa del Encebollado, que ya tiene masa crítica digital y delivery consolidado y puede absorber el mismo cliente si Náufrago no construye diferenciación de marca consistente. En el eje ceviche, Lobo Marino y Pepe 3 tienen ventaja de seguidores y red de locales; Náufrago debe contraatacar con la narrativa de autenticidad costera y contenido de origen (Olón) que ninguno de el\n\n- Competidores: El Pez Volador · La Casa del Encebollado · Pez Azul · El Encebollado Rosado · El Rincón del Ceviche · Encebollados Factory · Encebollado de Dieguito\n(cada [Sn] indica a que segmento pertenece el dato · un dato puede pertenecer a varios)\n- Segmentos ICP: [S1] Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténti · [S2] Guayaquileño urbano consumidor de encebollado y ceviche a domicilio · [S3] Familias guayaquileñas 30-50 años que buscan comida costera para ocasiones de fin de seman · [S4] Adultos urbanos guayaquileños 25-45 años que buscan desayuno/almuerzo costero auténtico a \n- Dolores: [S1] No conoce las huecas locales de confianza · [S2] Desconfianza en la frescura del marisco en delivery · [S3] Organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable · [S4] No tienen tiempo ni acceso fácil a la playa para comer marisco fresco · [S1] Dificultad para distinguir calidad entre la oferta masiva de delivery\n- Objetivos: [S1] Probar comida costera auténtica durante visita a Guayaquil · [S2] Satisfacer antojo de comida costera sin salir de casa · [S3] Compartir una comida costeña auténtica con la familia sin desplazarse · [S4] Disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina · [S1] Vivir una experiencia de sabor local con historia y origen verificable\n- Objeciones: [S3] ¿El pedido para varias personas llegará completo y caliente? · [S4] ¿El marisco llegará fresco después del delivery? · [S3] ¿El precio por persona sigue siendo accesible en pedidos grandes? · [S4] ¿Por qué pagar $7-$9 si puedo ir a una hueca local más barata? · [S4] No conozco la marca / no tengo reseñas de referencia\n- Canales preferidos: [S1] Google Maps · [S1,2,3,4] Instagram · [S2,3,4] WhatsApp · [S1] TripAdvisor · [S2,4] Uber Eats\n\n\nCAMPOS:\n[{\"field\":\"positioning\",\"value\":\"Náufrago es la única marca de encebollado y ceviche en Guayaquil con origen costero verificable — marisco fresco de Olón, Santa Elena — combinado con una experiencia aspiracional de \\\"alma de playa\\\" que los competidores urbanos consolidados (La Casa del Encebollado, Pez Azul, Lobo Marino, Pepe 3) no pueden replicar desde la ciudad. Su modelo híbrido ghost kitchen en Guayaquil + local físico en origen sustenta una propuesta de autenticidad real en el rango medio-alto del mercado ($5–$9 ceviche, $3–$6 encebollado), donde la diferenciación por procedencia del marisco es el eje competitivo no ocupado por ningún actor de primera línea.\"},{\"field\":\"icp_summary\",\"value\":\"SEGMENTO 1 — Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténtica. Pains: no conoce las huecas locales de confianza; dificultad para distinguir calidad entre la oferta masiva de delivery. Goals: probar comida costera auténtica durante su visita; vivir una experiencia de sabor local con historia y origen verificable. Canales: Google Maps, Instagram, TripAdvisor. Criterio de decisión: rating y reseñas en Google y TripAdvisor.\\n\\nSEGMENTO 2 — Guayaquileño urbano consumidor de encebollado y ceviche a domicilio. Pains: desconfianza en la frescura del marisco en delivery. Goals: satisfacer antojo de comida costera sin salir de casa. Canales: Instagram, WhatsApp, Uber Eats. Criterio de decisión: rating y reseñas en app de delivery.\\n\\nSEGMENTO 3 — Familias guayaquileñas 30–50 años que buscan comida costera para ocasiones de fin de semana. Pains: organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable. Goals: compartir una comida costeña auténtica con la familia sin desplazarse. Canales: Instagram, WhatsApp. Criterio de decisión: cantidad y variedad del menú para grupos. Objeciones clave: ¿el pedido para varias personas llegará completo y caliente? ¿El precio por persona sigue siendo accesible en pedidos grandes?\\n\\nSEGMENTO 4 — Adultos urbanos guayaquileños 25–45 años que buscan desayuno/almuerzo costero auténtico a domicilio. Pains: no tienen tiempo ni acceso fácil a la playa para comer marisco fresco. Goals: disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina. Canales: Instagram, WhatsApp, Uber Eats. Objeciones clave: ¿el marisco llegará fresco después del delivery? ¿Por qué pagar $7–$9 si puedo ir a una hueca local más barata? No conozco la marca / no tengo reseñas de referencia.\"},{\"field\":\"voice_description\",\"value\":\"La evidencia directa de copy propio de Náufrago es nula en este dataset — no hay posts de Instagram, textos web ni piezas reales de la marca. Lo inferible desde el nombre \\\"Náufrago\\\" y la descripción estratégica de discovery es: voz que ancla autenticidad en coordenadas reales (Olón, Santa Elena) en lugar de adjetivos genéricos; tono directo, sin rodeos corporativos; registro informal-cercano adecuado a delivery urbano; evita la hipérbole competitiva (\\\"Campeones Mundiales\\\", \\\"Representantes del Encebollado\\\") y apuesta por la especificidad geográfica como argumento. El concepto \\\"alma de playa\\\" sugiere aspiracionalidad costero-escapista sin pretensión gastronómica. CONFIANZA BAJA — requiere validación con copy real.\"},{\"field\":\"customer_angle\",\"value\":\"El cliente de Náufrago resuelve una tensión real: quiere el sabor genuino del mar pero vive y trabaja en la ciudad. El driver de conversión es la confianza en la frescura del marisco — la objeción más frecuente ('¿llegará fresco después del delivery?') colapsa cuando el origen es verificable y visible. El cliente que permanece es quien conecta con la narrativa de autenticidad costera, no solo con la comida: valora saber de dónde viene lo que come. Para familias (S3) y adultos en rutina delivery (S2/S4), el precio medio-alto se justifica cuando la propuesta de origen es creíble y consistente. La ausencia de reseñas y reconocimiento de marca es la barrera crítica de adquisición, especialmente para S4 y el turista S1, cuyo proceso de compra arranca en Google Maps o Instagram antes de cualquier otro paso.\"},{\"field\":\"retention_notes\",\"value\":\"Driver #1 de retención: consistencia en frescura del marisco — encebollado y ceviche son hábitos de consumo frecuente en Guayaquil; un producto que cumple genera repetición de compra natural. Riesgo de churn principal: La Casa del Encebollado (55K IG, delivery consolidado) y Pez Azul (16 locales, desde 1988) pueden absorber al cliente antes de que Náufrago construya reconocimiento de marca — la ventana de diferenciación es estrecha. Canal de retención clave: WhatsApp (S2, S3, S4) reduce dependencia de apps de delivery y sus comisiones; es donde se construye lealtad directa y se captura el pedido recurrente. Loyalty trigger para familias (S3): pedidos grupales completos y puntuales generan recurrencia en ocasiones de fin de semana — packaging y completitud del pedido son puntos de quiebre de satisfacción o abandono. Gap crítico de onboarding: la falta de reseñas (objeción S4: 'No conozco la marca / no tengo reseñas de referencia') requiere estrategia activa de generación de primeras reseñas en Google Maps y apps de delivery — sin esto el funnel de adquisición se cierra antes de comenzar. Palanca de expansión natural: S4 (adultos 25–45, delivery rutinario) tiene potencial de pasar de compra ocasional a hábito semanal si la experiencia es consistente — el encebollado como desayuno o almuerzo de semana es una rutina ya instalada en la cultura guayaquileña.\"}]",
+      "_lazo": null,
+      "_icp_chars": 1672,
+      "_judge_task_chars": 10115,
+      "_icp_recortado": false,
+      "_omega_sin_espacio": false,
+      "_campos_cortados": [],
+      "_campo_truncado": null,
+      "_task_recortado": false,
+      "_evidencia_chars": 4162,
+      "judge_step_name": "bb-faithfulness-judge-c1",
+      "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+      "brand_book_draft": {
+        "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+        "positioning": "Náufrago es la única marca de encebollado y ceviche en Guayaquil con origen costero verificable — marisco fresco de Olón, Santa Elena — combinado con una experiencia aspiracional de \"alma de playa\" que los competidores urbanos consolidados (La Casa del Encebollado, Pez Azul, Lobo Marino, Pepe 3) no pueden replicar desde la ciudad. Su modelo híbrido ghost kitchen en Guayaquil + local físico en origen sustenta una propuesta de autenticidad real en el rango medio-alto del mercado ($5–$9 ceviche, $3–$6 encebollado), donde la diferenciación por procedencia del marisco es el eje competitivo no ocupado por ningún actor de primera línea.",
+        "icp_summary": "SEGMENTO 1 — Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténtica. Pains: no conoce las huecas locales de confianza; dificultad para distinguir calidad entre la oferta masiva de delivery. Goals: probar comida costera auténtica durante su visita; vivir una experiencia de sabor local con historia y origen verificable. Canales: Google Maps, Instagram, TripAdvisor. Criterio de decisión: rating y reseñas en Google y TripAdvisor.\n\nSEGMENTO 2 — Guayaquileño urbano consumidor de encebollado y ceviche a domicilio. Pains: desconfianza en la frescura del marisco en delivery. Goals: satisfacer antojo de comida costera sin salir de casa. Canales: Instagram, WhatsApp, Uber Eats. Criterio de decisión: rating y reseñas en app de delivery.\n\nSEGMENTO 3 — Familias guayaquileñas 30–50 años que buscan comida costera para ocasiones de fin de semana. Pains: organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable. Goals: compartir una comida costeña auténtica con la familia sin desplazarse. Canales: Instagram, WhatsApp. Criterio de decisión: cantidad y variedad del menú para grupos. Objeciones clave: ¿el pedido para varias personas llegará completo y caliente? ¿El precio por persona sigue siendo accesible en pedidos grandes?\n\nSEGMENTO 4 — Adultos urbanos guayaquileños 25–45 años que buscan desayuno/almuerzo costero auténtico a domicilio. Pains: no tienen tiempo ni acceso fácil a la playa para comer marisco fresco. Goals: disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina. Canales: Instagram, WhatsApp, Uber Eats. Objeciones clave: ¿el marisco llegará fresco después del delivery? ¿Por qué pagar $7–$9 si puedo ir a una hueca local más barata? No conozco la marca / no tengo reseñas de referencia.",
+        "voice_description": "La evidencia directa de copy propio de Náufrago es nula en este dataset — no hay posts de Instagram, textos web ni piezas reales de la marca. Lo inferible desde el nombre \"Náufrago\" y la descripción estratégica de discovery es: voz que ancla autenticidad en coordenadas reales (Olón, Santa Elena) en lugar de adjetivos genéricos; tono directo, sin rodeos corporativos; registro informal-cercano adecuado a delivery urbano; evita la hipérbole competitiva (\"Campeones Mundiales\", \"Representantes del Encebollado\") y apuesta por la especificidad geográfica como argumento. El concepto \"alma de playa\" sugiere aspiracionalidad costero-escapista sin pretensión gastronómica. CONFIANZA BAJA — requiere validación con copy real.",
+        "forbidden_words": [
+          "auténtico",
+          "auténtica",
+          "el auténtico de Guayaquil",
+          "representantes",
+          "campeones",
+          "garantizado",
+          "frescura garantizada",
+          "el mejor",
+          "sin igual",
+          "de calidad",
+          "realiza tu pedido",
+          "haz tu pedido ya",
+          "delicioso",
+          "exquisito",
+          "lo mejor del mar",
+          "hueca",
+          "barato",
+          "económico",
+          "industrial",
+          "congelado",
+          "procesado",
+          "cadena",
+          "franquicia",
+          "fast food",
+          "comida rápida"
+        ],
+        "required_terminology": [
+          "Olón",
+          "Santa Elena",
+          "marisco fresco",
+          "origen costero",
+          "alma de playa",
+          "encebollado",
+          "ceviche",
+          "costera",
+          "origen verificable",
+          "desde la costa",
+          "costa",
+          "del mar a tu mesa"
+        ],
+        "customer_angle": "El cliente de Náufrago resuelve una tensión real: quiere el sabor genuino del mar pero vive y trabaja en la ciudad. El driver de conversión es la confianza en la frescura del marisco — la objeción más frecuente ('¿llegará fresco después del delivery?') colapsa cuando el origen es verificable y visible. El cliente que permanece es quien conecta con la narrativa de autenticidad costera, no solo con la comida: valora saber de dónde viene lo que come. Para familias (S3) y adultos en rutina delivery (S2/S4), el precio medio-alto se justifica cuando la propuesta de origen es creíble y consistente. La ausencia de reseñas y reconocimiento de marca es la barrera crítica de adquisición, especialmente para S4 y el turista S1, cuyo proceso de compra arranca en Google Maps o Instagram antes de cualquier otro paso.",
+        "retention_notes": "Driver #1 de retención: consistencia en frescura del marisco — encebollado y ceviche son hábitos de consumo frecuente en Guayaquil; un producto que cumple genera repetición de compra natural. Riesgo de churn principal: La Casa del Encebollado (55K IG, delivery consolidado) y Pez Azul (16 locales, desde 1988) pueden absorber al cliente antes de que Náufrago construya reconocimiento de marca — la ventana de diferenciación es estrecha. Canal de retención clave: WhatsApp (S2, S3, S4) reduce dependencia de apps de delivery y sus comisiones; es donde se construye lealtad directa y se captura el pedido recurrente. Loyalty trigger para familias (S3): pedidos grupales completos y puntuales generan recurrencia en ocasiones de fin de semana — packaging y completitud del pedido son puntos de quiebre de satisfacción o abandono. Gap crítico de onboarding: la falta de reseñas (objeción S4: 'No conozco la marca / no tengo reseñas de referencia') requiere estrategia activa de generación de primeras reseñas en Google Maps y apps de delivery — sin esto el funnel de adquisición se cierra antes de comenzar. Palanca de expansión natural: S4 (adultos 25–45, delivery rutinario) tiene potencial de pasar de compra ocasional a hábito semanal si la experiencia es consistente — el encebollado como desayuno o almuerzo de semana es una rutina ya instalada en la cultura guayaquileña.",
+        "personalidad": [
+          "Costero-específico: la autenticidad tiene nombre de lugar (Olón), no es un adjetivo vacío",
+          "Directo-sin rodeos: el argumento es el origen, no la hipérbole",
+          "Aspiracional-accesible: evoca playa sin ser pretencioso ni inaccesible en precio",
+          "Verificable: las afirmaciones son comprobables por el cliente (origen, proveedor, ruta)"
+        ],
+        "tagline_opciones": [
+          "Del mar a tu mesa. Desde Olón.",
+          "El mar que llega. Náufrago.",
+          "La costa en tu puerta."
+        ],
+        "mensajes_clave": [
+          "Marisco fresco de Olón — sin que tengas que manejar hasta la playa. [S4: sin acceso fácil a la costa]",
+          "Sabés exactamente de dónde viene lo que comés: Olón, Santa Elena. [S2/S4: desconfianza en frescura del marisco en delivery]",
+          "El encebollado que vale lo que pagás — porque el marisco llegó hoy, no ayer. [S4: objeción precio vs. hueca local]",
+          "Para la comida costeña familiar del fin de semana, sin complicaciones de coordinación. [S3: organizar pedido familiar]",
+          "Si estás de visita en Guayaquil y querés el sabor costero real, acá está el origen. [S1: turista buscando experiencia gastronómica local verificable]"
+        ],
+        "mision": "Náufrago acerca el encebollado y el ceviche de origen costero verificable (Olón, Santa Elena) al consumidor urbano de Guayaquil, mediante un modelo híbrido de ghost kitchen y presencia física en la costa, para quienes quieren el sabor auténtico de la playa sin desplazarse.",
+        "proposito": "Demostrar que la autenticidad del mar no se improvisa — se trae directamente desde el origen.",
+        "propuestas_de_valor": [
+          "Origen costero verificable: marisco fresco de Olón, Santa Elena — trazabilidad que ningún competidor urbano consolidado (La Casa del Encebollado, Pez Azul, Lobo Marino) puede replicar.",
+          "Modelo híbrido ghost kitchen + local físico en origen: la presencia real en la costa respalda la narrativa de autenticidad y convierte el delivery en un puente tangible entre la playa y la ciudad.",
+          "Posicionamiento aspiracional 'alma de playa' en un mercado de precio: en el rango medio-alto ($7–9 ceviche), Náufrago compite por experiencia y origen, no por volumen ni precio bajo.",
+          "Contenido de origen como activo competitivo estructural: imágenes y videos desde Olón son imposibles de replicar por operadores 100% urbanos — ventaja duradera en Instagram y Google.",
+          "Canal directo vía WhatsApp: reduce dependencia de comisiones de apps de delivery y habilita una relación de lealtad directa con el cliente habitual."
+        ],
+        "_field_meta": {
+          "personalidad": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "Inferido de: nombre de marca 'Náufrago' (connotación costero-rawness) + discovery_summary: 'alma de playa', 'narrativa de origen costero verificable'. No hay copy real de la marca en la evidencia.",
+            "confianza": 0.3,
+            "lente": "editor-en-jefe"
+          },
+          "tagline_opciones": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "Síntesis creativa del positioning en discovery_summary: modelo híbrido origen-costa + delivery Guayaquil; no hay tagline real evidenciado en ninguna fuente del dataset.",
+            "confianza": 0.25,
+            "lente": "editor-en-jefe"
+          },
+          "mensajes_clave": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "ICP pain points y goals documentados en icp_signals del dataset: [S1-S4] mapeados directamente a cada mensaje.",
+            "confianza": 0.55,
+            "lente": "editor-en-jefe"
+          },
+          "mision": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena)' + 'modelo híbrido ghost kitchen + local físico en origen'; icp_signals.goals S2/S4: 'Satisfacer antoj",
+            "confianza": 0.82,
+            "lente": "jefe-client-success"
+          },
+          "proposito": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable'",
+            "confianza": 0.7,
+            "lente": "jefe-client-success"
+          },
+          "propuestas_de_valor": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'oportunidad estratégica... eje que ningún competidor de primera línea ocupa'; icp_signals.pain_points S2: 'Desconfianza en la frescura del marisco en delivery'; icp_signals.preferr",
+            "confianza": 0.8,
+            "lente": "jefe-client-success"
+          }
+        },
+        "_build": {
+          "source": "onboarding_collaborative_build",
+          "lenses": [
+            "brand-strategist",
+            "editor-en-jefe",
+            "jefe-client-success"
+          ],
+          "cycle": 1,
+          "corrections_applied": 0,
+          "structured_ok": {
+            "brand-strategist": true,
+            "editor-en-jefe": true,
+            "jefe-client-success": true
+          },
+          "structured_ok_all": true
+        }
+      },
+      "_grounding_refs": {
+        "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+        "client_name": "Náufrago",
+        "industry": "restaurante de comida costera",
+        "website": "https://www.naufrago.ec",
+        "discovery_summary": "El mercado de encebollado y ceviche en Guayaquil es uno de los más saturados y culturalmente arraigados del Ecuador, con oferta que va desde huecas de barrio históricas hasta ghost kitchens nativas-digitales. Los actores dominantes se dividen en tres capas: (1) cadenas multi-local consolidadas con delivery activo — La Casa del Encebollado (53K IG, 10+ puntos, Rappi/PedidosYa) y Pez Azul (\"Campeones Mundiales 2017\", 10+ locales, triple cobertura en apps) concentran la mayor masa crítica digital y física en encebollado; (2) operadores digitales de ceviche con presencia relevante — Cevichería Pepe 3 (43K IG, 3 locales, \"ceviche manaba\") y Cevichería Lobo Marino (46K IG, 2 locales en Urdesa y Kennedy) lideran el segmento ceviche-delivery; (3) actores delivery-first o multi-punto en expansión — Encebollado Cuarto de Libra (4+ locales, servicio 24h en Alborada) y Encebollados Factory (ghost kitchen Uber Eats) compiten directamente en el canal principal de Náufrago. El precio medio del encebollado oscila entre $3–$6 y el ceviche entre $5–$9, ubicando a Náufrago en el rango medio-alto con diferenciación posible por origen del marisco. CORRECCIÓN APLICADA: Ecuaviche y Manabiche fueron excluidos por operar en Quito — su inclusión previa constituía un error de ancla geográfica. El Encebollado Rosado (688 seguidores IG, precio $1.75, sin delivery evidente) se clasifica como amenaza baja por nula presencia digital y segmento de precio inferior al de Náufrago.\n\nLa oportunidad estratégica de Náufrago reside en un eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena) combinada con una experiencia de marca aspiracional (\"alma de playa\") y modelo híbrido ghost kitchen + local físico en origen. La amenaza más urgente es La Casa del Encebollado, que ya tiene masa crítica digital y delivery consolidado y puede absorber el mismo cliente si Náufrago no construye diferenciación de marca consistente. En el eje ceviche, Lobo Marino y Pepe 3 tienen ventaja de seguidores y red de locales; Náufrago debe contraatacar con la narrativa de autenticidad costera y contenido de origen (Olón) que ninguno de ellos puede replicar desde Guayaquil.",
+        "business_model": "",
+        "competitors": [
+          {
+            "name": "El Pez Volador",
+            "website": "https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "Estrella/oro en la Feria Raíces2014\nBicentenario2020👩‍🍳Angelita\n🔱Luque y José mascote\n📍Bamboo Plaza\n📍Chile y 9oct \n📍Ébanos y Víctor Emilio Estra",
+            "evidence": {
+              "followers_count": 10103,
+              "following_count": 1299,
+              "posts_count": 154,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "La Casa del Encebollado",
+            "website": "https://lacasadelencebollado.ec",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "🔥Representantes del Encebollado 2026 🐟🏆\n🛵Realiza tu pedido vía WhatsApp⬇️",
+            "evidence": {
+              "followers_count": 55556,
+              "following_count": 641,
+              "posts_count": 920,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "Pez Azul",
+            "website": "http://www.pezazul.com.ec",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "Los platos más icónicos del Ecuador. 🇪🇨\n📍 16 locales cerca de ti.\n🌟 Desde 1988.\n#LaMarcaDelEncebollado\n@rappi.ecuador \n@ubereats \n@pedidosya.ecuad",
+            "evidence": {
+              "followers_count": 13731,
+              "following_count": 714,
+              "posts_count": 2057,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "El Encebollado Rosado",
+            "website": "",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "El auténtico de Guayaquil.\n📍Tungurahua 4508 entre Sedala y Callejón Parra(actual Blacio Potes) \n#ElAuténticoDeDonAmador 💯\n#ElAuténticoDelSur",
+            "evidence": {
+              "followers_count": 775,
+              "following_count": 129,
+              "posts_count": 25,
+              "is_verified": false,
+              "platform": "instagram"
+            }
+          },
+          {
+            "name": "El Rincón del Ceviche",
+            "website": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+            "competitor_type": "direct",
+            "source": "apify_scrape",
+            "trust_level": "untrusted",
+            "scraped": true,
+            "positioning": "El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio\nCombo Ceviche de Pulpo en Salsa Roja\nCeviche tipo cóctel, cebolla perla y yerbita, incluy",
+            "evidence": {
+              "platform": "web"
+            }
+          },
+          {
+            "name": "Encebollados Factory",
+            "website": "https://www.ubereats.com/ec-en/store/encebollados-factory-guayaquil/_MHorYDrWG2sJ05VxM2a0w",
+            "competitor_type": "direct",
+            "source": "auto_discovery",
+            "trust_level": "untrusted",
+            "scraped": false
+          },
+          {
+            "name": "Encebollado de Dieguito",
+            "website": "https://www.ubereats.com/ec-en/store/encebollado-de-dieguito-guayaquil/KteJwwzwQYKbrymGhytWvg",
+            "competitor_type": "direct",
+            "source": "auto_discovery",
+            "trust_level": "untrusted",
+            "scraped": false
+          }
+        ],
+        "icp_signals": {
+          "segments": [
+            "[S1] Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténti",
+            "[S2] Guayaquileño urbano consumidor de encebollado y ceviche a domicilio",
+            "[S3] Familias guayaquileñas 30-50 años que buscan comida costera para ocasiones de fin de seman",
+            "[S4] Adultos urbanos guayaquileños 25-45 años que buscan desayuno/almuerzo costero auténtico a "
+          ],
+          "pain_points": [
+            "[S1] No conoce las huecas locales de confianza",
+            "[S2] Desconfianza en la frescura del marisco en delivery",
+            "[S3] Organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable",
+            "[S4] No tienen tiempo ni acceso fácil a la playa para comer marisco fresco",
+            "[S1] Dificultad para distinguir calidad entre la oferta masiva de delivery"
+          ],
+          "goals": [
+            "[S1] Probar comida costera auténtica durante visita a Guayaquil",
+            "[S2] Satisfacer antojo de comida costera sin salir de casa",
+            "[S3] Compartir una comida costeña auténtica con la familia sin desplazarse",
+            "[S4] Disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina",
+            "[S1] Vivir una experiencia de sabor local con historia y origen verificable"
+          ],
+          "objections": [
+            "[S3] ¿El pedido para varias personas llegará completo y caliente?",
+            "[S4] ¿El marisco llegará fresco después del delivery?",
+            "[S3] ¿El precio por persona sigue siendo accesible en pedidos grandes?",
+            "[S4] ¿Por qué pagar $7-$9 si puedo ir a una hueca local más barata?",
+            "[S4] No conozco la marca / no tengo reseñas de referencia"
+          ],
+          "preferred_channels": [
+            "[S1] Google Maps",
+            "[S1,2,3,4] Instagram",
+            "[S2,3,4] WhatsApp",
+            "[S1] TripAdvisor",
+            "[S2,4] Uber Eats"
+          ],
+          "decision_criteria": [
+            "[S1] Rating y reseñas en Google y TripAdvisor",
+            "[S2] Rating y reseñas en app de delivery",
+            "[S3] Cantidad y variedad del menú para grupos"
+          ],
+          "buying_process": [
+            "[S1] Búsqueda en Google o Instagram → lectura de reseñas → pedido delivery o visita al local",
+            "[S2] Descubrimiento en Instagram o app de delivery → revisión de reseñas y fotos → pedido directo en app o WhatsApp",
+            "[S3] Referencia de boca en boca o Instagram → WhatsApp para consultar pedido familiar → pago contra entrega o trans"
+          ]
+        },
+        "apify_sources": [],
+        "_icp_source": "client_icp_documents",
+        "_icp_rows": 4
+      },
+      "cycle": 1,
+      "_fidelity_cycle": 1,
+      "threshold": 0.85
+    },
+    "[BB] Faithfulness judge": {
+      "judge_incomplete": false,
+      "no_progress": false,
+      "best_gated_mean": 0.95,
+      "best_draft": {
+        "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+        "positioning": "Náufrago es la única marca de encebollado y ceviche en Guayaquil con origen costero verificable — marisco fresco de Olón, Santa Elena — combinado con una experiencia aspiracional de \"alma de playa\" que los competidores urbanos consolidados (La Casa del Encebollado, Pez Azul, Lobo Marino, Pepe 3) no pueden replicar desde la ciudad. Su modelo híbrido ghost kitchen en Guayaquil + local físico en origen sustenta una propuesta de autenticidad real en el rango medio-alto del mercado ($5–$9 ceviche, $3–$6 encebollado), donde la diferenciación por procedencia del marisco es el eje competitivo no ocupado por ningún actor de primera línea.",
+        "icp_summary": "SEGMENTO 1 — Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténtica. Pains: no conoce las huecas locales de confianza; dificultad para distinguir calidad entre la oferta masiva de delivery. Goals: probar comida costera auténtica durante su visita; vivir una experiencia de sabor local con historia y origen verificable. Canales: Google Maps, Instagram, TripAdvisor. Criterio de decisión: rating y reseñas en Google y TripAdvisor.\n\nSEGMENTO 2 — Guayaquileño urbano consumidor de encebollado y ceviche a domicilio. Pains: desconfianza en la frescura del marisco en delivery. Goals: satisfacer antojo de comida costera sin salir de casa. Canales: Instagram, WhatsApp, Uber Eats. Criterio de decisión: rating y reseñas en app de delivery.\n\nSEGMENTO 3 — Familias guayaquileñas 30–50 años que buscan comida costera para ocasiones de fin de semana. Pains: organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable. Goals: compartir una comida costeña auténtica con la familia sin desplazarse. Canales: Instagram, WhatsApp. Criterio de decisión: cantidad y variedad del menú para grupos. Objeciones clave: ¿el pedido para varias personas llegará completo y caliente? ¿El precio por persona sigue siendo accesible en pedidos grandes?\n\nSEGMENTO 4 — Adultos urbanos guayaquileños 25–45 años que buscan desayuno/almuerzo costero auténtico a domicilio. Pains: no tienen tiempo ni acceso fácil a la playa para comer marisco fresco. Goals: disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina. Canales: Instagram, WhatsApp, Uber Eats. Objeciones clave: ¿el marisco llegará fresco después del delivery? ¿Por qué pagar $7–$9 si puedo ir a una hueca local más barata? No conozco la marca / no tengo reseñas de referencia.",
+        "voice_description": "La evidencia directa de copy propio de Náufrago es nula en este dataset — no hay posts de Instagram, textos web ni piezas reales de la marca. Lo inferible desde el nombre \"Náufrago\" y la descripción estratégica de discovery es: voz que ancla autenticidad en coordenadas reales (Olón, Santa Elena) en lugar de adjetivos genéricos; tono directo, sin rodeos corporativos; registro informal-cercano adecuado a delivery urbano; evita la hipérbole competitiva (\"Campeones Mundiales\", \"Representantes del Encebollado\") y apuesta por la especificidad geográfica como argumento. El concepto \"alma de playa\" sugiere aspiracionalidad costero-escapista sin pretensión gastronómica. CONFIANZA BAJA — requiere validación con copy real.",
+        "forbidden_words": [
+          "auténtico",
+          "auténtica",
+          "el auténtico de Guayaquil",
+          "representantes",
+          "campeones",
+          "garantizado",
+          "frescura garantizada",
+          "el mejor",
+          "sin igual",
+          "de calidad",
+          "realiza tu pedido",
+          "haz tu pedido ya",
+          "delicioso",
+          "exquisito",
+          "lo mejor del mar",
+          "hueca",
+          "barato",
+          "económico",
+          "industrial",
+          "congelado",
+          "procesado",
+          "cadena",
+          "franquicia",
+          "fast food",
+          "comida rápida"
+        ],
+        "required_terminology": [
+          "Olón",
+          "Santa Elena",
+          "marisco fresco",
+          "origen costero",
+          "alma de playa",
+          "encebollado",
+          "ceviche",
+          "costera",
+          "origen verificable",
+          "desde la costa",
+          "costa",
+          "del mar a tu mesa"
+        ],
+        "customer_angle": "El cliente de Náufrago resuelve una tensión real: quiere el sabor genuino del mar pero vive y trabaja en la ciudad. El driver de conversión es la confianza en la frescura del marisco — la objeción más frecuente ('¿llegará fresco después del delivery?') colapsa cuando el origen es verificable y visible. El cliente que permanece es quien conecta con la narrativa de autenticidad costera, no solo con la comida: valora saber de dónde viene lo que come. Para familias (S3) y adultos en rutina delivery (S2/S4), el precio medio-alto se justifica cuando la propuesta de origen es creíble y consistente. La ausencia de reseñas y reconocimiento de marca es la barrera crítica de adquisición, especialmente para S4 y el turista S1, cuyo proceso de compra arranca en Google Maps o Instagram antes de cualquier otro paso.",
+        "retention_notes": "Driver #1 de retención: consistencia en frescura del marisco — encebollado y ceviche son hábitos de consumo frecuente en Guayaquil; un producto que cumple genera repetición de compra natural. Riesgo de churn principal: La Casa del Encebollado (55K IG, delivery consolidado) y Pez Azul (16 locales, desde 1988) pueden absorber al cliente antes de que Náufrago construya reconocimiento de marca — la ventana de diferenciación es estrecha. Canal de retención clave: WhatsApp (S2, S3, S4) reduce dependencia de apps de delivery y sus comisiones; es donde se construye lealtad directa y se captura el pedido recurrente. Loyalty trigger para familias (S3): pedidos grupales completos y puntuales generan recurrencia en ocasiones de fin de semana — packaging y completitud del pedido son puntos de quiebre de satisfacción o abandono. Gap crítico de onboarding: la falta de reseñas (objeción S4: 'No conozco la marca / no tengo reseñas de referencia') requiere estrategia activa de generación de primeras reseñas en Google Maps y apps de delivery — sin esto el funnel de adquisición se cierra antes de comenzar. Palanca de expansión natural: S4 (adultos 25–45, delivery rutinario) tiene potencial de pasar de compra ocasional a hábito semanal si la experiencia es consistente — el encebollado como desayuno o almuerzo de semana es una rutina ya instalada en la cultura guayaquileña.",
+        "personalidad": [
+          "Costero-específico: la autenticidad tiene nombre de lugar (Olón), no es un adjetivo vacío",
+          "Directo-sin rodeos: el argumento es el origen, no la hipérbole",
+          "Aspiracional-accesible: evoca playa sin ser pretencioso ni inaccesible en precio",
+          "Verificable: las afirmaciones son comprobables por el cliente (origen, proveedor, ruta)"
+        ],
+        "tagline_opciones": [
+          "Del mar a tu mesa. Desde Olón.",
+          "El mar que llega. Náufrago.",
+          "La costa en tu puerta."
+        ],
+        "mensajes_clave": [
+          "Marisco fresco de Olón — sin que tengas que manejar hasta la playa. [S4: sin acceso fácil a la costa]",
+          "Sabés exactamente de dónde viene lo que comés: Olón, Santa Elena. [S2/S4: desconfianza en frescura del marisco en delivery]",
+          "El encebollado que vale lo que pagás — porque el marisco llegó hoy, no ayer. [S4: objeción precio vs. hueca local]",
+          "Para la comida costeña familiar del fin de semana, sin complicaciones de coordinación. [S3: organizar pedido familiar]",
+          "Si estás de visita en Guayaquil y querés el sabor costero real, acá está el origen. [S1: turista buscando experiencia gastronómica local verificable]"
+        ],
+        "mision": "Náufrago acerca el encebollado y el ceviche de origen costero verificable (Olón, Santa Elena) al consumidor urbano de Guayaquil, mediante un modelo híbrido de ghost kitchen y presencia física en la costa, para quienes quieren el sabor auténtico de la playa sin desplazarse.",
+        "proposito": "Demostrar que la autenticidad del mar no se improvisa — se trae directamente desde el origen.",
+        "propuestas_de_valor": [
+          "Origen costero verificable: marisco fresco de Olón, Santa Elena — trazabilidad que ningún competidor urbano consolidado (La Casa del Encebollado, Pez Azul, Lobo Marino) puede replicar.",
+          "Modelo híbrido ghost kitchen + local físico en origen: la presencia real en la costa respalda la narrativa de autenticidad y convierte el delivery en un puente tangible entre la playa y la ciudad.",
+          "Posicionamiento aspiracional 'alma de playa' en un mercado de precio: en el rango medio-alto ($7–9 ceviche), Náufrago compite por experiencia y origen, no por volumen ni precio bajo.",
+          "Contenido de origen como activo competitivo estructural: imágenes y videos desde Olón son imposibles de replicar por operadores 100% urbanos — ventaja duradera en Instagram y Google.",
+          "Canal directo vía WhatsApp: reduce dependencia de comisiones de apps de delivery y habilita una relación de lealtad directa con el cliente habitual."
+        ],
+        "_field_meta": {
+          "personalidad": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "Inferido de: nombre de marca 'Náufrago' (connotación costero-rawness) + discovery_summary: 'alma de playa', 'narrativa de origen costero verificable'. No hay copy real de la marca en la evidencia.",
+            "confianza": 0.3,
+            "lente": "editor-en-jefe"
+          },
+          "tagline_opciones": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "Síntesis creativa del positioning en discovery_summary: modelo híbrido origen-costa + delivery Guayaquil; no hay tagline real evidenciado en ninguna fuente del dataset.",
+            "confianza": 0.25,
+            "lente": "editor-en-jefe"
+          },
+          "mensajes_clave": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "ICP pain points y goals documentados en icp_signals del dataset: [S1-S4] mapeados directamente a cada mensaje.",
+            "confianza": 0.55,
+            "lente": "editor-en-jefe"
+          },
+          "mision": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena)' + 'modelo híbrido ghost kitchen + local físico en origen'; icp_signals.goals S2/S4: 'Satisfacer antoj",
+            "confianza": 0.82,
+            "lente": "jefe-client-success"
+          },
+          "proposito": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable'",
+            "confianza": 0.7,
+            "lente": "jefe-client-success"
+          },
+          "propuestas_de_valor": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'oportunidad estratégica... eje que ningún competidor de primera línea ocupa'; icp_signals.pain_points S2: 'Desconfianza en la frescura del marisco en delivery'; icp_signals.preferr",
+            "confianza": 0.8,
+            "lente": "jefe-client-success"
+          }
+        },
+        "_build": {
+          "source": "onboarding_collaborative_build",
+          "lenses": [
+            "brand-strategist",
+            "editor-en-jefe",
+            "jefe-client-success"
+          ],
+          "cycle": 1,
+          "corrections_applied": 0,
+          "structured_ok": {
+            "brand-strategist": true,
+            "editor-en-jefe": true,
+            "jefe-client-success": true
+          },
+          "structured_ok_all": true
+        }
+      },
+      "gated_mean": 0.95,
+      "fidelity": {
+        "pass": true,
+        "threshold": 0.85,
+        "scores": {
+          "positioning": 0.95,
+          "icp_summary": 0.95,
+          "voice_description": 0.4,
+          "customer_angle": 0.87,
+          "retention_notes": 0.7
+        },
+        "gated_fields": [
+          "positioning",
+          "icp_summary"
+        ],
+        "low_fields": [],
+        "_lazo": null,
+        "judge_incomplete": false,
+        "ausentes": [],
+        "no_evaluados": [],
+        "campo_truncado": null,
+        "gated_ausentes": [],
+        "cycle": 1,
+        "fidelity_cycle": 1,
+        "max_cycles": 2,
+        "exhausted": false
+      },
+      "brand_book_draft": {
+        "client_id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+        "positioning": "Náufrago es la única marca de encebollado y ceviche en Guayaquil con origen costero verificable — marisco fresco de Olón, Santa Elena — combinado con una experiencia aspiracional de \"alma de playa\" que los competidores urbanos consolidados (La Casa del Encebollado, Pez Azul, Lobo Marino, Pepe 3) no pueden replicar desde la ciudad. Su modelo híbrido ghost kitchen en Guayaquil + local físico en origen sustenta una propuesta de autenticidad real en el rango medio-alto del mercado ($5–$9 ceviche, $3–$6 encebollado), donde la diferenciación por procedencia del marisco es el eje competitivo no ocupado por ningún actor de primera línea.",
+        "icp_summary": "SEGMENTO 1 — Visitante o turista interno en Guayaquil buscando experiencia gastronómica costera auténtica. Pains: no conoce las huecas locales de confianza; dificultad para distinguir calidad entre la oferta masiva de delivery. Goals: probar comida costera auténtica durante su visita; vivir una experiencia de sabor local con historia y origen verificable. Canales: Google Maps, Instagram, TripAdvisor. Criterio de decisión: rating y reseñas en Google y TripAdvisor.\n\nSEGMENTO 2 — Guayaquileño urbano consumidor de encebollado y ceviche a domicilio. Pains: desconfianza en la frescura del marisco en delivery. Goals: satisfacer antojo de comida costera sin salir de casa. Canales: Instagram, WhatsApp, Uber Eats. Criterio de decisión: rating y reseñas en app de delivery.\n\nSEGMENTO 3 — Familias guayaquileñas 30–50 años que buscan comida costera para ocasiones de fin de semana. Pains: organizar una comida familiar de calidad en casa es complicado sin un proveedor confiable. Goals: compartir una comida costeña auténtica con la familia sin desplazarse. Canales: Instagram, WhatsApp. Criterio de decisión: cantidad y variedad del menú para grupos. Objeciones clave: ¿el pedido para varias personas llegará completo y caliente? ¿El precio por persona sigue siendo accesible en pedidos grandes?\n\nSEGMENTO 4 — Adultos urbanos guayaquileños 25–45 años que buscan desayuno/almuerzo costero auténtico a domicilio. Pains: no tienen tiempo ni acceso fácil a la playa para comer marisco fresco. Goals: disfrutar un encebollado o ceviche auténtico sin salir de casa u oficina. Canales: Instagram, WhatsApp, Uber Eats. Objeciones clave: ¿el marisco llegará fresco después del delivery? ¿Por qué pagar $7–$9 si puedo ir a una hueca local más barata? No conozco la marca / no tengo reseñas de referencia.",
+        "voice_description": "La evidencia directa de copy propio de Náufrago es nula en este dataset — no hay posts de Instagram, textos web ni piezas reales de la marca. Lo inferible desde el nombre \"Náufrago\" y la descripción estratégica de discovery es: voz que ancla autenticidad en coordenadas reales (Olón, Santa Elena) en lugar de adjetivos genéricos; tono directo, sin rodeos corporativos; registro informal-cercano adecuado a delivery urbano; evita la hipérbole competitiva (\"Campeones Mundiales\", \"Representantes del Encebollado\") y apuesta por la especificidad geográfica como argumento. El concepto \"alma de playa\" sugiere aspiracionalidad costero-escapista sin pretensión gastronómica. CONFIANZA BAJA — requiere validación con copy real.",
+        "forbidden_words": [
+          "auténtico",
+          "auténtica",
+          "el auténtico de Guayaquil",
+          "representantes",
+          "campeones",
+          "garantizado",
+          "frescura garantizada",
+          "el mejor",
+          "sin igual",
+          "de calidad",
+          "realiza tu pedido",
+          "haz tu pedido ya",
+          "delicioso",
+          "exquisito",
+          "lo mejor del mar",
+          "hueca",
+          "barato",
+          "económico",
+          "industrial",
+          "congelado",
+          "procesado",
+          "cadena",
+          "franquicia",
+          "fast food",
+          "comida rápida"
+        ],
+        "required_terminology": [
+          "Olón",
+          "Santa Elena",
+          "marisco fresco",
+          "origen costero",
+          "alma de playa",
+          "encebollado",
+          "ceviche",
+          "costera",
+          "origen verificable",
+          "desde la costa",
+          "costa",
+          "del mar a tu mesa"
+        ],
+        "customer_angle": "El cliente de Náufrago resuelve una tensión real: quiere el sabor genuino del mar pero vive y trabaja en la ciudad. El driver de conversión es la confianza en la frescura del marisco — la objeción más frecuente ('¿llegará fresco después del delivery?') colapsa cuando el origen es verificable y visible. El cliente que permanece es quien conecta con la narrativa de autenticidad costera, no solo con la comida: valora saber de dónde viene lo que come. Para familias (S3) y adultos en rutina delivery (S2/S4), el precio medio-alto se justifica cuando la propuesta de origen es creíble y consistente. La ausencia de reseñas y reconocimiento de marca es la barrera crítica de adquisición, especialmente para S4 y el turista S1, cuyo proceso de compra arranca en Google Maps o Instagram antes de cualquier otro paso.",
+        "retention_notes": "Driver #1 de retención: consistencia en frescura del marisco — encebollado y ceviche son hábitos de consumo frecuente en Guayaquil; un producto que cumple genera repetición de compra natural. Riesgo de churn principal: La Casa del Encebollado (55K IG, delivery consolidado) y Pez Azul (16 locales, desde 1988) pueden absorber al cliente antes de que Náufrago construya reconocimiento de marca — la ventana de diferenciación es estrecha. Canal de retención clave: WhatsApp (S2, S3, S4) reduce dependencia de apps de delivery y sus comisiones; es donde se construye lealtad directa y se captura el pedido recurrente. Loyalty trigger para familias (S3): pedidos grupales completos y puntuales generan recurrencia en ocasiones de fin de semana — packaging y completitud del pedido son puntos de quiebre de satisfacción o abandono. Gap crítico de onboarding: la falta de reseñas (objeción S4: 'No conozco la marca / no tengo reseñas de referencia') requiere estrategia activa de generación de primeras reseñas en Google Maps y apps de delivery — sin esto el funnel de adquisición se cierra antes de comenzar. Palanca de expansión natural: S4 (adultos 25–45, delivery rutinario) tiene potencial de pasar de compra ocasional a hábito semanal si la experiencia es consistente — el encebollado como desayuno o almuerzo de semana es una rutina ya instalada en la cultura guayaquileña.",
+        "personalidad": [
+          "Costero-específico: la autenticidad tiene nombre de lugar (Olón), no es un adjetivo vacío",
+          "Directo-sin rodeos: el argumento es el origen, no la hipérbole",
+          "Aspiracional-accesible: evoca playa sin ser pretencioso ni inaccesible en precio",
+          "Verificable: las afirmaciones son comprobables por el cliente (origen, proveedor, ruta)"
+        ],
+        "tagline_opciones": [
+          "Del mar a tu mesa. Desde Olón.",
+          "El mar que llega. Náufrago.",
+          "La costa en tu puerta."
+        ],
+        "mensajes_clave": [
+          "Marisco fresco de Olón — sin que tengas que manejar hasta la playa. [S4: sin acceso fácil a la costa]",
+          "Sabés exactamente de dónde viene lo que comés: Olón, Santa Elena. [S2/S4: desconfianza en frescura del marisco en delivery]",
+          "El encebollado que vale lo que pagás — porque el marisco llegó hoy, no ayer. [S4: objeción precio vs. hueca local]",
+          "Para la comida costeña familiar del fin de semana, sin complicaciones de coordinación. [S3: organizar pedido familiar]",
+          "Si estás de visita en Guayaquil y querés el sabor costero real, acá está el origen. [S1: turista buscando experiencia gastronómica local verificable]"
+        ],
+        "mision": "Náufrago acerca el encebollado y el ceviche de origen costero verificable (Olón, Santa Elena) al consumidor urbano de Guayaquil, mediante un modelo híbrido de ghost kitchen y presencia física en la costa, para quienes quieren el sabor auténtico de la playa sin desplazarse.",
+        "proposito": "Demostrar que la autenticidad del mar no se improvisa — se trae directamente desde el origen.",
+        "propuestas_de_valor": [
+          "Origen costero verificable: marisco fresco de Olón, Santa Elena — trazabilidad que ningún competidor urbano consolidado (La Casa del Encebollado, Pez Azul, Lobo Marino) puede replicar.",
+          "Modelo híbrido ghost kitchen + local físico en origen: la presencia real en la costa respalda la narrativa de autenticidad y convierte el delivery en un puente tangible entre la playa y la ciudad.",
+          "Posicionamiento aspiracional 'alma de playa' en un mercado de precio: en el rango medio-alto ($7–9 ceviche), Náufrago compite por experiencia y origen, no por volumen ni precio bajo.",
+          "Contenido de origen como activo competitivo estructural: imágenes y videos desde Olón son imposibles de replicar por operadores 100% urbanos — ventaja duradera en Instagram y Google.",
+          "Canal directo vía WhatsApp: reduce dependencia de comisiones de apps de delivery y habilita una relación de lealtad directa con el cliente habitual."
+        ],
+        "_field_meta": {
+          "personalidad": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "Inferido de: nombre de marca 'Náufrago' (connotación costero-rawness) + discovery_summary: 'alma de playa', 'narrativa de origen costero verificable'. No hay copy real de la marca en la evidencia.",
+            "confianza": 0.3,
+            "lente": "editor-en-jefe"
+          },
+          "tagline_opciones": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "Síntesis creativa del positioning en discovery_summary: modelo híbrido origen-costa + delivery Guayaquil; no hay tagline real evidenciado en ninguna fuente del dataset.",
+            "confianza": 0.25,
+            "lente": "editor-en-jefe"
+          },
+          "mensajes_clave": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "ICP pain points y goals documentados en icp_signals del dataset: [S1-S4] mapeados directamente a cada mensaje.",
+            "confianza": 0.55,
+            "lente": "editor-en-jefe"
+          },
+          "mision": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'narrativa de origen costero verificable (marisco fresco de Olón, Santa Elena)' + 'modelo híbrido ghost kitchen + local físico en origen'; icp_signals.goals S2/S4: 'Satisfacer antoj",
+            "confianza": 0.82,
+            "lente": "jefe-client-success"
+          },
+          "proposito": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'eje que ningún competidor de primera línea ocupa con claridad: la narrativa de origen costero verificable'",
+            "confianza": 0.7,
+            "lente": "jefe-client-success"
+          },
+          "propuestas_de_valor": {
+            "estado": "provisional",
+            "provisional": true,
+            "gateado": false,
+            "fuente": "discovery_summary: 'oportunidad estratégica... eje que ningún competidor de primera línea ocupa'; icp_signals.pain_points S2: 'Desconfianza en la frescura del marisco en delivery'; icp_signals.preferr",
+            "confianza": 0.8,
+            "lente": "jefe-client-success"
+          }
+        },
+        "_build": {
+          "source": "onboarding_collaborative_build",
+          "lenses": [
+            "brand-strategist",
+            "editor-en-jefe",
+            "jefe-client-success"
+          ],
+          "cycle": 1,
+          "corrections_applied": 0,
+          "structured_ok": {
+            "brand-strategist": true,
+            "editor-en-jefe": true,
+            "jefe-client-success": true
+          },
+          "structured_ok_all": true
+        }
+      },
+      "cycle": 1,
+      "_fidelity_cycle": 1
+    }
+  },
+  "materia_146704": {
+    "idioma": "español de Ecuador · sin voseo (tú, no vos: «sabes», «pides», «pagas»)",
+    "sitio_estado": "trajo",
+    "sitio_texto": "DATOS ESTRUCTURADOS DE LA PAGINA\n[[{\"@context\":\"https://schema.org\",\"@type\":\"Restaurant\",\"@id\":\"https://naufrago.ec#restaurant\",\"name\":\"Náufrago\",\"description\":\"Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.\",\"url\":\"https://naufrago.ec\",\"telephone\":\"+593997744288\",\"priceRange\":\"$$\",\"servesCuisine\":[\"Ecuadorian\",\"Seafood\",\"Latin American\"],\"address\":{\"@type\":\"PostalAddress\",\"streetAddress\":\"Avenida 8 NO\",\"addressLocality\":\"Guayaquil\",\"addressRegion\":\"Guayas\",\"postalCode\":\"090505\",\"addressCountry\":\"EC\"},\"geo\":{\"@type\":\"GeoCoordinates\",\"latitude\":-2.1458611,\"longitude\":-79.9014167},\"openingHoursSpecification\":[{\"@type\":\"OpeningHoursSpecification\",\"dayOfWeek\":[\"Thursday\",\"Friday\",\"Saturday\",\"Sunday\",\"Monday\"],\"opens\":\"07:00\",\"closes\":\"15:00\"}],\"sameAs\":[\"https://instagram.com/naufrago.ec\"],\"image\":\"https://naufrago.ec/og-image.png\",\"acceptsReservations\":false,\"hasMenu\":{\"@type\":\"Menu\",\"@id\":\"https://naufrago.ec#menu\",\"name\":\"Menú Náufrago\",\"hasMenuSection\":[{\"@type\":\"MenuSection\",\"name\":\"Encebollados\",\"hasMenuItem\":[{\"@type\":\"MenuItem\",\"name\":\"Encebollado Náufrago\",\"description\":\"El de la casa · porción estándar.\",\"offers\":{\"@type\":\"Offer\",\"price\":\"4.00\",\"priceCurrency\":\"USD\"}},{\"@type\":\"MenuItem\",\"name\":\"Encebollado Mixto\",\"description\":\"Encebollado con camarón y pescado.\",\"offers\":{\"@type\":\"Offer\",\"price\":\"6.00\",\"priceCurrency\":\"USD\"}},{\"@type\":\"MenuItem\",\"name\":\"Encebollado Junior\",\"description\":\"Porción pequeña · 45g de pescado.\",\"offers\":{\"@type\":\"Offer\",\"price\":\"3.50\",\"priceCurrency\":\"USD\"}}]},{\"@type\":\"MenuSection\",\"name\":\"Ceviches\",\"hasMenuItem\":[{\"@type\":\"MenuItem\",\"name\":\"Ceviche Náufrago\",\"description\":\"Pescado curtido en leche de tigre · salsa de maní · aguacate.\",\"offers\":{\"@type\":\"Offer\",\"price\":\"7.00\",\"priceCurrency\":\"USD\"}},{\"@type\":\"MenuItem\",\"name\":\"Ceviche Mixto\",\"description\":\"Pescado curtido en leche de tigre · salsa de maní · aguacate · + camarón.\",\"offers\":{\"@type\":\"Offer\",\"price\":\"9.00\",\"priceCurrency\":\"USD\"}}]},{\"@type\":\"MenuSection\",\"name\":\"Bebidas\",\"hasMenuItem\":[{\"@type\":\"MenuItem\",\"name\":\"Jugo natural del día\",\"description\":\"Sabor del día · elegí cuando agregues.\",\"offers\":{\"@type\":\"Offer\",\"price\":\"2.00\",\"priceCurrency\":\"USD\"}},{\"@type\":\"MenuItem\",\"name\":\"Cola grande\",\"description\":\"Elige tu sabor preferido · 1 litro.\",\"offers\":{\"@type\":\"Offer\",\"price\":\"2.00\",\"priceCurrency\":\"USD\"}},{\"@type\":\"MenuItem\",\"name\":\"Cerveza grande\",\"description\":\"\",\"offers\":{\"@type\":\"Offer\",\"price\":\"3.00\",\"priceCurrency\":\"USD\"}},{\"@type\":\"MenuItem\",\"name\":\"Agua\",\"description\":\"\",\"offers\":{\"@type\":\"Offer\",\"price\":\"1.00\",\"priceCurrency\":\"USD\"}},{\"@type\":\"MenuItem\",\"name\":\"Café pasado\",\"description\":\"\",\"offers\":{\"@type\":\"Offer\",\"price\":\"2.00\",\"priceCurrency\":\"USD\"}},{\"@type\":\"MenuItem\",\"name\":\"Cola pequeña\",\"description\":\"Elige tu sabor preferido · 350ml.\",\"offers\":{\"@type\":\"Offer\",\"price\":\"1.25\",\"priceCurrency\":\"USD\"}}]},{\"@type\":\"MenuSection\",\"name\":\"extras\",\"hasMenuItem\":[{\"@type\":\"MenuItem\",\"name\":\"Chifle\",\"description\":\"\",\"offers\":{\"@type\":\"Offer\",\"price\":\"0.50\",\"priceCurrency\":\"USD\"}},{\"@type\":\"MenuItem\",\"name\":\"Pan\",\"description\":\"\",\"offers\":{\"@type\":\"Offer\",\"price\":\"0.50\",\"priceCurrency\":\"USD\"}},{\"@type\":\"MenuItem\",\"name\":\"Aguacate\",\"description\":\"\",\"offers\":{\"@type\":\"Offer\",\"price\":\"1.00\",\"priceCurrency\":\"USD\"}}]}]}},{\"@context\":\"https://schema.org\",\"@type\":\"LocalBusiness\",\"@id\":\"https://naufrago.ec#localbusiness",
+    "sitio_caracteres_total": 16006,
+    "instagram_propio": "## Record 1\n- **inputUrl**: https://instagram.com/naufrago.ec/\n- **id**: 64374967298\n- **username**: naufrago.ec\n- **url**: https://www.instagram.com/naufrago.ec\n- **fullName**: NÁUFRAGO\n- **biography**: Cuando tengas esa hambre de...\nNáufrago te espera!\n📍Olon 🕓Jueves-Lunes 08:00-16:00\nwww.naufrago.ec\nPedidos☎️0997744288\n- **externalUrls**: []\n- **followersCount**: 1228\n- **followsCount**: 550\n- **isBusinessAccount**: true\n- **businessCategoryName**: None\n- **private**: false\n- **verified**: false\n- **profilePicUrl**: https://scontent.cdninstagram.com/v/t51.2885-19/481860549_1005693934756680_4355751297900391888_n.jpg?stp=dst-jpg_s150x150_tt6&_nc_cat=100&ccb=7-5&_nc_sid=f7ccc5&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLnd3dy45NTguQzMifQ%3D%3D&_nc_ohc=1MgkisNIrSIQ7kNvwElJthl&_nc_oc=Ado39WERLtlBOEfZQaGkKc4KKHNdgOsbU7TDkdBvlBMLV1Ck4hG6ASi-nORuBDcM3DU&_nc_zt=24&_nc_ht=scontent.cdninstagram.com&_nc_ss=73a8c&oh=00_AQIxxY1ceCCZr3L7CmB3LdZIj6BSviVEAwoWo415CudQZA&oe=6AB77822\n- **profilePicUrlHD*",
+    "instagram_estado": "trajo"
+  },
+  "motor_146709": {
+    "ejecucion": "146709",
+    "flujo_de_prueba": "borrado",
+    "_judge_task_chars": 13394,
+    "_evidencia_chars": 8854,
+    "_icp_chars": 1672,
+    "_materia_chars": 4692,
+    "_materia_recortada": false,
+    "_task_recortado": false,
+    "_campos_cortados": [
+      "retention_notes"
+    ],
+    "threshold": 0.85,
+    "materia_inicio": "MATERIA DEL CLIENTE (texto real · evidencia primaria):\nIDIOMA: español de Ecuador · sin voseo (tú, no vos: «sabes», «pides», «pagas»)\nSITIO (16006 chars · primeros 3500):\nDATOS ESTRUCTURADOS DE LA PAG"
+  }
+}
