@@ -33,11 +33,15 @@ export const CODIGO_GATE = `// Gate · drop items that signaled skip (_discovery
 // sólo el primero (en 146532 se perdió instagram_scraper @naufrago.ec). Y own_web (apify_function null)
 // NO va al Servicio Apify: lo rechaza («apify_function invalid») y el sitio ya lo lee «Leer el sitio del cliente».
 const pasan = [];
-for (const it of $input.all()) {
-  const item = it.json || {};
+// E109b · pairedItem OBLIGATORIO: con varios ítems el motor no puede emparejar solo, y aguas abajo
+// «[JEFATURA] Load landscape_summary (canon)» y «Parse veredicto» usan $('Validate Deal Data').item
+// (146661 murió: «Paired item data for item from node Gate is unavailable»).
+const entrada = $input.all();
+for (let i = 0; i < entrada.length; i++) {
+  const item = entrada[i].json || {};
   if (item._discovery_ok === false || item._skip_reason) continue;   // señaló saltar · no pasa
   if (!item.apify_function) continue;                                 // own_web · el sitio va por otro camino
-  pasan.push({ json: item });
+  pasan.push({ json: item, pairedItem: { item: i } });
 }
 return pasan;`
 
