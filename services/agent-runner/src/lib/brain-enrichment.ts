@@ -22,6 +22,17 @@ const OPENAI_API = 'https://api.openai.com/v1'
 const EMBEDDING_MODEL = 'text-embedding-3-small'
 const EMBEDDING_DIMENSIONS = 1536
 const DEFAULT_TOP_K = 5
+/**
+ * E114 (CC#1 · 2026-09-23) · LA CONSULTA AL CEREBRO TIENE QUE CABER. El modelo de
+ * embeddings admite 8.192 tokens y la consulta se armaba con el pedido ENTERO: el
+ * redactor de planeación manda ~43.000 caracteres (≈12.000 tokens) y OpenAI lo
+ * rechazaba (400 «maximum context length is 8192 tokens») → `embed_query_failed` → el
+ * plan salía sin manual (E107 · E108 · Náufrago). Las lentes (≤14.000) sí cabían.
+ * Se embebe sólo la CABEZA del pedido (instrucción + cliente · lo que dice qué se
+ * busca); el resto es material, no consulta. 6.000 caracteres ≈ 1.700–3.000 tokens,
+ * cabe con margen en cualquier idioma. Se declara si hubo recorte.
+ */
+export const MAX_QUERY_CHARS = 6000
 
 export interface EnrichmentResult {
   enrichment: string // ready-to-inject prompt section (may be empty string)
@@ -55,6 +66,10 @@ export interface EnrichmentResult {
    */
   grounding: 'chunk_linked' | 'prose_only'
   error?: string // present only when something soft-failed
+  /** E114 · caracteres de la consulta realmente embebida (tras el tope). */
+  brain_query_chars?: number
+  /** E114 · true si el pedido superaba MAX_QUERY_CHARS y se embebió sólo la cabeza · nunca silencioso. */
+  brain_query_truncated?: boolean
 }
 
 interface BrainChunkRow {
@@ -139,13 +154,17 @@ export async function enrichSystemPromptWithClientBrain(args: {
   // Construct a richer query · include agent slug as soft context so the
   // brain returns chunks relevant to the agent's task (e.g. "social-media-strategist
   // generating instagram post" vs "media-buyer optimizing campaign").
-  const queryText = args.agentSlug
+  const queryFull = args.agentSlug
     ? `[${args.agentSlug}] ${args.taskDescription}`
     : args.taskDescription
+  // E114 · sólo la cabeza del pedido va como consulta (ver MAX_QUERY_CHARS).
+  const queryText = queryFull.length > MAX_QUERY_CHARS ? queryFull.slice(0, MAX_QUERY_CHARS) : queryFull
+  const brain_query_chars = queryText.length
+  const brain_query_truncated = queryText.length < queryFull.length
 
   const queryEmbedding = await embedQuery(queryText)
   if (!queryEmbedding) {
-    return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: 'embed_query_failed' }
+    return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: 'embed_query_failed', brain_query_chars, brain_query_truncated }
   }
 
   try {
@@ -154,11 +173,11 @@ export async function enrichSystemPromptWithClientBrain(args: {
       p_query_embedding: queryEmbedding,
       p_top_k: args.topK ?? DEFAULT_TOP_K,
     })
-    if (error) return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: `rpc_error: ${error.message}` }
+    if (error) return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: `rpc_error: ${error.message}`, brain_query_chars, brain_query_truncated }
     const rows = (data ?? []) as BrainChunkRow[]
     const brainQueryMs = Date.now() - queryStartedAt
     if (rows.length === 0) {
-      return { ...empty, brain_hit: false, brain_query_ms: brainQueryMs, error: 'brain_empty_for_client' }
+      return { ...empty, brain_hit: false, brain_query_ms: brainQueryMs, error: 'brain_empty_for_client', brain_query_chars, brain_query_truncated }
     }
     return {
       enrichment: formatChunksAsContext(rows),
@@ -166,6 +185,8 @@ export async function enrichSystemPromptWithClientBrain(args: {
       chunks_used: rows.length,
       brain_hit: true,
       brain_query_ms: brainQueryMs,
+      brain_query_chars,
+      brain_query_truncated,
       tokens_used: queryText.length / 4, // rough estimate · 4 chars per token
       cost_usd: 0.00002 * (queryText.length / 4000), // ~$0.00002 per 1K tokens
       // ADR-020 M1 · surface the retrieved chunk_ids (substrate for
@@ -176,6 +197,6 @@ export async function enrichSystemPromptWithClientBrain(args: {
       grounding: 'prose_only',
     }
   } catch (e) {
-    return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: e instanceof Error ? e.message : 'unknown' }
+    return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: e instanceof Error ? e.message : 'unknown', brain_query_chars, brain_query_truncated }
   }
 }
