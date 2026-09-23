@@ -172,6 +172,9 @@ export interface BrainEnrichmentResultMeta {
   /** ADR-020 M1 · `prose_only` until real claim→chunk matching exists (honest · NO over-sell). */
   brain_grounding: 'chunk_linked' | 'prose_only'
   brain_error?: string
+  /** E114 · caracteres de la consulta embebida y si el pedido se recortó a la cabeza (nunca silencioso). */
+  brain_query_chars?: number
+  brain_query_truncated?: boolean
 }
 
 /**
@@ -1090,7 +1093,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   if (enrichment.brain_hit) {
     systemPrompt = `${systemPrompt}\n\n${enrichment.enrichment}`
     console.log(
-      `[brain-enrich] ${canonicalSlug} · ${enrichment.brain_chunks_count} chunks injected · ${enrichment.brain_query_ms}ms · client=${input.clientId} · $${enrichment.cost_usd.toFixed(6)}`,
+      `[brain-enrich] ${canonicalSlug} · ${enrichment.brain_chunks_count} chunks injected · ${enrichment.brain_query_ms}ms · client=${input.clientId} · $${enrichment.cost_usd.toFixed(6)} · query=${enrichment.brain_query_chars ?? '?'} chars${enrichment.brain_query_truncated ? ' (cabeza · recortada · E114)' : ''}`,
     )
   } else if (input.clientId) {
     // Soft-fail: client_id provided but brain returned nothing · log for audit.
@@ -1456,6 +1459,9 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     brain_evidence_refs: enrichment.evidence_refs, // ADR-020 M1
     brain_grounding: enrichment.grounding, // ADR-020 M1 · prose_only until claim→chunk real
     ...(enrichment.error ? { brain_error: enrichment.error } : {}),
+    // E114 · la consulta al cerebro se recorta a la cabeza del pedido · se declara.
+    ...(typeof enrichment.brain_query_chars === 'number' ? { brain_query_chars: enrichment.brain_query_chars } : {}),
+    ...(typeof enrichment.brain_query_truncated === 'boolean' ? { brain_query_truncated: enrichment.brain_query_truncated } : {}),
   }
 
   const cacheMetricsMeta: CacheMetricsMeta = {
