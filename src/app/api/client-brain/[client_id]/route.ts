@@ -71,11 +71,15 @@ export async function GET(
         result[section] = { error: 'unknown_section' }
         return
       }
-      const { data, error } = await supabase
-        .from(cfg.table)
-        .select(cfg.select)
-        .eq('client_id', client_id)
-        .limit(20)
+      // E112 (CC#1 · 2026-09-23) · EL MANUAL SE VERSIONA desde E111: con `.limit(20)` sin orden
+      // este lector mezclaba la versión vieja con la nueva. Para `client_brand_books` se toma
+      // SÓLO la vigente (mayor `version`), igual que el GET del manual, `/limpio` y planeación.
+      // Las demás secciones no cambian.
+      const base = supabase.from(cfg.table).select(cfg.select).eq('client_id', client_id)
+      const { data, error } =
+        section === 'client_brand_books'
+          ? await base.order('version', { ascending: false }).limit(1)
+          : await base.limit(20)
 
       if (error) {
         result[section] = { error: error.message }
