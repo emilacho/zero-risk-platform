@@ -45,13 +45,16 @@ const plantillaCuerpo = (jsonBody) => {
 }
 const mezclar = (base, parche) => { const o = { ...base }; for (const [k, v] of Object.entries(parche || {})) o[k] = (v && typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object') ? mezclar(base[k], v) : v; return o }
 
-export function construirPrueba({ flujo, datasets, nombre, webhookPath, trigger, materia = null, parche = null, quitar = [], stubsExtra = [] }) {
+// E118 · `mantener`: nodos que se dejan REALES aunque sean HTTP (p. ej. la reserva en Cal.com para una prueba real
+// de reserva · declarada) · todo lo demás que cuesta o deja rastro sigue sustituido por lo grabado.
+export function construirPrueba({ flujo, datasets, nombre, webhookPath, trigger, materia = null, parche = null, quitar = [], stubsExtra = [], mantener = [] }) {
   const quitarSet = new Set(quitar)
   const nodes = []
   const informe = []
   for (const n of flujo.nodes) {
     if (quitarSet.has(n.name)) { informe.push({ nodo: n.name, accion: 'QUITADO' }); continue }
     const esTrigger = n.name === trigger
+    if (mantener.includes(n.name) && !esTrigger) { nodes.push(n); informe.push({ nodo: n.name, accion: 'REAL (mantenido · HTTP de verdad)', tipo: n.type.replace('n8n-nodes-base.', '') }); continue }
     if (!(STUB_TYPES.has(n.type) || stubsExtra.includes(n.name) || esTrigger)) { nodes.push(n); informe.push({ nodo: n.name, accion: 'REAL', tipo: n.type.replace('n8n-nodes-base.', '') }); continue }
     const g = corridas(datasets, n.name)
     const refs = refsItem(n.parameters)
@@ -116,7 +119,8 @@ if (process.argv[1] && process.argv[1].endsWith('construir-prueba.mjs')) {
   const parche = opt('--parche') ? JSON.parse(opt('--parche')) : null   // E111 · se mezcla en el json del disparador (p. ej. {"body":{"forzar":true}})
   const quitar = opt('--quitar') ? opt('--quitar').split('|') : []
   const stubsExtra = opt('--stubs') ? opt('--stubs').split('|') : []
-  const { flujo, informe } = construirPrueba({ flujo: JSON.parse(readFileSync(fl, 'utf8')), datasets: grabaciones(grabs.split(',')), nombre, webhookPath, trigger, materia, parche, quitar, stubsExtra })
+  const mantener = opt('--mantener') ? opt('--mantener').split('|') : []   // E118 · nodos HTTP que se dejan reales (declarados)
+  const { flujo, informe } = construirPrueba({ flujo: JSON.parse(readFileSync(fl, 'utf8')), datasets: grabaciones(grabs.split(',')), nombre, webhookPath, trigger, materia, parche, quitar, stubsExtra, mantener })
   writeFileSync(out, JSON.stringify(flujo, null, 2) + '\n')
   writeFileSync(out.replace(/\.json$/, '.informe.json'), JSON.stringify(informe, null, 2) + '\n')
   const st = informe.filter((i) => i.accion.startsWith('STUB')), re = informe.filter((i) => i.accion === 'REAL'), q = informe.filter((i) => i.accion === 'QUITADO')
