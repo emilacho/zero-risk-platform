@@ -33,6 +33,29 @@ const DEFAULT_TOP_K = 5
  * cabe con margen en cualquier idioma. Se declara si hubo recorte.
  */
 export const MAX_QUERY_CHARS = 6000
+/**
+ * E116 (CC#1 · 2026-09-23) · el manual se versiona (E111) y los trozos de las versiones
+ * viejas siguen en `client_brain_chunks`. Se piden estos trozos DE MÁS a la búsqueda para
+ * poder descartar los del manual que no sean de la versión vigente sin quedarse corto.
+ */
+export const OLD_VERSION_MARGIN = 5
+
+/** E116 · id de la fila vigente del manual (mayor `version`) · null si no hay o si falla (se declara, no se rompe). */
+async function manualVigenteId(supabase: SupabaseClient, clientId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('client_brand_books')
+      .select('id')
+      .eq('client_id', clientId)
+      .order('version', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error || !data?.id) return null
+    return String(data.id)
+  } catch {
+    return null
+  }
+}
 
 export interface EnrichmentResult {
   enrichment: string // ready-to-inject prompt section (may be empty string)
@@ -70,6 +93,10 @@ export interface EnrichmentResult {
   brain_query_chars?: number
   /** E114 · true si el pedido superaba MAX_QUERY_CHARS y se embebió sólo la cabeza · nunca silencioso. */
   brain_query_truncated?: boolean
+  /** E116 · trozos del manual de versiones NO vigentes que la búsqueda trajo y se descartaron. */
+  brain_chunks_old_version_dropped?: number
+  /** E116 · id de la fila vigente del manual usada para filtrar · null = no se pudo saber (no se filtró). */
+  brain_manual_vigente_id?: string | null
 }
 
 interface BrainChunkRow {
@@ -168,16 +195,28 @@ export async function enrichSystemPromptWithClientBrain(args: {
   }
 
   try {
+    const topK = args.topK ?? DEFAULT_TOP_K
+    // E116 (CC#1 · 2026-09-23) · EL MANUAL SE VERSIONA (E111) y los trozos de todas las
+    // versiones conviven en client_brain_chunks: en 149154 el redactor recibió `positioning`
+    // de la v2 y `voice_description` de la v1 (voz vieja · voseo). Se pide un margen de
+    // trozos y se descartan los del manual que NO sean de la versión vigente (mayor
+    // `version`). Los trozos viejos se quedan en la tabla (no se borra nada aquí): sólo
+    // dejan de entrar al pedido. Las demás fuentes no cambian.
     const { data, error } = await args.supabase.rpc('query_client_brain', {
       p_client_id: args.clientId,
       p_query_embedding: queryEmbedding,
-      p_top_k: args.topK ?? DEFAULT_TOP_K,
+      p_top_k: topK + OLD_VERSION_MARGIN,
     })
     if (error) return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: `rpc_error: ${error.message}`, brain_query_chars, brain_query_truncated }
-    const rows = (data ?? []) as BrainChunkRow[]
+    const crudos = (data ?? []) as BrainChunkRow[]
+    const vigente = await manualVigenteId(args.supabase, args.clientId)
+    const rows = crudos
+      .filter((r) => r.source_table !== 'client_brand_books' || vigente === null || String(r.source_id) === vigente)
+      .slice(0, topK)
+    const brain_chunks_old_version_dropped = crudos.filter((r) => r.source_table === 'client_brand_books' && vigente !== null && String(r.source_id) !== vigente).length
     const brainQueryMs = Date.now() - queryStartedAt
     if (rows.length === 0) {
-      return { ...empty, brain_hit: false, brain_query_ms: brainQueryMs, error: 'brain_empty_for_client', brain_query_chars, brain_query_truncated }
+      return { ...empty, brain_hit: false, brain_query_ms: brainQueryMs, error: 'brain_empty_for_client', brain_query_chars, brain_query_truncated, brain_chunks_old_version_dropped }
     }
     return {
       enrichment: formatChunksAsContext(rows),
@@ -187,6 +226,8 @@ export async function enrichSystemPromptWithClientBrain(args: {
       brain_query_ms: brainQueryMs,
       brain_query_chars,
       brain_query_truncated,
+      brain_chunks_old_version_dropped,
+      brain_manual_vigente_id: vigente,
       tokens_used: queryText.length / 4, // rough estimate · 4 chars per token
       cost_usd: 0.00002 * (queryText.length / 4000), // ~$0.00002 per 1K tokens
       // ADR-020 M1 · surface the retrieved chunk_ids (substrate for
