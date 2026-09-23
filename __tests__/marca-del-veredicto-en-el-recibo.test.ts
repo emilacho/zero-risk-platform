@@ -117,15 +117,18 @@ describe('🔴→🟢 el recibo dice la marca que quedó escrita', () => {
     expect(j.gate_outcome).toBe(null)
   })
 
-  it('camino idempotente · el recibo dice la marca de la fila que YA estaba', async () => {
-    // el caso de GoEuropeAdventure a partir de mañana: la fila existe y salió sin marca ·
-    // el corte de idempotencia devuelve la de siempre, y hay que poder VER que está vacía.
-    existingMaybeSingle.mockResolvedValue({ data: { id: '5648b126', gate_outcome: null }, error: null })
+  it('E111 · ya existe una fila (el caso de GoEuropeAdventure) · el manual nuevo se guarda como v2 y el recibo dice SU marca, no la de la fila vieja', async () => {
+    // Antes (corte de idempotencia) el recibo devolvía la marca de la fila que YA estaba y
+    // un manual que salió sin marca la seguía teniendo vacía para siempre. Ahora la fila nueva
+    // trae su propia marca y queda vigente (versión mayor); la vieja se conserva.
+    existingMaybeSingle.mockResolvedValue({ data: { id: '5648b126', version: 1 }, error: null })
+    respondeComoLaBase('bb-v2')
     const res = await POST(req(CUERPO_118856), ctx)
     const j = await res.json()
-    expect(j.already_existed).toBe(true)
-    expect(j.gate_outcome, 'el recibo del camino idempotente no dice nada de la marca').toBe(null)
-    expect(insertSingle).not.toHaveBeenCalled()
+    expect(j.already_existed).toBeUndefined()
+    expect(j).toMatchObject({ persisted: true, id: 'bb-v2', version: 2, previous_id: '5648b126', gate_outcome: 'paso_la_vara' })
+    expect(insertSingle).toHaveBeenCalledTimes(1)
+    expect((insertado as Record<string, unknown>).version).toBe(2)
   })
 })
 
@@ -146,12 +149,14 @@ describe('(e) · lo que NO debe romper · el camino que acaba de correr bien', (
     expect(row.version).toBe(1)
   })
 
-  it('el corte de idempotencia sigue sin crear duplicados', async () => {
-    existingMaybeSingle.mockResolvedValue({ data: { id: 'bb-existing', gate_outcome: 'paso_la_vara' }, error: null })
+  it('E111 · con una fila previa ya no hay corte: se inserta la versión siguiente (una sola vez)', async () => {
+    existingMaybeSingle.mockResolvedValue({ data: { id: 'bb-existing', version: 3 }, error: null })
+    respondeComoLaBase('bb-v4')
     const res = await POST(req(CUERPO_118856), ctx)
     const j = await res.json()
-    expect(j.id).toBe('bb-existing')
-    expect(insertSingle).not.toHaveBeenCalled()
+    expect(j.id).toBe('bb-v4')
+    expect(j.version).toBe(4)
+    expect(insertSingle).toHaveBeenCalledTimes(1)
   })
 
   it('el insert fallido sigue devolviendo 500 y persisted:false', async () => {

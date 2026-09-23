@@ -34,8 +34,18 @@ function corridas(datasets, nombre) {
 }
 const refsItem = (params) => [...new Set([...JSON.stringify(params).matchAll(/\$\('([^']+)'\)\.item\b/g)].map((m) => m[1]))]
 const esc = (s) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+// E111 · el cuerpo JSON de un nodo HTTP (`={ … {{ expr }} … }`) se evalúa en el sustituto con las MISMAS expresiones,
+// como plantilla JS: cada `{{ expr }}` pasa a `${ expr }` y el resto queda literal. Así el sobre real se ve resuelto.
+const plantillaCuerpo = (jsonBody) => {
+  if (typeof jsonBody !== 'string' || !jsonBody.startsWith('=')) return null
+  const partes = jsonBody.slice(1).split(/\{\{([\s\S]*?)\}\}/)
+  let out = '`'
+  for (let i = 0; i < partes.length; i++) out += i % 2 === 0 ? partes[i].replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${') : '${' + partes[i] + '}'
+  return out + '`'
+}
+const mezclar = (base, parche) => { const o = { ...base }; for (const [k, v] of Object.entries(parche || {})) o[k] = (v && typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object') ? mezclar(base[k], v) : v; return o }
 
-export function construirPrueba({ flujo, datasets, nombre, webhookPath, trigger, materia = null, quitar = [], stubsExtra = [] }) {
+export function construirPrueba({ flujo, datasets, nombre, webhookPath, trigger, materia = null, parche = null, quitar = [], stubsExtra = [] }) {
   const quitarSet = new Set(quitar)
   const nodes = []
   const informe = []
@@ -50,15 +60,17 @@ export function construirPrueba({ flujo, datasets, nombre, webhookPath, trigger,
       if (!g) throw new Error(`disparador sin grabación: ${n.name}`)
       const item = JSON.parse(JSON.stringify(g.runs[0][0]))
       if (materia) { item.json.discovery_package = { ...(item.json.discovery_package || {}), materia_cliente: materia } }
-      jsCode = `// STUB E110 · disparador · lo grabado en ${g.fuente}${materia ? ' + materia_cliente inyectada (salida real del Transform de la prueba del alta)' : ''}\nreturn [${JSON.stringify({ json: item.json })}];`
+      if (parche) { item.json = mezclar(item.json, parche) }
+      jsCode = `// STUB E110 · disparador · lo grabado en ${g.fuente}${materia ? ' + materia_cliente inyectada (salida real del Transform de la prueba del alta)' : ''}${parche ? ' + parche ' + JSON.stringify(parche) : ''}\nreturn [${JSON.stringify({ json: item.json })}];`
       mode = undefined
     } else if (!g) {
       jsCode = `// STUB E110 · este nodo NO corrió en las grabaciones · si se alcanza, la prueba se desvió del camino grabado\nthrow new Error('PRUEBA E110 · nodo sin grabación alcanzado: ${esc(n.name)}');`
       mode = undefined
-    } else if (refs.length) {
+    } else if (refs.length || plantillaCuerpo(n.parameters.jsonBody)) {
       mode = 'runOnceForEachItem'
+      const cuerpo = plantillaCuerpo(n.parameters.jsonBody)
       jsCode = [
-        `// STUB E110 · por ítem · devuelve lo grabado en ${g.fuente} y evalúa las MISMAS referencias .item del nodo original`,
+        `// STUB E110 · por ítem · devuelve lo grabado en ${g.fuente} y evalúa las MISMAS referencias .item${cuerpo ? ' y el MISMO cuerpo JSON' : ''} del nodo original`,
         `const RUNS = ${JSON.stringify(g.runs)};`,
         `const REFS = ${JSON.stringify(refs)};`,
         'const r = RUNS[Math.min($runIndex, RUNS.length - 1)];',
@@ -66,7 +78,8 @@ export function construirPrueba({ flujo, datasets, nombre, webhookPath, trigger,
         `if (!rec) throw new Error('PRUEBA E110 · sin ítem grabado para ${esc(n.name)} · run ' + $runIndex + ' · item ' + $itemIndex);`,
         'const resueltos = {};',
         "for (const ref of REFS) { const it = $(ref).item; resueltos[ref] = (it && it.json) ? (it.json.client_id || Object.keys(it.json).slice(0, 4).join('+')) : 'VACIO'; }",
-        `return { json: Object.assign({}, rec.json, { _prueba_e110: { nodo: ${JSON.stringify(n.name)}, run: $runIndex, item: $itemIndex, resueltos } }) };`,
+        cuerpo ? `const _cuerpoTxt = ${cuerpo};\nlet cuerpo; try { cuerpo = JSON.parse(_cuerpoTxt); } catch (e) { cuerpo = { _no_es_json: _cuerpoTxt.slice(0, 2000) }; }` : 'const cuerpo = null;',
+        `return { json: Object.assign({}, rec.json, { _prueba_e110: { nodo: ${JSON.stringify(n.name)}, run: $runIndex, item: $itemIndex, resueltos, cuerpo } }) };`,
       ].join('\n')
     } else {
       mode = undefined
@@ -100,9 +113,10 @@ if (process.argv[1] && process.argv[1].endsWith('construir-prueba.mjs')) {
   const [, , fl, out, nombre, webhookPath, trigger, grabs, ...rest] = process.argv
   const opt = (k) => { const i = rest.indexOf(k); return i >= 0 ? rest[i + 1] : null }
   const materia = opt('--materia') ? JSON.parse(readFileSync(opt('--materia'), 'utf8')) : null
+  const parche = opt('--parche') ? JSON.parse(opt('--parche')) : null   // E111 · se mezcla en el json del disparador (p. ej. {"body":{"forzar":true}})
   const quitar = opt('--quitar') ? opt('--quitar').split('|') : []
   const stubsExtra = opt('--stubs') ? opt('--stubs').split('|') : []
-  const { flujo, informe } = construirPrueba({ flujo: JSON.parse(readFileSync(fl, 'utf8')), datasets: grabaciones(grabs.split(',')), nombre, webhookPath, trigger, materia, quitar, stubsExtra })
+  const { flujo, informe } = construirPrueba({ flujo: JSON.parse(readFileSync(fl, 'utf8')), datasets: grabaciones(grabs.split(',')), nombre, webhookPath, trigger, materia, parche, quitar, stubsExtra })
   writeFileSync(out, JSON.stringify(flujo, null, 2) + '\n')
   writeFileSync(out.replace(/\.json$/, '.informe.json'), JSON.stringify(informe, null, 2) + '\n')
   const st = informe.filter((i) => i.accion.startsWith('STUB')), re = informe.filter((i) => i.accion === 'REAL'), q = informe.filter((i) => i.accion === 'QUITADO')

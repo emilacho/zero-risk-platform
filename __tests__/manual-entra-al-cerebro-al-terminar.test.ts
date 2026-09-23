@@ -211,15 +211,20 @@ describe('POST /api/brand-book/[clientId] · el manual entra al cerebro al termi
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('🟢 si el manual YA existía (corte de idempotencia), no se empuja de nuevo', async () => {
-    existente = { id: FILA, gate_outcome: 'paso_la_vara' }
+  it('🟢 E111 · si el manual YA existía se guarda la versión siguiente y ÉSA se empuja al cerebro (la fila nueva, no la vieja)', async () => {
+    existente = { id: 'fila-vieja', gate_outcome: 'paso_la_vara', version: 1 } as unknown as typeof existente
     const { POST } = await loadRoute()
     const res = await POST(req(cuerpo), ctx)
     const j = await res.json()
     expect(j.persisted).toBe(true)
-    expect(j.already_existed).toBe(true)
-    expect(chain.insert).not.toHaveBeenCalled()
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(j.already_existed).toBeUndefined()
+    expect(j.version).toBe(2)
+    expect(j.previous_id).toBe('fila-vieja')
+    expect(chain.insert).toHaveBeenCalledTimes(1)
+    await Promise.all(agendadas)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toMatchObject({ source_table: 'client_brand_books', source_id: FILA })
   })
 
   it('🔴 ROJO 4 · apagado por env · la fila se escribe y el recibo lo declara', async () => {
