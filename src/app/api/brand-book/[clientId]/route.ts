@@ -67,6 +67,8 @@ export function buildBrandBookRow(
   clientId: string,
   bb: Record<string, unknown>,
   body: Record<string, unknown>,
+  // E111 · la versión la decide el handler (max(version) del cliente + 1) · 1 si no hay ninguna.
+  version: number = 1,
 ): Record<string, unknown> {
   // La advertencia que el empleado escribe sobre su propio trabajo sale de la
   // PROSA y pasa a ser un dato. No se borra: se mueve a `_caveats`. Medido en la
@@ -125,7 +127,7 @@ export function buildBrandBookRow(
     auto_generated: true,
     auto_generated_from: body.source ?? 'onboarding_collaborative_build',
     human_validated: false,
-    version: 1,
+    version,
   }
 }
 
@@ -163,30 +165,31 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   const supabase = getSupabaseAdmin()
 
-  // FIX 2026-07-01 · IDEMPOTENCIA · el loop de fidelidad puede correr ciclos extra tras
-  // persistir (judge no-determinístico · pasa un ciclo, falla otro). Si YA existe un brand
-  // book para el cliente, devolvemos el existente SIN crear duplicado (detect persist=true).
-  const existing = await supabase
+  // E111 (CC#1 · 2026-09-23 · decisión de Emilio) · EL MANUAL SE VERSIONA. Antes (FIX
+  // 2026-07-01) esta puerta era idempotente POR CLIENTE: si ya había una fila devolvía
+  // `already_existed` sin insertar. Medido en E110 (cimiento 146732): el manual nuevo, que
+  // pasó la vara con 0,935, nunca llegó a la base; el PDF de Drive y la planeación leyeron
+  // el manual viejo de E107. Ahora cada manual que llega se guarda como versión nueva
+  // (`max(version) + 1`) y ESA queda vigente: los lectores (GET · /limpio · planeación)
+  // ya toman la mayor versión. Las anteriores se conservan: nada se borra ni se pisa.
+  // El Promote del cimiento corre UNA vez por corrida (después del veredicto), así que
+  // un ciclo extra del lazo no produce versiones extra.
+  const previa = await supabase
     .from('client_brand_books')
-    .select('id, gate_outcome')
+    .select('id, version')
     .eq('client_id', clientId)
     .order('version', { ascending: false })
     .limit(1)
     .maybeSingle()
-  if (existing.data?.id) {
-    return NextResponse.json({
-      persisted: true,
-      already_existed: true,
-      id: existing.data.id,
-      client_id: clientId,
-      // el recibo del corte de idempotencia dice la marca de la fila que YA estaba ·
-      // sin esto, un manual que salió sin marca la sigue teniendo vacía para siempre
-      // y la corrida que lo reintenta recibe el mismo verde de siempre.
-      gate_outcome: existing.data.gate_outcome ?? null,
-    })
+  if (previa.error) {
+    return NextResponse.json(
+      { persisted: false, error: 'previous_lookup_failed', detail: previa.error.message?.slice(0, 400) },
+      { status: 500 },
+    )
   }
+  const version = (Number(previa.data?.version) || 0) + 1
 
-  const row = buildBrandBookRow(clientId, bb, body)
+  const row = buildBrandBookRow(clientId, bb, body, version)
 
   const { data, error } = await supabase
     .from('client_brand_books')
@@ -216,6 +219,9 @@ export async function POST(req: Request, { params }: RouteContext) {
     id: data?.id,
     client_id: clientId,
     gate_outcome: data?.gate_outcome ?? null,
+    // E111 · el recibo dice QUÉ versión quedó vigente y cuál era la anterior (null = primera).
+    version,
+    previous_id: previa.data?.id ?? null,
     // El recibo DICE que se empujo (o por que no) · nunca silencioso.
     brain_push,
   })
