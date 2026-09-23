@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { enrichSystemPromptWithClientBrain, MAX_QUERY_CHARS } from '../services/agent-runner/src/lib/brain-enrichment'
+import { enrichSystemPromptWithClientBrain, MAX_QUERY_CHARS, OLD_VERSION_MARGIN } from '../services/agent-runner/src/lib/brain-enrichment'
 
 const EV = JSON.parse(readFileSync(join(process.cwd(), 'scripts/worker-staging/X9F0zp6LQ2xGEYVS/evidencia-146630-e114.json'), 'utf8')) as { cliente_id: string; pedido: string; pedido_chars: number }
 const TOPE_TOKENS_MODELO = 8192
@@ -63,7 +63,8 @@ describe('el verde · sólo la cabeza va como consulta · y el cerebro contesta'
     expect(out.evidence_refs).toEqual(['c-1', 'c-2'])
     expect(out.grounding).toBe('prose_only')
     expect(out.enrichment).toContain('client_brand_books · positioning')
-    expect(rpc).toHaveBeenCalledWith('query_client_brain', expect.objectContaining({ p_client_id: EV.cliente_id, p_top_k: 5 }))
+    // E116 · se piden top_k + margen para poder descartar trozos del manual de versiones viejas
+    expect(rpc).toHaveBeenCalledWith('query_client_brain', expect.objectContaining({ p_client_id: EV.cliente_id, p_top_k: 5 + OLD_VERSION_MARGIN }))
   })
   it('un pedido corto (como los de las lentes) viaja ENTERO · sin recorte declarado', async () => {
     const corto = 'Escribí el posicionamiento de Náufrago con la materia del cliente.'

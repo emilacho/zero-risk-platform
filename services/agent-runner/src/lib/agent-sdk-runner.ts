@@ -175,6 +175,9 @@ export interface BrainEnrichmentResultMeta {
   /** E114 · caracteres de la consulta embebida y si el pedido se recortó a la cabeza (nunca silencioso). */
   brain_query_chars?: number
   brain_query_truncated?: boolean
+  /** E116 · trozos del manual de versiones no vigentes descartados · y la fila vigente usada. */
+  brain_chunks_old_version_dropped?: number
+  brain_manual_vigente_id?: string | null
 }
 
 /**
@@ -878,6 +881,11 @@ function logExecution(
       brain_chunks_count: brainEnrichment.brain_chunks_count,
       brain_query_ms: brainEnrichment.brain_query_ms,
       brain_cost_usd: brainEnrichment.brain_cost_usd,
+      // E114/E116 · lo que el cerebro declara llega también a la tabla de invocaciones (antes se quedaba en el log).
+      brain_query_chars: brainEnrichment.brain_query_chars ?? null,
+      brain_query_truncated: brainEnrichment.brain_query_truncated ?? null,
+      brain_chunks_old_version_dropped: brainEnrichment.brain_chunks_old_version_dropped ?? null,
+      brain_manual_vigente_id: brainEnrichment.brain_manual_vigente_id ?? null,
       // ADR-020 M1 · claim→chunk substrate + honest grounding marker (prose_only
       // until real claim→chunk matching exists · a fidelity score over prose is
       // NOT groundedness · same false-green as dry_run≠real).
@@ -963,6 +971,11 @@ function logExecution(
       brain_chunks_count: brainEnrichment.brain_chunks_count,
       brain_query_ms: brainEnrichment.brain_query_ms,
       brain_cost_usd: brainEnrichment.brain_cost_usd,
+      // E114/E116 · lo que el cerebro declara llega también a la tabla de invocaciones (antes se quedaba en el log).
+      brain_query_chars: brainEnrichment.brain_query_chars ?? null,
+      brain_query_truncated: brainEnrichment.brain_query_truncated ?? null,
+      brain_chunks_old_version_dropped: brainEnrichment.brain_chunks_old_version_dropped ?? null,
+      brain_manual_vigente_id: brainEnrichment.brain_manual_vigente_id ?? null,
       // ADR-020 M1 · claim→chunk substrate + honest grounding marker (prose_only
       // until real claim→chunk matching exists · a fidelity score over prose is
       // NOT groundedness · same false-green as dry_run≠real).
@@ -1462,6 +1475,9 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     // E114 · la consulta al cerebro se recorta a la cabeza del pedido · se declara.
     ...(typeof enrichment.brain_query_chars === 'number' ? { brain_query_chars: enrichment.brain_query_chars } : {}),
     ...(typeof enrichment.brain_query_truncated === 'boolean' ? { brain_query_truncated: enrichment.brain_query_truncated } : {}),
+    // E116 · el filtro por versión vigente del manual se declara.
+    ...(typeof enrichment.brain_chunks_old_version_dropped === 'number' ? { brain_chunks_old_version_dropped: enrichment.brain_chunks_old_version_dropped } : {}),
+    ...(enrichment.brain_manual_vigente_id !== undefined ? { brain_manual_vigente_id: enrichment.brain_manual_vigente_id } : {}),
   }
 
   const cacheMetricsMeta: CacheMetricsMeta = {
