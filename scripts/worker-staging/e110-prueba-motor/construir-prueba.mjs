@@ -43,6 +43,14 @@ const plantillaCuerpo = (jsonBody) => {
   for (let i = 0; i < partes.length; i++) out += i % 2 === 0 ? partes[i].replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${') : '${' + partes[i] + '}'
   return out + '`'
 }
+// E121 · los parámetros de consulta (`queryParameters`) de un nodo HTTP también se evalúan en el sustituto (p. ej. el
+// anclaje que busca al cliente por id) · quedan en `_prueba_e110.consulta`.
+const plantillaConsulta = (params) => {
+  const lista = params && params.queryParameters && Array.isArray(params.queryParameters.parameters) ? params.queryParameters.parameters : []
+  if (!lista.length) return null
+  const partes = lista.map((p) => `${JSON.stringify(p.name)}: ${plantillaCuerpo(p.value) || JSON.stringify(String(p.value))}`)
+  return '({ ' + partes.join(', ') + ' })'
+}
 const mezclar = (base, parche) => { const o = { ...base }; for (const [k, v] of Object.entries(parche || {})) o[k] = (v && typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object') ? mezclar(base[k], v) : v; return o }
 
 // E118 · `mantener`: nodos que se dejan REALES aunque sean HTTP (p. ej. la reserva en Cal.com para una prueba real
@@ -69,9 +77,10 @@ export function construirPrueba({ flujo, datasets, nombre, webhookPath, trigger,
     } else if (!g) {
       jsCode = `// STUB E110 · este nodo NO corrió en las grabaciones · si se alcanza, la prueba se desvió del camino grabado\nthrow new Error('PRUEBA E110 · nodo sin grabación alcanzado: ${esc(n.name)}');`
       mode = undefined
-    } else if (refs.length || plantillaCuerpo(n.parameters.jsonBody)) {
+    } else if (refs.length || plantillaCuerpo(n.parameters.jsonBody) || plantillaConsulta(n.parameters)) {
       mode = 'runOnceForEachItem'
       const cuerpo = plantillaCuerpo(n.parameters.jsonBody)
+      const consulta = plantillaConsulta(n.parameters)
       jsCode = [
         `// STUB E110 · por ítem · devuelve lo grabado en ${g.fuente} y evalúa las MISMAS referencias .item${cuerpo ? ' y el MISMO cuerpo JSON' : ''} del nodo original`,
         `const RUNS = ${JSON.stringify(g.runs)};`,
@@ -82,7 +91,8 @@ export function construirPrueba({ flujo, datasets, nombre, webhookPath, trigger,
         'const resueltos = {};',
         "for (const ref of REFS) { const it = $(ref).item; resueltos[ref] = (it && it.json) ? (it.json.client_id || Object.keys(it.json).slice(0, 4).join('+')) : 'VACIO'; }",
         cuerpo ? `const _cuerpoTxt = ${cuerpo};\nlet cuerpo; try { cuerpo = JSON.parse(_cuerpoTxt); } catch (e) { cuerpo = { _no_es_json: _cuerpoTxt.slice(0, 2000) }; }` : 'const cuerpo = null;',
-        `return { json: Object.assign({}, rec.json, { _prueba_e110: { nodo: ${JSON.stringify(n.name)}, run: $runIndex, item: $itemIndex, resueltos, cuerpo } }) };`,
+        consulta ? `const consulta = ${consulta};` : 'const consulta = null;',
+        `return { json: Object.assign({}, rec.json, { _prueba_e110: { nodo: ${JSON.stringify(n.name)}, run: $runIndex, item: $itemIndex, resueltos, cuerpo, consulta } }) };`,
       ].join('\n')
     } else {
       mode = undefined

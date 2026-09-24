@@ -137,6 +137,25 @@ const DISCOVERY_INPUT_SCHEMA = {
       'Say WHAT the business IS: who pays, who delivers the service, and whether there is more than one side. ' +
         'If it is a platform or an intermediary where third parties offer their services, say so explicitly.',
     ),
+  // E121 (CC#1 2026-09-24) · lo que el sistema descubre se guarda. En E120B el descubridor
+  // determinó el rubro («restaurante de ceviche y encebollado») y las ciudades (Guayaquil ·
+  // Olón) pero sólo en prosa: la ficha quedó `industry: unknown` y `market` vacío. Dos casillas
+  // SUYAS, opcionales; la plataforma las escribe SÓLO si la ficha no las tiene (nunca pisa lo
+  // que puso ventas). Espejo en `forced-emit-messages.ts` y en `src/lib/discovery-output/types.ts`.
+  client_industry: z
+    .string()
+    .optional()
+    .describe(
+      'The CLIENT own industry/category in 2-6 words, in the client language (e.g. "restaurante de comida costera · ceviche y encebollado"). ' +
+        'Not the ICP industries. Omit if you could not determine it.',
+    ),
+  client_markets: z
+    .array(z.string().min(1))
+    .optional()
+    .describe(
+      'Cities/regions where the CLIENT itself operates or sells (e.g. ["Guayaquil", "Olón, Santa Elena"]). ' +
+        'Only places with evidence (site, maps, social). Omit if unknown.',
+    ),
 }
 
 // ── MCP server ──

@@ -180,7 +180,10 @@ export async function GET(request: Request) {
 
       // Single fetch
       if (client_id) {
-        const { data } = await supabase.from('clients').select('*').eq('client_id', client_id).maybeSingle()
+        // E121 (CC#1 · 2026-09-24) · la clave de `clients` es `id` (no `client_id`): con `.eq('client_id')`
+        // la consulta fallaba en silencio y la rama devolvía el STUB. El alta ancla ahora por este
+        // identificador (el de la corrida) en vez de por nombre, que era ambiguo con las lápidas.
+        const { data } = await supabase.from('clients').select('*').eq('id', client_id).maybeSingle()
         if (data) {
           const enriched = includeCompetitors
             ? { ...data, competitors: await fetchCompetitorsForClient(supabase, data.id as string | undefined ?? client_id) }

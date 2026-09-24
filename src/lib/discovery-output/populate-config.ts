@@ -34,6 +34,21 @@ export interface PopulateConfigResult {
   readonly competitors_written: number
   readonly merged_handles: DiscoverySocialHandles
   readonly errors: readonly string[]
+  /**
+   * E121 · qué pasó con `clients.industry` y `clients.market`:
+   * 'written' = la ficha estaba vacía/unknown y el descubridor trajo el dato ·
+   * 'kept' = la ficha ya tenía un valor (de ventas u otro) y NO se pisa ·
+   * 'absent' = el descubridor no lo trajo · 'skipped' = no se intentó (flag off / error de lectura).
+   */
+  readonly industry_outcome?: 'written' | 'kept' | 'absent' | 'skipped'
+  readonly market_outcome?: 'written' | 'kept' | 'absent' | 'skipped'
+}
+
+/** E121 · «vacío o unknown» · lo único que se rellena · nunca se pisa lo que puso ventas. */
+export function estaVacioOUnknown(v: unknown): boolean {
+  if (v === null || v === undefined) return true
+  const s = String(v).trim().toLowerCase()
+  return s.length === 0 || s === 'unknown' || s === 'null' || s === 'n/a'
 }
 
 /**
@@ -56,7 +71,7 @@ export async function populateClientConfigFromDiscovery(
   // ─── Step 1 · read current config (preserve existing structure) ───
   const { data: row, error: readError } = await input.supabase
     .from('clients')
-    .select('config')
+    .select('config, industry, market')
     .eq('id', input.discovery.client_id)
     .maybeSingle()
   if (readError) {
@@ -135,9 +150,38 @@ export async function populateClientConfigFromDiscovery(
 
   const nextConfig = { ...currentConfig, apify: nextApify, ...businessModel }
 
+  // ─── Step 4c · industry · market · E121 (CC#1 2026-09-24) ───
+  // Lo que el sistema descubre se guarda: `client_industry` → `clients.industry` y
+  // `client_markets` → `clients.market` (texto · «Guayaquil · Olón, Santa Elena»), pero
+  // SÓLO si la ficha los tiene vacíos o `unknown`. Lo que puso ventas nunca se pisa
+  // (la nota de E36 de arriba sigue valiendo: no es un modelo, es una categoría, y no
+  // se sobreescribe). Va en el MISMO UPDATE que el config: una escritura, un recibo.
+  const industryDiscovered =
+    typeof input.discovery.client_industry === 'string' && input.discovery.client_industry.trim().length > 0
+      ? input.discovery.client_industry.trim()
+      : null
+  const marketsDiscovered =
+    Array.isArray(input.discovery.client_markets) && input.discovery.client_markets.length > 0
+      ? input.discovery.client_markets.map((m) => String(m).trim()).filter((m) => m.length > 0).join(' · ')
+      : null
+  const industry_outcome: PopulateConfigResult['industry_outcome'] = !industryDiscovered
+    ? 'absent'
+    : estaVacioOUnknown(row.industry)
+      ? 'written'
+      : 'kept'
+  const market_outcome: PopulateConfigResult['market_outcome'] = !marketsDiscovered
+    ? 'absent'
+    : estaVacioOUnknown(row.market)
+      ? 'written'
+      : 'kept'
+  const extras: Record<string, unknown> = {
+    ...(industry_outcome === 'written' ? { industry: industryDiscovered } : {}),
+    ...(market_outcome === 'written' ? { market: marketsDiscovered } : {}),
+  }
+
   const { error: writeError } = await input.supabase
     .from('clients')
-    .update({ config: nextConfig, updated_at: new Date().toISOString() })
+    .update({ config: nextConfig, ...extras, updated_at: new Date().toISOString() })
     .eq('id', input.discovery.client_id)
   if (writeError) {
     return {
@@ -153,5 +197,7 @@ export async function populateClientConfigFromDiscovery(
     competitors_written: competitorList.length,
     merged_handles: mergedHandles as DiscoverySocialHandles,
     errors: [],
+    industry_outcome,
+    market_outcome,
   }
 }

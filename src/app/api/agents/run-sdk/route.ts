@@ -1210,6 +1210,8 @@ export async function POST(request: Request) {
           brain_chunks_upserted?: number
           config_handles_written?: number
           config_competitors_written?: number
+          config_industry_outcome?: 'written' | 'kept' | 'absent' | 'skipped'
+          config_market_outcome?: 'written' | 'kept' | 'absent' | 'skipped'
           client_ensured?: 'existed' | 'created' | 'failed'
           duration_ms?: number
           errors?: readonly string[]
@@ -1272,6 +1274,9 @@ export async function POST(request: Request) {
             brain_chunks_upserted: brainOutcome.brain_chunks_upserted,
             config_handles_written: configOutcome.handles_written,
             config_competitors_written: configOutcome.competitors_written,
+            // E121 · qué pasó con industry/market (written · kept · absent) · declarado en el recibo
+            ...(configOutcome.industry_outcome ? { config_industry_outcome: configOutcome.industry_outcome } : {}),
+            ...(configOutcome.market_outcome ? { config_market_outcome: configOutcome.market_outcome } : {}),
             client_ensured: ensured.status,
             errors: [
               ...brainOutcome.errors,
