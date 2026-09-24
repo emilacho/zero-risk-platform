@@ -227,6 +227,29 @@ export function validateDiscoveryShape(
     if (trimmed.length > 0) businessModel = trimmed
   }
 
+  // E121 (CC#1 2026-09-24) · client_industry · client_markets · opcionales · el filtro
+  // RECONSTRUYE el objeto (ver arriba): lo que no se copia acá desaparece en silencio.
+  let clientIndustry: string | undefined
+  if (obj.client_industry !== undefined && obj.client_industry !== null) {
+    if (typeof obj.client_industry !== 'string') {
+      return { kind: 'malformed', reason: 'client_industry_not_string' }
+    }
+    const t = obj.client_industry.trim()
+    if (t.length > 0) clientIndustry = t.slice(0, 200)
+  }
+  let clientMarkets: readonly string[] | undefined
+  if (obj.client_markets !== undefined && obj.client_markets !== null) {
+    if (!Array.isArray(obj.client_markets)) {
+      return { kind: 'malformed', reason: 'client_markets_not_array' }
+    }
+    const lista = obj.client_markets
+      .filter((m): m is string => typeof m === 'string')
+      .map((m) => m.trim())
+      .filter((m) => m.length > 0)
+      .slice(0, 10)
+    if (lista.length > 0) clientMarkets = lista
+  }
+
   // sources · optional · per-source execution summary (Apify actors etc) ·
   // tolerante · filtra entradas malformadas en vez de fallar (aditivo no-breaking).
   let sources: DiscoveryOutput['sources']
@@ -253,6 +276,8 @@ export function validateDiscoveryShape(
     ...(icp !== undefined ? { icp } : {}),
     ...(summary !== undefined ? { competitive_landscape_summary: summary } : {}),
     ...(businessModel !== undefined ? { business_model: businessModel } : {}),
+    ...(clientIndustry !== undefined ? { client_industry: clientIndustry } : {}),
+    ...(clientMarkets !== undefined ? { client_markets: clientMarkets } : {}),
     ...(sources !== undefined ? { sources } : {}),
   }
   return { kind: 'ok', value }

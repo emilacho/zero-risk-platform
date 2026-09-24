@@ -1,0 +1,647 @@
+{
+  "origen": "149699 (E120B · alta real) · salidas grabadas para la prueba E121 · correos tachados",
+  "validate_deal_data": {
+    "_meta": {
+      "nota": "sin ciudad · sin rubro · sin ubicación · sin competidores · sin otras redes: lo descubre el sistema",
+      "fecha": "2026-09-24",
+      "origen": "E120B · la corrida sin manos con ficha mínima · CC#1"
+    },
+    "email": "[correo]@hotmail.com",
+    "country": "Ecuador",
+    "deal_id": "E120B-NAUFRAGO-2026-09-24",
+    "dry_run": false,
+    "website": "https://www.naufrago.ec",
+    "language": "es",
+    "client_id": "058d06c4-7d83-4616-9ebc-290ca8752018",
+    "closed_at": "2026-09-24T02:57:04.765Z",
+    "instagram": "https://www.instagram.com/naufrago.ec/",
+    "tenant_id": "058d06c4-7d83-4616-9ebc-290ca8752018",
+    "deal_value": 0,
+    "client_name": "Náufrago",
+    "contact_name": "Emilio",
+    "force_restart": false,
+    "contract_scope": [
+      "onboarding"
+    ],
+    "instagram_handle": "@naufrago.ec",
+    "_sala_correlation_id": "65e3d7df-6d68-4536-abed-b186b6a6951c",
+    "_sala_caused_by_event_id": "f0048420-68db-466a-92f8-2c6666606b4c",
+    "_sala_idempotency_token": "ONBOARD::6cbb5bfc-0c58-54bb-8aba-dcb0db256455::65e3d7df-6d68-4536-abed-b186b6a6951c::onboard-worker-dispatch",
+    "_sala_libreto_version": 1,
+    "_journey_id": "6cbb5bfc-0c58-54bb-8aba-dcb0db256455",
+    "trigger_source": "sala-router-dispatch",
+    "target_step_id": "router.dispatch.alta/deal-won.onboard",
+    "_modelb_guard": "passed",
+    "_ids_minted": [],
+    "_llave_verificada": true,
+    "industry": "unknown",
+    "city": null,
+    "location": "Ecuador",
+    "_sin_ubicacion": false,
+    "_defaults_aplicados": [
+      "industry"
+    ],
+    "client_logo_url": null,
+    "client_brand_colors": null,
+    "client_brand_fonts": null
+  },
+  "load_client": {
+    "ok": false,
+    "error": "client_name_ambiguous",
+    "name": "Náufrago",
+    "candidates": [
+      {
+        "id": "058d06c4-7d83-4616-9ebc-290ca8752018",
+        "name": "Náufrago",
+        "slug": "naufrago",
+        "status": "onboarding",
+        "archived_at": null,
+        "industry": "unknown",
+        "config": {
+          "apify": {
+            "competitor_list": [
+              {
+                "name": "El Pez Volador",
+                "handles": {
+                  "facebook": "elpezvoladorpicanteria"
+                },
+                "website": "https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html",
+                "competitor_type": "direct"
+              },
+              {
+                "name": "Pez Azul",
+                "handles": {
+                  "facebook": "PezAzulECUADOR",
+                  "instagram": "@pezazulecuador"
+                },
+                "website": "http://www.pezazul.com.ec/",
+                "competitor_type": "direct"
+              },
+              {
+                "name": "Don Rabioso Ceviches y Encebollados",
+                "website": "https://www.ubereats.com/ec-en/store/don-rabioso-ceviches-y-encebollados-kennedy/dX8GzkCHTc2LeQq3NwgMIA",
+                "competitor_type": "direct"
+              },
+              {
+                "name": "El Rincón del Ceviche",
+                "website": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+                "competitor_type": "direct"
+              },
+              {
+                "name": "Triple B Cevichería",
+                "handles": {
+                  "instagram": "@triplebcevicheria"
+                },
+                "competitor_type": "direct"
+              },
+              {
+                "name": "Cevichería El Camarón Picudo",
+                "handles": {
+                  "instagram": "@cevicheriaelcamaronpicudo"
+                },
+                "competitor_type": "direct"
+              },
+              {
+                "name": "ROCOTO Cevichería",
+                "handles": {
+                  "facebook": "RocotoCevicheria",
+                  "instagram": "@rocotocevicheria"
+                },
+                "website": "https://www.rappi.com.ec/guayaquil/restaurantes/delivery/291-rocoto-cevicheria",
+                "competitor_type": "indirect"
+              },
+              {
+                "name": "Marrecife Marisquería",
+                "website": "http://www.marrecife.com/",
+                "competitor_type": "indirect"
+              }
+            ],
+            "own_handles": {
+              "instagram": "@naufrago.ec"
+            }
+          }
+        }
+      },
+      {
+        "id": "92148d0e-d2d1-40b9-b209-982edc968b7e",
+        "name": "Náufrago",
+        "slug": "naufrago-borrado-2026-09-21",
+        "status": "churned",
+        "archived_at": "2026-09-24T01:38:44.088+00:00",
+        "industry": "restaurante · cocina de mar y delivery",
+        "config": {
+          "apify": {
+            "competitor_list": []
+          }
+        }
+      },
+      {
+        "id": "0736401b-8a9c-4e57-9ab0-e4bad25cb630",
+        "name": "Náufrago",
+        "slug": "naufrago-borrado-2026-09-24",
+        "status": "churned",
+        "archived_at": "2026-09-24T01:38:44.088+00:00",
+        "industry": "restaurante de comida costera",
+        "config": {
+          "apify": {
+            "competitor_list": []
+          }
+        }
+      }
+    ],
+    "lookup": "by-name"
+  },
+  "guard": {
+    "response": "Re-discovery completado. Lista CORREGIDA de competidores (8 detectados): [{\"name\":\"El Pez Volador\",\"handles\":{\"facebook\":\"elpezvoladorpicanteria\"},\"website\":\"https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html\",\"competitor_type\":\"direct\"},{\"name\":\"Pez Azul\",\"handles\":{\"facebook\":\"PezAzulECUADOR\",\"instagram\":\"@pezazulecuador\"},\"website\":\"http://www.pezazul.com.ec/\",\"competitor_type\":\"direct\"},{\"name\":\"Don Rabioso Ceviches y Encebollados\",\"website\":\"https://www.ubereats.com/ec-en/store/don-rabioso-ceviches-y-encebollados-kennedy/dX8GzkCHTc2LeQq3NwgMIA\",\"competitor_type\":\"direct\"},{\"name\":\"El Rincón del Ceviche\",\"website\":\"https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche\",\"competitor_type\":\"direct\"},{\"name\":\"Triple B Cevichería\",\"handles\":{\"instagram\":\"@triplebcevicheria\"},\"competitor_type\":\"direct\"},{\"name\":\"Cevichería El Camarón Picudo\",\"handles\":{\"instagram\":\"@cevicheriaelcamaronpicudo\"},\"competitor_type\":\"direct\"},{\"name\":\"ROCOTO Cevichería\",\"handles\":{\"facebook\":\"RocotoCevicheria\",\"instagram\":\"@rocotocevicheria\"},\"website\":\"https://www.rappi.com.ec/guayaquil/restaurantes/delivery/291-rocoto-cevicheria\",\"competitor_type\":\"indirect\"},{\"name\":\"Marrecife Marisquería\",\"website\":\"http://www.marrecife.com/\",\"competitor_type\":\"indirect\"}] · nota: Voy a buscar el sitio de Náufrago y los competidores en el mercado ecuatoriano (Guayaquil) en paralelo.Tengo la base. Ahora busco en profundidad los competidores clave ya identificados y posibles nuev",
+    "discovery_output": {
+      "own_handles": {
+        "instagram": "@naufrago.ec"
+      },
+      "competitors": [
+        {
+          "name": "El Pez Volador",
+          "handles": {
+            "facebook": "elpezvoladorpicanteria"
+          },
+          "website": "https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html",
+          "competitor_type": "direct"
+        },
+        {
+          "name": "Pez Azul",
+          "handles": {
+            "facebook": "PezAzulECUADOR",
+            "instagram": "@pezazulecuador"
+          },
+          "website": "http://www.pezazul.com.ec/",
+          "competitor_type": "direct"
+        },
+        {
+          "name": "Don Rabioso Ceviches y Encebollados",
+          "website": "https://www.ubereats.com/ec-en/store/don-rabioso-ceviches-y-encebollados-kennedy/dX8GzkCHTc2LeQq3NwgMIA",
+          "competitor_type": "direct"
+        },
+        {
+          "name": "El Rincón del Ceviche",
+          "website": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+          "competitor_type": "direct"
+        },
+        {
+          "name": "Triple B Cevichería",
+          "handles": {
+            "instagram": "@triplebcevicheria"
+          },
+          "competitor_type": "direct"
+        },
+        {
+          "name": "Cevichería El Camarón Picudo",
+          "handles": {
+            "instagram": "@cevicheriaelcamaronpicudo"
+          },
+          "competitor_type": "direct"
+        },
+        {
+          "name": "ROCOTO Cevichería",
+          "handles": {
+            "facebook": "RocotoCevicheria",
+            "instagram": "@rocotocevicheria"
+          },
+          "website": "https://www.rappi.com.ec/guayaquil/restaurantes/delivery/291-rocoto-cevicheria",
+          "competitor_type": "indirect"
+        },
+        {
+          "name": "Marrecife Marisquería",
+          "website": "http://www.marrecife.com/",
+          "competitor_type": "indirect"
+        }
+      ]
+    },
+    "competitors": [
+      {
+        "name": "El Pez Volador",
+        "handles": {
+          "facebook": "elpezvoladorpicanteria"
+        },
+        "website": "https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "Pez Azul",
+        "handles": {
+          "facebook": "PezAzulECUADOR",
+          "instagram": "@pezazulecuador"
+        },
+        "website": "http://www.pezazul.com.ec/",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "Don Rabioso Ceviches y Encebollados",
+        "website": "https://www.ubereats.com/ec-en/store/don-rabioso-ceviches-y-encebollados-kennedy/dX8GzkCHTc2LeQq3NwgMIA",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "El Rincón del Ceviche",
+        "website": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "Triple B Cevichería",
+        "handles": {
+          "instagram": "@triplebcevicheria"
+        },
+        "competitor_type": "direct"
+      },
+      {
+        "name": "Cevichería El Camarón Picudo",
+        "handles": {
+          "instagram": "@cevicheriaelcamaronpicudo"
+        },
+        "competitor_type": "direct"
+      },
+      {
+        "name": "ROCOTO Cevichería",
+        "handles": {
+          "facebook": "RocotoCevicheria",
+          "instagram": "@rocotocevicheria"
+        },
+        "website": "https://www.rappi.com.ec/guayaquil/restaurantes/delivery/291-rocoto-cevicheria",
+        "competitor_type": "indirect"
+      },
+      {
+        "name": "Marrecife Marisquería",
+        "website": "http://www.marrecife.com/",
+        "competitor_type": "indirect"
+      }
+    ],
+    "status": "completed",
+    "_source": "re-discovery-poll-resume",
+    "_anchor": {
+      "applied": false,
+      "reason": "no_canonical"
+    }
+  },
+  "scrape_verify": {
+    "ok": true,
+    "client_id": "058d06c4-7d83-4616-9ebc-290ca8752018",
+    "workflow_id": "rediscovery-149699",
+    "competitors": [
+      {
+        "name": "El Pez Volador",
+        "website": "https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html",
+        "handles": {
+          "instagram": "elpezvoladorpicanteria"
+        },
+        "competitor_type": "direct",
+        "positioning": null,
+        "source": "apify_scrape",
+        "trust_level": "untrusted",
+        "deep_scan_data": {
+          "scraped_at": "2026-09-24T03:11:44.589Z",
+          "actor_id": "apify/instagram-profile-scraper",
+          "run_id": "qpV1kDo1d0ZYFiTRR",
+          "platform": "instagram"
+        },
+        "scraped": true,
+        "run_id": "qpV1kDo1d0ZYFiTRR",
+        "scrape_status": "scraped"
+      },
+      {
+        "name": "Pez Azul",
+        "website": "http://www.pezazul.com.ec/",
+        "handles": {
+          "instagram": "pezazulecuador"
+        },
+        "competitor_type": "direct",
+        "positioning": "Los platos más icónicos del Ecuador. 🇪🇨\n📍 16 locales cerca de ti.\n🌟 Desde 1988.\n#LaMarcaDelEncebollado\n@rappi.ecuador \n@ubereats \n@pedidosya.ecuador",
+        "source": "apify_scrape",
+        "trust_level": "untrusted",
+        "deep_scan_data": {
+          "scraped_at": "2026-09-24T03:11:44.597Z",
+          "actor_id": "apify/instagram-profile-scraper",
+          "run_id": "CqEk8Vv4geC6d6W2g",
+          "platform": "instagram",
+          "followers_count": 13730,
+          "following_count": 714,
+          "posts_count": 2059,
+          "full_name": "Pez Azul",
+          "biography": "Los platos más icónicos del Ecuador. 🇪🇨\n📍 16 locales cerca de ti.\n🌟 Desde 1988.\n#LaMarcaDelEncebollado\n@rappi.ecuador \n@ubereats \n@pedidosya.ecuador",
+          "is_verified": false,
+          "external_url": "http://www.pezazul.com.ec/",
+          "profile_pic_url": "https://scontent-fra5-2.cdninstagram.com/v/t51.82787-19/608395299_18444104614096818_5461660105579638410_n.jpg?stp=dst-jpg_e0_s150x150_tt6&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby45NzkuYzIifQ&_nc_ht=scontent-fra5-2.cdninstagram.com&_nc_cat=106&_nc_oc=Q6cZ2gEiY1ctSgGJOjZlAlRJsVw-b9wvUF3xapbyUMzEsSZ97TWuSNDjwr3OofE1dli0aU0&_nc_ohc=JzkJgLP3CoQQ7kNvwE7cm1N&_nc_gid=5Fq79cobFAnu8gN4sdZe6Q&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_AQKYe28Z1Hy7XfQBF6Ya4ZOXbgC0qYx_QjdNabXZJo_UuQ&oe=6ABA7904&_nc_sid=8b3546"
+        },
+        "scraped": true,
+        "run_id": "CqEk8Vv4geC6d6W2g",
+        "scrape_status": "scraped"
+      },
+      {
+        "name": "Don Rabioso Ceviches y Encebollados",
+        "website": "https://www.ubereats.com/ec-en/store/don-rabioso-ceviches-y-encebollados-kennedy/dX8GzkCHTc2LeQq3NwgMIA",
+        "handles": null,
+        "competitor_type": "direct",
+        "positioning": "Don Rabioso Ceviches y Encebollados Kennedy Delivery in Guayaquil | Menu & Prices\n4.8 x (120+) • Seafood • Creole\nx Delivery unavailable\n3er Callejon 11b No 109, Guayaquil 090512, Ecuador, Al Lado De La Peluquería Julio, \nDelivery\nPickup\nCeviches\nEncebollados\nGuarniciones\nBebidas\nFrequently asked questions\nCan I order Don Rabioso Ceviches y Encebollados Kennedy delivery in Guayaquil with Uber Eats?\nYes. Don Rabioso Ceviches y Encebollados Kennedy delivery is available on Uber Eats in Guayaquil.\n",
+        "source": "apify_scrape",
+        "trust_level": "untrusted",
+        "deep_scan_data": {
+          "scraped_at": "2026-09-24T03:11:44.599Z",
+          "actor_id": "apify/website-content-crawler",
+          "run_id": "fxAn8uyihpMoRPJL8",
+          "platform": "web",
+          "title": "Don Rabioso Ceviches y Encebollados Kennedy Delivery in Guayaquil | Menu & Prices | Uber Eats",
+          "url": "https://www.ubereats.com/ec-en/store/don-rabioso-ceviches-y-encebollados-kennedy/dX8GzkCHTc2LeQq3NwgMIA",
+          "text_excerpt": "Don Rabioso Ceviches y Encebollados Kennedy Delivery in Guayaquil | Menu & Prices\n4.8 x (120+) • Seafood • Creole\nx Delivery unavailable\n3er Callejon 11b No 109, Guayaquil 090512, Ecuador, Al Lado De La Peluquería Julio, \nDelivery\nPickup\nCeviches\nEncebollados\nGuarniciones\nBebidas\nFrequently asked questions\nCan I order Don Rabioso Ceviches y Encebollados Kennedy delivery in Guayaquil with Uber Eats?\nYes. Don Rabioso Ceviches y Encebollados Kennedy delivery is available on Uber Eats in Guayaquil.\nIs Don Rabioso Ceviches y Encebollados Kennedy delivery available near me?\nEnter your address to see if Don Rabioso Ceviches y Encebollados Kennedy delivery is available to your location in Guayaquil.\nHow do I order Don Rabioso Ceviches y Encebollados Kennedy delivery online in Guayaquil?\nThere are 2 ways to place an order on Uber Eats: on the app or online using the Uber Eats website. After you’ve looked over the Don Rabioso Ceviches y Encebollados Kennedy menu, simply choose the items you’d li"
+        },
+        "scraped": true,
+        "run_id": "fxAn8uyihpMoRPJL8",
+        "scrape_status": "scraped"
+      },
+      {
+        "name": "El Rincón del Ceviche",
+        "website": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+        "handles": null,
+        "competitor_type": "direct",
+        "positioning": "El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio\nCombo Ceviche de Pulpo en Salsa Roja\nCeviche tipo cóctel, cebolla perla y yerbita, incluye canguil, maíz, pan , porción de chifle completa, ají, limón y bebida.\n$ 16,68\nCombo Ceviche de Pulpo en 2 Salsas\nCeviche con salsas mitad roja y mitad limón, cebolla perla y yerbita, incluye canguil, maíz, pan , porción de chifle completa, ají, limón y bebida.\n$ 16,68\nCombo Ceviche de Pulpo en Limón\nCeviche con cebolla, tomate, pimiento y yerbita",
+        "source": "apify_scrape",
+        "trust_level": "untrusted",
+        "deep_scan_data": {
+          "scraped_at": "2026-09-24T03:11:44.600Z",
+          "actor_id": "apify/website-content-crawler",
+          "run_id": "fZ4HQJXIlmaAULuE5",
+          "platform": "web",
+          "title": "El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio - Rappi",
+          "url": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+          "text_excerpt": "El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio\nCombo Ceviche de Pulpo en Salsa Roja\nCeviche tipo cóctel, cebolla perla y yerbita, incluye canguil, maíz, pan , porción de chifle completa, ají, limón y bebida.\n$ 16,68\nCombo Ceviche de Pulpo en 2 Salsas\nCeviche con salsas mitad roja y mitad limón, cebolla perla y yerbita, incluye canguil, maíz, pan , porción de chifle completa, ají, limón y bebida.\n$ 16,68\nCombo Ceviche de Pulpo en Limón\nCeviche con cebolla, tomate, pimiento y yerbita, incluye canguil, maíz, pan , porción de chifle completa, ají, limón y bebida.\n$ 16,68\nCombo Ceviche de Camarón en Salsa Roja\nCeviche tipo cóctel, cebolla perla y yerbita, incluye canguil, maíz, pan , porción de chifle completa, ají, limón y bebida.\n$ 16,68\nCombo Ceviche de Camarón en Limón\nCeviche en limón cebolla, tomate, pimiento y yerbita, incluye canguil, maíz, pan, porción de chifle completa, ají, limón y bebida.\n$ 16,68\nCombo Ceviche Mixto 3 Mariscos\nCeviche de 3 marisco a elegir y salsa"
+        },
+        "scraped": true,
+        "run_id": "fZ4HQJXIlmaAULuE5",
+        "scrape_status": "scraped"
+      },
+      {
+        "name": "Triple B Cevichería",
+        "website": null,
+        "handles": {
+          "instagram": "triplebcevicheria"
+        },
+        "competitor_type": "direct",
+        "positioning": "🐠Desde $2.50🍤\n📍Kennedy\nAtrás de Clínica Kennedy del Policentro\n📍Guayacanes\nPdte. Luis Tamayo y Enrique Ibáñez Mora\n📍Centro\nJosé de Antepara y Hurtado",
+        "source": "apify_scrape",
+        "trust_level": "untrusted",
+        "deep_scan_data": {
+          "scraped_at": "2026-09-24T03:11:44.601Z",
+          "actor_id": "apify/instagram-profile-scraper",
+          "run_id": "9RuFrmoZiBlX7ibT5",
+          "platform": "instagram",
+          "followers_count": 6390,
+          "following_count": 507,
+          "posts_count": 297,
+          "full_name": "Triple B Cevichería | Restaurante de mariscos",
+          "biography": "🐠Desde $2.50🍤\n📍Kennedy\nAtrás de Clínica Kennedy del Policentro\n📍Guayacanes\nPdte. Luis Tamayo y Enrique Ibáñez Mora\n📍Centro\nJosé de Antepara y Hurtado",
+          "is_verified": false,
+          "external_url": "https://wa.me/+593958791548",
+          "profile_pic_url": "https://scontent.cdninstagram.com/v/t51.2885-19/450395495_1198163834514187_5133487289483908290_n.jpg?stp=dst-jpg_s150x150_tt6&_nc_cat=101&ccb=7-5&_nc_sid=f7ccc5&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLnd3dy4xMDgwLkMzIn0%3D&_nc_ohc=pKlBIr2h1bUQ7kNvwFHTKju&_nc_oc=AdoqAfNjt411385JFCpSGYwKeiOF3p_f1tzz5oWp1cIpCAN3W4Is_Nr-pb3a2rv10Sc&_nc_zt=24&_nc_ht=scontent.cdninstagram.com&_nc_ss=73689&oh=00_AQJnfnyCCQB7o03Li8bTKH5YwXidKW1no0IFdf-Zuj4s1Q&oe=6ABA5AC0"
+        },
+        "scraped": true,
+        "run_id": "9RuFrmoZiBlX7ibT5",
+        "scrape_status": "scraped"
+      }
+    ],
+    "scraped_count": 5,
+    "degraded_count": 0,
+    "note": "5 scraped with real apify_scrape provenance"
+  },
+  "enrich": {
+    "client_id": null,
+    "competitors": [
+      {
+        "name": "El Pez Volador",
+        "competitor_type": "direct",
+        "source": "apify_scrape",
+        "trust_level": "untrusted",
+        "scraped": true,
+        "evidence": {
+          "platform": "instagram"
+        }
+      },
+      {
+        "name": "Pez Azul",
+        "competitor_type": "direct",
+        "source": "apify_scrape",
+        "trust_level": "untrusted",
+        "scraped": true,
+        "positioning": "Los platos más icónicos del Ecuador. 🇪🇨\n📍 16 locales cerca de ti.\n🌟 Desde 1988.\n#LaMarcaDelEncebollado\n@rappi.ecuador \n@ubereats \n@pedidosya.ecuad",
+        "evidence": {
+          "followers_count": 13730,
+          "following_count": 714,
+          "posts_count": 2059,
+          "is_verified": false,
+          "platform": "instagram"
+        }
+      },
+      {
+        "name": "Don Rabioso Ceviches y Encebollados",
+        "competitor_type": "direct",
+        "source": "apify_scrape",
+        "trust_level": "untrusted",
+        "scraped": true,
+        "positioning": "Don Rabioso Ceviches y Encebollados Kennedy Delivery in Guayaquil | Menu & Prices\n4.8 x (120+) • Seafood • Creole\nx Delivery unavailable\n3er Callejon ",
+        "evidence": {
+          "platform": "web"
+        }
+      },
+      {
+        "name": "El Rincón del Ceviche",
+        "competitor_type": "direct",
+        "source": "apify_scrape",
+        "trust_level": "untrusted",
+        "scraped": true,
+        "positioning": "El Rincón Del Ceviche - Guayaquil Precios y Menú a Domicilio\nCombo Ceviche de Pulpo en Salsa Roja\nCeviche tipo cóctel, cebolla perla y yerbita, incluy",
+        "evidence": {
+          "platform": "web"
+        }
+      },
+      {
+        "name": "Triple B Cevichería",
+        "competitor_type": "direct",
+        "source": "apify_scrape",
+        "trust_level": "untrusted",
+        "scraped": true,
+        "positioning": "🐠Desde $2.50🍤\n📍Kennedy\nAtrás de Clínica Kennedy del Policentro\n📍Guayacanes\nPdte. Luis Tamayo y Enrique Ibáñez Mora\n📍Centro\nJosé de Antepara y Hur",
+        "evidence": {
+          "followers_count": 6390,
+          "following_count": 507,
+          "posts_count": 297,
+          "is_verified": false,
+          "platform": "instagram"
+        }
+      },
+      {
+        "name": "Cevichería El Camarón Picudo",
+        "competitor_type": "direct",
+        "source": "auto_discovery",
+        "trust_level": "untrusted",
+        "scraped": false
+      },
+      {
+        "name": "ROCOTO Cevichería",
+        "competitor_type": "indirect",
+        "source": "auto_discovery",
+        "trust_level": "untrusted",
+        "scraped": false
+      },
+      {
+        "name": "Marrecife Marisquería",
+        "competitor_type": "indirect",
+        "source": "auto_discovery",
+        "trust_level": "untrusted",
+        "scraped": false
+      }
+    ],
+    "_scrape_verify": {
+      "scraped_count": 5,
+      "total": 8
+    }
+  },
+  "rediscovery": {
+    "response": "Re-discovery completado. Lista CORREGIDA de competidores (8 detectados): [{\"name\":\"El Pez Volador\",\"handles\":{\"facebook\":\"elpezvoladorpicanteria\"},\"website\":\"https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html\",\"competitor_type\":\"direct\"},{\"name\":\"Pez Azul\",\"handles\":{\"facebook\":\"PezAzulECUADOR\",\"instagram\":\"@pezazulecuador\"},\"website\":\"http://www.pezazul.com.ec/\",\"competitor_type\":\"direct\"},{\"name\":\"Don Rabioso Ceviches y Encebollados\",\"website\":\"https://www.ubereats.com/ec-en/store/don-rabioso-ceviches-y-encebollados-kennedy/dX8GzkCHTc2LeQq3NwgMIA\",\"competitor_type\":\"direct\"},{\"name\":\"El Rincón del Ceviche\",\"website\":\"https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche\",\"competitor_type\":\"direct\"},{\"name\":\"Triple B Cevichería\",\"handles\":{\"instagram\":\"@triplebcevicheria\"},\"competitor_type\":\"direct\"},{\"name\":\"Cevichería El Camarón Picudo\",\"handles\":{\"instagram\":\"@cevicheriaelcamaronpicudo\"},\"competitor_type\":\"direct\"},{\"name\":\"ROCOTO Cevichería\",\"handles\":{\"facebook\":\"RocotoCevicheria\",\"instagram\":\"@rocotocevicheria\"},\"website\":\"https://www.rappi.com.ec/guayaquil/restaurantes/delivery/291-rocoto-cevicheria\",\"competitor_type\":\"indirect\"},{\"name\":\"Marrecife Marisquería\",\"website\":\"http://www.marrecife.com/\",\"competitor_type\":\"indirect\"}] · nota: Voy a buscar el sitio de Náufrago y los competidores en el mercado ecuatoriano (Guayaquil) en paralelo.Tengo la base. Ahora busco en profundidad los competidores clave ya identificados y posibles nuev",
+    "discovery_output": {
+      "own_handles": {
+        "instagram": "@naufrago.ec"
+      },
+      "competitors": [
+        {
+          "name": "El Pez Volador",
+          "handles": {
+            "facebook": "elpezvoladorpicanteria"
+          },
+          "website": "https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html",
+          "competitor_type": "direct"
+        },
+        {
+          "name": "Pez Azul",
+          "handles": {
+            "facebook": "PezAzulECUADOR",
+            "instagram": "@pezazulecuador"
+          },
+          "website": "http://www.pezazul.com.ec/",
+          "competitor_type": "direct"
+        },
+        {
+          "name": "Don Rabioso Ceviches y Encebollados",
+          "website": "https://www.ubereats.com/ec-en/store/don-rabioso-ceviches-y-encebollados-kennedy/dX8GzkCHTc2LeQq3NwgMIA",
+          "competitor_type": "direct"
+        },
+        {
+          "name": "El Rincón del Ceviche",
+          "website": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+          "competitor_type": "direct"
+        },
+        {
+          "name": "Triple B Cevichería",
+          "handles": {
+            "instagram": "@triplebcevicheria"
+          },
+          "competitor_type": "direct"
+        },
+        {
+          "name": "Cevichería El Camarón Picudo",
+          "handles": {
+            "instagram": "@cevicheriaelcamaronpicudo"
+          },
+          "competitor_type": "direct"
+        },
+        {
+          "name": "ROCOTO Cevichería",
+          "handles": {
+            "facebook": "RocotoCevicheria",
+            "instagram": "@rocotocevicheria"
+          },
+          "website": "https://www.rappi.com.ec/guayaquil/restaurantes/delivery/291-rocoto-cevicheria",
+          "competitor_type": "indirect"
+        },
+        {
+          "name": "Marrecife Marisquería",
+          "website": "http://www.marrecife.com/",
+          "competitor_type": "indirect"
+        }
+      ]
+    },
+    "competitors": [
+      {
+        "name": "El Pez Volador",
+        "handles": {
+          "facebook": "elpezvoladorpicanteria"
+        },
+        "website": "https://www.tripadvisor.com/Restaurant_Review-g303845-d6942979-Reviews-El_Pez_Volador-Guayaquil_Guayas_Province.html",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "Pez Azul",
+        "handles": {
+          "facebook": "PezAzulECUADOR",
+          "instagram": "@pezazulecuador"
+        },
+        "website": "http://www.pezazul.com.ec/",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "Don Rabioso Ceviches y Encebollados",
+        "website": "https://www.ubereats.com/ec-en/store/don-rabioso-ceviches-y-encebollados-kennedy/dX8GzkCHTc2LeQq3NwgMIA",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "El Rincón del Ceviche",
+        "website": "https://www.rappi.com.ec/restaurantes/2948-el-rincon-del-ceviche",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "Triple B Cevichería",
+        "handles": {
+          "instagram": "@triplebcevicheria"
+        },
+        "competitor_type": "direct"
+      },
+      {
+        "name": "Cevichería El Camarón Picudo",
+        "handles": {
+          "instagram": "@cevicheriaelcamaronpicudo"
+        },
+        "competitor_type": "direct"
+      },
+      {
+        "name": "ROCOTO Cevichería",
+        "handles": {
+          "facebook": "RocotoCevicheria",
+          "instagram": "@rocotocevicheria"
+        },
+        "website": "https://www.rappi.com.ec/guayaquil/restaurantes/delivery/291-rocoto-cevicheria",
+        "competitor_type": "indirect"
+      },
+      {
+        "name": "Marrecife Marisquería",
+        "website": "http://www.marrecife.com/",
+        "competitor_type": "indirect"
+      }
+    ],
+    "status": "completed",
+    "_source": "re-discovery-poll-resume"
+  },
+  "persist": {
+    "ok": true,
+    "client_id": "058d06c4-7d83-4616-9ebc-290ca8752018",
+    "client": {
+      "id": "058d06c4-7d83-4616-9ebc-290ca8752018",
+      "name": "Náufrago",
+      "slug": "naufrago",
+      "status": "onboarding",
+      "industry": "unknown",
+      "website_url": "https://www.naufrago.ec",
+      "created_at": "2026-09-24T02:57:07.234368+00:00",
+      "updated_at": "2026-09-24T03:05:57.977875+00:00"
+    },
+    "brand_book_id": null,
+    "journey_state_id": "c96ef020-fd5c-4ccc-a68b-0bb13bb7178d",
+    "writes": {
+      "clients": true,
+      "client_brand_books": false,
+      "client_journey_state": true
+    }
+  }
+}

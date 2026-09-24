@@ -101,6 +101,14 @@ export interface DiscoveryOutput {
    */
   readonly business_model?: string
   /**
+   * E121 (CC#1 2026-09-24) · rubro del CLIENTE (2-6 palabras) y ciudades/regiones donde
+   * opera · opcionales · la plataforma los escribe en `clients.industry` / `clients.market`
+   * SÓLO si están vacíos o `unknown` (nunca pisa lo que puso ventas). Espejo en
+   * `discovery-output-server.js` y `forced-emit-messages.ts`.
+   */
+  readonly client_industry?: string
+  readonly client_markets?: readonly string[]
+  /**
    * Sprint multi-source discovery · resumen de ejecución por fuente (qué actores
    * Apify corrieron y con qué resultado) · para transparencia + el veredicto del
    * competitive-intelligence-agent. Optional · aditivo no-breaking.

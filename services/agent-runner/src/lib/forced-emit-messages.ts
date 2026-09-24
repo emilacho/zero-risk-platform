@@ -107,6 +107,9 @@ export const EMIT_DISCOVERY_OUTPUT_TOOL = {
         oneOf: [ICP_SEGMENT_SCHEMA, { type: 'array', minItems: 1, items: ICP_SEGMENT_SCHEMA }],
       },
       competitive_landscape_summary: { type: 'string' },
+      // E121 · espejo de `discovery-output-server.js` · rubro y ciudades del CLIENTE (no del ICP).
+      client_industry: { type: 'string', description: 'The CLIENT own industry/category, 2-6 words, in the client language. Omit if unknown.' },
+      client_markets: { type: 'array', items: { type: 'string', minLength: 1 }, description: 'Cities/regions where the CLIENT operates or sells, only with evidence. Omit if unknown.' },
     },
   },
 } as const
