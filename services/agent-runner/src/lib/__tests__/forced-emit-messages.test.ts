@@ -50,12 +50,15 @@ afterEach(() => {
 })
 
 describe('EMIT_DISCOVERY_OUTPUT_TOOL schema', () => {
-  it('mirrors the zod contract · 5 top-level fields · 3 required · no sources', () => {
+  it('mirrors the zod contract · 7 top-level fields (E121: + client_industry · client_markets) · 3 required · no sources', () => {
     const s = EMIT_DISCOVERY_OUTPUT_TOOL.input_schema
     expect(EMIT_DISCOVERY_OUTPUT_TOOL.name).toBe('emit_discovery_output')
     expect(Object.keys(s.properties).sort()).toEqual(
-      ['client_id', 'competitive_landscape_summary', 'competitors', 'icp', 'own_handles'].sort(),
+      ['client_id', 'competitive_landscape_summary', 'competitors', 'icp', 'own_handles', 'client_industry', 'client_markets'].sort(),
     )
+    // E121 · las dos casillas nuevas son OPCIONALES (no entran en required) y describen al CLIENTE, no al ICP
+    expect(s.properties.client_industry.type).toBe('string')
+    expect(s.properties.client_markets.type).toBe('array')
     expect(s.required).toEqual(['client_id', 'own_handles', 'competitors'])
     expect(s.properties).not.toHaveProperty('sources')
     // nested objects are strict (.strict() in zod)
