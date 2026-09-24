@@ -110,12 +110,17 @@ export const EDITOR_WHITELIST: Record<string, EditorRoutingConfig> = {
     lens_emphasis: 'schwartz',
   },
 
-  // CCO BRANCH (2)
-  'onboarding-specialist': {
-    max_revisions: 1,
-    escalate_on: ['medium', 'high', 'critical'],
-    lens_emphasis: 'brand_voice',
-  },
+  // CCO BRANCH (2 → 1)
+  // 🪦 ANULADO · E126 · 2026-09-24 · firma CC#3 (E126-FIRMA-CC3-lista-de-lo-que-se-anula.md) · orden de
+  // Emilio: «si hay algo viejo como esto, anúlalo por completo». 'onboarding-specialist' (el descubridor)
+  // estaba aquí desde el 26-abr (5fa2d00). Desde el 25-may (24e9cde · 403 en /api/agents/run sin
+  // workflow_execution_id) los tres revisores rebotaban y cada corrida del descubridor dejaba una fila
+  // `editor_escalation` en hitl_pending_approvals que nadie contestaba ni avisaba (E126-RESULTADO-CC2 ·
+  // cero invocaciones de revisor por esa vía en toda la tabla). El descubridor es un agente de
+  // investigación, no de contenido: las lentes del revisor son de marca, copy y formato. Si algún día se
+  // quiere revisar el descubrimiento: (1) mandar workflow_execution_id o llamar a run-sdk desde
+  // editor-middleware.ts, (2) aceptar 3 invocaciones más por corrida y (3) encender el vigía de la
+  // bandeja (ZrMZpnLxurnJPnJH) con su lector arreglado. Hasta entonces, fuera de la lista.
   'reporting-agent': {
     max_revisions: 1,
     escalate_on: ['medium', 'high', 'critical'],
