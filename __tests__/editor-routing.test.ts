@@ -39,9 +39,9 @@ function v(
 // Whitelist invariants
 // ──────────────────────────────────────────────────────────
 describe('EDITOR_WHITELIST · invariants', () => {
-  it('contains exactly the 15 documented content-producing agents (per docs/04-agentes/ESTRUCTURA_ORGANIZACIONAL.md)', () => {
+  it('contains exactly the 14 documented content-producing agents (15 per docs/04-agentes/ESTRUCTURA_ORGANIZACIONAL.md menos onboarding-specialist · anulado E126)', () => {
     const slugs = Object.keys(EDITOR_WHITELIST)
-    expect(slugs.length).toBe(15)
+    expect(slugs.length).toBe(14)
     // Spot-check a few from each branch
     expect(slugs).toContain('creative-director')
     expect(slugs).toContain('content-creator')
@@ -61,16 +61,21 @@ describe('EDITOR_WHITELIST · invariants', () => {
     }
   })
 
-  it('email/review/PR/onboarding/reporting agents escalate on medium severity (low tolerance)', () => {
+  it('email/review/PR/reporting agents escalate on medium severity (low tolerance)', () => {
     for (const slug of [
       'email-marketer',
       'review-responder',
       'pr-earned-media-manager',
-      'onboarding-specialist',
       'reporting-agent',
     ]) {
       expect(EDITOR_WHITELIST[slug].escalate_on, slug).toContain('medium')
     }
+  })
+
+  it('E126 · el descubridor (onboarding-specialist) ya NO está en la lista · anulado con firma de CC#3', () => {
+    expect(EDITOR_WHITELIST).not.toHaveProperty('onboarding-specialist')
+    expect(requiresEditorReview('onboarding-specialist')).toBe(false)
+    expect(requiresEditorReview('onboarding_specialist')).toBe(false)
   })
 
   it('exposes constants for the dual-reviewer pattern', () => {
