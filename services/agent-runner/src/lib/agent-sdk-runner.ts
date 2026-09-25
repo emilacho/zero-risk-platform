@@ -20,6 +20,16 @@
 
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+// EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
+import {
+  armarBloquesDeImagen,
+  armarPromptConImagenes,
+  type BloqueDeContenido,
+  type ImagenDelPedido,
+  type ImagenEntregada,
+  type MensajeDeUsuarioSDK,
+  type ModoImagenes,
+} from './imagenes-en-el-pedido.js'
 import { instrumentClaudeAgentSdk } from './braintrust.js'
 
 // Braintrust · traza cada `query()` del Claude Agent SDK · pass-through (cero
@@ -95,7 +105,9 @@ type SDKStreamMessage =
 
 // `query` from the SDK accepts `{ prompt, options }` but the SDK's d.ts has
 // collapsed return inference. We type the call-site explicitly.
-type QueryParams = { prompt: string; options: Options }
+// El cable para mirar · el pedido puede ser una cadena (hoy, siempre) o UN mensaje de usuario
+// con bloques de imagen antes del texto (sólo cuando el pedido trae `images`).
+type QueryParams = { prompt: string | AsyncIterable<MensajeDeUsuarioSDK>; options: Options }
 type QueryFn = (p: QueryParams) => AsyncIterable<SDKMessage>
 
 // ---------- Tipos públicos ----------
@@ -142,6 +154,14 @@ export interface AgentRunInput {
   dryRun?: boolean
   /** Extra para system prompt. */
   extra?: Record<string, unknown>
+  /**
+   * EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · OPCIONAL y aditivo. Direcciones de
+   * imágenes que viajan como bloques `image` ANTES del texto del pedido. Ausente ⇒ el pedido es la
+   * cadena de siempre. `imagesMode` · `url` (Anthropic baja la imagen · por defecto) o `base64`
+   * (este lado la baja y la codifica · respaldo si el CDN no deja bajarla por URL).
+   */
+  images?: ImagenDelPedido[]
+  imagesMode?: ModoImagenes
 }
 
 /**
@@ -886,6 +906,9 @@ function logExecution(
       brain_query_truncated: brainEnrichment.brain_query_truncated ?? null,
       brain_chunks_old_version_dropped: brainEnrichment.brain_chunks_old_version_dropped ?? null,
       brain_manual_vigente_id: brainEnrichment.brain_manual_vigente_id ?? null,
+      // El cable para mirar (CC#1 · 2026-09-25) · cuántas imágenes llevó el pedido y por qué camino · 0/null si ninguna.
+      images_count: input.images?.length ?? 0,
+      images_mode: input.images && input.images.length > 0 ? (input.imagesMode === 'base64' ? 'base64' : 'url') : null,
       // ADR-020 M1 · claim→chunk substrate + honest grounding marker (prose_only
       // until real claim→chunk matching exists · a fidelity score over prose is
       // NOT groundedness · same false-green as dry_run≠real).
@@ -976,6 +999,9 @@ function logExecution(
       brain_query_truncated: brainEnrichment.brain_query_truncated ?? null,
       brain_chunks_old_version_dropped: brainEnrichment.brain_chunks_old_version_dropped ?? null,
       brain_manual_vigente_id: brainEnrichment.brain_manual_vigente_id ?? null,
+      // El cable para mirar (CC#1 · 2026-09-25) · cuántas imágenes llevó el pedido y por qué camino · 0/null si ninguna.
+      images_count: input.images?.length ?? 0,
+      images_mode: input.images && input.images.length > 0 ? (input.imagesMode === 'base64' ? 'base64' : 'url') : null,
       // ADR-020 M1 · claim→chunk substrate + honest grounding marker (prose_only
       // until real claim→chunk matching exists · a fidelity score over prose is
       // NOT groundedness · same false-green as dry_run≠real).
@@ -1131,6 +1157,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   //    zero token inputs. See dry-run-mode.ts for activation patterns +
   //    canon guards.
   let drain: StreamDrainResult
+  // El cable para mirar · lo que de verdad se entregó al modelo (para el registro) · [] si no hubo imágenes.
+  let imagenesEntregadas: ImagenEntregada[] = []
   // LOGGING DURABLE (CC#4 2026-07-01) · outcome del forced-emit del judge de fidelidad ·
   // se persiste en agent_invocations.metadata.fidelity_forced_emit (función-scope para
   // que logExecution lo lea). undefined = no fue una invocación-judge.
@@ -1141,10 +1169,31 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       `[dry-run] ${canonicalSlug} · canonical fake response · zero LLM cost · skip checkpoint save`,
     )
   } else {
+    // EL CABLE PARA MIRAR (CC#1 · 2026-09-25) · si el pedido trae `images`, se arman los bloques UNA
+    // vez (en modo base64 eso descarga) y el generador del mensaje se crea POR INTENTO, porque el
+    // reintento del SDK vuelve a consumir el pedido. Sin `images`: la cadena de siempre, byte a byte.
+    let bloquesDeImagen: BloqueDeContenido[] | null = null
+    if (input.images && input.images.length > 0) {
+      const modo: ModoImagenes = input.imagesMode === 'base64' ? 'base64' : 'url'
+      try {
+        const armado = await armarBloquesDeImagen(input.images, modo)
+        bloquesDeImagen = armado.bloques
+        imagenesEntregadas = armado.entregadas
+        console.log(
+          `[imagenes] ${canonicalSlug} · ${armado.entregadas.length} imagen(es) en el pedido · modo ${modo}` +
+            (modo === 'base64' ? ` · ${armado.entregadas.reduce((s, e) => s + (e.bytes ?? 0), 0)} bytes` : ''),
+        )
+      } catch (err) {
+        return fail(`imagenes: ${err instanceof Error ? err.message : String(err)}`, startedAt)
+      }
+    }
     try {
       const wrapped = await callSdkWithRetry(
         async () => {
-          const stream = (query as unknown as QueryFn)({ prompt: input.task, options })
+          const prompt: string | AsyncIterable<MensajeDeUsuarioSDK> = bloquesDeImagen
+            ? armarPromptConImagenes(input.task, bloquesDeImagen)
+            : input.task
+          const stream = (query as unknown as QueryFn)({ prompt, options })
           return await drainStream(stream)
         },
         { canonicalSlug },

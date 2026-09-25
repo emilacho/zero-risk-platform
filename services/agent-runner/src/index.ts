@@ -21,6 +21,7 @@ import { getSupabaseAdmin } from './lib/supabase.js'
 import { checkSpendCap } from './lib/spend-gate.js'
 import { flushBraintrust } from './lib/braintrust.js'
 import { abrirLatido, intervaloDelLatido } from './lib/latido.js'
+import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.js'
 
 /**
  * Capture an agent error in Sentry with canonical context tags. Sprint
@@ -131,6 +132,13 @@ interface RunSdkBody {
   dry_run?: unknown
   context?: unknown
   extra?: unknown
+  /**
+   * EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · OPCIONAL y aditivo. `images` arriba,
+   * dentro de `context` (como lo manda la prueba de humo) o dentro de `extra`. Mal formado = 400.
+   */
+  images?: unknown
+  images_mode?: unknown
+  imagesMode?: unknown
 }
 
 function isStringOrNullable(v: unknown): v is string | null | undefined {
@@ -303,9 +311,22 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     (typeof process.env.DRY_RUN_DEFAULT === 'string' &&
       process.env.DRY_RUN_DEFAULT.toLowerCase() === 'true')
 
+  // EL CABLE PARA MIRAR (CC#1 · 2026-09-25) · `images` es opcional: ausente ⇒ input idéntico al de hoy.
+  const ctxImagenes = body.context && typeof body.context === 'object' ? (body.context as Record<string, unknown>) : {}
+  const extraImagenes = body.extra && typeof body.extra === 'object' ? (body.extra as Record<string, unknown>) : {}
+  const imagenesValidadas = validarImagenes(body.images ?? ctxImagenes.images ?? extraImagenes.images)
+  if (imagenesValidadas.error) {
+    res.status(400).json({ success: false, error: 'images_invalid', code: 'E-IMAGES-INVALID', detail: imagenesValidadas.error })
+    return
+  }
+  const imagesMode = leerModoImagenes(
+    body.imagesMode ?? body.images_mode ?? ctxImagenes.imagesMode ?? ctxImagenes.images_mode ?? extraImagenes.images_mode,
+  )
+
   const input: AgentRunInput = {
     agentName: agentName,
     task: body.task,
+    ...(imagenesValidadas.images.length > 0 ? { images: imagenesValidadas.images, imagesMode } : {}),
     resumeSessionId: resumeSessionId ?? null,
     clientId: clientId ?? null,
     pipelineId: pipelineId ?? null,
