@@ -10,6 +10,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { sanitizeProseFields } from '@/lib/brand-book-caveat-extractor'
 import { empujarManualAlCerebro } from '@/lib/brain/push-al-terminar'
+import { completarVisualesDesdeLaFicha } from '@/lib/manual-visuales-desde-la-ficha'
 
 export const runtime = 'nodejs'
 
@@ -189,7 +190,24 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
   const version = (Number(previa.data?.version) || 0) + 1
 
-  const row = buildBrandBookRow(clientId, bb, body, version)
+  const rowBase = buildBrandBookRow(clientId, bb, body, version)
+
+  // CABLE ② · COLORES Y TIPOGRAFÍA DEL SITIO (CC#1 · 2026-09-25 · §144 Emilio). El Servicio de Apify
+  // deja en la ficha (`clients.brand_colors` / `brand_fonts`) lo que el sitio declara. Si el manual
+  // no trae `primary_colors` / `typography` (hoy nunca los trae: las cinco lentes son verbales), se
+  // completan DESDE LA FICHA. Aditivo: ficha vacía ⇒ fila idéntica a la de hoy. Si la lectura de la
+  // ficha falla, el manual sale igual que hoy y se declara en el recibo (`visuales_origen: null`).
+  let fichaVisual: { brand_colors?: unknown; brand_fonts?: unknown } | null = null
+  let fichaVisualError: string | null = null
+  try {
+    const f = await supabase.from('clients').select('brand_colors, brand_fonts').eq('id', clientId).maybeSingle()
+    if (f.error) fichaVisualError = f.error.message?.slice(0, 200) ?? 'error'
+    else fichaVisual = f.data
+  } catch (e) {
+    fichaVisualError = e instanceof Error ? e.message.slice(0, 200) : 'error'
+  }
+  const visuales = completarVisualesDesdeLaFicha(rowBase, bb, fichaVisual)
+  const row = visuales.row
 
   const { data, error } = await supabase
     .from('client_brand_books')
@@ -216,6 +234,9 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   return NextResponse.json({
     persisted: true,
+    // CABLE ② · de dónde salieron primary_colors / typography ('manual' · 'ficha' · null = quedaron vacíos)
+    visuales_origen: visuales.origen,
+    ...(fichaVisualError ? { visuales_ficha_error: fichaVisualError } : {}),
     id: data?.id,
     client_id: clientId,
     gate_outcome: data?.gate_outcome ?? null,
