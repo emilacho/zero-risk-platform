@@ -77,6 +77,42 @@ export function construir(flujo) {
   return { name: flujo.name, nodes, connections, settings }
 }
 
+/** Marca de versión del extractor embebido en el nodo · para no actualizar dos veces. */
+export const MARCA_VERSION = /VERSION DEL EXTRACTOR: (\d+)|VERSIÓN DEL EXTRACTOR: (\d+)/
+export function versionEmbebida(jsCode) {
+  const m = MARCA_VERSION.exec(String(jsCode || ''))
+  return m ? Number(m[1] || m[2]) : 1
+}
+export function versionDelEspejo() {
+  return versionEmbebida(EXTRACTOR_SRC)
+}
+
+/**
+ * v2 (2026-09-25 · «las tipografías viven en las hojas de estilo») · el flujo YA tiene el nodo (v1):
+ * se reemplaza SÓLO el código del nodo por el espejo actual. Conexiones, transform-sections y
+ * final-response-ok no se tocan (ya devuelven `visual`). Rehúsa si el nodo ya lleva esta versión.
+ */
+export function actualizar(flujo) {
+  const byName = new Map(flujo.nodes.map((n) => [n.name, n]))
+  if (!byName.has(NODO)) throw new Error(`el nodo del cable ② no existe · usar construir()`)
+  const nodo = byName.get(NODO)
+  const vieja = versionEmbebida(nodo.parameters.jsCode)
+  const nueva = versionDelEspejo()
+  if (vieja >= nueva) throw new Error(`el nodo ya lleva la versión ${vieja} del extractor (espejo: ${nueva}) · no actualizar dos veces`)
+  const salidas = flujo.connections[NODO]?.main || []
+  if (salidas.length !== 1 || salidas[0].length !== 1 || salidas[0][0].node !== MERGE || salidas[0][0].index !== 1) {
+    throw new Error(`«${NODO}» no sale sólo hacia «${MERGE}» entrada 1 · ${JSON.stringify(salidas)}`)
+  }
+  const settings = {}
+  for (const k of SETTINGS_OK) if (flujo.settings?.[k] !== undefined) settings[k] = flujo.settings[k]
+  const nodes = flujo.nodes.map((x) =>
+    x.name === NODO
+      ? { ...x, parameters: { ...x.parameters, jsCode: codigoDelNodo() }, notes: ((x.notes || '') + `\nv${nueva} (2026-09-25) · lee también las hojas de estilo del propio dominio (sin \`URL\`: el sandbox no la tiene) · excluye las «… Fallback» de next/font · tope 8 tipografías · declara el material leído.`).trim() }
+      : x,
+  )
+  return { name: flujo.name, nodes, connections: flujo.connections, settings }
+}
+
 if (process.argv[1] && process.argv[1].endsWith('construir-cable-colores.mjs')) {
   const [, , entrada, salida] = process.argv
   if (!entrada || !salida) { console.error('uso: node construir-cable-colores.mjs <flujo-vivo.json> <salida.json>'); process.exit(2) }
