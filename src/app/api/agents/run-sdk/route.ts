@@ -33,6 +33,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
 import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
+import { leerImagenesDelPedido, campoImagenesDelProxy } from '@/lib/imagenes-del-pedido'
 import { resolveAgentSlug } from '@/lib/agent-alias-map'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
@@ -123,6 +124,14 @@ interface RunSdkInput {
   callbackUrl?: string | null
   context?: Record<string, unknown> | null
   extra?: Record<string, unknown> | null
+  /**
+   * EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · OPCIONAL y aditivo · la puerta sólo
+   * lo deja pasar al corredor (`src/lib/imagenes-del-pedido.ts`). Ausente ⇒ el cuerpo que viaja
+   * al corredor es el de siempre, byte a byte.
+   */
+  images?: unknown
+  images_mode?: unknown
+  imagesMode?: unknown
 }
 
 /**
@@ -865,6 +874,14 @@ export async function POST(request: Request) {
     // Sprint 8D tail · forceRestart flag (workflow checkpoint canon) ·
     // accepts top-level OR nested under context · matches workflow_id pattern.
     const ctx = (body.context ?? {}) as Record<string, unknown>
+    // EL CABLE PARA MIRAR (CC#1 · 2026-09-25) · `images` opcional · mal formado se rechaza acá, antes de pagar.
+    const imagenesDelPedido = leerImagenesDelPedido(body, ctx)
+    if (imagenesDelPedido.error) {
+      return NextResponse.json(
+        { error: 'images_invalid', code: 'E-IMAGES-INVALID', detail: imagenesDelPedido.error },
+        { status: 400 },
+      )
+    }
     const forceRestart =
       body.force_restart === true ||
       body.forceRestart === true ||
@@ -905,6 +922,8 @@ export async function POST(request: Request) {
       // cost · enables mass-audit Phase 2 functional validation.
       dryRun,
       extra: body.extra || undefined,
+      // El cable para mirar · `{}` sin imágenes (cuerpo de siempre) · `images` + `imagesMode` con ellas.
+      ...campoImagenesDelProxy(imagenesDelPedido.images, imagenesDelPedido.imagesMode),
     }
 
     // Proxy hop with transient-failure retry (1 immediate + up to 2 retries ·
