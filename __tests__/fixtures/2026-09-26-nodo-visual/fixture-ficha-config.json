@@ -1,0 +1,71 @@
+{
+  "apify": {
+    "own_handles": {
+      "instagram": "@naufrago.ec"
+    },
+    "competitor_list": [
+      {
+        "name": "Pez Azul",
+        "handles": {
+          "tiktok": "pezazulecuador",
+          "facebook": "PezAzulECUADOR",
+          "instagram": "pezazulecuador"
+        },
+        "website": "http://www.pezazul.com.ec/",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "La Casa del Encebollado",
+        "handles": {
+          "facebook": "La-Casa-Del-Encebollado-100032190915998",
+          "instagram": "lacasadelencebollado"
+        },
+        "website": "https://lacasadelencebollado.ec/",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "Encebollado Cuarto de Libra",
+        "handles": {
+          "facebook": "encebolladoCDL",
+          "instagram": "encebolladocdl"
+        },
+        "website": "https://www.cuartodelibraplazadanin.com/",
+        "competitor_type": "direct"
+      },
+      {
+        "name": "El Pez Volador",
+        "handles": {
+          "facebook": "elpezvoladorpicanteria",
+          "instagram": "el_pez_volador"
+        },
+        "competitor_type": "direct"
+      },
+      {
+        "name": "ROCOTO Cevichería",
+        "handles": {
+          "tiktok": "rocotocevicheria",
+          "facebook": "RocotoCevicheria",
+          "instagram": "rocotocevicheria"
+        },
+        "competitor_type": "indirect"
+      },
+      {
+        "name": "La Ola Encebollados",
+        "website": "https://www.ubereats.com/ec-en/store/la-ola-encebollados/KdkFxMYJUVyS5tzlGhHClA",
+        "competitor_type": "alternative"
+      },
+      {
+        "name": "El Buen Encebollado",
+        "website": "https://www.ubereats.com/ec-en/store/el-buen-encebollado-guayaquil/k9jrNjAaWKWt5IX3dFimcg",
+        "competitor_type": "alternative"
+      }
+    ],
+    "last_populated_source": "auto_discovery_agent",
+    "last_populated_from_discovery_at": "2026-09-24T15:52:09.725Z"
+  },
+  "business_model": {
+    "text": "Ghost kitchen operada directamente por Náufrago en Guayaquil (sin local físico en la ciudad, entrega por delivery apps y WhatsApp) más restaurante físico propio en Olón, Santa Elena. El cliente final paga directamente a Náufrago; no hay intermediarios de terceros que ofrezcan el servicio — es un restaurante de un solo lado. Los ingresos provienen de la venta directa de platos de ceviche y encebollado a consumidores B2C, con ticket promedio de $4–$12 USD.",
+    "source": "auto_discovery_agent",
+    "captured_at": "2026-09-24T15:52:09.725Z"
+  }
+}

@@ -1,0 +1,1914 @@
+{
+  "params": {
+    "url": "https://www.naufrago.ec"
+  },
+  "respuesta": [
+    {
+      "url": "https://www.naufrago.ec/",
+      "html": null,
+      "text": "Náufrago · Cuando tengas esa hambre de... NÁUFRAGO te espera!\nNáufrago\nghost kitchen Guayaquil · restaurante Olón, Sta Elena\nAbierto · hasta 3pm",
+      "crawl": {
+        "depth": 0,
+        "loadedUrl": "https://www.naufrago.ec/",
+        "loadedTime": "2026-09-25T17:06:41.802Z",
+        "contentType": "text/html; charset=utf-8",
+        "referrerUrl": "https://www.naufrago.ec/",
+        "httpStatusCode": 200
+      },
+      "debug": {
+        "requestHandlerMode": "browser"
+      },
+      "_visual": {
+        "url": "https://www.naufrago.ec",
+        "nota": "sólo lo declarado en el HTML y en las hojas de estilo del propio dominio (o de Google Fonts) · se guarda en la ficha únicamente si estaba vacía · vacío = no se encontró, no se inventa",
+        "cable": "colores-y-tipografia · CC#1 · 2026-09-25 · v2",
+        "error": null,
+        "ficha": "escrito:brand_fonts",
+        "aplica": true,
+        "colores": [
+          "#1a0828",
+          "#663772",
+          "#2d1135",
+          "#51d4b4",
+          "#38154b",
+          "#4b2855"
+        ],
+        "detalle": {
+          "regla": "sólo lo declarado en HTML/CSS · se ignoran #000000 y #ffffff, las familias genéricas o de sistema y las «… Fallback» de next/font · vacío = no se encontró",
+          "font_face": 31,
+          "textos_leidos": 3,
+          "colores_distintos": 22,
+          "version_extractor": 2,
+          "colores_con_conteo": [
+            {
+              "n": 30,
+              "valor": "#1a0828"
+            },
+            {
+              "n": 27,
+              "valor": "#663772"
+            },
+            {
+              "n": 10,
+              "valor": "#2d1135"
+            },
+            {
+              "n": 10,
+              "valor": "#51d4b4"
+            },
+            {
+              "n": 5,
+              "valor": "#38154b"
+            },
+            {
+              "n": 5,
+              "valor": "#4b2855"
+            }
+          ],
+          "menciones_de_color": 136,
+          "material_leido_chars": 146937,
+          "tipografias_distintas": 7,
+          "tipografias_con_conteo": [
+            {
+              "n": 9,
+              "valor": "Caveat"
+            },
+            {
+              "n": 8,
+              "valor": "Inter"
+            },
+            {
+              "n": 4,
+              "valor": "Alfa Slab One"
+            },
+            {
+              "n": 3,
+              "valor": "Bebas Neue"
+            },
+            {
+              "n": 3,
+              "valor": "DM Serif Display"
+            },
+            {
+              "n": 2,
+              "valor": "Homemade Apple"
+            },
+            {
+              "n": 2,
+              "valor": "Permanent Marker"
+            }
+          ]
+        },
+        "funcion": "website_content_scraper",
+        "html_bytes": 38932,
+        "tipografias": [
+          "Caveat",
+          "Inter",
+          "Alfa Slab One",
+          "Bebas Neue",
+          "DM Serif Display",
+          "Homemade Apple",
+          "Permanent Marker"
+        ],
+        "hojas_leidas": [
+          {
+            "url": "https://www.naufrago.ec/_next/static/css/f58f0990fe456115.css?dpl=dpl_8VN8fTkNHeGQurssrYfPYEZQzA7E",
+            "bytes": 9325,
+            "recortada": false
+          },
+          {
+            "url": "https://www.naufrago.ec/_next/static/css/da5ef888d4af55de.css?dpl=dpl_8VN8fTkNHeGQurssrYfPYEZQzA7E",
+            "bytes": 98680,
+            "recortada": false
+          }
+        ],
+        "hojas_motivo": null,
+        "hojas_encontradas": 2,
+        "material_leido_bytes": 146937
+      },
+      "htmlUrl": null,
+      "markdown": "# Náufrago · Cuando tengas esa hambre de... NÁUFRAGO te espera!\n\nNáufrago\n\nghost kitchen Guayaquil · restaurante Olón, Sta Elena\n\nAbierto · hasta 3pm",
+      "metadata": {
+        "title": "Náufrago · Cuando tengas esa hambre de... NÁUFRAGO te espera!",
+        "author": null,
+        "jsonLd": [
+          [
+            {
+              "@id": "https://naufrago.ec#restaurant",
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": -2.1458611,
+                "longitude": -79.9014167
+              },
+              "url": "https://naufrago.ec",
+              "name": "Náufrago",
+              "@type": "Restaurant",
+              "image": "https://naufrago.ec/og-image.png",
+              "sameAs": [
+                "https://instagram.com/naufrago.ec"
+              ],
+              "address": {
+                "@type": "PostalAddress",
+                "postalCode": "090505",
+                "addressRegion": "Guayas",
+                "streetAddress": "Avenida 8 NO",
+                "addressCountry": "EC",
+                "addressLocality": "Guayaquil"
+              },
+              "hasMenu": {
+                "@id": "https://naufrago.ec#menu",
+                "name": "Menú Náufrago",
+                "@type": "Menu",
+                "hasMenuSection": [
+                  {
+                    "name": "Encebollados",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Encebollado Náufrago",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "4.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "El de la casa · porción estándar."
+                      },
+                      {
+                        "name": "Encebollado Mixto",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "6.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Encebollado con camarón y pescado."
+                      },
+                      {
+                        "name": "Encebollado Junior",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "3.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Porción pequeña · 45g de pescado."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Ceviches",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Ceviche Náufrago",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "7.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Pescado curtido en leche de tigre · salsa de maní · aguacate."
+                      },
+                      {
+                        "name": "Ceviche Mixto",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "9.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Pescado curtido en leche de tigre · salsa de maní · aguacate · + camarón."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Bebidas",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Jugo natural del día",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Sabor del día · elegí cuando agregues."
+                      },
+                      {
+                        "name": "Cola grande",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Elige tu sabor preferido · 1 litro."
+                      },
+                      {
+                        "name": "Cerveza grande",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "3.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Agua",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Café pasado",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Cola pequeña",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.25",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Elige tu sabor preferido · 350ml."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "extras",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Chifle",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "0.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Pan",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "0.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Aguacate",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "@context": "https://schema.org",
+              "telephone": "+593997744288",
+              "priceRange": "$$",
+              "description": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+              "servesCuisine": [
+                "Ecuadorian",
+                "Seafood",
+                "Latin American"
+              ],
+              "acceptsReservations": false,
+              "openingHoursSpecification": [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  "opens": "07:00",
+                  "closes": "15:00",
+                  "dayOfWeek": [
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                    "Monday"
+                  ]
+                }
+              ]
+            },
+            {
+              "@id": "https://naufrago.ec#localbusiness",
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": -2.1458611,
+                "longitude": -79.9014167
+              },
+              "url": "https://naufrago.ec",
+              "name": "Náufrago",
+              "@type": "LocalBusiness",
+              "address": {
+                "@type": "PostalAddress",
+                "postalCode": "090505",
+                "addressRegion": "Guayas",
+                "streetAddress": "Avenida 8 NO",
+                "addressCountry": "EC",
+                "addressLocality": "Guayaquil"
+              },
+              "@context": "https://schema.org",
+              "telephone": "+593997744288",
+              "areaServed": {
+                "@type": "GeoCircle",
+                "geoRadius": "15000",
+                "geoMidpoint": {
+                  "@type": "GeoCoordinates",
+                  "latitude": -2.1458611,
+                  "longitude": -79.9014167
+                }
+              },
+              "description": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+              "openingHoursSpecification": [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  "opens": "07:00",
+                  "closes": "15:00",
+                  "dayOfWeek": [
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                    "Monday"
+                  ]
+                }
+              ]
+            }
+          ],
+          [
+            {
+              "@id": "https://naufrago.ec#restaurant",
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": -2.1458611,
+                "longitude": -79.9014167
+              },
+              "url": "https://naufrago.ec",
+              "name": "Náufrago",
+              "@type": "Restaurant",
+              "image": "https://naufrago.ec/og-image.png",
+              "sameAs": [
+                "https://instagram.com/naufrago.ec"
+              ],
+              "address": {
+                "@type": "PostalAddress",
+                "postalCode": "090505",
+                "addressRegion": "Guayas",
+                "streetAddress": "Avenida 8 NO",
+                "addressCountry": "EC",
+                "addressLocality": "Guayaquil"
+              },
+              "hasMenu": {
+                "@id": "https://naufrago.ec#menu",
+                "name": "Menú Náufrago",
+                "@type": "Menu",
+                "hasMenuSection": [
+                  {
+                    "name": "Encebollados",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Encebollado Náufrago",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "4.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "El de la casa · porción estándar."
+                      },
+                      {
+                        "name": "Encebollado Mixto",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "6.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Encebollado con camarón y pescado."
+                      },
+                      {
+                        "name": "Encebollado Junior",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "3.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Porción pequeña · 45g de pescado."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Ceviches",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Ceviche Náufrago",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "7.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Pescado curtido en leche de tigre · salsa de maní · aguacate."
+                      },
+                      {
+                        "name": "Ceviche Mixto",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "9.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Pescado curtido en leche de tigre · salsa de maní · aguacate · + camarón."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Bebidas",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Jugo natural del día",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Sabor del día · elegí cuando agregues."
+                      },
+                      {
+                        "name": "Cola grande",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Elige tu sabor preferido · 1 litro."
+                      },
+                      {
+                        "name": "Cerveza grande",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "3.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Agua",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Café pasado",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Cola pequeña",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.25",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Elige tu sabor preferido · 350ml."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "extras",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Chifle",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "0.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Pan",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "0.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Aguacate",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "@context": "https://schema.org",
+              "telephone": "+593997744288",
+              "priceRange": "$$",
+              "description": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+              "servesCuisine": [
+                "Ecuadorian",
+                "Seafood",
+                "Latin American"
+              ],
+              "acceptsReservations": false,
+              "openingHoursSpecification": [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  "opens": "07:00",
+                  "closes": "15:00",
+                  "dayOfWeek": [
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                    "Monday"
+                  ]
+                }
+              ]
+            },
+            {
+              "@id": "https://naufrago.ec#localbusiness",
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": -2.1458611,
+                "longitude": -79.9014167
+              },
+              "url": "https://naufrago.ec",
+              "name": "Náufrago",
+              "@type": "LocalBusiness",
+              "address": {
+                "@type": "PostalAddress",
+                "postalCode": "090505",
+                "addressRegion": "Guayas",
+                "streetAddress": "Avenida 8 NO",
+                "addressCountry": "EC",
+                "addressLocality": "Guayaquil"
+              },
+              "@context": "https://schema.org",
+              "telephone": "+593997744288",
+              "areaServed": {
+                "@type": "GeoCircle",
+                "geoRadius": "15000",
+                "geoMidpoint": {
+                  "@type": "GeoCoordinates",
+                  "latitude": -2.1458611,
+                  "longitude": -79.9014167
+                }
+              },
+              "description": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+              "openingHoursSpecification": [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  "opens": "07:00",
+                  "closes": "15:00",
+                  "dayOfWeek": [
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                    "Monday"
+                  ]
+                }
+              ]
+            }
+          ]
+        ],
+        "headers": {
+          "age": "1488779",
+          "date": "Fri, 25 Sep 2026 17:06:41 GMT",
+          "etag": "W/\"53c8946dbaf5fb7038e52d912ccfb38b\"",
+          "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+          "server": "Vercel",
+          "x-vercel-id": "cle1::bl9mn-1790356001340-ec59b7e630ec",
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "public, max-age=0, must-revalidate",
+          "x-firefox-spdy": "h2",
+          "x-matched-path": "/",
+          "x-vercel-cache": "HIT",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "x-frame-options": "DENY",
+          "content-encoding": "br",
+          "x-xss-protection": "0",
+          "permissions-policy": "geolocation=(self), camera=(), microphone=(), payment=(), usb=(), accelerometer=(), gyroscope=()",
+          "x-nextjs-prerender": "1",
+          "content-disposition": "inline",
+          "x-nextjs-stale-time": "300",
+          "x-content-type-options": "nosniff",
+          "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+          "access-control-allow-origin": "*",
+          "content-security-policy-report-only": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://*.payphonetodoesposible.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://*.google.com https://ordaeyxvvvdqsznsecjx.supabase.co; media-src 'self' data: blob:; connect-src 'self' blob: https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://us.i.posthog.com https://us-assets.i.posthog.com https://ordaeyxvvvdqsznsecjx.supabase.co wss://ordaeyxvvvdqsznsecjx.supabase.co; frame-src 'self' https://*.payphonetodoesposible.com; worker-src 'self' blob:; frame-ancestors 'none'; form-action 'self' https://*.payphonetodoesposible.com; base-uri 'self'; object-src 'none'; report-uri /api/csp-reporte"
+        },
+        "keywords": "ceviche Olón,encebollado Ecuador,delivery Guayaquil,encebollado Guayaquil,ceviche Guayaquil,delivery Santa Elena,ghost kitchen,comida costera,mariscos Olón,Náufrago",
+        "openGraph": [
+          {
+            "content": "Náufrago",
+            "property": "og:title"
+          },
+          {
+            "content": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+            "property": "og:description"
+          },
+          {
+            "content": "https://naufrago.ec",
+            "property": "og:url"
+          },
+          {
+            "content": "Náufrago",
+            "property": "og:site_name"
+          },
+          {
+            "content": "es_EC",
+            "property": "og:locale"
+          },
+          {
+            "content": "https://naufrago.ec/og-image.png",
+            "property": "og:image"
+          },
+          {
+            "content": "1200",
+            "property": "og:image:width"
+          },
+          {
+            "content": "630",
+            "property": "og:image:height"
+          },
+          {
+            "content": "Náufrago · ceviche y encebollado en Olón",
+            "property": "og:image:alt"
+          },
+          {
+            "content": "website",
+            "property": "og:type"
+          }
+        ],
+        "description": "Encebollados y ceviches con producto del día — sin esperar mesa, sin salir de casa.",
+        "canonicalUrl": "https://www.naufrago.ec/",
+        "languageCode": "es"
+      },
+      "_pagina_id": "6c198cfe-508e-4a11-86b6-fd7d11034c53",
+      "screenshotUrl": null
+    },
+    {
+      "url": "https://www.naufrago.ec/privacidad",
+      "html": null,
+      "text": "Política de Privacidad · Náufrago · Náufrago\nÚltima actualización · 25 de mayo de 2026\nEn Náufrago respetamos tu privacidad y cumplimos con la Ley Orgánica de Protección de Datos Personales del Ecuador (LOPDP) vigente desde diciembre de 2025. Este documento explica qué datos capturamos · para qué · y cómo puedes ejercer tus derechos.\n1 · Qué datos capturamos\nNombre completo\nNúmero de WhatsApp (formato internacional E.164)\nEmail (opcional · si te registras con Google o con el enlace que te enviamos por correo)\nDirecciones de entrega · calle · referencia · coordenadas geo\nHistórico de pedidos · items · totales · fechas\nPreferencias alimenticias (notas opcionales para la cocina)\nFoto de comprobante de entrega (cuando aplica)\nIP del dispositivo · user agent (logs anonimizados)\n2 · Para qué usamos tus datos\nProcesar y entregar tu pedido\nConfirmar y dar seguimiento al pedido vía WhatsApp\nGestionar tu programa de fidelización (tesoro de náufrago)\nMejorar la experiencia (preferencias persistentes)\nCumplir con obligaciones legales y contables del negocio\nComunicarte promociones · solo si das consentimiento explícito\n3 · Con quién compartimos tus datos\nCompartimos datos mínimos necesarios con proveedores de servicios ·\nPedidosYa · cuando eliges envío motorizado · les pasamos nombre · teléfono · dirección de entrega\nTwilio · envío de WhatsApp (status updates · OTP)\nSupabase · hosting de base de datos cifrada\nVercel · hosting del sitio web\nGoogle Maps · autocompletado de direcciones\nNO vendemos · NO alquilamos · NO transferimos tus datos a terceros con fines comerciales.\n4 · Tus derechos (ARCO)\nComo titular de datos puedes ejercer en cualquier momento ·\nAcceso · descargar todos tus datos desdeMi Cuenta· botón “Descargar mis datos”\nRectificación · editar tu nombre · email · WhatsApp · direcciones · preferencias en cualquier momento\nCancelación / eliminación · solicitar borrado de tu cuenta desde Mi Cuenta · soft-delete con 30 días de cooldown\nOposición · negar el consentimiento de marketing opt-in cuando se te ofrezca\nPortabilidad · export en formato JSON estándar\n5 · Cuánto tiempo guardamos tus datos\nCuenta activa · mientras la cuenta exista\nPedidos confirmados · 5 años (obligación contable SRI Ecuador)\nLogs de consent · 5 años (auditoría LOPDP)\nPost-eliminación · datos PII se borran tras 30 días de cooldown · solo persiste hash anónimo para fines estadísticos\n6 · Cookies y tecnologías similares\nUsamos cookies funcionales (sesión · carrito) y analíticas (PostHog · uso del sitio). NO usamos cookies de tracking cross-site. Puedes rechazar las analíticas en el banner de consentimiento que aparece al entrar.\n7 · Contacto · DPO (Data Protection Officer)\nPara ejercer derechos · reclamos o consultas escríbenos a ·\nemilacho@hotmail.com\nResponsable · Náufrago · Avenida 8 NO, Urdenor 1, Tarqui · Guayaquil · Provincia del Guayas · Ecuador. Resolveremos tu solicitud dentro de 15 días hábiles per art. 30 LOPDP.\n8 · Cambios a esta política\nPodemos actualizar este documento cuando cambien nuestras prácticas o las regulaciones aplicables. La fecha de “Última actualización” arriba refleja la versión vigente. Si los cambios son materiales te notificaremos por correo o WhatsApp.",
+      "crawl": {
+        "depth": 1,
+        "loadedUrl": "https://www.naufrago.ec/privacidad",
+        "loadedTime": "2026-09-25T17:07:06.215Z",
+        "contentType": "text/html; charset=utf-8",
+        "referrerUrl": "https://www.naufrago.ec/",
+        "httpStatusCode": 200
+      },
+      "debug": {
+        "requestHandlerMode": "browser"
+      },
+      "htmlUrl": null,
+      "markdown": "# Política de Privacidad · Náufrago · Náufrago\n\nÚltima actualización · 25 de mayo de 2026\n\nEn **Náufrago** respetamos tu privacidad y cumplimos con la **Ley Orgánica de Protección de Datos Personales del Ecuador (LOPDP)** vigente desde diciembre de 2025. Este documento explica qué datos capturamos · para qué · y cómo puedes ejercer tus derechos.\n\n## 1 · Qué datos capturamos\n\n*   Nombre completo\n*   Número de WhatsApp (formato internacional E.164)\n*   Email (opcional · si te registras con Google o con el enlace que te enviamos por correo)\n*   Direcciones de entrega · calle · referencia · coordenadas geo\n*   Histórico de pedidos · items · totales · fechas\n*   Preferencias alimenticias (notas opcionales para la cocina)\n*   Foto de comprobante de entrega (cuando aplica)\n*   IP del dispositivo · user agent (logs anonimizados)\n\n## 2 · Para qué usamos tus datos\n\n*   Procesar y entregar tu pedido\n*   Confirmar y dar seguimiento al pedido vía WhatsApp\n*   Gestionar tu programa de fidelización (tesoro de náufrago)\n*   Mejorar la experiencia (preferencias persistentes)\n*   Cumplir con obligaciones legales y contables del negocio\n*   Comunicarte promociones · solo si das consentimiento explícito\n\n## 3 · Con quién compartimos tus datos\n\nCompartimos datos mínimos necesarios con proveedores de servicios ·\n\n*   **PedidosYa** · cuando eliges envío motorizado · les pasamos nombre · teléfono · dirección de entrega\n*   **Twilio** · envío de WhatsApp (status updates · OTP)\n*   **Supabase** · hosting de base de datos cifrada\n*   **Vercel** · hosting del sitio web\n*   **Google Maps** · autocompletado de direcciones\n\nNO vendemos · NO alquilamos · NO transferimos tus datos a terceros con fines comerciales.\n\n## 4 · Tus derechos (ARCO)\n\nComo titular de datos puedes ejercer en cualquier momento ·\n\n*   **Acceso** · descargar todos tus datos desde[Mi Cuenta](https://www.naufrago.ec/mi-cuenta)· botón “Descargar mis datos”\n*   **Rectificación** · editar tu nombre · email · WhatsApp · direcciones · preferencias en cualquier momento\n*   **Cancelación / eliminación** · solicitar borrado de tu cuenta desde Mi Cuenta · soft-delete con 30 días de cooldown\n*   **Oposición** · negar el consentimiento de marketing opt-in cuando se te ofrezca\n*   **Portabilidad** · export en formato JSON estándar\n\n## 5 · Cuánto tiempo guardamos tus datos\n\n*   **Cuenta activa** · mientras la cuenta exista\n*   **Pedidos confirmados** · 5 años (obligación contable SRI Ecuador)\n*   **Logs de consent** · 5 años (auditoría LOPDP)\n*   **Post-eliminación** · datos PII se borran tras 30 días de cooldown · solo persiste hash anónimo para fines estadísticos\n\n## 6 · Cookies y tecnologías similares\n\nUsamos cookies funcionales (sesión · carrito) y analíticas (PostHog · uso del sitio). NO usamos cookies de tracking cross-site. Puedes rechazar las analíticas en el banner de consentimiento que aparece al entrar.\n\n## 7 · Contacto · DPO (Data Protection Officer)\n\nPara ejercer derechos · reclamos o consultas escríbenos a ·\n\n[emilacho@hotmail.com](mailto:emilacho@hotmail.com)\n\nResponsable · Náufrago · Avenida 8 NO, Urdenor 1, Tarqui · Guayaquil · Provincia del Guayas · Ecuador. Resolveremos tu solicitud dentro de 15 días hábiles per art. 30 LOPDP.\n\n## 8 · Cambios a esta política\n\nPodemos actualizar este documento cuando cambien nuestras prácticas o las regulaciones aplicables. La fecha de “Última actualización” arriba refleja la versión vigente. Si los cambios son materiales te notificaremos por correo o WhatsApp.",
+      "metadata": {
+        "title": "Política de Privacidad · Náufrago · Náufrago",
+        "author": null,
+        "jsonLd": [
+          [
+            {
+              "@id": "https://naufrago.ec#restaurant",
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": -2.1458611,
+                "longitude": -79.9014167
+              },
+              "url": "https://naufrago.ec",
+              "name": "Náufrago",
+              "@type": "Restaurant",
+              "image": "https://naufrago.ec/og-image.png",
+              "sameAs": [
+                "https://instagram.com/naufrago.ec"
+              ],
+              "address": {
+                "@type": "PostalAddress",
+                "postalCode": "090505",
+                "addressRegion": "Guayas",
+                "streetAddress": "Avenida 8 NO",
+                "addressCountry": "EC",
+                "addressLocality": "Guayaquil"
+              },
+              "hasMenu": {
+                "@id": "https://naufrago.ec#menu",
+                "name": "Menú Náufrago",
+                "@type": "Menu",
+                "hasMenuSection": [
+                  {
+                    "name": "Encebollados",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Encebollado Náufrago",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "4.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "El de la casa · porción estándar."
+                      },
+                      {
+                        "name": "Encebollado Mixto",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "6.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Encebollado con camarón y pescado."
+                      },
+                      {
+                        "name": "Encebollado Junior",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "3.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Porción pequeña · 45g de pescado."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Ceviches",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Ceviche Náufrago",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "7.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Pescado curtido en leche de tigre · salsa de maní · aguacate."
+                      },
+                      {
+                        "name": "Ceviche Mixto",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "9.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Pescado curtido en leche de tigre · salsa de maní · aguacate · + camarón."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Bebidas",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Jugo natural del día",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Sabor del día · elegí cuando agregues."
+                      },
+                      {
+                        "name": "Cola grande",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Elige tu sabor preferido · 1 litro."
+                      },
+                      {
+                        "name": "Cerveza grande",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "3.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Agua",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Café pasado",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Cola pequeña",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.25",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Elige tu sabor preferido · 350ml."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "extras",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Chifle",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "0.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Pan",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "0.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Aguacate",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "@context": "https://schema.org",
+              "telephone": "+593997744288",
+              "priceRange": "$$",
+              "description": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+              "servesCuisine": [
+                "Ecuadorian",
+                "Seafood",
+                "Latin American"
+              ],
+              "acceptsReservations": false,
+              "openingHoursSpecification": [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  "opens": "07:00",
+                  "closes": "15:00",
+                  "dayOfWeek": [
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                    "Monday"
+                  ]
+                }
+              ]
+            },
+            {
+              "@id": "https://naufrago.ec#localbusiness",
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": -2.1458611,
+                "longitude": -79.9014167
+              },
+              "url": "https://naufrago.ec",
+              "name": "Náufrago",
+              "@type": "LocalBusiness",
+              "address": {
+                "@type": "PostalAddress",
+                "postalCode": "090505",
+                "addressRegion": "Guayas",
+                "streetAddress": "Avenida 8 NO",
+                "addressCountry": "EC",
+                "addressLocality": "Guayaquil"
+              },
+              "@context": "https://schema.org",
+              "telephone": "+593997744288",
+              "areaServed": {
+                "@type": "GeoCircle",
+                "geoRadius": "15000",
+                "geoMidpoint": {
+                  "@type": "GeoCoordinates",
+                  "latitude": -2.1458611,
+                  "longitude": -79.9014167
+                }
+              },
+              "description": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+              "openingHoursSpecification": [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  "opens": "07:00",
+                  "closes": "15:00",
+                  "dayOfWeek": [
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                    "Monday"
+                  ]
+                }
+              ]
+            }
+          ]
+        ],
+        "headers": {
+          "age": "977198",
+          "date": "Fri, 25 Sep 2026 17:07:04 GMT",
+          "etag": "W/\"a76aaaf9430b72289f1ac64a89e679c7\"",
+          "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+          "server": "Vercel",
+          "x-vercel-id": "cle1::mm4zm-1790356024817-fcbfa975c633",
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "public, max-age=0, must-revalidate",
+          "x-firefox-spdy": "h2",
+          "x-matched-path": "/privacidad",
+          "x-vercel-cache": "HIT",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "x-frame-options": "DENY",
+          "content-encoding": "br",
+          "x-xss-protection": "0",
+          "permissions-policy": "geolocation=(self), camera=(), microphone=(), payment=(), usb=(), accelerometer=(), gyroscope=()",
+          "x-nextjs-prerender": "1",
+          "content-disposition": "inline",
+          "x-nextjs-stale-time": "300",
+          "x-content-type-options": "nosniff",
+          "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+          "access-control-allow-origin": "*",
+          "content-security-policy-report-only": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://*.payphonetodoesposible.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://*.google.com https://ordaeyxvvvdqsznsecjx.supabase.co; media-src 'self' data: blob:; connect-src 'self' blob: https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://us.i.posthog.com https://us-assets.i.posthog.com https://ordaeyxvvvdqsznsecjx.supabase.co wss://ordaeyxvvvdqsznsecjx.supabase.co; frame-src 'self' https://*.payphonetodoesposible.com; worker-src 'self' blob:; frame-ancestors 'none'; form-action 'self' https://*.payphonetodoesposible.com; base-uri 'self'; object-src 'none'; report-uri /api/csp-reporte"
+        },
+        "keywords": "ceviche Olón,encebollado Ecuador,delivery Guayaquil,encebollado Guayaquil,ceviche Guayaquil,delivery Santa Elena,ghost kitchen,comida costera,mariscos Olón,Náufrago",
+        "openGraph": [
+          {
+            "content": "Náufrago",
+            "property": "og:title"
+          },
+          {
+            "content": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+            "property": "og:description"
+          },
+          {
+            "content": "https://naufrago.ec",
+            "property": "og:url"
+          },
+          {
+            "content": "Náufrago",
+            "property": "og:site_name"
+          },
+          {
+            "content": "es_EC",
+            "property": "og:locale"
+          },
+          {
+            "content": "https://naufrago.ec/og-image.png",
+            "property": "og:image"
+          },
+          {
+            "content": "1200",
+            "property": "og:image:width"
+          },
+          {
+            "content": "630",
+            "property": "og:image:height"
+          },
+          {
+            "content": "Náufrago · ceviche y encebollado en Olón",
+            "property": "og:image:alt"
+          },
+          {
+            "content": "website",
+            "property": "og:type"
+          }
+        ],
+        "description": "Cómo Náufrago captura · usa y protege tus datos personales",
+        "canonicalUrl": "https://www.naufrago.ec/privacidad",
+        "languageCode": "es"
+      },
+      "_pagina_id": "6c198cfe-508e-4a11-86b6-fd7d11034c53",
+      "screenshotUrl": null
+    },
+    {
+      "url": "https://www.naufrago.ec/faq",
+      "html": null,
+      "text": "Preguntas frecuentes · Náufrago · Náufrago\nLo más consultado por nuestros clientes. Si tu pregunta no está aquí · escríbenos por WhatsApp al 0997744288.\n¿Cuáles son los horarios de pedido?\nAtendemos jueves a lunes de 7:00 a 15:00. Martes y miércoles cerramos para descanso de la cocina.\n¿A qué zonas hacen entrega?\nCocinamos en Guayaquil y entregamos con motorizado de PedidosYa. Al escribir tu dirección te decimos al instante si llegamos hasta ahí y cuánto cuesta el envío, antes de que pagues. Si quedas fuera de cobertura puedes coordinar el retiro por WhatsApp.\n¿Cuánto tarda la entrega?\nEl motorizado de PedidosYa cotiza al instante y la entrega suele ser entre 20 y 35 minutos dependiendo de la distancia. Cuando confirmas recibes la cotización exacta antes de pagar.\n¿Qué métodos de pago aceptan?\nCobro contra entrega (efectivo al motorizado) o coordinación previa por WhatsApp. El pago con tarjeta está en camino.\n¿Cómo funciona el tesoro de náufrago?\nPor cada pedido entregado acumulas el 4% del total en tesoro de náufrago. Lo puedes usar como descuento en tus próximos pedidos (hasta la mitad del subtotal) o cambiarlo por premios · 5% de descuento por $1.00 de tesoro · 15% de descuento por $6.00 de tesoro.\n¿Cómo accedo a mi cuenta?\nSin contraseña · entra con un enlace que te enviamos al correo o continúa con Google desde el ícono de usuario en la barra superior. Tu cuenta queda activa 90 días en el mismo dispositivo.\n¿Cómo cambio mi número de WhatsApp?\nEn Mi Cuenta → 'Mi WhatsApp' → Cambiar. Te enviamos un código de 4 dígitos al nuevo número para confirmar · al verificar transferimos automáticamente tu tesoro de náufrago + histórico de pedidos al nuevo WhatsApp.\n¿Puedo eliminar mi cuenta y mis datos?\nSí · desde Mi Cuenta → 'Eliminar cuenta'. Cumplimos LOPDP Ecuador · el borrado se completa a los 30 días (puedes cancelar el proceso volviendo a iniciar sesión). También puedes descargar todos tus datos en formato JSON antes de eliminar.\n¿Cómo funciona la ruleta del cofre del náufrago?\nToca el cofre en la isla · gira el timón · puedes ganar chifle · pan · cola gratis · o seguir intentando. Solo un giro por dispositivo cada 24 horas. Si ganas un premio se agrega automáticamente al carrito como regalo · cuando pagues el motorizado te lo lleva sin costo.\n¿Qué hago si mi pedido llega frío · tarde o con problemas?\nEscríbenos por WhatsApp al 0997744288 · te respondemos al instante · resolvemos con reposición · descuento o reembolso según el caso. Tu derecho está protegido bajo la Ley de Defensa del Consumidor de Ecuador.",
+      "crawl": {
+        "depth": 1,
+        "loadedUrl": "https://www.naufrago.ec/faq",
+        "loadedTime": "2026-09-25T17:07:11.191Z",
+        "contentType": "text/html; charset=utf-8",
+        "referrerUrl": "https://www.naufrago.ec/",
+        "httpStatusCode": 200
+      },
+      "debug": {
+        "requestHandlerMode": "browser"
+      },
+      "htmlUrl": null,
+      "markdown": "# Preguntas frecuentes · Náufrago · Náufrago\n\nLo más consultado por nuestros clientes. Si tu pregunta no está aquí · escríbenos por WhatsApp al [0997744288](https://wa.me/593997744288).\n\n¿Cuáles son los horarios de pedido?\n\nAtendemos jueves a lunes de 7:00 a 15:00. Martes y miércoles cerramos para descanso de la cocina.\n\n¿A qué zonas hacen entrega?\n\nCocinamos en Guayaquil y entregamos con motorizado de PedidosYa. Al escribir tu dirección te decimos al instante si llegamos hasta ahí y cuánto cuesta el envío, antes de que pagues. Si quedas fuera de cobertura puedes coordinar el retiro por WhatsApp.\n\n¿Cuánto tarda la entrega?\n\nEl motorizado de PedidosYa cotiza al instante y la entrega suele ser entre 20 y 35 minutos dependiendo de la distancia. Cuando confirmas recibes la cotización exacta antes de pagar.\n\n¿Qué métodos de pago aceptan?\n\nCobro contra entrega (efectivo al motorizado) o coordinación previa por WhatsApp. El pago con tarjeta está en camino.\n\n¿Cómo funciona el tesoro de náufrago?\n\nPor cada pedido entregado acumulas el 4% del total en tesoro de náufrago. Lo puedes usar como descuento en tus próximos pedidos (hasta la mitad del subtotal) o cambiarlo por premios · 5% de descuento por $1.00 de tesoro · 15% de descuento por $6.00 de tesoro.\n\n¿Cómo accedo a mi cuenta?\n\nSin contraseña · entra con un enlace que te enviamos al correo o continúa con Google desde el ícono de usuario en la barra superior. Tu cuenta queda activa 90 días en el mismo dispositivo.\n\n¿Cómo cambio mi número de WhatsApp?\n\nEn Mi Cuenta → 'Mi WhatsApp' → Cambiar. Te enviamos un código de 4 dígitos al nuevo número para confirmar · al verificar transferimos automáticamente tu tesoro de náufrago + histórico de pedidos al nuevo WhatsApp.\n\n¿Puedo eliminar mi cuenta y mis datos?\n\nSí · desde Mi Cuenta → 'Eliminar cuenta'. Cumplimos LOPDP Ecuador · el borrado se completa a los 30 días (puedes cancelar el proceso volviendo a iniciar sesión). También puedes descargar todos tus datos en formato JSON antes de eliminar.\n\n¿Cómo funciona la ruleta del cofre del náufrago?\n\nToca el cofre en la isla · gira el timón · puedes ganar chifle · pan · cola gratis · o seguir intentando. Solo un giro por dispositivo cada 24 horas. Si ganas un premio se agrega automáticamente al carrito como regalo · cuando pagues el motorizado te lo lleva sin costo.\n\n¿Qué hago si mi pedido llega frío · tarde o con problemas?\n\nEscríbenos por WhatsApp al 0997744288 · te respondemos al instante · resolvemos con reposición · descuento o reembolso según el caso. Tu derecho está protegido bajo la Ley de Defensa del Consumidor de Ecuador.",
+      "metadata": {
+        "title": "Preguntas frecuentes · Náufrago · Náufrago",
+        "author": null,
+        "jsonLd": [
+          [
+            {
+              "@id": "https://naufrago.ec#restaurant",
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": -2.1458611,
+                "longitude": -79.9014167
+              },
+              "url": "https://naufrago.ec",
+              "name": "Náufrago",
+              "@type": "Restaurant",
+              "image": "https://naufrago.ec/og-image.png",
+              "sameAs": [
+                "https://instagram.com/naufrago.ec"
+              ],
+              "address": {
+                "@type": "PostalAddress",
+                "postalCode": "090505",
+                "addressRegion": "Guayas",
+                "streetAddress": "Avenida 8 NO",
+                "addressCountry": "EC",
+                "addressLocality": "Guayaquil"
+              },
+              "hasMenu": {
+                "@id": "https://naufrago.ec#menu",
+                "name": "Menú Náufrago",
+                "@type": "Menu",
+                "hasMenuSection": [
+                  {
+                    "name": "Encebollados",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Encebollado Náufrago",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "4.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "El de la casa · porción estándar."
+                      },
+                      {
+                        "name": "Encebollado Mixto",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "6.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Encebollado con camarón y pescado."
+                      },
+                      {
+                        "name": "Encebollado Junior",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "3.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Porción pequeña · 45g de pescado."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Ceviches",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Ceviche Náufrago",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "7.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Pescado curtido en leche de tigre · salsa de maní · aguacate."
+                      },
+                      {
+                        "name": "Ceviche Mixto",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "9.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Pescado curtido en leche de tigre · salsa de maní · aguacate · + camarón."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Bebidas",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Jugo natural del día",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Sabor del día · elegí cuando agregues."
+                      },
+                      {
+                        "name": "Cola grande",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Elige tu sabor preferido · 1 litro."
+                      },
+                      {
+                        "name": "Cerveza grande",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "3.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Agua",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Café pasado",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Cola pequeña",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.25",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Elige tu sabor preferido · 350ml."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "extras",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Chifle",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "0.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Pan",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "0.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Aguacate",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "@context": "https://schema.org",
+              "telephone": "+593997744288",
+              "priceRange": "$$",
+              "description": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+              "servesCuisine": [
+                "Ecuadorian",
+                "Seafood",
+                "Latin American"
+              ],
+              "acceptsReservations": false,
+              "openingHoursSpecification": [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  "opens": "07:00",
+                  "closes": "15:00",
+                  "dayOfWeek": [
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                    "Monday"
+                  ]
+                }
+              ]
+            },
+            {
+              "@id": "https://naufrago.ec#localbusiness",
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": -2.1458611,
+                "longitude": -79.9014167
+              },
+              "url": "https://naufrago.ec",
+              "name": "Náufrago",
+              "@type": "LocalBusiness",
+              "address": {
+                "@type": "PostalAddress",
+                "postalCode": "090505",
+                "addressRegion": "Guayas",
+                "streetAddress": "Avenida 8 NO",
+                "addressCountry": "EC",
+                "addressLocality": "Guayaquil"
+              },
+              "@context": "https://schema.org",
+              "telephone": "+593997744288",
+              "areaServed": {
+                "@type": "GeoCircle",
+                "geoRadius": "15000",
+                "geoMidpoint": {
+                  "@type": "GeoCoordinates",
+                  "latitude": -2.1458611,
+                  "longitude": -79.9014167
+                }
+              },
+              "description": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+              "openingHoursSpecification": [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  "opens": "07:00",
+                  "closes": "15:00",
+                  "dayOfWeek": [
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                    "Monday"
+                  ]
+                }
+              ]
+            }
+          ],
+          {
+            "@type": "FAQPage",
+            "@context": "https://schema.org",
+            "mainEntity": [
+              {
+                "name": "¿Cuáles son los horarios de pedido?",
+                "@type": "Question",
+                "acceptedAnswer": {
+                  "text": "Atendemos jueves a lunes de 7:00 a 15:00. Martes y miércoles cerramos para descanso de la cocina.",
+                  "@type": "Answer"
+                }
+              },
+              {
+                "name": "¿A qué zonas hacen entrega?",
+                "@type": "Question",
+                "acceptedAnswer": {
+                  "text": "Cocinamos en Guayaquil y entregamos con motorizado de PedidosYa. Al escribir tu dirección te decimos al instante si llegamos hasta ahí y cuánto cuesta el envío, antes de que pagues. Si quedas fuera de cobertura puedes coordinar el retiro por WhatsApp.",
+                  "@type": "Answer"
+                }
+              },
+              {
+                "name": "¿Cuánto tarda la entrega?",
+                "@type": "Question",
+                "acceptedAnswer": {
+                  "text": "El motorizado de PedidosYa cotiza al instante y la entrega suele ser entre 20 y 35 minutos dependiendo de la distancia. Cuando confirmas recibes la cotización exacta antes de pagar.",
+                  "@type": "Answer"
+                }
+              },
+              {
+                "name": "¿Qué métodos de pago aceptan?",
+                "@type": "Question",
+                "acceptedAnswer": {
+                  "text": "Cobro contra entrega (efectivo al motorizado) o coordinación previa por WhatsApp. El pago con tarjeta está en camino.",
+                  "@type": "Answer"
+                }
+              },
+              {
+                "name": "¿Cómo funciona el tesoro de náufrago?",
+                "@type": "Question",
+                "acceptedAnswer": {
+                  "text": "Por cada pedido entregado acumulas el 4% del total en tesoro de náufrago. Lo puedes usar como descuento en tus próximos pedidos (hasta la mitad del subtotal) o cambiarlo por premios · 5% de descuento por $1.00 de tesoro · 15% de descuento por $6.00 de tesoro.",
+                  "@type": "Answer"
+                }
+              },
+              {
+                "name": "¿Cómo accedo a mi cuenta?",
+                "@type": "Question",
+                "acceptedAnswer": {
+                  "text": "Sin contraseña · entra con un enlace que te enviamos al correo o continúa con Google desde el ícono de usuario en la barra superior. Tu cuenta queda activa 90 días en el mismo dispositivo.",
+                  "@type": "Answer"
+                }
+              },
+              {
+                "name": "¿Cómo cambio mi número de WhatsApp?",
+                "@type": "Question",
+                "acceptedAnswer": {
+                  "text": "En Mi Cuenta → 'Mi WhatsApp' → Cambiar. Te enviamos un código de 4 dígitos al nuevo número para confirmar · al verificar transferimos automáticamente tu tesoro de náufrago + histórico de pedidos al nuevo WhatsApp.",
+                  "@type": "Answer"
+                }
+              },
+              {
+                "name": "¿Puedo eliminar mi cuenta y mis datos?",
+                "@type": "Question",
+                "acceptedAnswer": {
+                  "text": "Sí · desde Mi Cuenta → 'Eliminar cuenta'. Cumplimos LOPDP Ecuador · el borrado se completa a los 30 días (puedes cancelar el proceso volviendo a iniciar sesión). También puedes descargar todos tus datos en formato JSON antes de eliminar.",
+                  "@type": "Answer"
+                }
+              },
+              {
+                "name": "¿Cómo funciona la ruleta del cofre del náufrago?",
+                "@type": "Question",
+                "acceptedAnswer": {
+                  "text": "Toca el cofre en la isla · gira el timón · puedes ganar chifle · pan · cola gratis · o seguir intentando. Solo un giro por dispositivo cada 24 horas. Si ganas un premio se agrega automáticamente al carrito como regalo · cuando pagues el motorizado te lo lleva sin costo.",
+                  "@type": "Answer"
+                }
+              },
+              {
+                "name": "¿Qué hago si mi pedido llega frío · tarde o con problemas?",
+                "@type": "Question",
+                "acceptedAnswer": {
+                  "text": "Escríbenos por WhatsApp al 0997744288 · te respondemos al instante · resolvemos con reposición · descuento o reembolso según el caso. Tu derecho está protegido bajo la Ley de Defensa del Consumidor de Ecuador.",
+                  "@type": "Answer"
+                }
+              }
+            ]
+          }
+        ],
+        "headers": {
+          "age": "1079186",
+          "date": "Fri, 25 Sep 2026 17:07:10 GMT",
+          "etag": "W/\"6493034b7a6726ffd3df5a596bae5ebc\"",
+          "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+          "server": "Vercel",
+          "x-vercel-id": "cle1::vpv28-1790356030754-92ca9cb519c3",
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "public, max-age=0, must-revalidate",
+          "x-firefox-spdy": "h2",
+          "x-matched-path": "/faq",
+          "x-vercel-cache": "HIT",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "x-frame-options": "DENY",
+          "content-encoding": "br",
+          "x-xss-protection": "0",
+          "permissions-policy": "geolocation=(self), camera=(), microphone=(), payment=(), usb=(), accelerometer=(), gyroscope=()",
+          "x-nextjs-prerender": "1",
+          "content-disposition": "inline",
+          "x-nextjs-stale-time": "300",
+          "x-content-type-options": "nosniff",
+          "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+          "access-control-allow-origin": "*",
+          "content-security-policy-report-only": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://*.payphonetodoesposible.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://*.google.com https://ordaeyxvvvdqsznsecjx.supabase.co; media-src 'self' data: blob:; connect-src 'self' blob: https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://us.i.posthog.com https://us-assets.i.posthog.com https://ordaeyxvvvdqsznsecjx.supabase.co wss://ordaeyxvvvdqsznsecjx.supabase.co; frame-src 'self' https://*.payphonetodoesposible.com; worker-src 'self' blob:; frame-ancestors 'none'; form-action 'self' https://*.payphonetodoesposible.com; base-uri 'self'; object-src 'none'; report-uri /api/csp-reporte"
+        },
+        "keywords": "ceviche Olón,encebollado Ecuador,delivery Guayaquil,encebollado Guayaquil,ceviche Guayaquil,delivery Santa Elena,ghost kitchen,comida costera,mariscos Olón,Náufrago",
+        "openGraph": [
+          {
+            "content": "Náufrago",
+            "property": "og:title"
+          },
+          {
+            "content": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+            "property": "og:description"
+          },
+          {
+            "content": "https://naufrago.ec",
+            "property": "og:url"
+          },
+          {
+            "content": "Náufrago",
+            "property": "og:site_name"
+          },
+          {
+            "content": "es_EC",
+            "property": "og:locale"
+          },
+          {
+            "content": "https://naufrago.ec/og-image.png",
+            "property": "og:image"
+          },
+          {
+            "content": "1200",
+            "property": "og:image:width"
+          },
+          {
+            "content": "630",
+            "property": "og:image:height"
+          },
+          {
+            "content": "Náufrago · ceviche y encebollado en Olón",
+            "property": "og:image:alt"
+          },
+          {
+            "content": "website",
+            "property": "og:type"
+          }
+        ],
+        "description": "Horarios · zonas de entrega · pagos · tesoro de náufrago · cuenta · ruleta · soporte. Todo lo que necesitas saber para pedir en Náufrago.",
+        "canonicalUrl": "https://www.naufrago.ec/faq",
+        "languageCode": "es"
+      },
+      "_pagina_id": "6c198cfe-508e-4a11-86b6-fd7d11034c53",
+      "screenshotUrl": null
+    },
+    {
+      "url": "https://www.naufrago.ec/mi-cuenta",
+      "html": null,
+      "text": "Náufrago · Cuando tengas esa hambre de... NÁUFRAGO te espera!\nNáufrago\nghost kitchen Guayaquil · restaurante Olón, Sta Elena\nAbierto · hasta 3pm\nMi Cuenta\nCrea tu cuenta y por cada pedido acumula tesoro de náufrago\nGanas el 4% de cada pedido en tesoro de náufrago · lo usas como descuento\nGuarda tu dirección y pide con un solo toque\nRepite cualquier pedido anterior sin volver a armarlo\nEntra con tu correo o Google · sin contraseña.\no",
+      "crawl": {
+        "depth": 2,
+        "loadedUrl": "https://www.naufrago.ec/mi-cuenta",
+        "loadedTime": "2026-09-25T17:07:16.025Z",
+        "contentType": "text/html; charset=utf-8",
+        "referrerUrl": "https://www.naufrago.ec/privacidad",
+        "httpStatusCode": 200
+      },
+      "debug": {
+        "requestHandlerMode": "browser"
+      },
+      "htmlUrl": null,
+      "markdown": "# Náufrago · Cuando tengas esa hambre de... NÁUFRAGO te espera!\n\nNáufrago\n\nghost kitchen Guayaquil · restaurante Olón, Sta Elena\n\nAbierto · hasta 3pm\n\n## Mi Cuenta\n\nCrea tu cuenta y por cada pedido acumula tesoro de náufrago\n\n*   Ganas el **4% de cada pedido** en tesoro de náufrago · lo usas como descuento\n*   Guarda tu dirección y pide con un solo toque\n*   Repite cualquier pedido anterior sin volver a armarlo\n\nEntra con tu correo o Google · sin contraseña.\n\no",
+      "metadata": {
+        "title": "Náufrago · Cuando tengas esa hambre de... NÁUFRAGO te espera!",
+        "author": null,
+        "jsonLd": [
+          [
+            {
+              "@id": "https://naufrago.ec#restaurant",
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": -2.1458611,
+                "longitude": -79.9014167
+              },
+              "url": "https://naufrago.ec",
+              "name": "Náufrago",
+              "@type": "Restaurant",
+              "image": "https://naufrago.ec/og-image.png",
+              "sameAs": [
+                "https://instagram.com/naufrago.ec"
+              ],
+              "address": {
+                "@type": "PostalAddress",
+                "postalCode": "090505",
+                "addressRegion": "Guayas",
+                "streetAddress": "Avenida 8 NO",
+                "addressCountry": "EC",
+                "addressLocality": "Guayaquil"
+              },
+              "hasMenu": {
+                "@id": "https://naufrago.ec#menu",
+                "name": "Menú Náufrago",
+                "@type": "Menu",
+                "hasMenuSection": [
+                  {
+                    "name": "Encebollados",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Encebollado Náufrago",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "4.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "El de la casa · porción estándar."
+                      },
+                      {
+                        "name": "Encebollado Mixto",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "6.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Encebollado con camarón y pescado."
+                      },
+                      {
+                        "name": "Encebollado Junior",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "3.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Porción pequeña · 45g de pescado."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Ceviches",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Ceviche Náufrago",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "7.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Pescado curtido en leche de tigre · salsa de maní · aguacate."
+                      },
+                      {
+                        "name": "Ceviche Mixto",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "9.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Pescado curtido en leche de tigre · salsa de maní · aguacate · + camarón."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Bebidas",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Jugo natural del día",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Sabor del día · elegí cuando agregues."
+                      },
+                      {
+                        "name": "Cola grande",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Elige tu sabor preferido · 1 litro."
+                      },
+                      {
+                        "name": "Cerveza grande",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "3.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Agua",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Café pasado",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "2.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Cola pequeña",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.25",
+                          "priceCurrency": "USD"
+                        },
+                        "description": "Elige tu sabor preferido · 350ml."
+                      }
+                    ]
+                  },
+                  {
+                    "name": "extras",
+                    "@type": "MenuSection",
+                    "hasMenuItem": [
+                      {
+                        "name": "Chifle",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "0.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Pan",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "0.50",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      },
+                      {
+                        "name": "Aguacate",
+                        "@type": "MenuItem",
+                        "offers": {
+                          "@type": "Offer",
+                          "price": "1.00",
+                          "priceCurrency": "USD"
+                        },
+                        "description": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "@context": "https://schema.org",
+              "telephone": "+593997744288",
+              "priceRange": "$$",
+              "description": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+              "servesCuisine": [
+                "Ecuadorian",
+                "Seafood",
+                "Latin American"
+              ],
+              "acceptsReservations": false,
+              "openingHoursSpecification": [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  "opens": "07:00",
+                  "closes": "15:00",
+                  "dayOfWeek": [
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                    "Monday"
+                  ]
+                }
+              ]
+            },
+            {
+              "@id": "https://naufrago.ec#localbusiness",
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": -2.1458611,
+                "longitude": -79.9014167
+              },
+              "url": "https://naufrago.ec",
+              "name": "Náufrago",
+              "@type": "LocalBusiness",
+              "address": {
+                "@type": "PostalAddress",
+                "postalCode": "090505",
+                "addressRegion": "Guayas",
+                "streetAddress": "Avenida 8 NO",
+                "addressCountry": "EC",
+                "addressLocality": "Guayaquil"
+              },
+              "@context": "https://schema.org",
+              "telephone": "+593997744288",
+              "areaServed": {
+                "@type": "GeoCircle",
+                "geoRadius": "15000",
+                "geoMidpoint": {
+                  "@type": "GeoCoordinates",
+                  "latitude": -2.1458611,
+                  "longitude": -79.9014167
+                }
+              },
+              "description": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+              "openingHoursSpecification": [
+                {
+                  "@type": "OpeningHoursSpecification",
+                  "opens": "07:00",
+                  "closes": "15:00",
+                  "dayOfWeek": [
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                    "Monday"
+                  ]
+                }
+              ]
+            }
+          ]
+        ],
+        "headers": {
+          "age": "1247848",
+          "date": "Fri, 25 Sep 2026 17:07:15 GMT",
+          "etag": "W/\"36c6c76a628f214003e026dcddd71611\"",
+          "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+          "server": "Vercel",
+          "x-vercel-id": "cle1::d96ws-1790356035639-e7c8d4475e3d",
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "public, max-age=0, must-revalidate",
+          "x-firefox-spdy": "h2",
+          "x-matched-path": "/mi-cuenta",
+          "x-vercel-cache": "HIT",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "x-frame-options": "DENY",
+          "content-encoding": "br",
+          "x-xss-protection": "0",
+          "permissions-policy": "geolocation=(self), camera=(), microphone=(), payment=(), usb=(), accelerometer=(), gyroscope=()",
+          "x-nextjs-prerender": "1",
+          "content-disposition": "inline",
+          "x-nextjs-stale-time": "300",
+          "x-content-type-options": "nosniff",
+          "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+          "access-control-allow-origin": "*",
+          "content-security-policy-report-only": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://*.payphonetodoesposible.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://*.google.com https://ordaeyxvvvdqsznsecjx.supabase.co; media-src 'self' data: blob:; connect-src 'self' blob: https://*.payphonetodoesposible.com https://*.googleapis.com https://*.gstatic.com https://us.i.posthog.com https://us-assets.i.posthog.com https://ordaeyxvvvdqsznsecjx.supabase.co wss://ordaeyxvvvdqsznsecjx.supabase.co; frame-src 'self' https://*.payphonetodoesposible.com; worker-src 'self' blob:; frame-ancestors 'none'; form-action 'self' https://*.payphonetodoesposible.com; base-uri 'self'; object-src 'none'; report-uri /api/csp-reporte"
+        },
+        "keywords": "ceviche Olón,encebollado Ecuador,delivery Guayaquil,encebollado Guayaquil,ceviche Guayaquil,delivery Santa Elena,ghost kitchen,comida costera,mariscos Olón,Náufrago",
+        "openGraph": [
+          {
+            "content": "Náufrago",
+            "property": "og:title"
+          },
+          {
+            "content": "Ceviche y encebollado con el marisco más fresco de Olón, hecho con alma de playa y entregado directo a tu puerta. Porque el mar no debería estar lejos del almuerzo.",
+            "property": "og:description"
+          },
+          {
+            "content": "https://naufrago.ec",
+            "property": "og:url"
+          },
+          {
+            "content": "Náufrago",
+            "property": "og:site_name"
+          },
+          {
+            "content": "es_EC",
+            "property": "og:locale"
+          },
+          {
+            "content": "https://naufrago.ec/og-image.png",
+            "property": "og:image"
+          },
+          {
+            "content": "1200",
+            "property": "og:image:width"
+          },
+          {
+            "content": "630",
+            "property": "og:image:height"
+          },
+          {
+            "content": "Náufrago · ceviche y encebollado en Olón",
+            "property": "og:image:alt"
+          },
+          {
+            "content": "website",
+            "property": "og:type"
+          }
+        ],
+        "description": "Encebollados y ceviches con producto del día — sin esperar mesa, sin salir de casa.",
+        "canonicalUrl": "https://www.naufrago.ec/mi-cuenta",
+        "languageCode": "es"
+      },
+      "_pagina_id": "6c198cfe-508e-4a11-86b6-fd7d11034c53",
+      "screenshotUrl": null
+    }
+  ]
+}
