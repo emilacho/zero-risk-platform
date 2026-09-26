@@ -6,8 +6,11 @@
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
-const CIMIENTO_VIVO = 'C:/Users/emili/OneDrive/Documents/zr-vault/raw/evidencia/2026-09-26-NODO-VISUAL/cimiento-vivo-antes.json'
+// Fixture = copia EXACTA de la captura real del cimiento vivo (`raw/evidencia/2026-09-26-NODO-VISUAL/`),
+// dentro del repo para que CI (sin acceso a la bóveda local) pueda leerla.
+const CIMIENTO_VIVO = join(process.cwd(), '__tests__', 'fixtures', '2026-09-26-nodo-visual', 'cimiento-vivo-antes.json')
 const vivo = JSON.parse(readFileSync(CIMIENTO_VIVO, 'utf8'))
 
 describe('el cimiento vivo capturado el 26-sep tiene la forma que el constructor asume', () => {

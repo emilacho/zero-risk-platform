@@ -27,7 +27,9 @@ const {
   MAX_FOTOS_A_MIRAR,
 } = require(join(DIR, 'piso-visual-logica.js'))
 
-const EVIDENCIA = 'C:/Users/emili/OneDrive/Documents/zr-vault/raw/evidencia/2026-09-26-NODO-VISUAL'
+// Fixtures = copia EXACTA de la captura real del 26-sep (`raw/evidencia/2026-09-26-NODO-VISUAL/`),
+// dentro del repo para que CI (sin acceso a la bóveda local) pueda leerlas.
+const EVIDENCIA = join(process.cwd(), '__tests__', 'fixtures', '2026-09-26-nodo-visual')
 const cargar = (f: string) => JSON.parse(readFileSync(join(EVIDENCIA, f), 'utf8'))
 
 const ownHandle = cargar('fixture-ficha-config.json').apify.own_handles.instagram // "@naufrago.ec"
