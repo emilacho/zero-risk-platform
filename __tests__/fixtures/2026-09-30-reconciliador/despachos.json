@@ -1,0 +1,128 @@
+[
+ {
+  "dispatch_key": "dispatch:5751fc7d-5417-5ca5-9174-00bc8c490d02:onboarding-specialist:156428",
+  "agent_name": "onboarding-specialist",
+  "status": "completed",
+  "created_at": "2026-09-29T00:13:08.308+00:00",
+  "running_at": "2026-09-29T00:13:08.732+00:00",
+  "completed_at": "2026-09-29T00:16:21.787+00:00",
+  "workflow_execution_id": "156428"
+ },
+ {
+  "dispatch_key": "dispatch:rediscovery-156428:onboarding-specialist:156428",
+  "agent_name": "onboarding-specialist",
+  "status": "completed",
+  "created_at": "2026-09-29T00:16:30.172+00:00",
+  "running_at": "2026-09-29T00:16:31.189+00:00",
+  "completed_at": "2026-09-29T00:21:49.999+00:00",
+  "workflow_execution_id": "156428"
+ },
+ {
+  "dispatch_key": "dispatch:9e05073f-83e8-5528-ad93-1c4a4528fb4d:onboarding-specialist:156501",
+  "agent_name": "onboarding-specialist",
+  "status": "completed",
+  "created_at": "2026-09-29T01:25:38.811+00:00",
+  "running_at": "2026-09-29T01:25:39.228+00:00",
+  "completed_at": "2026-09-29T01:28:49.043+00:00",
+  "workflow_execution_id": "156501"
+ },
+ {
+  "dispatch_key": "dispatch:X9F0zp6LQ2xGEYVS:campaign-brief-agent:156528",
+  "agent_name": "campaign-brief-agent",
+  "status": "completed",
+  "created_at": "2026-09-29T01:36:54.844+00:00",
+  "running_at": "2026-09-29T01:36:55.066+00:00",
+  "completed_at": "2026-09-29T01:45:04.843+00:00",
+  "workflow_execution_id": "156528"
+ },
+ {
+  "dispatch_key": "dispatch:a4cyzp6iTLKCxOdV:campaign-brief-agent:156845",
+  "agent_name": "campaign-brief-agent",
+  "status": "completed",
+  "created_at": "2026-09-29T06:04:45.144+00:00",
+  "running_at": "2026-09-29T06:04:45.589+00:00",
+  "completed_at": "2026-09-29T06:04:50.032+00:00",
+  "workflow_execution_id": "156845"
+ },
+ {
+  "dispatch_key": "dispatch:a4cyzp6iTLKCxOdV:campaign-brief-agent:156847",
+  "agent_name": "campaign-brief-agent",
+  "status": "completed",
+  "created_at": "2026-09-29T06:05:00.979+00:00",
+  "running_at": "2026-09-29T06:05:01.129+00:00",
+  "completed_at": "2026-09-29T06:05:04.726+00:00",
+  "workflow_execution_id": "156847"
+ },
+ {
+  "dispatch_key": "dispatch:a4cyzp6iTLKCxOdV:campaign-brief-agent:156850",
+  "agent_name": "campaign-brief-agent",
+  "status": "completed",
+  "created_at": "2026-09-29T06:05:09.185+00:00",
+  "running_at": "2026-09-29T06:05:09.521+00:00",
+  "completed_at": "2026-09-29T06:05:10.975+00:00",
+  "workflow_execution_id": "156850"
+ },
+ {
+  "dispatch_key": "dispatch:PQdIgbuFexuBsoh8:campaign-brief-agent:157555",
+  "agent_name": "campaign-brief-agent",
+  "status": "running",
+  "created_at": "2026-09-29T18:18:02.541+00:00",
+  "running_at": "2026-09-29T18:18:02.965+00:00",
+  "completed_at": null,
+  "workflow_execution_id": "157555"
+ },
+ {
+  "dispatch_key": "dispatch:3xq41lthG5128CsP:campaign-brief-agent:157619",
+  "agent_name": "campaign-brief-agent",
+  "status": "error",
+  "created_at": "2026-09-29T19:25:00.489+00:00",
+  "running_at": "2026-09-29T19:25:22.396+00:00",
+  "completed_at": "2026-09-29T19:25:23.523+00:00",
+  "workflow_execution_id": "157619"
+ },
+ {
+  "dispatch_key": "dispatch:3xq41lthG5128CsP:campaign-brief-agent:157622",
+  "agent_name": "campaign-brief-agent",
+  "status": "error",
+  "created_at": "2026-09-29T19:25:43.967+00:00",
+  "running_at": "2026-09-29T19:25:46.391+00:00",
+  "completed_at": "2026-09-29T19:25:48.051+00:00",
+  "workflow_execution_id": "157622"
+ },
+ {
+  "dispatch_key": "dispatch:3xq41lthG5128CsP:campaign-brief-agent:157624",
+  "agent_name": "campaign-brief-agent",
+  "status": "error",
+  "created_at": "2026-09-29T19:25:56.855+00:00",
+  "running_at": "2026-09-29T19:26:08.834+00:00",
+  "completed_at": "2026-09-29T19:26:09.946+00:00",
+  "workflow_execution_id": "157624"
+ },
+ {
+  "dispatch_key": "dispatch:3xq41lthG5128CsP:campaign-brief-agent:157627",
+  "agent_name": "campaign-brief-agent",
+  "status": "error",
+  "created_at": "2026-09-29T19:27:14.86+00:00",
+  "running_at": "2026-09-29T19:27:15.033+00:00",
+  "completed_at": "2026-09-29T19:27:15.928+00:00",
+  "workflow_execution_id": "157627"
+ },
+ {
+  "dispatch_key": "dispatch:3xq41lthG5128CsP:campaign-brief-agent:157629",
+  "agent_name": "campaign-brief-agent",
+  "status": "error",
+  "created_at": "2026-09-29T19:27:22.953+00:00",
+  "running_at": "2026-09-29T19:27:30.175+00:00",
+  "completed_at": "2026-09-29T19:27:30.956+00:00",
+  "workflow_execution_id": "157629"
+ },
+ {
+  "dispatch_key": "dispatch:3xq41lthG5128CsP:campaign-brief-agent:157631",
+  "agent_name": "campaign-brief-agent",
+  "status": "error",
+  "created_at": "2026-09-29T19:27:45.132+00:00",
+  "running_at": "2026-09-29T19:27:51.301+00:00",
+  "completed_at": "2026-09-29T19:27:51.808+00:00",
+  "workflow_execution_id": "157631"
+ }
+]
