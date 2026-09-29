@@ -98,3 +98,23 @@ describe('armarBloquesDeImagen + armarPromptConImagenes · imágenes primero, te
     await expect(armarBloquesDeImagen([{ url: 'https://a.b/c.jpg' }], 'base64', mk(true, 'application/octet-stream', MAX_BYTES_POR_IMAGEN + 1))).rejects.toThrow(/demasiado grande/)
   })
 })
+
+describe('descarga base64 · un corte de red dice su código y el servidor (29-sep · el 500 del piso visual)', () => {
+  it('fetch failed con cause.code ⇒ el error trae el código de red y el servidor, y sigue ABORTANDO el pedido', async () => {
+    const fetchRoto = vi.fn(async () => {
+      const e = new TypeError('fetch failed') as TypeError & { cause?: unknown }
+      e.cause = { code: 'ECONNRESET' }
+      throw e
+    }) as unknown as typeof fetch
+    await expect(armarBloquesDeImagen([{ url: 'https://scontent-ssn1-1.cdninstagram.com/v/t51.82787-15/foto.jpg' }], 'base64', fetchRoto)).rejects.toThrow(
+      'imagen no descargable · ECONNRESET · servidor scontent-ssn1-1.cdninstagram.com',
+    )
+  })
+
+  it('sin cause, usa el mensaje; un timeout lo dice como timeout', async () => {
+    const sinCausa = vi.fn(async () => { throw new Error('boom') }) as unknown as typeof fetch
+    await expect(armarBloquesDeImagen([{ url: 'https://a.example/x.jpg' }], 'base64', sinCausa)).rejects.toThrow('imagen no descargable · boom · servidor a.example')
+    const abortado = vi.fn(async () => { const e = new Error('aborted'); e.name = 'AbortError'; throw e }) as unknown as typeof fetch
+    await expect(armarBloquesDeImagen([{ url: 'https://a.example/x.jpg' }], 'base64', abortado)).rejects.toThrow('timeout')
+  })
+})

@@ -163,6 +163,32 @@ function parseRespuesta(texto) {
 }
 
 /**
+ * PLAN DE COPIA PROPIA (29-sep): las fotos que mira el modelo son NUESTRAS copias (bucket público
+ * client-social-images, tabla client_social_images), no el enlace de Instagram (caduca y el borde de
+ * Instagram le corta la conexión al corredor de Railway). NUNCA se cae al enlace de Instagram: si falta la
+ * copia de algo que se iba a mirar, se DECLARA con su causa exacta y no se llama al modelo.
+ */
+function resolverCopias(copias, tieneLogo, fotosElegidas) {
+  var porPost = {}
+  ;(copias || []).forEach(function (c) { if (c && c.post_id) porPost[c.post_id] = c })
+  var faltan = []
+  function buscar(id, etiqueta) {
+    var c = porPost[id]
+    if (c && c.estado === 'ok' && c.url) return c.url
+    faltan.push(etiqueta + ' → ' + (c ? 'no se pudo copiar · ' + (c.causa || 'sin causa registrada') : 'sin copia guardada'))
+    return null
+  }
+  var logoUrl = tieneLogo ? buscar('logo-hd', 'logo') : null
+  var fotos = []
+  for (var i = 0; i < fotosElegidas.length; i++) {
+    var p = fotosElegidas[i]
+    var url = buscar(String(p.shortCode || p.id), 'post ' + (p.shortCode || p.id))
+    if (url) fotos.push(Object.assign({}, p, { displayUrl: url }))
+  }
+  return { logoUrl: logoUrl, fotos: fotos, faltan: faltan }
+}
+
+/**
  * Compone el piso visual completo. `invocarModelo({task,images}) => Promise<{response, brain_hit}>`
  * se inyecta para que esta función sea pura y testeable a costo cero (sin red real).
  */
@@ -192,19 +218,27 @@ function derivarPisoVisual(ctx, invocarModelo) {
     visual.error = agregar(visual.error, 'sin fila de instagram_scraper propia para este cliente')
   }
 
-  var logoUrl = post0 ? post0.profilePicUrlHD || post0.profilePicUrl || null : null
-  visual.capa_grafica.logo_url = logoUrl
+  var logoOriginal = post0 ? post0.profilePicUrlHD || post0.profilePicUrl || null : null
+  var logoUrl = logoOriginal
 
   var clasif = post0 ? clasificarPosts(post0.latestPosts) : { total: 0, foto: [], video: [], fecha_mas_vieja: null, fecha_mas_nueva: null }
   var fotosElegidas = elegirFotos(clasif.foto, MAX_FOTOS_A_MIRAR)
-  visual.muestra = armarMuestra(clasif, fotosElegidas, !!logoUrl)
+  visual.muestra = armarMuestra(clasif, fotosElegidas, !!logoOriginal)
 
-  if (!logoUrl && fotosElegidas.length === 0) {
+  if (!logoOriginal && fotosElegidas.length === 0) {
     visual.nota = 'sin material visual propio (ni logo ni fotos de producto) · capa del producto y reglas NO derivadas · R7'
     return Promise.resolve(visual)
   }
 
-  var armado = armarPedido({ colores: coloresCrudos, tipografias: tipografiasCrudas }, fotosElegidas, logoUrl)
+  var copiasOk = resolverCopias(ctx.copias, !!logoOriginal, fotosElegidas)
+  if (copiasOk.faltan.length) {
+    visual.error = agregar(visual.error, 'FOTOS_SIN_COPIA · ' + copiasOk.faltan.join(' | ') + ' · no se llamó al modelo (no se usa el enlace de Instagram)')
+    return Promise.resolve(visual)
+  }
+  logoUrl = copiasOk.logoUrl
+  visual.capa_grafica.logo_url = logoUrl
+
+  var armado = armarPedido({ colores: coloresCrudos, tipografias: tipografiasCrudas }, copiasOk.fotos, logoUrl)
   return Promise.resolve(invocarModelo({ task: armado.task, images: armado.images })).then(function (resp) {
     visual.brain_hit = resp && resp.brain_hit === true
     if (visual.brain_hit) {
@@ -242,6 +276,7 @@ if (typeof module !== 'undefined' && module.exports) {
     armarMuestra: armarMuestra,
     armarPedido: armarPedido,
     parseRespuesta: parseRespuesta,
+    resolverCopias: resolverCopias,
     derivarPisoVisual: derivarPisoVisual,
   }
 }

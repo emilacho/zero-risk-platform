@@ -39,6 +39,15 @@ try {
     if (esInstagramPropio(f.params, ownHandle).propio) { filaInstagram = f; break }
   }
 
+  // PLAN DE COPIA PROPIA (29-sep): las fotos del perfil PROPIO ya copiadas a nuestro almacén por el paso
+  // «Copiar fotos» del flujo de Apify. El modelo mira ESTAS URLs, nunca el enlace de Instagram.
+  const copias = ownHandle
+    ? await this.helpers.httpRequest({
+        url: base + '/rest/v1/client_social_images?client_id=eq.' + clientId + '&owner_role=eq.propio&handle=eq.' + encodeURIComponent(normalizarHandle(ownHandle)) + '&select=post_id,tipo,url,estado,causa',
+        method: 'GET', json: true, timeout: 10000, headers: authDb,
+      })
+    : []
+
   const invocarModelo = async (pedido) => {
     const r = await this.helpers.httpRequest({
       url: ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/agents/run-sdk',
@@ -66,7 +75,7 @@ try {
     }
   }
 
-  visual = await derivarPisoVisual({ clientId, ownInstagramHandle: ownHandle, filaSitio, filaInstagram }, invocarModelo)
+  visual = await derivarPisoVisual({ clientId, ownInstagramHandle: ownHandle, filaSitio, filaInstagram, copias }, invocarModelo)
 } catch (e) {
   visual = { error: String((e && e.message) || e).slice(0, 300) }
 }

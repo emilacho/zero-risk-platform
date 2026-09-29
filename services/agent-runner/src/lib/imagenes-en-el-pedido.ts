@@ -89,11 +89,25 @@ function mediaTypePorExtension(url: string): string | null {
   return m[1] === 'jpg' || m[1] === 'jpeg' ? 'image/jpeg' : `image/${m[1]}`
 }
 
+/** Código de red real detrás de un `fetch failed` (ECONNRESET · ENOTFOUND · ETIMEDOUT · …) o el motivo del corte. */
+export function causaDeRed(e: unknown): string {
+  const err = e as { name?: string; message?: string; cause?: { code?: string; message?: string } }
+  if (err?.name === 'AbortError') return `sin respuesta en ${TIMEOUT_DESCARGA_MS / 1000} s (timeout)`
+  return String(err?.cause?.code || err?.cause?.message || err?.message || e).slice(0, 120)
+}
+
 async function descargar(url: string, fetchFn: typeof fetch): Promise<{ data: string; media_type: MediaTypeImagen; bytes: number }> {
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_DESCARGA_MS)
   try {
-    const res = await fetchFn(url, { signal: ctrl.signal, headers: { Accept: 'image/*' } })
+    let res: Response
+    try {
+      res = await fetchFn(url, { signal: ctrl.signal, headers: { Accept: 'image/*' } })
+    } catch (e) {
+      // 29-sep · "fetch failed" a secas no decía NADA (el 500 del piso visual): ahora dice el código de red
+      // y el servidor que cortó. Sin tolerancia: el error sigue abortando el pedido.
+      throw new Error(`imagen no descargable · ${causaDeRed(e)} · servidor ${url.split('/')[2] || 'desconocido'}`)
+    }
     if (!res.ok) throw new Error(`imagen no descargable · HTTP ${res.status} · ${url.slice(0, 80)}`)
     const ct = String(res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
     const media_type = TIPOS_ACEPTADOS.has(ct) ? ct : mediaTypePorExtension(url)
