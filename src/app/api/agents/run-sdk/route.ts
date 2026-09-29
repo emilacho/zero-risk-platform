@@ -641,6 +641,9 @@ export async function POST(request: Request) {
             return
           }
           // El corredor rechazó la dirección: NO se llama a esa dirección desde acá tampoco (sólo se cierra el libro y se dice fuerte).
+          // 🔴 ABIERTO, NO CERRADO: esto cubre SÓLO la vía con palanca `callback_mode=runner`. El camino de siempre (sin palanca) sigue
+          // reenviando la vuelta a CUALQUIER http/https (`validateCallbackUrl` no tiene lista blanca): superficie SSRF preexistente,
+          // pendiente de decisión. No leer este bloque como que el hueco general está resuelto.
           if (elegibilidad.elegible && (innerBody as { error_kind?: string })?.error_kind === 'callback_url_not_allowed') {
             console.error(`[run-sdk async-callback] 🔴 el corredor RECHAZÓ la dirección de vuelta · dispatch=${dispatchKey} · nadie la llama`)
             Sentry.captureMessage('async_callback_url_not_allowed', { level: 'error', extra: { workflow_id: cbWorkflowId, agent_slug: cbAgentSlug, dispatch_key: dispatchKey } })
