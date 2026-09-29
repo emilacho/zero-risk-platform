@@ -39,6 +39,7 @@ export type JourneyType =
   | 'REVIEW'       // quarterly QBR generation + HITL approval
   | 'ACQUIRE'      // lead intake + qualification
   | 'GROWTH'       // expansion · YouTube tier per-client (§144 pending)
+  | 'BRIEF'        // parte de trabajo · el campaign brief que baja el plan a entregables (§144 Emilio 29-sep)
 
 // ─── Step types ──────────────────────────────────────────────────────
 //

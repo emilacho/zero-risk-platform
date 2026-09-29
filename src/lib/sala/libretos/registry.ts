@@ -16,6 +16,7 @@ import { alwaysOnLibreto } from './journeys/always-on'
 import { reviewLibreto } from './journeys/review'
 import { acquireLibreto } from './journeys/acquire'
 import { growthLibreto } from './journeys/growth'
+import { briefLibreto } from './journeys/brief'
 
 /** Canonical map · ordered by lifecycle (ACQUIRE → ONBOARD → PRODUCE
  *  → REVIEW + ALWAYS_ON in parallel · GROWTH as add-on tier). */
@@ -26,6 +27,7 @@ export const CANONICAL_LIBRETOS: Readonly<Record<JourneyType, Libreto>> = {
   REVIEW: reviewLibreto,
   ALWAYS_ON: alwaysOnLibreto,
   GROWTH: growthLibreto,
+  BRIEF: briefLibreto,
 }
 
 /** Look up the libreto for a journey type. Returns `null` if the

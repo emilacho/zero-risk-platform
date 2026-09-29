@@ -124,6 +124,21 @@ export const JOURNEY_WORKFLOW_MAP: Readonly<
     phase_boundaries: Object.freeze(['journey_completed']),
     idempotency_suffix: 'planeacion-worker-dispatch',
   },
+  // 29-sep · el SÉPTIMO tipo de viaje, firmado por Emilio: el parte de trabajo (campaign brief).
+  // La cadena: planeación termina → sobre a la sala (planeacion/plan-listo · briefear) → la sala despacha BRIEF.
+  // `PRODUCE` NO se toca: sigue siendo planeación. El tipo vive en CINCO listas escritas a mano (libretos/types.ts ·
+  // libretos/loader.ts · sala-router-consumer/parsing.ts · api/sala/events/append/route.ts · journey-orchestrator/types.ts):
+  // dos de ellas fallan EN CALIENTE sin romper la compilación (descartan el sobre al leerlo / impiden escribir el asiento).
+  //
+  // 🔴 El obrero PAGA (un agente): exige la llave de despacho, como el alta (E67). Sin `SALA_DISPATCH_KEY` no se dispara.
+  BRIEF: {
+    workflow_id: 'PQdIgbuFexuBsoh8',
+    webhook_path: 'zero-risk/brief',
+    worker_name: 'brief (parte de trabajo · campaign brief)',
+    phase_boundaries: Object.freeze(['journey_completed']),
+    idempotency_suffix: 'brief-worker-dispatch',
+    dispatch_key_required: true,
+  },
   // ACQUIRE, ALWAYS_ON, REVIEW, GROWTH · intentionally
   // unmapped until each journey gets its §144 opt-in. The router will
   // emit `target='agent'` (default) for them, matching legacy behavior.

@@ -39,6 +39,15 @@ function resolveUrl(template: string): string {
 }
 
 const ROUTES: Record<JourneyType, L2Route> = {
+  BRIEF: {
+    mode: 'n8n_webhook',
+    url: '${N8N_BASE_URL}/webhook/zero-risk/brief',
+    authHeader: 'none',
+    // El flujo exige la llave de despacho (x-sala-dispatch-key) y la valida él mismo: este camino L2 NO la manda, así que
+    // BRIEF solo corre por el repartidor de la sala (JOURNEY_WORKFLOW_MAP, dispatch_key_required).
+    timeoutMs: 15_000,
+    doc: 'Parte de trabajo · campaign brief · workflow PQdIgbuFexuBsoh8 · un agente + chequeos en código',
+  },
   ONBOARD: {
     mode: 'http',
     url: '${ZERO_RISK_API_URL}/api/onboarding',
