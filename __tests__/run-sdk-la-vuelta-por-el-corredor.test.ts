@@ -128,6 +128,18 @@ describe('el recorrido completo (Vercel → corredor)', () => {
     await correrElPedido(pedido({ callback_mode: 'runner', dry_run: true, test_delay_ms: 900000 }))
     expect(alCorredor[0].cuerpo).toMatchObject({ dryRun: true, test_delay_ms: 900000 })
   })
+  it('el gancho viaja también SIN palanca (para probar el camino viejo) pero SÓLO con dry_run: en una corrida real no viaja NUNCA', async () => {
+    corredorResponde(RESPUESTA_LARGA_OK)
+    await correrElPedido(pedido({ dry_run: true, test_delay_ms: 900000 }))
+    expect(alCorredor[0].cuerpo).toMatchObject({ dryRun: true, test_delay_ms: 900000 })
+    expect(alCorredor[0].cuerpo.callback_mode).toBeUndefined()
+    corredorResponde(RESPUESTA_LARGA_OK)
+    await correrElPedido(pedido({ test_delay_ms: 900000 }))
+    expect(alCorredor[0].cuerpo.test_delay_ms).toBeUndefined()
+    corredorResponde(ACUSE_202)
+    await correrElPedido(pedido({ callback_mode: 'runner', test_delay_ms: 900000 }))
+    expect(alCorredor[0].cuerpo.test_delay_ms).toBeUndefined()
+  })
   it('🔴 ② SIN la palanca: el camino de SIEMPRE · el corredor no recibe nada nuevo y Vercel reenvía la vuelta y cierra el libro', async () => {
     corredorResponde(RESPUESTA_LARGA_OK)
     const r = await correrElPedido(pedido())
