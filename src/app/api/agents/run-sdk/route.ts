@@ -986,10 +986,12 @@ export async function POST(request: Request) {
             callback_mode: 'runner',
             callback_url: entregaDelCorredor.callback_url,
             dispatch_key: entregaDelCorredor.dispatch_key,
-            ...(typeof (body as { test_delay_ms?: unknown }).test_delay_ms === 'number' || typeof ctx.test_delay_ms === 'number'
-              ? { test_delay_ms: (body as { test_delay_ms?: number }).test_delay_ms ?? (ctx.test_delay_ms as number) }
-              : {}),
           }
+        : {}),
+      // Gancho de la PRUEBA DEL ROJO (ARQ 2026-09-30) · SÓLO con dry_run (cero costo) · el corredor lo topa en 25 min y lo ignora sin dry_run.
+      // Va por AMBOS caminos (con y sin palanca) para poder probar que el camino de siempre muere en la pared de 800 s.
+      ...(dryRun && (typeof (body as { test_delay_ms?: unknown }).test_delay_ms === 'number' || typeof ctx.test_delay_ms === 'number')
+        ? { test_delay_ms: (body as { test_delay_ms?: number }).test_delay_ms ?? (ctx.test_delay_ms as number) }
         : {}),
     }
 

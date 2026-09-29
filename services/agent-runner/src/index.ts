@@ -22,7 +22,7 @@ import { checkSpendCap } from './lib/spend-gate.js'
 import { flushBraintrust } from './lib/braintrust.js'
 import { abrirLatido, intervaloDelLatido } from './lib/latido.js'
 import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.js'
-import { validarDireccionDeVuelta } from './lib/entrega-de-la-vuelta.js'
+import { validarDireccionDeVuelta, esperaForzadaMs } from './lib/entrega-de-la-vuelta.js'
 import { correrYEntregar } from './lib/correr-y-entregar.js'
 
 /**
@@ -441,6 +441,9 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
   }
 
   try {
+    // Gancho de la prueba del rojo (ARQ 2026-09-30) · SÓLO dry_run · topado en 25 min · sin dry_run vale 0 (nunca retrasa una corrida real).
+    const esperaDePrueba = esperaForzadaMs(dryRun, body.testDelayMs ?? body.test_delay_ms ?? ctxObj.test_delay_ms)
+    if (esperaDePrueba > 0) await new Promise<void>((r) => setTimeout(r, esperaDePrueba))
     const result = await runAgentViaSDK(input)
     // The SDK runner already builds a typed AgentRunResult with success+error.
     // 500 only when success is false AND no usable response was produced —
