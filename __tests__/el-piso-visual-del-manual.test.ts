@@ -250,11 +250,12 @@ describe('derivarPisoVisual · compone todo, con los tres ROJOS del diseño (§7
 })
 
 describe('derivarPisoVisual · plan de copia propia: el modelo mira NUESTRAS copias, nunca el enlace de Instagram', () => {
+  type Pedido = { images: Array<{ url: string }> }
   const pedidoOk = async (copias: Copia[]) => {
-    let pedido: { images: Array<{ url: string }> } | null = null
-    const invocar = async (p: { images: Array<{ url: string }> }) => { pedido = p; return { response: '{}', brain_hit: false } }
+    const cap: { pedido: Pedido | null } = { pedido: null }
+    const invocar = async (p: Pedido) => { cap.pedido = p; return { response: '{}', brain_hit: false } }
     const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia, copias }, invocar)
-    return { v, pedido }
+    return { v, pedido: cap.pedido }
   }
 
   it('ROJO · todas las imágenes que viajan al corredor son de nuestro almacén (ninguna de Instagram)', async () => {
