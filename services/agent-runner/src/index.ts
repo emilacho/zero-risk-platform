@@ -22,6 +22,8 @@ import { checkSpendCap } from './lib/spend-gate.js'
 import { flushBraintrust } from './lib/braintrust.js'
 import { abrirLatido, intervaloDelLatido } from './lib/latido.js'
 import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.js'
+import { validarDireccionDeVuelta } from './lib/entrega-de-la-vuelta.js'
+import { correrYEntregar } from './lib/correr-y-entregar.js'
 
 /**
  * Capture an agent error in Sentry with canonical context tags. Sprint
@@ -139,6 +141,15 @@ interface RunSdkBody {
   images?: unknown
   images_mode?: unknown
   imagesMode?: unknown
+  /** ARQ 2026-09-30 · el corredor entrega la vuelta (opt-in por pedido) */
+  callbackMode?: unknown
+  callback_mode?: unknown
+  callbackUrl?: unknown
+  callback_url?: unknown
+  dispatchKey?: unknown
+  dispatch_key?: unknown
+  testDelayMs?: unknown
+  test_delay_ms?: unknown
 }
 
 function isStringOrNullable(v: unknown): v is string | null | undefined {
@@ -336,6 +347,60 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     forceRestart,
     dryRun,
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
+  }
+
+  // ── EL CORREDOR ENTREGA LA VUELTA · ARQ 2026-09-30 (CC#1) ─────────────────────
+  // Sólo con `callback_mode: "runner"` (palanca por pedido · ausente ⇒ todo lo de abajo NO existe y el camino es el de siempre).
+  // Se contesta 202 ya, el trabajo corre sin reloj de Vercel y el corredor hace el POST a `callback_url`. Antes de aceptar se
+  // valida la dirección: si no es de NUESTRO n8n, no se llama a nadie, se registra y se falla fuerte.
+  const modoDeVuelta = pickString(body.callbackMode, body.callback_mode, ctxObj.callback_mode, ctxObj.callbackMode)
+  if (modoDeVuelta === 'runner') {
+    const dispatchKey = pickString(body.dispatchKey, body.dispatch_key) ?? null
+    const urlPedida = pickString(body.callbackUrl, body.callback_url, ctxObj.callback_url, ctxObj.callbackUrl)
+    const direccion = validarDireccionDeVuelta(urlPedida)
+    if (!direccion.ok) {
+      const sb = (() => { try { return getSupabaseAdmin() } catch { return null } })()
+      console.error(`[agent-runner] 🔴 VUELTA RECHAZADA · ${direccion.motivo} · agent=${agentName} · dispatch=${dispatchKey ?? 'null'} · NO se llama a esa dirección`)
+      Sentry.captureMessage('runner_callback_url_not_allowed', { level: 'error', extra: { motivo: direccion.motivo, agent: agentName, dispatch_key: dispatchKey, workflow_id: workflowId } })
+      if (sb) {
+        // se registra para forensia: el intento bloqueado + el despacho en error (nadie va a recibir la vuelta)
+        const ahora = new Date().toISOString()
+        void Promise.resolve(sb.from('agent_callback_attempts').insert({
+          workflow_id: workflowId, callback_url: String(urlPedida ?? '').slice(0, 300),
+          attempt_number: 1, status: 'blocked_host', http_status_code: null, error_message: direccion.motivo, attempted_at: ahora,
+        })).catch(() => undefined)
+        if (dispatchKey) void Promise.resolve(sb.from('agent_dispatches').update({ status: 'error', completed_at: ahora, updated_at: ahora }).eq('dispatch_key', dispatchKey)).catch(() => undefined)
+      }
+      res.status(400).json({ success: false, error: 'callback_url_not_allowed', code: 'E-CALLBACK-HOST', detail: direccion.motivo })
+      return
+    }
+    res.status(202).json({ accepted: true, delivered_by: 'runner', dispatch_key: dispatchKey, ack_timestamp: new Date().toISOString() })
+    void correrYEntregar(
+      { url: direccion.url, agentName, dispatchKey, dryRun, esperaForzada: body.testDelayMs ?? body.test_delay_ms ?? ctxObj.test_delay_ms },
+      {
+        ejecutar: () => runAgentViaSDK(input),
+        registrarIntento: (i) => {
+          try {
+            void Promise.resolve(getSupabaseAdmin().from('agent_callback_attempts').insert({ workflow_id: workflowId, callback_url: direccion.url.toString(), ...i })).catch(() => undefined)
+          } catch { /* el registro nunca frena la entrega */ }
+        },
+        cerrarDespacho: async (estado) => {
+          if (!dispatchKey) return
+          const ahora = new Date().toISOString()
+          try { await getSupabaseAdmin().from('agent_dispatches').update({ status: estado, completed_at: ahora, updated_at: ahora }).eq('dispatch_key', dispatchKey) } catch { /* best-effort · el reconciliador lo ve */ }
+        },
+        avisarFallo: (mensaje, extra) => {
+          console.error(`[agent-runner] 🔴 ${mensaje}`, extra)
+          Sentry.captureMessage(mensaje, { level: 'error', extra: { ...extra, workflow_id: workflowId } })
+        },
+      },
+    )
+      .catch((err) => {
+        console.error('[agent-runner] correrYEntregar threw:', err)
+        captureAgentError(err, input)
+      })
+      .finally(() => flushBraintrust())
+    return
   }
 
   // ── EL LATIDO · E44 (CC#3 · 15-sep) ───────────────────────────────────────

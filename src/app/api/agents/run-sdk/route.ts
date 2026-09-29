@@ -148,6 +148,30 @@ function isDiscoveryAgentSlug(agentSlug: string): boolean {
 }
 
 /**
+ * ARQ 2026-09-30 · EL CORREDOR ENTREGA LA VUELTA. Sólo estos agentes pueden pedir que la vuelta la entregue el corredor
+ * (`callback_mode: "runner"`): la vuelta del corredor lleva el resultado CRUDO, sin los efectos que sólo corren en Vercel
+ * (persistir descubrimiento al cerebro · revisión editorial · normalizar brand_section/fidelity). Ampliar esta lista es una
+ * decisión explícita por agente, nunca un efecto lateral. Fuera de la lista o con palanca ausente ⇒ camino de siempre.
+ */
+export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent']
+
+export function resolveCallbackMode(body: RunSdkInput): string | null {
+  const ctx = (body.context ?? {}) as Record<string, unknown>
+  const raw = (body as unknown as Record<string, unknown>).callback_mode ?? ctx.callback_mode
+  return typeof raw === 'string' ? raw : null
+}
+
+/** La entrega por el corredor exige: palanca `runner` + agente en la lista + sin descubrimiento + sin revisión editorial. */
+export function vueltaPorElCorredorElegible(body: RunSdkInput): { elegible: boolean; motivo: string } {
+  if (resolveCallbackMode(body) !== 'runner') return { elegible: false, motivo: 'sin palanca callback_mode=runner' }
+  const slug = resolveAgentSlug(String(body.agent ?? ''))
+  if (isDiscoveryAgentSlug(slug)) return { elegible: false, motivo: 'agente de descubrimiento (efectos que sólo corren en Vercel)' }
+  if (requiresEditorReview(slug)) return { elegible: false, motivo: 'agente con revisión editorial (efecto que sólo corre en Vercel)' }
+  if (!AGENTES_CON_VUELTA_POR_EL_CORREDOR.includes(slug)) return { elegible: false, motivo: `agente ${slug} fuera de la lista de vuelta por el corredor` }
+  return { elegible: true, motivo: 'ok' }
+}
+
+/**
  * Resolve workflow_id + workflow_execution_id from request body · accepts
  * top-level OR nested under `context` (matches /api/agents/run pattern at
  * line 549-570 · symmetry across both endpoints).
@@ -467,6 +491,8 @@ const HOP_BY_HOP_OR_REWRITTEN_HEADERS = new Set([
 export function buildInnerRequestWithoutCallback(
   outerRequest: Request,
   outerBody: RunSdkInput,
+  /** ARQ 2026-09-30 · la vuelta la entrega el corredor: el pedido interno lleva la dirección y la clave del despacho para pasárselas. */
+  runnerDelivery?: { callback_url: string; dispatch_key: string },
 ): Request {
   const ctx = (outerBody.context ?? {}) as Record<string, unknown>
   // SHALLOW-OMIT both snake + camel · top-level + context-level. Cero JSON
@@ -484,6 +510,8 @@ export function buildInnerRequestWithoutCallback(
   const innerBody = {
     ...bodyMinusCallback,
     context: ctxMinusCallback,
+    // siempre se pisa: un `_runner_delivery` que llegue de afuera NO vale, sólo el que arma esta función
+    _runner_delivery: runnerDelivery ?? undefined,
   }
   // Forward the original headers verbatim · auth + workflow_id stay canonical.
   const innerHeaders = new Headers()
@@ -596,9 +624,29 @@ export async function POST(request: Request) {
         let innerBody: unknown
         let innerOk = false
         try {
-          const innerRequest = buildInnerRequestWithoutCallback(request, body)
+          const elegibilidad = vueltaPorElCorredorElegible(body)
+          if (resolveCallbackMode(body) === 'runner' && !elegibilidad.elegible) {
+            console.warn(`[run-sdk] callback_mode=runner IGNORADO · ${elegibilidad.motivo} · la vuelta la entrega Vercel como siempre`)
+          }
+          const innerRequest = buildInnerRequestWithoutCallback(
+            request,
+            body,
+            elegibilidad.elegible ? { callback_url: callbackUrl, dispatch_key: dispatchKey } : undefined,
+          )
           const innerResponse = await POST(innerRequest)
           innerBody = await innerResponse.json()
+          // El corredor aceptó y ÉL entrega la vuelta y cierra el libro: acá NO se reenvía nada ni se cierra nada.
+          if (elegibilidad.elegible && innerResponse.status === 202 && (innerBody as { delivered_by?: string })?.delivered_by === 'runner') {
+            console.info(`[run-sdk async-callback] la vuelta la entrega el corredor · dispatch=${dispatchKey}`)
+            return
+          }
+          // El corredor rechazó la dirección: NO se llama a esa dirección desde acá tampoco (sólo se cierra el libro y se dice fuerte).
+          if (elegibilidad.elegible && (innerBody as { error_kind?: string })?.error_kind === 'callback_url_not_allowed') {
+            console.error(`[run-sdk async-callback] 🔴 el corredor RECHAZÓ la dirección de vuelta · dispatch=${dispatchKey} · nadie la llama`)
+            Sentry.captureMessage('async_callback_url_not_allowed', { level: 'error', extra: { workflow_id: cbWorkflowId, agent_slug: cbAgentSlug, dispatch_key: dispatchKey } })
+            await markDispatchTerminal(getSupabaseAdmin(), dispatchKey, 'error')
+            return
+          }
           // E87 (CC#1 2026-09-17) · una respuesta perdida NO es éxito. Antes bastaba
           // `success !== false`: `{"error":"terminated"}` (la conexión al corredor se
           // perdió · E86) marcaba el ledger «completed» 21 s ANTES de que el empleado
@@ -901,6 +949,11 @@ export async function POST(request: Request) {
       ctx.dryRun === true ||
       headerDryRun
 
+    const rd = (body as unknown as { _runner_delivery?: { callback_url?: unknown; dispatch_key?: unknown } })._runner_delivery
+    const entregaDelCorredor =
+      rd && typeof rd.callback_url === 'string' && typeof rd.dispatch_key === 'string'
+        ? { callback_url: rd.callback_url, dispatch_key: rd.dispatch_key }
+        : null
     const proxyBody = {
       agentName,
       task,
@@ -924,6 +977,17 @@ export async function POST(request: Request) {
       extra: body.extra || undefined,
       // El cable para mirar · `{}` sin imágenes (cuerpo de siempre) · `images` + `imagesMode` con ellas.
       ...campoImagenesDelProxy(imagenesDelPedido.images, imagenesDelPedido.imagesMode),
+      // ARQ 2026-09-30 · la vuelta la entrega el corredor (sólo si el pedido interno lo trae · ausente ⇒ cuerpo de siempre).
+      ...(entregaDelCorredor
+        ? {
+            callback_mode: 'runner',
+            callback_url: entregaDelCorredor.callback_url,
+            dispatch_key: entregaDelCorredor.dispatch_key,
+            ...(typeof (body as { test_delay_ms?: unknown }).test_delay_ms === 'number' || typeof ctx.test_delay_ms === 'number'
+              ? { test_delay_ms: (body as { test_delay_ms?: number }).test_delay_ms ?? (ctx.test_delay_ms as number) }
+              : {}),
+          }
+        : {}),
     }
 
     // Proxy hop with transient-failure retry (1 immediate + up to 2 retries ·
@@ -1060,6 +1124,20 @@ export async function POST(request: Request) {
           )
         }
         // graceful 5xx · fall through to parse + pass-through.
+      }
+      // ARQ 2026-09-30 · el corredor aceptó y entrega él la vuelta: se devuelve el acuse y se corta acá (nada de post-proceso ni reenvío).
+      if (entregaDelCorredor && railwayResponse.status === 202) {
+        return NextResponse.json(
+          { accepted: true, delivered_by: 'runner', dispatch_key: entregaDelCorredor.dispatch_key },
+          { status: 202 },
+        )
+      }
+      // ARQ 2026-09-30 · el corredor rechazó la dirección de vuelta (no es de nuestro n8n): se corta con el motivo, sin más pasos.
+      if (entregaDelCorredor && railwayResponse.status === 400 && railwayText.includes('callback_url_not_allowed')) {
+        return NextResponse.json(
+          { success: false, error: 'callback_url_not_allowed', error_kind: 'callback_url_not_allowed', code: 'E-CALLBACK-HOST' },
+          { status: 400 },
+        )
       }
       break // usable response (2xx or graceful 5xx) · proceed.
     }
