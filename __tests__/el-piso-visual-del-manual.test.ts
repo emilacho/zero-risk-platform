@@ -38,6 +38,18 @@ const filasInstagram: Array<{ created_at: string; params: unknown; respuesta: un
 const filaPropia = filasInstagram.find((f) => esInstagramPropio(f.params, ownHandle).propio)!
 const filaCompetidor = filasInstagram.find((f) => !esInstagramPropio(f.params, ownHandle).propio)!
 
+// Plan de copia propia (29-sep): lo que el paso «Copiar fotos» del flujo de Apify deja en client_social_images.
+type Copia = { post_id: string; tipo: string; url: string | null; estado: 'ok' | 'no_bajo'; causa: string | null }
+const copiasDe = (fila: { respuesta: unknown[] }): Copia[] => {
+  const it = (fila.respuesta as Array<Record<string, any>>)[0]
+  const out: Copia[] = [{ post_id: 'logo-hd', tipo: 'logo_hd', url: 'https://copia.test/logo-hd.jpg', estado: 'ok', causa: null }]
+  for (const p of it.latestPosts || []) {
+    const id = String(p.shortCode || p.id)
+    out.push({ post_id: id, tipo: 'post_' + String(p.type || '').toLowerCase(), url: 'https://copia.test/' + id + '.jpg', estado: 'ok', causa: null })
+  }
+  return out
+}
+
 const RESPUESTA_CORRIDA_A_REAL = `## Estilo visual — NAUFRAGO
 
 **1) Paleta**
@@ -173,11 +185,11 @@ describe('derivarPisoVisual · compone todo, con los tres ROJOS del diseño (§7
       reglas: { debe: ['a', 'b', 'c'], no_debe: ['d', 'e'] },
     })
     const invocar = async () => ({ response: respuestaModelo, brain_hit: false })
-    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia }, invocar)
+    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia, copias: copiasDe(filaPropia) }, invocar)
     expect(v.legible).toBe(true)
     expect(v.brain_hit).toBe(false)
     expect(v.error).toBeNull()
-    expect(v.capa_grafica.logo_url).toBe(post0Propio.profilePicUrlHD)
+    expect(v.capa_grafica.logo_url).toBe('https://copia.test/logo-hd.jpg') // NUESTRA copia, no el enlace de Instagram
     expect(v.capa_grafica.paleta).toEqual([{ color: siteVisual.colores[0], rol: 'principal' }])
     expect(v.muestra.fotos_totales).toBe(2)
     expect(v.capa_producto).toEqual({ luz: 'natural, suave' })
@@ -186,7 +198,7 @@ describe('derivarPisoVisual · compone todo, con los tres ROJOS del diseño (§7
 
   it('ROJO R5 · si el recibo delata brain_hit:true, la corrida SE DESCARTA (no se guardan capa_producto ni reglas)', async () => {
     const invocar = async () => ({ response: '{"capa_producto":{},"reglas":{}}', brain_hit: true })
-    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia }, invocar)
+    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia, copias: copiasDe(filaPropia) }, invocar)
     expect(v.brain_hit).toBe(true)
     expect(v.legible).toBe(false)
     expect(v.capa_producto).toBeNull()
@@ -219,7 +231,7 @@ describe('derivarPisoVisual · compone todo, con los tres ROJOS del diseño (§7
 
   it('una respuesta no legible (sin JSON) ⇒ capa_producto y reglas quedan ausentes, la muestra SÍ queda (es de código)', async () => {
     const invocar = async () => ({ response: RESPUESTA_CORRIDA_A_REAL, brain_hit: false })
-    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia }, invocar)
+    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia, copias: copiasDe(filaPropia) }, invocar)
     expect(v.legible).toBe(false)
     expect(v.capa_producto).toBeNull()
     expect(v.reglas).toBeNull()
@@ -231,8 +243,59 @@ describe('derivarPisoVisual · compone todo, con los tres ROJOS del diseño (§7
       response: JSON.stringify({ capa_grafica: { paleta: [{ color: '#ff00ff', rol: 'principal' }], tipografias: [{ nombre: 'Comic Sans', rol: 'titulos' }] }, capa_producto: {}, reglas: {} }),
       brain_hit: false,
     })
-    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia }, invocar)
+    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia, copias: copiasDe(filaPropia) }, invocar)
     expect(v.capa_grafica.paleta).toEqual([])
     expect(v.capa_grafica.tipografias).toEqual([])
+  })
+})
+
+describe('derivarPisoVisual · plan de copia propia: el modelo mira NUESTRAS copias, nunca el enlace de Instagram', () => {
+  const pedidoOk = async (copias: Copia[]) => {
+    let pedido: { images: Array<{ url: string }> } | null = null
+    const invocar = async (p: { images: Array<{ url: string }> }) => { pedido = p; return { response: '{}', brain_hit: false } }
+    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia, copias }, invocar)
+    return { v, pedido }
+  }
+
+  it('ROJO · todas las imágenes que viajan al corredor son de nuestro almacén (ninguna de Instagram)', async () => {
+    const { pedido } = await pedidoOk(copiasDe(filaPropia))
+    expect(pedido!.images.length).toBeGreaterThanOrEqual(2)
+    for (const im of pedido!.images) {
+      expect(im.url.startsWith('https://copia.test/')).toBe(true)
+      expect(im.url).not.toMatch(/cdninstagram|fbcdn/)
+    }
+  })
+
+  it('ROJO · sin ninguna copia guardada ⇒ se DECLARA FOTOS_SIN_COPIA y NO se llama al modelo (no hay caída al enlace de Instagram)', async () => {
+    let llamado = false
+    const invocar = async () => { llamado = true; return { response: '{}', brain_hit: false } }
+    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia, copias: [] }, invocar)
+    expect(llamado).toBe(false)
+    expect(v.error).toMatch(/FOTOS_SIN_COPIA/)
+    expect(v.error).toMatch(/sin copia guardada/)
+    expect(v.capa_producto).toBeNull()
+    expect(v.reglas).toBeNull()
+  })
+
+  it('ROJO · una foto elegida que no se pudo copiar ⇒ se declara con su CAUSA EXACTA y no se llama al modelo', async () => {
+    const post0 = (filaPropia.respuesta as Array<Record<string, any>>)[0]
+    const elegida = elegirFotos(clasificarPosts(post0.latestPosts).foto, MAX_FOTOS_A_MIRAR)[0]
+    const id = String(elegida.shortCode || elegida.id)
+    const copias = copiasDe(filaPropia).map((c) => (c.post_id === id ? { ...c, url: null, estado: 'no_bajo' as const, causa: 'HTTP 403 · scontent-ssn1-1.cdninstagram.com' } : c))
+    let llamado = false
+    const invocar = async () => { llamado = true; return { response: '{}', brain_hit: false } }
+    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia, copias }, invocar)
+    expect(llamado).toBe(false)
+    expect(v.error).toMatch(/FOTOS_SIN_COPIA/)
+    expect(v.error).toContain('post ' + id + ' → no se pudo copiar · HTTP 403 · scontent-ssn1-1.cdninstagram.com')
+  })
+
+  it('el logo sin copia también se declara (logo → sin copia guardada)', async () => {
+    const copias = copiasDe(filaPropia).filter((c) => c.post_id !== 'logo-hd')
+    let llamado = false
+    const invocar = async () => { llamado = true; return { response: '{}', brain_hit: false } }
+    const v = await derivarPisoVisual({ ownInstagramHandle: ownHandle, filaSitio, filaInstagram: filaPropia, copias }, invocar)
+    expect(llamado).toBe(false)
+    expect(v.error).toMatch(/logo → sin copia guardada/)
   })
 })
