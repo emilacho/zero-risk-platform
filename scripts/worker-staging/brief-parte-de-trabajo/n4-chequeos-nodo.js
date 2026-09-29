@@ -1,12 +1,15 @@
 // ④ CHEQUEOS · cuerpo del nodo · CC#1 · 2026-09-29 (la lógica pura `brief-chequeos.js` va ANTEPUESTA por el constructor).
 // Gratis y en código. Lo que falle SE DECLARA en el parte · NO se corrige solo. Arma la fila que ⑤ guardará y el aviso de ⑥.
+// Entrada: la salida de «③c Juntar» (lista + tandas) que ya pasó «¿llegó todo?». Si no llegó todo NUNCA se llega aquí.
 const c = $input.first().json
 const ext = c.llego_la_vuelta ? extraerParte(c.texto) : { legible: false, motivo: c.motivo || 'la vuelta del redactor no llegó' }
 const manual = { forbidden_words: c.forbidden_words || [], required_terminology: c.required_terminology || [] }
 const parte = ext.legible ? ext.parte : { entregables: [], pendientes_declarados: [], huecos: [], contradicciones_plan_vs_manual: [] }
 const res = ext.legible
-  ? chequear(parte, manual, c.plan_texto)
+  ? chequear(parte, manual, c.plan_texto, { lista_ids: c.lista_ids, ids_extra: c.ids_extra_no_pedidos })
   : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', entregable: null, detalle: ext.motivo }], por_chequeo: { respuesta_no_legible: 1 }, entregables_revisados: 0 }
+// «legible» para guardar/mandar a Drive = hay al menos un brief de verdad
+const legible = ext.legible && parte.entregables.length > 0
 
 // ── el parte, legible (lo que Emilio lee en Drive) ────────────────────────────────────────────────
 const L = []
@@ -14,7 +17,7 @@ const p = (s) => L.push(s === undefined ? '' : s)
 const lista = (a) => (Array.isArray(a) && a.length ? a.map((x) => '  - ' + (typeof x === 'string' ? x : JSON.stringify(x))).join('\n') : '  (ninguno)')
 const hoy = new Date().toISOString().slice(0, 10)
 p('# PARTE DE TRABAJO · ' + c.client_name + ' · ' + hoy)
-p('Plan de origen: ' + c.plan_id + ' · Manual: versión ' + c.manual_version + ' (' + c.manual_id + ')' + (c.dry_run ? ' · ⚠️ MODO SECO (no es un parte real)' : ''))
+p('Plan de origen: ' + c.plan_id + ' · Manual: versión ' + c.manual_version + ' (' + c.manual_id + ')' + (c.dry_run ? ' · ⚠️ MODO SECO (no es un parte real)' : '') + ' · ' + c.tandas_total + ' tanda(s) de ≤' + c.tanda + ' entregable(s)')
 p('')
 p('## Estado de los chequeos: ' + (res.ok ? '✅ sin hallazgos' : '⚠️ ' + res.hallazgos.length + ' hallazgo(s) DECLARADOS · no se corrigieron solos'))
 if (!res.ok) {
@@ -61,10 +64,11 @@ if (!(parte.contradicciones_plan_vs_manual || []).length) p('(ninguna declarada)
 p('')
 p('## Dependencias')
 p(lista(parte.dependencias))
-if (!ext.legible) {
+const crudos = c.respuestas_crudas_ilegibles || []
+if (crudos.length) {
   p('')
-  p('## ⚠️ Respuesta del redactor (no legible como parte · se guarda tal cual para diagnóstico)')
-  p(String(c.texto || '').slice(0, 6000))
+  p('## ⚠️ Respuestas del redactor que NO fueron legibles (se guardan crudas para diagnóstico · ya estaban pagadas)')
+  crudos.forEach((t) => p(String(t).slice(0, 6000)))
 }
 const parte_md = L.join('\n')
 
@@ -83,16 +87,22 @@ const fila_parte = {
     plan_id: c.plan_id,
     manual_id: c.manual_id,
     manual_version: c.manual_version,
-    legible: ext.legible,
+    // «legible» es lo que mira la guardia de repetido: un parte ilegible NO impide reintentar
+    legible: legible,
     chequeos_ok: res.ok,
     hallazgos: res.hallazgos.length,
     por_chequeo: res.por_chequeo,
     entregables: parte.entregables.length,
     pendientes: (parte.pendientes_declarados || []).length,
     huecos: (parte.huecos || []).length,
+    tandas: c.tandas_total,
+    tanda_tamano: c.tanda,
+    tandas_ilegibles: c.tandas_ilegibles || [],
+    costo_usd: c.vuelta_costo_usd,
     dry_run: c.dry_run === true,
     guardado_antes_de_drive: true,
-    parte: ext.legible ? parte : null,
+    parte: legible ? parte : null,
+    respuestas_crudas_ilegibles: crudos.length ? crudos : null,
   },
 }
 const payload_cable = {
@@ -106,6 +116,7 @@ const payload_cable = {
   _journey_id: c._journey_id || null,
   ts: new Date().toISOString(),
 }
+const dryRuns = c.dry_runs_enviados || []
 return [{
   json: {
     client_id: c.client_id,
@@ -113,13 +124,17 @@ return [{
     dry_run: c.dry_run === true,
     plan_id: c.plan_id,
     manual_id: c.manual_id,
-    cuerpo_dry_run_enviado: c.cuerpo && c.cuerpo.dry_run,
+    // cada llamada al nodo que paga (la lista y cada tanda) mandó el dry_run del sobre
+    dry_runs_enviados: dryRuns,
+    todas_las_llamadas_con_el_dry_run_del_sobre: dryRuns.length > 0 && dryRuns.every((x) => x === (c.dry_run === true)),
+    llamadas_al_redactor: dryRuns.length,
     llego_la_vuelta: c.llego_la_vuelta,
     vuelta_real: c.vuelta_real,
     simulacro_usado: c.simulacro_usado,
     vuelta_costo_usd: c.vuelta_costo_usd,
     vuelta_modelo: c.vuelta_modelo,
-    parte_legible: ext.legible,
+    tandas_total: c.tandas_total,
+    parte_legible: legible,
     chequeos_ok: res.ok,
     hallazgos: res.hallazgos,
     por_chequeo: res.por_chequeo,

@@ -65,16 +65,80 @@ function palabraPresente(textoNorm, palabra) {
   return (' ' + textoNorm + ' ').indexOf(' ' + p + ' ') !== -1
 }
 
+/** Los fragmentos textuales entre comillas de una cita: « » “ ” " " y COMILLAS SIMPLES ('…'). Solo los de 12+ caracteres. */
+function fragmentosCitados(cita) {
+  var t = String(cita || '')
+  var out = []
+  var pares = [/«([^»]+)»/g, /“([^”]+)”/g, /"([^"]+)"/g]
+  for (var p = 0; p < pares.length; p++) {
+    var m
+    while ((m = pares[p].exec(t)) !== null) out.push(m[1])
+  }
+  var partes = t.split("'")
+  for (var i = 1; i < partes.length; i += 2) {
+    var cierra = i < partes.length - 1 // la comilla de cierre existe
+    if (cierra) out.push(partes[i])
+  }
+  return out.filter(function (f) { return normalizar(f).length >= 12 })
+}
+
+/** ¿El fragmento citado está en el plan? Se parte por «…», «...», flechas y [notas] del agente; TODOS los trozos de 12+ caracteres deben estar. */
+function fragmentoEnPlan(fragmento, planNorm) {
+  var f = String(fragmento || '')
+  // las notas del agente entre corchetes ([nota: …]) NO son texto del plan: se descartan enteras
+  var a = f.indexOf('[')
+  while (a !== -1) {
+    var b = f.indexOf(']', a)
+    f = b === -1 ? f.slice(0, a) : f.slice(0, a) + '|' + f.slice(b + 1)
+    a = f.indexOf('[')
+  }
+  var seps = ['…', '...', '→']
+  for (var i = 0; i < seps.length; i++) f = f.split(seps[i]).join('|')
+  var trozos = f.split('|').map(normalizar).filter(function (x) { return x.length >= 12 })
+  if (!trozos.length) return false
+  for (var j = 0; j < trozos.length; j++) if (planNorm.indexOf(trozos[j]) === -1) return false
+  return true
+}
+
+/** Números de sección que la cita nombra: «Sección 5», «sección 6». */
+function seccionesCitadas(cita) {
+  var n = normalizar(cita)
+  var out = []
+  var m
+  var re = /seccion (\d+)/g
+  while ((m = re.exec(n)) !== null) if (out.indexOf(m[1]) === -1) out.push(m[1])
+  return out
+}
+
+/** Números de sección que el plan realmente tiene: encabezados «## SECCIÓN N · …». */
+function seccionesQueTieneElPlan(planTexto) {
+  var out = []
+  var lineas = String(planTexto || '').split('\n')
+  for (var i = 0; i < lineas.length; i++) {
+    var m = /^seccion (\d+)/.exec(normalizar(lineas[i]))
+    if (m && out.indexOf(m[1]) === -1) out.push(m[1])
+  }
+  return out
+}
+
 /**
  * Corre TODOS los chequeos. `manual.forbidden_words` = lista de palabras prohibidas del manual (array de strings).
  * `planTexto` = texto del plan vigente (para verificar que la cita a su parte existe).
  * Devuelve {ok, hallazgos[], por_chequeo{}, entregables_revisados}. NO modifica nada.
  */
-function chequear(parte, manual, planTexto) {
+function chequear(parte, manual, planTexto, opts) {
   var hallazgos = []
   var falla = function (chequeo, entregable, detalle) { hallazgos.push({ chequeo: chequeo, entregable: entregable || null, detalle: detalle }) }
   var ents = parte && Array.isArray(parte.entregables) ? parte.entregables : []
   if (!ents.length) falla('sin_entregables', null, 'la lista de entregables está vacía · un parte sin entregables no es un parte')
+  // Con el parte por TANDAS: todo id de la lista cerrada debe traer su brief, y no puede haber briefs de ids que la lista no tiene.
+  var listaIds = opts && Array.isArray(opts.lista_ids) ? opts.lista_ids : null
+  if (listaIds) {
+    var tiene = {}
+    ents.forEach(function (x) { if (x && x.id) tiene[String(x.id)] = true })
+    listaIds.forEach(function (id) { if (!tiene[id]) falla('entregable_sin_brief', id, 'está en la lista cerrada pero su brief NO llegó o no es legible · se DECLARA, no se rellena') })
+  }
+  if (opts && Array.isArray(opts.ids_extra)) opts.ids_extra.forEach(function (id) { falla('id_fuera_de_la_lista', id, 'trae un brief para un id que NO está en la lista cerrada') })
   var prohibidas = (manual && Array.isArray(manual.forbidden_words) ? manual.forbidden_words : []).filter(Boolean)
   var planNorm = normalizar(planTexto)
 
@@ -142,11 +206,17 @@ function chequear(parte, manual, planTexto) {
       var citaNorm = normalizar(cita)
       var hayMarca = /§|seccion|semana|fase|paso|puerta|camino|ciclo|mes\s*\d/.test(citaNorm) || citaNorm.length >= 12
       var enPlan = citaNorm.length >= 12 && planNorm.indexOf(citaNorm) !== -1
-      var comillas = cita.match(/[«"“]([^»"”]{12,})[»"”]/)
-      var textoCitado = comillas ? normalizar(comillas[1]) : ''
-      var citaVerificada = enPlan || (textoCitado && planNorm.indexOf(textoCitado) !== -1)
+      // Fragmentos textuales citados, con CUALQUIER comilla: « » “ ” " " y comillas SIMPLES ('…').
+      var frags = fragmentosCitados(cita)
+      var fragOk = frags.filter(function (f) { return fragmentoEnPlan(f, planNorm) })
+      // «Sección N»: si la cita nombra una sección del plan, esa sección tiene que existir
+      var secciones = seccionesCitadas(cita)
+      var seccionesDelPlan = seccionesQueTieneElPlan(planTexto)
+      var faltantes = secciones.filter(function (n) { return seccionesDelPlan.length > 0 && seccionesDelPlan.indexOf(n) === -1 })
+      var citaVerificada = enPlan || fragOk.length > 0
       if (!hayMarca) falla('cita_al_plan', idE, 'la cita al plan es demasiado vaga: «' + cita + '»')
-      else if (planNorm && !citaVerificada && !/§/.test(cita)) falla('cita_al_plan', idE, 'la cita «' + cita.slice(0, 80) + '» no se encuentra en el plan · no se puede verificar la procedencia')
+      else if (faltantes.length) falla('cita_al_plan', idE, 'la cita nombra la sección ' + faltantes.join(', ') + ' y el plan no tiene esa sección · procedencia falsa')
+      else if (planNorm && !citaVerificada && !/§/.test(cita)) falla('cita_al_plan', idE, 'ningún fragmento citado («' + cita.slice(0, 80) + '…») se encuentra en el plan · no se puede verificar la procedencia' + (frags.length ? ' (' + frags.length + ' fragmento(s) revisados)' : ''))
     }
 
     // ── centinelas: cifras que terminan en ,77 / .77 = copió el documento de referencia
@@ -187,6 +257,10 @@ if (typeof module !== 'undefined' && module.exports) {
     normalizar: normalizar,
     aTexto: aTexto,
     extraerParte: extraerParte,
+    fragmentosCitados: fragmentosCitados,
+    fragmentoEnPlan: fragmentoEnPlan,
+    seccionesCitadas: seccionesCitadas,
+    seccionesQueTieneElPlan: seccionesQueTieneElPlan,
     chequear: chequear,
   }
 }

@@ -152,3 +152,58 @@ describe('normalizar', () => {
     expect(normalizar('¡El MARISCO, de Olón!')).toBe('el marisco de olon')
   })
 })
+
+// ── citas: comillas simples y «Sección N» (defecto hallado en la corrida 157555: 6 de 7 citas válidas salían como «no verificables») ──
+const { fragmentosCitados, fragmentoEnPlan, seccionesCitadas, seccionesQueTieneElPlan } = require(join(DIR, 'brief-chequeos.js'))
+const PLAN_S = `# PLAN DE CAMPAÑA 90 DÍAS
+## SECCIÓN 3 · LA AUDIENCIA
+La comunidad surf y foil costera ya adoptó Náufrago sin que nadie la buscara. No hay que convencerlos; hay que hacerles fácil pedir.
+## SECCIÓN 5 · EL CAMINO
+### Las fases de los 90 días
+Configurar WhatsApp Business con mensaje pre-cargado: Hola, quiero hacer un pedido. Definir audiencias en Meta Ads Manager y correr la estimación de entrega.
+## SECCIÓN 6 · LA PRUEBA
+| Bio de Instagram sin link a WhatsApp ni horario claro | Actualizar bio con link de WhatsApp Business y horario exacto · Día 1 |`
+const citar = (cita: string) => chequear({ entregables: [brief(1, { de_que_parte_del_plan: cita })] }, MANUAL, PLAN_S).hallazgos.filter((h: { chequeo: string }) => h.chequeo === 'cita_al_plan')
+
+describe('cita_al_plan · comillas simples, secciones y fragmentos (corregido 29-sep)', () => {
+  it('los fragmentos se sacan con CUALQUIER comilla: « » “ ” " " y simples', () => {
+    expect(fragmentosCitados("Sección 5 — 'Configurar WhatsApp Business con mensaje pre-cargado'")).toEqual(['Configurar WhatsApp Business con mensaje pre-cargado'])
+    expect(fragmentosCitados('Sección 3 — «La comunidad surf y foil costera ya adoptó Náufrago»').length).toBe(1)
+    expect(fragmentosCitados("una 'corta' no cuenta")).toEqual([])
+  })
+  it('ROJO→VERDE · la cita real del agente (Sección N + fragmento entre comillas simples, con «…» y nota entre corchetes) SE VERIFICA', () => {
+    expect(citar("Sección 5 Fase 1 Días 1–7 — 'Configurar WhatsApp Business con mensaje pre-cargado: Hola, quiero hacer un pedido'")).toHaveLength(0)
+    expect(citar("Sección 3 nota — 'La comunidad surf y foil costera ya adoptó Náufrago sin que nadie la buscara… No hay que convencerlos'")).toHaveLength(0)
+    expect(citar("Sección 5 — 'Definir audiencias en Meta Ads Manager y correr la estimación de entrega [nota: el reel va a pendientes]'")).toHaveLength(0)
+    expect(citar("Sección 6 tabla — 'Bio de Instagram sin link a WhatsApp ni horario claro → Actualizar bio con link de WhatsApp Business y horario exacto · Día 1'")).toHaveLength(0)
+  })
+  it('ROJO · un fragmento INVENTADO entre comillas simples se caza (la cita no se verifica solo por tener comillas)', () => {
+    const h = citar("Sección 5 — 'Lanzar una campaña de televisión abierta en horario estelar durante todo el año'")
+    expect(h).toHaveLength(1)
+    expect(h[0].detalle).toMatch(/ningún fragmento citado/)
+  })
+  it('ROJO · una sección que el plan NO tiene («Sección 9») se caza aunque el fragmento sea real', () => {
+    const h = citar("Sección 9 — 'Configurar WhatsApp Business con mensaje pre-cargado'")
+    expect(h).toHaveLength(1)
+    expect(h[0].detalle).toMatch(/sección 9/)
+  })
+  it('seccionesCitadas / seccionesQueTieneElPlan / fragmentoEnPlan', () => {
+    expect(seccionesCitadas('Sección 5 Fase 1 y sección 6 tabla')).toEqual(['5', '6'])
+    expect(seccionesQueTieneElPlan(PLAN_S)).toEqual(['3', '5', '6'])
+    expect(fragmentoEnPlan('Definir audiencias en Meta Ads Manager … correr la estimación de entrega', normalizar(PLAN_S))).toBe(true)
+    expect(fragmentoEnPlan('algo que el plan nunca dijo nunca jamás', normalizar(PLAN_S))).toBe(false)
+  })
+})
+
+describe('con el parte por tandas · un id de la lista sin brief se DECLARA', () => {
+  it('ROJO · lista_ids con un id sin brief ⇒ entregable_sin_brief · ids de más ⇒ id_fuera_de_la_lista', () => {
+    const r = chequear({ entregables: [brief(1), brief(2)] }, MANUAL, PLAN, { lista_ids: ['BRF-0001', 'BRF-0002', 'BRF-0003'], ids_extra: ['BRF-0099'] })
+    const por = r.por_chequeo
+    expect(por.entregable_sin_brief).toBe(1)
+    expect(por.id_fuera_de_la_lista).toBe(1)
+    expect(r.hallazgos.find((h: { chequeo: string }) => h.chequeo === 'entregable_sin_brief').entregable).toBe('BRF-0003')
+  })
+  it('sin opciones se comporta como antes (compatibilidad)', () => {
+    expect(chequear(parteOk(), MANUAL, PLAN).ok).toBe(true)
+  })
+})

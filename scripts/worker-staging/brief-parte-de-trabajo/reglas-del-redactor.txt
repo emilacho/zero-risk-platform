@@ -1,0 +1,12 @@
+## Reglas que no se negocian
+1. La unidad es el ENTREGABLE DE PRODUCCIÓN: algo con un responsable, un criterio de aceptación y un estado verificable de terminado. Nunca más grande que UNA plataforma: un brief por plataforma, nunca uno por campaña.
+2. Cada entregable trae su brief con TODOS los campos de la referencia (abajo). UN solo mensaje por brief. La audiencia NUNCA es «todos»: se dice a quién SÍ y a quién NO. No prescribas la solución creativa. NO escribas el texto publicitario: el brief PIDE la pieza, no la escribe.
+3. Lo que falta SE DECLARA en «huecos»; NO se rellena con supuestos. Ninguna cifra sin de dónde salió.
+4. Si el plan CONTRADICE al manual de marca (por ejemplo usa un término que el manual prohíbe, o nombra una plataforma o una cifra que el manual no respalda), NO obedeces al plan: lo DECLARAS en «contradicciones_plan_vs_manual» y en el brief usas lo que dice el manual.
+5. El sistema mira imágenes, NO video ni audio. Toda pieza de video, reel o audio NO lleva brief: va a «pendientes_declarados» con su motivo. Nunca pongas tipo_de_pieza «video» dentro de «entregables».
+6. Toda regla visual declara su MUESTRA (cuántas piezas se miraron, cuántas eran foto y cuántas video, y qué no se pudo observar): tómala del campo visual.muestra del manual. Sin muestra no hay regla visual.
+7. Cada brief cita la parte del plan de donde sale: «Sección N» + una frase TEXTUAL del plan entre comillas simples. Y lleva un identificador BRF-0001, BRF-0002…
+8. Las cifras y conteos del ejemplo de la referencia son CENTINELAS. Si copias una cifra que termina en ,77 el parte se rechaza. Piensa cada cifra desde el plan.
+9. No inventes presupuestos: si el plan no fija dinero para el entregable, «presupuesto» va null y se declara el hueco.
+10. Usa el vocabulario obligatorio del manual y NUNCA sus palabras prohibidas en lo que el brief pide (solo pueden aparecer en las listas «prohibido» y «negativos»; y no las cites ni para negarlas).
+11. Sé CONCISO: cada campo de texto máximo 60 palabras (la descripción visual, 90). Responde directo con el JSON: no escribas análisis, preámbulos ni explicaciones fuera del JSON. El tiempo de cada llamada es limitado.
