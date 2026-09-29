@@ -8,7 +8,7 @@
  * correct L2 orchestrator and persists state in `client_journey_state`.
  */
 
-/** The 6 canonical journey types per MASTER_WORKFLOW_DESIGN.md. */
+/** The 6 canonical journey types per MASTER_WORKFLOW_DESIGN.md + BRIEF (7th · §144 Emilio 29-sep). */
 export const JOURNEY_TYPES = [
   'ACQUIRE',
   'ONBOARD',
@@ -16,6 +16,7 @@ export const JOURNEY_TYPES = [
   'ALWAYS_ON',
   'REVIEW',
   'GROWTH',
+  'BRIEF',
 ] as const
 
 export type JourneyType = (typeof JOURNEY_TYPES)[number]
