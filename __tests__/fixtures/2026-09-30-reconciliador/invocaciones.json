@@ -1,0 +1,66 @@
+[
+ {
+  "workflow_execution_id": "156428",
+  "agent_name": "onboarding-specialist",
+  "created_at": "2026-09-29T00:16:01.073901+00:00",
+  "duration_ms": 171111,
+  "cost_usd": 0.296159,
+  "status": "completed"
+ },
+ {
+  "workflow_execution_id": "156428",
+  "agent_name": "onboarding-specialist",
+  "created_at": "2026-09-29T00:21:29.237444+00:00",
+  "duration_ms": 295765,
+  "cost_usd": 0.478673,
+  "status": "completed"
+ },
+ {
+  "workflow_execution_id": "156501",
+  "agent_name": "onboarding-specialist",
+  "created_at": "2026-09-29T01:28:19.151508+00:00",
+  "duration_ms": 158187,
+  "cost_usd": 0.226786,
+  "status": "completed"
+ },
+ {
+  "workflow_execution_id": "156528",
+  "agent_name": "campaign-brief-agent",
+  "created_at": "2026-09-29T01:45:05.005594+00:00",
+  "duration_ms": 488755,
+  "cost_usd": 0.457412,
+  "status": "completed"
+ },
+ {
+  "workflow_execution_id": "156845",
+  "agent_name": "campaign-brief-agent",
+  "created_at": "2026-09-29T06:04:50.082918+00:00",
+  "duration_ms": 2812,
+  "cost_usd": 0,
+  "status": "completed"
+ },
+ {
+  "workflow_execution_id": "156847",
+  "agent_name": "campaign-brief-agent",
+  "created_at": "2026-09-29T06:05:04.795232+00:00",
+  "duration_ms": 2322,
+  "cost_usd": 0,
+  "status": "completed"
+ },
+ {
+  "workflow_execution_id": "156850",
+  "agent_name": "campaign-brief-agent",
+  "created_at": "2026-09-29T06:05:10.963542+00:00",
+  "duration_ms": 639,
+  "cost_usd": 0,
+  "status": "completed"
+ },
+ {
+  "workflow_execution_id": "157555",
+  "agent_name": "campaign-brief-agent",
+  "created_at": "2026-09-29T18:50:07.924553+00:00",
+  "duration_ms": 1923131,
+  "cost_usd": 1.985556,
+  "status": "completed"
+ }
+]
