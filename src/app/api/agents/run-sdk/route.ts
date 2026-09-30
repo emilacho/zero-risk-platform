@@ -833,6 +833,48 @@ export async function POST(request: Request) {
       has_pipeline_id: !!body.pipeline_id,
     })
 
+    // ── VALIDAR PRIMERO · MEDIR DESPUÉS (CC#1 · 2026-09-30 · GO de Emilio) ────
+    // Un pedido MAL ESCRITO se rechaza (400) ANTES de tocar el freno de gasto: medir el freno consulta la base y, con la base caída, esperaba ≈8 min y avisaba «sin techo medido»
+    // por un pedido que ni siquiera iba a correr (medido 30-sep: mi sonda colgó la función 482 s y disparó la falsa alarma de las 14:02).
+    // Son sólo lecturas del propio pedido: cero red, cero base.
+    const ctx = (body.context ?? {}) as Record<string, unknown>
+    // EL CABLE PARA MIRAR (CC#1 · 2026-09-25) · `images` opcional · mal formado se rechaza acá, antes de pagar.
+    const imagenesDelPedido = leerImagenesDelPedido(body, ctx)
+    if (imagenesDelPedido.error) {
+      return NextResponse.json(
+        { error: 'images_invalid', code: 'E-IMAGES-INVALID', detail: imagenesDelPedido.error },
+        { status: 400 },
+      )
+    }
+    // TOPE DURO por corrida (opt-in · US$) · un tope MAL ESCRITO se rechaza ANTES de gastar (ignorarlo dejaría pagar sin tope) · ausente ⇒ cuerpo de siempre
+    // 🔴 `null` explícito NO es «sin tope» (con `??` lo era): un tope presente y nulo se rechaza abajo, igual que en el sobre y en el corredor
+    const topeArriba = (body as unknown as { max_budget_usd?: unknown }).max_budget_usd
+    const topeCrudo = topeArriba !== undefined ? topeArriba : ctx.max_budget_usd
+    let topeDelPedido: number | null = null
+    if (topeCrudo !== undefined) {
+      const n = typeof topeCrudo === 'number' ? topeCrudo : typeof topeCrudo === 'string' && topeCrudo.trim() !== '' ? Number(topeCrudo) : NaN
+      if (!Number.isFinite(n) || n <= 0 || n > 50) {
+        return NextResponse.json(
+          { error: 'max_budget_usd_invalid', code: 'E-BUDGET-INVALID', detail: 'max_budget_usd debe ser un número mayor que 0 y hasta 50 · un tope mal escrito no se ignora' },
+          { status: 400 },
+        )
+      }
+      topeDelPedido = n
+    }
+    // RAZONAMIENTO limitado (opt-in) · valor MAL ESCRITO se rechaza ANTES de gastar · `null` explícito tampoco es «ausente»
+    const razArriba = (body as unknown as { thinking_mode?: unknown }).thinking_mode
+    const razCrudo = razArriba !== undefined ? razArriba : ctx.thinking_mode
+    let razonamientoDelPedido: string | null = null
+    if (razCrudo !== undefined) {
+      if (razCrudo !== 'disabled' && razCrudo !== 'low' && razCrudo !== 'medium') {
+        return NextResponse.json(
+          { error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID', detail: 'thinking_mode debe ser disabled | low | medium · un valor mal escrito no se ignora' },
+          { status: 400 },
+        )
+      }
+      razonamientoDelPedido = razCrudo
+    }
+
     // ── §150 spend gate · GENERIC real brake before invoking the model ────
     // Closes the P0 gap (CC#3 2026-06-30): the cap only lived at the
     // sala-router dispatch + Slack alerts · run-sdk had none, so spend ran
@@ -924,15 +966,6 @@ export async function POST(request: Request) {
     // block can be replaced with `JSON.stringify(body)`.
     // Sprint 8D tail · forceRestart flag (workflow checkpoint canon) ·
     // accepts top-level OR nested under context · matches workflow_id pattern.
-    const ctx = (body.context ?? {}) as Record<string, unknown>
-    // EL CABLE PARA MIRAR (CC#1 · 2026-09-25) · `images` opcional · mal formado se rechaza acá, antes de pagar.
-    const imagenesDelPedido = leerImagenesDelPedido(body, ctx)
-    if (imagenesDelPedido.error) {
-      return NextResponse.json(
-        { error: 'images_invalid', code: 'E-IMAGES-INVALID', detail: imagenesDelPedido.error },
-        { status: 400 },
-      )
-    }
     const forceRestart =
       body.force_restart === true ||
       body.forceRestart === true ||
@@ -952,34 +985,6 @@ export async function POST(request: Request) {
       ctx.dryRun === true ||
       headerDryRun
 
-    // TOPE DURO por corrida (opt-in · US$) · un tope MAL ESCRITO se rechaza ANTES de gastar (ignorarlo dejaría pagar sin tope) · ausente ⇒ cuerpo de siempre
-    // 🔴 `null` explícito NO es «sin tope» (con `??` lo era): un tope presente y nulo se rechaza abajo, igual que en el sobre y en el corredor
-    const topeArriba = (body as unknown as { max_budget_usd?: unknown }).max_budget_usd
-    const topeCrudo = topeArriba !== undefined ? topeArriba : ctx.max_budget_usd
-    let topeDelPedido: number | null = null
-    if (topeCrudo !== undefined) {
-      const n = typeof topeCrudo === 'number' ? topeCrudo : typeof topeCrudo === 'string' && topeCrudo.trim() !== '' ? Number(topeCrudo) : NaN
-      if (!Number.isFinite(n) || n <= 0 || n > 50) {
-        return NextResponse.json(
-          { error: 'max_budget_usd_invalid', code: 'E-BUDGET-INVALID', detail: 'max_budget_usd debe ser un número mayor que 0 y hasta 50 · un tope mal escrito no se ignora' },
-          { status: 400 },
-        )
-      }
-      topeDelPedido = n
-    }
-    // RAZONAMIENTO limitado (opt-in) · valor MAL ESCRITO se rechaza ANTES de gastar · `null` explícito tampoco es «ausente»
-    const razArriba = (body as unknown as { thinking_mode?: unknown }).thinking_mode
-    const razCrudo = razArriba !== undefined ? razArriba : ctx.thinking_mode
-    let razonamientoDelPedido: string | null = null
-    if (razCrudo !== undefined) {
-      if (razCrudo !== 'disabled' && razCrudo !== 'low' && razCrudo !== 'medium') {
-        return NextResponse.json(
-          { error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID', detail: 'thinking_mode debe ser disabled | low | medium · un valor mal escrito no se ignora' },
-          { status: 400 },
-        )
-      }
-      razonamientoDelPedido = razCrudo
-    }
     const rd = (body as unknown as { _runner_delivery?: { callback_url?: unknown; dispatch_key?: unknown } })._runner_delivery
     const entregaDelCorredor =
       rd && typeof rd.callback_url === 'string' && typeof rd.dispatch_key === 'string'
