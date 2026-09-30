@@ -68,7 +68,8 @@ async function planeacion() {
     { id: 'C', nombre: 'final (cadena · dibujo publicado)', base: nuevo, viejas: false },
   ]
   const resultados = {}
-  await Promise.all(variantes.map(async (v) => {
+  const soloVariantes = arg('--variantes=') // p. ej. --variantes=C para correr sólo la variante final
+  await Promise.all(variantes.filter((v) => !soloVariantes || soloVariantes.split(',').includes(v.id)).map(async (v) => {
     const path = `zero-risk/planeacion-orden-${v.id.toLowerCase()}-cc1`
     const wid = await crear(copiaDePlaneacion(v.base, `CC1 · orden de planeación ${v.id} TEMPORAL (NO BORRAR hasta que CC#3 certifique)`, path, v.viejas))
     resultados[v.id] = { workflow: wid, nombre: v.nombre, combos: {} }

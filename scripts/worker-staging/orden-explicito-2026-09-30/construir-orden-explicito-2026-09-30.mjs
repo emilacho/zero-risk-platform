@@ -12,6 +12,9 @@
 //     Antes: el disparador repartía a los tres en paralelo y sólo «El libro» iba a «decide»; los otros dos eran ramas ciegas que «decide» leía con try/catch (y funcionaba
 //     porque estaban dibujadas arriba). Seguro porque los tres: continúan ante error · siempre devuelven salida · no usan $json.
 //
+// ÉXITO MUDO CERRADO (decisión de Emilio · misma publicación): «ningún brazo salió» es ERROR, no éxito. (Dos cambios en «elegir brazos»: el bloque que lanza y `onError: stopWorkflow` para que el error DETENGA la corrida.) Con las tres ramas de brazos sin pedidos la junta nunca dispara y la planeación
+//   terminaba «success» sin plan y sin error. Ahora «elegir brazos» LANZA `PLANEACION_NINGUN_BRAZO_SALIO` (antes de gastar) con el motivo de cada descarte. Es el ÚNICO cambio de código de esta pieza.
+//
 //   node construir-orden-explicito-2026-09-30.mjs    → escribe `*-construida-orden-explicito-2026-09-30.json` (NO toca n8n)
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -39,6 +42,20 @@ const salidaDe = (flujo, connections) => {
   return { name: flujo.name, nodes: flujo.nodes, connections, settings }
 }
 
+/** el punto exacto donde «elegir brazos» termina de decidir los pedidos (una sola vez en el nodo) */
+export const ELEGIR = 'elegir brazos'
+export const RENUMERAR = 'for (let i = 0; i < pedidos.length; i++) pedidos[i].orden = i + 1;'
+export const NINGUN_BRAZO = `
+// 🔴 «NINGÚN BRAZO SALIÓ» ES ERROR, NO ÉXITO (2026-09-30 · decisión de Emilio · «un éxito mudo es justo la enfermedad que venimos cerrando»).
+// Si no sale NINGÚN pedido para las tres ramas con brazo (apify · posthog · cerebro), la junta jamás dispara y la corrida terminaba «success» sin plan y sin error.
+// Se detiene ACÁ, antes de gastar, y dice por qué se descartó cada cosa (lo que no se pudo pedir casi siempre es un dato que falta en la ficha).
+const RAMAS_CON_BRAZO = ['apify', 'posthog', 'cerebro'];
+if (!pedidos.some((p) => RAMAS_CON_BRAZO.indexOf(p.brazo) !== -1)) {
+  throw new Error('PLANEACION_NINGUN_BRAZO_SALIO · ningún pedido salió hacia apify, posthog ni cerebro para el cliente ' + String(cliente_id) + ' · sin brazos no hay evidencia y el plan se escribiría a ciegas · la corrida SE DETIENE ANTES DE GASTAR · motivos: '
+    + (descartados.length ? descartados.slice(0, 8).map((d) => d.objetivo + ' (' + d.motivo + ')').join(' · ') : 'ninguno declarado'));
+}
+`
+
 export const PLANEACION = {
   GUARDA: '① GUARDA · sin manual aprobado se DETIENE', CASA: 'El número de la casa', REFERENCIA: 'La referencia del producto', FICHA: 'Ficha del cliente',
 }
@@ -47,11 +64,28 @@ export function construirPlaneacion(flujo) {
   if (flujo.connections[P.CASA]?.main?.[0]?.length) throw new Error('«El número de la casa» ya tiene hijos · ya está construido o el flujo cambió')
   esperar(flujo, P.GUARDA, [P.FICHA, P.CASA, P.REFERENCIA])
   for (const n of [P.CASA, P.REFERENCIA, P.FICHA]) exigirEncadenable(flujo, n)
+  // ÉXITO MUDO CERRADO · el único cambio de código: «elegir brazos» lanza si ningún brazo salió (se parcha sobre texto normalizado y se devuelve con los mismos saltos de línea)
+  const el = nodo(flujo, ELEGIR)
+  const original = String(el.parameters.jsCode)
+  const CRLF = '\r\n'
+  const LF = '\n'
+  const crlf = original.includes(CRLF)
+  const lf = original.split(CRLF).join(LF)
+  if (lf.includes('PLANEACION_NINGUN_BRAZO_SALIO')) throw new Error('ya está construido')
+  const veces = lf.split(RENUMERAR).length - 1
+  if (veces !== 1) throw new Error('«elegir brazos»: la línea que renumera el orden aparece ' + veces + ' veces, esperaba 1')
+  const bloque = NINGUN_BRAZO.split(CRLF).join(LF).replace(/^\n/, '')
+  const parchado = lf.replace(RENUMERAR, () => RENUMERAR + LF + bloque)
+  // 🔴 y el nodo debe DETENER la corrida ante su error: tenía `onError: continueRegularOutput`, que convierte el `throw` en un ítem {error} y la corrida sigue «bien»
+  // con los brazos recibiendo una lista vacía (medido en el ensayo 158487: el éxito mudo disfrazado). Es el segundo (y último) cambio de este nodo.
+  const elegir = { ...el, onError: 'stopWorkflow', parameters: { ...el.parameters, jsCode: crlf ? parchado.split(LF).join(CRLF) : parchado } }
   const c = JSON.parse(JSON.stringify(flujo.connections))
   c[P.GUARDA] = { main: [[enlace(P.CASA)]] }
   c[P.CASA] = { main: [[enlace(P.REFERENCIA)]] }
   c[P.REFERENCIA] = { main: [[enlace(P.FICHA)]] }
-  return salidaDe(flujo, c)
+  const salida = salidaDe(flujo, c)
+  salida.nodes = flujo.nodes.map((n) => (n.name === ELEGIR ? elegir : n))
+  return salida
 }
 
 export const VIGIA = {

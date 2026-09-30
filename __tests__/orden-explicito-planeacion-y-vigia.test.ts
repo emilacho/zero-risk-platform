@@ -70,9 +70,23 @@ describe('① PLANEACIÓN · la casa y la referencia son ANTECESORES de quien la
     const anc = antecesoresDe(P_DESPUES)
     for (const lector of ['Derivador (B5)', 'armar el paquete']) for (const leido of [P.CASA, P.REFERENCIA]) expect(anc(lector).has(leido), `${lector} ← ${leido}`).toBe(true)
   })
-  it('sólo cambian CONEXIONES: los 44 nodos son idénticos (parámetros, posición, ajustes de error)', () => {
+  it('sólo cambian CONEXIONES y UN bloque de «elegir brazos»: los otros 43 nodos son idénticos (parámetros, posición, ajustes de error)', () => {
     expect(P_DESPUES.nodes).toHaveLength(P_ANTES.nodes.length)
-    P_ANTES.nodes.forEach((n, i) => expect(JSON.stringify(P_DESPUES.nodes[i])).toBe(JSON.stringify(n)))
+    P_ANTES.nodes.forEach((n, i) => { if (n.name !== 'elegir brazos') expect(JSON.stringify(P_DESPUES.nodes[i]), n.name).toBe(JSON.stringify(n)) })
+    // …y en «elegir brazos» lo ÚNICO que cambia es el bloque insertado: quitándolo se recupera el código original byte a byte
+    const viejo = String(nodo(P_ANTES, 'elegir brazos').parameters.jsCode)
+    const nuevo = String(nodo(P_DESPUES, 'elegir brazos').parameters.jsCode)
+    const CRLF = '\r\n'
+    const i = nuevo.indexOf('// 🔴 «NINGÚN BRAZO SALIÓ»')
+    const j = nuevo.indexOf(CRLF + '}' + CRLF, i) + 3 + CRLF.length * 2 // hasta el cierre del bloque + su salto y el salto que ya traía el original
+    expect(i).toBeGreaterThan(0)
+    expect(nuevo.slice(0, i) + nuevo.slice(j)).toBe(viejo)
+    expect(viejo.includes(CRLF) && nuevo.includes(CRLF)).toBe(true)
+    // …y el ÚNICO otro cambio del nodo es que ahora DETIENE la corrida ante su error (antes la tragaba como un ítem {error})
+    const sinCodigo = (n: Nodo) => JSON.stringify({ ...n, onError: undefined, parameters: { ...n.parameters, jsCode: undefined } })
+    expect(nodo(P_ANTES, 'elegir brazos').onError).toBe('continueRegularOutput')
+    expect(nodo(P_DESPUES, 'elegir brazos').onError).toBe('stopWorkflow')
+    expect(sinCodigo(nodo(P_DESPUES, 'elegir brazos'))).toBe(sinCodigo(nodo(P_ANTES, 'elegir brazos')))
     const cambiadas = Object.keys({ ...P_ANTES.connections, ...P_DESPUES.connections }).filter((k) => JSON.stringify(P_ANTES.connections[k]) !== JSON.stringify(P_DESPUES.connections[k]))
     expect(cambiadas.sort()).toEqual([P.CASA, P.GUARDA, P.REFERENCIA].sort())
     expect(Object.keys(P_DESPUES.settings)).toEqual(['executionOrder'])
@@ -137,6 +151,51 @@ describe('② VIGÍA DEL SILENCIO · el umbral, el reloj y el libro van EN SERIE
     f.connections[V.PUERTA] = { main: [[{ node: V.UMBRAL }]] }
     expect(() => construirVigia(f)).toThrow(/cambió desde la foto/)
     expect(() => construirVigia(V_DESPUES)).toThrow(/ya está construido/)
+  })
+})
+
+describe('③ 🔴 «NINGÚN BRAZO SALIÓ» ES ERROR, NO ÉXITO (el éxito mudo, cerrado)', () => {
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+  const elegir = (f: Flujo, ficha: Record<string, unknown>) => {
+    const items = [{ json: ficha }]
+    const rf = () => ({ first: () => ({ json: {} }), all: () => [] })
+    return new AsyncFunction('$input', '$', '$env', '$json', '$workflow', '$execution', String(nodo(f, 'elegir brazos').parameters.jsCode))({ first: () => items[0], all: () => items }, rf, {}, ficha, { id: 'W' }, { id: '1' })
+  }
+  const NAUFRAGO = { id: 'c1', name: 'Náufrago', industry: 'restaurante', website_url: 'https://www.naufrago.ec', country: 'Ecuador' }
+  const VACIA = { id: 'c-vacio' } // sin nombre, sin rubro, sin sitio, sin cuentas: ningún pedido posible
+  const RAMAS = ['apify', 'posthog', 'cerebro']
+  it('🔴 una ficha sin nada ⇒ el flujo de ANTES «salía bien» con CERO brazos (éxito mudo) · el nuevo LANZA PLANEACION_NINGUN_BRAZO_SALIO con el motivo de cada descarte', async () => {
+    const [{ json: antes }] = await elegir(P_ANTES, VACIA)
+    expect(antes.pedidos.filter((p: { brazo: string }) => RAMAS.includes(p.brazo))).toHaveLength(0) // ANTES: ningún brazo, y aun así devolvía normalmente (la junta jamás disparaba)
+    await expect(elegir(P_DESPUES, VACIA)).rejects.toThrow(/PLANEACION_NINGUN_BRAZO_SALIO/)
+    await expect(elegir(P_DESPUES, VACIA)).rejects.toThrow(/ANTES DE GASTAR/)
+    await expect(elegir(P_DESPUES, VACIA)).rejects.toThrow(/sitio_propio \(el cliente no tiene sitio cargado/)
+    await expect(elegir(P_DESPUES, VACIA)).rejects.toThrow(/c-vacio/)
+  })
+  it('🔴 el error DETIENE la corrida: con `onError: continueRegularOutput` el throw se volvía un ítem {error} y la corrida seguía «success» (medido en el ensayo 158487)', () => {
+    expect(nodo(P_ANTES, 'elegir brazos').onError).toBe('continueRegularOutput')
+    expect(nodo(P_DESPUES, 'elegir brazos').onError).toBe('stopWorkflow')
+  })
+  it('el pedido de plataforma (costo_pauta) NO cuenta como brazo: no tiene rama que lo atienda', async () => {
+    const [{ json: antes }] = await elegir(P_ANTES, VACIA)
+    expect(antes.pedidos.map((p: { brazo: string }) => p.brazo)).toEqual(['plataforma'])
+    await expect(elegir(P_DESPUES, VACIA)).rejects.toThrow(/PLANEACION_NINGUN_BRAZO_SALIO/)
+  })
+  it('con UN solo brazo posible NO lanza (hay evidencia que buscar): sólo el sitio, sólo el nombre, sólo el rubro', async () => {
+    for (const ficha of [{ id: 'c2', website_url: 'https://negocio.test' }, { id: 'c3', name: 'Negocio' }, { id: 'c4', industry: 'panadería' }]) {
+      const [{ json }] = await elegir(P_DESPUES, ficha)
+      expect(json.pedidos.some((p: { brazo: string }) => RAMAS.includes(p.brazo)), JSON.stringify(ficha)).toBe(true)
+    }
+  })
+  it('el caso normal NO cambia: Náufrago sale igual que antes (mismos pedidos y descartados)', async () => {
+    const [{ json: a }] = await elegir(P_ANTES, NAUFRAGO)
+    const [{ json: d }] = await elegir(P_DESPUES, NAUFRAGO)
+    expect(d).toEqual(a)
+    expect(d.pedidos.some((p: { objetivo: string }) => p.objetivo === 'analitica_propia')).toBe(true)
+  })
+  it('lanza ANTES de gastar: «elegir brazos» es antecesor de los tres brazos y del redactor, así que el error nace sin haber llamado a ninguno', () => {
+    const anc = antecesoresDe(P_DESPUES)
+    for (const b of ['Brazo · Apify', 'Brazo · PostHog', 'Brazo · cerebro', 'Pedir el plan al redactor']) expect(anc(b).has('elegir brazos'), b).toBe(true)
   })
 })
 
