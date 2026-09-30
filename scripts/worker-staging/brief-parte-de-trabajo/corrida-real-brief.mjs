@@ -7,6 +7,7 @@
 // (reloj de 3 min) lo recoge y despacha el flujo del brief con SU llave (que no se puede leer desde afuera). `forzar:true` porque el plan vigente ya tiene un parte (la guarda de «brief repetido»).
 import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resumenDeLaCorrida, veredictoDeLaCorrida } from './resumen-corrida-brief.mjs'
@@ -54,14 +55,17 @@ if (!CONFIRMAR) { log('🟢 TODO EN VERDE · listo para disparar (falta --confir
 // ═══ 3 · DISPARO (UNA vez) ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
 const [plan] = await sql(`select id::text from client_historical_outputs where client_id='${CID}' and output_type='campaign_plan_90d' order by created_at desc limit 1`)
 const dia = new Date().toISOString().slice(0, 10)
-const clave = `cc1-brief-real-${dia}`
+const clave = `cc1-brief-real-${dia}-${new Date().toISOString().slice(11, 16).replace(':', '')}` // con la hora: un reintento tras un rechazo NO choca con una clave ya usada
+const correlacion = randomUUID() // la sala exige UUID (medido 30-sep 07:02: 22P02 con un texto)
 const previos = await sql(`select count(*)::int as n from sala_event_log where step_id like '%${clave}%' or stream_id::text like '%${clave}%'`).catch(() => [{ n: 0 }])
 if (previos[0].n > 0) parar('ya hay asientos con la clave ' + clave + ' · una corrida por día: no se dispara dos veces')
 const t0 = new Date()
 const cuerpo = {
   source: 'planeacion/plan-listo', intent: 'briefear',
   payload: { client_id: CID, plan_id: plan.id, dry_run: false, forzar: true, tope_usd: TOPE, desde_worker: 'X9F0zp6LQ2xGEYVS' },
-  idempotency_key: clave + ':briefear', logical_period: 'alta:' + clave, tenant_id: CID, client_id: CID, correlation_id: null,
+  idempotency_key: clave + ':briefear', logical_period: 'alta:' + clave, tenant_id: CID, client_id: CID,
+  // la puerta de la sala RECHAZA `correlation_id: null` (debe ser texto no vacío o no venir · medido 30-sep 07:02, invalid_envelope) · un texto propio deja la corrida rastreable
+  correlation_id: correlacion,
 }
 fs.writeFileSync(join(salida, 'sobre-enviado.json'), JSON.stringify({ ...cuerpo, hora: t0.toISOString() }, null, 1))
 log(`🚀 DISPARO · sobre a /api/sala/intake · plan ${plan.id} · tope pedido US$ ${TOPE} (autorizado US$ ${AUTORIZADO}) · forzar=true`)
@@ -69,7 +73,8 @@ const ing = await fetch(`${VERCEL}/api/sala/intake`, { method: 'POST', headers: 
 const ingj = await ing.json().catch(() => ({}))
 fs.writeFileSync(join(salida, 'respuesta-de-la-sala.json'), JSON.stringify({ http: ing.status, ...ingj }, null, 1))
 log(`respuesta de la sala · HTTP ${ing.status} · ${JSON.stringify(ingj).slice(0, 240)}`)
-if (!(ing.ok && (ingj.ok === true || ingj.kind === 'accepted' || ingj.kind === 'duplicate'))) parar('la sala no aceptó el sobre (¡ya no se puede reintentar sin revisar!)')
+if (ingj.kind === 'duplicate') parar('la sala dice DUPLICADO: no despachó nada nuevo (¡revisar antes de reintentar!)')
+if (!(ing.ok && (ingj.ok === true || ingj.kind === 'accepted'))) parar('la sala no aceptó el sobre (¡ya no se puede reintentar sin revisar!)')
 
 // ═══ 4 · SEGUIMIENTO ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 const vistos = new Set(); let ex = null; let ultimoEstado = ''

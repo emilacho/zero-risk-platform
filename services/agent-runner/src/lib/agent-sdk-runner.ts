@@ -20,7 +20,7 @@
 
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import { opcionDeTope, cortadoPorTope, mensajeDeCorte } from './tope-por-corrida.js'
+import { opcionDeTope, cortadoPorTope, mensajeDeCorte, SUBTIPO_CORTE_POR_PRESUPUESTO } from './tope-por-corrida.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
   armarBloquesDeImagen,
@@ -629,7 +629,8 @@ export interface StreamDrainResult {
  * Drain the SDK stream and accumulate text + usage stats.
  * Throws on stream error; caller wraps in try/catch.
  */
-export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDrainResult> {
+/** `toleraSalidaTrasCorte`: SÓLO para pedidos con tope por corrida (opt-in) · sin él, cualquier excepción del SDK sube igual que siempre */
+export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: { toleraSalidaTrasCorte?: boolean }): Promise<StreamDrainResult> {
   let responseText = ''
   let resultSubtype: string | null = null
   let sessionId: string | null = null
@@ -651,6 +652,10 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
   let fidelityScoresEmissionCount = 0
   let lastFidelityScoresInput: Record<string, unknown> | null = null
 
+  // 🔴 EL SDK LANZA «Claude Code process exited with code N» DESPUÉS de entregar el mensaje `result` cuando el proceso sale con código ≠ 0, y un corte por presupuesto sale así
+  // (corrida real 158667 · 30-sep: ~40 min de trabajo, fallo sin gasto registrado). Si el `result` ya llegó como `error_max_budget_usd`, la excepción de salida es la CONSECUENCIA esperada:
+  // se ignora y se devuelve lo drenado (el resultado se declara como corte y el gasto se REGISTRA). Cualquier otro error sigue subiendo tal cual.
+  try {
   for await (const rawMsg of stream) {
     const msg = rawMsg as SDKStreamMessage
     if (msg.type === 'system' && (msg as SDKSystemInitMessage).subtype === 'init') {
@@ -717,6 +722,10 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
       sessionId = sessionId ?? r.session_id ?? null
       resultSubtype = typeof r.subtype === 'string' ? r.subtype : null
     }
+  }
+  } catch (err) {
+    if (!(opciones?.toleraSalidaTrasCorte === true && resultSubtype === SUBTIPO_CORTE_POR_PRESUPUESTO)) throw err
+    console.warn('[agent-runner] corte por presupuesto · el SDK cerró con excepción de salida DESPUÉS del resultado (esperado) · ' + (err instanceof Error ? err.message : String(err)))
   }
 
   return {
@@ -1207,7 +1216,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
             ? armarPromptConImagenes(input.task, bloquesDeImagen)
             : input.task
           const stream = (query as unknown as QueryFn)({ prompt, options })
-          return await drainStream(stream)
+          return await drainStream(stream, { toleraSalidaTrasCorte: typeof input.maxBudgetUsd === 'number' && input.maxBudgetUsd > 0 })
         },
         { canonicalSlug },
       )

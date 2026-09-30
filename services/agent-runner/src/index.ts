@@ -390,7 +390,15 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     void correrYEntregar(
       { url: direccion.url, agentName, dispatchKey, clientId: clientId ?? null, dryRun, esperaForzada: body.testDelayMs ?? body.test_delay_ms ?? ctxObj.test_delay_ms },
       {
-        ejecutar: () => runAgentViaSDK(input),
+        ejecutar: async () => {
+          const r = await runAgentViaSDK(input)
+          // 🔴 la CAUSA de un fallo queda escrita: en la corrida 158667 el corredor falló tras ~40 min y no quedó ni el motivo (sólo `run_success: false`)
+          if (!r.success) {
+            console.error('[agent-runner] ❌ el empleado FALLÓ', { agent: agentName, dispatch_key: dispatchKey, error: r.error, cost_usd: r.costUsd, duration_ms: r.durationMs })
+            captureAgentError(new Error(r.error ?? 'agent run failed'), input)
+          }
+          return r
+        },
         emitirEvento: async (ev) => {
           const r = await emitirEventoPostHog(ev)
           if (r === 'sin_llave') console.warn('[agent-runner] agent_run_completed NO emitido · falta POSTHOG_API_KEY en el servicio')

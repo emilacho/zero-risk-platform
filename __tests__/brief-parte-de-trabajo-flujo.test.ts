@@ -219,7 +219,11 @@ describe('el grafo del flujo', async () => {
     for (const n of [N.manual, N.plan, N.repetido, N.ficha]) expect(nodo(n).alwaysOutputData).toBe(true)
   })
   it('la espera del agente usa el reanudar por webhook con tope (no espera para siempre)', () => {
-    expect(nodo(N.espera).parameters).toMatchObject({ resume: 'webhook', limitWaitTime: true, resumeAmount: 900, resumeUnit: 'seconds' })
+    expect(nodo(N.espera).parameters).toMatchObject({ resume: 'webhook', limitWaitTime: true, resumeAmount: 3600, resumeUnit: 'seconds' })
+    // 🔴 la espera NO puede ser menor que lo MEDIDO del redactor del brief (la única corrida real: 1.923 s · 30-sep corrida 158667: 900 s no alcanzaron) ni infinita
+    const seg = (nodo(N.espera).parameters as { resumeAmount: number }).resumeAmount
+    expect(seg).toBeGreaterThanOrEqual(2400)
+    expect(seg).toBeLessThanOrEqual(7200)
   })
   it('las consultas piden el manual más reciente y el plan de 90 días más reciente, y el brief previo del mismo plan', () => {
     expect(nodo(N.manual).parameters.url).toContain('client_brand_books')

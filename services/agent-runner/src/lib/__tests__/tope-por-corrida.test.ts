@@ -15,7 +15,12 @@ let flujo: Array<Record<string, unknown>> = []
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: (p: { options: Record<string, unknown> }) => {
     opcionesRecibidas = p.options
-    return (async function* () { for (const m of flujo) yield m })()
+    return (async function* () {
+      for (const m of flujo) {
+        if (typeof m.__lanza === 'string') throw new Error(m.__lanza)
+        yield m
+      }
+    })()
   },
 }))
 
@@ -45,6 +50,8 @@ const CORTE = [
   { type: 'assistant', message: { content: [{ type: 'text', text: '{"parte":{"entregables":[{"id":"BRF-0001"' }] } },
   { type: 'result', subtype: 'error_max_budget_usd', session_id: 's1', usage: USO },
 ]
+// 🔴 el caso REAL (corrida 158667): el SDK entrega el `result` de corte y DESPUÉS lanza la excepción de salida del proceso
+const CORTE_Y_SALIDA = [...CORTE, { __lanza: 'Claude Code process exited with code 1' }]
 const OK = [
   { type: 'system', subtype: 'init', session_id: 's1' },
   { type: 'assistant', message: { content: [{ type: 'text', text: 'listo' }] } },
@@ -94,6 +101,39 @@ describe('drainStream captura cómo terminó el SDK', () => {
     expect((await drainStream(stream(CORTE))).resultSubtype).toBe('error_max_budget_usd')
     expect((await drainStream(stream(OK))).resultSubtype).toBe('success')
     expect((await drainStream(stream([OK[0], OK[1]]))).resultSubtype).toBeNull()
+  })
+})
+
+describe('🔴 la excepción de salida del SDK DESPUÉS del corte (el caso real 158667)', () => {
+  const stream = (msgs: Array<Record<string, unknown>>) => (async function* () { for (const m of msgs) { if (typeof m.__lanza === 'string') throw new Error(m.__lanza); yield m } })() as never
+  it('drainStream: el corte por presupuesto seguido de la excepción de salida se devuelve como corte (no se pierde el resultado)', async () => {
+    const d = await drainStream(stream(CORTE_Y_SALIDA), { toleraSalidaTrasCorte: true })
+    expect(d.resultSubtype).toBe('error_max_budget_usd')
+    expect(d.responseText).toContain('BRF-0001')
+    expect(d.inputTokens).toBe(4000)
+  })
+  it('drainStream: la MISMA excepción tras un resultado que NO es corte, o sin resultado, sigue subiendo (no se traga cualquier error)', async () => {
+    const tolera = { toleraSalidaTrasCorte: true }
+    await expect(drainStream(stream([...OK, { __lanza: 'Claude Code process exited with code 1' }]), tolera)).rejects.toThrow(/exited with code 1/)
+    // y SIN la opción (llamador sin tope) la excepción sube AUNQUE el resultado fuera un corte: opt-in puro
+    await expect(drainStream(stream(CORTE_Y_SALIDA))).rejects.toThrow(/exited with code 1/)
+    await expect(drainStream(stream([OK[0], { __lanza: 'Claude Code process exited with code 1' }]), tolera)).rejects.toThrow(/exited with code 1/)
+  })
+  it('🔴 la corrida completa: corte + excepción de salida ⇒ FALLO declarado (error_max_budget_usd) con el gasto REGISTRADO en agent_invocations · antes: fail() sin gasto ni motivo', async () => {
+    flujo = CORTE_Y_SALIDA
+    const r = await corrida({ maxBudgetUsd: 3 })
+    expect(r.success).toBe(false)
+    expect(r.error).toMatch(/error_max_budget_usd/)
+    expect(r.costUsd).toBeGreaterThan(0)
+    await turno()
+    expect(escrituras.some((e) => e.tabla === 'agent_invocations' && e.op === 'insert')).toBe(true) // el gasto queda en el libro: el freno diario lo ve
+    expect(completados()).toHaveLength(0)
+  })
+  it('sin tope, la misma excepción de siempre es un fallo como hoy (opt-in puro)', async () => {
+    flujo = CORTE_Y_SALIDA
+    const r = await corrida({})
+    expect(r.success).toBe(false)
+    expect(r.error).toMatch(/exited with code 1/)
   })
 })
 

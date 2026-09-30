@@ -96,7 +96,9 @@ export function construirFlujo({ path = 'zero-risk/brief', nombre = 'Zero Risk �
       },
       name: N.redactor, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: x(10), onError: 'continueRegularOutput',
     },
-    { parameters: { resume: 'webhook', httpMethod: 'POST', limitWaitTime: true, resumeAmount: 900, resumeUnit: 'seconds', options: {} }, name: N.espera, type: 'n8n-nodes-base.wait', typeVersion: 1.1, position: x(11), webhookId: webhookId + '-espera' },
+    // 🔴 EL TOPE DE ESPERA (30-sep · corrida real 158667): con la palanca del corredor la vuelta ya no muere en los 800 s de Vercel, pero ESTE nodo seguía esperando sólo 900 s y el redactor del brief tarda
+    // ~16-32 min (la única corrida real medida: 1.923 s): la espera vencía, el parte salía «la vuelta NO llegó» y el trabajo se cobraba igual. 3.600 s (1 h) cubre lo medido con holgura; el SDK ya acota el COSTO con `tope_usd`.
+    { parameters: { resume: 'webhook', httpMethod: 'POST', limitWaitTime: true, resumeAmount: 3600, resumeUnit: 'seconds', options: {} }, name: N.espera, type: 'n8n-nodes-base.wait', typeVersion: 1.1, position: x(11), webhookId: webhookId + '-espera' },
     code(N.vuelta, 'vuelta', x(12)),
     code(N.chequeos, 'chequeos', x(13)),
     {
