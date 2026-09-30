@@ -164,3 +164,14 @@ export function isWorkflowJourney(journey_type: JourneyType): boolean {
 export function isCanonicalPhase(name: string): name is CanonicalPhaseLyVo {
   return (CANONICAL_PHASES_LyVoKcrypS5uLyuu as ReadonlyArray<string>).includes(name)
 }
+
+/** El journey al que pertenece un flujo n8n (por su workflow_id) · `undefined` si no está en el mapa.
+ *  El cable de vuelta (`/api/sala/callback`) lo usa para sellar el asiento de cierre con el journey REAL
+ *  (antes salía siempre `ONBOARD`, también para el brief · CC#1 2026-09-30). */
+export function journeyTypeOfWorkflow(workflow_id: string | null | undefined): JourneyType | undefined {
+  if (!workflow_id) return undefined
+  for (const [journey, target] of Object.entries(JOURNEY_WORKFLOW_MAP)) {
+    if (target && target.workflow_id === workflow_id) return journey as JourneyType
+  }
+  return undefined
+}

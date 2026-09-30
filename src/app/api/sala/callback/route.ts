@@ -27,6 +27,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { journeyTypeOfWorkflow } from '@/lib/sala-journey-dispatch/journey-workflow-map'
 import {
   SupabaseEventLogStorage,
   buildIdempotencyKey,
@@ -94,7 +95,8 @@ export async function POST(request: Request) {
     correlation_id: body._sala_correlation_id,
     causation_id: null,
     event_type: 'step_completed',
-    journey_type: 'ONBOARD',
+    // el journey REAL del flujo que vuelve (brief → BRIEF, planeación → PRODUCE) · ONBOARD sólo si el flujo no está en el mapa (comportamiento de siempre)
+    journey_type: journeyTypeOfWorkflow(body.worker_id) ?? 'ONBOARD',
     operation_type,
     idempotency_key,
     logical_period,
