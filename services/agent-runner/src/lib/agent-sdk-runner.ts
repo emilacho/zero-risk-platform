@@ -20,7 +20,7 @@
 
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import { opcionDeTope, cortadoPorTope, mensajeDeCorte, SUBTIPO_CORTE_POR_PRESUPUESTO } from './tope-por-corrida.js'
+import { opcionDeTope, cortadoPorTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
   armarBloquesDeImagen,
@@ -79,6 +79,10 @@ type SDKAssistantStreamMessage = {
 type SDKResultStreamMessage = {
   type: 'result'
   subtype?: string
+  /** el SDK marca así los fallos (p.ej. «response exceeded the 32000 output token maximum») · `result` trae el texto y `errors` el detalle */
+  is_error?: boolean
+  result?: string
+  errors?: string[]
   session_id?: string
   /**
    * Sprint 8 prompt-caching observability · the Agent SDK auto-enables
@@ -598,6 +602,10 @@ export function needsMetaAds(input: { agentName: string }): boolean {
 export interface StreamDrainResult {
   /** cómo terminó el SDK (`subtype` del mensaje `result`) · null si no llegó · ver tope-por-corrida.ts */
   resultSubtype?: string | null
+  /** el mensaje `result` llegó marcado como error (`is_error`) · sólo se interpreta como fallo con tope opt-in ver `falloDelResultado` */
+  resultIsError?: boolean
+  /** la causa textual del fallo (`result`/`errors` del SDK o la excepción de salida) · null si no hubo */
+  resultMessage?: string | null
   responseText: string
   sessionId: string | null
   inputTokens: number
@@ -633,6 +641,8 @@ export interface StreamDrainResult {
 export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: { toleraSalidaTrasCorte?: boolean }): Promise<StreamDrainResult> {
   let responseText = ''
   let resultSubtype: string | null = null
+  let resultIsError = false
+  let resultMessage: string | null = null
   let sessionId: string | null = null
   let inputTokens = 0
   let outputTokens = 0
@@ -721,16 +731,21 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
       cacheCreation1hTokens = r.usage?.cache_creation?.ephemeral_1h_input_tokens ?? 0
       sessionId = sessionId ?? r.session_id ?? null
       resultSubtype = typeof r.subtype === 'string' ? r.subtype : null
+      resultIsError = r.is_error === true
+      resultMessage = resultIsError ? [typeof r.result === 'string' ? r.result : '', ...(Array.isArray(r.errors) ? r.errors : [])].filter((x) => x !== '').join(' | ').slice(0, 500) || null : null
     }
   }
   } catch (err) {
-    if (!(opciones?.toleraSalidaTrasCorte === true && resultSubtype === SUBTIPO_CORTE_POR_PRESUPUESTO)) throw err
-    console.warn('[agent-runner] corte por presupuesto · el SDK cerró con excepción de salida DESPUÉS del resultado (esperado) · ' + (err instanceof Error ? err.message : String(err)))
+    // 🔴 el mismo síntoma cubre TODO fallo del SDK con `result` ya entregado (corte por presupuesto o un error como el de los 32000 tokens de salida): el gasto y la causa se REGISTRAN
+    if (!(opciones?.toleraSalidaTrasCorte === true && terminoConResultadoFallido(resultSubtype, resultIsError))) throw err
+    console.warn('[agent-runner] el SDK cerró con excepción de salida DESPUÉS de un resultado fallido (esperado) · ' + (err instanceof Error ? err.message : String(err)))
   }
 
   return {
     responseText,
     resultSubtype,
+    resultIsError,
+    resultMessage,
     sessionId,
     inputTokens,
     outputTokens,
@@ -893,9 +908,12 @@ function logExecution(
     cacheMetrics: CacheMetricsMeta
     /** Brand Book · outcome durable del forced-emit del judge · undefined si no fue judge. */
     fidelityForcedEmit?: Record<string, unknown>
+    /** causa del fallo del SDK (corte por tope u otro error del resultado) · null/ausente = corrida sana */
+    fallo?: string | null
   },
 ): void {
   const { canonicalSlug, input, skills, drain, modelId, startedAtMs, durationMs, costUsd, brainEnrichment, cacheMetrics, fidelityForcedEmit } = args
+  const fallo = args.fallo ?? null
   const row = {
     agent_name: canonicalSlug,
     action: 'agent_sdk_run',
@@ -943,7 +961,8 @@ function logExecution(
       cache_creation_5m_tokens: cacheMetrics.cache_creation_5m_tokens,
       cache_creation_1h_tokens: cacheMetrics.cache_creation_1h_tokens,
     },
-    status: 'success',
+    status: fallo ? 'error' : 'success',
+    ...(fallo ? { error_message: fallo } : {}),
     duration_ms: durationMs,
     cost_usd: costUsd,
   }
@@ -986,9 +1005,9 @@ function logExecution(
     tokens_cache_read: cacheMetrics.cache_read_input_tokens,
     tokens_cache_creation: cacheMetrics.cache_creation_input_tokens,
     num_turns: 1,
-    status: 'completed',
-    exit_code: 0,
-    error_message: null,
+    status: fallo ? 'failed' : 'completed',
+    exit_code: fallo ? 1 : 0,
+    error_message: fallo,
     system_prompt: null,
     // Sprint 8D transparency enhancement · canonical forensics deep self-contained
     // truncated 2000 chars + ellipsis · full payloads viven en Anthropic console retention
@@ -1179,6 +1198,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   let drain: StreamDrainResult
   // ¿el SDK cortó por el tope de la corrida? (sólo puede ser true si el pedido trajo `maxBudgetUsd`)
   let cortePorTope = false
+  let falloDelSdk: string | null = null
   // El cable para mirar · lo que de verdad se entregó al modelo (para el registro) · [] si no hubo imágenes.
   let imagenesEntregadas: ImagenEntregada[] = []
   // LOGGING DURABLE (CC#4 2026-07-01) · outcome del forced-emit del judge de fidelidad ·
@@ -1222,6 +1242,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       )
       drain = wrapped.result
       cortePorTope = cortadoPorTope(input.maxBudgetUsd, drain.resultSubtype)
+      falloDelSdk = falloDelResultado(input.maxBudgetUsd, drain.resultSubtype, drain.resultIsError, drain.resultMessage)
       if (wrapped.retry.retried) {
         console.log(
           `[sdk-call-retry] OK ${canonicalSlug} · succeeded on attempt ${wrapped.retry.attempts}/3 after ${wrapped.retry.transientErrors.length} transient(s)`,
@@ -1559,6 +1580,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     cache_creation_1h_tokens: drain.cacheCreation1hTokens,
   }
 
+  const falloFinal: string | null = cortePorTope ? mensajeDeCorte(input.maxBudgetUsd as number, costUsd) : falloDelSdk !== null ? mensajeDeFalloDelSdk(falloDelSdk, costUsd) : null
+
   // 5. Best-effort log · include brain enrichment + cache markers.
   //    Dual-write · `agents_log` (Railway runner forensics) + `agent_invocations`
   //    (canonical Sprint 8D audit trail · workflow_id column for enforcement
@@ -1568,12 +1591,13 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     brainEnrichment: brainEnrichmentMeta,
     cacheMetrics: cacheMetricsMeta,
     fidelityForcedEmit: fidelityForcedEmitDebug,
+    fallo: falloFinal,
   })
 
   const result: AgentRunResult = {
-    // un corte por presupuesto es un FALLO declarado, nunca un éxito con texto parcial
-    success: !cortePorTope,
-    ...(cortePorTope ? { error: mensajeDeCorte(input.maxBudgetUsd as number, costUsd) } : {}),
+    // un corte por presupuesto o un error del resultado es un FALLO declarado, nunca un éxito con texto parcial
+    success: falloFinal === null,
+    ...(falloFinal !== null ? { error: falloFinal } : {}),
     response: drain.responseText,
     sessionId: drain.sessionId,
     inputTokens: drain.inputTokens,
@@ -1603,7 +1627,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   //     prevents fake `[DRY_RUN]` response polluting the checkpoint cache.
   //     A subsequent real (non-dry-run) call must re-execute the SDK ·
   //     dry-run is for plumbing validation only · NOT a real cache fill.
-  if (input.workflowId && input.clientId && input.dryRun !== true && !cortePorTope) {
+  if (input.workflowId && input.clientId && input.dryRun !== true && falloFinal === null) {
     void saveCheckpoint(supabase, {
       workflowId: input.workflowId,
       workflowExecutionId: input.workflowExecutionId ?? null,
