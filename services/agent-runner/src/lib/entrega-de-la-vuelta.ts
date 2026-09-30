@@ -157,6 +157,8 @@ export function cuerpoDeLaVuelta(
       agent: contexto.agentName,
       error: result.error ?? 'agent run failed',
       error_kind: 'runner_run_failed',
+      // lo gastado también viaja en el FALLO: un corte por tope gasta, y el parte tiene que poder decir cuánto
+      ...(typeof result.costUsd === 'number' ? { cost_usd: result.costUsd } : {}),
       ...marca,
     }
   }

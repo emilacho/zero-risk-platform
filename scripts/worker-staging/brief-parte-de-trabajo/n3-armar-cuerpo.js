@@ -69,5 +69,7 @@ const cuerpo = {
   force_restart: true,
   // 🔴 EL INTERRUPTOR LLEGA AL NODO QUE PAGA
   dry_run: prev.dry_run === true,
+  // TOPE DURO por corrida (opt-in) · el corredor le pasa el presupuesto al SDK y CORTA al alcanzarlo · sin tope en el sobre, el cuerpo es el de siempre
+  ...(typeof prev.tope_usd === 'number' ? { max_budget_usd: prev.tope_usd } : {}),
 }
 return [{ json: { ...prev, client_name: nombre, cuerpo, pedido_caracteres: pedido.length } }]

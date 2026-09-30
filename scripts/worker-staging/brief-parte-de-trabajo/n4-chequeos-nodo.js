@@ -14,7 +14,7 @@ const res = ext.legible
 // Nada se rellena: un parte vacío se llama vacío.
 const CHEQUEOS_FATALES = ['respuesta_no_legible', 'sin_entregables', 'centinela']
 const motivos = []
-if (!c.llego_la_vuelta) motivos.push('la vuelta del redactor NO llegó')
+if (!c.llego_la_vuelta) motivos.push(c.falla_del_redactor ? 'el redactor FALLÓ · ' + c.falla_del_redactor : 'la vuelta del redactor NO llegó')
 if (!ext.legible) motivos.push('la respuesta no se pudo leer como parte (' + (ext.motivo || 'sin motivo') + ')')
 if (ext.legible && parte.entregables.length === 0) motivos.push('entregables: 0')
 res.hallazgos.filter((h) => CHEQUEOS_FATALES.indexOf(h.chequeo) !== -1 && h.chequeo !== 'respuesta_no_legible' && h.chequeo !== 'sin_entregables').forEach((h) => motivos.push('falla el chequeo «' + h.chequeo + '»' + (h.entregable ? ' en ' + h.entregable : '')))
@@ -113,6 +113,8 @@ const fila_parte = {
     huecos: (parte.huecos || []).length,
     dry_run: c.dry_run === true,
     guardado_antes_de_drive: true,
+    tope_usd: c.tope_usd === undefined ? null : c.tope_usd,
+    costo_usd: c.vuelta_costo_usd === undefined ? null : c.vuelta_costo_usd,
     parte: ext.legible ? parte : null,
   },
 }
@@ -142,6 +144,8 @@ return [{
     simulacro_usado: c.simulacro_usado,
     vuelta_costo_usd: c.vuelta_costo_usd,
     vuelta_modelo: c.vuelta_modelo,
+    falla_del_redactor: c.falla_del_redactor || null,
+    tope_usd: c.tope_usd === undefined ? null : c.tope_usd,
     parte_legible: ext.legible,
     parte_valido,
     motivo_invalido,
