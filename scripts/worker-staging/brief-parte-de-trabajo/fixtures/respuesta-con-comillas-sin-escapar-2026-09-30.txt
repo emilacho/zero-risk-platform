@@ -1,0 +1,393 @@
+```json
+{
+  "parte": {
+    "entregables": [
+      {
+        "id": "BRF-0001",
+        "plataforma": "Instagram",
+        "tipo_de_pieza": "configuracion",
+        "que_es": "Actualización de bio de Instagram: link de WhatsApp Business, horario exacto (jue–lun 7am–3pm), ciudad (Guayaquil)",
+        "de_que_parte_del_plan": "Sección 6 · tabla 'qué falta': «Bio de Instagram sin link a WhatsApp ni horario claro · El usuario llega y no sabe cómo pedir ni cuándo · Actualizar bio con link de WhatsApp Business y horario exacto · Día 1». También Sección D: «Actualizar la bio de Instagram: link de WhatsApp Business, horario exacto, ciudad (Guayaquil) · Día 1».",
+        "objetivo": "Eliminar la fricción de descubrimiento: quien llega al perfil por pauta sabe de inmediato cómo pedir y cuándo está disponible el servicio",
+        "segmento": "Todo visitante del perfil derivado de pauta — principalmente S2 (adulto guayaquileño 25–45 que busca delivery de ceviche/encebollado) y S4 (consumidor urbano que ordena desayuno/almuerzo premium). NO es para la audiencia orgánica ya fidelizada ni para visitantes fuera de Guayaquil",
+        "protagonista": "El acceso directo al pedido: el link de WhatsApp y el horario operativo. UNO. No el plato, no el origen del marisco",
+        "mensaje": "Guayaquil · marisco de Olón · jue–lun 7am–3pm · pedí por WhatsApp",
+        "hipotesis": "Si la bio muestra ciudad, horario y link de contacto en una sola lectura, la tasa de clics al WhatsApp desde el perfil sube respecto al estado actual (bio que apunta a Olón sin horario ni link directo)",
+        "limites": "Bio de Instagram: máximo 150 caracteres. El link en bio es un solo URL (WhatsApp Business). La nota de ubicación debe decir 'Guayaquil', no 'Olón' — el plan detecta que la bio actual dice '📍Olon' y eso confunde al receptor del anuncio de delivery en Guayaquil",
+        "vocabulario_obligatorio": ["jueves a lunes", "directo a tu puerta", "Olón", "delivery"],
+        "prohibido": ["premium", "exclusivo", "gourmet", "el mejor", "artesanal", "100% fresco", "auténtico sabor"],
+        "sintaxis": "Fragmentos cortos separados por punto o punto y coma. Sin subordinadas. Sin adjetivos de relleno. Cada dato en su propia línea si el formato lo permite",
+        "visual": {
+          "capa_que_manda": "grafica",
+          "descripcion": "La bio es texto puro; no hay visual propio. El campo foto de perfil y el grid de Instagram son el contexto visual — su coherencia con la narrativa costera es responsabilidad del grid, no de este entregable",
+          "muestra": "No aplica: este entregable es configuración de texto, no una pieza visual. No se observaron piezas de imagen ni video para derivar reglas visuales aquí"
+        },
+        "llamado_a_la_accion": "Link en bio → WhatsApp Business (+593 997 744 288)",
+        "variantes": "1 sola versión. No hay prueba A/B para una bio: el campo es único y el objetivo es funcional, no de optimización creativa",
+        "negativos": ["No prometer entrega fuera del horario operativo", "No usar lenguaje corporativo ni frío", "No mencionar plataformas de delivery de terceros en la bio si no están confirmadas como activas", "No usar 'vos' — la voz de la marca tutea siempre"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · Día 1 del plan (antes de lanzar cualquier pauta)",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0002",
+        "plataforma": "Google Business Profile",
+        "tipo_de_pieza": "configuracion",
+        "que_es": "Reclamación y configuración de la ficha de Google Business Profile: información de contacto, horario, ciudad de delivery, respuesta habilitada a reseñas",
+        "de_que_parte_del_plan": "Sección 6 · tabla 'qué falta': «Ficha Google Business sin reclamar · Cualquier persona puede sugerir cambios; no se pueden responder reseñas; Google puede mostrar info incorrecta · Reclamar en Google Business Profile por código o video · Días 1–3». Sección D: «Reclamar Google Business Profile (si hay duda entre Olón/Guayaquil, confirmar primero cuál) · Días 1–2».",
+        "objetivo": "Proteger y activar el activo de reputación existente (4.8/5 con 24 reseñas) y permitir que quien busca 'ceviche delivery Guayaquil' después de ver el anuncio encuentre información correcta y pueda ser respondido",
+        "segmento": "S2 y S4: adulto guayaquileño que busca en Google Maps después de ver el anuncio o recibir una recomendación. NO es para turistas en Olón (ese es un segmento distinto — S3 — y este entregable no puede servirlos simultáneamente si hay conflicto de ubicación)",
+        "protagonista": "La ficha verificada con información de delivery en Guayaquil. UNO. No el menú completo, no las fotos todavía (eso es BRF-0003)",
+        "mensaje": "Ceviche y encebollado de marisco de Olón · delivery en Guayaquil · jue–lun 7am–3pm",
+        "hipotesis": "Si la ficha está reclamada y muestra Guayaquil como ciudad de servicio, el tráfico derivado de pauta que busca validación en Maps encontrará información coherente y no abandonará por confusión de ubicación",
+        "limites": "La discrepancia Maps→Olón vs sitio→Guayaquil es un hueco declarado en el plan: el dueño debe confirmar antes de reclamar si existe o debe crearse una ficha de Guayaquil separada. Este entregable no puede completarse sin esa confirmación del dueño",
+        "vocabulario_obligatorio": ["marisco de Olón", "encebollado", "ceviche", "jueves a lunes", "delivery", "Guayaquil"],
+        "prohibido": ["premium", "gourmet", "el mejor", "exclusivo", "artesanal", "calidad garantizada"],
+        "sintaxis": "Descripción de ficha: frase completa, activa, sin subordinadas largas. Máximo 750 caracteres en el campo descripción de GBP",
+        "visual": {
+          "capa_que_manda": "producto",
+          "descripcion": "Las fotos de la ficha son el componente visual — pero su carga es el entregable BRF-0003. Este entregable cubre solo la configuración y reclamación de la ficha",
+          "muestra": "No aplica: este entregable es configuración. No se observaron piezas de imagen ni video para derivar reglas visuales aquí"
+        },
+        "llamado_a_la_accion": "Botón de contacto → WhatsApp o llamada al +593 997 744 288",
+        "variantes": "1 sola versión. La ficha es única; no hay prueba A/B",
+        "negativos": ["No publicar horarios de días que no opera (martes y miércoles)", "No prometer delivery fuera de Guayaquil", "No usar lenguaje de cadena o franquicia", "No ignorar las 24 reseñas existentes — responderlas es parte del trabajo de la ficha una vez reclamada"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · Días 1–3 · requiere confirmación previa del dueño sobre la duda Olón/Guayaquil antes de proceder",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0003",
+        "plataforma": "Google Business Profile",
+        "tipo_de_pieza": "imagen",
+        "que_es": "Pack de 10 fotos para subir a Google Maps: platos terminados, proceso de preparación, marisco llegando, cocina",
+        "de_que_parte_del_plan": "Sección 6 · tabla 'qué falta': «Solo 18 fotos en Google Maps · Perfil débil cuando alguien busca 'ceviche delivery Guayaquil' después de ver el anuncio · Dueño sube 10 fotos: platos, proceso, marisco llegando, cocina · Días 3–5».",
+        "objetivo": "Fortalecer la prueba social visual en Maps para que quien llegue después de ver el anuncio encuentre evidencia del producto y del origen — y no abandone por un perfil de foto escasa",
+        "segmento": "S2 y S4: el guayaquileño que busca validación en Google Maps antes de hacer el primer pedido. NO es para quien ya es cliente recurrente",
+        "protagonista": "El marisco y el proceso de origen: la evidencia visible de que viene de Olón. UNO. No el local, no el equipo humano en primer plano",
+        "mensaje": "Marisco de Olón · preparado y entregado en Guayaquil",
+        "hipotesis": "Si el perfil de Maps muestra evidencia visual del marisco fresco y del proceso, la tasa de clics al contacto desde la ficha sube respecto al perfil actual de 18 fotos sin narrativa de origen",
+        "limites": "10 fotos mínimo. Formato recomendado por Google: JPG o PNG, mínimo 720px en el lado corto. No hay límite de caracteres en captions de GBP, pero el caption debe ser breve — Google no garantiza su visualización en todos los contextos",
+        "vocabulario_obligatorio": ["marisco de Olón", "Santa Elena", "ceviche", "encebollado", "leche de tigre"],
+        "prohibido": ["premium", "gourmet", "artesanal", "el mejor", "exclusivo", "calidad garantizada", "100% fresco"],
+        "sintaxis": "Captions en frase corta activa. Máximo 2 líneas. El dato de origen va primero: 'Marisco de Olón. Listo para tu puerta en Guayaquil.'",
+        "visual": {
+          "capa_que_manda": "producto",
+          "descripcion": "Capa producto manda. Platos terminados con luz natural (no de estudio), encuadre limpio a la altura del ojo. Marisco en proceso: sin filtros artificiales, sin sobreposición de texto encima de la foto del plato. Cocina: orden visible, no staging. Marisco llegando: el insumo real, no el plato ya emplatado. Lo que NO aparece: logos sobreimpresos en la foto, fondos artificiales, personas posando",
+          "muestra": "HUECO: el campo visual.error del manual de marca retornó 'Request failed with status code 500' — no hay muestra de piezas visuales del cliente disponible para derivar reglas con base medida. Las reglas visuales de este brief se derivan del posicionamiento y la voz del manual, no de piezas observadas. Muestra: 0 fotos observadas, 0 videos observados"
+        },
+        "llamado_a_la_accion": "No aplica directamente en la foto — el CTA está en el botón de contacto de la ficha (BRF-0002)",
+        "variantes": "10 fotos con distribución sugerida: 4 platos terminados, 3 proceso/origen, 2 cocina, 1 marisco llegando. La distribución la define el dueño según material disponible",
+        "negativos": ["No usar fotos de stock", "No retocar el color del marisco artificialmente", "No mostrar el local como restaurante físico — es ghost kitchen", "No prometer presentación que no sea replicable en cada pedido"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · Días 3–5 · depende de que BRF-0002 esté en proceso",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0004",
+        "plataforma": "Instagram",
+        "tipo_de_pieza": "imagen",
+        "que_es": "9 posts de imagen fija para el grid de Instagram — a publicar antes del día 8 para que el perfil no se vea vacío cuando la pauta mande tráfico",
+        "de_que_parte_del_plan": "Sección 6 · tabla 'qué falta': «Solo 19 posts en Instagram · El perfil se ve vacío justo cuando el anuncio manda tráfico nuevo · Preparar 9 posts adicionales antes del día 8 · Días 1–7». Sección D: «Compartir material para 9 posts de Instagram (fotos, videos cortos, material de origen) · Días 1–7».",
+        "objetivo": "Construir credibilidad visual del perfil antes de que la pauta traiga visitantes nuevos — que quien llegue vea una cuenta activa con narrativa coherente, no un perfil de 19 posts",
+        "segmento": "S1 (entusiasta de lifestyle costero/surf) y S2 (adulto guayaquileño 25–45 que busca ceviche/encebollado auténtico). NO es para S5 (familia, que llega más por WhatsApp) ni para audiencias fuera de Guayaquil",
+        "protagonista": "El origen del marisco: Olón y Santa Elena como argumento visible. UNO por post. No el precio, no el horario — eso va en el anuncio (BRF-0005)",
+        "mensaje": "El marisco que comes salió de Olón, no de un depósito",
+        "hipotesis": "Si el grid muestra evidencia consistente de origen costera antes de que llegue la pauta, el visitante nuevo valida la narrativa en 3–5 segundos de scroll y sigue la cuenta o va directo al WhatsApp",
+        "limites": "Proporción recomendada para grid: 1:1 o 4:5. Texto en caption: lo importante en las primeras 2 líneas (antes del 'ver más'). No hay límite técnico de caracteres en caption de Instagram, pero el 'ver más' corta aproximadamente a los 125 caracteres en móvil",
+        "vocabulario_obligatorio": ["marisco de Olón", "alma de playa", "Olón", "Santa Elena", "ceviche", "encebollado", "leche de tigre", "trazabilidad", "directo a tu puerta"],
+        "prohibido": ["premium", "gourmet", "artesanal", "el mejor", "exclusivo", "calidad garantizada", "100% fresco", "auténtico sabor", "inigualable", "lujo", "fast food", "comida rápida", "barato", "económico", "low cost", "vos"],
+        "sintaxis": "Frases cortas. Una idea por frase. Puntos suspensivos para ritmo donde aplique. Activo: 'viene de Olón', no 'es traído desde Olón'. Tutea siempre",
+        "visual": {
+          "capa_que_manda": "producto",
+          "descripcion": "Capa producto manda. Luz natural preferente. Encuadre a la altura del ojo o cenital limpio. El marisco o el plato terminado ocupa el centro. Sin texto sobreimpreso encima del plato. Sin fondos de estudio. Lo que NO aparece: logos flotantes sobre la foto, personas posando en primer plano, luz artificial fría",
+          "muestra": "HUECO: el campo visual.error del manual de marca retornó 'Request failed with status code 500' — no hay muestra de piezas visuales del cliente disponible. Las reglas visuales se derivan del posicionamiento y voz del manual. Muestra: 0 fotos observadas, 0 videos observados"
+        },
+        "llamado_a_la_accion": "Caption cierra con invitación a pedir por WhatsApp o a seguir la cuenta — no es CTA de anuncio, es CTA orgánico. El link de WhatsApp va en bio (BRF-0001)",
+        "variantes": "9 posts con al menos 3 temas distintos: (1) plato terminado con origen declarado, (2) proceso/marisco llegando de Olón, (3) historia detrás — quién pesca, cómo llega. La distribución exacta la define quien produce según material disponible del dueño",
+        "negativos": ["No copiar el tono de cadena de comida rápida", "No prometer resultados de sabor ('el mejor ceviche que vas a probar')", "No publicar fotos de stock o marisco genérico sin origen verificable", "No usar 'vos' — la marca tutea"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · Días 1–7 · todos los posts deben estar listos antes del Día 8 (lanzamiento de pauta)",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0005",
+        "plataforma": "Meta Ads (Instagram + Facebook)",
+        "tipo_de_pieza": "imagen",
+        "que_es": "Anuncio de imagen fija — Fase 1, Días 8–21 — campaña de mensajes a WhatsApp con oferta de entrada: Ceviche Náufrago $7.00, Guayaquil, jue–lun 7am–3pm",
+        "de_que_parte_del_plan": "Sección 5 · Fase 1 · Días 8–14: «Lanzar campaña de alcance en Guayaquil con presupuesto inicial conservador · Objetivo de campaña: mensajes a WhatsApp». Sección 4 · La oferta: «El ceviche que viene del mar de verdad. Olón a tu puerta» · precio $7.00 · horario · cómo pedir. El plan prescribe Reel — ver contradicciones_plan_vs_manual.",
+        "objetivo": "Generar mensajes directos al WhatsApp (+593 997 744 288) de personas en Guayaquil que nunca han pedido a Náufrago — botón de campaña: 'Enviar mensaje'",
+        "segmento": "S2: adulto guayaquileño 25–45 que ordena desayuno o almuerzo por delivery y está dispuesto a pagar $7–$9 por ceviche si sabe de dónde viene. Señales de intención en plataforma: interacción con cuentas de gastronomía costera, surf, playa, cultura ecuatoriana. Geografía: Guayaquil, radio 15–20 km zona norte. NO es para S3 (turistas en Olón) ni para quien ya sigue la cuenta",
+        "protagonista": "El Ceviche Náufrago ($7.00) y su origen en Olón. UNO. No el encebollado, no el combo — la oferta de entrada es el ceviche",
+        "mensaje": "El marisco que comes salió de Olón, no de un depósito — $7.00 · jue–lun 7am–3pm · solo en Guayaquil",
+        "hipotesis": "Si el anuncio nombra Olón explícitamente y declara precio + horario + ciudad, el costo por mensaje a WhatsApp será menor que un anuncio genérico de ceviche sin origen declarado. Se prueba contra variante B (BRF-0006) que habla a la ocasión",
+        "limites": "Titular: máximo 40 caracteres. Texto principal: lo que importa en los primeros 125 caracteres (antes del 'ver más' en móvil). Proporción: 4:5 para feed Instagram, 1:1 para feed Facebook. El anuncio debe decir explícitamente: solo jue–lun, solo Guayaquil, solo 7am–3pm — el plan lo exige para evitar mensajes fuera de horario",
+        "vocabulario_obligatorio": ["marisco de Olón", "ceviche", "Olón", "jueves a lunes", "directo a tu puerta", "leche de tigre", "trazabilidad"],
+        "prohibido": ["premium", "gourmet", "artesanal", "el mejor", "exclusivo", "calidad garantizada", "100% fresco", "auténtico sabor", "inigualable", "lujo", "barato", "económico", "low cost", "vos", "fast food"],
+        "sintaxis": "Frase corta activa. Una idea por línea. El dato de origen va primero. El precio y el horario van al final como condiciones concretas, no como promesa. Sin subordinadas largas",
+        "visual": {
+          "capa_que_manda": "producto",
+          "descripcion": "Capa producto manda. El ceviche terminado en primer plano, luz natural, encuadre a la altura del ojo. El marisco visible — no cubierto por salsa. Sin texto sobreimpreso encima del plato. Sin fondos de estudio ni superficies artificiales. Lo que NO aparece: personas, logo flotante sobre la foto, luz de flash directo",
+          "muestra": "HUECO: el campo visual.error del manual de marca retornó 'Request failed with status code 500' — no hay muestra de piezas del cliente disponible. Las reglas visuales se derivan del posicionamiento y voz del manual. Muestra: 0 fotos observadas, 0 videos observados"
+        },
+        "llamado_a_la_accion": "Enviar mensaje → WhatsApp +593 997 744 288",
+        "variantes": "2 variantes de este anuncio: variante A (este brief, BRF-0005) habla al ORIGEN del marisco. Variante B (BRF-0006) habla a la OCASIÓN. El visual puede ser idéntico o distinto — lo que varía es el texto principal y el titular. Si cambian dos variables, no se sabe cuál funcionó: elegir UNA variable de cambio por prueba",
+        "negativos": ["No comparar precios con competidores", "No usar el tono de urgencia de oferta masiva ('¡Solo hoy!')", "No prometer entrega fuera del horario operativo", "No hablar al miedo — hablar al deseo de playa y origen"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · antes del Día 8 del plan · requiere que BRF-0001 y Meta Business Manager estén activos",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0006",
+        "plataforma": "Meta Ads (Instagram + Facebook)",
+        "tipo_de_pieza": "imagen",
+        "que_es": "Anuncio de imagen fija — variante B de la Fase 1 — misma campaña de mensajes a WhatsApp pero con ángulo de ocasión ('almuerzo con alma de playa') en lugar de origen del marisco",
+        "de_que_parte_del_plan": "Sección 5 · Fase 2 · Días 22–56: «Probar 2 variaciones de copy: una que habla al origen del marisco / una que habla a la ocasión (almuerzo rápido con alma de playa)».",
+        "objetivo": "Medir si el ángulo de ocasión ('el almuerzo de la semana con alma de playa') convierte más contactos a WhatsApp que el ángulo de origen (BRF-0005) — mismo botón: 'Enviar mensaje'",
+        "segmento": "S4: consumidor urbano guayaquileño que busca desayuno o almuerzo premium por delivery sin salir de casa u oficina. Dolor declarado: desconfianza sobre frescura y origen en deliveries, precio superior a la competencia. NO es S1 (surf/lifestyle) ni S5 (familia fin de semana) — este ángulo apunta al estado mental de 'necesito almorzar bien hoy'",
+        "protagonista": "La ocasión: el almuerzo del jueves o viernes con alma de playa, sin fila, sin espera. UNO. No el producto en sí, no el origen — eso es BRF-0005",
+        "mensaje": "Náufrago es la playa que no tuviste esta semana — en tu puerta · jue–lun 7am–3pm · Guayaquil",
+        "hipotesis": "Si el anuncio habla a la ocasión ('la playa que no tuviste esta semana') en lugar de al origen del marisco, el segmento S4 responde con mayor tasa de mensaje que ante el ángulo de origen. Se mide contra BRF-0005 en costo por contacto a WhatsApp",
+        "limites": "Mismos límites técnicos que BRF-0005: titular máximo 40 caracteres, texto principal relevante en primeros 125 caracteres, proporción 4:5 (feed IG) o 1:1 (feed FB). El anuncio debe declarar horario y ciudad — igual que BRF-0005",
+        "vocabulario_obligatorio": ["alma de playa", "jueves a lunes", "directo a tu puerta", "ceviche", "Olón"],
+        "prohibido": ["premium", "gourmet", "artesanal", "el mejor", "exclusivo", "calidad garantizada", "100% fresco", "auténtico sabor", "inigualable", "lujo", "barato", "económico", "low cost", "vos", "fast food"],
+        "sintaxis": "La frase de ocasión va primero — evoca el estado mental. El dato operativo (horario, ciudad) cierra. Puntos suspensivos para ritmo si aplica. Activo, nunca pasivo",
+        "visual": {
+          "capa_que_manda": "producto",
+          "descripcion": "Mismo criterio visual que BRF-0005: ceviche terminado, luz natural, encuadre limpio. La prueba varía el texto, no la foto — si el visual también cambia no se sabe qué variable movió el resultado",
+          "muestra": "HUECO: campo visual.error del manual retornó 'Request failed with status code 500'. Muestra: 0 fotos observadas, 0 videos observados. Reglas derivadas del posicionamiento y voz del manual"
+        },
+        "llamado_a_la_accion": "Enviar mensaje → WhatsApp +593 997 744 288",
+        "variantes": "Esta pieza ES la variante B. No tiene sub-variantes propias — para que la prueba sea válida, solo varía el copy respecto a BRF-0005. El visual debe ser idéntico o equivalente",
+        "negativos": ["No caer en nostalgia cursi ('el sabor de los recuerdos')", "No usar adjetivos de relleno para evocar playa", "No prometer experiencia de restaurante — es ghost kitchen", "No usar 'vos'"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · antes del Día 22 del plan (inicio Fase 2) · puede aprobarse junto a BRF-0005 si hay material",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0007",
+        "plataforma": "Instagram",
+        "tipo_de_pieza": "imagen",
+        "que_es": "Post orgánico de imagen fija — serie 'El marisco llegando de Olón': foto del marisco fresco o del proceso antes del plato terminado, con caption que declara origen",
+        "de_que_parte_del_plan": "Sección 5 · Contenido orgánico de soporte (3 posts/semana) · tema 1: «El marisco llegando de Olón: foto o video corto del proceso». También Sección 2: «El marisco viene de Olón, Santa Elena — con trazabilidad de origen. Ningún competidor del mercado lo capitaliza de forma activa».",
+        "objetivo": "Construir evidencia pública de trazabilidad del marisco en el feed orgánico — reforzar la narrativa que el anuncio promete y que ningún competidor capitaliza",
+        "segmento": "S1 (entusiasta de lifestyle costero/surf en Guayaquil) y S2 (adulto guayaquileño que busca origen verificable). NO es para S5 (familia) cuyo canal primario es WhatsApp, ni para turistas en Olón",
+        "protagonista": "El marisco fresco antes de ser plato: el insumo, el origen, el momento entre Olón y la cocina. UNO. No el plato terminado — eso es otro post",
+        "mensaje": "El marisco que comes salió de Olón, no de un depósito",
+        "hipotesis": "Si el feed muestra evidencia real del origen (marisco fresco, no solo plato terminado), el seguidor de S1 siente que la narrativa de autenticidad costera es verificable y comparte o guarda el post",
+        "limites": "Proporción 1:1 o 4:5. Caption: primeras 2 líneas visibles antes del 'ver más' (aproximadamente 125 caracteres en móvil) son las que cuentan",
+        "vocabulario_obligatorio": ["marisco de Olón", "Olón", "Santa Elena", "trazabilidad", "marisco fresco", "costa ecuatoriana"],
+        "prohibido": ["premium", "gourmet", "artesanal", "el mejor", "exclusivo", "100% fresco", "auténtico sabor", "inigualable", "barato", "económico", "vos"],
+        "sintaxis": "Frase corta. El dato geográfico va primero: 'De Olón.' — luego el verbo. Puntos suspensivos si hay pausa de ritmo. Activo",
+        "visual": {
+          "capa_que_manda": "producto",
+          "descripcion": "Marisco fresco en primer plano, sin procesar o en etapa de preparación. Luz natural. Sin fondos artificiales. Sin texto sobreimpreso sobre el marisco. Lo que NO aparece: plato terminado emplatado, logo flotante, personas posando",
+          "muestra": "HUECO: campo visual.error del manual retornó 'Request failed with status code 500'. Muestra: 0 fotos observadas, 0 videos observados. Reglas derivadas del posicionamiento y voz del manual"
+        },
+        "llamado_a_la_accion": "Invitación orgánica al final del caption: 'Pedí el tuyo jue–lun · link en bio'",
+        "variantes": "1 por publicación. La serie completa tiene múltiples entregas (3 posts/semana) pero cada una se aprueba individualmente",
+        "negativos": ["No mostrar marisco genérico sin declarar origen", "No prometer frescura con adjetivos — dejar que la foto lo diga", "No usar fotos de stock", "No usar 'vos'"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · aprobación rolling: cada post antes de su fecha de publicación · cadencia de 3 posts/semana desde el Día 1",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0008",
+        "plataforma": "Instagram",
+        "tipo_de_pieza": "imagen",
+        "que_es": "Post orgánico de imagen fija — serie 'El plato terminado con precio visible': foto del ceviche o encebollado listo, con precio declarado en el caption",
+        "de_que_parte_del_plan": "Sección 5 · Contenido orgánico de soporte (3 posts/semana) · tema 2: «El plato terminado: foto de producto limpia, con precio visible». Sección 4 · La oferta · tabla: Ceviche Náufrago $7.00, Ceviche Mixto $9.00, Encebollado Mixto $6.00.",
+        "objetivo": "Mostrar el producto terminado con precio visible para que S2 y S4 puedan comparar valor percibido vs precio antes de ir a la app de delivery — el plan identifica que el precio es la fricción principal en plataformas de delivery",
+        "segmento": "S4 (consumidor urbano que pide almuerzo premium por delivery, sensible al precio vs valor percibido) y S2 (adulto 25–45 que evalúa frescura y origen). NO es para S1 (surf/lifestyle) cuyo criterio de decisión es autenticidad, no precio",
+        "protagonista": "El plato terminado: el ceviche o el encebollado, completo y listo. UNO por post. No el marisco crudo, no el proceso — eso es BRF-0007",
+        "mensaje": "El mar no debería estar lejos del almuerzo — $7.00 · de Olón a tu puerta",
+        "hipotesis": "Si el post muestra el plato terminado con precio visible y origen declarado, el visitante del perfil puede evaluar la relación valor/precio sin abrir la app — reduciendo la fricción de comparación por precio en delivery",
+        "limites": "Proporción 1:1 o 4:5. El precio va en el caption, no sobreimpreso en la foto. Caption: precio y origen en las primeras 2 líneas visibles",
+        "vocabulario_obligatorio": ["ceviche", "encebollado", "Olón", "leche de tigre", "directo a tu puerta", "jueves a lunes"],
+        "prohibido": ["premium", "gourmet", "el mejor", "exclusivo", "artesanal", "calidad garantizada", "100% fresco", "auténtico sabor", "inigualable", "barato", "económico", "low cost", "vos"],
+        "sintaxis": "Frase activa. El plato primero, el precio al final como dato concreto, no como argumento de venta. Sin adjetivos de relleno sobre el sabor",
+        "visual": {
+          "capa_que_manda": "producto",
+          "descripcion": "Plato terminado en primer plano, luz natural, encuadre cenital o a la altura del ojo. El contenido del plato visible: el marisco, la leche de tigre, el aguacate si aplica. Sin texto sobreimpreso encima del plato. Sin fondos de estudio. Lo que NO aparece: logo flotante sobre la foto, luz de flash directo, manos sosteniendo el plato en pose artificial",
+          "muestra": "HUECO: campo visual.error del manual retornó 'Request failed with status code 500'. Muestra: 0 fotos observadas, 0 videos observados. Reglas derivadas del posicionamiento y voz del manual"
+        },
+        "llamado_a_la_accion": "Caption cierra con: 'Pedí jue–lun 7am–3pm · link en bio'",
+        "variantes": "1 por publicación. La serie alterna entre ceviche y encebollado según disponibilidad de material",
+        "negativos": ["No describir el sabor con adjetivos ('delicioso', 'increíble')", "No comparar precios con competidores", "No usar 'vos'", "No publicar foto de plato frío o con presentación degradada"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · aprobación rolling · cada post antes de su fecha de publicación",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0009",
+        "plataforma": "Instagram",
+        "tipo_de_pieza": "imagen",
+        "que_es": "Post orgánico de imagen fija — serie 'Testimonio real': repost o cita visual de comentario o etiqueta de cliente existente",
+        "de_que_parte_del_plan": "Sección 5 · Contenido orgánico de soporte · tema 4: «Testimonios reales: comentarios o etiquetas de clientes existentes». Sección 5 · Fase 2: «Incorporar contenido de comunidad: si algún cliente etiquetó el plato, repostear».",
+        "objetivo": "Activar prueba social real para S2 y S4 — quienes llegan por pauta buscan validación; una reseña real de cliente es más creíble que cualquier copy de marca",
+        "segmento": "S2 (adulto guayaquileño que decide por reseñas y recomendaciones en redes) y S4 (consumidor urbano con desconfianza sobre frescura en delivery). NO es para S1 — el testimonio de playa/surf tiene su propio camino orgánico",
+        "protagonista": "La voz del cliente: el comentario o la etiqueta real. UNO por post. No el plato, no el origen — la prueba social es el protagonista",
+        "mensaje": "Si no sabes de dónde viene el marisco que pediste, no es Náufrago",
+        "hipotesis": "Si el perfil publica testimonios reales (comentarios, etiquetas) en lugar de solo contenido de marca, S2 y S4 perciben mayor credibilidad y reducen la fricción de primer pedido",
+        "limites": "Solo se publica con permiso del cliente que generó el contenido original (repost, cita). El texto del testimonio debe ser literal — no se edita ni se parafrasea. Proporción 1:1 o 4:5",
+        "vocabulario_obligatorio": ["marisco de Olón", "ceviche", "encebollado"],
+        "prohibido": ["premium", "gourmet", "el mejor", "exclusivo", "artesanal", "auténtico sabor", "inigualable", "vos", "editar o parafrasear el testimonio del cliente"],
+        "sintaxis": "El testimonio del cliente va sin editar. El caption de la marca es mínimo: contextualiza sin sobreexplicar. Frase corta, activa",
+        "visual": {
+          "capa_que_manda": "grafica",
+          "descripcion": "El contenido visual es el testimonio: captura de pantalla del comentario o la etiqueta, o la foto que el cliente compartió. La marca puede agregar su logo en un margen, no sobreimpreso en el contenido del cliente. Lo que NO aparece: edición del contenido original del cliente",
+          "muestra": "HUECO: campo visual.error del manual retornó 'Request failed with status code 500'. Muestra: 0 fotos observadas, 0 videos observados. Reglas derivadas del posicionamiento y voz del manual"
+        },
+        "llamado_a_la_accion": "Caption cierra con: '¿Querés ser el próximo? Pedí jue–lun · link en bio'",
+        "variantes": "1 por publicación. Se publica cuando hay material real disponible — no se fuerza cadencia si no hay testimonios genuinos",
+        "negativos": ["No fabricar ni parafrasear testimonios", "No publicar sin permiso del cliente", "No usar testimonio de producto distinto al que se está promoviendo", "No usar 'vos'"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · aprobación case por case · cada vez que aparece material de testimonio válido",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0010",
+        "plataforma": "WhatsApp Business",
+        "tipo_de_pieza": "configuracion",
+        "que_es": "Configuración de mensaje de bienvenida pre-cargado en WhatsApp Business para el primer contacto de quienes lleguen desde anuncios",
+        "de_que_parte_del_plan": "Sección 5 · Fase 1 · Días 1–7: «Configurar WhatsApp Business con mensaje pre-cargado: "Hola, quiero hacer un pedido"». Sección 4 · Por qué creerlo: «WhatsApp +593 997 744 288». Sección D: «Acordar quién responde WhatsApp y en cuánto tiempo · Día 1».",
+        "objetivo": "Reducir la fricción del primer contacto: que quien haga clic en 'Enviar mensaje' desde el anuncio encuentre el texto de apertura ya escrito y no tenga que pensar qué escribir",
+        "segmento": "S2, S4 y S5: todo visitante que llega por pauta y hace clic en el botón de WhatsApp. El mensaje pre-cargado no discrimina segmento — es para cualquiera que inicia el contacto",
+        "protagonista": "El primer paso del pedido: el mensaje que abre la conversación. UNO. No el menú, no el precio — eso lo maneja el dueño en la respuesta",
+        "mensaje": "Hola, quiero hacer un pedido",
+        "hipotesis": "Si el mensaje de apertura está pre-cargado, la tasa de conversión de clic-a-mensaje-enviado sube respecto a un botón de WhatsApp que abre chat vacío",
+        "limites": "El texto pre-cargado de WhatsApp Business se configura en la URL del enlace (wa.me con parámetro text). Máximo recomendado: 1 frase corta. No puede incluir caracteres especiales que rompan la URL",
+        "vocabulario_obligatorio": ["directo a tu puerta"],
+        "prohibido": ["premium", "gourmet", "el mejor", "exclusivo", "artesanal", "mensajes de bienvenida que prometan tiempos de entrega no verificados"],
+        "sintaxis": "Frase mínima. El usuario la envía tal cual — si es muy larga o forzada, la borra y escribe otra. Tiene que ser lo que el usuario diría naturalmente",
+        "visual": {
+          "capa_que_manda": "grafica",
+          "descripcion": "No aplica — este entregable es configuración de texto en una plataforma de mensajería. No hay componente visual propio",
+          "muestra": "No aplica: entregable de configuración, sin piezas visuales"
+        },
+        "llamado_a_la_accion": "No aplica — este entregable ES el resultado del llamado a la acción de los anuncios",
+        "variantes": "1 sola versión. El mensaje pre-cargado es único",
+        "negativos": ["No pre-cargar un mensaje que el usuario no enviaría naturalmente", "No prometer respuesta inmediata en el mensaje pre-cargado si no está garantizada"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · Día 1 del plan · es prerequisito de cualquier anuncio que use botón de WhatsApp",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0011",
+        "plataforma": "Meta Ads (Instagram + Facebook)",
+        "tipo_de_pieza": "imagen",
+        "que_es": "Anuncio de imagen fija — Fase 2, anuncio ganador escalado — versión optimizada del anuncio que más contactos generó al menor costo por mensaje en la Fase 1",
+        "de_que_parte_del_plan": "Sección 5 · Fase 2 · Días 22–56: «Identificar el anuncio que más contactos genera al menor costo por mensaje · Doblar el presupuesto de ese anuncio». Sección 8 · señal 'sigo igual': costo por contacto estable o bajando.",
+        "objetivo": "Maximizar el volumen de mensajes a WhatsApp al costo por contacto validado en Fase 1 — botón: 'Enviar mensaje'",
+        "segmento": "El segmento que respondió mejor en Fase 1 — a determinar en la primera lectura del Día 21. HUECO: no se puede especificar hoy porque depende del dato de rendimiento de BRF-0005 y BRF-0006",
+        "protagonista": "El protagonista del anuncio ganador de Fase 1 — a confirmar en Día 21. No se prescribe hoy",
+        "mensaje": "El mensaje del anuncio ganador de Fase 1 — a confirmar en Día 21",
+        "hipotesis": "Si se dobla el presupuesto del anuncio con menor costo por contacto validado, el volumen de mensajes crece proporcionalmente sin degradar el costo por contacto",
+        "limites": "Mismos límites técnicos de plataforma que BRF-0005. El presupuesto de este anuncio es el doble del asignado al ganador en Fase 1 — cifra a confirmar en Día 21",
+        "vocabulario_obligatorio": ["marisco de Olón", "Olón", "ceviche", "jueves a lunes", "directo a tu puerta"],
+        "prohibido": ["premium", "gourmet", "artesanal", "el mejor", "exclusivo", "calidad garantizada", "100% fresco", "auténtico sabor", "inigualable", "lujo", "barato", "económico", "low cost", "vos"],
+        "sintaxis": "La sintaxis del anuncio ganador de Fase 1. No se modifica la sintaxis al escalar — si se cambia la sintaxis no se sabe si el cambio de escala afectó el resultado",
+        "visual": {
+          "capa_que_manda": "producto",
+          "descripcion": "El visual del anuncio ganador de Fase 1. No se cambia el visual al escalar presupuesto — cambiar visual y presupuesto simultáneamente impide saber qué variable movió el resultado",
+          "muestra": "HUECO: campo visual.error del manual retornó 'Request failed with status code 500'. Muestra: 0 fotos observadas, 0 videos observados"
+        },
+        "llamado_a_la_accion": "Enviar mensaje → WhatsApp +593 997 744 288",
+        "variantes": "1 sola versión en escala. Las nuevas variantes de copy (origen vs ocasión) ya se probaron en Fase 1 como BRF-0005 y BRF-0006",
+        "negativos": ["No cambiar copy ni visual al mismo tiempo que se dobla el presupuesto", "No escalar antes del Día 21 sin el dato de costo por contacto de Fase 1"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · Día 21 (primera lectura) · la aprobación de escalado está condicionada al dato de costo por contacto de la Fase 1",
+        "presupuesto": null
+      },
+      {
+        "id": "BRF-0012",
+        "plataforma": "Instagram",
+        "tipo_de_pieza": "imagen",
+        "que_es": "Post orgánico de imagen fija — serie 'La historia detrás': quién pesca, cómo llega el marisco de Olón, por qué importa el origen — con caption narrativo",
+        "de_que_parte_del_plan": "Sección 5 · Contenido orgánico de soporte · tema 3: «La historia detrás: quién pesca, cómo llega, por qué importa el origen». Sección 6: «El activo más valioso que ya tienen: el video orgánico con la comunidad de foil — 1.852 vistas, 45 comentarios, interacción genuina, sin pauta. Todo lo que se produzca de aquí en adelante tiene que apuntar a replicar esa autenticidad».",
+        "objetivo": "Construir la narrativa de trazabilidad costera que diferencia a Náufrago de todos los competidores — ninguno comunica activamente el origen del marisco (fuente: competitive_landscape · landscape_summary · cerebro_cliente)",
+        "segmento": "S1 (entusiasta de lifestyle costero/surf): su ciclo de compra es descubrimiento orgánico → seguimiento → compra emocional → evangelización. Este post apunta a la fase de seguimiento y evangelización. NO es para S4 (su palanca es precio/origen verificable, no narrativa costera profunda)",
+        "protagonista": "La persona o el proceso detrás del marisco: quién pesca en Olón, cómo llega a Guayaquil. UNO. No el plato, no el precio — la historia es el protagonista",
+        "mensaje": "Náufrago es la playa que no tuviste esta semana",
+        "hipotesis": "Si el feed muestra la historia real detrás del marisco (personas, proceso, Olón), S1 evangeliza el contenido a su comunidad de surf/costa sin que la marca pague por distribución",
+        "limites": "Proporción 1:1 o 4:5. Caption más largo que los posts de plato o proceso — la narrativa necesita espacio. El dato geográfico (Olón, Santa Elena) va en las primeras 2 líneas visibles",
+        "vocabulario_obligatorio": ["marisco de Olón", "alma de playa", "Olón", "Santa Elena", "trazabilidad", "costa ecuatoriana"],
+        "prohibido": ["premium", "gourmet", "artesanal", "el mejor", "exclusivo", "calidad garantizada", "100% fresco", "auténtico sabor", "inigualable", "lujo", "vos", "el sabor auténtico de los mares ecuatorianos"],
+        "sintaxis": "Narrativo pero económico. Una idea por párrafo. Sin subordinadas largas. La geografía es el argumento, no el adjetivo. Puntos suspensivos para ritmo si aplica",
+        "visual": {
+          "capa_que_manda": "producto",
+          "descripcion": "El proceso o el lugar: el mar de Olón, el marisco antes de la cocina, el momento de llegada. Luz natural. Sin staging. Lo que NO aparece: plato terminado emplatado, logo sobreimpreso, poses artificiales. Si aparece una persona (el pescador, quien trae el marisco), debe ser en contexto real, no posada",
+          "muestra": "HUECO: campo visual.error del manual retornó 'Request failed with status code 500'. Muestra: 0 fotos observadas, 0 videos observados. Reglas derivadas del posicionamiento y voz del manual"
+        },
+        "llamado_a_la_accion": "Orgánico: invitar a guardar o compartir el post. 'Guardá esto para el jueves' o similar. Link en bio para pedir",
+        "variantes": "1 por publicación. La cadencia es parte de la serie de 3 posts/semana — este tema rota junto a BRF-0007 y BRF-0008",
+        "negativos": ["No fabricar la historia — solo publicar lo que el dueño puede evidenciar", "No romantizar en exceso ('las aguas cristalinas')", "No usar 'vos'", "No publicar sin material real del dueño sobre el origen"],
+        "aprueba_y_para_cuando": "Dueño de Náufrago · aprobación rolling · cada post antes de su fecha de publicación",
+        "presupuesto": null
+      }
+    ],
+    "pendientes_declarados": [
+      {
+        "entregable": "Reel corto 15–30 segundos — marisco llegando de Olón + plato terminado (anuncio Fase 1)",
+        "plataforma": "Meta Ads (Instagram + Facebook)",
+        "motivo": "El plan lo prescribe explícitamente en Sección 5 · Fase 1 · Días 8–14: «Formato: Reel corto (15–30 segundos) mostrando marisco llegando de Olón + plato terminado». El sistema no puede generar briefs de video ni audio — regla no negociable del sistema. El brief de este reel queda pendiente hasta que el sistema pueda procesar video"
+      },
+      {
+        "entregable": "Video tipo @foillifepodcast — colaboración con comunidad surf/foil costera",
+        "plataforma": "Instagram",
+        "motivo": "El plan lo menciona en Sección 5 · Fase 3 · Días 57–90: «Incorporar video tipo @foillifepodcast si hay nuevo material disponible». El sistema no puede generar briefs de video ni audio. Además, el plan condiciona esta acción a que haya 'nuevo material disponible' — condición no verificable hoy"
+      },
+      {
+        "entregable": "Contenido orgánico de video corto — 'El marisco llegando de Olón'",
+        "plataforma": "Instagram",
+        "motivo": "El plan menciona 'foto o video corto del proceso' en la serie orgánica (Sección 5 · Contenido orgánico de soporte · tema 1). La parte de foto está cubierta en BRF-0007. La parte de video no puede briefearse — el sistema no procesa video ni audio"
+      },
+      {
+        "entregable": "Campaña de Google Ads Search — 'ceviche delivery Guayaquil'",
+        "plataforma": "Google Ads",
+        "motivo": "El plan la excluye explícitamente en Sección C: «Google Ads (Search) · No se pudo verificar el volumen de búsqueda (HTTP 500). Sin ese dato no se puede estimar retorno · Condición: datos de Google Trends disponibles + al menos un ciclo completo de Meta/IG completado». No hay condiciones para este brief hoy"
+      },
+      {
+        "entregable": "Contenido nativo para TikTok",
+        "plataforma": "TikTok",
+        "motivo": "El plan lo excluye explícitamente en Sección C: «TikTok · Requiere producción de video nativa y constante · Condición: 60+ contactos semanales sostenidos por 4 semanas en Meta + recursos de producción de video confirmados». No hay condiciones para este brief hoy. Adicionalmente, el sistema no puede generar briefs de video"
+      },
+      {
+        "entregable": "Colaboración con creadores surf/foil costera (orgánico, sin pago)",
+        "plataforma": "Instagram",
+        "motivo": "El plan lo menciona en Fase 3 (Días 57–90): «Invitar a 1–2 creadores de la comunidad surf/foil costera a contar su experiencia (orgánico, sin pago todavía)». El plan condiciona esta acción a datos de qué audiencia tiene mejor tasa de contacto a pedido (disponibles recién después de 4 semanas de pauta). El entregable resultante probablemente sea video — no briefeable hoy"
+      },
+      {
+        "entregable": "Pauta dentro de Rappi o Uber Eats",
+        "plataforma": "Rappi / Uber Eats",
+        "motivo": "El plan la excluye explícitamente en Sección C: «Pauta pagada dentro de Rappi / Uber Eats · No se sabe si están activos ni qué comisión adicional cobran · Condición: el dueño confirma si están activos, qué comisión se lleva cada plataforma, y si el margen lo soporta»"
+      }
+    ],
+    "huecos": [
+      "Presupuesto total de campaña no aprobado: el plan declara en Sección 7 que el costo variable por pedido (insumos + packaging + comisión de delivery) no llegó de ninguna fuente — esto bloquea el cálculo de contribución, CPA máximo y presupuesto total. Sin ese dato del dueño no se puede calcular el monto de ningún entregable de pauta",
+      "CPM/CPC real en Guayaquil no disponible: el plan declara en Sección 7 que el brazo de plataforma no llegó a la junta (fuente: costo_pauta · 2026-09-29). El 60% de presupuesto asignado a Meta/IG está asignado como regla de la casa pero no planeado con costos reales — se calibra en semana 1 con el estimador de Meta Ads Manager",
+      "Campo visual del manual de marca retornó error 500: no hay muestra de piezas visuales del cliente disponible para derivar reglas con base medida. Todas las reglas visuales de todos los briefs se derivan del posicionamiento y voz del manual, sin muestra observada. Esto se declara en cada brief pero no reemplaza la observación real de piezas",
+      "Discrepancia de ubicación sin resolver: el plan declara en Sección 6 que Maps apunta a Olón, el sitio declara Guayaquil como dirección de delivery. El dueño debe confirmar antes de reclamar la ficha (BRF-0002 depende de esta confirmación)",
+      "Precio de bebidas y complementos no disponible: el plan lo declara en Sección B como hueco. No afecta los briefs de esta entrega pero impide calcular ticket promedio completo",
+      "Distribución real de pedidos (qué piden más) no disponible: el plan lo declara en Sección B. No afecta los briefs de esta entrega pero impide calcular ticket promedio ponderado",
+      "Confirmación de plataformas de delivery activas (Rappi, Uber Eats): el plan declara en Sección C que no se sabe si están activos. Impide briefear cualquier entregable en esas plataformas",
+      "Segmento y mensaje de BRF-0011 (anuncio escalado Fase 2) no se pueden completar hoy: dependen del dato de rendimiento de Fase 1 (Día 21). El brief se produce incompleto por diseño — se completa en la primera lectura del Día 21",
+      "Techo operativo de cocina no declarado: el plan exige en Sección 1 que el dueño declare cuántos pedidos por turno puede atender sin degradar el servicio. Sin ese número, no hay techo para la campaña y el plan no puede decidir si seguir o parar"
+    ],
+    "contradicciones_plan_vs_manual": [
+      {
+        "que": "Formato del primer anuncio",
+        "plan_dice": "Sección 5 · Fase 1 · Días 8–14: «Formato: Reel corto (15–30 segundos) mostrando marisco llegando de Olón + plato terminado» — prescribe video como formato del primer anuncio activo",
+        "manual_dice": "El sistema de briefs no puede procesar video ni audio — regla no negociable declarada en la referencia del brief: «El sistema mira imágenes, NO video ni audio. Toda pieza de video, reel o audio NO lleva brief: va a pendientes_declarados»",
+        "que_se_hizo": "El anuncio de Fase 1 se briefeó como imagen fija (BRF-0005 y BRF-0006). El reel que prescribe el plan se declaró en pendientes_declarados con su motivo. Si el cliente produce el reel, ese brief se produce cuando el sistema pueda procesar video"
+      },
+      {
+        "que": "Uso del término 'premium'",
+        "plan_dice": "La Sección 1 y la Sección 2 usan 'precio premium' y 'delivery premium' para describir el posicionamiento de Náufrago: «precio premium ($7–$9 ceviche vs $3.59–$6 del mercado masivo)», «desayuno y almuerzo premium por delivery»",
+        "manual_dice": "El campo forbidden_words del manual incluye explícitamente 'premium' como palabra prohibida",
+        "que_se_hizo": "Ningún brief usa 'premium' en vocabulario_obligatorio, mensaje, sintaxis ni llamado_a_la_accion. El término aparece solo en el campo 'prohibido' de cada brief donde aplica. El concepto de precio superior al mercado masivo se comunica por contraste implícito y por declaración de origen, no por el término prohibido"
+      }
+    ],
+    "dependencias": [
+      "BRF-0001 (bio Instagram) debe estar completo antes del Día 8 — es prerequisito de cualquier pauta que mande tráfico al perfil",
+      "BRF-0010 (WhatsApp Business configurado) debe estar activo antes del Día 8 — es prerequisito de cualquier anuncio con botón de WhatsApp",
+      "Meta Business Manager verificado (acción del dueño, Día 1) es prerequisito de BRF-0005 y BRF-0006",
+      "BRF-0002 (reclamación ficha GBP) depende de confirmación del dueño sobre discrepancia Olón/Guayaquil — sin esa confirmación el brief no puede ejecutarse",
+      "BRF-0003 (fotos Google Maps) depende de que BRF-0002 esté en proceso — no se pueden subir fotos a una ficha no reclamada",
+      "BRF-0004 (9 posts Instagram) debe estar completo antes del Día 8 — el perfil necesita contenido antes de que la pauta mande tráfico",
+      "BRF-0011 (anuncio escalado Fase 2) no puede completarse hasta el Día 21 — depende del dato de rendimiento de BRF-0005 y BRF-0006",
+      "El presupuesto de todos los entregables de pauta (BRF-0005, BRF-0006, BRF-0011) está bloqueado hasta que el dueño confirme el costo variable por pedido (hueco declarado en plan Sección B)",
+      "La cadencia de 3 posts/semana (BRF-0007, BRF-0008, BRF-0009, BRF-0012) depende de que el dueño entregue material real — el plan declara en Sección D que el dueño debe compartir fotos, videos cortos y material de origen en Días 1–7"
+    ]
+  }
+}
+```

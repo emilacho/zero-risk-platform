@@ -36,12 +36,14 @@ if (body.tope_usd !== undefined) {
 }
 
 // RAZONAMIENTO limitado (opt-in) · experimento 30-sep · valor mal escrito detiene ANTES de gastar (mismo criterio que el tope) · ausente ⇒ razonamiento completo (como hoy)
-let razonamiento = null
+// 🔴 POR DEFECTO APAGADO (GO de Emilio 2026-10-01 tras el experimento: sin razonamiento el brief cabe en UNA respuesta · 16.352 tokens · 5 min · US$ 0,38; con él fallaba por el máximo de 32.000).
+// Ausente ⇒ 'disabled' (la cadena normal planeación→brief NO manda este campo y por eso volvía al fallo). Para volver al razonamiento completo hay que pedirlo: 'completo'.
+let razonamiento = 'disabled'
 if (body.razonamiento !== undefined) {
-  if (body.razonamiento !== 'disabled' && body.razonamiento !== 'low' && body.razonamiento !== 'medium') {
-    throw new Error('BRIEF_RAZONAMIENTO_INVALIDO · razonamiento debe ser disabled | low | medium · llegó ' + JSON.stringify(body.razonamiento) + ' · se DETIENE antes de gastar')
+  if (body.razonamiento !== 'disabled' && body.razonamiento !== 'low' && body.razonamiento !== 'medium' && body.razonamiento !== 'completo') {
+    throw new Error('BRIEF_RAZONAMIENTO_INVALIDO · razonamiento debe ser disabled | low | medium | completo · llegó ' + JSON.stringify(body.razonamiento) + ' · se DETIENE antes de gastar')
   }
-  razonamiento = body.razonamiento
+  razonamiento = body.razonamiento === 'completo' ? null : body.razonamiento
 }
 
 return [{

@@ -35,6 +35,7 @@ if (!parte_valido) {
 p('# PARTE DE TRABAJO · ' + c.client_name + ' · ' + hoy)
 p('Plan de origen: ' + c.plan_id + ' · Manual: versión ' + c.manual_version + ' (' + c.manual_id + ')' + (c.dry_run ? ' · ⚠️ MODO SECO (no es un parte real)' : ''))
 p('')
+if (ext.reparado) p('> ⚠️ Formato reparado: el redactor escribió ' + ext.comillas_reparadas + ' comilla(s) doble(s) sin escapar dentro de un texto y se escaparon para poder leer el parte · el CONTENIDO no se alteró.')
 p('## Estado de los chequeos: ' + (res.ok ? '✅ sin hallazgos' : '⚠️ ' + res.hallazgos.length + ' hallazgo(s) DECLARADOS · no se corrigieron solos'))
 if (!res.ok) {
   Object.keys(res.por_chequeo).forEach((k) => p('- ' + k + ': ' + res.por_chequeo[k]))
@@ -103,6 +104,8 @@ const fila_parte = {
     manual_id: c.manual_id,
     manual_version: c.manual_version,
     legible: ext.legible,
+    reparado: ext.reparado === true,
+    comillas_reparadas: ext.comillas_reparadas || 0,
     valido: parte_valido,
     motivo_invalido,
     chequeos_ok: res.ok,
@@ -147,6 +150,8 @@ return [{
     falla_del_redactor: c.falla_del_redactor || null,
     tope_usd: c.tope_usd === undefined ? null : c.tope_usd,
     parte_legible: ext.legible,
+    parte_reparado: ext.reparado === true,
+    comillas_reparadas: ext.comillas_reparadas || 0,
     parte_valido,
     motivo_invalido,
     titulo_parte: fila_parte.title,
