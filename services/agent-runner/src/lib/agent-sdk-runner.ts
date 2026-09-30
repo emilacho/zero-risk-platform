@@ -20,6 +20,7 @@
 
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import { opcionDeTope, cortadoPorTope, mensajeDeCorte } from './tope-por-corrida.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
   armarBloquesDeImagen,
@@ -77,6 +78,7 @@ type SDKAssistantStreamMessage = {
 }
 type SDKResultStreamMessage = {
   type: 'result'
+  subtype?: string
   session_id?: string
   /**
    * Sprint 8 prompt-caching observability · the Agent SDK auto-enables
@@ -143,6 +145,8 @@ export interface AgentRunInput {
    * · operator-forced fresh smokes · or any path that needs ungated SDK call.
    */
   forceRestart?: boolean
+  /** TOPE DURO por corrida (US$) · OPT-IN · el SDK corta al alcanzarlo y el resultado es un FALLO declarado · ver tope-por-corrida.ts */
+  maxBudgetUsd?: number
   /**
    * Sprint 9 entry canon · dry-run mode. When `dryRun=true` · skip the
    * Anthropic SDK call · return a canonical fake StreamDrainResult · cost
@@ -574,6 +578,8 @@ function buildSdkOptions(
     // Reanudar sesión previa para encadenar contexto entre pasos del pipeline.
     ...(input.resumeSessionId ? { resume: input.resumeSessionId } : {}),
     mcpServers,
+    // TOPE DURO por corrida (opt-in) · vacío sin tope ⇒ las opciones de siempre
+    ...opcionDeTope(input.maxBudgetUsd),
   }
 }
 
@@ -590,6 +596,8 @@ export function needsMetaAds(input: { agentName: string }): boolean {
 }
 
 export interface StreamDrainResult {
+  /** cómo terminó el SDK (`subtype` del mensaje `result`) · null si no llegó · ver tope-por-corrida.ts */
+  resultSubtype?: string | null
   responseText: string
   sessionId: string | null
   inputTokens: number
@@ -623,6 +631,7 @@ export interface StreamDrainResult {
  */
 export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<StreamDrainResult> {
   let responseText = ''
+  let resultSubtype: string | null = null
   let sessionId: string | null = null
   let inputTokens = 0
   let outputTokens = 0
@@ -706,11 +715,13 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>): Promise<St
       cacheCreation5mTokens = r.usage?.cache_creation?.ephemeral_5m_input_tokens ?? 0
       cacheCreation1hTokens = r.usage?.cache_creation?.ephemeral_1h_input_tokens ?? 0
       sessionId = sessionId ?? r.session_id ?? null
+      resultSubtype = typeof r.subtype === 'string' ? r.subtype : null
     }
   }
 
   return {
     responseText,
+    resultSubtype,
     sessionId,
     inputTokens,
     outputTokens,
@@ -1157,6 +1168,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   //    zero token inputs. See dry-run-mode.ts for activation patterns +
   //    canon guards.
   let drain: StreamDrainResult
+  // ¿el SDK cortó por el tope de la corrida? (sólo puede ser true si el pedido trajo `maxBudgetUsd`)
+  let cortePorTope = false
   // El cable para mirar · lo que de verdad se entregó al modelo (para el registro) · [] si no hubo imágenes.
   let imagenesEntregadas: ImagenEntregada[] = []
   // LOGGING DURABLE (CC#4 2026-07-01) · outcome del forced-emit del judge de fidelidad ·
@@ -1199,6 +1212,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
         { canonicalSlug },
       )
       drain = wrapped.result
+      cortePorTope = cortadoPorTope(input.maxBudgetUsd, drain.resultSubtype)
       if (wrapped.retry.retried) {
         console.log(
           `[sdk-call-retry] OK ${canonicalSlug} · succeeded on attempt ${wrapped.retry.attempts}/3 after ${wrapped.retry.transientErrors.length} transient(s)`,
@@ -1548,7 +1562,9 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   })
 
   const result: AgentRunResult = {
-    success: true,
+    // un corte por presupuesto es un FALLO declarado, nunca un éxito con texto parcial
+    success: !cortePorTope,
+    ...(cortePorTope ? { error: mensajeDeCorte(input.maxBudgetUsd as number, costUsd) } : {}),
     response: drain.responseText,
     sessionId: drain.sessionId,
     inputTokens: drain.inputTokens,
@@ -1578,7 +1594,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   //     prevents fake `[DRY_RUN]` response polluting the checkpoint cache.
   //     A subsequent real (non-dry-run) call must re-execute the SDK ·
   //     dry-run is for plumbing validation only · NOT a real cache fill.
-  if (input.workflowId && input.clientId && input.dryRun !== true) {
+  if (input.workflowId && input.clientId && input.dryRun !== true && !cortePorTope) {
     void saveCheckpoint(supabase, {
       workflowId: input.workflowId,
       workflowExecutionId: input.workflowExecutionId ?? null,

@@ -952,6 +952,21 @@ export async function POST(request: Request) {
       ctx.dryRun === true ||
       headerDryRun
 
+    // TOPE DURO por corrida (opt-in · US$) · un tope MAL ESCRITO se rechaza ANTES de gastar (ignorarlo dejaría pagar sin tope) · ausente ⇒ cuerpo de siempre
+    // 🔴 `null` explícito NO es «sin tope» (con `??` lo era): un tope presente y nulo se rechaza abajo, igual que en el sobre y en el corredor
+    const topeArriba = (body as unknown as { max_budget_usd?: unknown }).max_budget_usd
+    const topeCrudo = topeArriba !== undefined ? topeArriba : ctx.max_budget_usd
+    let topeDelPedido: number | null = null
+    if (topeCrudo !== undefined) {
+      const n = typeof topeCrudo === 'number' ? topeCrudo : typeof topeCrudo === 'string' && topeCrudo.trim() !== '' ? Number(topeCrudo) : NaN
+      if (!Number.isFinite(n) || n <= 0 || n > 50) {
+        return NextResponse.json(
+          { error: 'max_budget_usd_invalid', code: 'E-BUDGET-INVALID', detail: 'max_budget_usd debe ser un número mayor que 0 y hasta 50 · un tope mal escrito no se ignora' },
+          { status: 400 },
+        )
+      }
+      topeDelPedido = n
+    }
     const rd = (body as unknown as { _runner_delivery?: { callback_url?: unknown; dispatch_key?: unknown } })._runner_delivery
     const entregaDelCorredor =
       rd && typeof rd.callback_url === 'string' && typeof rd.dispatch_key === 'string'
@@ -980,6 +995,8 @@ export async function POST(request: Request) {
       extra: body.extra || undefined,
       // El cable para mirar · `{}` sin imágenes (cuerpo de siempre) · `images` + `imagesMode` con ellas.
       ...campoImagenesDelProxy(imagenesDelPedido.images, imagenesDelPedido.imagesMode),
+      // TOPE DURO por corrida (opt-in) · el corredor se lo pasa al SDK · ausente ⇒ el cuerpo de siempre
+      ...(topeDelPedido !== null ? { max_budget_usd: topeDelPedido } : {}),
       // ARQ 2026-09-30 · la vuelta la entrega el corredor (sólo si el pedido interno lo trae · ausente ⇒ cuerpo de siempre).
       ...(entregaDelCorredor
         ? {

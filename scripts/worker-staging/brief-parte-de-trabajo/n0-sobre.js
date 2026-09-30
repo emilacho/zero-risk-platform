@@ -24,6 +24,17 @@ if (typeof body.dry_run !== 'boolean') {
   throw new Error('BRIEF_DRY_RUN_AUSENTE · el sobre debe traer dry_run explícito (true o false) · no se asume · se DETIENE antes de gastar')
 }
 
+// TOPE DURO por corrida (opt-in · US$) · un tope MAL ESCRITO detiene la corrida ANTES de gastar: ignorarlo dejaría pagar sin tope (mismo criterio que dry_run).
+// Ausente ⇒ sin tope (como hoy). Presente ⇒ número > 0 y ≤ 50. El corredor lo hace cumplir (el SDK corta) y el corte queda DECLARADO en el parte.
+let tope_usd = null
+if (body.tope_usd !== undefined) {
+  const n = typeof body.tope_usd === 'number' ? body.tope_usd : (typeof body.tope_usd === 'string' && body.tope_usd.trim() !== '' ? Number(body.tope_usd) : NaN)
+  if (!Number.isFinite(n) || n <= 0 || n > 50) {
+    throw new Error('BRIEF_TOPE_INVALIDO · tope_usd debe ser un número mayor que 0 y hasta 50 · llegó ' + JSON.stringify(body.tope_usd) + ' · se DETIENE antes de gastar: ignorarlo dejaría pagar sin tope')
+  }
+  tope_usd = n
+}
+
 return [{
   json: {
     client_id: String(body.client_id),
@@ -37,5 +48,6 @@ return [{
     // SOLO en modo seco: una respuesta de redactor enlatada para poder probar los chequeos (④) con datos con forma real
     // sin pagar. En modo real se IGNORA por completo (el nodo ③ ni la mira).
     simulacro_respuesta: body.dry_run === true && typeof body._simulacro_respuesta === 'string' ? body._simulacro_respuesta : null,
+    tope_usd,
   },
 }]

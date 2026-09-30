@@ -24,6 +24,7 @@ import { abrirLatido, intervaloDelLatido } from './lib/latido.js'
 import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.js'
 import { validarDireccionDeVuelta, esperaForzadaMs, emitirEventoPostHog } from './lib/entrega-de-la-vuelta.js'
 import { correrYEntregar } from './lib/correr-y-entregar.js'
+import { resolverTopeUsd } from './lib/tope-por-corrida.js'
 
 /**
  * Capture an agent error in Sentry with canonical context tags. Sprint
@@ -149,6 +150,9 @@ interface RunSdkBody {
   dispatchKey?: unknown
   dispatch_key?: unknown
   testDelayMs?: unknown
+  /** TOPE DURO por corrida (US$) · opt-in · ver lib/tope-por-corrida.ts */
+  maxBudgetUsd?: unknown
+  max_budget_usd?: unknown
   test_delay_ms?: unknown
 }
 
@@ -334,6 +338,13 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     body.imagesMode ?? body.images_mode ?? ctxImagenes.imagesMode ?? ctxImagenes.images_mode ?? extraImagenes.images_mode,
   )
 
+  // TOPE DURO por corrida (opt-in) · un tope MAL ESCRITO se rechaza (400) ANTES de gastar: ignorarlo dejaría pagar sin tope
+  const tope = resolverTopeUsd(body.maxBudgetUsd, body.max_budget_usd, ctxObj.maxBudgetUsd, ctxObj.max_budget_usd)
+  if (!tope.ok) {
+    res.status(400).json({ success: false, error: 'max_budget_usd_invalid', code: 'E-BUDGET-INVALID', detail: tope.motivo })
+    return
+  }
+
   const input: AgentRunInput = {
     agentName: agentName,
     task: body.task,
@@ -346,6 +357,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     workflowExecutionId: workflowExecutionId ?? null,
     forceRestart,
     dryRun,
+    ...(tope.valor !== null ? { maxBudgetUsd: tope.valor } : {}),
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }
 
