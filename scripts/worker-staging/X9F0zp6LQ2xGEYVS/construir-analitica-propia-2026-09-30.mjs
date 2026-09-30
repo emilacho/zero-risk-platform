@@ -8,6 +8,7 @@
 //   ② «¿Llegó la vuelta?» · lo que no se buscó se DECLARA DENTRO DEL TEXTO DEL PLAN, con su motivo, escrito por el SISTEMA (no depende de que el redactor
 //      lo recuerde): «Lo que NO se buscó y por qué». Misma familia del parte que no miente: que no desaparezca del razonamiento sin dejar marca.
 //   ③ «Redactor (B4)» · una línea de su pedido (el bloque ⚪) para que no choque con ②.
+//   ④ POSICIÓN de «El número de la casa» y «La referencia del producto» (sólo el dibujo, ninguna lógica): ver la nota LATENTE de abajo.
 //
 //   node construir-analitica-propia-2026-09-30.mjs            → escribe `planeacion-construida-analitica-2026-09-30.json` (NO toca n8n)
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -96,6 +97,15 @@ export const VUELTA_SALIDA_NUEVO = `  caracteres: texto.length,
 export const REDACTOR_VIEJO = "'   NO lo reportes como una falta:',"
 export const REDACTOR_NUEVO = "'   NO lo reportes como una falta. El sistema lo lista al final del plan, con su motivo, en «Lo que NO se busco y por que»: no lo repitas alli. Pero si una decision tuya depende de algo de esta lista, dilo en el plan:',"
 
+// ④ 🔴 DEFECTO LATENTE que destapó el ensayo del 30-sep (corridas 158216 · 158229 · 158238) — NO lo introdujo esta pieza, pero esta pieza lo activa.
+// «El número de la casa» y «La referencia del producto» cuelgan de ① GUARDA EN PARALELO con la rama principal (Ficha → brazos → junta → derivador → «armar el
+// paquete», que los lee). n8n en modo v1 ejecuta las ramas de ARRIBA hacia ABAJO según su posición en el lienzo: ambos estaban dibujados MÁS ABAJO que «Ficha del
+// cliente» (y=520 y 700 contra 300), así que corrían DESPUÉS de toda la rama principal. Sólo funcionaba porque la rama de PostHog salía VACÍA (cliente que no vende
+// a empresas): una entrada vacía impide que la junta dispare hasta que se agota la cola, y mientras tanto corrían los dos hermanos. Con la analítica pedida a todos, las
+// tres ramas traen datos, la junta dispara enseguida, y «② GUARDA · sin referencia del producto» se detiene (PLANEACION_REFERENCIA_VACIA). Lo mismo le habría pasado a
+// CUALQUIER cliente que pidiera las tres ramas llenas. Arreglo: dibujarlos ARRIBA de «Ficha del cliente» para que corran primero. Sólo posición · ninguna lógica.
+export const POSICIONES_NUEVAS = { 'El número de la casa': [660, 60], 'La referencia del producto': [660, -120] }
+
 export function construir(flujo) {
   const nodo = (n) => { const x = flujo.nodes.find((k) => k.name === n); if (!x) throw new Error(`no encontré «${n}»`); return x }
   // el código vivo trae saltos CRLF: se parcha sobre texto normalizado y se devuelve con los MISMOS saltos que tenía (lo que no se toca queda byte a byte)
@@ -114,6 +124,12 @@ export function construir(flujo) {
   const v = parche(VUELTA, (c) => reemplazar(reemplazar(c, VUELTA_VIEJO, VUELTA_NUEVO, 1, VUELTA), VUELTA_SALIDA_VIEJO, VUELTA_SALIDA_NUEVO, 1, VUELTA))
   const r = parche(REDACTOR, (c) => reemplazar(c, REDACTOR_VIEJO, REDACTOR_NUEVO, 1, REDACTOR))
   const nuevos = { [ELEGIR]: e, [VUELTA]: v, [REDACTOR]: r }
+  for (const [nombre, pos] of Object.entries(POSICIONES_NUEVAS)) {
+    const x = nodo(nombre)
+    const ficha = nodo('Ficha del cliente')
+    if (!(pos[1] < ficha.position[1])) throw new Error('la posición nueva de «' + nombre + '» no queda por encima de «Ficha del cliente»')
+    nuevos[nombre] = { ...x, position: pos }
+  }
   const settings = {}
   for (const k of SETTINGS_OK) if (flujo.settings?.[k] !== undefined) settings[k] = flujo.settings[k]
   return { name: flujo.name, nodes: flujo.nodes.map((x) => nuevos[x.name] || x), connections: flujo.connections, settings }
