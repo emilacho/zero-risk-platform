@@ -25,6 +25,9 @@ const SETTINGS_OK = ['saveExecutionProgress', 'saveManualExecutions', 'saveDataE
 const SUMIDERO = 'https://n8n-production-72be.up.railway.app/webhook/zero-risk/sumidero-cc1-no-existe'
 const espera = (ms) => new Promise((s) => setTimeout(s, ms))
 const leer = (f) => JSON.parse(fs.readFileSync(join(aqui, f), 'utf8'))
+// --vivo: las copias salen de los flujos PUBLICADOS (lo que hay hoy en n8n), no de los archivos locales
+const VIVO = process.argv.includes('--vivo')
+const vivoDe = async (id) => (await (await fetch(`${N8N}/api/v1/workflows/${id}`, { headers: H })).json())
 const crear = async (f) => { const r = await (await fetch(`${N8N}/api/v1/workflows`, { method: 'POST', headers: H, body: JSON.stringify(f) })).json(); if (!r.id) throw new Error('no se creó: ' + JSON.stringify(r).slice(0, 300)); await fetch(`${N8N}/api/v1/workflows/${r.id}/activate`, { method: 'POST', headers: H }); await espera(3000); return r.id }
 const apagar = (id) => fetch(`${N8N}/api/v1/workflows/${id}/deactivate`, { method: 'POST', headers: H })
 const disparar = (path, body) => fetch(`${N8N}/webhook/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -61,7 +64,7 @@ for (const apify of [1, 0]) for (const posthog of [1, 0]) for (const cerebro of 
 
 async function planeacion() {
   const publicado = leer('planeacion-antes-orden-explicito-2026-09-30.json')
-  const nuevo = leer('planeacion-construida-orden-explicito-2026-09-30.json')
+  const nuevo = VIVO ? await vivoDe('X9F0zp6LQ2xGEYVS') : leer('planeacion-construida-orden-explicito-2026-09-30.json')
   const variantes = [
     { id: 'A', nombre: 'viejo (sin cadena · dibujo original)', base: publicado, viejas: true, esperaFallarConTodas: true },
     { id: 'B', nombre: 'cadena + dibujo original malo', base: nuevo, viejas: true },
@@ -94,7 +97,7 @@ async function planeacion() {
 
 // ═══ VIGÍA ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 async function vigia() {
-  const construida = leer('vigia-construida-orden-explicito-2026-09-30.json')
+  const construida = VIVO ? await vivoDe('0WRWM0cChdiAxfTY') : leer('vigia-construida-orden-explicito-2026-09-30.json')
   const escenarios = { normal: (f) => f, umbral_ilegible: (f) => { f.nodes.find((n) => n.name === 'El umbral del silencio').parameters.url = f.nodes.find((n) => n.name === 'El umbral del silencio').parameters.url.replace('sala.silencio_max_horas', 'sala.no_existe_cc1'); return f }, reloj_ilegible: (f) => { f.nodes.find((n) => n.name === 'El reloj de la sala').parameters.url = f.nodes.find((n) => n.name === 'El reloj de la sala').parameters.url.replace('z2nS8Up115EA9TKz', 'noExisteCC1000000'); return f } }
   const res = {}
   for (const [nombre, ajustar] of Object.entries(escenarios)) {
