@@ -116,7 +116,7 @@ export function construirFlujo({ path = 'zero-risk/brief', nombre = 'Zero Risk �
     {
       parameters: {
         method: 'POST', url: 'https://n8n-production-72be.up.railway.app/webhook/zero-risk/texto-a-drive', sendBody: true, specifyBody: 'json',
-        jsonBody: `={{ JSON.stringify({ client_id: $('${N.chequeos}').first().json.client_id, client_name: ($('${N.chequeos}').first().json.client_name || 'cliente'), nombre: 'Parte de trabajo · briefs · ' + new Date().toISOString().slice(0,10), texto: String($('${N.chequeos}').first().json.parte_md || '') }) }}`,
+        jsonBody: `={{ JSON.stringify({ client_id: $('${N.chequeos}').first().json.client_id, client_name: ($('${N.chequeos}').first().json.client_name || 'cliente'), nombre: ($('${N.chequeos}').first().json.titulo_parte || ('Parte de trabajo · briefs · ' + new Date().toISOString().slice(0,10))), texto: String($('${N.chequeos}').first().json.parte_md || '') }) }}`,
         options: { timeout: 120000, response: { response: { neverError: true } } },
       },
       name: N.drive, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [x(16)[0], -200], onError: 'continueRegularOutput',

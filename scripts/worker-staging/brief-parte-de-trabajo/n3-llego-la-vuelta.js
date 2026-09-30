@@ -21,7 +21,8 @@ return [{
     simulacro_usado,
     texto,
     caracteres: texto.length,
-    vuelta_costo_usd: typeof cuerpo.costUsd === 'number' ? cuerpo.costUsd : null,
+    // la vuelta trae `cost_usd` (snake_case) · antes se leía `costUsd` y salía siempre vacío (medido en la corrida del 29-sep)
+    vuelta_costo_usd: typeof cuerpo.cost_usd === 'number' ? cuerpo.cost_usd : (typeof cuerpo.costUsd === 'number' ? cuerpo.costUsd : null),
     vuelta_modelo: cuerpo.model || null,
     motivo: llego ? null : 'la vuelta del redactor NO llegó · se agotó la espera · el parte puede haberse escrito igual y estar en el corredor · NO se da por exitosa',
   },

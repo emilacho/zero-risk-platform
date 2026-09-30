@@ -183,3 +183,58 @@ export function esperaForzadaMs(dryRun: boolean, raw: unknown): number {
   if (!Number.isFinite(n) || n <= 0) return 0
   return Math.min(Math.floor(n), ESPERA_FORZADA_MAX_MS)
 }
+
+// ── EL EVENTO DE ANALÍTICA · simetría con Vercel (decisión de Emilio 2026-09-30) ─────────────────────────────────────
+// Por la vía normal, `run-sdk` (Vercel) emite `agent_run_completed` a PostHog al recibir la respuesta. Por la vía del corredor
+// Vercel corta antes, así que el corredor lo emite con EL MISMO nombre, la MISMA clave de persona y las MISMAS propiedades:
+// «simétrico o nada» (perder sólo la mitad de la pareja haría leer «el brief falla siempre»). Se distingue sólo por `emitted_by`.
+export const EVENTO_CORRIDA_COMPLETA = 'agent_run_completed'
+
+export function eventoDeCorridaCompleta(
+  result: { success?: boolean; durationMs?: number; inputTokens?: number; outputTokens?: number; costUsd?: number },
+  ctx: { agentName: string; clientId: string | null },
+): { event: string; distinctId: string; properties: Record<string, unknown> } {
+  return {
+    event: EVENTO_CORRIDA_COMPLETA,
+    distinctId: String(ctx.clientId || 'system'),
+    properties: {
+      agent_slug: ctx.agentName,
+      success: !!result.success,
+      duration_ms: result.durationMs ?? 0,
+      input_tokens: result.inputTokens ?? 0,
+      output_tokens: result.outputTokens ?? 0,
+      cost_usd: result.costUsd ?? 0,
+      emitted_by: 'agent-runner',
+    },
+  }
+}
+
+type FetcherPosthog = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<{ status: number }>
+
+/** Captura HTTP de PostHog · sin dependencia nueva · NUNCA lanza ni frena la entrega · sin llave ⇒ no hace nada (y lo dice una vez). */
+export async function emitirEventoPostHog(
+  ev: { event: string; distinctId: string; properties: Record<string, unknown> },
+  env: Record<string, string | undefined> = process.env,
+  fetcher: FetcherPosthog = fetch as unknown as FetcherPosthog,
+): Promise<'enviado' | 'sin_llave' | 'fallo'> {
+  const key = env.POSTHOG_API_KEY
+  if (!key) return 'sin_llave'
+  try {
+    const host = (env.POSTHOG_API_URL || 'https://us.i.posthog.com').replace(/\/+$/, '')
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 5000)
+    try {
+      const r = await fetcher(`${host}/capture/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: key, event: ev.event, distinct_id: ev.distinctId, properties: ev.properties, timestamp: new Date().toISOString() }),
+        signal: controller.signal,
+      })
+      return r.status >= 200 && r.status < 300 ? 'enviado' : 'fallo'
+    } finally {
+      clearTimeout(timer)
+    }
+  } catch {
+    return 'fallo'
+  }
+}

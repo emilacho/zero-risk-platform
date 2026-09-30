@@ -8,11 +8,30 @@ const res = ext.legible
   ? chequear(parte, manual, c.plan_texto)
   : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', entregable: null, detalle: ext.motivo }], por_chequeo: { respuesta_no_legible: 1 }, entregables_revisados: 0 }
 
+// ── EL VEREDICTO · un parte que no vale NO se lee como éxito (encargo Lenovo 30-sep §2) ──────────────────────
+// Inválido = la vuelta no llegó · la respuesta no se pudo leer como parte · trae 0 entregables · o falla un chequeo de CONTEO/CIFRAS
+// (sin_entregables · centinela: la cifra copiada del ejemplo). Los demás hallazgos siguen SOLO declarándose (no se corrigen solos).
+// Nada se rellena: un parte vacío se llama vacío.
+const CHEQUEOS_FATALES = ['respuesta_no_legible', 'sin_entregables', 'centinela']
+const motivos = []
+if (!c.llego_la_vuelta) motivos.push('la vuelta del redactor NO llegó')
+if (!ext.legible) motivos.push('la respuesta no se pudo leer como parte (' + (ext.motivo || 'sin motivo') + ')')
+if (ext.legible && parte.entregables.length === 0) motivos.push('entregables: 0')
+res.hallazgos.filter((h) => CHEQUEOS_FATALES.indexOf(h.chequeo) !== -1 && h.chequeo !== 'respuesta_no_legible' && h.chequeo !== 'sin_entregables').forEach((h) => motivos.push('falla el chequeo «' + h.chequeo + '»' + (h.entregable ? ' en ' + h.entregable : '')))
+const parte_valido = motivos.length === 0
+const motivo_invalido = parte_valido ? null : motivos.join(' · ')
+
 // ── el parte, legible (lo que Emilio lee en Drive) ────────────────────────────────────────────────
 const L = []
 const p = (s) => L.push(s === undefined ? '' : s)
 const lista = (a) => (Array.isArray(a) && a.length ? a.map((x) => '  - ' + (typeof x === 'string' ? x : JSON.stringify(x))).join('\n') : '  (ninguno)')
 const hoy = new Date().toISOString().slice(0, 10)
+if (!parte_valido) {
+  p('# ⛔ PARTE NO VÁLIDO · NO USAR')
+  p('Motivo: ' + motivo_invalido)
+  p('Este documento se conserva sólo para diagnóstico. No es un parte de trabajo.')
+  p('')
+}
 p('# PARTE DE TRABAJO · ' + c.client_name + ' · ' + hoy)
 p('Plan de origen: ' + c.plan_id + ' · Manual: versión ' + c.manual_version + ' (' + c.manual_id + ')' + (c.dry_run ? ' · ⚠️ MODO SECO (no es un parte real)' : ''))
 p('')
@@ -70,7 +89,7 @@ const parte_md = L.join('\n')
 
 const fila_parte = {
   client_id: c.client_id,
-  title: 'Parte de trabajo · briefs · ' + hoy,
+  title: (parte_valido ? '' : '⛔ PARTE NO VÁLIDO · ') + 'Parte de trabajo · briefs · ' + hoy,
   output_type: 'campaign_brief_pack',
   content: parte_md,
   content_text: parte_md,
@@ -84,6 +103,8 @@ const fila_parte = {
     manual_id: c.manual_id,
     manual_version: c.manual_version,
     legible: ext.legible,
+    valido: parte_valido,
+    motivo_invalido,
     chequeos_ok: res.ok,
     hallazgos: res.hallazgos.length,
     por_chequeo: res.por_chequeo,
@@ -99,7 +120,9 @@ const payload_cable = {
   event_type: 'run_completed',
   worker_id: $workflow.id,
   worker_name: 'brief',
-  resultado: 'parte_terminado',
+  // el cable declara el resultado REAL (el cierre ⑤ lo corrige a parte_no_valido / parte_con_problemas si algo falla)
+  resultado: parte_valido ? 'parte_terminado' : 'parte_no_valido',
+  ...(parte_valido ? {} : { motivo: motivo_invalido }),
   client_id: c.client_id,
   tenant_id: c.tenant_id || c.client_id,
   _sala_correlation_id: c._sala_correlation_id || null,
@@ -120,6 +143,9 @@ return [{
     vuelta_costo_usd: c.vuelta_costo_usd,
     vuelta_modelo: c.vuelta_modelo,
     parte_legible: ext.legible,
+    parte_valido,
+    motivo_invalido,
+    titulo_parte: fila_parte.title,
     chequeos_ok: res.ok,
     hallazgos: res.hallazgos,
     por_chequeo: res.por_chequeo,

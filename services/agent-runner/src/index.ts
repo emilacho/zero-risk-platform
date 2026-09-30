@@ -22,7 +22,7 @@ import { checkSpendCap } from './lib/spend-gate.js'
 import { flushBraintrust } from './lib/braintrust.js'
 import { abrirLatido, intervaloDelLatido } from './lib/latido.js'
 import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.js'
-import { validarDireccionDeVuelta, esperaForzadaMs } from './lib/entrega-de-la-vuelta.js'
+import { validarDireccionDeVuelta, esperaForzadaMs, emitirEventoPostHog } from './lib/entrega-de-la-vuelta.js'
 import { correrYEntregar } from './lib/correr-y-entregar.js'
 
 /**
@@ -376,9 +376,14 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     }
     res.status(202).json({ accepted: true, delivered_by: 'runner', dispatch_key: dispatchKey, ack_timestamp: new Date().toISOString() })
     void correrYEntregar(
-      { url: direccion.url, agentName, dispatchKey, dryRun, esperaForzada: body.testDelayMs ?? body.test_delay_ms ?? ctxObj.test_delay_ms },
+      { url: direccion.url, agentName, dispatchKey, clientId: clientId ?? null, dryRun, esperaForzada: body.testDelayMs ?? body.test_delay_ms ?? ctxObj.test_delay_ms },
       {
         ejecutar: () => runAgentViaSDK(input),
+        emitirEvento: async (ev) => {
+          const r = await emitirEventoPostHog(ev)
+          if (r === 'sin_llave') console.warn('[agent-runner] agent_run_completed NO emitido · falta POSTHOG_API_KEY en el servicio')
+          else if (r === 'fallo') console.warn('[agent-runner] agent_run_completed · PostHog no lo aceptó')
+        },
         registrarIntento: (i) => {
           try {
             void Promise.resolve(getSupabaseAdmin().from('agent_callback_attempts').insert({ workflow_id: workflowId, callback_url: direccion.url.toString(), ...i })).catch(() => undefined)

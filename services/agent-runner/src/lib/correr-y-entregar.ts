@@ -8,6 +8,7 @@
  */
 import {
   cuerpoDeLaVuelta,
+  eventoDeCorridaCompleta,
   entregarLaVuelta,
   esperaForzadaMs,
   type IntentoDeEntrega,
@@ -32,11 +33,13 @@ export interface DepsDeEntrega {
   registrarIntento: (i: IntentoDeEntrega) => void
   cerrarDespacho: (estado: 'completed' | 'error') => Promise<void>
   avisarFallo: (mensaje: string, extra: Record<string, unknown>) => void
+  /** analítica · simetría con Vercel · nunca lanza · opcional (sin ella no se emite) */
+  emitirEvento?: (ev: ReturnType<typeof eventoDeCorridaCompleta>) => Promise<unknown>
   dormir?: (ms: number) => Promise<void>
 }
 
 export async function correrYEntregar(
-  p: { url: URL; agentName: string; dispatchKey: string | null; dryRun: boolean; esperaForzada?: unknown },
+  p: { url: URL; agentName: string; dispatchKey: string | null; clientId?: string | null; dryRun: boolean; esperaForzada?: unknown },
   deps: DepsDeEntrega,
 ): Promise<{ entregada: boolean; estadoCerrado: 'completed' | 'error' | null }> {
   const dormir = deps.dormir ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
@@ -48,6 +51,12 @@ export async function correrYEntregar(
     result = await deps.ejecutar()
   } catch (e) {
     result = { success: false, error: e instanceof Error ? e.message : String(e) }
+  }
+  // el evento de analítica sale ANTES de entregar y pase lo que pase con la entrega (Vercel lo emite antes de mirar el éxito)
+  try {
+    await deps.emitirEvento?.(eventoDeCorridaCompleta(result, { agentName: p.agentName, clientId: p.clientId ?? null }))
+  } catch {
+    /* la analítica nunca frena la vuelta */
   }
   const cuerpo = cuerpoDeLaVuelta(result, { agentName: p.agentName, dispatchKey: p.dispatchKey })
   const r = await entregar(p.url, cuerpo, deps.registrarIntento)
