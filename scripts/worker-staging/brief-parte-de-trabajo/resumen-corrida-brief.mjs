@@ -35,7 +35,7 @@ export function resumenDeLaCorrida(exec) {
     vuelta: { delivered_by: espera.delivered_by ?? null, success: espera.success ?? null, cost_usd: espera.cost_usd ?? null, model: espera.model ?? null, error: espera.error ?? null },
     llego: { llego_la_vuelta: llego.llego_la_vuelta ?? null, caracteres: llego.caracteres ?? null, falla_del_redactor: llego.falla_del_redactor ?? null, costo_usd: llego.vuelta_costo_usd ?? null, motivo: llego.motivo ?? null },
     chequeos: {
-      parte_legible: ch.parte_legible ?? null, parte_valido: ch.parte_valido ?? null, motivo_invalido: ch.motivo_invalido ?? null, chequeos_ok: ch.chequeos_ok ?? null,
+      parte_legible: ch.parte_legible ?? null, parte_reparado: ch.parte_reparado ?? null, comillas_reparadas: ch.comillas_reparadas ?? null, parte_valido: ch.parte_valido ?? null, motivo_invalido: ch.motivo_invalido ?? null, chequeos_ok: ch.chequeos_ok ?? null,
       entregables: ch.entregables ?? null, pendientes_declarados: ch.pendientes_declarados ?? null, titulo: ch.titulo_parte ?? null,
       hallazgos: Array.isArray(ch.hallazgos) ? ch.hallazgos.map((h) => ({ chequeo: h.chequeo, entregable: h.entregable, detalle: String(h.detalle || '').slice(0, 200) })) : [],
       por_chequeo: ch.por_chequeo ?? null,

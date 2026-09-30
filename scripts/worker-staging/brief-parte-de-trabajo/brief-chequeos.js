@@ -35,6 +35,35 @@ function aTexto(v) {
   return String(v)
 }
 
+/**
+ * LECTOR TOLERANTE DE COMILLAS · CC#1 · 2026-10-01 · GO de Emilio. El redactor a veces escribe comillas dobles SIN ESCAPAR dentro de un texto del JSON
+ * («... el mensaje "Hola, quiero hacer un pedido"» · pasó en las DOS corridas reales del 29 y el 30-sep) y eso invalidaba un parte completo.
+ * Una comilla dentro de un texto sólo lo CIERRA si lo que sigue es estructura JSON (`:` `}` `]` o una coma seguida de `"` `{` `[` `}` `]`); si no, es parte del texto y se escapa.
+ * Es una reparación de FORMATO, nunca de contenido: sólo se acepta si el resultado parsea Y trae la lista «entregables» · se DECLARA (reparado:true + cuántas) · lo que no parsea sigue siendo ilegible.
+ */
+function repararComillas(s) {
+  var out = ''
+  var dentro = false
+  var reparadas = 0
+  for (var i = 0; i < s.length; i++) {
+    var ch = s[i]
+    if (!dentro) { out += ch; if (ch === '"') dentro = true; continue }
+    if (ch === '\\') { out += ch + (s[i + 1] === undefined ? '' : s[i + 1]); i++; continue }
+    if (ch !== '"') { out += ch; continue }
+    var j = i + 1
+    while (j < s.length && /\s/.test(s[j])) j++
+    var sig = s[j]
+    var cierra = sig === ':' || sig === '}' || sig === ']' || sig === undefined
+    if (sig === ',') {
+      var k = j + 1
+      while (k < s.length && /\s/.test(s[k])) k++
+      cierra = s[k] === '"' || s[k] === '{' || s[k] === '[' || s[k] === '}' || s[k] === ']'
+    }
+    if (cierra) { out += ch; dentro = false } else { out += '\\"'; reparadas++ }
+  }
+  return { texto: out, reparadas: reparadas }
+}
+
 /** Saca el JSON del texto del redactor (bloque ```json o el primer objeto completo). */
 function extraerParte(texto) {
   var t = String(texto || '')
@@ -54,7 +83,15 @@ function extraerParte(texto) {
       var j = JSON.parse(candidatos[i])
       var p = j && j.parte ? j.parte : j
       if (p && Array.isArray(p.entregables)) return { legible: true, parte: p }
-    } catch (e) { /* siguiente candidato */ }
+    } catch (e) { /* se prueba la reparación de comillas y luego el siguiente candidato */ }
+    try {
+      var rep = repararComillas(candidatos[i])
+      if (rep.reparadas > 0) {
+        var j2 = JSON.parse(rep.texto)
+        var p2 = j2 && j2.parte ? j2.parte : j2
+        if (p2 && Array.isArray(p2.entregables)) return { legible: true, parte: p2, reparado: true, comillas_reparadas: rep.reparadas }
+      }
+    } catch (e2) { /* sigue ilegible */ }
   }
   return { legible: false, motivo: 'no hay un JSON con la lista «entregables» en la respuesta del redactor' }
 }
@@ -187,6 +224,7 @@ if (typeof module !== 'undefined' && module.exports) {
     normalizar: normalizar,
     aTexto: aTexto,
     extraerParte: extraerParte,
+    repararComillas: repararComillas,
     chequear: chequear,
   }
 }
