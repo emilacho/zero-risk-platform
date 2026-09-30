@@ -235,3 +235,38 @@ describe('🔴 un error del resultado que NO es tope (el caso real): el gasto y 
     expect(r.error).toMatch(/exited with code 1/)
   })
 })
+
+// ── RAZONAMIENTO LIMITADO (experimento 30-sep) ─────────────────────────────────────────────────────────────────────────────────────────
+const { resolverRazonamiento, opcionDeRazonamiento } = await import('../tope-por-corrida')
+describe('🔴 thinking_mode · opt-in puro', () => {
+  it('resolverRazonamiento: ausente ⇒ null · válido ⇒ el valor · el primero presente manda · mal escrito o null explícito ⇒ rechazo', () => {
+    expect(resolverRazonamiento(undefined, undefined)).toEqual({ ok: true, valor: null })
+    expect(resolverRazonamiento(undefined, 'low')).toEqual({ ok: true, valor: 'low' })
+    expect(resolverRazonamiento('disabled', 'low')).toEqual({ ok: true, valor: 'disabled' })
+    for (const malo of ['high', '', null, 3, true, 'DISABLED']) expect(resolverRazonamiento(malo).ok, JSON.stringify(malo)).toBe(false)
+  })
+  it('opcionDeRazonamiento: disabled ⇒ thinking desactivado · low/medium ⇒ effort · sin modo ⇒ vacío', () => {
+    expect(opcionDeRazonamiento('disabled')).toEqual({ thinking: { type: 'disabled' } })
+    expect(opcionDeRazonamiento('low')).toEqual({ effort: 'low' })
+    expect(opcionDeRazonamiento('medium')).toEqual({ effort: 'medium' })
+    expect(opcionDeRazonamiento(null)).toEqual({})
+    expect(opcionDeRazonamiento(undefined)).toEqual({})
+  })
+  it('la corrida completa: el SDK recibe thinking/effort SÓLO si el pedido lo trae · y el modo queda en el libro', async () => {
+    flujo = OK
+    await corrida({ thinkingMode: 'disabled' })
+    expect(opcionesRecibidas).toMatchObject({ thinking: { type: 'disabled' } })
+    await turno()
+    expect((escrituraDe('agent_invocations')?.metadata as Record<string, unknown>).thinking_mode).toBe('disabled')
+    escrituras.length = 0
+    await corrida({ thinkingMode: 'low' })
+    expect(opcionesRecibidas).toMatchObject({ effort: 'low' })
+    expect(Object.prototype.hasOwnProperty.call(opcionesRecibidas, 'thinking')).toBe(false)
+    escrituras.length = 0
+    await corrida({})
+    expect(Object.prototype.hasOwnProperty.call(opcionesRecibidas, 'thinking')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(opcionesRecibidas, 'effort')).toBe(false)
+    await turno()
+    expect((escrituraDe('agent_invocations')?.metadata as Record<string, unknown>).thinking_mode).toBeNull()
+  })
+})

@@ -20,7 +20,7 @@
 
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import { opcionDeTope, cortadoPorTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
+import { opcionDeRazonamiento, type ModoDeRazonamiento, opcionDeTope, cortadoPorTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
   armarBloquesDeImagen,
@@ -151,6 +151,8 @@ export interface AgentRunInput {
   forceRestart?: boolean
   /** TOPE DURO por corrida (US$) · OPT-IN · el SDK corta al alcanzarlo y el resultado es un FALLO declarado · ver tope-por-corrida.ts */
   maxBudgetUsd?: number
+  /** RAZONAMIENTO limitado por corrida · OPT-IN · ver tope-por-corrida.ts · ausente ⇒ opciones del SDK de siempre */
+  thinkingMode?: ModoDeRazonamiento
   /**
    * Sprint 9 entry canon · dry-run mode. When `dryRun=true` · skip the
    * Anthropic SDK call · return a canonical fake StreamDrainResult · cost
@@ -584,6 +586,8 @@ function buildSdkOptions(
     mcpServers,
     // TOPE DURO por corrida (opt-in) · vacío sin tope ⇒ las opciones de siempre
     ...opcionDeTope(input.maxBudgetUsd),
+    // RAZONAMIENTO limitado (opt-in) · vacío sin modo ⇒ las opciones de siempre
+    ...opcionDeRazonamiento(input.thinkingMode),
   }
 }
 
@@ -1023,6 +1027,8 @@ function logExecution(
       // nominal que sugiere el slug.
       effective_model: modelId,
       nominal_agent: canonicalSlug,
+      // RAZONAMIENTO limitado (opt-in) · null = razonamiento completo (como siempre) · queda en el libro para comparar corridas
+      thinking_mode: input.thinkingMode ?? null,
       task_text: input.task.substring(0, 200),
       step_name: input.stepName ?? null,
       pipeline_id: input.pipelineId ?? null,

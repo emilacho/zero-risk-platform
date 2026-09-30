@@ -68,3 +68,30 @@ export function falloDelResultado(maxBudgetUsd: number | null | undefined, resul
 export function mensajeDeFalloDelSdk(causa: string, costoUsd: number): string {
   return `el empleado FALLÓ · ${causa} · gastado ≈ US$ ${costoUsd.toFixed(4)} · lo escrito hasta ahí es PARCIAL y no se da por respuesta`
 }
+
+/**
+ * RAZONAMIENTO INTERNO LIMITADO POR CORRIDA · CC#1 · 2026-09-30 · experimento autorizado por Emilio (Braintrust: ~90% de la salida del redactor es pensamiento que nadie lee,
+ * y el fallo real es el máximo de 32.000 tokens POR RESPUESTA). OPT-IN igual que el tope: sin `thinking_mode` en el pedido, las opciones del SDK son las de siempre (ni existen las claves).
+ *   · `disabled` → `thinking: {type:'disabled'}` (sin pensamiento extendido)
+ *   · `low` | `medium` → `effort` (guía la profundidad del pensamiento adaptativo)
+ * Un valor MAL ESCRITO se rechaza (400): ignorarlo dejaría correr con el razonamiento completo y pagar el fallo de siempre.
+ */
+export const MODOS_DE_RAZONAMIENTO = ['disabled', 'low', 'medium'] as const
+export type ModoDeRazonamiento = (typeof MODOS_DE_RAZONAMIENTO)[number]
+
+export type RazonamientoResuelto = { ok: true; valor: ModoDeRazonamiento | null } | { ok: false; motivo: string }
+
+/** toma el PRIMER candidato presente y lo valida · ninguno presente ⇒ sin límite (`valor:null`) · `null` explícito NO es «ausente» */
+export function resolverRazonamiento(...candidatos: unknown[]): RazonamientoResuelto {
+  const presente = candidatos.find((c) => c !== undefined)
+  if (presente === undefined) return { ok: true, valor: null }
+  if (typeof presente === 'string' && (MODOS_DE_RAZONAMIENTO as readonly string[]).includes(presente)) return { ok: true, valor: presente as ModoDeRazonamiento }
+  return { ok: false, motivo: `thinking_mode debe ser uno de ${MODOS_DE_RAZONAMIENTO.join(' | ')} (llegó ${JSON.stringify(presente)})` }
+}
+
+/** la parte de las opciones del SDK · vacía sin modo (camino de siempre) */
+export function opcionDeRazonamiento(modo: ModoDeRazonamiento | null | undefined): { thinking?: { type: 'disabled' }; effort?: 'low' | 'medium' } {
+  if (modo === 'disabled') return { thinking: { type: 'disabled' } }
+  if (modo === 'low' || modo === 'medium') return { effort: modo }
+  return {}
+}

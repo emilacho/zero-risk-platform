@@ -160,3 +160,51 @@ describe('④ un fallo del redactor (p. ej. el corte por tope) es un parte INVÁ
     for (const n of f.nodes.filter((x: { type: string }) => x.type.endsWith('.code'))) expect(() => new AsyncFunction('$input', '$', '$env', '$json', '$workflow', '$execution', n.parameters.jsCode)).not.toThrow()
   })
 })
+
+// ── RAZONAMIENTO LIMITADO (experimento 30-sep) · el sobre → el nodo que paga → Vercel · opt-in puro ────────────────────────────────────
+describe('⑤ `razonamiento` del sobre llega al corredor como `thinking_mode` · opt-in puro', () => {
+  const cuerpo = async (prev: Record<string, unknown>) => (await correrNodo('n3-armar-cuerpo.js', { input: [{ name: 'Náufrago' }], refs: { '② ¿Ya hay parte de este plan? · guarda': { client_id: CID, dry_run: false, manual_texto: 'm', plan_id: 'p', plan_texto: 'x', manual_version: 1, manual_id: 'm', ...prev } } }))[0].json.cuerpo
+  it('el sobre: ausente ⇒ null · válido ⇒ el valor', async () => {
+    expect((await sobre({}))[0].json.razonamiento).toBeNull()
+    for (const v of ['disabled', 'low', 'medium']) expect((await sobre({ razonamiento: v }))[0].json.razonamiento).toBe(v)
+  })
+  it.each([['high'], [''], [null], [true], [0], ['DISABLED']])('🔴 razonamiento mal escrito (%j) ⇒ BRIEF_RAZONAMIENTO_INVALIDO · se DETIENE antes de gastar', async (v) => {
+    await expect(sobre({ razonamiento: v })).rejects.toThrow(/BRIEF_RAZONAMIENTO_INVALIDO/)
+  })
+  it('el nodo que paga: con razonamiento ⇒ thinking_mode en el cuerpo · sin él ⇒ ni la clave', async () => {
+    expect(await cuerpo({ razonamiento: 'disabled', tope_usd: 1 })).toMatchObject({ thinking_mode: 'disabled', max_budget_usd: 1 })
+    expect(Object.prototype.hasOwnProperty.call(await cuerpo({ razonamiento: null }), 'thinking_mode')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(await cuerpo({}), 'thinking_mode')).toBe(false)
+  })
+  it('las guardas propagan el sobre: el razonamiento llega intacto hasta el nodo que paga', async () => {
+    const [{ json: s }] = await sobre({ razonamiento: 'low' })
+    const [{ json: m }] = await correrNodo('n1-guarda-manual.js', { input: [{ id: 'm1', version: 1, gate_outcome: 'paso_la_vara', content_text: 'x', forbidden_words: [], required_terminology: [] }], refs: { '⓪ Sobre · llave · modo seco': s } })
+    expect(m.razonamiento).toBe('low')
+  })
+})
+
+describe('⑥ Vercel valida y reenvía `thinking_mode`', () => {
+  const pedido = (extra: Record<string, unknown> = {}) => ({ agent: 'campaign-brief-agent', task: 'trivial', client_id: null, workflow_id: 'WF1', workflow_execution_id: '900', step_name: 'brief', ...extra })
+  const req = (b: Record<string, unknown>) => new Request('https://prod.test/api/agents/run-sdk', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'k' }, body: JSON.stringify(b) })
+  let alCorredor: Array<Record<string, unknown>> = []
+  beforeEach(() => {
+    vi.clearAllMocks(); alCorredor = []; promesas.length = 0
+    process.env.INTERNAL_API_KEY = 'k'; process.env.RAILWAY_AGENT_RUNNER_URL = 'https://runner.test'
+    registrar.mockResolvedValue({ dispatch_key: 'dispatch:WF1:campaign-brief-agent:900', idempotent: false })
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: { body: string }) => { alCorredor.push(JSON.parse(init.body)); return new Response(JSON.stringify({ success: true, response: 'x', costUsd: 0.1 }), { status: 200, headers: { 'content-type': 'application/json' } }) }))
+  })
+  it('🔴 con thinking_mode (arriba o en context) ⇒ el corredor lo recibe · sin él ⇒ el cuerpo de siempre', async () => {
+    await POST(req(pedido({ thinking_mode: 'disabled' })))
+    expect(alCorredor[0]).toMatchObject({ thinking_mode: 'disabled' })
+    await POST(req(pedido({ context: { thinking_mode: 'low' } })))
+    expect(alCorredor[1]).toMatchObject({ thinking_mode: 'low' })
+    await POST(req(pedido()))
+    expect(Object.prototype.hasOwnProperty.call(alCorredor[2], 'thinking_mode')).toBe(false)
+  })
+  it.each([['high'], [''], [null], [1], ['Disabled']])('🔴 thinking_mode mal escrito (%j) ⇒ 400 thinking_mode_invalid y el corredor NO se llama', async (v) => {
+    const r = await POST(req(pedido({ thinking_mode: v })))
+    expect(r.status).toBe(400)
+    expect(await r.json()).toMatchObject({ error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID' })
+    expect(alCorredor).toHaveLength(0)
+  })
+})

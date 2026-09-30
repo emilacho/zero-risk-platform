@@ -967,6 +967,19 @@ export async function POST(request: Request) {
       }
       topeDelPedido = n
     }
+    // RAZONAMIENTO limitado (opt-in) · valor MAL ESCRITO se rechaza ANTES de gastar · `null` explícito tampoco es «ausente»
+    const razArriba = (body as unknown as { thinking_mode?: unknown }).thinking_mode
+    const razCrudo = razArriba !== undefined ? razArriba : ctx.thinking_mode
+    let razonamientoDelPedido: string | null = null
+    if (razCrudo !== undefined) {
+      if (razCrudo !== 'disabled' && razCrudo !== 'low' && razCrudo !== 'medium') {
+        return NextResponse.json(
+          { error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID', detail: 'thinking_mode debe ser disabled | low | medium · un valor mal escrito no se ignora' },
+          { status: 400 },
+        )
+      }
+      razonamientoDelPedido = razCrudo
+    }
     const rd = (body as unknown as { _runner_delivery?: { callback_url?: unknown; dispatch_key?: unknown } })._runner_delivery
     const entregaDelCorredor =
       rd && typeof rd.callback_url === 'string' && typeof rd.dispatch_key === 'string'
@@ -997,6 +1010,8 @@ export async function POST(request: Request) {
       ...campoImagenesDelProxy(imagenesDelPedido.images, imagenesDelPedido.imagesMode),
       // TOPE DURO por corrida (opt-in) · el corredor se lo pasa al SDK · ausente ⇒ el cuerpo de siempre
       ...(topeDelPedido !== null ? { max_budget_usd: topeDelPedido } : {}),
+      // RAZONAMIENTO limitado (opt-in) · ausente ⇒ el cuerpo de siempre
+      ...(razonamientoDelPedido !== null ? { thinking_mode: razonamientoDelPedido } : {}),
       // ARQ 2026-09-30 · la vuelta la entrega el corredor (sólo si el pedido interno lo trae · ausente ⇒ cuerpo de siempre).
       ...(entregaDelCorredor
         ? {

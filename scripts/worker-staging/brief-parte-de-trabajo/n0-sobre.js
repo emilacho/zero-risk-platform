@@ -35,6 +35,15 @@ if (body.tope_usd !== undefined) {
   tope_usd = n
 }
 
+// RAZONAMIENTO limitado (opt-in) · experimento 30-sep · valor mal escrito detiene ANTES de gastar (mismo criterio que el tope) · ausente ⇒ razonamiento completo (como hoy)
+let razonamiento = null
+if (body.razonamiento !== undefined) {
+  if (body.razonamiento !== 'disabled' && body.razonamiento !== 'low' && body.razonamiento !== 'medium') {
+    throw new Error('BRIEF_RAZONAMIENTO_INVALIDO · razonamiento debe ser disabled | low | medium · llegó ' + JSON.stringify(body.razonamiento) + ' · se DETIENE antes de gastar')
+  }
+  razonamiento = body.razonamiento
+}
+
 return [{
   json: {
     client_id: String(body.client_id),
@@ -49,5 +58,6 @@ return [{
     // sin pagar. En modo real se IGNORA por completo (el nodo ③ ni la mira).
     simulacro_respuesta: body.dry_run === true && typeof body._simulacro_respuesta === 'string' ? body._simulacro_respuesta : null,
     tope_usd,
+    razonamiento,
   },
 }]
