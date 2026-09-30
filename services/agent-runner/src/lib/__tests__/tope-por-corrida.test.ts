@@ -172,3 +172,66 @@ describe('①②④ la corrida completa del corredor (SDK simulado)', () => {
     expect(Object.prototype.hasOwnProperty.call(opcionesRecibidas, 'maxBudgetUsd')).toBe(false)
   })
 })
+
+// ── EL FALLO REAL (corrida 158667 · Braintrust): «response exceeded the 32000 output token maximum» · no es corte por tope ────────────────────
+const { terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } = await import('../tope-por-corrida')
+const CAUSA = "API Error: Claude's response exceeded the 32000 output token maximum"
+const ERROR_DE_SALIDA = [
+  { type: 'system', subtype: 'init', session_id: 's1' },
+  { type: 'assistant', message: { content: [{ type: 'text', text: '{"parte":{"entregables":[{"id":"BRF-0001"' }] } },
+  { type: 'result', subtype: 'success', is_error: true, result: CAUSA, session_id: 's1', usage: USO },
+  { __lanza: 'Claude Code process exited with code 1' },
+]
+const escrituraDe = (tabla: string) => escrituras.find((e) => e.tabla === tabla && e.op === 'insert')?.contenido as Record<string, unknown> | undefined
+
+describe('🔴 un error del resultado que NO es tope (el caso real): el gasto y la causa se registran', () => {
+  it('funciones puras: sólo con tope opt-in · el corte por tope y error_max_turns no cuentan como «otro fallo»', () => {
+    expect(terminoConResultadoFallido('success', true)).toBe(true)
+    expect(terminoConResultadoFallido('success', false)).toBe(false)
+    expect(terminoConResultadoFallido('error_max_turns', true)).toBe(false)
+    expect(terminoConResultadoFallido('error_max_budget_usd', undefined)).toBe(true)
+    expect(falloDelResultado(3, 'success', true, CAUSA)).toBe(CAUSA)
+    expect(falloDelResultado(undefined, 'success', true, CAUSA)).toBeNull()
+    expect(falloDelResultado(3, 'error_max_budget_usd', true, 'x')).toBeNull()
+    expect(falloDelResultado(3, 'error_max_turns', true, 'x')).toBeNull()
+    expect(falloDelResultado(3, 'success', true, null)).toMatch(/cerró con error/)
+    expect(mensajeDeFalloDelSdk(CAUSA, 2.4)).toMatch(/FALLÓ .*32000.*2\.4000/)
+  })
+  it('drainStream captura is_error y la causa · con tolerancia devuelve el resultado · sin ella la excepción sube', async () => {
+    const s = (m: Array<Record<string, unknown>>) => (async function* () { for (const x of m) { if (typeof x.__lanza === 'string') throw new Error(x.__lanza); yield x } })() as never
+    const d = await drainStream(s(ERROR_DE_SALIDA), { toleraSalidaTrasCorte: true })
+    expect(d).toMatchObject({ resultIsError: true, resultMessage: CAUSA, outputTokens: 2000 })
+    await expect(drainStream(s(ERROR_DE_SALIDA))).rejects.toThrow(/exited with code 1/)
+  })
+  it('🔴 la corrida completa con tope: FALLO declarado con la causa y el gasto · fila de invocación failed/exit 1 · agents_log error · SIN punto de control', async () => {
+    flujo = ERROR_DE_SALIDA
+    const r = await corrida({ maxBudgetUsd: 3 })
+    expect(r.success).toBe(false)
+    expect(r.error).toContain(CAUSA)
+    expect(r.costUsd).toBeGreaterThan(0)
+    await turno()
+    expect(escrituraDe('agent_invocations')).toMatchObject({ status: 'failed', exit_code: 1, error_message: expect.stringContaining('32000') })
+    expect(Number(escrituraDe('agent_invocations')?.cost_usd)).toBeGreaterThan(0)
+    expect(escrituraDe('agents_log')).toMatchObject({ status: 'error', error_message: expect.stringContaining('32000') })
+    expect(completados()).toHaveLength(0)
+  })
+  it('el corte por tope también queda failed en el libro (antes quedaba completed con exit 0)', async () => {
+    flujo = CORTE_Y_SALIDA
+    await corrida({ maxBudgetUsd: 3 })
+    await turno()
+    expect(escrituraDe('agent_invocations')).toMatchObject({ status: 'failed', exit_code: 1, error_message: expect.stringMatching(/error_max_budget_usd/) })
+  })
+  it('una corrida sana sigue completed / exit 0 / sin error_message', async () => {
+    flujo = OK
+    await corrida({ maxBudgetUsd: 3 })
+    await turno()
+    expect(escrituraDe('agent_invocations')).toMatchObject({ status: 'completed', exit_code: 0, error_message: null })
+    expect(escrituraDe('agents_log')).toMatchObject({ status: 'success' })
+  })
+  it('SIN tope: el error del resultado con excepción sigue subiendo como siempre (opt-in puro)', async () => {
+    flujo = ERROR_DE_SALIDA
+    const r = await corrida({})
+    expect(r.success).toBe(false)
+    expect(r.error).toMatch(/exited with code 1/)
+  })
+})

@@ -43,3 +43,28 @@ export function mensajeDeCorte(maxBudgetUsd: number, costoUsd: number): string {
     `gastado ≈ US$ ${costoUsd.toFixed(4)} · lo escrito hasta ahí es PARCIAL y no se da por respuesta`
   )
 }
+
+/**
+ * FALLO DEL SDK QUE NO ES UN CORTE POR TOPE · CC#1 · 2026-09-30 (corrida real 158667: «response exceeded the 32000 output token maximum»).
+ * El SDK entrega un `result` con `is_error:true` y luego el proceso sale ≠ 0 (excepción). Antes esa excepción subía a `fail()`: cero gasto registrado y la causa sólo en Braintrust.
+ * Opt-in igual que el tope: sólo los pedidos con `max_budget_usd` cambian; el resto sigue byte a byte. `error_max_turns` NO es un fallo (siempre fue un cierre con texto parcial).
+ */
+export const SUBTIPO_TOPE_DE_TURNOS = 'error_max_turns'
+
+/** ¿el `result` ya entregado es un fallo (corte por presupuesto o `is_error`)? · decide si la excepción de salida posterior es la consecuencia esperada */
+export function terminoConResultadoFallido(resultSubtype: string | null | undefined, resultIsError: boolean | undefined): boolean {
+  if (resultSubtype === SUBTIPO_CORTE_POR_PRESUPUESTO) return true
+  return resultIsError === true && resultSubtype !== SUBTIPO_TOPE_DE_TURNOS
+}
+
+/** la causa de un fallo del resultado que NO es corte por tope · null si no aplica (sin tope opt-in, sin error, corte por tope o tope de turnos) */
+export function falloDelResultado(maxBudgetUsd: number | null | undefined, resultSubtype: string | null | undefined, resultIsError: boolean | undefined, resultMessage: string | null | undefined): string | null {
+  if (!(typeof maxBudgetUsd === 'number' && maxBudgetUsd > 0)) return null
+  if (resultSubtype === SUBTIPO_CORTE_POR_PRESUPUESTO) return null
+  if (!terminoConResultadoFallido(resultSubtype, resultIsError)) return null
+  return resultMessage && resultMessage.trim() !== '' ? resultMessage : `el SDK cerró con error (${resultSubtype ?? 'sin subtipo'})`
+}
+
+export function mensajeDeFalloDelSdk(causa: string, costoUsd: number): string {
+  return `el empleado FALLÓ · ${causa} · gastado ≈ US$ ${costoUsd.toFixed(4)} · lo escrito hasta ahí es PARCIAL y no se da por respuesta`
+}
