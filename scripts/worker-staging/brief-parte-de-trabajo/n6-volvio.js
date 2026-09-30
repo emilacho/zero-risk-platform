@@ -8,6 +8,13 @@ try { corr = $('⓪ Sobre · llave · modo seco').first().json._sala_correlation
 if (corr && !volvio) {
   throw new Error('CABLE_DE_VUELTA_MUDO · la sala NO se enteró de que la corrida terminó · código ' + String(r.code || r.error || 'sin código'))
 }
+// 🔴 LA CORRIDA NO CIERRA «CORRECTA» SI EL PARTE NO VALE (encargo Lenovo 30-sep §2): el cable YA declaró el resultado real arriba;
+// acá la corrida termina en ERROR visible con el motivo, no en verde. Antes este nodo devolvía siempre `cierre: 'parte_terminado'`.
+let cierrePrevio = null
+try { cierrePrevio = $('⑤ ¿Guardó y salió el PDF?').first().json } catch (e) { cierrePrevio = null }
+if (cierrePrevio && cierrePrevio.ok === false) {
+  throw new Error((cierrePrevio.parte_valido === false ? 'PARTE_NO_VALIDO' : 'PARTE_CON_PROBLEMAS') + ' · ' + (cierrePrevio.problemas || []).join(' | ') + ' · la sala ya fue avisada del resultado real')
+}
 return [{
   json: {
     cierre: 'parte_terminado',

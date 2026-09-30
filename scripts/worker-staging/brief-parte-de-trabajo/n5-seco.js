@@ -14,7 +14,8 @@ for (const k of ['event_type', 'worker_id', 'worker_name', 'resultado', 'client_
 }
 if (a.event_type !== 'run_completed') faltan.push('payload_cable.event_type debe ser run_completed')
 if (a.worker_name !== 'brief') faltan.push('payload_cable.worker_name debe ser brief')
-return [{
+const habria_cerrado_como = c.parte_valido === false ? 'ERROR · PARTE_NO_VALIDO · ' + c.motivo_invalido : 'parte_terminado'
+const salida = {
   json: {
     seco: true,
     escrituras_reales: 0,
@@ -23,8 +24,15 @@ return [{
     la_vuelta_del_redactor: { llego: c.llego_la_vuelta, real: c.vuelta_real, simulacro: c.simulacro_usado, costo_usd: c.vuelta_costo_usd, modelo: c.vuelta_modelo },
     chequeos: { legible: c.parte_legible, ok: c.chequeos_ok, por_chequeo: c.por_chequeo, entregables: c.entregables, pendientes: c.pendientes_declarados },
     habria_guardado: { tabla: 'client_historical_outputs', output_type: f.output_type, status: f.status, titulo: f.title, largo_del_parte: String(f.content || '').length, provenance_tag_claves: Object.keys(f.provenance_tag || {}) },
+    habria_subido_a_drive_con_titulo: f.title,
+    parte_valido: c.parte_valido !== false,
+    motivo_invalido: c.motivo_invalido || null,
+    habria_cerrado_como,
     habria_avisado: a,
     formas_validas: faltan.length === 0,
     faltan,
   },
-}]
+}
+// 🔴 el ensayo ejerce el MISMO veredicto que el camino real: un parte inválido termina la corrida en error (con la salida ya guardada en la ejecución)
+if (c.parte_valido === false) throw new Error('PARTE_NO_VALIDO (modo seco) · ' + c.motivo_invalido + ' · en modo real habría subido a Drive con la marca y cerrado en error')
+return [salida]

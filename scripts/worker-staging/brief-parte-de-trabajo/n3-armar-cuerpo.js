@@ -63,6 +63,9 @@ const cuerpo = {
   workflow_id: $workflow.id,
   workflow_execution_id: $execution.id,
   callback_url: $execution.resumeUrl,
+  // 🔴 LA PALANCA (2026-09-30 · PR #399 en producción) · el corredor de Railway hace el POST de la vuelta y no muere en los 800 s de Vercel.
+  // SÓLO para campaign-brief-agent (lista cerrada en run-sdk) · NO copiar a otro agente ni a otro flujo. Quitarla = todo vuelve a como era.
+  callback_mode: 'runner',
   force_restart: true,
   // 🔴 EL INTERRUPTOR LLEGA AL NODO QUE PAGA
   dry_run: prev.dry_run === true,
