@@ -157,12 +157,29 @@ describe('② lo que no se buscó se DECLARA DENTRO DEL PLAN, con su motivo', ()
 })
 
 describe('el flujo · sólo cambian esos 3 nodos', () => {
-  it('3 nodos cambiados · mismas conexiones · mismos 42 nodos · ajustes sólo los permitidos por la API', () => {
+  it('3 nodos cambiados de lógica (+ 2 sólo de posición) · mismas conexiones · mismos 42 nodos · ajustes sólo los permitidos por la API', () => {
     expect(DESPUES.nodes).toHaveLength(42)
     const cambiados = DESPUES.nodes.filter((n: { name: string; parameters: unknown }, i: number) => JSON.stringify(n.parameters) !== JSON.stringify(ANTES.nodes[i].parameters)).map((n: { name: string }) => n.name)
     expect(cambiados.sort()).toEqual([ELEGIR, REDACTOR, VUELTA].sort())
     expect(JSON.stringify(DESPUES.connections)).toBe(JSON.stringify(ANTES.connections))
     expect(Object.keys(DESPUES.settings)).toEqual(['executionOrder'])
+  })
+  it('🔴 DEFECTO LATENTE: «El número de la casa» y «La referencia del producto» quedan dibujados POR ENCIMA de «Ficha del cliente» (n8n v1 corre las ramas de arriba hacia abajo) · antes corrían DESPUÉS y sólo funcionaba porque PostHog salía vacío', () => {
+    const y = (f: typeof ANTES, n: string) => f.nodes.find((x: { name: string }) => x.name === n).position[1]
+    // ANTES: ambos por debajo de la ficha ⇒ corren después de toda la rama principal
+    expect(y(ANTES, 'El número de la casa')).toBeGreaterThan(y(ANTES, 'Ficha del cliente'))
+    expect(y(ANTES, 'La referencia del producto')).toBeGreaterThan(y(ANTES, 'Ficha del cliente'))
+    // DESPUÉS: ambos por encima
+    expect(y(DESPUES, 'El número de la casa')).toBeLessThan(y(DESPUES, 'Ficha del cliente'))
+    expect(y(DESPUES, 'La referencia del producto')).toBeLessThan(y(DESPUES, 'Ficha del cliente'))
+    // sólo se movió el dibujo: parámetros, tipo y conexiones idénticos
+    for (const n of ['El número de la casa', 'La referencia del producto']) {
+      const a = ANTES.nodes.find((x: { name: string }) => x.name === n), d = DESPUES.nodes.find((x: { name: string }) => x.name === n)
+      expect(JSON.stringify(d.parameters)).toBe(JSON.stringify(a.parameters))
+      expect(d.type).toBe(a.type)
+    }
+    // y los tres siguen colgando de la misma guarda ①
+    expect(DESPUES.connections['① GUARDA · sin manual aprobado se DETIENE'].main[0].map((t: { node: string }) => t.node).sort()).toEqual(['El número de la casa', 'Ficha del cliente', 'La referencia del producto'])
   })
   it('los saltos de línea de lo que no se tocó quedan byte a byte (CRLF del original)', () => {
     const viejo = codigo(ANTES, ELEGIR)
