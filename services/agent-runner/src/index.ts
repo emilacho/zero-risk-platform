@@ -24,7 +24,7 @@ import { abrirLatido, intervaloDelLatido } from './lib/latido.js'
 import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.js'
 import { validarDireccionDeVuelta, esperaForzadaMs, emitirEventoPostHog } from './lib/entrega-de-la-vuelta.js'
 import { correrYEntregar } from './lib/correr-y-entregar.js'
-import { resolverTopeUsd } from './lib/tope-por-corrida.js'
+import { resolverTopeUsd, resolverRazonamiento } from './lib/tope-por-corrida.js'
 
 /**
  * Capture an agent error in Sentry with canonical context tags. Sprint
@@ -153,6 +153,9 @@ interface RunSdkBody {
   /** TOPE DURO por corrida (US$) · opt-in · ver lib/tope-por-corrida.ts */
   maxBudgetUsd?: unknown
   max_budget_usd?: unknown
+  /** RAZONAMIENTO limitado por corrida · opt-in · ver lib/tope-por-corrida.ts */
+  thinkingMode?: unknown
+  thinking_mode?: unknown
   test_delay_ms?: unknown
 }
 
@@ -345,6 +348,13 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     return
   }
 
+  // RAZONAMIENTO limitado (opt-in) · un valor MAL ESCRITO se rechaza (400) ANTES de gastar
+  const razonamiento = resolverRazonamiento(body.thinkingMode, body.thinking_mode, ctxObj.thinkingMode, ctxObj.thinking_mode)
+  if (!razonamiento.ok) {
+    res.status(400).json({ success: false, error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID', detail: razonamiento.motivo })
+    return
+  }
+
   const input: AgentRunInput = {
     agentName: agentName,
     task: body.task,
@@ -358,6 +368,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     forceRestart,
     dryRun,
     ...(tope.valor !== null ? { maxBudgetUsd: tope.valor } : {}),
+    ...(razonamiento.valor !== null ? { thinkingMode: razonamiento.valor } : {}),
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }
 

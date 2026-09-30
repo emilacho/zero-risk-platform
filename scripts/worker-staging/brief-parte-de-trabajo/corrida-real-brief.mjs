@@ -16,6 +16,9 @@ const envPath = process.env.ENV_FILE || 'C:/Users/emili/Documents/Claude/Project
 for (const l of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) { const m = l.match(/^([A-Z0-9_]+)=(.*)$/); if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^"|"$/g, '') }
 const arg = (p) => (process.argv.find((a) => a.startsWith(p)) || '').slice(p.length)
 const TOPE = Number(arg('--tope=') || 3), AUTORIZADO = Number(arg('--autorizado=') || 3.5)
+// --razonamiento=disabled|low|medium · experimento 30-sep · limita el pensamiento interno del redactor (ausente ⇒ razonamiento completo, como siempre)
+const RAZ = arg('--razonamiento=') || null
+if (RAZ !== null && !['disabled', 'low', 'medium'].includes(RAZ)) { console.log('--razonamiento inválido: ' + RAZ); process.exit(1) }
 const CONFIRMAR = process.argv.includes('--confirmar')
 const salida = arg('--salida=') || join(process.cwd(), 'salida-corrida-real'); fs.mkdirSync(salida, { recursive: true })
 const CID = '41dd3d62-d6de-4c9a-9996-6df78c1da118', FLUJO_BRIEF = 'PQdIgbuFexuBsoh8'
@@ -38,9 +41,20 @@ const rn = await fetch(`${RUNNER}/run-sdk`, { method: 'POST', headers: { 'x-inte
 const rj = await rn.json().catch(() => ({}))
 log(`sonda corredor · HTTP ${rn.status} · ${rj.error || ''}`)
 if (!(rn.status === 400 && rj.error === 'max_budget_usd_invalid')) parar('el corredor NO trae el tope por corrida (esperaba 400 max_budget_usd_invalid)')
+// sondas del razonamiento (sólo si se pide) · valor inválido ⇒ 400 antes de correr nada (US$ 0) en Vercel y en el corredor
+if (RAZ !== null) {
+  const vr = await fetch(`${VERCEL}/api/agents/run-sdk`, { method: 'POST', headers: { 'x-api-key': process.env.INTERNAL_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sonda, max_budget_usd: 1, thinking_mode: 'invalido' }) })
+  const vrj = await vr.json().catch(() => ({}))
+  log(`sonda razonamiento Vercel · HTTP ${vr.status} · ${vrj.error || ''}`)
+  if (!(vr.status === 400 && vrj.error === 'thinking_mode_invalid')) parar('Vercel NO trae thinking_mode (esperaba 400 thinking_mode_invalid)')
+  const rr = await fetch(`${RUNNER}/run-sdk`, { method: 'POST', headers: { 'x-internal-auth': process.env.INTERNAL_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ agentName: sonda.agent, task: sonda.task, workflowId: sonda.workflow_id, workflowExecutionId: sonda.workflow_execution_id, clientId: CID, dryRun: true, thinking_mode: 'invalido' }) })
+  const rrj = await rr.json().catch(() => ({}))
+  log(`sonda razonamiento corredor · HTTP ${rr.status} · ${rrj.error || ''}`)
+  if (!(rr.status === 400 && rrj.error === 'thinking_mode_invalid')) parar('el corredor NO trae thinking_mode (esperaba 400 thinking_mode_invalid)')
+}
 const flujo = await (await fetch(`${N8N}/api/v1/workflows/${FLUJO_BRIEF}`, { headers: HN })).json()
 const cod = (n) => String(flujo.nodes.find((x) => x.name === n)?.parameters?.jsCode || '')
-const conTope = cod('⓪ Sobre · llave · modo seco').includes('BRIEF_TOPE_INVALIDO') && cod('③ Armar el cuerpo del redactor').includes('max_budget_usd') && cod('③ ¿Llegó la vuelta?').includes('falla_del_redactor')
+const conTope = cod('⓪ Sobre · llave · modo seco').includes('BRIEF_TOPE_INVALIDO') && cod('③ Armar el cuerpo del redactor').includes('max_budget_usd') && cod('③ ¿Llegó la vuelta?').includes('falla_del_redactor') && (RAZ === null || (cod('⓪ Sobre · llave · modo seco').includes('BRIEF_RAZONAMIENTO_INVALIDO') && cod('③ Armar el cuerpo del redactor').includes('thinking_mode')))
 log(`flujo del brief · versión ${flujo.versionId} · activo=${flujo.active} · trae el tope=${conTope}`)
 if (!flujo.active || !conTope) parar('el flujo del brief no está activo o no trae el tope')
 
@@ -62,13 +76,13 @@ if (previos[0].n > 0) parar('ya hay asientos con la clave ' + clave + ' · una c
 const t0 = new Date()
 const cuerpo = {
   source: 'planeacion/plan-listo', intent: 'briefear',
-  payload: { client_id: CID, plan_id: plan.id, dry_run: false, forzar: true, tope_usd: TOPE, desde_worker: 'X9F0zp6LQ2xGEYVS' },
+  payload: { client_id: CID, plan_id: plan.id, dry_run: false, forzar: true, tope_usd: TOPE, ...(RAZ !== null ? { razonamiento: RAZ } : {}), desde_worker: 'X9F0zp6LQ2xGEYVS' },
   idempotency_key: clave + ':briefear', logical_period: 'alta:' + clave, tenant_id: CID, client_id: CID,
   // la puerta de la sala RECHAZA `correlation_id: null` (debe ser texto no vacío o no venir · medido 30-sep 07:02, invalid_envelope) · un texto propio deja la corrida rastreable
   correlation_id: correlacion,
 }
 fs.writeFileSync(join(salida, 'sobre-enviado.json'), JSON.stringify({ ...cuerpo, hora: t0.toISOString() }, null, 1))
-log(`🚀 DISPARO · sobre a /api/sala/intake · plan ${plan.id} · tope pedido US$ ${TOPE} (autorizado US$ ${AUTORIZADO}) · forzar=true`)
+log(`🚀 DISPARO · sobre a /api/sala/intake · plan ${plan.id} · razonamiento ${RAZ ?? 'completo'} · tope pedido US$ ${TOPE} (autorizado US$ ${AUTORIZADO}) · forzar=true`)
 const ing = await fetch(`${VERCEL}/api/sala/intake`, { method: 'POST', headers: { 'x-api-key': process.env.INTERNAL_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) })
 const ingj = await ing.json().catch(() => ({}))
 fs.writeFileSync(join(salida, 'respuesta-de-la-sala.json'), JSON.stringify({ http: ing.status, ...ingj }, null, 1))
