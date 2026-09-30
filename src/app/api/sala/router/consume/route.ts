@@ -28,10 +28,14 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { SupabaseEventLogStorage } from '@/lib/sala-event-log'
 import {
+  candadoEnSupabase,
   consumeIntakeTick,
   isConsumerEnabled,
+  isPaqueteEnabled,
   wireCapSpendQuerySupabase,
+  type CandadoDelTic,
 } from '@/lib/sala-router-consumer'
+import { TICK_DEADLINE_MS_DEFAULT, TICK_LOCK_TTL_MS } from '@/lib/sala-router-consumer/types'
 
 function fail(status: number, code: string, detail: string): NextResponse {
   return NextResponse.json({ ok: false, code, detail }, { status })
@@ -74,8 +78,10 @@ export async function POST(request: Request) {
   // ─── 4 · compose storage + cap-wire (SPEC lazo agentico §gap §150) ───
   let storage: SupabaseEventLogStorage
   let cap_spend_query
+  let candado: CandadoDelTic | null = null
   try {
     const supabase = getSupabaseAdmin()
+    if (isPaqueteEnabled()) candado = candadoEnSupabase(supabase as never)
     storage = new SupabaseEventLogStorage(supabase)
     // Canon canonical · production wires the Supabase-backed spend query ·
     // dispatch evaluates per-stream cumulative cost vs §150 cap before
@@ -94,6 +100,8 @@ export async function POST(request: Request) {
   }
 
   // ─── 5 · run one tick ───
+  // PAQUETE del repartidor (palanca SALA_ROUTER_PAQUETE_ENABLED · NACE APAGADA · apagada = el camino de siempre, byte a byte)
+  if (candado) return await correrTicConPaquete({ candado, storage, tenant_id, batch_size, scan_window, cap_spend_query })
   try {
     const tick = await consumeIntakeTick({
       storage,
@@ -106,6 +114,61 @@ export async function POST(request: Request) {
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
     return fail(500, 'tick_failed', detail)
+  }
+}
+
+/**
+ * ① candado (un solo tic a la vez) + ② tope de tiempo (el tic que no termina, muere dentro de su ciclo) · el tope cubre TODO, también la espera de la base al tomar el candado
+ * (con la base caída esa espera era la que apilaba tics). ③ y ⑤ viven en el orquestador (`claim_before_fire`).
+ */
+async function correrTicConPaquete(a: {
+  candado: CandadoDelTic
+  storage: SupabaseEventLogStorage
+  tenant_id: string | undefined
+  batch_size: number | undefined
+  scan_window: number | undefined
+  cap_spend_query: Parameters<typeof consumeIntakeTick>[0]['cap_spend_query']
+}): Promise<NextResponse> {
+  const deadlineMs = Number(process.env.SALA_ROUTER_TICK_DEADLINE_MS) > 0 ? Number(process.env.SALA_ROUTER_TICK_DEADLINE_MS) : TICK_DEADLINE_MS_DEFAULT
+  const inicio = Date.now()
+  const deadline_at_ms = inicio + deadlineMs
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const vencio = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), deadlineMs)
+  })
+  const trabajo = (async () => {
+    const toma = await a.candado.tomar(TICK_LOCK_TTL_MS)
+    if (!toma.ok) return { kind: 'sin_candado' as const, motivo: toma.motivo }
+    try {
+      const tick = await consumeIntakeTick({
+        storage: a.storage,
+        tenant_id: a.tenant_id,
+        batch_size: a.batch_size,
+        scan_window: a.scan_window,
+        cap_spend_query: a.cap_spend_query,
+        claim_before_fire: true,
+        deadline_at_ms,
+      })
+      return { kind: 'tick' as const, tick }
+    } finally {
+      // el candado se suelta cuando el TRABAJO termina (no cuando la respuesta sale): si el tope corta la respuesta pero el tic sigue vivo, el candado sigue tomado hasta su vencimiento (TTL)
+      await a.candado.soltar(toma.holder)
+    }
+  })()
+  // si el tope gana la carrera, `trabajo` puede seguir vivo un rato: su error tardío no puede tirar la función
+  trabajo.catch(() => undefined)
+  try {
+    const r = await Promise.race([trabajo, vencio])
+    if (r === 'timeout') return fail(504, 'tick_timeout', `el tic superó su tope de tiempo (${deadlineMs} ms) y se cortó · lo que no se tomó queda para el próximo tic`)
+    if (r.kind === 'sin_candado') {
+      // no es un error: otro tic está corriendo (o la base no dio el candado) · salir rápido es justo lo que evita la pila
+      return NextResponse.json({ ok: true, skipped: r.motivo, tick: null }, { status: 200 })
+    }
+    return NextResponse.json({ ok: true, tick: r.tick, took_ms: Date.now() - inicio }, { status: 200 })
+  } catch (e) {
+    return fail(500, 'tick_failed', e instanceof Error ? e.message : String(e))
+  } finally {
+    if (timer) clearTimeout(timer)
   }
 }
 

@@ -18,6 +18,7 @@ import {
   evaluateNaufragoRunCap,
   getJourneyWorkflowTarget,
   isNaufragoCapEnforced,
+  isWorkflowDispatchEnabled,
   NAUFRAGO_TENANT_IDS,
   type NaufragoCostCapResult,
   type WorkflowDispatchResult,
@@ -114,9 +115,16 @@ export interface DispatchOneInput {
    * `skipped_cap_blocked` outcome. Tests inject a spy to assert it fired.
    */
   readonly cap_alerter?: CapAlerter
+  /**
+   * PAQUETE del repartidor (pieza ③) · RECLAMAR el sobre ANTES de disparar · devuelve true si este tic ganó el reclamo, false si otro ya lo tenía.
+   * Se llama SÓLO cuando el disparo va a salir de verdad (después del tope de gasto y con el despachador encendido). Ausente ⇒ camino de siempre.
+   */
+  readonly claim?: () => Promise<boolean>
 }
 
 export interface DispatchOneResult {
+  /** PAQUETE · true si el sobre quedó reclamado antes de disparar */
+  readonly claimed?: boolean
   readonly kind: DispatchOutcomeKind
   readonly detail: string
   readonly workflow_dispatch_result?: WorkflowDispatchResult
@@ -264,6 +272,29 @@ export async function dispatchOneIntake(
     }
   }
 
+  // ─── 2.9 · PAQUETE · RECLAMAR ANTES de disparar (pieza ③) ───
+  // Cambia el modo de fallar: si el disparo no vuelve, el sobre queda reclamado y se PIERDE (visible) en vez de re-dispararse (una duplicación = otra alta pagada).
+  // Sólo si el disparo va a salir de verdad: con el despachador apagado no se reclama (el sobre vuelve a la fila como siempre).
+  let claimed = false
+  if (input.claim && isWorkflowDispatchEnabled({ enabled: input.enabled })) {
+    try {
+      if (!(await input.claim())) {
+        return {
+          kind: 'skipped_already_claimed',
+          detail: 'otro tic ya reclamó este sobre · NO se dispara dos veces',
+          ...(cap_evaluation ? { cap_evaluation } : {}),
+        }
+      }
+      claimed = true
+    } catch (e) {
+      return {
+        kind: 'dispatched_failed',
+        detail: `no se pudo reclamar el sobre · NO se disparó · ${e instanceof Error ? e.message : String(e)}`,
+        ...(cap_evaluation ? { cap_evaluation } : {}),
+      }
+    }
+  }
+
   // ─── 3 · fire via workflow-dispatcher · Model B (#172) ───
   const result = await dispatchToWorkflow({
     decision,
@@ -278,6 +309,7 @@ export async function dispatchOneIntake(
       kind: 'dispatched_ok',
       detail: `webhook ${result.webhook_url} responded ${result.status_code}`,
       workflow_dispatch_result: result,
+      ...(claimed ? { claimed } : {}),
       ...(cap_evaluation ? { cap_evaluation } : {}),
     }
   }
@@ -286,6 +318,7 @@ export async function dispatchOneIntake(
       kind: 'skipped_dispatcher_off',
       detail: 'SALA_WORKFLOW_DISPATCH_ENABLED!=true · shadow path',
       workflow_dispatch_result: result,
+      ...(claimed ? { claimed } : {}),
       ...(cap_evaluation ? { cap_evaluation } : {}),
     }
   }
@@ -293,6 +326,7 @@ export async function dispatchOneIntake(
     kind: 'dispatched_failed',
     detail: `dispatcher reason=${result.reason} · ${result.detail ?? ''}`,
     workflow_dispatch_result: result,
+    ...(claimed ? { claimed } : {}),
     ...(cap_evaluation ? { cap_evaluation } : {}),
   }
 }

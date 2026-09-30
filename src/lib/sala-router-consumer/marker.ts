@@ -23,8 +23,10 @@ import {
 } from '@/lib/sala-event-log'
 import {
   ATTEMPT_MARKER_PREFIX,
+  CLAIM_MARKER_PREFIX,
   DISPATCH_MARKER_PREFIX,
   GIVEUP_MARKER_PREFIX,
+  LOST_ALERT_MARKER_PREFIX,
   MAX_DISPATCH_ATTEMPTS,
   type DispatchOutcomeKind,
   type ParsedIntakeEvent,
@@ -32,7 +34,7 @@ import {
 
 export interface BuildMarkerInput {
   readonly intake: ParsedIntakeEvent
-  readonly kind: DispatchOutcomeKind
+  readonly kind: DispatchOutcomeKind | 'claimed'
   readonly detail: string
   readonly dispatch_result?: Record<string, unknown>
   /**
@@ -52,16 +54,18 @@ export interface BuildMarkerInput {
  * 2026-09-07). `dispatch` es el ÚNICO que significa "se despachó" y el
  * único que puede excluir el hilo por mérito propio.
  */
-export type MarkerClass = 'dispatch' | 'attempt' | 'giveup'
+export type MarkerClass = 'dispatch' | 'attempt' | 'giveup' | 'claim' | 'lostalert'
 
 const PREFIJO: Record<MarkerClass, string> = {
   dispatch: DISPATCH_MARKER_PREFIX,
   attempt: ATTEMPT_MARKER_PREFIX,
   giveup: GIVEUP_MARKER_PREFIX,
+  claim: CLAIM_MARKER_PREFIX,
+  lostalert: LOST_ALERT_MARKER_PREFIX,
 }
 
 export function buildDispatchMarkerEvent(
-  input: BuildMarkerInput & { readonly marker_class?: MarkerClass; readonly attempt_no?: number },
+  input: BuildMarkerInput & { readonly marker_class?: MarkerClass; readonly attempt_no?: number; readonly after_claim?: boolean; readonly extra?: Record<string, unknown> },
 ): EventAppendInput {
   const { intake } = input
   const clase: MarkerClass = input.marker_class ?? 'dispatch'
@@ -100,7 +104,11 @@ export function buildDispatchMarkerEvent(
       // dicen que NO salió, y `giveup` además deja el motivo a la vista.
       marker_class: clase,
       despachado: clase === 'dispatch',
-      ...(clase !== 'dispatch' ? { attempt_no, max_attempts: MAX_DISPATCH_ATTEMPTS } : {}),
+      ...(clase === 'attempt' || clase === 'giveup' ? { attempt_no, max_attempts: MAX_DISPATCH_ATTEMPTS } : {}),
+      // PAQUETE · el reclamo dice QUÉ es: reclamado, NO despachado · y un abandono tras reclamo declara que el sobre se PERDIÓ a propósito (preferimos perder a duplicar)
+      ...(clase === 'claim' ? { reclamado: true } : {}),
+      ...(clase === 'giveup' && input.after_claim ? { perdido_tras_reclamo: true, no_pude_despachar: true, motivo: input.detail } : {}),
+      ...(input.extra ?? {}),
       ...(clase === 'giveup'
         ? { no_pude_despachar: true, motivo: input.detail, tope_agotado: true }
         : {}),

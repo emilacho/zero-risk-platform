@@ -69,6 +69,32 @@ export const GIVEUP_MARKER_PREFIX = 'router.giveup.'
  *  3 = mismo tope que el resto del sistema (retries cap = 3). */
 export const MAX_DISPATCH_ATTEMPTS = 3
 
+// ---------------------------------------------------------------------
+// PAQUETE DEL REPARTIDOR · CC#1 · 2026-09-30 · palanca SALA_ROUTER_PAQUETE_ENABLED (nace APAGADA).
+//   router.claim.*      → SE RECLAMÓ el sobre ANTES de disparar · EXCLUYE el hilo (si el tic muere o el disparo no vuelve, NO se re-dispara: se pierde en vez de duplicarse)
+//   router.lostalert.*  → el vigilante ya avisó de un reclamo sin desenlace (para avisar UNA sola vez)
+// ---------------------------------------------------------------------
+export const CLAIM_MARKER_PREFIX = 'router.claim.'
+export const LOST_ALERT_MARKER_PREFIX = 'router.lostalert.'
+/** tope de tiempo del tic (pieza ②): muy por encima de lo normal (0-9 s) y por debajo de cualquier ciclo */
+export const TICK_DEADLINE_MS_DEFAULT = 60_000
+/** el candado vence solo si su dueño muere (pieza ①) · un poco más que el tope de tiempo */
+export const TICK_LOCK_TTL_MS = 90_000
+/** un reclamo sin desenlace más viejo que esto es un sobre PERDIDO (pieza ⑤) · un despacho sano tarda segundos */
+export const CLAIM_STALE_MS = 5 * 60_000
+
+/** Canon canonical · un sobre reclamado que no llegó a desenlace */
+export interface LostClaim {
+  readonly stream_id: string
+  readonly claim_event_id: string
+  readonly claimed_at: string
+  readonly age_ms: number
+  readonly tenant_id: string
+  readonly client_id: string
+  readonly journey_type: string
+  readonly intake_event_id: string | null
+}
+
 /** Canon canonical · el ÚNICO desenlace que puede escribir la marca de
  *  despacho. Todo lo demás cuenta como intento (o abandono al tope). */
 export const DISPATCHED_KIND = 'dispatched_ok'
@@ -120,6 +146,8 @@ export type DispatchOutcomeKind =
    */
   | 'skipped_cap_blocked'
   | 'marker_write_failed'
+  /** PAQUETE · otro tic ya reclamó este sobre (no se dispara dos veces) */
+  | 'skipped_already_claimed'
 
 export interface DispatchOutcome {
   readonly intake_event_id: string
@@ -141,6 +169,10 @@ export interface ConsumerTickResult {
   readonly scanned: number
   readonly processed: number
   readonly outcomes: ReadonlyArray<DispatchOutcome>
+  /** PAQUETE · true si el tope de tiempo cortó el recorrido de la fila (lo que quedó se toma en el próximo tic) */
+  readonly stopped_by_deadline?: boolean
+  /** PAQUETE · sobres reclamados sin desenlace hallados en este tic (el vigilante) */
+  readonly lost_claims?: ReadonlyArray<LostClaim>
 }
 
 // =====================================================================

@@ -39,10 +39,18 @@ export type {
 } from './dispatch'
 
 export { consumeIntakeTick } from './orchestrator'
+export { CandadoEnMemoria, candadoEnSupabase } from './lock'
+export type { CandadoDelTic, TomaDelCandado } from './lock'
+export { findLostClaims } from './query'
 export type { OrchestratorInput } from './orchestrator'
 
 export { wireCapSpendQuerySupabase } from './cap-spend-query'
 export type { WireCapSpendQueryOptions } from './cap-spend-query'
+
+/** PAQUETE del repartidor (candado · tope de tiempo · reclamar antes de disparar) · NACE APAGADA · sólo `true` literal lo enciende */
+export function isPaqueteEnabled(): boolean {
+  return process.env.SALA_ROUTER_PAQUETE_ENABLED === 'true'
+}
 
 /** Canon canonical · whether the consumer endpoint is enabled.
  *  Default-OFF · canon §144 escalón 6 sibling. Tests inject explicit. */
