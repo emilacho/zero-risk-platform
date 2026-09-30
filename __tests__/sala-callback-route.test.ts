@@ -225,6 +225,23 @@ describe('POST /api/sala/callback · happy path · terminal append', () => {
     expect(events[0].payload.summary).toEqual({ notion: 'ok', handoff_score: 0.85 })
   })
 
+  it('🔴 el asiento de cierre lleva el journey REAL del flujo (brief → BRIEF · planeación → PRODUCE) y ONBOARD sólo si es el alta o un flujo desconocido', async () => {
+    const { POST } = await importRoute()
+    const casos: Array<[string, string, string]> = [
+      ['PQdIgbuFexuBsoh8', 'corr-brief', 'BRIEF'],
+      ['X9F0zp6LQ2xGEYVS', 'corr-plan', 'PRODUCE'],
+      ['LyVoKcrypS5uLyuu', 'corr-alta', 'ONBOARD'],
+      ['flujo-desconocido', 'corr-otro', 'ONBOARD'],
+    ]
+    for (const [i, [worker_id, corr, esperado]] of casos.entries()) {
+      const stream = `bbbbbbbb-bbbb-bbbb-bbbb-${String(i).padStart(12, '0')}`
+      const res = await POST(makeReq(validBody({ worker_id, _sala_correlation_id: corr, _journey_id: stream }), { 'x-api-key': 'test-callback-key' }))
+      expect((await res.json()).ok, worker_id).toBe(true)
+      const ev = await sharedStorage.select({ tenant_id: TENANT, stream_id: stream })
+      expect(ev[0].journey_type, worker_id).toBe(esperado)
+    }
+  })
+
   it('canon · 2x same correlation_id → idempotency_key collision', async () => {
     const { POST } = await importRoute()
     await POST(makeReq(validBody(), { 'x-api-key': 'test-callback-key' }))
