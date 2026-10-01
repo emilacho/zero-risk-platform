@@ -25,6 +25,8 @@ import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.j
 import { validarDireccionDeVuelta, esperaForzadaMs, emitirEventoPostHog } from './lib/entrega-de-la-vuelta.js'
 import { correrYEntregar } from './lib/correr-y-entregar.js'
 import { resolverTopeUsd, resolverRazonamiento } from './lib/tope-por-corrida.js'
+import { createRequire } from 'node:module'
+import { resolve as pathResolve } from 'node:path'
 
 /**
  * Capture an agent error in Sentry with canonical context tags. Sprint
@@ -156,6 +158,9 @@ interface RunSdkBody {
   /** RAZONAMIENTO limitado por corrida · opt-in · ver lib/tope-por-corrida.ts */
   thinkingMode?: unknown
   thinking_mode?: unknown
+  /** LÍMITES de «mirar afuera» por corrida · opt-in · ver lib/mcp/mirar-afuera-limites.js */
+  mirarAfueraLimites?: unknown
+  mirar_afuera_limites?: unknown
   test_delay_ms?: unknown
 }
 
@@ -355,6 +360,15 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     return
   }
 
+  // LÍMITES de «mirar afuera» (opt-in) · un límite MAL ESCRITO se rechaza (400) ANTES de gastar: ignorarlo dejaría pasar un cupo que se creía puesto
+  // (el módulo es JS y vive donde viven los servidores MCP: en `src/lib/mcp/` de la imagen · se resuelve desde la carpeta del servicio, igual que el registro monta los servidores)
+  const { resolverLimites } = createRequire(pathResolve(process.cwd(), 'package.json'))('./src/lib/mcp/mirar-afuera-limites.js') as { resolverLimites: (...c: unknown[]) => { ok: boolean; valor?: { maxPedidos: number | null; permitidos: string[] | null } | null; motivo?: string } }
+  const limitesMirar = resolverLimites(body.mirarAfueraLimites, body.mirar_afuera_limites, ctxObj.mirarAfueraLimites, ctxObj.mirar_afuera_limites)
+  if (!limitesMirar.ok) {
+    res.status(400).json({ success: false, error: 'mirar_afuera_limites_invalid', code: 'E-MIRAR-LIMITES-INVALID', detail: limitesMirar.motivo })
+    return
+  }
+
   const input: AgentRunInput = {
     agentName: agentName,
     task: body.task,
@@ -369,6 +383,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     dryRun,
     ...(tope.valor !== null ? { maxBudgetUsd: tope.valor } : {}),
     ...(razonamiento.valor !== null ? { thinkingMode: razonamiento.valor } : {}),
+    ...(limitesMirar.valor ? { mirarAfueraLimites: limitesMirar.valor } : {}),
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }
 

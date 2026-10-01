@@ -874,6 +874,27 @@ export async function POST(request: Request) {
       }
       razonamientoDelPedido = razCrudo
     }
+    // LÍMITES de «mirar afuera» (opt-in · CC#1 · 01-oct) · «máximo N pedidos» y «sólo estas opciones» los hace cumplir el SISTEMA (el corredor), no el texto del pedido.
+    // Aquí sólo se valida la FORMA (antes de gastar) y se reenvía tal cual; el corredor valida contra el catálogo y los hace cumplir. Un valor MAL ESCRITO se rechaza: ignorarlo dejaría pasar un cupo que se creía puesto.
+    const limArriba = (body as unknown as { mirar_afuera_limites?: unknown }).mirar_afuera_limites
+    const limCrudo = limArriba !== undefined ? limArriba : ctx.mirar_afuera_limites
+    let limitesMirarAfuera: { max_pedidos?: number; permitidos?: string[] } | null = null
+    if (limCrudo !== undefined) {
+      const l = limCrudo as { max_pedidos?: unknown; permitidos?: unknown } | null
+      const objeto = l !== null && typeof l === 'object' && !Array.isArray(l)
+      const maxOk = objeto && l.max_pedidos !== undefined && typeof l.max_pedidos === 'number' && Number.isInteger(l.max_pedidos) && l.max_pedidos >= 1 && l.max_pedidos <= 20
+      const permOk = objeto && l.permitidos !== undefined && Array.isArray(l.permitidos) && l.permitidos.length >= 1 && l.permitidos.length <= 20 && l.permitidos.every((x) => typeof x === 'string')
+      const sobran = objeto ? Object.keys(l).filter((k) => k !== 'max_pedidos' && k !== 'permitidos') : []
+      const maxMalo = objeto && l.max_pedidos !== undefined && !maxOk
+      const permMalo = objeto && l.permitidos !== undefined && !permOk
+      if (!objeto || (!maxOk && !permOk) || maxMalo || permMalo || sobran.length) {
+        return NextResponse.json(
+          { error: 'mirar_afuera_limites_invalid', code: 'E-MIRAR-LIMITES-INVALID', detail: 'mirar_afuera_limites debe ser { max_pedidos?: entero 1..20, permitidos?: lista de 1..20 textos } con al menos uno · un límite mal escrito no se ignora' },
+          { status: 400 },
+        )
+      }
+      limitesMirarAfuera = { ...(maxOk ? { max_pedidos: l!.max_pedidos as number } : {}), ...(permOk ? { permitidos: l!.permitidos as string[] } : {}) }
+    }
 
     // ── §150 spend gate · GENERIC real brake before invoking the model ────
     // Closes the P0 gap (CC#3 2026-06-30): the cap only lived at the
@@ -1017,6 +1038,8 @@ export async function POST(request: Request) {
       ...(topeDelPedido !== null ? { max_budget_usd: topeDelPedido } : {}),
       // RAZONAMIENTO limitado (opt-in) · ausente ⇒ el cuerpo de siempre
       ...(razonamientoDelPedido !== null ? { thinking_mode: razonamientoDelPedido } : {}),
+      // LÍMITES de «mirar afuera» por corrida (opt-in) · ausente ⇒ el cuerpo de siempre
+      ...(limitesMirarAfuera !== null ? { mirar_afuera_limites: limitesMirarAfuera } : {}),
       // ARQ 2026-09-30 · la vuelta la entrega el corredor (sólo si el pedido interno lo trae · ausente ⇒ cuerpo de siempre).
       ...(entregaDelCorredor
         ? {
