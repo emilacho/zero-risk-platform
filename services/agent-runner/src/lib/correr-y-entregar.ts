@@ -28,6 +28,8 @@ export interface DepsDeEntrega {
     brainEnrichment?: unknown
     cacheMetrics?: unknown
     error?: string
+    partial?: boolean
+    partialReason?: string
   }>
   entregar?: (url: URL, cuerpo: unknown, alIntentar: (i: IntentoDeEntrega) => void) => Promise<ResultadoDeEntrega>
   registrarIntento: (i: IntentoDeEntrega) => void

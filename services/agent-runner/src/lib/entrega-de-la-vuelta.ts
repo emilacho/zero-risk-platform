@@ -147,6 +147,8 @@ export function cuerpoDeLaVuelta(
     brainEnrichment?: unknown
     cacheMetrics?: unknown
     error?: string
+    partial?: boolean
+    partialReason?: string
   },
   contexto: { agentName: string; dispatchKey: string | null },
 ): Record<string, unknown> {
@@ -159,6 +161,17 @@ export function cuerpoDeLaVuelta(
       error_kind: 'runner_run_failed',
       // lo gastado también viaja en el FALLO: un corte por tope gasta, y el parte tiene que poder decir cuánto
       ...(typeof result.costUsd === 'number' ? { cost_usd: result.costUsd } : {}),
+      // 🔴 RESULTADO PARCIAL (CC#1 · 2026-10-01): un fallo con tope opt-in entrega lo escrito hasta ahí MARCADO como parcial (nunca como respuesta) y las fichas gastadas · antes el texto se perdía aquí
+      ...(result.partial === true
+        ? {
+            partial: true,
+            partial_reason: result.partialReason ?? 'error_del_sdk',
+            response: typeof result.response === 'string' ? result.response : '',
+            ...(typeof result.inputTokens === 'number' ? { input_tokens: result.inputTokens } : {}),
+            ...(typeof result.outputTokens === 'number' ? { output_tokens: result.outputTokens } : {}),
+            ...(typeof result.model === 'string' ? { model: result.model } : {}),
+          }
+        : {}),
       ...marca,
     }
   }
