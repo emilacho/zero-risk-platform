@@ -386,6 +386,7 @@ describe('⑥ el canon de Emilio como propiedad del grafo (estructural · sin te
     const sig = (nombre: string) => f.connections[nombre].main[0][0].node
     for (const [q, g] of [[N.parte, N.guardaParte], [N.manual, N.guardaManual], [N.fotos, N.guardaFotos], [N.repetida, N.guardaRepetida], [N.ficha, N.cuerpo]]) expect(sig(q)).toBe(g)
     // los nodos de red de aguas abajo se leen en un Code que declara el fallo
+    expect(sig(N.salud)).toBe(N.guardaSalud) // la comprobación previa al corredor también
     expect(sig(N.productor)).toBe(N.acepto) // el rechazo síncrono de run-sdk se declara ANTES de esperar (cerrar el rojo, 01-oct)
     expect(sig(N.acepto)).toBe(N.espera)
     expect(sig(N.espera)).toBe(N.vuelta)

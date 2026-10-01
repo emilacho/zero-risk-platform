@@ -29,6 +29,8 @@ export const N = {
   guardaRepetida: '④ ¿Ya hay pieza de este brief? · guarda',
   ficha: '⑤ Ficha del cliente',
   cuerpo: '⑤ Armar el cuerpo del productor',
+  salud: '⑤ ¿Qué sabe hacer el corredor?',
+  guardaSalud: '⑤ GUARDA · el corredor trae los límites',
   productor: '⑥ Productor (run-sdk)',
   acepto: '⑥ ¿Aceptó el pedido?',
   espera: '⑥ Esperar al productor',
@@ -62,6 +64,7 @@ export function codigoDeNodo(clave) {
     case 'guardaFotos': return leer('n3-guarda-fotos.js')
     case 'guardaRepetida': return leer('n4-guarda-repetida.js')
     case 'cuerpo': return leer('n5-armar-cuerpo.js')
+    case 'guardaSalud': return leer('n5b-corredor-trae-limites.js')
     case 'acepto': return leer('n6a-acepto.js')
     case 'vuelta': return leer('n6-llego-la-vuelta.js')
     case 'chequeos': return sinExports(leer('pieza-chequeos.js')) + '\n' + leer('n7-chequeos-nodo.js')
@@ -95,6 +98,9 @@ export function construirFlujo({ path = 'zero-risk/pieza', nombre = 'Zero Risk �
     code(N.guardaRepetida, 'guardaRepetida', x(9)),
     get(N.ficha, `=${SB}/rest/v1/clients?select=*&id=eq.${cid}&limit=1`, x(10)),
     code(N.cuerpo, 'cuerpo', x(11)),
+    // 🔴 ANTES de pagar: ¿el corredor trae los límites de «mirar afuera»? (GET /health · sin llave · sin reintento · el fallo lo declara la GUARDA de abajo)
+    { parameters: { method: 'GET', url: "={{ ($env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app').replace(/\\/+$/, '') }}/health", options: { timeout: 10000 } }, name: N.salud, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [11.4 * 260, 0], onError: 'continueRegularOutput', alwaysOutputData: true },
+    code(N.guardaSalud, 'guardaSalud', [11.7 * 260, 0]),
     {
       // 🔴 SIN `retryOnFail`: el productor PAGA. Una llamada, un resultado (medido 01-oct: con reintento una llamada cortada por tope se cobró 4 veces).
       parameters: {
@@ -141,7 +147,7 @@ export function construirFlujo({ path = 'zero-risk/pieza', nombre = 'Zero Risk �
   const links = [
     enlace(N.webhook, N.sobre), enlace(N.sobre, N.parte), enlace(N.parte, N.guardaParte), enlace(N.guardaParte, N.manual),
     enlace(N.manual, N.guardaManual), enlace(N.guardaManual, N.fotos), enlace(N.fotos, N.guardaFotos), enlace(N.guardaFotos, N.repetida),
-    enlace(N.repetida, N.guardaRepetida), enlace(N.guardaRepetida, N.ficha), enlace(N.ficha, N.cuerpo), enlace(N.cuerpo, N.productor),
+    enlace(N.repetida, N.guardaRepetida), enlace(N.guardaRepetida, N.ficha), enlace(N.ficha, N.cuerpo), enlace(N.cuerpo, N.salud), enlace(N.salud, N.guardaSalud), enlace(N.guardaSalud, N.productor),
     enlace(N.productor, N.acepto), enlace(N.acepto, N.espera), enlace(N.espera, N.vuelta), enlace(N.vuelta, N.chequeos), enlace(N.chequeos, N.seco),
     enlace(N.seco, N.secoCierre, 0), // verdadero = modo seco
     enlace(N.seco, N.guardar, 1), // falso = modo real

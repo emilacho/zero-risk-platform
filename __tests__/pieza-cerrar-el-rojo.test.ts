@@ -107,3 +107,67 @@ describe('② un rechazo SÍNCRONO de run-sdk se DETIENE YA, con su motivo', () 
     expect(padres).toEqual([N.acepto])
   })
 })
+
+// ── ③ OBLIGATORIO · el flujo verifica que el corredor trae los límites (nada depende de que alguien recuerde el orden de publicación) ───────────────────────────────
+describe('③ el corredor trae los límites de «mirar afuera» · si no, se DETIENE antes de gastar', () => {
+  const CUATRO = ['instagram', 'ficha_en_mapas', 'leer_el_sitio', 'que_dice_el_buscador']
+  const LIM = { max_pedidos: 4, permitidos: CUATRO }
+  const cuerpoArmado = { ...SOBRE, cuerpo: { max_budget_usd: 0.6, mirar_afuera_limites: LIM } }
+  const guardaSalud = (salud: unknown) => correrNodo('guardaSalud', { input: [salud], refs: { '⑤ Armar el cuerpo del productor': cuerpoArmado } })
+  const acepto = (acuse: unknown) => correrNodo('acepto', { input: [acuse], refs: { '⑤ Armar el cuerpo del productor': cuerpoArmado } })
+  const ACUSE = { accepted: true, will_callback: true, dispatch_key: 'dispatch:W:a:1', ack_timestamp: 't' }
+
+  it('el flujo tiene la comprobación previa entre armar el cuerpo y pagar · cadena en serie · orden por el grafo', () => {
+    const f = construirFlujo()
+    expect(f.connections[N.cuerpo].main[0][0].node).toBe(N.salud)
+    expect(f.connections[N.salud].main[0][0].node).toBe(N.guardaSalud)
+    expect(f.connections[N.guardaSalud].main[0][0].node).toBe(N.productor)
+    const salud = f.nodes.find((n: { name: string }) => n.name === N.salud)
+    expect(salud.parameters.method).toBe('GET')
+    expect(salud.parameters.url).toMatch(/\/health/)
+    expect(salud.alwaysOutputData).toBe(true)
+    expect('retryOnFail' in salud).toBe(false)
+    expect(lecturasFueraDeOrden(f)).toEqual([])
+  })
+  it('✅ el corredor dice que trae los límites ⇒ pasa y devuelve el MISMO cuerpo (el productor lo manda tal cual)', async () => {
+    const [{ json }] = await guardaSalud({ status: 'ok', uptimeSeconds: 5, capacidades: { mirar_afuera_limites: 1 } })
+    expect(json.cuerpo.mirar_afuera_limites).toEqual(LIM)
+  })
+  it.each([
+    ['🔴 un corredor SIN el cambio (el /health de HOY: sin capacidades)', { status: 'ok', uptimeSeconds: 5 }, /PIEZA_CORREDOR_SIN_LIMITES/],
+    ['capacidades sin la clave', { status: 'ok', capacidades: {} }, /PIEZA_CORREDOR_SIN_LIMITES/],
+    ['capacidad en 0', { capacidades: { mirar_afuera_limites: 0 } }, /PIEZA_CORREDOR_SIN_LIMITES/],
+    ['capacidades que no es un objeto', { capacidades: 'si' }, /PIEZA_CORREDOR_SIN_LIMITES/],
+    ['la llamada falló (ítem de error de n8n)', { error: { message: 'ECONNREFUSED' } }, /PIEZA_CORREDOR_NO_RESPONDE/],
+    ['respuesta vacía', {}, /PIEZA_CORREDOR_SIN_LIMITES/],
+  ])('%s ⇒ se DETIENE ANTES de gastar', async (_n, salud, motivo) => {
+    await expect(guardaSalud(salud)).rejects.toThrow(motivo)
+  })
+
+  it('✅ el acuse hace ECO de los límites mandados ⇒ confirmado', async () => {
+    const [{ json }] = await acepto({ ...ACUSE, mirar_afuera_limites: LIM })
+    expect(json).toMatchObject({ pedido_aceptado: true, limites_confirmados: true })
+    // el mismo conjunto en otro orden también vale
+    expect((await acepto({ ...ACUSE, mirar_afuera_limites: { max_pedidos: 4, permitidos: [...CUATRO].reverse() } }))[0].json.limites_confirmados).toBe(true)
+  })
+  it.each([
+    ['🔴 SIN eco (Vercel viejo / el camino perdió el campo)', ACUSE],
+    ['eco vacío', { ...ACUSE, mirar_afuera_limites: {} }],
+    ['eco con OTRO máximo', { ...ACUSE, mirar_afuera_limites: { max_pedidos: 20, permitidos: CUATRO } }],
+    ['eco con OTRAS opciones (incluye un anuncio de pago)', { ...ACUSE, mirar_afuera_limites: { max_pedidos: 4, permitidos: [...CUATRO, 'anuncios_en_meta'] } }],
+    ['eco con MENOS opciones', { ...ACUSE, mirar_afuera_limites: { max_pedidos: 4, permitidos: ['instagram'] } }],
+    ['eco sin la lista', { ...ACUSE, mirar_afuera_limites: { max_pedidos: 4 } }],
+    ['eco que no es objeto', { ...ACUSE, mirar_afuera_limites: 'ok' }],
+  ])('%s ⇒ PIEZA_LIMITES_NO_ACEPTADOS · se DETIENE', async (_n, acuse) => {
+    await expect(acepto(acuse)).rejects.toThrow(/PIEZA_LIMITES_NO_ACEPTADOS/)
+  })
+  it('CONTROL POSITIVO: un cuerpo SIN límites (no es el caso de la pieza) no exige eco · y el aceptado/rechazado de siempre sigue igual', async () => {
+    const sinLimites = (acuse: unknown) => correrNodo('acepto', { input: [acuse], refs: { '⑤ Armar el cuerpo del productor': { ...SOBRE, cuerpo: { max_budget_usd: 0.6 } } } })
+    expect((await sinLimites(ACUSE))[0].json).toMatchObject({ pedido_aceptado: true, limites_confirmados: false })
+    await expect(sinLimites({ error: 'images_invalid', code: 'E-IMAGES-INVALID' })).rejects.toThrow(/PIEZA_PEDIDO_RECHAZADO/)
+  })
+  it('el cuerpo REAL que arma el flujo lleva los límites (si no los llevara, el eco no se exigiría)', async () => {
+    const [{ json }] = await correrNodo('cuerpo', { input: [{ id: CID, name: 'Mi Negocio', config: { apify: { own_handles: { instagram: ['minegocio'] } } } }], refs: { '④ ¿Ya hay pieza de este brief? · guarda': { ...SOBRE, brief: {}, brief_texto: 'x', fotos: [] } } })
+    expect(json.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['instagram', 'ficha_en_mapas', 'que_dice_el_buscador'] })
+  })
+})

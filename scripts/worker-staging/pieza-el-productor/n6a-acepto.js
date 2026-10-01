@@ -10,7 +10,18 @@ if (r.error && typeof r.error === 'object') {
   throw new Error('PIEZA_PEDIDO_NO_LLEGO · la llamada a run-sdk falló antes de recibir respuesta (' + String(r.error.message || r.error.name || 'sin detalle').slice(0, 160) + ') · el agente NO se puede dar por arrancado · se DETIENE antes de esperar')
 }
 if (r.accepted === true) {
-  return [{ json: { ...c, pedido_aceptado: true, dispatch_key: r.dispatch_key || null, aceptado_en: r.ack_timestamp || null } }]
+  // 🔴 EL ECO DE LOS LÍMITES (obligatorio · canon de Emilio): el acuse debe devolver EXACTAMENTE los límites de «mirar afuera» que se mandaron. Sin eco ⇒ el camino los perdió (Vercel viejo) o no los entendió.
+  // Ojo: en la vuelta por callback el acuse es inmediato y el trabajo ya se programó: el agente PUDO arrancar. Lo acota el tope de gasto (max_budget_usd) y por eso la comprobación PREVIA al corredor (`⑤ GUARDA`) es la que impide el caso normal.
+  const pedidos = c.cuerpo && c.cuerpo.mirar_afuera_limites
+  if (pedidos) {
+    const eco = r.mirar_afuera_limites
+    const igual = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b)
+    const mismosPermitidos = eco && Array.isArray(eco.permitidos) && Array.isArray(pedidos.permitidos) && eco.permitidos.length === pedidos.permitidos.length && pedidos.permitidos.every((x) => eco.permitidos.indexOf(x) !== -1)
+    if (!eco || typeof eco !== 'object' || !igual(eco.max_pedidos, pedidos.max_pedidos) || (pedidos.permitidos && !mismosPermitidos)) {
+      throw new Error('PIEZA_LIMITES_NO_ACEPTADOS · run-sdk aceptó el pedido pero NO devolvió el eco de los límites de «mirar afuera» (mandé ' + JSON.stringify(pedidos) + ' · volvió ' + JSON.stringify(eco === undefined ? null : eco) + ') · el camino los perdió o no los entendió · se DETIENE · el agente pudo arrancar sin ellos (lo acota max_budget_usd) · revisar el despliegue de Vercel y del corredor')
+    }
+  }
+  return [{ json: { ...c, pedido_aceptado: true, dispatch_key: r.dispatch_key || null, aceptado_en: r.ack_timestamp || null, limites_confirmados: !!pedidos } }]
 }
 if (Object.keys(r).length === 0) {
   throw new Error('PIEZA_PEDIDO_NO_LLEGO · run-sdk contestó vacío · el agente NO se puede dar por arrancado · se DETIENE antes de esperar')
