@@ -49,7 +49,7 @@ function inputFor(
 }
 
 describe('sala-integration · canon canonical libretos canon-loaded', () => {
-  it('canon · all 7 canonical journeys are available (BRIEF · séptimo tipo, 29-sep)', () => {
+  it('canon · all 8 canonical journeys are available (BRIEF · séptimo tipo 29-sep · PIEZAS · octavo 01-oct)', () => {
     const types = Object.keys(CANONICAL_LIBRETOS)
     expect(types.sort()).toEqual([
       'ACQUIRE',
@@ -57,6 +57,7 @@ describe('sala-integration · canon canonical libretos canon-loaded', () => {
       'BRIEF',
       'GROWTH',
       'ONBOARD',
+      'PIEZAS',
       'PRODUCE',
       'REVIEW',
     ])

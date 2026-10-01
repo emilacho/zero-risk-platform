@@ -40,6 +40,7 @@ export type JourneyType =
   | 'ACQUIRE'      // lead intake + qualification
   | 'GROWTH'       // expansion · YouTube tier per-client (§144 pending)
   | 'BRIEF'        // parte de trabajo · el campaign brief que baja el plan a entregables (§144 Emilio 29-sep)
+  | 'PIEZAS'       // el productor · UN brief del parte → UNA pieza (titular · texto · prompt de imagen) · octavo tipo (§144 Emilio 01-oct) · NO es PRODUCE (planeación)
 
 // ─── Step types ──────────────────────────────────────────────────────
 //

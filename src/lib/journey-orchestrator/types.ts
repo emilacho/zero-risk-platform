@@ -17,6 +17,7 @@ export const JOURNEY_TYPES = [
   'REVIEW',
   'GROWTH',
   'BRIEF',
+  'PIEZAS',
 ] as const
 
 export type JourneyType = (typeof JOURNEY_TYPES)[number]

@@ -34,6 +34,7 @@ const KNOWN_JOURNEYS: ReadonlyArray<JourneyType> = [
   'ACQUIRE',
   'GROWTH',
   'BRIEF',
+  'PIEZAS',
 ]
 
 function isNonEmptyString(s: unknown): s is string {
