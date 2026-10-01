@@ -156,6 +156,8 @@ const CLIENT_BRAIN_DENY: ReadonlySet<string> = new Set([
 export interface AgentMcpContext {
   agentSlug?: string
   clientId?: string
+  /** LÍMITES de «mirar afuera» por corrida (opt-in · CC#1 · 01-oct) · ausente ⇒ el montaje de siempre · ver mcp/mirar-afuera-limites.js */
+  mirarAfueraLimites?: { maxPedidos?: number | null; permitidos?: string[] | null } | null
 }
 
 export interface McpServerConfig {
@@ -231,6 +233,9 @@ export function buildMcpServers(
         AGENT_SLUG: slug,
         APIFY_SERVICE_URL: process.env.APIFY_SERVICE_URL ?? '',
         PATH: process.env.PATH ?? '',
+        // límites por corrida (opt-in) · sin ellos NO se agrega ninguna clave (el entorno de siempre)
+        ...(typeof ctx.mirarAfueraLimites?.maxPedidos === 'number' ? { MIRAR_AFUERA_MAX_PEDIDOS: String(ctx.mirarAfueraLimites.maxPedidos) } : {}),
+        ...(Array.isArray(ctx.mirarAfueraLimites?.permitidos) && ctx.mirarAfueraLimites.permitidos.length ? { MIRAR_AFUERA_PERMITIDOS: ctx.mirarAfueraLimites.permitidos.join(',') } : {}),
       },
     }
   }

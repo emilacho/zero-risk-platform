@@ -31,6 +31,11 @@ jobs:
           rm -f pnpm-lock.yaml
           pnpm install
 
+      - name: Install agent-runner dependencies
+        # 🔴 (CC#1 · 01-oct · PR #418) las pruebas «de punta a punta» de mirar_afuera arrancan el servidor MCP REAL y le hablan con el cliente del SDK de MCP: ambos viven en las dependencias del
+        # SERVICIO (`services/agent-runner`), no en las de la raíz. Sin este paso esas pruebas no encontraban `@modelcontextprotocol/sdk` y el CI fallaba (medido en el CI de GitHub). NO se saltan: corren.
+        run: pnpm --dir services/agent-runner install --frozen-lockfile=false
+
       - name: Typecheck
         run: pnpm typecheck
 

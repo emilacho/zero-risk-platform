@@ -25,6 +25,7 @@ import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.j
 import { validarDireccionDeVuelta, esperaForzadaMs, emitirEventoPostHog } from './lib/entrega-de-la-vuelta.js'
 import { correrYEntregar } from './lib/correr-y-entregar.js'
 import { resolverTopeUsd, resolverRazonamiento } from './lib/tope-por-corrida.js'
+import { limitesDelPedido, ecoDeLimites, CAPACIDADES_DEL_CORREDOR } from './lib/mirar-afuera-pedido.js'
 
 /**
  * Capture an agent error in Sentry with canonical context tags. Sprint
@@ -87,6 +88,8 @@ app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
+    // lo que este corredor sabe hacer · un flujo lo comprueba ANTES de gastar (PR #418)
+    capacidades: CAPACIDADES_DEL_CORREDOR,
   })
 })
 
@@ -156,6 +159,9 @@ interface RunSdkBody {
   /** RAZONAMIENTO limitado por corrida · opt-in · ver lib/tope-por-corrida.ts */
   thinkingMode?: unknown
   thinking_mode?: unknown
+  /** LÍMITES de «mirar afuera» por corrida · opt-in · ver lib/mcp/mirar-afuera-limites.js */
+  mirarAfueraLimites?: unknown
+  mirar_afuera_limites?: unknown
   test_delay_ms?: unknown
 }
 
@@ -355,6 +361,13 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     return
   }
 
+  // LÍMITES de «mirar afuera» (opt-in) · un límite MAL ESCRITO se rechaza (400) ANTES de gastar: ignorarlo dejaría pasar un cupo que se creía puesto
+  const limitesMirar = limitesDelPedido(body as unknown as Record<string, unknown>, ctxObj as Record<string, unknown>)
+  if (!limitesMirar.ok) {
+    res.status(400).json({ success: false, error: 'mirar_afuera_limites_invalid', code: 'E-MIRAR-LIMITES-INVALID', detail: limitesMirar.motivo })
+    return
+  }
+
   const input: AgentRunInput = {
     agentName: agentName,
     task: body.task,
@@ -369,6 +382,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     dryRun,
     ...(tope.valor !== null ? { maxBudgetUsd: tope.valor } : {}),
     ...(razonamiento.valor !== null ? { thinkingMode: razonamiento.valor } : {}),
+    ...(limitesMirar.valor ? { mirarAfueraLimites: limitesMirar.valor } : {}),
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }
 
@@ -397,7 +411,9 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'callback_url_not_allowed', code: 'E-CALLBACK-HOST', detail: direccion.motivo })
       return
     }
-    res.status(202).json({ accepted: true, delivered_by: 'runner', dispatch_key: dispatchKey, ack_timestamp: new Date().toISOString() })
+    // 🔴 EL ECO de los límites de «mirar afuera»: quien pidió puede VERIFICAR que se aceptaron (sin límites en el pedido ⇒ el acuse de siempre, ni existe la clave)
+    const eco = ecoDeLimites(limitesMirar.valor)
+    res.status(202).json({ accepted: true, delivered_by: 'runner', dispatch_key: dispatchKey, ack_timestamp: new Date().toISOString(), ...(eco ? { mirar_afuera_limites: eco } : {}) })
     void correrYEntregar(
       { url: direccion.url, agentName, dispatchKey, clientId: clientId ?? null, dryRun, esperaForzada: body.testDelayMs ?? body.test_delay_ms ?? ctxObj.test_delay_ms },
       {

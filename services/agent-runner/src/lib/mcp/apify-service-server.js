@@ -43,6 +43,12 @@ const PUERTA =
   'https://n8n-production-72be.up.railway.app/webhook/apify-service-workflow'
 
 const { CATALOGO } = require('./apify-catalogo.js')
+// 🔴 LÍMITES POR CORRIDA (CC#1 · 2026-10-01 · opt-in): «máximo N pedidos» y «sólo estas opciones» los hace cumplir el SISTEMA, no el texto del pedido. Ver mirar-afuera-limites.js.
+// Sin variables en el entorno (lo normal) NO cambia nada: el esquema ofrece las nueve y no hay tope.
+const { leerLimitesDeEntorno, crearControl } = require('./mirar-afuera-limites.js')
+const LIMITES = leerLimitesDeEntorno(process.env)
+const CONTROL = crearControl(LIMITES)
+const OPCIONES_OFRECIDAS = LIMITES.permitidos || Object.keys(CATALOGO)
 
 const server = new McpServer({ name: 'zero-risk-mirar-afuera', version: '1.0.0' })
 
@@ -59,10 +65,12 @@ server.registerTool(
       '🔴 Leé SIEMPRE el campo `cero` de la respuesta: distingue "se miró y NO HAY" de ' +
       '"NO SE PUDO MIRAR". No son lo mismo y no se pueden escribir igual en un plan.',
     inputSchema: {
+      // con límites en el pedido el esquema SÓLO ofrece lo permitido: el modelo ni siquiera puede nombrar las otras opciones
       que_mirar: z
-        .enum(Object.keys(CATALOGO))
+        .enum(OPCIONES_OFRECIDAS)
         .describe(
-          Object.entries(CATALOGO).map(([k, v]) => k + ' = ' + v.para).join(' · '),
+          Object.entries(CATALOGO).filter(([k]) => OPCIONES_OFRECIDAS.includes(k)).map(([k, v]) => k + ' = ' + v.para).join(' · ') +
+            (LIMITES.maxPedidos !== null ? ' · 🔴 en ESTA corrida: máximo ' + LIMITES.maxPedidos + ' pedidos en total, haz todos los que necesites de una vez' : ''),
         ),
       de_quien: z
         .string()
@@ -84,6 +92,11 @@ server.registerTool(
   async (args) => {
     const entrada = CATALOGO[args.que_mirar]
     const clientId = args.client_id || CLIENT_ID
+    // 🔴 el límite se revisa ANTES de tocar el Servicio: un rechazo no gasta nada (el cupo se toma de forma síncrona, así los pedidos «de una vez» tampoco se cuelan)
+    const permiso = CONTROL.revisar(args.que_mirar)
+    if (!permiso.ok) {
+      return respuesta({ se_pudo: false, limite: permiso.codigo, motivo: permiso.motivo })
+    }
     if (!clientId) {
       return respuesta({
         se_pudo: false,

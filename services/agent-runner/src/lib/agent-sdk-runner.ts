@@ -153,6 +153,8 @@ export interface AgentRunInput {
   maxBudgetUsd?: number
   /** RAZONAMIENTO limitado por corrida · OPT-IN · ver tope-por-corrida.ts · ausente ⇒ opciones del SDK de siempre */
   thinkingMode?: ModoDeRazonamiento
+  /** LÍMITES de «mirar afuera» por corrida · OPT-IN (CC#1 · 01-oct) · {maxPedidos, permitidos} ya validados · ausente ⇒ el montaje de siempre · ver mcp/mirar-afuera-limites.js */
+  mirarAfueraLimites?: { maxPedidos: number | null; permitidos: string[] | null }
   /**
    * Sprint 9 entry canon · dry-run mode. When `dryRun=true` · skip the
    * Anthropic SDK call · return a canonical fake StreamDrainResult · cost
@@ -570,6 +572,7 @@ function buildSdkOptions(
   const mcpServers = buildMcpServers({
     agentSlug: input.agentName,
     clientId: input.clientId ?? undefined,
+    ...(input.mirarAfueraLimites ? { mirarAfueraLimites: input.mirarAfueraLimites } : {}),
   })
   return {
     systemPrompt: systemPromptOption as unknown as Options['systemPrompt'],
@@ -1029,6 +1032,8 @@ function logExecution(
       nominal_agent: canonicalSlug,
       // RAZONAMIENTO limitado (opt-in) · null = razonamiento completo (como siempre) · queda en el libro para comparar corridas
       thinking_mode: input.thinkingMode ?? null,
+      // límites de «mirar afuera» de la corrida (opt-in) · quedan en el libro para auditar · null = sin límites (como siempre)
+      mirar_afuera_limites: input.mirarAfueraLimites ?? null,
       task_text: input.task.substring(0, 200),
       step_name: input.stepName ?? null,
       pipeline_id: input.pipelineId ?? null,
