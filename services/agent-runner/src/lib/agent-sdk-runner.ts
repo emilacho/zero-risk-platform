@@ -20,7 +20,7 @@
 
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import { opcionDeRazonamiento, type ModoDeRazonamiento, opcionDeTope, cortadoPorTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
+import { opcionDeRazonamiento, type ModoDeRazonamiento, opcionDeTope, cortadoPorTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk, reconciliarGastoDeFallo, causaDelParcial, TEXTO_PARCIAL_MAX_CHARS } from './tope-por-corrida.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
   armarBloquesDeImagen,
@@ -84,6 +84,9 @@ type SDKResultStreamMessage = {
   result?: string
   errors?: string[]
   session_id?: string
+  /** el medidor propio del SDK · en un corte por presupuesto `usage` llega en cero pero esto SÍ trae lo gastado (medido 01-oct · corrida 160410) */
+  total_cost_usd?: number
+  modelUsage?: Record<string, unknown>
   /**
    * Sprint 8 prompt-caching observability · the Agent SDK auto-enables
    * Anthropic prompt caching (per upstream issue
@@ -244,6 +247,13 @@ export interface AgentRunResult {
   costUsd: number
   durationMs: number
   model: string
+  /**
+   * RESULTADO PARCIAL (CC#1 · 2026-10-01) · `true` sólo cuando la corrida terminó en un fallo del resultado con tope opt-in (corte por presupuesto u otro error del SDK): `response` trae lo escrito hasta ahí
+   * (PARCIAL · no es una respuesta) y `costUsd`/tokens traen lo REALMENTE gastado. Ausente en toda corrida sana y en toda corrida sin tope.
+   */
+  partial?: boolean
+  /** por qué es parcial: el subtype del SDK (`error_max_budget_usd`…) · sólo con `partial` */
+  partialReason?: string
   /**
    * Sprint 8B · brain enrichment metadata. Always present (zero values when
    * clientId missing OR brain empty for client). Vercel proxy forwards this
@@ -610,6 +620,10 @@ export interface StreamDrainResult {
   resultIsError?: boolean
   /** la causa textual del fallo (`result`/`errors` del SDK o la excepción de salida) · null si no hubo */
   resultMessage?: string | null
+  /** `total_cost_usd` del mensaje `result` · null si no llegó · sólo se USA para reconciliar el gasto de un resultado fallido */
+  sdkTotalCostUsd?: number | null
+  /** `modelUsage` del mensaje `result` (por modelo) · null si no llegó · idem */
+  sdkModelUsage?: unknown
   responseText: string
   sessionId: string | null
   inputTokens: number
@@ -647,6 +661,8 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
   let resultSubtype: string | null = null
   let resultIsError = false
   let resultMessage: string | null = null
+  let sdkTotalCostUsd: number | null = null
+  let sdkModelUsage: unknown = null
   let sessionId: string | null = null
   let inputTokens = 0
   let outputTokens = 0
@@ -735,6 +751,8 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
       cacheCreation1hTokens = r.usage?.cache_creation?.ephemeral_1h_input_tokens ?? 0
       sessionId = sessionId ?? r.session_id ?? null
       resultSubtype = typeof r.subtype === 'string' ? r.subtype : null
+      sdkTotalCostUsd = typeof r.total_cost_usd === 'number' ? r.total_cost_usd : null
+      sdkModelUsage = r.modelUsage ?? null
       resultIsError = r.is_error === true
       resultMessage = resultIsError ? [typeof r.result === 'string' ? r.result : '', ...(Array.isArray(r.errors) ? r.errors : [])].filter((x) => x !== '').join(' | ').slice(0, 500) || null : null
     }
@@ -750,6 +768,8 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
     resultSubtype,
     resultIsError,
     resultMessage,
+    sdkTotalCostUsd,
+    sdkModelUsage,
     sessionId,
     inputTokens,
     outputTokens,
@@ -914,6 +934,8 @@ function logExecution(
     fidelityForcedEmit?: Record<string, unknown>
     /** causa del fallo del SDK (corte por tope u otro error del resultado) · null/ausente = corrida sana */
     fallo?: string | null
+    /** de dónde salió el gasto de un fallo: `fichas` | `sdk_total_cost_usd` | `sdk_model_usage` · null en una corrida sana */
+    fuenteDelGasto?: string | null
   },
 ): void {
   const { canonicalSlug, input, skills, drain, modelId, startedAtMs, durationMs, costUsd, brainEnrichment, cacheMetrics, fidelityForcedEmit } = args
@@ -1055,6 +1077,8 @@ function logExecution(
       ...(brainEnrichment.brain_error ? { brain_error: brainEnrichment.brain_error } : {}),
       cache_creation_5m_tokens: cacheMetrics.cache_creation_5m_tokens,
       cache_creation_1h_tokens: cacheMetrics.cache_creation_1h_tokens,
+      // 🔴 RESULTADO PARCIAL (CC#1 · 2026-10-01) · un fallo con tope opt-in deja AQUÍ el texto escrito hasta el corte (tope 100 mil) y de dónde salió el gasto · antes el texto sólo sobrevivía en Braintrust y el gasto se registraba en 0
+      ...(fallo ? { partial: true, partial_reason: causaDelParcial(drain.resultSubtype), partial_output: drain.responseText.slice(0, TEXTO_PARCIAL_MAX_CHARS), partial_output_truncated: drain.responseText.length > TEXTO_PARCIAL_MAX_CHARS, cost_source: args.fuenteDelGasto ?? null, sdk_total_cost_usd: drain.sdkTotalCostUsd ?? null } : {}),
       // Sprint 9 entry canon · dry-run audit trail · invocations where this
       // flag is true returned canonical fake responses · NO Anthropic call ·
       // forensics + post-deploy compliance queries should filter on this.
@@ -1554,14 +1578,39 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   }
 
   const durationMs = Date.now() - startedAt
-  const costUsd = costFor(
-    modelId,
-    drain.inputTokens,
-    drain.outputTokens,
-    drain.cacheReadInputTokens,
-    drain.cacheCreation5mTokens,
-    drain.cacheCreation1hTokens,
-  )
+  // 🔴 GASTO DE UN CORTE (CC#1 · 2026-10-01 · corrida 160410): el `result` de un corte por presupuesto llega con `usage` en CERO pero con el medidor propio del SDK (`total_cost_usd` · `modelUsage`).
+  // Sólo un resultado FALLIDO (corte por tope u otro error con tope opt-in) se reconcilia con ese medidor: el gasto REAL queda en el libro y lo ve el freno. Un éxito se calcula como siempre.
+  const esFallido = cortePorTope || falloDelSdk !== null
+  const costoPorFichas = (f: { input: number; output: number; cacheRead: number; cacheCreate: number }): number =>
+    costFor(modelId, f.input, f.output, f.cacheRead, drain.cacheCreation5mTokens, drain.cacheCreation1hTokens)
+  let costUsd: number
+  let fuenteDelGasto: string | null = null
+  if (esFallido) {
+    const g = reconciliarGastoDeFallo({
+      costoPorFichas,
+      inputTokens: drain.inputTokens,
+      outputTokens: drain.outputTokens,
+      cacheReadInputTokens: drain.cacheReadInputTokens,
+      cacheCreationInputTokens: drain.cacheCreationInputTokens,
+      sdkTotalCostUsd: drain.sdkTotalCostUsd,
+      sdkModelUsage: drain.sdkModelUsage,
+    })
+    drain.inputTokens = g.inputTokens
+    drain.outputTokens = g.outputTokens
+    drain.cacheReadInputTokens = g.cacheReadInputTokens
+    drain.cacheCreationInputTokens = g.cacheCreationInputTokens
+    costUsd = g.costUsd
+    fuenteDelGasto = g.fuente
+  } else {
+    costUsd = costFor(
+      modelId,
+      drain.inputTokens,
+      drain.outputTokens,
+      drain.cacheReadInputTokens,
+      drain.cacheCreation5mTokens,
+      drain.cacheCreation1hTokens,
+    )
+  }
 
   const brainEnrichmentMeta: BrainEnrichmentResultMeta = {
     brain_hit: enrichment.brain_hit,
@@ -1598,12 +1647,15 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     cacheMetrics: cacheMetricsMeta,
     fidelityForcedEmit: fidelityForcedEmitDebug,
     fallo: falloFinal,
+    fuenteDelGasto,
   })
 
   const result: AgentRunResult = {
     // un corte por presupuesto o un error del resultado es un FALLO declarado, nunca un éxito con texto parcial
     success: falloFinal === null,
     ...(falloFinal !== null ? { error: falloFinal } : {}),
+    // 🔴 un fallo con tope opt-in ENTREGA lo escrito hasta ahí, marcado PARCIAL, y lo gastado de verdad (antes: el texto se perdía en el camino de vuelta y el gasto se registraba en 0)
+    ...(falloFinal !== null ? { partial: true, partialReason: causaDelParcial(drain.resultSubtype) } : {}),
     response: drain.responseText,
     sessionId: drain.sessionId,
     inputTokens: drain.inputTokens,

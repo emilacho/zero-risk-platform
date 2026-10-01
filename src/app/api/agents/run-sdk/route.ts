@@ -252,6 +252,9 @@ interface AgentRunResultProxy {
   brandSectionToolCall?: DiscoveryToolCallProxyMeta
   fidelityScoresToolCall?: DiscoveryToolCallProxyMeta
   error?: string
+  /** RESULTADO PARCIAL (CC#1 · 2026-10-01) · sólo un fallo con tope opt-in: `response` es lo escrito hasta el corte (PARCIAL · no es una respuesta) */
+  partial?: boolean
+  partialReason?: string
 }
 
 // 790 s aligns with maxDuration = 800 (Vercel Pro Fluid Compute ceiling)
@@ -1292,6 +1295,8 @@ export async function POST(request: Request) {
               typeof rawFidelityScores.emission_count === 'number' ? rawFidelityScores.emission_count : 1,
           }
         : undefined
+    const parcial = (result as { partial?: unknown }).partial === true
+    const parcialRazon = (result as { partialReason?: unknown }).partialReason
     result = {
       success: !!result.success,
       response: typeof result.response === 'string' ? result.response : '',
@@ -1306,6 +1311,7 @@ export async function POST(request: Request) {
       ...(discoveryToolCall ? { discoveryToolCall } : {}),
       ...(brandSectionToolCall ? { brandSectionToolCall } : {}),
       ...(fidelityScoresToolCall ? { fidelityScoresToolCall } : {}),
+      ...(parcial ? { partial: true, partialReason: typeof parcialRazon === 'string' ? parcialRazon : 'error_del_sdk' } : {}),
       error: result.error,
     }
 
@@ -1319,6 +1325,24 @@ export async function POST(request: Request) {
     })
 
     if (!result.success) {
+      // 🔴 RESULTADO PARCIAL (CC#1 · 2026-10-01): un fallo con tope opt-in devuelve lo escrito hasta el corte, MARCADO parcial, y lo gastado de verdad · antes sólo viajaba el error y el texto se perdía.
+      // Sin `partial` el cuerpo es el de siempre, byte a byte (sólo los pedidos con `max_budget_usd` producen un parcial).
+      if (result.partial === true) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: result.error,
+            partial: true,
+            partial_reason: result.partialReason ?? 'error_del_sdk',
+            response: result.response,
+            costUsd: result.costUsd,
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+            model: result.model,
+          },
+          { status: 500 },
+        )
+      }
       return NextResponse.json({ success: false, error: result.error }, { status: 500 })
     }
 
