@@ -153,6 +153,27 @@ function isDiscoveryAgentSlug(agentSlug: string): boolean {
  * (persistir descubrimiento al cerebro · revisión editorial · normalizar brand_section/fidelity). Ampliar esta lista es una
  * decisión explícita por agente, nunca un efecto lateral. Fuera de la lista o con palanca ausente ⇒ camino de siempre.
  */
+/**
+ * LÍMITES de «mirar afuera» (opt-in · CC#1 · 01-oct · PR #418) · «máximo N pedidos» y «sólo estas opciones» los hace cumplir el SISTEMA (el corredor), no el texto del pedido.
+ * Aquí sólo se valida la FORMA y se reenvía tal cual; el corredor valida contra el catálogo y los hace cumplir. Un valor MAL ESCRITO se rechaza: ignorarlo dejaría pasar un cupo que se creía puesto.
+ * Techo y forma ESPEJAN `services/agent-runner/src/lib/mcp/mirar-afuera-limites.js` (no pueden importarse entre sí: la puerta es Next, el corredor es otro servicio) · una prueba de PARIDAD los vigila.
+ */
+const LIMITES_MIRAR_AFUERA_INVALIDOS = { error: 'mirar_afuera_limites_invalid', code: 'E-MIRAR-LIMITES-INVALID', detail: 'mirar_afuera_limites debe ser { max_pedidos?: entero 1..20, permitidos?: lista de 1..20 textos } con al menos uno · un límite mal escrito no se ignora' }
+export function validarLimitesDeMirarAfuera(body: unknown): { ok: true; valor: { max_pedidos?: number; permitidos?: string[] } | null } | { ok: false } {
+  const b = (body ?? {}) as { mirar_afuera_limites?: unknown; context?: { mirar_afuera_limites?: unknown } | null }
+  const crudo = b.mirar_afuera_limites !== undefined ? b.mirar_afuera_limites : b.context?.mirar_afuera_limites
+  if (crudo === undefined) return { ok: true, valor: null }
+  const l = crudo as { max_pedidos?: unknown; permitidos?: unknown } | null
+  const objeto = l !== null && typeof l === 'object' && !Array.isArray(l)
+  const maxOk = objeto && l.max_pedidos !== undefined && typeof l.max_pedidos === 'number' && Number.isInteger(l.max_pedidos) && l.max_pedidos >= 1 && l.max_pedidos <= 20
+  const permOk = objeto && l.permitidos !== undefined && Array.isArray(l.permitidos) && l.permitidos.length >= 1 && l.permitidos.length <= 20 && l.permitidos.every((x) => typeof x === 'string')
+  const sobran = objeto ? Object.keys(l).filter((k) => k !== 'max_pedidos' && k !== 'permitidos') : []
+  const maxMalo = objeto && l.max_pedidos !== undefined && !maxOk
+  const permMalo = objeto && l.permitidos !== undefined && !permOk
+  if (!objeto || (!maxOk && !permOk) || maxMalo || permMalo || sobran.length) return { ok: false }
+  return { ok: true, valor: { ...(maxOk ? { max_pedidos: l!.max_pedidos as number } : {}), ...(permOk ? { permitidos: l!.permitidos as string[] } : {}) } }
+}
+
 export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent']
 
 export function resolveCallbackMode(body: RunSdkInput): string | null {
@@ -573,6 +594,9 @@ export async function POST(request: Request) {
   if (callbackUrlRaw && validateCallbackUrl(callbackUrlRaw)) {
     const callbackUrl = callbackUrlRaw
     const ackTimestamp = new Date().toISOString()
+    // 🔴 los límites de «mirar afuera» se validan ANTES del acuse (un límite mal escrito = 400 AHORA, no un fallo asíncrono a la hora) y el acuse HACE ECO de lo aceptado: quien pidió puede verificar que Vercel los leyó y los reenviará
+    const limAck = validarLimitesDeMirarAfuera(body)
+    if (!limAck.ok) return NextResponse.json(LIMITES_MIRAR_AFUERA_INVALIDOS, { status: 400 })
     // Track P context · stamped onto the audit trail + Sentry extra.
     const cbAttr = resolveWorkflowAttribution(body)
     const cbWorkflowId = cbAttr.workflow_id
@@ -722,6 +746,7 @@ export async function POST(request: Request) {
         callback_url: callbackUrl,
         ack_timestamp: ackTimestamp,
         dispatch_key: dispatchKey,
+        ...(limAck.valor ? { mirar_afuera_limites: limAck.valor } : {}),
       },
       { status: 202 },
     )
@@ -874,27 +899,10 @@ export async function POST(request: Request) {
       }
       razonamientoDelPedido = razCrudo
     }
-    // LÍMITES de «mirar afuera» (opt-in · CC#1 · 01-oct) · «máximo N pedidos» y «sólo estas opciones» los hace cumplir el SISTEMA (el corredor), no el texto del pedido.
-    // Aquí sólo se valida la FORMA (antes de gastar) y se reenvía tal cual; el corredor valida contra el catálogo y los hace cumplir. Un valor MAL ESCRITO se rechaza: ignorarlo dejaría pasar un cupo que se creía puesto.
-    const limArriba = (body as unknown as { mirar_afuera_limites?: unknown }).mirar_afuera_limites
-    const limCrudo = limArriba !== undefined ? limArriba : ctx.mirar_afuera_limites
-    let limitesMirarAfuera: { max_pedidos?: number; permitidos?: string[] } | null = null
-    if (limCrudo !== undefined) {
-      const l = limCrudo as { max_pedidos?: unknown; permitidos?: unknown } | null
-      const objeto = l !== null && typeof l === 'object' && !Array.isArray(l)
-      const maxOk = objeto && l.max_pedidos !== undefined && typeof l.max_pedidos === 'number' && Number.isInteger(l.max_pedidos) && l.max_pedidos >= 1 && l.max_pedidos <= 20
-      const permOk = objeto && l.permitidos !== undefined && Array.isArray(l.permitidos) && l.permitidos.length >= 1 && l.permitidos.length <= 20 && l.permitidos.every((x) => typeof x === 'string')
-      const sobran = objeto ? Object.keys(l).filter((k) => k !== 'max_pedidos' && k !== 'permitidos') : []
-      const maxMalo = objeto && l.max_pedidos !== undefined && !maxOk
-      const permMalo = objeto && l.permitidos !== undefined && !permOk
-      if (!objeto || (!maxOk && !permOk) || maxMalo || permMalo || sobran.length) {
-        return NextResponse.json(
-          { error: 'mirar_afuera_limites_invalid', code: 'E-MIRAR-LIMITES-INVALID', detail: 'mirar_afuera_limites debe ser { max_pedidos?: entero 1..20, permitidos?: lista de 1..20 textos } con al menos uno · un límite mal escrito no se ignora' },
-          { status: 400 },
-        )
-      }
-      limitesMirarAfuera = { ...(maxOk ? { max_pedidos: l!.max_pedidos as number } : {}), ...(permOk ? { permitidos: l!.permitidos as string[] } : {}) }
-    }
+    // LÍMITES de «mirar afuera» (opt-in · CC#1 · 01-oct) · la forma se valida ANTES de gastar (también arriba, antes del acuse 202 de la vuelta por callback)
+    const lim = validarLimitesDeMirarAfuera(body)
+    if (!lim.ok) return NextResponse.json(LIMITES_MIRAR_AFUERA_INVALIDOS, { status: 400 })
+    const limitesMirarAfuera = lim.valor
 
     // ── §150 spend gate · GENERIC real brake before invoking the model ────
     // Closes the P0 gap (CC#3 2026-06-30): the cap only lived at the

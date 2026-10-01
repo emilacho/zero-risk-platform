@@ -25,8 +25,7 @@ import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.j
 import { validarDireccionDeVuelta, esperaForzadaMs, emitirEventoPostHog } from './lib/entrega-de-la-vuelta.js'
 import { correrYEntregar } from './lib/correr-y-entregar.js'
 import { resolverTopeUsd, resolverRazonamiento } from './lib/tope-por-corrida.js'
-import { createRequire } from 'node:module'
-import { resolve as pathResolve } from 'node:path'
+import { limitesDelPedido, ecoDeLimites, CAPACIDADES_DEL_CORREDOR } from './lib/mirar-afuera-pedido.js'
 
 /**
  * Capture an agent error in Sentry with canonical context tags. Sprint
@@ -89,6 +88,8 @@ app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
+    // lo que este corredor sabe hacer · un flujo lo comprueba ANTES de gastar (PR #418)
+    capacidades: CAPACIDADES_DEL_CORREDOR,
   })
 })
 
@@ -361,9 +362,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
   }
 
   // LÍMITES de «mirar afuera» (opt-in) · un límite MAL ESCRITO se rechaza (400) ANTES de gastar: ignorarlo dejaría pasar un cupo que se creía puesto
-  // (el módulo es JS y vive donde viven los servidores MCP: en `src/lib/mcp/` de la imagen · se resuelve desde la carpeta del servicio, igual que el registro monta los servidores)
-  const { resolverLimites } = createRequire(pathResolve(process.cwd(), 'package.json'))('./src/lib/mcp/mirar-afuera-limites.js') as { resolverLimites: (...c: unknown[]) => { ok: boolean; valor?: { maxPedidos: number | null; permitidos: string[] | null } | null; motivo?: string } }
-  const limitesMirar = resolverLimites(body.mirarAfueraLimites, body.mirar_afuera_limites, ctxObj.mirarAfueraLimites, ctxObj.mirar_afuera_limites)
+  const limitesMirar = limitesDelPedido(body as unknown as Record<string, unknown>, ctxObj as Record<string, unknown>)
   if (!limitesMirar.ok) {
     res.status(400).json({ success: false, error: 'mirar_afuera_limites_invalid', code: 'E-MIRAR-LIMITES-INVALID', detail: limitesMirar.motivo })
     return
@@ -412,7 +411,9 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'callback_url_not_allowed', code: 'E-CALLBACK-HOST', detail: direccion.motivo })
       return
     }
-    res.status(202).json({ accepted: true, delivered_by: 'runner', dispatch_key: dispatchKey, ack_timestamp: new Date().toISOString() })
+    // 🔴 EL ECO de los límites de «mirar afuera»: quien pidió puede VERIFICAR que se aceptaron (sin límites en el pedido ⇒ el acuse de siempre, ni existe la clave)
+    const eco = ecoDeLimites(limitesMirar.valor)
+    res.status(202).json({ accepted: true, delivered_by: 'runner', dispatch_key: dispatchKey, ack_timestamp: new Date().toISOString(), ...(eco ? { mirar_afuera_limites: eco } : {}) })
     void correrYEntregar(
       { url: direccion.url, agentName, dispatchKey, clientId: clientId ?? null, dryRun, esperaForzada: body.testDelayMs ?? body.test_delay_ms ?? ctxObj.test_delay_ms },
       {
