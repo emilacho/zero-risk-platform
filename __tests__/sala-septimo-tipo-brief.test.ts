@@ -43,7 +43,7 @@ vi.mock('@/lib/sala-journey-dispatch/reconciliation', async () => {
 })
 
 const SEIS_DE_SIEMPRE = ['ONBOARD', 'PRODUCE', 'ALWAYS_ON', 'REVIEW', 'ACQUIRE', 'GROWTH']
-const LOS_SIETE = [...SEIS_DE_SIEMPRE, 'BRIEF']
+const LOS_SIETE = [...SEIS_DE_SIEMPRE, 'BRIEF', 'PIEZAS'] // desde el 01-oct son OCHO (PIEZAS · ver sala-octavo-tipo-piezas.test.ts); el nombre de la constante se conserva por historia
 
 const leer = (f: string) => readFileSync(join(process.cwd(), f), 'utf8')
 /** Las palabras entre comillas de una lista `[ 'A', 'B' ]` que empieza en `marca`. */
@@ -70,7 +70,7 @@ describe('🔴 la lista COMPLETA en los CINCO sitios escritos a mano', () => {
     ['api/sala/events/append/route.ts (KNOWN_JOURNEYS)', () => listaTrasMarca(leer('src/app/api/sala/events/append/route.ts'), 'const KNOWN_JOURNEYS')],
     ['journey-orchestrator/types.ts (JOURNEY_TYPES)', () => listaTrasMarca(leer('src/lib/journey-orchestrator/types.ts'), 'export const JOURNEY_TYPES')],
   ]
-  it.each(sitios)('%s trae los siete tipos, BRIEF incluido', (_n, dame) => {
+  it.each(sitios)('%s trae los ocho tipos (BRIEF y PIEZAS incluidos)', (_n, dame) => {
     expect(orden(dame())).toEqual(orden(LOS_SIETE))
   })
   it('los cinco coinciden ENTRE SÍ (si un octavo tipo se agrega en cuatro y se olvida el quinto, esto lo grita)', () => {
@@ -133,7 +133,7 @@ describe('🔴 los DOS que fallan en caliente: se prueban por su comportamiento'
       const filas = await sharedStorage.select({ tenant_id: TENANT, stream_id: STREAM })
       expect(filas).toHaveLength(1)
     })
-    it('ROJO · un tipo fuera de la lista se rechaza ruidosamente (400) y el mensaje lista los siete', async () => {
+    it('ROJO · un tipo fuera de la lista se rechaza ruidosamente (400) y el mensaje lista los ocho', async () => {
       const { POST } = await import('../src/app/api/sala/events/append/route')
       const res = await POST(req('MYSTERY'))
       expect(res.status).toBe(400)

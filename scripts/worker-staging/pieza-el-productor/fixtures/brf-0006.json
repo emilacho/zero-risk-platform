@@ -1,0 +1,26 @@
+{
+  "id": "BRF-0006",
+  "plataforma": "Meta Ads (Facebook e Instagram)",
+  "tipo_de_pieza": "imagen",
+  "que_es": "Anuncio de imagen fija para campaña de mensajes a WhatsApp — audiencia primaria guayaquileña, fase 1 (días 8–21)",
+  "de_que_parte_del_plan": "Sección 5 Fase 1 días 8–14: «Lanzar campaña de alcance en Guayaquil» · «Objetivo de campaña: mensajes a WhatsApp»",
+  "objetivo": "Mensajes a WhatsApp desde Guayaquil — botón disponible: «Enviar mensaje».",
+  "segmento": "Adulto que ordena desayuno o almuerzo por delivery entre 7am y 12pm, en Guayaquil, que sigue cuentas de gastronomía costera. NO es para quien busca la opción más barata de delivery.",
+  "protagonista": "El ceviche con su origen en Olón. UNO. No el encebollado, no el combo.",
+  "mensaje": "El ceviche que viene de Olón de verdad — pídelo por WhatsApp, jueves a lunes, 7am a 3pm, Guayaquil.",
+  "hipotesis": "Si el anuncio declara origen, precio, horario y ciudad antes del clic, la calidad del contacto es mayor.",
+  "limites": "Titular de Meta Ads: ≤ 40 caracteres. Texto principal: los primeros 125 caracteres son los visibles antes del 'ver más' en móvil — lo esencial va ahí. Proporción: 1:1 (cuadrado) o 4:5 (vertical) para feed. El botón de CTA disponible para objetivo 'mensajes' es 'Enviar mensaje'.",
+  "vocabulario_obligatorio": ["marisco de Olón", "ceviche", "Olón", "jueves a lunes", "directo a tu puerta", "delivery"],
+  "prohibido": ["premium", "calidad garantizada", "el mejor", "gourmet", "100% fresco", "auténtico sabor", "artesanal", "exclusivo", "fast food", "económico", "barato", "el mejor de Guayaquil"],
+  "sintaxis": "Frase corta de apertura activa con anclaje geográfico. El precio aparece en el texto principal antes del 'ver más'. Sin subordinadas largas.",
+  "visual": {
+    "capa_que_manda": "producto",
+    "descripcion": "El plato de ceviche ocupa el encuadre completo o el 80% del frame. Luz natural o cálida. No aparecen personas, no aparece logo superpuesto, no aparece texto quemado sobre la imagen.",
+    "muestra": "0 piezas del perfil observadas: se declara este hueco."
+  },
+  "llamado_a_la_accion": "Botón: «Enviar mensaje» → WhatsApp Business +593 997 744 288.",
+  "variantes": "2 variantes: varía SOLO el texto principal.",
+  "negativos": ["No prometer 'el mejor ceviche'", "No mencionar a los competidores por nombre", "No usar urgencia artificial"],
+  "aprueba_y_para_cuando": "Dueño del negocio · antes del Día 8 del plan.",
+  "presupuesto": null
+}

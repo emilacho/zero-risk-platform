@@ -39,6 +39,14 @@ function resolveUrl(template: string): string {
 }
 
 const ROUTES: Record<JourneyType, L2Route> = {
+  PIEZAS: {
+    mode: 'n8n_webhook',
+    url: '${N8N_BASE_URL}/webhook/zero-risk/pieza',
+    authHeader: 'none',
+    // Igual que BRIEF: el flujo exige la llave de despacho (x-sala-dispatch-key) y la valida él mismo: este camino L2 NO la manda, así que PIEZAS solo corre por el repartidor de la sala.
+    timeoutMs: 15_000,
+    doc: 'La pieza · el productor · workflow lVCLzxQCKNkd3uS0 · un agente + chequeos en código · un brief → una pieza',
+  },
   BRIEF: {
     mode: 'n8n_webhook',
     url: '${N8N_BASE_URL}/webhook/zero-risk/brief',

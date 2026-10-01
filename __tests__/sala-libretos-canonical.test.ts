@@ -30,6 +30,7 @@ const ALL_JOURNEYS: JourneyType[] = [
   'ALWAYS_ON',
   'GROWTH',
   'BRIEF',
+  'PIEZAS',
 ]
 
 // ─── Canonical libretos · per-journey validation ───────────────────

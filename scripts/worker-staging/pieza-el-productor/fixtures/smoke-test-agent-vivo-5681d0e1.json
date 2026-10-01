@@ -1,0 +1,211 @@
+{
+ "id": "y6H7nG3FGrmCGccP",
+ "name": "Zero Risk — Smoke Test Agent Invocation (canonical · Sprint 8D Emilio canon 2026-05-24)",
+ "description": null,
+ "active": true,
+ "activeVersionId": "5681d0e1-b83f-4e91-822d-11f43290f79d",
+ "createdAt": "2026-05-25T04:49:15.842Z",
+ "updatedAt": "2026-05-25T08:36:40.525Z",
+ "isArchived": false,
+ "versionId": "5681d0e1-b83f-4e91-822d-11f43290f79d",
+ "versionCounter": 8,
+ "sourceWorkflowId": null,
+ "triggerCount": 1,
+ "nodes": [
+  {
+   "id": "smoke-webhook-entry",
+   "name": "Webhook · POST /smoke-test-agent",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    100,
+    100
+   ],
+   "parameters": {
+    "path": "smoke-test-agent",
+    "responseMode": "lastNode",
+    "httpMethod": "POST",
+    "options": {}
+   },
+   "webhookId": "smoke-test-agent-canonical"
+  },
+  {
+   "id": "smoke-invoke-agent",
+   "name": "Invoke agent via /api/agents/run-sdk",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    400,
+    100
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app' }}/run-sdk",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"agent\": \"{{ $json.body.agent_slug || $json.body.agent || 'jefe-marketing' }}\",\n  \"task\": \"{{ $json.body.task || 'Smoke test invocation · respond with one short acknowledgement sentence.' }}\",\n  \"client_id\": \"{{ $json.body.client_id || null }}\",\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"context\": {{ JSON.stringify($json.body.context || {}) }}\n}",
+    "options": {
+     "timeout": 300000
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 30000,
+   "notes": "Sprint 8D retry resilience CC#3 2026-05-25 · retryOnFail=true maxTries=3 wait=30s · transparent retry de Railway 502/ECONNRESET transient crashes per brand-strategist reliability fix"
+  }
+ ],
+ "connections": {
+  "Webhook · POST /smoke-test-agent": {
+   "main": [
+    [
+     {
+      "node": "Invoke agent via /api/agents/run-sdk",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "nodeGroups": [],
+ "settings": {
+  "executionOrder": "v1",
+  "saveManualExecutions": true,
+  "callerPolicy": "workflowsFromSameOwner"
+ },
+ "staticData": null,
+ "pinData": null,
+ "meta": null,
+ "tags": [],
+ "shared": [
+  {
+   "role": "workflow:owner",
+   "workflowId": "y6H7nG3FGrmCGccP",
+   "projectId": "xKBOyp07nrGbu4ob",
+   "project": {
+    "id": "xKBOyp07nrGbu4ob",
+    "name": "Emilio  Perez  <emilacho@hotmail.com>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-04-18T13:41:21.856Z",
+    "updatedAt": "2026-04-18T13:51:26.012Z"
+   },
+   "createdAt": "2026-05-25T04:49:15.842Z",
+   "updatedAt": "2026-05-25T04:49:15.842Z"
+  }
+ ],
+ "activeVersion": {
+  "versionId": "5681d0e1-b83f-4e91-822d-11f43290f79d",
+  "workflowId": "y6H7nG3FGrmCGccP",
+  "nodes": [
+   {
+    "id": "smoke-webhook-entry",
+    "name": "Webhook · POST /smoke-test-agent",
+    "type": "n8n-nodes-base.webhook",
+    "typeVersion": 2,
+    "position": [
+     100,
+     100
+    ],
+    "parameters": {
+     "path": "smoke-test-agent",
+     "responseMode": "lastNode",
+     "httpMethod": "POST",
+     "options": {}
+    },
+    "webhookId": "smoke-test-agent-canonical"
+   },
+   {
+    "id": "smoke-invoke-agent",
+    "name": "Invoke agent via /api/agents/run-sdk",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     400,
+     100
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app' }}/run-sdk",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={\n  \"agent\": \"{{ $json.body.agent_slug || $json.body.agent || 'jefe-marketing' }}\",\n  \"task\": \"{{ $json.body.task || 'Smoke test invocation · respond with one short acknowledgement sentence.' }}\",\n  \"client_id\": \"{{ $json.body.client_id || null }}\",\n  \"workflow_id\": \"{{ $workflow.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"context\": {{ JSON.stringify($json.body.context || {}) }}\n}",
+     "options": {
+      "timeout": 300000
+     }
+    },
+    "retryOnFail": true,
+    "maxTries": 3,
+    "waitBetweenTries": 30000,
+    "notes": "Sprint 8D retry resilience CC#3 2026-05-25 · retryOnFail=true maxTries=3 wait=30s · transparent retry de Railway 502/ECONNRESET transient crashes per brand-strategist reliability fix"
+   }
+  ],
+  "connections": {
+   "Webhook · POST /smoke-test-agent": {
+    "main": [
+     [
+      {
+       "node": "Invoke agent via /api/agents/run-sdk",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   }
+  },
+  "nodeGroups": [],
+  "authors": "Emilio  Perez ",
+  "name": null,
+  "description": null,
+  "autosaved": false,
+  "createdAt": "2026-05-25T08:36:40.542Z",
+  "updatedAt": "2026-05-25T08:36:40.542Z",
+  "workflowPublishHistory": [
+   {
+    "id": 1037,
+    "workflowId": "y6H7nG3FGrmCGccP",
+    "versionId": "5681d0e1-b83f-4e91-822d-11f43290f79d",
+    "event": "deactivated",
+    "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-05-25T08:36:40.853Z"
+   },
+   {
+    "id": 1038,
+    "workflowId": "y6H7nG3FGrmCGccP",
+    "versionId": "5681d0e1-b83f-4e91-822d-11f43290f79d",
+    "event": "activated",
+    "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-05-25T08:36:41.029Z"
+   }
+  ]
+ }
+}

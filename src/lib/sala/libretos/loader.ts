@@ -54,6 +54,7 @@ const JOURNEY_TYPES: ReadonlyArray<string> = [
   'ACQUIRE',
   'GROWTH',
   'BRIEF', // séptimo tipo · el parte de trabajo del campaign brief (firmado por Emilio 29-sep)
+  'PIEZAS', // octavo tipo · el productor: un brief → una pieza (§144 Emilio 01-oct)
 ]
 
 const LIBRETO_STATUSES: ReadonlyArray<string> = [

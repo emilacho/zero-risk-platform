@@ -139,6 +139,17 @@ export const JOURNEY_WORKFLOW_MAP: Readonly<
     idempotency_suffix: 'brief-worker-dispatch',
     dispatch_key_required: true,
   },
+  // 01-oct · el OCTAVO tipo de viaje: el productor (un brief del parte → una pieza). El nombre evita la colisión con `PRODUCE` (que es planeación).
+  // La cadena: el parte listo (o quien lo pida) deja un sobre `brief/parte-listo` · `producir` → la sala despacha PIEZAS. Lo despacha el repartidor y nada más (ADR-018).
+  // 🔴 El obrero PAGA (un agente): exige la llave de despacho, como el brief y el alta (E67).
+  PIEZAS: {
+    workflow_id: 'lVCLzxQCKNkd3uS0',
+    webhook_path: 'zero-risk/pieza',
+    worker_name: 'pieza (el productor · un brief → una pieza)',
+    phase_boundaries: Object.freeze(['journey_completed']),
+    idempotency_suffix: 'pieza-worker-dispatch',
+    dispatch_key_required: true,
+  },
   // ACQUIRE, ALWAYS_ON, REVIEW, GROWTH · intentionally
   // unmapped until each journey gets its §144 opt-in. The router will
   // emit `target='agent'` (default) for them, matching legacy behavior.

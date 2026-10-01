@@ -52,6 +52,7 @@ const KNOWN_JOURNEYS: ReadonlyArray<JourneyType> = [
   'ACQUIRE',
   'GROWTH',
   'BRIEF',
+  'PIEZAS',
 ]
 
 export async function POST(request: Request) {

@@ -44,6 +44,7 @@ export const JOURNEY_STAGES: Record<JourneyType, readonly string[]> = {
   ],
   REVIEW: ['data_collection', 'qbr_drafted', 'qbr_reviewed', 'qbr_sent'],
   BRIEF: ['plan_recibido', 'parte_redactado', 'parte_chequeado', 'parte_guardado'], // séptimo tipo · el parte de trabajo (29-sep)
+  PIEZAS: ['brief_recibido', 'pieza_redactada', 'pieza_chequeada', 'pieza_guardada'], // octavo tipo · el productor (01-oct)
   GROWTH: ['expansion_identified', 'pitch_prepared', 'committed'],
 } as const
 

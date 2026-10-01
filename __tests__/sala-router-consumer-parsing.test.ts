@@ -126,7 +126,7 @@ describe('parseIntakeEvent · field-level rejections', () => {
   })
 
   it('accepts other canonical journey_types', () => {
-    for (const j of ['PRODUCE', 'ACQUIRE', 'ALWAYS_ON', 'REVIEW', 'GROWTH', 'BRIEF']) {
+    for (const j of ['PRODUCE', 'ACQUIRE', 'ALWAYS_ON', 'REVIEW', 'GROWTH', 'BRIEF', 'PIEZAS']) {
       const r = parseIntakeEvent(intakeFixture({ journey_type: j }))
       expect(r.ok).toBe(true)
     }
