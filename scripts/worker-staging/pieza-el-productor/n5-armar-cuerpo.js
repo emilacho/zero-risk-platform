@@ -5,8 +5,18 @@
 // 🔴 `thinking_mode:'disabled'`: el razonamiento interno era ~90 % de la salida y revienta el máximo por respuesta (medido 30-sep) · una pieza cabe sobra.
 // Agnóstico: nada de este nodo nombra a un cliente · los datos del negocio salen de la ficha.
 const prev = $('④ ¿Ya hay pieza de este brief? · guarda').first().json
+// 🔴 UN ERROR DE LA BASE NO ES «VACÍO» (certificación CC#3 · 01-oct): el nodo HTTP de la consulta tiene `onError: continueRegularOutput` y, si la base falla, entrega un ítem `{error:{…}}`
+// (o PostgREST contesta un OBJETO `{code, message}` en vez de una lista). Leerlo como «el cliente» seguiría hacia el nodo que PAGA. Se DETIENE con su motivo.
+const _filas = $input.all().map((i) => i.json)
+const _falla = _filas.find((r) => r && ((r.error !== undefined && r.error !== null) || (r.code !== undefined && r.message !== undefined && r.id === undefined)))
+if (_falla) {
+  const _m = _falla.error && typeof _falla.error === 'object' ? (_falla.error.message || _falla.error.name) : (_falla.error || _falla.message)
+  throw new Error('PIEZA_FICHA_CONSULTA_FALLO · la consulta a la base FALLÓ (' + String(_m || 'sin detalle').slice(0, 160) + ') · un error no es «el cliente» · se DETIENE y NO escribe nada')
+}
 let ficha = {}
 try { const f = $input.first().json; ficha = Array.isArray(f) ? f[0] || {} : f || {} } catch (e) { ficha = {} }
+// sin ficha no hay nombre, ni sitio, ni Instagram: el pedido saldría para «el cliente» y el agente gastaría raspado en ruido
+if (!ficha || !ficha.id) throw new Error('PIEZA_SIN_FICHA · la consulta de la ficha del cliente ' + prev.client_id + ' volvió sin fila · se DETIENE y NO escribe nada')
 const nombre = String(ficha.name || ficha.client_name || 'el cliente')
 const cfg = ficha.config && typeof ficha.config === 'object' ? ficha.config : {}
 const apify = cfg.apify && typeof cfg.apify === 'object' ? cfg.apify : {}
@@ -19,9 +29,12 @@ const donde = [ficha.country, ficha.market, ficha.city].find((x) => typeof x ===
 
 // las herramientas que SÍ tienen dato para este cliente (no se le ofrece al agente lo que no hay a quién mirar)
 const pedidos = []
-if (instagram) pedidos.push('     - que_mirar = instagram            · de_quien = ' + String(instagram).replace(/^@/, ''))
+const ofrecidas = []
+if (instagram) { ofrecidas.push('instagram'); pedidos.push('     - que_mirar = instagram            · de_quien = ' + String(instagram).replace(/^@/, '')) }
+ofrecidas.push('ficha_en_mapas')
 pedidos.push('     - que_mirar = ficha_en_mapas       · de_quien = ' + nombre + (donde ? ' · donde = ' + donde : ''))
-if (sitio) pedidos.push('     - que_mirar = leer_el_sitio        · de_quien = ' + sitio)
+if (sitio) { ofrecidas.push('leer_el_sitio'); pedidos.push('     - que_mirar = leer_el_sitio        · de_quien = ' + sitio) }
+ofrecidas.push('que_dice_el_buscador')
 pedidos.push('     - que_mirar = que_dice_el_buscador · de_quien = ' + nombre + (donde ? ' ' + donde : ''))
 const sinDato = []
 if (!instagram) sinDato.push('instagram (no hay un Instagram propio registrado para este cliente)')
@@ -87,6 +100,9 @@ const cuerpo = {
   // TOPE DURO por llamada · SIEMPRE presente (el sobre lo valida o pone el de fábrica) · el corredor lo hace cumplir
   max_budget_usd: prev.tope_usd,
   thinking_mode: 'disabled',
+  // 🔴 «máximo 4 pedidos» y «sin anuncios de pago» los hace cumplir el SISTEMA (el corredor monta la herramienta con ESTAS opciones y este cupo), no el texto del pedido · certificación CC#3 · cierra el punto 3
+  // Exige que el corredor tenga el cambio de `mirar_afuera_limites` (PR aparte): sin él, Vercel descarta el campo y la herramienta queda como hoy (el texto sigue pidiéndolo, pero no se hace cumplir).
+  mirar_afuera_limites: { max_pedidos: 4, permitidos: ofrecidas },
   // las fotos propias (nuestro almacén) · el corredor las baja y las codifica · Instagram no se manda nunca
   ...(nFotos > 0 ? { images: prev.fotos, images_mode: 'base64' } : {}),
 }

@@ -5,6 +5,14 @@
 //   · límites medidos en el código del corredor: 20 imágenes por pedido · 10 MB por imagen · prudencia del proveedor: 5 MB por imagen y 32 MB en base64 por pedido (no verificados · se aplican como tope duro de este flujo)
 //   · lo que no cabe se DECLARA (`fotos_no_enviadas` con sus ids) · nunca se recorta callado · sin fotos NO es un fallo: la pieza sale sin ellas y lo dice
 const prev = $('② GUARDA · sin manual aprobado se DETIENE').first().json
+// 🔴 UN ERROR DE LA BASE NO ES «VACÍO» (certificación CC#3 · 01-oct): el nodo HTTP de la consulta tiene `onError: continueRegularOutput` y, si la base falla, entrega un ítem `{error:{…}}`
+// (o PostgREST contesta un OBJETO `{code, message}` en vez de una lista). Leerlo como «sin fotos» seguiría hacia el nodo que PAGA. Se DETIENE con su motivo.
+const _filas = $input.all().map((i) => i.json)
+const _falla = _filas.find((r) => r && ((r.error !== undefined && r.error !== null) || (r.code !== undefined && r.message !== undefined && r.id === undefined)))
+if (_falla) {
+  const _m = _falla.error && typeof _falla.error === 'object' ? (_falla.error.message || _falla.error.name) : (_falla.error || _falla.message)
+  throw new Error('PIEZA_FOTOS_CONSULTA_FALLO · la consulta a la base FALLÓ (' + String(_m || 'sin detalle').slice(0, 160) + ') · un error no es «sin fotos» · se DETIENE y NO escribe nada')
+}
 const MAX_IMAGENES = 20
 const MAX_BYTES_POR_IMAGEN = 5 * 1024 * 1024
 const MAX_BASE64_TOTAL = 32 * 1024 * 1024

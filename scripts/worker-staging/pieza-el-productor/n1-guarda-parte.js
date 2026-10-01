@@ -1,6 +1,14 @@
 // ① GUARDA · el parte y el brief · CC#1 · 2026-10-01. Sin parte VÁLIDO, o sin ese brief dentro de él, se DETIENE y no se escribe nada.
 // El brief se lee ESTRUCTURADO de `provenance_tag.parte` (lo guarda el flujo del brief junto al texto), no se parsea de un texto pegado a mano.
 const env = $('⓪ Sobre · llave · modo seco').first().json
+// 🔴 UN ERROR DE LA BASE NO ES «VACÍO» (certificación CC#3 · 01-oct): el nodo HTTP de la consulta tiene `onError: continueRegularOutput` y, si la base falla, entrega un ítem `{error:{…}}`
+// (o PostgREST contesta un OBJETO `{code, message}` en vez de una lista). Leerlo como «sin parte» seguiría hacia el nodo que PAGA. Se DETIENE con su motivo.
+const _filas = $input.all().map((i) => i.json)
+const _falla = _filas.find((r) => r && ((r.error !== undefined && r.error !== null) || (r.code !== undefined && r.message !== undefined && r.id === undefined)))
+if (_falla) {
+  const _m = _falla.error && typeof _falla.error === 'object' ? (_falla.error.message || _falla.error.name) : (_falla.error || _falla.message)
+  throw new Error('PIEZA_PARTE_CONSULTA_FALLO · la consulta a la base FALLÓ (' + String(_m || 'sin detalle').slice(0, 160) + ') · un error no es «sin parte» · se DETIENE y NO escribe nada')
+}
 const filas = $input.all().map((i) => i.json).filter((r) => r && r.id)
 if (filas.length === 0) {
   throw new Error('PIEZA_SIN_PARTE · el cliente ' + env.client_id + ' no tiene un parte de trabajo (campaign_brief_pack) · se DETIENE y NO escribe nada')

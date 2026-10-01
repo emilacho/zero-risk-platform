@@ -165,13 +165,20 @@ describe('③ GUARDA · las fotos propias (todas las ramas)', () => {
 
 // ── ③ el cuerpo que paga ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 const prevCuerpo = (extra: Record<string, unknown> = {}) => ({ ...SOBRE, brief: BRIEF, brief_texto: 'BRIEF BRF-0006 · …', fotos: [{ url: URL_OK + '1.jpg', label: 'imagen · p1' }, { url: URL_OK + '2.jpg', label: 'imagen · p2' }], ...extra })
-const armar = (prev: Record<string, unknown>, ficha: Record<string, unknown> = { name: 'Mi Negocio', config: { apify: { own_handles: { instagram: ['minegocio'] } } }, website: 'https://www.minegocio.ec/', country: 'Ecuador' }) =>
+const armar = (prev: Record<string, unknown>, ficha: Record<string, unknown> = { id: CID, name: 'Mi Negocio', config: { apify: { own_handles: { instagram: ['minegocio'] } } }, website: 'https://www.minegocio.ec/', country: 'Ecuador' }) =>
   correrNodo('cuerpo', { input: [ficha], refs: { '④ ¿Ya hay pieza de este brief? · guarda': prev } }).then((r) => r[0].json)
 describe('③ el cuerpo que se manda al nodo que paga', () => {
   it('🔴 lleva TODO lo que el canon exige: dry_run · runner · force_restart · thinking disabled · tope SIEMPRE · fotos en base64 · el workflow', async () => {
     const j = await armar(prevCuerpo())
     expect(j.cuerpo).toMatchObject({ agent: 'campaign-brief-agent', client_id: CID, workflow_id: 'WF-PIEZA', workflow_execution_id: '999', callback_url: 'https://n8n.test/webhook-waiting/999', callback_mode: 'runner', force_restart: true, dry_run: false, max_budget_usd: 0.6, thinking_mode: 'disabled', images_mode: 'base64' })
     expect(j.cuerpo.images).toHaveLength(2)
+  })
+  it('🔴 «máximo 4 pedidos» y «sólo estas opciones» viajan como CAMPO para que el sistema los haga cumplir · y son exactamente lo que se le ofrece al agente (nunca los anuncios de pago)', async () => {
+    const j = await armar(prevCuerpo())
+    expect(j.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['instagram', 'ficha_en_mapas', 'leer_el_sitio', 'que_dice_el_buscador'] })
+    const sin = await armar(prevCuerpo(), { id: CID, name: 'Otro Negocio' })
+    expect(sin.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['ficha_en_mapas', 'que_dice_el_buscador'] })
+    for (const caro of ['anuncios_en_meta', 'anuncios_en_google']) expect(j.cuerpo.mirar_afuera_limites.permitidos).not.toContain(caro)
   })
   it('el dry_run del sobre es el del cuerpo (true ⇒ true) y el tope pedido es el del cuerpo', async () => {
     const j = await armar(prevCuerpo({ dry_run: true, tope_usd: 1.25 }))
@@ -195,7 +202,7 @@ describe('③ el cuerpo que se manda al nodo que paga', () => {
     expect(t).not.toMatch(/Náufrago|naufrago/i)
   })
   it('sin Instagram ni sitio en la ficha: no se le ofrece al agente lo que no hay y se le dice', async () => {
-    const t = (await armar(prevCuerpo(), { name: 'Otro Negocio' })).cuerpo.task as string
+    const t = (await armar(prevCuerpo(), { id: CID, name: 'Otro Negocio' })).cuerpo.task as string
     expect(t).not.toContain('que_mirar = instagram')
     expect(t).not.toContain('que_mirar = leer_el_sitio')
     expect(t).toMatch(/NO tienes: instagram .* · leer_el_sitio/)
@@ -379,7 +386,8 @@ describe('⑥ el canon de Emilio como propiedad del grafo (estructural · sin te
     const sig = (nombre: string) => f.connections[nombre].main[0][0].node
     for (const [q, g] of [[N.parte, N.guardaParte], [N.manual, N.guardaManual], [N.fotos, N.guardaFotos], [N.repetida, N.guardaRepetida], [N.ficha, N.cuerpo]]) expect(sig(q)).toBe(g)
     // los nodos de red de aguas abajo se leen en un Code que declara el fallo
-    expect(sig(N.productor)).toBe(N.espera)
+    expect(sig(N.productor)).toBe(N.acepto) // el rechazo síncrono de run-sdk se declara ANTES de esperar (cerrar el rojo, 01-oct)
+    expect(sig(N.acepto)).toBe(N.espera)
     expect(sig(N.espera)).toBe(N.vuelta)
     expect(sig(N.guardar)).toBe(N.cierre)
     expect(sig(N.cable)).toBe(N.volvio)
