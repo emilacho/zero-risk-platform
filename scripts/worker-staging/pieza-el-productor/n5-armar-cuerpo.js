@@ -7,14 +7,18 @@
 const prev = $('④ ¿Ya hay pieza de este brief? · guarda').first().json
 // 🔴 UN ERROR DE LA BASE NO ES «VACÍO» (certificación CC#3 · 01-oct): el nodo HTTP de la consulta tiene `onError: continueRegularOutput` y, si la base falla, entrega un ítem `{error:{…}}`
 // (o PostgREST contesta un OBJETO `{code, message}` en vez de una lista). Leerlo como «el cliente» seguiría hacia el nodo que PAGA. Se DETIENE con su motivo.
-const _filas = $input.all().map((i) => i.json)
+// 🔴 02-oct: entre la ficha y este nodo hay ahora «⑤ GUARDA · sedes y voz» (trae `sedes_info`); la ficha se lee por su NOMBRE (es antecesora). Con la entrada vieja (la ficha misma) todo funciona como antes y las sedes quedan «no leídas».
+const _entrada = $input.first().json || {}
+const _traeSedes = Object.prototype.hasOwnProperty.call(_entrada, 'sedes_info')
+const _filas = (_traeSedes ? $('⑤ Ficha del cliente').all() : $input.all()).map((i) => i.json)
+const sedesInfo = _traeSedes ? _entrada.sedes_info : { error: 'la lectura de sedes no está en el camino de este flujo' }
 const _falla = _filas.find((r) => r && ((r.error !== undefined && r.error !== null) || (r.code !== undefined && r.message !== undefined && r.id === undefined)))
 if (_falla) {
   const _m = _falla.error && typeof _falla.error === 'object' ? (_falla.error.message || _falla.error.name) : (_falla.error || _falla.message)
   throw new Error('PIEZA_FICHA_CONSULTA_FALLO · la consulta a la base FALLÓ (' + String(_m || 'sin detalle').slice(0, 160) + ') · un error no es «el cliente» · se DETIENE y NO escribe nada')
 }
 let ficha = {}
-try { const f = $input.first().json; ficha = Array.isArray(f) ? f[0] || {} : f || {} } catch (e) { ficha = {} }
+try { const f = _filas[0]; ficha = Array.isArray(f) ? f[0] || {} : f || {} } catch (e) { ficha = {} }
 // sin ficha no hay nombre, ni sitio, ni Instagram: el pedido saldría para «el cliente» y el agente gastaría raspado en ruido
 if (!ficha || !ficha.id) throw new Error('PIEZA_SIN_FICHA · la consulta de la ficha del cliente ' + prev.client_id + ' volvió sin fila · se DETIENE y NO escribe nada')
 const nombre = String(ficha.name || ficha.client_name || 'el cliente')
@@ -26,19 +30,29 @@ const instagram = primero(propios.instagram)
 const sitioCrudo = [ficha.website, ficha.website_url, ficha.sitio_web, ficha.domain, ficha.dominio].find((x) => typeof x === 'string' && x.trim())
 const sitio = sitioCrudo ? String(sitioCrudo).trim().replace(/^https?:\/\//, '').replace(/\/+$/, '') : null
 const donde = [ficha.country, ficha.market, ficha.city].find((x) => typeof x === 'string' && x.trim()) || null
+// 🔴 02-oct · MAPAS con la CIUDAD y la DIRECCIÓN de cada sede, no con el país (con «Ecuador» trajo la ficha de OTRO negocio, Gualaceo). Sin ubicación en la ficha NO se ofrece `ficha_en_mapas`.
+const sedesResueltas = sedesInfo && Array.isArray(sedesInfo.sedes) ? sedesInfo.sedes : []
+// 🔴 02-oct · LA VOZ: los textos de los posts propios del cliente (si existen; si no, se DECLARA en el pedido)
+const textosDeVoz = sedesInfo && Array.isArray(sedesInfo.textos_propios) ? sedesInfo.textos_propios : []
+const ubicaciones = ubicacionesParaMapas(sedesResueltas, ficha)
 
 // las herramientas que SÍ tienen dato para este cliente (no se le ofrece al agente lo que no hay a quién mirar)
 const pedidos = []
 const ofrecidas = []
 if (instagram) { ofrecidas.push('instagram'); pedidos.push('     - que_mirar = instagram            · de_quien = ' + String(instagram).replace(/^@/, '')) }
-ofrecidas.push('ficha_en_mapas')
-pedidos.push('     - que_mirar = ficha_en_mapas       · de_quien = ' + nombre + (donde ? ' · donde = ' + donde : ''))
+if (ubicaciones.length) {
+  ofrecidas.push('ficha_en_mapas')
+  ubicaciones.forEach((u) => pedidos.push('     - que_mirar = ficha_en_mapas       · de_quien = ' + nombre + ' · donde = ' + u.donde))
+}
 if (sitio) { ofrecidas.push('leer_el_sitio'); pedidos.push('     - que_mirar = leer_el_sitio        · de_quien = ' + sitio) }
 ofrecidas.push('que_dice_el_buscador')
-pedidos.push('     - que_mirar = que_dice_el_buscador · de_quien = ' + nombre + (donde ? ' ' + donde : ''))
+pedidos.push('     - que_mirar = que_dice_el_buscador · de_quien = ' + nombre + (ubicaciones.length ? ' ' + ubicaciones[0].ciudad : donde ? ' ' + donde : ''))
 const sinDato = []
 if (!instagram) sinDato.push('instagram (no hay un Instagram propio registrado para este cliente)')
 if (!sitio) sinDato.push('leer_el_sitio (no hay sitio propio registrado para este cliente)')
+if (!ubicaciones.length) sinDato.push('ficha_en_mapas (la ficha del cliente no trae ciudad ni dirección de ninguna sede: sin ubicación la búsqueda trae negocios homónimos de otras ciudades)')
+// una búsqueda de Mapas por sede: el máximo de pedidos crece con ellas (base 4 · 1 por sede adicional) para que tener 2 sedes no deje sin cupo al Instagram o al sitio
+const maxPedidos = 4 + Math.max(0, ubicaciones.length - 1)
 
 const nFotos = prev.fotos.length
 const bloqueFotos = nFotos > 0
@@ -61,14 +75,19 @@ const REGLAS = [
   '',
   'C) LA HERRAMIENTA mirar_afuera. Úsala cuando te falte un dato real del negocio que ni el brief ni las fotos traen. Puedes pedir:',
   pedidos.join('\n'),
-  '   Reglas: MÁXIMO 4 pedidos en total. Haz todos los que necesites de una sola vez, en la misma vuelta, no uno por uno. NO uses anuncios_en_meta ni anuncios_en_google ni ninguna',
+  '   Reglas: MÁXIMO ' + maxPedidos + ' pedidos en total. Haz todos los que necesites de una sola vez, en la misma vuelta, no uno por uno. NO uses anuncios_en_meta ni anuncios_en_google ni ninguna',
   '   otra opción: cuestan mucho y no las necesitas. Lee siempre el campo `cero` de cada respuesta: distingue «se miró y no hay» de «no se pudo mirar». Si algo no se pudo mirar, dilo; no lo rellenes.',
   sinDato.length ? '   Para este cliente NO tienes: ' + sinDato.join(' · ') + '.' : '',
+  '   Lo que devuelve mirar_afuera NO entra al cerebro del cliente: es lo que se vio ahora, sin sello. Antes de citar una ficha de Mapas comprueba que el nombre y la CIUDAD sean los del cliente (bloque D): una ficha de otra ciudad es OTRO negocio y no la uses.',
+  '',
+  bloqueDeSedes(sedesResueltas, sedesInfo && sedesInfo.error ? sedesInfo : null),
+  '',
+  bloqueDeVoz(textosDeVoz),
   '',
   'Reglas de la pieza:',
   '1. Respeta los límites de caracteres del brief. Usa el vocabulario obligatorio. NUNCA uses una palabra prohibida (solo pueden aparecer en la lista «prohibido» del brief, no en tu texto).',
   '2. UN solo mensaje: el del brief. El llamado a la acción es el del brief.',
-  '3. No inventes datos que no estén en el brief, en las fotos o en lo que te devolvió mirar_afuera.',
+  '3. No inventes datos que no estén en el brief, en las fotos o en lo que te devolvió mirar_afuera. El horario, la dirección y el teléfono salen del brief o del bloque D (con su fuente), nunca de tu memoria ni de otra ciudad.',
   '4. El prompt para la imagen va EN POSITIVO: describe lo que SÍ aparece («un plato solo sobre una mesa de madera»), no lo que no. Los generadores de imagen manejan mal las instrucciones en negativo.',
   '   El brief a veces describe lo visual con NEGACIONES («No aparecen personas, no aparece logo, no aparece texto sobre la imagen»): NO las copies al prompt. Tradúcelas a lo que sí se ve («el plato ocupa el encuadre completo sobre la mesa, con luz cálida»).',
   '   En el prompt de imagen no escribas ninguna de estas palabras: no, not, without, never, avoid, sin, ni, evita. Si quieres decir algo con ellas, cámbialo por lo que sí está en la imagen.',
@@ -104,8 +123,13 @@ const cuerpo = {
   thinking_mode: 'disabled',
   // 🔴 «máximo 4 pedidos» y «sin anuncios de pago» los hace cumplir el SISTEMA (el corredor monta la herramienta con ESTAS opciones y este cupo), no el texto del pedido · certificación CC#3 · cierra el punto 3
   // Exige que el corredor tenga el cambio de `mirar_afuera_limites` (PR aparte): sin él, Vercel descarta el campo y la herramienta queda como hoy (el texto sigue pidiéndolo, pero no se hace cumplir).
-  mirar_afuera_limites: { max_pedidos: 4, permitidos: ofrecidas },
+  mirar_afuera_limites: { max_pedidos: maxPedidos, permitidos: ofrecidas },
   // las fotos propias (nuestro almacén) · el corredor las baja y las codifica · Instagram no se manda nunca
   ...(nFotos > 0 ? { images: prev.fotos, images_mode: 'base64' } : {}),
 }
-return [{ json: { ...prev, client_name: nombre, cuerpo, pedido_caracteres: pedido.length, herramientas_ofrecidas: pedidos.length } }]
+// lo que viaja con la pieza (y se guarda en su provenance): el estado de las sedes y de la voz · quien aprueba ve de dónde salió cada dato
+const sedes_resumen = sedesInfo && sedesInfo.error
+  ? { leidas: false, error: String(sedesInfo.error).slice(0, 200) }
+  : { leidas: true, sedes: sedesResueltas.map((s) => ({ ciudad: s.ciudad, horario: s.horario.estado, direccion: s.direccion.estado, canal_pedido: s.canal_pedido.estado })), descartes: (sedesInfo && sedesInfo.descartes) || [] }
+const voz_resumen = { textos: textosDeVoz.length, fechas: textosDeVoz.map((t) => t.fecha) }
+return [{ json: { ...prev, client_name: nombre, cuerpo, pedido_caracteres: pedido.length, herramientas_ofrecidas: pedidos.length, max_pedidos_mirar_afuera: maxPedidos, sedes_resumen, sedes_resueltas: sedesResueltas, voz_resumen } }]

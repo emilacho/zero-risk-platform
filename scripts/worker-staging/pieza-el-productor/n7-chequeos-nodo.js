@@ -8,7 +8,10 @@ const manual = { forbidden_words: c.forbidden_words || [] }
 let ext = { legible: false, motivo: c.motivo || 'la vuelta del productor no llegó' }
 if (c.llego_la_vuelta) ext = extraerPieza(c.texto)
 const pieza = ext.legible ? ext.pieza : { titular: '', texto_principal: '', prompt_imagen: '', fuente_imagen: '', no_pude_cumplir: [], que_miro: [] }
-const res = ext.legible ? chequearPieza(c.brief, pieza, manual) : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', detalle: ext.motivo, fatal: true }], por_chequeo: { respuesta_no_legible: 1 }, fatales: ['respuesta_no_legible'] }
+// 02-oct · el horario de la pieza se compara con lo que el sistema vio de las sedes (sin sedes leídas no hay comparación: no se inventa una verificación)
+const herrSedes = { horarioDeTexto: horarioDeTexto, canonicoHorario: canonicoHorario, describirHorario: describirHorario }
+const sedesParaChequear = c.sedes_resumen && c.sedes_resumen.leidas === true ? c.sedes_resueltas : null
+const res = ext.legible ? chequearPieza(c.brief, pieza, manual, sedesParaChequear, herrSedes) : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', detalle: ext.motivo, fatal: true }], por_chequeo: { respuesta_no_legible: 1 }, fatales: ['respuesta_no_legible'] }
 
 let motivo_invalido = null
 if (!c.llego_la_vuelta) motivo_invalido = c.motivo || 'la vuelta del productor no llegó'
@@ -39,6 +42,11 @@ P.push('## Fotos reales que se le dieron al productor')
 P.push('- enviadas: ' + c.fotos_enviadas + ' de ' + c.fotos_en_la_tabla + (c.sin_fotos ? ' (SIN FOTOS)' : ''))
 if ((c.fotos_no_enviadas || []).length) P.push('- NO enviadas por el límite de 20 por pedido: ' + c.fotos_no_enviadas.length + ' (' + c.fotos_no_enviadas.join(', ') + ')')
 ;(c.fotos_excluidas || []).forEach((x) => P.push('- EXCLUIDA ' + x.id + ' · ' + x.label + ' · ' + x.causa))
+P.push('')
+P.push('## Sedes y voz que se le dieron al productor')
+P.push(c.sedes_resumen && c.sedes_resumen.leidas === false ? '- SEDES: NO se pudieron leer (' + c.sedes_resumen.error + ')' : '- SEDES: ' + ((c.sedes_resumen && c.sedes_resumen.sedes) || []).map((s) => s.ciudad + ' (horario: ' + s.horario + ' · dirección: ' + s.direccion + ')').join(' · '))
+;((c.sedes_resumen && c.sedes_resumen.descartes) || []).forEach((d) => P.push('- DESCARTADO: ' + d.motivo))
+P.push('- VOZ: ' + (c.voz_resumen && c.voz_resumen.textos ? c.voz_resumen.textos + ' texto(s) de posts propios de referencia' : 'sin textos propios de referencia'))
 P.push('')
 P.push('## Qué miró el productor\n' + l(pieza.que_miro))
 P.push('')
@@ -92,6 +100,8 @@ const fila_pieza = {
     fotos: { en_la_tabla: c.fotos_en_la_tabla, enviadas: c.fotos_enviadas, no_enviadas: c.fotos_no_enviadas, excluidas: c.fotos_excluidas, sin_fotos: c.sin_fotos },
     que_miro: Array.isArray(pieza.que_miro) ? pieza.que_miro : [],
     no_pude_cumplir: Array.isArray(pieza.no_pude_cumplir) ? pieza.no_pude_cumplir : [],
+    sedes: c.sedes_resumen || null,
+    voz: c.voz_resumen || null,
     thinking_mode: 'disabled',
     tope_usd: c.tope_usd,
     costo_usd: c.vuelta_costo_usd === undefined ? null : c.vuelta_costo_usd,

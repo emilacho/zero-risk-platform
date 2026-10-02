@@ -28,6 +28,8 @@ export const N = {
   repetida: '④ ¿Ya hay pieza de este brief?',
   guardaRepetida: '④ ¿Ya hay pieza de este brief? · guarda',
   ficha: '⑤ Ficha del cliente',
+  sedes: '⑤ Sedes y voz del cliente',
+  guardaSedes: '⑤ GUARDA · sedes y voz',
   cuerpo: '⑤ Armar el cuerpo del productor',
   salud: '⑤ ¿Qué sabe hacer el corredor?',
   guardaSalud: '⑤ GUARDA · el corredor trae los límites',
@@ -51,6 +53,9 @@ const authSb = [
   { name: 'Authorization', value: '=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}' },
 ]
 
+/** la lógica de sedes y voz (la MISMA que prueba `sedes-logica.test.ts` y usa el recolector) · se pega entera en los nodos que la usan */
+const SEDES_LOGICA = fs.readFileSync(join(aqui, '..', '..', '..', 'src', 'lib', 'sedes', 'sedes-logica.js'), 'utf8')
+
 function sinExports(js) {
   const i = js.indexOf("if (typeof module !== 'undefined' && module.exports)")
   return i === -1 ? js : js.slice(0, i)
@@ -63,11 +68,12 @@ export function codigoDeNodo(clave) {
     case 'guardaManual': return leer('n2-guarda-manual.js')
     case 'guardaFotos': return leer('n3-guarda-fotos.js')
     case 'guardaRepetida': return leer('n4-guarda-repetida.js')
-    case 'cuerpo': return leer('n5-armar-cuerpo.js')
+    case 'guardaSedes': return leer('n5c-guarda-sedes-y-voz.js')
+    case 'cuerpo': return sinExports(SEDES_LOGICA) + '\n' + leer('n5-armar-cuerpo.js')
     case 'guardaSalud': return leer('n5b-corredor-trae-limites.js')
     case 'acepto': return leer('n6a-acepto.js')
     case 'vuelta': return leer('n6-llego-la-vuelta.js')
-    case 'chequeos': return sinExports(leer('pieza-chequeos.js')) + '\n' + leer('n7-chequeos-nodo.js')
+    case 'chequeos': return sinExports(SEDES_LOGICA) + '\n' + sinExports(leer('pieza-chequeos.js')) + '\n' + leer('n7-chequeos-nodo.js')
     case 'secoCierre': return leer('n8-seco.js')
     case 'cierre': return leer('n8-cierre.js')
     case 'volvio': return leer('n9-volvio.js')
@@ -97,6 +103,17 @@ export function construirFlujo({ path = 'zero-risk/pieza', nombre = 'Zero Risk �
     get(N.repetida, `=${SB}/rest/v1/client_historical_outputs?select=id,created_at&output_type=eq.campaign_piece&client_id=eq.${cid}&provenance_tag->>brief_id=eq.{{ $('${N.guardaFotos}').first().json.brief_id }}&provenance_tag->>parte_id=eq.{{ $('${N.guardaFotos}').first().json.parte_id }}&limit=1`, x(8)),
     code(N.guardaRepetida, 'guardaRepetida', x(9)),
     get(N.ficha, `=${SB}/rest/v1/clients?select=*&id=eq.${cid}&limit=1`, x(10)),
+    // 🔴 02-oct · las SEDES y la VOZ del cliente (US$ 0: lee lo que el sistema ya guardó · idempotente · SIN reintento) · una lectura caída no detiene la pieza: la GUARDA de abajo la DECLARA y el pedido le prohíbe al productor afirmar horarios
+    {
+      parameters: {
+        method: 'POST', url: 'https://zero-risk-platform.vercel.app/api/clients/sedes/recolectar', sendHeaders: true,
+        headerParameters: { parameters: [{ name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' }, { name: 'Content-Type', value: 'application/json' }] },
+        sendBody: true, specifyBody: 'json', jsonBody: `={{ JSON.stringify({ client_id: $('${N.sobre}').first().json.client_id }) }}`,
+        options: { timeout: 45000, response: { response: { neverError: true } } },
+      },
+      name: N.sedes, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [10.5 * 260, 0], onError: 'continueRegularOutput', alwaysOutputData: true,
+    },
+    code(N.guardaSedes, 'guardaSedes', [10.8 * 260, 0]),
     code(N.cuerpo, 'cuerpo', x(11)),
     // 🔴 ANTES de pagar: ¿el corredor trae los límites de «mirar afuera»? (GET /health · sin llave · sin reintento · el fallo lo declara la GUARDA de abajo)
     { parameters: { method: 'GET', url: "={{ ($env.RAILWAY_AGENT_RUNNER_URL || 'https://zero-risk-platform-production.up.railway.app').replace(/\\/+$/, '') }}/health", options: { timeout: 10000 } }, name: N.salud, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [11.4 * 260, 0], onError: 'continueRegularOutput', alwaysOutputData: true },
@@ -147,7 +164,7 @@ export function construirFlujo({ path = 'zero-risk/pieza', nombre = 'Zero Risk �
   const links = [
     enlace(N.webhook, N.sobre), enlace(N.sobre, N.parte), enlace(N.parte, N.guardaParte), enlace(N.guardaParte, N.manual),
     enlace(N.manual, N.guardaManual), enlace(N.guardaManual, N.fotos), enlace(N.fotos, N.guardaFotos), enlace(N.guardaFotos, N.repetida),
-    enlace(N.repetida, N.guardaRepetida), enlace(N.guardaRepetida, N.ficha), enlace(N.ficha, N.cuerpo), enlace(N.cuerpo, N.salud), enlace(N.salud, N.guardaSalud), enlace(N.guardaSalud, N.productor),
+    enlace(N.repetida, N.guardaRepetida), enlace(N.guardaRepetida, N.ficha), enlace(N.ficha, N.sedes), enlace(N.sedes, N.guardaSedes), enlace(N.guardaSedes, N.cuerpo), enlace(N.cuerpo, N.salud), enlace(N.salud, N.guardaSalud), enlace(N.guardaSalud, N.productor),
     enlace(N.productor, N.acepto), enlace(N.acepto, N.espera), enlace(N.espera, N.vuelta), enlace(N.vuelta, N.chequeos), enlace(N.chequeos, N.seco),
     enlace(N.seco, N.secoCierre, 0), // verdadero = modo seco
     enlace(N.seco, N.guardar, 1), // falso = modo real

@@ -175,9 +175,12 @@ describe('③ el cuerpo que se manda al nodo que paga', () => {
   })
   it('🔴 «máximo 4 pedidos» y «sólo estas opciones» viajan como CAMPO para que el sistema los haga cumplir · y son exactamente lo que se le ofrece al agente (nunca los anuncios de pago)', async () => {
     const j = await armar(prevCuerpo())
-    expect(j.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['instagram', 'ficha_en_mapas', 'leer_el_sitio', 'que_dice_el_buscador'] })
+    // 02-oct: `ficha_en_mapas` se ofrece SÓLO si la ficha trae una ubicación (ciudad o sede) · el país solo NO es una ubicación (con «Ecuador» trajo la ficha de OTRO negocio)
+    expect(j.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['instagram', 'leer_el_sitio', 'que_dice_el_buscador'] })
+    const conCiudad = await armar(prevCuerpo(), { id: CID, name: 'Mi Negocio', config: { apify: { own_handles: { instagram: ['minegocio'] } } }, website: 'https://www.minegocio.ec/', country: 'Ecuador', market: 'Guayaquil · Guayas' })
+    expect(conCiudad.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['instagram', 'ficha_en_mapas', 'leer_el_sitio', 'que_dice_el_buscador'] })
     const sin = await armar(prevCuerpo(), { id: CID, name: 'Otro Negocio' })
-    expect(sin.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['ficha_en_mapas', 'que_dice_el_buscador'] })
+    expect(sin.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['que_dice_el_buscador'] })
     for (const caro of ['anuncios_en_meta', 'anuncios_en_google']) expect(j.cuerpo.mirar_afuera_limites.permitidos).not.toContain(caro)
   })
   it('el dry_run del sobre es el del cuerpo (true ⇒ true) y el tope pedido es el del cuerpo', async () => {
@@ -196,7 +199,8 @@ describe('③ el cuerpo que se manda al nodo que paga', () => {
     expect(t).toContain('«Mi Negocio»')
     expect(t).toContain('que_mirar = instagram            · de_quien = minegocio')
     expect(t).toContain('que_mirar = leer_el_sitio        · de_quien = www.minegocio.ec')
-    expect(t).toContain('donde = Ecuador')
+    expect(t).not.toContain('donde = Ecuador') // 02-oct: el país solo no es una ubicación
+    expect(t).not.toContain('que_mirar = ficha_en_mapas') // y sin ubicación NO se ofrece la ficha de Mapas
     expect(t).toMatch(/NO uses anuncios_en_meta ni anuncios_en_google/)
     expect(t).toMatch(/MÁXIMO 4 pedidos/)
     expect(t).not.toMatch(/Náufrago|naufrago/i)
@@ -386,7 +390,7 @@ describe('⑥ el canon de Emilio como propiedad del grafo (estructural · sin te
     for (const q of consultas) expect(q.alwaysOutputData, q.name).toBe(true)
     // cada consulta va seguida de un nodo Code (la GUARDA o quien lee su resultado) y nunca de otra consulta suelta
     const sig = (nombre: string) => f.connections[nombre].main[0][0].node
-    for (const [q, g] of [[N.parte, N.guardaParte], [N.manual, N.guardaManual], [N.fotos, N.guardaFotos], [N.repetida, N.guardaRepetida], [N.ficha, N.cuerpo]]) expect(sig(q)).toBe(g)
+    for (const [q, g] of [[N.parte, N.guardaParte], [N.manual, N.guardaManual], [N.fotos, N.guardaFotos], [N.repetida, N.guardaRepetida], [N.ficha, N.sedes], [N.sedes, N.guardaSedes], [N.guardaSedes, N.cuerpo]]) expect(sig(q)).toBe(g)
     // los nodos de red de aguas abajo se leen en un Code que declara el fallo
     expect(sig(N.salud)).toBe(N.guardaSalud) // la comprobación previa al corredor también
     expect(sig(N.productor)).toBe(N.acepto) // el rechazo síncrono de run-sdk se declara ANTES de esperar (cerrar el rojo, 01-oct)

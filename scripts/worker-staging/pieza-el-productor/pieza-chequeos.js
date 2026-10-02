@@ -135,7 +135,7 @@ function negacionesDelPrompt(prompt) {
  * Corre TODOS los chequeos. `brief` = el entregable del parte · `pieza` = lo que escribió el productor · `manual.forbidden_words` = prohibidas del manual.
  * Devuelve {ok, hallazgos[], por_chequeo{}, fatales[]}. NO modifica nada.
  */
-function chequearPieza(brief, pieza, manual) {
+function chequearPieza(brief, pieza, manual, sedes, herr) {
   var hallazgos = []
   var falla = function (chequeo, detalle, fatal) { hallazgos.push({ chequeo: chequeo, detalle: detalle, fatal: fatal === true }) }
   var titular = String(pieza.titular || '')
@@ -186,6 +186,22 @@ function chequearPieza(brief, pieza, manual) {
   // ── el prompt va EN POSITIVO (los generadores manejan mal el negativo)
   var negs = prompt.trim() ? negacionesDelPrompt(prompt) : []
   if (negs.length) falla('prompt_con_negaciones', 'el prompt de imagen trae ' + negs.length + ' ' + (negs.length === 1 ? 'negación' : 'negaciones') + ' (' + negs.slice(0, 8).map(function (n) { return '«' + n + '»' }).join(' · ') + ') · los generadores las manejan mal · debe decir lo que SÍ aparece')
+
+  // ── el HORARIO de la pieza contra lo que el SISTEMA vio de las sedes (sitio · Instagram · Mapas): si la pieza afirma un horario y ninguna sede lo tiene verificado, se declara
+  // (`sedes` = la ficha resuelta · `herr` = las funciones de lectura de sedes-logica.js · sin ellas no se corre este chequeo: no se inventa una verificación)
+  if (Array.isArray(sedes) && herr && typeof herr.horarioDeTexto === 'function') {
+    var hp = herr.horarioDeTexto(titular + ' . ' + texto)
+    if (hp) {
+      var cp = herr.canonicoHorario(hp)
+      var verificadas = sedes.filter(function (s) { return s && s.horario && (s.horario.estado === 'coincide' || s.horario.estado === 'una_fuente') && s.horario.norm })
+      if (!verificadas.some(function (s) { return herr.canonicoHorario(s.horario.norm) === cp })) {
+        var vistas = sedes.length
+          ? sedes.map(function (s) { return s.ciudad + ': ' + (s.horario && s.horario.valor ? s.horario.valor : s.horario && s.horario.estado === 'conflicto' ? 'las fuentes no coinciden' : 'sin dato') }).join(' · ')
+          : 'el sistema no tiene sedes registradas'
+        falla('horario_sin_respaldo', 'la pieza afirma «' + herr.describirHorario(hp) + '» y ninguna sede lo tiene verificado (' + vistas + ') · lo decide quien aprueba con lo que el sistema vio, no el dueño')
+      }
+    }
+  }
 
   // ── lo que no pudo y lo que miró se declaran (nunca en silencio)
   if (!Array.isArray(pieza.que_miro) || pieza.que_miro.length === 0) falla('no_declaro_lo_que_miro', 'la pieza no declara qué miró (brief · fotos · mirar afuera)')

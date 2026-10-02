@@ -168,6 +168,6 @@ describe('③ el corredor trae los límites de «mirar afuera» · si no, se DET
   })
   it('el cuerpo REAL que arma el flujo lleva los límites (si no los llevara, el eco no se exigiría)', async () => {
     const [{ json }] = await correrNodo('cuerpo', { input: [{ id: CID, name: 'Mi Negocio', config: { apify: { own_handles: { instagram: ['minegocio'] } } } }], refs: { '④ ¿Ya hay pieza de este brief? · guarda': { ...SOBRE, brief: {}, brief_texto: 'x', fotos: [] } } })
-    expect(json.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['instagram', 'ficha_en_mapas', 'que_dice_el_buscador'] })
+    expect(json.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['instagram', 'que_dice_el_buscador'] }) // 02-oct: sin ubicación en la ficha no se ofrece Mapas
   })
 })

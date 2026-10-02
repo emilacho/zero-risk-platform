@@ -115,5 +115,7 @@ describe('③ las negaciones del prompt de imagen: se dicen TODAS, en español o
     expect(js).toMatch(/negaci[oó]n/i)
     expect(js).toMatch(/no aparecen personas/i) // el caso real: el brief dice «No aparecen personas…» y el productor lo copió
     expect(js).toMatch(/en positivo/i)
+    expect(js).toMatch(/NO las copies al prompt/) // la instrucción explícita de traducir, no sólo la mención del caso
+    expect(js).toMatch(/no escribas ninguna de estas palabras: no, not, without, never, avoid, sin, ni, evita/)
   })
 })
