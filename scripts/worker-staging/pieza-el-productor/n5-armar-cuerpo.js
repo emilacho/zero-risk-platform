@@ -70,6 +70,8 @@ const REGLAS = [
   '2. UN solo mensaje: el del brief. El llamado a la acción es el del brief.',
   '3. No inventes datos que no estén en el brief, en las fotos o en lo que te devolvió mirar_afuera.',
   '4. El prompt para la imagen va EN POSITIVO: describe lo que SÍ aparece («un plato solo sobre una mesa de madera»), no lo que no. Los generadores de imagen manejan mal las instrucciones en negativo.',
+  '   El brief a veces describe lo visual con NEGACIONES («No aparecen personas, no aparece logo, no aparece texto sobre la imagen»): NO las copies al prompt. Tradúcelas a lo que sí se ve («el plato ocupa el encuadre completo sobre la mesa, con luz cálida»).',
+  '   En el prompt de imagen no escribas ninguna de estas palabras: no, not, without, never, avoid, sin, ni, evita. Si quieres decir algo con ellas, cámbialo por lo que sí está en la imagen.',
   '5. La fuente de la imagen la decide el brief, no tú: repite cuál es en «fuente_imagen» (cliente = una foto real del negocio · generada = la hace el generador desde tu prompt · dueno = la toma el dueño). Si el brief no lo dice, escribe «no_declarada».',
   '',
   'Responde EXCLUSIVAMENTE con UN bloque JSON (nada de texto antes ni después) con esta forma exacta:',

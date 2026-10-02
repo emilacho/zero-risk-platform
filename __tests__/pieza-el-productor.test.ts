@@ -242,7 +242,7 @@ describe('④ ¿llegó la vuelta?', () => {
 })
 
 // ── ⑤ los chequeos ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-const BUENA = { titular: 'El ceviche que viene de Olón', texto_principal: 'Ceviche con marisco de Olón, directo a tu puerta en Guayaquil. Delivery jueves a lunes, 7am a 3pm. $7. Escríbenos: +593 997 744 288', prompt_imagen: 'Un plato de ceviche ocupa el encuadre, luz natural cálida, mesa de madera clara, marisco visible', fuente_imagen: 'cliente', no_pude_cumplir: [], que_miro: ['no pedí nada: el brief y las fotos bastaron', 'fotos: luz natural y mesa de madera'] }
+const BUENA = { titular: 'El ceviche que viene de Olón', texto_principal: 'Ceviche con marisco de Olón, directo a tu puerta en Guayaquil. Delivery jueves a lunes, 7am a 3pm. $7. Toca «Enviar mensaje» y escríbenos.', prompt_imagen: 'Un plato de ceviche ocupa el encuadre, luz natural cálida, mesa de madera clara, marisco visible', fuente_imagen: 'cliente', no_pude_cumplir: [], que_miro: ['no pedí nada: el brief y las fotos bastaron', 'fotos: luz natural y mesa de madera'] }
 const chequear = (p: unknown, forb: string[] = []) => CH.chequearPieza(BRIEF, p, { forbidden_words: forb })
 describe('⑤ los chequeos comparan lo PEDIDO contra lo HECHO', () => {
   it('una pieza que cumple pasa limpia', () => {
@@ -265,8 +265,10 @@ describe('⑤ los chequeos comparan lo PEDIDO contra lo HECHO', () => {
   it('el vocabulario obligatorio que falta se declara · el llamado a la acción trae datos verificables', () => {
     const r = chequear({ ...BUENA, texto_principal: 'Ceviche. Pide ya.' })
     expect(r.por_chequeo.termino_obligatorio_ausente).toBe(1)
-    expect(r.por_chequeo.llamado_ausente).toBe(1)
-    expect(CH.datosDelLlamado(BRIEF.llamado_a_la_accion)).toEqual(['+593 997 744 288'])
+    // 02-oct (certificación CC#3): el teléfono es el DESTINO del botón, no copy ⇒ ya no se exige en el texto; en su lugar se pide NOMBRAR el botón
+    expect(r.por_chequeo.llamado_ausente).toBeUndefined()
+    expect(r.por_chequeo.boton_sin_mencion).toBe(1)
+    expect(CH.datosDelLlamado(BRIEF.llamado_a_la_accion)).toEqual([])
   })
   it('🔴 la fuente de la imagen la declara la pieza (si el brief es de imagen) · el prompt va en POSITIVO', () => {
     expect(chequear({ ...BUENA, fuente_imagen: 'quien sabe' }).por_chequeo.fuente_de_imagen_no_declarada).toBe(1)

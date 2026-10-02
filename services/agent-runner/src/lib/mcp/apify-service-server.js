@@ -112,7 +112,9 @@ server.registerTool(
         body: JSON.stringify({
           client_id: clientId,
           apify_function: entrada.funcion,
-          destination: 'brain_rag',
+          // 🔴 `respuesta`: el Servicio devuelve lo encontrado a quien lo pidió y NO escribe en el cerebro del cliente (certificación CC#3 02-oct: con `brain_rag` la ficha de Mapas de OTRO negocio quedó
+          // guardada como evidencia competitiva de Náufrago, y el pedido de Instagram sobrescribió un trozo del alta). Lo que el agente cite lo declara en su pieza.
+          destination: 'respuesta',
           dry_run: false,
           params: entrada.params(args),
           metadata: {
@@ -164,7 +166,7 @@ server.registerTool(
           : j.materia_prima === true
             ? 'Esto es MATERIA PRIMA: quedó guardado en su tabla (' + (j.guardado_en || 'client_web_pages') +
               '), NO en el cerebro. Usalo de esta respuesta.'
-            : 'Lo encontrado quedó también en el cerebro del cliente.',
+            : 'Esto NO entró al cerebro del cliente: es lo que se vio ahora, sin sello. Usalo de esta respuesta, verificá que sea del negocio correcto (misma ciudad, mismo nombre) y declará lo que citaste.',
     })
   },
 )

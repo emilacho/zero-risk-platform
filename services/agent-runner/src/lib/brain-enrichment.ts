@@ -40,6 +40,37 @@ export const MAX_QUERY_CHARS = 6000
  */
 export const OLD_VERSION_MARGIN = 5
 
+/**
+ * 02-oct (CC#1 · certificación CC#3 «la primera pieza real» · firma de Emilio) · LO RASPADO SIN SELLO NO SE INYECTA.
+ *
+ * El trozo 343bed5c (la ficha de Mapas de OTRO negocio) quedó en el cerebro de Náufrago como `untrusted` y este módulo no miraba la confianza.
+ * 🔴 Medido: los 92 trozos del cerebro son `untrusted` (el sello `canon` de ADR-021 fase C2 no existe todavía) ⇒ excluir TODO `untrusted` apagaría el cerebro entero, la voz del manual incluida.
+ * Regla de hoy (estrecha): se excluye lo `untrusted` que entró por el raspado del Servicio de Apify (`metadata.apify_function`). Lo demás sigue entrando.
+ * Palanca construida y APAGADA: `BRAIN_EXCLUIR_UNTRUSTED=todo` excluye todo `untrusted` · se enciende cuando exista el sello (decisión de Emilio, no se enciende sola).
+ */
+export function excluidoPorConfianza(
+  tag: { trust_level?: unknown } | null | undefined,
+  meta: { apify_function?: unknown } | null | undefined,
+): boolean {
+  if (!tag || tag.trust_level !== 'untrusted') return false // sin etiqueta no se sabe: no se inventa una exclusión
+  if (process.env.BRAIN_EXCLUIR_UNTRUSTED === 'todo') return true
+  return typeof meta?.apify_function === 'string' && meta.apify_function.length > 0
+}
+
+/** La confianza de los trozos que trajo la búsqueda · UNA consulta · el error se devuelve (no se traga). */
+async function marcasDeLosTrozos(supabase: SupabaseClient, ids: string[]): Promise<{ marcas: Map<string, { provenance_tag: any; metadata: any }>; error: string | null }> {
+  const marcas = new Map<string, { provenance_tag: any; metadata: any }>()
+  if (ids.length === 0) return { marcas, error: null }
+  try {
+    const { data, error } = await supabase.from('client_brain_chunks').select('id, provenance_tag, metadata').in('id', ids)
+    if (error) return { marcas, error: String(error.message || 'error de la base') }
+    for (const r of (data ?? []) as Array<{ id: string; provenance_tag: any; metadata: any }>) marcas.set(String(r.id), { provenance_tag: r.provenance_tag, metadata: r.metadata })
+    return { marcas, error: null }
+  } catch (e) {
+    return { marcas, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 /** E116 · id de la fila vigente del manual (mayor `version`) · null si no hay o si falla (se declara, no se rompe). */
 async function manualVigenteId(supabase: SupabaseClient, clientId: string): Promise<string | null> {
   try {
@@ -97,6 +128,10 @@ export interface EnrichmentResult {
   brain_chunks_old_version_dropped?: number
   /** E116 · id de la fila vigente del manual usada para filtrar · null = no se pudo saber (no se filtró). */
   brain_manual_vigente_id?: string | null
+  /** 02-oct · trozos `untrusted` que entraron por el raspado del Servicio (o todo `untrusted` con la palanca) y se descartaron de la inyección. */
+  brain_chunks_untrusted_dropped?: number
+  /** 02-oct · si la consulta de confianza falló: el motivo (y no se inyectó nada que no se pudiera verificar). */
+  brain_trust_lookup_error?: string
 }
 
 interface BrainChunkRow {
@@ -210,13 +245,24 @@ export async function enrichSystemPromptWithClientBrain(args: {
     if (error) return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: `rpc_error: ${error.message}`, brain_query_chars, brain_query_truncated }
     const crudos = (data ?? []) as BrainChunkRow[]
     const vigente = await manualVigenteId(args.supabase, args.clientId)
+    // 02-oct · la confianza de cada trozo (UNA consulta) · si no se puede saber, NO se inyecta lo que no se puede verificar
+    const { marcas, error: errorDeConfianza } = await marcasDeLosTrozos(args.supabase, crudos.map((r) => String(r.chunk_id)))
+    if (errorDeConfianza) {
+      return { ...empty, brain_hit: false, brain_query_ms: Date.now() - queryStartedAt, error: 'brain_trust_lookup_failed', brain_trust_lookup_error: errorDeConfianza, brain_query_chars, brain_query_truncated }
+    }
+    const confiable = (r: BrainChunkRow) => {
+      const m = marcas.get(String(r.chunk_id))
+      return !!m && !excluidoPorConfianza(m.provenance_tag, m.metadata) // un trozo que la consulta no devuelve no se inyecta
+    }
+    const brain_chunks_untrusted_dropped = crudos.filter((r) => !confiable(r)).length
     const rows = crudos
       .filter((r) => r.source_table !== 'client_brand_books' || vigente === null || String(r.source_id) === vigente)
+      .filter(confiable)
       .slice(0, topK)
     const brain_chunks_old_version_dropped = crudos.filter((r) => r.source_table === 'client_brand_books' && vigente !== null && String(r.source_id) !== vigente).length
     const brainQueryMs = Date.now() - queryStartedAt
     if (rows.length === 0) {
-      return { ...empty, brain_hit: false, brain_query_ms: brainQueryMs, error: 'brain_empty_for_client', brain_query_chars, brain_query_truncated, brain_chunks_old_version_dropped }
+      return { ...empty, brain_hit: false, brain_query_ms: brainQueryMs, error: 'brain_empty_for_client', brain_query_chars, brain_query_truncated, brain_chunks_old_version_dropped, brain_chunks_untrusted_dropped }
     }
     return {
       enrichment: formatChunksAsContext(rows),
@@ -227,6 +273,7 @@ export async function enrichSystemPromptWithClientBrain(args: {
       brain_query_chars,
       brain_query_truncated,
       brain_chunks_old_version_dropped,
+      brain_chunks_untrusted_dropped,
       brain_manual_vigente_id: vigente,
       tokens_used: queryText.length / 4, // rough estimate · 4 chars per token
       cost_usd: 0.00002 * (queryText.length / 4000), // ~$0.00002 per 1K tokens

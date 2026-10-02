@@ -93,15 +93,27 @@ function limitesDelBrief(textoLimites) {
   return { atribuidos: res, sin_campo: sueltos }
 }
 
+/** Separa por palabras: `normalizar` conserva . / : _ - (sirven para enlaces y teléfonos) y una frase pegada a un punto («puerta.») no se encontraba entre espacios · certificación CC#3 02-oct (falso positivo de «directo a tu puerta») */
+function porPalabras(s) {
+  return ' ' + normalizar(s).replace(/[.\/:_-]+/g, ' ').replace(/\s+/g, ' ').trim() + ' '
+}
 function palabraPresente(textoNorm, palabra) {
-  var p = normalizar(palabra)
+  var p = porPalabras(palabra).trim()
   if (!p) return false
-  return (' ' + textoNorm + ' ').indexOf(' ' + p + ' ') !== -1
+  return porPalabras(textoNorm).indexOf(' ' + p + ' ') !== -1
 }
 
-/** Lo que el llamado a la acción trae como dato verificable: enlaces, teléfonos, @usuarios. */
+/** «Botón: «Enviar mensaje» → WhatsApp Business +593…»: la etiqueta es lo que se ve; lo que va tras la flecha es el DESTINO del botón (se configura en la plataforma, no es copy). null si el llamado no trae botón. */
+function botonDelLlamado(llamado) {
+  var m = /bot[oó]n\s*:?\s*[«"“']([^»"”']+)[»"”']\s*(?:(?:→|->|=>)\s*(.+))?/i.exec(String(llamado || ''))
+  if (!m) return null
+  return { etiqueta: m[1].trim(), destino: m[2] ? m[2].trim() : '' }
+}
+
+/** Lo que el llamado a la acción trae como dato verificable: enlaces, teléfonos, @usuarios. Si trae un botón, lo que va tras la flecha es su destino, no copy: no se exige en el texto. */
 function datosDelLlamado(llamado) {
   var t = String(llamado || '')
+  if (botonDelLlamado(t)) t = t.replace(/(?:→|->|=>)[\s\S]*$/, '')
   var out = []
   var re = /(https?:\/\/\S+|wa\.me\/\S+|www\.\S+|@[A-Za-z0-9_.]+|\+?\d[\d\s-]{7,}\d)/g
   var m
@@ -109,7 +121,15 @@ function datosDelLlamado(llamado) {
   return out
 }
 
-var NEGACIONES = /\b(sin|no|nunca|ning[uú]n[oa]?|evita[rn]?|evitar|ni|jam[aá]s)\b/i
+// español Y inglés: el prompt de imagen va en inglés y la regla sólo miraba español (la corrida real tuvo 4 «no …» y el hallazgo no las nombraba)
+/** Las negaciones del prompt con hasta 4 palabras de contexto cada una: «no logo», «no sauce bottles in». */
+function negacionesDelPrompt(prompt) {
+  var out = []
+  var re = /\b(sin|no|nunca|ning[uú]n[oa]?|evita[rn]?|evitar|ni|jam[aá]s|without|not|never|avoid|nor|none)\b((?:\s+[\wáéíóúñÁÉÍÓÚÑ'’-]+){0,4})/gi
+  var m
+  while ((m = re.exec(String(prompt || ''))) !== null) out.push((m[1] + m[2]).trim())
+  return out
+}
 
 /**
  * Corre TODOS los chequeos. `brief` = el entregable del parte · `pieza` = lo que escribió el productor · `manual.forbidden_words` = prohibidas del manual.
@@ -148,6 +168,11 @@ function chequearPieza(brief, pieza, manual) {
     var dn = normalizar(d).replace(/\s+/g, '')
     if (normalizar(titular + ' ' + texto).replace(/\s+/g, '').indexOf(dn) === -1) falla('llamado_ausente', 'el llamado a la acción del brief trae «' + d + '» y no aparece en la pieza')
   })
+  // el BOTÓN del llamado: el rótulo se ve en el anuncio y la pieza tiene que invitar a tocarlo (candidato, no fatal) · el destino del botón no se exige en el texto
+  var boton = botonDelLlamado(brief && brief.llamado_a_la_accion)
+  if (boton && boton.etiqueta && !palabraPresente(aire, boton.etiqueta)) {
+    falla('boton_sin_mencion', 'el brief declara el botón «' + boton.etiqueta + '» y la pieza no lo nombra (el destino del botón' + (boton.destino ? ' — ' + boton.destino.replace(/[.\s]+$/, '') : '') + ' lo configura la plataforma, no va en el texto)')
+  }
 
   // ── la fuente de la imagen · la decide el BRIEF; la pieza debe declarar cuál usó
   var tipo = normalizar(brief && brief.tipo_de_pieza)
@@ -159,7 +184,8 @@ function chequearPieza(brief, pieza, manual) {
     if (!prompt.trim()) falla('prompt_de_imagen_ausente', 'la pieza es de imagen y no trae prompt para el generador')
   }
   // ── el prompt va EN POSITIVO (los generadores manejan mal el negativo)
-  if (prompt.trim() && NEGACIONES.test(prompt)) falla('prompt_con_negaciones', 'el prompt de imagen trae una negación («' + (prompt.match(NEGACIONES) || [''])[0] + '») · los generadores la manejan mal · debe decir lo que SÍ aparece')
+  var negs = prompt.trim() ? negacionesDelPrompt(prompt) : []
+  if (negs.length) falla('prompt_con_negaciones', 'el prompt de imagen trae ' + negs.length + ' ' + (negs.length === 1 ? 'negación' : 'negaciones') + ' (' + negs.slice(0, 8).map(function (n) { return '«' + n + '»' }).join(' · ') + ') · los generadores las manejan mal · debe decir lo que SÍ aparece')
 
   // ── lo que no pudo y lo que miró se declaran (nunca en silencio)
   if (!Array.isArray(pieza.que_miro) || pieza.que_miro.length === 0) falla('no_declaro_lo_que_miro', 'la pieza no declara qué miró (brief · fotos · mirar afuera)')
@@ -171,5 +197,5 @@ function chequearPieza(brief, pieza, manual) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { normalizar: normalizar, aTexto: aTexto, repararComillas: repararComillas, extraerPieza: extraerPieza, limitesDelBrief: limitesDelBrief, datosDelLlamado: datosDelLlamado, chequearPieza: chequearPieza, FUENTES_DE_IMAGEN: FUENTES_DE_IMAGEN }
+  module.exports = { botonDelLlamado: botonDelLlamado, negacionesDelPrompt: negacionesDelPrompt, palabraPresente: palabraPresente, normalizar: normalizar, aTexto: aTexto, repararComillas: repararComillas, extraerPieza: extraerPieza, limitesDelBrief: limitesDelBrief, datosDelLlamado: datosDelLlamado, chequearPieza: chequearPieza, FUENTES_DE_IMAGEN: FUENTES_DE_IMAGEN }
 }

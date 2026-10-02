@@ -1,0 +1,12 @@
+{
+ "fuente": "flujo vivo 3lyknrP3PoS2KzUf versionId 373cadaa-6072-4c2b-af32-fa314384330d · leído de n8n 02-oct",
+ "destinos_validos": [
+  "brain_rag",
+  "callback_url",
+  "both",
+  "respuesta"
+ ],
+ "should_brain_expresion": "should_brain: !['website_content_scraper', 'own_google_maps_profile', 'competitor_website_scraper'].includes(ctx.apify_function) && !ensayo && (ctx.sections || []).length > 0 && (ctx.destination === 'brain_rag' || ctx.destination === 'both')",
+ "respuesta_trae_datos": true,
+ "guardado_en_expresion": "guardado_en: ctx.materia_prima ? 'client_web_pages' : (ctx.destination === 'brain_rag' || ctx.destination === 'both' ? 'cerebro' : 'sólo la respuesta'),"
+}
