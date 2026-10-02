@@ -12,6 +12,6 @@ if (r.error && typeof r.error === 'object') {
 } else if (!Array.isArray(r.sedes)) {
   info = { error: 'la lectura de sedes contestó ok pero sin la lista de sedes' }
 } else {
-  info = { sedes: r.sedes, textos_propios: Array.isArray(r.textos_propios) ? r.textos_propios : [], descartes: Array.isArray(r.descartes) ? r.descartes : [], nuevas: r.nuevas || 0 }
+  info = { sedes: r.sedes, textos_propios: Array.isArray(r.textos_propios) ? r.textos_propios : [], descartes: Array.isArray(r.descartes) ? r.descartes : [], choques: Array.isArray(r.choques) ? r.choques : [], mapas_por_sede: Array.isArray(r.mapas_por_sede) ? r.mapas_por_sede : [], nuevas: r.nuevas || 0 }
 }
 return [{ json: { sedes_info: info } }]

@@ -1,0 +1,958 @@
+{
+ "captura": "4dd4e195-8112-4f0b-a4b4-f1fd3d9eed6c",
+ "created_at": "2026-09-29T01:36:09.451697+00:00",
+ "items": [
+  {
+   "cid": "1711391995246345696",
+   "fid": "0x902c2b00261aabdd:0x17c015f3cc1afde0",
+   "url": "https://www.google.com/maps/search/?api=1&query=Naufrago&query_place_id=ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "city": "Olon",
+   "menu": null,
+   "rank": 1,
+   "floor": null,
+   "kgmid": "/g/11vz6bdjfm",
+   "phone": "",
+   "price": null,
+   "state": null,
+   "title": "Naufrago",
+   "street": "663R+25G",
+   "address": "663R+25G, Olon, Ecuador",
+   "placeId": "ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "hotelAds": [],
+   "imageUrl": "https://lh3.googleusercontent.com/gps-cs-s/AHRPTWk7koNj_kXqw3Rm5Gn-nona7kK59NIBWMrIeH8-FX5AiCgo-j8Jy1vvNykaUEEUHykMg0faW1_O-LrVIXxxHhRUoLtXz2gcGTTSxRwHalRn-c6F1BORf9w4vLt5TBTLEV1MKT3RDR_ryLeC=w426-h240-k-no",
+   "language": "es",
+   "location": {
+    "lat": -1.7974316,
+    "lng": -80.7595412
+   },
+   "plusCode": null,
+   "subTitle": null,
+   "gasPrices": [],
+   "locatedIn": null,
+   "scrapedAt": "2026-09-29T01:36:08.037Z",
+   "categories": [
+    "Restaurante de desayunos"
+   ],
+   "hotelStars": null,
+   "placesTags": [],
+   "postalCode": null,
+   "totalScore": 4.8,
+   "checkInDate": null,
+   "countryCode": "EC",
+   "description": null,
+   "imagesCount": 18,
+   "reviewsTags": [],
+   "categoryName": "Restaurante de desayunos",
+   "checkOutDate": null,
+   "neighborhood": null,
+   "openingHours": [
+    {
+     "day": "lunes",
+     "hours": "8 AM to 4 PM"
+    },
+    {
+     "day": "martes",
+     "hours": "Cerrado"
+    },
+    {
+     "day": "miércoles",
+     "hours": "Cerrado"
+    },
+    {
+     "day": "jueves",
+     "hours": "8 AM to 4 PM"
+    },
+    {
+     "day": "viernes",
+     "hours": "8 AM to 4 PM"
+    },
+    {
+     "day": "sábado",
+     "hours": "8 AM to 4 PM"
+    },
+    {
+     "day": "domingo",
+     "hours": "8 AM to 4 PM"
+    }
+   ],
+   "reviewsCount": 24,
+   "searchString": "Náufrago Ecuador",
+   "servicesLink": null,
+   "googleFoodUrl": null,
+   "searchPageUrl": "https://www.google.com/maps/search/N%C3%A1ufrago%20Ecuador?hl=es",
+   "additionalInfo": {
+    "Menores": [
+     {
+      "Ideal para ir con niños": true
+     }
+    ],
+    "Ambiente": [
+     {
+      "A la moda": true
+     },
+     {
+      "Agradable": true
+     },
+     {
+      "Informal": true
+     },
+     {
+      "Relajado": true
+     }
+    ],
+    "Servicios": [
+     {
+      "Sanitario": true
+     }
+    ],
+    "Popular por": [
+     {
+      "Desayuno": true
+     },
+     {
+      "Cena en solitario": true
+     }
+    ],
+    "Qué ofrece": [
+     {
+      "Aperitivos": true
+     },
+     {
+      "Bocadillos": true
+     }
+    ],
+    "Público usual": [
+     {
+      "Grupos": true
+     },
+     {
+      "Turistas": true
+     }
+    ],
+    "Estacionamiento": [
+     {
+      "Estacionamiento gratuito en la calle": true
+     }
+    ],
+    "Opciones del local": [
+     {
+      "Desayunos": true
+     },
+     {
+      "Servicio a la mesa": true
+     }
+    ],
+    "Opciones de servicio": [
+     {
+      "Para llevar": true
+     },
+     {
+      "Consumo en el lugar": true
+     }
+    ]
+   },
+   "imageCategories": [],
+   "isAdvertisement": false,
+   "reserveTableUrl": null,
+   "hotelDescription": null,
+   "ownerDescription": null,
+   "peopleAlsoSearch": [],
+   "phoneUnformatted": "",
+   "businessProfileId": null,
+   "claimThisBusiness": true,
+   "permanentlyClosed": false,
+   "temporarilyClosed": false,
+   "reviewsDistribution": {
+    "oneStar": 1,
+    "twoStar": 0,
+    "fiveStar": 23,
+    "fourStar": 0,
+    "threeStar": 0
+   },
+   "wasOpenAtScrapeTime": false,
+   "popularTimesLiveText": null,
+   "popularTimesHistogram": {},
+   "popularTimesLivePercent": null
+  },
+  {
+   "cid": "6819041451795834387",
+   "fid": "0x902be756a7c7d88f:0x5ea21a1252f46613",
+   "url": "https://www.google.com/maps/search/?api=1&query=Hostal%20El%20Naufrago%202&query_place_id=ChIJj9jHp1bnK5ARE2b0UhIaol4",
+   "city": "Manta",
+   "menu": null,
+   "rank": 2,
+   "floor": null,
+   "kgmid": "/g/11smqzg48x",
+   "phone": "+593 99 570 8991",
+   "price": "$18",
+   "state": null,
+   "title": "Hostal El Naufrago 2",
+   "street": "Av. 113 y calle 118, Junto a Agencia Banco del Pacífico",
+   "address": "Av. 113 y calle 118, Junto a Agencia Banco del Pacífico, 130802 Manta, Ecuador",
+   "placeId": "ChIJj9jHp1bnK5ARE2b0UhIaol4",
+   "hotelAds": [
+    {
+     "url": "https://www.expedia.com/Hotel-Search?selected=74491157&startDate=2026-09-30&endDate=2026-10-01&MDPCID=US.META.HPA.HOTEL-ORGANIC-desktop.HOTEL&MDPDTL=HTL.74491157.20260930.20261001.DDT.2.CID..AUDID..RRID.bex_us_desktop&mctc=10&ct=hotel&mpg=USD&mpf=18.00&mpj=0.00&mpr=0.00&mpl=USD&exp_pg=google&langid=es&ad=2&tp=&utm_source=google&utm_medium=cpc&utm_term=74491157&utm_content=mapresults&utm_campaign=HotelAds&langid=2058&adults=2&children=&rrid=bex_us_desktop&rateplanid=385229849&mpm=24&mpn=316003514&mpo=HC&mpe=1790628507&mpp=1",
+     "price": "$18",
+     "title": "Expedia.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80Osx2BDpeptKbRu4PrDy-8Y5Zz66fZnywCCFq5K5Zwx24QPEf8D706Xz_0ck4NkCJSck_5NuX38i4w8k7v10i5wbNuhsONWoZf-HpoVvNJZm4J23QBmGPLzn-tiCL5l0tjii9RgJZU7yP_EkFitOUjjoSronKaSyWgSoepkmhE2CkE2XnzzKSFuVLw7qRsKLn&pcurl=https://www.expedia.com/Hotel-Search?selected%3D74491157%26startDate%3D2026-09-30%26endDate%3D2026-10-01%26MDPCID%3DUS.META.HPA.HOTEL-ORGANIC-desktop.HOTEL%26MDPDTL%3DHTL.74491157.20260930.20261001.DDT.2.CID..AUDID..RRID.bex_us_desktop%26mctc%3D10%26ct%3Dhotel%26mpg%3DUSD%26mpf%3D18.00%26mpj%3D0.00%26mpr%3D0.00%26mpl%3DUSD%26exp_pg%3Dgoogle%26langid%3Des%26ad%3D2%26tp%3D%26utm_source%3Dgoogle%26utm_medium%3Dcpc%26utm_term%3D74491157%26utm_content%3Dmapresults%26utm_campaign%3DHotelAds%26langid%3D2058%26adults%3D2%26children%3D%26rrid%3Dbex_us_desktop%26rateplanid%3D385229849%26mpm%3D24%26mpn%3D316003514%26mpo%3DHC%26mpe%3D1790628507%26mpp%3D1&s=AD1XQnlHZr9wFRn_XK-uR-SvFYdl",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.hotels.com/Hotel-Search?selected=74491157&startDate=2026-09-30&endDate=2026-10-01&mdpcid=HCOM-US.META.HPA.HOTEL-ORGANIC-desktop.HOTEL&MDPDTL=HTL.74491157.20260930.20261001.DDT.2.CID..AUDID.&adults=2&children=&mctc=10&mpf=18.00&mpg=USD&mpl=USD&mpj=0.00&mpr=0.00&rffrid=sem.hcom.US.156.024.mapresults.02.desktop-1.kwrd=GGMETA.74491157USes-20260930-D-ABW=2-camp=-aud=-N&rateplanid=385229849&mpm=24&mpn=316003514&mpo=HC&mpe=1790643190&mpp=1&locale=es_US&siteid=300000001",
+     "price": "$18",
+     "title": "Hotels.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OsxW7rHM3Pr400iLXfFA2t5JE5la1XhaXS1_JIwCSjiCVCwJBa6jeHwtFfWlAw2cJ_1ZnUBEj_WSZtIfAyP-2fI51liPbqpINsXjJhdJtsrU_hRKmUpYgn_U1_c1YdTMaF14EB7Wl8BMarRJ10DHEoT2itSVxEJva8_j81dSYp0HZdpBRdp4_HH8OOk-86o&pcurl=https://www.hotels.com/Hotel-Search?selected%3D74491157%26startDate%3D2026-09-30%26endDate%3D2026-10-01%26mdpcid%3DHCOM-US.META.HPA.HOTEL-ORGANIC-desktop.HOTEL%26MDPDTL%3DHTL.74491157.20260930.20261001.DDT.2.CID..AUDID.%26adults%3D2%26children%3D%26mctc%3D10%26mpf%3D18.00%26mpg%3DUSD%26mpl%3DUSD%26mpj%3D0.00%26mpr%3D0.00%26rffrid%3Dsem.hcom.US.156.024.mapresults.02.desktop-1.kwrd%3DGGMETA.74491157USes-20260930-D-ABW%3D2-camp%3D-aud%3D-N%26rateplanid%3D385229849%26mpm%3D24%26mpn%3D316003514%26mpo%3DHC%26mpe%3D1790643190%26mpp%3D1%26locale%3Des_US%26siteid%3D300000001&s=AD1XQnngW_PJNLB6G7P1VLD2FllZ",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.orbitz.com/Hotel-Search?selected=74491157&startDate=2026-09-30&endDate=2026-10-01&adults=2&children=&langid=2058&MDPCID=ORBITZ-US.META.HPA.ORGANIC-desktop-US-ES.HOTEL&MDPDTL=htl.74491157.20260930.20261001.DDT.2.CID..AUDID..mapresults&mpg=USD&mpf=18.00&mpj=0.00&mctc=10&rateplanid=385229849&mpm=24&mpn=316003514&mpo=HC&mpe=1790628507&mpp=1",
+     "price": "$18",
+     "title": "Orbitz.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OsysOPYp7720M7XkfTG488kmjeTc-nt_O0SzOKIE_KNCpldRcOdwkZgb3gkgeiG17Hlo5iQ0ZJW_MFs_6UTFOhOWGo52uaNZyk3YLNrkwAkX8TGsfHpAoMvGyZ5t-AhXYBLUTosJy1v3FKGzKReeX4IJN76zK7EdafH2Nwz4YXefgIBuHE2w99DEbGOZVx4&pcurl=https://www.orbitz.com/Hotel-Search?selected%3D74491157%26startDate%3D2026-09-30%26endDate%3D2026-10-01%26adults%3D2%26children%3D%26langid%3D2058%26MDPCID%3DORBITZ-US.META.HPA.ORGANIC-desktop-US-ES.HOTEL%26MDPDTL%3Dhtl.74491157.20260930.20261001.DDT.2.CID..AUDID..mapresults%26mpg%3DUSD%26mpf%3D18.00%26mpj%3D0.00%26mctc%3D10%26rateplanid%3D385229849%26mpm%3D24%26mpn%3D316003514%26mpo%3DHC%26mpe%3D1790628507%26mpp%3D1&s=AD1XQnn2aKgfOvCZzS486iUG6O-a",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://deals.vio.com/?sig=73aca13c7f952d2641c156f3e69125e1eb497c325f122828ee5aa8797168b9a12d32303331333438363233&turl=https://www.vio.com/Hotel/Search?checkIn=2026-09-30&checkOut=2026-10-01&currency=USD&forceCurrencyChange=1&lang=es&forceLanguageChange=1&rooms=2:&utm_source=gha&utm_medium=cpc&hotelId=21371436&userCountry=US&profile=r2d2m73kn8&preferredRate=18.00&deviceType=desktop&label=src%3Dgha%26cltype%3Dhotel%26datype%3Ddefault%26gsite%3Dmapresults%26vf%3D0%26ucountry%3DUS%26udevice%3Ddesktop%26hotel%3D21371436%26day%3D30%26month%3D09%26year%3D2026%26los%3D1%26price%3D18.00%26currency%3DUSD%26cid%3D%26listid%3D%26rateid%3DUS_D%26closerateid%3D%26promo%3D0%26isPrivateRate%3D0%26isAudienceUser%3D0%26isPaidClick%3D0%26&cp=UdI8uI3bMo76AldIChEIiA4iA1VTRCjw4uvVBlIBMhIaFUPc7pMaC2JYaGlHaVlSMzVNKAIw5_jr1QY",
+     "price": "$18",
+     "title": "Vio.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OszXHcqHA7bTfQ-mcyobPi3u2WGC6Lso05nNVMlpy3CAqf6VWas2RXY2ibm9LGTUfdom54RSja9NPzrGtOO20zujMc3III4E4DV9mx2vM6YoWrRL_RBRPYrDLLnLmPxwRxxEYSqFOO0KjL0JFykj7mzVGeMtgLWXEkre0YUaJbrHyNoWvlo80l6P&pcurl=https://deals.vio.com/?sig%3D73aca13c7f952d2641c156f3e69125e1eb497c325f122828ee5aa8797168b9a12d32303331333438363233%26turl%3Dhttps%253A%252F%252Fwww.vio.com%252FHotel%252FSearch%253FcheckIn%253D2026-09-30%2526checkOut%253D2026-10-01%2526currency%253DUSD%2526forceCurrencyChange%253D1%2526lang%253Des%2526forceLanguageChange%253D1%2526rooms%253D2%253A%2526utm_source%253Dgha%2526utm_medium%253Dcpc%2526hotelId%253D21371436%2526userCountry%253DUS%2526profile%253Dr2d2m73kn8%2526preferredRate%253D18.00%2526deviceType%253Ddesktop%2526label%253Dsrc%25253Dgha%252526cltype%25253Dhotel%252526datype%25253Ddefault%252526gsite%25253Dmapresults%252526vf%25253D0%252526ucountry%25253DUS%252526udevice%25253Ddesktop%252526hotel%25253D21371436%252526day%25253D30%252526month%25253D09%252526year%25253D2026%252526los%25253D1%252526price%25253D18.00%252526currency%25253DUSD%252526cid%25253D%252526listid%25253D%252526rateid%25253DUS_D%252526closerateid%25253D%252526promo%25253D0%252526isPrivateRate%25253D0%252526isAudienceUser%25253D0%252526isPaidClick%25253D0%252526%2526cp%253DUdI8uI3bMo76AldIChEIiA4iA1VTRCjw4uvVBlIBMhIaFUPc7pMaC2JYaGlHaVlSMzVNKAIw5_jr1QY&s=AD1XQnlM545HGCj-StYLZZjXxUK7",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.travelocity.com/Hotel-Search?selected=74491157&startDate=2026-09-30&endDate=2026-10-01&adults=2&children=&langid=2058&MDPCID=travelocity-US.META.HPA.ORGANIC-US-ES.HOTEL&MDPDTL=HTL.74491157.20260930.20261001.DDT.2.CID..AUDID..mapresults&mpg=USD&mpf=18.00&mpj=0.00&mpr=0.00&mctc=10&rateplanid=385229849&mpm=24&mpn=316003514&mpo=HC&mpe=1790628507&mpp=1",
+     "price": "$18",
+     "title": "Travelocity.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OswuXo70tqNSJ4sIbb8_ZBQjGujZ1eb4huvMe1eputkK-1gZLOcMKEUs5_-Kmpo_zvreX6Io6Z3V0W9Fq3Od02t6fnThjl4Td5EamGJDHik3ALQZByUX4neVYeH2yQyRixz95OZQNIitqlbB1b_OvwzWOWaP8d9GEm5KwtcyAtbVDZOxZeUBZYWsL8BHQQVt&pcurl=https://www.travelocity.com/Hotel-Search?selected%3D74491157%26startDate%3D2026-09-30%26endDate%3D2026-10-01%26adults%3D2%26children%3D%26langid%3D2058%26MDPCID%3Dtravelocity-US.META.HPA.ORGANIC-US-ES.HOTEL%26MDPDTL%3DHTL.74491157.20260930.20261001.DDT.2.CID..AUDID..mapresults%26mpg%3DUSD%26mpf%3D18.00%26mpj%3D0.00%26mpr%3D0.00%26mctc%3D10%26rateplanid%3D385229849%26mpm%3D24%26mpn%3D316003514%26mpo%3DHC%26mpe%3D1790628507%26mpp%3D1&s=AD1XQnkXyrtCOuNq525gNNtpqfIK",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://accommodation.edreams.net/Hotel-Search?selected=74491157&startDate=2026-09-30&endDate=2026-10-01&adults=2&children=&mpf=18.00&cur=USD&mpj=0.00&MDPCID=eDreams-US.DPS.Edreams.MetaSearch-GHA.HOTEL&mpl=USD&numberOfRooms=1&locale=en_US&rffrid=h4p.hcom.US.ghaodigeo.000.000.kwrd=&pos=EDREAMS_US&rateplanid=385229849&mctc=10&utm_medium=metasearch&utm_campaign=2384717024&utm_term=hotel&utm_source=FREEBOOKING",
+     "price": "$18",
+     "title": "eDreams",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OsxPKfvL0bYu_RZTfx5b6qOxTXvf5PCt8HTtASi3lABB1pp_IamoUTUNUVs1cC75A-CVXSicI87YH0wtYYpu0CSzihZ2gFWVJlbaZNKzxjOfo_jHydS9_y5D7BqEoatMkPho-DlQ8CRX7HP0ESANMtVkajaIflQQlE9LAxUp64GZ8dqGlSeo&pcurl=https://accommodation.edreams.net/Hotel-Search?selected%3D74491157%26startDate%3D2026-09-30%26endDate%3D2026-10-01%26adults%3D2%26children%3D%26mpf%3D18.00%26cur%3DUSD%26mpj%3D0.00%26MDPCID%3DeDreams-US.DPS.Edreams.MetaSearch-GHA.HOTEL%26mpl%3DUSD%26numberOfRooms%3D1%26locale%3Den_US%26rffrid%3Dh4p.hcom.US.ghaodigeo.000.000.kwrd%3D%26pos%3DEDREAMS_US%26rateplanid%3D385229849%26mctc%3D10%26utm_medium%3Dmetasearch%26utm_campaign%3D2384717024%26utm_term%3Dhotel%26utm_source%3DFREEBOOKING&s=AD1XQnl47wielITw-3psunEGbG3B",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://deals.goseek.com/?sig=34c47a49c3e8320dca5a5dda0da2a460c1bc23afde972e2894a4ff0b6052fb53383131303836353931&turl=https://www.goseek.com/Hotel/Search?checkIn=2026-09-30&checkOut=2026-10-01&currency=USD&forceCurrencyChange=1&lang=es&forceLanguageChange=1&rooms=2:&utm_source=gha&utm_medium=cpc&hotelId=21371436&userCountry=US&profile=r2d2m73kn8&preferredRate=18.00&deviceType=desktop&label=src%3Dgha%26cltype%3Dhotel%26datype%3Ddefault%26gsite%3Dmapresults%26vf%3D0%26ucountry%3DUS%26udevice%3Ddesktop%26hotel%3D21371436%26day%3D30%26month%3D09%26year%3D2026%26los%3D1%26price%3D18.00%26currency%3DUSD%26cid%3D%26listid%3D%26rateid%3DUS_D%26closerateid%3D%26promo%3D0%26isPrivateRate%3D0%26isAudienceUser%3D0%26isPaidClick%3D0%26&cp=ravv1hhHKLn6AldIChEIiA4iA1VTRCjw4uvVBlIBMhIaFfX3308aC0ZyVHRueGZKaE9jKAMwy5Xs1QY",
+     "price": "$18",
+     "title": "goseek.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OszqMS8sINDDbHkzBMHDbTvuw5KBpUHJ083IDjbiu4jteciQ6hvcFN6QImjb0kgP7_V-yi-lcDSLRDtEt69O0uiBlxqocYRmIpOdYFtInCT_bWfGvhZNsCVqytjPQf6w4iZLiTN57viMYNma5frmmc1AiVe6MnFJxPeiY-NK89EJ7_MVjK-qul8U7Px3KO81WQ&pcurl=https://deals.goseek.com/?sig%3D34c47a49c3e8320dca5a5dda0da2a460c1bc23afde972e2894a4ff0b6052fb53383131303836353931%26turl%3Dhttps%253A%252F%252Fwww.goseek.com%252FHotel%252FSearch%253FcheckIn%253D2026-09-30%2526checkOut%253D2026-10-01%2526currency%253DUSD%2526forceCurrencyChange%253D1%2526lang%253Des%2526forceLanguageChange%253D1%2526rooms%253D2%253A%2526utm_source%253Dgha%2526utm_medium%253Dcpc%2526hotelId%253D21371436%2526userCountry%253DUS%2526profile%253Dr2d2m73kn8%2526preferredRate%253D18.00%2526deviceType%253Ddesktop%2526label%253Dsrc%25253Dgha%252526cltype%25253Dhotel%252526datype%25253Ddefault%252526gsite%25253Dmapresults%252526vf%25253D0%252526ucountry%25253DUS%252526udevice%25253Ddesktop%252526hotel%25253D21371436%252526day%25253D30%252526month%25253D09%252526year%25253D2026%252526los%25253D1%252526price%25253D18.00%252526currency%25253DUSD%252526cid%25253D%252526listid%25253D%252526rateid%25253DUS_D%252526closerateid%25253D%252526promo%25253D0%252526isPrivateRate%25253D0%252526isAudienceUser%25253D0%252526isPaidClick%25253D0%252526%2526cp%253Dravv1hhHKLn6AldIChEIiA4iA1VTRCjw4uvVBlIBMhIaFfX3308aC0ZyVHRueGZKaE9jKAMwy5Xs1QY&s=AD1XQnkH3-neIcP9-XUiNtSw_9f0",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://deals.etrip.net/?sig=e9cc68956712e1e5d60f579a67e54afadd83f5d631dc9782cc50d47864de2f2c2d32303330363031313335&turl=https://search.etrip.net/Hotel/Search?checkIn=2026-09-30&checkOut=2026-10-01&currency=USD&forceCurrencyChange=1&lang=es&forceLanguageChange=1&rooms=2:&utm_source=gha&utm_medium=cpc&hotelId=21371436&userCountry=US&profile=r2d2m73kn8&preferredRate=18.00&label=src%3Dgha%26cltype%3Dhotel%26datype%3Ddefault%26gsite%3Dmapresults%26vf%3D0%26ucountry%3DUS%26udevice%3Ddesktop%26hotel%3D21371436%26day%3D30%26month%3D09%26year%3D2026%26los%3D1%26price%3D18.00%26currency%3DUSD%26cid%3D%26listid%3D%26rateid%3DUS_D%26closerateid%3D%26promo%3D0%26isPrivateRate%3D0%26isAudienceUser%3D0%26isPaidClick%3D0%26&cp=UdI8uI3bMo76AldIChEIiA4iA1VTRCjw4uvVBlIBMhIaFUPc7pMaC2JYaGlHaVlSMzVNKAIw5_jr1QY",
+     "price": "$18",
+     "title": "Etrip.net",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80Osz9bqX07pcXPQlDjdbP4EMyN1PDStJfSWrXHHEGnzRQBli1HEcteRqW9U1WiTylXPH92C9nQ6zqhyDLovlMIwmVwgTGAdIBBVfPbUyItIMDJxR8HMm0Er_SB9aJ51Ej3a5PuB5jQOARVY0QMiSH8KfKFVkqAYexJ-TJxx9VC9XFomMTAHE&pcurl=https://deals.etrip.net/?sig%3De9cc68956712e1e5d60f579a67e54afadd83f5d631dc9782cc50d47864de2f2c2d32303330363031313335%26turl%3Dhttps%253A%252F%252Fsearch.etrip.net%252FHotel%252FSearch%253FcheckIn%253D2026-09-30%2526checkOut%253D2026-10-01%2526currency%253DUSD%2526forceCurrencyChange%253D1%2526lang%253Des%2526forceLanguageChange%253D1%2526rooms%253D2%253A%2526utm_source%253Dgha%2526utm_medium%253Dcpc%2526hotelId%253D21371436%2526userCountry%253DUS%2526profile%253Dr2d2m73kn8%2526preferredRate%253D18.00%2526label%253Dsrc%25253Dgha%252526cltype%25253Dhotel%252526datype%25253Ddefault%252526gsite%25253Dmapresults%252526vf%25253D0%252526ucountry%25253DUS%252526udevice%25253Ddesktop%252526hotel%25253D21371436%252526day%25253D30%252526month%25253D09%252526year%25253D2026%252526los%25253D1%252526price%25253D18.00%252526currency%25253DUSD%252526cid%25253D%252526listid%25253D%252526rateid%25253DUS_D%252526closerateid%25253D%252526promo%25253D0%252526isPrivateRate%25253D0%252526isAudienceUser%25253D0%252526isPaidClick%25253D0%252526%2526cp%253DUdI8uI3bMo76AldIChEIiA4iA1VTRCjw4uvVBlIBMhIaFUPc7pMaC2JYaGlHaVlSMzVNKAIw5_jr1QY&s=AD1XQnn1phfZARTKVgMnygWiKnUT",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.bluepillow.com/search/61ef140e113b0ba9fb96cc19?begin=2026-09-30&end=2026-10-01&block_id=-b,kPxYBnyquec6EQWmplBils9v0qbGxRWxlIyVukLm2EJN0bQe0z7tU-DBo4K4yq3t5xIc7YwaiNbghoCkh-tm3g,-bkng-Hotel&fees=0.00&tax=3.56&total=27.31&adults=2&childs=0&infants=0&childrens=0&country=US&currency=USD&language=es&source=mapresults&utm_campaign=hotel&prid=foreign",
+     "price": "$27",
+     "title": "Bluepillow.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OsyAYHTYOEnOdTPjlFoL9maUkLFLVFWU3LwZxDwpDvCslNjHl7VARQsJ_HHvdZdp4a6QVgYFxbjbUOcAdhN3r_Awd3fBU3RlcqvV4r8SHDn9MVnth32UAeeeMwspVywIeByIGAcGRr5iMDt2MErpp-qTEM_wn12WlIzfeRkY9xq-nrx-fidrci2y5g&pcurl=https://www.bluepillow.com/search/61ef140e113b0ba9fb96cc19?begin%3D2026-09-30%26end%3D2026-10-01%26block_id%3D-b,kPxYBnyquec6EQWmplBils9v0qbGxRWxlIyVukLm2EJN0bQe0z7tU-DBo4K4yq3t5xIc7YwaiNbghoCkh-tm3g,-bkng-Hotel%26fees%3D0.00%26tax%3D3.56%26total%3D27.31%26adults%3D2%26childs%3D0%26infants%3D0%26childrens%3D0%26country%3DUS%26currency%3DUSD%26language%3Des%26source%3Dmapresults%26utm_campaign%3Dhotel%26prid%3Dforeign&s=AD1XQnky_Q9nkuIe0wOac8LLncSd",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.booking.com/searchresults.es.html?dest_id=8083740&highlighted_hotels=8083740&dest_type=hotel&checkin=2026-09-30&checkout=2026-10-01&group_adults=2&req_adults=2&show_room=808374006_396920284_2_0_0_540047&lang=es&selected_currency=USD&exrt=1.00000000&ext_price_total=27.31&ext_price_tax=3.56&xfc=USD&hca=m&group_children=0&req_children=0&&ts=1790122449&no_rooms=1&edgtid=YQfqSDIlT5yIwfzGuFbRzg&efpc=I7daJ7MaLw&utm_source=metagha&utm_medium=mapresults&utm_campaign=US&utm_term=hotel-8083740&utm_content=dev-desktop_los-1_bw-2_dow-Wednesday_defdate-1_room-0_gstadt-2_rateid-us_aud-0_gacid-_mcid-10_ppa-0_clrid-0_ad-0_gstkid-0_checkin-20260930_ppt-G&aid=2127489&label=metagha-link-MRUS-hotel-8083740_dev-desktop_los-1_bw-2_dow-Wednesday_defdate-1_room-0_gstadt-2_rateid-us_aud-0_gacid-_mcid-10_ppa-0_clrid-0_ad-0_gstkid-0_checkin-20260930_ppt-G",
+     "price": "$27",
+     "title": "Booking.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OswF8buzOe5Lxq1Nq2mPD4fChBkxUoFtXrhyZVnpxbFTRHjBLaoPn3faktVllgDtPh1DbmIKHjlHfbDYzHI_9j5ph7ZjISDvCk0CP92TOfBu2FoJX2kVM5kgi3SrI4B-oLDQAqLniFtEs41UPFo_zVo1U669fqtdz7X__iSk1wwbNWRBiYo75Xsg6qtsgEmR9gbCXw&pcurl=https://www.booking.com/searchresults.es.html?dest_id%3D8083740%26highlighted_hotels%3D8083740%26dest_type%3Dhotel%26checkin%3D2026-09-30%26checkout%3D2026-10-01%26group_adults%3D2%26req_adults%3D2%26show_room%3D808374006_396920284_2_0_0_540047%26lang%3Des%26selected_currency%3DUSD%26exrt%3D1.00000000%26ext_price_total%3D27.31%26ext_price_tax%3D3.56%26xfc%3DUSD%26hca%3Dm%26group_children%3D0%26req_children%3D0%26%26ts%3D1790122449%26no_rooms%3D1%26edgtid%3DYQfqSDIlT5yIwfzGuFbRzg%26efpc%3DI7daJ7MaLw%26utm_source%3Dmetagha%26utm_medium%3Dmapresults%26utm_campaign%3DUS%26utm_term%3Dhotel-8083740%26utm_content%3Ddev-desktop_los-1_bw-2_dow-Wednesday_defdate-1_room-0_gstadt-2_rateid-us_aud-0_gacid-_mcid-10_ppa-0_clrid-0_ad-0_gstkid-0_checkin-20260930_ppt-G%26aid%3D2127489%26label%3Dmetagha-link-MRUS-hotel-8083740_dev-desktop_los-1_bw-2_dow-Wednesday_defdate-1_room-0_gstadt-2_rateid-us_aud-0_gacid-_mcid-10_ppa-0_clrid-0_ad-0_gstkid-0_checkin-20260930_ppt-G&s=AD1XQnkqMguIBC68-Wy-HNAEGFFc",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.agoda.com/es-es/partners/partnersearch.aspx?site_id=1917614&CkInDay=30&CkInMonth=09&CkInYear=2026&CkOutDay=01&campaignid=&CkOutMonth=10&CkOutYear=2026&SearchDateType=default&NumberOfAdults=2&LT=2&NumberOfChildren=0&childages=&NumberOfRooms=1&gsite=mapresults&los=1&PartnerCurrency=USD&hid=30503422&RoomID=480835435&masterRoomId=480835435&PriceTotal=28.75&PriceTax=3.75&PriceFee=0.00&RatePlan=292ed66e-a2c8-4692-789b-db70a159fa6a&UserCountry=US&Currency=USD&UserDevice=desktop&Verif=false&rr=row_desktop&audience_list=&mcid=3038&booking_source=cpc&adType=0&mpt=WDQ2YjA3NTZTVDBMVk55S256L2IrL1Fmd3JoL2Q3L2ZsL1NyVkQxbVRzRGVVaDBTd0o1d3BJVGREQ015QyttNThVUEg5RWNIRWdsR1h3PT0&original_rr=&gaClickSrc=&clickType=hotel&lang=es&pkgId=NoBreakfast_NoDinner_false",
+     "price": "$29",
+     "title": "Agoda",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80Oswokwa5BuC1ChobiVBgkiEU0Dy2eA7WoQsBAKY-W1rmeAZ_ZHRIhzRFRLzDlUxpSrZrbX9EsdsZD3dSWOrHIhb_XgjmjXGrxfEh2vh_TpG6FsclLNIWbTujgaBK00GeG-PANS_Yv6xwKR66gUDTZATjFWX9RNybuvWkrtBzPXwb705E3nHbMKu0gHN3CA&pcurl=https://www.agoda.com/es-es/partners/partnersearch.aspx?site_id%3D1917614%26CkInDay%3D30%26CkInMonth%3D09%26CkInYear%3D2026%26CkOutDay%3D01%26campaignid%3D%26CkOutMonth%3D10%26CkOutYear%3D2026%26SearchDateType%3Ddefault%26NumberOfAdults%3D2%26LT%3D2%26NumberOfChildren%3D0%26childages%3D%26NumberOfRooms%3D1%26gsite%3Dmapresults%26los%3D1%26PartnerCurrency%3DUSD%26hid%3D30503422%26RoomID%3D480835435%26masterRoomId%3D480835435%26PriceTotal%3D28.75%26PriceTax%3D3.75%26PriceFee%3D0.00%26RatePlan%3D292ed66e-a2c8-4692-789b-db70a159fa6a%26UserCountry%3DUS%26Currency%3DUSD%26UserDevice%3Ddesktop%26Verif%3Dfalse%26rr%3Drow_desktop%26audience_list%3D%26mcid%3D3038%26booking_source%3Dcpc%26adType%3D0%26mpt%3DWDQ2YjA3NTZTVDBMVk55S256L2IrL1Fmd3JoL2Q3L2ZsL1NyVkQxbVRzRGVVaDBTd0o1d3BJVGREQ015QyttNThVUEg5RWNIRWdsR1h3PT0%26original_rr%3D%26gaClickSrc%3D%26clickType%3Dhotel%26lang%3Des%26pkgId%3DNoBreakfast_NoDinner_false&s=AD1XQnmD45SHYfXSw8DuPLjYpf96",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.reservationday.com/transition/?data=price=25.0&total_price=28.75&retail_price=25.0&retail_total_price=28.75&request_id=11164650443399591936&ps=73774358001493850&pb=0-slAkZlDjP06IhVxwa_7K5pynYIGxPDbpkbyKvHRkNy6REVv1DVXrRxPTlIj1fUDPF-fpuojiMoyfsQlGg8hBhTov5-ETjsATN0pvDG2-4NH46wTa3gfkCsqu_0iPC-91HgP7uUR3y5ZpcyfOHdKg%3D%3D&gha_rd_pull_request=True&alwd_rand=false&gt=1790636759&sg=WgCVp&ib=false&all_inclusive=false&utm_source=gha_rd&utm_content=mapresults&currency=USD&user_country=US&verification=false&rate_rule_ids=&date_type=default&rate_rule_id=signedout_desktop&display_currency=USD&display_all_inclusive_price=28.75&checkin_at=2026-09-30&checkout_at=2026-10-01&provider_hotel_id=10016207372&provider=htl&num_adults=2&children=[]&hotel_campaign=&user_locale=es-US&user_list_id=&utm_medium=organic&utm_id=gha_organic_rd",
+     "price": "$29",
+     "title": "Reservation Day",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OszX_LEBz8Rt4mbAc47VTWkcdTCuHYaJGf0liRiawsT5T_MXtvP3lmmlA5m2GTjnK-IpCxDqtE2ODkSN2KGXeUTU03KP6ZJoA7jy24jnv_U7WdZMzDACXAs8UOUuLh042HjwG5ABX3zA1BGXko1Q8a00HXGz7YuKOhmhpAiioLKYqr3XZxbRlLOC7YuRezhSgnKm8q6hVzdQ&pcurl=https://www.reservationday.com/transition/?data%3Dprice%3D25.0%2526total_price%3D28.75%2526retail_price%3D25.0%2526retail_total_price%3D28.75%2526request_id%3D11164650443399591936%2526ps%3D73774358001493850%2526pb%3D0-slAkZlDjP06IhVxwa_7K5pynYIGxPDbpkbyKvHRkNy6REVv1DVXrRxPTlIj1fUDPF-fpuojiMoyfsQlGg8hBhTov5-ETjsATN0pvDG2-4NH46wTa3gfkCsqu_0iPC-91HgP7uUR3y5ZpcyfOHdKg%25253D%25253D%2526gha_rd_pull_request%3DTrue%2526alwd_rand%3Dfalse%2526gt%3D1790636759%2526sg%3DWgCVp%2526ib%3Dfalse%2526all_inclusive%3Dfalse%26utm_source%3Dgha_rd%26utm_content%3Dmapresults%26currency%3DUSD%26user_country%3DUS%26verification%3Dfalse%26rate_rule_ids%3D%26date_type%3Ddefault%26rate_rule_id%3Dsignedout_desktop%26display_currency%3DUSD%26display_all_inclusive_price%3D28.75%26checkin_at%3D2026-09-30%26checkout_at%3D2026-10-01%26provider_hotel_id%3D10016207372%26provider%3Dhtl%26num_adults%3D2%26children%3D%5B%5D%26hotel_campaign%3D%26user_locale%3Des-US%26user_list_id%3D%26utm_medium%3Dorganic%26utm_id%3Dgha_organic_rd&s=AD1XQnln_urlI6xEbZkaLys_nOlB",
+     "isOfficialSite": false
+    }
+   ],
+   "imageUrl": "https://lh3.googleusercontent.com/gps-cs-s/AHRPTWlAE5EWO6mUhcGOgR26dZtZnj_yp6xYSVvHALl4R93EGdfV3AK-3GdaWuMaURGBM0rzvP0CQlv_RGcNtMNttOEZv_fi1NuKs4fgmtH0JZDrlbuEh6nfaaTf2aNH0CQGuVVPj44O-y9JsJBp=w408-h544-k-no",
+   "language": "es",
+   "location": {
+    "lat": -0.9624316,
+    "lng": -80.7077067
+   },
+   "plusCode": null,
+   "subTitle": null,
+   "gasPrices": [],
+   "locatedIn": null,
+   "scrapedAt": "2026-09-29T01:36:08.038Z",
+   "categories": [
+    "Hotel"
+   ],
+   "hotelStars": "Hotel de 3 estrellas",
+   "placesTags": [],
+   "postalCode": "130802",
+   "totalScore": 4.4,
+   "checkInDate": "2026-09-30",
+   "countryCode": "EC",
+   "description": null,
+   "imagesCount": 72,
+   "reviewsTags": [],
+   "categoryName": "Hotel",
+   "checkOutDate": "2026-10-01",
+   "neighborhood": "Tarqui",
+   "openingHours": [],
+   "reviewsCount": 80,
+   "searchString": "Náufrago Ecuador",
+   "servicesLink": null,
+   "googleFoodUrl": null,
+   "searchPageUrl": "https://www.google.com/maps/search/N%C3%A1ufrago%20Ecuador?hl=es",
+   "additionalInfo": {
+    "Amenities": [
+     {
+      "Wi-Fi gratis": true
+     },
+     {
+      "Desayuno incluido": true
+     }
+    ]
+   },
+   "imageCategories": [],
+   "isAdvertisement": false,
+   "reserveTableUrl": null,
+   "hotelDescription": null,
+   "ownerDescription": null,
+   "peopleAlsoSearch": [],
+   "phoneUnformatted": "+593995708991",
+   "businessProfileId": "9121283972998774479",
+   "claimThisBusiness": false,
+   "permanentlyClosed": false,
+   "temporarilyClosed": false,
+   "reviewsDistribution": {
+    "oneStar": 2,
+    "twoStar": 3,
+    "fiveStar": 52,
+    "fourStar": 17,
+    "threeStar": 6
+   },
+   "wasOpenAtScrapeTime": null,
+   "popularTimesLiveText": null,
+   "popularTimesHistogram": {},
+   "popularTimesLivePercent": null
+  },
+  {
+   "cid": "17247352559639124722",
+   "fid": "0x902be141ce0431b3:0xef5ae7c5c936daf2",
+   "url": "https://www.google.com/maps/search/?api=1&query=Hostal%20el%20Naufrago&query_place_id=ChIJszEEzkHhK5AR8to2ycXnWu8",
+   "city": "Manta",
+   "menu": null,
+   "rank": 3,
+   "floor": null,
+   "kgmid": "/g/11g8xch2xb",
+   "phone": "+593 99 500 0437",
+   "price": "$17",
+   "state": null,
+   "title": "Hostal el Naufrago",
+   "street": "Av. Circunvalacion y, Av. 42 y C. O",
+   "address": "Av. Circunvalacion y, Av. 42 y C. O, Manta, Ecuador",
+   "placeId": "ChIJszEEzkHhK5AR8to2ycXnWu8",
+   "website": "https://www.facebook.com/hostalnaufrago",
+   "hotelAds": [
+    {
+     "url": "https://www.reservationday.com/transition/?data=price=17.34&total_price=19.94&retail_price=26.0&retail_total_price=29.9&request_id=9791869782118148096&ps=11530094286364&pb=0-slAkZlDjP06IhVxwa_7Bdd60g55ybetKJiITGuW05mH-qotyPFS8YVImGzaAjWz6lE-FG6s7TNMSwQDVobfscv9uw94FWJWAjcRrQGnMO8KpXvWrqDrmMz-olZpNQzzIqHPrs2mnTZ--n517dLwQ%3D%3D&gha_rd_pull_request=True&alwd_rand=false&gt=1790643179&sg=lRlzC&ib=false&all_inclusive=false&utm_source=gha_rd&utm_content=mapresults&currency=USD&user_country=US&verification=false&rate_rule_ids=&date_type=default&rate_rule_id=signedout_desktop&display_currency=USD&display_all_inclusive_price=19.94&checkin_at=2026-09-30&checkout_at=2026-10-01&provider_hotel_id=10009565317&provider=htl&num_adults=2&children=[]&hotel_campaign=&user_locale=es-US&user_list_id=&utm_medium=organic&utm_id=gha_organic_rd",
+     "price": "$20",
+     "title": "Reservation Day",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80Osx7S6sYqQHAg9lUMZzCl29EvXt91F9BZxAC9N5q0MKVBwwEwetZK-uXqjgkqIlnOfeNPSheYMbvowUvzrHfxGBqZ3PIR8opprF0_FSYBIN07JXWZBsWwkZkGGXYyuCNTxVRAyVEMk4mqSeln8JxKcAJIq0qZXPS8RMyoS9_cCMhR1FHQYKK7cQtVN3Ba9Ucb2lGnV5JLPVA&pcurl=https://www.reservationday.com/transition/?data%3Dprice%3D17.34%2526total_price%3D19.94%2526retail_price%3D26.0%2526retail_total_price%3D29.9%2526request_id%3D9791869782118148096%2526ps%3D11530094286364%2526pb%3D0-slAkZlDjP06IhVxwa_7Bdd60g55ybetKJiITGuW05mH-qotyPFS8YVImGzaAjWz6lE-FG6s7TNMSwQDVobfscv9uw94FWJWAjcRrQGnMO8KpXvWrqDrmMz-olZpNQzzIqHPrs2mnTZ--n517dLwQ%25253D%25253D%2526gha_rd_pull_request%3DTrue%2526alwd_rand%3Dfalse%2526gt%3D1790643179%2526sg%3DlRlzC%2526ib%3Dfalse%2526all_inclusive%3Dfalse%26utm_source%3Dgha_rd%26utm_content%3Dmapresults%26currency%3DUSD%26user_country%3DUS%26verification%3Dfalse%26rate_rule_ids%3D%26date_type%3Ddefault%26rate_rule_id%3Dsignedout_desktop%26display_currency%3DUSD%26display_all_inclusive_price%3D19.94%26checkin_at%3D2026-09-30%26checkout_at%3D2026-10-01%26provider_hotel_id%3D10009565317%26provider%3Dhtl%26num_adults%3D2%26children%3D%5B%5D%26hotel_campaign%3D%26user_locale%3Des-US%26user_list_id%3D%26utm_medium%3Dorganic%26utm_id%3Dgha_organic_rd&s=AD1XQnn-eX_6Fiion4UlQt9sS7XD",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.booking.com/searchresults.es.html?dest_id=2695430&highlighted_hotels=2695430&dest_type=hotel&checkin=2026-09-30&checkout=2026-10-01&group_adults=2&req_adults=2&show_room=269543020_426614674_2_1_0_785751&lang=es&selected_currency=USD&exrt=1.00000000&ext_price_total=29.90&ext_price_tax=3.90&xfc=USD&hca=m&group_children=0&req_children=0&&no_rooms=1&ts=1790644815&edgtid=g41nN5oZQVuZawLeOhGVBw&efpc=JrAKKbkKLw&utm_source=metagha&utm_medium=mapresults&utm_campaign=US&utm_term=hotel-2695430&utm_content=dev-desktop_los-1_bw-2_dow-Wednesday_defdate-1_room-0_gstadt-2_rateid-public_aud-0_gacid-_mcid-10_ppa-0_clrid-0_ad-0_gstkid-0_checkin-20260930_ppt-0&aid=2127489&label=metagha-link-MRUS-hotel-2695430_dev-desktop_los-1_bw-2_dow-Wednesday_defdate-1_room-0_gstadt-2_rateid-public_aud-0_gacid-_mcid-10_ppa-0_clrid-0_ad-0_gstkid-0_checkin-20260930_ppt-0",
+     "price": "$30",
+     "title": "Booking.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OsycVrVIDP_PVijOUnVzrxY0iBHtOsfPPhFpURLNqHYoiH0tVFwX3u95ZbDOfobvzae3c-eOtWHHZ5hH8BisDT6hk271OacWxPxctUcY8iW1h7h8wmd1JC6HJvLFxRxT_V3nuntBFscfOMGj7Ypy_byK_5FzTZSA06I6WXx2zIYJSYXJJfCkNhtU1TZPThfUTRsnrw&pcurl=https://www.booking.com/searchresults.es.html?dest_id%3D2695430%26highlighted_hotels%3D2695430%26dest_type%3Dhotel%26checkin%3D2026-09-30%26checkout%3D2026-10-01%26group_adults%3D2%26req_adults%3D2%26show_room%3D269543020_426614674_2_1_0_785751%26lang%3Des%26selected_currency%3DUSD%26exrt%3D1.00000000%26ext_price_total%3D29.90%26ext_price_tax%3D3.90%26xfc%3DUSD%26hca%3Dm%26group_children%3D0%26req_children%3D0%26%26no_rooms%3D1%26ts%3D1790644815%26edgtid%3Dg41nN5oZQVuZawLeOhGVBw%26efpc%3DJrAKKbkKLw%26utm_source%3Dmetagha%26utm_medium%3Dmapresults%26utm_campaign%3DUS%26utm_term%3Dhotel-2695430%26utm_content%3Ddev-desktop_los-1_bw-2_dow-Wednesday_defdate-1_room-0_gstadt-2_rateid-public_aud-0_gacid-_mcid-10_ppa-0_clrid-0_ad-0_gstkid-0_checkin-20260930_ppt-0%26aid%3D2127489%26label%3Dmetagha-link-MRUS-hotel-2695430_dev-desktop_los-1_bw-2_dow-Wednesday_defdate-1_room-0_gstadt-2_rateid-public_aud-0_gacid-_mcid-10_ppa-0_clrid-0_ad-0_gstkid-0_checkin-20260930_ppt-0&s=AD1XQnnifKVIkkAcDddv06NOK019",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.hotels.com/Hotel-Search?selected=25027742&startDate=2026-09-30&endDate=2026-10-01&mdpcid=HCOM-US.META.HPA.HOTEL-ORGANIC-desktop.HOTEL&MDPDTL=HTL.25027742.20260930.20261001.DDT.2.CID..AUDID.&adults=2&children=&mctc=10&mpf=26.00&mpg=USD&mpl=USD&mpj=0.00&mpr=0.00&rffrid=sem.hcom.US.156.024.mapresults.02.desktop-1.kwrd=GGMETA.25027742USes-20260930-D-ABW=2-camp=-aud=-N&rateplanid=392947182&mpm=24&mpn=218112228&mpo=EC&mpe=1790623232&mpp=1&locale=es_US&siteid=300000001",
+     "price": "$26",
+     "title": "Hotels.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OsxPSFbLz24BrrP63ZI8evheHxYlLPY9blAxwge_xrU6jxQo3FsFuzhIGkLhCJJNGIGTTftRoTWJR2-lpz7-Lr31N-GuhM34i9nRd3wWI87sgU4Wk8JR7R8i1c0FLwmEpc7--37dXJYsjrY0zfPfhiZlH1jIkaaKHLUMccBn3NDRwacxvk5HbfLWxfX9-as&pcurl=https://www.hotels.com/Hotel-Search?selected%3D25027742%26startDate%3D2026-09-30%26endDate%3D2026-10-01%26mdpcid%3DHCOM-US.META.HPA.HOTEL-ORGANIC-desktop.HOTEL%26MDPDTL%3DHTL.25027742.20260930.20261001.DDT.2.CID..AUDID.%26adults%3D2%26children%3D%26mctc%3D10%26mpf%3D26.00%26mpg%3DUSD%26mpl%3DUSD%26mpj%3D0.00%26mpr%3D0.00%26rffrid%3Dsem.hcom.US.156.024.mapresults.02.desktop-1.kwrd%3DGGMETA.25027742USes-20260930-D-ABW%3D2-camp%3D-aud%3D-N%26rateplanid%3D392947182%26mpm%3D24%26mpn%3D218112228%26mpo%3DEC%26mpe%3D1790623232%26mpp%3D1%26locale%3Des_US%26siteid%3D300000001&s=AD1XQnnwSaxZVv9gjFX511NGaqmr",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://deals.vio.com/?sig=73aca13c7f952d2641c156f3e69125e1eb497c325f122828ee5aa8797168b9a12d32303331333438363233&turl=https://www.vio.com/Hotel/Search?checkIn=2026-09-30&checkOut=2026-10-01&currency=USD&forceCurrencyChange=1&lang=es&forceLanguageChange=1&rooms=2:&utm_source=gha&utm_medium=cpc&hotelId=3638124&userCountry=US&profile=r2d2m73kn8&preferredRate=26.00&deviceType=desktop&label=src%3Dgha%26cltype%3Dhotel%26datype%3Ddefault%26gsite%3Dmapresults%26vf%3D0%26ucountry%3DUS%26udevice%3Ddesktop%26hotel%3D3638124%26day%3D30%26month%3D09%26year%3D2026%26los%3D1%26price%3D26.00%26currency%3DUSD%26cid%3D%26listid%3D%26rateid%3DUS_D%26closerateid%3D%26promo%3D0%26isPrivateRate%3D0%26isAudienceUser%3D0%26isPaidClick%3D0%26&cp=hAk4BItixU5UbLyPChEIqBQiA1VTRCiUrvLVBlIBMhIaFfX3308aC2htVVRYQkJEY1p3KAMwpKDs1QY",
+     "price": "$26",
+     "title": "Vio.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OsxES_BMWB2pMfej0tyPI15D_yFCN7lj3QTiO_SqN4zjFZYROHOhGN_rRWdL9UYVOKBpK0sUk2HuU7x827tJGnTEba_kaDPRLr9GGhrfbl8FZBbPWJkvrHfLJFa2roXYVXbCEC-FMZmu_qbdUN9I327LT-nenF8OweAhEMGqXnRyRHNUImK4b1x2&pcurl=https://deals.vio.com/?sig%3D73aca13c7f952d2641c156f3e69125e1eb497c325f122828ee5aa8797168b9a12d32303331333438363233%26turl%3Dhttps%253A%252F%252Fwww.vio.com%252FHotel%252FSearch%253FcheckIn%253D2026-09-30%2526checkOut%253D2026-10-01%2526currency%253DUSD%2526forceCurrencyChange%253D1%2526lang%253Des%2526forceLanguageChange%253D1%2526rooms%253D2%253A%2526utm_source%253Dgha%2526utm_medium%253Dcpc%2526hotelId%253D3638124%2526userCountry%253DUS%2526profile%253Dr2d2m73kn8%2526preferredRate%253D26.00%2526deviceType%253Ddesktop%2526label%253Dsrc%25253Dgha%252526cltype%25253Dhotel%252526datype%25253Ddefault%252526gsite%25253Dmapresults%252526vf%25253D0%252526ucountry%25253DUS%252526udevice%25253Ddesktop%252526hotel%25253D3638124%252526day%25253D30%252526month%25253D09%252526year%25253D2026%252526los%25253D1%252526price%25253D26.00%252526currency%25253DUSD%252526cid%25253D%252526listid%25253D%252526rateid%25253DUS_D%252526closerateid%25253D%252526promo%25253D0%252526isPrivateRate%25253D0%252526isAudienceUser%25253D0%252526isPaidClick%25253D0%252526%2526cp%253DhAk4BItixU5UbLyPChEIqBQiA1VTRCiUrvLVBlIBMhIaFfX3308aC2htVVRYQkJEY1p3KAMwpKDs1QY&s=AD1XQnnbVKvbNe6dJPd9Yb8Ehpz4",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://accommodation.edreams.net/Hotel-Search?selected=25027742&startDate=2026-09-30&endDate=2026-10-01&adults=2&children=&mpf=26.00&cur=USD&mpj=0.00&MDPCID=eDreams-US.DPS.Edreams.MetaSearch-GHA.HOTEL&mpl=USD&numberOfRooms=1&locale=en_US&rffrid=h4p.hcom.US.ghaodigeo.000.000.kwrd=&pos=EDREAMS_US&rateplanid=392947182&mctc=10&utm_medium=metasearch&utm_campaign=801887744&utm_term=hotel&utm_source=FREEBOOKING",
+     "price": "$26",
+     "title": "eDreams",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80Osw8XRL6TbZmDAwmKiIrfDei0lmO31JiHe_F_Gy5kJmNNFsOti0ghkWVeZW8Jj4CNrodiiAssjERTvegrAPVu2Gj9eXpTl9jkm6xhcIyFSq3J2Sd8xBWOQ-qKaFhie4iU7SiLqfuninIGxbu9_LNGJ8MO3-zjJl9jln8ApOxUAl4MjMJirK4&pcurl=https://accommodation.edreams.net/Hotel-Search?selected%3D25027742%26startDate%3D2026-09-30%26endDate%3D2026-10-01%26adults%3D2%26children%3D%26mpf%3D26.00%26cur%3DUSD%26mpj%3D0.00%26MDPCID%3DeDreams-US.DPS.Edreams.MetaSearch-GHA.HOTEL%26mpl%3DUSD%26numberOfRooms%3D1%26locale%3Den_US%26rffrid%3Dh4p.hcom.US.ghaodigeo.000.000.kwrd%3D%26pos%3DEDREAMS_US%26rateplanid%3D392947182%26mctc%3D10%26utm_medium%3Dmetasearch%26utm_campaign%3D801887744%26utm_term%3Dhotel%26utm_source%3DFREEBOOKING&s=AD1XQnkVd0f-ssLpHC5WYf8YmCY8",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.zenhotels.com/go/rooms/9007931/?dates=30.09.2026-01.10.2026&cur=USD&lang=es&utm_source=google_hotelads&utm_medium=cpc-metasearch&partner_slug=google&guests=2&from=hostal_el_naufrago.26.USD.sr-01a0eac4-f9c3-7905-9fc1-0e6f6bf53102&utm_campaign=es-US&price=one&scroll=prices&partner_data=HvHZuxIVxlskYXr_TYHTbHfXW2HLUIvtspDsz5nattmeWkW8DYsJA9Xcqz1NYZObyFTyK77yL-AOCTOXy0W5ZgbGSn1TsVM-AOUSuJcbFNfDjFY8dm84b5XYHuOelcjVP2JMZtDc&utm_content=GoogleCPC&utm_term=gacid_.bw_2.los_1.dow_Wednesday.dtype_default.hid_9007931.rid_22819636.aud_.d_desktop.ad_0.ctype_hotel.promo_0.apireqtype_deals=disabled&showed_price=26.00&showed_taxes=5.20&RateRuleId=google.affiliate.162b_US-USD_zen",
+     "price": "$26",
+     "title": "ZenHotels.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OsxLZb3zPbxthvbhwJiVaofjHVt68PA1UmELmSjtHKzunQf3thbmVXBXQPntRmjE45DbPXgBPMXRXw7ySdKCCqo2VUrLJF3DI7RbJDbyS1hiXXMIGw0dS3cNMNFcbnNjFufGXCpL7qXSctKNXCHV0HMBt7TTI9ssaje-F47Ijl-vX4ZNKHvIcebM&pcurl=https://www.zenhotels.com/go/rooms/9007931/?dates%3D30.09.2026-01.10.2026%26cur%3DUSD%26lang%3Des%26utm_source%3Dgoogle_hotelads%26utm_medium%3Dcpc-metasearch%26partner_slug%3Dgoogle%26guests%3D2%26from%3Dhostal_el_naufrago.26.USD.sr-01a0eac4-f9c3-7905-9fc1-0e6f6bf53102%26utm_campaign%3Des-US%26price%3Done%26scroll%3Dprices%26partner_data%3DHvHZuxIVxlskYXr_TYHTbHfXW2HLUIvtspDsz5nattmeWkW8DYsJA9Xcqz1NYZObyFTyK77yL-AOCTOXy0W5ZgbGSn1TsVM-AOUSuJcbFNfDjFY8dm84b5XYHuOelcjVP2JMZtDc%26utm_content%3DGoogleCPC%26utm_term%3Dgacid_.bw_2.los_1.dow_Wednesday.dtype_default.hid_9007931.rid_22819636.aud_.d_desktop.ad_0.ctype_hotel.promo_0.apireqtype_deals%3Ddisabled%26showed_price%3D26.00%26showed_taxes%3D5.20%26RateRuleId%3Dgoogle.affiliate.162b_US-USD_zen&s=AD1XQnmP2Roip9Erw8CZSDabz9FG",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://deals.goseek.com/?sig=34c47a49c3e8320dca5a5dda0da2a460c1bc23afde972e2894a4ff0b6052fb53383131303836353931&turl=https://www.goseek.com/Hotel/Search?checkIn=2026-09-30&checkOut=2026-10-01&currency=USD&forceCurrencyChange=1&lang=es&forceLanguageChange=1&rooms=2:&utm_source=gha&utm_medium=cpc&hotelId=3638124&userCountry=US&profile=r2d2m73kn8&preferredRate=26.00&deviceType=desktop&label=src%3Dgha%26cltype%3Dhotel%26datype%3Ddefault%26gsite%3Dmapresults%26vf%3D0%26ucountry%3DUS%26udevice%3Ddesktop%26hotel%3D3638124%26day%3D30%26month%3D09%26year%3D2026%26los%3D1%26price%3D26.00%26currency%3DUSD%26cid%3D%26listid%3D%26rateid%3DUS_D%26closerateid%3D%26promo%3D0%26isPrivateRate%3D0%26isAudienceUser%3D0%26isPaidClick%3D0%26&cp=Gz0c7-J_8gxUbLyPChEIqBQiA1VTRCiUrvLVBlIBMhIaFT4EAuwaC2pOVlpaWEZlX1lvKAMwy5Xs1QY",
+     "price": "$26",
+     "title": "goseek.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80Osx1IvalxzaPa_wNnAih9fNUiClkTUr_bf3pebFjlcpcNt1ojGkFw1FMkMDJY9BaQ0-TBTwXZsjauFEwGOvMl7Yzkth1wQLlwQXgYA0UoNcxGEraFl4nVkZ0j6jhGSPOgksJcTv8hWWXZd7q4D26Nn59tPdapS5MGF6pYCQhnrPTv5HtWXqHundMOS8-_Ncg8A&pcurl=https://deals.goseek.com/?sig%3D34c47a49c3e8320dca5a5dda0da2a460c1bc23afde972e2894a4ff0b6052fb53383131303836353931%26turl%3Dhttps%253A%252F%252Fwww.goseek.com%252FHotel%252FSearch%253FcheckIn%253D2026-09-30%2526checkOut%253D2026-10-01%2526currency%253DUSD%2526forceCurrencyChange%253D1%2526lang%253Des%2526forceLanguageChange%253D1%2526rooms%253D2%253A%2526utm_source%253Dgha%2526utm_medium%253Dcpc%2526hotelId%253D3638124%2526userCountry%253DUS%2526profile%253Dr2d2m73kn8%2526preferredRate%253D26.00%2526deviceType%253Ddesktop%2526label%253Dsrc%25253Dgha%252526cltype%25253Dhotel%252526datype%25253Ddefault%252526gsite%25253Dmapresults%252526vf%25253D0%252526ucountry%25253DUS%252526udevice%25253Ddesktop%252526hotel%25253D3638124%252526day%25253D30%252526month%25253D09%252526year%25253D2026%252526los%25253D1%252526price%25253D26.00%252526currency%25253DUSD%252526cid%25253D%252526listid%25253D%252526rateid%25253DUS_D%252526closerateid%25253D%252526promo%25253D0%252526isPrivateRate%25253D0%252526isAudienceUser%25253D0%252526isPaidClick%25253D0%252526%2526cp%253DGz0c7-J_8gxUbLyPChEIqBQiA1VTRCiUrvLVBlIBMhIaFT4EAuwaC2pOVlpaWEZlX1lvKAMwy5Xs1QY&s=AD1XQnk0tWp6EgdJIYF_6TwEXY6q",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://deals.etrip.net/?sig=e9cc68956712e1e5d60f579a67e54afadd83f5d631dc9782cc50d47864de2f2c2d32303330363031313335&turl=https://search.etrip.net/Hotel/Search?checkIn=2026-09-30&checkOut=2026-10-01&currency=USD&forceCurrencyChange=1&lang=es&forceLanguageChange=1&rooms=2:&utm_source=gha&utm_medium=cpc&hotelId=3638124&userCountry=US&profile=r2d2m73kn8&preferredRate=26.00&label=src%3Dgha%26cltype%3Dhotel%26datype%3Ddefault%26gsite%3Dmapresults%26vf%3D0%26ucountry%3DUS%26udevice%3Ddesktop%26hotel%3D3638124%26day%3D30%26month%3D09%26year%3D2026%26los%3D1%26price%3D26.00%26currency%3DUSD%26cid%3D%26listid%3D%26rateid%3DUS_D%26closerateid%3D%26promo%3D0%26isPrivateRate%3D0%26isAudienceUser%3D0%26isPaidClick%3D0%26&cp=hAk4BItixU5UbLyPChEIqBQiA1VTRCiUrvLVBlIBMhIaFfX3308aC2htVVRYQkJEY1p3KAMwpKDs1QY",
+     "price": "$26",
+     "title": "Etrip.net",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80Osz2cRQgoliUe6D6Ob5PDj1zkVgmDqzo0sYnxTTctQZSkQTsLeYr9xpzIUBFTcIRg_slalc3fPYtVL2j-nSdNO0Yjqnwd-gj1c0izm5iiNXMXDMNME9uew1088Ud-LbmPtDIIg0i_7ivcCmniNmXJ8I8tMWpnqeym7nU2jmjikhCnLe4HqQ&pcurl=https://deals.etrip.net/?sig%3De9cc68956712e1e5d60f579a67e54afadd83f5d631dc9782cc50d47864de2f2c2d32303330363031313335%26turl%3Dhttps%253A%252F%252Fsearch.etrip.net%252FHotel%252FSearch%253FcheckIn%253D2026-09-30%2526checkOut%253D2026-10-01%2526currency%253DUSD%2526forceCurrencyChange%253D1%2526lang%253Des%2526forceLanguageChange%253D1%2526rooms%253D2%253A%2526utm_source%253Dgha%2526utm_medium%253Dcpc%2526hotelId%253D3638124%2526userCountry%253DUS%2526profile%253Dr2d2m73kn8%2526preferredRate%253D26.00%2526label%253Dsrc%25253Dgha%252526cltype%25253Dhotel%252526datype%25253Ddefault%252526gsite%25253Dmapresults%252526vf%25253D0%252526ucountry%25253DUS%252526udevice%25253Ddesktop%252526hotel%25253D3638124%252526day%25253D30%252526month%25253D09%252526year%25253D2026%252526los%25253D1%252526price%25253D26.00%252526currency%25253DUSD%252526cid%25253D%252526listid%25253D%252526rateid%25253DUS_D%252526closerateid%25253D%252526promo%25253D0%252526isPrivateRate%25253D0%252526isAudienceUser%25253D0%252526isPaidClick%25253D0%252526%2526cp%253DhAk4BItixU5UbLyPChEIqBQiA1VTRCiUrvLVBlIBMhIaFfX3308aC2htVVRYQkJEY1p3KAMwpKDs1QY&s=AD1XQnkPJBj5cBwLjUA_uxSJ7oeG",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.agoda.com/es-es/partners/partnersearch.aspx?site_id=1917614&CkInDay=30&CkInMonth=09&CkInYear=2026&CkOutDay=01&campaignid=&CkOutMonth=10&CkOutYear=2026&SearchDateType=default&NumberOfAdults=2&LT=2&NumberOfChildren=0&childages=&NumberOfRooms=1&gsite=mapresults&los=1&PartnerCurrency=USD&hid=2813070&RoomID=64477236&masterRoomId=64477236&PriceTotal=29.90&PriceTax=3.90&PriceFee=0.00&RatePlan=385d7464-d24c-a6b5-c50e-00855a408814&UserCountry=US&Currency=USD&UserDevice=desktop&Verif=false&rr=row_desktop&audience_list=&mcid=3038&booking_source=cpc&adType=0&mpt=elJQSVY1YUJpM0FYNWkvaHVIWEJkZTFFU1Z5NkV1YVhpdGxmQ3RPdmRnWEV6MjVTNW02ZDhWK1JmREEvYjB3WjR5RkVPT252cFNqeU1hbz0&original_rr=&gaClickSrc=&clickType=hotel&lang=es&pkgId=Breakfast_NoDinner_false",
+     "price": "$30",
+     "title": "Agoda",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OsxgVDMZBbn_CEPOcLdQN1nMCAgNnsE0PgEoLsY4lcZhNTzjjS7N-wvy-GJf5vPVQKFl3Z3_EEaQEPOm1ou_7fHGmGLSjuG8k218jPR6r_Ad3qidWecw6CF_sEuyy-0-s7n4t5Jj0ljfxnBhYIaMvTxd5t3-vsW8g8MQ0wEXjEG886k1v6hJmr8hn7dCsA&pcurl=https://www.agoda.com/es-es/partners/partnersearch.aspx?site_id%3D1917614%26CkInDay%3D30%26CkInMonth%3D09%26CkInYear%3D2026%26CkOutDay%3D01%26campaignid%3D%26CkOutMonth%3D10%26CkOutYear%3D2026%26SearchDateType%3Ddefault%26NumberOfAdults%3D2%26LT%3D2%26NumberOfChildren%3D0%26childages%3D%26NumberOfRooms%3D1%26gsite%3Dmapresults%26los%3D1%26PartnerCurrency%3DUSD%26hid%3D2813070%26RoomID%3D64477236%26masterRoomId%3D64477236%26PriceTotal%3D29.90%26PriceTax%3D3.90%26PriceFee%3D0.00%26RatePlan%3D385d7464-d24c-a6b5-c50e-00855a408814%26UserCountry%3DUS%26Currency%3DUSD%26UserDevice%3Ddesktop%26Verif%3Dfalse%26rr%3Drow_desktop%26audience_list%3D%26mcid%3D3038%26booking_source%3Dcpc%26adType%3D0%26mpt%3DelJQSVY1YUJpM0FYNWkvaHVIWEJkZTFFU1Z5NkV1YVhpdGxmQ3RPdmRnWEV6MjVTNW02ZDhWK1JmREEvYjB3WjR5RkVPT252cFNqeU1hbz0%26original_rr%3D%26gaClickSrc%3D%26clickType%3Dhotel%26lang%3Des%26pkgId%3DBreakfast_NoDinner_false&s=AD1XQnmkrBanOKG4EJ3bhw50sRgY",
+     "isOfficialSite": false
+    },
+    {
+     "url": "https://www.bluepillow.com/search/5a84fb487c00cb0e0428d590?begin=2026-09-30&end=2026-10-01&block_id=-b,iVLGky8E9QBmTxFMxDRZuxzQBpoaeDBOqAZvSYUqa_whOP5OdrumByVkkwRk_d6x_iE3KfKqM31-3rSTAXL9OA,-bkng-Hotel&fees=0.00&tax=3.90&total=29.90&adults=2&childs=0&infants=0&childrens=0&country=US&currency=USD&language=es&source=mapresults&utm_campaign=hotel&prid=foreign",
+     "price": "$30",
+     "title": "Bluepillow.com",
+     "googleUrl": "https://www.google.com/travel/lodging/clk?pc=AA80OszxFV9fYraa2gEjZPQwxETOP4CVPV1XfElC1fSw_gqNbfRenSDOp-3-H8vvC_oZea9e9qFyT98pt1w6Leghc122bGjNRjiPZ2PW2t3TyE25xCnHJ8yIFCdN6JJuMnWRk14oURNzQgwr-asGTerseUzUidOMZYZ9YN-YX3PDK6JijR-y7SLyJrQlag&pcurl=https://www.bluepillow.com/search/5a84fb487c00cb0e0428d590?begin%3D2026-09-30%26end%3D2026-10-01%26block_id%3D-b,iVLGky8E9QBmTxFMxDRZuxzQBpoaeDBOqAZvSYUqa_whOP5OdrumByVkkwRk_d6x_iE3KfKqM31-3rSTAXL9OA,-bkng-Hotel%26fees%3D0.00%26tax%3D3.90%26total%3D29.90%26adults%3D2%26childs%3D0%26infants%3D0%26childrens%3D0%26country%3DUS%26currency%3DUSD%26language%3Des%26source%3Dmapresults%26utm_campaign%3Dhotel%26prid%3Dforeign&s=AD1XQnlVRihsrxmn4Fc5hNkyCRmQ",
+     "isOfficialSite": false
+    }
+   ],
+   "imageUrl": "https://lh3.googleusercontent.com/gps-cs-s/AHRPTWnk3GmQFO6RbtipItIrcXxQCVEccN8I7VZFHbP4DlIfWJGsyTBf5rKVamKliXuz9V8uzpqgRDdQM1jJBsVWExDp3jaS6LOqae2H-Nif4EYex0YT6_wBSyUzHVeF1iGF0f_8h69kBQ=w427-h240-k-no",
+   "language": "es",
+   "location": {
+    "lat": -0.9531981,
+    "lng": -80.7429125
+   },
+   "plusCode": null,
+   "subTitle": null,
+   "gasPrices": [],
+   "locatedIn": null,
+   "scrapedAt": "2026-09-29T01:36:08.039Z",
+   "categories": [
+    "Hotel"
+   ],
+   "hotelStars": "Hotel",
+   "placesTags": [],
+   "postalCode": null,
+   "totalScore": 4.2,
+   "checkInDate": "2026-09-30",
+   "countryCode": "EC",
+   "description": null,
+   "imagesCount": 263,
+   "reviewsTags": [],
+   "categoryName": "Hotel",
+   "checkOutDate": "2026-10-01",
+   "neighborhood": "Parroquia Manta",
+   "openingHours": [],
+   "reviewsCount": 266,
+   "searchString": "Náufrago Ecuador",
+   "servicesLink": null,
+   "googleFoodUrl": null,
+   "searchPageUrl": "https://www.google.com/maps/search/N%C3%A1ufrago%20Ecuador?hl=es",
+   "additionalInfo": {
+    "Amenities": [
+     {
+      "Wi-Fi gratis": true
+     },
+     {
+      "Desayuno incluido": true
+     }
+    ],
+    "Público usual": [
+     {
+      "Amigable con LGBTQ+": true
+     }
+    ]
+   },
+   "imageCategories": [],
+   "isAdvertisement": false,
+   "reserveTableUrl": null,
+   "hotelDescription": null,
+   "ownerDescription": null,
+   "peopleAlsoSearch": [],
+   "phoneUnformatted": "+593995000437",
+   "businessProfileId": "14631543242208703906",
+   "claimThisBusiness": false,
+   "permanentlyClosed": false,
+   "temporarilyClosed": false,
+   "reviewsDistribution": {
+    "oneStar": 23,
+    "twoStar": 7,
+    "fiveStar": 151,
+    "fourStar": 63,
+    "threeStar": 22
+   },
+   "wasOpenAtScrapeTime": null,
+   "popularTimesLiveText": null,
+   "popularTimesHistogram": {},
+   "popularTimesLivePercent": null
+  },
+  {
+   "cid": "9395589923697073970",
+   "fid": "0x91cd052364f80503:0x8263d74171341f32",
+   "url": "https://www.google.com/maps/search/?api=1&query=El%20Naufrago%20Marisquer%C3%ADa&query_place_id=ChIJAwX4ZCMFzZERMh80cUHXY4I",
+   "city": "Gualaceo",
+   "menu": null,
+   "rank": 4,
+   "floor": null,
+   "kgmid": "/g/11j8tmsbbx",
+   "phone": "",
+   "price": null,
+   "state": null,
+   "title": "El Naufrago Marisquería",
+   "street": "Luis Ríos Rodríguez entre Eugenio Espejo, y y Av. Jaime Roldos",
+   "address": "Luis Ríos Rodríguez entre Eugenio Espejo, y y Av. Jaime Roldos, 010350 Gualaceo, Ecuador",
+   "placeId": "ChIJAwX4ZCMFzZERMh80cUHXY4I",
+   "hotelAds": [],
+   "imageUrl": "https://lh3.googleusercontent.com/gps-cs-s/AHRPTWkuHLic_qHz0I9LGM7ZReXJTRbDJWxdrlyreHEnsTO2TyAOZl1FMnLPORvbDsPpKN9sGCv9yECexp9rye0AutLn7O8XRCAIk2fVjiRbPTedmFw8z6e15Ry3AGT0SIjDmqamsEs=w426-h240-k-no",
+   "language": "es",
+   "location": {
+    "lat": -2.8906293,
+    "lng": -78.7759756
+   },
+   "plusCode": null,
+   "subTitle": null,
+   "gasPrices": [],
+   "locatedIn": null,
+   "scrapedAt": "2026-09-29T01:36:08.039Z",
+   "categories": [
+    "Marisquería"
+   ],
+   "hotelStars": null,
+   "placesTags": [],
+   "postalCode": "010350",
+   "totalScore": 4.4,
+   "checkInDate": null,
+   "countryCode": "EC",
+   "description": null,
+   "imagesCount": 136,
+   "reviewsTags": [],
+   "categoryName": "Marisquería",
+   "checkOutDate": null,
+   "neighborhood": null,
+   "openingHours": [
+    {
+     "day": "lunes",
+     "hours": "9 AM to 6 PM"
+    },
+    {
+     "day": "martes",
+     "hours": "Cerrado"
+    },
+    {
+     "day": "miércoles",
+     "hours": "9 AM to 6 PM"
+    },
+    {
+     "day": "jueves",
+     "hours": "9 AM to 9 PM"
+    },
+    {
+     "day": "viernes",
+     "hours": "9 AM to 9 PM"
+    },
+    {
+     "day": "sábado",
+     "hours": "9 AM to 10 PM"
+    },
+    {
+     "day": "domingo",
+     "hours": "9 AM to 6 PM"
+    }
+   ],
+   "reviewsCount": 140,
+   "searchString": "Náufrago Ecuador",
+   "servicesLink": null,
+   "googleFoodUrl": null,
+   "searchPageUrl": "https://www.google.com/maps/search/N%C3%A1ufrago%20Ecuador?hl=es",
+   "additionalInfo": {
+    "Pagos": [
+     {
+      "Pagos móviles mediante NFC": true
+     },
+     {
+      "Tarjetas de débito": true
+     }
+    ],
+    "Menores": [
+     {
+      "Ideal para ir con niños": true
+     },
+     {
+      "Menú para niños": true
+     },
+     {
+      "Sillas altas": true
+     }
+    ],
+    "Ambiente": [
+     {
+      "A la moda": true
+     },
+     {
+      "Agradable": true
+     },
+     {
+      "Informal": true
+     },
+     {
+      "Relajado": true
+     }
+    ],
+    "Mascotas": [
+     {
+      "Se permiten perros": true
+     }
+    ],
+    "Servicios": [
+     {
+      "Sanitario": true
+     },
+     {
+      "Tiene bar": true
+     },
+     {
+      "Wi-Fi": true
+     },
+     {
+      "Tiene Wi-Fi gratis": true
+     }
+    ],
+    "Popular por": [
+     {
+      "Almuerzo": true
+     }
+    ],
+    "Qué ofrece": [
+     {
+      "Alcohol": true
+     },
+     {
+      "Aperitivos": true
+     },
+     {
+      "Barra de ensaladas": true
+     },
+     {
+      "Bebidas en hora feliz": true
+     },
+     {
+      "Bebidas fuertes": true
+     },
+     {
+      "Bocadillos": true
+     },
+     {
+      "Buffet": true
+     },
+     {
+      "Café": true
+     },
+     {
+      "Cerveza": true
+     },
+     {
+      "Cócteles": true
+     },
+     {
+      "Comedor privado": true
+     },
+     {
+      "Comidas en hora feliz": true
+     },
+     {
+      "Platos orgánicos": true
+     },
+     {
+      "Platos vegetarianos": true
+     },
+     {
+      "Vino": true
+     }
+    ],
+    "Accesibilidad": [
+     {
+      "Entrada accesible para personas en silla de ruedas": true
+     },
+     {
+      "Espacio accesible para personas en silla de ruedas": true
+     },
+     {
+      "Estacionamiento accesible para personas en silla de ruedas": true
+     }
+    ],
+    "Planificación": [
+     {
+      "Se aceptan reservas": true
+     }
+    ],
+    "Público usual": [
+     {
+      "Amigable con LGBTQ+": true
+     },
+     {
+      "Espacio seguro para personas transgénero": true
+     },
+     {
+      "Grupos": true
+     },
+     {
+      "Recomendable para ir en familia": true
+     },
+     {
+      "Turistas": true
+     }
+    ],
+    "Estacionamiento": [
+     {
+      "Estacionamiento gratuito en la calle": true
+     }
+    ],
+    "Opciones del local": [
+     {
+      "Desayunos": true
+     },
+     {
+      "Almuerzo": true
+     },
+     {
+      "Cena": true
+     },
+     {
+      "Servicio de catering": true
+     },
+     {
+      "Postres": true
+     },
+     {
+      "Espacio con asientos": true
+     },
+     {
+      "Servicio a la mesa": true
+     }
+    ],
+    "Aspectos destacados": [
+     {
+      "Asientos en la terraza": true
+     },
+     {
+      "Deportes": true
+     },
+     {
+      "Música en vivo": true
+     }
+    ],
+    "Opciones de servicio": [
+     {
+      "Asientos al aire libre": true
+     },
+     {
+      "Entrega a domicilio": true
+     },
+     {
+      "Pedidos desde el automóvil": true
+     },
+     {
+      "Para llevar": true
+     },
+     {
+      "Consumo en el lugar": true
+     }
+    ]
+   },
+   "imageCategories": [],
+   "isAdvertisement": false,
+   "reserveTableUrl": null,
+   "hotelDescription": null,
+   "ownerDescription": null,
+   "peopleAlsoSearch": [],
+   "phoneUnformatted": "",
+   "businessProfileId": "16776184134953843213",
+   "claimThisBusiness": false,
+   "permanentlyClosed": false,
+   "temporarilyClosed": false,
+   "reviewsDistribution": {
+    "oneStar": 5,
+    "twoStar": 3,
+    "fiveStar": 92,
+    "fourStar": 27,
+    "threeStar": 13
+   },
+   "wasOpenAtScrapeTime": false,
+   "popularTimesLiveText": null,
+   "popularTimesHistogram": {},
+   "popularTimesLivePercent": null
+  },
+  {
+   "cid": "6230989379833838621",
+   "fid": "0x902d6d1447527bc7:0x5678ebd3e83a3c1d",
+   "url": "https://www.google.com/maps/search/?api=1&query=Picanteria%20El%20Naufrago&query_place_id=ChIJx3tSRxRtLZARHTw66NPreFY",
+   "city": "Guayaquil",
+   "menu": null,
+   "rank": 5,
+   "floor": null,
+   "kgmid": "/g/11cn9nthch",
+   "phone": "+593 99 968 0948",
+   "price": null,
+   "state": null,
+   "title": "Picanteria El Naufrago",
+   "street": "7ma Peatonal 3 NE 723",
+   "address": "7ma Peatonal 3 NE 723, 090505 Guayaquil, Ecuador",
+   "placeId": "ChIJx3tSRxRtLZARHTw66NPreFY",
+   "hotelAds": [],
+   "imageUrl": "https://lh5.googleusercontent.com/kf5mb8RnTKrnTWdfzvCMMR8ECWygB2W-9SOBF99ye-nfbq9fBin1ElZoQAYNclE7=w408-h306-k-no",
+   "language": "es",
+   "location": {
+    "lat": -2.1344805,
+    "lng": -79.8924729
+   },
+   "plusCode": null,
+   "subTitle": null,
+   "gasPrices": [],
+   "locatedIn": null,
+   "scrapedAt": "2026-09-29T01:36:08.040Z",
+   "categories": [
+    "Restaurante ecuatoriano",
+    "Restaurante"
+   ],
+   "hotelStars": null,
+   "placesTags": [],
+   "postalCode": "090505",
+   "totalScore": 3.2,
+   "checkInDate": null,
+   "countryCode": "EC",
+   "description": null,
+   "imagesCount": 6,
+   "reviewsTags": [],
+   "categoryName": "Restaurante ecuatoriano",
+   "checkOutDate": null,
+   "neighborhood": "Los Sauces",
+   "openingHours": [
+    {
+     "day": "lunes",
+     "hours": "8 AM to 4 PM"
+    },
+    {
+     "day": "martes",
+     "hours": "8 AM to 4 PM"
+    },
+    {
+     "day": "miércoles",
+     "hours": "8 AM to 4 PM"
+    },
+    {
+     "day": "jueves",
+     "hours": "8 AM to 4 PM"
+    },
+    {
+     "day": "viernes",
+     "hours": "8 AM to 8 PM"
+    },
+    {
+     "day": "sábado",
+     "hours": "8 AM to 8 PM"
+    },
+    {
+     "day": "domingo",
+     "hours": "8 AM to 8 PM"
+    }
+   ],
+   "reviewsCount": 11,
+   "searchString": "Náufrago Ecuador",
+   "servicesLink": null,
+   "googleFoodUrl": null,
+   "searchPageUrl": "https://www.google.com/maps/search/N%C3%A1ufrago%20Ecuador?hl=es",
+   "additionalInfo": {
+    "Pagos": [
+     {
+      "Solo dinero en efectivo": true
+     }
+    ],
+    "Menores": [
+     {
+      "Ideal para ir con niños": true
+     }
+    ],
+    "Ambiente": [
+     {
+      "A la moda": true
+     },
+     {
+      "Agradable": true
+     },
+     {
+      "Relajado": true
+     }
+    ],
+    "Servicios": [
+     {
+      "Sanitario": true
+     }
+    ],
+    "Qué ofrece": [
+     {
+      "Aperitivos": true
+     }
+    ],
+    "Público usual": [
+     {
+      "Grupos": true
+     }
+    ],
+    "Estacionamiento": [
+     {
+      "Estacionamiento gratuito en la calle": true
+     }
+    ],
+    "Opciones del local": [
+     {
+      "Servicio a la mesa": true
+     }
+    ],
+    "Opciones de servicio": [
+     {
+      "Para llevar": true
+     },
+     {
+      "Consumo en el lugar": true
+     }
+    ]
+   },
+   "imageCategories": [],
+   "isAdvertisement": false,
+   "reserveTableUrl": null,
+   "hotelDescription": null,
+   "ownerDescription": null,
+   "peopleAlsoSearch": [],
+   "phoneUnformatted": "+593999680948",
+   "businessProfileId": null,
+   "claimThisBusiness": true,
+   "permanentlyClosed": false,
+   "temporarilyClosed": false,
+   "reviewsDistribution": {
+    "oneStar": 3,
+    "twoStar": 0,
+    "fiveStar": 1,
+    "fourStar": 6,
+    "threeStar": 1
+   },
+   "wasOpenAtScrapeTime": false,
+   "popularTimesLiveText": null,
+   "popularTimesHistogram": {},
+   "popularTimesLivePercent": null
+  }
+ ]
+}

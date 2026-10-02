@@ -28,13 +28,25 @@ export interface SedeResuelta { clave: string; ciudad: string; direccion: CampoR
 interface SedesLogica {
   observacionesDelSitio(contenido: string, ctx: { url?: string | null; crawled_at?: string | null }): Observacion[]
   observacionesDeInstagram(perfil: unknown, ctx: { observado_en?: string | null; url?: string | null }): Observacion[]
-  pruebasDePropiedad(obs: Observacion[], ficha: { website_url?: unknown; instagram?: unknown }): unknown
-  observacionesDeMaps(item: unknown, sedes: { clave: string; ciudad: string }[], nombre: string, ctx: { observado_en?: string | null; pruebas?: unknown }): { observaciones: Observacion[]; descartado: { motivo: string; ciudad?: string | null } | null }
+  pruebasDePropiedad(obs: Observacion[], ficha: { website_url?: unknown; instagram?: unknown; cuentas?: string[] }): unknown
+  observacionesDeMaps(item: unknown, sedes: { clave: string; ciudad: string }[], nombre: string, ctx: { observado_en?: string | null; pruebas?: unknown }): { observaciones: Observacion[]; descartado: { motivo: string; ciudad?: string | null } | null; prueba?: string; sede?: string }
+  cuentasSocialesDe(texto: unknown): string[]
+  horarioDeMapsEnTexto(lista: unknown): string | null
+  telefonoNorm(s: unknown): string | null
   descubrirSedes(obs: Observacion[]): { clave: string; ciudad: string }[]
   resolverSedes(sedes: { clave: string; ciudad: string }[], obs: Observacion[]): SedeResuelta[]
   textosPropios(posts: unknown, op?: { max?: number; largo?: number }): { fecha: string | null; texto: string; post: string | null }[]
   clave(s: string): string
 }
+
+export interface AporteMapas {
+  sede: string
+  ciudad: string
+  ficha: { titulo: string; ref: string | null; prueba: string; observado_en: string | null } | null
+  aporta: { direccion: string | null; codigo_plus: boolean; horario: string | null; telefono: string | null; puntaje: number | null; resenas: number | null; fotos: number | null; categoria: string | null }
+  falta: string[]
+}
+export interface ChoqueDeFichas { sede: string; ciudad: string; fichas: { titulo: string; ref: string | null; prueba: string; direccion: string | null; horario: string | null; telefono: string | null }[]; chocan: string[] }
 
 export interface ResultadoRecoleccion {
   ok: boolean
@@ -44,6 +56,10 @@ export interface ResultadoRecoleccion {
   descartes: { fuente: string; motivo: string; ref?: string | null }[]
   /** observaciones que no se pudieron atar a una sede (p. ej. un horario de la cuenta) · se guardan con alcance «cuenta» */
   de_la_cuenta: number
+  /** lo que cada ficha de Mapas PROBADA aporta a cada sede (con su procedencia) y lo que le falta · se calcula en cada corrida, no se guarda aparte */
+  mapas_por_sede: AporteMapas[]
+  /** dos fichas de Mapas distintas pasaron la prueba para la MISMA sede: se DECLARAN (y, si difieren en un dato, ese dato queda en conflicto, nunca se elige uno) */
+  choques: ChoqueDeFichas[]
   nuevas: number
   fuentes_leidas: { sitio: number; instagram: number; mapas: number }
 }
@@ -77,7 +93,7 @@ function esDeLaCuentaPropia(fila: FilaApify, propio: string | null): boolean {
 const primerItem = (r: unknown): Record<string, unknown> | null => (Array.isArray(r) ? (r[0] as Record<string, unknown>) ?? null : r && typeof r === 'object' ? (r as Record<string, unknown>) : null)
 
 export async function recolectarSedes(supabase: SupabaseClient, clientId: string): Promise<ResultadoRecoleccion> {
-  const vacio: ResultadoRecoleccion = { ok: false, sedes: [], textos_propios: [], descartes: [], de_la_cuenta: 0, nuevas: 0, fuentes_leidas: { sitio: 0, instagram: 0, mapas: 0 } }
+  const vacio: ResultadoRecoleccion = { ok: false, sedes: [], textos_propios: [], descartes: [], de_la_cuenta: 0, mapas_por_sede: [], choques: [], nuevas: 0, fuentes_leidas: { sitio: 0, instagram: 0, mapas: 0 } }
   try {
     const cli = RAPIDO(await supabase.from('clients').select('id,name,website_url,config').eq('id', clientId).limit(1), 'leer el cliente') as Array<{ id: string; name: string; website_url?: string | null; config: unknown }>
     if (!cli[0]) return { ...vacio, error: 'el cliente ' + clientId + ' no existe' }
@@ -88,7 +104,8 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     const paginas = RAPIDO(await supabase.from('client_web_pages').select('url,content_text,crawled_at').eq('client_id', clientId).eq('owner_role', 'propio'), 'leer las páginas del sitio') as Array<{ url: string; content_text: string | null; crawled_at: string | null }>
     const obs: Observacion[] = []
     let nSitio = 0
-    for (const p of paginas) { const o = L.observacionesDelSitio(p.content_text || '', { url: p.url, crawled_at: p.crawled_at }); nSitio += o.length; obs.push(...o) }
+    const cuentasPropias = new Set<string>()
+    for (const p of paginas) { const o = L.observacionesDelSitio(p.content_text || '', { url: p.url, crawled_at: p.crawled_at }); nSitio += o.length; obs.push(...o); for (const k of L.cuentasSocialesDe(p.content_text || '')) cuentasPropias.add(k) }
 
     const crudas = RAPIDO(await supabase.from('apify_raw').select('id,apify_function,params,respuesta,ensayo,created_at').eq('client_id', clientId).eq('ensayo', false).in('apify_function', ['instagram_scraper', 'google_maps_scraper', 'own_google_maps_profile']).order('created_at', { ascending: false }).limit(12), 'leer lo raspado') as FilaApify[]
     const igFila = crudas.find((f) => f.apify_function === 'instagram_scraper' && esDeLaCuentaPropia(f, propio) && primerItem(f.respuesta))
@@ -100,20 +117,26 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
       nIg = o.length
       obs.push(...o)
       textos = L.textosPropios(perfil.latestPosts, { max: 8 })
+      // las cuentas que el propio perfil enlaza (su sitio, su Facebook…) también son «cuentas del cliente» para probar propiedad
+      for (const k of L.cuentasSocialesDe([perfil.biography, perfil.externalUrl, ...(Array.isArray(perfil.externalUrls) ? (perfil.externalUrls as unknown[]).map((u) => (u && typeof u === 'object' ? (u as Record<string, unknown>).url : u)) : [])].filter(Boolean).join(' '))) cuentasPropias.add(k)
     }
 
     // ── Mapas: SÓLO observa sobre las sedes que el cliente ya declaró · lo demás se descarta con su motivo ──
     const sedesDeclaradas = L.descubrirSedes(obs)
     // D1 · lo ya visto en las fuentes PROPIAS (sitio · Instagram · la ficha) es contra lo que se prueba que una ficha de Mapas es del cliente: nombre + ciudad no alcanzan
-    const pruebas = L.pruebasDePropiedad(obs, { website_url: cli[0].website_url, instagram: propio })
+    const pruebas = L.pruebasDePropiedad(obs, { website_url: cli[0].website_url, instagram: propio, cuentas: [...cuentasPropias] })
     const descartes: ResultadoRecoleccion['descartes'] = []
     let nMapas = 0
+    const aprobadas: { sede: string; id: string; item: Record<string, unknown>; prueba: string; ref: string | null; cuando: string }[] = []
     for (const f of crudas.filter((x) => x.apify_function !== 'instagram_scraper')) {
       const items = Array.isArray(f.respuesta) ? (f.respuesta as unknown[]) : []
       for (const item of items) {
         const r = L.observacionesDeMaps(item, sedesDeclaradas, nombre, { observado_en: f.created_at, pruebas })
         if (r.descartado) descartes.push({ fuente: 'mapas', motivo: r.descartado.motivo, ref: f.id })
-        else { nMapas += r.observaciones.length; obs.push(...r.observaciones) }
+        else {
+          nMapas += r.observaciones.length; obs.push(...r.observaciones)
+          if (r.sede) { const it = item as Record<string, unknown>; aprobadas.push({ sede: r.sede, id: String(it.placeId || it.url || it.title || ''), item: it, prueba: r.prueba || '', ref: (it.url as string) || (it.placeId ? 'placeId ' + String(it.placeId) : null) || f.id, cuando: f.created_at }) }
+        }
       }
     }
 
@@ -165,7 +188,43 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     const clavePorId = new Map([...porClave.values()].map((s) => [s.id, s.clave]))
     const deLaBase: Observacion[] = todas.map((t) => ({ sede: t.sede_id ? clavePorId.get(t.sede_id) ?? null : null, ciudad: null, campo: t.campo, valor_texto: t.valor_texto, valor_norm: t.valor_norm, fuente: t.fuente, fuente_ref: t.fuente_ref, observado_en: t.observado_en, alcance: t.alcance }))
     const sedes = L.resolverSedes([...porClave.values()].map((s) => ({ clave: s.clave, ciudad: s.ciudad })), deLaBase)
-    return { ok: true, sedes, textos_propios: textos, descartes, de_la_cuenta: deLaCuenta, nuevas: aInsertar.length, fuentes_leidas: { sitio: nSitio, instagram: nIg, mapas: nMapas } }
+    // ── qué aporta Mapas a cada sede · y si dos fichas distintas pasaron para la misma: se DECLARA, no se elige en silencio ──
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+    const resumen = (a: (typeof aprobadas)[number]) => {
+      const it = a.item
+      const dir = (it.street || it.address) ? String(it.street || it.address) : null
+      return { direccion: dir, codigo_plus: !!dir && /^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}/i.test(dir), horario: L.horarioDeMapsEnTexto(it.openingHours), telefono: L.telefonoNorm(it.phone) ? String(it.phone) : null, puntaje: num(it.totalScore), resenas: num(it.reviewsCount), fotos: num(it.imagesCount), categoria: it.categoryName ? String(it.categoryName) : null }
+    }
+    const mapas_por_sede: AporteMapas[] = []
+    const choques: ChoqueDeFichas[] = []
+    for (const s of porClave.values()) {
+      // la versión MÁS RECIENTE de cada ficha distinta (la misma ficha raspada varias veces cuenta una vez)
+      const ultimas = new Map<string, (typeof aprobadas)[number]>()
+      for (const a of aprobadas.filter((x) => x.sede === s.clave)) { const p = ultimas.get(a.id); if (!p || a.cuando >= p.cuando) ultimas.set(a.id, a) }
+      const fichas = [...ultimas.values()]
+      if (!fichas.length) {
+        mapas_por_sede.push({ sede: s.clave, ciudad: s.ciudad, ficha: null, aporta: { direccion: null, codigo_plus: false, horario: null, telefono: null, puntaje: null, resenas: null, fotos: null, categoria: null }, falta: ['ninguna ficha de Mapas probada como del cliente para esta sede'] })
+        continue
+      }
+      const res = fichas.map((a) => ({ a, r: resumen(a) }))
+      if (res.length > 1) {
+        const chocan: string[] = []
+        const dif = (k: 'direccion' | 'horario' | 'telefono', etiqueta: string) => { const v = new Set(res.map((x) => x.r[k]).filter(Boolean).map((x) => L.clave(String(x)))); if (v.size > 1) chocan.push(etiqueta) }
+        dif('direccion', 'direccion'); dif('horario', 'horario'); dif('telefono', 'canal_pedido')
+        choques.push({ sede: s.clave, ciudad: s.ciudad, fichas: res.map((x) => ({ titulo: String(x.a.item.title || ''), ref: x.a.ref, prueba: x.a.prueba, direccion: x.r.direccion, horario: x.r.horario, telefono: x.r.telefono })), chocan })
+        const sr = sedes.find((x) => x.clave === s.clave)
+        if (sr) for (const campo of chocan) {
+          const k = campo === 'canal_pedido' ? 'telefono' : (campo as 'direccion' | 'horario')
+          const vistas = res.filter((x) => x.r[k])
+          ;(sr as unknown as Record<string, CampoResuelto>)[campo] = { estado: 'conflicto', valor: null, fuentes: vistas.map((x) => ({ fuente: 'mapas', valor: x.r[k], fuente_ref: x.a.ref, observado_en: x.a.cuando, alcance: 'sede' })), versiones: vistas.map((x) => ({ valor: x.r[k], fuentes: ['mapas'] })) }
+        }
+      }
+      const elegida = res[0]
+      const falta: string[] = []
+      if (!elegida.r.direccion) falta.push('dirección'); if (!elegida.r.horario) falta.push('horario'); if (!elegida.r.telefono) falta.push('teléfono'); if (elegida.r.puntaje === null) falta.push('puntaje'); if (elegida.r.resenas === null) falta.push('reseñas'); if (elegida.r.fotos === null) falta.push('fotos')
+      mapas_por_sede.push({ sede: s.clave, ciudad: s.ciudad, ficha: { titulo: String(elegida.a.item.title || ''), ref: elegida.a.ref, prueba: elegida.a.prueba, observado_en: elegida.a.cuando }, aporta: elegida.r, falta })
+    }
+    return { ok: true, sedes, textos_propios: textos, descartes, de_la_cuenta: deLaCuenta, mapas_por_sede, choques, nuevas: aInsertar.length, fuentes_leidas: { sitio: nSitio, instagram: nIg, mapas: nMapas } }
   } catch (e) {
     return { ...vacio, error: e instanceof Error ? e.message : String(e) }
   }

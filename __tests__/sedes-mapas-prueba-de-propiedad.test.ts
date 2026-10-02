@@ -59,8 +59,8 @@ describe('D1 · lo que se PRUEBA y lo que no', () => {
   it('un dato que COINCIDE alcanza aunque los otros difieran (el teléfono de la ficha puede estar viejo)', () => {
     expect(mapas(homonimo({ phone: '0997744288' })).descartado).toBeNull()
   })
-  it('🔴 sólo nombre + ciudad NUNCA alcanza (aunque el nombre sea idéntico)', () => {
-    const r = mapas({ title: 'Náufrago', city: 'Guayaquil' })
+  it('🔴 un nombre PARECIDO + ciudad NUNCA alcanza (sólo el nombre EXACTO del alta · ver sedes-mapas-nombre-exacto-y-cuentas)', () => {
+    const r = mapas({ title: 'Náufrago Express', city: 'Guayaquil' })
     expect(r.observaciones).toEqual([])
     expect(r.descartado.motivo).toMatch(/no se pudo probar/)
   })

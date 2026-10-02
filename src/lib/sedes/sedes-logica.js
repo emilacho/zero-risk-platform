@@ -311,6 +311,29 @@ function usuarioDeInstagram(url) {
   return m ? m[1] : null
 }
 
+var REDES = [
+  { red: 'instagram', nombre: 'Instagram', re: /(?:^|[^a-z0-9.-])(?:www\.)?instagram\.com\/@?([a-z0-9._]{2,30})/g, ruido: ['p', 'reel', 'reels', 'tv', 'explore', 'accounts', 'stories', 'direct', 'about', 'share'] },
+  { red: 'facebook', nombre: 'Facebook', re: /(?:^|[^a-z0-9.-])(?:www\.|m\.|web\.)?facebook\.com\/(?:pages\/[^\/?#\s]+\/)?@?([a-z0-9._-]{3,60})/g, ruido: ['sharer', 'sharer.php', 'share', 'tr', 'plugins', 'dialog', 'groups', 'events', 'watch', 'photo', 'photo.php', 'profile.php', 'login', 'policies', 'privacy', 'help', 'story.php', 'permalink.php', 'hashtag', 'marketplace', 'reel', 'reels'] },
+  { red: 'tiktok', nombre: 'TikTok', re: /(?:^|[^a-z0-9.-])(?:www\.)?tiktok\.com\/@([a-z0-9._]{2,30})/g, ruido: [] },
+  { red: 'youtube', nombre: 'YouTube', re: /(?:^|[^a-z0-9.-])(?:www\.)?youtube\.com\/(?:@|c\/|user\/|channel\/)([a-z0-9._-]{2,60})/g, ruido: [] },
+  { red: 'linkedin', nombre: 'LinkedIn', re: /(?:^|[^a-z0-9.-])(?:[a-z]{2,3}\.)?linkedin\.com\/(?:company|in|school)\/([a-z0-9._%-]{2,80})/g, ruido: [] },
+]
+/** las cuentas sociales que un texto o una dirección nombra: ['instagram:usuario', 'facebook:pagina'] · sin repetir · SIN los enlaces de compartir/publicaciones */
+function cuentasSocialesDe(texto) {
+  var t = String(texto || '').toLowerCase()
+  var out = []
+  REDES.forEach(function (r) {
+    r.re.lastIndex = 0
+    var m
+    while ((m = r.re.exec(t)) !== null) {
+      var u = m[1].replace(/[._-]+$/g, '')
+      if (u && r.ruido.indexOf(u) === -1) { var k = r.red + ':' + u; if (out.indexOf(k) === -1) out.push(k) }
+    }
+  })
+  return out
+}
+function nombreDeRed(k) { var r = REDES.filter(function (x) { return x.red === String(k).split(':')[0] })[0]; return r ? r.nombre : String(k).split(':')[0] }
+
 /**
  * LO YA VISTO EN LAS FUENTES PROPIAS del cliente contra lo que se prueba que una ficha de Mapas es suya: teléfonos, sitio web, cuenta de Instagram y direcciones.
  * `observaciones` = lo observado en el sitio y en Instagram (Mapas NO cuenta: una ficha no puede probarse a sí misma) · `ficha` = { website_url, instagram } de la ficha del cliente.
@@ -320,6 +343,7 @@ function pruebasDePropiedad(observaciones, ficha) {
   var dir = []
   var sitios = []
   var ig = []
+  var cuentas = []
   var add = function (lista, v) { if (v && lista.indexOf(v) === -1) lista.push(v) }
   ;(observaciones || []).forEach(function (o) {
     if (!o || o.fuente === 'mapas') return
@@ -329,23 +353,40 @@ function pruebasDePropiedad(observaciones, ficha) {
   var f = ficha || {}
   add(sitios, anfitrion(f.website_url || f.website || f.domain))
   add(ig, f.instagram ? String(f.instagram).replace(/^@/, '').toLowerCase() : null)
-  return { telefonos: tel, direcciones: dir, sitios: sitios, instagram: ig }
+  ig.forEach(function (u) { add(cuentas, 'instagram:' + u) })
+  ;(Array.isArray(f.cuentas) ? f.cuentas : []).forEach(function (k) { if (typeof k === 'string' && k.indexOf(':') > 0) add(cuentas, k.toLowerCase()) })
+  return { telefonos: tel, direcciones: dir, sitios: sitios, instagram: ig, cuentas: cuentas }
 }
 
-/** ¿esta ficha de Mapas coincide, en AL MENOS UN dato, con lo ya visto en las fuentes propias? → el nombre del dato que la prueba, o null */
-function probarPropiedad(item, pruebas) {
+/** los enlaces a redes que una ficha de Mapas trae: su sitio y, si el raspado los trae, sus listas de cuentas */
+function cuentasDeLaFicha(item) {
+  var textos = [item.website, item.url_sitio]
+  ;['instagrams', 'facebooks', 'tiktoks', 'youtubes', 'linkedIns', 'linkedins', 'twitters'].forEach(function (k) { if (Array.isArray(item[k])) item[k].forEach(function (x) { textos.push(x) }) })
+  var out = []
+  textos.forEach(function (t) { cuentasSocialesDe(t).forEach(function (k) { if (out.indexOf(k) === -1) out.push(k) }) })
+  return out
+}
+
+/**
+ * ¿esta ficha de Mapas es del cliente? Cumple CUALQUIERA de (agnóstico) → el dato que la prueba, o null:
+ *   1. NOMBRE EXACTO del alta (sin tildes ni mayúsculas ni espacios de más · nada de «contiene») Y ciudad de una sede (`conSede`)
+ *   2. coincide teléfono, sitio web, dirección o una cuenta social (Instagram · Facebook · TikTok · YouTube · LinkedIn) con lo ya visto en fuentes propias
+ */
+function probarPropiedad(item, pruebas, nombreCliente, conSede) {
   var p = pruebas || {}
+  if (conSede && nombreCliente && item.title && clave(nombreCliente) && clave(item.title) === clave(nombreCliente)) return 'nombre exacto «' + item.title + '» en una sede del cliente'
   var t = telefonoNorm(item.phone)
   if (t && (p.telefonos || []).indexOf(t) !== -1) return 'teléfono ' + item.phone
   var web = item.website || item.url_sitio || ''
   var h = anfitrion(web)
-  if (h && h.indexOf('.') !== -1 && (p.sitios || []).indexOf(h) !== -1) return 'sitio web ' + h
-  var u = usuarioDeInstagram(web)
-  if (u && (p.instagram || []).indexOf(u) !== -1) return 'cuenta de Instagram @' + u
+  if (h && h.indexOf('.') !== -1 && (p.sitios || []).indexOf(h) !== -1 && !cuentasSocialesDe(web).length) return 'sitio web ' + h
+  var propias = p.cuentas || []
+  var hit = cuentasDeLaFicha(item).filter(function (k) { return propias.indexOf(k) !== -1 })[0]
+  if (hit) return 'cuenta de ' + nombreDeRed(hit) + ' @' + hit.split(':')[1]
   var d = claveDireccion(item.street || item.address || '')
   if (direccionConsistente(d)) {
-    var hit = (p.direcciones || []).filter(function (x) { return direccionesIguales(x, d) })[0]
-    if (hit) return 'dirección «' + (item.street || item.address) + '»'
+    var dh = (p.direcciones || []).filter(function (x) { return direccionesIguales(x, d) })[0]
+    if (dh) return 'dirección «' + (item.street || item.address) + '»'
   }
   return null
 }
@@ -370,19 +411,20 @@ function observacionesDeMaps(item, sedes, nombreCliente, ctx) {
   var ciudadItem = item.city || (item.address ? String(item.address).split(',').slice(-2)[0] : '')
   var cuando = ctx.observado_en || item.scrapedAt || null
   var ref = item.url || ctx.url || null
-  if (nombreCliente && !mismoNegocio(item.title, nombreCliente)) {
-    return { observaciones: [], descartado: { motivo: 'el nombre de la ficha («' + item.title + '») no es el del cliente («' + nombreCliente + '»)', ciudad: ciudadItem || null } }
-  }
   var cc = clave(ciudadItem)
   var sede = (sedes || []).filter(function (s) { return s.clave === cc || (cc && clave(item.address || '').indexOf(s.clave) !== -1) })[0]
+  // la prueba va ANTES de los descartes: una ficha con otro nombre pero con el teléfono/sitio/cuenta del cliente SÍ es suya (agnóstico · «cualquiera de»)
+  var prueba = probarPropiedad(item, ctx.pruebas, nombreCliente, !!sede)
+  if (!prueba && nombreCliente && !mismoNegocio(item.title, nombreCliente)) {
+    return { observaciones: [], descartado: { motivo: 'el nombre de la ficha («' + item.title + '») no es el del cliente («' + nombreCliente + '»)', ciudad: ciudadItem || null } }
+  }
   if (!sede) {
     return { observaciones: [], descartado: { motivo: 'la ficha «' + item.title + '» es de «' + (ciudadItem || 'ciudad desconocida') + '», que no es una sede de este cliente (sedes: ' + ((sedes || []).map(function (s) { return s.ciudad }).join(', ') || 'ninguna') + ') · es otro negocio y NO se guarda', ciudad: ciudadItem || null } }
   }
-  // 🔴 D1 (CC#3 02-oct) · nombre + ciudad NO alcanzan (un homónimo de la misma ciudad pasaba): la ficha es del cliente SOLO si coincide, con lo ya visto en sus fuentes propias, un teléfono, un sitio web, una cuenta de Instagram o una dirección
-  var prueba = probarPropiedad(item, ctx.pruebas)
+  // 🔴 D1 · nombre parecido + ciudad NO alcanzan (un homónimo de la misma ciudad pasaba): sólo cuenta el NOMBRE EXACTO del alta o una coincidencia de teléfono, sitio, dirección o cuenta social con lo ya visto en las fuentes propias
   if (!prueba) {
-    var hayConQue = ctx.pruebas && ((ctx.pruebas.telefonos || []).length || (ctx.pruebas.sitios || []).length || (ctx.pruebas.instagram || []).length || (ctx.pruebas.direcciones || []).length)
-    return { observaciones: [], descartado: { motivo: 'no se pudo probar que sea del cliente la ficha «' + item.title + '» de «' + ciudadItem + '»: ' + (hayConQue ? 'ni su teléfono' + (item.phone ? ' (' + item.phone + ')' : '') + ', ni su sitio web' + (item.website ? ' (' + item.website + ')' : '') + ', ni su dirección' + (item.street || item.address ? ' (' + (item.street || item.address) + ')' : '') + ' coinciden con lo ya visto en el sitio, Instagram o la ficha del cliente · nombre y ciudad no alcanzan · NO se guarda' : 'no hay nada ya visto (teléfono, sitio web, dirección) contra qué probarlo · NO se guarda'), ciudad: ciudadItem || null } }
+    var hayConQue = ctx.pruebas && ((ctx.pruebas.telefonos || []).length || (ctx.pruebas.sitios || []).length || (ctx.pruebas.instagram || []).length || (ctx.pruebas.direcciones || []).length || (ctx.pruebas.cuentas || []).length)
+    return { observaciones: [], descartado: { motivo: 'no se pudo probar que sea del cliente la ficha «' + item.title + '» de «' + ciudadItem + '»: su nombre no es el exacto del alta («' + nombreCliente + '») y ' + (hayConQue ? 'ni su teléfono' + (item.phone ? ' (' + item.phone + ')' : '') + ', ni su sitio web' + (item.website ? ' (' + item.website + ')' : '') + ', ni su dirección' + (item.street || item.address ? ' (' + (item.street || item.address) + ')' : '') + ', ni sus cuentas sociales coinciden con lo ya visto en el sitio, Instagram o la ficha del cliente · NO se guarda' : 'no hay nada ya visto (teléfono, sitio web, dirección, cuentas sociales) contra qué probarlo · NO se guarda'), ciudad: ciudadItem || null } }
   }
   var obs = []
   var base = { sede: sede.clave, ciudad: sede.ciudad, fuente: 'mapas', fuente_ref: ref, observado_en: cuando, alcance: 'sede' }
@@ -392,7 +434,7 @@ function observacionesDeMaps(item, sedes, nombreCliente, ctx) {
   if (dir) obs.push(Object.assign({}, base, { campo: 'direccion', valor_texto: String(dir) + (item.street && ciudadItem ? ', ' + ciudadItem : ''), valor_norm: clave(item.street || item.address) }))
   var tel = telefonoNorm(item.phone)
   if (tel) obs.push(Object.assign({}, base, { campo: 'canal_pedido', valor_texto: 'teléfono ' + item.phone, valor_norm: tel }))
-  return { observaciones: obs, descartado: null, prueba: prueba }
+  return { observaciones: obs, descartado: null, prueba: prueba, sede: sede.clave }
 }
 
 // ───────────────────────────── LA FICHA (resolver) ─────────────────────────────
@@ -576,7 +618,7 @@ if (typeof module !== 'undefined' && module.exports) {
     clave: clave, leerDias: leerDias, leerRangoDeHoras: leerRangoDeHoras, horarioDeTexto: horarioDeTexto, horarioDeJsonLd: horarioDeJsonLd, horarioDeMaps: horarioDeMaps,
     canonicoHorario: canonicoHorario, describirHorario: describirHorario, telefonoNorm: telefonoNorm, extraerJsonLd: extraerJsonLd,
     observacionesDelSitio: observacionesDelSitio, observacionesDeInstagram: observacionesDeInstagram, observacionesDeMaps: observacionesDeMaps, mismoNegocio: mismoNegocio,
-    pruebasDePropiedad: pruebasDePropiedad, probarPropiedad: probarPropiedad, descubrirSedes: descubrirSedes, ultimasPorFuente: ultimasPorFuente, resolverCampo: resolverCampo, resolverSedes: resolverSedes, ubicacionesParaMapas: ubicacionesParaMapas,
+    horarioDeMapsEnTexto: function (lista) { var h = horarioDeMaps(lista); return h ? describirHorario(h) : null }, pruebasDePropiedad: pruebasDePropiedad, probarPropiedad: probarPropiedad, cuentasSocialesDe: cuentasSocialesDe, cuentasDeLaFicha: cuentasDeLaFicha, descubrirSedes: descubrirSedes, ultimasPorFuente: ultimasPorFuente, resolverCampo: resolverCampo, resolverSedes: resolverSedes, ubicacionesParaMapas: ubicacionesParaMapas,
     bloqueDeSedes: bloqueDeSedes, textosPropios: textosPropios, bloqueDeVoz: bloqueDeVoz,
   }
 }
