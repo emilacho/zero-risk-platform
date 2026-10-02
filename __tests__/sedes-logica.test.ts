@@ -112,7 +112,7 @@ describe('③ 🔴 Mapas NUNCA crea una sede · el homónimo de Gualaceo se DESC
   })
   it('CONTROL POSITIVO: la ficha del propio negocio en una sede conocida SÍ observa (horario · dirección · teléfono) con su fuente', () => {
     const propia = { title: 'Náufrago', city: 'Guayaquil', street: 'Avenida 8 NO', address: 'Avenida 8 NO, Guayaquil', phone: '+593 99 774 4288', url: 'https://maps/x', openingHours: [{ day: 'jueves', hours: '7 AM to 3 PM' }, { day: 'viernes', hours: '7 AM to 3 PM' }, { day: 'sábado', hours: '7 AM to 3 PM' }, { day: 'domingo', hours: '7 AM to 3 PM' }, { day: 'lunes', hours: '7 AM to 3 PM' }, { day: 'martes', hours: 'Cerrado' }, { day: 'miércoles', hours: 'Cerrado' }] }
-    const r = S.observacionesDeMaps(propia, sedes(), 'Náufrago', { observado_en: '2026-10-02' })
+    const r = S.observacionesDeMaps(propia, sedes(), 'Náufrago', { observado_en: '2026-10-02', pruebas: S.pruebasDePropiedad(TODAS(), { website_url: 'https://www.naufrago.ec' }) }) // D1: la ficha propia coincide por teléfono y dirección con lo ya visto
     expect(r.descartado).toBeNull()
     expect(r.observaciones.map((x: { campo: string }) => x.campo).sort()).toEqual(['canal_pedido', 'direccion', 'horario'])
     expect(r.observaciones.every((x: { fuente: string; sede: string }) => x.fuente === 'mapas' && x.sede === 'guayaquil')).toBe(true)

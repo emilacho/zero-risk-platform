@@ -294,6 +294,62 @@ function observacionesDeInstagram(perfil, ctx) {
   return obs
 }
 
+/** «Av. 8 NO» y «Avenida 8 NO» son la misma calle: se expanden las abreviaturas comunes antes de comparar */
+function claveDireccion(s) {
+  return clave(s).split('-').map(function (p) { return p === 'av' || p === 'avda' ? 'avenida' : p === 'cll' ? 'calle' : p }).join('-')
+}
+/** una dirección sirve de prueba sólo si dice algo (≥2 palabras): la ciudad sola no prueba nada */
+function direccionConsistente(c) { return String(c || '').split('-').filter(Boolean).length >= 2 }
+
+/** el sitio web como se compara: sin protocolo, sin www, sin ruta, en minúsculas · «instagram.com/usuario» se reconoce aparte */
+function anfitrion(url) {
+  var t = String(url || '').trim().toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/^www\./, '')
+  return t.split(/[\/?#]/)[0] || null
+}
+function usuarioDeInstagram(url) {
+  var m = /instagram\.com\/([a-z0-9._]+)/.exec(String(url || '').toLowerCase())
+  return m ? m[1] : null
+}
+
+/**
+ * LO YA VISTO EN LAS FUENTES PROPIAS del cliente contra lo que se prueba que una ficha de Mapas es suya: teléfonos, sitio web, cuenta de Instagram y direcciones.
+ * `observaciones` = lo observado en el sitio y en Instagram (Mapas NO cuenta: una ficha no puede probarse a sí misma) · `ficha` = { website_url, instagram } de la ficha del cliente.
+ */
+function pruebasDePropiedad(observaciones, ficha) {
+  var tel = []
+  var dir = []
+  var sitios = []
+  var ig = []
+  var add = function (lista, v) { if (v && lista.indexOf(v) === -1) lista.push(v) }
+  ;(observaciones || []).forEach(function (o) {
+    if (!o || o.fuente === 'mapas') return
+    if (o.campo === 'canal_pedido' && typeof o.valor_norm === 'string') add(tel, o.valor_norm)
+    if (o.campo === 'direccion' && typeof o.valor_norm === 'string') { var c = claveDireccion(o.valor_norm); if (direccionConsistente(c)) add(dir, c) }
+  })
+  var f = ficha || {}
+  add(sitios, anfitrion(f.website_url || f.website || f.domain))
+  add(ig, f.instagram ? String(f.instagram).replace(/^@/, '').toLowerCase() : null)
+  return { telefonos: tel, direcciones: dir, sitios: sitios, instagram: ig }
+}
+
+/** ¿esta ficha de Mapas coincide, en AL MENOS UN dato, con lo ya visto en las fuentes propias? → el nombre del dato que la prueba, o null */
+function probarPropiedad(item, pruebas) {
+  var p = pruebas || {}
+  var t = telefonoNorm(item.phone)
+  if (t && (p.telefonos || []).indexOf(t) !== -1) return 'teléfono ' + item.phone
+  var web = item.website || item.url_sitio || ''
+  var h = anfitrion(web)
+  if (h && h.indexOf('.') !== -1 && (p.sitios || []).indexOf(h) !== -1) return 'sitio web ' + h
+  var u = usuarioDeInstagram(web)
+  if (u && (p.instagram || []).indexOf(u) !== -1) return 'cuenta de Instagram @' + u
+  var d = claveDireccion(item.street || item.address || '')
+  if (direccionConsistente(d)) {
+    var hit = (p.direcciones || []).filter(function (x) { return direccionesIguales(x, d) })[0]
+    if (hit) return 'dirección «' + (item.street || item.address) + '»'
+  }
+  return null
+}
+
 function palabras(s) { return clave(s).split('-').filter(function (x) { return x.length > 2 }) }
 
 /** ¿Este nombre de negocio de Mapas es el del cliente? (comparten una palabra del nombre: «El Mar Marisquería» ~ «Mar») */
@@ -322,6 +378,12 @@ function observacionesDeMaps(item, sedes, nombreCliente, ctx) {
   if (!sede) {
     return { observaciones: [], descartado: { motivo: 'la ficha «' + item.title + '» es de «' + (ciudadItem || 'ciudad desconocida') + '», que no es una sede de este cliente (sedes: ' + ((sedes || []).map(function (s) { return s.ciudad }).join(', ') || 'ninguna') + ') · es otro negocio y NO se guarda', ciudad: ciudadItem || null } }
   }
+  // 🔴 D1 (CC#3 02-oct) · nombre + ciudad NO alcanzan (un homónimo de la misma ciudad pasaba): la ficha es del cliente SOLO si coincide, con lo ya visto en sus fuentes propias, un teléfono, un sitio web, una cuenta de Instagram o una dirección
+  var prueba = probarPropiedad(item, ctx.pruebas)
+  if (!prueba) {
+    var hayConQue = ctx.pruebas && ((ctx.pruebas.telefonos || []).length || (ctx.pruebas.sitios || []).length || (ctx.pruebas.instagram || []).length || (ctx.pruebas.direcciones || []).length)
+    return { observaciones: [], descartado: { motivo: 'no se pudo probar que sea del cliente la ficha «' + item.title + '» de «' + ciudadItem + '»: ' + (hayConQue ? 'ni su teléfono' + (item.phone ? ' (' + item.phone + ')' : '') + ', ni su sitio web' + (item.website ? ' (' + item.website + ')' : '') + ', ni su dirección' + (item.street || item.address ? ' (' + (item.street || item.address) + ')' : '') + ' coinciden con lo ya visto en el sitio, Instagram o la ficha del cliente · nombre y ciudad no alcanzan · NO se guarda' : 'no hay nada ya visto (teléfono, sitio web, dirección) contra qué probarlo · NO se guarda'), ciudad: ciudadItem || null } }
+  }
   var obs = []
   var base = { sede: sede.clave, ciudad: sede.ciudad, fuente: 'mapas', fuente_ref: ref, observado_en: cuando, alcance: 'sede' }
   var h = horarioDeMaps(item.openingHours)
@@ -330,7 +392,7 @@ function observacionesDeMaps(item, sedes, nombreCliente, ctx) {
   if (dir) obs.push(Object.assign({}, base, { campo: 'direccion', valor_texto: String(dir) + (item.street && ciudadItem ? ', ' + ciudadItem : ''), valor_norm: clave(item.street || item.address) }))
   var tel = telefonoNorm(item.phone)
   if (tel) obs.push(Object.assign({}, base, { campo: 'canal_pedido', valor_texto: 'teléfono ' + item.phone, valor_norm: tel }))
-  return { observaciones: obs, descartado: null }
+  return { observaciones: obs, descartado: null, prueba: prueba }
 }
 
 // ───────────────────────────── LA FICHA (resolver) ─────────────────────────────
@@ -514,7 +576,7 @@ if (typeof module !== 'undefined' && module.exports) {
     clave: clave, leerDias: leerDias, leerRangoDeHoras: leerRangoDeHoras, horarioDeTexto: horarioDeTexto, horarioDeJsonLd: horarioDeJsonLd, horarioDeMaps: horarioDeMaps,
     canonicoHorario: canonicoHorario, describirHorario: describirHorario, telefonoNorm: telefonoNorm, extraerJsonLd: extraerJsonLd,
     observacionesDelSitio: observacionesDelSitio, observacionesDeInstagram: observacionesDeInstagram, observacionesDeMaps: observacionesDeMaps, mismoNegocio: mismoNegocio,
-    descubrirSedes: descubrirSedes, ultimasPorFuente: ultimasPorFuente, resolverCampo: resolverCampo, resolverSedes: resolverSedes, ubicacionesParaMapas: ubicacionesParaMapas,
+    pruebasDePropiedad: pruebasDePropiedad, probarPropiedad: probarPropiedad, descubrirSedes: descubrirSedes, ultimasPorFuente: ultimasPorFuente, resolverCampo: resolverCampo, resolverSedes: resolverSedes, ubicacionesParaMapas: ubicacionesParaMapas,
     bloqueDeSedes: bloqueDeSedes, textosPropios: textosPropios, bloqueDeVoz: bloqueDeVoz,
   }
 }

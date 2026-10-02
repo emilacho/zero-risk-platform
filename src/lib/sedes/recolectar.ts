@@ -28,7 +28,8 @@ export interface SedeResuelta { clave: string; ciudad: string; direccion: CampoR
 interface SedesLogica {
   observacionesDelSitio(contenido: string, ctx: { url?: string | null; crawled_at?: string | null }): Observacion[]
   observacionesDeInstagram(perfil: unknown, ctx: { observado_en?: string | null; url?: string | null }): Observacion[]
-  observacionesDeMaps(item: unknown, sedes: { clave: string; ciudad: string }[], nombre: string, ctx: { observado_en?: string | null }): { observaciones: Observacion[]; descartado: { motivo: string; ciudad?: string | null } | null }
+  pruebasDePropiedad(obs: Observacion[], ficha: { website_url?: unknown; instagram?: unknown }): unknown
+  observacionesDeMaps(item: unknown, sedes: { clave: string; ciudad: string }[], nombre: string, ctx: { observado_en?: string | null; pruebas?: unknown }): { observaciones: Observacion[]; descartado: { motivo: string; ciudad?: string | null } | null }
   descubrirSedes(obs: Observacion[]): { clave: string; ciudad: string }[]
   resolverSedes(sedes: { clave: string; ciudad: string }[], obs: Observacion[]): SedeResuelta[]
   textosPropios(posts: unknown, op?: { max?: number; largo?: number }): { fecha: string | null; texto: string; post: string | null }[]
@@ -78,7 +79,7 @@ const primerItem = (r: unknown): Record<string, unknown> | null => (Array.isArra
 export async function recolectarSedes(supabase: SupabaseClient, clientId: string): Promise<ResultadoRecoleccion> {
   const vacio: ResultadoRecoleccion = { ok: false, sedes: [], textos_propios: [], descartes: [], de_la_cuenta: 0, nuevas: 0, fuentes_leidas: { sitio: 0, instagram: 0, mapas: 0 } }
   try {
-    const cli = RAPIDO(await supabase.from('clients').select('id,name,config').eq('id', clientId).limit(1), 'leer el cliente') as Array<{ id: string; name: string; config: unknown }>
+    const cli = RAPIDO(await supabase.from('clients').select('id,name,website_url,config').eq('id', clientId).limit(1), 'leer el cliente') as Array<{ id: string; name: string; website_url?: string | null; config: unknown }>
     if (!cli[0]) return { ...vacio, error: 'el cliente ' + clientId + ' no existe' }
     const nombre = String(cli[0].name || '')
     const propio = instagramPropio(cli[0].config)
@@ -103,12 +104,14 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
 
     // ── Mapas: SÓLO observa sobre las sedes que el cliente ya declaró · lo demás se descarta con su motivo ──
     const sedesDeclaradas = L.descubrirSedes(obs)
+    // D1 · lo ya visto en las fuentes PROPIAS (sitio · Instagram · la ficha) es contra lo que se prueba que una ficha de Mapas es del cliente: nombre + ciudad no alcanzan
+    const pruebas = L.pruebasDePropiedad(obs, { website_url: cli[0].website_url, instagram: propio })
     const descartes: ResultadoRecoleccion['descartes'] = []
     let nMapas = 0
     for (const f of crudas.filter((x) => x.apify_function !== 'instagram_scraper')) {
       const items = Array.isArray(f.respuesta) ? (f.respuesta as unknown[]) : []
       for (const item of items) {
-        const r = L.observacionesDeMaps(item, sedesDeclaradas, nombre, { observado_en: f.created_at })
+        const r = L.observacionesDeMaps(item, sedesDeclaradas, nombre, { observado_en: f.created_at, pruebas })
         if (r.descartado) descartes.push({ fuente: 'mapas', motivo: r.descartado.motivo, ref: f.id })
         else { nMapas += r.observaciones.length; obs.push(...r.observaciones) }
       }
@@ -126,9 +129,20 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     const llave = (sedeId: string | null, campo: string, fuente: string, norm: unknown, texto: string, cuando: string | null) =>
       [sedeId || '', campo, fuente, JSON.stringify(norm ?? texto), String(cuando ? new Date(cuando).toISOString() : '')].join('|')
     const ya = new Set(guardadas.map((g) => llave(g.sede_id, g.campo, g.fuente, g.valor_norm, g.valor_texto, g.observado_en)))
+    // D2 · una ficha raspada varias veces con el MISMO contenido no duplica observaciones: se compara con LO ÚLTIMO guardado de cada (sede · campo · fuente) y sólo se agrega si cambió
+    //      (A → B → A sí agrega la vuelta a A: se compara con lo último, no con «alguna vez existió»)
+    const ultimo = new Map<string, { cuando: number; valor: string }>()
+    const grupo = (sedeId: string | null, campo: string, fuente: string) => [sedeId || '', campo, fuente].join('|')
+    const valorDe = (norm: unknown, texto: string) => JSON.stringify(norm ?? texto)
+    for (const g of guardadas) {
+      const k = grupo(g.sede_id, g.campo, g.fuente)
+      const c = new Date(g.observado_en).getTime()
+      if (!ultimo.has(k) || c >= ultimo.get(k)!.cuando) ultimo.set(k, { cuando: c, valor: valorDe(g.valor_norm, g.valor_texto) })
+    }
     const aInsertar: Record<string, unknown>[] = []
     let deLaCuenta = 0
-    for (const o of obs) {
+    const enOrden = [...obs].sort((x, y) => String(x.observado_en ?? '').localeCompare(String(y.observado_en ?? '')))
+    for (const o of enOrden) {
       if (o.campo === 'ciudad') continue // la ciudad ya está en la sede
       const sede = o.sede ? porClave.get(o.sede) : null
       if (o.sede && !sede) continue // una observación de una sede que no existe no se guarda (no se inventa una sede)
@@ -136,7 +150,12 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
       if (!sede) deLaCuenta++
       const k = llave(sede ? sede.id : null, o.campo, o.fuente, o.valor_norm, o.valor_texto, o.observado_en)
       if (ya.has(k)) continue
+      const g = grupo(sede ? sede.id : null, o.campo, o.fuente)
+      const cuando = new Date(o.observado_en).getTime()
+      const previo = ultimo.get(g)
+      if (previo && cuando >= previo.cuando && previo.valor === valorDe(o.valor_norm, o.valor_texto)) continue // el mismo contenido que lo último guardado
       ya.add(k)
+      if (!previo || cuando >= previo.cuando) ultimo.set(g, { cuando, valor: valorDe(o.valor_norm, o.valor_texto) })
       aInsertar.push({ client_id: clientId, sede_id: sede ? sede.id : null, campo: o.campo, valor_texto: o.valor_texto, valor_norm: o.valor_norm ?? null, fuente: o.fuente, fuente_ref: o.fuente_ref, alcance: sede ? 'sede' : 'cuenta', observado_en: o.observado_en })
     }
     if (aInsertar.length) RAPIDO(await supabase.from('client_sede_datos').insert(aInsertar), 'guardar las observaciones')
