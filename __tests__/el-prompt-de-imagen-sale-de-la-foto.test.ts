@@ -2,8 +2,8 @@
  * EL PROMPT DE IMAGEN SALE DE LA FOTO · pruebas a costo cero con los datos REALES de Náufrago · CC#1 · 2026-10-03
  * (encargo Lenovo `el-prompt-de-imagen-sale-de-la-foto` · origen: certificación de CC#3 de la 3.ª pieza real, BRF-0006).
  *
+ * (03-oct · CANON «SIN REJAS AL AGENTE»: el punto ① —sin marcas ni contactos ajenos— se QUITÓ por mandato de Emilio; ver `quitar-las-rejas-del-productor.test.ts`.)
  * 🔴 Cada prueba tiene que estar ROJA contra el estado de ANTES (main `824570a`) y VERDE después:
- *   ① sin marcas, rótulos ni contactos AJENOS en el prompt de imagen (la 3.ª pieza pedía el frasco «Rukutu» de la foto de referencia)
  *   ② el prompt describe lo que la foto muestra: lo que el brief pide y la foto NO trae se DECLARA (la 3.ª escribió «marisco visible» sin que se viera)
  *   ③ las variantes van en CAMPOS separados (la 3.ª entregó «Variante A: … Variante B: …» dentro de un solo texto)
  *   ④ «coincide en parte»: un producto de varias palabras que la foto nombra sólo en parte se ve (recomendación 3.1 de CC#3)
@@ -73,77 +73,12 @@ const hall = (r: { hallazgos: { chequeo: string }[] }, n: string) => r.hallazgos
 // el prompt REAL de la 3.ª pieza (BRF-0006): el frasco «Rukutu» sale de la foto de referencia
 const PROMPT_REAL = 'Overhead shot of a white ceramic bowl of ceviche: red onion, creamy avocado, pico de gallo and fresh cilantro, warm natural light, wooden table. Beside it stands a glass jar labeled Rukutu with an orange hot-sauce condiment inside.'
 
-describe('① sin marcas, rótulos ni contactos AJENOS en el prompt de imagen', () => {
-  it('🔴 EL INCIDENTE REAL: «a glass jar labeled Rukutu» ⇒ FATAL «prompt_con_marca_ajena» y la pieza queda NO VÁLIDA', async () => {
-    const r = await chequear(await cadenaReal(), { prompt_imagen: PROMPT_REAL })
-    const h = hall(r, 'prompt_con_marca_ajena')
-    expect(h).toBeTruthy()
-    expect(h.fatal).toBe(true)
-    expect(h.detalle).toMatch(/Rukutu/)
-    expect(r.pieza_valida).toBe(false)
-    expect(r.motivo_invalido).toMatch(/prompt_con_marca_ajena/)
-  })
-  it('CONTROL POSITIVO: el mismo prompt SIN el frasco ⇒ ningún hallazgo de marcas y la pieza vale', async () => {
-    const sin = PROMPT_REAL.replace(/ Beside it stands.*$/, '')
-    const r = await chequear(await cadenaReal(), { prompt_imagen: sin })
-    expect(nombres(r).filter((n) => /marca|contacto|palabra_ajena/.test(n))).toEqual([])
-    expect(r.pieza_valida).toBe(true)
-  })
-  it('lo del CLIENTE sí puede aparecer: su nombre, su ciudad, su WhatsApp y lo que dice su brief', async () => {
-    const r = await chequear(await cadenaReal(), { prompt_imagen: 'A bowl of ceviche with a small sign reading “Náufrago” on the table, Olón style, WhatsApp order card, phone +593 997 744 288' })
-    expect(nombres(r).filter((n) => /marca|contacto|palabra_ajena/.test(n))).toEqual([])
-  })
-  it('🔴 un rótulo entre comillas o con «logo/label/branded» que no es del cliente ⇒ FATAL', async () => {
-    for (const p of ['A bowl of ceviche with a bottle that says “Corona Extra”', 'Ceviche next to a branded Tabasco bottle', 'Ceviche bowl, a logo of Heinz in the corner']) {
-      const r = await chequear(await cadenaReal(), { prompt_imagen: p })
-      expect(hall(r, 'prompt_con_marca_ajena'), p).toBeTruthy()
-      expect(hall(r, 'prompt_con_marca_ajena').fatal, p).toBe(true)
-    }
-  })
-  it('🔴 un texto entre comillas SIN palabra de rótulo («a card “Fresh Daily”») también es ajeno ⇒ FATAL · pero las cifras y siglas cortas («“2x1”», «“WOW”») no son marcas', async () => {
-    const ajena = await chequear(await cadenaReal(), { prompt_imagen: 'Ceviche bowl on a table next to a card “Fresh Daily”' })
-    expect(hall(ajena, 'prompt_con_marca_ajena')).toBeTruthy()
-    const corta = await chequear(await cadenaReal(), { prompt_imagen: 'Ceviche bowl on a table next to a card “2x1” and a sticker “WOW”' })
-    expect(nombres(corta)).not.toContain('prompt_con_marca_ajena')
-  })
-  it('🔴 un teléfono, enlace o @usuario que NO es del cliente ⇒ FATAL «prompt_con_contacto_ajeno» (el de la foto de referencia no se copia)', async () => {
-    for (const p of ['Ceviche bowl with a jar showing WhatsApp +593 98 111 2233', 'Ceviche bowl, a card with www.otra-marca.com', 'Ceviche bowl, a sticker @otra_marca']) {
-      const r = await chequear(await cadenaReal(), { prompt_imagen: p })
-      expect(hall(r, 'prompt_con_contacto_ajeno'), p).toBeTruthy()
-      expect(hall(r, 'prompt_con_contacto_ajeno').fatal, p).toBe(true)
-    }
-  })
-  it('una palabra con mayúscula a mitad de frase que no es del cliente ⇒ AVISO no fatal «prompt_con_palabra_ajena» (candidato)', async () => {
-    const r = await chequear(await cadenaReal(), { prompt_imagen: 'Overhead ceviche bowl next to a Fanta bottle, warm light' })
-    const h = hall(r, 'prompt_con_palabra_ajena')
-    expect(h).toBeTruthy()
-    expect(h.fatal).toBe(false)
-    expect(h.detalle).toMatch(/Fanta/)
-  })
-  it('las mayúsculas de INICIO de frase y los términos del brief y del manual no disparan nada', async () => {
-    const r = await chequear(await cadenaReal(), { prompt_imagen: 'Overhead shot of ceviche. Warm light. The bowl sits on wood. Marisco de Olón served for delivery in Guayaquil.' })
-    expect(nombres(r).filter((n) => /marca|contacto|palabra_ajena/.test(n))).toEqual([])
-  })
-  it('🔴 el pedido pide OMITIR marcas, rótulos, logos y teléfonos de terceros de la foto (antes: ni una palabra)', async () => {
-    const t: string = (await cadenaReal()).cuerpo.task
-    expect(t).toMatch(/OMITE las marcas, rótulos, logos, textos y teléfonos de terceros/)
-    expect(t).toMatch(/«omitido_de_la_foto»/)
-  })
-  it('AGNÓSTICO: otro cliente (una pizzería) · «labeled Heinz» es ajeno, «labeled Luna» es suyo', () => {
-    const permitido = F.permitidoDelPrompt({ nombre: 'Pizzería Luna', handles: ['pizzerialuna'], ciudades: ['Cuenca'], brief: { mensaje: 'La pizza margarita de Luna', llamado_a_la_accion: 'Llama al 0987654321' }, manual: { required_terminology: ['masa madre'] }, ficha: {} })
-    const mal = F.chequearPromptDeImagen({ prompt_imagen: 'A pizza next to a bottle labeled Heinz', fuente_imagen: 'cliente' }, { permitido })
-    expect(mal.map((h: { chequeo: string; fatal: boolean }) => [h.chequeo, h.fatal])).toContainEqual(['prompt_con_marca_ajena', true])
-    const bien = F.chequearPromptDeImagen({ prompt_imagen: 'A pizza box labeled Luna, phone 0987654321, masa madre crust', fuente_imagen: 'cliente' }, { permitido })
-    expect(bien.filter((h: { chequeo: string }) => /marca|contacto|palabra_ajena/.test(h.chequeo))).toEqual([])
-  })
-})
-
 describe('② el prompt describe lo que la foto MUESTRA · lo que el brief pide y la foto no trae se DECLARA', () => {
-  it('🔴 el pedido lo dice y el contrato trae «fuera_de_la_foto» y «omitido_de_la_foto»', async () => {
+  it('el pedido pide DECLARAR lo que la foto no muestra (información, no prohibición) y el contrato trae «fuera_de_la_foto»', async () => {
     const t: string = (await cadenaReal()).cuerpo.task
-    expect(t).toMatch(/Si el brief pide un elemento que la foto de referencia NO muestra, NO lo describas como si estuviera/)
+    expect(t).toMatch(/puedes agregarlo o alterar la foto: dilo en «fuera_de_la_foto»/)
     expect(t).toMatch(/"fuera_de_la_foto": \[/)
-    expect(t).toMatch(/"omitido_de_la_foto": \[/)
+    expect(t).not.toMatch(/omitido_de_la_foto/)
   })
   it('🔴 la imagen es del cliente y la pieza NO trae la lista «fuera_de_la_foto» (aunque sea vacía) ⇒ aviso «no_declaro_lo_que_la_foto_no_muestra»', async () => {
     const c: Record<string, unknown> = {}

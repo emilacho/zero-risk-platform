@@ -249,7 +249,7 @@ describe('④ ¿llegó la vuelta?', () => {
 const BUENA = { titular: 'El ceviche que viene de Olón', texto_principal: 'Ceviche con marisco de Olón, directo a tu puerta en Guayaquil. Delivery jueves a lunes, 7am a 3pm. $7. Toca «Enviar mensaje» y escríbenos.', prompt_imagen: 'Un plato de ceviche ocupa el encuadre, luz natural cálida, mesa de madera clara, marisco visible', fuente_imagen: 'cliente', no_pude_cumplir: [], que_miro: ['no pedí nada: el brief y las fotos bastaron', 'fotos: luz natural y mesa de madera'] }
 const chequear = (p: unknown, forb: string[] = []) => CH.chequearPieza(BRIEF, p, { forbidden_words: forb })
 // 03-oct · el brief pide «2 variantes»: una pieza que CUMPLE las entrega en CAMPOS separados (`variantes`), no en un solo texto (ver el-prompt-de-imagen-sale-de-la-foto.test.ts)
-const CUMPLE_CON_VARIANTES = { ...BUENA, variantes: [{ id: 'A', titular: BUENA.titular, texto_principal: BUENA.texto_principal }, { id: 'B', titular: BUENA.titular, texto_principal: BUENA.texto_principal.replace('Ceviche con', 'Ceviche, ahora con') }] }
+const CUMPLE_CON_VARIANTES = { ...BUENA, fuera_de_la_foto: [], variantes: [{ id: 'A', titular: BUENA.titular, texto_principal: BUENA.texto_principal }, { id: 'B', titular: BUENA.titular, texto_principal: BUENA.texto_principal.replace('Ceviche con', 'Ceviche, ahora con') }] }
 describe('⑤ los chequeos comparan lo PEDIDO contra lo HECHO', () => {
   it('una pieza que cumple pasa limpia', () => {
     const r = chequear(CUMPLE_CON_VARIANTES)

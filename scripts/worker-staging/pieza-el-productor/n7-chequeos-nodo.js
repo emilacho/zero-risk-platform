@@ -12,7 +12,7 @@ const pieza = ext.legible ? ext.pieza : { titular: '', texto_principal: '', prom
 const herrSedes = { horarioDeTexto: horarioDeTexto, canonicoHorario: canonicoHorario, describirHorario: describirHorario }
 const sedesParaChequear = c.sedes_resumen && c.sedes_resumen.leidas === true ? c.sedes_resueltas : null
 // 03-oct · coherencia foto ↔ pieza y trato: las funciones vienen de fotos-contexto-logica.js y trato-logica.js (pegadas arriba por el constructor)
-const extraChequeos = { fotos_regla: c.fotos_regla || null, trato: c.trato || null, prompt_permitido: c.prompt_permitido || null, chequearFotoReferencia: chequearFotoReferencia, chequearTrato: chequearTrato, chequearPromptDeImagen: chequearPromptDeImagen }
+const extraChequeos = { fotos_regla: c.fotos_regla || null, trato: c.trato || null, chequearFotoReferencia: chequearFotoReferencia, chequearTrato: chequearTrato, chequearLoQueLaFotoNoMuestra: chequearLoQueLaFotoNoMuestra }
 const res = ext.legible ? chequearPieza(c.brief, pieza, manual, sedesParaChequear, herrSedes, extraChequeos) : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', detalle: ext.motivo, fatal: true }], por_chequeo: { respuesta_no_legible: 1 }, fatales: ['respuesta_no_legible'] }
 
 let motivo_invalido = null
@@ -49,8 +49,7 @@ P.push('')
 P.push('## IMAGEN')
 P.push('- Fuente declarada: ' + (pieza.fuente_imagen || '(sin declarar)'))
 P.push('- PROMPT para el generador (se guarda con la pieza):\n' + (pieza.prompt_imagen || '(sin prompt)'))
-if (Array.isArray(pieza.fuera_de_la_foto) && pieza.fuera_de_la_foto.length) P.push('- LO QUE EL BRIEF PIDE Y LA FOTO NO MUESTRA (no está en el prompt): ' + pieza.fuera_de_la_foto.join(' · '))
-if (Array.isArray(pieza.omitido_de_la_foto) && pieza.omitido_de_la_foto.length) P.push('- OMITIDO DE LA FOTO (marcas, rótulos o teléfonos de terceros): ' + pieza.omitido_de_la_foto.join(' · '))
+if (Array.isArray(pieza.fuera_de_la_foto) && pieza.fuera_de_la_foto.length) P.push('- LO QUE EL BRIEF PIDE Y LA FOTO NO MUESTRA (el productor lo agregó o alteró la foto): ' + pieza.fuera_de_la_foto.join(' · '))
 P.push('')
 P.push('## Fotos reales que se le dieron al productor')
 P.push('- enviadas: ' + c.fotos_enviadas + ' de ' + c.fotos_en_la_tabla + (c.sin_fotos ? ' (SIN FOTOS)' : ''))
@@ -120,7 +119,6 @@ const fila_pieza = {
     fotos: { en_la_tabla: c.fotos_en_la_tabla, enviadas: c.fotos_enviadas, no_enviadas: c.fotos_no_enviadas, excluidas: c.fotos_excluidas, sin_fotos: c.sin_fotos, repetidas_ocultas: c.fotos_ocultas_por_repetidas || [], ctx: c.fotos_ctx || [], regla: c.fotos_regla ? { regla_activa: c.fotos_regla.regla_activa, sin_foto_del_producto: c.fotos_regla.sin_foto_del_producto, producto_del_brief: c.fotos_regla.producto_del_brief, de_referencia: c.fotos_regla.de_referencia } : null, foto_referencia: pieza.foto_referencia || null },
     variantes: Array.isArray(pieza.variantes) ? pieza.variantes : [],
     fuera_de_la_foto: Array.isArray(pieza.fuera_de_la_foto) ? pieza.fuera_de_la_foto : [],
-    omitido_de_la_foto: Array.isArray(pieza.omitido_de_la_foto) ? pieza.omitido_de_la_foto : [],
     trato: c.trato || null,
     que_miro: Array.isArray(pieza.que_miro) ? pieza.que_miro : [],
     no_pude_cumplir: Array.isArray(pieza.no_pude_cumplir) ? pieza.no_pude_cumplir : [],
