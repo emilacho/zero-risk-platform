@@ -1,4 +1,5 @@
-// COPIA DE FOTOS · 3/5 · REVISAR · CC#1 · 2026-09-29. Mira lo que bajó CADA foto: si no es una imagen entera, se DECLARA aquí
+// COPIA DE FOTOS · 3/5 · REVISAR · CC#1 · 2026-09-29 · 03-oct: SIN DUPLICADOS (huella SHA-256 · la portada de un carrusel es su hijo 1: se queda UNA y la repetida se DECLARA, no se sube) y el contexto de cada foto viaja a la tabla.
+// (la lógica `sha256Hex` viene de fotos-contexto-logica.js, pegada arriba por el constructor) Mira lo que bajó CADA foto: si no es una imagen entera, se DECLARA aquí
 // (fila estado=no_bajo con la causa exacta) y no pasa a subirse. Pasan solo las buenas, con su huella para verificar la subida.
 const SB = 'https://ordaeyxvvvdqsznsecjx.supabase.co'
 const auth = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }
@@ -7,6 +8,10 @@ const entradas = $input.all()
 const host = (u) => String(u).split('/')[2] || 'host desconocido'
 const buenas = []
 const fallas = []
+const duplicadas = []
+const vistas = {}
+// el contexto que acompaña a cada fila (lo trae `Fotos · lista`)
+const contexto = (m) => ({ caption: m.caption || null, posted_at: m.posted_at || null, post_url: m.post_url || null, posicion: m.posicion || null, medio: m.medio || null })
 for (let i = 0; i < metas.length; i++) {
   const m = metas[i]
   const e = entradas[i]
@@ -25,12 +30,17 @@ for (let i = 0; i < metas.length; i++) {
     else if (buf.length > 10 * 1024 * 1024) causa = 'demasiado grande · ' + buf.length + ' B'
   }
   if (causa) {
-    fallas.push({ client_id: m.client_id, owner_role: m.owner_role, handle: m.handle, post_id: m.post_id, tipo: m.tipo, url: null, estado: 'no_bajo', causa: causa + ' · ' + host(m.src) })
+    fallas.push({ client_id: m.client_id, owner_role: m.owner_role, handle: m.handle, post_id: m.post_id, tipo: m.tipo, url: null, estado: 'no_bajo', causa: causa + ' · ' + host(m.src), ...contexto(m) })
     continue
   }
+  // 🔴 la MISMA imagen dos veces dentro de un post (portada = hijo 1) no se sube dos veces: se queda la primera y la repetida se declara
+  const hash = sha256Hex(buf)
+  const claveDup = String(m.post_id).replace(/-c\d+$/, '') + '|' + hash
+  if (vistas[claveDup] !== undefined) { duplicadas.push({ post_id: m.post_id, igual_a: vistas[claveDup], hash }); continue }
+  vistas[claveDup] = m.post_id
   const ext = ct === 'image/png' ? 'png' : ct === 'image/webp' ? 'webp' : 'jpg'
   buenas.push({
-    json: { ...m, ct, bytes: buf.length, magic: buf.slice(0, 4).toString('hex'), path: m.client_id + '/' + m.owner_role + '/' + m.handle + '/' + m.post_id + '.' + ext },
+    json: { ...m, ct, hash_archivo: hash, bytes: buf.length, magic: buf.slice(0, 4).toString('hex'), path: m.client_id + '/' + m.owner_role + '/' + m.handle + '/' + m.post_id + '.' + ext },
     binary: { data: e.binary.data },
   })
 }
@@ -48,5 +58,5 @@ if (!buenas.length) {
   if (fallas.length) throw new Error('FOTOS_NO_BAJARON · ' + resumen(fallas))
   return []
 }
-buenas.forEach((b) => { b.json._fallas = fallas; b.json._total = metas.length })
+buenas.forEach((b) => { b.json._fallas = fallas; b.json._total = metas.length; b.json._duplicadas = duplicadas })
 return buenas

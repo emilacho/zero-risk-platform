@@ -1,4 +1,5 @@
-// COPIA DE FOTOS · 1/5 · LISTA · CC#1 · 2026-09-29. Una salida por foto a copiar (perfil HD + últimas portadas + hijas de carrusel).
+// COPIA DE FOTOS · 1/5 · LISTA · CC#1 · 2026-09-29 · 03-oct: CADA FOTO CON SU CONTEXTO (texto, fecha, enlace del post, posición en el carrusel, medio real) vía `contextoDePost` (fotos-contexto-logica.js, pegada arriba por el constructor).
+// Una salida por foto a copiar (perfil HD + últimas portadas + hijas de carrusel).
 // Solo instagram_scraper real (no ensayo) con client_id. Sin fotos ⇒ [] y la rama termina sin ruido.
 const ctx = $('Validar el cuerpo contra el esquema').first().json
 if (ctx.apify_function !== 'instagram_scraper' || ctx.dry_run === true || !ctx.client_id) return []
@@ -15,13 +16,10 @@ for (const it of $('Merge · apify data ready').all().map((i) => i.json)) {
   const handle = norm(it && it.username)
   if (!handle) continue
   const owner_role = own && handle === own ? 'propio' : 'competidor'
-  const push = (post_id, tipo, src) => { if (src) out.push({ json: { ...base, owner_role, handle, post_id, tipo, src } }) }
-  push('logo-hd', 'logo_hd', it.profilePicUrlHD || it.profilePicUrl)
+  const push = (post_id, tipo, src, extra) => { if (src) out.push({ json: { ...base, owner_role, handle, post_id, tipo, src, ...(extra || {}) } }) }
+  push('logo-hd', 'logo_hd', it.profilePicUrlHD || it.profilePicUrl, { medio: 'logo', posicion: 'unica' })
   for (const p of (it.latestPosts || []).slice(0, MAX_POSTS)) {
-    const sc = p.shortCode || p.id
-    if (!sc) continue
-    push(String(sc), 'post_' + String(p.type || '').toLowerCase(), p.displayUrl)
-    ;(p.childPosts || []).slice(0, MAX_HIJAS).forEach((c, i) => push(sc + '-c' + (i + 1), 'post_hijo', c.displayUrl))
+    for (const c of contextoDePost(p, { maxHijas: MAX_HIJAS })) out.push({ json: { ...base, owner_role, handle, ...c } })
   }
 }
 return out

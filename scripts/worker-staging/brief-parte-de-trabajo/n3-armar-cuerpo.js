@@ -8,6 +8,9 @@ const prev = $('② ¿Ya hay parte de este plan? · guarda').first().json
 let ficha = {}
 try { const f = $input.first().json; ficha = Array.isArray(f) ? f[0] || {} : f || {} } catch (e) { ficha = {} }
 const nombre = String(ficha.name || ficha.client_name || 'cliente')
+// 03-oct · EL TRATO de la marca (tú · vos · usted) sale del manual o de la ficha · lógica de trato-logica.js (pegada arriba por el constructor) · el brief ya NO copia el trato de una conversación
+// (si este archivo se corre SIN la lógica pegada por el constructor, el trato queda «no_definido» y el pedido es el de siempre)
+const trato = typeof resolverTrato === 'function' ? resolverTrato(prev.manual_voz, ficha) : { trato: 'no_definido', fuente: 'ninguna', evidencia: 'la lógica del trato no está pegada en este nodo' }
 
 const REFERENCIA = __REFERENCIA__
 
@@ -46,6 +49,7 @@ const REGLAS = [
 const pedido = [
   REGLAS,
   '',
+  ...(typeof bloqueDeTrato === 'function' ? [bloqueDeTrato(trato), 'Esto vale para todo texto que el brief PROPONGA al público (mensaje, llamado a la acción, variantes, sintaxis): escríbelo en ese trato. Nunca copies formas de otro trato.', ''] : []),
   '════════ MANUAL DE MARCA VIGENTE (versión ' + prev.manual_version + ' · id ' + prev.manual_id + ') ════════',
   prev.manual_texto || '(el manual no trae texto)',
   '',
@@ -74,4 +78,4 @@ const cuerpo = {
   // RAZONAMIENTO limitado (opt-in) · sin él en el sobre, el cuerpo es el de siempre
   ...(typeof prev.razonamiento === 'string' ? { thinking_mode: prev.razonamiento } : {}),
 }
-return [{ json: { ...prev, client_name: nombre, cuerpo, pedido_caracteres: pedido.length } }]
+return [{ json: { ...prev, client_name: nombre, trato, cuerpo, pedido_caracteres: pedido.length } }]

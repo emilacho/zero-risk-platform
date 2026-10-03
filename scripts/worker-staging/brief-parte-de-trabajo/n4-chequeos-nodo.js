@@ -8,6 +8,14 @@ const res = ext.legible
   ? chequear(parte, manual, c.plan_texto)
   : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', entregable: null, detalle: ext.motivo }], por_chequeo: { respuesta_no_legible: 1 }, entregables_revisados: 0 }
 
+// ── 03-oct · EL TRATO: el texto que cada brief propone al público respeta el trato de la marca (candidato · no fatal · se DECLARA)
+if (ext.legible && c.trato && typeof chequearTrato === 'function') {
+  parte.entregables.forEach((e) => {
+    const texto = [e && e.mensaje, e && e.llamado_a_la_accion, e && e.variantes, e && e.sintaxis].filter(Boolean).join(' . ')
+    chequearTrato(c.trato, texto, 'el brief ' + (e && e.id)).forEach((h) => { res.hallazgos.push({ chequeo: 'brief_en_otro_trato', entregable: e && e.id, detalle: h.detalle }); res.por_chequeo.brief_en_otro_trato = (res.por_chequeo.brief_en_otro_trato || 0) + 1; res.ok = false })
+  })
+}
+
 // ── EL VEREDICTO · un parte que no vale NO se lee como éxito (encargo Lenovo 30-sep §2) ──────────────────────
 // Inválido = la vuelta no llegó · la respuesta no se pudo leer como parte · trae 0 entregables · o falla un chequeo de CONTEO/CIFRAS
 // (sin_entregables · centinela: la cifra copiada del ejemplo). Los demás hallazgos siguen SOLO declarándose (no se corrigen solos).

@@ -64,5 +64,7 @@ return [{
     brief_texto: L.join('\n'),
     plataforma: brief.plataforma || null,
     tipo_de_pieza: brief.tipo_de_pieza || null,
+    // 03-oct · EL PRODUCTO: el protagonista de ESTE brief (y su vocabulario obligatorio, que ya viaja dentro de `brief`) · ③ y ⑤ lo usan para saber qué muestra cada foto
+    protagonista: brief.protagonista || null,
   },
 }]

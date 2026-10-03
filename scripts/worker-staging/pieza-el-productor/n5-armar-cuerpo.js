@@ -1,4 +1,4 @@
-// ⑤ ARMAR EL CUERPO DEL PRODUCTOR · CC#1 · 2026-10-01. Un solo agente (`campaign-brief-agent`) lee UN brief, mira las fotos reales del cliente, usa «mirar afuera» para lo que falte y ESCRIBE la pieza.
+// ⑤ ARMAR EL CUERPO DEL PRODUCTOR · CC#1 · 2026-10-01 · 03-oct: CADA FOTO CON TODO SU CONTEXTO (texto · fecha · enlace · qué producto es) + la regla «sólo fotos del producto del brief» + el TRATO de la marca (tú · vos · usted) · lógica de fotos-contexto-logica.js y trato-logica.js pegada arriba por el constructor. Un solo agente (`campaign-brief-agent`) lee UN brief, mira las fotos reales del cliente, usa «mirar afuera» para lo que falte y ESCRIBE la pieza.
 // 🔴 MODO SECO DE VERDAD: `dry_run` viaja en el CUERPO que se manda a /api/agents/run-sdk (`cuerpo.dry_run`) y el HTTP siguiente manda EXACTAMENTE `JSON.stringify($json.cuerpo)`.
 // 🔴 `force_restart:true` es obligatorio: sin él el corredor sirve un punto de control guardado (vuelve en 0,7 s sin haber corrido).
 // 🔴 `callback_mode:'runner'`: la vuelta la entrega el CORREDOR (no muere en los 800 s de Vercel) · SÓLO para campaign-brief-agent (lista cerrada en run-sdk).
@@ -36,6 +36,20 @@ const sedesResueltas = sedesInfo && Array.isArray(sedesInfo.sedes) ? sedesInfo.s
 const textosDeVoz = sedesInfo && Array.isArray(sedesInfo.textos_propios) ? sedesInfo.textos_propios : []
 const ubicaciones = ubicacionesParaMapas(sedesResueltas, ficha)
 
+// 🔴 03-oct · CADA FOTO CON SU CONTEXTO: el texto, la fecha y el enlace de la publicación de cada foto, y qué producto nombra ese texto, contra el producto de ESTE brief.
+// Sin la lista de filas con contexto (flujo viejo) todo funciona como antes: las fotos van como {url, label} y no hay regla de producto.
+const _filasFotos = Array.isArray(prev.fotos_filas) ? prev.fotos_filas : null
+const excluirProducto = excluirDe({ nombre: nombre, handles: [instagram].concat((_filasFotos || []).map((f) => f.handle)).filter(Boolean), ciudades: sedesResueltas.map((s) => s.ciudad), market: ficha.market, country: ficha.country })
+// el producto de ESTE brief (su protagonista ∩ su vocabulario obligatorio) · las alternativas que el brief niega («No el X») · y los productos que el dueño declara en la ficha (`config.productos`)
+// la regla de «sólo fotos del producto» vale para piezas de IMAGEN (una bio o una configuración no llevan foto de plato)
+const productoBrief = productoDelBrief(prev.brief, excluirProducto)
+const _esDeImagen = /^(imagen|carrusel)$/.test(sinTildes(prev.brief && prev.brief.tipo_de_pieza))
+const catalogoProductos = catalogoDelBrief(prev.brief, productoBrief, ficha, excluirProducto)
+const clasif = _filasFotos ? clasificarFotos(_filasFotos, { producto: _esDeImagen ? productoBrief : null, catalogo: catalogoProductos, excluir: excluirProducto, maxImagenes: 20 }) : null
+const fotosAEnviar = clasif ? clasif.fotos.map((f) => ({ url: f.url, label: f.label })) : prev.fotos
+// 🔴 03-oct · EL TRATO sale del manual (o de la ficha), no de una regla fija
+const trato = resolverTrato(prev.manual_voz, ficha)
+
 // las herramientas que SÍ tienen dato para este cliente (no se le ofrece al agente lo que no hay a quién mirar)
 const pedidos = []
 const ofrecidas = []
@@ -54,13 +68,15 @@ if (!ubicaciones.length) sinDato.push('ficha_en_mapas (la ficha del cliente no t
 // una búsqueda de Mapas por sede: el máximo de pedidos crece con ellas (base 4 · 1 por sede adicional) para que tener 2 sedes no deje sin cupo al Instagram o al sitio
 const maxPedidos = 4 + Math.max(0, ubicaciones.length - 1)
 
-const nFotos = prev.fotos.length
-const bloqueFotos = nFotos > 0
-  ? ['B) LAS FOTOS REALES DEL NEGOCIO. Van adjuntas a este mensaje: son ' + nFotos + ' foto' + (nFotos === 1 ? '' : 's') + ' propias de ' + nombre + '.',
-     '   Míralas todas ANTES de escribir el prompt de imagen. En ese prompt describe solo lo que de verdad se ve en ellas (el producto, la luz, el encuadre, el fondo, los objetos).',
-     '   No inventes elementos que no aparezcan.'].join('\n')
-  : ['B) LAS FOTOS REALES DEL NEGOCIO. Para este cliente NO hay fotos propias disponibles. No las inventes: escribe el prompt de imagen solo desde el brief y declara en',
-     '   «no_pude_cumplir» que no hubo fotos reales de apoyo.'].join('\n')
+const nFotos = fotosAEnviar.length
+const bloqueFotos = clasif
+  ? bloqueDeFotos(clasif, nombre)
+  : nFotos > 0
+    ? ['B) LAS FOTOS REALES DEL NEGOCIO. Van adjuntas a este mensaje: son ' + nFotos + ' foto' + (nFotos === 1 ? '' : 's') + ' propias de ' + nombre + '.',
+       '   Míralas todas ANTES de escribir el prompt de imagen. En ese prompt describe solo lo que de verdad se ve en ellas (el producto, la luz, el encuadre, el fondo, los objetos).',
+       '   No inventes elementos que no aparezcan.'].join('\n')
+    : ['B) LAS FOTOS REALES DEL NEGOCIO. Para este cliente NO hay fotos propias disponibles. No las inventes: escribe el prompt de imagen solo desde el brief y declara en',
+       '   «no_pude_cumplir» que no hubo fotos reales de apoyo.'].join('\n')
 
 const REGLAS = [
   'Abajo va un brief de una pieza de marketing. Ya está todo decidido: el mensaje, el vocabulario, lo prohibido, los límites y el llamado.',
@@ -84,6 +100,8 @@ const REGLAS = [
   '',
   bloqueDeVoz(textosDeVoz),
   '',
+  bloqueDeTrato(trato),
+  '',
   'Reglas de la pieza:',
   '1. Respeta los límites de caracteres del brief. Usa el vocabulario obligatorio. NUNCA uses una palabra prohibida (solo pueden aparecer en la lista «prohibido» del brief, no en tu texto).',
   '2. UN solo mensaje: el del brief. El llamado a la acción es el del brief.',
@@ -92,6 +110,7 @@ const REGLAS = [
   '   El brief a veces describe lo visual con NEGACIONES («No aparecen personas, no aparece logo, no aparece texto sobre la imagen»): NO las copies al prompt. Tradúcelas a lo que sí se ve («el plato ocupa el encuadre completo sobre la mesa, con luz cálida»).',
   '   En el prompt de imagen no escribas ninguna de estas palabras: no, not, without, never, avoid, sin, ni, evita. Si quieres decir algo con ellas, cámbialo por lo que sí está en la imagen.',
   '5. La fuente de la imagen la decide el brief, no tú: repite cuál es en «fuente_imagen» (cliente = una foto real del negocio · generada = la hace el generador desde tu prompt · dueno = la toma el dueño). Si el brief no lo dice, escribe «no_declarada».',
+  '6. «foto_referencia»: la CLAVE (F01, F02…) de la foto que usaste de referencia del producto y por qué; null si no usaste ninguna. Si la imagen es del cliente es obligatoria. Nunca uses de referencia una foto marcada «NO es el producto».',
   '',
   'Responde EXCLUSIVAMENTE con UN bloque JSON (nada de texto antes ni después) con esta forma exacta:',
   '{ "pieza": {',
@@ -100,6 +119,7 @@ const REGLAS = [
   '  "prompt_imagen": "…",',
   '  "fuente_imagen": "cliente|generada|dueno|no_declarada",',
   '  "no_pude_cumplir": [ "qué del brief no pudiste cumplir y por qué · [] si todo" ],',
+  '  "foto_referencia": { "foto": "F01", "por_que": "…" } | null,',
   '  "que_miro": [ "una línea por cada pedido a mirar_afuera (qué pediste, qué volvió, qué usaste) y una línea sobre qué tomaste de las fotos · si no pediste nada: «no pedí nada» y por qué" ]',
   '} }',
   'Si el brief no pide titular (p. ej. una bio), deja «titular» como cadena vacía.',
@@ -125,11 +145,14 @@ const cuerpo = {
   // Exige que el corredor tenga el cambio de `mirar_afuera_limites` (PR aparte): sin él, Vercel descarta el campo y la herramienta queda como hoy (el texto sigue pidiéndolo, pero no se hace cumplir).
   mirar_afuera_limites: { max_pedidos: maxPedidos, permitidos: ofrecidas },
   // las fotos propias (nuestro almacén) · el corredor las baja y las codifica · Instagram no se manda nunca
-  ...(nFotos > 0 ? { images: prev.fotos, images_mode: 'base64' } : {}),
+  ...(nFotos > 0 ? { images: fotosAEnviar, images_mode: 'base64' } : {}),
 }
 // lo que viaja con la pieza (y se guarda en su provenance): el estado de las sedes y de la voz · quien aprueba ve de dónde salió cada dato
 const sedes_resumen = sedesInfo && sedesInfo.error
   ? { leidas: false, error: String(sedesInfo.error).slice(0, 200) }
   : { leidas: true, sedes: sedesResueltas.map((s) => ({ ciudad: s.ciudad, horario: s.horario.estado, direccion: s.direccion.estado, canal_pedido: s.canal_pedido.estado })), descartes: (sedesInfo && sedesInfo.descartes) || [] }
 const voz_resumen = { textos: textosDeVoz.length, fechas: textosDeVoz.map((t) => t.fecha) }
-return [{ json: { ...prev, client_name: nombre, cuerpo, pedido_caracteres: pedido.length, herramientas_ofrecidas: pedidos.length, max_pedidos_mirar_afuera: maxPedidos, sedes_resumen, sedes_resueltas: sedesResueltas, voz_resumen } }]
+// 03-oct · lo que viaja con la pieza: qué foto es cada una (clave · rol · producto) y la regla con que se comprobará la pieza en ⑦
+const fotos_ctx = clasif ? clasif.fotos.map((f) => ({ ref: f.ref, id: f.id, post_id: f.post_id, fecha: f.fecha, enlace: f.enlace, medio: f.medio, posicion: f.posicion, rol: f.rol, producto: f.producto, producto_fuente: f.producto_fuente, via: f.via || null })) : []
+const fotos_regla = clasif ? { regla_activa: clasif.regla_activa, sin_foto_del_producto: clasif.sin_foto_del_producto, producto_del_brief: clasif.producto_del_brief, raices_del_producto: clasif.raices_del_producto, de_referencia: clasif.de_referencia, fotos: fotos_ctx, catalogo: catalogoProductos } : { regla_activa: false, fotos: [], catalogo: [] }
+return [{ json: { ...prev, ...(clasif ? { fotos_enviadas: nFotos, fotos_no_enviadas: (prev.fotos_no_enviadas || []).concat(clasif.no_enviadas), fotos_ocultas_por_repetidas: (prev.fotos_duplicadas_ocultas || []).concat(clasif.duplicadas_ocultas) } : {}), fotos_ctx, fotos_regla, trato, client_name: nombre, cuerpo, pedido_caracteres: pedido.length, herramientas_ofrecidas: pedidos.length, max_pedidos_mirar_afuera: maxPedidos, sedes_resumen, sedes_resueltas: sedesResueltas, voz_resumen } }]

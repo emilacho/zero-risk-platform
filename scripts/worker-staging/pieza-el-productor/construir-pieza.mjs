@@ -56,6 +56,10 @@ const authSb = [
 /** la lógica de sedes y voz (la MISMA que prueba `sedes-logica.test.ts` y usa el recolector) · se pega entera en los nodos que la usan */
 const SEDES_LOGICA = fs.readFileSync(join(aqui, '..', '..', '..', 'src', 'lib', 'sedes', 'sedes-logica.js'), 'utf8')
 
+/** 03-oct · «cada foto viaja con todo su contexto» y «el trato es de la marca»: la MISMA lógica que prueban `fotos-contexto-*.test.ts` y `trato-del-cliente.test.ts` · se pega entera en los nodos que la usan */
+const FOTOS_LOGICA = fs.readFileSync(join(aqui, '..', '..', '..', 'src', 'lib', 'fotos', 'fotos-contexto-logica.js'), 'utf8')
+const TRATO_LOGICA = fs.readFileSync(join(aqui, '..', '..', '..', 'src', 'lib', 'trato', 'trato-logica.js'), 'utf8')
+
 function sinExports(js) {
   const i = js.indexOf("if (typeof module !== 'undefined' && module.exports)")
   return i === -1 ? js : js.slice(0, i)
@@ -66,14 +70,14 @@ export function codigoDeNodo(clave) {
     case 'sobre': return leer('n0-sobre.js')
     case 'guardaParte': return leer('n1-guarda-parte.js')
     case 'guardaManual': return leer('n2-guarda-manual.js')
-    case 'guardaFotos': return leer('n3-guarda-fotos.js')
+    case 'guardaFotos': return sinExports(FOTOS_LOGICA) + '\n' + leer('n3-guarda-fotos.js')
     case 'guardaRepetida': return leer('n4-guarda-repetida.js')
     case 'guardaSedes': return leer('n5c-guarda-sedes-y-voz.js')
-    case 'cuerpo': return sinExports(SEDES_LOGICA) + '\n' + leer('n5-armar-cuerpo.js')
+    case 'cuerpo': return sinExports(SEDES_LOGICA) + '\n' + sinExports(FOTOS_LOGICA) + '\n' + sinExports(TRATO_LOGICA) + '\n' + leer('n5-armar-cuerpo.js')
     case 'guardaSalud': return leer('n5b-corredor-trae-limites.js')
     case 'acepto': return leer('n6a-acepto.js')
     case 'vuelta': return leer('n6-llego-la-vuelta.js')
-    case 'chequeos': return sinExports(SEDES_LOGICA) + '\n' + sinExports(leer('pieza-chequeos.js')) + '\n' + leer('n7-chequeos-nodo.js')
+    case 'chequeos': return sinExports(SEDES_LOGICA) + '\n' + sinExports(FOTOS_LOGICA) + '\n' + sinExports(TRATO_LOGICA) + '\n' + sinExports(leer('pieza-chequeos.js')) + '\n' + leer('n7-chequeos-nodo.js')
     case 'secoCierre': return leer('n8-seco.js')
     case 'cierre': return leer('n8-cierre.js')
     case 'volvio': return leer('n9-volvio.js')
@@ -96,9 +100,9 @@ export function construirFlujo({ path = 'zero-risk/pieza', nombre = 'Zero Risk �
     code(N.sobre, 'sobre', x(1)),
     get(N.parte, `=${SB}/rest/v1/client_historical_outputs?select=id,created_at,title,provenance_tag&output_type=eq.campaign_brief_pack&client_id=eq.${cid}{{ $('${N.sobre}').first().json.parte_id ? '&id=eq.' + $('${N.sobre}').first().json.parte_id : '' }}&order=created_at.desc&limit=20`, x(2)),
     code(N.guardaParte, 'guardaParte', x(3)),
-    get(N.manual, `=${SB}/rest/v1/client_brand_books?select=id,client_id,version,gate_outcome,created_at,forbidden_words,required_terminology&client_id=eq.${cid}&order=version.desc&limit=1`, x(4)),
+    get(N.manual, `=${SB}/rest/v1/client_brand_books?select=id,client_id,version,gate_outcome,created_at,forbidden_words,required_terminology,voice_description,writing_style,tone_guidelines&client_id=eq.${cid}&order=version.desc&limit=1`, x(4)),
     code(N.guardaManual, 'guardaManual', x(5)),
-    get(N.fotos, `=${SB}/rest/v1/client_social_images?select=id,tipo,post_id,url,estado,created_at&client_id=eq.${cid}&owner_role=eq.propio&estado=eq.ok&order=created_at.desc&limit=200`, x(6)),
+    get(N.fotos, `=${SB}/rest/v1/client_social_images?select=id,handle,tipo,post_id,url,estado,created_at,caption,posted_at,post_url,posicion,medio,producto,producto_fuente,duplicado_de&client_id=eq.${cid}&owner_role=eq.propio&estado=eq.ok&order=created_at.desc&limit=200`, x(6)),
     code(N.guardaFotos, 'guardaFotos', x(7)),
     get(N.repetida, `=${SB}/rest/v1/client_historical_outputs?select=id,created_at&output_type=eq.campaign_piece&client_id=eq.${cid}&provenance_tag->>brief_id=eq.{{ $('${N.guardaFotos}').first().json.brief_id }}&provenance_tag->>parte_id=eq.{{ $('${N.guardaFotos}').first().json.parte_id }}&limit=1`, x(8)),
     code(N.guardaRepetida, 'guardaRepetida', x(9)),

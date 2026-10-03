@@ -49,15 +49,18 @@ function sinExports(js) {
   return i === -1 ? js : js.slice(0, i)
 }
 
+/** 03-oct · el trato de la marca: la MISMA lógica que prueba `trato-del-cliente.test.ts` · se pega entera en los nodos que la usan */
+const TRATO_LOGICA = fs.readFileSync(join(aqui, '..', '..', '..', 'src', 'lib', 'trato', 'trato-logica.js'), 'utf8')
+
 export function codigoDeNodo(clave) {
   switch (clave) {
     case 'sobre': return leer('n0-sobre.js')
     case 'guardaManual': return leer('n1-guarda-manual.js')
     case 'guardaPlan': return leer('n2-guarda-plan.js')
     case 'guardaRepetido': return leer('n2b-repetido.js')
-    case 'cuerpo': return leer('n3-armar-cuerpo.js').replace('__REFERENCIA__', JSON.stringify(leer('referencia-el-brief-de-un-entregable.md')))
+    case 'cuerpo': return sinExports(TRATO_LOGICA) + '\n' + leer('n3-armar-cuerpo.js').replace('__REFERENCIA__', JSON.stringify(leer('referencia-el-brief-de-un-entregable.md')))
     case 'vuelta': return leer('n3-llego-la-vuelta.js')
-    case 'chequeos': return sinExports(leer('brief-chequeos.js')) + '\n' + leer('n4-chequeos-nodo.js')
+    case 'chequeos': return sinExports(TRATO_LOGICA) + '\n' + sinExports(leer('brief-chequeos.js')) + '\n' + leer('n4-chequeos-nodo.js')
     case 'secoCierre': return leer('n5-seco.js')
     case 'cierre': return leer('n5-cierre.js')
     case 'volvio': return leer('n6-volvio.js')
@@ -79,13 +82,13 @@ export function construirFlujo({ path = 'zero-risk/brief', nombre = 'Zero Risk �
   const nodes = [
     { parameters: { httpMethod: 'POST', path, responseMode: 'onReceived', options: {} }, name: N.webhook, type: 'n8n-nodes-base.webhook', typeVersion: 2, position: x(0), webhookId },
     code(N.sobre, 'sobre', x(1)),
-    get(N.manual, `=${SB}/rest/v1/client_brand_books?select=id,client_id,version,gate_outcome,created_at,forbidden_words,required_terminology,content_text&client_id=eq.${cid}&order=version.desc&limit=1`, x(2)),
+    get(N.manual, `=${SB}/rest/v1/client_brand_books?select=id,client_id,version,gate_outcome,created_at,forbidden_words,required_terminology,content_text,voice_description,writing_style,tone_guidelines&client_id=eq.${cid}&order=version.desc&limit=1`, x(2)),
     code(N.guardaManual, 'guardaManual', x(3)),
     get(N.plan, `=${SB}/rest/v1/client_historical_outputs?select=id,created_at,title,content_text,status&output_type=eq.campaign_plan_90d&client_id=eq.${cid}&order=created_at.desc&limit=1`, x(4)),
     code(N.guardaPlan, 'guardaPlan', x(5)),
     get(N.repetido, `=${SB}/rest/v1/client_historical_outputs?select=id,created_at&output_type=eq.campaign_brief_pack&client_id=eq.${cid}&provenance_tag->>plan_id=eq.{{ $('${N.guardaPlan}').first().json.plan_id }}&limit=1`, x(6)),
     code(N.guardaRepetido, 'guardaRepetido', x(7)),
-    get(N.ficha, `=${SB}/rest/v1/clients?select=id,name&id=eq.${cid}&limit=1`, x(8)),
+    get(N.ficha, `=${SB}/rest/v1/clients?select=id,name,country,market,config&id=eq.${cid}&limit=1`, x(8)),
     code(N.cuerpo, 'cuerpo', x(9)),
     {
       parameters: {
