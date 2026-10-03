@@ -133,9 +133,10 @@ function negacionesDelPrompt(prompt) {
 
 /**
  * Corre TODOS los chequeos. `brief` = el entregable del parte · `pieza` = lo que escribió el productor · `manual.forbidden_words` = prohibidas del manual.
+ * 03-oct · `extra` = { fotos_regla, trato, chequearFotoReferencia, chequearTrato } (las funciones se INYECTAN: en el nodo vienen de fotos-contexto-logica.js y trato-logica.js; sin `extra` estos chequeos no corren).
  * Devuelve {ok, hallazgos[], por_chequeo{}, fatales[]}. NO modifica nada.
  */
-function chequearPieza(brief, pieza, manual, sedes, herr) {
+function chequearPieza(brief, pieza, manual, sedes, herr, extra) {
   var hallazgos = []
   var falla = function (chequeo, detalle, fatal) { hallazgos.push({ chequeo: chequeo, detalle: detalle, fatal: fatal === true }) }
   var titular = String(pieza.titular || '')
@@ -201,6 +202,17 @@ function chequearPieza(brief, pieza, manual, sedes, herr) {
         falla('horario_sin_respaldo', 'la pieza afirma «' + herr.describirHorario(hp) + '» y ninguna sede lo tiene verificado (' + vistas + ') · lo decide quien aprueba con lo que el sistema vio, no el dueño')
       }
     }
+  }
+
+  // ── 03-oct · COHERENCIA FOTO ↔ PIEZA (determinista · sin modelo): una pieza no puede usar de referencia la foto de OTRO producto ni armar el prompt sobre otro plato · tres hallazgos FATALES
+  if (extra && extra.fotos_regla && typeof extra.chequearFotoReferencia === 'function') {
+    extra.chequearFotoReferencia(pieza, extra.fotos_regla, brief).forEach(function (x) { falla(x.chequeo, x.detalle, x.fatal) })
+  }
+  // ── 03-oct · EL TRATO de la marca (tú · vos · usted): la pieza y el brief lo respetan · candidato, no fatal
+  if (extra && extra.trato && typeof extra.chequearTrato === 'function') {
+    extra.chequearTrato(extra.trato, titular + ' . ' + texto, 'la pieza').forEach(function (x) { falla(x.chequeo, x.detalle, x.fatal) })
+    var deBrief = [brief && brief.mensaje, brief && brief.llamado_a_la_accion, brief && brief.sintaxis].filter(Boolean).join(' . ')
+    extra.chequearTrato(extra.trato, deBrief, 'el brief').forEach(function (x) { falla('brief_en_otro_trato', x.detalle, false) })
   }
 
   // ── lo que no pudo y lo que miró se declaran (nunca en silencio)

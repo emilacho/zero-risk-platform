@@ -18,5 +18,7 @@ return [{
     forbidden_words: Array.isArray(m.forbidden_words) ? m.forbidden_words : [],
     required_terminology: Array.isArray(m.required_terminology) ? m.required_terminology : [],
     manual_texto: String(m.content_text || ''),
+    // 03-oct · EL TRATO (tú · vos · usted) sale del manual: su descripción de voz y sus guías de tono viajan a ③ y ④
+    manual_voz: { voice_description: m.voice_description || null, writing_style: m.writing_style || null, tone_guidelines: m.tone_guidelines && typeof m.tone_guidelines === 'object' ? m.tone_guidelines : {} },
   },
 }]

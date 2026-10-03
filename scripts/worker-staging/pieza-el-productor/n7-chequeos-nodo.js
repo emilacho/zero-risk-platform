@@ -11,7 +11,9 @@ const pieza = ext.legible ? ext.pieza : { titular: '', texto_principal: '', prom
 // 02-oct · el horario de la pieza se compara con lo que el sistema vio de las sedes (sin sedes leídas no hay comparación: no se inventa una verificación)
 const herrSedes = { horarioDeTexto: horarioDeTexto, canonicoHorario: canonicoHorario, describirHorario: describirHorario }
 const sedesParaChequear = c.sedes_resumen && c.sedes_resumen.leidas === true ? c.sedes_resueltas : null
-const res = ext.legible ? chequearPieza(c.brief, pieza, manual, sedesParaChequear, herrSedes) : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', detalle: ext.motivo, fatal: true }], por_chequeo: { respuesta_no_legible: 1 }, fatales: ['respuesta_no_legible'] }
+// 03-oct · coherencia foto ↔ pieza y trato: las funciones vienen de fotos-contexto-logica.js y trato-logica.js (pegadas arriba por el constructor)
+const extraChequeos = { fotos_regla: c.fotos_regla || null, trato: c.trato || null, chequearFotoReferencia: chequearFotoReferencia, chequearTrato: chequearTrato }
+const res = ext.legible ? chequearPieza(c.brief, pieza, manual, sedesParaChequear, herrSedes, extraChequeos) : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', detalle: ext.motivo, fatal: true }], por_chequeo: { respuesta_no_legible: 1 }, fatales: ['respuesta_no_legible'] }
 
 let motivo_invalido = null
 if (!c.llego_la_vuelta) motivo_invalido = c.motivo || 'la vuelta del productor no llegó'
@@ -42,6 +44,12 @@ P.push('## Fotos reales que se le dieron al productor')
 P.push('- enviadas: ' + c.fotos_enviadas + ' de ' + c.fotos_en_la_tabla + (c.sin_fotos ? ' (SIN FOTOS)' : ''))
 if ((c.fotos_no_enviadas || []).length) P.push('- NO enviadas por el límite de 20 por pedido: ' + c.fotos_no_enviadas.length + ' (' + c.fotos_no_enviadas.join(', ') + ')')
 ;(c.fotos_excluidas || []).forEach((x) => P.push('- EXCLUIDA ' + x.id + ' · ' + x.label + ' · ' + x.causa))
+P.push('')
+P.push('## Qué foto es cada una y cuál usó de referencia')
+P.push('- Producto del brief: ' + ((c.fotos_regla && c.fotos_regla.producto_del_brief) || '(el brief no nombra un producto: sin regla)') + (c.fotos_regla && c.fotos_regla.sin_foto_del_producto ? ' · ⚠️ NO HAY FOTO DE ESE PRODUCTO' : ''))
+;(c.fotos_ctx || []).forEach((f) => P.push('- ' + f.ref + ' · ' + (f.fecha || 's/f') + ' · ' + (f.enlace || '') + ' · ' + f.rol + ((f.producto || []).length ? ' (' + f.producto.join(' + ') + ')' : '')))
+P.push('- Foto de referencia que declaró el productor: ' + (pieza.foto_referencia ? JSON.stringify(pieza.foto_referencia) : '(ninguna)'))
+P.push('- Trato de la marca: ' + (c.trato ? c.trato.trato + ' (' + c.trato.fuente + ')' : '(no resuelto)'))
 P.push('')
 P.push('## Sedes y voz que se le dieron al productor')
 P.push(c.sedes_resumen && c.sedes_resumen.leidas === false ? '- SEDES: NO se pudieron leer (' + c.sedes_resumen.error + ')' : '- SEDES: ' + ((c.sedes_resumen && c.sedes_resumen.sedes) || []).map((s) => s.ciudad + ' (horario: ' + s.horario + ' · dirección: ' + s.direccion + ')').join(' · '))
@@ -97,7 +105,8 @@ const fila_pieza = {
     pieza: ext.legible ? pieza : null,
     prompt_imagen: pieza.prompt_imagen || null,
     fuente_imagen: pieza.fuente_imagen || null,
-    fotos: { en_la_tabla: c.fotos_en_la_tabla, enviadas: c.fotos_enviadas, no_enviadas: c.fotos_no_enviadas, excluidas: c.fotos_excluidas, sin_fotos: c.sin_fotos },
+    fotos: { en_la_tabla: c.fotos_en_la_tabla, enviadas: c.fotos_enviadas, no_enviadas: c.fotos_no_enviadas, excluidas: c.fotos_excluidas, sin_fotos: c.sin_fotos, repetidas_ocultas: c.fotos_ocultas_por_repetidas || [], ctx: c.fotos_ctx || [], regla: c.fotos_regla ? { regla_activa: c.fotos_regla.regla_activa, sin_foto_del_producto: c.fotos_regla.sin_foto_del_producto, producto_del_brief: c.fotos_regla.producto_del_brief, de_referencia: c.fotos_regla.de_referencia } : null, foto_referencia: pieza.foto_referencia || null },
+    trato: c.trato || null,
     que_miro: Array.isArray(pieza.que_miro) ? pieza.que_miro : [],
     no_pude_cumplir: Array.isArray(pieza.no_pude_cumplir) ? pieza.no_pude_cumplir : [],
     sedes: c.sedes_resumen || null,

@@ -1,4 +1,4 @@
-// ③ GUARDA · las fotos propias del cliente · CC#1 · 2026-10-01. Entrada: las filas `client_social_images` del cliente con owner_role=propio y estado=ok.
+// ③ GUARDA · las fotos propias del cliente · CC#1 · 2026-10-01 · 03-oct: CADA FOTO CON SU CONTEXTO (texto · fecha · enlace · posición · medio · producto) y SIN la repetida (`duplicado_de`) · la lógica `raicesDe` / `entradaDeProtagonista` viene de fotos-contexto-logica.js (pegada arriba por el constructor). Entrada: las filas `client_social_images` del cliente con owner_role=propio y estado=ok.
 // 🔴 Reglas (todas DECLARADAS, ninguna calla):
 //   · sólo se aceptan fotos de NUESTRO almacén (bucket client-social-images): una URL de afuera DETIENE la corrida (nunca se manda al corredor una dirección ajena · y Instagram corta al corredor, ver doc 01 §2.2)
 //   · el corredor aborta TODO el pedido si UNA foto no baja, sin cobro y sin fila: por eso aquí se COMPRUEBA cada una (HEAD · 200 · tipo imagen · tamaño) y la que no sirve se EXCLUYE y se DECLARA con su causa
@@ -25,9 +25,16 @@ for (const f of filas) {
     throw new Error('PIEZA_FOTO_FUERA_DEL_ALMACEN · la foto ' + f.id + ' no está en nuestro almacén (' + String(f.url).slice(0, 80) + ') · se DETIENE: sólo se mandan al corredor fotos de client-social-images')
   }
 }
-// las más recientes primero (la consulta ya las trae ordenadas) · el tope se declara
-const candidatas = filas.slice(0, MAX_IMAGENES)
-const no_enviadas = filas.slice(MAX_IMAGENES).map((f) => f.id)
+// 03-oct · SIN DUPLICADOS: la portada de un carrusel es su hijo 1 (misma huella): la fila repetida trae `duplicado_de` y no se manda · se DECLARA
+const duplicadas_ocultas = filas.filter((f) => f.duplicado_de).map((f) => f.id)
+const vivas = filas.filter((f) => !f.duplicado_de)
+// las más recientes primero (la consulta ya las trae ordenadas) · si hay que recortar al tope, las fotos cuyo texto nombra algo del PROTAGONISTA del brief van primero (orden estable: no se pierde la que importa)
+// (esta prioridad es amplia a propósito: la decisión exacta de «cuál es el producto» la toma ⑤, que ya conoce la marca y sus ciudades)
+const _prot = productoDelBrief(prev.brief, [])
+const _prioridad = (f) => (_prot && raicesDe(f.caption || '', []).some((r) => _prot.raices.indexOf(r) !== -1) ? 0 : 1)
+const ordenadas = vivas.map((f, i) => ({ f, i })).sort((a, b) => _prioridad(a.f) - _prioridad(b.f) || a.i - b.i).map((x) => x.f)
+const candidatas = ordenadas.slice(0, MAX_IMAGENES)
+const no_enviadas = ordenadas.slice(MAX_IMAGENES).map((f) => f.id)
 
 const etiqueta = (f) => (String(f.tipo || 'foto') + ' · ' + String(f.post_id || f.id)).slice(0, 80)
 const medir = async (f) => {
@@ -57,10 +64,14 @@ for (const m of buenas) {
   dentro.push(m)
 }
 const fotos = dentro.map((m) => ({ url: m.f.url, label: etiqueta(m.f) }))
+// 03-oct · las filas CON TODO SU CONTEXTO: ⑤ las clasifica contra el producto del brief y arma lo que ve el productor (fotos de verdad · con su texto, fecha y enlace)
+const fotos_filas = dentro.map((m) => ({ id: m.f.id, handle: m.f.handle || null, tipo: m.f.tipo || null, post_id: m.f.post_id || null, url: m.f.url, caption: m.f.caption || null, posted_at: m.f.posted_at || null, post_url: m.f.post_url || null, posicion: m.f.posicion || null, medio: m.f.medio || null, producto: Array.isArray(m.f.producto) ? m.f.producto : [], producto_fuente: m.f.producto_fuente || 'desconocido' }))
 return [{
   json: {
     ...prev,
     fotos,
+    fotos_filas,
+    fotos_duplicadas_ocultas: duplicadas_ocultas,
     fotos_en_la_tabla: filas.length,
     fotos_enviadas: fotos.length,
     fotos_no_enviadas: no_enviadas,
