@@ -144,27 +144,52 @@ function chequearPieza(brief, pieza, manual, sedes, herr, extra) {
   var prompt = String(pieza.prompt_imagen || '')
   var aire = normalizar(titular + ' . ' + texto)
 
+  // 03-oct · LAS VARIANTES VAN EN CAMPOS: `pieza.variantes = [{ id, titular, texto_principal }]` · cada una se revisa POR SEPARADO y el aviso dice cuál (antes la 3.ª pieza entregó «Variante A: … Variante B: …» dentro de un solo texto)
+  // Sin `variantes`, `titular` y `texto_principal` son la pieza (o la variante A) como siempre.
+  var variantes = []
+  if (Array.isArray(pieza.variantes)) {
+    pieza.variantes.forEach(function (v, i) {
+      if (v && typeof v === 'object') variantes.push({ id: String(v.id || String.fromCharCode(65 + i)), titular: String(v.titular !== undefined && v.titular !== null ? v.titular : titular), texto: String(v.texto_principal || '') })
+    })
+  }
+  var conVariantes = variantes.length > 0
+  if (!conVariantes) variantes.push({ id: '', titular: titular, texto: texto })
+  var recorrer = function (fn) {
+    variantes.forEach(function (v) {
+      var pre = v.id ? '[variante ' + v.id + '] ' : ''
+      fn(v.titular, v.texto, normalizar(v.titular + ' . ' + v.texto), function (c, d, f) { falla(c, pre + d, f) }, v)
+    })
+  }
+
   if (!titular.trim() && !texto.trim()) falla('pieza_vacia', 'la pieza no trae titular NI texto principal', true)
 
   // ── los límites de caracteres que el brief atribuye a un campo
   var lim = limitesDelBrief(brief && brief.limites)
+  recorrer(function (titular, texto, aire, falla) {
   lim.atribuidos.forEach(function (l) {
     var n = (l.campo === 'titular' ? titular : texto).length
     if (n > l.max) falla('limite_de_caracteres', 'el ' + l.campo + ' mide ' + n + ' caracteres y el brief dice «' + l.etiqueta + '» ≤ ' + l.max)
   })
+  })
+
   lim.sin_campo.forEach(function (mx) { falla('limite_sin_campo', 'el brief menciona un máximo de ' + mx + ' caracteres sin decir de qué campo · NO se pudo comprobar') })
 
   // ── palabras prohibidas (las del brief y las del manual) · en lo que sale al público (titular y texto), no en el prompt de imagen
   var prohibidas = []
   ;((brief && brief.prohibido) || []).concat((manual && manual.forbidden_words) || []).forEach(function (w) { if (w && prohibidas.indexOf(w) === -1) prohibidas.push(w) })
+  recorrer(function (titular, texto, aire, falla) {
   prohibidas.forEach(function (w) { if (palabraPresente(aire, w)) falla('palabra_prohibida', 'usa «' + w + '», prohibida (búsqueda literal · puede ser una mención y no un uso)') })
+  })
 
   // ── el vocabulario obligatorio del brief
+  recorrer(function (titular, texto, aire, falla) {
   var faltan = []
   ;((brief && brief.vocabulario_obligatorio) || []).forEach(function (w) { if (w && !palabraPresente(aire, w)) faltan.push(w) })
   if (faltan.length) falla('termino_obligatorio_ausente', 'no aparece(n) en el titular ni en el texto: ' + faltan.map(function (w) { return '«' + w + '»' }).join(' · ') + ' (el brief no siempre exige TODOS en una misma pieza)')
+  })
 
   // ── el llamado a la acción: los datos verificables que trae (enlace, teléfono, @usuario) tienen que estar
+  recorrer(function (titular, texto, aire, falla) {
   datosDelLlamado(brief && brief.llamado_a_la_accion).forEach(function (d) {
     var dn = normalizar(d).replace(/\s+/g, '')
     if (normalizar(titular + ' ' + texto).replace(/\s+/g, '').indexOf(dn) === -1) falla('llamado_ausente', 'el llamado a la acción del brief trae «' + d + '» y no aparece en la pieza')
@@ -174,6 +199,7 @@ function chequearPieza(brief, pieza, manual, sedes, herr, extra) {
   if (boton && boton.etiqueta && !palabraPresente(aire, boton.etiqueta)) {
     falla('boton_sin_mencion', 'el brief declara el botón «' + boton.etiqueta + '» y la pieza no lo nombra (el destino del botón' + (boton.destino ? ' — ' + boton.destino.replace(/[.\s]+$/, '') : '') + ' lo configura la plataforma, no va en el texto)')
   }
+  })
 
   // ── la fuente de la imagen · la decide el BRIEF; la pieza debe declarar cuál usó
   var tipo = normalizar(brief && brief.tipo_de_pieza)
@@ -190,6 +216,7 @@ function chequearPieza(brief, pieza, manual, sedes, herr, extra) {
 
   // ── el HORARIO de la pieza contra lo que el SISTEMA vio de las sedes (sitio · Instagram · Mapas): si la pieza afirma un horario y ninguna sede lo tiene verificado, se declara
   // (`sedes` = la ficha resuelta · `herr` = las funciones de lectura de sedes-logica.js · sin ellas no se corre este chequeo: no se inventa una verificación)
+  recorrer(function (titular, texto, aire, falla) {
   if (Array.isArray(sedes) && herr && typeof herr.horarioDeTexto === 'function') {
     var hp = herr.horarioDeTexto(titular + ' . ' + texto)
     if (hp) {
@@ -203,6 +230,7 @@ function chequearPieza(brief, pieza, manual, sedes, herr, extra) {
       }
     }
   }
+  })
 
   // ── 03-oct · COHERENCIA FOTO ↔ PIEZA (determinista · sin modelo): una pieza no puede usar de referencia la foto de OTRO producto ni armar el prompt sobre otro plato · tres hallazgos FATALES
   if (extra && extra.fotos_regla && typeof extra.chequearFotoReferencia === 'function') {
@@ -210,9 +238,27 @@ function chequearPieza(brief, pieza, manual, sedes, herr, extra) {
   }
   // ── 03-oct · EL TRATO de la marca (tú · vos · usted): la pieza y el brief lo respetan · candidato, no fatal
   if (extra && extra.trato && typeof extra.chequearTrato === 'function') {
-    extra.chequearTrato(extra.trato, titular + ' . ' + texto, 'la pieza').forEach(function (x) { falla(x.chequeo, x.detalle, x.fatal) })
+    recorrer(function (tit, tex, air, fal, v) { extra.chequearTrato(extra.trato, tit + ' . ' + tex, v.id ? 'la variante ' + v.id : 'la pieza').forEach(function (x) { falla(x.chequeo, x.detalle, x.fatal) }) })
     var deBrief = [brief && brief.mensaje, brief && brief.llamado_a_la_accion, brief && brief.sintaxis].filter(Boolean).join(' . ')
     extra.chequearTrato(extra.trato, deBrief, 'el brief').forEach(function (x) { falla('brief_en_otro_trato', x.detalle, false) })
+  }
+
+  // ── 03-oct · VARIANTES: separadas, completas y distintas · candidatos (no fatales)
+  var pideN = /(\d+)\s*variantes?/i.exec(String((brief && brief.variantes) || ''))
+  var nPedidas = pideN ? Number(pideN[1]) : 0
+  if (!conVariantes && /(^|\n)\s*variante\s+[a-z0-9]\s*[:.)\-–—]/i.test(texto) && (texto.match(/variante\s+[a-z0-9]\s*[:.)\-–—]/gi) || []).length >= 2) {
+    falla('variantes_concatenadas', 'el texto principal trae varias variantes pegadas («Variante A: … Variante B: …») en un solo campo: cada variante va en su propio objeto de «variantes» (el sistema que carga la creatividad necesita campos separados)')
+  }
+  if (nPedidas > 1 && variantes.length < nPedidas && !(!conVariantes && /variante\s+[a-z0-9]\s*[:.)\-–—]/i.test(texto))) {
+    falla('variantes_incompletas', 'el brief pide ' + nPedidas + ' variantes y la pieza entrega ' + (conVariantes ? variantes.length : 1) + ' en campos separados')
+  }
+  if (conVariantes && variantes.length > 1) {
+    var vistos = {}
+    variantes.forEach(function (v) { var k = normalizar(v.titular + ' . ' + v.texto); if (vistos[k]) falla('variantes_iguales', 'la variante ' + v.id + ' es idéntica a la variante ' + vistos[k] + ' (titular y texto)'); else vistos[k] = v.id })
+  }
+  // ── 03-oct · EL PROMPT DE IMAGEN SALE DE LA FOTO: sin marcas ni contactos ajenos (fatales los claros) y lo que la foto no muestra se declara
+  if (esImagen && extra && extra.prompt_permitido && typeof extra.chequearPromptDeImagen === 'function') {
+    extra.chequearPromptDeImagen(pieza, { permitido: extra.prompt_permitido }).forEach(function (x) { falla(x.chequeo, x.detalle, x.fatal) })
   }
 
   // ── lo que no pudo y lo que miró se declaran (nunca en silencio)
