@@ -186,3 +186,84 @@ describe('el recolector con la captura REAL · qué aporta Mapas a cada sede', (
     expect(r.mapas_por_sede.find((x) => x.sede === 'olon')!.ficha!.prueba).toMatch(/Facebook @naufragoec/)
   })
 })
+
+// ── PR #419 · huecos que dejó la recertificación de CC#3 (N8 · N9 · valor_norm · descartes repetidos) ──
+describe('N8 · las cuentas que enlaza el PERFIL de Instagram del cliente cuentan como propias', () => {
+  const ficha = (website: string) => ({ title: 'Marisquería La Ola', city: 'Olon', street: 'Calle Principal 1', website, url: 'https://maps/ola', placeId: 'OLA' })
+  const conPerfil = (perfil: Record<string, unknown>, website: string) => {
+    const m = mundo([rawMapas('x', [ficha(website)], '2026-10-02T00:00:00+00:00')])
+    ;(m.tablas.apify_raw[0] as Fila).respuesta = [{ ...IG, ...perfil }]
+    return m
+  }
+  it('🔴 la página de Facebook que el perfil enlaza (externalUrl) prueba una ficha con OTRO nombre', async () => {
+    const r = await recolectarSedes(conPerfil({ externalUrl: 'https://www.facebook.com/cuentaperfil' }, 'https://www.facebook.com/cuentaperfil').cliente, CID)
+    expect(r.descartes).toEqual([])
+    expect(r.mapas_por_sede.find((x) => x.sede === 'olon')!.ficha!.prueba).toMatch(/Facebook @cuentaperfil/)
+  })
+  it('también la que aparece en la biografía y en externalUrls[]', async () => {
+    const bio = await recolectarSedes(conPerfil({ biography: IG.biography + '\ntiktok.com/@cuenta.perfil' }, 'https://www.tiktok.com/@cuenta.perfil').cliente, CID)
+    expect(bio.mapas_por_sede.find((x) => x.sede === 'olon')!.ficha!.prueba).toMatch(/TikTok @cuenta.perfil/)
+    const lista = await recolectarSedes(conPerfil({ externalUrls: [{ url: 'https://www.youtube.com/@canalperfil' }] }, 'https://www.youtube.com/@canalperfil').cliente, CID)
+    expect(lista.mapas_por_sede.find((x) => x.sede === 'olon')!.ficha!.prueba).toMatch(/YouTube @canalperfil/)
+  })
+  it('CONTROL: sin ese enlace en el perfil, la misma ficha NO pasa · y la cuenta de otro no se confunde', async () => {
+    expect((await recolectarSedes(conPerfil({}, 'https://www.facebook.com/cuentaperfil').cliente, CID)).descartes).toHaveLength(1)
+    expect((await recolectarSedes(conPerfil({ externalUrl: 'https://www.facebook.com/cuentaperfil' }, 'https://www.facebook.com/otracuenta').cliente, CID)).descartes).toHaveLength(1)
+  })
+})
+
+describe('N9 · un sitio cuyo «host» es una red social NO prueba por el host', () => {
+  const web = (website_url: string) => S.pruebasDePropiedad([], { website_url })
+  const item = (website: string) => ({ title: 'Otro Negocio', city: 'Olon', street: 'Calle Principal 1', website })
+  it('🔴 el cliente tiene su Facebook como «web»: una ficha que enlaza OTRA página de facebook.com NO pasa', () => {
+    expect(mapas(item('https://www.facebook.com/ajena'), web('https://www.facebook.com/propia')).descartado).not.toBeNull()
+    expect(mapas(item('https://instagram.com/ajena'), web('https://www.instagram.com/propia')).descartado).not.toBeNull()
+  })
+  it('y la propia SÍ pasa, como cuenta (no como host)', () => {
+    const r = mapas(item('https://www.facebook.com/propia'), web('https://www.facebook.com/propia'))
+    expect(r.descartado).toBeNull()
+    expect(r.prueba).toMatch(/cuenta de Facebook @propia/)
+  })
+  it('CONTROL: un sitio normal sigue probando por host (con www, ruta y mayúsculas)', () => {
+    expect(mapas(item('https://WWW.tienda.ec/menu?x=1'), web('https://tienda.ec')).prueba).toMatch(/sitio web tienda.ec/)
+  })
+})
+
+describe('el valor que se guarda de un horario es LEGIBLE y la segunda corrida no agrega nada', () => {
+  it('valor_norm de cada horario guardado es un objeto {día: «hh:mm-hh:mm»} (jsonb), nunca «[object Object]»', async () => {
+    const m = mundo([rawMapas('cap', REALES.items, REALES.created_at)])
+    await recolectarSedes(m.cliente, CID)
+    const horarios = m.tablas.client_sede_datos.filter((d) => d.campo === 'horario')
+    expect(horarios.map((d) => d.fuente).sort()).toEqual(['instagram', 'mapas', 'sitio'])
+    for (const h of horarios) {
+      const txt = JSON.stringify(h.valor_norm)
+      expect(txt, String(h.fuente)).toMatch(/^\{("[1-7]":"\d\d:\d\d-\d\d:\d\d",?)+\}$/)
+      expect(txt).not.toMatch(/object Object/)
+      expect(String(h.valor_texto)).toMatch(/\d\d:\d\d–\d\d:\d\d/) // y el texto humano lo dice con palabras
+    }
+  })
+  it('segunda corrida = 0 nuevas y no cambia ninguna fila', async () => {
+    const m = mundo([rawMapas('cap', REALES.items, REALES.created_at)])
+    await recolectarSedes(m.cliente, CID)
+    const antes = JSON.stringify(m.tablas.client_sede_datos)
+    const r2 = await recolectarSedes(m.cliente, CID)
+    expect(r2.nuevas).toBe(0)
+    expect(JSON.stringify(m.tablas.client_sede_datos)).toBe(antes)
+  })
+})
+
+describe('los descartes se declaran UNA vez por ficha aunque el raspado se repita', () => {
+  it('🔴 5 copias del mismo raspado (4 fichas ajenas cada una) ⇒ 4 descartes, no 20', async () => {
+    const m = mundo([1, 2, 3, 4, 5].map((i) => rawMapas('c' + i, REALES.items, '2026-09-29T01:36:0' + i + '+00:00')))
+    const r = await recolectarSedes(m.cliente, CID)
+    expect(r.descartes).toHaveLength(4)
+    expect(new Set(r.descartes.map((d) => d.ref)).size).toBe(4)
+    expect(r.descartes.every((d) => d.ref && !/^c\d$/.test(d.ref))).toBe(true) // la referencia es la FICHA, no la copia del raspado
+  })
+  it('dos fichas distintas con el mismo motivo siguen contando por separado', async () => {
+    const a = { title: 'Otro A', city: 'Olon', street: 'Calle A 1', url: 'https://maps/a' }
+    const b = { title: 'Otro B', city: 'Olon', street: 'Calle B 2', url: 'https://maps/b' }
+    const r = await recolectarSedes(mundo([rawMapas('x', [a, b], '2026-10-02T00:00:00+00:00')]).cliente, CID)
+    expect(r.descartes).toHaveLength(2)
+  })
+})

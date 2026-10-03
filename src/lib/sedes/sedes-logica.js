@@ -354,6 +354,7 @@ function pruebasDePropiedad(observaciones, ficha) {
   add(sitios, anfitrion(f.website_url || f.website || f.domain))
   add(ig, f.instagram ? String(f.instagram).replace(/^@/, '').toLowerCase() : null)
   ig.forEach(function (u) { add(cuentas, 'instagram:' + u) })
+  cuentasSocialesDe(f.website_url || f.website).forEach(function (k) { add(cuentas, k) }) // la «web» del cliente puede ser su página de una red: entonces es una cuenta propia
   ;(Array.isArray(f.cuentas) ? f.cuentas : []).forEach(function (k) { if (typeof k === 'string' && k.indexOf(':') > 0) add(cuentas, k.toLowerCase()) })
   return { telefonos: tel, direcciones: dir, sitios: sitios, instagram: ig, cuentas: cuentas }
 }

@@ -126,13 +126,20 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     // D1 · lo ya visto en las fuentes PROPIAS (sitio · Instagram · la ficha) es contra lo que se prueba que una ficha de Mapas es del cliente: nombre + ciudad no alcanzan
     const pruebas = L.pruebasDePropiedad(obs, { website_url: cli[0].website_url, instagram: propio, cuentas: [...cuentasPropias] })
     const descartes: ResultadoRecoleccion['descartes'] = []
+    const descartesVistos = new Set<string>()
     let nMapas = 0
     const aprobadas: { sede: string; id: string; item: Record<string, unknown>; prueba: string; ref: string | null; cuando: string }[] = []
     for (const f of crudas.filter((x) => x.apify_function !== 'instagram_scraper')) {
       const items = Array.isArray(f.respuesta) ? (f.respuesta as unknown[]) : []
       for (const item of items) {
         const r = L.observacionesDeMaps(item, sedesDeclaradas, nombre, { observado_en: f.created_at, pruebas })
-        if (r.descartado) descartes.push({ fuente: 'mapas', motivo: r.descartado.motivo, ref: f.id })
+        if (r.descartado) {
+          // una ficha descartada se declara UNA vez aunque el raspado se repita (la misma ficha en 5 copias del raspado = 1 descarte)
+          const it = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>
+          const ref = (it.url as string) || (it.placeId ? 'placeId ' + String(it.placeId) : null) || f.id
+          const llaveDescarte = ref + '|' + r.descartado.motivo
+          if (!descartesVistos.has(llaveDescarte)) { descartesVistos.add(llaveDescarte); descartes.push({ fuente: 'mapas', motivo: r.descartado.motivo, ref }) }
+        }
         else {
           nMapas += r.observaciones.length; obs.push(...r.observaciones)
           if (r.sede) { const it = item as Record<string, unknown>; aprobadas.push({ sede: r.sede, id: String(it.placeId || it.url || it.title || ''), item: it, prueba: r.prueba || '', ref: (it.url as string) || (it.placeId ? 'placeId ' + String(it.placeId) : null) || f.id, cuando: f.created_at }) }
