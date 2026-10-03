@@ -210,6 +210,9 @@ export interface BrainEnrichmentResultMeta {
   /** E116 · trozos del manual de versiones no vigentes descartados · y la fila vigente usada. */
   brain_chunks_old_version_dropped?: number
   brain_manual_vigente_id?: string | null
+  /** 02-oct · lo raspado sin sello que se descartó de la inyección · y el motivo si la consulta de confianza falló. */
+  brain_chunks_untrusted_dropped?: number
+  brain_trust_lookup_error?: string
 }
 
 /**
@@ -951,6 +954,8 @@ function logExecution(
       brain_query_truncated: brainEnrichment.brain_query_truncated ?? null,
       brain_chunks_old_version_dropped: brainEnrichment.brain_chunks_old_version_dropped ?? null,
       brain_manual_vigente_id: brainEnrichment.brain_manual_vigente_id ?? null,
+      brain_chunks_untrusted_dropped: brainEnrichment.brain_chunks_untrusted_dropped ?? null,
+      brain_trust_lookup_error: brainEnrichment.brain_trust_lookup_error ?? null,
       // El cable para mirar (CC#1 · 2026-09-25) · cuántas imágenes llevó el pedido y por qué camino · 0/null si ninguna.
       images_count: input.images?.length ?? 0,
       images_mode: input.images && input.images.length > 0 ? (input.imagesMode === 'base64' ? 'base64' : 'url') : null,
@@ -1049,6 +1054,8 @@ function logExecution(
       brain_query_truncated: brainEnrichment.brain_query_truncated ?? null,
       brain_chunks_old_version_dropped: brainEnrichment.brain_chunks_old_version_dropped ?? null,
       brain_manual_vigente_id: brainEnrichment.brain_manual_vigente_id ?? null,
+      brain_chunks_untrusted_dropped: brainEnrichment.brain_chunks_untrusted_dropped ?? null,
+      brain_trust_lookup_error: brainEnrichment.brain_trust_lookup_error ?? null,
       // El cable para mirar (CC#1 · 2026-09-25) · cuántas imágenes llevó el pedido y por qué camino · 0/null si ninguna.
       images_count: input.images?.length ?? 0,
       images_mode: input.images && input.images.length > 0 ? (input.imagesMode === 'base64' ? 'base64' : 'url') : null,
@@ -1582,6 +1589,9 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     // E116 · el filtro por versión vigente del manual se declara.
     ...(typeof enrichment.brain_chunks_old_version_dropped === 'number' ? { brain_chunks_old_version_dropped: enrichment.brain_chunks_old_version_dropped } : {}),
     ...(enrichment.brain_manual_vigente_id !== undefined ? { brain_manual_vigente_id: enrichment.brain_manual_vigente_id } : {}),
+    // 02-oct · lo raspado sin sello que NO se inyectó · y si la consulta de confianza falló.
+    ...(typeof enrichment.brain_chunks_untrusted_dropped === 'number' ? { brain_chunks_untrusted_dropped: enrichment.brain_chunks_untrusted_dropped } : {}),
+    ...(enrichment.brain_trust_lookup_error ? { brain_trust_lookup_error: enrichment.brain_trust_lookup_error } : {}),
   }
 
   const cacheMetricsMeta: CacheMetricsMeta = {

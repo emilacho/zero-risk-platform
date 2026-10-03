@@ -175,9 +175,12 @@ describe('③ el cuerpo que se manda al nodo que paga', () => {
   })
   it('🔴 «máximo 4 pedidos» y «sólo estas opciones» viajan como CAMPO para que el sistema los haga cumplir · y son exactamente lo que se le ofrece al agente (nunca los anuncios de pago)', async () => {
     const j = await armar(prevCuerpo())
-    expect(j.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['instagram', 'ficha_en_mapas', 'leer_el_sitio', 'que_dice_el_buscador'] })
+    // 02-oct: `ficha_en_mapas` se ofrece SÓLO si la ficha trae una ubicación (ciudad o sede) · el país solo NO es una ubicación (con «Ecuador» trajo la ficha de OTRO negocio)
+    expect(j.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['instagram', 'leer_el_sitio', 'que_dice_el_buscador'] })
+    const conCiudad = await armar(prevCuerpo(), { id: CID, name: 'Mi Negocio', config: { apify: { own_handles: { instagram: ['minegocio'] } } }, website: 'https://www.minegocio.ec/', country: 'Ecuador', market: 'Guayaquil · Guayas' })
+    expect(conCiudad.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['instagram', 'ficha_en_mapas', 'leer_el_sitio', 'que_dice_el_buscador'] })
     const sin = await armar(prevCuerpo(), { id: CID, name: 'Otro Negocio' })
-    expect(sin.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['ficha_en_mapas', 'que_dice_el_buscador'] })
+    expect(sin.cuerpo.mirar_afuera_limites).toEqual({ max_pedidos: 4, permitidos: ['que_dice_el_buscador'] })
     for (const caro of ['anuncios_en_meta', 'anuncios_en_google']) expect(j.cuerpo.mirar_afuera_limites.permitidos).not.toContain(caro)
   })
   it('el dry_run del sobre es el del cuerpo (true ⇒ true) y el tope pedido es el del cuerpo', async () => {
@@ -196,7 +199,8 @@ describe('③ el cuerpo que se manda al nodo que paga', () => {
     expect(t).toContain('«Mi Negocio»')
     expect(t).toContain('que_mirar = instagram            · de_quien = minegocio')
     expect(t).toContain('que_mirar = leer_el_sitio        · de_quien = www.minegocio.ec')
-    expect(t).toContain('donde = Ecuador')
+    expect(t).not.toContain('donde = Ecuador') // 02-oct: el país solo no es una ubicación
+    expect(t).not.toContain('que_mirar = ficha_en_mapas') // y sin ubicación NO se ofrece la ficha de Mapas
     expect(t).toMatch(/NO uses anuncios_en_meta ni anuncios_en_google/)
     expect(t).toMatch(/MÁXIMO 4 pedidos/)
     expect(t).not.toMatch(/Náufrago|naufrago/i)
@@ -242,7 +246,7 @@ describe('④ ¿llegó la vuelta?', () => {
 })
 
 // ── ⑤ los chequeos ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-const BUENA = { titular: 'El ceviche que viene de Olón', texto_principal: 'Ceviche con marisco de Olón, directo a tu puerta en Guayaquil. Delivery jueves a lunes, 7am a 3pm. $7. Escríbenos: +593 997 744 288', prompt_imagen: 'Un plato de ceviche ocupa el encuadre, luz natural cálida, mesa de madera clara, marisco visible', fuente_imagen: 'cliente', no_pude_cumplir: [], que_miro: ['no pedí nada: el brief y las fotos bastaron', 'fotos: luz natural y mesa de madera'] }
+const BUENA = { titular: 'El ceviche que viene de Olón', texto_principal: 'Ceviche con marisco de Olón, directo a tu puerta en Guayaquil. Delivery jueves a lunes, 7am a 3pm. $7. Toca «Enviar mensaje» y escríbenos.', prompt_imagen: 'Un plato de ceviche ocupa el encuadre, luz natural cálida, mesa de madera clara, marisco visible', fuente_imagen: 'cliente', no_pude_cumplir: [], que_miro: ['no pedí nada: el brief y las fotos bastaron', 'fotos: luz natural y mesa de madera'] }
 const chequear = (p: unknown, forb: string[] = []) => CH.chequearPieza(BRIEF, p, { forbidden_words: forb })
 describe('⑤ los chequeos comparan lo PEDIDO contra lo HECHO', () => {
   it('una pieza que cumple pasa limpia', () => {
@@ -265,8 +269,10 @@ describe('⑤ los chequeos comparan lo PEDIDO contra lo HECHO', () => {
   it('el vocabulario obligatorio que falta se declara · el llamado a la acción trae datos verificables', () => {
     const r = chequear({ ...BUENA, texto_principal: 'Ceviche. Pide ya.' })
     expect(r.por_chequeo.termino_obligatorio_ausente).toBe(1)
-    expect(r.por_chequeo.llamado_ausente).toBe(1)
-    expect(CH.datosDelLlamado(BRIEF.llamado_a_la_accion)).toEqual(['+593 997 744 288'])
+    // 02-oct (certificación CC#3): el teléfono es el DESTINO del botón, no copy ⇒ ya no se exige en el texto; en su lugar se pide NOMBRAR el botón
+    expect(r.por_chequeo.llamado_ausente).toBeUndefined()
+    expect(r.por_chequeo.boton_sin_mencion).toBe(1)
+    expect(CH.datosDelLlamado(BRIEF.llamado_a_la_accion)).toEqual([])
   })
   it('🔴 la fuente de la imagen la declara la pieza (si el brief es de imagen) · el prompt va en POSITIVO', () => {
     expect(chequear({ ...BUENA, fuente_imagen: 'quien sabe' }).por_chequeo.fuente_de_imagen_no_declarada).toBe(1)
@@ -384,7 +390,7 @@ describe('⑥ el canon de Emilio como propiedad del grafo (estructural · sin te
     for (const q of consultas) expect(q.alwaysOutputData, q.name).toBe(true)
     // cada consulta va seguida de un nodo Code (la GUARDA o quien lee su resultado) y nunca de otra consulta suelta
     const sig = (nombre: string) => f.connections[nombre].main[0][0].node
-    for (const [q, g] of [[N.parte, N.guardaParte], [N.manual, N.guardaManual], [N.fotos, N.guardaFotos], [N.repetida, N.guardaRepetida], [N.ficha, N.cuerpo]]) expect(sig(q)).toBe(g)
+    for (const [q, g] of [[N.parte, N.guardaParte], [N.manual, N.guardaManual], [N.fotos, N.guardaFotos], [N.repetida, N.guardaRepetida], [N.ficha, N.sedes], [N.sedes, N.guardaSedes], [N.guardaSedes, N.cuerpo]]) expect(sig(q)).toBe(g)
     // los nodos de red de aguas abajo se leen en un Code que declara el fallo
     expect(sig(N.salud)).toBe(N.guardaSalud) // la comprobación previa al corredor también
     expect(sig(N.productor)).toBe(N.acepto) // el rechazo síncrono de run-sdk se declara ANTES de esperar (cerrar el rojo, 01-oct)

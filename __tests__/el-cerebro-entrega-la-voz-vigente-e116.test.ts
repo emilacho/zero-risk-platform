@@ -36,7 +36,8 @@ const LO_QUE_TRAE_LA_BUSQUEDA = [
 ]
 const rpc = vi.fn(async () => ({ data: LO_QUE_TRAE_LA_BUSQUEDA, error: null }))
 let vigente: { data: { id: string } | null; error: { message: string } | null } = { data: { id: V2 }, error: null }
-const from = vi.fn((_t: string) => ({ select: () => ({ eq: () => ({ order: () => ({ limit: () => ({ maybeSingle: async () => vigente }) }) }) }) }))
+// 02-oct: el módulo también consulta la confianza de los trozos · aquí sin etiqueta (no se excluye ninguno)
+const from = vi.fn((_t: string) => _t === 'client_brain_chunks' ? { select: () => ({ in: async (_c: string, ids: string[]) => ({ data: ids.map((id) => ({ id, provenance_tag: null, metadata: {} })), error: null }) }) } : ({ select: () => ({ eq: () => ({ order: () => ({ limit: () => ({ maybeSingle: async () => vigente }) }) }) }) }))
 const supabase = { rpc, from } as unknown as Parameters<typeof enrichSystemPromptWithClientBrain>[0]['supabase']
 const fetchMock = vi.fn(async (_u: string, init: RequestInit) => ({ ok: true, status: 200, json: async () => ({ data: [{ embedding: new Array(1536).fill(0.01) }], usage: { total_tokens: 10 } }) } as unknown as Response))
 

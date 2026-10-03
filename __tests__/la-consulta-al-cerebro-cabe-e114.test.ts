@@ -34,7 +34,9 @@ const filas = [
   { chunk_id: 'c-2', source_table: 'client_competitive_landscape', source_id: '0736401b', section_label: 'instagram_competitive', chunk_text: 'La Casa del Encebollado…', similarity: 0.7 },
 ]
 const rpc = vi.fn(async () => ({ data: filas, error: null }))
-const supabase = { rpc } as unknown as Parameters<typeof enrichSystemPromptWithClientBrain>[0]['supabase']
+// 02-oct: el módulo ahora consulta la confianza de los trozos (`client_brain_chunks`) · aquí todos sin etiqueta (no se excluye ninguno); la tabla del manual sigue sin mock (se declara y no rompe)
+const from = vi.fn((tabla: string) => { if (tabla === 'client_brain_chunks') return { select: () => ({ in: async (_c: string, ids: string[]) => ({ data: ids.map((id) => ({ id, provenance_tag: null, metadata: {} })), error: null }) }) }; throw new Error('sin mock: ' + tabla) })
+const supabase = { rpc, from } as unknown as Parameters<typeof enrichSystemPromptWithClientBrain>[0]['supabase']
 
 beforeEach(() => { embeds.length = 0; rpc.mockClear(); fetchMock.mockClear(); process.env.OPENAI_API_KEY = 'test-openai'; global.fetch = fetchMock as unknown as typeof fetch })
 afterEach(() => { delete process.env.OPENAI_API_KEY })

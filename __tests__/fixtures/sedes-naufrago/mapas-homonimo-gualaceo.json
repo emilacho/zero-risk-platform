@@ -1,0 +1,50 @@
+{
+ "item": {
+  "title": "El Naufrago Marisquería",
+  "categoryName": "Marisquería",
+  "street": "Luis Ríos Rodríguez entre Eugenio Espejo, y y Av. Jaime Roldos",
+  "city": "Gualaceo",
+  "address": "Luis Ríos Rodríguez entre Eugenio Espejo, y y Av. Jaime Roldos, 010350 Gualaceo, Ecuador",
+  "postalCode": "010350",
+  "countryCode": "EC",
+  "placeId": "ChIJAwX4ZCMFzZERMh80cUHXY4I",
+  "location": {
+   "lat": -2.8906293,
+   "lng": -78.7759756
+  },
+  "phone": "",
+  "openingHours": [
+   {
+    "day": "jueves",
+    "hours": "9 AM to 9 PM"
+   },
+   {
+    "day": "viernes",
+    "hours": "9 AM to 9 PM"
+   },
+   {
+    "day": "sábado",
+    "hours": "9 AM to 10 PM"
+   },
+   {
+    "day": "domingo",
+    "hours": "9 AM to 6 PM"
+   },
+   {
+    "day": "lunes",
+    "hours": "9 AM to 6 PM"
+   },
+   {
+    "day": "martes",
+    "hours": "Cerrado"
+   },
+   {
+    "day": "miércoles",
+    "hours": "9 AM to 6 PM"
+   }
+  ],
+  "totalScore": 4.4,
+  "reviewsCount": 140
+ },
+ "created_at": "2026-10-01 23:45:54.143236+00"
+}
