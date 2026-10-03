@@ -252,23 +252,6 @@ function sha256Hex(bytes) {
   return H.map(function (x) { return ('00000000' + x.toString(16)).slice(-8) }).join('')
 }
 
-/**
- * SIN DUPLICADOS: dentro de un mismo post, una foto con la MISMA huella que otra anterior es la misma imagen (la portada de un carrusel ES su hijo 1).
- * `fotos` = [{ post_id, hash }] en orden (la portada va antes que sus hijas) → { unicas: [índices], duplicadas: [{ indice, de }] } · se queda la primera, la repetida se DECLARA.
- */
-function quitarDuplicadas(fotos) {
-  var vistas = {}
-  var unicas = []
-  var duplicadas = []
-  fotos.forEach(function (f, i) {
-    var post = String(f.post_id || '').replace(/-c\d+$/, '')
-    var k = post + '|' + f.hash
-    if (f.hash && vistas[k] !== undefined) duplicadas.push({ indice: i, de: vistas[k] })
-    else { if (f.hash) vistas[k] = i; unicas.push(i) }
-  })
-  return { unicas: unicas, duplicadas: duplicadas }
-}
-
 // ───────────────────────────── el viaje de cada foto hacia el productor ─────────────────────────────
 function fechaCorta(iso) { return iso ? String(iso).slice(0, 10) : null }
 var NOMBRE_MEDIO = { imagen: 'imagen', video: 'video (cuadro)', reel: 'reel (cuadro de portada)', logo: 'logo' }
@@ -301,6 +284,7 @@ function clasificarFotos(filas, opciones) {
     var texto = f.caption || ''
     var dueno = f.producto_fuente === 'dueno' && tieneProducto(f)
     var producto, fuente, esElDelBrief
+    var viaTexto = null
     if (dueno) {
       producto = productosDe(f)
       fuente = 'dueno'
@@ -308,6 +292,7 @@ function clasificarFotos(filas, opciones) {
     } else {
       // el producto del brief cuenta aunque no esté en el catálogo del plan · el cuerpo del texto manda sobre las etiquetas
       var n = nombrados(todasLasEntradas, texto)
+      viaTexto = n.via
       producto = n.entradas.map(function (e) { return e.nombre })
       fuente = producto.length ? 'caption' : 'desconocido'
       esElDelBrief = !!prot && n.entradas.some(function (e) { return e === prot })
@@ -324,7 +309,7 @@ function clasificarFotos(filas, opciones) {
       id: f.id || null, url: f.url, tipo: f.tipo || null, post_id: f.post_id || null,
       fecha: fechaCorta(f.posted_at), enlace: f.post_url || null, texto: f.caption || null,
       posicion: f.posicion || null, medio: esLogo(f) ? 'logo' : f.medio || null,
-      producto: producto, producto_fuente: f.producto_fuente === 'conflicto' ? 'conflicto' : fuente, rol: rol,
+      producto: producto, producto_fuente: f.producto_fuente === 'conflicto' ? 'conflicto' : fuente, via: dueno ? 'dueno' : viaTexto, rol: rol,
     }
   })
   // el producto del brief va primero (si hay que recortar, no se pierde la foto que importa) · dentro de cada rol, el orden de entrada (las más nuevas primero)
@@ -352,7 +337,8 @@ function etiquetaDeFoto(f) {
     : f.rol === 'varios_productos' ? 'varios productos en el texto'
     : f.rol === 'marca' ? 'logo de la marca'
     : (NOMBRE_MEDIO[f.medio] || 'foto')
-  return (f.ref + ' · ' + (f.fecha || 's/f') + ' · ' + quien).slice(0, 80)
+  var debil = f.via === 'etiqueta' && (f.rol === 'producto_del_brief' || f.rol === 'otro_producto') ? ' (sólo #etiqueta)' : ''
+  return (f.ref + ' · ' + (f.fecha || 's/f') + ' · ' + quien + debil).slice(0, 80)
 }
 
 /** el bloque B del pedido: CADA foto con su texto, fecha y enlace · y la regla del producto */
@@ -372,7 +358,7 @@ function bloqueDeFotos(clasif, nombre) {
       : f.rol === 'varios_productos' ? 'el texto nombra varios productos (' + productosDe(f).join(' + ') + '): NO se sabe cuál muestra la foto'
       : f.rol === 'marca' ? 'logo'
       : 'sin regla de producto'
-    L.push('   ' + f.ref + ' · ' + donde + ' · ' + (f.fecha || 'sin fecha') + (f.enlace ? ' · ' + f.enlace : '') + ' · texto de la publicación: ' + (f.texto ? '«' + limpiar(f.texto, 240) + '»' : '(sin texto)') + ' · ' + que + ' (según ' + (f.producto_fuente === 'dueno' ? 'el dueño' : f.producto_fuente === 'caption' ? 'el texto de la publicación' : 'nadie') + ')')
+    L.push('   ' + f.ref + ' · ' + donde + ' · ' + (f.fecha || 'sin fecha') + (f.enlace ? ' · ' + f.enlace : '') + ' · texto de la publicación: ' + (f.texto ? '«' + limpiar(f.texto, 240) + '»' : '(sin texto)') + ' · ' + que + ' (según ' + (f.producto_fuente === 'dueno' ? 'el dueño' : f.producto_fuente === 'caption' ? (f.via === 'etiqueta' ? 'una #etiqueta: el cuerpo del texto NO lo dice · evidencia débil' : 'el texto de la publicación') : 'nadie') + ')')
   })
   if (clasif.no_enviadas.length) L.push('   (No caben ' + clasif.no_enviadas.length + ' foto(s) más en este pedido: ' + clasif.no_enviadas.join(', ') + ')')
   if (!clasif.regla_activa) {
@@ -466,7 +452,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     sinTildes: sinTildes, raicesDe: raicesDe, excluirDe: excluirDe, sinNegaciones: sinNegaciones,
     entradaDeProtagonista: entradaDeProtagonista, catalogoDeProtagonistas: catalogoDeProtagonistas, productoDelBrief: productoDelBrief, alternativasDelBrief: alternativasDelBrief, catalogoDelBrief: catalogoDelBrief, productoDeTexto: productoDeTexto,
-    contextoDePost: contextoDePost, aMedio: aMedio, sha256Hex: sha256Hex, quitarDuplicadas: quitarDuplicadas,
+    contextoDePost: contextoDePost, aMedio: aMedio, sha256Hex: sha256Hex,
     clasificarFotos: clasificarFotos, etiquetaDeFoto: etiquetaDeFoto, bloqueDeFotos: bloqueDeFotos, fotoDeclarada: fotoDeclarada, chequearFotoReferencia: chequearFotoReferencia, planDeVision: planDeVision, combinarFuentes: combinarFuentes,
   }
 }

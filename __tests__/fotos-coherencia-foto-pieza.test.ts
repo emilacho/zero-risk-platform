@@ -101,6 +101,16 @@ describe('② al productor le llega TODO: cada foto con su texto, su fecha y su 
     expect(prev3.fotos_no_enviadas).toHaveLength(5)
     expect(out.cuerpo.images[0].label).toMatch(/ES el producto/)
   })
+  it('🟡→🟢 la evidencia DÉBIL se ve: si el plato sólo lo dijo una #etiqueta, la etiqueta de la foto y el bloque B lo dicen (CC#3 · debilidad 3.2)', async () => {
+    const { out } = await tresYCinco()
+    const debil = out.cuerpo.images.filter((i: { label: string }) => i.label.includes('(sólo #etiqueta)'))
+    expect(debil.length).toBeGreaterThanOrEqual(2) // en los datos reales, 2 fotos de encebollado se clasifican sólo por etiqueta
+    for (const i of debil) expect(i.label.length).toBeLessThanOrEqual(80)
+    expect(out.cuerpo.task).toContain('una #etiqueta: el cuerpo del texto NO lo dice · evidencia débil')
+    const sana = out.cuerpo.images.find((i: { label: string }) => i.label.includes('ES el producto'))
+    expect(sana.label).not.toContain('etiqueta') // la foto cuyo cuerpo lo dice no lleva la marca
+    expect(out.fotos_ctx.filter((f: { via: string }) => f.via === 'etiqueta').length).toBe(debil.length)
+  })
   it('la posición en el carrusel se dice como lo ve el dueño: portada = foto 1 · el hijo 2 es la foto 2', async () => {
     const { out } = await tresYCinco()
     expect(out.cuerpo.task).toMatch(/portada de carrusel · 2025-10-12/)

@@ -1,5 +1,5 @@
 // COPIA DE FOTOS · 3/5 · REVISAR · CC#1 · 2026-09-29 · 03-oct: SIN DUPLICADOS (huella SHA-256 · la portada de un carrusel es su hijo 1: se queda UNA y la repetida se DECLARA, no se sube) y el contexto de cada foto viaja a la tabla.
-// (la lógica `sha256Hex` y `quitarDuplicadas` viene de fotos-contexto-logica.js, pegada arriba por el constructor) Mira lo que bajó CADA foto: si no es una imagen entera, se DECLARA aquí
+// (la lógica `sha256Hex` viene de fotos-contexto-logica.js, pegada arriba por el constructor) Mira lo que bajó CADA foto: si no es una imagen entera, se DECLARA aquí
 // (fila estado=no_bajo con la causa exacta) y no pasa a subirse. Pasan solo las buenas, con su huella para verificar la subida.
 const SB = 'https://ordaeyxvvvdqsznsecjx.supabase.co'
 const auth = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }
