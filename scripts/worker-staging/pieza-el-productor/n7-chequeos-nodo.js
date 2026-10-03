@@ -12,7 +12,7 @@ const pieza = ext.legible ? ext.pieza : { titular: '', texto_principal: '', prom
 const herrSedes = { horarioDeTexto: horarioDeTexto, canonicoHorario: canonicoHorario, describirHorario: describirHorario }
 const sedesParaChequear = c.sedes_resumen && c.sedes_resumen.leidas === true ? c.sedes_resueltas : null
 // 03-oct · coherencia foto ↔ pieza y trato: las funciones vienen de fotos-contexto-logica.js y trato-logica.js (pegadas arriba por el constructor)
-const extraChequeos = { fotos_regla: c.fotos_regla || null, trato: c.trato || null, chequearFotoReferencia: chequearFotoReferencia, chequearTrato: chequearTrato }
+const extraChequeos = { fotos_regla: c.fotos_regla || null, trato: c.trato || null, prompt_permitido: c.prompt_permitido || null, chequearFotoReferencia: chequearFotoReferencia, chequearTrato: chequearTrato, chequearPromptDeImagen: chequearPromptDeImagen }
 const res = ext.legible ? chequearPieza(c.brief, pieza, manual, sedesParaChequear, herrSedes, extraChequeos) : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', detalle: ext.motivo, fatal: true }], por_chequeo: { respuesta_no_legible: 1 }, fatales: ['respuesta_no_legible'] }
 
 let motivo_invalido = null
@@ -33,12 +33,24 @@ P.push('## LO QUE SE PIDIÓ ↔ LO QUE SALIÓ')
 P.push('- Mensaje del brief: ' + (b.mensaje || ''))
 P.push('- Límites del brief: ' + (b.limites || ''))
 P.push('- Llamado del brief: ' + (b.llamado_a_la_accion || ''))
-P.push('- TITULAR (' + String(pieza.titular || '').length + ' car.): ' + (pieza.titular || '(vacío)'))
-P.push('- TEXTO PRINCIPAL (' + String(pieza.texto_principal || '').length + ' car.): ' + (pieza.texto_principal || '(vacío)'))
+const _vars = Array.isArray(pieza.variantes) ? pieza.variantes.filter((v) => v && typeof v === 'object') : []
+if (_vars.length) {
+  _vars.forEach((v, i) => {
+    const vt = String(v.titular !== undefined && v.titular !== null ? v.titular : pieza.titular || '')
+    P.push('### Variante ' + (v.id || String.fromCharCode(65 + i)))
+    P.push('- TITULAR (' + vt.length + ' car.): ' + (vt || '(vacío)'))
+    P.push('- TEXTO PRINCIPAL (' + String(v.texto_principal || '').length + ' car.): ' + (v.texto_principal || '(vacío)'))
+  })
+} else {
+  P.push('- TITULAR (' + String(pieza.titular || '').length + ' car.): ' + (pieza.titular || '(vacío)'))
+  P.push('- TEXTO PRINCIPAL (' + String(pieza.texto_principal || '').length + ' car.): ' + (pieza.texto_principal || '(vacío)'))
+}
 P.push('')
 P.push('## IMAGEN')
 P.push('- Fuente declarada: ' + (pieza.fuente_imagen || '(sin declarar)'))
 P.push('- PROMPT para el generador (se guarda con la pieza):\n' + (pieza.prompt_imagen || '(sin prompt)'))
+if (Array.isArray(pieza.fuera_de_la_foto) && pieza.fuera_de_la_foto.length) P.push('- LO QUE EL BRIEF PIDE Y LA FOTO NO MUESTRA (no está en el prompt): ' + pieza.fuera_de_la_foto.join(' · '))
+if (Array.isArray(pieza.omitido_de_la_foto) && pieza.omitido_de_la_foto.length) P.push('- OMITIDO DE LA FOTO (marcas, rótulos o teléfonos de terceros): ' + pieza.omitido_de_la_foto.join(' · '))
 P.push('')
 P.push('## Fotos reales que se le dieron al productor')
 P.push('- enviadas: ' + c.fotos_enviadas + ' de ' + c.fotos_en_la_tabla + (c.sin_fotos ? ' (SIN FOTOS)' : ''))
@@ -106,6 +118,9 @@ const fila_pieza = {
     prompt_imagen: pieza.prompt_imagen || null,
     fuente_imagen: pieza.fuente_imagen || null,
     fotos: { en_la_tabla: c.fotos_en_la_tabla, enviadas: c.fotos_enviadas, no_enviadas: c.fotos_no_enviadas, excluidas: c.fotos_excluidas, sin_fotos: c.sin_fotos, repetidas_ocultas: c.fotos_ocultas_por_repetidas || [], ctx: c.fotos_ctx || [], regla: c.fotos_regla ? { regla_activa: c.fotos_regla.regla_activa, sin_foto_del_producto: c.fotos_regla.sin_foto_del_producto, producto_del_brief: c.fotos_regla.producto_del_brief, de_referencia: c.fotos_regla.de_referencia } : null, foto_referencia: pieza.foto_referencia || null },
+    variantes: Array.isArray(pieza.variantes) ? pieza.variantes : [],
+    fuera_de_la_foto: Array.isArray(pieza.fuera_de_la_foto) ? pieza.fuera_de_la_foto : [],
+    omitido_de_la_foto: Array.isArray(pieza.omitido_de_la_foto) ? pieza.omitido_de_la_foto : [],
     trato: c.trato || null,
     que_miro: Array.isArray(pieza.que_miro) ? pieza.que_miro : [],
     no_pude_cumplir: Array.isArray(pieza.no_pude_cumplir) ? pieza.no_pude_cumplir : [],

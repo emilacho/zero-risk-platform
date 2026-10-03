@@ -248,9 +248,11 @@ describe('④ ¿llegó la vuelta?', () => {
 // ── ⑤ los chequeos ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 const BUENA = { titular: 'El ceviche que viene de Olón', texto_principal: 'Ceviche con marisco de Olón, directo a tu puerta en Guayaquil. Delivery jueves a lunes, 7am a 3pm. $7. Toca «Enviar mensaje» y escríbenos.', prompt_imagen: 'Un plato de ceviche ocupa el encuadre, luz natural cálida, mesa de madera clara, marisco visible', fuente_imagen: 'cliente', no_pude_cumplir: [], que_miro: ['no pedí nada: el brief y las fotos bastaron', 'fotos: luz natural y mesa de madera'] }
 const chequear = (p: unknown, forb: string[] = []) => CH.chequearPieza(BRIEF, p, { forbidden_words: forb })
+// 03-oct · el brief pide «2 variantes»: una pieza que CUMPLE las entrega en CAMPOS separados (`variantes`), no en un solo texto (ver el-prompt-de-imagen-sale-de-la-foto.test.ts)
+const CUMPLE_CON_VARIANTES = { ...BUENA, variantes: [{ id: 'A', titular: BUENA.titular, texto_principal: BUENA.texto_principal }, { id: 'B', titular: BUENA.titular, texto_principal: BUENA.texto_principal.replace('Ceviche con', 'Ceviche, ahora con') }] }
 describe('⑤ los chequeos comparan lo PEDIDO contra lo HECHO', () => {
   it('una pieza que cumple pasa limpia', () => {
-    const r = chequear(BUENA)
+    const r = chequear(CUMPLE_CON_VARIANTES)
     expect(r.hallazgos.map((h: { chequeo: string }) => h.chequeo)).toEqual([])
     expect(r.ok).toBe(true)
   })
@@ -307,7 +309,7 @@ const chequeos = (texto: string, c: Record<string, unknown> = {}) => correrNodo(
 }).then((r) => r[0].json)
 describe('⑦ el nodo de chequeos arma la fila · la pieza inválida no se da por buena', () => {
   it('pieza sana ⇒ fila draft con el brief, el prompt y la fuente declarada dentro de provenance_tag', async () => {
-    const j = await chequeos(JSON.stringify({ pieza: BUENA }))
+    const j = await chequeos(JSON.stringify({ pieza: CUMPLE_CON_VARIANTES }))
     expect(j).toMatchObject({ pieza_valida: true, chequeos_ok: true, motivo_invalido: null })
     expect(j.fila_pieza).toMatchObject({ output_type: 'campaign_piece', status: 'draft', producing_agent: 'campaign-brief-agent', client_id: CID })
     expect(j.fila_pieza.title).toMatch(/^Pieza · BRF-0006 · Meta Ads/)

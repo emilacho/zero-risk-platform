@@ -297,6 +297,12 @@ function clasificarFotos(filas, opciones) {
       fuente = producto.length ? 'caption' : 'desconocido'
       esElDelBrief = !!prot && n.entradas.some(function (e) { return e === prot })
     }
+    // «coincide en parte»: el producto del brief tiene varias palabras y el texto de la foto nombra sólo algunas (p. ej. «pizza» frente a «pizza margarita») · ES el producto, pero se VE
+    var parcial = false
+    if (!dueno && esElDelBrief && prot && prot.raices.length > 1) {
+      var tocadas = nombrados([prot], texto).raicesTocadas
+      parcial = !prot.raices.every(function (r) { return tocadas.indexOf(r) !== -1 })
+    }
     var rol
     if (f.producto_fuente === 'conflicto') rol = 'no_identificado'
     else if (esLogo(f)) rol = 'marca'
@@ -309,12 +315,12 @@ function clasificarFotos(filas, opciones) {
       id: f.id || null, url: f.url, tipo: f.tipo || null, post_id: f.post_id || null,
       fecha: fechaCorta(f.posted_at), enlace: f.post_url || null, texto: f.caption || null,
       posicion: f.posicion || null, medio: esLogo(f) ? 'logo' : f.medio || null,
-      producto: producto, producto_fuente: f.producto_fuente === 'conflicto' ? 'conflicto' : fuente, via: dueno ? 'dueno' : viaTexto, rol: rol,
+      producto: producto, producto_fuente: f.producto_fuente === 'conflicto' ? 'conflicto' : fuente, via: dueno ? 'dueno' : viaTexto, rol: rol, parcial: parcial && rol === 'producto_del_brief',
     }
   })
   // el producto del brief va primero (si hay que recortar, no se pierde la foto que importa) · dentro de cada rol, el orden de entrada (las más nuevas primero)
   var peso = { producto_del_brief: 0, sin_regla: 1, no_identificado: 2, varios_productos: 2, otro_producto: 3, marca: 4 }
-  var ordenadas = fotos.map(function (f, i) { return { f: f, i: i } }).sort(function (a, b) { return peso[a.f.rol] - peso[b.f.rol] || a.i - b.i }).map(function (x) { return x.f })
+  var ordenadas = fotos.map(function (f, i) { return { f: f, i: i } }).sort(function (a, b) { return (peso[a.f.rol] + (a.f.parcial ? 0.5 : 0)) - (peso[b.f.rol] + (b.f.parcial ? 0.5 : 0)) || a.i - b.i }).map(function (x) { return x.f })
   var enviadas = ordenadas.slice(0, max)
   var no_enviadas = ordenadas.slice(max).map(function (f) { return f.id || f.post_id })
   enviadas.forEach(function (f, i) { f.ref = 'F' + ('0' + (i + 1)).slice(-2); f.label = etiquetaDeFoto(f) })
@@ -331,7 +337,7 @@ function clasificarFotos(filas, opciones) {
 
 /** ≤ 80 caracteres (el límite del corredor): «F08 · 2025-10-12 · ES el producto: pizza» */
 function etiquetaDeFoto(f) {
-  var quien = f.rol === 'producto_del_brief' ? 'ES el producto'
+  var quien = f.rol === 'producto_del_brief' ? (f.parcial ? 'ES el producto (coincide en parte)' : 'ES el producto')
     : f.rol === 'otro_producto' ? 'NO es el producto: ' + productosDe(f).join(' + ')
     : f.rol === 'no_identificado' ? 'producto sin identificar'
     : f.rol === 'varios_productos' ? 'varios productos en el texto'
@@ -352,7 +358,7 @@ function bloqueDeFotos(clasif, nombre) {
     '   Aquí abajo está TODO lo que el sistema sabe de cada una: de qué publicación sale, cuándo, el texto con que el dueño la publicó y qué producto nombra ese texto.']
   fotos.forEach(function (f) {
     var donde = f.medio === 'logo' ? 'logo de la marca' : (NOMBRE_MEDIO[f.medio] || 'foto') + ' · ' + nombreDePosicion(f)
-    var que = f.rol === 'producto_del_brief' ? 'ES el producto del brief'
+    var que = f.rol === 'producto_del_brief' ? (f.parcial ? 'coincide sólo en parte con «' + clasif.producto_del_brief + '» (el texto no nombra todo el producto: puede ser otra variante o sólo una etiqueta · mírala con cuidado)' : 'ES el producto del brief')
       : f.rol === 'otro_producto' ? 'NO es el producto del brief (el texto nombra: ' + productosDe(f).join(' + ') + ')'
       : f.rol === 'no_identificado' ? 'el texto no nombra un producto: NO se sabe qué plato es'
       : f.rol === 'varios_productos' ? 'el texto nombra varios productos (' + productosDe(f).join(' + ') + '): NO se sabe cuál muestra la foto'
@@ -372,6 +378,9 @@ function bloqueDeFotos(clasif, nombre) {
       '   Las demás son contexto de marca o de lugar: NO copies su plato ni lo describas como si fuera «' + clasif.producto_del_brief + '». En el prompt de imagen describe solo lo que de verdad se ve en la foto de referencia.',
       '   En «foto_referencia» pon la clave de la foto que usaste y por qué (una frase).')
   }
+  // 03-oct · EL PROMPT SALE DE LA FOTO (certificación CC#3 de la 3.ª pieza real: el prompt pedía el frasco de una marca ajena y «marisco visible» que la foto no mostraba)
+  L.push('   OMITE las marcas, rótulos, logos, textos y teléfonos de terceros que aparezcan en la foto (frascos, envases, carteles, etiquetas de otras marcas): no los escribas en el prompt de imagen; anótalos en «omitido_de_la_foto» y dilo en «no_pude_cumplir». En el prompt sólo puede aparecer lo del cliente.',
+    '   Si el brief pide un elemento que la foto de referencia NO muestra, NO lo describas como si estuviera: anótalo en «fuera_de_la_foto» y en «no_pude_cumplir» (el prompt describe lo que la foto muestra, no lo que el brief desearía).')
   return L.join('\n')
 }
 
@@ -421,6 +430,103 @@ function chequearFotoReferencia(pieza, ctx, brief) {
   return h
 }
 
+// ───────────────────────────── EL PROMPT DE IMAGEN SALE DE LA FOTO (marcas, contactos y lo que la foto no muestra)
+function ultimos9(s) { var d = String(s || '').replace(/\D+/g, ''); return d.length >= 8 ? d.slice(-9) : null }
+function aplanar(v, out) {
+  if (v === undefined || v === null) return out
+  if (typeof v === 'string') out.push(v)
+  else if (Array.isArray(v)) v.forEach(function (x) { aplanar(x, out) })
+  else if (typeof v === 'object') Object.keys(v).forEach(function (k) { aplanar(v[k], out) })
+  return out
+}
+/**
+ * LO QUE PUEDE APARECER en el prompt de imagen = lo del CLIENTE: su nombre, sus usuarios, sus ciudades y mercado, todo lo que dice su brief, los términos de su manual y los productos que declara.
+ * { raices[], telefonos[], handles[], dominios[] } · NO entran los textos de las fotos (ahí viven las marcas ajenas).
+ */
+function permitidoDelPrompt(datos) {
+  var d = datos || {}
+  var f = d.ficha || {}
+  var cfg = f.config && typeof f.config === 'object' ? f.config : {}
+  var manual = d.manual || {}
+  var textos = [d.nombre, d.handles, d.ciudades, f.market, f.country, f.website, f.website_url, f.domain, aplanar(d.brief, []), manual.required_terminology, cfg.productos]
+  var todo = aplanar(textos, []).join(' . ')
+  var tels = []
+  var re = /(?:\+?\d[\s().-]?){8,}\d/g
+  var m
+  while ((m = re.exec(todo)) !== null) { var u = ultimos9(m[0]); if (u && tels.indexOf(u) === -1) tels.push(u) }
+  var handles = []
+  ;(todo.match(/@[A-Za-z0-9_.]{3,}/g) || []).concat(aplanar([d.handles], []).map(function (h) { return '@' + String(h).replace(/^@/, '') })).forEach(function (h) { var x = h.toLowerCase().replace(/[.]+$/, ''); if (handles.indexOf(x) === -1) handles.push(x) })
+  var dominios = []
+  ;(todo.match(/(?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|ec|net|org|io|co|shop|store|app|me)\b/gi) || []).forEach(function (h) { var x = h.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, ''); if (dominios.indexOf(x) === -1) dominios.push(x) })
+  return { raices: raicesDe(todo, []), telefonos: tels, handles: handles, dominios: dominios }
+}
+function enPermitido(texto, permitido) {
+  var r = raicesDe(texto, [])
+  if (!r.length) return true // sin palabras significativas (cifras, siglas cortas) no hay marca que afirmar
+  var p = (permitido && permitido.raices) || []
+  return r.every(function (x) { return p.indexOf(x) !== -1 })
+}
+/**
+ * Los hallazgos sobre el prompt de imagen de una pieza · [{ chequeo, detalle, fatal }]
+ *   FATALES (claros): un rótulo/marca entre comillas o tras «label/branded/logo/reads…» que no es del cliente · un teléfono, enlace o @usuario que no es del cliente
+ *   AVISOS: una palabra con mayúscula a mitad de frase que no es del cliente · lo que la foto no muestra y el brief pide (se declara, no se calla)
+ * `ctx.permitido` = permitidoDelPrompt(…)
+ */
+function chequearPromptDeImagen(pieza, ctx) {
+  var h = []
+  var falla = function (chequeo, detalle, fatal) { h.push({ chequeo: chequeo, detalle: detalle, fatal: fatal === true }) }
+  var permitido = (ctx && ctx.permitido) || { raices: [], telefonos: [], handles: [], dominios: [] }
+  var prompt = String((pieza && pieza.prompt_imagen) || '')
+  var fuente = String((pieza && pieza.fuente_imagen) || '')
+  if (!prompt.trim()) return h
+  // — contactos ajenos
+  var ajenos = []
+  var reTel = /(?:\+?\d[\s().-]?){8,}\d/g
+  var m
+  while ((m = reTel.exec(prompt)) !== null) { var u = ultimos9(m[0]); if (u && permitido.telefonos.indexOf(u) === -1) ajenos.push(m[0].trim()) }
+  ;(prompt.match(/(?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|ec|net|org|io|co|shop|store|app|me)\b/gi) || []).forEach(function (x) { var d = x.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, ''); if (permitido.dominios.indexOf(d) === -1) ajenos.push(x) })
+  ;(prompt.match(/@[A-Za-z0-9_.]{3,}/g) || []).forEach(function (x) { if (permitido.handles.indexOf(x.toLowerCase().replace(/[.]+$/, '')) === -1) ajenos.push(x) })
+  if (ajenos.length) falla('prompt_con_contacto_ajeno', 'el prompt de imagen trae ' + ajenos.slice(0, 4).map(function (x) { return '«' + x + '»' }).join(' · ') + ', que no es del cliente (lo copió de la foto de referencia o lo inventó): el anuncio mostraría el contacto de un tercero', true)
+  // — marcas y rótulos ajenos: entre comillas o tras una palabra de rótulo
+  var marcas = []
+  var anotar = function (texto) { var x = String(texto).trim(); if (x && !enPermitido(x, permitido) && marcas.indexOf(x) === -1) marcas.push(x) }
+  var reCom = /["“«]([^"”»]{2,60})["”»]/g
+  while ((m = reCom.exec(prompt)) !== null) anotar(m[1])
+  var reMarcador = /\b(labell?ed|branded|brand|logos?|wordmark|printed|stamped|says|saying|reads|reading|sign|signage|sticker|packaging)\b/gi
+  while ((m = reMarcador.exec(prompt)) !== null) {
+    var cola = prompt.slice(m.index + m[0].length, m.index + m[0].length + 45)
+    var mm = /^[^.;\n]{0,25}?\b([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ0-9&'-]{2,}(?:\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ0-9&'-]{2,}){0,2})/.exec(cola)
+    if (mm) anotar(mm[1])
+  }
+  if (marcas.length) falla('prompt_con_marca_ajena', 'el prompt de imagen nombra ' + marcas.slice(0, 4).map(function (x) { return '«' + x + '»' }).join(' · ') + ' como marca, rótulo o texto y no es del cliente (suele salir de la foto de referencia: un frasco, un envase, un cartel): el anuncio mostraría la marca de un tercero · se omite y se declara', true)
+  // — palabras con mayúscula a mitad de frase que no son del cliente (candidato)
+  var dudosas = []
+  prompt.split(/(?<=[.!?])\s+/).forEach(function (frase) {
+    frase.split(/\s+/).forEach(function (tok, i) {
+      if (i === 0) return
+      var w = tok.replace(/^[^A-Za-zÁÉÍÓÚÑáéíóúñ]+|[^A-Za-zÁÉÍÓÚÑáéíóúñ]+$/g, '')
+      if (!/^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{3,}$/.test(w) && !/^[A-ZÁÉÍÓÚÑ]{3,}$/.test(w)) return
+      if (enPermitido(w, permitido)) return
+      if (marcas.some(function (x) { return x.indexOf(w) !== -1 })) return
+      if (dudosas.indexOf(w) === -1) dudosas.push(w)
+    })
+  })
+  if (dudosas.length) falla('prompt_con_palabra_ajena', 'el prompt de imagen trae palabras con mayúscula que no salen del cliente, de su brief ni de su manual: ' + dudosas.slice(0, 6).map(function (x) { return '«' + x + '»' }).join(' · ') + ' (puede ser una marca de la foto de referencia · candidato, lo decide quien aprueba)')
+  // — lo que la foto de referencia no muestra: se DECLARA (sólo si la imagen sale de una foto del cliente)
+  if (fuente === 'cliente') {
+    var fuera = pieza && pieza.fuera_de_la_foto
+    if (!Array.isArray(fuera)) {
+      falla('no_declaro_lo_que_la_foto_no_muestra', 'la imagen es del cliente y la pieza no trae la lista «fuera_de_la_foto» (aunque sea vacía): no se sabe si lo que pide el brief sale de la foto o se agregó')
+    } else if (fuera.length) {
+      falla('foto_no_muestra_lo_que_pide_el_brief', 'el brief pide y la foto de referencia NO muestra: ' + fuera.slice(0, 6).map(function (x) { return '«' + x + '»' }).join(' · ') + ' · el prompt no debe describirlo como si estuviera')
+      var noPude = raicesDe(aplanar([pieza.no_pude_cumplir], []).join(' . '), [])
+      var sin = fuera.filter(function (x) { var r = raicesDe(x, []); return r.length && !r.some(function (y) { return noPude.indexOf(y) !== -1 }) })
+      if (sin.length) falla('elemento_fuera_de_la_foto_sin_declarar', 'lo que la foto no muestra (' + sin.slice(0, 4).map(function (x) { return '«' + x + '»' }).join(' · ') + ') no está declarado en «no_pude_cumplir»')
+    }
+  }
+  return h
+}
+
 // ───────────────────────────── la pasada de VISIÓN · DISEÑADA Y APAGADA ─────────────────────────────
 // 🔴 NO se construye con gasto (encargo Lenovo punto 3): requiere el GO de Emilio. Este módulo NO tiene red ni llamada a ningún modelo: sólo el CONTRATO y la regla de combinación,
 // para que cuando haya GO la pasada sea enchufar un ejecutor y no rediseñar. Sin autorización explícita, `planDeVision` devuelve «apagada» y NO prepara ningún pedido.
@@ -453,6 +559,6 @@ if (typeof module !== 'undefined' && module.exports) {
     sinTildes: sinTildes, raicesDe: raicesDe, excluirDe: excluirDe, sinNegaciones: sinNegaciones,
     entradaDeProtagonista: entradaDeProtagonista, catalogoDeProtagonistas: catalogoDeProtagonistas, productoDelBrief: productoDelBrief, alternativasDelBrief: alternativasDelBrief, catalogoDelBrief: catalogoDelBrief, productoDeTexto: productoDeTexto,
     contextoDePost: contextoDePost, aMedio: aMedio, sha256Hex: sha256Hex,
-    clasificarFotos: clasificarFotos, etiquetaDeFoto: etiquetaDeFoto, bloqueDeFotos: bloqueDeFotos, fotoDeclarada: fotoDeclarada, chequearFotoReferencia: chequearFotoReferencia, planDeVision: planDeVision, combinarFuentes: combinarFuentes,
+    clasificarFotos: clasificarFotos, etiquetaDeFoto: etiquetaDeFoto, bloqueDeFotos: bloqueDeFotos, fotoDeclarada: fotoDeclarada, chequearFotoReferencia: chequearFotoReferencia, planDeVision: planDeVision, combinarFuentes: combinarFuentes, permitidoDelPrompt: permitidoDelPrompt, chequearPromptDeImagen: chequearPromptDeImagen,
   }
 }
