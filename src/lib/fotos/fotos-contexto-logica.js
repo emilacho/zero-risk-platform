@@ -367,20 +367,19 @@ function bloqueDeFotos(clasif, nombre) {
     L.push('   ' + f.ref + ' · ' + donde + ' · ' + (f.fecha || 'sin fecha') + (f.enlace ? ' · ' + f.enlace : '') + ' · texto de la publicación: ' + (f.texto ? '«' + limpiar(f.texto, 240) + '»' : '(sin texto)') + ' · ' + que + ' (según ' + (f.producto_fuente === 'dueno' ? 'el dueño' : f.producto_fuente === 'caption' ? (f.via === 'etiqueta' ? 'una #etiqueta: el cuerpo del texto NO lo dice · evidencia débil' : 'el texto de la publicación') : 'nadie') + ')')
   })
   if (clasif.no_enviadas.length) L.push('   (No caben ' + clasif.no_enviadas.length + ' foto(s) más en este pedido: ' + clasif.no_enviadas.join(', ') + ')')
+  // 🔴 CANON «SIN REJAS AL AGENTE» (Emilio · 03-oct): el productor crea LIBRE; lo de arriba es INFORMACIÓN sobre lo que muestra cada foto, no una regla. El control es la aprobación de Emilio antes de publicar.
+  var LIBRE = 'Eres LIBRE de usar de referencia CUALQUIER foto (propia, de otro producto, de la competencia) y de alterarla, o de crear la imagen sin ninguna foto: las etiquetas de arriba son información, no una regla.'
   if (!clasif.regla_activa) {
-    L.push('   Míralas todas ANTES de escribir el prompt de imagen. Describe solo lo que de verdad se ve. No inventes elementos que no aparezcan. En «foto_referencia» pon la clave de la foto que usaste de referencia y por qué (o null si no usaste ninguna).')
+    L.push('   Míralas todas antes de escribir el prompt de imagen. ' + LIBRE,
+      '   En «foto_referencia» pon la clave de la foto que usaste de referencia y por qué (o null si no usaste ninguna).')
   } else if (clasif.sin_foto_del_producto) {
-    L.push('   🔴 NO HAY NINGUNA FOTO DEL PRODUCTO DE ESTE BRIEF («' + clasif.producto_del_brief + '»). Las fotos de arriba son de OTROS platos o de ningún plato: PROHIBIDO armar el prompt mirando una foto de otro producto y llamarlo «' + clasif.producto_del_brief + '».',
-      '   · Si el brief dice que la imagen es del cliente (fuente «cliente»): deja «prompt_imagen» VACÍO, «foto_referencia» en null y declara el hueco en «no_pude_cumplir» («no hay foto del producto»).',
-      '   · Si el brief dice «generada»: escribe el prompt SOLO desde el texto del brief (sin copiar nada de las fotos de otros platos), «foto_referencia» en null y declara que no hay foto real del producto.')
+    L.push('   El producto de este brief es «' + clasif.producto_del_brief + '». Hoy no hay ninguna foto que su texto asocie a «' + clasif.producto_del_brief + '» (las de arriba son de otros platos o de ninguno). ' + LIBRE,
+      '   En «foto_referencia» pon la clave de la foto que usaste y por qué, o null si creaste la imagen sin foto.')
   } else {
-    L.push('   El producto de este brief es «' + clasif.producto_del_brief + '». Como REFERENCIA del producto solo puedes usar las fotos marcadas «ES el producto» (' + clasif.de_referencia.join(', ') + ').',
-      '   Las demás son contexto de marca o de lugar: NO copies su plato ni lo describas como si fuera «' + clasif.producto_del_brief + '». En el prompt de imagen describe solo lo que de verdad se ve en la foto de referencia.',
+    L.push('   El producto de este brief es «' + clasif.producto_del_brief + '». Las fotos cuyo texto lo asocia a él: ' + clasif.de_referencia.join(', ') + '. ' + LIBRE,
       '   En «foto_referencia» pon la clave de la foto que usaste y por qué (una frase).')
   }
-  // 03-oct · EL PROMPT SALE DE LA FOTO (certificación CC#3 de la 3.ª pieza real: el prompt pedía el frasco de una marca ajena y «marisco visible» que la foto no mostraba)
-  L.push('   OMITE las marcas, rótulos, logos, textos y teléfonos de terceros que aparezcan en la foto (frascos, envases, carteles, etiquetas de otras marcas): no los escribas en el prompt de imagen; anótalos en «omitido_de_la_foto» y dilo en «no_pude_cumplir». En el prompt sólo puede aparecer lo del cliente.',
-    '   Si el brief pide un elemento que la foto de referencia NO muestra, NO lo describas como si estuviera: anótalo en «fuera_de_la_foto» y en «no_pude_cumplir» (el prompt describe lo que la foto muestra, no lo que el brief desearía).')
+  L.push('   Si el brief pide algo que la foto de referencia no muestra, puedes agregarlo o alterar la foto: dilo en «fuera_de_la_foto» (es información para quien aprueba).')
   return L.join('\n')
 }
 
@@ -392,137 +391,46 @@ function fotoDeclarada(pieza) {
   s = typeof s === 'string' ? s.trim().toUpperCase() : ''
   return /^F\d{2}$/.test(s) ? s : null
 }
-function nombraProducto(texto, catalogo, prot) {
-  var r = raicesDe(texto, [])
-  var otros = (catalogo || []).filter(function (e) { return !prot || e.nombre !== prot.nombre }).filter(function (e) { return e.raices.some(function (x) { return r.indexOf(x) !== -1 }) })
-  var propio = !!prot && prot.raices.some(function (x) { return r.indexOf(x) !== -1 })
-  return { otros: otros.map(function (e) { return e.nombre }), propio: propio }
-}
 /**
- * `ctx` = { regla_activa, sin_foto_del_producto, producto_del_brief, raices_del_producto, fotos: [{ref, rol, producto}], catalogo }
- * Devuelve [{ chequeo, detalle, fatal }]. Los FATALES son los tres que dejan pasar un plato por otro.
+ * INFORMACIÓN para quien aprueba, NUNCA una reja (canon «sin rejas al agente»): ningún hallazgo de aquí es fatal.
+ * `ctx` = { regla_activa, sin_foto_del_producto, producto_del_brief, fotos: [{ref, rol, producto}] } · devuelve [{ chequeo, detalle, fatal:false }]
  */
 function chequearFotoReferencia(pieza, ctx, brief) {
   var h = []
   if (!ctx || !ctx.regla_activa) return h
-  var falla = function (chequeo, detalle, fatal) { h.push({ chequeo: chequeo, detalle: detalle, fatal: fatal === true }) }
+  var falla = function (chequeo, detalle) { h.push({ chequeo: chequeo, detalle: detalle, fatal: false }) }
   var tipo = sinTildes(brief && brief.tipo_de_pieza)
   if (tipo !== 'imagen' && tipo !== 'carrusel') return h
   var prompt = String((pieza && pieza.prompt_imagen) || '')
   var fuente = String((pieza && pieza.fuente_imagen) || '')
   var ref = fotoDeclarada(pieza)
   var foto = ref ? (ctx.fotos || []).filter(function (f) { return f.ref === ref })[0] : null
-  var prot = { nombre: ctx.producto_del_brief, raices: ctx.raices_del_producto || [] }
   if (ref && !foto) falla('foto_referencia_inexistente', 'la pieza declara la foto «' + ref + '» de referencia y esa clave no existe entre las fotos que se le dieron')
-  if (foto && foto.rol === 'otro_producto') falla('foto_referencia_de_otro_producto', 'la foto de referencia declarada (' + ref + ') muestra «' + (foto.producto || []).join(' + ') + '» y el producto del brief es «' + ctx.producto_del_brief + '»', true)
-  else if (foto && (foto.rol === 'no_identificado' || foto.rol === 'varios_productos')) falla('foto_referencia_sin_producto_identificado', 'la foto de referencia declarada (' + ref + ') no tiene un producto identificado: el sistema no puede comprobar que sea «' + ctx.producto_del_brief + '»')
-  if (ctx.sin_foto_del_producto && fuente === 'cliente' && prompt.trim()) falla('prompt_sin_foto_del_producto', 'no hay ninguna foto de «' + ctx.producto_del_brief + '», la fuente de la imagen es «cliente» y la pieza trae un prompt: se armó sobre la foto de otro producto', true)
+  if (foto && foto.rol === 'otro_producto') falla('foto_referencia_de_otro_producto', 'la foto de referencia declarada (' + ref + ') muestra «' + (foto.producto || []).join(' + ') + '» y el producto del brief es «' + ctx.producto_del_brief + '» · informativo: el productor puede usar cualquier foto y alterarla; lo decide quien aprueba')
+  else if (foto && (foto.rol === 'no_identificado' || foto.rol === 'varios_productos')) falla('foto_referencia_sin_producto_identificado', 'la foto de referencia declarada (' + ref + ') no tiene un producto identificado: el sistema no puede decir qué plato muestra')
   if (!ctx.sin_foto_del_producto && fuente === 'cliente' && prompt.trim() && !ref) falla('foto_referencia_no_declarada', 'la imagen es del cliente y la pieza no declara qué foto usó de referencia')
-  if (ctx.sin_foto_del_producto) {
-    var declaro = (pieza && Array.isArray(pieza.no_pude_cumplir) ? pieza.no_pude_cumplir : []).some(function (x) { return /foto/i.test(String(x)) })
-    if (!declaro) falla('hueco_de_foto_no_declarado', 'no hay foto del producto del brief y la pieza no lo declara en «no_pude_cumplir»')
-  }
-  // el prompt nombra OTRO producto del cliente y no el del brief
-  if (prompt.trim()) {
-    var n = nombraProducto(prompt, ctx.catalogo, prot)
-    if (n.otros.length && !n.propio) falla('prompt_nombra_otro_producto', 'el prompt de imagen nombra «' + n.otros.join(' + ') + '» y no el producto del brief («' + ctx.producto_del_brief + '»)', true)
-  }
   return h
 }
 
-// ───────────────────────────── EL PROMPT DE IMAGEN SALE DE LA FOTO (marcas, contactos y lo que la foto no muestra)
-function ultimos9(s) { var d = String(s || '').replace(/\D+/g, ''); return d.length >= 8 ? d.slice(-9) : null }
-function aplanar(v, out) {
-  if (v === undefined || v === null) return out
-  if (typeof v === 'string') out.push(v)
-  else if (Array.isArray(v)) v.forEach(function (x) { aplanar(x, out) })
-  else if (typeof v === 'object') Object.keys(v).forEach(function (k) { aplanar(v[k], out) })
-  return out
-}
+// ───────────────────────────── LO QUE LA FOTO NO MUESTRA (información para quien aprueba)
 /**
- * LO QUE PUEDE APARECER en el prompt de imagen = lo del CLIENTE: su nombre, sus usuarios, sus ciudades y mercado, todo lo que dice su brief, los términos de su manual y los productos que declara.
- * { raices[], telefonos[], handles[], dominios[] } · NO entran los textos de las fotos (ahí viven las marcas ajenas).
+ * Si el brief pide algo que la foto de referencia no muestra, el productor puede agregarlo o alterar la foto: lo DECLARA en `fuera_de_la_foto`. Avisos (nunca fatales); sólo si la imagen sale de una foto del cliente.
+ * (Canon «sin rejas al agente»: ya no existe ningún chequeo de marcas, rótulos ni contactos en el prompt de imagen.)
  */
-function permitidoDelPrompt(datos) {
-  var d = datos || {}
-  var f = d.ficha || {}
-  var cfg = f.config && typeof f.config === 'object' ? f.config : {}
-  var manual = d.manual || {}
-  var textos = [d.nombre, d.handles, d.ciudades, f.market, f.country, f.website, f.website_url, f.domain, aplanar(d.brief, []), manual.required_terminology, cfg.productos]
-  var todo = aplanar(textos, []).join(' . ')
-  var tels = []
-  var re = /(?:\+?\d[\s().-]?){8,}\d/g
-  var m
-  while ((m = re.exec(todo)) !== null) { var u = ultimos9(m[0]); if (u && tels.indexOf(u) === -1) tels.push(u) }
-  var handles = []
-  ;(todo.match(/@[A-Za-z0-9_.]{3,}/g) || []).concat(aplanar([d.handles], []).map(function (h) { return '@' + String(h).replace(/^@/, '') })).forEach(function (h) { var x = h.toLowerCase().replace(/[.]+$/, ''); if (handles.indexOf(x) === -1) handles.push(x) })
-  var dominios = []
-  ;(todo.match(/(?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|ec|net|org|io|co|shop|store|app|me)\b/gi) || []).forEach(function (h) { var x = h.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, ''); if (dominios.indexOf(x) === -1) dominios.push(x) })
-  return { raices: raicesDe(todo, []), telefonos: tels, handles: handles, dominios: dominios }
-}
-function enPermitido(texto, permitido) {
-  var r = raicesDe(texto, [])
-  if (!r.length) return true // sin palabras significativas (cifras, siglas cortas) no hay marca que afirmar
-  var p = (permitido && permitido.raices) || []
-  return r.every(function (x) { return p.indexOf(x) !== -1 })
-}
-/**
- * Los hallazgos sobre el prompt de imagen de una pieza · [{ chequeo, detalle, fatal }]
- *   FATALES (claros): un rótulo/marca entre comillas o tras «label/branded/logo/reads…» que no es del cliente · un teléfono, enlace o @usuario que no es del cliente
- *   AVISOS: una palabra con mayúscula a mitad de frase que no es del cliente · lo que la foto no muestra y el brief pide (se declara, no se calla)
- * `ctx.permitido` = permitidoDelPrompt(…)
- */
-function chequearPromptDeImagen(pieza, ctx) {
+function chequearLoQueLaFotoNoMuestra(pieza) {
   var h = []
-  var falla = function (chequeo, detalle, fatal) { h.push({ chequeo: chequeo, detalle: detalle, fatal: fatal === true }) }
-  var permitido = (ctx && ctx.permitido) || { raices: [], telefonos: [], handles: [], dominios: [] }
+  var falla = function (chequeo, detalle) { h.push({ chequeo: chequeo, detalle: detalle, fatal: false }) }
   var prompt = String((pieza && pieza.prompt_imagen) || '')
   var fuente = String((pieza && pieza.fuente_imagen) || '')
-  if (!prompt.trim()) return h
-  // — contactos ajenos
-  var ajenos = []
-  var reTel = /(?:\+?\d[\s().-]?){8,}\d/g
-  var m
-  while ((m = reTel.exec(prompt)) !== null) { var u = ultimos9(m[0]); if (u && permitido.telefonos.indexOf(u) === -1) ajenos.push(m[0].trim()) }
-  ;(prompt.match(/(?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|ec|net|org|io|co|shop|store|app|me)\b/gi) || []).forEach(function (x) { var d = x.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, ''); if (permitido.dominios.indexOf(d) === -1) ajenos.push(x) })
-  ;(prompt.match(/@[A-Za-z0-9_.]{3,}/g) || []).forEach(function (x) { if (permitido.handles.indexOf(x.toLowerCase().replace(/[.]+$/, '')) === -1) ajenos.push(x) })
-  if (ajenos.length) falla('prompt_con_contacto_ajeno', 'el prompt de imagen trae ' + ajenos.slice(0, 4).map(function (x) { return '«' + x + '»' }).join(' · ') + ', que no es del cliente (lo copió de la foto de referencia o lo inventó): el anuncio mostraría el contacto de un tercero', true)
-  // — marcas y rótulos ajenos: entre comillas o tras una palabra de rótulo
-  var marcas = []
-  var anotar = function (texto) { var x = String(texto).trim(); if (x && !enPermitido(x, permitido) && marcas.indexOf(x) === -1) marcas.push(x) }
-  var reCom = /["“«]([^"”»]{2,60})["”»]/g
-  while ((m = reCom.exec(prompt)) !== null) anotar(m[1])
-  var reMarcador = /\b(labell?ed|branded|brand|logos?|wordmark|printed|stamped|says|saying|reads|reading|sign|signage|sticker|packaging)\b/gi
-  while ((m = reMarcador.exec(prompt)) !== null) {
-    var cola = prompt.slice(m.index + m[0].length, m.index + m[0].length + 45)
-    var mm = /^[^.;\n]{0,25}?\b([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ0-9&'-]{2,}(?:\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ0-9&'-]{2,}){0,2})/.exec(cola)
-    if (mm) anotar(mm[1])
-  }
-  if (marcas.length) falla('prompt_con_marca_ajena', 'el prompt de imagen nombra ' + marcas.slice(0, 4).map(function (x) { return '«' + x + '»' }).join(' · ') + ' como marca, rótulo o texto y no es del cliente (suele salir de la foto de referencia: un frasco, un envase, un cartel): el anuncio mostraría la marca de un tercero · se omite y se declara', true)
-  // — palabras con mayúscula a mitad de frase que no son del cliente (candidato)
-  var dudosas = []
-  prompt.split(/(?<=[.!?])\s+/).forEach(function (frase) {
-    frase.split(/\s+/).forEach(function (tok, i) {
-      if (i === 0) return
-      var w = tok.replace(/^[^A-Za-zÁÉÍÓÚÑáéíóúñ]+|[^A-Za-zÁÉÍÓÚÑáéíóúñ]+$/g, '')
-      if (!/^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{3,}$/.test(w) && !/^[A-ZÁÉÍÓÚÑ]{3,}$/.test(w)) return
-      if (enPermitido(w, permitido)) return
-      if (marcas.some(function (x) { return x.indexOf(w) !== -1 })) return
-      if (dudosas.indexOf(w) === -1) dudosas.push(w)
-    })
-  })
-  if (dudosas.length) falla('prompt_con_palabra_ajena', 'el prompt de imagen trae palabras con mayúscula que no salen del cliente, de su brief ni de su manual: ' + dudosas.slice(0, 6).map(function (x) { return '«' + x + '»' }).join(' · ') + ' (puede ser una marca de la foto de referencia · candidato, lo decide quien aprueba)')
-  // — lo que la foto de referencia no muestra: se DECLARA (sólo si la imagen sale de una foto del cliente)
-  if (fuente === 'cliente') {
-    var fuera = pieza && pieza.fuera_de_la_foto
-    if (!Array.isArray(fuera)) {
-      falla('no_declaro_lo_que_la_foto_no_muestra', 'la imagen es del cliente y la pieza no trae la lista «fuera_de_la_foto» (aunque sea vacía): no se sabe si lo que pide el brief sale de la foto o se agregó')
-    } else if (fuera.length) {
-      falla('foto_no_muestra_lo_que_pide_el_brief', 'el brief pide y la foto de referencia NO muestra: ' + fuera.slice(0, 6).map(function (x) { return '«' + x + '»' }).join(' · ') + ' · el prompt no debe describirlo como si estuviera')
-      var noPude = raicesDe(aplanar([pieza.no_pude_cumplir], []).join(' . '), [])
-      var sin = fuera.filter(function (x) { var r = raicesDe(x, []); return r.length && !r.some(function (y) { return noPude.indexOf(y) !== -1 }) })
-      if (sin.length) falla('elemento_fuera_de_la_foto_sin_declarar', 'lo que la foto no muestra (' + sin.slice(0, 4).map(function (x) { return '«' + x + '»' }).join(' · ') + ') no está declarado en «no_pude_cumplir»')
-    }
+  if (!prompt.trim() || fuente !== 'cliente') return h
+  var fuera = pieza && pieza.fuera_de_la_foto
+  if (!Array.isArray(fuera)) {
+    falla('no_declaro_lo_que_la_foto_no_muestra', 'la imagen es del cliente y la pieza no trae la lista «fuera_de_la_foto» (aunque sea vacía): no se sabe si lo que pide el brief sale de la foto o se agregó')
+  } else if (fuera.length) {
+    falla('foto_no_muestra_lo_que_pide_el_brief', 'el brief pide y la foto de referencia NO muestra: ' + fuera.slice(0, 6).map(function (x) { return '«' + x + '»' }).join(' · ') + ' · informativo: el productor lo agregó o alteró la foto')
+    var noPude = raicesDe([].concat((pieza && pieza.no_pude_cumplir) || []).map(String).join(' . '), [])
+    var sin = fuera.filter(function (x) { var r = raicesDe(x, []); return r.length && !r.some(function (y) { return noPude.indexOf(y) !== -1 }) })
+    if (sin.length) falla('elemento_fuera_de_la_foto_sin_declarar', 'lo que la foto no muestra (' + sin.slice(0, 4).map(function (x) { return '«' + x + '»' }).join(' · ') + ') no está repetido en «no_pude_cumplir»')
   }
   return h
 }
@@ -559,6 +467,6 @@ if (typeof module !== 'undefined' && module.exports) {
     sinTildes: sinTildes, raicesDe: raicesDe, excluirDe: excluirDe, sinNegaciones: sinNegaciones,
     entradaDeProtagonista: entradaDeProtagonista, catalogoDeProtagonistas: catalogoDeProtagonistas, productoDelBrief: productoDelBrief, alternativasDelBrief: alternativasDelBrief, catalogoDelBrief: catalogoDelBrief, productoDeTexto: productoDeTexto,
     contextoDePost: contextoDePost, aMedio: aMedio, sha256Hex: sha256Hex,
-    clasificarFotos: clasificarFotos, etiquetaDeFoto: etiquetaDeFoto, bloqueDeFotos: bloqueDeFotos, fotoDeclarada: fotoDeclarada, chequearFotoReferencia: chequearFotoReferencia, planDeVision: planDeVision, combinarFuentes: combinarFuentes, permitidoDelPrompt: permitidoDelPrompt, chequearPromptDeImagen: chequearPromptDeImagen,
+    clasificarFotos: clasificarFotos, etiquetaDeFoto: etiquetaDeFoto, bloqueDeFotos: bloqueDeFotos, fotoDeclarada: fotoDeclarada, chequearFotoReferencia: chequearFotoReferencia, planDeVision: planDeVision, combinarFuentes: combinarFuentes, chequearLoQueLaFotoNoMuestra: chequearLoQueLaFotoNoMuestra,
   }
 }

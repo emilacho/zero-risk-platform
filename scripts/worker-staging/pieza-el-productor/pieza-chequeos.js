@@ -1,6 +1,6 @@
 // LOS CHEQUEOS DE LA PIEZA · CC#1 · 2026-10-01 · lógica PURA (sin red, sin `this`, sin `URL`): se prueba a costo cero y se pega en el nodo ⑦.
 // Por PRIMERA vez se compara lo PEDIDO (el brief) contra lo HECHO (la pieza). Son CANDIDATOS, no veredictos: «la palabra aparece» ≠ «la palabra se usa» · viajan con la pieza como aviso y decide quien aprueba.
-// Sólo dos hallazgos son FATALES (la pieza queda marcada NO VÁLIDA): la respuesta ilegible y la pieza sin titular NI texto.
+// Sólo dos hallazgos son FATALES (la pieza queda marcada NO VÁLIDA): la respuesta ilegible y la pieza sin titular NI texto. Todo lo demás son AVISOS (canon «sin rejas al agente»: el productor crea libre; decide quien aprueba).
 
 function normalizar(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9ñ@+.\/:_-]+/g, ' ').trim()
@@ -232,9 +232,9 @@ function chequearPieza(brief, pieza, manual, sedes, herr, extra) {
   }
   })
 
-  // ── 03-oct · COHERENCIA FOTO ↔ PIEZA (determinista · sin modelo): una pieza no puede usar de referencia la foto de OTRO producto ni armar el prompt sobre otro plato · tres hallazgos FATALES
+  // ── 03-oct · FOTO DE REFERENCIA (determinista · sin modelo): sólo INFORMACIÓN (qué foto usó y si es de otro producto) · avisos, ninguno es fatal
   if (extra && extra.fotos_regla && typeof extra.chequearFotoReferencia === 'function') {
-    extra.chequearFotoReferencia(pieza, extra.fotos_regla, brief).forEach(function (x) { falla(x.chequeo, x.detalle, x.fatal) })
+    extra.chequearFotoReferencia(pieza, extra.fotos_regla, brief).forEach(function (x) { falla(x.chequeo, x.detalle, false) })
   }
   // ── 03-oct · EL TRATO de la marca (tú · vos · usted): la pieza y el brief lo respetan · candidato, no fatal
   if (extra && extra.trato && typeof extra.chequearTrato === 'function') {
@@ -256,9 +256,9 @@ function chequearPieza(brief, pieza, manual, sedes, herr, extra) {
     var vistos = {}
     variantes.forEach(function (v) { var k = normalizar(v.titular + ' . ' + v.texto); if (vistos[k]) falla('variantes_iguales', 'la variante ' + v.id + ' es idéntica a la variante ' + vistos[k] + ' (titular y texto)'); else vistos[k] = v.id })
   }
-  // ── 03-oct · EL PROMPT DE IMAGEN SALE DE LA FOTO: sin marcas ni contactos ajenos (fatales los claros) y lo que la foto no muestra se declara
-  if (esImagen && extra && extra.prompt_permitido && typeof extra.chequearPromptDeImagen === 'function') {
-    extra.chequearPromptDeImagen(pieza, { permitido: extra.prompt_permitido }).forEach(function (x) { falla(x.chequeo, x.detalle, x.fatal) })
+  // ── 03-oct · LO QUE LA FOTO NO MUESTRA: el productor lo declara (información para quien aprueba · aviso, nunca reja)
+  if (esImagen && extra && typeof extra.chequearLoQueLaFotoNoMuestra === 'function') {
+    extra.chequearLoQueLaFotoNoMuestra(pieza).forEach(function (x) { falla(x.chequeo, x.detalle, false) })
   }
 
   // ── lo que no pudo y lo que miró se declaran (nunca en silencio)

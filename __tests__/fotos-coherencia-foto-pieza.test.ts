@@ -2,6 +2,7 @@
  * COHERENCIA FOTO ↔ PIEZA · el flujo de la pieza · pruebas a costo cero con los datos REALES de Náufrago · CC#1 · 2026-10-03
  * (encargo Lenovo «cada foto viaja con todo su contexto» puntos 2 y 4 · diagnóstico CC#2: la 2.ª pieza armó un prompt de «ceviche» sobre una foto de encebollado y nada lo impedía).
  *
+ * (03-oct · CANON «SIN REJAS AL AGENTE»: los chequeos de coherencia ya NO son fatales y ya no hay regla dura de «sólo fotos del producto»; esas pruebas se reemplazaron por las de `quitar-las-rejas-del-productor.test.ts`. Lo que sigue aquí es la INFORMACIÓN: contexto por foto, rol, declaración de la foto usada.)
  * 🔴 Cada prueba tiene que estar ROJA contra el estado de ANTES (commit `e667b5c`) y VERDE después:
  *   ② al productor le llega TODO: cada foto con su texto, fecha y enlace (no un código opaco) · no se esconde ninguna foto · sin repetidas
  *   ④ el productor declara qué foto usó de referencia · si el producto del brief no coincide con el de esa foto ⇒ hallazgo FATAL
@@ -135,7 +136,7 @@ describe('④ qué producto muestra cada foto contra el producto del brief', () 
     expect(de('DT1H9PDjH78').rol).toBe('no_identificado')
     expect(de('logo').rol).toBe('marca')
     expect(r.de_referencia).toEqual([de('DAvtICqvjC-').ref])
-    expect(out.cuerpo.task).toMatch(/Como REFERENCIA del producto solo puedes usar las fotos marcadas «ES el producto»/)
+    expect(out.cuerpo.task).toMatch(/Las fotos cuyo texto lo asocia a él: F01/)
     expect(out.cuerpo.task).toMatch(/NO es el producto del brief \(el texto nombra: encebollado\)/)
   })
   it('🔴 el cuerpo de un post manda sobre su cola de #etiquetas: un reel de encebollado con «#ceviche» NO es una foto de ceviche', async () => {
@@ -151,15 +152,13 @@ describe('④ qué producto muestra cada foto contra el producto del brief', () 
     expect(de('DPti3m8jQJt').rol).toBe('producto_del_brief')
     expect(de('DAvtICqvjC-').rol).toBe('otro_producto')
   })
-  it('🔴 SIN foto del producto: se declara · el pedido PROHÍBE armar el prompt mirando otro plato (y dice qué hacer según la fuente de la imagen)', async () => {
+  it('SIN foto del producto: el pedido INFORMA que no hay una foto asociada a ese producto y deja elegir (canon sin rejas)', async () => {
     const { out } = await tresYCinco({ brief: { ...BRF6, protagonista: 'La hamburguesa doble de la casa', vocabulario_obligatorio: ['hamburguesa', 'delivery'] } })
     expect(out.fotos_regla).toMatchObject({ regla_activa: true, sin_foto_del_producto: true })
     expect(out.fotos_regla.producto_del_brief).toMatch(/hamburguesa/)
     const t: string = out.cuerpo.task
-    expect(t).toMatch(/NO HAY NINGUNA FOTO DEL PRODUCTO DE ESTE BRIEF/)
-    expect(t).toMatch(/PROHIBIDO armar el prompt mirando una foto de otro producto/)
-    expect(t).toMatch(/fuente «cliente»\): deja «prompt_imagen» VACÍO/)
-    expect(t).toMatch(/«generada»: escribe el prompt SOLO desde el texto del brief/)
+    expect(t).toMatch(/ninguna foto que su texto asocie a «/)
+    expect(t).toMatch(/CUALQUIER foto/)
     expect(out.cuerpo.images).toHaveLength(15) // las fotos siguen yendo como contexto de marca · ninguna se esconde
   })
   it('brief que NO nombra un producto (sin regla): no se inventa una regla de producto · todo como antes', async () => {
@@ -193,7 +192,7 @@ describe('④ qué producto muestra cada foto contra el producto del brief', () 
 describe('④ el chequeo de coherencia foto ↔ pieza (determinista · sin modelo)', () => {
   async function chequear(regla: Record<string, unknown>, pieza: Record<string, unknown>, brief: Record<string, unknown> = BRF6) {
     const c = {
-      llego_la_vuelta: true, texto: '```json\n' + JSON.stringify({ pieza: { titular: 'Ceviche de Olón', texto_principal: 'Pídelo por WhatsApp, jueves a lunes.', no_pude_cumplir: [], que_miro: ['miré las fotos'], ...pieza } }) + '\n```',
+      llego_la_vuelta: true, texto: '```json\n' + JSON.stringify({ pieza: { titular: 'Ceviche de Olón', texto_principal: 'Pídelo por WhatsApp, jueves a lunes.', no_pude_cumplir: [], que_miro: ['miré las fotos'], fuera_de_la_foto: [], ...pieza } }) + '\n```',
       brief, brief_id: 'BRF-0006', parte_id: 'p', client_id: CID, client_name: 'Náufrago', manual_id: 'm', manual_version: 1, plan_id: null, forbidden_words: [], fotos_en_la_tabla: 16, fotos_enviadas: 15, fotos_no_enviadas: [], fotos_excluidas: [],
       fotos_regla: regla, fotos_ctx: (regla as { fotos?: unknown[] }).fotos ?? [], trato: { trato: 'tu', fuente: 'manual', evidencia: 'x' }, dry_run: false, cuerpo: {}, tope_usd: 0.6, sedes_resumen: { leidas: false, error: 'x' },
     }
@@ -205,46 +204,12 @@ describe('④ el chequeo de coherencia foto ↔ pieza (determinista · sin model
   const refDe = (regla: { fotos: { post_id: string; ref: string }[] }, post: string) => regla.fotos.find((f) => f.post_id === post)!.ref
   const PROMPT_CEVICHE = 'Overhead shot of a bowl of ceviche with red onion and lime, warm natural light'
 
-  it('🔴 EL INCIDENTE REAL: brief de ceviche + foto de referencia de encebollado ⇒ FATAL «foto_referencia_de_otro_producto» y la pieza queda NO VÁLIDA', async () => {
-    const regla = await REGLA()
-    const r = await chequear(regla, { fuente_imagen: 'cliente', prompt_imagen: PROMPT_CEVICHE, foto_referencia: { foto: refDe(regla, 'DPti3m8jQJt'), por_que: 'es la única foto de producto sin personas' } })
-    expect(r.hallazgos.map((h: { chequeo: string }) => h.chequeo)).toContain('foto_referencia_de_otro_producto')
-    expect(r.pieza_valida).toBe(false)
-    expect(r.motivo_invalido).toMatch(/foto_referencia_de_otro_producto/)
-    expect(r.hallazgos.find((h: { chequeo: string }) => h.chequeo === 'foto_referencia_de_otro_producto').fatal).toBe(true)
-  })
   it('CONTROL POSITIVO: la foto de referencia ES del producto del brief ⇒ ningún hallazgo de fotos y la pieza vale', async () => {
     const regla = await REGLA()
     const r = await chequear(regla, { fuente_imagen: 'cliente', prompt_imagen: PROMPT_CEVICHE, foto_referencia: { foto: refDe(regla, 'DAvtICqvjC-'), por_que: 'su texto dice ceviche' } })
     const fotos = r.hallazgos.filter((h: { chequeo: string }) => /foto|prompt_sin|prompt_nombra|hueco/.test(h.chequeo))
     expect(fotos).toEqual([])
     expect(r.pieza_valida).toBe(true)
-  })
-  it('🔴 el prompt NOMBRA otro producto del cliente y no el del brief ⇒ FATAL «prompt_nombra_otro_producto» (aunque no declare foto)', async () => {
-    const regla = await REGLA()
-    const r = await chequear(regla, { fuente_imagen: 'generada', prompt_imagen: 'A steaming bowl of encebollado with chifles and lime', foto_referencia: null })
-    expect(r.fatales ?? r.hallazgos.filter((h: { fatal: boolean }) => h.fatal).map((h: { chequeo: string }) => h.chequeo)).toContain('prompt_nombra_otro_producto')
-    expect(r.pieza_valida).toBe(false)
-  })
-  it('el prompt que nombra el producto del brief Y un acompañante del catálogo NO es fatal (el brief manda)', async () => {
-    const regla = await REGLA()
-    const r = await chequear(regla, { fuente_imagen: 'generada', prompt_imagen: 'Ceviche bowl next to a small cup of encebollado', foto_referencia: null })
-    expect(r.hallazgos.map((h: { chequeo: string }) => h.chequeo)).not.toContain('prompt_nombra_otro_producto')
-  })
-  it('🔴 SIN foto del producto + fuente «cliente» + prompt armado ⇒ FATAL «prompt_sin_foto_del_producto»', async () => {
-    const regla = await REGLA({ brief: HAMBURGUESA })
-    const r = await chequear(regla, { fuente_imagen: 'cliente', prompt_imagen: 'A burger on a wooden table', foto_referencia: { foto: 'F01', por_que: 'x' }, no_pude_cumplir: ['no hay foto del producto'] }, HAMBURGUESA)
-    expect(r.hallazgos.map((h: { chequeo: string }) => h.chequeo)).toContain('prompt_sin_foto_del_producto')
-    expect(r.pieza_valida).toBe(false)
-  })
-  it('SIN foto del producto: declararlo y dejar el prompt vacío es lo CORRECTO (sin fatales) · si no lo declara, se avisa', async () => {
-    const regla = await REGLA({ brief: HAMBURGUESA })
-    const br = HAMBURGUESA
-    const bien = await chequear(regla, { fuente_imagen: 'cliente', prompt_imagen: '', foto_referencia: null, no_pude_cumplir: ['No hay foto del producto: no armé el prompt'] }, br)
-    expect(bien.hallazgos.filter((h: { fatal: boolean; chequeo: string }) => h.fatal && /foto|prompt_sin|prompt_nombra/.test(h.chequeo))).toEqual([])
-    expect(bien.hallazgos.map((h: { chequeo: string }) => h.chequeo)).not.toContain('hueco_de_foto_no_declarado')
-    const calla = await chequear(regla, { fuente_imagen: 'generada', prompt_imagen: 'A burger on a table', foto_referencia: null, no_pude_cumplir: [] }, br)
-    expect(calla.hallazgos.map((h: { chequeo: string }) => h.chequeo)).toContain('hueco_de_foto_no_declarado')
   })
   it('foto de referencia con clave inventada ⇒ avisa · foto sin producto identificado ⇒ avisa (no fatal) · imagen del cliente sin declarar la foto ⇒ avisa', async () => {
     const regla = await REGLA()

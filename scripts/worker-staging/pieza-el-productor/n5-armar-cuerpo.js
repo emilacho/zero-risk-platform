@@ -47,8 +47,6 @@ const _esDeImagen = /^(imagen|carrusel)$/.test(sinTildes(prev.brief && prev.brie
 const catalogoProductos = catalogoDelBrief(prev.brief, productoBrief, ficha, excluirProducto)
 const clasif = _filasFotos ? clasificarFotos(_filasFotos, { producto: _esDeImagen ? productoBrief : null, catalogo: catalogoProductos, excluir: excluirProducto, maxImagenes: 20 }) : null
 const fotosAEnviar = clasif ? clasif.fotos.map((f) => ({ url: f.url, label: f.label })) : prev.fotos
-// 🔴 03-oct · EL PROMPT DE IMAGEN SALE DE LA FOTO: lo único que puede nombrar es lo del cliente (su nombre, sus usuarios, sus ciudades, su brief, su manual, sus productos) · ⑦ lo compara
-const prompt_permitido = permitidoDelPrompt({ nombre: nombre, handles: [instagram].concat((_filasFotos || []).map((f) => f.handle)).filter(Boolean), ciudades: sedesResueltas.map((s) => s.ciudad), brief: prev.brief, manual: { required_terminology: prev.required_terminology }, ficha: ficha })
 // 🔴 03-oct · EL TRATO sale del manual (o de la ficha), no de una regla fija
 const trato = resolverTrato(prev.manual_voz, ficha)
 
@@ -113,7 +111,7 @@ const REGLAS = [
   '   En el prompt de imagen no escribas ninguna de estas palabras: no, not, without, never, avoid, sin, ni, evita. Si quieres decir algo con ellas, cámbialo por lo que sí está en la imagen.',
   '5. La fuente de la imagen la decide el brief, no tú: repite cuál es en «fuente_imagen» (cliente = una foto real del negocio · generada = la hace el generador desde tu prompt · dueno = la toma el dueño). Si el brief no lo dice, escribe «no_declarada».',
   '7. VARIANTES: si el brief pide más de una, entrégalas en «variantes» (un objeto por variante, COMPLETO y por separado, con SU titular y SU texto_principal). «titular» y «texto_principal» de arriba son los de la variante A. NUNCA concatenes las variantes dentro de un solo campo («Variante A: … Variante B: …»). Si el brief no pide variantes, deja «variantes» como [].',
-  '6. «foto_referencia»: la CLAVE (F01, F02…) de la foto que usaste de referencia del producto y por qué; null si no usaste ninguna. Si la imagen es del cliente es obligatoria. Nunca uses de referencia una foto marcada «NO es el producto».',
+  '6. «foto_referencia»: la CLAVE (F01, F02…) de la foto que usaste de referencia y por qué; null si no usaste ninguna. Puedes usar cualquier foto y alterarla.',
   '',
   'Responde EXCLUSIVAMENTE con UN bloque JSON (nada de texto antes ni después) con esta forma exacta:',
   '{ "pieza": {',
@@ -123,8 +121,7 @@ const REGLAS = [
   '  "fuente_imagen": "cliente|generada|dueno|no_declarada",',
   '  "no_pude_cumplir": [ "qué del brief no pudiste cumplir y por qué · [] si todo" ],',
   '  "foto_referencia": { "foto": "F01", "por_que": "…" } | null,',
-  '  "fuera_de_la_foto": [ "elementos que el brief pide y la foto de referencia NO muestra · [] si no hay" ],',
-  '  "omitido_de_la_foto": [ "marcas, rótulos, textos o teléfonos de terceros que la foto trae y omitiste del prompt · [] si no hay" ],',
+  '  "fuera_de_la_foto": [ "lo que el brief pide y la foto de referencia NO muestra y tú agregaste o alteraste · [] si no hay" ],',
   '  "variantes": [ { "id": "A", "titular": "…", "texto_principal": "…" } ],',
   '  "que_miro": [ "una línea por cada pedido a mirar_afuera (qué pediste, qué volvió, qué usaste) y una línea sobre qué tomaste de las fotos · si no pediste nada: «no pedí nada» y por qué" ]',
   '} }',
@@ -161,4 +158,4 @@ const voz_resumen = { textos: textosDeVoz.length, fechas: textosDeVoz.map((t) =>
 // 03-oct · lo que viaja con la pieza: qué foto es cada una (clave · rol · producto) y la regla con que se comprobará la pieza en ⑦
 const fotos_ctx = clasif ? clasif.fotos.map((f) => ({ ref: f.ref, id: f.id, post_id: f.post_id, fecha: f.fecha, enlace: f.enlace, medio: f.medio, posicion: f.posicion, rol: f.rol, producto: f.producto, producto_fuente: f.producto_fuente, via: f.via || null })) : []
 const fotos_regla = clasif ? { regla_activa: clasif.regla_activa, sin_foto_del_producto: clasif.sin_foto_del_producto, producto_del_brief: clasif.producto_del_brief, raices_del_producto: clasif.raices_del_producto, de_referencia: clasif.de_referencia, fotos: fotos_ctx, catalogo: catalogoProductos } : { regla_activa: false, fotos: [], catalogo: [] }
-return [{ json: { ...prev, prompt_permitido, ...(clasif ? { fotos_enviadas: nFotos, fotos_no_enviadas: (prev.fotos_no_enviadas || []).concat(clasif.no_enviadas), fotos_ocultas_por_repetidas: (prev.fotos_duplicadas_ocultas || []).concat(clasif.duplicadas_ocultas) } : {}), fotos_ctx, fotos_regla, trato, client_name: nombre, cuerpo, pedido_caracteres: pedido.length, herramientas_ofrecidas: pedidos.length, max_pedidos_mirar_afuera: maxPedidos, sedes_resumen, sedes_resueltas: sedesResueltas, voz_resumen } }]
+return [{ json: { ...prev, ...(clasif ? { fotos_enviadas: nFotos, fotos_no_enviadas: (prev.fotos_no_enviadas || []).concat(clasif.no_enviadas), fotos_ocultas_por_repetidas: (prev.fotos_duplicadas_ocultas || []).concat(clasif.duplicadas_ocultas) } : {}), fotos_ctx, fotos_regla, trato, client_name: nombre, cuerpo, pedido_caracteres: pedido.length, herramientas_ofrecidas: pedidos.length, max_pedidos_mirar_afuera: maxPedidos, sedes_resumen, sedes_resueltas: sedesResueltas, voz_resumen } }]
