@@ -266,24 +266,39 @@ export async function leerFotos(ctx: Contexto): Promise<Salida> {
 }
 
 // ── trabajos hechos (plan, partes, piezas) con su versión derivada · y las decisiones que traen ──
-const CLAVE_DE_VERSION: Record<string, (f: Fila) => string> = {
-  // el plan es uno por cliente: la clave es el tipo
+/**
+ * Los ÚNICOS tipos que hoy derivan versión, y por qué clave (medido en las filas reales):
+ *   · plan   (`campaign_plan_90d`)   → el tipo (hay uno por cliente)
+ *   · parte  (`campaign_brief_pack`) → tipo + `provenance_tag.plan_id`
+ *   · pieza  (`campaign_piece`)      → tipo + `provenance_tag.brief_id` + `provenance_tag.parte_id`
+ * Todo lo demás —un tipo sin clave, o con la clave INCOMPLETA— NO se agrupa por tipo: cada fila es su propia cosa
+ * (tres correos distintos son tres cosas vigentes, no tres versiones de una). Devuelve null cuando no se sabe de qué cosa es.
+ */
+const CLAVE_DE_VERSION: Record<string, (f: Fila) => string | null> = {
   campaign_plan_90d: (f) => `plan|${f.output_type}`,
-  // la parte de trabajo trae el plan del que sale
-  campaign_brief_pack: (f) => `parte|${f.output_type}|${texto(objeto(f.provenance_tag).plan_id) ?? ''}`,
-  // la pieza trae el entregable y la parte: lo único que de verdad las identifica
-  campaign_piece: (f) => `pieza|${f.output_type}|${texto(objeto(f.provenance_tag).brief_id) ?? ''}|${texto(objeto(f.provenance_tag).parte_id) ?? ''}`,
+  campaign_brief_pack: (f) => {
+    const plan = texto(objeto(f.provenance_tag).plan_id)
+    return plan ? `parte|${f.output_type}|${plan}` : null
+  },
+  campaign_piece: (f) => {
+    const pt = objeto(f.provenance_tag)
+    const brief = texto(pt.brief_id), parte = texto(pt.parte_id)
+    return brief && parte ? `pieza|${f.output_type}|${brief}|${parte}` : null
+  },
 }
+
+/** Las PARTES guardan la validez en `valido` y las PIEZAS en `valida` (medido en las filas reales): vale si ninguna de las dos dice false. */
+const esValido = (pt: Record<string, unknown>): boolean => pt.valido !== false && pt.valida !== false
 
 export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
   const r = await leer(ctx, { tabla: 'client_historical_outputs', columnas: ['id', 'output_type', 'title', 'status', 'created_at', 'updated_at', 'content_text', 'provenance_tag', 'hitl_verdict', 'human_edits'], donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['trabajos_hechos', 'decisiones_del_aprobador'], r.error)
   const versiones = derivarVersiones(r.filas.map((f) => ({
     id: String(f.id),
-    clave: (CLAVE_DE_VERSION[String(f.output_type)] ?? ((x: Fila) => `otro|${x.output_type}`))(f),
+    clave: CLAVE_DE_VERSION[String(f.output_type)]?.(f) ?? `propia|${f.id}`,
     creado: iso(f.created_at) ?? '',
     aprobada: f.status === 'approved' || f.status === 'published',
-    valida: objeto(f.provenance_tag).valido !== false,
+    valida: esValido(objeto(f.provenance_tag)),
   })))
   const lineas: Ficha[] = []
   const decisiones: Ficha[] = []
@@ -291,7 +306,7 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
     const v = versiones.get(String(f.id))
     const tipo = String(f.output_type)
     const pt = objeto(f.provenance_tag)
-    const valida = pt.valido !== false
+    const valida = esValido(pt)
     const ref = `client_historical_outputs:${f.id}`
     const esPlan = tipo === 'campaign_plan_90d'
     const esParte = tipo === 'campaign_brief_pack'
@@ -300,7 +315,7 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
       titulo: texto(f.title) ?? tipo, que_es: `${tipo} · ${texto(f.status) ?? 'sin estado'}`, origen: 'producido', estado: estadoDeTrabajo(f.status),
       fecha: iso(f.created_at), plazo: esPlan ? 'plan' : 'sin_plazo', peso: pesoDeTexto(texto(f.content_text)),
       version: v?.version, vigente: v?.vigente, reemplazada: v?.reemplazada, versiones_anteriores: v?.versiones_anteriores, valida,
-      ...(!valida ? { aviso: `PARTE NO VÁLIDO · ${texto(pt.motivo_invalido) ?? 'sin motivo declarado'}` } : {}),
+      ...(!valida ? { aviso: `${esParte ? 'PARTE NO VÁLIDO' : tipo === 'campaign_piece' ? 'PIEZA NO VÁLIDA' : 'NO VÁLIDO'} · ${texto(pt.motivo_invalido) ?? 'sin motivo declarado'}` } : {}),
     }))
     const veredicto = texto(f.hitl_verdict), cambios = texto(f.human_edits)
     if (veredicto || cambios) {
