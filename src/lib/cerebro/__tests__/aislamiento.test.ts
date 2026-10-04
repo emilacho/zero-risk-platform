@@ -57,7 +57,7 @@ describe('revisión automática del repositorio', () => {
   const LECTURAS_GLOBALES = new Set(['src/app/api/health/route.ts', 'src/app/api/brain/reindex-stale/route.ts'])
 
   const archivos = (): string[] => {
-    const salida = execSync("git grep -l -E \"from\\(\\s*['\\\"]client_brain_chunks['\\\"]\\s*\\)\" -- src services", { cwd: RAIZ, encoding: 'utf8' })
+    const salida = execSync("git grep --untracked -l -E \"from\\(\\s*['\\\"]client_brain_chunks['\\\"]\\s*\\)\" -- src services", { cwd: RAIZ, encoding: 'utf8' })
     return salida.split(/\r?\n/).filter((f) => f && !/\.test\.[tj]sx?$/.test(f) && !f.includes('/__tests__/'))
   }
 
