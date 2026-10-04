@@ -108,6 +108,8 @@ export function tablasDeLaBase(): Tablas {
       { id: 'wp-a1', client_id: A, url: 'https://a.example/', title: 'Inicio A', owner_role: 'propio', competitor_id: null, crawled_at: dias(46), content_text: `${texto(60)}\n${jsonLdServicios}` },
       // A · una página de un competidor
       { id: 'wp-a2', client_id: A, url: 'https://otro.example/', title: 'Competidor', owner_role: 'competidor', competitor_id: 'comp-1', crawled_at: dias(2), content_text: texto(40) },
+      // A · una página propia con un precio SOLO en texto libre (sin datos estructurados), verificada hace 3 días
+      { id: 'wp-a3', client_id: A, url: 'https://a.example/precios', title: 'Precios A', owner_role: 'propio', competitor_id: null, crawled_at: dias(3), content_text: 'Nuestro servicio cuesta 25 dólares por sesión.' },
       // B · catálogo grande verificado hace 2 días
       { id: 'wp-b1', client_id: B, url: 'https://b.example/', title: 'Inicio B', owner_role: 'propio', competitor_id: null, crawled_at: dias(2), content_text: `${texto(30)}\n${jsonLdCatalogo}` },
       // C · sin datos estructurados, con una frase repetida 8 veces
@@ -152,6 +154,16 @@ export function tablasDeLaBase(): Tablas {
       { id: 'pz-3', client_id: A, output_type: 'campaign_piece', title: 'Pieza · E-1 · versión 3', status: 'draft', created_at: dias(10), content_text: texto(100), provenance_tag: { brief_id: 'E-1', parte_id: 'part-1' }, hitl_verdict: null, human_edits: null },
       // otro entregable: una sola versión
       { id: 'pz-4', client_id: A, output_type: 'campaign_piece', title: 'Pieza · E-2', status: 'draft', created_at: dias(9), content_text: texto(100), provenance_tag: { brief_id: 'E-2', parte_id: 'part-1' }, hitl_verdict: null, human_edits: null },
+      // D1 · las PIEZAS guardan la validez en `valida` (las partes, en `valido`): la inválida es la más NUEVA de su entregable y no puede salir vigente
+      { id: 'pz-5', client_id: A, output_type: 'campaign_piece', title: 'Pieza · E-3 · válida', status: 'draft', created_at: dias(8), content_text: texto(100), provenance_tag: { brief_id: 'E-3', parte_id: 'part-1', valida: true }, hitl_verdict: null, human_edits: null },
+      { id: 'pz-6', client_id: A, output_type: 'campaign_piece', title: 'Pieza · E-3 · inválida', status: 'draft', created_at: dias(5), content_text: texto(100), provenance_tag: { brief_id: 'E-3', parte_id: 'part-1', valida: false, motivo_invalido: 'la pieza no cerró' }, hitl_verdict: null, human_edits: null },
+      // D2 · un tipo de trabajo SIN clave de versión conocida: tres correos distintos son tres cosas, no tres versiones de una
+      { id: 'em-1', client_id: A, output_type: 'campaign_email', title: 'Correo de bienvenida', status: 'draft', created_at: dias(7), content_text: texto(50), provenance_tag: {}, hitl_verdict: null, human_edits: null },
+      { id: 'em-2', client_id: A, output_type: 'campaign_email', title: 'Correo de carrito abandonado', status: 'draft', created_at: dias(6), content_text: texto(50), provenance_tag: {}, hitl_verdict: null, human_edits: null },
+      { id: 'em-3', client_id: A, output_type: 'campaign_email', title: 'Correo de reactivación', status: 'draft', created_at: dias(4), content_text: texto(50), provenance_tag: {}, hitl_verdict: null, human_edits: null },
+      // D2 · un tipo CON clave conocida pero a la que le faltan las claves (no se sabe de qué entregable es): tampoco se agrupa por tipo
+      { id: 'pz-8', client_id: A, output_type: 'campaign_piece', title: 'Pieza sin entregable declarado · uno', status: 'draft', created_at: dias(3), content_text: texto(50), provenance_tag: {}, hitl_verdict: null, human_edits: null },
+      { id: 'pz-9', client_id: A, output_type: 'campaign_piece', title: 'Pieza sin entregable declarado · dos', status: 'draft', created_at: dias(2), content_text: texto(50), provenance_tag: {}, hitl_verdict: null, human_edits: null },
       { id: 'pz-z', client_id: Z, output_type: 'campaign_piece', title: 'Pieza de Z', status: 'draft', created_at: dias(9), content_text: texto(100), provenance_tag: { brief_id: 'E-9', parte_id: 'part-z' }, hitl_verdict: null, human_edits: null },
     ],
     hitl_queue: [

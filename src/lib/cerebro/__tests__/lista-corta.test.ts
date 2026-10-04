@@ -131,6 +131,38 @@ describe('A · negocio con varias sedes', () => {
     expect([v('plan-1').vigente, v('plan-1').vencido]).toEqual([true, false])
   })
 
+  it('D1 · una pieza con valida:false (la clave de las PIEZAS) no sale vigente aunque sea la más nueva', async () => {
+    const { lista } = await listaDe(A)
+    const v = (id: string) => dev(lista, 'client_historical_outputs:' + id)
+    expect([v('pz-5').vigente, v('pz-5').valida]).toEqual([true, true])
+    expect([v('pz-6').vigente, v('pz-6').valida, v('pz-6').reemplazada]).toEqual([false, false, true])
+    expect(v('pz-6').aviso).toMatch(/NO VÁLID/)
+    expect(v('pz-6').aviso).toMatch(/la pieza no cerró/) // el motivo se dice
+  })
+
+  it('D2 · un tipo de trabajo sin clave de versión conocida NO se agrupa por tipo: cada fila es su propia cosa', async () => {
+    const { lista } = await listaDe(A)
+    for (const id of ['em-1', 'em-2', 'em-3']) {
+      const f = dev(lista, 'client_historical_outputs:' + id)
+      expect([f.version, f.vigente, f.reemplazada, f.versiones_anteriores], id).toEqual([1, true, false, 0])
+    }
+  })
+
+  it('D2 · un tipo con clave conocida pero sin sus claves (no se sabe de qué entregable es) tampoco se agrupa por tipo', async () => {
+    const { lista } = await listaDe(A)
+    for (const id of ['pz-8', 'pz-9']) {
+      const f = dev(lista, 'client_historical_outputs:' + id)
+      expect([f.version, f.vigente, f.reemplazada], id).toEqual([1, true, false])
+    }
+  })
+
+  it('observación 1 · el precio escrito en texto libre dentro de una página NO tiene plazo propio: rige el de la página (30 días)', async () => {
+    const { lista } = await listaDe(A)
+    const pagina = dev(lista, 'client_web_pages:wp-a3')
+    expect(new Date(pagina.vigente_hasta as string).getTime()).toBe(new Date(pagina.fecha_fuente as string).getTime() + 30 * DIA)
+    expect(lista.lineas.some((f) => f.ref.startsWith('client_web_pages:wp-a3#')), 'no se inventa un lector de precios en texto libre').toBe(false)
+  })
+
   it('las correcciones y decisiones del aprobador van al estante E7 con la máxima autoridad', async () => {
     const { lista } = await listaDe(A)
     const d = dev(lista, 'client_historical_outputs:pz-2#decision')
