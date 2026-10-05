@@ -9,6 +9,7 @@ import type { Consulta } from '../consulta'
 import { leerContenidos } from '../contenido'
 import { construirListaCorta } from '../lista-corta'
 import { MOTIVO_NO_CABE } from '../conversacion'
+import type { Ficha } from '../tipos'
 import { numerarLista } from './lista-numerada'
 
 /** lo que se entrega por llamada: 70.000 «tokens» (decisión 4 del diseño) */
@@ -16,6 +17,30 @@ export const TOPE_DE_ENTREGA_EN_UNIDADES = 70_000
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const invalida = (errores: string[], status = 400, error = 'entrada_invalida') => ({ status, cuerpo: { error, code: 'E-INPUT-INVALID', errores } as Record<string, unknown> })
+
+/**
+ * Lo que debe viajar JUNTO a una cosa con versiones: qué versión es, si es la vigente (y, si no, cuál lo es) y la última decisión del dueño sobre ella
+ * (`null` = no la hay: se dice). Una línea de decisión trae qué decidió, sobre qué cosa y sobre cuál versión. Lo que no tiene versiones no trae nada de esto.
+ */
+function versionYDecision(f: Ficha, porRef: Map<string, Ficha>): Record<string, unknown> {
+  const salida: Record<string, unknown> = {}
+  if (f.version !== undefined) {
+    salida.version = f.version
+    salida.vigente = f.vigente === true
+    salida.decision_del_dueno = f.decision_del_dueno ?? null
+    if (f.reemplazada === true) {
+      salida.reemplazada = true
+      if (f.ref_de_la_vigente) {
+        salida.ref_de_la_vigente = f.ref_de_la_vigente
+        const v = porRef.get(f.ref_de_la_vigente)
+        salida.aviso = [f.aviso, `NO es la versión vigente: la vigente es ${f.ref_de_la_vigente}${v?.version !== undefined ? ` (versión ${v.version})` : ''}`].filter(Boolean).join(' · ')
+      }
+    }
+  }
+  if (f.decision) salida.decision = f.decision
+  if (f.de_la_cosa) { salida.de_la_cosa = f.de_la_cosa; salida.version_decidida = f.version_decidida ?? null }
+  return salida
+}
 
 export async function entregarContenido(consulta: Consulta, cuerpo: unknown, opciones: { ahora?: Date; topeDeEntrega?: number } = {}): Promise<{ status: number; cuerpo: Record<string, unknown> }> {
   if (!esObjeto(cuerpo)) return invalida(['el cuerpo debe ser un objeto'])
@@ -73,7 +98,7 @@ export async function entregarContenido(consulta: Consulta, cuerpo: unknown, opc
       caracteres_totales: c.caracteres_totales, caracteres_entregados: c.caracteres_entregados, cortado: c.cortado, ...(c.aviso_de_corte ? { aviso_de_corte: c.aviso_de_corte } : {}),
       peso_estimado: c.peso_estimado,
       ...(ilegible ? { detalle: `emitida por la lista y no se pudo leer (${c.detalle ?? 'sin detalle'})` } : c.detalle ? { detalle: c.detalle } : {}),
-      ...(f ? { titulo: f.titulo, estante: f.estante, clase: f.clase, estado: f.estado, fecha_fuente: f.fecha_fuente, vigente_hasta: f.vigente_hasta, vencido: f.vencido, ...(f.aviso ? { aviso: f.aviso } : {}), enlace: f.enlace ?? null, producto: f.producto ?? null, sede: f.sede ?? null } : {}),
+      ...(f ? { titulo: f.titulo, estante: f.estante, clase: f.clase, estado: f.estado, fecha_fuente: f.fecha_fuente, vigente_hasta: f.vigente_hasta, vencido: f.vencido, ...(f.aviso ? { aviso: f.aviso } : {}), enlace: f.enlace ?? null, producto: f.producto ?? null, sede: f.sede ?? null, ...versionYDecision(f, porRef) } : {}),
     })
   }
   const hayOk = estados.includes('ok'), hayError = estados.includes('error_de_lectura')

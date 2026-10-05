@@ -13,7 +13,7 @@ export interface EntradaDeVersion {
   valida: boolean
 }
 
-export interface SalidaDeVersion { version: number; vigente: boolean; reemplazada: boolean; versiones_anteriores: number }
+export interface SalidaDeVersion { version: number; vigente: boolean; reemplazada: boolean; versiones_anteriores: number; /** el id de la versión que manda en su grupo (si hay una) */ vigente_id?: string }
 
 /**
  * `ultima_aprobada`: manda la última APROBADA; si no hay ninguna, la última válida (un borrador más nuevo no desplaza a la aprobada).
@@ -29,7 +29,7 @@ export function derivarVersiones(entradas: EntradaDeVersion[], regla: 'ultima_ap
     const vigente = regla === 'ultima_aprobada' ? [...validas].reverse().find((e) => e.aprobada) ?? validas[validas.length - 1] : validas[validas.length - 1]
     orden.forEach((e, i) => {
       const esVigente = !!vigente && e.id === vigente.id
-      salida.set(e.id, { version: i + 1, vigente: esVigente, reemplazada: !!vigente && !esVigente, versiones_anteriores: esVigente ? orden.length - 1 : 0 })
+      salida.set(e.id, { version: i + 1, vigente: esVigente, reemplazada: !!vigente && !esVigente, versiones_anteriores: esVigente ? orden.length - 1 : 0, ...(vigente ? { vigente_id: vigente.id } : {}) })
     })
   }
   return salida

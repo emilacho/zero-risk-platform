@@ -28,6 +28,21 @@ function unir(a: EstadoDeFuente | undefined, b: EstadoDeFuente | undefined): Est
   return n > 0 ? { estado: 'ok', n } : { estado: 'sin_material', n: 0 }
 }
 
+/**
+ * Ata cada línea de decisión a LA VERSIÓN de la cosa que decidió: la decisión nombra una fila (una versión) y la lista sabe qué número de versión es.
+ * Si la cosa ya no está en esta lista (otra de otro cliente, de prueba, borrada) la versión queda en `null` y se dice: nunca se adivina de quién es.
+ */
+function atarDecisionesALaVersion(lineas: Ficha[]): Ficha[] {
+  const porRef = new Map(lineas.map((f) => [f.ref, f]))
+  return lineas.map((f) => {
+    if (!f.de_la_cosa || f.version_decidida !== undefined) return f
+    const cosa = porRef.get(f.de_la_cosa)
+    return cosa && cosa.version !== undefined
+      ? { ...f, version_decidida: cosa.version }
+      : { ...f, version_decidida: null, aviso: [f.aviso, 'la cosa que decidió ya no está en la lista'].filter(Boolean).join(' · ') }
+  })
+}
+
 export async function construirListaCorta(consulta: Consulta, clienteId: string, opciones: OpcionesListaCorta = {}): Promise<ListaCorta> {
   const ahora = opciones.ahora ?? new Date()
   const plazos: Plazos = { ...PLAZOS_EN_DIAS, ...(opciones.plazos ?? {}) } as Plazos
@@ -55,7 +70,7 @@ export async function construirListaCorta(consulta: Consulta, clienteId: string,
   const lecturas = salidas.reduce((s, x) => s + x.lecturas, 0)
   const fallidas = salidas.reduce((s, x) => s + x.fallidas, 0)
   const orden = (f: Ficha): string => `${f.estante}|${f.clase}|${f.ref}`
-  const lineas = salidas.flatMap((s) => s.lineas).sort((a, b) => (orden(a) < orden(b) ? -1 : 1))
+  const lineas = atarDecisionesALaVersion(salidas.flatMap((s) => s.lineas)).sort((a, b) => (orden(a) < orden(b) ? -1 : 1))
   const estado: ListaCorta['estado'] = fallidas === 0 ? 'ok' : fallidas >= lecturas ? 'error_de_lectura' : 'parcial'
   return { ...base, estado, fuentes, lineas }
 }

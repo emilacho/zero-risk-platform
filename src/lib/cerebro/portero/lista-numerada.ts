@@ -7,7 +7,7 @@
  */
 import { createHash } from 'node:crypto'
 import { loFijo } from '../conversacion'
-import { type Ficha, type ListaCorta, NOMBRES_DE_FUENTE, type NombreDeFuente } from '../tipos'
+import { type DecisionDelDueno, type Ficha, type ListaCorta, NOMBRES_DE_FUENTE, type NombreDeFuente } from '../tipos'
 
 /** a qué fuente pertenece cada clase de línea (para que `ya_trae` pueda nombrar una fuente entera o una clase) */
 export const FUENTE_DE_CLASE: Record<string, NombreDeFuente> = {
@@ -38,6 +38,8 @@ const una = (t: string): string => t.replace(/\s+/g, ' ').trim()
 const recorte = (t: string, n: number): string => (t.length > n ? t.slice(0, n) + '…' : t)
 const dia = (iso: string | null): string => (iso ? iso.slice(0, 10) : 'sin fecha')
 
+const NOMBRE_DE_DECISION: Record<DecisionDelDueno, string> = { aprobada: 'aprobada', rechazada: 'rechazada', cambio_pedido: 'cambio pedido' }
+
 /** `#n estante clase · título · qué es (100) [· producto] · estado · fecha · vigencia [· versión] · peso N` */
 export function lineaParaElModelo(n: number, f: Ficha): string {
   const partes = [`${f.estante} ${f.clase}`, una(f.titulo), recorte(una(f.que_es), 100)]
@@ -46,6 +48,9 @@ export function lineaParaElModelo(n: number, f: Ficha): string {
   partes.push(f.vencido ? `VENCIDO desde ${dia(f.vigente_hasta)}` : f.vigente_hasta ? `vigente hasta ${dia(f.vigente_hasta)}` : 'sin plazo')
   if (f.version !== undefined) partes.push(`v${f.version}${f.vigente ? ' vigente' : ''}`)
   if (f.versiones_anteriores && f.versiones_anteriores > 0) partes.push(`+${f.versiones_anteriores} versiones anteriores`)
+  // la decisión del dueño viaja SIEMPRE junto a la cosa y a su versión
+  if (f.decision_del_dueno) partes.push(`decisión del dueño: ${NOMBRE_DE_DECISION[f.decision_del_dueno.decision]}${f.decision_del_dueno.version !== null ? ` (v${f.decision_del_dueno.version})` : ''}`)
+  if (f.decision && f.de_la_cosa) partes.push(`${NOMBRE_DE_DECISION[f.decision]} sobre ${f.version_decidida != null ? `la v${f.version_decidida} de ` : ''}${f.de_la_cosa}`)
   partes.push(`peso ${f.peso_estimado}`)
   return `#${n} ${partes.join(' · ')}`
 }
