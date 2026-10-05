@@ -1,0 +1,30 @@
+{
+  "unidad": "dias",
+  "nota": "Cuánto tiempo se considera vigente cada clase de dato desde su última verificación. Es la decisión 13 del diseño: Emilio la puede cambiar. Cambiar un número acá NO requiere tocar lógica. «null» = no vence nunca (lo reemplaza una versión nueva). Valores propuestos por el diseño v3: son calculados, no medidos.",
+  "plazos": {
+    "precio_oferta_horario": 7,
+    "catalogo_y_direccion": 30,
+    "publicacion_propia": 14,
+    "perfil_propio": 30,
+    "ficha_mapas_propia": 30,
+    "anuncio_competencia": 14,
+    "sitio_competencia": 30,
+    "plan": 90,
+    "normativa": 180,
+    "configuracion_externa": 30,
+    "sin_plazo": null
+  },
+  "que_es_cada_uno": {
+    "precio_oferta_horario": "Precios, promociones, horarios y disponibilidad: cambian rápido",
+    "catalogo_y_direccion": "Catálogo sin precio, servicios, direcciones y teléfonos de las sedes, páginas del sitio propio",
+    "publicacion_propia": "Publicaciones y fotos propias en redes",
+    "perfil_propio": "Perfil, biografía y logotipos propios",
+    "ficha_mapas_propia": "Ficha de mapas propia (su horario va en «precio_oferta_horario»)",
+    "anuncio_competencia": "Anuncios y publicaciones de la competencia",
+    "sitio_competencia": "Sitios y análisis de la competencia",
+    "plan": "Plan de varios días: vence a los 90 días de su fecha",
+    "normativa": "Normativa y restricciones legales del rubro",
+    "configuracion_externa": "Configuración o código que vive en otra plataforma",
+    "sin_plazo": "Manual, perfil de cliente ideal, parte de trabajo, piezas y decisiones del dueño: no vencen, los reemplaza una versión nueva"
+  }
+}
