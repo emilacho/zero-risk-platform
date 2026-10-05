@@ -13,7 +13,7 @@ import { INSTRUCCION_DEL_PORTERO } from '../instruccion'
 import { numerarLista } from '../lista-numerada'
 import { leerListaDePrueba } from '../prueba'
 import { CARACTERES_POR_TOKEN, TOPE_DE_ENTRADA_EN_TOKENS, estimarTokens } from '../medida'
-import { INSTRUCCION_DE_ESTANTES, TOPE_DE_GASTO_POR_PEDIDO_USD, razonar, type DepsDeRazonar, type PeticionAlModelo, type RespuestaDelModelo } from '../razonar'
+import { CLIENTE_DE_PRUEBA, INSTRUCCION_DE_ESTANTES, TOPE_DE_GASTO_POR_PEDIDO_USD, razonar, type DepsDeRazonar, type PeticionAlModelo, type RespuestaDelModelo } from '../razonar'
 
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -355,14 +355,48 @@ describe('defecto 5 · el dorado corre entero por la ruta con una lista de prueb
     expect(base.llamadas).toHaveLength(0)
     expect(listaDe(espia.peticiones[0]).split('\n')).toHaveLength(3)
   })
-  it('queda registrada MARCADA como prueba y sin client_id (no se escribe ningún cliente inventado en tablas de cliente)', async () => {
+  it('queda registrada MARCADA como prueba y con el cliente de prueba (texto, nunca sin cliente: el cubo `system` de run-sdk queda intacto)', async () => {
     const { deps, espia } = armar(() => buenaDecision([1]))
     await razonar(deps, conLista(listaChica(), { cliente: 'W1' }))
     const fila = espia.registros[0]
+    expect(CLIENTE_DE_PRUEBA).toBe('prueba-portero')
     expect(fila.workflow_id).toBe('wf-prueba')
-    expect(fila).not.toHaveProperty('client_id')
+    expect(fila.client_id).toBe('prueba-portero')
     expect(fila.command).toBe('portero.razonar.prueba')
     expect(fila.metadata).toMatchObject({ prueba: true, cliente_de_prueba: 'W1' })
+  })
+  it('NINGUNA fila de prueba sale sin cliente: ni el camino feliz, ni el fallo, ni el timeout, ni las dos pasadas', async () => {
+    const casos: Array<[string, Contesta, Record<string, unknown>]> = [
+      ['feliz', () => buenaDecision([1]), conLista(listaChica())],
+      ['falla el modelo', () => new Error('boom'), conLista(listaChica())],
+      ['tiempo', () => Object.assign(new Error('t'), { name: 'AbortError' }), conLista(listaChica())],
+      ['respuesta rota', () => 'no es json', conLista(listaChica())],
+      ['dos pasadas', (p) => (p.system === INSTRUCCION_DE_ESTANTES ? JSON.stringify({ estantes: ['E3'] }) : buenaDecision(numerosDe(listaDe(p)).slice(0, 1))), conLista(listaGrande())],
+    ]
+    for (const [nombre, contesta, c] of casos) {
+      const { deps, espia } = armar(contesta)
+      await razonar(deps, c)
+      expect(espia.registros.length, nombre).toBeGreaterThan(0)
+      for (const f of espia.registros) expect(f.client_id, nombre).toBe('prueba-portero')
+    }
+  })
+  it('el cliente que viene en el pedido de prueba (W1, o uno REAL) NUNCA se usa como client_id del registro', async () => {
+    const { deps, espia } = armar(() => buenaDecision([1]))
+    await razonar(deps, conLista(listaChica(), { cliente: A }))
+    expect(espia.registros[0].client_id).toBe('prueba-portero')
+    expect(espia.registros[0].client_id).not.toBe(A)
+  })
+  it('una llamada REAL (sin lista de prueba) conserva el client_id del cliente pedido, también en el fallo; prueba:true SIN lista es una llamada real', async () => {
+    const real = armar(() => buenaDecision([1]))
+    await razonar(real.deps, cuerpo())
+    expect(real.espia.registros[0].client_id).toBe(A)
+    expect(real.espia.registros[0].metadata).not.toHaveProperty('prueba')
+    const falla = armar(() => new Error('boom'))
+    await razonar(falla.deps, cuerpo())
+    expect(falla.espia.registros[0].client_id).toBe(A)
+    const sinLista = armar(() => buenaDecision([1]))
+    await razonar(sinLista.deps, cuerpo({ prueba: true }))
+    expect(sinLista.espia.registros[0].client_id).toBe(A)
   })
   it('la lista de prueba SIN prueba:true se rechaza (400): no hay modo de prueba por accidente', async () => {
     const { deps, espia } = armar(() => buenaDecision([1]))

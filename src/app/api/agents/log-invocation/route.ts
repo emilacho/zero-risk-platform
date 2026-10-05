@@ -220,7 +220,6 @@ export async function POST(request: Request) {
     model: typeof body.model === 'string' ? body.model : null,
     started_at: startedAt,
     ended_at: endedAt,
-    duration_ms: durationMs,
     cost_usd: typeof body.cost_usd === 'number' && Number.isFinite(body.cost_usd) ? body.cost_usd : null,
     tokens_input: typeof body.tokens_input === 'number' ? body.tokens_input : null,
     tokens_output: typeof body.tokens_output === 'number' ? body.tokens_output : null,
