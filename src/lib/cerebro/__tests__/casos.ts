@@ -167,6 +167,8 @@ export function tablasDeLaBase(): Tablas {
       // D2 · un tipo CON clave conocida pero a la que le faltan las claves (no se sabe de qué entregable es): tampoco se agrupa por tipo
       { id: 'pz-8', client_id: A, output_type: 'campaign_piece', title: 'Pieza sin entregable declarado · uno', status: 'draft', created_at: dias(3), content_text: texto(50), provenance_tag: {}, hitl_verdict: null, human_edits: null },
       { id: 'pz-9', client_id: A, output_type: 'campaign_piece', title: 'Pieza sin entregable declarado · dos', status: 'draft', created_at: dias(2), content_text: texto(50), provenance_tag: {}, hitl_verdict: null, human_edits: null },
+      // P1 · una pieza de PRUEBA (marca prueba_t2): sería la vigente de su entregable (aprobada y la más nueva) y contaminaría las mediciones
+      { id: 'pz-t2', client_id: A, output_type: 'campaign_piece', title: 'Pieza de prueba', status: 'approved', created_at: dias(1), content_text: texto(50), provenance_tag: { brief_id: 'E-1', parte_id: 'part-1', prueba_t2: true, valida: true }, hitl_verdict: null, human_edits: null },
       { id: 'pz-z', client_id: Z, output_type: 'campaign_piece', title: 'Pieza de Z', status: 'draft', created_at: dias(9), content_text: texto(100), provenance_tag: { brief_id: 'E-9', parte_id: 'part-z' }, hitl_verdict: null, human_edits: null },
     ],
     hitl_queue: [

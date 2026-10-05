@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { construirListaCorta } from '../lista-corta'
-import { MAX_RONDAS, MOTIVOS_DE_QUITA, loFijo, respuestaDeRespaldo, validarPedido, validarRespuesta, verificarIndiceNoMiente } from '../conversacion'
+import { MAX_RONDAS, MOTIVO_NO_CABE, esMotivoValido, loFijo, respuestaDeRespaldo, validarPedido, validarRespuesta, verificarIndiceNoMiente } from '../conversacion'
 import { A, AHORA, B, C, crearBaseFalsa, tablasDeLaBase } from './casos'
 
 const pedidoValido = (cliente: string) => ({
@@ -43,6 +43,26 @@ describe('el pedido', () => {
   })
 })
 
+describe('P2 · el pedido admite ya_trae: las clases de material que el proceso YA entrega por su cuenta', () => {
+  it('lo conserva limpio', () => {
+    const r = validarPedido({ ...pedidoValido(A), ya_trae: ['fotos', ' sede ', ''] })
+    expect(r.ok && r.pedido.ya_trae).toEqual(['fotos', 'sede'])
+  })
+  it('sin ya_trae es una lista vacía; mal escrito se rechaza', () => {
+    const r = validarPedido(pedidoValido(A))
+    expect(r.ok && r.pedido.ya_trae).toEqual([])
+    expect(validarPedido({ ...pedidoValido(A), ya_trae: 'fotos' }).ok).toBe(false)
+    expect(validarPedido({ ...pedidoValido(A), ya_trae: [3] }).ok).toBe(false)
+  })
+  it('el pedido dice si quiere los píxeles (por defecto sí)', () => {
+    const a = validarPedido(pedidoValido(A))
+    expect(a.ok && a.pedido.pixeles).toBe(true)
+    const b = validarPedido({ ...pedidoValido(A), pixeles: false })
+    expect(b.ok && b.pedido.pixeles).toBe(false)
+    expect(validarPedido({ ...pedidoValido(A), pixeles: 'no' }).ok).toBe(false)
+  })
+})
+
 describe('lo fijo: manual vigente + correcciones del aprobador (y nada más)', () => {
   it('A: el manual vigente y las decisiones del aprobador; no el manual reemplazado, ni la ficha, ni el sitio', async () => {
     const fijo = loFijo(await lista(A)).map((f) => f.ref).sort()
@@ -75,9 +95,11 @@ describe('el respaldo (lo arma la biblioteca, sin modelo: no depende de ningún 
       expect(m.texto, m.ref).toBeTypeOf('string')
     }
   })
-  it('lo vencido NO se quita nunca: el motivo «vencido» no existe', () => {
-    expect(MOTIVOS_DE_QUITA.some((m) => /venc/i.test(m))).toBe(false)
-    expect([...MOTIVOS_DE_QUITA].sort()).toEqual(['contradice_correccion_del_dueno', 'fuera_de_tema', 'no_cabe', 'otra_sede', 'otro_producto', 'repetido'])
+  it('P3 · los motivos de quita son libres, salvo dos reglas: no_cabe existe y «vencido» nunca es motivo', () => {
+    expect(MOTIVO_NO_CABE).toBe('no_cabe')
+    for (const ok of ['no_cabe', 'fuera de tema para un correo', 'es de otra sede', 'repetido']) expect(esMotivoValido(ok), ok).toBe(true)
+    for (const mal of ['', '   ', 'vencido', 'está vencido desde hace días', 'VENCIDO sin reconfirmar', 'x'.repeat(200)]) expect(esMotivoValido(mal), mal).toBe(false)
+    expect(esMotivoValido(42 as unknown as string)).toBe(false)
   })
   it('un error de lectura NO se confunde con «sin material»', async () => {
     const r = respuestaDeRespaldo(await lista(C, ['client_social_images']), pedidoValido(C))
@@ -97,12 +119,12 @@ describe('el respaldo (lo arma la biblioteca, sin modelo: no depende de ningún 
 })
 
 describe('la respuesta', () => {
-  it('rechaza un motivo de quita fuera de la lista cerrada', async () => {
+  it('rechaza un motivo de quita que diga «vencido»; acepta uno libre', async () => {
     const l = await lista(A)
     const r = respuestaDeRespaldo(l, pedidoValido(A))
     const mala = { ...r, lo_que_no_te_di: [{ ref: 'client_web_pages:wp-a2', motivo: 'vencido_sin_reconfirmar' }] }
     expect(validarRespuesta(mala).ok).toBe(false)
-    const buena = { ...r, lo_que_no_te_di: [{ ref: 'client_web_pages:wp-a2', motivo: 'fuera_de_tema' }] }
+    const buena = { ...r, lo_que_no_te_di: [{ ref: 'client_web_pages:wp-a2', motivo: 'no sirve para un correo' }] }
     expect(validarRespuesta(buena).ok).toBe(true)
   })
   it('rechaza una cosa entregada sin estado o sin fecha', async () => {
@@ -118,7 +140,7 @@ describe('la respuesta', () => {
     const sinUna = { ...r, indice: r.indice.filter((i) => i.ref !== 'client_social_images:im-1') }
     expect(verificarIndiceNoMiente(l, sinUna)).toEqual(['client_social_images:im-1'])
     // quitarla CON motivo es válido (está declarada)
-    const conMotivo = { ...sinUna, lo_que_no_te_di: [{ ref: 'client_social_images:im-1', motivo: 'fuera_de_tema' as const }] }
+    const conMotivo = { ...sinUna, lo_que_no_te_di: [{ ref: 'client_social_images:im-1', motivo: 'fuera_de_tema' }] }
     expect(verificarIndiceNoMiente(l, conMotivo)).toEqual([])
   })
   it('una versión reemplazada puede no aparecer: solo se exige lo vigente', async () => {
