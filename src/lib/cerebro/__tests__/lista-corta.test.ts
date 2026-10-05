@@ -96,6 +96,30 @@ describe('A · negocio con varias sedes', () => {
     expect(dev(lista, 'client_social_images:im-4').clase).toBe('logo')
   })
 
+  it('H2 · cada foto o portada lleva su producto, el texto de la publicación, su fecha, su enlace y si es foto o portada', async () => {
+    const { lista } = await listaDe(A)
+    const foto = dev(lista, 'client_social_images:im-1')
+    expect(foto.producto).toEqual(['Servicio uno'])
+    expect(foto.titulo).toMatch(/Servicio uno/) // el producto se VE en la línea que lee el portero
+    expect(foto.que_es).toMatch(/texto de la publicación/) // el texto de la publicación
+    expect(foto.publicado_en).toMatch(/^[0-9]{4}-[0-9]{2}-[0-9]{2}/)
+    expect(foto.producto_fuente).toBe('caption')
+    expect([foto.clase, foto.enlace, foto.fecha_fuente === null]).toEqual(['foto', 'https://bucket/im-1.jpg', false])
+    const reel = dev(lista, 'client_social_images:im-2')
+    expect([reel.clase, reel.titulo]).toEqual(['portada_de_video', expect.stringMatching(/Portada/)])
+    expect(reel.que_es).toMatch(/texto del reel/)
+  })
+
+  it('H2 · dos fotos no pueden salir con la misma línea (ni con el mismo título y el mismo texto)', async () => {
+    const { lista } = await listaDe(A)
+    const fotos = lista.lineas.filter((f) => ['foto', 'portada_de_video', 'logo'].includes(f.clase) && f.estante === 'E3')
+    expect(fotos.length).toBeGreaterThanOrEqual(6)
+    const huellas = fotos.map((f) => JSON.stringify([f.titulo, f.que_es]))
+    expect(new Set(huellas).size, 'dos líneas de foto iguales').toBe(huellas.length)
+    const seis = dev(lista, 'client_social_images:im-6'), siete = dev(lista, 'client_social_images:im-7')
+    expect(`${seis.titulo}|${seis.que_es}`).not.toBe(`${siete.titulo}|${siete.que_es}`)
+  })
+
   it('la vigencia de una publicación es la de su última verificación, no la fecha en que se publicó', async () => {
     const { lista } = await listaDe(A)
     const antigua = dev(lista, 'client_social_images:im-5')
