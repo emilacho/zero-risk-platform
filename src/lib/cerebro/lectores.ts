@@ -299,13 +299,18 @@ const CLAVE_DE_VERSION: Record<string, (f: Fila) => string | null> = {
   },
 }
 
+/** Una fila de prueba lleva una marca `prueba_<algo>: true` en su `provenance_tag` (por ejemplo `prueba_t2`). */
+const esDePrueba = (pt: Record<string, unknown>): boolean => Object.entries(pt).some(([k, v]) => k.startsWith('prueba_') && v === true)
+
 /** Las PARTES guardan la validez en `valido` y las PIEZAS en `valida` (medido en las filas reales): vale si ninguna de las dos dice false. */
 const esValido = (pt: Record<string, unknown>): boolean => pt.valido !== false && pt.valida !== false
 
 export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
   const r = await leer(ctx, { tabla: 'client_historical_outputs', columnas: ['id', 'output_type', 'title', 'status', 'created_at', 'updated_at', 'content_text', 'provenance_tag', 'hitl_verdict', 'human_edits'], donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['trabajos_hechos', 'decisiones_del_aprobador'], r.error)
-  const versiones = derivarVersiones(r.filas.map((f) => ({
+  // P1 · una fila marcada como PRUEBA (`provenance_tag.prueba_*`) no existe para la lista ni cuenta como versión
+  const filas = r.filas.filter((f) => !esDePrueba(objeto(f.provenance_tag)))
+  const versiones = derivarVersiones(filas.map((f) => ({
     id: String(f.id),
     clave: CLAVE_DE_VERSION[String(f.output_type)]?.(f) ?? `propia|${f.id}`,
     creado: iso(f.created_at) ?? '',
@@ -314,7 +319,7 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
   })))
   const lineas: Ficha[] = []
   const decisiones: Ficha[] = []
-  for (const f of r.filas) {
+  for (const f of filas) {
     const v = versiones.get(String(f.id))
     const tipo = String(f.output_type)
     const pt = objeto(f.provenance_tag)

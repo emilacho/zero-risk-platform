@@ -11,7 +11,7 @@ import { entregarContenido } from '../entregar'
 import { numerarLista } from '../lista-numerada'
 
 const base = (fallan: string[] = [], tablas = tablasDeLaBase()) => crearBaseFalsa(tablas, fallan)
-type Cuerpo = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+type Cuerpo = Record<string, any>
 const indice = async (cuerpo: unknown, b = base()) => ({ ...(await armarIndice(b.consulta, cuerpo, { ahora: AHORA })), llamadas: b.llamadas })
 const entregar = async (cuerpo: unknown, b = base(), opciones: { topeDeEntrega?: number } = {}) => ({ ...(await entregarContenido(b.consulta, cuerpo, { ahora: AHORA, ...opciones })), llamadas: b.llamadas })
 

@@ -11,18 +11,28 @@ import { NOMBRES_DE_FUENTE } from './tipos'
 /** La ronda 1 la hace el proceso; el agente puede preguntar hasta 3 veces más. */
 export const MAX_RONDAS = 4
 
+/** Cuando algo no cabe en el tope de lo entregado. Es el único motivo con nombre fijo; los demás los escribe el portero. */
+export const MOTIVO_NO_CABE = 'no_cabe'
+
 /**
- * Por qué el portero puede NO entregar algo (lista CERRADA). «Vencido» no es un motivo: lo vencido se entrega con su aviso.
- * El modelo decide por razonamiento cuál aplica; el código no calcula «producto» ni «sede» del parte (no existen en él).
+ * Por qué el portero no entregó algo: texto LIBRE (el portero razona; el código no tiene una lista de motivos por tipo de trabajo).
+ * Dos reglas: no puede estar vacío ni ser larguísimo, y «vencido» NUNCA es un motivo (lo vencido se entrega con su aviso).
  */
-export const MOTIVOS_DE_QUITA = ['repetido', 'otro_producto', 'otra_sede', 'fuera_de_tema', 'contradice_correccion_del_dueno', 'no_cabe'] as const
-export type MotivoDeQuita = (typeof MOTIVOS_DE_QUITA)[number]
+export function esMotivoValido(motivo: unknown): boolean {
+  if (typeof motivo !== 'string') return false
+  const m = motivo.trim()
+  return m.length > 0 && m.length <= 120 && !/venc/i.test(m)
+}
 
 export interface Pedido {
   cliente: string
   voy_a_producir: { output?: string; material?: string; canal?: string; formato?: string; objetivo?: string }
   necesito: string
   ya_tengo: string[]
+  /** clases o fuentes de material que el proceso YA entrega por su cuenta: no se vuelven a listar */
+  ya_trae: string[]
+  /** si el pedido quiere que el portero pueda pedir fotos para VER (por defecto sí) */
+  pixeles: boolean
   ronda: number
 }
 
@@ -40,6 +50,10 @@ export function validarPedido(x: unknown): ResultadoDePedido {
   if (typeof ronda !== 'number' || !Number.isInteger(ronda) || ronda < 1 || ronda > MAX_RONDAS) errores.push(`\`ronda\` debe ser un entero entre 1 y ${MAX_RONDAS}`)
   const yaTengo = x.ya_tengo === undefined ? [] : x.ya_tengo
   if (!Array.isArray(yaTengo) || yaTengo.some((r) => typeof r !== 'string')) errores.push('`ya_tengo` debe ser una lista de textos')
+  const yaTrae = x.ya_trae === undefined ? [] : x.ya_trae
+  if (!Array.isArray(yaTrae) || yaTrae.some((r) => typeof r !== 'string')) errores.push('`ya_trae` debe ser una lista de textos')
+  const pixeles = x.pixeles === undefined ? true : x.pixeles
+  if (typeof pixeles !== 'boolean') errores.push('`pixeles` debe ser verdadero o falso')
   const vp = x.voy_a_producir === undefined ? {} : x.voy_a_producir
   if (!esObjeto(vp)) errores.push('`voy_a_producir` debe ser un objeto')
   const produccion: Pedido['voy_a_producir'] = {}
@@ -47,7 +61,7 @@ export function validarPedido(x: unknown): ResultadoDePedido {
   const necesito = typeof x.necesito === 'string' ? x.necesito.trim() : ''
   if (!necesito && Object.keys(produccion).length === 0) errores.push('el pedido no dice qué se va a producir: falta `necesito` o algún campo de `voy_a_producir`')
   if (errores.length) return { ok: false, errores }
-  return { ok: true, pedido: { cliente, voy_a_producir: produccion, necesito, ya_tengo: yaTengo as string[], ronda: ronda as number } }
+  return { ok: true, pedido: { cliente, voy_a_producir: produccion, necesito, ya_tengo: yaTengo as string[], ya_trae: (yaTrae as string[]).map((r) => r.trim()).filter(Boolean), pixeles: pixeles as boolean, ronda: ronda as number } }
 }
 
 export interface CosaEntregada {
@@ -69,7 +83,7 @@ export interface CosaEntregada {
 }
 
 export interface LineaDeIndice { ref: string; estante: Estante; clase: string; titulo: string; estado: Estado; fecha_fuente: string | null; vencido: boolean; vigente?: boolean }
-export interface CosaQuitada { ref: string; motivo: MotivoDeQuita }
+export interface CosaQuitada { ref: string; motivo: string }
 
 export interface Respuesta {
   modo: 'conversado' | 'respaldo'
@@ -137,7 +151,7 @@ export function validarRespuesta(x: unknown): { ok: true } | { ok: false; errore
   })
   if (!Array.isArray(x.lo_que_no_te_di)) errores.push('`lo_que_no_te_di` debe ser una lista')
   else x.lo_que_no_te_di.forEach((q, i) => {
-    if (!esObjeto(q) || typeof q.ref !== 'string' || !(MOTIVOS_DE_QUITA as readonly string[]).includes(String(q.motivo))) errores.push(`lo_que_no_te_di[${i}] con un motivo fuera de la lista cerrada: ${esObjeto(q) ? String(q.motivo) : '?'}`)
+    if (!esObjeto(q) || typeof q.ref !== 'string' || !esMotivoValido(q.motivo)) errores.push(`lo_que_no_te_di[${i}] con un motivo que no vale (vacío, larguísimo o «vencido»): ${esObjeto(q) ? String(q.motivo) : '?'}`)
   })
   if (!Array.isArray(x.indice)) errores.push('`indice` debe ser una lista')
   if (!Array.isArray(x.faltantes) || x.faltantes.some((f) => typeof f !== 'string')) errores.push('`faltantes` debe ser una lista de textos')

@@ -39,7 +39,8 @@ describe('solo lectura, salvo el modelo y el registro', () => {
   it('ninguna escritura en la base ni cliente de base con escritura', () => {
     for (const { archivo, texto } of codigo()) {
       const t = sinComentarios(texto)
-      for (const p of [/\.insert\(/, /\.update\(/, /\.upsert\(/, /\.delete\(/, /\.rpc\(/, /supabase-js/, /\bINSERT\s+INTO\b/i, /\bDELETE\s+FROM\b/i]) expect(t, `${archivo} contiene ${p}`).not.toMatch(p)
+      // `.update(` solo cuenta cuando sale de una tabla (`.from('x').update(`): calcular una huella también se llama así
+      for (const p of [/\.insert\(/, /\.from\(\s*['"`][^'"`]+['"`]\s*\)\s*\.update\(/, /\.upsert\(/, /\.delete\(/, /\.rpc\(/, /supabase-js/, /\bINSERT\s+INTO\b/i, /\bDELETE\s+FROM\b/i]) expect(t, `${archivo} contiene ${p}`).not.toMatch(p)
     }
   })
   it('solo DOS archivos hacen una petición que no es de lectura: la llamada al modelo y el registro', () => {
