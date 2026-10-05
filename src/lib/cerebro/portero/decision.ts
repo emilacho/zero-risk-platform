@@ -22,7 +22,7 @@ export interface Decision {
   sin_material?: boolean
 }
 
-export type CaidaDeLaRespuesta = 'json_roto' | 'campos_que_faltan' | 'todos_los_numeros_invalidos' | 'entregar_vacio_sospechoso'
+export type CaidaDeLaRespuesta = 'json_roto' | 'salida_cortada' | 'campos_que_faltan' | 'todos_los_numeros_invalidos' | 'entregar_vacio_sospechoso'
 export type ResultadoDeDecision = { ok: true; decision: Decision } | { ok: false; caida: CaidaDeLaRespuesta }
 
 const MAXIMO_DE_PIXELES = 6
@@ -32,15 +32,50 @@ const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 const entero = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v)
 const frase = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, MAXIMO_DE_FRASE) : null)
 
-function leerJson(crudo: string): unknown {
-  const t = crudo.trim()
-  const m = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(t)
-  return JSON.parse(m ? m[1] : t)
+const MAXIMO_DE_INICIOS = 60
+
+/** el cierre de la llave que abre en `desde`, sabiendo de comillas y escapes (una llave dentro de una frase no cuenta); -1 si no cierra */
+function cierreDeLaLlave(t: string, desde: number): number {
+  let profundidad = 0
+  let enTexto = false
+  for (let i = desde; i < t.length; i++) {
+    const c = t[i]
+    if (enTexto) { if (c === '\\') i++; else if (c === '"') enTexto = false; continue }
+    if (c === '"') enTexto = true
+    else if (c === '{') profundidad++
+    else if (c === '}' && --profundidad === 0) return i
+  }
+  return -1
 }
 
-export function interpretarDecision(textoCrudo: string, numerada: ListaNumerada, opciones: { pixeles: boolean }): ResultadoDeDecision {
-  let x: unknown
-  try { x = leerJson(textoCrudo) } catch { return { ok: false, caida: 'json_roto' } }
+/**
+ * Lee el JSON de lo que contestó el modelo AUNQUE traiga texto antes o después (4 de 20 respuestas reales venían con un párrafo).
+ * Primero el texto entero; si no, el primer objeto que trae la clave pedida; si ninguno la trae, el primer objeto que se pueda leer
+ * (así «campos que faltan» sigue siendo distinto de «json roto»). Nada del texto de alrededor entra a la decisión.
+ */
+export function extraerJson(crudo: string, clave: string): { valor: unknown } | null {
+  const t = crudo.trim()
+  const envuelto = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(t)
+  try { return { valor: JSON.parse(envuelto ? envuelto[1] : t) } } catch { /* sigue: hay texto alrededor */ }
+  let primero: { valor: unknown } | null = null
+  let inicios = 0
+  for (let i = t.indexOf('{'); i !== -1 && inicios < MAXIMO_DE_INICIOS; i = t.indexOf('{', i + 1), inicios++) {
+    const fin = cierreDeLaLlave(t, i)
+    if (fin === -1) continue
+    let v: unknown
+    try { v = JSON.parse(t.slice(i, fin + 1)) } catch { continue }
+    if (!esObjeto(v)) continue
+    if (clave in v) return { valor: v }
+    primero ??= { valor: v }
+  }
+  return primero
+}
+
+export function interpretarDecision(textoCrudo: string, numerada: ListaNumerada, opciones: { pixeles: boolean; cortada?: boolean }): ResultadoDeDecision {
+  const leido = extraerJson(textoCrudo, 'entregar')
+  // sin ninguna decisión legible: si el modelo paró por max_tokens se dice así, no «json roto»
+  if (!leido) return { ok: false, caida: opciones.cortada ? 'salida_cortada' : 'json_roto' }
+  const x = leido.valor
   if (!esObjeto(x) || !Array.isArray(x.entregar)) return { ok: false, caida: 'campos_que_faltan' }
   const porNumero = new Map(numerada.lineas.map((l) => [l.numero, l.ficha]))
   const validos: number[] = []

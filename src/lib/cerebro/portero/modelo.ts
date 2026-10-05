@@ -20,9 +20,9 @@ export async function llamarAlModelo(p: PeticionAlModelo): Promise<RespuestaDelM
       signal: control.signal,
     })
     if (!r.ok) throw new Error(`el modelo respondió ${r.status}: ${(await r.text()).slice(0, 200)}`)
-    const j = (await r.json()) as { content?: Array<{ type?: string; text?: string }>; usage?: { input_tokens?: number; output_tokens?: number } }
+    const j = (await r.json()) as { content?: Array<{ type?: string; text?: string }>; stop_reason?: string | null; usage?: { input_tokens?: number; output_tokens?: number } }
     const texto = (j.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('')
-    return { texto, usage: { input_tokens: j.usage?.input_tokens ?? 0, output_tokens: j.usage?.output_tokens ?? 0 } }
+    return { texto, stop_reason: j.stop_reason ?? null, usage: { input_tokens: j.usage?.input_tokens ?? 0, output_tokens: j.usage?.output_tokens ?? 0 } }
   } finally {
     clearTimeout(reloj)
   }

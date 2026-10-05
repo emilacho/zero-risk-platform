@@ -140,9 +140,11 @@ describe('antes de gastar: lo que NO llega al modelo', () => {
     expect(espia.peticiones).toHaveLength(0)
   })
   it('una lista que no cabe en una pasada ya no se descarta: va a dos pasadas (el detalle está en arreglo-medicion.test.ts)', async () => {
-    const { deps, espia } = armar(await buena(), { topeDeEntradaTokens: 50 })
+    const buenaLista = await buena()
+    const { deps, espia } = armar((p) => (/estantes/.test(p.system) && /<estantes>/.test(p.messages[0].content) ? '{"estantes":["E1","E2","E3","E4","E5","E6","E7","E8"]}' : buenaLista), { topeDeEntradaTokens: 3000 })
     const r = await razonar(deps, cuerpo())
     expect(r.cuerpo).toMatchObject({ pasadas: 2 })
+    expect(r.cuerpo).not.toMatchObject({ motivo_de_respaldo: 'lista_mas_grande_que_el_tope' })
     expect(espia.peticiones.length).toBeLessThanOrEqual(2)
   })
 })

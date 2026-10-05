@@ -59,7 +59,7 @@ const cuerpo = (extra: Record<string, unknown> = {}) => ({
   necesito: 'tengo que hacer un carrusel de reels', ronda: 1, ...extra,
 })
 const conLista = (fichas: Ficha[], extra: Record<string, unknown> = {}) => cuerpo({ prueba: true, lista_de_prueba: fichas, ...extra })
-const salida = (r: { cuerpo: Record<string, unknown> }) => r.cuerpo as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+const salida = (r: { cuerpo: Record<string, unknown> }) => r.cuerpo as Record<string, any>
 const numerosDe = (texto: string) => [...texto.matchAll(/^#(\d+) /gm)].map((m) => Number(m[1]))
 const listaDe = (p: PeticionAlModelo) => /<lista>\n([\s\S]*)\n<\/lista>/.exec(p.messages[0].content)![1]
 const buenaDecision = (n: number[]) => JSON.stringify({ entregar: n, pixeles: [], por_que: [{ numeros: n.slice(0, 1), linea: 'sirve' }], faltantes: [], duda: [] })
