@@ -241,8 +241,9 @@ export async function leerSedes(ctx: Contexto): Promise<Salida> {
 
 // ── fotos, portadas de video y logotipos ──────────────────────────────────────────────
 export async function leerFotos(ctx: Contexto): Promise<Salida> {
-  const r = await leer(ctx, { tabla: 'client_social_images', columnas: ['id', 'owner_role', 'tipo', 'medio', 'estado', 'url', 'caption', 'posted_at', 'post_url', 'producto', 'created_at'], donde: { client_id: ctx.cliente } })
+  const r = await leer(ctx, { tabla: 'client_social_images', columnas: ['id', 'owner_role', 'post_id', 'tipo', 'medio', 'estado', 'url', 'caption', 'posted_at', 'post_url', 'producto', 'producto_fuente', 'created_at'], donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['fotos'], r.error)
+  const claves: string[] = []
   const lineas = r.filas.map((f) => {
     const rol = porRol(f.owner_role)
     const medio = texto(f.medio)
@@ -250,18 +251,29 @@ export async function leerFotos(ctx: Contexto): Promise<Salida> {
     const esVideo = medio === 'reel' || medio === 'video'
     const clase = esLogo ? 'logo' : esVideo ? 'portada_de_video' : 'foto'
     const plazo: ClaseDePlazo = !rol.propio ? 'anuncio_competencia' : esLogo ? 'perfil_propio' : 'publicacion_propia'
+    const producto = Array.isArray(f.producto) ? (f.producto as unknown[]).filter((p): p is string => typeof p === 'string') : null
+    const publicado = iso(f.posted_at)
+    const leyenda = texto(f.caption)
+    const nombre = esLogo ? 'Logotipo' : esVideo ? 'Portada de video' : 'Foto'
+    // la línea que lee el portero DISTINGUE cada foto: clase · fecha · producto (o, sin producto, el comienzo de su texto)
+    const distintivo = producto && producto.length ? producto.join(' / ') : leyenda ? recorte(leyenda, 40) : 'sin producto ni texto'
+    claves.push(String(f.post_id ?? f.id).slice(0, 12))
     return linea(ctx, {
       ref: `client_social_images:${f.id}`, estante: rol.propio ? 'E3' : 'E5', clase,
-      titulo: esLogo ? 'Logotipo' : esVideo ? 'Portada de un video o reel' : 'Foto',
-      que_es: `${f.posted_at && iso(f.posted_at) ? `publicada el ${iso(f.posted_at)?.slice(0, 10)} · ` : ''}${recorte(texto(f.caption) ?? `${medio ?? 'imagen'} sin texto`)}`,
+      titulo: `${nombre} · ${(publicado ?? iso(f.created_at) ?? 'sin fecha').slice(0, 10)} · ${distintivo}`,
+      que_es: `${publicado ? `publicada el ${publicado.slice(0, 10)} · ` : ''}texto de la publicación: ${leyenda ? `«${recorte(leyenda)}»` : 'sin texto'} · producto: ${producto && producto.length ? producto.join(', ') : 'no declarado'}`,
       // la vigencia es de la ÚLTIMA VERIFICACIÓN (cuando se capturó), no de la fecha en que se publicó
-      origen: rol.origen, estado: rol.estado, fecha: iso(f.created_at) ?? iso(f.posted_at), plazo,
+      origen: rol.origen, estado: rol.estado, fecha: iso(f.created_at) ?? publicado, plazo,
       // el video no se guarda: el enlace es el de la publicación (la dirección del archivo caduca)
       enlace: esVideo ? texto(f.post_url) : texto(f.url) ?? texto(f.post_url),
-      producto: Array.isArray(f.producto) ? (f.producto as unknown[]).filter((p): p is string => typeof p === 'string') : null,
+      producto, publicado_en: publicado, producto_fuente: texto(f.producto_fuente),
       ...(f.estado === 'no_bajo' ? { aviso: 'archivo no descargado' } : {}),
     })
   })
+  // dos fotos jamás salen con la misma línea: si dos coinciden en título y texto, se añade lo que las separa (su publicación)
+  const veces = new Map<string, number>()
+  for (const l of lineas) veces.set(JSON.stringify([l.titulo, l.que_es]), (veces.get(JSON.stringify([l.titulo, l.que_es])) ?? 0) + 1)
+  lineas.forEach((l, i) => { if ((veces.get(JSON.stringify([l.titulo, l.que_es])) ?? 0) > 1) l.titulo = `${l.titulo} · ${claves[i]}` })
   return exito({ fotos: estadoDeFuente(lineas.length) }, lineas)
 }
 

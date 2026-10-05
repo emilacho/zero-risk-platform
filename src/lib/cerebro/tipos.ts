@@ -37,6 +37,10 @@ export interface Ficha {
   enlace?: string | null
   sede?: string | null
   producto?: string[] | null
+  /** de dónde salió el producto de una foto: caption · vision · dueno · conflicto · desconocido (columna de la tabla) */
+  producto_fuente?: string | null
+  /** cuándo se publicó (no confundir con `fecha_fuente`, que es la última verificación) */
+  publicado_en?: string | null
   datos?: { precio?: number | null; moneda?: string | null; familia?: string | null }
   sobre_terceros?: boolean
   /** «tokens» aproximados del contenido (2,8 caracteres por «token», medido por CC#2) */
