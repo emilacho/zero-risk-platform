@@ -84,7 +84,7 @@ describe('no toca lo vedado', () => {
   })
   it('este PR solo agrega archivos de src/lib/cerebro y de src/app/api/brain/portero (comparado con origin/main)', () => {
     const rama = process.env.GITHUB_HEAD_REF || execSync('git rev-parse --abbrev-ref HEAD', { cwd: RAIZ, encoding: 'utf8' }).trim()
-    if (rama !== 'feat/cerebro-portero-rutas' && rama !== 'fix/cerebro-portero-arreglo-medicion') return // la garantía es de ESTE PR; en otras ramas no aplica
+    if (rama !== 'feat/cerebro-portero-rutas' && rama !== 'fix/cerebro-portero-arreglo-medicion' && rama !== 'feat/cerebro-paso-1-aprobacion-y-vencidos') return // la garantía es de ESTE PR; en otras ramas no aplica
     const esShallow = execSync('git rev-parse --is-shallow-repository', { cwd: RAIZ, encoding: 'utf8' }).trim() === 'true'
     let cambiados: string
     if (esShallow) {

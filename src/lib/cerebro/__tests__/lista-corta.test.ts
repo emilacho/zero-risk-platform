@@ -91,7 +91,7 @@ describe('A · negocio con varias sedes', () => {
     const foto = dev(lista, 'client_social_images:im-1')
     expect([foto.clase, foto.origen, foto.vencido, foto.producto]).toEqual(['foto', 'su_fuente', false, ['Servicio uno']])
     const reel = dev(lista, 'client_social_images:im-2')
-    expect([reel.clase, reel.enlace, reel.vencido]).toEqual(['portada_de_video', 'https://red/p2', true])
+    expect([reel.clase, reel.enlace, reel.vencido]).toEqual(['portada_de_video', 'https://red/p2', false]) // paso 1: una portada PROPIA es un archivo y no vence
     expect(dev(lista, 'client_social_images:im-3').estado).toBe('de_tercero')
     expect(dev(lista, 'client_social_images:im-4').clase).toBe('logo')
   })
