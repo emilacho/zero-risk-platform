@@ -11,6 +11,7 @@ import type { Ficha } from '../../tipos'
 import { interpretarDecision } from '../decision'
 import { INSTRUCCION_DEL_PORTERO } from '../instruccion'
 import { numerarLista } from '../lista-numerada'
+import { leerListaDePrueba } from '../prueba'
 import { CARACTERES_POR_TOKEN, TOPE_DE_ENTRADA_EN_TOKENS, estimarTokens } from '../medida'
 import { INSTRUCCION_DE_ESTANTES, TOPE_DE_GASTO_POR_PEDIDO_USD, razonar, type DepsDeRazonar, type PeticionAlModelo, type RespuestaDelModelo } from '../razonar'
 
@@ -405,6 +406,11 @@ describe('defecto 5 · el dorado corre entero por la ruta con una lista de prueb
     const f = { ...ficha(1, 'E1', 'plan', 'Plan uno'), contenido: 'SECRETO-DEL-CONTENIDO', extra: 'SECRETO-EXTRA' } as Ficha
     await razonar(deps, conLista([f]))
     expect(JSON.stringify(espia.peticiones[0])).not.toMatch(/SECRETO/)
+  })
+  it('leerListaDePrueba se queda SOLO con los campos que el portero usa (ni contenido ni campos extra sobreviven)', () => {
+    const f = { ...ficha(1, 'E1', 'plan', 'Plan uno'), contenido: 'SECRETO', extra: 'X', datos: { precio: 1 } }
+    const r = leerListaDePrueba(true, [f], 'c', AHORA)
+    expect(r && r.ok && Object.keys(r.lista.lineas[0]).sort()).toEqual(['clase', 'estado', 'estante', 'fecha_fuente', 'origen', 'peso_estimado', 'que_es', 'ref', 'titulo', 'vencido', 'vigente_hasta'])
   })
   it('la lista grande también corre por esta vía en dos pasadas (el caso W3 del dorado)', async () => {
     const { deps, espia, base } = armar((p) => (p.system === INSTRUCCION_DE_ESTANTES ? JSON.stringify({ estantes: ['E2'] }) : buenaDecision(numerosDe(listaDe(p)).slice(0, 4))))
