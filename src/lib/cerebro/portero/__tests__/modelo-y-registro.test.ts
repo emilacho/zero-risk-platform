@@ -20,7 +20,7 @@ describe('llamarAlModelo', () => {
     const f = vi.fn(async (_u: unknown, _i?: RequestInit) => new Response(JSON.stringify({ content: [{ type: 'text', text: '{"entregar":[1]}' }], usage: { input_tokens: 7000, output_tokens: 600 } }), { status: 200 }))
     vi.stubGlobal('fetch', f)
     const r = await llamarAlModelo(peticion())
-    expect(r).toEqual({ texto: '{"entregar":[1]}', usage: { input_tokens: 7000, output_tokens: 600 } })
+    expect(r).toEqual({ texto: '{"entregar":[1]}', stop_reason: null, usage: { input_tokens: 7000, output_tokens: 600 } })
     expect(f).toHaveBeenCalledTimes(1)
     const [url, init] = f.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('https://api.anthropic.com/v1/messages')
@@ -30,6 +30,11 @@ describe('llamarAlModelo', () => {
     const cuerpo = JSON.parse(String(init.body))
     expect(cuerpo).toEqual({ model: 'claude-sonnet-5-5', max_tokens: 1500, thinking: { type: 'between_tools' }, system: 'instrucción', messages: [{ role: 'user', content: 'pedido y lista' }] })
     expect(cuerpo).not.toHaveProperty('temperature')
+  })
+
+  it('devuelve por qué paró el modelo (stop_reason): sin él «se cortó por max_tokens» no se puede decir', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ content: [{ type: 'text', text: '{"entr' }], stop_reason: 'max_tokens', usage: { input_tokens: 5, output_tokens: 1500 } }), { status: 200 }))
+    expect(await llamarAlModelo(peticion())).toEqual({ texto: '{"entr', stop_reason: 'max_tokens', usage: { input_tokens: 5, output_tokens: 1500 } })
   })
 
   it('junta solo los bloques de texto (el razonamiento no es la respuesta)', async () => {
