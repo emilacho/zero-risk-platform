@@ -197,3 +197,68 @@ describe('POST /api/agents/log-invocation · canon §149 enforcement', () => {
     expect(j.code).toBe('E-PERSIST-FAILED')
   })
 })
+
+// ── arreglo · `duration_ms` es una columna GENERADA en la base real: la ruta no debe enviarla ──────────────
+// La base simulada de arriba aceptaba cualquier cosa, por eso esto nunca se vio (0 de 269 filas por esta ruta desde julio).
+// Esta imita las reglas reales de `agent_invocations`: columna generada, NOT NULL, enteros y CHECK de `status`.
+const NOT_NULL = ['session_id', 'agent_id', 'agent_name', 'model', 'started_at', 'cost_usd', 'num_turns', 'status']
+const ENTERAS = ['tokens_input', 'tokens_output', 'tokens_cache_read', 'tokens_cache_creation', 'num_turns', 'exit_code']
+function comoLaBase(fila: Record<string, unknown>): string | null {
+  if ('duration_ms' in fila) return 'cannot insert a non-DEFAULT value into column "duration_ms"'
+  for (const k of NOT_NULL) if (fila[k] === null || fila[k] === undefined) return `null value in column "${k}" violates not-null constraint`
+  for (const k of ENTERAS) if (fila[k] !== null && fila[k] !== undefined && !Number.isInteger(fila[k])) return `invalid input syntax for type integer (${k})`
+  if (!['running', 'completed', 'failed', 'timeout'].includes(String(fila.status))) return 'violates check constraint agent_invocations_status_check'
+  return null
+}
+function basePorReglas() {
+  insertMock.mockImplementationOnce(((rows: Array<Record<string, unknown>>) => ({
+    select: () => ({ single: async () => { const e = comoLaBase(rows[0]!); return e ? { data: null, error: { message: e } } : { data: { id: 'inv-1' }, error: null } } }),
+  })) as unknown as typeof insertMock)
+}
+const CUERPO_DEL_PORTERO = {
+  workflow_id: 'tVWeaqTTpqPUQl7Z', workflow_execution_id: '165030', agent_name: 'portero-del-cerebro', agent_id: 'portero-del-cerebro', session_id: '165030',
+  model: 'claude-sonnet-5-5', cost_usd: 0.03, duration_ms: 7000, tokens_input: 10000, tokens_output: 700, num_turns: 1, status: 'completed',
+  client_id: 'prueba-portero', command: 'portero.razonar.prueba', response_text: '{}', metadata: { prueba: true, pasada: 1 },
+}
+const ultimaFila = () => (insertMock.mock.calls[0] as unknown as [Array<Record<string, unknown>>])[0][0]!
+
+describe('POST /api/agents/log-invocation · el cuerpo del portero entra (columna generada duration_ms)', () => {
+  beforeEach(() => { insertMock.mockClear() })
+
+  it('NO envía `duration_ms` en la fila (la base la calcula de ended_at − started_at)', async () => {
+    const { POST } = await importRoute()
+    await POST(makeReq(CUERPO_DEL_PORTERO))
+    expect(ultimaFila()).not.toHaveProperty('duration_ms')
+  })
+  it('la duración NO se pierde: sin started_at, `started_at` = `ended_at` − duration_ms', async () => {
+    const { POST } = await importRoute()
+    await POST(makeReq({ ...CUERPO_DEL_PORTERO, ended_at: '2026-10-05T10:00:07.000Z' }))
+    expect(ultimaFila().started_at).toBe('2026-10-05T10:00:00.000Z')
+    expect(ultimaFila().ended_at).toBe('2026-10-05T10:00:07.000Z')
+  })
+  it('con la base simulada por reglas reales, el cuerpo del portero (bueno, de prueba, fallido y con timeout) da 200', async () => {
+    const { POST } = await importRoute()
+    for (const cuerpo of [
+      CUERPO_DEL_PORTERO,
+      { ...CUERPO_DEL_PORTERO, client_id: undefined },
+      { ...CUERPO_DEL_PORTERO, status: 'failed', cost_usd: 0, tokens_input: 0, tokens_output: 0, error_message: 'boom' },
+      { ...CUERPO_DEL_PORTERO, status: 'timeout', cost_usd: 0 },
+    ]) {
+      basePorReglas()
+      const res = await POST(makeReq(cuerpo))
+      expect(res.status, JSON.stringify(cuerpo)).toBe(200)
+      expect((await res.json()).ok).toBe(true)
+    }
+  })
+  it('conserva todo lo demás de la fila (cliente, costo, tokens, comando, marca de prueba)', async () => {
+    const { POST } = await importRoute()
+    await POST(makeReq(CUERPO_DEL_PORTERO))
+    expect(ultimaFila()).toMatchObject({ client_id: 'prueba-portero', cost_usd: 0.03, tokens_input: 10000, tokens_output: 700, num_turns: 1, status: 'completed', command: 'portero.razonar.prueba', agent_name: 'portero-del-cerebro', model: 'claude-sonnet-5-5' })
+    expect((ultimaFila().metadata as Record<string, unknown>).prueba).toBe(true)
+  })
+  it('el cambio es SOLO ese campo: las demás columnas de la fila son las de antes', async () => {
+    const { POST } = await importRoute()
+    await POST(makeReq(CUERPO_DEL_PORTERO))
+    expect(Object.keys(ultimaFila()).sort()).toEqual(['agent_id', 'agent_name', 'client_id', 'command', 'cost_usd', 'ended_at', 'error_message', 'exit_code', 'journey_id', 'metadata', 'model', 'num_turns', 'output_summary', 'session_id', 'started_at', 'status', 'task_id', 'tokens_cache_creation', 'tokens_cache_read', 'tokens_input', 'tokens_output', 'workflow_execution_id', 'workflow_id'])
+  })
+})
