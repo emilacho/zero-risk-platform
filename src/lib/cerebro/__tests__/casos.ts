@@ -144,6 +144,7 @@ export function tablasDeLaBase(): Tablas {
       // H2 · dos publicaciones del mismo día con la MISMA leyenda y sin producto: no pueden salir con la misma línea
       { id: 'im-6', client_id: A, owner_role: 'propio', handle: 'cuenta_a', post_id: 'p6', tipo: 'post_imagen', medio: 'imagen', estado: 'ok', url: 'https://bucket/im-6.jpg', caption: 'misma leyenda', posted_at: dias(2), post_url: 'https://red/p6', posicion: 'unica', producto: [], producto_fuente: 'desconocido', created_at: dias(2) },
       { id: 'im-7', client_id: A, owner_role: 'propio', handle: 'cuenta_a', post_id: 'p7', tipo: 'post_imagen', medio: 'imagen', estado: 'ok', url: 'https://bucket/im-7.jpg', caption: 'misma leyenda', posted_at: dias(2), post_url: 'https://red/p7', posicion: 'unica', producto: [], producto_fuente: 'desconocido', created_at: dias(2) },
+      { id: 'im-8', client_id: A, owner_role: 'propio', handle: 'cuenta_a', post_id: 'p8', tipo: 'post_imagen', medio: 'imagen', estado: 'ok', url: 'https://bucket/im-8.jpg', caption: 'otra publicación del servicio dos', posted_at: dias(6), post_url: 'https://red/p8', posicion: 'unica', producto: ['Servicio dos'], producto_fuente: 'caption', created_at: dias(6) },
       { id: 'im-c1', client_id: C, owner_role: 'propio', handle: 'cuenta_c', post_id: 'c1', tipo: 'post_imagen', medio: 'imagen', estado: 'ok', url: 'https://bucket/im-c1.jpg', caption: 'x', posted_at: dias(1), post_url: 'https://red/c1', posicion: 'unica', producto: [], created_at: dias(1) },
       { id: 'im-z1', client_id: Z, owner_role: 'propio', handle: 'cuenta_z', post_id: 'z1', tipo: 'post_imagen', medio: 'imagen', estado: 'ok', url: 'https://bucket/im-z1.jpg', caption: 'foto de Z', posted_at: dias(1), post_url: 'https://red/z1', posicion: 'unica', producto: [], created_at: dias(1) },
     ],
@@ -167,6 +168,8 @@ export function tablasDeLaBase(): Tablas {
       // D2 · un tipo CON clave conocida pero a la que le faltan las claves (no se sabe de qué entregable es): tampoco se agrupa por tipo
       { id: 'pz-8', client_id: A, output_type: 'campaign_piece', title: 'Pieza sin entregable declarado · uno', status: 'draft', created_at: dias(3), content_text: texto(50), provenance_tag: {}, hitl_verdict: null, human_edits: null },
       { id: 'pz-9', client_id: A, output_type: 'campaign_piece', title: 'Pieza sin entregable declarado · dos', status: 'draft', created_at: dias(2), content_text: texto(50), provenance_tag: {}, hitl_verdict: null, human_edits: null },
+      // P1 · una pieza de PRUEBA (marca prueba_t2): sería la vigente de su entregable (aprobada y la más nueva) y contaminaría las mediciones
+      { id: 'pz-t2', client_id: A, output_type: 'campaign_piece', title: 'Pieza de prueba', status: 'approved', created_at: dias(1), content_text: texto(50), provenance_tag: { brief_id: 'E-1', parte_id: 'part-1', prueba_t2: true, valida: true }, hitl_verdict: null, human_edits: null },
       { id: 'pz-z', client_id: Z, output_type: 'campaign_piece', title: 'Pieza de Z', status: 'draft', created_at: dias(9), content_text: texto(100), provenance_tag: { brief_id: 'E-9', parte_id: 'part-z' }, hitl_verdict: null, human_edits: null },
     ],
     hitl_queue: [

@@ -4,7 +4,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { MAXIMO_DE_CARACTERES_POR_DEFECTO, leerContenido, leerContenidos } from '../contenido'
-import { A, B, crearBaseFalsa, tablasDeLaBase } from './casos'
+import { construirListaCorta } from '../lista-corta'
+import { A, AHORA, B, C, Z, crearBaseFalsa, tablasDeLaBase } from './casos'
 
 const tablas = tablasDeLaBase()
 const fila = (tabla: string, id: string): Record<string, unknown> => (tablas[tabla] as Array<Record<string, unknown>>).find((f) => f.id === id) as Record<string, unknown>
@@ -128,5 +129,16 @@ describe('varias referencias a la vez', () => {
   it('un error de lectura en una fuente no tapa lo que sí se pudo leer', async () => {
     const r = await leerContenidos(nueva(['client_icp_documents']).consulta, A, ['client_brand_books:bb-2', 'client_icp_documents:icp-1'])
     expect(r.map((x) => x.estado)).toEqual(['ok', 'error_de_lectura'])
+  })
+})
+
+describe('TODA referencia que la lista emite es legible por el lector (CC#3: una fuente nueva sin su entrada en la tabla rompería esto)', () => {
+  it.each([[A, 'A'], [B, 'B'], [C, 'C'], [Z, 'Z']])('cliente %s: cada línea de su lista se lee con estado ok', async (cliente, nombre) => {
+    const base = crearBaseFalsa(tablasDeLaBase())
+    const lista = await construirListaCorta(base.consulta, cliente, { ahora: AHORA })
+    expect(lista.lineas.length, nombre).toBeGreaterThan(0)
+    const lecturas = await leerContenidos(crearBaseFalsa(tablasDeLaBase()).consulta, cliente, lista.lineas.map((l) => l.ref))
+    const malas = lecturas.filter((l) => l.estado !== 'ok').map((l) => l.ref + ' → ' + l.estado + ' ' + (l.detalle ?? ''))
+    expect(malas, 'referencias emitidas por la lista que no se pueden leer: ' + malas.join(' | ')).toEqual([])
   })
 })

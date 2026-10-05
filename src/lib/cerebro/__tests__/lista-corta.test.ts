@@ -155,6 +155,12 @@ describe('A · negocio con varias sedes', () => {
     expect([v('plan-1').vigente, v('plan-1').vencido]).toEqual([true, false])
   })
 
+  it('P1 · una fila marcada como prueba (prueba_t2) no existe para la lista ni cuenta como versión', async () => {
+    const { lista } = await listaDe(A)
+    expect(porRef(lista, 'client_historical_outputs:pz-t2'), 'la pieza de prueba se coló').toBeUndefined()
+    expect([dev(lista, 'client_historical_outputs:pz-2').vigente, dev(lista, 'client_historical_outputs:pz-3').version]).toEqual([true, 3])
+  })
+
   it('D1 · una pieza con valida:false (la clave de las PIEZAS) no sale vigente aunque sea la más nueva', async () => {
     const { lista } = await listaDe(A)
     const v = (id: string) => dev(lista, 'client_historical_outputs:' + id)
