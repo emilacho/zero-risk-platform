@@ -92,6 +92,23 @@ describe('lo que vence en los próximos N días', () => {
   })
 })
 
+describe('lo reemplazado no cuenta y los días se cuentan completos', () => {
+  const plan = (id: string, status: string, creado: number) => ({ id, client_id: A, output_type: 'campaign_plan_90d', title: `Plan ${id}`, status, created_at: dia(creado), content_text: 'plan', provenance_tag: {}, hitl_verdict: null, human_edits: null })
+  it('un plan VIEJO ya reemplazado por el vigente no sale como vencido (solo el vigente cuenta)', async () => {
+    const t: Tablas = { clients: [{ id: A, name: 'A', website_url: 'https://a.example', status: 'active', config: {} }], client_historical_outputs: [plan('viejo', 'draft', 200), plan('vigente', 'approved', 100)] }
+    const r = await vencidos({ cliente: A, dias: 7 }, t)
+    expect(refs(r.c.vencidas)).toEqual(['client_historical_outputs:vigente']) // el viejo venció hace 110 días pero está reemplazado
+    expect(r.c.vencidas[0].dias_de_atraso).toBe(10)
+  })
+  it('los días de atraso y los que faltan son días ENTEROS: el atraso se redondea hacia abajo y lo que falta hacia arriba', async () => {
+    const medio = (horas: number): Tablas => ({ clients: [{ id: A, name: 'A', website_url: 'https://a.example', status: 'active', config: {} }], client_sede_datos: [{ id: 'm', client_id: A, sede_id: null, campo: 'horario', valor_texto: 'x', fuente: 'sitio', alcance: 'cuenta', observado_en: new Date(AHORA.getTime() - horas * 3_600_000).toISOString() }] })
+    const atraso = await vencidos({ cliente: A }, medio(15 * 24 + 12)) // vencido hace 8 días y medio
+    expect(atraso.c.vencidas[0].dias_de_atraso).toBe(8)
+    const falta = await vencidos({ cliente: A, dias: 7 }, medio(24 + 12)) // vence en 5 días y medio
+    expect(falta.c.por_vencer[0].dias_que_faltan).toBe(6)
+  })
+})
+
 describe('sin_material ≠ error_de_lectura (nunca se lee un fallo como «no vence nada»)', () => {
   const soloCliente = (): Tablas => ({ clients: [{ id: A, name: 'A', website_url: 'https://a.example', status: 'active', config: {} }] })
   it('un cliente que existe pero no tiene nada que pueda vencer: `sin_material`, con listas vacías', async () => {

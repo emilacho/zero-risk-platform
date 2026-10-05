@@ -335,7 +335,6 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
   if (r.error) return fallo(['trabajos_hechos', 'decisiones_del_aprobador'], r.error)
   // P1 · una fila marcada como PRUEBA (`provenance_tag.prueba_*`) no existe para la lista ni cuenta como versión
   const filas = r.filas.filter((f) => !esDePrueba(objeto(f.provenance_tag)))
-  const idsDeLaLista = new Set(filas.map((f) => String(f.id)))
 
   // la ÚLTIMA decisión de la cola sobre cada pieza (sin importar el orden en que lleguen las filas)
   const ultimaPorPieza = new Map<string, { decision: DecisionDelDueno; fecha: string | null; id: string; detalle: string | null }>()
@@ -343,7 +342,7 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
     for (const f of cola.filas) {
       const decision = DECISION_DE_LA_COLA[String(f.status)]
       const salida = f.output_id === null || f.output_id === undefined ? '' : String(f.output_id)
-      if (!decision || !salida || !idsDeLaLista.has(salida)) continue
+      if (!decision || !salida) continue
       const fecha = iso(f.resolved_at) ?? iso(f.created_at)
       const previa = ultimaPorPieza.get(salida)
       if (!previa || String(fecha ?? '') > String(previa.fecha ?? '') || (fecha === previa.fecha && String(f.id) > previa.id)) ultimaPorPieza.set(salida, { decision, fecha, id: String(f.id), detalle: detalleDeLaCola(f) })

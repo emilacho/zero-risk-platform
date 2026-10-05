@@ -180,6 +180,18 @@ describe('1 · la decisión del dueño queda atada a UNA versión de la cosa', (
     expect(v1.decision_del_dueno).toBeUndefined()
   })
 
+  it('si falla SOLO la lectura de la cola dentro de las piezas (la otra lectura de la cola responde), la lista igual queda PARCIAL', async () => {
+    const t = tablas([pieza('v1', 'draft', 20)], [decision('h1', 'approved', 'v1', 8)])
+    const base = crearBaseFalsa(t)
+    let llamadasALaCola = 0
+    const consulta: typeof base.consulta = async (p) => (p.tabla === 'hitl_queue' && ++llamadasALaCola === 1 ? { filas: [], error: 'fallo simulado de la primera lectura de la cola' } : base.consulta(p))
+    const l = await construirListaCorta(consulta, P, { ahora: AHORA })
+    expect(llamadasALaCola).toBe(2) // las dos lecturas de la cola ocurren
+    expect(l.fuentes.trabajos_hechos.estado).toBe('error_de_lectura')
+    expect(l.fuentes.decisiones_del_aprobador.estado).toBe('ok')
+    expect(l.estado).toBe('parcial')
+  })
+
   it('cada lectura nueva lleva el filtro del cliente y ninguna es de escritura', async () => {
     const b = crearBaseFalsa(tablas([pieza('v1', 'draft', 20)], [decision('h1', 'approved', 'v1', 8)]))
     await construirListaCorta(b.consulta, P, { ahora: AHORA })
