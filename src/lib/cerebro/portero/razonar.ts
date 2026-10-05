@@ -35,6 +35,9 @@ export const TOPE_DE_GASTO_POR_PEDIDO_USD = 0.12
 /** US$ por millón de «tokens» (página oficial de precios de Anthropic consultada el 2026-10-05) */
 export const PRECIO_POR_MILLON = { entrada: 2, salida: 10 } as const
 
+/** el `client_id` con que se registran las llamadas de prueba: un texto (no existe en `clients`); nunca van sin cliente porque el cubo `system` del freno de `run-sdk` (US$ 2 por 24 h) suma las filas sin cliente */
+export const CLIENTE_DE_PRUEBA = 'prueba-portero'
+
 export class SinLlave extends Error {
   constructor() { super('no hay llave del modelo configurada en el servidor'); this.name = 'SinLlave' }
 }
@@ -150,8 +153,8 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
         workflow_id: workflowId, workflow_execution_id: ejecucionId, agent_name: 'portero-del-cerebro', agent_id: 'portero-del-cerebro', session_id: ejecucionId,
         model: MODELO, cost_usd: ll.costo, duration_ms: ll.duracion, tokens_input: ll.usage.input_tokens, tokens_output: ll.usage.output_tokens, num_turns: 1,
         status: ll.fallo ? ll.fallo.status : 'completed', ...(ll.fallo ? { error_message: ll.fallo.mensaje } : {}),
-        // una prueba NO escribe un cliente inventado en ninguna tabla de cliente: va sin client_id y marcada
-        ...(esPrueba ? {} : { client_id: pedido.cliente }), command: esPrueba ? 'portero.razonar.prueba' : 'portero.razonar',
+        // una prueba NO usa ningún cliente real ni inventado de las tablas de cliente: lleva el texto de prueba y va marcada (nunca sin cliente: sumaría al cubo `system` del freno)
+        client_id: esPrueba ? CLIENTE_DE_PRUEBA : pedido.cliente, command: esPrueba ? 'portero.razonar.prueba' : 'portero.razonar',
         response_text: textoDeLaRespuesta.slice(0, 2000),
         metadata: { pasada, ronda: pedido.ronda, motivo_de_respaldo: motivoDeRespaldo, stop_reason: ll.respuesta?.stop_reason ?? null, huella: numerada.huella, lineas_en_la_lista: numerada.lineas.length, ya_trae: pedido.ya_trae, ...(esPrueba ? { prueba: true, cliente_de_prueba: pedido.cliente } : {}), ...metadata },
       })
