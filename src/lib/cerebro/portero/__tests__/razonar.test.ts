@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { A, AHORA, B, NO_EXISTE, crearBaseFalsa, tablasDeLaBase } from '../../__tests__/casos'
 import { numerarLista } from '../lista-numerada'
 import { construirListaCorta } from '../../lista-corta'
-import { MAX_TOKENS_DE_SALIDA, MODELO, RAZONAMIENTO, SinLlave, TIEMPO_MAXIMO_MS, TOPE_DE_GASTO_POR_LLAMADA_USD, TOPE_DE_LISTA_EN_UNIDADES, razonar, type DepsDeRazonar, type PeticionAlModelo } from '../razonar'
+import { MAX_TOKENS_DE_SALIDA, MODELO, RAZONAMIENTO, SinLlave, TIEMPO_MAXIMO_MS, TOPE_DE_GASTO_POR_LLAMADA_USD, razonar, type DepsDeRazonar, type PeticionAlModelo } from '../razonar'
 
 interface Espia { peticiones: PeticionAlModelo[]; registros: Array<Record<string, unknown>> }
 
@@ -139,12 +139,11 @@ describe('antes de gastar: lo que NO llega al modelo', () => {
     expect(r.cuerpo).toMatchObject({ modo: 'respaldo', motivo_de_respaldo: 'tope_de_gasto', llamo_al_modelo: false })
     expect(espia.peticiones).toHaveLength(0)
   })
-  it('una lista más grande que el tope (12.000 unidades) no se manda entera: respaldo declarado', async () => {
-    expect(TOPE_DE_LISTA_EN_UNIDADES).toBe(12_000)
-    const { deps, espia } = armar(await buena(), { topeDeLista: 50 })
+  it('una lista que no cabe en una pasada ya no se descarta: va a dos pasadas (el detalle está en arreglo-medicion.test.ts)', async () => {
+    const { deps, espia } = armar(await buena(), { topeDeEntradaTokens: 50 })
     const r = await razonar(deps, cuerpo())
-    expect(r.cuerpo).toMatchObject({ modo: 'respaldo', motivo_de_respaldo: 'lista_mas_grande_que_el_tope', llamo_al_modelo: false })
-    expect(espia.peticiones).toHaveLength(0)
+    expect(r.cuerpo).toMatchObject({ pasadas: 2 })
+    expect(espia.peticiones.length).toBeLessThanOrEqual(2)
   })
 })
 
