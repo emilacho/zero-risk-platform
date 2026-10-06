@@ -117,7 +117,9 @@ export const ESCRITORES_CONOCIDOS: Record<string, string> = {
   'scripts/worker-staging/3lyknrP3PoS2KzUf/completar-contexto-fotos.mjs': 'guion manual de una sola vez · completa las filas viejas por PATCH',
 }
 /** quién, DENTRO de src/ y services/, puede escribir en client_social_images: solo la ruta `etiquetar` del portero (paso 4) y solo UPDATE de las 4 columnas de etiqueta */
-export const ESCRITORES_DE_ETIQUETAS_EN_SRC: Record<string, string> = {}
+export const ESCRITORES_DE_ETIQUETAS_EN_SRC: Record<string, string> = {
+  'src/lib/cerebro/portero/etiqueta-escritura.ts': 'paso 4 · la ruta `etiquetar` del portero: PATCH de las 4 columnas de etiqueta de UNA foto, filtrado por el id de la foto Y el cliente',
+}
 export function escribeEnLaTabla(texto: string): boolean {
   for (const m of texto.matchAll(/rest\/v1\/client_social_images/g)) {
     // el PRIMER `method:` después de la dirección es el de ESA llamada (el que sigue puede ser de otra)
