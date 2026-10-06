@@ -46,7 +46,7 @@ const LEIBLES: Record<string, Leible> = {
   client_historical_outputs: { columnas: ['id', 'content_text'], texto: (f) => cadena(f.content_text) },
   client_brain_chunks: { columnas: ['id', 'chunk_text'], texto: (f) => cadena(f.chunk_text) },
   client_social_images: {
-    columnas: ['id', 'caption', 'producto', 'posted_at', 'post_url', 'url', 'medio', 'tipo'],
+    columnas: ['id', 'caption', 'producto', 'posted_at', 'post_url', 'url', 'medio', 'tipo', 'que_muestra', 'producto_visto'],
     texto: (f) => [
       `Tipo: ${cadena(f.medio) ?? cadena(f.tipo) ?? 'imagen'}`,
       `Texto de la publicación: ${cadena(f.caption) ?? '(sin texto)'}`,
@@ -54,6 +54,8 @@ const LEIBLES: Record<string, Leible> = {
       `Publicada el ${fecha(f.posted_at)}`,
       `Enlace de la publicación: ${cadena(f.post_url) ?? 'sin enlace'}`,
       `Archivo: ${cadena(f.url) ?? 'sin archivo'}`,
+      ...(cadena(f.que_muestra) ? [`Qué muestra (etiquetador): ${f.que_muestra}`] : []),
+      ...(lista(f.producto_visto).length ? [`Producto visto: ${lista(f.producto_visto).join(', ')}`] : []),
     ].join('\n'),
   },
   client_sede_datos: { columnas: ['id', 'campo', 'valor_texto', 'fuente', 'observado_en'], texto: (f) => (cadena(f.valor_texto) ? `${cadena(f.campo) ?? 'dato'} · ${cadena(f.fuente) ?? 'fuente desconocida'} · observado ${fecha(f.observado_en)}: ${f.valor_texto}` : null) },

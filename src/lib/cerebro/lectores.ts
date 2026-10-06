@@ -241,7 +241,7 @@ export async function leerSedes(ctx: Contexto): Promise<Salida> {
 
 // ── fotos, portadas de video y logotipos ──────────────────────────────────────────────
 export async function leerFotos(ctx: Contexto): Promise<Salida> {
-  const r = await leer(ctx, { tabla: 'client_social_images', columnas: ['id', 'owner_role', 'post_id', 'tipo', 'medio', 'estado', 'url', 'caption', 'posted_at', 'post_url', 'producto', 'producto_fuente', 'created_at'], donde: { client_id: ctx.cliente } })
+  const r = await leer(ctx, { tabla: 'client_social_images', columnas: ['id', 'owner_role', 'post_id', 'tipo', 'medio', 'estado', 'url', 'caption', 'posted_at', 'post_url', 'producto', 'producto_fuente', 'que_muestra', 'producto_visto', 'created_at'], donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['fotos'], r.error)
   const claves: string[] = []
   const lineas = r.filas.map((f) => {
@@ -252,7 +252,12 @@ export async function leerFotos(ctx: Contexto): Promise<Salida> {
     const clase = esLogo ? 'logo' : esVideo ? 'portada_de_video' : 'foto'
     // una foto, una portada o un logo PROPIOS son archivos: no vencen (su clase propia). Lo de un competidor sigue siendo un anuncio y vence
     const plazo: ClaseDePlazo = !rol.propio ? 'anuncio_competencia' : 'archivo_propio'
-    const producto = Array.isArray(f.producto) ? (f.producto as unknown[]).filter((p): p is string => typeof p === 'string') : null
+    const productoDeLaColumna = Array.isArray(f.producto) ? (f.producto as unknown[]).filter((p): p is string => typeof p === 'string') : null
+    // lo que el etiquetador VIO en la foto (paso 4) se muestra cuando `producto` está vacío: `producto` (lo que dijo el texto o el dueño) NUNCA se pisa
+    const productoVisto = Array.isArray(f.producto_visto) ? (f.producto_visto as unknown[]).filter((p): p is string => typeof p === 'string' && p.trim().length > 0) : []
+    const usaElVisto = (!productoDeLaColumna || productoDeLaColumna.length === 0) && productoVisto.length > 0
+    const producto = usaElVisto ? productoVisto : productoDeLaColumna
+    const queMuestra = texto(f.que_muestra)
     const publicado = iso(f.posted_at)
     const leyenda = texto(f.caption)
     const nombre = esLogo ? 'Logotipo' : esVideo ? 'Portada de video' : 'Foto'
@@ -262,12 +267,12 @@ export async function leerFotos(ctx: Contexto): Promise<Salida> {
     return linea(ctx, {
       ref: `client_social_images:${f.id}`, estante: rol.propio ? 'E3' : 'E5', clase,
       titulo: `${nombre} · ${(publicado ?? iso(f.created_at) ?? 'sin fecha').slice(0, 10)} · ${distintivo}`,
-      que_es: `${publicado ? `publicada el ${publicado.slice(0, 10)} · ` : ''}texto de la publicación: ${leyenda ? `«${recorte(leyenda)}»` : 'sin texto'} · producto: ${producto && producto.length ? producto.join(', ') : 'no declarado'}`,
+      que_es: `${publicado ? `publicada el ${publicado.slice(0, 10)} · ` : ''}texto de la publicación: ${leyenda ? `«${recorte(leyenda)}»` : 'sin texto'} · producto: ${producto && producto.length ? producto.join(', ') : 'no declarado'}${queMuestra ? ` · qué muestra (según el etiquetador): ${recorte(queMuestra)}` : ''}`,
       // la vigencia es de la ÚLTIMA VERIFICACIÓN (cuando se capturó), no de la fecha en que se publicó
       origen: rol.origen, estado: rol.estado, fecha: iso(f.created_at) ?? publicado, plazo,
       // el video no se guarda: el enlace es el de la publicación (la dirección del archivo caduca)
       enlace: esVideo ? texto(f.post_url) : texto(f.url) ?? texto(f.post_url),
-      producto, publicado_en: publicado, producto_fuente: texto(f.producto_fuente),
+      producto, publicado_en: publicado, producto_fuente: usaElVisto ? 'vision' : texto(f.producto_fuente), ...(queMuestra ? { que_muestra: recorte(queMuestra) } : {}),
       ...(f.estado === 'no_bajo' ? { aviso: 'archivo no descargado' } : {}),
     })
   })

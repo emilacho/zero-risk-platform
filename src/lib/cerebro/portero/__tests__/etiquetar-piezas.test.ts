@@ -91,7 +91,7 @@ describe('crearBajador · baja la foto con tope de tamaño, de tiempo, sin segui
 describe('crearEscritor · UPDATE de las 4 columnas de etiqueta, filtrado por la foto Y el cliente', () => {
   const valores = { que_muestra: 'un plato', producto_visto: ['Servicio uno'], etiquetada_en: '2026-10-07T00:00:00.000Z', etiqueta_modelo: 'claude-sonnet-5-5' }
   it('hace UN PATCH a la tabla con el filtro de la foto y del cliente, con la llave de servicio, y solo con esas 4 columnas', async () => {
-    const f = vi.fn(async (_u: string, _i?: RequestInit) => new Response('', { status: 204 }))
+    const f = vi.fn(async (_u: string, _i?: RequestInit) => new Response(null, { status: 204 }))
     const r = await crearEscritor({ urlDeLaBase: BASE, llave: 'llave-servicio', fetchImpl: f })({ foto_id: 'f-1', cliente: 'c-1', valores })
     expect(r).toEqual({ ok: true })
     expect(f).toHaveBeenCalledTimes(1)

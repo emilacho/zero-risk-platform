@@ -53,6 +53,8 @@ export interface Ficha {
   producto?: string[] | null
   /** de dónde salió el producto de una foto: caption · vision · dueno · conflicto · desconocido (columna de la tabla) */
   producto_fuente?: string | null
+  /** solo en una foto etiquetada (paso 4): lo que el etiquetador vio en ella (aparte de `producto`, que es lo que dijo el texto o el dueño) */
+  que_muestra?: string
   /** cuándo se publicó (no confundir con `fecha_fuente`, que es la última verificación) */
   publicado_en?: string | null
   datos?: { precio?: number | null; moneda?: string | null; familia?: string | null }
