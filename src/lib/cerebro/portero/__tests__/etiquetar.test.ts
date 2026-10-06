@@ -42,7 +42,7 @@ function armar(contesta: Contesta, over: Partial<DepsDeEtiquetar> = {}, t: Tabla
 }
 const bueno = (extra: Record<string, unknown> = {}) => JSON.stringify({ que_muestra: 'un plato de pescado con arroz sobre una mesa de madera', producto_visto: ['Servicio uno'], texto_visible: 'PLATO DEL DÍA', confianza: 'alta', ...extra })
 const cuerpo = (extra: Record<string, unknown> = {}) => ({ cliente: A, foto: 'f1', workflow_id: 'wf-etiquetar', workflow_execution_id: 'ex-1', ...extra })
-const salida = (r: { cuerpo: Record<string, unknown> }) => r.cuerpo as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+const salida = (r: { cuerpo: Record<string, unknown> }) => r.cuerpo as Record<string, any>
 
 afterEach(() => { vi.restoreAllMocks() })
 
