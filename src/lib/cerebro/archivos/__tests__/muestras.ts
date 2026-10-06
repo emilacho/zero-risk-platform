@@ -114,7 +114,7 @@ export function crearPdf(paginas: PaginaPdf[], op: OpcionesPdf = {}): Buffer {
   const nuevo = (c: string): number => { objs.push(c); return objs.length }
   const raiz = nuevo('') // 1 catálogo (se rellena abajo)
   const arbol = nuevo('') // 2 páginas
-  const fuente = nuevo('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+  const fuente = nuevo('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>')
   const imagen = nuevo('<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length 1 >>\nstream\nÿ\nendstream')
   const hijas: number[] = []
   for (const p of paginas) {
