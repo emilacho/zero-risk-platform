@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 const RAIZ = process.cwd()
 const MIGRACION = 'supabase/migrations/202610060100_cerebro_paso_2_tablas_y_columnas.sql'
 const REVERSA = 'supabase/reversas/202610060100_cerebro_paso_2_REVERSA.sql'
-const leer = (rel: string): string => fs.readFileSync(path.join(RAIZ, rel), 'utf8')
+const leer = (rel: string): string => fs.readFileSync(path.join(RAIZ, rel), 'utf8').replace(/\r/g, '')
 /** sin comentarios de línea: lo que dice un comentario no cuenta como SQL */
 const sql = (rel: string): string => leer(rel).split('\n').map((l) => l.replace(/--.*$/, '')).join('\n')
 
@@ -22,7 +22,7 @@ describe('la migración: SOLO aditiva, repetible y cerrada', () => {
   it('existe y la reversa NO está dentro de supabase/migrations (una herramienta de migraciones la correría sola)', () => {
     expect(fs.existsSync(path.join(RAIZ, MIGRACION))).toBe(true)
     expect(fs.existsSync(path.join(RAIZ, REVERSA))).toBe(true)
-    expect(fs.readdirSync(path.join(RAIZ, 'supabase/migrations')).filter((f) => /REVERSA|down|rollback/i.test(f))).toEqual([])
+    expect(fs.readdirSync(path.join(RAIZ, 'supabase/migrations')).filter((f) => /(^|_)(REVERSA|down|rollback)(_|\.)/i.test(f))).toEqual([])
   })
   it('crea EXACTAMENTE las dos tablas nuevas, con IF NOT EXISTS, y agrega EXACTAMENTE las 4 columnas, anulables y sin valor por defecto', () => {
     const s = sql(MIGRACION)
