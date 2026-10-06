@@ -96,6 +96,15 @@ describe('la reversa: se NIEGA a borrar datos y borra SOLO lo que la migración 
     expect(s).toMatch(/RAISE EXCEPTION 'REVERSA ABORTADA: client_social_images\.%/)
     for (const c of COLUMNAS_NUEVAS) expect(s).toContain(`'${c}'`)
     expect(leer(REVERSA)).toMatch(/Exportar antes de borrar/)
+    // R11 (CC#3): no basta con que el texto exista: cada guarda debe CONTAR y abortar con `IF n > 0 THEN RAISE`
+    const plano = s.replace(/\s+/g, ' ')
+    for (const t of TABLAS_NUEVAS) {
+      expect(plano, `la guarda de ${t} no cuenta y aborta con IF n > 0`).toMatch(new RegExp(`SELECT count\\(\\*\\) FROM public\\.${t}' INTO n; IF n > 0 THEN RAISE EXCEPTION 'REVERSA ABORTADA: ${t} tiene`))
+      expect(plano, `la guarda de ${t} no está dentro de IF to_regclass(...) IS NOT NULL`).toMatch(new RegExp(`IF to_regclass\\('public\\.${t}'\\) IS NOT NULL THEN EXECUTE`))
+    }
+    expect(plano).toMatch(/FOREACH col IN ARRAY ARRAY\['que_muestra','producto_visto','etiquetada_en','etiqueta_modelo'\] LOOP/)
+    expect(plano).toMatch(/EXECUTE format\('SELECT count\(\*\) FROM public\.client_social_images WHERE %I IS NOT NULL', col\) INTO n; IF n > 0 THEN RAISE EXCEPTION 'REVERSA ABORTADA: client_social_images\.%/)
+    expect(plano).not.toMatch(/IF false|IF NOT TRUE|IF 1 = 0|IF n < 0|IF n >= 1000000/i)
   })
   it('borra EXACTAMENTE lo que creó la migración (las dos tablas y las 4 columnas), sin CASCADE ni nada más', () => {
     const r = sql(REVERSA), m = sql(MIGRACION)
