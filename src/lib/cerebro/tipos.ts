@@ -9,6 +9,12 @@ export type Estado =
 
 export type Origen = 'dueno' | 'su_fuente' | 'plataforma' | 'tercero' | 'producido'
 
+/** La decisión del dueño sobre UNA versión de una cosa (la cola de revisión: approved · rejected · edited; o el veredicto guardado en la propia pieza) */
+export type DecisionDelDueno = 'aprobada' | 'rechazada' | 'cambio_pedido'
+
+/** La decisión más reciente sobre una versión, tal como viaja junto a la cosa */
+export interface DecisionAtada { decision: DecisionDelDueno; version: number | null; ref_de_la_decision: string; fecha: string | null; detalle: string | null }
+
 export interface Ficha {
   /** estable: `tabla:id` (más `#suffix` si la cosa sale de dentro de una fila) */
   ref: string
@@ -29,6 +35,14 @@ export interface Ficha {
   /** solo en lo que se versiona: la versión que manda hoy */
   vigente?: boolean
   reemplazada?: boolean
+  /** solo en lo reemplazado: la referencia de la versión que manda hoy */
+  ref_de_la_vigente?: string
+  /** solo en una cosa con versiones: la última decisión del dueño sobre ESTA versión (si la hay) */
+  decision_del_dueno?: DecisionAtada
+  /** solo en una línea de decisión: qué decidió el dueño (si se sabe leer), sobre qué cosa y sobre cuál versión (null = la cosa ya no está en la lista) */
+  decision?: DecisionDelDueno
+  de_la_cosa?: string
+  version_decidida?: number | null
   versiones_anteriores?: number
   /** solo en lo que se observa en el tiempo: cuántas observaciones anteriores quedaron debajo */
   observaciones_anteriores?: number

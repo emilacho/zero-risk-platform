@@ -61,7 +61,9 @@ describe('la línea que lee el portero (formato D)', () => {
     const t = lineaParaElModelo(foto.numero, foto.ficha)
     expect(t).not.toContain('\n')
     expect(t).toMatch(new RegExp(`^#${foto.numero} +E3 foto · `))
-    for (const parte of ['Servicio uno', 'producto: Servicio uno', 'visto_en_su_fuente', '2026-', 'vigente hasta', 'peso ']) expect(t, parte).toContain(parte)
+    for (const parte of ['Servicio uno', 'producto: Servicio uno', 'visto_en_su_fuente', '2026-', 'sin plazo', 'peso ']) expect(t, parte).toContain(parte) // paso 1: una foto propia es un archivo y no vence
+    const horario = n.lineas.find((l) => l.ficha.ref === 'client_sede_datos:dat-2')!
+    expect(lineaParaElModelo(horario.numero, horario.ficha)).toContain('vigente hasta') // lo que sí vence lo dice
   })
   it('lo vencido lleva su aviso en la línea; nunca desaparece', async () => {
     const n = numerarLista(await listaDe())

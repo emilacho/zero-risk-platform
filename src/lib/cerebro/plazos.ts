@@ -5,7 +5,7 @@
 import crudo from './plazos.json'
 
 export type ClaseDePlazo =
-  | 'precio_oferta_horario' | 'catalogo_y_direccion' | 'publicacion_propia' | 'perfil_propio' | 'ficha_mapas_propia'
+  | 'precio_oferta_horario' | 'catalogo_y_direccion' | 'publicacion_propia' | 'archivo_propio' | 'perfil_propio' | 'ficha_mapas_propia'
   | 'anuncio_competencia' | 'sitio_competencia' | 'plan' | 'normativa' | 'configuracion_externa' | 'sin_plazo'
 
 export type Plazos = Record<ClaseDePlazo, number | null>
