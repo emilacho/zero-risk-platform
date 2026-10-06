@@ -216,7 +216,7 @@ describe('defecto 3 · el tope se mide en «tokens» con el factor MEDIDO (no co
 })
 
 // ───────────────────────── 4 · dos pasadas
-describe('defecto 4 · la lista grande (571 líneas inventadas) SÍ se razona: dos pasadas por estante, con costo máximo por pedido', () => {
+describe('defecto 4 · la lista grande (571 líneas inventadas) SÍ se razona: por niveles, con costo máximo por pedido', () => {
   const contestaDosPasadas = (estantes: string[], tras: (n: number[]) => string = buenaDecision): Contesta => (p) => {
     if (p.system === INSTRUCCION_DE_ESTANTES) return JSON.stringify({ estantes, por_que: 'el producto está en el catálogo' })
     return tras(numerosDe(listaDe(p)).slice(0, 3))
@@ -250,21 +250,18 @@ describe('defecto 4 · la lista grande (571 líneas inventadas) SÍ se razona: d
     expect(r).toMatchObject({ modo: 'conversado', pasadas: 2, llamo_al_modelo: true })
     expect(r.decision.entregar.every((x: string) => x.startsWith('prueba:E3-') || x.startsWith('prueba:E5-'))).toBe(true)
   })
-  it('un estante que solo ya pasa el tope: muestra las líneas que más coinciden en texto con el pedido (máx. 100), y lo demás queda por conteo', async () => {
+  it('un estante que solo ya pasa el tope NO se recorta por palabras: se lee ENTERO en trozos consecutivos y toda línea sale en exactamente un trozo', async () => {
     const f = listaGrande()
-    // una línea del catálogo que coincide con el pedido, escondida al fondo del estante
     const buscada = f.find((x) => x.ref === 'prueba:E2-0444')!
     buscada.titulo = 'Producto de servicio uno para vender · carrusel de reels'
-    const { deps, espia } = armar(contestaDosPasadas(['E2']))
-    const r = salida(await razonar(deps, conLista(f, { necesito: 'carrusel de reels para vender el servicio uno' })))
-    const p2 = espia.peticiones[1]
-    const lineas = listaDe(p2).split('\n').filter((l) => /^#\d+ /.test(l))
-    expect(lineas.length).toBeLessThanOrEqual(100)
-    expect(lineas.some((l) => l.includes('carrusel de reels'))).toBe(true) // la que coincide entra aunque estaba al fondo
-    expect(listaDe(p2)).toMatch(/545 .*(100|mostradas)|445 (cosas )?más/i) // dice cuántas quedaron fuera
-    expect(r.pasada_2).toMatchObject({ recortada_por_coincidencia: true, lineas_mostradas: lineas.length, lineas_no_mostradas: 545 - lineas.length })
-    // la entrada de la pasada 2 respeta el tope de entrada
-    expect(estimarTokens(p2.system.length + p2.messages[0].content.length)).toBeLessThanOrEqual(TOPE_DE_ENTRADA_EN_TOKENS)
+    const { deps, espia } = armar(contestaDosPasadas(['E2'], () => JSON.stringify({ entregar: [], pixeles: [] })))
+    await razonar(deps, conLista(f, { necesito: 'carrusel de reels para vender el servicio uno' }))
+    const lecturas = espia.peticiones.slice(1)
+    expect(lecturas.length).toBeGreaterThanOrEqual(2)
+    const vistas = lecturas.flatMap((p) => numerosDe(listaDe(p)))
+    expect(new Set(vistas).size).toBe(545) // las 545 líneas del estante, ninguna oculta
+    expect(vistas).toHaveLength(545) // y cada una una sola vez
+    for (const p of lecturas) expect(estimarTokens(p.system.length + p.messages[0].content.length)).toBeLessThanOrEqual(TOPE_DE_ENTRADA_EN_TOKENS)
   })
   it('el modelo no puede elegir una línea que no se le mostró (número fuera de lo desplegado → inválido, anotado)', async () => {
     const { deps } = armar(contestaDosPasadas(['E3'], () => JSON.stringify({ entregar: [1, 5, 600], pixeles: [] })))
@@ -272,10 +269,9 @@ describe('defecto 4 · la lista grande (571 líneas inventadas) SÍ se razona: d
     // los números 1 y 5 son del estante E1 (no mostrado) y 600 no existe: todos inválidos → respaldo declarado
     expect(r).toMatchObject({ modo: 'respaldo', motivo_de_respaldo: 'todos_los_numeros_invalidos' })
   })
-  it('costo declarado y con tope: nunca más de DOS llamadas, la suma se informa y el peor caso de la pasada 2 no pasa el tope por pedido', async () => {
-    expect(TOPE_DE_GASTO_POR_PEDIDO_USD).toBeGreaterThan(0.08)
-    expect(TOPE_DE_GASTO_POR_PEDIDO_USD).toBeLessThanOrEqual(0.15)
-    const { deps, espia } = armar(contestaDosPasadas(['E2']))
+  it('costo declarado y con tope: un estante que cabe = DOS llamadas, la suma se informa y el tope por pedido es US$ 0,30', async () => {
+    expect(TOPE_DE_GASTO_POR_PEDIDO_USD).toBe(0.3)
+    const { deps, espia } = armar(contestaDosPasadas(['E3']))
     const r = salida(await razonar(deps, conLista(listaGrande())))
     expect(espia.peticiones).toHaveLength(2)
     expect(r.costo_usd).toBeCloseTo(2 * ((7000 * 2 + 600 * 10) / 1_000_000), 8)
@@ -332,12 +328,14 @@ describe('defecto 4 · la lista grande (571 líneas inventadas) SÍ se razona: d
     expect(espia.peticiones[0].system).toBe(INSTRUCCION_DEL_PORTERO)
     expect(r.pasadas).toBe(1)
   })
-  it('sin regla por rubro ni por tipo de trabajo: los estantes se agrupan por la etiqueta de la propia ficha y la coincidencia es solo de palabras del pedido', async () => {
+  it('sin regla por rubro ni por tipo de trabajo: los grupos salen de la etiqueta de la propia ficha; una clase inventada no cambia nada', async () => {
     const f = listaGrande().map((x) => ({ ...x, clase: 'otra_clase_que_no_existe' }))
     const { deps, espia } = armar(contestaDosPasadas(['E2']))
     const r = salida(await razonar(deps, conLista(f)))
-    expect(r.pasadas).toBe(2)
-    expect(espia.peticiones).toHaveLength(2)
+    expect(r.modo).toBe('conversado')
+    expect(r.pasadas).toBe(espia.peticiones.length)
+    expect(espia.peticiones.length).toBeGreaterThanOrEqual(3) // estantes + los trozos del estante entero
+    expect(new Set(espia.peticiones.slice(1).flatMap((p) => numerosDe(listaDe(p)))).size).toBe(545)
   })
 })
 
@@ -446,11 +444,12 @@ describe('defecto 5 · el dorado corre entero por la ruta con una lista de prueb
     const r = leerListaDePrueba(true, [f], 'c', AHORA)
     expect(r && r.ok && Object.keys(r.lista.lineas[0]).sort()).toEqual(['clase', 'estado', 'estante', 'fecha_fuente', 'origen', 'peso_estimado', 'que_es', 'ref', 'titulo', 'vencido', 'vigente_hasta'])
   })
-  it('la lista grande también corre por esta vía en dos pasadas (el caso W3 del dorado)', async () => {
+  it('la lista grande también corre por esta vía por niveles (el caso W3 del dorado), sin leer tablas y todo marcado como prueba', async () => {
     const { deps, espia, base } = armar((p) => (p.system === INSTRUCCION_DE_ESTANTES ? JSON.stringify({ estantes: ['E2'] }) : buenaDecision(numerosDe(listaDe(p)).slice(0, 4))))
     const r = salida(await razonar(deps, conLista(listaGrande())))
     expect(base.llamadas).toHaveLength(0)
-    expect(r).toMatchObject({ prueba: true, pasadas: 2, modo: 'conversado' })
+    expect(r).toMatchObject({ prueba: true, modo: 'conversado' })
+    expect(r.pasadas).toBeGreaterThanOrEqual(3)
     expect(espia.registros.every((x) => (x.metadata as { prueba: boolean }).prueba === true)).toBe(true)
-  })
+})
 })

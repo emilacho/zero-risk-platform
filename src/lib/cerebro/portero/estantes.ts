@@ -1,46 +1,49 @@
 /**
- * LAS DOS PASADAS de una lista que no cabe entera (diseño firmado del tramo 2, sección «Más: dos pasadas»).
- *  1) el sistema agrupa por ESTANTE (mecánico, sin modelo): una línea por estante con su conteo, su peso y los títulos de las 5 cosas más recientes;
- *  2) el portero dice qué estantes abrir y el sistema despliega las líneas de esos estantes; si no caben, muestra las que MÁS COINCIDEN en palabras
- *     con el pedido (máx. 100 por estante) y el resto queda por conteo.
- * La coincidencia de palabras es el ÚNICO lugar con búsqueda (límite declarado en el diseño): no mira rubro ni tipo de trabajo, solo las palabras del pedido.
- * Los números de las líneas desplegadas son los de la lista COMPLETA, así lo que el portero elige se entrega con el mismo mecanismo de siempre.
+ * LISTAS GRANDES POR NIVELES (diseño v3 §3 · paso 6). Cuando la lista no cabe entera en una llamada, el archivo se recorre por niveles con
+ * campos que YA existen en cada ficha: ESTANTE → CLASE → FAMILIA. En cada nivel el sistema arma, sin modelo, una línea por grupo (conteo,
+ * peso y títulos de lo más reciente) y el PORTERO decide qué grupos abrir. No hay tablas de reglas ni búsqueda por palabras: ninguna línea
+ * se oculta por «parecerse poco» al pedido. Si lo abierto aún no cabe, se lee entero en TROZOS consecutivos (cada trozo, una llamada),
+ * así toda línea de lo elegido es alcanzable. Los números de las líneas son SIEMPRE los de la lista completa.
  */
 import type { Pedido } from '../conversacion'
+import type { Ficha } from '../tipos'
 import { armarMensaje, INSTRUCCION_DEL_PORTERO } from './instruccion'
 import { lineaParaElModelo, type LineaNumerada, type ListaNumerada } from './lista-numerada'
 import { CARACTERES_POR_TOKEN, estimarTokens } from './medida'
 
-export const MAXIMO_DE_LINEAS_POR_ESTANTE = 100
+export type Nivel = 'estante' | 'clase' | 'familia'
+export const NIVELES: readonly Nivel[] = ['estante', 'clase', 'familia']
+
 const MAXIMO_DE_RECIENTES = 5
-const RESERVA_POR_AVISO = 260
+/** lo que se reserva para el recordatorio de «parte i de n» que lleva cada trozo */
+const RESERVA_POR_PARTE = 450
+const SIN_FAMILIA = '(sin familia)'
 
-const SIN_VALOR = new Set(['para', 'como', 'pero', 'donde', 'cuando', 'porque', 'sobre', 'entre', 'desde', 'hasta', 'esta', 'este', 'esto', 'estos', 'estas', 'tengo', 'quiero', 'necesito', 'hacer', 'algo', 'todo', 'todos', 'cada', 'tiene', 'tienen'])
+export interface Grupo { nombre: string; lineas: LineaNumerada[] }
 
-const palabras = (t: string): string[] =>
-  t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !SIN_VALOR.has(w))
-
-export function palabrasDelPedido(p: Pedido): Set<string> {
-  const vp = p.voy_a_producir
-  return new Set(palabras([vp.output, vp.material, vp.canal, vp.formato, vp.objetivo, p.necesito].filter(Boolean).join(' ')))
+/** el grupo al que pertenece una ficha en cada nivel (campos de la propia ficha; nada se infiere del texto) */
+export function claveDeNivel(f: Ficha, nivel: Nivel): string {
+  if (nivel === 'estante') return f.estante
+  if (nivel === 'clase') return `${f.estante} ${f.clase}`
+  const fam = typeof f.datos?.familia === 'string' ? f.datos.familia.replace(/\s+/g, ' ').trim() : ''
+  return fam || SIN_FAMILIA
 }
 
-const puntaje = (l: LineaNumerada, buscadas: Set<string>): number => {
-  if (buscadas.size === 0) return 0
-  const f = l.ficha
-  const dentro = new Set(palabras([f.titulo, f.que_es, ...(f.producto ?? [])].join(' ')))
-  let n = 0
-  for (const w of buscadas) if (dentro.has(w)) n++
-  return n
+export const normalizarNombre = (t: string): string => t.replace(/\s+/g, ' ').trim().toUpperCase()
+
+export function agruparLineas(lineas: LineaNumerada[], nivel: Nivel): Grupo[] {
+  const por = new Map<string, Grupo>()
+  for (const l of lineas) {
+    const nombre = claveDeNivel(l.ficha, nivel)
+    const k = normalizarNombre(nombre)
+    const g = por.get(k)
+    if (g) g.lineas.push(l)
+    else por.set(k, { nombre, lineas: [l] })
+  }
+  return [...por.values()].sort((a, b) => (a.nombre < b.nombre ? -1 : a.nombre > b.nombre ? 1 : 0))
 }
 
-export interface Estante { nombre: string; lineas: LineaNumerada[] }
-
-export function agruparPorEstante(numerada: ListaNumerada): Estante[] {
-  const por = new Map<string, LineaNumerada[]>()
-  for (const l of numerada.lineas) por.set(l.ficha.estante, [...(por.get(l.ficha.estante) ?? []), l])
-  return [...por.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([nombre, lineas]) => ({ nombre, lineas }))
-}
+export const agruparPorEstante = (numerada: ListaNumerada): Grupo[] => agruparLineas(numerada.lineas, 'estante')
 
 const masReciente = (a: LineaNumerada, b: LineaNumerada): number => {
   const x = a.ficha.fecha_fuente ?? ''
@@ -48,52 +51,51 @@ const masReciente = (a: LineaNumerada, b: LineaNumerada): number => {
   return x < y ? 1 : x > y ? -1 : a.numero - b.numero
 }
 
-/** una línea por estante: conteo, peso total y los títulos de las 5 cosas más recientes (sin modelo) */
-export function indiceDeEstantes(estantes: Estante[]): string {
-  return estantes.map((e) => {
-    const peso = e.lineas.reduce((a, l) => a + l.ficha.peso_estimado, 0)
-    const clases = new Map<string, number>()
-    for (const l of e.lineas) clases.set(l.ficha.clase, (clases.get(l.ficha.clase) ?? 0) + 1)
-    const recientes = [...e.lineas].sort(masReciente).slice(0, MAXIMO_DE_RECIENTES).map((l) => l.ficha.titulo.replace(/\s+/g, ' ').trim().slice(0, 80))
-    return `${e.nombre} · ${e.lineas.length} cosas · peso ${peso} · clases: ${[...clases.entries()].map(([c, n]) => `${c} ${n}`).join(', ')} · más recientes: ${recientes.join(' | ')}`
+/** una línea por grupo: conteo, peso total y los títulos de las 5 cosas más recientes (sin modelo); en el nivel de estante, también cuántas de cada clase */
+export function indiceDeGrupos(grupos: Grupo[], nivel: Nivel): string {
+  return grupos.map((g) => {
+    const peso = g.lineas.reduce((a, l) => a + l.ficha.peso_estimado, 0)
+    const recientes = [...g.lineas].sort(masReciente).slice(0, MAXIMO_DE_RECIENTES).map((l) => l.ficha.titulo.replace(/\s+/g, ' ').trim().slice(0, 80))
+    let clases = ''
+    if (nivel === 'estante') {
+      const por = new Map<string, number>()
+      for (const l of g.lineas) por.set(l.ficha.clase, (por.get(l.ficha.clase) ?? 0) + 1)
+      clases = ` · clases: ${[...por.entries()].map(([c, n]) => `${c} ${n}`).join(', ')}`
+    }
+    return `${g.nombre} · ${g.lineas.length} cosas · peso ${peso}${clases} · más recientes: ${recientes.join(' | ')}`
   }).join('\n')
 }
+export const indiceDeEstantes = (grupos: Grupo[]): string => indiceDeGrupos(grupos, 'estante')
 
-export interface Despliegue {
-  /** la lista que ve el modelo en la pasada 2: solo las líneas desplegadas (con su número de la lista completa) */
-  numerada: ListaNumerada
-  mostradas: number
-  no_mostradas: number
-  recortada_por_coincidencia: boolean
+/** la lista que ve el modelo con SOLO estas líneas (con su número de la lista completa) */
+export function vistaDe(numerada: ListaNumerada, lineas: LineaNumerada[]): ListaNumerada {
+  return { ...numerada, lineas, texto: lineas.map((l) => lineaParaElModelo(l.numero, l.ficha)).join('\n') }
 }
 
-/** despliega las líneas de los estantes elegidos; si no caben en `topeDeEntrada`, las que más coinciden con el pedido */
-export function desplegar(numerada: ListaNumerada, elegidos: string[], pedido: Pedido, topeDeEntrada: number): Despliegue {
-  const abiertos = agruparPorEstante(numerada).filter((e) => elegidos.includes(e.nombre))
-  const candidatas = abiertos.flatMap((e) => e.lineas)
-  const base = estimarTokens(INSTRUCCION_DEL_PORTERO.length + armarMensaje(pedido, { ...numerada, texto: '' }).length)
-  const presupuesto = Math.max(0, Math.floor((topeDeEntrada - base) * CARACTERES_POR_TOKEN) - RESERVA_POR_AVISO * abiertos.length)
-  const texto = (l: LineaNumerada) => lineaParaElModelo(l.numero, l.ficha)
-  const total = candidatas.reduce((a, l) => a + texto(l).length + 1, 0)
-  const armar = (lineas: LineaNumerada[], avisos: string[]): ListaNumerada => ({ ...numerada, lineas, texto: [...lineas.map(texto), ...avisos].join('\n') })
-  if (total <= presupuesto) return { numerada: armar(candidatas, []), mostradas: candidatas.length, no_mostradas: 0, recortada_por_coincidencia: false }
+const largo = (l: LineaNumerada): number => lineaParaElModelo(l.numero, l.ficha).length + 1
 
-  const buscadas = palabrasDelPedido(pedido)
-  const orden = (a: LineaNumerada, b: LineaNumerada) => puntaje(b, buscadas) - puntaje(a, buscadas) || a.numero - b.numero
-  const preseleccion = abiertos.flatMap((e) => [...e.lineas].sort(orden).slice(0, MAXIMO_DE_LINEAS_POR_ESTANTE)).sort(orden)
-  const elegidas: LineaNumerada[] = []
+/** cuántos caracteres de líneas caben en UNA llamada de decisión, descontando instrucción, pedido y el recordatorio de parte */
+export function presupuestoDeLineas(numerada: ListaNumerada, pedido: Pedido, topeDeEntrada: number): number {
+  const base = estimarTokens(INSTRUCCION_DEL_PORTERO.length + armarMensaje(pedido, { ...numerada, texto: '' }).length)
+  return Math.max(0, Math.floor((topeDeEntrada - base) * CARACTERES_POR_TOKEN) - RESERVA_POR_PARTE)
+}
+
+export const cabeEnUna = (lineas: LineaNumerada[], presupuesto: number): boolean => lineas.reduce((a, l) => a + largo(l), 0) <= presupuesto
+
+/**
+ * parte las líneas en trozos CONSECUTIVOS (en el orden de la lista) que caben cada uno en `presupuesto`. Ninguna línea se descarta:
+ * una línea que sola pasa el presupuesto queda en un trozo propio.
+ */
+export function trocear(lineas: LineaNumerada[], presupuesto: number): LineaNumerada[][] {
+  const trozos: LineaNumerada[][] = []
+  let actual: LineaNumerada[] = []
   let usado = 0
-  for (const l of preseleccion) {
-    const n = texto(l).length + 1
-    if (usado + n > presupuesto) break
-    elegidas.push(l)
+  for (const l of lineas) {
+    const n = largo(l)
+    if (actual.length > 0 && usado + n > presupuesto) { trozos.push(actual); actual = []; usado = 0 }
+    actual.push(l)
     usado += n
   }
-  elegidas.sort((a, b) => a.numero - b.numero)
-  const vistas = new Set(elegidas.map((l) => l.numero))
-  const avisos = abiertos
-    .map((e) => ({ nombre: e.nombre, fuera: e.lineas.filter((l) => !vistas.has(l.numero)).length }))
-    .filter((e) => e.fuera > 0)
-    .map((e) => `(${e.nombre}: ${e.fuera} cosas más de este estante no se muestran aquí; solo las que más coinciden en palabras con el pedido)`)
-  return { numerada: armar(elegidas, avisos), mostradas: elegidas.length, no_mostradas: candidatas.length - elegidas.length, recortada_por_coincidencia: true }
+  if (actual.length > 0) trozos.push(actual)
+  return trozos
 }
