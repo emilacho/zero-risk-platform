@@ -37,7 +37,7 @@ describe('la migración: SOLO aditiva, repetible y cerrada', () => {
   })
   it('no cambia, borra ni endurece nada de lo que ya existe', () => {
     const s = sql(MIGRACION)
-    for (const prohibido of [/\bDROP\b/i, /ALTER\s+COLUMN/i, /\bSET\s+NOT\s+NULL\b/i, /\bALTER\s+TYPE\b/i, /\bTRUNCATE\b/i, /\bDELETE\s+FROM\b/i, /\bUPDATE\s+\w+\s+SET\b/i, /\bRENAME\b/i, /\bCREATE\s+(OR\s+REPLACE\s+)?(TRIGGER|FUNCTION|VIEW|MATERIALIZED)/i, /\bCREATE\s+EXTENSION\b/i, /\bINSERT\s+INTO\b/i]) {
+    for (const prohibido of [/\bDROP\b/i, /ALTER\s+COLUMN/i, /\bSET\s+NOT\s+NULL\b/i, /\bALTER\s+TYPE\b/i, /\bTRUNCATE\b/i, /\bDELETE\s+FROM\b/i, /\bUPDATE\s+[\w.]+\s+SET\b/i, /\bRENAME\b/i, /\bCREATE\s+(OR\s+REPLACE\s+)?(TRIGGER|FUNCTION|VIEW|MATERIALIZED)/i, /\bCREATE\s+EXTENSION\b/i, /\bINSERT\s+INTO\b/i]) {
       expect(s, String(prohibido)).not.toMatch(prohibido)
     }
     // solo toca las dos tablas nuevas y client_social_images
@@ -91,6 +91,9 @@ describe('la reversa: se NIEGA a borrar datos y borra SOLO lo que la migración 
     expect(s.indexOf('RAISE EXCEPTION')).toBeLessThan(s.indexOf('DROP TABLE'))
     expect(s.indexOf('RAISE EXCEPTION')).toBeLessThan(s.indexOf('DROP COLUMN'))
     for (const t of TABLAS_NUEVAS) expect(s).toMatch(new RegExp(`count\\(\\*\\) FROM public\\.${t}`))
+    expect(s.match(/RAISE EXCEPTION/g)).toHaveLength(3) // una por cada tabla y una por las columnas: ninguna se puede quitar
+    for (const t of ['cerebro_fichas', 'cerebro_ingresos']) expect(s).toMatch(new RegExp(`RAISE EXCEPTION 'REVERSA ABORTADA: ${t} tiene`))
+    expect(s).toMatch(/RAISE EXCEPTION 'REVERSA ABORTADA: client_social_images\.%/)
     for (const c of COLUMNAS_NUEVAS) expect(s).toContain(`'${c}'`)
     expect(leer(REVERSA)).toMatch(/Exportar antes de borrar/)
   })
@@ -105,7 +108,7 @@ describe('la reversa: se NIEGA a borrar datos y borra SOLO lo que la migración 
     expect(quitadas.sort()).toEqual(agregadas.sort())
     expect(r).not.toMatch(/\bCASCADE\b/i)
     expect(r.match(/\bDROP\b/gi)).toHaveLength(creadas.length + agregadas.length)
-    for (const prohibido of [/\bTRUNCATE\b/i, /\bDELETE\s+FROM\b/i, /\bUPDATE\s+\w+\s+SET\b/i, /DROP\s+(SCHEMA|DATABASE|ROLE|POLICY|INDEX|FUNCTION|VIEW|TRIGGER)/i]) expect(r, String(prohibido)).not.toMatch(prohibido)
+    for (const prohibido of [/\bTRUNCATE\b/i, /\bDELETE\s+FROM\b/i, /\bUPDATE\s+[\w.]+\s+SET\b/i, /DROP\s+(SCHEMA|DATABASE|ROLE|POLICY|INDEX|FUNCTION|VIEW|TRIGGER)/i]) expect(r, String(prohibido)).not.toMatch(prohibido)
   })
   it('va en una transacción y termina con el aviso de recarga', () => {
     const r = leer(REVERSA)
@@ -123,7 +126,7 @@ describe('los guiones de auditoría del paso (se corren al publicar y dejan su r
       expect(fs.existsSync(path.join(RAIZ, f)), f).toBe(true)
       const t = leer(f).split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n')
       expect(t, f).not.toMatch(/method:\s*['"](PUT|PATCH|DELETE)['"]/)
-      expect(t, f).not.toMatch(/\b(INSERT INTO|UPDATE\s+\w+\s+SET|DELETE FROM|DROP TABLE|ALTER TABLE|TRUNCATE|CREATE TABLE)\b/i)
+      expect(t, f).not.toMatch(/\b(INSERT INTO|UPDATE\s+[\w.]+\s+SET|DELETE FROM|DROP TABLE|ALTER TABLE|TRUNCATE|CREATE TABLE)\b/i)
     }
   })
   it('la auditoría de flujos VIVOS marca a un flujo que use las tablas nuevas, las 4 columnas o un select * de la tabla de fotos, y deja las versiones de la pieza, la planeación y el Servicio de Apify', async () => {
@@ -144,7 +147,8 @@ describe('los guiones de auditoría del paso (se corren al publicar y dejan su r
   })
   it('la auditoría del estado de la base da PASA solo con el estado esperado y FALLA ante cada desvío (tablas con filas, sin RLS, anon con permisos, columnas con valor por defecto o con dato, fotos cambiadas)', async () => {
     const mod = await import(/* @vite-ignore */ pathToFileURL(path.join(RAIZ, AUDITORIA_BASE)).href)
-    const bueno = {
+    type Estado = { tablas: Record<string, { existe: boolean; filas: number; rls: boolean; permisos_anon_authenticated: string[]; politicas: string[] }>; columnas: Array<{ column_name: string; is_nullable: string; column_default: string | null }>; columnas_con_dato: number; fotos: { n: number; huella: string }; base: { fotos_n: number; huella: string } }
+    const bueno: Estado = {
       tablas: { cerebro_ingresos: { existe: true, filas: 0, rls: true, permisos_anon_authenticated: [], politicas: ['cerebro_ingresos_service'] }, cerebro_fichas: { existe: true, filas: 0, rls: true, permisos_anon_authenticated: [], politicas: ['cerebro_fichas_service'] } },
       columnas: [{ column_name: 'que_muestra', is_nullable: 'YES', column_default: null }, { column_name: 'producto_visto', is_nullable: 'YES', column_default: null }, { column_name: 'etiquetada_en', is_nullable: 'YES', column_default: null }, { column_name: 'etiqueta_modelo', is_nullable: 'YES', column_default: null }],
       columnas_con_dato: 0,
@@ -152,19 +156,19 @@ describe('los guiones de auditoría del paso (se corren al publicar y dejan su r
       base: { fotos_n: 16, huella: 'H' },
     }
     expect(mod.evaluar(bueno).ok).toBe(true)
-    const rompe = (f: (e: typeof bueno) => void) => { const e = JSON.parse(JSON.stringify(bueno)); f(e); return mod.evaluar(e) }
+    const rompe = (f: (e: Estado) => void) => { const e = JSON.parse(JSON.stringify(bueno)); f(e); return mod.evaluar(e) }
     for (const [que, f] of [
-      ['una tabla con filas', (e: typeof bueno) => { e.tablas.cerebro_fichas.filas = 1 }],
-      ['una tabla sin seguridad por fila', (e: typeof bueno) => { e.tablas.cerebro_ingresos.rls = false }],
-      ['anon con permisos', (e: typeof bueno) => { e.tablas.cerebro_ingresos.permisos_anon_authenticated = ['SELECT'] }],
-      ['una tabla que no existe', (e: typeof bueno) => { e.tablas.cerebro_fichas.existe = false }],
-      ['una columna con valor por defecto', (e: typeof bueno) => { e.columnas[0].column_default = "'x'" }],
-      ['una columna NOT NULL', (e: typeof bueno) => { e.columnas[1].is_nullable = 'NO' }],
-      ['faltan columnas', (e: typeof bueno) => { e.columnas.pop() }],
-      ['una columna con dato', (e: typeof bueno) => { e.columnas_con_dato = 2 }],
-      ['una foto de menos', (e: typeof bueno) => { e.fotos.n = 15 }],
-      ['la huella de las fotos cambió', (e: typeof bueno) => { e.fotos.huella = 'OTRA' }],
-    ] as Array<[string, (e: typeof bueno) => void]>) {
+      ['una tabla con filas', (e: Estado) => { e.tablas.cerebro_fichas.filas = 1 }],
+      ['una tabla sin seguridad por fila', (e: Estado) => { e.tablas.cerebro_ingresos.rls = false }],
+      ['anon con permisos', (e: Estado) => { e.tablas.cerebro_ingresos.permisos_anon_authenticated = ['SELECT'] }],
+      ['una tabla que no existe', (e: Estado) => { e.tablas.cerebro_fichas.existe = false }],
+      ['una columna con valor por defecto', (e: Estado) => { e.columnas[0].column_default = "'x'" }],
+      ['una columna NOT NULL', (e: Estado) => { e.columnas[1].is_nullable = 'NO' }],
+      ['faltan columnas', (e: Estado) => { e.columnas.pop() }],
+      ['una columna con dato', (e: Estado) => { e.columnas_con_dato = 2 }],
+      ['una foto de menos', (e: Estado) => { e.fotos.n = 15 }],
+      ['la huella de las fotos cambió', (e: Estado) => { e.fotos.huella = 'OTRA' }],
+    ] as Array<[string, (e: Estado) => void]>) {
       const r = rompe(f)
       expect(r.ok, que).toBe(false)
       expect(r.fallas.length, que).toBeGreaterThan(0)
