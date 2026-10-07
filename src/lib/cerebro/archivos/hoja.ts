@@ -1,6 +1,7 @@
 /**
  * Lector de hojas: CSV y XLSX → filas como texto. Cada fila se explica sola: «fila N: Columna: valor | …».
- * Cada 20 filas va una línea en blanco y se repite «Columnas: …» (el sistema corta en segmentos por línea en blanco, y cada segmento se entiende solo).
+ * Un bloque de encabezado («Columnas: …») y DESPUÉS UNA FILA POR BLOQUE, separados por línea en blanco (el sistema corta en segmentos por línea en blanco): cada fila es su
+ * propio segmento, se entiende sola (lleva sus nombres de columna) y se puede archivar, vencer o retirar una fila sin tocar las demás.
  * Las fórmulas NO se interpretan: se lee el valor guardado como texto. Sin biblioteca: lector de CSV propio y XLSX sobre zip.ts.
  */
 import { cortarSalida, lectura } from './comun'
@@ -8,8 +9,6 @@ import { TOPES } from './topes'
 import type { LecturaDeArchivo } from './tipos'
 import { atributo, recorrer } from './xml'
 import { abrirZip, leerEntrada } from './zip'
-
-const FILAS_POR_BLOQUE = 20
 
 interface FilaLeida { numero: number; celdas: string[] }
 interface HojaLeida { nombre: string | null; filas: FilaLeida[]; cortada: boolean; columnasCortadas: boolean; celdasCortadas: boolean }
@@ -176,14 +175,12 @@ function describir(h: HojaLeida, avisos: string[]): { texto: string; filas: numb
   const [encabezado, ...datos] = h.filas
   const nombres = encabezado.celdas.map((c, i) => (c.trim() ? c.trim() : `col ${i + 1}`))
   const cabeza = (h.nombre ? `Hoja «${h.nombre}»\n` : '') + `Columnas: ${nombres.join(' | ')}`
-  const bloques: string[] = []
-  for (let i = 0; i < datos.length; i += FILAS_POR_BLOQUE) {
-    const lineas = datos.slice(i, i + FILAS_POR_BLOQUE).map((f) => {
-      const partes: string[] = []
-      f.celdas.forEach((c, k) => { if (c.trim()) partes.push(`${nombres[k] ?? `col ${k + 1}`}: ${c}`) })
-      return `fila ${f.numero}: ${partes.join(' | ')}`
-    })
-    bloques.push(cabeza + '\n' + lineas.join('\n'))
+  const prefijo = h.nombre ? `Hoja «${h.nombre}» · ` : ''
+  const bloques: string[] = [cabeza]
+  for (const f of datos) {
+    const partes: string[] = []
+    f.celdas.forEach((c, k) => { if (c.trim()) partes.push(`${nombres[k] ?? `col ${k + 1}`}: ${c}`) })
+    bloques.push(`${prefijo}fila ${f.numero}: ${partes.join(' | ')}`)
   }
   const tag = h.nombre ? `«${h.nombre}»` : 'la hoja'
   if (h.cortada) avisos.push(`${tag}: pasa de ${TOPES.hoja_filas} filas; se leyeron las primeras ${TOPES.hoja_filas} y lo que sigue NO se leyó.`)

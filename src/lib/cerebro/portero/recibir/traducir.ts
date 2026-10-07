@@ -9,6 +9,8 @@ import { type Segmento, firmaDe } from './segmentos'
 import type { FichaViva, FilaDeFicha, OrigenDeIngreso, Propiedad } from './tipos'
 
 export const MAXIMO_DE_DIAS_DE_VIGENCIA_EXPLICITA = 400
+/** lo más que lleva UNA ficha (en caracteres): bajo el límite de lo que `entregar` devuelve de una ficha (60.000), para que NINGUNA se entregue cortada */
+export const MAXIMO_DE_CARACTERES_POR_FICHA = 40_000
 export const MOTIVO_DE_RETIRADA_PARCIAL = 'sus segmentos cambiaron y nada los reemplazó'
 
 export interface ContextoDeTraduccion {
@@ -29,6 +31,20 @@ export type ResultadoDeTraduccion =
   | { ok: false; caida: CaidaDeTraduccion }
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+/** parte los segmentos de una ficha en grupos seguidos cuyo texto no pasa del máximo (un segmento mide ≤ 600, así que siempre cabe); lo corto queda en un solo grupo */
+export function partesDe(segs: Segmento[]): Segmento[][] {
+  const partes: Segmento[][] = []
+  let actual: Segmento[] = []
+  let largo = 0
+  for (const s of segs) {
+    const suma = largo + s.texto.length + (actual.length > 0 ? 2 : 0)
+    if (actual.length > 0 && suma > MAXIMO_DE_CARACTERES_POR_FICHA) { partes.push(actual); actual = []; largo = 0 }
+    largo += s.texto.length + (actual.length > 0 ? 2 : 0)
+    actual.push(s)
+  }
+  if (actual.length > 0) partes.push(actual)
+  return partes
+}
 const texto = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
 
 export function traducir(respuestas: Array<{ texto: string; cortada?: boolean }>, ctx: ContextoDeTraduccion): ResultadoDeTraduccion {
@@ -99,9 +115,14 @@ export function traducir(respuestas: Array<{ texto: string; cortada?: boolean }>
       } else notas.push(`${quien}: el «reemplaza» ${String(k)} no vale (no existe o ya lo citó otra ficha)`)
     }
     const producto = (Array.isArray(c.producto) ? c.producto : []).map((p) => texto(p, 120)).filter((p): p is string => p !== null).slice(0, 20)
-    fichas.push({
-      ...base(id, segs), ref, clase, titulo, que_es: texto(c.que_es, 400) ?? titulo, plazo, vigente_hasta: vigente, version_de: versionDe,
-      producto, sede: texto(c.sede, 200), propiedad, porque: texto(c.porque, 300), descartada: false, motivo_descarte: null, juzgado_por: 'modelo', residual: false,
+    // una ficha larga se parte en fichas que `entregar` devuelve ENTERAS; `reemplaza` va solo en la primera parte, las demás son fichas nuevas
+    const partes = partesDe(segs)
+    partes.forEach((ps, k) => {
+      const idk = k === 0 ? id : ctx.nuevoId()
+      fichas.push({
+        ...base(idk, ps), ref: k === 0 ? ref : `ficha:${idk}`, clase, titulo: partes.length > 1 ? `${titulo.slice(0, 170)} (parte ${k + 1} de ${partes.length})` : titulo, que_es: texto(c.que_es, 400) ?? titulo, plazo, vigente_hasta: vigente, version_de: k === 0 ? versionDe : null,
+        producto, sede: texto(c.sede, 200), propiedad, porque: texto(c.porque, 300), descartada: false, motivo_descarte: null, juzgado_por: 'modelo', residual: false,
+      })
     })
   })
 
@@ -127,11 +148,14 @@ export function traducir(respuestas: Array<{ texto: string; cortada?: boolean }>
     else tramos.push([s])
   }
   for (const tramo of tramos) {
-    const id = ctx.nuevoId()
-    const b = base(id, tramo)
-    fichas.push({
-      ...b, ref: `ficha:${id}`, clase: 'sin_clasificar', titulo: `Sin clasificar: ${(b.contenido ?? '').replace(/\s+/g, ' ').slice(0, 80)}`, que_es: 'archivado tal cual, sin juicio sobre qué es',
-      plazo: 'sin_plazo', vigente_hasta: null, version_de: null, producto: [], sede: null, propiedad: 'incierta', porque: null, descartada: false, motivo_descarte: null, juzgado_por: 'sistema', residual: true,
+    const partes = partesDe(tramo)
+    partes.forEach((ps, k) => {
+      const id = ctx.nuevoId()
+      const b = base(id, ps)
+      fichas.push({
+        ...b, ref: `ficha:${id}`, clase: 'sin_clasificar', titulo: `Sin clasificar: ${(b.contenido ?? '').replace(/\s+/g, ' ').slice(0, 80)}${partes.length > 1 ? ` (parte ${k + 1} de ${partes.length})` : ''}`, que_es: 'archivado tal cual, sin juicio sobre qué es',
+        plazo: 'sin_plazo', vigente_hasta: null, version_de: null, producto: [], sede: null, propiedad: 'incierta', porque: null, descartada: false, motivo_descarte: null, juzgado_por: 'sistema', residual: true,
+      })
     })
   }
 

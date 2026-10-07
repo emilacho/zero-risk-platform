@@ -251,7 +251,7 @@ describe('debilidades de las pruebas que señaló CC#3 (G14, T14, T18)', () => {
 })
 
 /** huella de la instrucción fija del paso 7 (Anexo A del diseño v3): cambiarla exige cambiar esto y que se vea en la revisión */
-const HUELLA_DE_LA_INSTRUCCION = '5e54d9d2e2936ad92d6a0513'
+const HUELLA_DE_LA_INSTRUCCION = 'b6caa6bf27b562ea099c32c9'
 
 describe('H3 · el gasto de la imagen cuenta para el tope del INGRESO', () => {
   const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('imagen-minima-del-afiche')]).toString('base64')

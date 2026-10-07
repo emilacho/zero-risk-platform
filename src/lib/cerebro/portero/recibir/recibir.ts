@@ -32,6 +32,16 @@ export const TOPE_DE_GASTO_POR_LLAMADA_USD = 0.08
 export const TOPE_DE_GASTO_POR_INGRESO_USD = 0.4
 /** llamadas al modelo por ingreso (las pasadas normales MÁS los reintentos por una respuesta cortada); con 25 s cada una el ingreso cabe en los 300 s de la ruta */
 export const MAXIMO_DE_LLAMADAS_POR_INGRESO = 12
+/** lo que dice la ficha de un PDF cuyas páginas son imágenes */
+export const AVISO_DE_ESCANEADO = 'escaneado, sin texto: las páginas son imágenes; no se leyó ni se inventó ningún texto'
+/** el techo de llamadas de UN ingreso por largo que sea el material (el tope de gasto y el reloj mandan antes si hace falta) */
+export const MAXIMO_ABSOLUTO_DE_LLAMADAS = 32
+/** el tope de llamadas sigue a los segmentos: las pasadas que hacen falta a 24 por pasada + 4 de margen para reintentos; nunca baja de 12 */
+export const llamadasMaximasPara = (segmentos: number): number => Math.min(MAXIMO_ABSOLUTO_DE_LLAMADAS, Math.max(MAXIMO_DE_LLAMADAS_POR_INGRESO, Math.ceil(segmentos / MAX_SEGMENTOS_POR_PASADA) + 4))
+/** una pasada puede crecer, con lo que el modelo gasta de salida POR SEGMENTO, hasta llenar esta parte del tope de salida (mide, no adivina) */
+export const FRACCION_DEL_TOPE_DE_SALIDA_PARA_CRECER = 0.5
+/** lo más que una pasada crece (en segmentos), aunque el modelo gaste poquísima salida */
+export const MAX_SEGMENTOS_POR_PASADA_CRECIDA = 160
 /** una pasada no lleva más de 24 segmentos: la salida esperada (≈ 45 «tokens» por segmento) queda bajo el tope de salida de 2.000 */
 export const MAX_SEGMENTOS_POR_PASADA = 24
 /** cuántas veces se puede dividir un trozo cuya respuesta se cortó (24 → 12 → 6 → 3 → 1) */
@@ -176,13 +186,18 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   // ── 1 · el material: texto, o archivo leído (los bytes se leen y se sueltan: nunca se guardan)
   let material: string | null = e.texto
   let lectura: LecturaDeArchivo | null = null
-  let fichaDeArchivo: { tipo: string; nombre: string; enlace: string | null; bytes: number | null; fecha: string | null } | null = null
+  let fichaDeArchivo: { tipo: string; nombre: string; enlace: string | null; bytes: number | null; fecha: string | null; aviso?: string } | null = null
   let imagenParaMirar: { tipo: string; base64: string } | null = null
   let fallaDeLectura: { estado: string; motivo: string } | null = null
   if (e.archivo) {
     if (e.archivo.base64) {
       lectura = await leerArchivo({ nombre: e.archivo.nombre, tipo: e.archivo.tipo ?? undefined, base64: e.archivo.base64 })
-      if (lectura.estado !== 'ok') fallaDeLectura = { estado: lectura.estado, motivo: lectura.motivo ?? lectura.estado }
+      if (lectura.estado === 'escaneado') {
+        // un PDF escaneado no se pierde ni se inventa: queda con su ficha de archivo (nombre, tipo, tamaño y el aviso), como un video o un audio
+        fichaDeArchivo = { tipo: lectura.tipo ?? 'pdf', nombre: e.archivo.nombre, enlace: e.archivo.enlace, bytes: lectura.bytes, fecha: e.archivo.fecha, aviso: AVISO_DE_ESCANEADO }
+        material = e.texto
+      }
+      else if (lectura.estado !== 'ok') fallaDeLectura = { estado: lectura.estado, motivo: lectura.motivo ?? lectura.estado }
       else if (lectura.tipo && TIPOS_DE_ARCHIVO_SIN_TEXTO.has(lectura.tipo)) {
         fichaDeArchivo = { tipo: lectura.tipo, nombre: e.archivo.nombre, enlace: e.archivo.enlace, bytes: lectura.bytes, fecha: e.archivo.fecha }
         imagenParaMirar = { tipo: lectura.mime ?? 'image/png', base64: e.archivo.base64 }
@@ -272,7 +287,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
 
   // ── 6a · la IMAGEN (si llegó una y no es la misma de antes): UNA llamada con visión, mismas garantías y topes; «qué muestra» va a la ficha, jamás a la tabla de fotos
   let miradaDeLaImagen: Etiqueta | null = null
-  const notasDeLaImagen: string[] = []
+  const notasDeLaImagen: string[] = fichaDeArchivo?.aviso ? [`archivo: ${fichaDeArchivo.aviso}`] : []
   if (imagenParaMirar && fichaDeArchivo && !archivoHeredado) {
     let nombresDeProducto: string[] = [...e.familiasDePrueba.map((f) => f.nombre), ...e.productosDePrueba]
     let lineasDeProducto: string[] = [...e.familiasDePrueba.map(lineaDeFamilia), ...e.productosDePrueba]
@@ -305,7 +320,9 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
     const inicio = plan.paraModelo.findIndex((s) => s.n === segs[0].n)
     return inicio > 0 ? plan.paraModelo.slice(Math.max(0, inicio - SEGMENTOS_DE_SOLAPE), inicio) : []
   }
-  const trozos = partirEnTrozos(plan.paraModelo, (segs) => estimarTokens(INSTRUCCION_DE_RECIBIR.length + armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: segs, afectadas: plan.afectadas, contexto: contextoDe(segs) }).length), topeEntrada)
+  const medirTrozo = (segs: Segmento[]): number => estimarTokens(INSTRUCCION_DE_RECIBIR.length + armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: segs, afectadas: plan.afectadas, contexto: contextoDe(segs) }).length)
+  const trozos = partirEnTrozos(plan.paraModelo, medirTrozo, topeEntrada)
+  const llamadasMaximas = llamadasMaximasPara(plan.paraModelo.length)
   const respuestas: Array<{ texto: string; cortada?: boolean }> = []
   let motivoParcial: string | null = null
   let divisiones = 0
@@ -313,12 +330,26 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   const cola: Array<{ segs: Segmento[]; prof: number }> = trozos.map((segs) => ({ segs, prof: 0 }))
   const reloj = deps.reloj ?? (() => Date.now())
   const inicioDeLasPasadas = reloj()
+  // lo pendiente (sin empezar) se vuelve a partir cuando cambia lo que cabe en una pasada: crece con lo que el modelo gasta de salida por segmento, y vuelve a 24 si una respuesta se corta
+  let capacidad = MAX_SEGMENTOS_POR_PASADA
+  let peorSalidaPorSegmento = 0
+  // una pasada que CRECE nunca pasa del gasto máximo por llamada (peor caso: toda la salida): si no, la llamada se rechazaría en vez de partirse más chica
+  const entradaQueCabeEnElGastoPorLlamada = Math.max(0, Math.floor(((topeLlamada - costoDeLaLlamada({ input_tokens: 0, output_tokens: MAX_TOKENS_DE_RECIBIR })) / Math.max(costoDeLaLlamada({ input_tokens: 1_000_000, output_tokens: 0 }), 1e-9)) * 1_000_000 * 0.9))
+  const repartirPendientes = (cap: number) => {
+    if (cap === capacidad) return
+    capacidad = cap
+    const pendientes = cola.filter((t) => t.prof === 0).flatMap((t) => t.segs)
+    if (pendientes.length === 0) return
+    const divididos = cola.filter((t) => t.prof > 0)
+    cola.length = 0
+    cola.push(...divididos, ...partirEnTrozos(pendientes, medirTrozo, Math.min(topeEntrada, entradaQueCabeEnElGastoPorLlamada), cap).map((segs) => ({ segs, prof: 0 })))
+  }
   while (cola.length > 0) {
     const trozo = cola.shift() as { segs: Segmento[]; prof: number }
     const contexto = contextoDe(trozo.segs)
     const mensaje = armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: trozo.segs, afectadas: plan.afectadas, contexto })
     const peor = costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DE_RECIBIR.length + mensaje.length), output_tokens: MAX_TOKENS_DE_RECIBIR })
-    if (pasadas >= MAXIMO_DE_LLAMADAS_POR_INGRESO) { motivoParcial = `tope_de_pasadas: más de ${MAXIMO_DE_LLAMADAS_POR_INGRESO} llamadas`; break }
+    if (pasadas >= llamadasMaximas) { motivoParcial = `tope_de_pasadas: más de ${llamadasMaximas} llamadas`; break }
     if (reloj() - inicioDeLasPasadas > TIEMPO_TOTAL_MAXIMO_MS) { motivoParcial = `tiempo: pasaron ${TIEMPO_TOTAL_MAXIMO_MS / 1000} s desde la primera llamada`; break }
     if (gasto > 0 && gasto + peor > topeIngreso) { motivoParcial = `tope_de_gasto_del_ingreso: US$ ${topeIngreso}`; break }
     if (peor > topeLlamada || (pasadas === 0 && peor > topeIngreso)) {
@@ -343,12 +374,19 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
     if (fallo) { await nuevoRegistro({ costo, duracion, usage, fallo, stop: null }, pasadas, fallo.motivo); return cerrar('fallido', `${fallo.motivo}: ${fallo.mensaje}`, {}, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null }) }
     const sePuedeDividir = cortada && trozo.segs.length > 1 && trozo.prof < PROFUNDIDAD_MAXIMA_DE_DIVISION
     await nuevoRegistro({ costo, duracion, usage, fallo: null, stop: respuesta?.stop_reason ?? null }, pasadas, cortada ? 'salida_cortada' : null, cortada ? { dividido: sePuedeDividir, segmentos_del_trozo: trozo.segs.length } : {})
+    if (cortada) { peorSalidaPorSegmento = MAX_TOKENS_DE_RECIBIR; repartirPendientes(MAX_SEGMENTOS_POR_PASADA) } // una respuesta cortada: esa tasa no deja crecer más; lo pendiente vuelve a 24
     if (sePuedeDividir) {
       // la respuesta cortada NO se usa: el trozo se parte en dos mitades y se reintentan, en orden, antes que lo que sigue
       const mitad = Math.ceil(trozo.segs.length / 2)
       cola.unshift({ segs: trozo.segs.slice(0, mitad), prof: trozo.prof + 1 }, { segs: trozo.segs.slice(mitad), prof: trozo.prof + 1 })
       divisiones++
       continue
+    }
+    if (!cortada) {
+      peorSalidaPorSegmento = Math.max(peorSalidaPorSegmento, usage.output_tokens / trozo.segs.length)
+      const cabe = Math.floor((MAX_TOKENS_DE_RECIBIR * FRACCION_DEL_TOPE_DE_SALIDA_PARA_CRECER) / Math.max(peorSalidaPorSegmento, 1))
+      // crece de a poco (a lo más al doble por pasada): si el modelo en una pasada grande se corta, se pierde una llamada chica, no una enorme
+      repartirPendientes(Math.max(MAX_SEGMENTOS_POR_PASADA, Math.min(MAX_SEGMENTOS_POR_PASADA_CRECIDA, cabe, capacidad * 2)))
     }
     // sin cortar (o un trozo que ya no se puede dividir: entonces `traducir` lo declara `salida_cortada` y el ingreso falla como siempre)
     respuestas.push({ texto: (respuesta as RespuestaDelModelo).texto, cortada })
@@ -423,12 +461,12 @@ function partirEnTrozos(segmentos: Segmento[], medir: (s: Segmento[]) => number,
   return trozos
 }
 
-function filaDeArchivo(a: { cliente: string; ingresoId: string; origen: OrigenDeIngreso; ahoraIso: string; prueba: boolean; id: string; firma: string; propiedad: 'propia' | 'incierta'; mirada: Etiqueta | null; a: { tipo: string; nombre: string; enlace: string | null; bytes: number | null; fecha: string | null } }): FilaDeFicha {
+function filaDeArchivo(a: { cliente: string; ingresoId: string; origen: OrigenDeIngreso; ahoraIso: string; prueba: boolean; id: string; firma: string; propiedad: 'propia' | 'incierta'; mirada: Etiqueta | null; a: { tipo: string; nombre: string; enlace: string | null; bytes: number | null; fecha: string | null; aviso?: string } }): FilaDeFicha {
   const d = a.a
   const m = a.mirada
   return {
     id: a.id, client_id: a.cliente, ingreso_id: a.ingresoId, ref: `ficha:${a.id}`, clase: m ? 'foto' : 'archivo', titulo: d.nombre.slice(0, 200),
-    que_es: m ? `Foto: ${m.que_muestra}`.slice(0, 400) : `Archivo ${d.tipo} «${d.nombre.slice(0, 120)}»`,
+    que_es: m ? `Foto: ${m.que_muestra}`.slice(0, 400) : `Archivo ${d.tipo} «${d.nombre.slice(0, 120)}»${d.aviso ? ` · ${d.aviso}` : ''}`,
     // un archivo que no se mira (video, audio, 3D) NO lleva texto; una imagen mirada lleva el texto que se lee en ella
     contenido: m && m.texto_visible ? m.texto_visible : null, archivo_nombre: d.nombre, archivo_tipo: d.tipo, archivo_enlace: d.enlace, archivo_bytes: d.bytes, firmas: [a.firma], origen: a.origen, fecha_fuente: d.fecha,
     reconfirmado_en: a.ahoraIso, plazo: 'archivo_propio', vigente_hasta: null, version_de: null, huella: a.firma.slice(5), producto: m ? m.producto_visto : [], sede: null, propiedad: a.propiedad, porque: null,
