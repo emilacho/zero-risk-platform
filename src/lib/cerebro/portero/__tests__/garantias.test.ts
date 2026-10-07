@@ -43,9 +43,21 @@ describe('solo lectura, salvo el modelo y el registro', () => {
       for (const p of [/\.insert\(/, /\.from\(\s*['"`][^'"`]+['"`]\s*\)\s*\.update\(/, /\.upsert\(/, /\.delete\(/, /\.rpc\(/, /supabase-js/, /\bINSERT\s+INTO\b/i, /\bDELETE\s+FROM\b/i]) expect(t, `${archivo} contiene ${p}`).not.toMatch(p)
     }
   })
-  it('solo DOS archivos hacen una petición que no es de lectura: la llamada al modelo y el registro', () => {
+  it('solo TRES archivos hacen una petición que no es de lectura: la llamada al modelo, el registro y la escritura de las 4 columnas de etiqueta (paso 4)', () => {
     const conPost = codigo().filter(({ texto }) => /method:\s*['"](POST|PUT|PATCH|DELETE)['"]/.test(sinComentarios(texto))).map((c) => path.basename(c.archivo)).sort()
-    expect(conPost).toEqual(['modelo.ts', 'registro.ts'])
+    expect(conPost).toEqual(['etiqueta-escritura.ts', 'modelo.ts', 'registro.ts'])
+  })
+  it('la escritura de etiquetas es solo PATCH, no trae ninguna dirección fija (usa la base que se le pasa) y solo nombra las 4 columnas', () => {
+    const t = sinComentarios(fs.readFileSync(path.join(PORTERO, 'etiqueta-escritura.ts'), 'utf8'))
+    expect([...t.matchAll(/method:\s*['"](\w+)['"]/g)].map((m) => m[1])).toEqual(['PATCH'])
+    expect(t.match(/https?:\/\/[^'"`\s)]+/g) ?? []).toEqual([])
+    expect(t).toMatch(/client_social_images/)
+    expect(t).not.toMatch(/\.(insert|upsert|delete)\(|DELETE FROM|INSERT INTO/i)
+  })
+  it('la bajada de la foto solo hace GET (lectura), sin seguir saltos', () => {
+    const t = sinComentarios(fs.readFileSync(path.join(PORTERO, 'almacen.ts'), 'utf8'))
+    expect(t).not.toMatch(/method:\s*['"](POST|PUT|PATCH|DELETE)['"]/)
+    expect(t).toMatch(/redirect:\s*['"]error['"]/)
   })
   it('esos dos hablan con UN solo destino cada uno', () => {
     const modelo = sinComentarios(fs.readFileSync(path.join(PORTERO, 'modelo.ts'), 'utf8'))
