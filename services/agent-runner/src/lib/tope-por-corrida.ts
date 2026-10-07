@@ -95,3 +95,87 @@ export function opcionDeRazonamiento(modo: ModoDeRazonamiento | null | undefined
   if (modo === 'low' || modo === 'medium') return { effort: modo }
   return {}
 }
+
+/**
+ * LO GASTADO Y EL TEXTO DE UNA CORRIDA CORTADA · CC#1 · 2026-10-01 (corrida 160410 del flujo de prueba: 4 llamadas con tope de US$ 0,12 · las 4 cortadas por el tope · las 4 registradas con «gastado ≈ US$ 0.0000»).
+ *
+ * 🔴 EL DEFECTO, MEDIDO: el SDK entrega el `result` de un corte (`error_max_budget_usd`) con `usage` en CERO, pero SÍ trae su medidor propio: `total_cost_usd` y `modelUsage` (por modelo: fichas y `costUSD`).
+ * El corredor sólo leía `usage`, así que el corte se registraba con costo 0 y 0 fichas: el freno diario no veía el gasto (4 llamadas ≈ US$ 0,48 invisibles) y el mensaje del propio corte decía «gastado ≈ US$ 0.0000».
+ * Sólo aplica a un resultado FALLIDO (corte por tope o error del resultado con tope opt-in): un éxito se calcula igual que siempre, byte a byte.
+ *
+ * Regla: el gasto de un fallo es el MAYOR entre lo calculado por fichas y lo que el SDK declara (`total_cost_usd`, o la suma de `modelUsage[].costUSD`). Nunca se inventa: sin medidor del SDK y sin fichas, queda en 0 y se dice la fuente.
+ */
+export interface UsoDeModelo {
+  inputTokens: number
+  outputTokens: number
+  cacheReadInputTokens: number
+  cacheCreationInputTokens: number
+  costUSD: number
+}
+
+/** suma el `modelUsage` del SDK (por modelo) · null si no es un objeto con al menos un modelo legible */
+export function sumarModelUsage(modelUsage: unknown): UsoDeModelo | null {
+  if (!modelUsage || typeof modelUsage !== 'object' || Array.isArray(modelUsage)) return null
+  const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0)
+  let hay = false
+  const suma: UsoDeModelo = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0 }
+  for (const m of Object.values(modelUsage as Record<string, unknown>)) {
+    if (!m || typeof m !== 'object') continue
+    hay = true
+    const u = m as Record<string, unknown>
+    suma.inputTokens += n(u.inputTokens)
+    suma.outputTokens += n(u.outputTokens)
+    suma.cacheReadInputTokens += n(u.cacheReadInputTokens)
+    suma.cacheCreationInputTokens += n(u.cacheCreationInputTokens)
+    suma.costUSD += n(u.costUSD)
+  }
+  return hay ? suma : null
+}
+
+export type FuenteDelGasto = 'fichas' | 'sdk_total_cost_usd' | 'sdk_model_usage'
+
+export interface GastoReconciliado {
+  /** lo gastado que se REGISTRA (el mayor entre lo calculado por fichas y lo que el SDK declara) */
+  costUsd: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadInputTokens: number
+  cacheCreationInputTokens: number
+  fuente: FuenteDelGasto
+}
+
+/**
+ * Reconcilia el gasto de un resultado FALLIDO. Las fichas del `usage` mandan cuando existen; si vienen en cero y el SDK declara `modelUsage`, se usan las de `modelUsage`.
+ * El costo es el mayor entre `costoPorFichas` (calculado con los precios del corredor) y el medidor del SDK.
+ */
+export function reconciliarGastoDeFallo(a: {
+  costoPorFichas: (f: { input: number; output: number; cacheRead: number; cacheCreate: number }) => number
+  inputTokens: number
+  outputTokens: number
+  cacheReadInputTokens: number
+  cacheCreationInputTokens: number
+  sdkTotalCostUsd?: number | null
+  sdkModelUsage?: unknown
+}): GastoReconciliado {
+  const uso = sumarModelUsage(a.sdkModelUsage)
+  const usageEnCero = a.inputTokens === 0 && a.outputTokens === 0 && a.cacheReadInputTokens === 0 && a.cacheCreationInputTokens === 0
+  const f =
+    usageEnCero && uso
+      ? { input: uso.inputTokens, output: uso.outputTokens, cacheRead: uso.cacheReadInputTokens, cacheCreate: uso.cacheCreationInputTokens }
+      : { input: a.inputTokens, output: a.outputTokens, cacheRead: a.cacheReadInputTokens, cacheCreate: a.cacheCreationInputTokens }
+  const porFichas = a.costoPorFichas(f)
+  const total = typeof a.sdkTotalCostUsd === 'number' && Number.isFinite(a.sdkTotalCostUsd) && a.sdkTotalCostUsd > 0 ? a.sdkTotalCostUsd : 0
+  const porModelo = uso ? uso.costUSD : 0
+  const medidor = Math.max(total, porModelo)
+  const costUsd = Math.max(porFichas, medidor)
+  const fuente: FuenteDelGasto = medidor > porFichas ? (total >= porModelo ? 'sdk_total_cost_usd' : 'sdk_model_usage') : 'fichas'
+  return { costUsd, inputTokens: f.input, outputTokens: f.output, cacheReadInputTokens: f.cacheRead, cacheCreationInputTokens: f.cacheCreate, fuente }
+}
+
+/** tope del texto parcial que se conserva en el libro de invocaciones (el punto de control ya usa el mismo tope de 100 mil) */
+export const TEXTO_PARCIAL_MAX_CHARS = 100_000
+
+/** la causa corta con la que se marca un resultado parcial: el subtype del SDK (`error_max_budget_usd`…) o «error_del_sdk» si no llegó ninguno */
+export function causaDelParcial(resultSubtype: string | null | undefined): string {
+  return typeof resultSubtype === 'string' && resultSubtype !== '' ? resultSubtype : 'error_del_sdk'
+}
