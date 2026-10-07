@@ -12,7 +12,8 @@ import { crearRegistrador } from '@/lib/cerebro/portero/registro'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+// una lista grande se recorre por niveles y por trozos: hasta 3 llamadas de nivel + ≈ 5 de lectura de 25 s cada una (peor caso ≈ 200 s). Con 60 s Vercel cortaría la consulta a la mitad y se cobraría sin respuesta.
+export const maxDuration = 300
 
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)

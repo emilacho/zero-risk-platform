@@ -4,7 +4,7 @@
  *
  * Lee y exige, después de aplicar la migración (o antes, con --antes, para anotar la línea base de las fotos):
  *   · las dos tablas nuevas existen, están VACÍAS, con seguridad por fila activa, SIN permisos para anon ni authenticated y con su política de service_role;
- *   · las 4 columnas nuevas de `client_social_images` existen, son anulables, SIN valor por defecto y TODAS vacías;
+ *   · las 4 columnas nuevas de `client_social_images` (6 con `--con-fotos-2`, después de la migración del 07-oct: `texto_visible` y `etiqueta_confianza` con su restricción alta|media|baja) existen, son anulables, SIN valor por defecto y TODAS vacías;
  *   · las 16 fotos siguen intactas: misma cuenta y misma huella de sus 21 columnas VIEJAS (lista fija, no «todas las columnas»).
  *
  * Uso:  node scripts/audit/cerebro-paso-2-verifica-base.mjs --antes  [--env-file ruta] [--guardar linea-base.json]
@@ -16,6 +16,9 @@ import { pathToFileURL } from 'node:url'
 
 export const TABLAS = ['cerebro_ingresos', 'cerebro_fichas']
 export const COLUMNAS_NUEVAS = ['que_muestra', 'producto_visto', 'etiquetada_en', 'etiqueta_modelo']
+/** las 2 columnas de la migración del 07-oct (`202610070100_…`): se exigen solo con `--con-fotos-2` (después de aplicarla) */
+export const COLUMNAS_FOTOS_2 = ['texto_visible', 'etiqueta_confianza']
+export const RESTRICCION_CONFIANZA = 'client_social_images_etiqueta_confianza_valida'
 /** las 21 columnas que tenía `client_social_images` ANTES del paso 2 (lista FIJA: la huella no cambia aunque se agreguen columnas) */
 export const COLUMNAS_VIEJAS = ['id', 'client_id', 'owner_role', 'handle', 'post_id', 'tipo', 'url', 'estado', 'causa', 'created_at', 'caption', 'posted_at', 'post_url', 'posicion', 'medio', 'hash_archivo', 'duplicado_de', 'producto', 'producto_fuente', 'producto_evidencia', 'contexto_completado_en']
 
@@ -30,8 +33,14 @@ export function evaluar(e) {
     if ((x.permisos_anon_authenticated ?? []).length) fallas.push(`${t}: anon/authenticated con permisos (${x.permisos_anon_authenticated.join(',')})`)
     if (!(x.politicas ?? []).includes(`${t}_service`)) fallas.push(`${t}: falta su política de service_role`)
   }
+  const esperadas = e.con_fotos_2 ? [...COLUMNAS_NUEVAS, ...COLUMNAS_FOTOS_2] : COLUMNAS_NUEVAS
   const nombres = (e.columnas ?? []).map((c) => c.column_name).sort()
-  if (JSON.stringify(nombres) !== JSON.stringify([...COLUMNAS_NUEVAS].sort())) fallas.push(`client_social_images: columnas nuevas esperadas ${COLUMNAS_NUEVAS.join(',')} y hay ${nombres.join(',') || 'ninguna'}`)
+  if (JSON.stringify(nombres) !== JSON.stringify([...esperadas].sort())) fallas.push(`client_social_images: columnas nuevas esperadas ${esperadas.join(',')} y hay ${nombres.join(',') || 'ninguna'}`)
+  if (e.con_fotos_2) {
+    const r = e.restriccion_confianza
+    if (typeof r !== 'string' || !/alta/.test(r) || !/media/.test(r) || !/baja/.test(r)) fallas.push(`client_social_images: falta la restricción ${RESTRICCION_CONFIANZA} (alta | media | baja)`)
+    else if (!/IS NULL/i.test(r)) fallas.push("client_social_images.etiqueta_confianza: la restricción no admite NULL (las fotos sin etiquetar deben poder quedar vacías)")
+  }
   for (const c of e.columnas ?? []) {
     if (c.is_nullable !== 'YES') fallas.push(`client_social_images.${c.column_name}: NO es anulable`)
     if (c.column_default !== null && c.column_default !== undefined) fallas.push(`client_social_images.${c.column_name}: tiene valor por defecto (${c.column_default})`)
@@ -58,12 +67,14 @@ export async function leerEstado(consulta) {
       politicas: (await q(`select polname from pg_policy where polrelid = 'public.${t}'::regclass order by 1`)).map((r) => r.polname),
     }
   }
-  const lista = COLUMNAS_NUEVAS.map((c) => `'${c}'`).join(',')
+  const todas = [...COLUMNAS_NUEVAS, ...COLUMNAS_FOTOS_2]
+  const lista = todas.map((c) => `'${c}'`).join(',')
   const columnas = await q(`select column_name, is_nullable, column_default from information_schema.columns where table_schema='public' and table_name='client_social_images' and column_name in (${lista}) order by 1`)
   let columnas_con_dato = 0
-  if (columnas.length === COLUMNAS_NUEVAS.length) columnas_con_dato = (await q(`select count(*)::int n from public.client_social_images where ${COLUMNAS_NUEVAS.map((c) => `${c} is not null`).join(' or ')}`))[0].n
+  if (columnas.length > 0) columnas_con_dato = (await q(`select count(*)::int n from public.client_social_images where ${columnas.map((c) => `${c.column_name} is not null`).join(' or ')}`))[0].n
+  const rc = await q(`select pg_get_constraintdef(oid) def from pg_constraint where conrelid = 'public.client_social_images'::regclass and conname = '${RESTRICCION_CONFIANZA}'`)
   const f = (await q(HUELLA_SQL))[0]
-  return { tablas, columnas, columnas_con_dato, fotos: { n: f.n, huella: f.huella } }
+  return { tablas, columnas, columnas_con_dato, restriccion_confianza: rc[0]?.def ?? null, fotos: { n: f.n, huella: f.huella } }
 }
 
 function leerEntorno(ruta) {
@@ -91,7 +102,7 @@ async function main() {
     process.exit(0)
   }
   const baseline = JSON.parse(fs.readFileSync(arg('--baseline') ?? '', 'utf8'))
-  const r = evaluar({ ...estado, base: { fotos_n: baseline.fotos_n, huella: baseline.huella } })
+  const r = evaluar({ ...estado, con_fotos_2: process.argv.includes('--con-fotos-2'), base: { fotos_n: baseline.fotos_n, huella: baseline.huella } })
   console.log(JSON.stringify({ ...r, estado, baseline, leido_en: new Date().toISOString() }, null, 1))
   process.exit(r.ok ? 0 : 1)
 }

@@ -269,3 +269,28 @@ describe('H3 · el gasto de la imagen cuenta para el tope del INGRESO', () => {
     void base; void m
   })
 })
+
+describe('condición 2 de CC#3 · `recibir` ofrece las FAMILIAS del catálogo al mirar una imagen (lo mismo que `etiquetar`)', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('imagen-minima-del-plato')]).toString('base64')
+  const imagen = (extra: Record<string, unknown> = {}) => cuerpo({ texto: undefined, fuente_ref: 'plato', archivo: { nombre: 'plato.png', tipo: 'image/png', base64: PNG }, ...extra })
+  const catalogoJsonLd = JSON.stringify({ '@context': 'https://schema.org', '@type': 'ItemList', itemListElement: [['Encebollado A', 'Encebollados'], ['Encebollado B', 'Encebollados'], ['Cola', 'Bebidas']].map(([n, c], i) => ({ '@type': 'ListItem', position: i + 1, item: { '@type': 'Product', name: n, category: c, offers: { '@type': 'Offer', price: '4', priceCurrency: 'USD' } } })) })
+  it('catálogo real del cliente: el modelo de visión ve «Familia «Encebollados» · agrupa: …» y se acepta la familia en `producto_visto`', async () => {
+    const { base, m, correr } = armar(undefined, {}, () => etiquetaBuena({ producto_visto: ['Encebollados', 'Postres'] }))
+    base.otras.client_web_pages = [{ id: 'wp-1', client_id: A, url: 'https://a.example/', title: 'Inicio', owner_role: 'propio', competitor_id: null, crawled_at: AHORA.toISOString(), content_text: `Texto.\n${catalogoJsonLd}` }]
+    const r = await correr(imagen())
+    expect(m.espia.imagenes[0].texto).toContain('Familia «Encebollados» · agrupa: Encebollado A, Encebollado B')
+    expect(base.fichas[0].producto).toEqual(['Encebollados'])
+    expect(r.c.notas.join(' ')).toMatch(/Postres/)
+  })
+  it('modo prueba con `familias_de_prueba`: se ofrecen y se aceptan; inválidas o fuera de prueba → 400', async () => {
+    const familias = [{ nombre: 'Encebollados', incluye: ['Encebollado A', 'Encebollado B'] }]
+    const ok = armar(undefined, {}, () => etiquetaBuena({ producto_visto: ['Encebollados'] }))
+    await ok.correr(imagen({ prueba: true, productos_de_prueba: ['Encebollado A', 'Encebollado B'], familias_de_prueba: familias }))
+    expect(ok.m.espia.imagenes[0].texto).toContain('Familia «Encebollados» · agrupa: Encebollado A, Encebollado B')
+    expect(ok.base.fichas[0].producto).toEqual(['Encebollados'])
+    const mala = armar()
+    expect((await mala.correr(imagen({ prueba: true, familias_de_prueba: 'x' }))).status).toBe(400)
+    expect((await mala.correr(imagen({ familias_de_prueba: familias }))).status).toBe(400)
+    expect(mala.m.espia.imagenes).toHaveLength(0)
+  })
+})

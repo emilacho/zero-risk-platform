@@ -13,7 +13,7 @@ import { leerArchivo as leerArchivoReal } from '../../archivos/leer'
 import type { LecturaDeArchivo } from '../../archivos/tipos'
 import { leerSitio } from '../../lectores'
 import { PLAZOS_EN_DIAS } from '../../plazos'
-import { type Etiqueta, MAXIMO_DE_LINEAS_DE_PRODUCTO, armarMensajeDeMirada, mirarImagen, peorCasoDeMirar } from '../etiquetar'
+import { type Etiqueta, type FamiliaDeProductos, MAXIMO_DE_LINEAS_DE_PRODUCTO, armarMensajeDeMirada, leerFamiliasDePrueba, lineaDeFamilia, mirarImagen, peorCasoDeMirar, vocabularioDelCatalogo } from '../etiquetar'
 import { estimarTokens } from '../medida'
 import type { PeticionConImagen } from '../modelo'
 import { CLIENTE_DE_PRUEBA, MODELO, PRECIO_POR_MILLON, RAZONAMIENTO, TIEMPO_MAXIMO_MS, costoDeLaLlamada, type PeticionAlModelo, type RespuestaDelModelo, type ResultadoDeRegistro } from '../razonar'
@@ -73,6 +73,8 @@ interface Entrada {
   prueba: boolean
   /** solo en modo prueba: el catálogo con que se valida «qué producto se ve» en una imagen */
   productosDePrueba: string[]
+  /** solo en modo prueba: las familias del catálogo de prueba (como en `etiquetar`) */
+  familiasDePrueba: FamiliaDeProductos[]
   archivo: { nombre: string; tipo: string | null; enlace: string | null; fecha: string | null; bytes: number | null; texto: string | null; base64: string | null } | null
 }
 
@@ -93,6 +95,15 @@ function validar(b: unknown): { ok: true; entrada: Entrada } | { ok: false; erro
     else if (!Array.isArray(pp) || pp.some((x) => typeof x !== 'string' || x.length > 200) || pp.length > MAXIMO_DE_LINEAS_DE_PRODUCTO) errores.push(`\`productos_de_prueba\` debe ser una lista de hasta ${MAXIMO_DE_LINEAS_DE_PRODUCTO} textos de hasta 200 caracteres`)
     else productosDePrueba = pp as string[]
   }
+  let familiasDePrueba: FamiliaDeProductos[] = []
+  if (b.familias_de_prueba !== undefined) {
+    if (b.prueba !== true) errores.push('`familias_de_prueba` solo se acepta con `prueba: true`')
+    else {
+      const leidas = leerFamiliasDePrueba(b.familias_de_prueba)
+      if (!leidas.ok) errores.push(leidas.error)
+      else familiasDePrueba = leidas.familias
+    }
+  }
   if (b.texto !== undefined && b.texto !== null && typeof b.texto !== 'string') errores.push('`texto` debe ser un texto')
   if (typeof b.texto === 'string' && b.texto.length > MAXIMO_DE_CARACTERES_DE_MATERIAL) errores.push(`\`texto\` pasa de ${MAXIMO_DE_CARACTERES_DE_MATERIAL} caracteres`)
   let archivo: Entrada['archivo'] = null
@@ -111,7 +122,7 @@ function validar(b: unknown): { ok: true; entrada: Entrada } | { ok: false; erro
   const texto = typeof b.texto === 'string' && b.texto.trim() ? b.texto : null
   if (!texto && !archivo) errores.push('falta el material: `texto` o `archivo`')
   if (errores.length) return { ok: false, errores }
-  return { ok: true, entrada: { cliente, origen: b.origen as OrigenDeIngreso, fuenteRef: typeof b.fuente_ref === 'string' && b.fuente_ref ? b.fuente_ref : null, esCompleta: b.es_completa === true, texto, fechaFuente: iso(b.fecha_fuente), prueba: b.prueba === true, productosDePrueba, archivo } }
+  return { ok: true, entrada: { cliente, origen: b.origen as OrigenDeIngreso, fuenteRef: typeof b.fuente_ref === 'string' && b.fuente_ref ? b.fuente_ref : null, esCompleta: b.es_completa === true, texto, fechaFuente: iso(b.fecha_fuente), prueba: b.prueba === true, productosDePrueba, familiasDePrueba, archivo } }
 }
 
 /** el tipo de un archivo con enlace se guarda con su barra (`audio/mpeg`), sin caracteres raros */
@@ -245,14 +256,14 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   let miradaDeLaImagen: Etiqueta | null = null
   const notasDeLaImagen: string[] = []
   if (imagenParaMirar && fichaDeArchivo && !archivoHeredado) {
-    let nombresDeProducto: string[] = e.productosDePrueba
-    let lineasDeProducto: string[] = e.productosDePrueba
+    let nombresDeProducto: string[] = [...e.familiasDePrueba.map((f) => f.nombre), ...e.productosDePrueba]
+    let lineasDeProducto: string[] = [...e.familiasDePrueba.map(lineaDeFamilia), ...e.productosDePrueba]
     if (!e.prueba) {
       const sitio = await leerSitio({ consulta: deps.consulta, cliente: e.cliente, ahora: ahoraD, plazos: PLAZOS_EN_DIAS })
       if (sitio.fallidas > 0) return cerrar('fallido', 'error_de_lectura_de_productos: no se pudo leer el catálogo del cliente para validar lo que se ve en la imagen', {}, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null })
-      const productos = sitio.lineas.filter((f) => f.clase === 'catalogo_item' || f.clase === 'catalogo_familia')
-      nombresDeProducto = productos.map((f) => f.titulo)
-      lineasDeProducto = productos.map((f) => `${f.titulo} · ${f.que_es}`.slice(0, 200))
+      const vocabulario = vocabularioDelCatalogo(sitio.lineas)
+      nombresDeProducto = vocabulario.nombres
+      lineasDeProducto = vocabulario.lineas
     }
     // la leyenda es SOLO el texto que ya pasó el filtro (un segmento apartado nunca llega al modelo de visión)
     const mensajeDeImagen = armarMensajeDeMirada(limpios.map((s) => s.texto).join('\n\n').slice(0, 1500), lineasDeProducto)

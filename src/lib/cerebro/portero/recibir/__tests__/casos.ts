@@ -17,6 +17,8 @@ export const PAGINA = (extra = ''): string => [extra, REPUESTO(), OTRO_REPUESTO]
 type Tabla = Record<string, unknown>[]
 export class BaseSimulada {
   ingresos: Tabla = []
+  /** otras tablas de solo lectura (p. ej. `client_web_pages` con el catálogo del cliente) */
+  otras: Record<string, Tabla> = {}
   fichas: Tabla = []
   llamadas: string[] = []
   fallarEn: 'crear' | 'aplicar' | 'cerrar' | null = null
@@ -31,7 +33,7 @@ export class BaseSimulada {
     this.llamadas.push(`leer:${p.tabla}`)
     if (this.errorDeLectura) return { filas: [], error: this.errorDeLectura }
     if (this.errorEnFichas && p.tabla === 'cerebro_fichas') return { filas: [], error: this.errorEnFichas }
-    const tabla = p.tabla === 'cerebro_ingresos' ? this.ingresos : p.tabla === 'cerebro_fichas' ? this.fichas : []
+    const tabla = p.tabla === 'cerebro_ingresos' ? this.ingresos : p.tabla === 'cerebro_fichas' ? this.fichas : (this.otras[p.tabla] ?? [])
     let filas = tabla.filter((f) => Object.entries(p.donde).every(([k, v]) => (v === null ? f[k] === null || f[k] === undefined : f[k] === v)))
     if (this.filasFalsas !== null && p.tabla === 'cerebro_fichas') filas = Array.from({ length: this.filasFalsas }, () => ({ ...(filas[0] ?? { id: 'x', firmas: [] }) }))
     return { filas: filas.map((f) => ({ ...f })) as Fila[], error: null }

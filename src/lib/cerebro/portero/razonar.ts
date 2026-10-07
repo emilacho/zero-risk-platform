@@ -1,8 +1,9 @@
 /**
  * RAZONAR · la ÚNICA ruta que llama al modelo del portero.
  *
- * Una lista que cabe (≤ 20.000 «tokens» de entrada, medidos con el factor real) va en UNA llamada. Una que no cabe va en DOS pasadas
- * (estantes → líneas de los estantes elegidos), nunca más. Cada llamada: sin reintentos, 25 s, razonamiento al mínimo, solo con `workflow_id`,
+ * Una lista que cabe (≤ 20.000 «tokens» de entrada, medidos con el factor real) va en UNA llamada. Una que no cabe se recorre por NIVELES
+ * (estante → clase → familia, solo los que hagan falta): en cada uno el modelo escoge qué grupos abrir y lo abierto se lee ENTERO (en trozos si aún no cabe);
+ * no hay búsqueda por palabras ni línea inalcanzable. Cada llamada: sin reintentos, 25 s, razonamiento al mínimo, solo con `workflow_id`,
  * con tope de gasto por llamada y por pedido, y REGISTRADA; si el registro falla, la respuesta lo grita (`alerta: llamada_sin_registro`).
  * El modelo ELIGE números; el sistema copia el texto. Si el modelo falla, tarda, contesta mal o se corta, la respuesta lo DICE
  * (`modo: respaldo` y su motivo) y la corrida sigue: nada queda colgado.
@@ -13,9 +14,9 @@ import { type Pedido, validarPedido } from '../conversacion'
 import { construirListaCorta } from '../lista-corta'
 import { type ListaCorta, NOMBRES_DE_FUENTE } from '../tipos'
 import { type Decision, extraerJson, interpretarDecision } from './decision'
-import { desplegar, agruparPorEstante, indiceDeEstantes } from './estantes'
-import { armarMensaje, armarMensajeDeEstantes, INSTRUCCION_DE_ESTANTES, INSTRUCCION_DEL_PORTERO } from './instruccion'
-import { type ListaNumerada, numerarLista } from './lista-numerada'
+import { agruparLineas, claveDeNivel, indiceDeGrupos, NIVELES, normalizarNombre, presupuestoDeLineas, tieneFamilia, trocear, vistaDe, type Nivel } from './estantes'
+import { armarMensaje, armarMensajeDeGrupos, GRUPOS_POR_NIVEL, INSTRUCCION_DE_ESTANTES, INSTRUCCION_DEL_PORTERO } from './instruccion'
+import { type LineaNumerada, type ListaNumerada, numerarLista } from './lista-numerada'
 import { estimarTokens, TOPE_DE_ENTRADA_EN_TOKENS } from './medida'
 import { leerListaDePrueba } from './prueba'
 
@@ -25,13 +26,13 @@ export const MODELO = 'claude-sonnet-5-5'
 export const RAZONAMIENTO = { type: 'between_tools' } as const
 /** medición real 1: 19 de 20 respuestas terminaron solas con 523–1.282; la única que se cortó traía un párrafo de 3.243 caracteres (ya no se pide) */
 export const MAX_TOKENS_DE_SALIDA = 1500
-/** la pasada de estantes solo devuelve unos nombres */
+/** la pasada de cada nivel (estante, clase, familia) solo devuelve unos nombres */
 export const MAX_TOKENS_DE_ESTANTES = 500
 export const TIEMPO_MAXIMO_MS = 25_000
 /** una llamada que costaría más que esto no se hace (la real cuesta ≈ US$ 0,03) */
 export const TOPE_DE_GASTO_POR_LLAMADA_USD = 0.08
-/** lo máximo que puede costar UN pedido entero (hasta dos llamadas); el peor caso calculado de las dos juntas es ≈ US$ 0,065 */
-export const TOPE_DE_GASTO_POR_PEDIDO_USD = 0.12
+/** lo máximo que puede costar UN pedido entero (los niveles + la lectura, en trozos si hace falta): típico ≈ US$ 0,02 · una familia ≈ 0,035 · todo un catálogo grande ≈ 0,19 (diseño v3 §3). Pasado el tope, respaldo declarado */
+export const TOPE_DE_GASTO_POR_PEDIDO_USD = 0.30
 /** US$ por millón de «tokens» (página oficial de precios de Anthropic consultada el 2026-10-05) */
 export const PRECIO_POR_MILLON = { entrada: 2, salida: 10 } as const
 
@@ -66,6 +67,7 @@ export interface DepsDeRazonar {
 export const costoDeLaLlamada = (usage: { input_tokens: number; output_tokens: number }): number =>
   (usage.input_tokens * PRECIO_POR_MILLON.entrada + usage.output_tokens * PRECIO_POR_MILLON.salida) / 1_000_000
 
+const MOTIVO_SIN_GRUPOS: Record<Nivel, string> = { estante: 'estantes_invalidos', clase: 'clases_invalidas', familia: 'familias_invalidas' }
 const salida = (status: number, cuerpo: Record<string, unknown>) => ({ status, cuerpo })
 
 interface Llamada {
@@ -199,35 +201,113 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     return terminar({ modo, estado: estadoLegible, ...(motivo ? { motivo_de_respaldo: motivo } : {}), llamo_al_modelo: true, ...(lectura && lectura.ok ? { decision: lectura.decision as Decision } : {}), ...extra })
   }
 
-  // ── cabe entera: UNA pasada
-  const mensajeEntero = armarMensaje(pedido, numerada)
-  if (estimarTokens(INSTRUCCION_DEL_PORTERO.length + mensajeEntero.length) <= topeEntrada) {
-    return pasadaDeDecision(numerada, 1, {})
+  // ── cabe entera: UNA pasada (las listas chicas, como el piloto de 62 líneas, nunca salen de aquí)
+  const cabe = (lineas: LineaNumerada[]): boolean =>
+    estimarTokens(INSTRUCCION_DEL_PORTERO.length + armarMensaje(pedido, vistaDe(numerada, lineas)).length) <= topeEntrada
+  if (cabe(numerada.lineas)) return pasadaDeDecision(numerada, 1, {})
+
+  // ── no cabe: se recorre por NIVELES (estante → clase → familia). En cada uno el portero dice qué grupos abrir; no hay búsqueda por palabras
+  // y ninguna línea se oculta por parecerse poco al pedido: lo elegido se lee entero, en trozos si hace falta.
+  const todas = numerada.lineas
+  let candidatas: LineaNumerada[] = todas
+  let huboRespuesta = false
+  let pasada1: Record<string, unknown> | null = null
+  const niveles: Array<Record<string, unknown>> = []
+  const extrasDeNiveles = (): Record<string, unknown> => ({ ...(pasada1 ? { pasada_1: pasada1 } : {}), niveles })
+  const respaldoDeTope = (extra: Record<string, unknown>) =>
+    pasadas === 0
+      ? sinModelo({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: 'tope_de_gasto', ...extra, ...comun })
+      : terminar({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: 'tope_de_gasto', llamo_al_modelo: true, ...extra, ...extrasDeNiveles() })
+
+  for (const nivel of NIVELES) {
+    if (cabe(candidatas)) break
+    // en el nivel de familia, lo que NO tiene familia no se pregunta: se abre SIEMPRE (si no, una «bolsa sin familia» escondería páginas, sedes y horarios)
+    const sinFamilia = nivel === 'familia' ? candidatas.filter((l) => !tieneFamilia(l.ficha)) : []
+    const sujetas = nivel === 'familia' ? candidatas.filter((l) => tieneFamilia(l.ficha)) : candidatas
+    const grupos = agruparLineas(sujetas, nivel)
+    if (grupos.length < 2) continue // un solo grupo: no hay nada que elegir en este nivel
+    const cfg = GRUPOS_POR_NIVEL[nivel]
+    const aviso = sinFamilia.length ? `\n(además se abren SIEMPRE ${sinFamilia.length} cosas que no tienen familia — ${[...new Set(sinFamilia.map((l) => l.ficha.clase))].join(', ')} — no hace falta elegirlas)` : ''
+    const mensaje = armarMensajeDeGrupos(pedido, indiceDeGrupos(grupos, nivel) + aviso, nivel)
+    if (estimarTokens(cfg.instruccion.length + mensaje.length) > topeEntrada) {
+      return pasadas === 0
+        ? sinModelo({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: 'indice_mas_grande_que_el_tope', ...comun })
+        : terminar({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: 'indice_mas_grande_que_el_tope', llamo_al_modelo: true, ...extrasDeNiveles() })
+    }
+    const peor = peorCaso(cfg.instruccion, mensaje, MAX_TOKENS_DE_ESTANTES)
+    if (peor > topeLlamada || gasto + peor > topePedido) return respaldoDeTope({ costo_maximo_calculado_usd: peor })
+    const ll = await llamar(peticion(cfg.instruccion, mensaje, MAX_TOKENS_DE_ESTANTES))
+    if (ll.respuesta) huboRespuesta = true
+    const porNombre = new Map(grupos.map((g) => [normalizarNombre(g.nombre), g]))
+    const leido = ll.respuesta ? extraerJson(ll.respuesta.texto, cfg.clave) : null
+    const valor = leido && typeof leido.valor === 'object' && leido.valor !== null ? (leido.valor as Record<string, unknown>)[cfg.clave] : undefined
+    const pedidosDelModelo = Array.isArray(valor) ? valor : null
+    const elegidos = [...new Set((pedidosDelModelo ?? []).filter((x): x is string => typeof x === 'string').map(normalizarNombre).filter((x) => porNombre.has(x)))]
+    const invalidos = [...new Set((pedidosDelModelo ?? []).filter((x) => !(typeof x === 'string' && porNombre.has(normalizarNombre(x)))).map(String))]
+    const nombresElegidos = elegidos.map((k) => (porNombre.get(k) as { nombre: string }).nombre)
+    const caida = ll.fallo ? ll.fallo.motivo : !ll.respuesta ? 'error_del_modelo' : !leido ? (ll.cortada ? 'salida_cortada' : 'json_roto') : elegidos.length === 0 ? MOTIVO_SIN_GRUPOS[nivel] : null
+    await anotar(ll, pasadas, caida, leido ? JSON.stringify(leido.valor) : '', {
+      modo: caida ? 'respaldo' : 'grupos', nivel, grupos_ofrecidos: grupos.length, grupos_elegidos: nombresElegidos, ...(nivel === 'estante' ? { estantes_elegidos: nombresElegidos } : {}),
+    })
+    const resumen = { grupos_ofrecidos: grupos.length, grupos_elegidos: nombresElegidos, grupos_invalidos: invalidos, costo_usd: ll.costo, tokens: { entrada: ll.usage.input_tokens, salida: ll.usage.output_tokens } }
+    niveles.push({ nivel, ...resumen })
+    if (nivel === 'estante') pasada1 = { estantes_elegidos: nombresElegidos, estantes_invalidos: invalidos, costo_usd: ll.costo, tokens: resumen.tokens }
+    if (caida) return terminar({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: caida, llamo_al_modelo: huboRespuesta, ...extrasDeNiveles() })
+    const abiertos = new Set(elegidos)
+    candidatas = [...sinFamilia, ...sujetas.filter((l) => abiertos.has(normalizarNombre(claveDeNivel(l.ficha, nivel))))].sort((x, y) => x.numero - y.numero)
   }
 
-  // ── no cabe: DOS pasadas (estantes → líneas de los estantes elegidos)
-  const estantes = agruparPorEstante(numerada)
-  const mensajeDeEstantes = armarMensajeDeEstantes(pedido, indiceDeEstantes(estantes))
-  const peor1 = peorCaso(INSTRUCCION_DE_ESTANTES, mensajeDeEstantes, MAX_TOKENS_DE_ESTANTES)
-  if (peor1 > topeLlamada || peor1 > topePedido) {
-    return sinModelo({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: 'tope_de_gasto', costo_maximo_calculado_usd: peor1, ...comun })
-  }
-  const l1 = await llamar(peticion(INSTRUCCION_DE_ESTANTES, mensajeDeEstantes, MAX_TOKENS_DE_ESTANTES))
-  const nombres = new Set(estantes.map((e) => e.nombre.toUpperCase()))
-  const leido = l1.respuesta ? extraerJson(l1.respuesta.texto, 'estantes') : null
-  const pedidos = leido && typeof leido.valor === 'object' && leido.valor !== null && Array.isArray((leido.valor as { estantes?: unknown }).estantes) ? ((leido.valor as { estantes: unknown[] }).estantes) : null
-  const pedidosTexto = (pedidos ?? []).filter((x): x is string => typeof x === 'string').map((x) => x.trim().toUpperCase())
-  const elegidos = [...new Set(pedidosTexto.filter((x) => nombres.has(x)))]
-  const invalidos = [...new Set((pedidos ?? []).filter((x) => !(typeof x === 'string' && nombres.has(x.trim().toUpperCase()))).map(String))]
-  const caida1 = l1.fallo ? l1.fallo.motivo : !l1.respuesta ? 'error_del_modelo' : !leido ? (l1.cortada ? 'salida_cortada' : 'json_roto') : elegidos.length === 0 ? 'estantes_invalidos' : null
-  await anotar(l1, 1, caida1, leido ? JSON.stringify(leido.valor) : '', { modo: caida1 ? 'respaldo' : 'estantes', estantes_elegidos: elegidos })
-  const pasada1 = { estantes_elegidos: elegidos, estantes_invalidos: invalidos, costo_usd: l1.costo, tokens: { entrada: l1.usage.input_tokens, salida: l1.usage.output_tokens } }
-  if (caida1) return terminar({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: caida1, llamo_al_modelo: l1.respuesta !== null, pasada_1: pasada1 })
+  const lecturaFinal = (trozos: number, extra: Record<string, unknown> = {}) => ({
+    lectura_final: { lineas_mostradas: candidatas.length, lineas_no_mostradas: todas.length - candidatas.length, trozos, ...extra },
+  })
 
-  const abierto = desplegar(numerada, elegidos, pedido, topeEntrada)
-  return pasadaDeDecision(abierto.numerada, 2, {
-    pasada_1: pasada1,
-    pasada_2: { lineas_mostradas: abierto.mostradas, lineas_no_mostradas: abierto.no_mostradas, recortada_por_coincidencia: abierto.recortada_por_coincidencia },
+  // ── lo abierto cabe en UNA llamada de decisión
+  if (cabe(candidatas)) return pasadaDeDecision(vistaDe(numerada, candidatas), pasadas + 1, { ...extrasDeNiveles(), ...lecturaFinal(1) })
+
+  // ── lo abierto no cabe y ya no se puede subdividir: se lee ENTERO en trozos consecutivos (una llamada por trozo, el costo se calcula ANTES)
+  const trozos = trocear(candidatas, presupuestoDeLineas(numerada, pedido, topeEntrada))
+  const vistas = trozos.map((t) => vistaDe(numerada, t))
+  const peores = vistas.map((v, i) => peorCaso(INSTRUCCION_DEL_PORTERO, armarMensaje(pedido, v, { numero: i + 1, de: trozos.length }), MAX_TOKENS_DE_SALIDA))
+  const peorTotal = peores.reduce((a, x) => a + x, 0)
+  if (peores.some((x) => x > topeLlamada) || gasto + peorTotal > topePedido) {
+    return respaldoDeTope({ costo_maximo_calculado_usd: peorTotal, ...lecturaFinal(trozos.length, { trozos_leidos: 0 }) })
+  }
+  const partes: Decision[] = []
+  const faltantesNoConcluyentes: string[] = []
+  let vacios = 0
+  for (let i = 0; i < vistas.length; i++) {
+    const mensaje = armarMensaje(pedido, vistas[i], { numero: i + 1, de: vistas.length })
+    const ll = await llamar(peticion(INSTRUCCION_DEL_PORTERO, mensaje, MAX_TOKENS_DE_SALIDA))
+    if (ll.respuesta) huboRespuesta = true
+    const lectura = ll.respuesta ? interpretarDecision(ll.respuesta.texto, vistas[i], { pixeles: pedido.pixeles, cortada: ll.cortada }) : null
+    // una parte donde nada sirve es legítima («entregar» vacío): solo es sospechosa si TODAS las partes salen vacías
+    const parteVacia = lectura !== null && !lectura.ok && lectura.caida === 'entregar_vacio_sospechoso'
+    const motivo = ll.fallo ? ll.fallo.motivo : lectura && !lectura.ok && !parteVacia ? lectura.caida : null
+    await anotar(ll, pasadas, motivo, lectura && lectura.ok ? JSON.stringify(lectura.decision) : '', { modo: motivo ? 'respaldo' : 'conversado', trozo: i + 1, trozos: vistas.length })
+    if (motivo) return terminar({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: motivo, llamo_al_modelo: huboRespuesta, ...extrasDeNiveles(), ...lecturaFinal(trozos.length, { trozos_leidos: i }) })
+    if (lectura && lectura.ok) {
+      partes.push(lectura.decision)
+      // lo que una parte da por «faltante» puede estar en otra parte: no se declara faltante, se anota como no concluyente
+      for (const f of lectura.decision.faltantes) if (!faltantesNoConcluyentes.includes(f)) faltantesNoConcluyentes.push(f)
+    } else vacios++
+  }
+  if (partes.length === 0) {
+    return terminar({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: 'entregar_vacio_sospechoso', llamo_al_modelo: true, ...extrasDeNiveles(), ...lecturaFinal(trozos.length, { trozos_leidos: trozos.length, trozos_vacios: vacios }) })
+  }
+  const unico = <T>(xs: T[]): T[] => [...new Set(xs)]
+  const decision: Decision = {
+    entregar: unico(partes.flatMap((d) => d.entregar)),
+    entregar_numeros: unico(partes.flatMap((d) => d.entregar_numeros)),
+    pixeles: unico(partes.flatMap((d) => d.pixeles)).slice(0, 6),
+    por_que: partes.flatMap((d) => d.por_que),
+    faltantes: [],
+    duda: unico(partes.flatMap((d) => d.duda)),
+    numeros_invalidos: partes.flatMap((d) => d.numeros_invalidos),
+    ...(faltantesNoConcluyentes.length ? { faltantes_no_concluyentes: faltantesNoConcluyentes.slice(0, 20) } : {}),
+  }
+  return terminar({
+    modo: 'conversado', estado: estadoLegible, llamo_al_modelo: true, decision, ...extrasDeNiveles(),
+    ...lecturaFinal(trozos.length, { trozos_leidos: trozos.length, trozos_vacios: vacios }),
   })
 }
 
