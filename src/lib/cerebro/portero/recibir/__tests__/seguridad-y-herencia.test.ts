@@ -235,3 +235,52 @@ describe('H1b de CC#3 · una ficha SUELTA de una línea no parte un producto: so
     expect(partidos).toBe(0)
   })
 })
+
+describe('regresión de H1b (CC#3): un re-ingreso IDÉNTICO hereda TODO, también las fichas sueltas pegadas una a otra', () => {
+  it('título + subtítulo (dos sueltas adyacentes) + un producto de 3 líneas: todo se hereda, 0 al modelo', () => {
+    const p = planearHerencia({ limpios: segs('titulo', 'subtitulo', 'nombre-1', 'precio-1', 'garantia-1'), vivas: [viva('t', ['titulo']), viva('s', ['subtitulo']), viva('p1', ['nombre-1', 'precio-1', 'garantia-1'])], esCompleta: true })
+    expect(p.heredadas.map((f) => f.id).sort()).toEqual(['p1', 's', 't'])
+    expect(p.paraModelo).toEqual([])
+  })
+  it('tres sueltas adyacentes', () => {
+    const p = planearHerencia({ limpios: segs('a', 'b', 'c'), vivas: [viva('a', ['a']), viva('b', ['b']), viva('c', ['c'])], esCompleta: true })
+    expect(p.heredadas).toHaveLength(3)
+    expect(p.paraModelo).toEqual([])
+  })
+  it('re-raspado sin UN patrocinador de una lista de sueltas: heredan los que siguen y solo el que falta se retira', () => {
+    const vivas = ['s1', 's2', 's3', 's4', 's5', 's6'].map((x) => viva(x, [x]))
+    const p = planearHerencia({ limpios: segs('s1', 's2', 's4', 's5', 's6'), vivas, esCompleta: true })
+    expect(p.heredadas.map((f) => f.id)).toEqual(['s1', 's2', 's4', 's5', 's6'])
+    expect(p.sinFirmas.map((f) => f.id)).toEqual(['s3'])
+    expect(p.paraModelo).toEqual([])
+  })
+  it('un tramo con una línea que NADIE reclama (un producto cambiado) no es heredado por las sueltas que lo rodean: todo el tramo va al modelo', () => {
+    const p = planearHerencia({ limpios: segs('x', 'precio-nuevo', 'y'), vivas: [viva('x', ['x']), viva('y', ['y'])], esCompleta: true })
+    expect(p.heredadas).toEqual([])
+    expect(p.paraModelo.map((s) => s.texto)).toEqual(['x', 'precio-nuevo', 'y'])
+  })
+  it('dos tramos libres distintos se juzgan por separado: el explicado hereda, el que tiene una línea nueva va al modelo', () => {
+    const vivas = [viva('l', ['largo-1', 'largo-2']), viva('a', ['a']), viva('b', ['b'])]
+    const p = planearHerencia({ limpios: segs('a', 'b', 'largo-1', 'largo-2', 'nueva', 'a'), vivas, esCompleta: true })
+    expect(p.heredadas.map((f) => f.id).sort()).toEqual(['a', 'b', 'l'])
+    expect(p.paraModelo.map((s) => s.texto)).toEqual(['nueva', 'a'])
+  })
+  it('una suelta repetida dos veces en un tramo necesita DOS fichas sueltas iguales (una posición se usa una vez)', () => {
+    expect(planearHerencia({ limpios: segs('g', 'g'), vivas: [viva('g1', ['g'])], esCompleta: true }).heredadas).toEqual([])
+    expect(planearHerencia({ limpios: segs('g', 'g'), vivas: [viva('g1', ['g']), viva('g2', ['g'])], esCompleta: true }).heredadas.map((f) => f.id)).toEqual(['g1', 'g2'])
+  })
+  it('BARRIDO de idempotencia (semilla fija): el material = la unión de las fichas de un ingreso anterior (bloques de 1 a 4 líneas, con textos repetidos) → TODO hereda y 0 va al modelo', () => {
+    let semilla = 424242
+    const azar = (n: number) => { semilla = (semilla * 1103515245 + 12345) % 2147483648; return semilla % n }
+    const POOL = ['x', 'y', 'z', 'Precio: 40 USD', 'Garantía: 12 meses', 'titulo', 'subtitulo']
+    for (let vuelta = 0; vuelta < 3000; vuelta++) {
+      const bloques: string[][] = []
+      for (let n = 1 + azar(8); n > 0; n--) bloques.push(Array.from({ length: 1 + azar(4) }, () => (azar(3) === 0 ? POOL[azar(POOL.length)] : `${POOL[azar(POOL.length)]} ${azar(6)}`)))
+      const limpios = segs(...bloques.flat())
+      const vivas = bloques.map((b, i) => viva(`f${i}`, b))
+      const r = planearHerencia({ limpios, vivas, esCompleta: true })
+      expect(r.paraModelo.map((s) => s.texto), `vuelta ${vuelta}`).toEqual([])
+      expect(r.heredadas.length, `vuelta ${vuelta}`).toBe(vivas.length)
+    }
+  })
+})
