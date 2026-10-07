@@ -9,6 +9,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const RAIZ = process.cwd()
@@ -115,6 +116,8 @@ export const ESCRITORES_CONOCIDOS: Record<string, string> = {
   'scripts/worker-staging/3lyknrP3PoS2KzUf/fotos-revisar.js': 'Servicio de Apify · nodo «Fotos · revisar» · upsert de las fotos que no se pudieron bajar',
   'scripts/worker-staging/3lyknrP3PoS2KzUf/completar-contexto-fotos.mjs': 'guion manual de una sola vez · completa las filas viejas por PATCH',
 }
+/** quién, DENTRO de src/ y services/, puede escribir en client_social_images: solo la ruta `etiquetar` del portero (paso 4) y solo UPDATE de las 4 columnas de etiqueta */
+export const ESCRITORES_DE_ETIQUETAS_EN_SRC: Record<string, string> = {}
 export function escribeEnLaTabla(texto: string): boolean {
   for (const m of texto.matchAll(/rest\/v1\/client_social_images/g)) {
     // el PRIMER `method:` después de la dirección es el de ESA llamada (el que sigue puede ser de otra)
@@ -128,9 +131,20 @@ export function escribeEnLaTabla(texto: string): boolean {
 }
 describe('C · nadie escribe en client_social_images salvo quienes ya lo hacían', () => {
   const candidatos = TODOS.filter((rel) => !/(^|\/)__tests__\//.test(rel) && !/\.test\.ts$/.test(rel) && !/^supabase\/(migrations|reversas)\//.test(rel))
-  it('el código del producto (src/ y services/) no la escribe', () => {
+  it('el código del producto (src/ y services/) solo la escribe un escritor DECLARADO, y ese solo actualiza las 4 columnas de etiqueta', () => {
     const escriben = candidatos.filter((rel) => /^(src|services)\//.test(rel)).filter((rel) => escribeEnLaTabla(leer(rel)))
-    expect(escriben, `escriben en client_social_images: ${escriben.join(', ')}`).toEqual([])
+    expect(escriben.sort(), `escriben en client_social_images sin estar declarados: ${escriben.join(', ')}`).toEqual(Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC).sort())
+    for (const rel of Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC)) {
+      const t = leer(rel).split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n')
+      expect(/\bmethod:\s*['"`](POST|PUT|DELETE)['"`]/.test(t), `${rel}: solo se permite PATCH (actualizar), nunca insertar ni borrar`).toBe(false)
+      expect(/\.(insert|upsert|delete)\(/.test(t), `${rel}: no puede insertar ni borrar filas`).toBe(false)
+    }
+  })
+  it('cada escritor declarado exporta COLUMNAS_QUE_ESCRIBE y son EXACTAMENTE las 4 de etiqueta (producto, url, caption… jamás)', async () => {
+    for (const rel of Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC)) {
+      const mod = await import(/* @vite-ignore */ pathToFileURL(path.join(RAIZ, rel)).href.replace(/\.ts$/, ''))
+      expect([...mod.COLUMNAS_QUE_ESCRIBE].sort(), rel).toEqual(['etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra'])
+    }
   })
   it('en scripts/ solo la escriben los tres conocidos; un escritor nuevo falla hasta que se declare con su razón', () => {
     const escriben = candidatos.filter((rel) => rel.startsWith('scripts/')).filter((rel) => escribeEnLaTabla(leer(rel)))

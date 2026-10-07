@@ -436,3 +436,87 @@ export async function leerTrozosSinLector(ctx: Contexto): Promise<Salida> {
   }))
   return exito({ trozos_sin_lector: estadoDeFuente(lineas.length) }, lineas)
 }
+
+// ── fichas del cerebro (`cerebro_fichas`) · la fuente nueva del paso 3 ───────────────────────────────
+const ORIGEN_DE_LA_FICHA: Record<string, { origen: Origen; estado: Estado }> = {
+  dueno: { origen: 'dueno', estado: 'dicho_por_dueno' },
+  su_fuente: { origen: 'su_fuente', estado: 'visto_en_su_fuente' },
+  plataforma: { origen: 'plataforma', estado: 'medido' },
+  tercero: { origen: 'tercero', estado: 'de_tercero' },
+}
+const DIA_EN_MS = 86_400_000
+
+/**
+ * Lo VIGENTE de `cerebro_fichas`, con el mismo formato de línea y de referencia que las demás fuentes (`cerebro_fichas:<id>`).
+ *  · quien lo afirmó sale del ORIGEN de la ficha; propiedad ajena = sobre terceros; propiedad incierta = `propiedad_incierta`;
+ *  · vigencia: la fecha EXPLÍCITA del material si la hay; si no, el plazo (de la lista de plazos) contado desde la última reconfirmación; un plazo que no está en la lista = sin plazo;
+ *  · versiones: la ficha que reemplaza a otra (`version_de`) manda; la vieja queda marcada como reemplazada y apunta a la vigente;
+ *  · lo RETIRADO se muestra con su marca y su motivo (no se oculta ni vence); lo DESCARTADO y lo de PRUEBA no existen para la lista.
+ */
+export async function leerFichas(ctx: Contexto): Promise<Salida> {
+  const r = await leer(ctx, {
+    tabla: 'cerebro_fichas',
+    columnas: ['id', 'clase', 'titulo', 'que_es', 'contenido', 'archivo_nombre', 'archivo_tipo', 'archivo_enlace', 'archivo_bytes', 'origen', 'fecha_fuente', 'reconfirmado_en', 'plazo', 'vigente_hasta', 'version_de', 'retirada_en', 'motivo_retirada', 'producto', 'sede', 'propiedad', 'residual', 'creado_en', 'prueba', 'descartada'],
+    donde: { client_id: ctx.cliente },
+  })
+  if (r.error) return fallo(['fichas'], r.error)
+  const filas = r.filas.filter((f) => f.prueba !== true && f.descartada !== true).sort((a, b) => (String(iso(a.creado_en)) < String(iso(b.creado_en)) ? -1 : 1))
+  const porId = new Map(filas.map((f) => [String(f.id), f]))
+  const hijoDe = new Map<string, string>()
+  for (const f of filas) if (f.version_de !== null && f.version_de !== undefined && porId.has(String(f.version_de))) hijoDe.set(String(f.version_de), String(f.id))
+  const profundidad = (id: string): number => {
+    let n = 1
+    const visto = new Set([id])
+    for (let padre = porId.get(id)?.version_de; padre !== null && padre !== undefined && porId.has(String(padre)) && !visto.has(String(padre)); padre = porId.get(String(padre))?.version_de) { visto.add(String(padre)); n++ }
+    return n
+  }
+  const hoja = (id: string): string => {
+    const visto = new Set([id])
+    let actual = id
+    while (hijoDe.has(actual) && !visto.has(hijoDe.get(actual) as string)) { actual = hijoDe.get(actual) as string; visto.add(actual) }
+    return actual
+  }
+  const t0 = ctx.ahora.getTime()
+  const lineas = filas.map((f): Ficha => {
+    const id = String(f.id)
+    const mapa = ORIGEN_DE_LA_FICHA[String(f.origen)] ?? ORIGEN_DE_LA_FICHA.su_fuente
+    const contenido = texto(f.contenido)
+    const archivo = texto(f.archivo_nombre) ? ` · archivo ${texto(f.archivo_tipo) ?? 'sin tipo'} «${texto(f.archivo_nombre)}»${typeof f.archivo_bytes === 'number' || (typeof f.archivo_bytes === 'string' && f.archivo_bytes) ? ` (${f.archivo_bytes} bytes)` : ''}` : ''
+    const base = iso(f.reconfirmado_en) ?? iso(f.fecha_fuente) ?? iso(f.creado_en)
+    const plazoClase: ClaseDePlazo = typeof f.plazo === 'string' && Object.prototype.hasOwnProperty.call(ctx.plazos, f.plazo) ? (f.plazo as ClaseDePlazo) : 'sin_plazo'
+    const explicita = iso(f.vigente_hasta)
+    const retirada = iso(f.retirada_en)
+    const avisos: string[] = []
+    let vig: { vigente_hasta: string | null; vencido: boolean }
+    if (retirada) {
+      vig = { vigente_hasta: null, vencido: false }
+      avisos.push(`RETIRADA desde ${retirada.slice(0, 10)}${texto(f.motivo_retirada) ? ` · ${texto(f.motivo_retirada)}` : ''}`)
+    } else if (explicita) {
+      const vencido = new Date(explicita).getTime() < t0
+      vig = { vigente_hasta: explicita, vencido }
+      if (vencido) avisos.push(`VENCIDO desde ${explicita.slice(0, 10)} · fecha del propio material · verifícalo antes de afirmarlo`)
+    } else {
+      const v = vigenciaDe(base, ctx.plazos[plazoClase], ctx.ahora)
+      vig = { vigente_hasta: v.vigente_hasta, vencido: v.vencido }
+      if (v.aviso) avisos.push(v.aviso)
+    }
+    if (f.residual === true) avisos.push('SIN CLASIFICAR · archivado tal cual, sin juicio sobre qué es')
+    const reemplazada = hijoDe.has(id)
+    const producto = Array.isArray(f.producto) ? (f.producto as unknown[]).filter((p): p is string => typeof p === 'string') : null
+    const salida: Ficha = {
+      ref: `cerebro_fichas:${id}`, estante: 'E8', clase: texto(f.clase) ?? 'ficha', titulo: texto(f.titulo) ?? texto(f.clase) ?? 'Ficha',
+      que_es: `${recorte(texto(f.que_es) ?? texto(f.titulo) ?? 'ficha del cerebro', 200)}${archivo}`,
+      origen: mapa.origen, estado: f.propiedad === 'incierta' ? 'propiedad_incierta' : mapa.estado, fecha_fuente: iso(f.fecha_fuente) ?? iso(f.creado_en),
+      vigente_hasta: vig.vigente_hasta, vencido: vig.vencido, peso_estimado: pesoDeTexto(contenido ?? `${texto(f.titulo) ?? ''} ${texto(f.que_es) ?? ''}${archivo}`),
+      version: profundidad(id), vigente: !reemplazada, reemplazada, versiones_anteriores: reemplazada ? 0 : profundidad(id) - 1,
+    }
+    if (reemplazada) salida.ref_de_la_vigente = `cerebro_fichas:${hoja(id)}`
+    if (avisos.length) salida.aviso = avisos.join(' · ')
+    if (f.propiedad === 'ajena') salida.sobre_terceros = true
+    if (producto && producto.length) salida.producto = producto
+    if (texto(f.sede)) salida.sede = texto(f.sede)
+    if (texto(f.archivo_enlace)) salida.enlace = texto(f.archivo_enlace)
+    return salida
+  })
+  return exito({ fichas: estadoDeFuente(lineas.length) }, lineas)
+}

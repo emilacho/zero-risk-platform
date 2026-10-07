@@ -7,7 +7,7 @@
  */
 import type { Consulta } from './consulta'
 import {
-  type Contexto, type Salida, leerCompetencia, leerDecisionesDeLaCola, leerFichaDelCliente, leerFotos, leerManual, leerPerfilDeClienteIdeal,
+  type Contexto, type Salida, leerCompetencia, leerDecisionesDeLaCola, leerFichaDelCliente, leerFichas, leerFotos, leerManual, leerPerfilDeClienteIdeal,
   leerSedes, leerSitio, leerTrabajosHechos, leerTrozosSinLector,
 } from './lectores'
 import { PLAZOS_EN_DIAS, type Plazos } from './plazos'
@@ -43,6 +43,18 @@ function atarDecisionesALaVersion(lineas: Ficha[]): Ficha[] {
   })
 }
 
+/**
+ * Una foto vive en UNA sola casa: si una ficha del cerebro trae el MISMO enlace que una foto de `client_social_images`, se queda la foto de su tabla y la ficha
+ * se omite de la lista (el diseño pide que toda foto nueva que no venga de un raspado viva solo en `cerebro_fichas`; esto lo vigila). Se DECLARA, no se calla.
+ */
+function sinFotosDuplicadas(lineas: Ficha[]): { lineas: Ficha[]; omitidas: number } {
+  const deFotos = new Set(lineas.filter((f) => f.ref.startsWith('client_social_images:')).map((f) => f.enlace).filter((e): e is string => typeof e === 'string' && e.length > 0))
+  const sobran = lineas.filter((f) => f.ref.startsWith('cerebro_fichas:') && typeof f.enlace === 'string' && deFotos.has(f.enlace))
+  if (!sobran.length) return { lineas, omitidas: 0 }
+  const fuera = new Set(sobran.map((f) => f.ref))
+  return { lineas: lineas.filter((f) => !fuera.has(f.ref)), omitidas: sobran.length }
+}
+
 export async function construirListaCorta(consulta: Consulta, clienteId: string, opciones: OpcionesListaCorta = {}): Promise<ListaCorta> {
   const ahora = opciones.ahora ?? new Date()
   const plazos: Plazos = { ...PLAZOS_EN_DIAS, ...(opciones.plazos ?? {}) } as Plazos
@@ -59,7 +71,7 @@ export async function construirListaCorta(consulta: Consulta, clienteId: string,
 
   const salidas: Salida[] = [ficha.salida, ...(await Promise.all([
     leerManual(ctx), leerPerfilDeClienteIdeal(ctx), leerCompetencia(ctx), leerSitio(ctx), leerSedes(ctx), leerFotos(ctx),
-    leerTrabajosHechos(ctx), leerDecisionesDeLaCola(ctx), leerTrozosSinLector(ctx),
+    leerTrabajosHechos(ctx), leerDecisionesDeLaCola(ctx), leerTrozosSinLector(ctx), leerFichas(ctx),
   ]))]
 
   const fuentes = todasEn(vacia())
@@ -70,7 +82,13 @@ export async function construirListaCorta(consulta: Consulta, clienteId: string,
   const lecturas = salidas.reduce((s, x) => s + x.lecturas, 0)
   const fallidas = salidas.reduce((s, x) => s + x.fallidas, 0)
   const orden = (f: Ficha): string => `${f.estante}|${f.clase}|${f.ref}`
-  const lineas = atarDecisionesALaVersion(salidas.flatMap((s) => s.lineas)).sort((a, b) => (orden(a) < orden(b) ? -1 : 1))
+  const sinDuplicadas = sinFotosDuplicadas(salidas.flatMap((s) => s.lineas))
+  if (sinDuplicadas.omitidas > 0 && fuentes.fichas.estado !== 'error_de_lectura') {
+    const n = sinDuplicadas.omitidas
+    const restantes = Math.max(0, fuentes.fichas.n - n)
+    fuentes.fichas = { estado: restantes > 0 ? 'ok' : 'sin_material', n: restantes, detalle: `${n} ficha${n > 1 ? 's' : ''} omitida${n > 1 ? 's' : ''} por ser la misma foto que ya vive en client_social_images` }
+  }
+  const lineas = atarDecisionesALaVersion(sinDuplicadas.lineas).sort((a, b) => (orden(a) < orden(b) ? -1 : 1))
   const estado: ListaCorta['estado'] = fallidas === 0 ? 'ok' : fallidas >= lecturas ? 'error_de_lectura' : 'parcial'
   return { ...base, estado, fuentes, lineas }
 }

@@ -21,6 +21,9 @@ export const FUENTE_DE_CLASE: Record<string, NombreDeFuente> = {
   decision_del_aprobador: 'decisiones_del_aprobador', trozo: 'trozos_sin_lector',
 }
 
+/** a qué fuente pertenece una línea: las fichas del cerebro tienen clase LIBRE, así que se reconocen por su referencia */
+export const fuenteDeLaLinea = (f: Ficha): string => (f.ref.startsWith('cerebro_fichas:') ? 'fichas' : FUENTE_DE_CLASE[f.clase] ?? '')
+
 export interface LineaNumerada { numero: number; ficha: Ficha }
 export interface ListaNumerada {
   lineas: LineaNumerada[]
@@ -62,7 +65,7 @@ export function numerarLista(lista: ListaCorta, opciones: { ya_trae?: string[] }
   const quitar = new Set(pedidos)
   const fijo = loFijo(lista)
   const fijas = new Set(fijo.map((f) => f.ref))
-  const visibles = lista.lineas.filter((f) => !fijas.has(f.ref) && f.reemplazada !== true && !quitar.has(f.clase) && !quitar.has(FUENTE_DE_CLASE[f.clase] ?? ''))
+  const visibles = lista.lineas.filter((f) => !fijas.has(f.ref) && f.reemplazada !== true && !quitar.has(f.clase) && !quitar.has(fuenteDeLaLinea(f)))
   const lineas = visibles.map((ficha, i) => ({ numero: i + 1, ficha }))
   const huella = createHash('sha256').update(JSON.stringify(lineas.map((l) => [l.ficha.ref, l.ficha.peso_estimado, l.ficha.vencido]))).digest('hex').slice(0, 16)
   return { lineas, texto: lineas.map((l) => lineaParaElModelo(l.numero, l.ficha)).join('\n'), huella, fijo, ya_trae_desconocido: desconocidos }

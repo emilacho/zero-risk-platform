@@ -58,6 +58,14 @@ const LEIBLES: Record<string, Leible> = {
   },
   client_sede_datos: { columnas: ['id', 'campo', 'valor_texto', 'fuente', 'observado_en'], texto: (f) => (cadena(f.valor_texto) ? `${cadena(f.campo) ?? 'dato'} · ${cadena(f.fuente) ?? 'fuente desconocida'} · observado ${fecha(f.observado_en)}: ${f.valor_texto}` : null) },
   client_sedes: { columnas: ['id', 'clave', 'ciudad'], texto: (f) => `Sede ${cadena(f.clave) ?? ''} · ciudad ${cadena(f.ciudad) ?? 'sin declarar'}`.trim() },
+  // la ficha del cerebro: su texto completo copiado; si es un archivo sin texto, su descripción (nombre, tipo, tamaño y enlace); nunca queda sin lectura
+  cerebro_fichas: {
+    columnas: ['id', 'titulo', 'que_es', 'contenido', 'archivo_nombre', 'archivo_tipo', 'archivo_enlace', 'archivo_bytes'],
+    texto: (f) => cadena(f.contenido)
+      ?? (cadena(f.archivo_nombre) || cadena(f.archivo_enlace)
+        ? [`Archivo: ${cadena(f.archivo_nombre) ?? 'sin nombre'}`, `Tipo: ${cadena(f.archivo_tipo) ?? 'sin tipo'}`, `Tamaño: ${f.archivo_bytes ?? 'sin dato'} bytes`, `Enlace: ${cadena(f.archivo_enlace) ?? 'sin enlace'}`, ...(cadena(f.que_es) ? [`Qué es: ${f.que_es}`] : [])].join('\n')
+        : [cadena(f.titulo), cadena(f.que_es)].filter(Boolean).join('\n') || null),
+  },
   hitl_queue: {
     columnas: ['id', 'type', 'status', 'decision', 'resolution_notes'],
     texto: (f) => [`${cadena(f.type) ?? 'revisión'} · ${cadena(f.status) ?? ''}`.trim(), Object.keys(objeto(f.decision)).length ? JSON.stringify(f.decision) : null, cadena(f.resolution_notes)].filter(Boolean).join('\n'),

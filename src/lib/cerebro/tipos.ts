@@ -67,7 +67,7 @@ export interface EstadoDeFuente { estado: EstadoDeLectura; n: number; detalle?: 
 
 export const NOMBRES_DE_FUENTE = [
   'ficha_del_cliente', 'manual', 'perfil_cliente_ideal', 'competencia', 'sitio', 'productos', 'sedes',
-  'datos_de_sede', 'fotos', 'trabajos_hechos', 'decisiones_del_aprobador', 'trozos_sin_lector',
+  'datos_de_sede', 'fotos', 'trabajos_hechos', 'decisiones_del_aprobador', 'trozos_sin_lector', 'fichas',
 ] as const
 export type NombreDeFuente = (typeof NOMBRES_DE_FUENTE)[number]
 
