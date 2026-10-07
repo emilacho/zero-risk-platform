@@ -13,9 +13,9 @@ describe('texto de un .docx', () => {
     expect(r.estado).toBe('ok'); expect(r.tipo).toBe('word')
     expect(r.texto).toBe('Contrato de servicios\n\nPago & entrega: 50 < 100 > 10 "ok"\n\nColumna\tValor')
   })
-  it('una tabla: una línea por fila, celdas separadas por « | »', () => {
+  it('una tabla: UN BLOQUE POR FILA (cada fila es su propio segmento), celdas separadas por « | »', () => {
     const r = leerWord(crearDocx(parrafoXml('Honorarios') + tablaXml([['Servicio', 'Precio'], ['Consulta', '40'], ['Contrato', '300']])), 't.docx')
-    expect(r.texto).toBe('Honorarios\n\nServicio | Precio\nConsulta | 40\nContrato | 300')
+    expect(r.texto).toBe('Honorarios\n\nServicio | Precio\n\nConsulta | 40\n\nContrato | 300')
   })
   it('saltos de línea dentro de un párrafo y referencias numéricas de carácter', () => {
     const r = leerWord(crearDocx('<w:p><w:r><w:t>Linea uno</w:t><w:br/><w:t>Linea dos &#233; &#x41;</w:t></w:r></w:p>'), 's.docx')

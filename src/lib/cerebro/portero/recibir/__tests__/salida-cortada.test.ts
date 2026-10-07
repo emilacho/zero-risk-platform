@@ -16,7 +16,7 @@ const conCapacidad = (capacidad: number, agrupa = 3): Respuesta => (p) => {
   if (ns.length > capacidad) return { texto: '{"fichas":[{"clase":"producto","titulo":"Repues', stop_reason: 'max_tokens', usage: { input_tokens: 2500, output_tokens: 2000 } }
   const fichas = []
   for (let i = 0; i < ns.length; i += agrupa) fichas.push({ clase: 'producto', titulo: `Cosa ${ns[i]}`, que_es: 'x', segmentos: ns.slice(i, i + agrupa), propiedad: 'propia', plazo: 'precio_oferta_horario' })
-  return respuestaJson({ fichas, descartes: [] }, { input_tokens: 2500, output_tokens: 400 })
+  return respuestaJson({ fichas, descartes: [] }, { input_tokens: 2500, output_tokens: 1500 })
 }
 
 function armar(respuesta: Respuesta, extra: Partial<DepsDeRecibir> = {}) {

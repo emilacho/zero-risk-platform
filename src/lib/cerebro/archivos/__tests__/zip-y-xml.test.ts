@@ -125,7 +125,7 @@ describe('CSV · BOM, CRLF, «;» y comillas con salto (M22)', () => {
   })
   it('CRLF, separador «;» y comillas con salto de línea y comillas dobles', () => {
     const r = leerHoja(Buffer.from('\uFEFFa;b\r\n"x;1";"dijo ""sí""\r\ny"\r\n', 'utf8'), 'x.csv', 'csv')
-    expect(r.texto).toBe('Columnas: a | b\nfila 2: a: x;1 | b: dijo "sí"\ny')
+    expect(r.texto).toBe('Columnas: a | b\n\nfila 2: a: x;1 | b: dijo "sí"\ny')
   })
 })
 

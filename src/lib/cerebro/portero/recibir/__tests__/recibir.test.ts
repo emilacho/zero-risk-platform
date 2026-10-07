@@ -407,8 +407,8 @@ describe('archivos', () => {
     expect(todo).not.toContain(PNG)
     expect(todo).not.toMatch(/base64/)
   })
-  it('un escaneado / ilegible / vacío / protegido: ingreso «fallido» con el motivo del lector, sin modelo, US$ 0', async () => {
-    for (const estado of ['escaneado', 'ilegible', 'vacio', 'protegido', 'sobre_el_tope', 'tipo_no_admitido'] as const) {
+  it('un ilegible / vacío / protegido: ingreso «fallido» con el motivo del lector, sin modelo, US$ 0', async () => {
+    for (const estado of ['ilegible', 'vacio', 'protegido', 'sobre_el_tope', 'tipo_no_admitido'] as const) { // el «escaneado» ya NO falla: queda con ficha de archivo (arreglo-2.test.ts)
       const { base, m, correr } = armar(modeloDeGrupos(3), { leerArchivo: async () => ({ estado, tipo: 'pdf', nombre: 'x.pdf', huella: 'h'.repeat(64), bytes: 1234, texto: '', avisos: [], motivo: `el lector dijo ${estado}` }) })
       const r = await correr(cuerpo({ texto: undefined, archivo: { nombre: 'x.pdf', tipo: 'pdf', base64: 'AAAA' } }))
       expect(r.c, estado).toMatchObject({ estado: 'fallido', llamo_al_modelo: false, costo_usd: 0 })

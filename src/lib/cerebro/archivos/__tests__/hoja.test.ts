@@ -30,11 +30,21 @@ describe('CSV', () => {
     const r = csv('a,b,c\n1,,3\n,,\n4,5,\n')
     expect(r.texto).toContain('fila 2: a: 1 | c: 3'); expect(r.texto).toContain('fila 4: a: 4 | b: 5'); expect(r.texto).not.toContain('fila 3')
   })
-  it('cada 20 filas hay una línea en blanco y se repite «Columnas:» (así el sistema corta en segmentos que se explican solos)', () => {
+  it('UNA FILA POR BLOQUE: un bloque de encabezado y después cada fila separada por línea en blanco (cada fila es su segmento, y se explica sola)', () => {
     const filas = Array.from({ length: 45 }, (_, i) => `p${i},${i}`).join('\n')
     const r = csv('producto,precio\n' + filas)
-    expect(r.texto.match(/^Columnas: producto \| precio$/gm)?.length).toBe(3)
-    expect(r.texto.split('\n\n').length).toBe(3)
+    const bloques = r.texto.split('\n\n')
+    expect(bloques).toHaveLength(46)
+    expect(bloques[0]).toBe('Columnas: producto | precio')
+    expect(bloques[1]).toBe('fila 2: producto: p0 | precio: 0')
+    expect(bloques.slice(1).every((b) => /^fila \d+: producto: p\d+ \| precio: \d+$/.test(b))).toBe(true)
+  })
+  it('una hoja con nombre lleva su nombre en el encabezado y en cada fila', () => {
+    const r = leerHoja(crearXlsx([{ nombre: 'Tarifas', filas: [['servicio', 'precio'], ['consulta', 40], ['visita', 25]] }]), 't.xlsx', 'xlsx')
+    const bloques = r.texto.split('\n\n')
+    expect(bloques[0]).toBe('Hoja «Tarifas»\nColumnas: servicio | precio')
+    expect(bloques[1]).toBe('Hoja «Tarifas» · fila 2: servicio: consulta | precio: 40')
+    expect(bloques).toHaveLength(3)
   })
   it('una fórmula maliciosa en una celda se lee como TEXTO, no se interpreta', () => {
     const r = csv('a,b\n"=cmd|\' /C calc\'!A0",2')

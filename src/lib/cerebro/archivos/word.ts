@@ -56,7 +56,7 @@ export function leerWord(buf: Buffer, nombre: string): LecturaDeArchivo {
       else if (t.nombre === 'w:tr' && nivelTabla === 1) { const f = celdas.join(' | '); if (celdas.some((c) => c)) { filas.push(f); total += f.length + 1 } celdas = [] }
       else if (t.nombre === 'w:tbl') {
         nivelTabla = Math.max(0, nivelTabla - 1)
-        if (nivelTabla === 0 && filas.length) { bloques.push(filas.join('\n')); filas = [] }
+        if (nivelTabla === 0 && filas.length) { bloques.push(...filas); filas = [] } // una fila de tabla = un bloque = un segmento
       }
     }
   })

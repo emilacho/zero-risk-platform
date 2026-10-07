@@ -16,7 +16,7 @@ const modelo: Respuesta = (p) => {
   const ns = numerosDelMensaje(p)
   const fichas = []
   for (let i = 0; i < ns.length; i += 3) fichas.push({ clase: 'producto', titulo: `Cosa ${ns[i]}`, que_es: 'x', segmentos: ns.slice(i, i + 3), propiedad: 'propia', plazo: 'precio_oferta_horario' })
-  return respuestaJson({ fichas, descartes: [] })
+  return respuestaJson({ fichas, descartes: [] }, { input_tokens: 2500, output_tokens: 1500 }) // salida realista de un catálogo: la pasada no crece
 }
 function armar(r: Respuesta = modelo, extra: Partial<DepsDeRecibir> = {}) {
   const base = new BaseSimulada()
