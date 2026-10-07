@@ -49,5 +49,5 @@ export function planearHerencia(args: { limpios: Segmento[]; vivas: FichaViva[];
     else if (f.firmas.some((x) => sobra.has(x))) afectadas.push(f)
     else if (args.esCompleta) sinFirmas.push(f)
   }
-  return { heredadas, sinFirmas, afectadas, paraModelo: args.limpios.filter((_s, i) => !consumido[i]) }
+  return { heredadas, sinFirmas, afectadas, paraModelo: args.limpios.filter((s) => !args.vivas.some((f) => heredadasIds.has(f.id) && f.firmas.includes(s.firma))) }
 }
