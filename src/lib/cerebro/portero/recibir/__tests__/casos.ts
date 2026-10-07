@@ -1,5 +1,6 @@
 /** PASO 7 · ayudas de prueba: una base simulada en memoria (lee y escribe las dos tablas), un modelo simulado y los materiales de los casos del dorado (Q1 bicicletas…). */
 import type { Consulta, Fila, PeticionDeLectura } from '../../../consulta'
+import type { PeticionConImagen } from '../../modelo'
 import type { PeticionAlModelo, RespuestaDelModelo } from '../../razonar'
 import { type Almacen, type Cambios, type FilaDeFicha, type FilaDeIngreso, type ResultadoDeAlmacen } from '../tipos'
 
@@ -69,7 +70,7 @@ export class BaseSimulada {
   nuevoId = (): string => `00000000-0000-4000-8000-${String(++this.n).padStart(12, '0')}`
 }
 
-export interface Espia { peticiones: PeticionAlModelo[]; registros: Record<string, unknown>[] }
+export interface Espia { peticiones: PeticionAlModelo[]; imagenes: PeticionConImagen[]; registros: Record<string, unknown>[] }
 export type Respuesta = (p: PeticionAlModelo, n: number) => RespuestaDelModelo | Error | Promise<RespuestaDelModelo | Error>
 
 export const respuestaJson = (j: unknown, usage = { input_tokens: 2000, output_tokens: 300 }): RespuestaDelModelo => ({ texto: JSON.stringify(j), stop_reason: 'end_turn', usage })
@@ -93,14 +94,25 @@ export const modeloDeGrupos = (tam = 3): Respuesta => (p) => {
   return respuestaJson({ fichas, descartes: [], nota: '' })
 }
 
-export function crearModelo(respuesta: Respuesta) {
-  const espia: Espia = { peticiones: [], registros: [] }
+export type RespuestaDeImagen = (p: PeticionConImagen, n: number) => RespuestaDelModelo | Error | Promise<RespuestaDelModelo | Error>
+/** lo que dice el modelo simulado al mirar una imagen */
+export const etiquetaBuena = (extra: Record<string, unknown> = {}): RespuestaDelModelo => respuestaJson({ que_muestra: 'un afiche con la fecha del concierto sobre fondo rojo', producto_visto: [], texto_visible: 'CONCIERTO 12 DE NOVIEMBRE', confianza: 'alta', ...extra }, { input_tokens: 3200, output_tokens: 240 })
+
+export function crearModelo(respuesta: Respuesta, respuestaDeImagen: RespuestaDeImagen = () => etiquetaBuena()) {
+  const espia: Espia = { peticiones: [], imagenes: [], registros: [] }
+  let ni = 0
   let n = 0
   return {
     espia,
     llamarModelo: async (p: PeticionAlModelo): Promise<RespuestaDelModelo> => {
       espia.peticiones.push(p)
       const r = await respuesta(p, ++n)
+      if (r instanceof Error) throw r
+      return r
+    },
+    llamarModeloConImagen: async (p: PeticionConImagen): Promise<RespuestaDelModelo> => {
+      espia.imagenes.push(p)
+      const r = await respuestaDeImagen(p, ++ni)
       if (r instanceof Error) throw r
       return r
     },

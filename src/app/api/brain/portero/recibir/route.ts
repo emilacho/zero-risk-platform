@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
-import { llamarAlModelo } from '@/lib/cerebro/portero/modelo'
+import { llamarAlModelo, llamarAlModeloConImagen } from '@/lib/cerebro/portero/modelo'
 import { consultaDelEntorno } from '@/lib/cerebro/portero/entorno'
 import { crearRegistrador } from '@/lib/cerebro/portero/registro'
 import { crearAlmacen } from '@/lib/cerebro/portero/recibir/escritura'
@@ -27,6 +27,7 @@ export async function POST(request: Request) {
       consulta: consultaDelEntorno(),
       almacen: crearAlmacen({ urlDeLaBase: process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? '', llave: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '' }),
       llamarModelo: llamarAlModelo,
+      llamarModeloConImagen: llamarAlModeloConImagen,
       registrar: crearRegistrador({ origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '' }),
     },
     cuerpo,

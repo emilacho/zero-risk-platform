@@ -53,6 +53,83 @@ export const costoCalculadoPorFoto = (): number =>
   costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DEL_ETIQUETADOR.length) + 400 + 150 + TOKENS_DE_IMAGEN_TIPICA, output_tokens: 250 })
 export const costoCalculadoDeLaCorrida = (fotos: number): number => costoCalculadoPorFoto() * fotos
 
+export interface Etiqueta { que_muestra: string; producto_visto: string[]; texto_visible: string; confianza: string }
+export interface Mirada {
+  respuesta: RespuestaDelModelo | null
+  fallo: { motivo: string; status: 'failed' | 'timeout'; mensaje: string } | null
+  duracion: number
+  usage: { input_tokens: number; output_tokens: number }
+  costo: number
+  etiqueta: Etiqueta | null
+  descartados: string[]
+  caida: string | null
+}
+
+/** lo que se le manda al modelo junto con la foto: la leyenda y las líneas de producto, como DATO */
+export const armarMensajeDeMirada = (leyenda: string, lineasDeProducto: string[]): string =>
+  `<leyenda>\n${comoDato(leyenda || '(sin texto)')}\n</leyenda>\n<productos>\n${comoDato(lineasDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO).join('\n') || '(el cliente no tiene líneas de producto)')}\n</productos>`
+
+/** el peor caso de UNA llamada con una imagen (foto grande, salida al tope) */
+export const peorCasoDeMirar = (mensaje: string): number =>
+  costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DEL_ETIQUETADOR.length + mensaje.length) + TOKENS_DE_IMAGEN_PEOR_CASO, output_tokens: MAX_TOKENS_DE_ETIQUETA })
+
+/**
+ * MIRAR UNA IMAGEN · UNA llamada al modelo con la foto, sin reintentos, y leer lo que dijo sin tomar nada sin comprobar: un producto que no esté, con su nombre, en
+ * `nombresDeProducto` se DESCARTA. Lo usan `etiquetar` (fotos de `client_social_images`) y `recibir` (imágenes que llegan en base64): no se duplica.
+ * No registra ni escribe nada: eso lo hace quien llama.
+ */
+export async function mirarImagen(
+  llamarModelo: (p: PeticionConImagen) => Promise<RespuestaDelModelo>,
+  imagen: { tipo: string; base64: string },
+  mensaje: string,
+  nombresDeProducto: string[],
+): Promise<Mirada> {
+  const catalogo = new Map<string, string>()
+  for (const n of nombresDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO)) if (!catalogo.has(normalizar(n))) catalogo.set(normalizar(n), n)
+  const peticion: PeticionConImagen = { model: MODELO, max_tokens: MAX_TOKENS_DE_ETIQUETA, thinking: RAZONAMIENTO, system: INSTRUCCION_DEL_ETIQUETADOR, texto: mensaje, imagen, timeoutMs: TIEMPO_MAXIMO_DE_ETIQUETA_MS }
+  const inicio = Date.now()
+  let respuesta: RespuestaDelModelo | null = null
+  let fallo: Mirada['fallo'] = null
+  try {
+    respuesta = await llamarModelo(peticion)
+  } catch (e) {
+    const nombre = e instanceof Error ? e.name : ''
+    const t = e instanceof Error ? e.message : String(e)
+    fallo = nombre === 'SinLlave' ? { motivo: 'sin_llave', status: 'failed', mensaje: t }
+      : nombre === 'AbortError' ? { motivo: 'tiempo', status: 'timeout', mensaje: `pasó de ${TIEMPO_MAXIMO_DE_ETIQUETA_MS} ms` }
+      : { motivo: 'error_del_modelo', status: 'failed', mensaje: t.slice(0, 300) }
+  }
+  const duracion = Date.now() - inicio
+  const usage = respuesta?.usage ?? { input_tokens: 0, output_tokens: 0 }
+  const costo = respuesta ? costoDeLaLlamada(usage) : 0
+  const cortada = respuesta?.stop_reason === 'max_tokens'
+
+  let etiqueta: Etiqueta | null = null
+  const descartados: string[] = []
+  let caida: string | null = fallo ? fallo.motivo : null
+  if (!caida && respuesta) {
+    const leido = extraerJson(respuesta.texto, 'que_muestra')
+    if (!leido) caida = cortada ? 'salida_cortada' : 'json_roto'
+    else if (!esObjeto(leido.valor) || !texto(leido.valor.que_muestra)) caida = 'campos_que_faltan'
+    else {
+      const v = leido.valor
+      const vistos: string[] = []
+      for (const p of Array.isArray(v.producto_visto) ? (v.producto_visto as unknown[]) : []) {
+        if (typeof p !== 'string') continue
+        const exacto = catalogo.get(normalizar(p))
+        if (!exacto) { descartados.push(p); continue } // un producto que no está en las líneas del cliente NO se inventa
+        if (!vistos.includes(exacto)) vistos.push(exacto)
+      }
+      etiqueta = {
+        que_muestra: (texto(v.que_muestra) as string).slice(0, MAXIMO_DE_TEXTO), producto_visto: vistos,
+        texto_visible: typeof v.texto_visible === 'string' ? v.texto_visible.trim().slice(0, MAXIMO_DE_TEXTO) : '',
+        confianza: typeof v.confianza === 'string' && (CONFIANZAS as readonly string[]).includes(v.confianza) ? v.confianza : 'baja',
+      }
+    }
+  }
+  return { respuesta, fallo, duracion, usage, costo, etiqueta, descartados, caida }
+}
+
 export interface DepsDeEtiquetar {
   consulta: Consulta
   /** la dirección de nuestra base: de ahí sale el único anfitrión del que se baja una foto */
@@ -151,61 +228,18 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
   }
   const omitidas = Math.max(0, lineasDeProducto.length - MAXIMO_DE_LINEAS_DE_PRODUCTO)
   lineasDeProducto = lineasDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO)
-  const catalogo = new Map<string, string>()
-  for (const n of nombresDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO)) if (!catalogo.has(normalizar(n))) catalogo.set(normalizar(n), n)
 
   // ── 2 · solo de NUESTRO almacén (antes de gastar nada)
   if (!fotoEnBase64 && !esUrlDelAlmacen(url, deps.urlDeLaBase)) return sinModelo('foto_fuera_del_almacen')
-  const mensaje = `<leyenda>\n${comoDato(leyenda || '(sin texto)')}\n</leyenda>\n<productos>\n${comoDato(lineasDeProducto.join('\n') || '(el cliente no tiene líneas de producto)')}\n</productos>`
-  const peor = costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DEL_ETIQUETADOR.length + mensaje.length) + TOKENS_DE_IMAGEN_PEOR_CASO, output_tokens: MAX_TOKENS_DE_ETIQUETA })
+  const mensaje = armarMensajeDeMirada(leyenda, lineasDeProducto)
+  const peor = peorCasoDeMirar(mensaje)
   if (peor > (deps.topeDeGastoUsd ?? TOPE_DE_GASTO_POR_FOTO_USD)) return sinModelo('tope_de_gasto', { costo_maximo_calculado_usd: peor })
   // en modo prueba la foto puede venir en base64: no se baja nada ni se sale a la red
   const bajada = fotoEnBase64 ? leerFotoEnBase64(fotoEnBase64.base64, fotoEnBase64.tipo) : await deps.bajarFoto(url)
   if (!bajada.ok) return sinModelo(bajada.motivo, bajada.detalle ? { detalle_de_la_bajada: bajada.detalle } : {})
 
-  // ── 3 · UNA llamada, sin reintentos
-  const peticion: PeticionConImagen = { model: MODELO, max_tokens: MAX_TOKENS_DE_ETIQUETA, thinking: RAZONAMIENTO, system: INSTRUCCION_DEL_ETIQUETADOR, texto: mensaje, imagen: { tipo: bajada.tipo, base64: bajada.base64 }, timeoutMs: TIEMPO_MAXIMO_DE_ETIQUETA_MS }
-  const inicio = Date.now()
-  let respuesta: RespuestaDelModelo | null = null
-  let fallo: { motivo: string; status: 'failed' | 'timeout'; mensaje: string } | null = null
-  try {
-    respuesta = await deps.llamarModelo(peticion)
-  } catch (e) {
-    const nombre = e instanceof Error ? e.name : ''
-    const t = e instanceof Error ? e.message : String(e)
-    fallo = nombre === 'SinLlave' ? { motivo: 'sin_llave', status: 'failed', mensaje: t }
-      : nombre === 'AbortError' ? { motivo: 'tiempo', status: 'timeout', mensaje: `pasó de ${TIEMPO_MAXIMO_DE_ETIQUETA_MS} ms` }
-      : { motivo: 'error_del_modelo', status: 'failed', mensaje: t.slice(0, 300) }
-  }
-  const duracion = Date.now() - inicio
-  const usage = respuesta?.usage ?? { input_tokens: 0, output_tokens: 0 }
-  const costo = respuesta ? costoDeLaLlamada(usage) : 0
-  const cortada = respuesta?.stop_reason === 'max_tokens'
-
-  // ── 4 · leer lo que dijo: nada se toma sin comprobar
-  let etiqueta: { que_muestra: string; producto_visto: string[]; texto_visible: string; confianza: string } | null = null
-  const descartados: string[] = []
-  let caida: string | null = fallo ? fallo.motivo : null
-  if (!caida && respuesta) {
-    const leido = extraerJson(respuesta.texto, 'que_muestra')
-    if (!leido) caida = cortada ? 'salida_cortada' : 'json_roto'
-    else if (!esObjeto(leido.valor) || !texto(leido.valor.que_muestra)) caida = 'campos_que_faltan'
-    else {
-      const v = leido.valor
-      const vistos: string[] = []
-      for (const p of Array.isArray(v.producto_visto) ? (v.producto_visto as unknown[]) : []) {
-        if (typeof p !== 'string') continue
-        const exacto = catalogo.get(normalizar(p))
-        if (!exacto) { descartados.push(p); continue } // un producto que no está en las líneas del cliente NO se inventa
-        if (!vistos.includes(exacto)) vistos.push(exacto)
-      }
-      etiqueta = {
-        que_muestra: (texto(v.que_muestra) as string).slice(0, MAXIMO_DE_TEXTO), producto_visto: vistos,
-        texto_visible: typeof v.texto_visible === 'string' ? v.texto_visible.trim().slice(0, MAXIMO_DE_TEXTO) : '',
-        confianza: typeof v.confianza === 'string' && (CONFIANZAS as readonly string[]).includes(v.confianza) ? v.confianza : 'baja',
-      }
-    }
-  }
+  // ── 3 y 4 · UNA llamada, sin reintentos, y leer lo que dijo (compartido con `recibir`: `mirarImagen`)
+  const { respuesta, fallo, duracion, usage, costo, etiqueta, descartados, caida } = await mirarImagen(deps.llamarModelo, { tipo: bajada.tipo, base64: bajada.base64 }, mensaje, nombresDeProducto)
 
   // ── 5 · escribir SOLO las 6 columnas de etiqueta (nunca en modo prueba, nunca sin una etiqueta válida)
   let escribio = false

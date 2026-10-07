@@ -11,7 +11,11 @@
 import type { Consulta, Fila } from '../../consulta'
 import { leerArchivo as leerArchivoReal } from '../../archivos/leer'
 import type { LecturaDeArchivo } from '../../archivos/tipos'
+import { leerSitio } from '../../lectores'
+import { PLAZOS_EN_DIAS } from '../../plazos'
+import { type Etiqueta, MAXIMO_DE_LINEAS_DE_PRODUCTO, armarMensajeDeMirada, mirarImagen, peorCasoDeMirar } from '../etiquetar'
 import { estimarTokens } from '../medida'
+import type { PeticionConImagen } from '../modelo'
 import { CLIENTE_DE_PRUEBA, MODELO, PRECIO_POR_MILLON, RAZONAMIENTO, TIEMPO_MAXIMO_MS, costoDeLaLlamada, type PeticionAlModelo, type RespuestaDelModelo, type ResultadoDeRegistro } from '../razonar'
 import { planearHerencia } from './herencia'
 import { INSTRUCCION_DE_RECIBIR, armarMensajeDeRecibir } from './instruccion'
@@ -28,6 +32,8 @@ export const TOPE_DE_GASTO_POR_INGRESO_USD = 0.4
 export const MAXIMO_DE_PASADAS = 8
 export const UMBRAL_DE_PARCIAL = 0.2
 export const MAXIMO_DE_CARACTERES_DE_MATERIAL = 400_000
+/** el tipo oficial de un Word mide 71 caracteres y el de una hoja 65: se pasa ENTERO al lector (recortarlo lo hacía rechazar) */
+export const MAXIMO_DE_CARACTERES_DE_TIPO = 200
 export const FILAS_MAXIMAS_POR_LECTURA = 1000
 export const MAXIMO_DE_INGRESOS_DE_UNA_FUENTE = 200
 export const MOTIVO_DE_RETIRADA_ENTERA = 'ya no está en su fuente'
@@ -36,6 +42,8 @@ export interface DepsDeRecibir {
   consulta: Consulta
   almacen: Almacen
   llamarModelo: (p: PeticionAlModelo) => Promise<RespuestaDelModelo>
+  /** la llamada con visión (la misma que usa `etiquetar`): una por imagen que llega en base64 */
+  llamarModeloConImagen: (p: PeticionConImagen) => Promise<RespuestaDelModelo>
   registrar: (fila: Record<string, unknown>) => Promise<ResultadoDeRegistro>
   leerArchivo?: (entrada: unknown) => Promise<LecturaDeArchivo>
   filtro?: Filtro
@@ -63,6 +71,8 @@ interface Entrada {
   texto: string | null
   fechaFuente: string | null
   prueba: boolean
+  /** solo en modo prueba: el catálogo con que se valida «qué producto se ve» en una imagen */
+  productosDePrueba: string[]
   archivo: { nombre: string; tipo: string | null; enlace: string | null; fecha: string | null; bytes: number | null; texto: string | null; base64: string | null } | null
 }
 
@@ -76,6 +86,13 @@ function validar(b: unknown): { ok: true; entrada: Entrada } | { ok: false; erro
   if (b.es_completa !== undefined && typeof b.es_completa !== 'boolean') errores.push('`es_completa` debe ser verdadero o falso')
   if (b.prueba !== undefined && typeof b.prueba !== 'boolean') errores.push('`prueba` debe ser verdadero o falso')
   if (b.fecha_fuente !== undefined && b.fecha_fuente !== null && iso(b.fecha_fuente) === null) errores.push('`fecha_fuente` no es una fecha legible')
+  let productosDePrueba: string[] = []
+  if (b.productos_de_prueba !== undefined) {
+    const pp = b.productos_de_prueba
+    if (b.prueba !== true) errores.push('`productos_de_prueba` solo se acepta con `prueba: true`')
+    else if (!Array.isArray(pp) || pp.some((x) => typeof x !== 'string' || x.length > 200) || pp.length > MAXIMO_DE_LINEAS_DE_PRODUCTO) errores.push(`\`productos_de_prueba\` debe ser una lista de hasta ${MAXIMO_DE_LINEAS_DE_PRODUCTO} textos de hasta 200 caracteres`)
+    else productosDePrueba = pp as string[]
+  }
   if (b.texto !== undefined && b.texto !== null && typeof b.texto !== 'string') errores.push('`texto` debe ser un texto')
   if (typeof b.texto === 'string' && b.texto.length > MAXIMO_DE_CARACTERES_DE_MATERIAL) errores.push(`\`texto\` pasa de ${MAXIMO_DE_CARACTERES_DE_MATERIAL} caracteres`)
   let archivo: Entrada['archivo'] = null
@@ -88,19 +105,20 @@ function validar(b: unknown): { ok: true; entrada: Entrada } | { ok: false; erro
       if (a.tamano !== undefined && a.tamano !== null && !(typeof a.tamano === 'number' && Number.isFinite(a.tamano) && a.tamano >= 0)) errores.push('`archivo.tamano` debe ser un número de bytes')
       if (a.fecha !== undefined && a.fecha !== null && iso(a.fecha) === null) errores.push('`archivo.fecha` no es una fecha legible')
       if (a.base64 !== undefined && a.base64 !== null && typeof a.base64 !== 'string') errores.push('`archivo.base64` debe ser un texto')
-      archivo = { nombre, tipo: textoLimpio(a.tipo, 60), enlace: textoLimpio(a.enlace, 1000), fecha: iso(a.fecha), bytes: typeof a.tamano === 'number' ? Math.floor(a.tamano) : null, texto: typeof a.texto === 'string' && a.texto.trim() ? a.texto : null, base64: typeof a.base64 === 'string' && a.base64 ? a.base64 : null }
+      archivo = { nombre, tipo: textoLimpio(a.tipo, MAXIMO_DE_CARACTERES_DE_TIPO), enlace: textoLimpio(a.enlace, 1000), fecha: iso(a.fecha), bytes: typeof a.tamano === 'number' ? Math.floor(a.tamano) : null, texto: typeof a.texto === 'string' && a.texto.trim() ? a.texto : null, base64: typeof a.base64 === 'string' && a.base64 ? a.base64 : null }
     }
   }
   const texto = typeof b.texto === 'string' && b.texto.trim() ? b.texto : null
   if (!texto && !archivo) errores.push('falta el material: `texto` o `archivo`')
   if (errores.length) return { ok: false, errores }
-  return { ok: true, entrada: { cliente, origen: b.origen as OrigenDeIngreso, fuenteRef: typeof b.fuente_ref === 'string' && b.fuente_ref ? b.fuente_ref : null, esCompleta: b.es_completa === true, texto, fechaFuente: iso(b.fecha_fuente), prueba: b.prueba === true, archivo } }
+  return { ok: true, entrada: { cliente, origen: b.origen as OrigenDeIngreso, fuenteRef: typeof b.fuente_ref === 'string' && b.fuente_ref ? b.fuente_ref : null, esCompleta: b.es_completa === true, texto, fechaFuente: iso(b.fecha_fuente), prueba: b.prueba === true, productosDePrueba, archivo } }
 }
 
+/** el tipo de un archivo con enlace se guarda con su barra (`audio/mpeg`), sin caracteres raros */
 const resumenDeTipo = (t: string | null): string => {
-  const x = (t ?? '').toLowerCase()
+  const x = (t ?? '').toLowerCase().trim()
   if (x.startsWith('image/') || x === 'imagen') return 'imagen'
-  return x.replace(/[^a-z0-9_+.-]/g, '').slice(0, 40) || 'archivo'
+  return x.replace(/[^a-z0-9_+./-]/g, '').slice(0, 120) || 'archivo'
 }
 
 export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ status: number; cuerpo: Record<string, unknown> }> {
@@ -130,12 +148,16 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   let material: string | null = e.texto
   let lectura: LecturaDeArchivo | null = null
   let fichaDeArchivo: { tipo: string; nombre: string; enlace: string | null; bytes: number | null; fecha: string | null } | null = null
+  let imagenParaMirar: { tipo: string; base64: string } | null = null
   let fallaDeLectura: { estado: string; motivo: string } | null = null
   if (e.archivo) {
     if (e.archivo.base64) {
       lectura = await leerArchivo({ nombre: e.archivo.nombre, tipo: e.archivo.tipo ?? undefined, base64: e.archivo.base64 })
       if (lectura.estado !== 'ok') fallaDeLectura = { estado: lectura.estado, motivo: lectura.motivo ?? lectura.estado }
-      else if (lectura.tipo && TIPOS_DE_ARCHIVO_SIN_TEXTO.has(lectura.tipo)) fichaDeArchivo = { tipo: lectura.tipo, nombre: e.archivo.nombre, enlace: e.archivo.enlace, bytes: lectura.bytes, fecha: e.archivo.fecha }
+      else if (lectura.tipo && TIPOS_DE_ARCHIVO_SIN_TEXTO.has(lectura.tipo)) {
+        fichaDeArchivo = { tipo: lectura.tipo, nombre: e.archivo.nombre, enlace: e.archivo.enlace, bytes: lectura.bytes, fecha: e.archivo.fecha }
+        imagenParaMirar = { tipo: lectura.mime ?? 'image/png', base64: e.archivo.base64 }
+      }
       else material = [lectura.texto, e.texto].filter((x): x is string => !!x && x.trim() !== '').join('\n\n') || null
     } else {
       // sin bytes (video, audio, 3D, cualquier cosa con enlace): ficha con su enlace; nunca se baja nada
@@ -204,7 +226,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   contadores.alModelo = plan.paraModelo.length
 
   // ── 6 · el modelo: una llamada por trozo, sin reintentos, con topes; TODO falla junto
-  const nuevoRegistro = async (ll: { costo: number; duracion: number; usage: { input_tokens: number; output_tokens: number }; fallo: { motivo: string; status: 'failed' | 'timeout'; mensaje: string } | null; stop: string | null }, pasada: number, caida: string | null) => {
+  const nuevoRegistro = async (ll: { costo: number; duracion: number; usage: { input_tokens: number; output_tokens: number }; fallo: { motivo: string; status: 'failed' | 'timeout'; mensaje: string } | null; stop: string | null }, pasada: number, caida: string | null, extraDeMetadata: Record<string, unknown> = {}) => {
     let registro: ResultadoDeRegistro
     try {
       registro = await deps.registrar({
@@ -212,11 +234,40 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
         model: MODELO, cost_usd: ll.costo, duration_ms: ll.duracion, tokens_input: ll.usage.input_tokens, tokens_output: ll.usage.output_tokens, num_turns: 1,
         status: ll.fallo ? ll.fallo.status : 'completed', ...(ll.fallo ? { error_message: ll.fallo.mensaje } : {}),
         client_id: e.prueba ? CLIENTE_DE_PRUEBA : e.cliente, command: e.prueba ? 'portero.recibir.prueba' : 'portero.recibir', response_text: caida ? `caída: ${caida}` : 'ok',
-        metadata: { pasada, ingreso_id: ingresoId, fuente_ref: e.fuenteRef, stop_reason: ll.stop, motivo_de_caida: caida, segmentos_al_modelo: plan.paraModelo.length, ...(e.prueba ? { prueba: true, cliente_de_prueba: e.cliente } : {}) },
+        metadata: { pasada, ingreso_id: ingresoId, fuente_ref: e.fuenteRef, stop_reason: ll.stop, motivo_de_caida: caida, segmentos_al_modelo: plan.paraModelo.length, ...extraDeMetadata, ...(e.prueba ? { prueba: true, cliente_de_prueba: e.cliente } : {}) },
       })
     } catch (err) { registro = { ok: false, detalle: err instanceof Error ? err.message : String(err) } }
     registros.push(registro)
     if (!registro.ok) gastoSinRegistrar += ll.costo
+  }
+
+  // ── 6a · la IMAGEN (si llegó una y no es la misma de antes): UNA llamada con visión, mismas garantías y topes; «qué muestra» va a la ficha, jamás a la tabla de fotos
+  let miradaDeLaImagen: Etiqueta | null = null
+  const notasDeLaImagen: string[] = []
+  if (imagenParaMirar && fichaDeArchivo && !archivoHeredado) {
+    let nombresDeProducto: string[] = e.productosDePrueba
+    let lineasDeProducto: string[] = e.productosDePrueba
+    if (!e.prueba) {
+      const sitio = await leerSitio({ consulta: deps.consulta, cliente: e.cliente, ahora: ahoraD, plazos: PLAZOS_EN_DIAS })
+      if (sitio.fallidas > 0) return cerrar('fallido', 'error_de_lectura_de_productos: no se pudo leer el catálogo del cliente para validar lo que se ve en la imagen', {}, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null })
+      const productos = sitio.lineas.filter((f) => f.clase === 'catalogo_item' || f.clase === 'catalogo_familia')
+      nombresDeProducto = productos.map((f) => f.titulo)
+      lineasDeProducto = productos.map((f) => `${f.titulo} · ${f.que_es}`.slice(0, 200))
+    }
+    // la leyenda es SOLO el texto que ya pasó el filtro (un segmento apartado nunca llega al modelo de visión)
+    const mensajeDeImagen = armarMensajeDeMirada(limpios.map((s) => s.texto).join('\n\n').slice(0, 1500), lineasDeProducto)
+    const peorDeImagen = peorCasoDeMirar(mensajeDeImagen)
+    if (peorDeImagen > topeLlamada || peorDeImagen > topeIngreso) {
+      return cerrar('fallido', `tope_de_gasto: el peor caso de mirar la imagen (US$ ${peorDeImagen.toFixed(4)}) pasa del tope`, { costo_maximo_calculado_usd: peorDeImagen }, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null })
+    }
+    const mirada = await mirarImagen(deps.llamarModeloConImagen, imagenParaMirar, mensajeDeImagen, nombresDeProducto)
+    pasadas++; gasto += mirada.costo; entrada += mirada.usage.input_tokens; salidaTokens += mirada.usage.output_tokens; duracionTotal += mirada.duracion
+    await nuevoRegistro({ costo: mirada.costo, duracion: mirada.duracion, usage: mirada.usage, fallo: mirada.fallo, stop: mirada.respuesta?.stop_reason ?? null }, pasadas, mirada.caida, { paso: 'imagen', imagen_bytes: fichaDeArchivo.bytes })
+    if (mirada.caida || !mirada.etiqueta) {
+      return cerrar('fallido', `${mirada.caida ?? 'json_roto'}: ${mirada.fallo?.mensaje ?? 'la respuesta del modelo al mirar la imagen no se pudo leer'}`, {}, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null })
+    }
+    miradaDeLaImagen = mirada.etiqueta
+    for (const d of mirada.descartados) notasDeLaImagen.push(`imagen: el producto «${d}» no está en el catálogo del cliente y se descartó`)
   }
 
   const trozos = partirEnTrozos(plan.paraModelo, (segs) => estimarTokens(INSTRUCCION_DE_RECIBIR.length + armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: segs, afectadas: plan.afectadas }).length), topeEntrada)
@@ -225,7 +276,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   for (let i = 0; i < trozos.length; i++) {
     const mensaje = armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: trozos[i], afectadas: plan.afectadas })
     const peor = costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DE_RECIBIR.length + mensaje.length), output_tokens: MAX_TOKENS_DE_RECIBIR })
-    if (i >= MAXIMO_DE_PASADAS || (i > 0 && gasto + peor > topeIngreso)) { motivoParcial = i >= MAXIMO_DE_PASADAS ? `tope_de_pasadas: más de ${MAXIMO_DE_PASADAS} llamadas` : `tope_de_gasto_del_ingreso: US$ ${topeIngreso}`; break }
+    if (i >= MAXIMO_DE_PASADAS || (gasto > 0 && gasto + peor > topeIngreso)) { motivoParcial = i >= MAXIMO_DE_PASADAS ? `tope_de_pasadas: más de ${MAXIMO_DE_PASADAS} llamadas` : `tope_de_gasto_del_ingreso: US$ ${topeIngreso}`; break }
     if (peor > topeLlamada || (i === 0 && peor > topeIngreso)) {
       if (i === 0) return cerrar('fallido', `tope_de_gasto: el peor caso de la llamada (US$ ${peor.toFixed(4)}) pasa del tope`, { costo_maximo_calculado_usd: peor }, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null })
       motivoParcial = `tope_de_gasto_del_ingreso: la llamada ${i + 1} pasa del tope por llamada`; break
@@ -260,7 +311,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   contadores.residuales = t.segmentosResiduales
 
   const fichas: FilaDeFicha[] = [...t.fichas]
-  if (fichaDeArchivo && !archivoHeredado) fichas.push(filaDeArchivo({ cliente, ingresoId, origen: e.origen, ahoraIso, prueba: e.prueba, id: nuevoId(), a: fichaDeArchivo, firma: firmaArchivo as string, propiedad: e.origen === 'dueno' || e.origen === 'su_fuente' ? 'propia' : 'incierta' }))
+  if (fichaDeArchivo && !archivoHeredado) fichas.push(filaDeArchivo({ cliente, ingresoId, origen: e.origen, ahoraIso, prueba: e.prueba, id: nuevoId(), a: fichaDeArchivo, mirada: miradaDeLaImagen, firma: firmaArchivo as string, propiedad: e.origen === 'dueno' || e.origen === 'su_fuente' ? 'propia' : 'incierta' }))
   const retiradas = [...plan.sinFirmas.map((f) => ({ id: f.id, motivo: MOTIVO_DE_RETIRADA_ENTERA })), ...t.retiradas]
   const heredadas = [...plan.heredadas.map((f) => f.id), ...(archivoHeredado ? [archivoHeredado.id] : [])]
   const cobertura = plan.paraModelo.length === 0 ? 1 : Math.round(((plan.paraModelo.length - t.segmentosResiduales) / plan.paraModelo.length) * 10_000) / 10_000
@@ -282,7 +333,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   return resultado(estado, {
     ...(motivoFinal ? { motivo: motivoFinal } : {}),
     fichas: { archivadas: filasDeModelo.length, heredadas: heredadas.length, retiradas: retiradas.length, descartadas: fichas.filter((f) => f.descartada).length, residuales: fichas.filter((f) => f.residual).length },
-    cobertura, notas: t.notas,
+    cobertura, notas: [...t.notas, ...notasDeLaImagen],
   })
 }
 
@@ -319,14 +370,17 @@ function partirEnTrozos(segmentos: Segmento[], medir: (s: Segmento[]) => number,
   return trozos
 }
 
-function filaDeArchivo(a: { cliente: string; ingresoId: string; origen: OrigenDeIngreso; ahoraIso: string; prueba: boolean; id: string; firma: string; propiedad: 'propia' | 'incierta'; a: { tipo: string; nombre: string; enlace: string | null; bytes: number | null; fecha: string | null } }): FilaDeFicha {
+function filaDeArchivo(a: { cliente: string; ingresoId: string; origen: OrigenDeIngreso; ahoraIso: string; prueba: boolean; id: string; firma: string; propiedad: 'propia' | 'incierta'; mirada: Etiqueta | null; a: { tipo: string; nombre: string; enlace: string | null; bytes: number | null; fecha: string | null } }): FilaDeFicha {
   const d = a.a
+  const m = a.mirada
   return {
-    id: a.id, client_id: a.cliente, ingreso_id: a.ingresoId, ref: `ficha:${a.id}`, clase: 'archivo', titulo: d.nombre.slice(0, 200), que_es: `Archivo ${d.tipo} «${d.nombre.slice(0, 120)}»`,
-    contenido: null, archivo_nombre: d.nombre, archivo_tipo: d.tipo, archivo_enlace: d.enlace, archivo_bytes: d.bytes, firmas: [a.firma], origen: a.origen, fecha_fuente: d.fecha,
-    reconfirmado_en: a.ahoraIso, plazo: 'archivo_propio', vigente_hasta: null, version_de: null, huella: a.firma.slice(5), producto: [], sede: null, propiedad: a.propiedad, porque: null,
-    descartada: false, motivo_descarte: null, juzgado_por: 'regla', residual: false,
-    provenance_tag: { source: 'cerebro_recibir', trust_level: a.origen === 'dueno' ? 'tenant_trusted' : 'untrusted', ingress_route: 'cerebro/portero/recibir', ingress_id: a.ingresoId, received_at: a.ahoraIso }, prueba: a.prueba,
+    id: a.id, client_id: a.cliente, ingreso_id: a.ingresoId, ref: `ficha:${a.id}`, clase: m ? 'foto' : 'archivo', titulo: d.nombre.slice(0, 200),
+    que_es: m ? `Foto: ${m.que_muestra}`.slice(0, 400) : `Archivo ${d.tipo} «${d.nombre.slice(0, 120)}»`,
+    // un archivo que no se mira (video, audio, 3D) NO lleva texto; una imagen mirada lleva el texto que se lee en ella
+    contenido: m && m.texto_visible ? m.texto_visible : null, archivo_nombre: d.nombre, archivo_tipo: d.tipo, archivo_enlace: d.enlace, archivo_bytes: d.bytes, firmas: [a.firma], origen: a.origen, fecha_fuente: d.fecha,
+    reconfirmado_en: a.ahoraIso, plazo: 'archivo_propio', vigente_hasta: null, version_de: null, huella: a.firma.slice(5), producto: m ? m.producto_visto : [], sede: null, propiedad: a.propiedad, porque: null,
+    descartada: false, motivo_descarte: null, juzgado_por: m ? 'modelo' : 'regla', residual: false,
+    provenance_tag: { source: 'cerebro_recibir', trust_level: a.origen === 'dueno' ? 'tenant_trusted' : 'untrusted', ingress_route: 'cerebro/portero/recibir', ingress_id: a.ingresoId, received_at: a.ahoraIso, ...(m ? { etiqueta: { confianza: m.confianza, modelo: MODELO } } : {}) }, prueba: a.prueba,
   }
 }
 
