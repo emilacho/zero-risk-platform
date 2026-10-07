@@ -95,6 +95,26 @@ describe('A · el nombre de la clase se acepta con o sin el estante, sin adivina
     const r = salida(await razonar(deps, cuerpo(lista())))
     expect(r).toMatchObject({ modo: 'respaldo', motivo_de_respaldo: 'estantes_invalidos' })
   })
+  it('M8 · un nombre PARCIAL de la clase no vale: «catalogo» o «item» no son «catalogo_item» (nada de alias por subcadena)', async () => {
+    for (const parcial of ['catalogo', 'item', 'cat', 'catalogo_', 'logo_item']) {
+      const { deps } = armar(modelo([parcial]))
+      const r = salida(await razonar(deps, cuerpo(lista())))
+      expect(r, parcial).toMatchObject({ modo: 'respaldo', motivo_de_respaldo: 'clases_invalidas' })
+      expect(r.niveles[1], parcial).toMatchObject({ grupos_elegidos: [], grupos_invalidos: [parcial] })
+    }
+    const { deps } = armar(modelo(['catalogo', 'sitio']))
+    expect(salida(await razonar(deps, cuerpo(lista()))).niveles[1]).toMatchObject({ grupos_elegidos: ['E2 sitio'], grupos_invalidos: ['catalogo'] })
+  })
+  it('M9 · el estante SOLO no vale por una clase: «E2» (o «e2») en el nivel de clase es inválido', async () => {
+    for (const solo of ['E2', 'e2', ' E2 ', '«E2»']) {
+      const { deps } = armar(modelo([solo]))
+      const r = salida(await razonar(deps, cuerpo(lista())))
+      expect(r, solo).toMatchObject({ modo: 'respaldo', motivo_de_respaldo: 'clases_invalidas' })
+      expect(r.niveles[1].grupos_elegidos, solo).toEqual([])
+    }
+    const { deps } = armar(modelo(['E2', 'catalogo_item']))
+    expect(salida(await razonar(deps, cuerpo(lista()))).niveles[1]).toMatchObject({ grupos_elegidos: ['E2 catalogo_item'], grupos_invalidos: ['E2'] })
+  })
   it('las familias NO tienen alias: «07» no vale por «Familia 07» (solo la clase se acepta sin su estante)', async () => {
     const conFamilias: Ficha[] = [...Array.from({ length: 3 }, (_, i) => ficha(i, 'E1', 'plan', `Plan ${i}`)), ...Array.from({ length: 520 }, (_, i) => ficha(i, 'E2', 'catalogo_item', `Producto ${i}`, `Familia ${String(i % 20).padStart(2, '0')}`))]
     const bueno = armar((p) => (p.system === INSTRUCCION_DE_ESTANTES ? JSON.stringify({ estantes: ['E2'] }) : p.system === INSTRUCCION_DE_FAMILIAS ? JSON.stringify({ familias: ['Familia 07'] }) : decision(numerosDe(listaDe(p)).slice(0, 2))))
