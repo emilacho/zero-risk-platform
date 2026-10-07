@@ -5,6 +5,7 @@
  * Origen, estado, fecha y vigencia se DERIVAN al leer; no se escribe nada en ninguna parte.
  * Un error de lectura queda como `error_de_lectura`: jamás como «sin material».
  */
+import { esClienteDePrueba } from './cliente-de-prueba'
 import type { Consulta, Fila, PeticionDeLectura } from './consulta'
 import { extraerCatalogo, type ItemCatalogo } from './datos-estructurados'
 import { type ClaseDePlazo, type Plazos, vigenciaDe } from './plazos'
@@ -468,7 +469,9 @@ export async function leerFichas(ctx: Contexto): Promise<Salida> {
     donde: { client_id: ctx.cliente },
   })
   if (r.error) return fallo(['fichas'], r.error)
-  const filas = r.filas.filter((f) => f.prueba !== true && f.descartada !== true).sort((a, b) => (String(iso(a.creado_en)) < String(iso(b.creado_en)) ? -1 : 1))
+  // lo de PRUEBA solo lo lee su cliente de prueba (y un cliente de prueba solo lee lo de prueba); un cliente real jamás lo ve
+  const deCliente = esClienteDePrueba(ctx.cliente)
+  const filas = r.filas.filter((f) => (f.prueba === true) === deCliente && f.descartada !== true).sort((a, b) => (String(iso(a.creado_en)) < String(iso(b.creado_en)) ? -1 : 1))
   const porId = new Map(filas.map((f) => [String(f.id), f]))
   const hijoDe = new Map<string, string>()
   for (const f of filas) if (f.version_de !== null && f.version_de !== undefined && porId.has(String(f.version_de))) hijoDe.set(String(f.version_de), String(f.id))
