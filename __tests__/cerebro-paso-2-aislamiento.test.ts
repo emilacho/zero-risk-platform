@@ -31,16 +31,19 @@ const TODOS = CARPETAS.flatMap((c) => archivos(c))
 const leer = (rel: string): string => fs.readFileSync(path.join(RAIZ, rel), 'utf8')
 
 // ───────────────────────── A · las tablas y columnas nuevas son solo del portero del cerebro
-export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|producto_visto|etiquetada_en|etiqueta_modelo)\b/
+export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|producto_visto|etiquetada_en|etiqueta_modelo|texto_visible|etiqueta_confianza)\b/
 /** quién PUEDE nombrarlas: la migración y su reversa, los guiones de auditoría, el cerebro (su carpeta), la ruta del portero y estas dos pruebas */
 export const PUEDEN_NOMBRARLAS = [
   /^supabase\/migrations\/202610060100_cerebro_paso_2_tablas_y_columnas\.sql$/,
   /^supabase\/reversas\/202610060100_cerebro_paso_2_REVERSA\.sql$/,
+  /^supabase\/migrations\/202610070100_cerebro_fotos_texto_visible_y_etiqueta_confianza\.sql$/,
+  /^supabase\/reversas\/202610070100_cerebro_fotos_texto_visible_y_etiqueta_confianza_REVERSA\.sql$/,
   /^scripts\/audit\/cerebro-tablas-no-las-usa-nadie\.mjs$/,
   /^scripts\/audit\/cerebro-paso-2-verifica-base\.mjs$/,
   /^src\/lib\/cerebro\//,
   /^src\/app\/api\/brain\/portero\//,
   /^__tests__\/cerebro-paso-2-(aislamiento|migracion)\.test\.ts$/,
+  /^__tests__\/cerebro-fotos-2-columnas\.test\.ts$/,
 ]
 export const quienNombra = (archivosYTextos: Array<{ rel: string; texto: string }>): string[] =>
   archivosYTextos.filter(({ rel, texto }) => NOMBRES_NUEVOS.test(texto) && !PUEDEN_NOMBRARLAS.some((r) => r.test(rel))).map((x) => x.rel)

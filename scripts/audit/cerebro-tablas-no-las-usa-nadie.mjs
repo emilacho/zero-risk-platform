@@ -3,8 +3,8 @@
  * AUDITORÍA DE FLUJOS VIVOS · paso 2 del cerebro · SOLO LECTURA (solo hace GET a la API de n8n).
  *
  * El repositorio no ve los flujos VIVOS de n8n. Este guion los lee todos (activos e inactivos) y falla si alguno:
- *   · nombra las tablas nuevas del cerebro (`cerebro_ingresos`, `cerebro_fichas`) o las 4 columnas nuevas de `client_social_images`
- *     (`que_muestra`, `producto_visto`, `etiquetada_en`, `etiqueta_modelo`): nadie más que el portero del cerebro las toca;
+ *   · nombra las tablas nuevas del cerebro (`cerebro_ingresos`, `cerebro_fichas`) o las 6 columnas nuevas de `client_social_images`
+ *     (`que_muestra`, `producto_visto`, `etiquetada_en`, `etiqueta_modelo`, y desde el 07-oct `texto_visible`, `etiqueta_confianza`): nadie más que el portero del cerebro las toca;
  *   · pide TODAS las columnas (`select=*`) de `client_social_images`: un campo más no puede romper a un lector.
  * Y deja escritas las VERSIONES de la pieza, la planeación y el Servicio de Apify, para comparar antes/después de publicar.
  *
@@ -15,7 +15,7 @@
 import fs from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
-export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|producto_visto|etiquetada_en|etiqueta_modelo)\b/
+export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|producto_visto|etiquetada_en|etiqueta_modelo|texto_visible|etiqueta_confianza)\b/
 export const FLUJOS_A_VIGILAR = { lVCLzxQCKNkd3uS0: 'pieza', X9F0zp6LQ2xGEYVS: 'planeacion', '3lyknrP3PoS2KzUf': 'apify_service' }
 
 export function usaSelectEstrella(texto) {
