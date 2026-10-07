@@ -256,7 +256,14 @@ describe('verificación de faltantes · antes de declarar que algo FALTA se lee 
     }
     const absurdos = armar((p) => (p.system === INSTRUCCION_DE_VERIFICACION ? JSON.stringify({ siguen_faltando: [99, -1, 'x', 1.5] }) : decision([1, 2], { faltantes: [faltante], duda: [1] })))
     const r = salida(await razonar(absurdos.deps, cuerpo(lista())))
-    expect(r.decision.faltantes).toEqual([]) // los números que no existen no cuentan: ninguno «sigue faltando»
+    expect(r.decision.faltantes).toEqual([faltante]) // un número que no es entero válido = respuesta mal formada: ante la duda SIGUE faltando
+    expect(r.verificacion_de_faltantes.estado).toBe('fallo')
+    for (const mala of [['1'], [1.5, null, 'uno'], [1, 7], [0]]) {
+      const x = armar((p) => (p.system === INSTRUCCION_DE_VERIFICACION ? JSON.stringify({ siguen_faltando: mala }) : decision([1, 2], { faltantes: [faltante], duda: [1] })))
+      const rr = salida(await razonar(x.deps, cuerpo(lista())))
+      expect(rr.decision.faltantes, JSON.stringify(mala)).toEqual([faltante])
+      expect(rr.decision.faltantes_descartados_por_ficha_completa).toBeUndefined()
+    }
   })
   it('dentro del tope de gasto: si la verificación no cabe, se omite (y se dice), no se hace', async () => {
     const { deps, peticiones } = armar(conFaltante(), { topeDeGastoPorPedidoUsd: 0.021 })

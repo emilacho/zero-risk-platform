@@ -229,7 +229,8 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     const ll = await llamar(peticion(INSTRUCCION_DE_VERIFICACION, mensaje, MAX_TOKENS_DE_VERIFICACION))
     const leido = ll.respuesta ? extraerJson(ll.respuesta.texto, 'siguen_faltando') : null
     const crudo = leido && typeof leido.valor === 'object' && leido.valor !== null ? (leido.valor as Record<string, unknown>).siguen_faltando : undefined
-    const motivo = ll.fallo ? ll.fallo.motivo : !Array.isArray(crudo) ? (ll.cortada ? 'salida_cortada' : 'json_roto') : null
+    const malFormada = Array.isArray(crudo) && crudo.some((n) => !Number.isInteger(n) || n < 1 || n > d.faltantes.length)
+    const motivo = ll.fallo ? ll.fallo.motivo : !Array.isArray(crudo) ? (ll.cortada ? 'salida_cortada' : 'json_roto') : malFormada ? 'respuesta_mal_formada' : null
     await anotar(ll, pasadas, motivo, leido ? JSON.stringify(leido.valor) : '', { modo: motivo ? 'respaldo' : 'verificacion', nivel: 'verificacion', faltantes_antes: d.faltantes.length, fichas_leidas: leidas.length, fichas_cortadas_entregadas: cortadas.length })
     if (motivo || !Array.isArray(crudo)) return { decision: d, extra: { verificacion_de_faltantes: { estado: 'fallo', motivo, costo_usd: ll.costo } } }
     const siguen = new Set(crudo.filter((n): n is number => Number.isInteger(n) && n >= 1 && n <= d.faltantes.length))
