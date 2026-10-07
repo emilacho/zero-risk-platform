@@ -2,15 +2,22 @@
  * Lector de PDF sobre `unpdf` (pdf.js empaquetado, sin dependencias, MIT). Lee el texto con su posición: las celdas de una misma fila quedan
  * en la misma línea (separadas por tabulación si hay un hueco de columna). Sin modelo, sin red, sin escribir.
  * Un PDF escaneado (solo imagen) se DECLARA como tal: no se inventa texto. Los PDF con JavaScript se leen como datos: el código no corre.
- * Mitigaciones de seguridad de pdf.js: `isEvalSupported:false`, sin canvas, sin worker de página, y topes de tamaño, páginas y tiempo.
+ * Defensas (hallazgo F1 de CC#3): ANTES de abrir se infla cada flujo comprimido con un máximo de salida (`pdf-flujos.ts`: una bomba se rechaza sin llegar a la
+ * biblioteca); el tiempo máximo CANCELA el trabajo (no se lee otra página) y el texto de una página se corta al juntarlo, no al final.
+ * Mitigaciones de pdf.js: `isEvalSupported:false`, sin canvas, sin visor ni scripting, y topes de tamaño, páginas y tiempo.
  */
 import { getDocumentProxy, getResolvedPDFJS } from 'unpdf'
 import { cortarSalida, lectura } from './comun'
+import { revisarFlujosDePdf } from './pdf-flujos'
 import { TOPES } from './topes'
 import type { LecturaDeArchivo } from './tipos'
 
 interface ItemDeTexto { str?: string; transform?: number[]; width?: number; height?: number }
-interface PaginaLeible { getTextContent(): Promise<{ items: ItemDeTexto[] }>; getOperatorList(): Promise<{ fnArray: number[] }> }
+interface PaginaLeible {
+  getTextContent(): Promise<{ items: ItemDeTexto[] }>
+  streamTextContent?(): { getReader(): { read(): Promise<{ done: boolean; value?: { items: ItemDeTexto[] } }>; cancel(): Promise<void> } }
+  getOperatorList(): Promise<{ fnArray: number[] }>
+}
 interface DocumentoLeible { numPages: number; getPage(n: number): Promise<PaginaLeible>; destroy?: () => Promise<void> | void; getJSActions?: () => Promise<unknown> }
 
 export interface OpcionesDePdf {
@@ -23,6 +30,8 @@ export function clasificarErrorDePdf(e: unknown): 'protegido' | 'ilegible' {
   const nombre = e && typeof e === 'object' ? String((e as { name?: unknown }).name ?? '') : ''
   return nombre === 'PasswordException' ? 'protegido' : 'ilegible'
 }
+
+class Cancelado extends Error { constructor() { super('cancelado por tiempo'); this.name = 'Cancelado' } }
 
 const abrirPorDefecto = (datos: Uint8Array): Promise<DocumentoLeible> =>
   getDocumentProxy(datos, { isEvalSupported: false, verbosity: 0, useSystemFonts: false, disableFontFace: true } as never) as unknown as Promise<DocumentoLeible>
@@ -55,17 +64,43 @@ function lineasDePagina(items: ItemDeTexto[]): string[] {
   }).filter(Boolean)
 }
 
+/** los trozos de texto de una página, juntados de a poco: si pasan del tope se corta ahí y se cancela la lectura (no se espera a tenerlos todos en memoria) */
+async function itemsDePagina(pagina: PaginaLeible, cancelado: () => boolean): Promise<{ items: ItemDeTexto[]; cortada: boolean }> {
+  if (typeof pagina.streamTextContent !== 'function') {
+    const items = (await pagina.getTextContent()).items
+    return items.length > TOPES.pdf_items_por_pagina ? { items: items.slice(0, TOPES.pdf_items_por_pagina), cortada: true } : { items, cortada: false }
+  }
+  const lector = pagina.streamTextContent().getReader()
+  const items: ItemDeTexto[] = []
+  let caracteres = 0
+  for (;;) {
+    if (cancelado()) { await lector.cancel().catch(() => undefined); throw new Cancelado() }
+    const { done, value } = await lector.read()
+    if (done) return { items, cortada: false }
+    for (const it of value?.items ?? []) { items.push(it); caracteres += it.str?.length ?? 0 }
+    if (items.length > TOPES.pdf_items_por_pagina || caracteres > TOPES.texto_salida_chars) {
+      await lector.cancel().catch(() => undefined)
+      return { items, cortada: true }
+    }
+  }
+}
+
 export async function leerPdf(buf: Buffer, nombre: string, op: OpcionesDePdf = {}): Promise<LecturaDeArchivo> {
   if (buf.length > TOPES.pdf_bytes) return lectura('pdf', nombre, buf, 'sobre_el_tope', { motivo: `el PDF pesa ${buf.length} bytes (tope ${TOPES.pdf_bytes})` })
+  // ANTES de abrir: ningún flujo comprimido puede inflarse más de lo permitido (el PDF no llega a la biblioteca si es una bomba)
+  const revision = revisarFlujosDePdf(buf)
+  if (!revision.ok) return lectura('pdf', nombre, buf, revision.estado, { motivo: revision.motivo })
   const tiempoMs = op.tiempoMs ?? TOPES.tiempo_ms
   const abrir = op.abrirDocumento ?? abrirPorDefecto
   const avisos: string[] = []
   let doc: DocumentoLeible | null = null
   let reloj: ReturnType<typeof setTimeout> | undefined
-  const vencido = new Promise<'tiempo'>((resolve) => { reloj = setTimeout(() => resolve('tiempo'), tiempoMs) })
+  let cancelar = false
+  const vencido = new Promise<'tiempo'>((resolve) => { reloj = setTimeout(() => { cancelar = true; resolve('tiempo') }, tiempoMs) })
 
   const trabajar = async (): Promise<LecturaDeArchivo> => {
     doc = await abrir(new Uint8Array(buf))
+    if (cancelar) throw new Cancelado()
     const paginas = doc.numPages
     if (paginas > TOPES.pdf_paginas) {
       return lectura('pdf', nombre, buf, 'sobre_el_tope', { paginas, motivo: `el PDF tiene ${paginas} páginas (tope ${TOPES.pdf_paginas}); no se extrajo nada` })
@@ -74,14 +109,24 @@ export async function leerPdf(buf: Buffer, nombre: string, op: OpcionesDePdf = {
     const imagenes = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject, OPS.paintJpegXObject, OPS.paintImageXObjectRepeat].filter((x) => typeof x === 'number'))
     const textos: string[] = []
     const sinTexto: number[] = []
+    const cortadas: number[] = []
+    let acumulado = 0
+    let leidas = 0
     for (let n = 1; n <= paginas; n++) {
+      if (cancelar) throw new Cancelado() // el tiempo venció: no se lee ninguna página más
+      if (acumulado > TOPES.texto_salida_chars) break
       const pagina = await doc.getPage(n)
-      const lineas = lineasDePagina((await pagina.getTextContent()).items)
-      if (lineas.length) { textos.push(lineas.join('\n')); continue }
+      const { items, cortada } = await itemsDePagina(pagina, () => cancelar)
+      leidas = n
+      const lineas = lineasDePagina(items)
+      if (cortada) cortadas.push(n)
+      if (lineas.length) { const t = lineas.join('\n'); textos.push(t); acumulado += t.length + 2; continue }
       let conImagen = false
       try { conImagen = (await pagina.getOperatorList()).fnArray.some((f) => imagenes.has(f)) } catch { conImagen = false }
       if (conImagen) sinTexto.push(n)
     }
+    if (cortadas.length) avisos.push(`El texto de la(s) página(s) ${cortadas.join(', ')} se cortó (demasiado texto en una página); lo que sigue NO se leyó.`)
+    if (leidas < paginas) avisos.push(`El texto leído ya llegó al máximo: las páginas ${leidas + 1} a ${paginas} NO se leyeron.`)
     let tieneJs = buf.includes('/JavaScript') || buf.includes('/JS')
     if (!tieneJs && doc.getJSActions) { try { tieneJs = Boolean(await doc.getJSActions()) } catch { /* sin acciones */ } }
     if (tieneJs) avisos.push('El PDF contiene JavaScript: NO se ejecuta; solo se leyó el texto como datos.')
@@ -99,6 +144,7 @@ export async function leerPdf(buf: Buffer, nombre: string, op: OpcionesDePdf = {
     if (r === 'tiempo') return lectura('pdf', nombre, buf, 'ilegible', { motivo: 'tiempo_agotado' })
     return r
   } catch (e) {
+    if (e instanceof Cancelado) return lectura('pdf', nombre, buf, 'ilegible', { motivo: 'tiempo_agotado' })
     const estado = clasificarErrorDePdf(e)
     const motivo = estado === 'protegido' ? 'el PDF está protegido con contraseña' : `no se pudo leer el PDF (${(e instanceof Error ? e.message : String(e)).slice(0, 160)})`
     return lectura('pdf', nombre, buf, estado, { motivo })

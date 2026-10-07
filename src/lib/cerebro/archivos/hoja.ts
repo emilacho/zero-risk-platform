@@ -65,7 +65,9 @@ function leerCsv(buf: Buffer): HojaLeida {
   for (let i = 0; i < t.length; i++) {
     const c = t[i]
     if (entre) {
-      if (c === '"') { if (t[i + 1] === '"') { celda += '"'; i++ } else entre = false } else celda += c
+      if (c === '"') { if (t[i + 1] === '"') { celda += '"'; i++ } else entre = false }
+      else if (c === '\r') { celda += '\n'; if (t[i + 1] === '\n') i++ } // un salto dentro de la celda sale siempre como un solo salto de línea
+      else celda += c
       continue
     }
     if (c === '"' && celda === '') entre = true
@@ -206,9 +208,9 @@ export function leerHoja(buf: Buffer, nombre: string, formato: 'csv' | 'xlsx'): 
     if (!z.ok) return lectura(tipo, nombre, buf, z.estado, { motivo: z.motivo })
     const libro = leerEntrada(z, 'xl/workbook.xml')
     if (!libro.ok) return lectura(tipo, nombre, buf, libro.estado, { motivo: libro.motivo })
-    const lista: Array<{ nombre: string; rid: string }> = []
+    const lista: Array<{ nombre: string; rid: string; oculta: boolean }> = []
     recorrer(libro.datos.toString('utf8'), (t) => {
-      if (t.nombre === 'sheet' && t.tipo !== 'cierra') lista.push({ nombre: atributo(t.crudo, 'name') ?? `Hoja ${lista.length + 1}`, rid: atributo(t.crudo, 'r:id') ?? '' })
+      if (t.nombre === 'sheet' && t.tipo !== 'cierra') lista.push({ nombre: atributo(t.crudo, 'name') ?? `Hoja ${lista.length + 1}`, rid: atributo(t.crudo, 'r:id') ?? '', oculta: /^(hidden|veryHidden)$/i.test(atributo(t.crudo, 'state') ?? '') })
     })
     if (lista.length === 0) return lectura(tipo, nombre, buf, 'ilegible', { motivo: 'el libro no declara ninguna hoja' })
     const destinos = new Map<string, string>()
@@ -223,6 +225,8 @@ export function leerHoja(buf: Buffer, nombre: string, formato: 'csv' | 'xlsx'): 
     if (lista.length > TOPES.hoja_hojas) avisos.push(`El libro tiene ${lista.length} hojas; solo se leyeron las primeras ${TOPES.hoja_hojas}.`)
     hojas = []
     for (let i = 0; i < Math.min(lista.length, TOPES.hoja_hojas); i++) {
+      // una hoja que el dueño ESCONDIÓ no entra al cerebro sin que se diga (hallazgo F3 de CC#3): no se lee y se avisa
+      if (lista[i].oculta) { avisos.push(`La hoja «${lista[i].nombre}» está OCULTA en el libro: NO se leyó.`); continue }
       const destino = destinos.get(lista[i].rid)
       const ruta = destino ? rutaDeHoja(destino) : `xl/worksheets/sheet${i + 1}.xml`
       const ent = leerEntrada(z, ruta)
