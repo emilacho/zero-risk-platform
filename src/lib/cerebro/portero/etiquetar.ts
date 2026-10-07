@@ -12,7 +12,7 @@
 import type { Consulta } from '../consulta'
 import { leerSitio } from '../lectores'
 import { PLAZOS_EN_DIAS } from '../plazos'
-import { esUrlDelAlmacen, type ResultadoDeBajada } from './almacen'
+import { esUrlDelAlmacen, leerFotoEnBase64, type ResultadoDeBajada } from './almacen'
 import { extraerJson } from './decision'
 import { COLUMNAS_QUE_ESCRIBE, type ResultadoDeEscritura, type ValoresDeEtiqueta } from './etiqueta-escritura'
 import { comoDato } from './instruccion'
@@ -83,12 +83,20 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
   const modoPrueba = prueba && hayFotoDePrueba
   let fotoId: string | null = null
   let urlDePrueba: string | null = null
+  let fotoEnBase64: { base64: unknown; tipo: unknown } | null = null
   let leyendaDePrueba = ''
   let productosDePrueba: string[] = []
   if (modoPrueba) {
     const fp = body.foto_de_prueba
-    if (!esObjeto(fp) || !texto(fp.url)) errores.push('`foto_de_prueba` debe traer `url`')
-    else { urlDePrueba = texto(fp.url); leyendaDePrueba = typeof fp.caption === 'string' ? fp.caption : '' }
+    if (!esObjeto(fp)) errores.push('`foto_de_prueba` debe ser un objeto')
+    else if (texto(fp.url) && fp.base64 !== undefined) errores.push('`foto_de_prueba` trae `url` Y `base64`: manda solo uno')
+    else if (!texto(fp.url) && fp.base64 === undefined) errores.push('`foto_de_prueba` debe traer `url` (de nuestro almacén) o `base64` + `tipo`')
+    else {
+      if (texto(fp.url)) urlDePrueba = texto(fp.url)
+      else if (typeof fp.base64 !== 'string' || !texto(fp.tipo)) errores.push('`foto_de_prueba.base64` exige `tipo` (image/jpeg, image/png, image/webp o image/gif)')
+      else fotoEnBase64 = { base64: fp.base64, tipo: fp.tipo }
+      leyendaDePrueba = typeof fp.caption === 'string' ? fp.caption : ''
+    }
     const pp = body.productos_de_prueba
     if (pp !== undefined) {
       if (!Array.isArray(pp) || pp.some((x) => typeof x !== 'string' || x.length > 200)) errores.push('`productos_de_prueba` debe ser una lista de textos de hasta 200 caracteres')
@@ -99,6 +107,7 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
     fotoId = texto(body.foto)
     if (!fotoId) errores.push('falta `foto` (el id de la foto)')
   }
+  if (body.forzar !== undefined && typeof body.forzar !== 'boolean') errores.push('`forzar` debe ser verdadero o falso')
   if (errores.length) return invalida(errores)
 
   const workflowId = texto(body.workflow_id)
@@ -113,21 +122,25 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
     salida(200, { modo: 'respaldo', motivo_de_respaldo: motivo, llamo_al_modelo: false, escribio: false, costo_usd: 0, tokens: { entrada: 0, salida: 0 }, duracion_ms: 0, ...marca, ...extra })
 
   // ── 1 · la foto y las líneas de producto del cliente
-  let url: string
+  let url = ''
   let leyenda: string
   let nombresDeProducto: string[]
   let lineasDeProducto: string[]
   if (modoPrueba) {
-    url = urlDePrueba as string
+    url = urlDePrueba ?? ''
     leyenda = leyendaDePrueba
     nombresDeProducto = productosDePrueba
     lineasDeProducto = productosDePrueba
   } else {
-    const r = await deps.consulta({ tabla: 'client_social_images', columnas: ['id', 'url', 'caption', 'estado'], donde: { client_id: cli, id: fotoId as string }, limite: 1 })
+    const r = await deps.consulta({ tabla: 'client_social_images', columnas: ['id', 'url', 'caption', 'estado', 'etiquetada_en'], donde: { client_id: cli, id: fotoId as string }, limite: 1 })
     if (r.error) return salida(502, { error: 'error_de_lectura', code: 'E-LECTURA', detail: r.error.slice(0, 200) })
     const fila = r.filas[0]
     if (!fila) return salida(404, { error: 'foto_no_encontrada', code: 'E-FOTO-NO-EXISTE', detail: 'esa foto no existe para este cliente' })
     if (fila.estado !== 'ok' || !texto(fila.url)) return sinModelo('foto_sin_archivo')
+    // una foto ya etiquetada se salta salvo que se pida `forzar`: un reintento por error no la paga dos veces
+    if (texto(fila.etiquetada_en) && body.forzar !== true) {
+      return salida(200, { modo: 'omitida', motivo: 'ya_etiquetada', etiquetada_en: fila.etiquetada_en, llamo_al_modelo: false, escribio: false, costo_usd: 0, tokens: { entrada: 0, salida: 0 }, duracion_ms: 0 })
+    }
     url = texto(fila.url) as string
     leyenda = typeof fila.caption === 'string' ? fila.caption : ''
     const sitio = await leerSitio({ consulta: deps.consulta, cliente: cli, ahora: ahora(), plazos: PLAZOS_EN_DIAS })
@@ -142,11 +155,12 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
   for (const n of nombresDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO)) if (!catalogo.has(normalizar(n))) catalogo.set(normalizar(n), n)
 
   // ── 2 · solo de NUESTRO almacén (antes de gastar nada)
-  if (!esUrlDelAlmacen(url, deps.urlDeLaBase)) return sinModelo('foto_fuera_del_almacen')
+  if (!fotoEnBase64 && !esUrlDelAlmacen(url, deps.urlDeLaBase)) return sinModelo('foto_fuera_del_almacen')
   const mensaje = `<leyenda>\n${comoDato(leyenda || '(sin texto)')}\n</leyenda>\n<productos>\n${comoDato(lineasDeProducto.join('\n') || '(el cliente no tiene líneas de producto)')}\n</productos>`
   const peor = costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DEL_ETIQUETADOR.length + mensaje.length) + TOKENS_DE_IMAGEN_PEOR_CASO, output_tokens: MAX_TOKENS_DE_ETIQUETA })
   if (peor > (deps.topeDeGastoUsd ?? TOPE_DE_GASTO_POR_FOTO_USD)) return sinModelo('tope_de_gasto', { costo_maximo_calculado_usd: peor })
-  const bajada = await deps.bajarFoto(url)
+  // en modo prueba la foto puede venir en base64: no se baja nada ni se sale a la red
+  const bajada = fotoEnBase64 ? leerFotoEnBase64(fotoEnBase64.base64, fotoEnBase64.tipo) : await deps.bajarFoto(url)
   if (!bajada.ok) return sinModelo(bajada.motivo, bajada.detalle ? { detalle_de_la_bajada: bajada.detalle } : {})
 
   // ── 3 · UNA llamada, sin reintentos
@@ -212,7 +226,7 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
       client_id: modoPrueba ? CLIENTE_DE_PRUEBA : cli, command: modoPrueba ? 'portero.etiquetar.prueba' : 'portero.etiquetar',
       response_text: etiqueta ? JSON.stringify(etiqueta).slice(0, 2000) : '',
       metadata: {
-        foto_id: fotoId, motivo_de_respaldo: caida, stop_reason: respuesta?.stop_reason ?? null, escribio, bytes_de_la_foto: bajada.bytes, producto_visto_descartados: descartados,
+        foto_id: fotoId, ...(fotoEnBase64 ? { origen_de_la_foto: 'base64_de_prueba' } : {}), motivo_de_respaldo: caida, stop_reason: respuesta?.stop_reason ?? null, escribio, bytes_de_la_foto: bajada.bytes, producto_visto_descartados: descartados,
         ...(modoPrueba ? { prueba: true, cliente_de_prueba: cli } : {}),
       },
     })

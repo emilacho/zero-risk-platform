@@ -395,3 +395,88 @@ describe('B (referencia) · el cliente de A y B tienen líneas propias: no se me
     expect(espia.peticiones[0].texto).not.toMatch(/Servicio uno/)
   })
 })
+
+describe('C3 de CC#3 · modo prueba con la foto en base64 (sin subir nada, sin bajar nada, sin salir a la red)', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('imagen-minima')]).toString('base64')
+  const prueba = (fp: Record<string, unknown>, extra: Record<string, unknown> = {}) => cuerpo({ cliente: 'cliente-inventado', foto: undefined, prueba: true, foto_de_prueba: { caption: 'una leyenda', ...fp }, productos_de_prueba: ['Producto inventado uno'], ...extra })
+  it('manda la imagen al modelo tal cual, NO baja nada, NO escribe, registra como prueba y no hace ninguna petición de red', async () => {
+    const f = vi.spyOn(globalThis, 'fetch')
+    const { deps, espia } = armar(bueno({ producto_visto: ['Producto inventado uno'] }))
+    const r = await etiquetar(deps, prueba({ base64: PNG, tipo: 'image/png' }))
+    expect(salida(r)).toMatchObject({ modo: 'etiquetado', escribio: false, llamo_al_modelo: true, prueba: true })
+    expect(espia.bajadas).toEqual([])
+    expect(espia.escrituras).toEqual([])
+    expect(espia.peticiones).toHaveLength(1)
+    expect(espia.peticiones[0].imagen).toEqual({ tipo: 'image/png', base64: PNG })
+    expect(espia.registros[0]).toMatchObject({ client_id: CLIENTE_DE_PRUEBA, command: 'portero.etiquetar.prueba' })
+    expect(espia.registros[0].metadata).toMatchObject({ origen_de_la_foto: 'base64_de_prueba' })
+    expect(f).not.toHaveBeenCalled()
+  })
+  it('`url` Y `base64` juntos, ninguno de los dos, o base64 sin tipo → 400 sin hacer nada', async () => {
+    for (const fp of [{ url: `${ALMACEN}/prueba/x.jpg`, base64: PNG, tipo: 'image/png' }, {}, { base64: PNG }, { base64: 12345, tipo: 'image/png' }]) {
+      const { deps, espia } = armar(bueno())
+      expect((await etiquetar(deps, prueba(fp))).status).toBe(400)
+      expect(espia.peticiones).toHaveLength(0)
+    }
+  })
+  it('base64 SIN `prueba: true` se rechaza (400): el modo prueba no se activa por accidente', async () => {
+    const { deps, espia } = armar(bueno())
+    expect((await etiquetar(deps, cuerpo({ foto_de_prueba: { base64: PNG, tipo: 'image/png' } }))).status).toBe(400)
+    expect(espia.peticiones).toHaveLength(0)
+  })
+  it.each([
+    ['un tipo que no es imagen', { base64: PNG, tipo: 'application/pdf' }, 'foto_no_es_imagen'],
+    ['bytes que no son del tipo declarado', { base64: PNG, tipo: 'image/jpeg' }, 'foto_no_es_imagen'],
+    ['base64 inválido', { base64: 'no es base64!!', tipo: 'image/png' }, 'foto_base64_invalido'],
+    ['más grande que el tope', { base64: 'A'.repeat(7_000_100), tipo: 'image/png' }, 'foto_demasiado_grande'],
+  ])('%s → respaldo con su motivo, sin llamar al modelo', async (_n, fp, motivo) => {
+    const { deps, espia } = armar(bueno())
+    const r = await etiquetar(deps, prueba(fp))
+    expect(salida(r)).toMatchObject({ modo: 'respaldo', motivo_de_respaldo: motivo, llamo_al_modelo: false, escribio: false, costo_usd: 0 })
+    expect(espia.peticiones).toHaveLength(0)
+  })
+  it('con base64 NO se exige que la dirección sea del almacén (no hay dirección) y el modo con `url` sigue exigiéndolo', async () => {
+    const a = armar(bueno())
+    expect(salida(await etiquetar(a.deps, prueba({ base64: PNG, tipo: 'image/png' }))).modo).toBe('etiquetado')
+    const b = armar(bueno())
+    expect(salida(await etiquetar(b.deps, prueba({ url: 'https://scontent.cdninstagram.com/x.jpg' }))).motivo_de_respaldo).toBe('foto_fuera_del_almacen')
+  })
+})
+
+describe('una foto ya etiquetada se salta salvo que se pida `forzar`', () => {
+  const conEtiqueta = (): Tablas => ({ ...tablas(), client_social_images: [...(tablas().client_social_images as Array<Record<string, unknown>>), foto('f-etq', A, { etiquetada_en: '2026-10-02T00:00:00.000Z' })] })
+  it('sin `forzar`: no baja, no llama al modelo, no escribe, no cuesta, y dice por qué (modo «omitida»)', async () => {
+    const { deps, espia } = armar(bueno(), {}, conEtiqueta())
+    const r = await etiquetar(deps, cuerpo({ foto: 'f-etq' }))
+    expect(salida(r)).toMatchObject({ modo: 'omitida', motivo: 'ya_etiquetada', etiquetada_en: '2026-10-02T00:00:00.000Z', llamo_al_modelo: false, escribio: false, costo_usd: 0 })
+    expect(espia.bajadas).toEqual([]); expect(espia.peticiones).toHaveLength(0); expect(espia.escrituras).toHaveLength(0); expect(espia.registros).toHaveLength(0)
+  })
+  it('con `forzar: true`: la etiqueta de nuevo y escribe', async () => {
+    const { deps, espia } = armar(bueno(), {}, conEtiqueta())
+    const r = await etiquetar(deps, cuerpo({ foto: 'f-etq', forzar: true }))
+    expect(salida(r)).toMatchObject({ modo: 'etiquetado', escribio: true })
+    expect(espia.peticiones).toHaveLength(1); expect(espia.escrituras).toHaveLength(1)
+  })
+  it('una foto SIN etiqueta se etiqueta normalmente; `forzar` que no es booleano → 400', async () => {
+    const a = armar(bueno(), {}, conEtiqueta())
+    expect(salida(await etiquetar(a.deps, cuerpo())).modo).toBe('etiquetado')
+    const b = armar(bueno(), {}, conEtiqueta())
+    expect((await etiquetar(b.deps, cuerpo({ forzar: 'si' }))).status).toBe(400)
+    expect(b.espia.peticiones).toHaveLength(0)
+  })
+  it('una foto con `etiquetada_en` vacío o en blanco cuenta como sin etiquetar', async () => {
+    const t = { ...tablas(), client_social_images: [foto('f-v', A, { etiquetada_en: '  ' }), foto('f-n', A, { etiquetada_en: null })] }
+    for (const id of ['f-v', 'f-n']) {
+      const { deps, espia } = armar(bueno(), {}, t)
+      await etiquetar(deps, cuerpo({ foto: id }))
+      expect(espia.peticiones).toHaveLength(1)
+    }
+  })
+  it('la lectura de la foto pide `etiquetada_en` y sigue filtrando por foto Y cliente', async () => {
+    const { deps, base } = armar(bueno(), {}, conEtiqueta())
+    await etiquetar(deps, cuerpo({ foto: 'f-etq' }))
+    const l = base.llamadas.find((x: Record<string, any>) => x.tabla === 'client_social_images') as Record<string, any>
+    expect(l.columnas).toContain('etiquetada_en')
+    expect(l.donde).toEqual({ client_id: A, id: 'f-etq' })
+  })
+})

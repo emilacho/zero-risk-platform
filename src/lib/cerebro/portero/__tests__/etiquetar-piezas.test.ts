@@ -3,7 +3,7 @@
  * (con `fetch` SIMULADO: no sale ninguna petición de verdad). Pruebas escritas ANTES del código.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MAXIMO_DE_BYTES_DE_FOTO, PREFIJO_DEL_ALMACEN, crearBajador, esUrlDelAlmacen } from '../almacen'
+import { MAXIMO_DE_BYTES_DE_FOTO, PREFIJO_DEL_ALMACEN, crearBajador, esUrlDelAlmacen, leerFotoEnBase64 } from '../almacen'
 import { COLUMNAS_QUE_ESCRIBE, crearEscritor } from '../etiqueta-escritura'
 import { llamarAlModeloConImagen, type PeticionConImagen } from '../modelo'
 import { SinLlave } from '../razonar'
@@ -30,6 +30,14 @@ describe('esUrlDelAlmacen · lista cerrada de UN anfitrión y UNA carpeta', () =
     'https://user:pass@zero.supabase.co/storage/v1/object/public/client-social-images/a.jpg',
     'https://zero.supabase.co/storage/v1/object/public/client-social-images/../agent-images/a.jpg',
     'https://zero.supabase.co/storage/v1/object/public/client-social-images/%2e%2e/agent-images/a.jpg',
+    // C1 de CC#3: saltos de carpeta escritos con la barra codificada o con partes decodificadas
+    'https://zero.supabase.co/storage/v1/object/public/client-social-images/..%2fagent-images/a.jpg',
+    'https://zero.supabase.co/storage/v1/object/public/client-social-images/..%2Fagent-images/a.jpg',
+    'https://zero.supabase.co/storage/v1/object/public/client-social-images/%2e%2e%2fagent-images/a.jpg',
+    'https://zero.supabase.co/storage/v1/object/public/client-social-images/%2E%2E%2Fagent-images/a.jpg',
+    'https://zero.supabase.co/storage/v1/object/public/client-social-images/c1/%2e%2e%2f%2e%2e%2fagent-images/a.jpg',
+    'https://zero.supabase.co/storage/v1/object/public/client-social-images/c1/..%2f..%2fsign/x.jpg',
+    'https://zero.supabase.co/storage/v1/object/public/client-social-images/c1/a%2f%2fb.jpg',
     'https://zero.supabase.co//storage/v1/object/public/client-social-images/a.jpg',
     'file:///etc/passwd', 'javascript:alert(1)', '', 'no es una url',
   ])('rechaza %s', (u) => { expect(esUrlDelAlmacen(u, BASE)).toBe(false) })
@@ -197,5 +205,48 @@ describe('llamarAlModeloConImagen · UNA petición con la foto en base64, sin re
     vi.stubGlobal('fetch', f)
     await expect(llamarAlModeloConImagen(peticion(30))).rejects.toMatchObject({ name: 'AbortError' })
     expect(f).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('C2 de CC#3 · la bajada NO sigue saltos: lo comprueba la PROPIA petición (no el texto del archivo)', () => {
+  it('cada petición de bajada lleva redirect: «error»; si el almacén contesta con un salto, la bajada falla y no se sigue', async () => {
+    const f = vi.fn(async (_u: string, init?: RequestInit) => {
+      if (init?.redirect !== 'error') return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'image/jpeg' } }) // si lo siguiera, «bajaría» otra cosa
+      throw new TypeError('redirect mode is set to error')
+    })
+    const r = await crearBajador({ urlDeLaBase: BASE, fetchImpl: f })(OK)
+    expect(f).toHaveBeenCalledTimes(1)
+    expect((f.mock.calls[0] as [string, RequestInit])[1].redirect).toBe('error')
+    expect(r).toMatchObject({ ok: false, motivo: 'no_se_pudo_bajar' })
+  })
+})
+
+describe('C3 de CC#3 · leerFotoEnBase64 (foto de prueba sin subir nada ni salir a la red)', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('imagen-minima')])
+  const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('imagen-minima')])
+  it('acepta PNG, JPEG, WebP y GIF cuando el tipo declarado coincide con la firma de los bytes', () => {
+    const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.from([1, 2, 3, 4]), Buffer.from('WEBPVP8 ')])
+    const gif = Buffer.from('GIF89a-lo-demas')
+    for (const [tipo, b] of [['image/png', PNG], ['image/jpeg', JPG], ['image/webp', webp], ['image/gif', gif]] as const) {
+      expect(leerFotoEnBase64(b.toString('base64'), tipo)).toEqual({ ok: true, base64: b.toString('base64'), tipo, bytes: b.length })
+    }
+    expect(leerFotoEnBase64(PNG.toString('base64'), ' IMAGE/PNG ')).toMatchObject({ ok: true, tipo: 'image/png' })
+  })
+  it.each([
+    ['un tipo que no es imagen', PNG.toString('base64'), 'application/pdf', 'foto_no_es_imagen'],
+    ['un SVG', Buffer.from('<svg/>').toString('base64'), 'image/svg+xml', 'foto_no_es_imagen'],
+    ['sin tipo', PNG.toString('base64'), undefined, 'foto_no_es_imagen'],
+    ['el tipo no coincide con los bytes', JPG.toString('base64'), 'image/png', 'foto_no_es_imagen'],
+    ['bytes que no son una imagen', Buffer.from('hola mundo, no soy una foto').toString('base64'), 'image/jpeg', 'foto_no_es_imagen'],
+    ['vacío', '', 'image/png', 'foto_vacia'],
+    ['no es un texto', 12345, 'image/png', 'foto_vacia'],
+    ['base64 inválido', 'esto no es base64!!', 'image/png', 'foto_base64_invalido'],
+    ['largo que no es múltiplo de 4', 'QUJDR', 'image/png', 'foto_base64_invalido'],
+    ['más grande que el tope (se mide el texto antes de decodificar)', 'A'.repeat(7_000_100), 'image/png', 'foto_demasiado_grande'],
+  ])('rechaza %s', (_n, b64, tipo, motivo) => { expect(leerFotoEnBase64(b64, tipo)).toMatchObject({ ok: false, motivo }) })
+  it('el tope de tamaño de los bytes es el mismo que el de una foto bajada', () => {
+    const grande = Buffer.concat([PNG, Buffer.alloc(200)])
+    expect(leerFotoEnBase64(grande.toString('base64'), 'image/png', 100)).toMatchObject({ ok: false, motivo: 'foto_demasiado_grande' })
+    expect(MAXIMO_DE_BYTES_DE_FOTO).toBe(5_000_000)
   })
 })

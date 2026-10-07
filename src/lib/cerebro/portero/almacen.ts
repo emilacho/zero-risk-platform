@@ -24,6 +24,29 @@ export function esUrlDelAlmacen(url: string, urlDeLaBase: string): boolean {
   return !decodificado.split('/').some((parte) => parte === '..' || parte === '.' || parte === '') && !resto.includes('\\')
 }
 
+/**
+ * Una foto de PRUEBA que llega en base64 (modo prueba, sin subir nada al almacén ni salir a la red): mismos tipos y mismo tope de tamaño que una foto bajada,
+ * y el tipo declarado tiene que coincidir con la firma de los bytes. Se mide el LARGO del texto antes de decodificar.
+ */
+const FIRMAS_DE_IMAGEN: Record<string, (b: Buffer) => boolean> = {
+  'image/jpeg': (b) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/png': (b) => b.length >= 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/webp': (b) => b.length >= 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+  'image/gif': (b) => b.length >= 6 && /^GIF8[79]a$/.test(b.subarray(0, 6).toString('latin1')),
+}
+export function leerFotoEnBase64(base64: unknown, tipoDeclarado: unknown, maximoBytes: number = MAXIMO_DE_BYTES_DE_FOTO): ResultadoDeBajada {
+  const tipo = typeof tipoDeclarado === 'string' ? tipoDeclarado.trim().toLowerCase() : ''
+  if (!TIPOS_DE_IMAGEN.has(tipo)) return { ok: false, motivo: 'foto_no_es_imagen', detalle: tipo || 'sin tipo' }
+  if (typeof base64 !== 'string' || base64.length === 0) return { ok: false, motivo: 'foto_vacia' }
+  if (base64.length > Math.ceil((maximoBytes * 4) / 3) + 8) return { ok: false, motivo: 'foto_demasiado_grande', detalle: `${base64.length} caracteres de base64` }
+  if (base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) return { ok: false, motivo: 'foto_base64_invalido' }
+  const bytes = Buffer.from(base64, 'base64')
+  if (bytes.length === 0) return { ok: false, motivo: 'foto_vacia' }
+  if (bytes.length > maximoBytes) return { ok: false, motivo: 'foto_demasiado_grande', detalle: `${bytes.length} bytes` }
+  if (!FIRMAS_DE_IMAGEN[tipo](bytes)) return { ok: false, motivo: 'foto_no_es_imagen', detalle: `se declaró ${tipo} pero los bytes no lo son` }
+  return { ok: true, base64, tipo, bytes: bytes.length }
+}
+
 export function crearBajador(args: { urlDeLaBase: string; fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>; maximoBytes?: number; timeoutMs?: number }) {
   const traer = args.fetchImpl ?? ((u: string, i?: RequestInit) => fetch(u, i))
   const maximo = args.maximoBytes ?? MAXIMO_DE_BYTES_DE_FOTO
