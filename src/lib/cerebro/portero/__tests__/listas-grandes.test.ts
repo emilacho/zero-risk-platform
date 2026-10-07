@@ -426,3 +426,12 @@ describe('las instrucciones de cada nivel son agnósticas y piden lo mismo que l
     expect(t).not.toMatch(/laboratorio|cl[ií]nica|restaurante|marisquer|cotizador|chequeo|n[aá]ufrago|p[eé]rez|ferreter|inmobiliari|medicament|academia/i)
   })
 })
+
+describe('la ruta de razonar aguanta una consulta grande (la medición real la necesita)', () => {
+  it('maxDuration cubre el peor caso: 3 llamadas de nivel + 5 de lectura de 25 s (≈ 200 s) y la ruta no corta una consulta a la mitad', () => {
+    const t = fs.readFileSync(path.resolve(__dirname, '../../../../app/api/brain/portero/razonar/route.ts'), 'utf8')
+    const m = /export const maxDuration = (\d+)/.exec(t)
+    expect(m, 'la ruta debe declarar maxDuration').not.toBeNull()
+    expect(Number(m![1])).toBeGreaterThanOrEqual(3 * 25 + 5 * 25 + 30)
+  })
+})
