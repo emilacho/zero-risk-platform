@@ -47,6 +47,7 @@ const NOMBRE_DE_DECISION: Record<DecisionDelDueno, string> = { aprobada: 'aproba
 export function lineaParaElModelo(n: number, f: Ficha): string {
   const partes = [`${f.estante} ${f.clase}`, una(f.titulo), recorte(una(f.que_es), 100)]
   if (f.producto && f.producto.length) partes.push(`producto: ${f.producto.map(una).join(', ')}`)
+  if (f.que_muestra) partes.push(`muestra: ${recorte(una(f.que_muestra), 100)}`)
   partes.push(f.estado, dia(f.fecha_fuente))
   partes.push(f.vencido ? `VENCIDO desde ${dia(f.vigente_hasta)}` : f.vigente_hasta ? `vigente hasta ${dia(f.vigente_hasta)}` : 'sin plazo')
   if (f.version !== undefined) partes.push(`v${f.version}${f.vigente ? ' vigente' : ''}`)
