@@ -447,3 +447,36 @@ describe('archivos', () => {
     expect(base.fichas.map((x) => x.clase).sort()).toEqual(['archivo', 'producto'])
   })
 })
+
+describe('defensas por capas: cada guarda se ejerce SOLA (con datos incoherentes a propósito)', () => {
+  const viejo = (extra: Record<string, unknown>) => ({ id: '77777777-7777-4777-8777-777777777771', ref: 'ficha:viejo', clase: 'x', titulo: 'x', que_es: 'x', contenido: 'Cadena reforzada Taurus 9v', firmas: [firmaDe('Cadena reforzada Taurus 9v')], origen: 'su_fuente', retirada_en: null, descartada: false, version_de: null, ...extra })
+  const ingresoViejo = (extra: Record<string, unknown> = {}) => ({ id: '88888888-8888-4888-8888-888888888881', client_id: A, fuente_ref: 'sitio:/repuestos', prueba: false, ...extra })
+  const heredo = async (ing: Record<string, unknown>, fic: Record<string, unknown>) => {
+    const { base, correr } = armar()
+    base.ingresos.push(ing); base.fichas.push(viejo({ ingreso_id: ing.id, ...fic }))
+    const r = await correr(cuerpo({ texto: 'Cadena reforzada Taurus 9v', es_completa: false }))
+    return r.c.fichas.heredadas as number
+  }
+  it('control: datos coherentes → hereda', async () => { expect(await heredo(ingresoViejo(), { client_id: A, prueba: false })).toBe(1) })
+  it('un ingreso de OTRO cliente con una ficha rotulada como de este: no se hereda (guarda de entregas)', async () => { expect(await heredo(ingresoViejo({ client_id: B }), { client_id: A, prueba: false })).toBe(0) })
+  it('un ingreso de este cliente con una ficha rotulada de OTRO: no se hereda (guarda de fichas)', async () => { expect(await heredo(ingresoViejo(), { client_id: B, prueba: false })).toBe(0) })
+  it('un ingreso de prueba con una ficha real: lo real no hereda (guarda de entregas)', async () => { expect(await heredo(ingresoViejo({ prueba: true }), { client_id: A, prueba: false })).toBe(0) })
+  it('un ingreso real con una ficha de prueba: no se hereda (guarda de fichas)', async () => { expect(await heredo(ingresoViejo(), { client_id: A, prueba: true })).toBe(0) })
+  it('1.000 entregas anteriores de la misma fuente: lectura recortada, ingreso fallido, sin modelo', async () => {
+    const { base, m, correr } = armar()
+    for (let i = 0; i < 1000; i++) base.ingresos.push(ingresoViejo({ id: `99999999-9999-4999-8999-${String(i).padStart(12, '0')}` }))
+    const r = await correr(cuerpo({ workflow_execution_id: 'ex-9' }))
+    expect(r.c).toMatchObject({ estado: 'fallido', llamo_al_modelo: false })
+    expect(String(r.c.motivo)).toMatch(/recortada/)
+    expect(m.espia.peticiones).toHaveLength(0)
+  })
+  it('un error SOLO al leer las fichas (las entregas se leen bien) no se lee como «ninguna»', async () => {
+    const { base, m, correr } = armar()
+    base.ingresos.push(ingresoViejo())
+    base.errorEnFichas = 'lectura falló (500) en cerebro_fichas'
+    const r = await correr()
+    expect(r.c).toMatchObject({ estado: 'fallido', llamo_al_modelo: false })
+    expect(String(r.c.motivo)).toMatch(/lectura_de_fichas_fallo/)
+    expect(m.espia.peticiones).toHaveLength(0)
+  })
+})

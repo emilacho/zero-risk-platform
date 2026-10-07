@@ -50,10 +50,7 @@ export function cortarEnSegmentos(material: string): Segmento[] {
   for (let r = hueco.exec(material); r; r = hueco.exec(material)) cortes.push([r.index, r.index + r[0].length])
   cortes.push([material.length, material.length])
   for (const [ini, fin] of cortes) {
-    let a = desde, b = ini
-    while (a < b && ESPACIO.test(material[a])) a++
-    while (b > a && ESPACIO.test(material[b - 1])) b--
-    if (b > a) tramos.push(...partirParrafo(material, a, b))
+    tramos.push(...partirParrafo(material, desde, ini)) // recorta los espacios de los bordes y descarta lo vacío
     desde = fin
   }
   return tramos.map(([inicio, fin], i) => {

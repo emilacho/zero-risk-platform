@@ -20,8 +20,8 @@ import { type Filtro, filtrarSegmentos } from './seguridad'
 import { traducir } from './traducir'
 import { type Almacen, type Cambios, type FichaViva, type FilaDeFicha, type FilaDeIngreso, ORIGENES, type EstadoDeIngreso, type OrigenDeIngreso } from './tipos'
 
-/** una pasada cabe en 12.000 «tokens» de entrada (instrucción + mensaje); sus 2.000 de salida son el máximo de una pasada */
-export const TOPE_DE_ENTRADA_POR_PASADA = 12_000
+/** una pasada cabe en 16.000 «tokens» de entrada (instrucción + mensaje); sus 2.000 de salida son el máximo de una pasada */
+export const TOPE_DE_ENTRADA_POR_PASADA = 16_000
 export const MAX_TOKENS_DE_RECIBIR = 2000
 export const TOPE_DE_GASTO_POR_LLAMADA_USD = 0.08
 export const TOPE_DE_GASTO_POR_INGRESO_USD = 0.4
@@ -291,7 +291,8 @@ async function leerVivas(consulta: Consulta, cliente: string, fuenteRef: string,
   const ing = await consulta({ tabla: 'cerebro_ingresos', columnas: ['id'], donde: { client_id: cliente, fuente_ref: fuenteRef, prueba }, limite: FILAS_MAXIMAS_POR_LECTURA })
   if (ing.error) return { ok: false, motivo: `lectura_de_fichas_fallo: ${ing.error}` }
   const ids = ing.filas.map((f: Fila) => String(f.id)).filter((id) => id !== ingresoActual)
-  if (ing.filas.length >= FILAS_MAXIMAS_POR_LECTURA || ids.length > MAXIMO_DE_INGRESOS_DE_UNA_FUENTE) return { ok: false, motivo: `lectura_de_fichas_recortada: la fuente tiene demasiadas entregas anteriores para leerlas completas (tope ${MAXIMO_DE_INGRESOS_DE_UNA_FUENTE})` }
+  // el tope de entregas (200) es menor que el de la base (1.000): una lectura recortada por la base lo pasa siempre
+  if (ids.length > MAXIMO_DE_INGRESOS_DE_UNA_FUENTE) return { ok: false, motivo: `lectura_de_fichas_recortada: la fuente tiene demasiadas entregas anteriores para leerlas completas (tope ${MAXIMO_DE_INGRESOS_DE_UNA_FUENTE})` }
   const todas: Fila[] = []
   for (const id of ids) {
     const r = await consulta({ tabla: 'cerebro_fichas', columnas: ['id', 'ref', 'titulo', 'que_es', 'firmas', 'retirada_en', 'descartada', 'version_de', 'ingreso_id'], donde: { ingreso_id: id, client_id: cliente, prueba }, limite: FILAS_MAXIMAS_POR_LECTURA })
