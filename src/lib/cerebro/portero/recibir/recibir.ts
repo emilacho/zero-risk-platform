@@ -258,12 +258,14 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   if (imagenParaMirar && fichaDeArchivo && !archivoHeredado) {
     let nombresDeProducto: string[] = [...e.familiasDePrueba.map((f) => f.nombre), ...e.productosDePrueba]
     let lineasDeProducto: string[] = [...e.familiasDePrueba.map(lineaDeFamilia), ...e.productosDePrueba]
+    let nombresDeFamilia: string[] = e.familiasDePrueba.map((f) => f.nombre)
     if (!e.prueba) {
       const sitio = await leerSitio({ consulta: deps.consulta, cliente: e.cliente, ahora: ahoraD, plazos: PLAZOS_EN_DIAS })
       if (sitio.fallidas > 0) return cerrar('fallido', 'error_de_lectura_de_productos: no se pudo leer el catálogo del cliente para validar lo que se ve en la imagen', {}, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null })
       const vocabulario = vocabularioDelCatalogo(sitio.lineas)
       nombresDeProducto = vocabulario.nombres
       lineasDeProducto = vocabulario.lineas
+      nombresDeFamilia = vocabulario.familias
     }
     // la leyenda es SOLO el texto que ya pasó el filtro (un segmento apartado nunca llega al modelo de visión)
     const mensajeDeImagen = armarMensajeDeMirada(limpios.map((s) => s.texto).join('\n\n').slice(0, 1500), lineasDeProducto)
@@ -271,7 +273,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
     if (peorDeImagen > topeLlamada || peorDeImagen > topeIngreso) {
       return cerrar('fallido', `tope_de_gasto: el peor caso de mirar la imagen (US$ ${peorDeImagen.toFixed(4)}) pasa del tope`, { costo_maximo_calculado_usd: peorDeImagen }, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null })
     }
-    const mirada = await mirarImagen(deps.llamarModeloConImagen, imagenParaMirar, mensajeDeImagen, nombresDeProducto)
+    const mirada = await mirarImagen(deps.llamarModeloConImagen, imagenParaMirar, mensajeDeImagen, nombresDeProducto, nombresDeFamilia)
     pasadas++; gasto += mirada.costo; entrada += mirada.usage.input_tokens; salidaTokens += mirada.usage.output_tokens; duracionTotal += mirada.duracion
     await nuevoRegistro({ costo: mirada.costo, duracion: mirada.duracion, usage: mirada.usage, fallo: mirada.fallo, stop: mirada.respuesta?.stop_reason ?? null }, pasadas, mirada.caida, { paso: 'imagen', imagen_bytes: fichaDeArchivo.bytes })
     if (mirada.caida || !mirada.etiqueta) {
