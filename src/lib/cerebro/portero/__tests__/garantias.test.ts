@@ -22,10 +22,11 @@ const leer = (carpeta: string): Array<{ archivo: string; texto: string }> => {
   recorrer(carpeta)
   return salida
 }
+const EXCEPCION_DEL_FILTRO = 'src/lib/cerebro/portero/recibir/seguridad.ts'
 const codigo = (): Array<{ archivo: string; texto: string }> => [...leer(PORTERO), ...leer(RUTAS)]
 
-describe('las tres rutas existen y están protegidas', () => {
-  it.each(['indice', 'entregar', 'razonar'])('%s exporta POST y comprueba la llave interna', (n) => {
+describe('las cuatro rutas existen y están protegidas', () => {
+  it.each(['indice', 'entregar', 'razonar', 'recibir'])('%s exporta POST y comprueba la llave interna', (n) => {
     const f = path.join(RUTAS, n, 'route.ts')
     expect(fs.existsSync(f)).toBe(true)
     const t = fs.readFileSync(f, 'utf8')
@@ -43,9 +44,16 @@ describe('solo lectura, salvo el modelo y el registro', () => {
       for (const p of [/\.insert\(/, /\.from\(\s*['"`][^'"`]+['"`]\s*\)\s*\.update\(/, /\.upsert\(/, /\.delete\(/, /\.rpc\(/, /supabase-js/, /\bINSERT\s+INTO\b/i, /\bDELETE\s+FROM\b/i]) expect(t, `${archivo} contiene ${p}`).not.toMatch(p)
     }
   })
-  it('solo DOS archivos hacen una petición que no es de lectura: la llamada al modelo y el registro', () => {
-    const conPost = codigo().filter(({ texto }) => /method:\s*['"](POST|PUT|PATCH|DELETE)['"]/.test(sinComentarios(texto))).map((c) => path.basename(c.archivo)).sort()
-    expect(conPost).toEqual(['modelo.ts', 'registro.ts'])
+  it('solo TRES archivos hacen una petición que no es de lectura: la llamada al modelo, el registro y el escritor de `recibir` (paso 7)', () => {
+    const conPost = codigo().filter(({ texto }) => /method:\s*(['"](POST|PUT|PATCH|DELETE)['"]|metodo)/.test(sinComentarios(texto))).map((c) => c.archivo.replace(/^src\/lib\/cerebro\/portero\//, '')).sort()
+    expect(conPost).toEqual(['modelo.ts', 'recibir/escritura.ts', 'registro.ts'])
+  })
+  it('el escritor de `recibir` habla SOLO con `cerebro_ingresos` y `cerebro_fichas`, sin ninguna dirección escrita en el código, y no usa otro verbo que POST, PATCH y DELETE', () => {
+    const t = sinComentarios(fs.readFileSync(path.join(PORTERO, 'recibir/escritura.ts'), 'utf8'))
+    expect([...new Set(t.match(/cerebro_[a-z_]+/g) ?? [])].sort()).toEqual(['cerebro_fichas', 'cerebro_ingresos'])
+    expect(t.match(/https?:\/\/[^'"`\s)]+/g) ?? []).toEqual([])
+    expect(t).not.toMatch(/client_social_images|client_brain|agent_invocations|\bPUT\b/)
+    expect([...new Set([...t.matchAll(/pedir\(\s*'([A-Z]+)'/g)].map((m) => m[1]))].sort()).toEqual(['DELETE', 'PATCH', 'POST'])
   })
   it('esos dos hablan con UN solo destino cada uno', () => {
     const modelo = sinComentarios(fs.readFileSync(path.join(PORTERO, 'modelo.ts'), 'utf8'))
@@ -78,9 +86,19 @@ describe('no toca lo vedado', () => {
   it('el código del portero no importa ningún módulo vedado', () => {
     for (const { archivo, texto } of codigo()) {
       for (const m of sinComentarios(texto).matchAll(/from\s+['"]([^'"]+)['"]/g)) {
-        expect(m[1], `${archivo} importa ${m[1]}`).not.toMatch(/agent-runner|run-sdk|brain-enrichment|ingest-source|persist-chunks|lib\/brain\/|ingress-filter|onboarding-orchestrator|persist-brain|client-brain|log-invocation\/route/)
+        expect(m[1], `${archivo} importa ${m[1]}`).not.toMatch(/agent-runner|run-sdk|brain-enrichment|ingest-source|persist-chunks|lib\/brain\/|onboarding-orchestrator|persist-brain|client-brain|log-invocation\/route/)
+        // ÚNICA EXCEPCIÓN FIRMADA (paso 7): `recibir/seguridad.ts` puede importar la función pura del filtro; ningún otro archivo
+        if (archivo !== EXCEPCION_DEL_FILTRO) expect(m[1], `${archivo} importa ${m[1]}`).not.toMatch(/ingress-filter/)
       }
     }
+  })
+  it('la excepción del filtro es de UN solo archivo y solo importa su función pura (el filtro mismo no se modificó)', () => {
+    const conFiltro = codigo().filter(({ texto }) => /from\s+['"][^'"]*ingress-filter[^'"]*['"]/.test(sinComentarios(texto))).map((c) => c.archivo)
+    expect(conFiltro).toEqual([EXCEPCION_DEL_FILTRO])
+    const t = sinComentarios(fs.readFileSync(path.join(RAIZ, EXCEPCION_DEL_FILTRO), 'utf8'))
+    expect(t).toMatch(/import \{ DEFAULT_ROUTE_POLICY, runIngressFilter \} from '\.\.\/\.\.\/\.\.\/ingress-filter'/)
+    expect(t).toMatch(/shadow_mode: false/)
+    expect(t).toMatch(/skip_classifier: true/)
   })
   it('este PR solo agrega archivos de src/lib/cerebro y de src/app/api/brain/portero (comparado con origin/main)', () => {
     const rama = process.env.GITHUB_HEAD_REF || execSync('git rev-parse --abbrev-ref HEAD', { cwd: RAIZ, encoding: 'utf8' }).trim()
