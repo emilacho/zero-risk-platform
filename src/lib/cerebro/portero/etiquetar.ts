@@ -65,7 +65,7 @@ export const MAXIMO_DE_PRODUCTOS_POR_FAMILIA_DE_PRUEBA = 30
 export function familiasDelCatalogo(items: Array<{ titulo: string; familia?: string | null }>): FamiliaDeProductos[] {
   const porFamilia = new Map<string, { nombre: string; incluye: string[] }>()
   for (const it of items) {
-    const nombre = typeof it.familia === 'string' ? it.familia.trim() : ''
+    const nombre = typeof it.familia === 'string' ? enUnaLinea(it.familia) : ''
     if (!nombre || normalizar(nombre) === 'sin familia') continue
     const clave = normalizar(nombre)
     const f = porFamilia.get(clave) ?? { nombre, incluye: [] }
@@ -75,7 +75,29 @@ export function familiasDelCatalogo(items: Array<{ titulo: string; familia?: str
   const titulos = new Set(items.map((i) => normalizar(i.titulo)))
   return [...porFamilia.entries()].filter(([clave, f]) => f.incluye.length >= 2 && !titulos.has(clave)).map(([, f]) => f)
 }
-const lineaDeFamilia = (f: FamiliaDeProductos): string => `Familia «${f.nombre}» · agrupa: ${f.incluye.join(', ')}`.slice(0, 200)
+const MAXIMO_DE_CARACTERES_DE_LINEA = 200
+/** un nombre en UNA sola línea (un salto de línea o espacios de más no parten la línea que ve el modelo) */
+const enUnaLinea = (t: string): string => t.replace(/\s+/g, ' ').trim()
+/**
+ * La línea de una familia: «Familia «X» · agrupa: A, B, C». Si no caben todos los productos en 200 caracteres se cortan ENTRE nombres (nunca a medio nombre) y dice cuántos faltan
+ * («(+N más)»); esos productos siguen en sus propias líneas y el código los acepta igual.
+ */
+export function lineaDeFamilia(f: FamiliaDeProductos): string {
+  const cabeza = `Familia «${enUnaLinea(f.nombre)}» · agrupa: `
+  const nombres = f.incluye.map(enUnaLinea).filter(Boolean)
+  let linea = cabeza
+  let puestos = 0
+  for (const n of nombres) {
+    const resto = nombres.length - puestos - 1
+    const siguiente = `${linea}${puestos ? ', ' : ''}${n}`
+    const cola = resto > 0 ? ` (+${resto} más)` : ''
+    if (siguiente.length + cola.length > MAXIMO_DE_CARACTERES_DE_LINEA) break
+    linea = siguiente
+    puestos++
+  }
+  if (puestos === 0) return `${cabeza}(${nombres.length} productos)`.slice(0, MAXIMO_DE_CARACTERES_DE_LINEA)
+  return puestos < nombres.length ? `${linea} (+${nombres.length - puestos} más)` : linea
+}
 
 export interface DepsDeEtiquetar {
   consulta: Consulta
@@ -133,7 +155,7 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
     if (fa !== undefined) {
       const bien = Array.isArray(fa) && fa.length <= MAXIMO_DE_FAMILIAS_DE_PRUEBA && fa.every((f) => esObjeto(f) && typeof f.nombre === 'string' && f.nombre.trim() !== '' && f.nombre.length <= 120 && Array.isArray(f.incluye) && f.incluye.length <= MAXIMO_DE_PRODUCTOS_POR_FAMILIA_DE_PRUEBA && f.incluye.every((x: unknown) => typeof x === 'string' && x.length <= 200))
       if (!bien) errores.push(`\`familias_de_prueba\` debe ser una lista de hasta ${MAXIMO_DE_FAMILIAS_DE_PRUEBA} familias {nombre, incluye: [textos]} (nombre ≤ 120, hasta ${MAXIMO_DE_PRODUCTOS_POR_FAMILIA_DE_PRUEBA} productos)`)
-      else familiasDePrueba = (fa as Array<{ nombre: string; incluye: string[] }>).map((f) => ({ nombre: f.nombre.trim(), incluye: f.incluye }))
+      else familiasDePrueba = (fa as Array<{ nombre: string; incluye: string[] }>).map((f) => ({ nombre: enUnaLinea(f.nombre), incluye: f.incluye.map(enUnaLinea) }))
     }
   } else {
     fotoId = texto(body.foto)
