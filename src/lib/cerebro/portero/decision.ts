@@ -17,6 +17,10 @@ export interface Decision {
   faltantes: string[]
   /** solo al leer una lista por trozos: lo que un trozo dio por «faltante» y que puede estar en otro trozo (NO es un faltante declarado) */
   faltantes_no_concluyentes?: string[]
+  /** faltantes que el portero declaró pero que, al leer el texto COMPLETO de las fichas entregadas (el resumen salía cortado), YA estaban: no son faltantes */
+  faltantes_descartados_por_ficha_completa?: string[]
+  /** grupos que el portero pidió ENTEROS (sin escoger cosa por cosa): se entregan completos, también lo vencido */
+  grupos_completos?: Array<{ nivel: string; grupo: string; lineas: number }>
   duda: number[]
   /** números que el modelo puso y que no están en la lista (descartados) */
   numeros_invalidos: unknown[]

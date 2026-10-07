@@ -39,13 +39,19 @@ export interface ListaNumerada {
 
 const una = (t: string): string => t.replace(/\s+/g, ' ').trim()
 const recorte = (t: string, n: number): string => (t.length > n ? t.slice(0, n) + '…' : t)
+/** cuántos caracteres del resumen (`que_es`) ve el modelo en la lista; lo que pase de ahí sale CORTADO y marcado con «…» */
+export const LARGO_DEL_RESUMEN = 100
+/** ¿el resumen de esta ficha sale cortado en la lista? (el empleado recibe la ficha COMPLETA; el modelo solo ve el resumen) */
+export const estaCortada = (f: Ficha): boolean => una(f.que_es).length > LARGO_DEL_RESUMEN
+/** la línea con el resumen ENTERO (para comprobar un «faltante» contra lo que el empleado de verdad recibe) */
+export const lineaCompleta = (n: number, f: Ficha): string => `#${n} ${una(f.titulo)} · ${una(f.que_es)}${f.producto && f.producto.length ? ` · producto: ${f.producto.map(una).join(', ')}` : ''}`
 const dia = (iso: string | null): string => (iso ? iso.slice(0, 10) : 'sin fecha')
 
 const NOMBRE_DE_DECISION: Record<DecisionDelDueno, string> = { aprobada: 'aprobada', rechazada: 'rechazada', cambio_pedido: 'cambio pedido' }
 
 /** `#n estante clase · título · qué es (100) [· producto] · estado · fecha · vigencia [· versión] · peso N` */
 export function lineaParaElModelo(n: number, f: Ficha): string {
-  const partes = [`${f.estante} ${f.clase}`, una(f.titulo), recorte(una(f.que_es), 100)]
+  const partes = [`${f.estante} ${f.clase}`, una(f.titulo), recorte(una(f.que_es), LARGO_DEL_RESUMEN)]
   if (f.producto && f.producto.length) partes.push(`producto: ${f.producto.map(una).join(', ')}`)
   if (f.que_muestra) partes.push(`muestra: ${recorte(una(f.que_muestra), 100)}`)
   partes.push(f.estado, dia(f.fecha_fuente))

@@ -215,7 +215,7 @@ describe('condición 1 · vigilancia sobre todo src/lib/cerebro/ y src/app/api/b
       const n = [...t.matchAll(/\b(pedido|p)\s*:\s*Pedido\b/g)].length
       if (n) usos[path.basename(rel)] = n
     }
-    expect(usos).toEqual({ 'estantes.ts': 1, 'instruccion.ts': 4 })
+    expect(usos).toEqual({ 'estantes.ts': 1, 'instruccion.ts': 5 })
   })
   it('la propia vigilancia detecta cada forma que sobrevivía (se prueba contra textos de ejemplo)', () => {
     const nombra = (t: string) => /palabrasDelPedido|\bpuntaje\b|puntuar|recortada_por_coincidencia|coincidencia|afinidad|similitud|parecido|relevancia|\bsimilar\b/i.test(t)
