@@ -40,6 +40,8 @@ export function leerListaDePrueba(prueba: unknown, lista: unknown, cliente: stri
       ...(typeof x.version === 'number' ? { version: x.version } : {}), ...(typeof x.vigente === 'boolean' ? { vigente: x.vigente } : {}),
       ...(Array.isArray(x.producto) && x.producto.every(esTexto) ? { producto: x.producto as string[] } : {}),
       ...(typeof x.versiones_anteriores === 'number' ? { versiones_anteriores: x.versiones_anteriores } : {}),
+      // de `datos` solo pasa la familia (el nivel más fino de las listas grandes); precio y lo demás no
+      ...(esObjeto(x.datos) && esTexto(x.datos.familia) && x.datos.familia.trim() ? { datos: { familia: x.datos.familia } } : {}),
       peso_estimado: x.peso_estimado,
     })
   })
