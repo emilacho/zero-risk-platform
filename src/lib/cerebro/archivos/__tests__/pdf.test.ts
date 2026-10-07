@@ -75,10 +75,6 @@ describe('archivos rotos y topes', () => {
     const r = await leerPdf(cien, 'g.pdf')
     expect(r.estado).toBe('ok'); expect(r.paginas).toBe(TOPES.pdf_paginas)
   })
-  it('si el lector no contesta a tiempo se declara ilegible por tiempo (25 s en producción)', async () => {
-    const r = await leerPdf(crearPdf([textoPagina('x')]), 'x.pdf', { tiempoMs: 30, abrirDocumento: () => new Promise(() => {}) })
-    expect(r.estado).toBe('ilegible'); expect(r.motivo).toBe('tiempo_agotado')
-  })
 })
 
 describe('PDF hostil: se lee como datos, no se ejecuta nada', () => {

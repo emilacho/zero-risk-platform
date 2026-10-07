@@ -177,3 +177,27 @@ export function aAscii85(b: Buffer): Buffer {
 }
 /** el flujo de contenido de una página con una sola línea de texto, listo para comprimir */
 export const contenidoDeTexto = (t: string): Buffer => Buffer.from(`BT /F1 11 Tf 1 0 0 1 50 780 Tm (${escPdf(t)}) Tj ET`, 'latin1')
+
+// ───────────────────────── PDF hostil a medida: objetos sueltos (los de los sondeos A y C de CC#3)
+export type ObjetoPdf = Buffer | string
+/** un PDF cuyo objeto 1 es el catálogo; `objs` son los objetos, en orden, tal cual */
+export function crearPdfDeObjetos(objs: ObjetoPdf[], raiz = 1): Buffer {
+  const partes: Buffer[] = []
+  let largo = 0
+  const desplazamientos: number[] = []
+  const poner = (b: ObjetoPdf) => { const x = Buffer.isBuffer(b) ? b : Buffer.from(b, 'latin1'); partes.push(x); largo += x.length }
+  poner('%PDF-1.4\n')
+  objs.forEach((o, i) => { desplazamientos.push(largo); poner(`${i + 1} 0 obj\n`); poner(o); poner('\nendobj\n') })
+  const xref = largo
+  poner(`xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + desplazamientos.map((x) => String(x).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size ${objs.length + 1} /Root ${raiz} 0 R >>\nstartxref\n${xref}\n%%EOF\n`)
+  return Buffer.concat(partes)
+}
+/** los tres primeros objetos de una página de un solo contenido (que será el objeto 4) */
+export const baseDePagina = (contenidos = '4 0 R'): ObjetoPdf[] => [
+  '<< /Type /Catalog /Pages 2 0 R >>',
+  '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+  `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents ${contenidos} /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> >>`,
+]
+/** un flujo con su diccionario; `antes`, `despues` y `sep` permiten torcer la forma (relleno, «stream» con espacios, «endstream» falso…) */
+export const flujoCrudo = (dic: string, datos: Buffer, antes = '', despues = '\nendstream', sep = '\n'): Buffer =>
+  Buffer.concat([Buffer.from(`${antes}<< ${dic} >>\nstream${sep}`, 'latin1'), datos, Buffer.from(despues, 'latin1')])
