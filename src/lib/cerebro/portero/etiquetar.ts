@@ -80,6 +80,11 @@ const MAXIMO_DE_CARACTERES_DE_LINEA = 200
 /** un nombre en UNA sola línea (un salto de línea o espacios de más no parten la línea que ve el modelo) */
 const enUnaLinea = (t: string): string => t.replace(/\s+/g, ' ').trim()
 /**
+ * El nombre sin el adorno con que el modelo suele repetir la línea que vio: «Familia «X»», «Familia: X», comillas («», "", “”), mayúsculas de más, punto final.
+ * Solo se prueba DESPUÉS del nombre exacto (un producto que se llame «Familia Real» entra por su nombre), y lo que quede tiene que ser un nombre del catálogo: no abre la puerta a nada.
+ */
+export const sinAdorno = (t: string): string => t.trim().replace(/^familia\b\s*[:\-–—]?\s*/i, '').replace(/^[«»"'“”‘’\s]+|[«»"'“”‘’.,;:\s]+$/g, '').trim()
+/**
  * La línea de una familia: «Familia «X» · agrupa: A, B, C». Si no caben todos los productos en 200 caracteres se cortan ENTRE nombres (nunca a medio nombre) y dice cuántos faltan
  * («(+N más)»); esos productos siguen en sus propias líneas y el código los acepta igual.
  */
@@ -180,11 +185,13 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
   let url = ''
   let leyenda: string
   let nombresDeProducto: string[]
+  let nombresDeFamilia: string[] = []
   let lineasDeProducto: string[]
   if (modoPrueba) {
     url = urlDePrueba ?? ''
     leyenda = leyendaDePrueba
     nombresDeProducto = [...familiasDePrueba.map((f) => f.nombre), ...productosDePrueba]
+    nombresDeFamilia = familiasDePrueba.map((f) => f.nombre)
     lineasDeProducto = [...familiasDePrueba.map(lineaDeFamilia), ...productosDePrueba]
   } else {
     const r = await deps.consulta({ tabla: 'client_social_images', columnas: ['id', 'url', 'caption', 'estado', 'etiquetada_en'], donde: { client_id: cli, id: fotoId as string }, limite: 1 })
@@ -203,6 +210,7 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
     const productos = sitio.lineas.filter((f) => f.clase === 'catalogo_item' || f.clase === 'catalogo_familia')
     const familias = familiasDelCatalogo(productos.filter((f) => f.clase === 'catalogo_item').map((f) => ({ titulo: f.titulo, familia: f.datos?.familia })))
     nombresDeProducto = [...familias.map((f) => f.nombre), ...productos.map((f) => f.titulo)]
+    nombresDeFamilia = familias.map((f) => f.nombre)
     lineasDeProducto = [...familias.map(lineaDeFamilia), ...productos.map((f) => `${f.titulo} · ${f.que_es}`.slice(0, 200))]
   }
   const omitidas = Math.max(0, lineasDeProducto.length - MAXIMO_DE_LINEAS_DE_PRODUCTO)
@@ -251,14 +259,17 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
       const vistos: string[] = []
       for (const p of Array.isArray(v.producto_visto) ? (v.producto_visto as unknown[]) : []) {
         if (typeof p !== 'string') continue
-        const exacto = catalogo.get(normalizar(p))
+        const exacto = catalogo.get(normalizar(p)) ?? catalogo.get(normalizar(sinAdorno(p)))
         if (!exacto) { descartados.push(p); continue } // un producto que no está en las líneas del cliente NO se inventa
         if (!vistos.includes(exacto)) vistos.push(exacto)
       }
+      // la familia dice «de qué tipo», no «cuál variante»: si solo hay familia, la confianza es BAJA diga lo que diga el modelo
+      const familias = new Set(nombresDeFamilia.map(normalizar))
+      const soloFamilia = vistos.length > 0 && vistos.every((x) => familias.has(normalizar(x)))
       etiqueta = {
         que_muestra: (texto(v.que_muestra) as string).slice(0, MAXIMO_DE_TEXTO), producto_visto: vistos,
         texto_visible: typeof v.texto_visible === 'string' ? v.texto_visible.trim().slice(0, MAXIMO_DE_TEXTO) : '',
-        confianza: typeof v.confianza === 'string' && (CONFIANZAS as readonly string[]).includes(v.confianza) ? v.confianza : 'baja',
+        confianza: soloFamilia ? 'baja' : typeof v.confianza === 'string' && (CONFIANZAS as readonly string[]).includes(v.confianza) ? v.confianza : 'baja',
       }
     }
   }

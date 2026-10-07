@@ -22,19 +22,20 @@ const tablas = (items = CATALOGO): Tablas => ({
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('imagen-minima')]).toString('base64')
 
 function armar(productoVisto: string[], t: Tablas = tablas()) {
+  let confianza = 'baja'
   const peticiones: PeticionConImagen[] = []
   const escrituras: Array<{ valores: ValoresDeEtiqueta }> = []
   const base = crearBaseFalsa(t)
   const deps: DepsDeEtiquetar = {
     consulta: base.consulta, urlDeLaBase: BASE,
-    llamarModelo: async (p) => { peticiones.push(p); return { texto: JSON.stringify({ que_muestra: 'un plato de sopa con cebolla', producto_visto: productoVisto, texto_visible: '', confianza: 'baja' }), usage: { input_tokens: 3000, output_tokens: 200 } } },
+    llamarModelo: async (p) => { peticiones.push(p); return { texto: JSON.stringify({ que_muestra: 'un plato de sopa con cebolla', producto_visto: productoVisto, texto_visible: '', confianza }), usage: { input_tokens: 3000, output_tokens: 200 } } },
     bajarFoto: async () => ({ ok: true, base64: 'QUJD', tipo: 'image/jpeg', bytes: 3 }),
     escribir: async (a) => { escrituras.push(a); return { ok: true } },
     registrar: async () => ({ ok: true }), ahora: () => AHORA,
   }
   const real = (extra: Record<string, unknown> = {}) => etiquetar(deps, { cliente: A, foto: 'f1', workflow_id: 'wf', workflow_execution_id: 'ex', ...extra })
   const prueba = (extra: Record<string, unknown> = {}) => etiquetar(deps, { cliente: 'prueba-portero', prueba: true, workflow_id: 'wf', workflow_execution_id: 'ex', foto_de_prueba: { base64: PNG, tipo: 'image/png', caption: '' }, productos_de_prueba: ['Encebollado A', 'Encebollado B', 'Cola'], ...extra })
-  return { peticiones, escrituras, real, prueba }
+  return { peticiones, escrituras, real, prueba, cambiarConfianza: (c: string) => { confianza = c } }
 }
 const cuerpoDe = (r: { cuerpo: Record<string, unknown> }) => r.cuerpo as Record<string, any>
 afterEach(() => { vi.restoreAllMocks() })
@@ -192,5 +193,75 @@ describe('condición 1 de CC#3 · lo que las pruebas del PR no atrapaban (M04, M
     expect(INSTRUCCION_DEL_ETIQUETADOR).toContain('y baja la confianza')
     expect(INSTRUCCION_DEL_ETIQUETADOR).toContain('«media» o «baja» cuando no distingues la variante')
     expect(INSTRUCCION_DEL_ETIQUETADOR).toContain('4. «confianza»')
+  })
+})
+
+describe('adenda 2 · el modelo nombra la familia CON ADORNO («Familia «Encebollados»»): se reconoce; y una familia sola sale con confianza baja', () => {
+  const con = (productoVisto: string[], confianza = 'media', t: Tablas = tablas()) => {
+    const x = armar(productoVisto, t)
+    return x
+  }
+  it.each([
+    ['Familia «Encebollados»', 'Encebollados'],
+    ['familia «ENCEBOLLADOS»', 'Encebollados'],
+    ['Familia: Encebollados', 'Encebollados'],
+    ['Familia - Encebollados', 'Encebollados'],
+    ['«Encebollados»', 'Encebollados'],
+    ['"encebollados"', 'Encebollados'],
+    ['“Encebollados”', 'Encebollados'],
+    ['  Encebollados.  ', 'Encebollados'],
+    ['Familia «Encebollados» ', 'Encebollados'],
+    ['«Encebollado A»', 'Encebollado A'],
+    ['Familia «extras»', 'extras'],
+  ])('«%s» → se reconoce como «%s»', async (dicho, canonico) => {
+    const r = await con([dicho]).real()
+    expect(cuerpoDe(r).etiqueta.producto_visto).toEqual([canonico])
+    expect(cuerpoDe(r).producto_visto_descartados).toEqual([])
+  })
+  it('el adorno NO abre la puerta: una familia inventada, una con palabras de más o una de un solo producto siguen descartadas (con lo que escribió el modelo)', async () => {
+    const dichos = ['Familia «Postres»', 'Familia «Encebollados» y más', 'Encebollados de la casa', 'Familia «Unica»', 'Familia', '«»']
+    const r = await con(dichos).real()
+    expect(cuerpoDe(r).etiqueta.producto_visto).toEqual([])
+    expect(cuerpoDe(r).producto_visto_descartados).toEqual(dichos)
+  })
+  it('un producto que se llama «Familia Real» se acepta por su nombre EXACTO, aunque exista otro llamado «Real» (la limpieza solo se prueba después)', async () => {
+    const x = armar(['Familia Real'], tablas([['Familia Real', 'Menu'], ['Real', 'Menu'], ['Sopa A', 'Sopas'], ['Sopa B', 'Sopas']]))
+    expect(cuerpoDe(await x.real()).etiqueta.producto_visto).toEqual(['Familia Real'])
+  })
+  it('el mismo nombre repetido con y sin adorno cuenta UNA vez', async () => {
+    const r = await con(['Encebollados', 'Familia «Encebollados»', '«encebollados»']).real()
+    expect(cuerpoDe(r).etiqueta.producto_visto).toEqual(['Encebollados'])
+  })
+  it('modo prueba: lo mismo con `familias_de_prueba`', async () => {
+    const t = armar(['Familia «Encebollados»'])
+    const r = await t.prueba({ familias_de_prueba: [{ nombre: 'Encebollados', incluye: ['Encebollado A', 'Encebollado B'] }] })
+    expect(cuerpoDe(r).etiqueta.producto_visto).toEqual(['Encebollados'])
+  })
+  it('si solo hay FAMILIA, la confianza sale «baja» aunque el modelo diga «alta» o «media» (y así se guarda)', async () => {
+    for (const conf of ['alta', 'media', 'baja']) {
+      const x = armar(['Familia «Encebollados»'])
+      x.cambiarConfianza(conf)
+      const r = await x.real()
+      expect(cuerpoDe(r).etiqueta.confianza, conf).toBe('baja')
+      expect(x.escrituras[0].valores.etiqueta_confianza, conf).toBe('baja')
+    }
+  })
+  it('con una variante exacta (sola o junto a una familia) la confianza del modelo se respeta', async () => {
+    for (const vistos of [['Encebollado A'], ['Encebollados', 'Cola'], ['Encebollado B', 'extras']]) {
+      const x = armar(vistos)
+      x.cambiarConfianza('alta')
+      expect(cuerpoDe(await x.real()).etiqueta.confianza, vistos.join()).toBe('alta')
+    }
+  })
+  it('sin ningún producto visto, la confianza del modelo se respeta', async () => {
+    const x = armar([])
+    x.cambiarConfianza('media')
+    expect(cuerpoDe(await x.real()).etiqueta.confianza).toBe('media')
+  })
+  it('en modo prueba la familia sola también baja la confianza', async () => {
+    const x = armar(['Encebollados'])
+    x.cambiarConfianza('alta')
+    const r = await x.prueba({ familias_de_prueba: [{ nombre: 'Encebollados', incluye: ['Encebollado A', 'Encebollado B'] }] })
+    expect(cuerpoDe(r).etiqueta.confianza).toBe('baja')
   })
 })
