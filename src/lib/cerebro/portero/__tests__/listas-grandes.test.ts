@@ -402,7 +402,18 @@ describe('las listas chicas se comportan EXACTAMENTE como antes (comparado con e
     expect(Object.keys(antes).filter((k) => k.startsWith('piloto 62 líneas')).length).toBe(5)
   })
   it.each(escenariosDeListaChica().map((e) => [e.nombre, e] as const))('%s: lo que se le manda al modelo, lo que se registra y la respuesta son idénticos', async (nombre, e) => {
-    expect(await correrEscenario(e)).toEqual(antes[nombre])
+    // lo ÚNICO que cambió desde el código anterior es la regla 8 de la instrucción (vista cortada, relevo 6 · adenda 2): se pone la instrucción vieja en su lugar y TODO lo demás debe ser igual
+    const hoy = (await correrEscenario(e)) as { peticiones: Array<{ system: string }> }
+    const sistemaViejo = (Object.values(antes)[0] as { peticiones: Array<{ system: string }> }).peticiones[0].system
+    for (const p of hoy.peticiones) { expect(p.system).toBe(INSTRUCCION_DEL_PORTERO); p.system = sistemaViejo }
+    expect(hoy).toEqual(antes[nombre])
+  })
+  it('la instrucción de hoy es la de antes MÁS la regla 8 (la de las líneas cortadas) y nada más', () => {
+    const sistemaViejo = (Object.values(antes)[0] as { peticiones: Array<{ system: string }> }).peticiones[0].system
+    expect(INSTRUCCION_DEL_PORTERO.replace(/\n8\. [^\n]*/, '')).toBe(sistemaViejo)
+    expect(INSTRUCCION_DEL_PORTERO).toMatch(/8\./)
+    expect(INSTRUCCION_DEL_PORTERO).toMatch(/resumen de una línea termina en «…», ese resumen está CORTADO/)
+    expect(INSTRUCCION_DEL_PORTERO).toMatch(/nunca declares «faltante» algo solo porque no lo ves/)
   })
   it('una lista que cabe nunca navega: UNA llamada, sin niveles', async () => {
     const { deps, espia } = armar(() => decision([1, 2]))
