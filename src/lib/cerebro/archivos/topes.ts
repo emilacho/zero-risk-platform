@@ -23,6 +23,12 @@ export const TOPES = {
   zip_entradas: 500,
   zip_entrada_bytes: 20 * MB,
   zip_total_bytes: 60 * MB,
+  /** PDF: lo que puede inflarse un flujo comprimido (se mide ANTES de abrir el PDF), el total de todos los flujos y cuántos flujos se revisan */
+  pdf_flujo_bytes: 32 * MB,
+  pdf_flujos_total_bytes: 128 * MB,
+  pdf_flujos_max: 50_000,
+  /** PDF: trozos de texto por página que se juntan antes de cortar la página */
+  pdf_items_por_pagina: 400_000,
 } as const
 
 /** el archivo más grande que se admite de cualquier tipo: el tope del base64 sale de aquí (4 caracteres por cada 3 bytes) */

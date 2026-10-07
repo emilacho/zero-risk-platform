@@ -67,7 +67,7 @@ export function crearDocx(cuerpoXml: string, extra: EntradaDeZip[] = []): Buffer
 }
 
 // ───────────────────────── XLSX ─────────────────────────
-export interface HojaDeMuestra { nombre: string; filas: Array<Array<string | number | boolean | null>>; enLinea?: boolean }
+export interface HojaDeMuestra { nombre: string; filas: Array<Array<string | number | boolean | null>>; enLinea?: boolean; estado?: 'hidden' | 'veryHidden' }
 const letra = (i: number): string => { let s = ''; let n = i + 1; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26) } return s }
 
 export function crearXlsx(hojas: HojaDeMuestra[]): Buffer {
@@ -86,7 +86,7 @@ export function crearXlsx(hojas: HojaDeMuestra[]): Buffer {
     }).join('')
     return `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${filas}</sheetData></worksheet>`
   })
-  const libro = `<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${hojas.map((h, i) => `<sheet name="${esc(h.nombre)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`
+  const libro = `<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${hojas.map((h, i) => `<sheet name="${esc(h.nombre)}"${h.estado ? ` state="${h.estado}"` : ''} sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`
   const rels = `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${hojas.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}</Relationships>`
   const comp = `<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${compartidas.length}" uniqueCount="${compartidas.length}">${compartidas.map((t) => `<si><t xml:space="preserve">${esc(t)}</t></si>`).join('')}</sst>`
   return crearZip([
@@ -141,3 +141,39 @@ export const b64 = (b: Buffer | string): string => (Buffer.isBuffer(b) ? b : Buf
 /** una imagen PNG mínima válida (1×1) */
 export const PNG_1X1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')
 export const JPEG_MINIMO = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9])
+
+// ───────────────────────── PDF con un flujo comprimido a medida (bombas, cadenas de filtros, flujos legítimos)
+/** un PDF de una página cuyo contenido es `datos` TAL CUAL (ya comprimido) con el `filtro` declarado, p. ej. `/FlateDecode` o `[/ASCII85Decode /FlateDecode]` */
+export function crearPdfConFlujo(datos: Buffer, filtro: string): Buffer {
+  const partes: Buffer[] = []
+  const pos: number[] = []
+  let largo = 0
+  const poner = (b: Buffer | string) => { const x = Buffer.isBuffer(b) ? b : Buffer.from(b, 'latin1'); partes.push(x); largo += x.length }
+  poner('%PDF-1.4\n')
+  const cuerpos: Array<Buffer | string> = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    Buffer.concat([Buffer.from(`<< /Length ${datos.length} /Filter ${filtro} >>\nstream\n`, 'latin1'), datos, Buffer.from('\nendstream', 'latin1')]),
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+  ]
+  cuerpos.forEach((c, i) => { pos.push(largo); poner(`${i + 1} 0 obj\n`); poner(c); poner('\nendobj\n') })
+  const xref = largo
+  poner(`xref\n0 ${cuerpos.length + 1}\n0000000000 65535 f \n` + pos.map((p) => String(p).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size ${cuerpos.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`)
+  return Buffer.concat(partes)
+}
+/** ASCII85 mínimo para armar cadenas de filtros en las pruebas */
+export function aAscii85(b: Buffer): Buffer {
+  let s = ''
+  for (let i = 0; i < b.length; i += 4) {
+    const n = Math.min(4, b.length - i)
+    let v = 0
+    for (let k = 0; k < 4; k++) v = v * 256 + (k < n ? b[i + k] : 0)
+    const c: string[] = []
+    for (let k = 0; k < 5; k++) { c.unshift(String.fromCharCode((v % 85) + 33)); v = Math.floor(v / 85) }
+    s += c.slice(0, n + 1).join('')
+  }
+  return Buffer.from(s + '~>', 'latin1')
+}
+/** el flujo de contenido de una página con una sola línea de texto, listo para comprimir */
+export const contenidoDeTexto = (t: string): Buffer => Buffer.from(`BT /F1 11 Tf 1 0 0 1 50 780 Tm (${escPdf(t)}) Tj ET`, 'latin1')
