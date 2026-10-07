@@ -239,11 +239,22 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     const ll = await llamar(peticion(cfg.instruccion, mensaje, MAX_TOKENS_DE_ESTANTES))
     if (ll.respuesta) huboRespuesta = true
     const porNombre = new Map(grupos.map((g) => [normalizarNombre(g.nombre), g]))
+    // el índice llama a un grupo de clase «E2 catalogo_item»; el modelo suele repetir solo «catalogo_item» (medición del 07-oct: 30 de 30): se acepta el nombre SIN el estante
+    // cuando identifica a UN solo grupo entre los ofrecidos; si fuera ambiguo (la misma clase en dos estantes) NO se adivina: es un nombre inválido
+    const sinEstante = new Map<string, string[]>()
+    if (nivel === 'clase') for (const g of grupos) { const corto = normalizarNombre(g.nombre.split(' ').slice(1).join(' ')); if (corto) sinEstante.set(corto, [...(sinEstante.get(corto) ?? []), normalizarNombre(g.nombre)]) }
+    const resolver = (x: unknown): string | undefined => {
+      if (typeof x !== 'string') return undefined
+      const k = normalizarNombre(x)
+      if (porNombre.has(k)) return k
+      const unico = sinEstante.get(k)
+      return unico && unico.length === 1 ? unico[0] : undefined
+    }
     const leido = ll.respuesta ? extraerJson(ll.respuesta.texto, cfg.clave) : null
     const valor = leido && typeof leido.valor === 'object' && leido.valor !== null ? (leido.valor as Record<string, unknown>)[cfg.clave] : undefined
     const pedidosDelModelo = Array.isArray(valor) ? valor : null
-    const elegidos = [...new Set((pedidosDelModelo ?? []).filter((x): x is string => typeof x === 'string').map(normalizarNombre).filter((x) => porNombre.has(x)))]
-    const invalidos = [...new Set((pedidosDelModelo ?? []).filter((x) => !(typeof x === 'string' && porNombre.has(normalizarNombre(x)))).map(String))]
+    const elegidos = [...new Set((pedidosDelModelo ?? []).map(resolver).filter((x): x is string => x !== undefined))]
+    const invalidos = [...new Set((pedidosDelModelo ?? []).filter((x) => resolver(x) === undefined).map(String))]
     const nombresElegidos = elegidos.map((k) => (porNombre.get(k) as { nombre: string }).nombre)
     const caida = ll.fallo ? ll.fallo.motivo : !ll.respuesta ? 'error_del_modelo' : !leido ? (ll.cortada ? 'salida_cortada' : 'json_roto') : elegidos.length === 0 ? MOTIVO_SIN_GRUPOS[nivel] : null
     await anotar(ll, pasadas, caida, leido ? JSON.stringify(leido.valor) : '', {
