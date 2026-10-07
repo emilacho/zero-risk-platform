@@ -142,10 +142,10 @@ describe('C · nadie escribe en client_social_images salvo quienes ya lo hacían
       expect(/\.(insert|upsert|delete)\(/.test(t), `${rel}: no puede insertar ni borrar filas`).toBe(false)
     }
   })
-  it('cada escritor declarado exporta COLUMNAS_QUE_ESCRIBE y son EXACTAMENTE las 4 de etiqueta (producto, url, caption… jamás)', async () => {
+  it('cada escritor declarado exporta COLUMNAS_QUE_ESCRIBE y son EXACTAMENTE las 6 de etiqueta (producto, url, caption… jamás)', async () => {
     for (const rel of Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC)) {
       const mod = await import(/* @vite-ignore */ pathToFileURL(path.join(RAIZ, rel)).href.replace(/\.ts$/, ''))
-      expect([...mod.COLUMNAS_QUE_ESCRIBE].sort(), rel).toEqual(['etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra'])
+      expect([...mod.COLUMNAS_QUE_ESCRIBE].sort(), rel).toEqual(['etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra', 'texto_visible'])
     }
   })
   it('en scripts/ solo la escriben los tres conocidos; un escritor nuevo falla hasta que se declare con su razón', () => {

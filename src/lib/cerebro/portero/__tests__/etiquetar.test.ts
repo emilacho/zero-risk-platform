@@ -46,7 +46,7 @@ const salida = (r: { cuerpo: Record<string, unknown> }) => r.cuerpo as Record<st
 
 afterEach(() => { vi.restoreAllMocks() })
 
-describe('el camino feliz: UNA llamada, escribe SOLO las 4 columnas', () => {
+describe('el camino feliz: UNA llamada, escribe EXACTAMENTE las 6 columnas de etiqueta', () => {
   it('lee la foto del cliente, baja la foto de nuestro almacén, llama UNA vez al modelo y guarda lo que muestra', async () => {
     const { deps, espia } = armar(bueno())
     const r = await etiquetar(deps, cuerpo())
@@ -57,26 +57,39 @@ describe('el camino feliz: UNA llamada, escribe SOLO las 4 columnas', () => {
     expect(espia.peticiones).toHaveLength(1)
     expect(espia.escrituras).toHaveLength(1)
   })
-  it('escribe SOLO las 4 columnas (que_muestra, producto_visto, etiquetada_en, etiqueta_modelo): jamás `producto`, `url`, `caption`…', async () => {
+  it('escribe EXACTAMENTE las 6 columnas de etiqueta (que_muestra, producto_visto, etiquetada_en, etiqueta_modelo, texto_visible, etiqueta_confianza): jamás `producto`, `url`, `caption`…', async () => {
     const { deps, espia } = armar(bueno())
     await etiquetar(deps, cuerpo())
     const e = espia.escrituras[0]
-    expect(Object.keys(e.valores).sort()).toEqual(['etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra'])
-    expect([...COLUMNAS_QUE_ESCRIBE].sort()).toEqual(['etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra'])
+    const SEIS = ['etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra', 'texto_visible']
+    expect(Object.keys(e.valores).sort()).toEqual(SEIS)
+    expect([...COLUMNAS_QUE_ESCRIBE].sort()).toEqual(SEIS)
     expect(e).toMatchObject({ foto_id: 'f1', cliente: A })
     expect(e.valores.etiquetada_en).toBe(AHORA.toISOString())
     expect(e.valores.etiqueta_modelo).toBe(MODELO)
     expect(e.valores.producto_visto).toEqual(['Servicio uno'])
+    expect(e.valores.texto_visible).toBe('PLATO DEL DÍA')
+    expect(e.valores.etiqueta_confianza).toBe('alta')
     expect(e.valores).not.toHaveProperty('producto')
+    expect(e.valores).not.toHaveProperty('confianza') // la columna se llama etiqueta_confianza
   })
-  it('`texto_visible` y `confianza` NO tienen columna: no se guardan; salen en la respuesta y en el registro de la llamada', async () => {
-    const { deps, espia } = armar(bueno())
+  it('`texto_visible` y `etiqueta_confianza` SÍ se guardan (tienen su columna); además salen en la respuesta y en el registro de la llamada', async () => {
+    const { deps, espia } = armar(bueno({ confianza: 'media' }))
     const r = await etiquetar(deps, cuerpo())
-    expect(espia.escrituras[0].valores).not.toHaveProperty('texto_visible')
-    expect(espia.escrituras[0].valores).not.toHaveProperty('confianza')
+    expect(espia.escrituras[0].valores.texto_visible).toBe('PLATO DEL DÍA')
+    expect(espia.escrituras[0].valores.etiqueta_confianza).toBe('media')
     expect(salida(r).etiqueta.texto_visible).toBe('PLATO DEL DÍA')
+    expect(salida(r).etiqueta.confianza).toBe('media')
     expect(String(espia.registros[0].response_text)).toMatch(/PLATO DEL DÍA/)
-    expect(salida(r).columnas_escritas.sort()).toEqual(['etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra'])
+    expect(salida(r).columnas_escritas.sort()).toEqual(['etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra', 'texto_visible'])
+  })
+  it('un texto visible vacío se guarda vacío (no se inventa) y una confianza rara se guarda como «baja»; el texto largo se guarda acotado', async () => {
+    const vacio = armar(bueno({ texto_visible: '', confianza: 'segurísima' }))
+    await etiquetar(vacio.deps, cuerpo())
+    expect(vacio.espia.escrituras[0].valores).toMatchObject({ texto_visible: '', etiqueta_confianza: 'baja' })
+    const largo = armar(bueno({ texto_visible: 'y'.repeat(2000) }))
+    await etiquetar(largo.deps, cuerpo())
+    expect(largo.espia.escrituras[0].valores.texto_visible.length).toBeLessThanOrEqual(500)
   })
   it('la petición al modelo: Sonnet 5.5, razonamiento al mínimo, tope de salida, tiempo, la foto en base64, SIN temperatura', async () => {
     const { deps, espia } = armar(bueno())
