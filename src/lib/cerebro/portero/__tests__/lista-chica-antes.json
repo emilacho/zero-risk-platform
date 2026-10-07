@@ -47,7 +47,8 @@
     "fotos": "ok",
     "trabajos_hechos": "ok",
     "decisiones_del_aprobador": "ok",
-    "trozos_sin_lector": "ok"
+    "trozos_sin_lector": "ok",
+    "fichas": "ok"
    },
    "costo_usd": 0.02,
    "tokens": {
@@ -154,7 +155,8 @@
     "fotos": "ok",
     "trabajos_hechos": "ok",
     "decisiones_del_aprobador": "ok",
-    "trozos_sin_lector": "ok"
+    "trozos_sin_lector": "ok",
+    "fichas": "ok"
    },
    "costo_usd": 0.02,
    "tokens": {
@@ -239,7 +241,8 @@
     "fotos": "ok",
     "trabajos_hechos": "ok",
     "decisiones_del_aprobador": "ok",
-    "trozos_sin_lector": "ok"
+    "trozos_sin_lector": "ok",
+    "fichas": "ok"
    },
    "costo_usd": 0,
    "tokens": {
@@ -322,7 +325,8 @@
     "fotos": "ok",
     "trabajos_hechos": "ok",
     "decisiones_del_aprobador": "ok",
-    "trozos_sin_lector": "ok"
+    "trozos_sin_lector": "ok",
+    "fichas": "ok"
    },
    "costo_usd": 0.02,
    "tokens": {
@@ -431,7 +435,8 @@
     "fotos": "ok",
     "trabajos_hechos": "ok",
     "decisiones_del_aprobador": "ok",
-    "trozos_sin_lector": "ok"
+    "trozos_sin_lector": "ok",
+    "fichas": "ok"
    },
    "costo_usd": 0.02,
    "tokens": {
@@ -538,7 +543,8 @@
     "fotos": "ok",
     "trabajos_hechos": "ok",
     "decisiones_del_aprobador": "ok",
-    "trozos_sin_lector": "ok"
+    "trozos_sin_lector": "ok",
+    "fichas": "ok"
    },
    "costo_usd": 0.02,
    "tokens": {
@@ -641,7 +647,8 @@
     "fotos": "ok",
     "trabajos_hechos": "ok",
     "decisiones_del_aprobador": "ok",
-    "trozos_sin_lector": "ok"
+    "trozos_sin_lector": "ok",
+    "fichas": "ok"
    },
    "costo_usd": 0.02,
    "tokens": {

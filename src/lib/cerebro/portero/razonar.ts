@@ -14,7 +14,7 @@ import { type Pedido, validarPedido } from '../conversacion'
 import { construirListaCorta } from '../lista-corta'
 import { type ListaCorta, NOMBRES_DE_FUENTE } from '../tipos'
 import { type Decision, extraerJson, interpretarDecision } from './decision'
-import { agruparLineas, claveDeNivel, indiceDeGrupos, NIVELES, normalizarNombre, presupuestoDeLineas, trocear, vistaDe, type Nivel } from './estantes'
+import { agruparLineas, claveDeNivel, indiceDeGrupos, NIVELES, normalizarNombre, presupuestoDeLineas, tieneFamilia, trocear, vistaDe, type Nivel } from './estantes'
 import { armarMensaje, armarMensajeDeGrupos, GRUPOS_POR_NIVEL, INSTRUCCION_DE_ESTANTES, INSTRUCCION_DEL_PORTERO } from './instruccion'
 import { type LineaNumerada, type ListaNumerada, numerarLista } from './lista-numerada'
 import { estimarTokens, TOPE_DE_ENTRADA_EN_TOKENS } from './medida'
@@ -221,10 +221,14 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
 
   for (const nivel of NIVELES) {
     if (cabe(candidatas)) break
-    const grupos = agruparLineas(candidatas, nivel)
+    // en el nivel de familia, lo que NO tiene familia no se pregunta: se abre SIEMPRE (si no, una «bolsa sin familia» escondería páginas, sedes y horarios)
+    const sinFamilia = nivel === 'familia' ? candidatas.filter((l) => !tieneFamilia(l.ficha)) : []
+    const sujetas = nivel === 'familia' ? candidatas.filter((l) => tieneFamilia(l.ficha)) : candidatas
+    const grupos = agruparLineas(sujetas, nivel)
     if (grupos.length < 2) continue // un solo grupo: no hay nada que elegir en este nivel
     const cfg = GRUPOS_POR_NIVEL[nivel]
-    const mensaje = armarMensajeDeGrupos(pedido, indiceDeGrupos(grupos, nivel), nivel)
+    const aviso = sinFamilia.length ? `\n(además se abren SIEMPRE ${sinFamilia.length} cosas que no tienen familia — ${[...new Set(sinFamilia.map((l) => l.ficha.clase))].join(', ')} — no hace falta elegirlas)` : ''
+    const mensaje = armarMensajeDeGrupos(pedido, indiceDeGrupos(grupos, nivel) + aviso, nivel)
     if (estimarTokens(cfg.instruccion.length + mensaje.length) > topeEntrada) {
       return pasadas === 0
         ? sinModelo({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: 'indice_mas_grande_que_el_tope', ...comun })
@@ -250,7 +254,7 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     if (nivel === 'estante') pasada1 = { estantes_elegidos: nombresElegidos, estantes_invalidos: invalidos, costo_usd: ll.costo, tokens: resumen.tokens }
     if (caida) return terminar({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: caida, llamo_al_modelo: huboRespuesta, ...extrasDeNiveles() })
     const abiertos = new Set(elegidos)
-    candidatas = candidatas.filter((l) => abiertos.has(normalizarNombre(claveDeNivel(l.ficha, nivel))))
+    candidatas = [...sinFamilia, ...sujetas.filter((l) => abiertos.has(normalizarNombre(claveDeNivel(l.ficha, nivel))))].sort((x, y) => x.numero - y.numero)
   }
 
   const lecturaFinal = (trozos: number, extra: Record<string, unknown> = {}) => ({

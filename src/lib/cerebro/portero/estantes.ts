@@ -29,6 +29,9 @@ export function claveDeNivel(f: Ficha, nivel: Nivel): string {
   return fam || SIN_FAMILIA
 }
 
+/** ¿la ficha trae familia? Las que no la traen (páginas, sedes, horarios, documentos…) NO forman un grupo que el modelo deba adivinar: se abren siempre (arreglo de la condición 2 de CC#3) */
+export const tieneFamilia = (f: Ficha): boolean => typeof f.datos?.familia === 'string' && f.datos.familia.replace(/\s+/g, ' ').trim() !== ''
+
 export const normalizarNombre = (t: string): string => t.replace(/\s+/g, ' ').trim().toUpperCase()
 
 export function agruparLineas(lineas: LineaNumerada[], nivel: Nivel): Grupo[] {
