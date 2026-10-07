@@ -151,7 +151,7 @@ describe('tres niveles: estante → clase → familia, el modelo escoge y el sis
     expect(r.niveles.map((n: any) => n.nivel)).toEqual(['estante', 'clase', 'familia'])
     expect(r.niveles[1]).toMatchObject({ grupos_ofrecidos: 2, grupos_elegidos: ['E2 catalogo_item'] })
     expect(r.niveles[2]).toMatchObject({ grupos_ofrecidos: 20, grupos_elegidos: ['Familia 07'] })
-    expect(r.lectura_final).toEqual({ lineas_mostradas: 24, lineas_no_mostradas: f.length - 24, trozos: 1 })
+    expect(r.lectura_final).toEqual({ lineas_mostradas: 24, lineas_completas: 0, lineas_no_mostradas: f.length - 24, trozos: 1 })
     expect(r.pasada_1).toMatchObject({ estantes_elegidos: ['E2'], estantes_invalidos: [] })
   })
   it('cada nivel ofrece lo que hay: una línea por grupo con su conteo, y las familias salen del campo de la propia ficha', async () => {
@@ -408,9 +408,9 @@ describe('las listas chicas se comportan EXACTAMENTE como antes (comparado con e
     for (const p of hoy.peticiones) { expect(p.system).toBe(INSTRUCCION_DEL_PORTERO); p.system = sistemaViejo }
     expect(hoy).toEqual(antes[nombre])
   })
-  it('la instrucción de hoy es la de antes MÁS la regla 8 (la de las líneas cortadas) y nada más', () => {
+  it('la instrucción de hoy es la de antes MÁS las reglas 8 (líneas cortadas) y 9 (conjunto completo) y nada más', () => {
     const sistemaViejo = (Object.values(antes)[0] as { peticiones: Array<{ system: string }> }).peticiones[0].system
-    expect(INSTRUCCION_DEL_PORTERO.replace(/\n8\. [^\n]*/, '')).toBe(sistemaViejo)
+    expect(INSTRUCCION_DEL_PORTERO.replace(/\n8\. [^\n]*/, '').replace(/\n9\. [^\n]*/, '')).toBe(sistemaViejo)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/8\./)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/resumen de una línea termina en «…», ese resumen está CORTADO/)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/nunca declares «faltante» algo solo porque no lo ves/)
