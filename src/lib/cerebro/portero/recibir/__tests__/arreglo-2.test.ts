@@ -7,7 +7,7 @@
  * La herencia NO se toca (ni los descartes que no se heredan, ni H1b).
  */
 import { describe, expect, it } from 'vitest'
-import { MAXIMO_DE_CARACTERES_POR_FICHA } from '../traducir'
+import { MAXIMO_DE_CARACTERES_POR_FICHA, traducir } from '../traducir'
 import { MAX_SEGMENTOS_POR_PASADA, MAXIMO_ABSOLUTO_DE_LLAMADAS, llamadasMaximasPara, recibir, type DepsDeRecibir } from '../recibir'
 import { INSTRUCCION_DE_RECIBIR } from '../instruccion'
 import { entregarContenido } from '../../entregar'
@@ -173,14 +173,30 @@ describe('4 · una hoja o una tabla: una fila = un segmento = (a juicio del mode
 })
 
 describe('3b · una pasada que crece nunca pasa del gasto máximo por llamada', () => {
-  it('120 segmentos largos (590 caracteres) con un modelo de salida corta y el tope por llamada de FÁBRICA: las pasadas crecen sólo hasta lo que cabe en US$ 0,08 de peor caso → «fichado», no «parcial»', async () => {
+  it('120 segmentos largos (590 caracteres), salida corta y un gasto máximo por llamada de US$ 0,05: las pasadas crecen sólo hasta lo que cabe en ese peor caso → «fichado», no «parcial»', async () => {
     const largo = 'z'.repeat(590)
     const texto = Array.from({ length: 120 }, (_x, i) => `U${i + 1} ${largo}`).join('\n\n')
-    const { base, m, correr } = armar(agrupa(40, 300), { topeDeEntradaTokens: 100_000 })
+    const { base, m, correr } = armar(agrupa(40, 300), { topeDeEntradaTokens: 100_000, topeDeGastoPorLlamadaUsd: 0.05 })
     const r = await correr(cuerpo({ texto }))
     expect(r.c.estado).toBe('fichado')
     expect(r.c.segmentos.residuales).toBe(0)
     expect(base.fichas.flatMap((f) => f.firmas as string[])).toHaveLength(120)
     expect(Math.max(...m.espia.peticiones.map((p) => numerosDelMensaje(p).length))).toBeGreaterThan(MAX_SEGMENTOS_POR_PASADA)
+  })
+})
+
+describe('2b · `reemplaza` de una ficha larga va solo en su primera parte', () => {
+  it('traducir: una ficha que reemplaza a otra y pasa del máximo → la primera parte es la nueva versión (version_de, mismo ref) y las demás son fichas nuevas sin version_de', () => {
+    const largo = 'w'.repeat(590)
+    const segs = Array.from({ length: 100 }, (_x, i) => ({ n: i + 1, texto: `V${i + 1} ${largo}`, inicio: 0, fin: 0, firma: `f${i + 1}` }))
+    const afectada = { id: 'vieja-1', ref: 'ficha:vieja-1', titulo: 'Antes', que_es: 'x', firmas: ['zzz'] }
+    let k = 0
+    const r = traducir([{ texto: JSON.stringify({ fichas: [{ clase: 'doc', titulo: 'Nueva versión', que_es: 'x', segmentos: segs.map((s) => s.n), propiedad: 'propia', plazo: 'sin_plazo', reemplaza: 1 }], descartes: [] }) }], { cliente: 'c', ingresoId: 'i', origen: 'su_fuente', fechaFuente: null, ahora: AHORA, prueba: true, paraModelo: segs, afectadas: [afectada], nuevoId: () => `id-${++k}` })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.fichas.length).toBeGreaterThan(1)
+    expect(r.fichas[0]).toMatchObject({ version_de: 'vieja-1', ref: 'ficha:vieja-1' })
+    expect(r.fichas.slice(1).every((f) => f.version_de === null && f.ref === `ficha:${f.id}`)).toBe(true)
+    expect(r.retiradas).toEqual([])
   })
 })
