@@ -15,6 +15,7 @@ import { numerarLista } from '../lista-numerada'
 import { estimarTokens, TOPE_DE_ENTRADA_EN_TOKENS } from '../medida'
 import { costoDeLaLlamada, razonar, TOPE_DE_GASTO_POR_PEDIDO_USD, type DepsDeRazonar, type PeticionAlModelo, type RespuestaDelModelo } from '../razonar'
 import { correrEscenario, escenariosDeListaChica } from './escenarios-de-lista'
+import { sinLaExcepcion } from './excepcion-normalizar-nombre'
 
 // ───────────────────────── herramientas
 const QUE_ES = 'ficha de un producto del catálogo con su presentación, su medida y su precio de lista vigente'
@@ -97,8 +98,9 @@ describe('la coincidencia por palabras no existe y una prueba permanente impide 
   })
   it('ni siquiera una versión disfrazada: nada del portero parte el pedido en palabras para compararlas con las líneas', () => {
     for (const { f, t } of codigo()) {
-      expect(t, f).not.toMatch(/split\(\s*\/\[\^a-z0-9\]/)
-      expect(t, f).not.toMatch(/normalize\('NFD'\)/)
+      const revisado = sinLaExcepcion(`src/lib/cerebro/portero/${f}`, t) // la ÚNICA excepción, con nombre: ver excepcion-normalizar-nombre.ts
+      expect(revisado, f).not.toMatch(/split\(\s*\/\[\^a-z0-9\]/)
+      expect(revisado, f).not.toMatch(/normalize\('NFD'\)/)
     }
   })
   it('una línea SIN ninguna palabra en común con el pedido sigue alcanzable, esté donde esté en el estante grande', async () => {

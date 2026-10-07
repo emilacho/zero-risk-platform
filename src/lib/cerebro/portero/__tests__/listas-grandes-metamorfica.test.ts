@@ -13,6 +13,7 @@ import { A, AHORA, crearBaseFalsa, tablasDeLaBase } from '../../__tests__/casos'
 import type { Ficha } from '../../tipos'
 import { INSTRUCCION_DE_CLASES, INSTRUCCION_DE_ESTANTES, INSTRUCCION_DE_FAMILIAS, INSTRUCCION_DEL_PORTERO } from '../instruccion'
 import { numerarLista } from '../lista-numerada'
+import { ARCHIVO_CON_EXCEPCION, LINEA_CON_EXCEPCION, sinLaExcepcion } from './excepcion-normalizar-nombre'
 import { razonar, type DepsDeRazonar, type PeticionAlModelo } from '../razonar'
 
 // ───────────────────────── herramientas (inventadas para esta prueba)
@@ -192,7 +193,8 @@ describe('condición 1 · vigilancia sobre todo src/lib/cerebro/ y src/app/api/b
     for (const { rel, t } of TODO()) expect(t, rel).not.toMatch(/palabrasDelPedido|\bpuntaje\b|puntuar|recortada_por_coincidencia|MAXIMO_DE_LINEAS_POR_ESTANTE|SIN_VALOR|coincidencia|afinidad|similitud|parecido|relevancia|\bsimilar\b/i)
   })
   it('ningún archivo parte textos en palabras para compararlos (normalizar tildes, partir por no-letras, regex sobre el pedido)', () => {
-    for (const { rel, t } of TODO()) {
+    for (const { rel, t: texto } of TODO()) {
+      const t = sinLaExcepcion(rel, texto) // la ÚNICA excepción, con nombre y mínima: excepcion-normalizar-nombre.ts
       expect(t, rel).not.toMatch(/normalize\(\s*['"]NFD['"]\s*\)/)
       expect(t, rel).not.toMatch(/split\(\s*\/\[\^a-z/i)
       expect(t, rel).not.toMatch(/split\(\s*\/\\W/)
@@ -227,5 +229,54 @@ describe('condición 1 · vigilancia sobre todo src/lib/cerebro/ y src/app/api/b
     expect(/normalize\(\s*['"]NFD['"]\s*\)/.test("t.normalize('NFD').toLowerCase()")).toBe(true)
     expect(/split\(\s*\/\[\^a-z/i.test("t.split(/[^a-z0-9]+/)")).toBe(true)
     expect(lee('const grupos = agruparLineas(candidatas, nivel)')).toBe(false)
+  })
+})
+
+describe('la ÚNICA excepción: comparar un nombre de producto con el catálogo (etiquetar.ts), mínima y con nombre', () => {
+  const NFD = /normalize\(\s*['"]NFD['"]\s*\)/
+  it('en el archivo permitido, la declaración exacta queda exceptuada (y solo ella)', () => {
+    const texto = `import x from 'y'
+${LINEA_CON_EXCEPCION}
+export const z = 1
+`
+    expect(NFD.test(texto)).toBe(true)
+    expect(NFD.test(sinLaExcepcion(ARCHIVO_CON_EXCEPCION, texto))).toBe(false)
+  })
+  it('en CUALQUIER otro archivo la misma línea sigue prohibida', () => {
+    for (const rel of ['src/lib/cerebro/portero/estantes.ts', 'src/lib/cerebro/portero/razonar.ts', 'src/lib/cerebro/lectores.ts', 'src/app/api/brain/portero/etiquetar/route.ts', 'src/lib/cerebro/portero/otro/etiquetar.ts']) {
+      expect(NFD.test(sinLaExcepcion(rel, LINEA_CON_EXCEPCION)), rel).toBe(true)
+    }
+  })
+  it('una declaración DISTINTA en el archivo permitido (otro nombre, otro cuerpo, o la misma con algo de más) no está cubierta', () => {
+    const variantes = [
+      LINEA_CON_EXCEPCION.replace('normalizar', 'palabras'),
+      LINEA_CON_EXCEPCION.replace(".trim()", ".trim().split(' ')"),
+      LINEA_CON_EXCEPCION + " // y además filtra",
+      "const normalizar = (t: string) => t.normalize('NFD')",
+      "const normalizar = (t: string): string => t.normalize('NFD').toLowerCase()",
+    ]
+    for (const v of variantes) expect(NFD.test(sinLaExcepcion(ARCHIVO_CON_EXCEPCION, v)), v).toBe(true)
+  })
+  it('solo cubre UNA aparición: una segunda copia de la línea en el mismo archivo sigue prohibida', () => {
+    const texto = `${LINEA_CON_EXCEPCION}
+function f() {}
+${LINEA_CON_EXCEPCION}
+`
+    expect(NFD.test(sinLaExcepcion(ARCHIVO_CON_EXCEPCION, texto))).toBe(true)
+  })
+  it('lo demás de ese archivo sigue sujeto a TODO: otro normalize en otro sitio, partir por no-letras o leer el pedido salta igual', () => {
+    const otro = `${LINEA_CON_EXCEPCION}
+const q = (t: string) => t.normalize('NFD').split(/[^a-z0-9]+/)
+`
+    const r = sinLaExcepcion(ARCHIVO_CON_EXCEPCION, otro)
+    expect(NFD.test(r)).toBe(true)
+    expect(/split\(\s*\/\[\^a-z/i.test(r)).toBe(true)
+    expect(/\b(necesito|voy_a_producir|ya_tengo)\b/.test(sinLaExcepcion(ARCHIVO_CON_EXCEPCION, `${LINEA_CON_EXCEPCION}
+const n = pedido.necesito
+`))).toBe(true)
+  })
+  it('el archivo permitido NO está en la lista de quienes pueden leer el pedido: etiquetar.ts no lee necesito ni voy_a_producir', () => {
+    expect(ARCHIVO_CON_EXCEPCION).toBe('src/lib/cerebro/portero/etiquetar.ts')
+    expect(LINEA_CON_EXCEPCION).toMatch(/^const normalizar = \(t: string\): string => t\.normalize\('NFD'\)/)
   })
 })
