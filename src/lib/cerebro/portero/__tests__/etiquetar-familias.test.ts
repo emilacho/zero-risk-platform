@@ -173,6 +173,9 @@ describe('condición 1 de CC#3 · lo que las pruebas del PR no atrapaban (M04, M
     expect(linea.length).toBeLessThanOrEqual(200)
     expect(linea).toMatch(/\(\+\d+ más\)$/)
   })
+  it('observación 2 de CC#3 · el título de un producto con salto de línea tampoco parte la línea de su familia', () => {
+    expect(familiasDelCatalogo([{ titulo: 'Sopa\nde pescado', familia: 'Sopas' }, { titulo: 'Sopa  de   pollo', familia: 'Sopas' }])).toEqual([{ nombre: 'Sopas', incluye: ['Sopa de pescado', 'Sopa de pollo'] }])
+  })
   it('observación 2 de CC#3 · un nombre de familia con salto de línea o espacios raros no parte la línea en dos', async () => {
     const t = armar([], tablas([['Sopa A', 'Sopas\ncalientes'], ['Sopa B', 'Sopas \n  calientes']]))
     const r = await (async () => { const x = armar(['Sopas calientes'], tablas([['Sopa A', 'Sopas\ncalientes'], ['Sopa B', 'Sopas \n  calientes']])); return x.real() })()

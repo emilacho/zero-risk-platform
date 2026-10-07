@@ -69,7 +69,8 @@ export function familiasDelCatalogo(items: Array<{ titulo: string; familia?: str
     if (!nombre || normalizar(nombre) === 'sin familia') continue
     const clave = normalizar(nombre)
     const f = porFamilia.get(clave) ?? { nombre, incluye: [] }
-    if (!f.incluye.includes(it.titulo)) f.incluye.push(it.titulo)
+    const titulo = enUnaLinea(it.titulo)
+    if (!f.incluye.includes(titulo)) f.incluye.push(titulo)
     porFamilia.set(clave, f)
   }
   const titulos = new Set(items.map((i) => normalizar(i.titulo)))
@@ -83,8 +84,8 @@ const enUnaLinea = (t: string): string => t.replace(/\s+/g, ' ').trim()
  * («(+N más)»); esos productos siguen en sus propias líneas y el código los acepta igual.
  */
 export function lineaDeFamilia(f: FamiliaDeProductos): string {
-  const cabeza = `Familia «${enUnaLinea(f.nombre)}» · agrupa: `
-  const nombres = f.incluye.map(enUnaLinea).filter(Boolean)
+  const cabeza = `Familia «${f.nombre}» · agrupa: ` // los nombres ya llegan en una sola línea (familiasDelCatalogo y la entrada de prueba los limpian)
+  const nombres = f.incluye.filter(Boolean)
   let linea = cabeza
   let puestos = 0
   for (const n of nombres) {
