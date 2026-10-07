@@ -1,14 +1,24 @@
 'use strict'
 /**
- * EL HILO DEL LECTOR DE PDF (relevo 4 · hallazgo F1 de CC#3). Aquí, y SOLO aquí, corre `unpdf` (pdf.js).
- * Lo lanza `pdf.ts` en un hilo aparte con la memoria del montón topada y un reloj DURO: si el PDF se pasa de tiempo o de memoria, el hilo se MATA desde afuera
- * (a mitad de una página, a mitad de una descompresión) y el proceso principal ni se entera. Por eso aquí NO hay revisiones del PDF «por texto» ni cancelación
- * cooperativa: el aislamiento es lo que protege.
- * Sin red, sin disco, sin variables de entorno (el hilo nace con el entorno vacío), sin procesos hijos. Los topes llegan de `topes.ts` por el mensaje.
- * Protocolo: manda {tipo:'listo'} al cargar; recibe {datos: Uint8Array, topes}; contesta {tipo:'resultado', resultado} o {tipo:'error', nombre, mensaje}.
+ * EL PROCESO DEL LECTOR DE PDF (relevo 4 · F1 de CC#3, ronda 2: proceso hijo en vez de hilo). Aquí, y SOLO aquí, corre `unpdf` (pdf.js).
+ * Lo lanza `pdf.ts` con `child_process.fork` como un PROCESO APARTE: con `--max-old-space-size`, entorno vacío y un RELOJ DURO (SIGKILL desde afuera). Un hilo no basta:
+ * cuando su montón se agota, V8 puede abortar el proceso entero (código 134); un proceso hijo muere SOLO y el principal sigue vivo.
+ * La memoria total del proceso se vigila desde un hilo guardián que vive dentro de este mismo proceso (no depende de que el PDF coopere ni de que el hilo principal esté libre):
+ * al pasar el límite escribe MEMORIA_AGOTADA en la salida de errores y el proceso se mata a sí mismo.
+ * Sin red, sin disco (salvo cargar la biblioteca), sin variables de entorno (nace con el entorno vacío), sin más procesos. Los topes llegan de `topes.ts` por el mensaje.
+ * Protocolo (canal IPC): manda {tipo:'listo'} al cargar; recibe {datos: Uint8Array, topes, limite_mb}; contesta {tipo:'resultado', resultado} o {tipo:'error', nombre, mensaje}.
  */
-const { parentPort } = require('node:worker_threads')
+const { Worker } = require('node:worker_threads')
 const { getDocumentProxy, getResolvedPDFJS } = require('unpdf')
+
+/** el guardián de memoria: un hilo propio, con su propio reloj, que mata el proceso al pasar el límite de memoria total (rss) */
+function vigilarMemoria(limiteMb) {
+  const guardian = new Worker(
+    "const { workerData } = require('node:worker_threads'); const fs = require('node:fs'); setInterval(() => { if (process.memoryUsage.rss() > workerData.limite) { try { fs.writeSync(2, 'MEMORIA_AGOTADA' + String.fromCharCode(10)) } catch (e) { /* nada */ } process.kill(process.pid, 'SIGKILL') } }, 20)",
+    { eval: true, env: {}, workerData: { limite: limiteMb * 1024 * 1024 } },
+  )
+  guardian.unref()
+}
 
 /** junta los trozos de una página en líneas: por altura (tolerancia 3 pt), de arriba abajo; dentro de la línea, de izquierda a derecha */
 function lineasDePagina(items) {
@@ -102,11 +112,12 @@ async function leer(datos, topes) {
   }
 }
 
-parentPort.once('message', async (m) => {
+process.once('message', async (m) => {
   try {
-    parentPort.postMessage({ tipo: 'resultado', resultado: await leer(m.datos, m.topes) })
+    if (m && typeof m.limite_mb === 'number' && m.limite_mb > 0) vigilarMemoria(m.limite_mb)
+    process.send({ tipo: 'resultado', resultado: await leer(m.datos, m.topes) })
   } catch (e) {
-    parentPort.postMessage({ tipo: 'error', nombre: e && e.name ? String(e.name) : 'Error', mensaje: String(e && e.message ? e.message : e).slice(0, 300) })
+    process.send({ tipo: 'error', nombre: e && e.name ? String(e.name) : 'Error', mensaje: String(e && e.message ? e.message : e).slice(0, 300) })
   }
 })
-parentPort.postMessage({ tipo: 'listo' })
+process.send({ tipo: 'listo' })

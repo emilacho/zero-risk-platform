@@ -29,6 +29,8 @@ export const TOPES = {
   pdf_flujos_max: 50_000,
   /** PDF: trozos de texto por página que se juntan antes de cortar la página */
   pdf_items_por_pagina: 400_000,
+  /** PDF: cuántas lecturas puede haber esperando turno en un proceso (de a una se leen); la que llegue de más se rechaza sin leer */
+  pdf_cola_max: 8,
 } as const
 
 /** el archivo más grande que se admite de cualquier tipo: el tope del base64 sale de aquí (4 caracteres por cada 3 bytes) */

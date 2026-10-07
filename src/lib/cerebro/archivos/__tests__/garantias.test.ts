@@ -17,8 +17,11 @@ describe('los lectores no salen a ninguna red ni ejecutan nada', () => {
   it.each([
     ['fetch(', /\bfetch\s*\(/], ['XMLHttpRequest', /XMLHttpRequest/], ['http/https', /from\s+['"](node:)?https?['"]/], ['net/dns/tls', /from\s+['"](node:)?(net|dns|tls|dgram)['"]/],
     ['child_process', /child_process/], ['eval', /\beval\s*\(/], ['new Function', /new\s+Function\s*\(/], ['vm', /from\s+['"](node:)?vm['"]/],
-  ])('ningún archivo usa %s', (_n, patron) => {
-    for (const { nombre, texto } of archivos()) expect(texto, nombre).not.toMatch(patron)
+  ])('ningún archivo usa %s (salvo `pdf.ts` para lanzar el proceso del PDF)', (n, patron) => {
+    for (const { nombre, texto } of archivos()) {
+      if (n === 'child_process' && nombre === 'pdf.ts') continue
+      expect(texto, nombre).not.toMatch(patron)
+    }
   })
   it('no escribe en el disco ni lee variables de entorno (no hay secretos)', () => {
     for (const { nombre, texto } of archivos()) {
@@ -29,10 +32,10 @@ describe('los lectores no salen a ninguna red ni ejecutan nada', () => {
 })
 
 describe('imports permitidos', () => {
-  it('solo node:zlib, node:crypto, node:worker_threads, node:path y archivos de la misma carpeta (`unpdf` solo lo carga el hilo, por require)', () => {
+  it('solo node:zlib, node:crypto, node:child_process, node:path y archivos de la misma carpeta (`unpdf` solo lo carga el proceso del PDF, por require)', () => {
     for (const { nombre, texto } of archivos()) {
       for (const m of texto.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
-        expect(m[1], `${nombre} importa ${m[1]}`).toMatch(/^(node:zlib|node:crypto|node:worker_threads|node:path|\.\/[a-z0-9-]+)$/)
+        expect(m[1], `${nombre} importa ${m[1]}`).toMatch(/^(node:zlib|node:crypto|node:child_process|node:path|\.\/[a-z0-9-]+)$/)
       }
     }
   })
@@ -58,18 +61,18 @@ describe('el aislamiento del PDF: el hilo es lo único que carga unpdf y solo `p
       expect(texto, nombre).not.toMatch(/['"]unpdf['"]/)
     }
   })
-  it('solo `pdf.ts` importa worker_threads o crea hilos; el hilo solo hace require de node:worker_threads y unpdf', () => {
+  it('solo `pdf.ts` lanza procesos (fork) y solo el proceso del PDF usa worker_threads (para su guardián de memoria); el proceso solo hace require de node:worker_threads, node:fs y unpdf', () => {
     for (const { nombre, texto } of archivos()) {
-      if (nombre === 'pdf.ts' || nombre === 'trabajador-pdf.cjs') continue
-      expect(texto, nombre).not.toMatch(/worker_threads|new\s+Worker\s*\(/)
+      if (nombre !== 'pdf.ts') expect(texto, nombre).not.toMatch(/child_process|\bfork\s*\(/)
+      if (nombre !== 'trabajador-pdf.cjs') expect(texto, nombre).not.toMatch(/worker_threads|new\s+Worker\s*\(/)
     }
-    const hilo = archivos().find((a) => a.nombre === 'trabajador-pdf.cjs')
-    expect(hilo, 'falta el archivo del hilo').toBeDefined()
-    expect([...(hilo?.texto ?? '').matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]).sort()).toEqual(['node:worker_threads', 'unpdf'])
+    const hijo = archivos().find((a) => a.nombre === 'trabajador-pdf.cjs')
+    expect(hijo, 'falta el archivo del proceso').toBeDefined()
+    expect([...new Set([...(hijo?.texto ?? '').matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]))].sort()).toEqual(['node:fs', 'node:worker_threads', 'unpdf'])
   })
 })
 
-describe('el hilo del PDF viaja en el empaquetado del servidor (probado con un `next build` real: ver la señal)', () => {
+describe('el proceso del PDF viaja en el empaquetado del servidor (probado con un `next build` real: ver la señal)', () => {
   it('next.config.js lo incluye a mano para las rutas del portero: el archivo del hilo y `unpdf` (nadie los importa de forma estática)', () => {
     const t = fs.readFileSync(path.join(RAIZ, 'next.config.js'), 'utf8')
     expect(t).toMatch(/outputFileTracingIncludes:\s*\{[^}]*'\/api\/brain\/portero\/\*\*'/)
