@@ -37,6 +37,8 @@ export const MAX_SEGMENTOS_POR_PASADA = 24
 /** cuántas veces se puede dividir un trozo cuya respuesta se cortó (24 → 12 → 6 → 3 → 1) */
 export const PROFUNDIDAD_MAXIMA_DE_DIVISION = 4
 /** pasado este tiempo desde la primera llamada no se lanzan más pasadas (lo pendiente queda «sin clasificar») */
+/** cuántos segmentos de lo anterior ve cada pasada como contexto (sin número, no se clasifican): un producto partido en la frontera conserva su nombre */
+export const SEGMENTOS_DE_SOLAPE = 4
 export const TIEMPO_TOTAL_MAXIMO_MS = 240_000
 export const UMBRAL_DE_PARCIAL = 0.2
 export const MAXIMO_DE_CARACTERES_DE_MATERIAL = 400_000
@@ -299,7 +301,11 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
     for (const d of mirada.descartados) notasDeLaImagen.push(`imagen: el producto «${d}» no está en el catálogo del cliente y se descartó`)
   }
 
-  const trozos = partirEnTrozos(plan.paraModelo, (segs) => estimarTokens(INSTRUCCION_DE_RECIBIR.length + armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: segs, afectadas: plan.afectadas }).length), topeEntrada)
+  const contextoDe = (segs: Segmento[]): Segmento[] => {
+    const inicio = plan.paraModelo.findIndex((s) => s.n === segs[0].n)
+    return inicio > 0 ? plan.paraModelo.slice(Math.max(0, inicio - SEGMENTOS_DE_SOLAPE), inicio) : []
+  }
+  const trozos = partirEnTrozos(plan.paraModelo, (segs) => estimarTokens(INSTRUCCION_DE_RECIBIR.length + armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: segs, afectadas: plan.afectadas, contexto: contextoDe(segs) }).length), topeEntrada)
   const respuestas: Array<{ texto: string; cortada?: boolean }> = []
   let motivoParcial: string | null = null
   let divisiones = 0
@@ -309,7 +315,8 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   const inicioDeLasPasadas = reloj()
   while (cola.length > 0) {
     const trozo = cola.shift() as { segs: Segmento[]; prof: number }
-    const mensaje = armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: trozo.segs, afectadas: plan.afectadas })
+    const contexto = contextoDe(trozo.segs)
+    const mensaje = armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: trozo.segs, afectadas: plan.afectadas, contexto })
     const peor = costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DE_RECIBIR.length + mensaje.length), output_tokens: MAX_TOKENS_DE_RECIBIR })
     if (pasadas >= MAXIMO_DE_LLAMADAS_POR_INGRESO) { motivoParcial = `tope_de_pasadas: más de ${MAXIMO_DE_LLAMADAS_POR_INGRESO} llamadas`; break }
     if (reloj() - inicioDeLasPasadas > TIEMPO_TOTAL_MAXIMO_MS) { motivoParcial = `tiempo: pasaron ${TIEMPO_TOTAL_MAXIMO_MS / 1000} s desde la primera llamada`; break }

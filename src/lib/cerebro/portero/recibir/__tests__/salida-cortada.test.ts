@@ -4,7 +4,7 @@
  * y se reintenta solo ese trozo, de forma acotada; (3) solo si un trozo de un segmento sigue cortándose, o se agota lo acotado, el ingreso falla como antes. Modelo simulado, US$ 0.
  */
 import { describe, expect, it } from 'vitest'
-import { MAXIMO_DE_LLAMADAS_POR_INGRESO, MAX_SEGMENTOS_POR_PASADA, recibir, type DepsDeRecibir } from '../recibir'
+import { MAXIMO_DE_LLAMADAS_POR_INGRESO, MAX_SEGMENTOS_POR_PASADA, PROFUNDIDAD_MAXIMA_DE_DIVISION, recibir, type DepsDeRecibir } from '../recibir'
 import { A, AHORA, BaseSimulada, crearModelo, cuerpo, numerosDelMensaje, respuestaJson, type Respuesta } from './casos'
 
 const producto = (n: number): string => [`Repuesto ${n}`, `Precio: ${10 + n} USD`, `Garantía: ${6 + (n % 3)} meses`].join('\n\n')
@@ -41,6 +41,18 @@ describe('una página de 17, 24 y 40 productos entra COMPLETA (permanente: ≥ 1
   it('el tope de segmentos por pasada es 24 (la salida esperada es proporcional) y el tope de llamadas por ingreso es 12', () => {
     expect(MAX_SEGMENTOS_POR_PASADA).toBe(24)
     expect(MAXIMO_DE_LLAMADAS_POR_INGRESO).toBe(12)
+  })
+})
+
+describe('la profundidad de la división está acotada (recomendación de CC#3: M3)', () => {
+  it('24 → 12 → 6 → 3 → 2: un trozo de 2 segmentos que sigue cortándose YA NO se divide (profundidad 4), y el ingreso falla limpio con el reintento acotado', async () => {
+    expect(PROFUNDIDAD_MAXIMA_DE_DIVISION).toBe(4)
+    const { m, correr } = armar(conCapacidad(0), { /* sin tope de llamadas que estorbe */ })
+    const r = await correr(cuerpo({ texto: catalogo(8) }))
+    const largos = m.espia.peticiones.map((p) => numerosDelMensaje(p).length)
+    expect(largos.slice(0, 5)).toEqual([24, 12, 6, 3, 2])
+    expect(largos.slice(5, 7)).toEqual([1, 3]) // el 1 es la otra mitad del 3; tras el trozo de 2 (profundidad 4) NO se baja a 1+1: sigue la otra mitad del 6
+    expect(r.c.estado).toBe('fallido')
   })
 })
 
