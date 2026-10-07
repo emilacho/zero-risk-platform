@@ -38,6 +38,9 @@ describe('esUrlDelAlmacen · lista cerrada de UN anfitrión y UNA carpeta', () =
     'https://zero.supabase.co/storage/v1/object/public/client-social-images/c1/%2e%2e%2f%2e%2e%2fagent-images/a.jpg',
     'https://zero.supabase.co/storage/v1/object/public/client-social-images/c1/..%2f..%2fsign/x.jpg',
     'https://zero.supabase.co/storage/v1/object/public/client-social-images/c1/a%2f%2fb.jpg',
+    'https://zero.supabase.co/storage/v1/object/public/client-social-images/c1/..%5cagent-images/a.jpg',
+    'https://zero.supabase.co/storage/v1/object/public/client-social-images/c1%5ca.jpg',
+    'https://zero.supabase.co/storage/v1/object/public/client-social-images/c1/a%5C..%5Cb.jpg',
     'https://zero.supabase.co//storage/v1/object/public/client-social-images/a.jpg',
     'file:///etc/passwd', 'javascript:alert(1)', '', 'no es una url',
   ])('rechaza %s', (u) => { expect(esUrlDelAlmacen(u, BASE)).toBe(false) })
@@ -244,6 +247,18 @@ describe('C3 de CC#3 · leerFotoEnBase64 (foto de prueba sin subir nada ni salir
     ['largo que no es múltiplo de 4', 'QUJDR', 'image/png', 'foto_base64_invalido'],
     ['más grande que el tope (se mide el texto antes de decodificar)', 'A'.repeat(7_000_100), 'image/png', 'foto_demasiado_grande'],
   ])('rechaza %s', (_n, b64, tipo, motivo) => { expect(leerFotoEnBase64(b64, tipo)).toMatchObject({ ok: false, motivo }) })
+  it('el texto demasiado largo se rechaza ANTES de decodificarlo (no se reserva memoria para algo que no se va a usar)', () => {
+    const grande = 'A'.repeat(7_000_100)
+    const espia = vi.spyOn(Buffer, 'from')
+    expect(leerFotoEnBase64(grande, 'image/png')).toMatchObject({ ok: false, motivo: 'foto_demasiado_grande' })
+    expect(espia.mock.calls.some((c) => c[0] === grande)).toBe(false)
+    espia.mockRestore()
+  })
+  it('un archivo que se pasa del tope por muy poco (el texto cabe en la holgura) se rechaza por sus BYTES', () => {
+    const b = Buffer.concat([PNG.subarray(0, 8), Buffer.alloc(92)]) // 100 bytes
+    expect(leerFotoEnBase64(b.toString('base64'), 'image/png', 99)).toMatchObject({ ok: false, motivo: 'foto_demasiado_grande', detalle: '100 bytes' })
+    expect(leerFotoEnBase64(b.toString('base64'), 'image/png', 100)).toMatchObject({ ok: true })
+  })
   it('el tope de tamaño de los bytes es el mismo que el de una foto bajada', () => {
     const grande = Buffer.concat([PNG, Buffer.alloc(200)])
     expect(leerFotoEnBase64(grande.toString('base64'), 'image/png', 100)).toMatchObject({ ok: false, motivo: 'foto_demasiado_grande' })

@@ -21,7 +21,7 @@ export function esUrlDelAlmacen(url: string, urlDeLaBase: string): boolean {
   const resto = u.pathname.slice(PREFIJO_DEL_ALMACEN.length)
   let decodificado: string
   try { decodificado = decodeURIComponent(resto) } catch { return false }
-  return !decodificado.split('/').some((parte) => parte === '..' || parte === '.' || parte === '') && !resto.includes('\\')
+  return !decodificado.split('/').some((parte) => parte === '..' || parte === '.' || parte === '') && !decodificado.includes('\\')
 }
 
 /**
