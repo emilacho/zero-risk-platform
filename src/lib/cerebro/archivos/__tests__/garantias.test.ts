@@ -46,7 +46,7 @@ describe('imports permitidos', () => {
 describe('la única biblioteca nueva es unpdf, con versión fija en el manifiesto', () => {
   it('package.json agrega `unpdf` y ninguna otra de lectura de archivos', () => {
     const p = JSON.parse(fs.readFileSync(path.join(RAIZ, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
-    expect(p.dependencies.unpdf).toMatch(/^\^?1\./)
+    expect(p.dependencies.unpdf).toBe('1.8.1') // versión EXACTA (sin ^): subirla es una decisión, no un accidente
     for (const prohibida of ['pdfjs-dist', 'pdf-parse', 'mammoth', 'xlsx', 'exceljs', 'jszip', 'adm-zip', 'unzipper', 'papaparse', 'csv-parse']) expect(p.dependencies[prohibida], prohibida).toBeUndefined()
   })
 })
