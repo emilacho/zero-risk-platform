@@ -104,7 +104,9 @@ describe('«aparece en la lista y se lee entero»: lo archivado en modo prueba s
     const { base, ingresar } = armar()
     await ingresar({ cliente_de_prueba: 'R1' })
     base.fichas.push({ ...base.fichas[0], id: '99999999-9999-4999-8999-999999999999', client_id: A, prueba: true })
+    base.otras.clients = [{ id: A, name: 'Cliente real', website_url: null, status: 'active', config: {}, created_at: '2026-01-01T00:00:00Z' }] // existe de verdad: la lista se lee de verdad, no «cliente_inexistente»
     const real = await construirListaCorta(base.consulta, A, { ahora: AHORA })
+    expect(real.estado).not.toBe('cliente_inexistente')
     expect(real.lineas.filter((l) => l.ref.startsWith('cerebro_fichas:'))).toEqual([])
     const vacio = await construirListaCorta(base.consulta, 'prueba-portero-R9', { ahora: AHORA })
     expect(vacio.estado).toBe('ok')
