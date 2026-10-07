@@ -15,6 +15,8 @@ export interface Decision {
   pixeles: string[]
   por_que: Array<{ numeros: number[]; linea: string }>
   faltantes: string[]
+  /** solo al leer una lista por trozos: lo que un trozo dio por «faltante» y que puede estar en otro trozo (NO es un faltante declarado) */
+  faltantes_no_concluyentes?: string[]
   duda: number[]
   /** números que el modelo puso y que no están en la lista (descartados) */
   numeros_invalidos: unknown[]
