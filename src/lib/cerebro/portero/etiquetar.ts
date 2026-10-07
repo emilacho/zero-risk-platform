@@ -11,6 +11,7 @@
  */
 import type { Consulta } from '../consulta'
 import { leerSitio } from '../lectores'
+import type { Ficha } from '../tipos'
 import { PLAZOS_EN_DIAS } from '../plazos'
 import { esUrlDelAlmacen, leerFotoEnBase64, type ResultadoDeBajada } from './almacen'
 import { extraerJson } from './decision'
@@ -105,6 +106,105 @@ export function lineaDeFamilia(f: FamiliaDeProductos): string {
   return puestos < nombres.length ? `${linea} (+${nombres.length - puestos} más)` : linea
 }
 
+/** el vocabulario que ve el modelo (y que el código acepta) a partir de las líneas del sitio del cliente: familias primero y luego los productos */
+export function vocabularioDelCatalogo(lineasDelSitio: Ficha[]): { nombres: string[]; lineas: string[]; familias: string[] } {
+  const productos = lineasDelSitio.filter((f) => f.clase === 'catalogo_item' || f.clase === 'catalogo_familia')
+  const familias = familiasDelCatalogo(productos.filter((f) => f.clase === 'catalogo_item').map((f) => ({ titulo: f.titulo, familia: f.datos?.familia })))
+  return {
+    nombres: [...familias.map((f) => f.nombre), ...productos.map((f) => f.titulo)],
+    lineas: [...familias.map(lineaDeFamilia), ...productos.map((f) => `${f.titulo} · ${f.que_es}`.slice(0, 200))],
+    familias: familias.map((f) => f.nombre),
+  }
+}
+
+/** valida `familias_de_prueba` (lista de hasta 20 familias {nombre ≤ 120, incluye: hasta 30 textos ≤ 200}) y las pasa a una sola línea */
+export function leerFamiliasDePrueba(fa: unknown): { ok: true; familias: FamiliaDeProductos[] } | { ok: false; error: string } {
+  const bien = Array.isArray(fa) && fa.length <= MAXIMO_DE_FAMILIAS_DE_PRUEBA && fa.every((f) => esObjeto(f) && typeof f.nombre === 'string' && f.nombre.trim() !== '' && f.nombre.length <= 120 && Array.isArray(f.incluye) && f.incluye.length <= MAXIMO_DE_PRODUCTOS_POR_FAMILIA_DE_PRUEBA && f.incluye.every((x: unknown) => typeof x === 'string' && x.length <= 200))
+  if (!bien) return { ok: false, error: `\`familias_de_prueba\` debe ser una lista de hasta ${MAXIMO_DE_FAMILIAS_DE_PRUEBA} familias {nombre, incluye: [textos]} (nombre ≤ 120, hasta ${MAXIMO_DE_PRODUCTOS_POR_FAMILIA_DE_PRUEBA} productos)` }
+  return { ok: true, familias: (fa as Array<{ nombre: string; incluye: string[] }>).map((f) => ({ nombre: enUnaLinea(f.nombre), incluye: f.incluye.map(enUnaLinea) })) }
+}
+
+export interface Etiqueta { que_muestra: string; producto_visto: string[]; texto_visible: string; confianza: string }
+export interface Mirada {
+  respuesta: RespuestaDelModelo | null
+  fallo: { motivo: string; status: 'failed' | 'timeout'; mensaje: string } | null
+  duracion: number
+  usage: { input_tokens: number; output_tokens: number }
+  costo: number
+  etiqueta: Etiqueta | null
+  descartados: string[]
+  caida: string | null
+}
+
+/** lo que se le manda al modelo junto con la foto: la leyenda y las líneas de producto, como DATO */
+export const armarMensajeDeMirada = (leyenda: string, lineasDeProducto: string[]): string =>
+  `<leyenda>\n${comoDato(leyenda || '(sin texto)')}\n</leyenda>\n<productos>\n${comoDato(lineasDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO).join('\n') || '(el cliente no tiene líneas de producto)')}\n</productos>`
+
+/** el peor caso de UNA llamada con una imagen (foto grande, salida al tope) */
+export const peorCasoDeMirar = (mensaje: string): number =>
+  costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DEL_ETIQUETADOR.length + mensaje.length) + TOKENS_DE_IMAGEN_PEOR_CASO, output_tokens: MAX_TOKENS_DE_ETIQUETA })
+
+/**
+ * MIRAR UNA IMAGEN · UNA llamada al modelo con la foto, sin reintentos, y leer lo que dijo sin tomar nada sin comprobar: un producto que no esté, con su nombre, en
+ * `nombresDeProducto` se DESCARTA. Lo usan `etiquetar` (fotos de `client_social_images`) y `recibir` (imágenes que llegan en base64): no se duplica.
+ * No registra ni escribe nada: eso lo hace quien llama.
+ */
+export async function mirarImagen(
+  llamarModelo: (p: PeticionConImagen) => Promise<RespuestaDelModelo>,
+  imagen: { tipo: string; base64: string },
+  mensaje: string,
+  nombresDeProducto: string[],
+  nombresDeFamilia: string[] = [],
+): Promise<Mirada> {
+  const catalogo = new Map<string, string>()
+  for (const n of nombresDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO)) if (!catalogo.has(normalizar(n))) catalogo.set(normalizar(n), n)
+  const peticion: PeticionConImagen = { model: MODELO, max_tokens: MAX_TOKENS_DE_ETIQUETA, thinking: RAZONAMIENTO, system: INSTRUCCION_DEL_ETIQUETADOR, texto: mensaje, imagen, timeoutMs: TIEMPO_MAXIMO_DE_ETIQUETA_MS }
+  const inicio = Date.now()
+  let respuesta: RespuestaDelModelo | null = null
+  let fallo: Mirada['fallo'] = null
+  try {
+    respuesta = await llamarModelo(peticion)
+  } catch (e) {
+    const nombre = e instanceof Error ? e.name : ''
+    const t = e instanceof Error ? e.message : String(e)
+    fallo = nombre === 'SinLlave' ? { motivo: 'sin_llave', status: 'failed', mensaje: t }
+      : nombre === 'AbortError' ? { motivo: 'tiempo', status: 'timeout', mensaje: `pasó de ${TIEMPO_MAXIMO_DE_ETIQUETA_MS} ms` }
+      : { motivo: 'error_del_modelo', status: 'failed', mensaje: t.slice(0, 300) }
+  }
+  const duracion = Date.now() - inicio
+  const usage = respuesta?.usage ?? { input_tokens: 0, output_tokens: 0 }
+  const costo = respuesta ? costoDeLaLlamada(usage) : 0
+  const cortada = respuesta?.stop_reason === 'max_tokens'
+
+  let etiqueta: Etiqueta | null = null
+  const descartados: string[] = []
+  let caida: string | null = fallo ? fallo.motivo : null
+  if (!caida && respuesta) {
+    const leido = extraerJson(respuesta.texto, 'que_muestra')
+    if (!leido) caida = cortada ? 'salida_cortada' : 'json_roto'
+    else if (!esObjeto(leido.valor) || !texto(leido.valor.que_muestra)) caida = 'campos_que_faltan'
+    else {
+      const v = leido.valor
+      const vistos: string[] = []
+      for (const p of Array.isArray(v.producto_visto) ? (v.producto_visto as unknown[]) : []) {
+        if (typeof p !== 'string') continue
+        const exacto = catalogo.get(normalizar(p)) ?? catalogo.get(normalizar(sinAdorno(p)))
+        if (!exacto) { descartados.push(p); continue } // un producto que no está en las líneas del cliente NO se inventa
+        if (!vistos.includes(exacto)) vistos.push(exacto)
+      }
+      // la familia dice «de qué tipo», no «cuál variante»: si solo hay familia, la confianza es BAJA diga lo que diga el modelo
+      const familias = new Set(nombresDeFamilia.map(normalizar))
+      const soloFamilia = vistos.length > 0 && vistos.every((x) => familias.has(normalizar(x)))
+      etiqueta = {
+        que_muestra: (texto(v.que_muestra) as string).slice(0, MAXIMO_DE_TEXTO), producto_visto: vistos,
+        texto_visible: typeof v.texto_visible === 'string' ? v.texto_visible.trim().slice(0, MAXIMO_DE_TEXTO) : '',
+        confianza: soloFamilia ? 'baja' : typeof v.confianza === 'string' && (CONFIANZAS as readonly string[]).includes(v.confianza) ? v.confianza : 'baja',
+      }
+    }
+  }
+  return { respuesta, fallo, duracion, usage, costo, etiqueta, descartados, caida }
+}
+
 export interface DepsDeEtiquetar {
   consulta: Consulta
   /** la dirección de nuestra base: de ahí sale el único anfitrión del que se baja una foto */
@@ -159,9 +259,9 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
     }
     const fa = body.familias_de_prueba
     if (fa !== undefined) {
-      const bien = Array.isArray(fa) && fa.length <= MAXIMO_DE_FAMILIAS_DE_PRUEBA && fa.every((f) => esObjeto(f) && typeof f.nombre === 'string' && f.nombre.trim() !== '' && f.nombre.length <= 120 && Array.isArray(f.incluye) && f.incluye.length <= MAXIMO_DE_PRODUCTOS_POR_FAMILIA_DE_PRUEBA && f.incluye.every((x: unknown) => typeof x === 'string' && x.length <= 200))
-      if (!bien) errores.push(`\`familias_de_prueba\` debe ser una lista de hasta ${MAXIMO_DE_FAMILIAS_DE_PRUEBA} familias {nombre, incluye: [textos]} (nombre ≤ 120, hasta ${MAXIMO_DE_PRODUCTOS_POR_FAMILIA_DE_PRUEBA} productos)`)
-      else familiasDePrueba = (fa as Array<{ nombre: string; incluye: string[] }>).map((f) => ({ nombre: enUnaLinea(f.nombre), incluye: f.incluye.map(enUnaLinea) }))
+      const leidas = leerFamiliasDePrueba(fa)
+      if (!leidas.ok) errores.push(leidas.error)
+      else familiasDePrueba = leidas.familias
     }
   } else {
     fotoId = texto(body.foto)
@@ -207,72 +307,25 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
     leyenda = typeof fila.caption === 'string' ? fila.caption : ''
     const sitio = await leerSitio({ consulta: deps.consulta, cliente: cli, ahora: ahora(), plazos: PLAZOS_EN_DIAS })
     if (sitio.fallidas > 0) return sinModelo('error_de_lectura_de_productos')
-    const productos = sitio.lineas.filter((f) => f.clase === 'catalogo_item' || f.clase === 'catalogo_familia')
-    const familias = familiasDelCatalogo(productos.filter((f) => f.clase === 'catalogo_item').map((f) => ({ titulo: f.titulo, familia: f.datos?.familia })))
-    nombresDeProducto = [...familias.map((f) => f.nombre), ...productos.map((f) => f.titulo)]
-    nombresDeFamilia = familias.map((f) => f.nombre)
-    lineasDeProducto = [...familias.map(lineaDeFamilia), ...productos.map((f) => `${f.titulo} · ${f.que_es}`.slice(0, 200))]
+    const vocabulario = vocabularioDelCatalogo(sitio.lineas)
+    nombresDeProducto = vocabulario.nombres
+    nombresDeFamilia = vocabulario.familias
+    lineasDeProducto = vocabulario.lineas
   }
   const omitidas = Math.max(0, lineasDeProducto.length - MAXIMO_DE_LINEAS_DE_PRODUCTO)
   lineasDeProducto = lineasDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO)
-  const catalogo = new Map<string, string>()
-  for (const n of nombresDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO)) if (!catalogo.has(normalizar(n))) catalogo.set(normalizar(n), n)
 
   // ── 2 · solo de NUESTRO almacén (antes de gastar nada)
   if (!fotoEnBase64 && !esUrlDelAlmacen(url, deps.urlDeLaBase)) return sinModelo('foto_fuera_del_almacen')
-  const mensaje = `<leyenda>\n${comoDato(leyenda || '(sin texto)')}\n</leyenda>\n<productos>\n${comoDato(lineasDeProducto.join('\n') || '(el cliente no tiene líneas de producto)')}\n</productos>`
-  const peor = costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DEL_ETIQUETADOR.length + mensaje.length) + TOKENS_DE_IMAGEN_PEOR_CASO, output_tokens: MAX_TOKENS_DE_ETIQUETA })
+  const mensaje = armarMensajeDeMirada(leyenda, lineasDeProducto)
+  const peor = peorCasoDeMirar(mensaje)
   if (peor > (deps.topeDeGastoUsd ?? TOPE_DE_GASTO_POR_FOTO_USD)) return sinModelo('tope_de_gasto', { costo_maximo_calculado_usd: peor })
   // en modo prueba la foto puede venir en base64: no se baja nada ni se sale a la red
   const bajada = fotoEnBase64 ? leerFotoEnBase64(fotoEnBase64.base64, fotoEnBase64.tipo) : await deps.bajarFoto(url)
   if (!bajada.ok) return sinModelo(bajada.motivo, bajada.detalle ? { detalle_de_la_bajada: bajada.detalle } : {})
 
-  // ── 3 · UNA llamada, sin reintentos
-  const peticion: PeticionConImagen = { model: MODELO, max_tokens: MAX_TOKENS_DE_ETIQUETA, thinking: RAZONAMIENTO, system: INSTRUCCION_DEL_ETIQUETADOR, texto: mensaje, imagen: { tipo: bajada.tipo, base64: bajada.base64 }, timeoutMs: TIEMPO_MAXIMO_DE_ETIQUETA_MS }
-  const inicio = Date.now()
-  let respuesta: RespuestaDelModelo | null = null
-  let fallo: { motivo: string; status: 'failed' | 'timeout'; mensaje: string } | null = null
-  try {
-    respuesta = await deps.llamarModelo(peticion)
-  } catch (e) {
-    const nombre = e instanceof Error ? e.name : ''
-    const t = e instanceof Error ? e.message : String(e)
-    fallo = nombre === 'SinLlave' ? { motivo: 'sin_llave', status: 'failed', mensaje: t }
-      : nombre === 'AbortError' ? { motivo: 'tiempo', status: 'timeout', mensaje: `pasó de ${TIEMPO_MAXIMO_DE_ETIQUETA_MS} ms` }
-      : { motivo: 'error_del_modelo', status: 'failed', mensaje: t.slice(0, 300) }
-  }
-  const duracion = Date.now() - inicio
-  const usage = respuesta?.usage ?? { input_tokens: 0, output_tokens: 0 }
-  const costo = respuesta ? costoDeLaLlamada(usage) : 0
-  const cortada = respuesta?.stop_reason === 'max_tokens'
-
-  // ── 4 · leer lo que dijo: nada se toma sin comprobar
-  let etiqueta: { que_muestra: string; producto_visto: string[]; texto_visible: string; confianza: string } | null = null
-  const descartados: string[] = []
-  let caida: string | null = fallo ? fallo.motivo : null
-  if (!caida && respuesta) {
-    const leido = extraerJson(respuesta.texto, 'que_muestra')
-    if (!leido) caida = cortada ? 'salida_cortada' : 'json_roto'
-    else if (!esObjeto(leido.valor) || !texto(leido.valor.que_muestra)) caida = 'campos_que_faltan'
-    else {
-      const v = leido.valor
-      const vistos: string[] = []
-      for (const p of Array.isArray(v.producto_visto) ? (v.producto_visto as unknown[]) : []) {
-        if (typeof p !== 'string') continue
-        const exacto = catalogo.get(normalizar(p)) ?? catalogo.get(normalizar(sinAdorno(p)))
-        if (!exacto) { descartados.push(p); continue } // un producto que no está en las líneas del cliente NO se inventa
-        if (!vistos.includes(exacto)) vistos.push(exacto)
-      }
-      // la familia dice «de qué tipo», no «cuál variante»: si solo hay familia, la confianza es BAJA diga lo que diga el modelo
-      const familias = new Set(nombresDeFamilia.map(normalizar))
-      const soloFamilia = vistos.length > 0 && vistos.every((x) => familias.has(normalizar(x)))
-      etiqueta = {
-        que_muestra: (texto(v.que_muestra) as string).slice(0, MAXIMO_DE_TEXTO), producto_visto: vistos,
-        texto_visible: typeof v.texto_visible === 'string' ? v.texto_visible.trim().slice(0, MAXIMO_DE_TEXTO) : '',
-        confianza: soloFamilia ? 'baja' : typeof v.confianza === 'string' && (CONFIANZAS as readonly string[]).includes(v.confianza) ? v.confianza : 'baja',
-      }
-    }
-  }
+  // ── 3 y 4 · UNA llamada, sin reintentos, y leer lo que dijo (compartido con `recibir`: `mirarImagen`)
+  const { respuesta, fallo, duracion, usage, costo, etiqueta, descartados, caida } = await mirarImagen(deps.llamarModelo, { tipo: bajada.tipo, base64: bajada.base64 }, mensaje, nombresDeProducto, nombresDeFamilia)
 
   // ── 5 · escribir SOLO las 6 columnas de etiqueta (nunca en modo prueba, nunca sin una etiqueta válida)
   let escribio = false

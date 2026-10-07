@@ -458,6 +458,9 @@ const DIA_EN_MS = 86_400_000
  *  · versiones: la ficha que reemplaza a otra (`version_de`) manda; la vieja queda marcada como reemplazada y apunta a la vigente;
  *  · lo RETIRADO se muestra con su marca y su motivo (no se oculta ni vence); lo DESCARTADO y lo de PRUEBA no existen para la lista.
  */
+/** `max_rows` de la base: una lectura devuelve a lo más esto */
+const TOPE_DE_FILAS_DE_LA_BASE = 1000
+
 export async function leerFichas(ctx: Contexto): Promise<Salida> {
   const r = await leer(ctx, {
     tabla: 'cerebro_fichas',
@@ -523,5 +526,9 @@ export async function leerFichas(ctx: Contexto): Promise<Salida> {
     if (texto(f.archivo_enlace)) salida.enlace = texto(f.archivo_enlace)
     return salida
   })
+  // la base corta cada lectura en 1.000 filas y no avisa: una lectura que llega EXACTAMENTE al tope no se da por completa (podría faltar la versión que reemplaza a una vieja)
+  if (r.filas.length >= TOPE_DE_FILAS_DE_LA_BASE) {
+    return { fuentes: { fichas: { estado: 'error_de_lectura', n: lineas.length, detalle: `lectura recortada: la base devolvió ${r.filas.length} filas (su tope es ${TOPE_DE_FILAS_DE_LA_BASE}); puede faltar alguna ficha, incluida una versión nueva` } }, lineas, lecturas: 1, fallidas: 1 }
+  }
   return exito({ fichas: estadoDeFuente(lineas.length) }, lineas)
 }

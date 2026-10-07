@@ -241,3 +241,24 @@ describe('5 · errores y vacío', () => {
     expect(c.lista.some((x) => x.ref === 'cerebro_fichas:fa-1' && x.estante === 'E8')).toBe(true)
   })
 })
+
+describe('8 · el tope de lectura de la base (1.000 filas): una lectura que llega al tope NO se da por completa (condición de CC#3 al certificar el paso 3)', () => {
+  const muchas = (n: number): Tablas => ({ ...tablasDeLaBase(), cerebro_fichas: Array.from({ length: n }, (_, i) => ficha(`fx-${i}`, A)) })
+  it('con 999 fichas la fuente está «ok»', async () => {
+    const l = await lista(A, muchas(999))
+    expect(l.fuentes.fichas).toMatchObject({ estado: 'ok', n: 999 })
+    expect(l.estado).toBe('ok')
+  })
+  it('con EXACTAMENTE 1.000 la fuente pasa a «error_de_lectura» con su aviso (la base corta ahí y podría faltar una versión nueva); la lista queda «parcial» y las líneas leídas se muestran', async () => {
+    const l = await lista(A, muchas(1000))
+    expect(l.fuentes.fichas.estado).toBe('error_de_lectura')
+    expect(l.fuentes.fichas.detalle).toMatch(/recortada|1\.000/)
+    expect(l.fuentes.fichas.n).toBe(1000)
+    expect(l.estado).toBe('parcial')
+    expect(l.lineas.filter((x) => x.ref.startsWith('cerebro_fichas:')).length).toBe(1000)
+  })
+  it('las fichas de OTRO cliente no cuentan para el tope', async () => {
+    const t = { ...tablasDeLaBase(), cerebro_fichas: [...Array.from({ length: 600 }, (_, i) => ficha(`fx-${i}`, A)), ...Array.from({ length: 600 }, (_, i) => ficha(`fy-${i}`, B))] }
+    expect((await lista(A, t)).fuentes.fichas.estado).toBe('ok')
+  })
+})
