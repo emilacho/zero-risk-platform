@@ -16,6 +16,7 @@ import { PLAZOS_EN_DIAS } from '../../plazos'
 import { type Etiqueta, type FamiliaDeProductos, MAXIMO_DE_LINEAS_DE_PRODUCTO, armarMensajeDeMirada, leerFamiliasDePrueba, lineaDeFamilia, mirarImagen, peorCasoDeMirar, vocabularioDelCatalogo } from '../etiquetar'
 import { estimarTokens } from '../medida'
 import type { PeticionConImagen } from '../modelo'
+import { clienteDePrueba, etiquetaValida } from '../../cliente-de-prueba'
 import { CLIENTE_DE_PRUEBA, MODELO, PRECIO_POR_MILLON, RAZONAMIENTO, TIEMPO_MAXIMO_MS, costoDeLaLlamada, type PeticionAlModelo, type RespuestaDelModelo, type ResultadoDeRegistro } from '../razonar'
 import { planearHerencia } from './herencia'
 import { INSTRUCCION_DE_RECIBIR, armarMensajeDeRecibir } from './instruccion'
@@ -29,7 +30,14 @@ export const TOPE_DE_ENTRADA_POR_PASADA = 16_000
 export const MAX_TOKENS_DE_RECIBIR = 2000
 export const TOPE_DE_GASTO_POR_LLAMADA_USD = 0.08
 export const TOPE_DE_GASTO_POR_INGRESO_USD = 0.4
-export const MAXIMO_DE_PASADAS = 8
+/** llamadas al modelo por ingreso (las pasadas normales MÁS los reintentos por una respuesta cortada); con 25 s cada una el ingreso cabe en los 300 s de la ruta */
+export const MAXIMO_DE_LLAMADAS_POR_INGRESO = 12
+/** una pasada no lleva más de 24 segmentos: la salida esperada (≈ 45 «tokens» por segmento) queda bajo el tope de salida de 2.000 */
+export const MAX_SEGMENTOS_POR_PASADA = 24
+/** cuántas veces se puede dividir un trozo cuya respuesta se cortó (24 → 12 → 6 → 3 → 1) */
+export const PROFUNDIDAD_MAXIMA_DE_DIVISION = 4
+/** pasado este tiempo desde la primera llamada no se lanzan más pasadas (lo pendiente queda «sin clasificar») */
+export const TIEMPO_TOTAL_MAXIMO_MS = 240_000
 export const UMBRAL_DE_PARCIAL = 0.2
 export const MAXIMO_DE_CARACTERES_DE_MATERIAL = 400_000
 /** el tipo oficial de un Word mide 71 caracteres y el de una hoja 65: se pasa ENTERO al lector (recortarlo lo hacía rechazar) */
@@ -48,6 +56,8 @@ export interface DepsDeRecibir {
   leerArchivo?: (entrada: unknown) => Promise<LecturaDeArchivo>
   filtro?: Filtro
   ahora?: () => Date
+  /** milisegundos (por defecto `Date.now`): solo para medir el tiempo total de las pasadas */
+  reloj?: () => number
   nuevoId?: () => string
   topeDeGastoPorLlamadaUsd?: number
   topeDeGastoPorIngresoUsd?: number
@@ -71,6 +81,8 @@ interface Entrada {
   texto: string | null
   fechaFuente: string | null
   prueba: boolean
+  /** solo en modo prueba: la etiqueta de un cliente de prueba aparte (`prueba-portero-<etiqueta>`); sin ella, el de siempre */
+  etiquetaDeCliente: string | undefined
   /** solo en modo prueba: el catálogo con que se valida «qué producto se ve» en una imagen */
   productosDePrueba: string[]
   /** solo en modo prueba: las familias del catálogo de prueba (como en `etiquetar`) */
@@ -89,6 +101,10 @@ function validar(b: unknown): { ok: true; entrada: Entrada } | { ok: false; erro
   if (b.prueba !== undefined && typeof b.prueba !== 'boolean') errores.push('`prueba` debe ser verdadero o falso')
   if (b.fecha_fuente !== undefined && b.fecha_fuente !== null && iso(b.fecha_fuente) === null) errores.push('`fecha_fuente` no es una fecha legible')
   let productosDePrueba: string[] = []
+  if (b.cliente_de_prueba !== undefined) {
+    if (b.prueba !== true) errores.push('`cliente_de_prueba` solo se acepta con `prueba: true`')
+    else if (!etiquetaValida(b.cliente_de_prueba)) errores.push('`cliente_de_prueba` debe ser un texto de 1 a 32 letras, números o guion bajo')
+  }
   if (b.productos_de_prueba !== undefined) {
     const pp = b.productos_de_prueba
     if (b.prueba !== true) errores.push('`productos_de_prueba` solo se acepta con `prueba: true`')
@@ -122,7 +138,7 @@ function validar(b: unknown): { ok: true; entrada: Entrada } | { ok: false; erro
   const texto = typeof b.texto === 'string' && b.texto.trim() ? b.texto : null
   if (!texto && !archivo) errores.push('falta el material: `texto` o `archivo`')
   if (errores.length) return { ok: false, errores }
-  return { ok: true, entrada: { cliente, origen: b.origen as OrigenDeIngreso, fuenteRef: typeof b.fuente_ref === 'string' && b.fuente_ref ? b.fuente_ref : null, esCompleta: b.es_completa === true, texto, fechaFuente: iso(b.fecha_fuente), prueba: b.prueba === true, productosDePrueba, familiasDePrueba, archivo } }
+  return { ok: true, entrada: { cliente, origen: b.origen as OrigenDeIngreso, fuenteRef: typeof b.fuente_ref === 'string' && b.fuente_ref ? b.fuente_ref : null, esCompleta: b.es_completa === true, texto, fechaFuente: iso(b.fecha_fuente), prueba: b.prueba === true, etiquetaDeCliente: typeof b.cliente_de_prueba === 'string' ? b.cliente_de_prueba : undefined, productosDePrueba, familiasDePrueba, archivo } }
 }
 
 /** el tipo de un archivo con enlace se guarda con su barra (`audio/mpeg`), sin caracteres raros */
@@ -147,7 +163,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
     return salida(403, { error: 'workflow_id_required', code: 'E-WF-ID-REQUIRED', detail: `el portero solo archiva desde un flujo · falta(n): ${faltan.join(', ')}` })
   }
   // una prueba NUNCA usa un cliente real: todo lleva el texto de prueba y la marca (el borrado por la marca deja 0 filas)
-  const cliente = e.prueba ? CLIENTE_DE_PRUEBA : e.cliente
+  const cliente = e.prueba ? (clienteDePrueba(e.etiquetaDeCliente) as string) : e.cliente
   const marca = e.prueba ? { prueba: true } : {}
   const ahoraD = ahora()
   const ahoraIso = ahoraD.toISOString()
@@ -245,7 +261,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
         model: MODELO, cost_usd: ll.costo, duration_ms: ll.duracion, tokens_input: ll.usage.input_tokens, tokens_output: ll.usage.output_tokens, num_turns: 1,
         status: ll.fallo ? ll.fallo.status : 'completed', ...(ll.fallo ? { error_message: ll.fallo.mensaje } : {}),
         client_id: e.prueba ? CLIENTE_DE_PRUEBA : e.cliente, command: e.prueba ? 'portero.recibir.prueba' : 'portero.recibir', response_text: caida ? `caída: ${caida}` : 'ok',
-        metadata: { pasada, ingreso_id: ingresoId, fuente_ref: e.fuenteRef, stop_reason: ll.stop, motivo_de_caida: caida, segmentos_al_modelo: plan.paraModelo.length, ...extraDeMetadata, ...(e.prueba ? { prueba: true, cliente_de_prueba: e.cliente } : {}) },
+        metadata: { pasada, ingreso_id: ingresoId, fuente_ref: e.fuenteRef, stop_reason: ll.stop, motivo_de_caida: caida, segmentos_al_modelo: plan.paraModelo.length, ...extraDeMetadata, ...(e.prueba ? { prueba: true, cliente_de_prueba: e.cliente, ...(e.etiquetaDeCliente ? { etiqueta_de_cliente: e.etiquetaDeCliente } : {}) } : {}) },
       })
     } catch (err) { registro = { ok: false, detalle: err instanceof Error ? err.message : String(err) } }
     registros.push(registro)
@@ -286,13 +302,21 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   const trozos = partirEnTrozos(plan.paraModelo, (segs) => estimarTokens(INSTRUCCION_DE_RECIBIR.length + armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: segs, afectadas: plan.afectadas }).length), topeEntrada)
   const respuestas: Array<{ texto: string; cortada?: boolean }> = []
   let motivoParcial: string | null = null
-  for (let i = 0; i < trozos.length; i++) {
-    const mensaje = armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: trozos[i], afectadas: plan.afectadas })
+  let divisiones = 0
+  // una COLA de trozos: si la respuesta de uno se corta por el tope de salida, ese trozo se divide en dos y se reintenta solo ese trozo (acotado); nunca se tira el ingreso por un corte
+  const cola: Array<{ segs: Segmento[]; prof: number }> = trozos.map((segs) => ({ segs, prof: 0 }))
+  const reloj = deps.reloj ?? (() => Date.now())
+  const inicioDeLasPasadas = reloj()
+  while (cola.length > 0) {
+    const trozo = cola.shift() as { segs: Segmento[]; prof: number }
+    const mensaje = armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: trozo.segs, afectadas: plan.afectadas })
     const peor = costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DE_RECIBIR.length + mensaje.length), output_tokens: MAX_TOKENS_DE_RECIBIR })
-    if (i >= MAXIMO_DE_PASADAS || (gasto > 0 && gasto + peor > topeIngreso)) { motivoParcial = i >= MAXIMO_DE_PASADAS ? `tope_de_pasadas: más de ${MAXIMO_DE_PASADAS} llamadas` : `tope_de_gasto_del_ingreso: US$ ${topeIngreso}`; break }
-    if (peor > topeLlamada || (i === 0 && peor > topeIngreso)) {
-      if (i === 0) return cerrar('fallido', `tope_de_gasto: el peor caso de la llamada (US$ ${peor.toFixed(4)}) pasa del tope`, { costo_maximo_calculado_usd: peor }, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null })
-      motivoParcial = `tope_de_gasto_del_ingreso: la llamada ${i + 1} pasa del tope por llamada`; break
+    if (pasadas >= MAXIMO_DE_LLAMADAS_POR_INGRESO) { motivoParcial = `tope_de_pasadas: más de ${MAXIMO_DE_LLAMADAS_POR_INGRESO} llamadas`; break }
+    if (reloj() - inicioDeLasPasadas > TIEMPO_TOTAL_MAXIMO_MS) { motivoParcial = `tiempo: pasaron ${TIEMPO_TOTAL_MAXIMO_MS / 1000} s desde la primera llamada`; break }
+    if (gasto > 0 && gasto + peor > topeIngreso) { motivoParcial = `tope_de_gasto_del_ingreso: US$ ${topeIngreso}`; break }
+    if (peor > topeLlamada || (pasadas === 0 && peor > topeIngreso)) {
+      if (pasadas === 0) return cerrar('fallido', `tope_de_gasto: el peor caso de la llamada (US$ ${peor.toFixed(4)}) pasa del tope`, { costo_maximo_calculado_usd: peor }, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null })
+      motivoParcial = `tope_de_gasto_del_ingreso: la llamada ${pasadas + 1} pasa del tope por llamada`; break
     }
     const inicio = Date.now()
     let respuesta: RespuestaDelModelo | null = null
@@ -309,9 +333,18 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
     const duracion = Date.now() - inicio
     pasadas++; gasto += costo; entrada += usage.input_tokens; salidaTokens += usage.output_tokens; duracionTotal += duracion
     const cortada = respuesta?.stop_reason === 'max_tokens'
-    if (fallo) { await nuevoRegistro({ costo, duracion, usage, fallo, stop: null }, i + 1, fallo.motivo); return cerrar('fallido', `${fallo.motivo}: ${fallo.mensaje}`, {}, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null }) }
+    if (fallo) { await nuevoRegistro({ costo, duracion, usage, fallo, stop: null }, pasadas, fallo.motivo); return cerrar('fallido', `${fallo.motivo}: ${fallo.mensaje}`, {}, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null }) }
+    const sePuedeDividir = cortada && trozo.segs.length > 1 && trozo.prof < PROFUNDIDAD_MAXIMA_DE_DIVISION
+    await nuevoRegistro({ costo, duracion, usage, fallo: null, stop: respuesta?.stop_reason ?? null }, pasadas, cortada ? 'salida_cortada' : null, cortada ? { dividido: sePuedeDividir, segmentos_del_trozo: trozo.segs.length } : {})
+    if (sePuedeDividir) {
+      // la respuesta cortada NO se usa: el trozo se parte en dos mitades y se reintentan, en orden, antes que lo que sigue
+      const mitad = Math.ceil(trozo.segs.length / 2)
+      cola.unshift({ segs: trozo.segs.slice(0, mitad), prof: trozo.prof + 1 }, { segs: trozo.segs.slice(mitad), prof: trozo.prof + 1 })
+      divisiones++
+      continue
+    }
+    // sin cortar (o un trozo que ya no se puede dividir: entonces `traducir` lo declara `salida_cortada` y el ingreso falla como siempre)
     respuestas.push({ texto: (respuesta as RespuestaDelModelo).texto, cortada })
-    await nuevoRegistro({ costo, duracion, usage, fallo: null, stop: respuesta?.stop_reason ?? null }, i + 1, null)
   }
 
   // ── 7 · traducir números → fichas con el texto copiado (todo segmento acaba en algún lado)
@@ -346,7 +379,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   return resultado(estado, {
     ...(motivoFinal ? { motivo: motivoFinal } : {}),
     fichas: { archivadas: filasDeModelo.length, heredadas: heredadas.length, retiradas: retiradas.length, descartadas: fichas.filter((f) => f.descartada).length, residuales: fichas.filter((f) => f.residual).length },
-    cobertura, notas: [...t.notas, ...notasDeLaImagen],
+    cobertura, notas: [...t.notas, ...notasDeLaImagen], ...(divisiones > 0 ? { divisiones } : {}),
   })
 }
 
@@ -372,11 +405,11 @@ async function leerVivas(consulta: Consulta, cliente: string, fuenteRef: string,
 }
 
 /** corta los segmentos en trozos que caben en una llamada (al menos un segmento por trozo; un segmento ya mide ≤ 600 caracteres) */
-function partirEnTrozos(segmentos: Segmento[], medir: (s: Segmento[]) => number, tope: number): Segmento[][] {
+function partirEnTrozos(segmentos: Segmento[], medir: (s: Segmento[]) => number, tope: number, maximoDeSegmentos: number = MAX_SEGMENTOS_POR_PASADA): Segmento[][] {
   const trozos: Segmento[][] = []
   let actual: Segmento[] = []
   for (const s of segmentos) {
-    if (actual.length > 0 && medir([...actual, s]) > tope) { trozos.push(actual); actual = [] }
+    if (actual.length > 0 && (actual.length >= maximoDeSegmentos || medir([...actual, s]) > tope)) { trozos.push(actual); actual = [] }
     actual.push(s)
   }
   if (actual.length > 0) trozos.push(actual)

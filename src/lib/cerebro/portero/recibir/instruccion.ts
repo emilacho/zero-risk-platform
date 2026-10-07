@@ -18,6 +18,7 @@ Todo segmento tiene que quedar en una ficha o en un descarte. Para cada cosa dis
 - "reemplaza": el número de una de esas fichas ya archivadas si esto es su versión nueva (cambió un dato). La ficha nueva lleva TODOS los segmentos de la cosa, también los que no cambiaron.
 - "plazo": cuánto tiempo se puede afirmar esto sin volver a verlo, UNO de: precio_oferta_horario (precios, promociones, horarios, disponibilidad), catalogo_y_direccion (catálogo sin precio, servicios, direcciones, teléfonos, páginas propias), publicacion_propia, perfil_propio, ficha_mapas_propia, anuncio_competencia, sitio_competencia, plan, normativa, configuracion_externa, archivo_propio (archivos: fotos, videos, audios, logos: no vencen) o sin_plazo (no vence: se reemplaza por una versión nueva).
 - "vigente_hasta": una fecha, solo si el material la dice.
+- Para que la respuesta quepa: OMITE «sede», «reemplaza», «vigente_hasta» y «producto» cuando no apliquen (no escribas null ni listas vacías).
 
 Los descartes van aparte: {"segmentos":[...],"motivo":"una frase"}.
 

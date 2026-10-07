@@ -5,6 +5,7 @@
  * `error_de_lectura` y la lista como `parcial`: nunca se lee un error como «no hay nada».
  * El que atiende (tramo 2) razona sobre ESTA lista completa; el código no decide qué sirve.
  */
+import { esClienteDePrueba } from './cliente-de-prueba'
 import type { Consulta } from './consulta'
 import {
   type Contexto, type Salida, leerCompetencia, leerDecisionesDeLaCola, leerFichaDelCliente, leerFichas, leerFotos, leerManual, leerPerfilDeClienteIdeal,
@@ -62,14 +63,16 @@ export async function construirListaCorta(consulta: Consulta, clienteId: string,
   const base = { cliente_id: clienteId, generada_en: ahora.toISOString() }
   const todasEn = (e: EstadoDeFuente): Record<NombreDeFuente, EstadoDeFuente> => Object.fromEntries(NOMBRES_DE_FUENTE.map((f) => [f, e])) as Record<NombreDeFuente, EstadoDeFuente>
 
-  const ficha = await leerFichaDelCliente(ctx)
+  // un cliente de PRUEBA no tiene ficha en `clients` ni otras tablas: su lista son solo sus fichas de prueba (nunca «cliente_inexistente»)
+  const deLasPruebas = esClienteDePrueba(clienteId)
+  const ficha = deLasPruebas ? { salida: { fuentes: {}, lineas: [], lecturas: 0, fallidas: 0 } as Salida, existe: true } : await leerFichaDelCliente(ctx)
   if (ficha.salida.fallidas > 0) {
     const detalle = ficha.salida.fuentes.ficha_del_cliente?.detalle ?? 'no se pudo leer la ficha del cliente'
     return { ...base, estado: 'error_de_lectura', fuentes: todasEn({ estado: 'error_de_lectura', n: 0, detalle: `no se leyó: ${detalle}` }), lineas: [] }
   }
   if (!ficha.existe) return { ...base, estado: 'cliente_inexistente', fuentes: todasEn(vacia('cliente_inexistente')), lineas: [] }
 
-  const salidas: Salida[] = [ficha.salida, ...(await Promise.all([
+  const salidas: Salida[] = deLasPruebas ? [await leerFichas(ctx)] : [ficha.salida, ...(await Promise.all([
     leerManual(ctx), leerPerfilDeClienteIdeal(ctx), leerCompetencia(ctx), leerSitio(ctx), leerSedes(ctx), leerFotos(ctx),
     leerTrabajosHechos(ctx), leerDecisionesDeLaCola(ctx), leerTrozosSinLector(ctx), leerFichas(ctx),
   ]))]
