@@ -1,7 +1,7 @@
 /**
  * POST /api/brain/portero/etiquetar · «qué MUESTRA esta foto» (paso 4 del cerebro). UNA llamada al modelo por foto (Sonnet 5.5, razonamiento al mínimo, 25 s,
- * sin reintentos), con la foto bajada SOLO de nuestro almacén. Escribe SOLO 4 columnas de `client_social_images` (`que_muestra`, `producto_visto`, `etiquetada_en`,
- * `etiqueta_modelo`); jamás toca `producto`. Exige `workflow_id` y `workflow_execution_id` y registra cada llamada por `log-invocation`.
+ * sin reintentos), con la foto bajada SOLO de nuestro almacén. Escribe SOLO 6 columnas de `client_social_images` (`que_muestra`, `producto_visto`, `etiquetada_en`,
+ * `etiqueta_modelo`, `texto_visible`, `etiqueta_confianza`); jamás toca `producto`. Exige `workflow_id` y `workflow_execution_id` y registra cada llamada por `log-invocation`.
  * 🔴 NO se publica ni se corre sin la firma de Emilio (la corrida real ≈ US$ 0,15, tope US$ 0,40). Auth igual a las rutas internas: `x-api-key: INTERNAL_API_KEY`.
  */
 import { NextResponse } from 'next/server'

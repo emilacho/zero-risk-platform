@@ -2,8 +2,8 @@
  * ETIQUETAR · «qué MUESTRA esta foto» (paso 4 del cerebro, diseño §2.1). UNA llamada al modelo por foto, con la foto en base64.
  *
  * Entrada: la foto (de `client_social_images` del cliente, o en modo prueba una de nuestro almacén), su leyenda y SOLO las líneas de producto del cliente.
- * Salida: `que_muestra`, `producto_visto`, `texto_visible`, `confianza`. Se guardan SOLO 4 columnas (`que_muestra`, `producto_visto`, `etiquetada_en`, `etiqueta_modelo`);
- * `texto_visible` y `confianza` NO tienen columna: salen en la respuesta y en el registro de la llamada. `producto` NO se toca nunca.
+ * Salida: `que_muestra`, `producto_visto`, `texto_visible`, `confianza`. Se guardan EXACTAMENTE 6 columnas (`que_muestra`, `producto_visto`, `etiquetada_en`, `etiqueta_modelo`,
+ * `texto_visible`, `etiqueta_confianza`); además salen en la respuesta y en el registro de la llamada. `producto` NO se toca nunca.
  * NO INVENTA un producto: lo que el modelo diga que no esté, con su nombre, en las líneas de producto del cliente se DESCARTA y se anota (lo hace el código, no la instrucción).
  * Mismas garantías que `razonar`: exige `workflow_id` + `workflow_execution_id` (403), una sola llamada y sin reintentos, tope de tiempo y de gasto, registro en
  * `log-invocation` (con la alerta si falla), y modo `prueba` con `client_id: 'prueba-portero'` sin leer ni escribir tablas de cliente.
@@ -14,7 +14,7 @@ import { leerSitio } from '../lectores'
 import { PLAZOS_EN_DIAS } from '../plazos'
 import { esUrlDelAlmacen, type ResultadoDeBajada } from './almacen'
 import { extraerJson } from './decision'
-import type { ResultadoDeEscritura, ValoresDeEtiqueta } from './etiqueta-escritura'
+import { COLUMNAS_QUE_ESCRIBE, type ResultadoDeEscritura, type ValoresDeEtiqueta } from './etiqueta-escritura'
 import { comoDato } from './instruccion'
 import { estimarTokens } from './medida'
 import type { PeticionConImagen } from './modelo'
@@ -193,11 +193,11 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
     }
   }
 
-  // ── 5 · escribir SOLO las 4 columnas (nunca en modo prueba, nunca sin una etiqueta válida)
+  // ── 5 · escribir SOLO las 6 columnas de etiqueta (nunca en modo prueba, nunca sin una etiqueta válida)
   let escribio = false
   let detalleDeEscritura: string | null = null
   if (etiqueta && !modoPrueba) {
-    const w = await deps.escribir({ foto_id: fotoId as string, cliente: cli, valores: { que_muestra: etiqueta.que_muestra, producto_visto: etiqueta.producto_visto, etiquetada_en: ahora().toISOString(), etiqueta_modelo: MODELO } })
+    const w = await deps.escribir({ foto_id: fotoId as string, cliente: cli, valores: { que_muestra: etiqueta.que_muestra, producto_visto: etiqueta.producto_visto, etiquetada_en: ahora().toISOString(), etiqueta_modelo: MODELO, texto_visible: etiqueta.texto_visible, etiqueta_confianza: etiqueta.confianza as ValoresDeEtiqueta['etiqueta_confianza'] } })
     escribio = w.ok
     if (!w.ok) detalleDeEscritura = w.detalle ?? 'la escritura falló'
   }
@@ -229,7 +229,7 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
   return salida(200, {
     modo: caida ? 'respaldo' : 'etiquetado', ...(caida ? { motivo_de_respaldo: caida } : {}), llamo_al_modelo: respuesta !== null, escribio,
     ...(etiqueta ? { etiqueta } : {}), producto_visto_descartados: descartados,
-    ...(etiqueta && !modoPrueba ? { columnas_escritas: escribio ? ['que_muestra', 'producto_visto', 'etiquetada_en', 'etiqueta_modelo'] : [] } : {}),
+    ...(etiqueta && !modoPrueba ? { columnas_escritas: escribio ? [...COLUMNAS_QUE_ESCRIBE] : [] } : {}),
     ...(detalleDeEscritura ? { detalle_de_escritura: detalleDeEscritura } : {}), ...(omitidas ? { lineas_de_producto_omitidas: omitidas } : {}),
     ...(respuesta?.stop_reason ? { stop_reason: respuesta.stop_reason } : {}),
     costo_usd: costo, tokens: { entrada: usage.input_tokens, salida: usage.output_tokens }, duracion_ms: duracion, registro,
