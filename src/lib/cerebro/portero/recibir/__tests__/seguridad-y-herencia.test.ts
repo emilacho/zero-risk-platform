@@ -179,3 +179,59 @@ describe('H1 de CC#3 · la herencia consume segmentos por POSICIÓN, no por text
     }
   })
 })
+
+describe('H1b de CC#3 · una ficha SUELTA de una línea no parte un producto: solo hereda una línea aislada', () => {
+  const g = 'Garantía: 12 meses'
+  it('el producto cambió de precio y existe una ficha suelta con su garantía: las 3 líneas del producto van juntas al modelo (la suelta no se lleva la garantía)', () => {
+    const r = planearHerencia({ limpios: segs('Producto 1', 'Precio: 45 USD', g), vivas: [viva('p1', ['Producto 1', 'Precio: 40 USD', g]), viva('suelta', [g])], esCompleta: true })
+    expect(r.heredadas).toEqual([])
+    expect(r.paraModelo.map((x) => x.texto)).toEqual(['Producto 1', 'Precio: 45 USD', g])
+    expect(r.afectadas.map((f) => f.id).sort()).toEqual(['p1', 'suelta'])
+  })
+  it('lo mismo con una suelta de la línea del PRECIO o del NOMBRE', () => {
+    for (const suelta of [['Precio: 45 USD'], ['Producto 1']]) {
+      const r = planearHerencia({ limpios: segs('Producto 1', 'Precio: 45 USD', g), vivas: [viva('p1', ['Producto 1', 'Precio: 40 USD', g]), viva('suelta', suelta)], esCompleta: true })
+      expect(r.paraModelo, suelta[0]).toHaveLength(3)
+    }
+  })
+  it('una línea AISLADA (sus vecinas ya están consumidas) sí se hereda', () => {
+    const r = planearHerencia({ limpios: segs('a', 'b', g, 'c', 'd'), vivas: [viva('f1', ['a', 'b']), viva('f2', ['c', 'd']), viva('suelta', [g])], esCompleta: true })
+    expect(r.heredadas.map((f) => f.id).sort()).toEqual(['f1', 'f2', 'suelta'])
+    expect(r.paraModelo).toEqual([])
+  })
+  it('una suelta que es TODO el material (sin vecinas) se hereda; una al borde con la vecina libre no', () => {
+    expect(planearHerencia({ limpios: segs(g), vivas: [viva('s', [g])], esCompleta: true }).heredadas.map((f) => f.id)).toEqual(['s'])
+    const r = planearHerencia({ limpios: segs(g, 'nueva'), vivas: [viva('s', [g])], esCompleta: true })
+    expect(r.heredadas).toEqual([])
+    expect(r.paraModelo.map((x) => x.texto)).toEqual([g, 'nueva'])
+  })
+  it('una ficha de DOS líneas o más no cambia: hereda aunque sus vecinas estén libres', () => {
+    const r = planearHerencia({ limpios: segs('x', 'y', 'nueva'), vivas: [viva('f', ['x', 'y'])], esCompleta: true })
+    expect(r.heredadas.map((f) => f.id)).toEqual(['f'])
+    expect(r.paraModelo.map((s) => s.texto)).toEqual(['nueva'])
+  })
+  it('BARRIDO con semilla fija: con fichas sueltas mezcladas, ningún producto queda «partido» (ni 1 ni 2 de sus 3 líneas al modelo) y nada se pierde ni se duplica', () => {
+    let semilla = 20261007
+    const azar = (n: number) => { semilla = (semilla * 1103515245 + 12345) % 2147483648; return semilla % n }
+    const PRECIOS = ['Precio: 40 USD', 'Precio: 45 USD', 'Precio: 50 USD']
+    let partidos = 0
+    for (let vuelta = 0; vuelta < 3000; vuelta++) {
+      const n = 2 + azar(5)
+      const viejos = Array.from({ length: n }, (_x, i) => [`Producto ${i}`, PRECIOS[azar(3)], g])
+      const nuevos = viejos.map((p) => (azar(3) === 0 ? [p[0], PRECIOS[azar(3)], g] : p))
+      const vivas = viejos.map((p, i) => viva(`p${i}`, p))
+      for (let k = azar(4); k > 0; k--) { const p = viejos[azar(n)]; vivas.push(viva(`s${k}`, [p[azar(3)]])) } // fichas sueltas de UNA línea
+      const limpios = segs(...nuevos.flat())
+      const r = planearHerencia({ limpios, vivas, esCompleta: true })
+      const alModelo = new Set(r.paraModelo.map((s) => s.n - 1))
+      for (let b = 0; b < n; b++) {
+        const dentro = [0, 1, 2].filter((j) => alModelo.has(b * 3 + j)).length
+        const igual = nuevos[b].every((t, j) => t === viejos[b][j])
+        if (!igual && dentro > 0 && dentro < 3) partidos++
+      }
+      const consumidas = r.heredadas.reduce((a, f) => a + f.firmas.length, 0)
+      expect(consumidas + r.paraModelo.length, `vuelta ${vuelta}`).toBe(limpios.length)
+    }
+    expect(partidos).toBe(0)
+  })
+})

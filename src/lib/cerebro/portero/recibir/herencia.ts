@@ -6,6 +6,7 @@
  *  · no se encuentra y NINGUNA de sus firmas está en lo que sobra → candidata a RETIRADA (solo si el ingreso trae TODA la fuente);
  *  · no se encuentra pero alguna de sus firmas está en lo que sobra → AFECTADA: se vuelve a fichar completa.
  * Al modelo va todo segmento limpio cuya posición NO fue consumida. Las fichas largas se procesan primero (una de una sola línea no le roba la posición a una larga).
+ * Una ficha SUELTA de una sola línea solo hereda una línea AISLADA (sus vecinas ya consumidas o sin vecina): así no le quita una línea a un producto que va entero al modelo (H1b).
  */
 import type { Segmento } from './segmentos'
 import type { FichaViva } from './tipos'
@@ -23,6 +24,8 @@ function buscar(firmas: string[], material: string[], consumido: boolean[]): num
   for (let i = 0; i + k <= material.length; i++) {
     let sirve = true
     for (let j = 0; j < k && sirve; j++) sirve = !consumido[i + j] && material[i + j] === firmas[j]
+    // H1b: una ficha SUELTA (una sola línea) solo hereda una línea AISLADA (sus vecinas ya consumidas o sin vecina); si no, le quitaría una línea a un producto que va al modelo
+    if (sirve && k === 1 && ((i > 0 && !consumido[i - 1]) || (i + 1 < material.length && !consumido[i + 1]))) sirve = false
     if (sirve) return Array.from({ length: k }, (_x, j) => i + j)
   }
   return null
