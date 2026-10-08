@@ -6,6 +6,7 @@
  * vacía donde había material, o con números inventados cae al respaldo con su motivo; nunca se lee como «sin material».
  */
 import type { ListaNumerada } from './lista-numerada'
+import type { DetalleCrudo } from './recados'
 
 export interface Decision {
   /** referencias de lo que el portero decidió entregar, en su orden */
@@ -15,6 +16,8 @@ export interface Decision {
   pixeles: string[]
   por_que: Array<{ numeros: number[]; linea: string }>
   faltantes: string[]
+  /** lo que el modelo dijo de cada faltante cuando lo declaró con forma (objeto): INTERNO; `razonar` lo convierte en `faltantes_con_forma` y lo quita de la respuesta */
+  faltantes_detalle?: DetalleCrudo[]
   /** solo al leer una lista por trozos: lo que un trozo dio por «faltante» y que puede estar en otro trozo (NO es un faltante declarado) */
   faltantes_no_concluyentes?: string[]
   /** faltantes que el portero declaró pero que, al leer el texto COMPLETO de las fichas entregadas (el resumen salía cortado), YA estaban: no son faltantes */
@@ -107,10 +110,24 @@ export function interpretarDecision(textoCrudo: string, numerada: ListaNumerada,
       if (esObjeto(p) && linea && Array.isArray(p.numeros) && p.numeros.every(entero)) por_que.push({ numeros: p.numeros as number[], linea })
     }
   }
-  const faltantes = Array.isArray(x.faltantes) ? (x.faltantes.map(frase).filter(Boolean) as string[]).slice(0, 20) : []
+  // un faltante puede venir como texto (la forma de siempre) o como objeto {que, para_que, bloquea, destino_propuesto, razon, recado_existente} (recados de la sala)
+  const faltantes: string[] = []
+  const detalle: DetalleCrudo[] = []
+  if (Array.isArray(x.faltantes)) {
+    for (const f of x.faltantes) {
+      if (faltantes.length >= 20) break
+      if (esObjeto(f)) {
+        const que = frase(f.que)
+        if (que) { faltantes.push(que); detalle.push({ que, para_que: frase(f.para_que), bloquea: f.bloquea === true, destino_propuesto: f.destino_propuesto, razon: frase(f.razon), recado_existente: f.recado_existente }) }
+      } else {
+        const que = frase(f)
+        if (que) faltantes.push(que)
+      }
+    }
+  }
   const duda = Array.isArray(x.duda) ? [...new Set((x.duda as unknown[]).filter((n): n is number => entero(n) && porNumero.has(n)))] : []
   return {
     ok: true,
-    decision: { entregar: validos.map((n) => (porNumero.get(n) as { ref: string }).ref), entregar_numeros: validos, pixeles, por_que, faltantes, duda, numeros_invalidos: invalidos, ...(sinMaterial ? { sin_material: true } : {}) },
+    decision: { entregar: validos.map((n) => (porNumero.get(n) as { ref: string }).ref), entregar_numeros: validos, pixeles, por_que, faltantes, ...(detalle.length ? { faltantes_detalle: detalle } : {}), duda, numeros_invalidos: invalidos, ...(sinMaterial ? { sin_material: true } : {}) },
   }
 }

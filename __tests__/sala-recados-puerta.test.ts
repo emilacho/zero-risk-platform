@@ -28,6 +28,7 @@ class Memoria implements Almacen {
   falla: 'leer' | 'insertar' | 'cerrar' | null = null
   carrera = false
   private n = 0
+  async listarDestinos() { return DESTINOS }
   async leerDestino(d: string) { if (this.falla === 'leer') throw new Error('base caída'); return DESTINOS.find((x) => x.destino === d) ?? null }
   async buscarAbierto(c: string, k: string, p: boolean) { return this.filas.find((f) => f.client_id === c && f.clave_de_agrupacion === k && f.prueba === p && (f.estado === 'abierto' || f.estado === 'repartido')) ?? null }
   async buscarNoConseguidoReciente(c: string, k: string, p: boolean, desde: string) { return this.filas.find((f) => f.client_id === c && f.clave_de_agrupacion === k && f.prueba === p && f.estado === 'no_conseguido' && (f.creado_en ?? '') >= desde) ?? null }

@@ -25,6 +25,8 @@ export type FilaNueva = Pick<Recado, 'client_id' | 'clave_de_agrupacion' | 'que_
 
 export interface Almacen {
   leerDestino(destino: string): Promise<Destino | null>
+  /** todos los destinos (para que el portero sepa a quién se le puede pedir qué) */
+  listarDestinos(): Promise<Destino[]>
   buscarAbierto(clientId: string, clave: string, prueba: boolean): Promise<Recado | null>
   buscarNoConseguidoReciente(clientId: string, clave: string, prueba: boolean, desdeIso: string): Promise<Recado | null>
   contarAbiertos(clientId: string, prueba: boolean): Promise<number>

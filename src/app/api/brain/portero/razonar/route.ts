@@ -9,6 +9,8 @@ import { llamarAlModelo } from '@/lib/cerebro/portero/modelo'
 import { razonar } from '@/lib/cerebro/portero/razonar'
 import { consultaDelEntorno } from '@/lib/cerebro/portero/entorno'
 import { crearRegistrador } from '@/lib/cerebro/portero/registro'
+import { contextoParaElPortero } from '@/lib/sala-recados/contexto-portero'
+import { almacenDeSupabase } from '@/lib/sala-recados/almacen-supabase'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -24,6 +26,8 @@ export async function POST(request: Request) {
     {
       consulta: consultaDelEntorno(),
       llamarModelo: llamarAlModelo,
+      // SOLO LECTURA de la sala: destinos y recados abiertos del cliente; el portero declara el faltante y NO abre recados
+      leerRecados: (cliente) => contextoParaElPortero(almacenDeSupabase(), cliente),
       registrar: crearRegistrador({ origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '' }),
     },
     cuerpo,
