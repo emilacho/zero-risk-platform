@@ -151,6 +151,8 @@ describe('PATCH /api/hitl/[id]', () => {
       await patch({ status: 'rejected', frase_del_aprobador: 'No, cámbiala.', hora_de_la_frase: '2026-10-08T15:04:05Z' })
       const u = registro.find((x) => x.op === 'update')?.datos as Record<string, any>
       expect(u.metadata.decision_humana.hora_de_la_frase).toBe('2026-10-08T15:04:05.000Z')
+      expect(u.metadata.decision_humana.hora).toBe(u.resolved_at) // la hora de la decisión sigue siendo la del servidor, no la que mande el cliente
+      expect(u.metadata.decision_humana.hora).not.toBe('2026-10-08T15:04:05.000Z')
     })
     it('`edited` también guarda la frase', async () => {
       await patch({ status: 'edited', frase_del_aprobador: 'Aprobada con cambios: quita la segunda línea.' })
