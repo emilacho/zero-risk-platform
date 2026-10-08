@@ -1,6 +1,7 @@
 /**
  * /api/hitl/queue
  *  POST → enqueue an HITL item (workflows call this when output needs review)
+ *         `output_id` (opcional, uuid de `client_historical_outputs`): ata la decisión a LA VERSIÓN de la pieza; sin él la fila es idéntica a la de siempre
  *  GET  → list queue (Mission Control inbox)
  *
  * Note: we keep the legacy /api/hitl/pending in place; this endpoint is the
@@ -14,6 +15,8 @@ import { validateObject } from '@/lib/input-validator'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
@@ -24,6 +27,13 @@ export async function POST(request: Request) {
   const body = _v.data as Record<string, any>
   for (const f of ['type', 'title']) {
     if (!body?.[f]) return NextResponse.json({ error: `missing field: ${f}` }, { status: 400 })
+  }
+
+  // `output_id` (opcional): lo que el cerebro usa para atar la decisión del aprobador a una versión. Ausente/nulo/vacío = como siempre.
+  const outputIdCrudo = body.output_id
+  const traeOutputId = outputIdCrudo !== undefined && outputIdCrudo !== null && outputIdCrudo !== ''
+  if (traeOutputId && !(typeof outputIdCrudo === 'string' && UUID.test(outputIdCrudo))) {
+    return NextResponse.json({ error: 'output_id_invalid', detail: '`output_id` debe ser el uuid de una salida de `client_historical_outputs`' }, { status: 400 })
   }
 
   const supabase = getSupabaseAdmin()
@@ -41,9 +51,14 @@ export async function POST(request: Request) {
     status: 'pending',
     payload: body.payload ?? {},
     metadata: body.metadata ?? {},
+    ...(traeOutputId ? { output_id: outputIdCrudo as string } : {}),
   }
   const { data, error } = await supabase.from('hitl_queue').insert(row).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    // una pieza que no existe: la llave foránea de la base lo dice; se contesta claro (400), no como una caída (500)
+    if (traeOutputId && (error.code === '23503' || /foreign key/i.test(error.message ?? ''))) return NextResponse.json({ error: 'output_id_not_found', detail: 'no existe una salida con ese `output_id`' }, { status: 400 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ item: data }, { status: 201 })
 }
 

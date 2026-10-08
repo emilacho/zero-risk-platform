@@ -1,9 +1,11 @@
 /**
  * /api/hitl/[id]
  *  GET   → fetch one HITL item
- *  PATCH → reviewer decision: { status: 'approved'|'rejected', reviewer, decision }
+ *  PATCH → reviewer decision: { status: 'approved'|'rejected'|'edited', reviewer, decision, frase_del_aprobador?, hora_de_la_frase? }
  *
- * On approve/reject we stamp decided_at and (where reference_id is in metadata)
+ * On approve/reject/edit we stamp decided_at AND resolved_at (el cerebro fecha la decisión con resolved_at). `frase_del_aprobador` (opcional, solo con una decisión)
+ * guarda en `metadata.decision_humana` la frase del aprobador y la hora, para que una decisión humana no se confunda con el clic de un empleado.
+ * On approve/reject we also (where reference_id is in metadata)
  * also bump the linked seo_engagement / content_package / experiment status.
  */
 import { NextResponse } from 'next/server'
@@ -30,8 +32,25 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
   const _v = validateObject<Record<string, unknown>>(_raw, 'hitl-action')
   if (!_v.ok) return _v.response
   const body = _v.data as Record<string, any>
-  if (!body.status || !['approved', 'rejected', 'in_review', 'expired'].includes(body.status)) {
-    return NextResponse.json({ error: 'status must be approved|rejected|in_review|expired' }, { status: 400 })
+  if (!body.status || !['approved', 'rejected', 'edited', 'in_review', 'expired'].includes(body.status)) {
+    return NextResponse.json({ error: 'status must be approved|rejected|edited|in_review|expired' }, { status: 400 })
+  }
+  const esDecision = body.status === 'approved' || body.status === 'rejected' || body.status === 'edited'
+
+  // la frase del aprobador (opcional): solo con una decisión; texto de 1 a 2000 caracteres; la hora de la frase, si viene, debe ser una fecha legible
+  const traeFrase = body.frase_del_aprobador !== undefined && body.frase_del_aprobador !== null
+  let frase: string | null = null
+  let horaDeLaFrase: string | null = null
+  if (traeFrase) {
+    if (typeof body.frase_del_aprobador !== 'string' || !body.frase_del_aprobador.trim() || body.frase_del_aprobador.trim().length > 2000 || !esDecision) {
+      return NextResponse.json({ error: 'frase_del_aprobador_invalid', detail: 'la frase es un texto de 1 a 2000 caracteres y solo va con approved|rejected|edited' }, { status: 400 })
+    }
+    frase = body.frase_del_aprobador.trim()
+    if (body.hora_de_la_frase !== undefined && body.hora_de_la_frase !== null) {
+      const t = typeof body.hora_de_la_frase === 'string' ? Date.parse(body.hora_de_la_frase) : NaN
+      if (Number.isNaN(t)) return NextResponse.json({ error: 'hora_de_la_frase_invalid', detail: 'fecha ilegible' }, { status: 400 })
+      horaDeLaFrase = new Date(t).toISOString()
+    }
   }
 
   const supabase = getSupabaseAdmin()
@@ -40,8 +59,19 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
     reviewer: body.reviewer ?? null,
     decision: body.decision ?? {},
   }
-  if (body.status === 'approved' || body.status === 'rejected') {
-    updates.decided_at = new Date().toISOString()
+  const hora = new Date().toISOString()
+  if (esDecision) {
+    updates.decided_at = hora
+    updates.resolved_at = hora
+  }
+  if (frase !== null) {
+    // se lee lo que ya traía la fila para no borrarlo; sin frase NO se lee ni se escribe `metadata` (la ruta de hoy)
+    const { data: previa } = await supabase.from('hitl_queue').select('metadata').eq('id', ctx.params.id).maybeSingle()
+    if (!previa) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    updates.metadata = {
+      ...((previa.metadata ?? {}) as Record<string, unknown>),
+      decision_humana: { frase, hora, estado: body.status, reviewer: body.reviewer ?? null, ...(horaDeLaFrase ? { hora_de_la_frase: horaDeLaFrase } : {}) },
+    }
   }
 
   const { data, error } = await supabase.from('hitl_queue').update(updates).eq('id', ctx.params.id).select().single()
