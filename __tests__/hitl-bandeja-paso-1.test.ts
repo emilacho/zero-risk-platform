@@ -12,6 +12,8 @@ const registro: Llamada[] = []
 let filaActual: Record<string, unknown> | null = null
 let errorDeInsert: { message: string; code?: string } | null = null
 let errorDeUpdate: { message: string; code?: string } | null = null
+let salidaActual: Record<string, unknown> | null = null
+let errorDeLecturaDeSalida: { message: string } | null = null
 
 vi.mock('@/lib/internal-auth', () => ({
   checkInternalKey: (r: Request) => (r.headers.get('x-api-key') === 'k' ? { ok: true } : { ok: false, reason: 'Invalid x-api-key' }),
@@ -29,7 +31,7 @@ vi.mock('@/lib/supabase', () => ({
           return { select: () => ({ single: async () => (errorDeUpdate ? { data: null, error: errorDeUpdate } : { data: { id, type: String(filaActual?.type ?? 'otro'), metadata: filaActual?.metadata ?? {}, ...datos }, error: null }) }) }
         },
       }),
-      select: () => ({ eq: (_c: string, id: string) => ({ maybeSingle: async () => { registro.push({ tabla, op: 'select', id }); return { data: filaActual, error: null } } }) }),
+      select: () => ({ eq: (_c: string, id: string) => ({ maybeSingle: async () => { registro.push({ tabla, op: 'select', id }); return tabla === 'client_historical_outputs' ? { data: salidaActual, error: errorDeLecturaDeSalida } : { data: filaActual, error: null } } }) }),
     }),
   }),
 }))
@@ -46,7 +48,8 @@ const patch = async (cuerpo: unknown, id = '11111111-1111-4111-8111-111111111111
 }
 const OUT = '6ed1307a-0000-4000-8000-000000000001'
 
-beforeEach(() => { registro.length = 0; filaActual = { id: '11111111-1111-4111-8111-111111111111', type: 'otro', metadata: { origen: 'flujo' } }; errorDeInsert = null; errorDeUpdate = null })
+const CLI = '41dd3d62-d6de-4c9a-9996-6df78c1da118'
+beforeEach(() => { salidaActual = { id: OUT, client_id: CLI }; errorDeLecturaDeSalida = null; registro.length = 0; filaActual = { id: '11111111-1111-4111-8111-111111111111', type: 'otro', metadata: { origen: 'flujo' } }; errorDeInsert = null; errorDeUpdate = null })
 
 describe('POST /api/hitl/queue', () => {
   const base = { type: 'content_review', title: 'Pieza', client_id: '41dd3d62-d6de-4c9a-9996-6df78c1da118' }
@@ -61,7 +64,7 @@ describe('POST /api/hitl/queue', () => {
   it('con `output_id` válido la fila lo guarda y todo lo demás sigue igual', async () => {
     const r = await post({ ...base, output_id: OUT })
     expect(r.status).toBe(201)
-    const fila = registro[0].datos as Record<string, unknown>
+    const fila = registro.find((x) => x.op === 'insert')?.datos as Record<string, unknown>
     expect(fila.output_id).toBe(OUT)
     const { output_id: _o, ...resto } = fila
     expect(resto).toEqual({ client_id: base.client_id, agent_name: 'system', risk_type: 'strategic_decision', output_preview: 'Pieza', type: 'content_review', title: 'Pieza', priority: 'medium', status: 'pending', payload: {}, metadata: {} })
@@ -81,6 +84,45 @@ describe('POST /api/hitl/queue', () => {
     const r = await post({ ...base, output_id: OUT })
     expect(r.status).toBe(400)
     expect(r.json.error).toBe('output_id_not_found')
+  })
+  describe('la pieza tiene que ser del MISMO cliente que la fila (condición 1 de CC#3)', () => {
+    it('la salida existe y es del mismo cliente → se guarda (y se leyó solo `client_historical_outputs`)', async () => {
+      const r = await post({ ...base, output_id: OUT })
+      expect(r.status).toBe(201)
+      expect(registro[0]).toMatchObject({ tabla: 'client_historical_outputs', op: 'select', id: OUT })
+      expect(registro[1]).toMatchObject({ tabla: 'hitl_queue', op: 'insert' })
+    })
+    it('la salida es de OTRO cliente → 400 `output_id_other_client` y no se escribe nada', async () => {
+      salidaActual = { id: OUT, client_id: 'e388a370-910f-4ee7-9a48-4a79393b8cb4' }
+      const r = await post({ ...base, output_id: OUT })
+      expect(r.status).toBe(400)
+      expect(r.json.error).toBe('output_id_other_client')
+      expect(registro.filter((x) => x.op === 'insert')).toHaveLength(0)
+    })
+    it('la salida no existe → 400 `output_id_not_found` sin intentar escribir', async () => {
+      salidaActual = null
+      const r = await post({ ...base, output_id: OUT })
+      expect(r.status).toBe(400)
+      expect(r.json.error).toBe('output_id_not_found')
+      expect(registro.filter((x) => x.op === 'insert')).toHaveLength(0)
+    })
+    it('con `output_id` pero SIN `client_id` → 400 `client_id_required_with_output_id` (no se adivina de quién es)', async () => {
+      const { client_id: _c, ...sinCliente } = base
+      const r = await post({ ...sinCliente, output_id: OUT })
+      expect(r.status).toBe(400)
+      expect(r.json.error).toBe('client_id_required_with_output_id')
+      expect(registro).toHaveLength(0)
+    })
+    it('si la base falla al leer la salida → 500 y no se escribe', async () => {
+      errorDeLecturaDeSalida = { message: 'base caída' }
+      const r = await post({ ...base, output_id: OUT })
+      expect(r.status).toBe(500)
+      expect(registro.filter((x) => x.op === 'insert')).toHaveLength(0)
+    })
+    it('SIN `output_id` no se lee la salida (la ruta de hoy no hace la lectura extra)', async () => {
+      await post(base)
+      expect(registro.filter((x) => x.tabla === 'client_historical_outputs')).toHaveLength(0)
+    })
   })
   it('cualquier otro error de la base sigue siendo 500 con su mensaje', async () => {
     errorDeInsert = { message: 'boom' }
@@ -182,6 +224,14 @@ describe('PATCH /api/hitl/[id]', () => {
       const r = await patch({ status: 'approved', frase_del_aprobador: 'ok' })
       expect(r.status).toBe(404)
       expect(registro.filter((x) => x.op === 'update')).toHaveLength(0)
+    })
+    it.each([['un texto', 'solo texto'], ['una lista', ['a', 'b']], ['un número', 7], ['nulo', null]])('si el `metadata` previo es %s se trata como {} y se mezcla sin romper', async (_n, previo) => {
+      filaActual = { id: 'x', type: 'otro', metadata: previo }
+      const r = await patch({ status: 'approved', frase_del_aprobador: 'ok' })
+      expect(r.status).toBe(200)
+      const u = registro.find((x) => x.op === 'update')?.datos as Record<string, any>
+      expect(Object.keys(u.metadata)).toEqual(['decision_humana'])
+      expect(Array.isArray(u.metadata)).toBe(false)
     })
     it('sin frase NO se lee ni se escribe `metadata` (la ruta de hoy no hace la lectura extra)', async () => {
       await patch({ status: 'approved' })
