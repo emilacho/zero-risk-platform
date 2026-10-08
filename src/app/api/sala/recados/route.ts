@@ -11,15 +11,18 @@ import { almacenDeSupabase } from '@/lib/sala-recados/almacen-supabase'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-function igual(a: string, b: string): boolean {
-  const x = Buffer.from(a), y = Buffer.from(b)
-  return x.length === y.length && crypto.timingSafeEqual(x, y)
+/** la llave de despacho de la sala: `x-sala-dispatch-key` contra `SALA_DISPATCH_KEY` (sin la variable, cerrada; la llave interna no vale aquí) */
+function checkSalaDispatchKey(request: Request): { ok: true } | { ok: false; status: 401 | 503; error: string; detalle: string } {
+  const esperada = (process.env.SALA_DISPATCH_KEY ?? '').trim()
+  if (!esperada) return { ok: false, status: 503, error: 'sala_dispatch_key_not_configured', detalle: 'la puerta de recados queda cerrada sin SALA_DISPATCH_KEY' }
+  const x = Buffer.from((request.headers.get('x-sala-dispatch-key') ?? '').trim()), y = Buffer.from(esperada)
+  if (x.length !== y.length || !crypto.timingSafeEqual(x, y)) return { ok: false, status: 401, error: 'unauthorized', detalle: 'falta o no coincide x-sala-dispatch-key' }
+  return { ok: true }
 }
 
 export async function POST(request: Request) {
-  const esperada = (process.env.SALA_DISPATCH_KEY ?? '').trim()
-  if (!esperada) return NextResponse.json({ error: 'sala_dispatch_key_not_configured', detalle: 'la puerta de recados queda cerrada sin SALA_DISPATCH_KEY' }, { status: 503 })
-  if (!igual((request.headers.get('x-sala-dispatch-key') ?? '').trim(), esperada)) return NextResponse.json({ error: 'unauthorized', detalle: 'falta o no coincide x-sala-dispatch-key' }, { status: 401 })
+  const auth = checkSalaDispatchKey(request)
+  if (!auth.ok) return NextResponse.json({ error: auth.error, detalle: auth.detalle }, { status: auth.status })
 
   let cuerpo: unknown
   try { cuerpo = await request.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
