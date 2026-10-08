@@ -26,8 +26,12 @@ export const MODELO = 'claude-sonnet-5-5'
 export const RAZONAMIENTO = { type: 'between_tools' } as const
 /** medición real 1: 19 de 20 respuestas terminaron solas con 523–1.282; la única que se cortó traía un párrafo de 3.243 caracteres (ya no se pide) */
 export const MAX_TOKENS_DE_SALIDA = 1500
-/** la pasada de cada nivel (estante, clase, familia) solo devuelve unos nombres */
-export const MAX_TOKENS_DE_ESTANTES = 500
+/** la pasada de cada nivel (estante, clase, familia) solo devuelve unos nombres, pero el razonamiento gasta de este mismo tope: con 18 familias a 500 se cortó SIN una letra de respuesta (medición 08-oct, L1-26#1) */
+export const MAX_TOKENS_DE_ESTANTES = 1000
+/** si aun así la pasada de un nivel se corta, se repite UNA vez con este múltiplo (si cabe en el tope de gasto) en vez de caer a respaldo */
+export const MULTIPLO_DE_REINTENTO_DE_NIVEL = 3
+/** lo que NO se puede entregar aunque su grupo se pida «completo»: lo marcado NO VÁLIDO y lo reemplazado por una versión nueva */
+export const esEntregable = (f: { valida?: boolean; reemplazada?: boolean }): boolean => f.valida !== false && f.reemplazada !== true
 export const TIEMPO_MAXIMO_MS = 25_000
 /** la comprobación de «faltantes» solo devuelve unos números */
 export const MAX_TOKENS_DE_VERIFICACION = 300
@@ -75,7 +79,7 @@ const MOTIVO_SIN_GRUPOS: Record<Nivel, string> = { estante: 'estantes_invalidos'
 const salida = (status: number, cuerpo: Record<string, unknown>) => ({ status, cuerpo })
 
 /** un grupo que el portero pidió ENTERO en un nivel: se entrega completo, sin escoger cosa por cosa */
-interface GrupoCompleto { nivel: string; nombre: string; lineas: LineaNumerada[] }
+interface GrupoCompleto { nivel: string; nombre: string; lineas: LineaNumerada[]; excluidas?: number }
 
 interface Llamada {
   respuesta: RespuestaDelModelo | null
@@ -209,7 +213,7 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
       por_que: [...completas.map((g) => ({ numeros: g.lineas.map((l) => l.numero), linea: `Grupo completo «${g.nombre}» (${g.nivel}): el portero lo pidió ENTERO, sin escoger entre sus cosas.` })), ...d.por_que],
       faltantes: [],
       ...(noConcluyentes.length ? { faltantes_no_concluyentes: noConcluyentes } : {}),
-      grupos_completos: completas.map((g) => ({ nivel: g.nivel, grupo: g.nombre, lineas: g.lineas.length })),
+      grupos_completos: completas.map((g) => ({ nivel: g.nivel, grupo: g.nombre, lineas: g.lineas.length, ...(g.excluidas ? { excluidas_no_validas_o_reemplazadas: g.excluidas } : {}) })),
     }
   }
 
@@ -217,10 +221,10 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
    * Antes de declarar que algo FALTA se lee la ficha COMPLETA: el modelo ve el resumen cortado, el empleado recibe la ficha entera. Si hay faltantes y se entregaron fichas cuyo resumen salió cortado,
    * UNA llamada le muestra ese texto entero y le pregunta cuáles faltantes SIGUEN faltando; los demás se descartan. Si la comprobación falla o no cabe en el tope, los faltantes quedan como estaban (y se dice).
    */
-  const verificarFaltantes = async (d: Decision, vista: ListaNumerada): Promise<{ decision: Decision; extra: Record<string, unknown> }> => {
+  const verificarFaltantes = async (d: Decision, vista: ListaNumerada, alFinal: Set<number> = new Set()): Promise<{ decision: Decision; extra: Record<string, unknown> }> => {
     if (d.faltantes.length === 0) return { decision: d, extra: {} }
     const entregadas = new Set([...d.entregar_numeros, ...d.duda])
-    const cortadas = vista.lineas.filter((l) => entregadas.has(l.numero) && estaCortada(l.ficha))
+    const cortadas = vista.lineas.filter((l) => entregadas.has(l.numero) && estaCortada(l.ficha)).sort((x, y) => Number(alFinal.has(x.numero)) - Number(alFinal.has(y.numero)) || x.numero - y.numero) // lo escogido cosa por cosa primero; lo de grupos completos al final
     if (cortadas.length === 0) return { decision: d, extra: {} }
     const leidas = cortadas.slice(0, MAXIMO_DE_FICHAS_A_VERIFICAR)
     const mensaje = armarMensajeDeVerificacion(pedido, d.faltantes, leidas.map((l) => lineaCompleta(l.numero, l.ficha)))
@@ -242,6 +246,19 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     }
   }
 
+  /**
+   * Con grupos completos, los faltantes de la lectura final son «no concluyentes» (esa lectura no vio lo completo). Antes de dejarlos así se pasan por la MISMA comprobación contra la ficha completa:
+   * los que una ficha entregada ya trae se descartan; los que sobreviven siguen como no concluyentes (no se promueven: la comprobación solo ve las fichas cortadas, no todo lo completo).
+   */
+  const podarNoConcluyentes = async (d: Decision, grupos: GrupoCompleto[]): Promise<{ decision: Decision; extra: Record<string, unknown> }> => {
+    const nc = d.faltantes_no_concluyentes ?? []
+    if (nc.length === 0) return { decision: d, extra: {} }
+    const alFinal = new Set(grupos.flatMap((g) => g.lineas.map((l) => l.numero)))
+    const v = await verificarFaltantes({ ...d, faltantes: nc }, numerada, alFinal)
+    const descartados = [...(d.faltantes_descartados_por_ficha_completa ?? []), ...(v.decision.faltantes_descartados_por_ficha_completa ?? [])]
+    return { decision: { ...d, faltantes_no_concluyentes: v.decision.faltantes, ...(descartados.length ? { faltantes_descartados_por_ficha_completa: descartados } : {}) }, extra: v.extra }
+  }
+
   /** una pasada que elige números sobre `vista` (la lista entera, o las líneas desplegadas de los grupos elegidos); `completas` = grupos que el portero pidió ENTEROS */
   const pasadaDeDecision = async (vista: ListaNumerada, pasada: number, extra: Record<string, unknown>, completas: GrupoCompleto[] = []) => {
     const mensaje = armarMensaje(pedido, vista)
@@ -257,7 +274,7 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     let decision: Decision | null = lectura && lectura.ok ? lectura.decision : null
     let extraVerificacion: Record<string, unknown> = {}
     if (decision) {
-      if (completas.length > 0) decision = fusionarCompletas(decision, completas)
+      if (completas.length > 0) { const v = await podarNoConcluyentes(fusionarCompletas(decision, completas), completas); decision = v.decision; extraVerificacion = v.extra }
       else { const v = await verificarFaltantes(decision, vista); decision = v.decision; extraVerificacion = v.extra }
     }
     return terminar({ modo, estado: estadoLegible, ...(motivo ? { motivo_de_respaldo: motivo } : {}), llamo_al_modelo: true, ...(decision ? { decision } : {}), ...extra, ...extraVerificacion })
@@ -299,7 +316,17 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     }
     const peor = peorCaso(cfg.instruccion, mensaje, MAX_TOKENS_DE_ESTANTES)
     if (peor > topeLlamada || gasto + peor > topePedido) return respaldoDeTope({ costo_maximo_calculado_usd: peor })
-    const ll = await llamar(peticion(cfg.instruccion, mensaje, MAX_TOKENS_DE_ESTANTES))
+    let ll = await llamar(peticion(cfg.instruccion, mensaje, MAX_TOKENS_DE_ESTANTES))
+    let reintento: Record<string, unknown> = {}
+    if (ll.cortada && !ll.fallo) {
+      // la salida se cortó (el razonamiento se comió el tope): se anota la cortada y se repite UNA vez con más margen; si no cabe en el tope de gasto, queda el respaldo declarado
+      const peorReintento = peorCaso(cfg.instruccion, mensaje, MAX_TOKENS_DE_ESTANTES * MULTIPLO_DE_REINTENTO_DE_NIVEL)
+      if (peorReintento <= topeLlamada && gasto + peorReintento <= topePedido) {
+        await anotar(ll, pasadas, 'salida_cortada', '', { modo: 'reintento', nivel })
+        reintento = { reintento_por_salida_cortada: true }
+        ll = await llamar(peticion(cfg.instruccion, mensaje, MAX_TOKENS_DE_ESTANTES * MULTIPLO_DE_REINTENTO_DE_NIVEL))
+      } else reintento = { reintento_omitido_por_tope: true, costo_maximo_calculado_usd: peorReintento }
+    }
     if (ll.respuesta) huboRespuesta = true
     const porNombre = new Map(grupos.map((g) => [normalizarNombre(g.nombre), g]))
     // el índice llama a un grupo de clase «E2 catalogo_item»; el modelo suele repetir solo «catalogo_item» (medición del 07-oct: 30 de 30): se acepta el nombre SIN el estante
@@ -326,17 +353,19 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     for (const k of clavesCompletas) if (!elegidos.includes(k)) elegidos.push(k)
     const nombresElegidos = elegidos.map((k) => (porNombre.get(k) as { nombre: string }).nombre)
     const nombresCompletas = clavesCompletas.map((k) => (porNombre.get(k) as { nombre: string }).nombre)
-    const caida = ll.fallo ? ll.fallo.motivo : !ll.respuesta ? 'error_del_modelo' : !leido ? (ll.cortada ? 'salida_cortada' : 'json_roto') : elegidos.length === 0 ? MOTIVO_SIN_GRUPOS[nivel] : null
+    // en el nivel de familia «ninguna» es una respuesta válida cuando ya hay algo que leer (lo que no tiene familia se abre siempre y lo completo ya está apartado); en los demás niveles, nada elegido = nada que leer
+    const ningunaEsValida = nivel === 'familia' && pedidosDelModelo !== null && invalidos.length === 0 && completasInvalidas.length === 0 && (sinFamilia.length > 0 || completas.length > 0)
+    const caida = ll.fallo ? ll.fallo.motivo : !ll.respuesta ? 'error_del_modelo' : !leido ? (ll.cortada ? 'salida_cortada' : 'json_roto') : elegidos.length === 0 && !ningunaEsValida ? MOTIVO_SIN_GRUPOS[nivel] : null
     await anotar(ll, pasadas, caida, leido ? JSON.stringify(leido.valor) : '', {
-      modo: caida ? 'respaldo' : 'grupos', nivel, grupos_ofrecidos: grupos.length, grupos_elegidos: nombresElegidos, ...(nombresCompletas.length ? { grupos_completos: nombresCompletas } : {}), ...(nivel === 'estante' ? { estantes_elegidos: nombresElegidos } : {}),
+      modo: caida ? 'respaldo' : 'grupos', nivel, grupos_ofrecidos: grupos.length, grupos_elegidos: nombresElegidos, ...(nombresCompletas.length ? { grupos_completos: nombresCompletas } : {}), ...(nivel === 'estante' ? { estantes_elegidos: nombresElegidos } : {}), ...reintento,
     })
-    const resumen = { grupos_ofrecidos: grupos.length, grupos_elegidos: nombresElegidos, grupos_completos: nombresCompletas, grupos_invalidos: [...invalidos, ...completasInvalidas], costo_usd: ll.costo, tokens: { entrada: ll.usage.input_tokens, salida: ll.usage.output_tokens } }
+    const resumen = { grupos_ofrecidos: grupos.length, grupos_elegidos: nombresElegidos, grupos_completos: nombresCompletas, grupos_invalidos: [...invalidos, ...completasInvalidas], ...reintento, costo_usd: ll.costo, tokens: { entrada: ll.usage.input_tokens, salida: ll.usage.output_tokens } }
     niveles.push({ nivel, ...resumen })
     if (nivel === 'estante') pasada1 = { estantes_elegidos: nombresElegidos, estantes_invalidos: invalidos, costo_usd: ll.costo, tokens: resumen.tokens }
     if (caida) return terminar({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: caida, llamo_al_modelo: huboRespuesta, ...extrasDeNiveles() })
     const abiertos = new Set(elegidos)
     const enteras = new Set(clavesCompletas)
-    for (const k of clavesCompletas) { const g = porNombre.get(k) as { nombre: string; lineas: LineaNumerada[] }; completas.push({ nivel, nombre: g.nombre, lineas: g.lineas }) }
+    for (const k of clavesCompletas) { const g = porNombre.get(k) as { nombre: string; lineas: LineaNumerada[] }; completas.push({ nivel, nombre: g.nombre, lineas: g.lineas.filter((l) => esEntregable(l.ficha)), excluidas: g.lineas.filter((l) => !esEntregable(l.ficha)).length }) }
     candidatas = [...sinFamilia, ...sujetas.filter((l) => { const k = normalizarNombre(claveDeNivel(l.ficha, nivel)); return abiertos.has(k) && !enteras.has(k) })].sort((x, y) => x.numero - y.numero)
   }
 
@@ -394,9 +423,10 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     numeros_invalidos: partes.flatMap((d) => d.numeros_invalidos),
     ...(faltantesNoConcluyentes.length ? { faltantes_no_concluyentes: faltantesNoConcluyentes.slice(0, 20) } : {}),
   }
+  const fusionada = completas.length > 0 ? await podarNoConcluyentes(fusionarCompletas(decision, completas), completas) : { decision, extra: {} }
   return terminar({
-    modo: 'conversado', estado: estadoLegible, llamo_al_modelo: true, decision: fusionarCompletas(decision, completas), ...extrasDeNiveles(),
-    ...lecturaFinal(trozos.length, { trozos_leidos: trozos.length, trozos_vacios: vacios }),
+    modo: 'conversado', estado: estadoLegible, llamo_al_modelo: true, decision: fusionada.decision, ...extrasDeNiveles(),
+    ...lecturaFinal(trozos.length, { trozos_leidos: trozos.length, trozos_vacios: vacios }), ...fusionada.extra,
   })
 }
 

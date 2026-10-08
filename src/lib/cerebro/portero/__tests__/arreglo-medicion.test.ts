@@ -226,7 +226,7 @@ describe('defecto 4 · la lista grande (571 líneas inventadas) SÍ se razona: p
     await razonar(deps, conLista(listaGrande()))
     const p1 = espia.peticiones[0]
     expect(p1.system).toBe(INSTRUCCION_DE_ESTANTES)
-    expect(p1.max_tokens).toBeLessThanOrEqual(600)
+    expect(p1.max_tokens).toBeLessThanOrEqual(1000)
     expect(p1.thinking).toEqual({ type: 'between_tools' })
     const texto = /<estantes>\n([\s\S]*)\n<\/estantes>/.exec(p1.messages[0].content)![1].split('\n')
     expect(texto).toHaveLength(5) // E1 E2 E3 E5 E6
