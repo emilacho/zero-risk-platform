@@ -198,6 +198,16 @@ describe('si la pasada de un nivel se corta, se repite UNA vez con más margen',
     expect(r.motivo_de_respaldo).toBe('salida_cortada')
     expect(r.niveles.at(-1).reintento_omitido_por_tope).toBe(true)
   })
+  it('el tope por PEDIDO también frena la repetición (C1 de CC#3): la primera llamada cabe, la repetición haría pasar el pedido del tope → no se hace', async () => {
+    // cada llamada simulada cuesta US$ 0,02: estante + clase + familia cortada = 0,06; la repetición a 3× (≈ 0,034 de peor caso) llevaría el pedido a ≈ 0,094
+    const { deps, peticiones } = armar(cortaLaPrimera(INSTRUCCION_DE_FAMILIAS, JSON.stringify({ familias: [], completas: [] })), { topeDeGastoPorPedidoUsd: 0.07 })
+    const r = salida(await razonar(deps, cuerpo(lista())))
+    expect(peticiones.filter((p) => p.system === INSTRUCCION_DE_FAMILIAS)).toHaveLength(1)
+    expect(r.modo).toBe('respaldo')
+    expect(r.motivo_de_respaldo).toBe('salida_cortada')
+    expect(r.niveles.at(-1).reintento_omitido_por_tope).toBe(true)
+    expect(r.costo_usd).toBeLessThanOrEqual(0.07)
+  })
   it('una salida que NO se cortó no se repite (el caso común sigue en una llamada por nivel)', async () => {
     const { deps, peticiones } = armar(navega({ clases: ['catalogo_item', 'sede'], familias: [] }))
     await razonar(deps, cuerpo(lista()))
