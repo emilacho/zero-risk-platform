@@ -82,6 +82,7 @@ describe('lo que recibe el modelo', () => {
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/destino_propuesto/)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/pon su número en «recado_existente» en vez de pedirlo otra vez/)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/bloquea/)
+    expect(INSTRUCCION_DEL_PORTERO).toMatch(/"faltantes":\[\{"que":[^\]]*"para_que":[^\]]*"bloquea":[^\]]*"destino_propuesto":[^\]]*"razon":[^\]]*"recado_existente":/) // la FORMA del JSON pide el objeto
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/NO abres recados|no abres recados/i)
   })
   it('si leer los recados FALLA el portero sigue como siempre (nunca se cae por esto)', async () => {
