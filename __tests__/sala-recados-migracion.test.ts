@@ -26,7 +26,7 @@ describe('la migración: SOLO aditiva, repetible y cerrada', () => {
     expect(creadas).toEqual(TABLAS)
     expect(s).not.toMatch(/CREATE TABLE (?!IF NOT EXISTS)/)
     expect(new Set([...s.matchAll(/public\.([a-z_]+)/g)].map((m) => m[1]).filter((n) => !n.endsWith('_id_seq')))).toEqual(new Set(TABLAS)) // la secuencia del número no es otra tabla
-    for (const prohibido of [/\bDROP\b/i, /ALTER\s+COLUMN/i, /\bALTER\s+TABLE\s+\S+\s+(?!ENABLE ROW LEVEL SECURITY)/i, /\bTRUNCATE\b/i, /\bDELETE\s+FROM\b/i, /\bUPDATE\s+[\w.]+\s+SET\b/i, /\bCREATE\s+(OR\s+REPLACE\s+)?(TRIGGER|FUNCTION)\b/i]) {
+    for (const prohibido of [/\bDROP\b/i, /ALTER\s+COLUMN/i, /\bALTER\s+TABLE\s+\S+\s+(?=\S)(?!ENABLE ROW LEVEL SECURITY)/i, /\bTRUNCATE\b/i, /\bDELETE\s+FROM\b/i, /\bUPDATE\s+[\w.]+\s+SET\b/i, /\bCREATE\s+(OR\s+REPLACE\s+)?(TRIGGER|FUNCTION)\b/i]) {
       expect(s, String(prohibido)).not.toMatch(prohibido)
     }
   })
