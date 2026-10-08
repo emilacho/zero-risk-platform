@@ -47,7 +47,7 @@ export function partesDe(segs: Segmento[]): Segmento[][] {
 }
 const texto = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
 
-export function traducir(respuestas: Array<{ texto: string; cortada?: boolean }>, ctx: ContextoDeTraduccion): ResultadoDeTraduccion {
+export function traducir(respuestas: Array<{ texto: string; cortada?: boolean; excluirDesde?: number }>, ctx: ContextoDeTraduccion): ResultadoDeTraduccion {
   const crudas: Record<string, unknown>[] = []
   const descartesCrudos: Record<string, unknown>[] = []
   for (const r of respuestas) {
@@ -55,8 +55,13 @@ export function traducir(respuestas: Array<{ texto: string; cortada?: boolean }>
     if (!leido) return { ok: false, caida: r.cortada ? 'salida_cortada' : 'json_roto' }
     const v = leido.valor
     if (!esObjeto(v) || !Array.isArray(v.fichas)) return { ok: false, caida: r.cortada ? 'salida_cortada' : 'campos_que_faltan' }
-    for (const f of v.fichas) if (esObjeto(f)) crudas.push(f)
-    if (Array.isArray(v.descartes)) for (const d of v.descartes) if (esObjeto(d)) descartesCrudos.push(d)
+    // el último elemento que ese tramo declaró «incompleto» se archiva en el tramo siguiente: lo que esta respuesta pida desde ese número NO cuenta aquí
+    const sinElIncompleto = (x: Record<string, unknown>): Record<string, unknown> => {
+      const desde = r.excluirDesde
+      return desde !== undefined && Array.isArray(x.segmentos) ? { ...x, segmentos: x.segmentos.filter((n) => !(typeof n === 'number' && n >= desde)) } : x
+    }
+    for (const f of v.fichas) if (esObjeto(f)) crudas.push(sinElIncompleto(f))
+    if (Array.isArray(v.descartes)) for (const d of v.descartes) if (esObjeto(d)) descartesCrudos.push(sinElIncompleto(d))
   }
 
   const notas: string[] = []

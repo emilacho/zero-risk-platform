@@ -19,6 +19,7 @@ import type { PeticionConImagen } from '../modelo'
 import { clienteDePrueba, etiquetaValida } from '../../cliente-de-prueba'
 import { CLIENTE_DE_PRUEBA, MODELO, PRECIO_POR_MILLON, RAZONAMIENTO, TIEMPO_MAXIMO_MS, costoDeLaLlamada, type PeticionAlModelo, type RespuestaDelModelo, type ResultadoDeRegistro } from '../razonar'
 import { planearHerencia } from './herencia'
+import { extraerJson } from '../decision'
 import { INSTRUCCION_DE_RECIBIR, armarMensajeDeRecibir } from './instruccion'
 import { type Segmento, cortarEnSegmentos, firmaDe } from './segmentos'
 import { type Filtro, filtrarSegmentos } from './seguridad'
@@ -40,6 +41,10 @@ export const MAXIMO_ABSOLUTO_DE_LLAMADAS = 32
 export const llamadasMaximasPara = (segmentos: number): number => Math.min(MAXIMO_ABSOLUTO_DE_LLAMADAS, Math.max(MAXIMO_DE_LLAMADAS_POR_INGRESO, Math.ceil(segmentos / MAX_SEGMENTOS_POR_PASADA) + 4))
 /** una pasada puede crecer, con lo que el modelo gasta de salida POR SEGMENTO, hasta llenar esta parte del tope de salida (mide, no adivina) */
 export const FRACCION_DEL_TOPE_DE_SALIDA_PARA_CRECER = 0.5
+/** una pasada cuya salida pasa de esto (la mitad del tope) es DENSA: el material no admite pasadas más grandes y ninguna crece más */
+export const UMBRAL_DE_SALIDA_DENSA = MAX_TOKENS_DE_RECIBIR * 0.5
+/** si el modelo marca el último elemento como «incompleto», a lo más esto se arrastra al tramo siguiente (si es más, se ignora la marca) */
+export const MAXIMO_DE_SEGMENTOS_ARRASTRADOS = 8
 /** lo más que una pasada crece (en segmentos), aunque el modelo gaste poquísima salida */
 export const MAX_SEGMENTOS_POR_PASADA_CRECIDA = 160
 /** una pasada no lleva más de 24 segmentos: la salida esperada (≈ 45 «tokens» por segmento) queda bajo el tope de salida de 2.000 */
@@ -320,10 +325,12 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
     const inicio = plan.paraModelo.findIndex((s) => s.n === segs[0].n)
     return inicio > 0 ? plan.paraModelo.slice(Math.max(0, inicio - SEGMENTOS_DE_SOLAPE), inicio) : []
   }
-  const medirTrozo = (segs: Segmento[]): number => estimarTokens(INSTRUCCION_DE_RECIBIR.length + armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: segs, afectadas: plan.afectadas, contexto: contextoDe(segs) }).length)
+  const medirTrozo = (segs: Segmento[]): number => estimarTokens(INSTRUCCION_DE_RECIBIR.length + armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: segs, afectadas: plan.afectadas, contexto: contextoDe(segs), totalDeSegmentos: plan.paraModelo.length, hayTramoSiguiente: true }).length)
   const trozos = partirEnTrozos(plan.paraModelo, medirTrozo, topeEntrada)
   const llamadasMaximas = llamadasMaximasPara(plan.paraModelo.length)
-  const respuestas: Array<{ texto: string; cortada?: boolean }> = []
+  const respuestas: Array<{ texto: string; cortada?: boolean; excluirDesde?: number }> = []
+  let arrastre: Segmento[] = []
+  const notasDeTramos: string[] = []
   let motivoParcial: string | null = null
   let divisiones = 0
   // una COLA de trozos: si la respuesta de uno se corta por el tope de salida, ese trozo se divide en dos y se reintenta solo ese trozo (acotado); nunca se tira el ingreso por un corte
@@ -333,6 +340,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   // lo pendiente (sin empezar) se vuelve a partir cuando cambia lo que cabe en una pasada: crece con lo que el modelo gasta de salida por segmento, y vuelve a 24 si una respuesta se corta
   let capacidad = MAX_SEGMENTOS_POR_PASADA
   let peorSalidaPorSegmento = 0
+  let crecimientoCerrado = false // tras una salida densa o un corte, ninguna pasada vuelve a crecer
   // una pasada que CRECE nunca pasa del gasto máximo por llamada (peor caso: toda la salida): si no, la llamada se rechazaría en vez de partirse más chica
   const entradaQueCabeEnElGastoPorLlamada = Math.max(0, Math.floor(((topeLlamada - costoDeLaLlamada({ input_tokens: 0, output_tokens: MAX_TOKENS_DE_RECIBIR })) / Math.max(costoDeLaLlamada({ input_tokens: 1_000_000, output_tokens: 0 }), 1e-9)) * 1_000_000 * 0.9))
   const repartirPendientes = (cap: number) => {
@@ -346,8 +354,10 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   }
   while (cola.length > 0) {
     const trozo = cola.shift() as { segs: Segmento[]; prof: number }
+    // el último elemento que el tramo anterior declaró incompleto abre este tramo (así un producto no queda partido en la frontera)
+    if (arrastre.length > 0 && trozo.prof === 0) { trozo.segs = [...arrastre, ...trozo.segs]; arrastre = [] }
     const contexto = contextoDe(trozo.segs)
-    const mensaje = armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: trozo.segs, afectadas: plan.afectadas, contexto })
+    const mensaje = armarMensajeDeRecibir({ origen: e.origen, fuenteRef: e.fuenteRef, fechaFuente, segmentos: trozo.segs, afectadas: plan.afectadas, contexto, totalDeSegmentos: plan.paraModelo.length, hayTramoSiguiente: cola.length > 0 })
     const peor = costoDeLaLlamada({ input_tokens: estimarTokens(INSTRUCCION_DE_RECIBIR.length + mensaje.length), output_tokens: MAX_TOKENS_DE_RECIBIR })
     if (pasadas >= llamadasMaximas) { motivoParcial = `tope_de_pasadas: más de ${llamadasMaximas} llamadas`; break }
     if (reloj() - inicioDeLasPasadas > TIEMPO_TOTAL_MAXIMO_MS) { motivoParcial = `tiempo: pasaron ${TIEMPO_TOTAL_MAXIMO_MS / 1000} s desde la primera llamada`; break }
@@ -374,7 +384,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
     if (fallo) { await nuevoRegistro({ costo, duracion, usage, fallo, stop: null }, pasadas, fallo.motivo); return cerrar('fallido', `${fallo.motivo}: ${fallo.mensaje}`, {}, { segmentos_n: segmentos.length, segmentos_bloqueados: apartados.length ? apartados : null }) }
     const sePuedeDividir = cortada && trozo.segs.length > 1 && trozo.prof < PROFUNDIDAD_MAXIMA_DE_DIVISION
     await nuevoRegistro({ costo, duracion, usage, fallo: null, stop: respuesta?.stop_reason ?? null }, pasadas, cortada ? 'salida_cortada' : null, cortada ? { dividido: sePuedeDividir, segmentos_del_trozo: trozo.segs.length } : {})
-    if (cortada) { peorSalidaPorSegmento = MAX_TOKENS_DE_RECIBIR; repartirPendientes(MAX_SEGMENTOS_POR_PASADA) } // una respuesta cortada: esa tasa no deja crecer más; lo pendiente vuelve a 24
+    if (cortada) { crecimientoCerrado = true; peorSalidaPorSegmento = MAX_TOKENS_DE_RECIBIR; repartirPendientes(MAX_SEGMENTOS_POR_PASADA) } // una respuesta cortada: esa tasa no deja crecer más; lo pendiente vuelve a 24
     if (sePuedeDividir) {
       // la respuesta cortada NO se usa: el trozo se parte en dos mitades y se reintentan, en orden, antes que lo que sigue
       const mitad = Math.ceil(trozo.segs.length / 2)
@@ -382,14 +392,28 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
       divisiones++
       continue
     }
-    if (!cortada) {
+    if (!cortada && usage.output_tokens > UMBRAL_DE_SALIDA_DENSA) { crecimientoCerrado = true; repartirPendientes(MAX_SEGMENTOS_POR_PASADA) } // salida densa: la pasada no crece
+    else if (!cortada && !crecimientoCerrado) {
       peorSalidaPorSegmento = Math.max(peorSalidaPorSegmento, usage.output_tokens / trozo.segs.length)
       const cabe = Math.floor((MAX_TOKENS_DE_RECIBIR * FRACCION_DEL_TOPE_DE_SALIDA_PARA_CRECER) / Math.max(peorSalidaPorSegmento, 1))
       // crece de a poco (a lo más al doble por pasada): si el modelo en una pasada grande se corta, se pierde una llamada chica, no una enorme
       repartirPendientes(Math.max(MAX_SEGMENTOS_POR_PASADA, Math.min(MAX_SEGMENTOS_POR_PASADA_CRECIDA, cabe, capacidad * 2)))
     }
     // sin cortar (o un trozo que ya no se puede dividir: entonces `traducir` lo declara `salida_cortada` y el ingreso falla como siempre)
-    respuestas.push({ texto: (respuesta as RespuestaDelModelo).texto, cortada })
+    // el marcador «incompleto_desde»: solo en un tramo entero (no en una mitad), con otro tramo entero después, dentro del tramo, y con poco que arrastrar; si no, se ignora con una nota
+    let excluirDesde: number | undefined
+    if (!cortada) {
+      const leido = extraerJson((respuesta as RespuestaDelModelo).texto, 'fichas')
+      const marca = leido && typeof leido.valor === 'object' && leido.valor !== null && !Array.isArray(leido.valor) ? (leido.valor as Record<string, unknown>).incompleto_desde : undefined
+      if (marca !== undefined && marca !== null) {
+        const primero = trozo.segs[0].n
+        const ultimo = trozo.segs[trozo.segs.length - 1].n
+        const carga = typeof marca === 'number' && Number.isInteger(marca) ? trozo.segs.filter((s) => s.n >= marca) : []
+        if (trozo.prof === 0 && cola.some((t) => t.prof === 0) && typeof marca === 'number' && Number.isInteger(marca) && marca > primero && marca <= ultimo && carga.length <= MAXIMO_DE_SEGMENTOS_ARRASTRADOS) { excluirDesde = marca; arrastre = carga }
+        else notasDeTramos.push(`tramo ${primero}-${ultimo}: la marca «incompleto_desde» ${JSON.stringify(marca)} no se usó (solo vale en un tramo entero con otro después, dentro del tramo y con a lo más ${MAXIMO_DE_SEGMENTOS_ARRASTRADOS} segmentos por arrastrar)`)
+      }
+    }
+    respuestas.push({ texto: (respuesta as RespuestaDelModelo).texto, cortada, ...(excluirDesde !== undefined ? { excluirDesde } : {}) })
   }
 
   // ── 7 · traducir números → fichas con el texto copiado (todo segmento acaba en algún lado)
@@ -424,7 +448,7 @@ export async function recibir(deps: DepsDeRecibir, body: unknown): Promise<{ sta
   return resultado(estado, {
     ...(motivoFinal ? { motivo: motivoFinal } : {}),
     fichas: { archivadas: filasDeModelo.length, heredadas: heredadas.length, retiradas: retiradas.length, descartadas: fichas.filter((f) => f.descartada).length, residuales: fichas.filter((f) => f.residual).length },
-    cobertura, notas: [...t.notas, ...notasDeLaImagen], ...(divisiones > 0 ? { divisiones } : {}),
+    cobertura, notas: [...t.notas, ...notasDeLaImagen, ...notasDeTramos], ...(divisiones > 0 ? { divisiones } : {}),
   })
 }
 
