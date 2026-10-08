@@ -4,7 +4,7 @@
  *
  * El repositorio no ve los flujos VIVOS de n8n. Este guion los lee todos (activos e inactivos) y falla si alguno:
  *   · nombra las tablas nuevas del cerebro (`cerebro_ingresos`, `cerebro_fichas`) o las 6 columnas nuevas de `client_social_images`
- *     (`que_muestra`, `producto_visto`, `etiquetada_en`, `etiqueta_modelo`, y desde el 07-oct `texto_visible`, `etiqueta_confianza`): nadie más que el portero del cerebro las toca;
+ *     (`que_muestra`, `producto_visto`, `etiquetada_en`, `etiqueta_modelo`, y desde el 07-oct `texto_visible`, `etiqueta_confianza`, y desde el relevo 19 `con_personas`, `tipo_de_toma`; `formato` es una palabra común y no se vigila por nombre): nadie más que el portero del cerebro las toca;
  *   · pide TODAS las columnas (`select=*`) de `client_social_images`: un campo más no puede romper a un lector.
  * Y deja escritas las VERSIONES de la pieza, la planeación y el Servicio de Apify, para comparar antes/después de publicar.
  *

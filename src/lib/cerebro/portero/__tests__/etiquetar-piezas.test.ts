@@ -99,9 +99,9 @@ describe('crearBajador · baja la foto con tope de tamaño, de tiempo, sin segui
   })
 })
 
-describe('crearEscritor · UPDATE de las 6 columnas de etiqueta, filtrado por la foto Y el cliente', () => {
-  const valores = { que_muestra: 'un plato', producto_visto: ['Servicio uno'], etiquetada_en: '2026-10-07T00:00:00.000Z', etiqueta_modelo: 'claude-sonnet-5-5', texto_visible: 'PLATO DEL DÍA', etiqueta_confianza: 'alta' as const }
-  it('hace UN PATCH a la tabla con el filtro de la foto y del cliente, con la llave de servicio, y solo con esas 6 columnas', async () => {
+describe('crearEscritor · UPDATE de las columnas de etiqueta (6 + 3 de la toma), filtrado por la foto Y el cliente', () => {
+  const valores = { que_muestra: 'un plato', producto_visto: ['Servicio uno'], etiquetada_en: '2026-10-07T00:00:00.000Z', etiqueta_modelo: 'claude-sonnet-5-5', texto_visible: 'PLATO DEL DÍA', etiqueta_confianza: 'alta' as const, con_personas: false, tipo_de_toma: 'producto' as const, formato: 'vertical' as const }
+  it('hace UN PATCH a la tabla con el filtro de la foto y del cliente, con la llave de servicio, y solo con esas 9 columnas', async () => {
     const f = vi.fn(async (_u: string, _i?: RequestInit) => new Response(null, { status: 204 }))
     const r = await crearEscritor({ urlDeLaBase: BASE, llave: 'llave-servicio', fetchImpl: f })({ foto_id: 'f-1', cliente: 'c-1', valores })
     expect(r).toEqual({ ok: true })
@@ -112,10 +112,10 @@ describe('crearEscritor · UPDATE de las 6 columnas de etiqueta, filtrado por la
     expect((init.headers as Record<string, string>).apikey).toBe('llave-servicio')
     expect(Object.keys(JSON.parse(String(init.body))).sort()).toEqual([...COLUMNAS_QUE_ESCRIBE].sort())
   })
-  it('las columnas son EXACTAMENTE las 6 y nada más', () => {
-    expect([...COLUMNAS_QUE_ESCRIBE].sort()).toEqual(['etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra', 'texto_visible'])
+  it('las columnas son EXACTAMENTE las 9 y nada más', () => {
+    expect([...COLUMNAS_QUE_ESCRIBE].sort()).toEqual(['con_personas', 'etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'formato', 'producto_visto', 'que_muestra', 'texto_visible', 'tipo_de_toma'])
   })
-  it('se NIEGA si falta alguna de las 6 (una etiqueta a medias no se escribe) o si la confianza no es alta, media o baja: no sale ninguna petición', async () => {
+  it('se NIEGA si falta alguna de las 9 (una etiqueta a medias no se escribe) o si la confianza no es alta, media o baja: no sale ninguna petición', async () => {
     const f = vi.fn()
     const escribir = crearEscritor({ urlDeLaBase: BASE, llave: 'k', fetchImpl: f })
     for (const c of COLUMNAS_QUE_ESCRIBE) {

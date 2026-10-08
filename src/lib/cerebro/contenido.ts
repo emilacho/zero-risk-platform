@@ -58,7 +58,7 @@ const LEIBLES: Record<string, Leible> = {
       ...(lista(f.producto_visto).length ? [`Producto visto: ${lista(f.producto_visto).join(', ')}`] : []),
     ].join('\n'),
   },
-  client_sede_datos: { columnas: ['id', 'campo', 'valor_texto', 'fuente', 'observado_en'], texto: (f) => (cadena(f.valor_texto) ? `${cadena(f.campo) ?? 'dato'} · ${cadena(f.fuente) ?? 'fuente desconocida'} · observado ${fecha(f.observado_en)}: ${f.valor_texto}` : null) },
+  client_sede_datos: { columnas: ['id', 'campo', 'valor_texto', 'fuente', 'observado_en', 'reconfirmado_en'], texto: (f) => (cadena(f.valor_texto) ? `${cadena(f.campo) ?? 'dato'} · ${cadena(f.fuente) ?? 'fuente desconocida'} · observado ${fecha(f.observado_en)}${cadena(f.reconfirmado_en) ? ` · reconfirmado ${fecha(f.reconfirmado_en)}` : ''}: ${f.valor_texto}` : null) },
   client_sedes: { columnas: ['id', 'clave', 'ciudad'], texto: (f) => `Sede ${cadena(f.clave) ?? ''} · ciudad ${cadena(f.ciudad) ?? 'sin declarar'}`.trim() },
   // la ficha del cerebro: su texto completo copiado; si es un archivo sin texto, su descripción (nombre, tipo, tamaño y enlace); nunca queda sin lectura
   cerebro_fichas: {
