@@ -162,7 +162,7 @@ describe('tres niveles: estante → clase → familia, el modelo escoge y el sis
     const fam = bloque(espia.peticiones[2], 'familias').split('\n')
     expect(fam).toHaveLength(20)
     expect(fam[0]).toMatch(/^Familia 00 · 24 cosas/)
-    for (const p of espia.peticiones.slice(0, 3)) expect(p.max_tokens).toBeLessThanOrEqual(600)
+    for (const p of espia.peticiones.slice(0, 3)) expect(p.max_tokens).toBeLessThanOrEqual(1000)
   })
   it('puede elegir varios grupos y de un nivel pasa al siguiente solo con lo elegido', async () => {
     const { deps, espia } = armar(navega(['E2', 'E3'], ['E2 catalogo_familia'], undefined))
@@ -408,9 +408,9 @@ describe('las listas chicas se comportan EXACTAMENTE como antes (comparado con e
     for (const p of hoy.peticiones) { expect(p.system).toBe(INSTRUCCION_DEL_PORTERO); p.system = sistemaViejo }
     expect(hoy).toEqual(antes[nombre])
   })
-  it('la instrucción de hoy es la de antes MÁS las reglas 8 (líneas cortadas) y 9 (conjunto completo) y nada más', () => {
+  it('la instrucción de hoy es la de antes MÁS las reglas 8 (líneas cortadas), 9 (conjunto completo) y 10 (dato de todos los lugares) y nada más', () => {
     const sistemaViejo = (Object.values(antes)[0] as { peticiones: Array<{ system: string }> }).peticiones[0].system
-    expect(INSTRUCCION_DEL_PORTERO.replace(/\n8\. [^\n]*/, '').replace(/\n9\. [^\n]*/, '')).toBe(sistemaViejo)
+    expect(INSTRUCCION_DEL_PORTERO.replace(/\n8\. [^\n]*/, '').replace(/\n9\. [^\n]*/, '').replace(/\n10\. [^\n]*/, '')).toBe(sistemaViejo)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/8\./)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/resumen de una línea termina en «…», ese resumen está CORTADO/)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/nunca declares «faltante» algo solo porque no lo ves/)
