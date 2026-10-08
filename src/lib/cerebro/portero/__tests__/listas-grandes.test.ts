@@ -406,11 +406,19 @@ describe('las listas chicas se comportan EXACTAMENTE como antes (comparado con e
     const hoy = (await correrEscenario(e)) as { peticiones: Array<{ system: string }> }
     const sistemaViejo = (Object.values(antes)[0] as { peticiones: Array<{ system: string }> }).peticiones[0].system
     for (const p of hoy.peticiones) { expect(p.system).toBe(INSTRUCCION_DEL_PORTERO); p.system = sistemaViejo }
+    // lo ÚNICO agregado en la respuesta por los recados (relevo 18): `faltantes_con_forma` (junto a `faltantes`, que no cambia) y el resumen `recados`; sin faltantes no aparece nada
+    const sinRecados = (v: unknown): void => { if (Array.isArray(v)) v.forEach(sinRecados); else if (v && typeof v === 'object') { const o = v as Record<string, unknown>; delete o.faltantes_con_forma; delete o.recados; Object.values(o).forEach(sinRecados) } }
+    sinRecados(hoy)
     expect(hoy).toEqual(antes[nombre])
   })
   it('la instrucción de hoy es la de antes MÁS las reglas 8 (líneas cortadas), 9 (conjunto completo) y 10 (dato de todos los lugares) y nada más', () => {
     const sistemaViejo = (Object.values(antes)[0] as { peticiones: Array<{ system: string }> }).peticiones[0].system
-    expect(INSTRUCCION_DEL_PORTERO.replace(/\n8\. [^\n]*/, '').replace(/\n9\. [^\n]*/, '').replace(/\n10\. [^\n]*/, '')).toBe(sistemaViejo)
+    // lo ÚNICO que cambia además (relevo 18, recados): la regla 11, la frase final de la regla 4 y la forma de «faltantes» en el JSON (de texto a objeto con forma)
+    const aLaDeAntes = (x: string): string => x
+      .replace(/\n8\. [^\n]*/, '').replace(/\n9\. [^\n]*/, '').replace(/\n10\. [^\n]*/, '').replace(/\n11\. [^\n]*/, '')
+      .replace('dilo en «faltantes»: cada faltante es un objeto con forma (ver abajo).', 'dilo en «faltantes».')
+      .replace(/"faltantes":\[\{[^\]]*\}\],"duda"/, '"faltantes":["lo que el trabajo necesitaba y no hay"],"duda"')
+    expect(aLaDeAntes(INSTRUCCION_DEL_PORTERO)).toBe(sistemaViejo)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/8\./)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/resumen de una línea termina en «…», ese resumen está CORTADO/)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/nunca declares «faltante» algo solo porque no lo ves/)

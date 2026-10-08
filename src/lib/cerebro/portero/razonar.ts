@@ -19,6 +19,7 @@ import { armarMensaje, armarMensajeDeGrupos, armarMensajeDeVerificacion, GRUPOS_
 import { estaCortada, type LineaNumerada, lineaCompleta, type ListaNumerada, numerarLista } from './lista-numerada'
 import { estimarTokens, TOPE_DE_ENTRADA_EN_TOKENS } from './medida'
 import { leerListaDePrueba } from './prueba'
+import { bloqueDeRecados, type ContextoDeRecados, conForma, leerRecadosDePrueba } from './recados'
 
 export { INSTRUCCION_DE_ESTANTES }
 export const MODELO = 'claude-sonnet-5-5'
@@ -70,6 +71,8 @@ export interface DepsDeRazonar {
   topeDeGastoUsd?: number
   topeDeGastoPorPedidoUsd?: number
   topeDeEntradaTokens?: number
+  /** SOLO LECTURA: los destinos que existen y los recados abiertos del cliente (la sala). Si falla o no está, el portero sigue como siempre; el portero NUNCA abre recados */
+  leerRecados?: (cliente: string) => Promise<ContextoDeRecados | null>
 }
 
 export const costoDeLaLlamada = (usage: { input_tokens: number; output_tokens: number }): number =>
@@ -106,6 +109,10 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
   if (dePrueba && !dePrueba.ok) return salida(400, { error: 'entrada_invalida', code: 'E-INPUT-INVALID', errores: dePrueba.errores })
   const esPrueba = dePrueba !== null
   const marca = esPrueba ? { prueba: true } : {}
+  // el contexto de recados lo manda quien PRUEBA (con lista de prueba); en una corrida real lo lee el servidor y `recados_de_prueba` se ignora
+  const recadosDePrueba = esPrueba && b.recados_de_prueba !== undefined ? leerRecadosDePrueba(b.recados_de_prueba) : null
+  if (recadosDePrueba && !recadosDePrueba.ok) return salida(400, { error: 'entrada_invalida', code: 'E-INPUT-INVALID', errores: recadosDePrueba.errores })
+  let contexto: ContextoDeRecados | null = recadosDePrueba && recadosDePrueba.ok ? recadosDePrueba.contexto : null
 
   // con lista de prueba NO se lee ninguna tabla: la lista inventada reemplaza a la lectura
   const lista: ListaCorta = dePrueba ? dePrueba.lista : await construirListaCorta(deps.consulta, pedido.cliente, { ahora: ahora() })
@@ -122,6 +129,9 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     return sinModelo({ modo: 'conversado', estado: lista.estado === 'ok' ? 'sin_material' : 'parcial', decision: { entregar: [], sin_material: true }, ...comun })
   }
 
+  // lo que el portero ve de la sala (solo lectura): nunca lo tumba; sin esto todo sigue exactamente igual
+  if (!esPrueba && deps.leerRecados) { try { contexto = await deps.leerRecados(pedido.cliente) } catch { contexto = null } }
+  const bloqueRecados = bloqueDeRecados(contexto)
   const topeLlamada = deps.topeDeGastoUsd ?? TOPE_DE_GASTO_POR_LLAMADA_USD
   const topePedido = deps.topeDeGastoPorPedidoUsd ?? TOPE_DE_GASTO_POR_PEDIDO_USD
   const topeEntrada = deps.topeDeEntradaTokens ?? TOPE_DE_ENTRADA_EN_TOKENS
@@ -178,7 +188,18 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
     if (!registro.ok) gastoSinRegistrar += ll.costo
   }
 
-  const terminar = (extra: Record<string, unknown>) => {
+  /** los faltantes que SIGUEN declarados salen con forma (`faltantes_con_forma`); lo interno (`faltantes_detalle`) nunca sale. Sin faltantes la respuesta queda igual */
+  const conRecados = (extra: Record<string, unknown>): Record<string, unknown> => {
+    const d = extra.decision as (Decision & Record<string, unknown>) | undefined
+    if (!d || typeof d !== 'object' || !('faltantes_detalle' in d || (Array.isArray(d.faltantes) && d.faltantes.length > 0))) return extra
+    const { faltantes_detalle: detalle, ...resto } = d
+    const faltantes = Array.isArray(d.faltantes) ? d.faltantes : []
+    if (faltantes.length === 0) return { ...extra, decision: resto }
+    return { ...extra, decision: { ...resto, faltantes_con_forma: conForma(faltantes, detalle ?? [], contexto) }, recados: { destinos_ofrecidos: contexto?.destinos.length ?? 0, recados_abiertos: contexto?.abiertos.length ?? 0 } }
+  }
+
+  const terminar = (extraCrudo: Record<string, unknown>) => {
+    const extra = conRecados(extraCrudo)
     const fallidos = registros.filter((r) => !r.ok)
     const registro: ResultadoDeRegistro = fallidos.length === 0 ? { ok: true } : { ok: false, detalle: fallidos.map((r) => r.detalle).filter(Boolean).join(' · ') || 'el registro falló' }
     if (fallidos.length > 0) {
@@ -261,7 +282,7 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
 
   /** una pasada que elige números sobre `vista` (la lista entera, o las líneas desplegadas de los grupos elegidos); `completas` = grupos que el portero pidió ENTEROS */
   const pasadaDeDecision = async (vista: ListaNumerada, pasada: number, extra: Record<string, unknown>, completas: GrupoCompleto[] = []) => {
-    const mensaje = armarMensaje(pedido, vista)
+    const mensaje = armarMensaje(pedido, vista, undefined, bloqueRecados)
     const peor = peorCaso(INSTRUCCION_DEL_PORTERO, mensaje, MAX_TOKENS_DE_SALIDA)
     if (peor > topeLlamada || gasto + peor > topePedido) {
       return terminar({ modo: 'respaldo', estado: estadoLegible, motivo_de_respaldo: 'tope_de_gasto', costo_maximo_calculado_usd: peor, llamo_al_modelo: pasadas > 0, ...extra })
@@ -282,7 +303,7 @@ export async function razonar(deps: DepsDeRazonar, body: unknown): Promise<{ sta
 
   // ── cabe entera: UNA pasada (las listas chicas, como el piloto de 62 líneas, nunca salen de aquí)
   const cabe = (lineas: LineaNumerada[]): boolean =>
-    estimarTokens(INSTRUCCION_DEL_PORTERO.length + armarMensaje(pedido, vistaDe(numerada, lineas)).length) <= topeEntrada
+    estimarTokens(INSTRUCCION_DEL_PORTERO.length + armarMensaje(pedido, vistaDe(numerada, lineas), undefined, bloqueRecados).length) <= topeEntrada
   if (cabe(numerada.lineas)) return pasadaDeDecision(numerada, 1, {})
 
   // ── no cabe: se recorre por NIVELES (estante → clase → familia). En cada uno el portero dice qué grupos abrir; no hay búsqueda por palabras

@@ -298,3 +298,17 @@ describe('un dato que cada lugar tiene por separado llega de TODOS los lugares (
     for (const t of [INSTRUCCION_DE_CLASES, INSTRUCCION_DE_FAMILIAS, INSTRUCCION_DEL_PORTERO]) expect(t).not.toMatch(/rese[ñn]a|laboratorio|cl[ií]nica|restaurante|marisquer|cotizador|n[aá]ufrago|p[eé]rez|ferreter|inmobiliari|medicament|academia|veterinari|farmacia/i)
   })
 })
+
+// ───────────────────────── recados (relevo 18): un faltante CON FORMA que la verificación descarta o deja como no concluyente NO sale como faltante con forma
+describe('un faltante con forma que la lectura entera descarta o deja no concluyente no se declara (ni se filtra lo interno)', () => {
+  const FALTA = 'el WhatsApp del mostrador de la oficina norte'
+  const objeto = { que: FALTA, para_que: 'poner el contacto en el anuncio', bloquea: true, destino_propuesto: 'apify', razon: 'está en el sitio', recado_existente: null }
+  const escenario = (verifica: Resp) => armar(navega({ clases: ['catalogo_item', 'sitio'], completasClases: ['catalogo_item'], final: (n) => decision(n, { faltantes: [objeto], duda: n.slice(0, 1) }), verifica }))
+  it.each([['la ficha completa SÍ lo trae → descartado', JSON.stringify({ siguen_faltando: [] })], ['la ficha completa NO lo trae → no concluyente', JSON.stringify({ siguen_faltando: [1] })]])('%s: no hay `faltantes_con_forma`, ni `faltantes_detalle`, ni resumen `recados`', async (_n, verifica) => {
+    const r = salida(await razonar(escenario(verifica).deps, cuerpo(lista())))
+    expect(r.decision.faltantes).toEqual([])
+    expect(r.decision).not.toHaveProperty('faltantes_con_forma')
+    expect(r.decision).not.toHaveProperty('faltantes_detalle')
+    expect(r).not.toHaveProperty('recados')
+  })
+})

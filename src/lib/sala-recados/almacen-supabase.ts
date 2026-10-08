@@ -15,6 +15,11 @@ export function almacenDeSupabase(): Almacen {
       if (error) fallo(error)
       return (data as Destino | null) ?? null
     },
+    async listarDestinos() {
+      const { data, error } = await db.from('sala_destinos_de_recado').select('*').order('destino', { ascending: true }).limit(200)
+      if (error) fallo(error)
+      return (data as Destino[] | null) ?? []
+    },
     async buscarAbierto(clientId, clave, prueba) {
       const { data, error } = await db.from('sala_recados').select('*').eq('client_id', clientId).eq('clave_de_agrupacion', clave).eq('prueba', prueba).in('estado', ['abierto', 'repartido']).limit(1)
       if (error) fallo(error)
