@@ -80,7 +80,7 @@ describe('lo que recibe el modelo', () => {
   })
   it('la instrucción describe el faltante con forma, el recado existente y que el portero NO abre recados', () => {
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/destino_propuesto/)
-    expect(INSTRUCCION_DEL_PORTERO).toMatch(/recado_existente/)
+    expect(INSTRUCCION_DEL_PORTERO).toMatch(/pon su número en «recado_existente» en vez de pedirlo otra vez/)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/bloquea/)
     expect(INSTRUCCION_DEL_PORTERO).toMatch(/NO abres recados|no abres recados/i)
   })
@@ -97,6 +97,7 @@ describe('los faltantes salen con forma', () => {
   it('un faltante completo: `faltantes` sigue siendo la frase y `faltantes_con_forma` trae todos los campos', async () => {
     const r = await razonar(armar(await decisionCon([FALTANTE]), contexto()).deps, cuerpo())
     expect(decision(r).faltantes).toEqual(['el horario de la sede de Quito'])
+    expect(decision(r)).not.toHaveProperty('faltantes_detalle') // lo interno nunca sale
     expect(decision(r).faltantes_con_forma).toEqual([{ que: 'el horario de la sede de Quito', para_que: 'poner el horario en el anuncio', bloquea: true, destino_propuesto: 'apify', razon: 'está en el sitio y en Maps', recado_existente: null }])
     expect(r.cuerpo).toMatchObject({ recados: { destinos_ofrecidos: 3, recados_abiertos: 1 } })
   })
@@ -136,6 +137,24 @@ describe('los faltantes salen con forma', () => {
   it('SIN contexto de recados el faltante sale con forma igual (destino null, nunca se inventa uno)', async () => {
     const r = await razonar(armar(await decisionCon([FALTANTE])).deps, cuerpo())
     expect(decision(r).faltantes_con_forma[0]).toMatchObject({ que: 'el horario de la sede de Quito', bloquea: true, destino_propuesto: null, nota: 'destino_no_valido' })
+  })
+})
+
+describe('el bloque de recados cuenta en lo que CABE en una llamada', () => {
+  it('al borde del tope de entrada, la lista que cabe SIN el bloque ya no cabe CON él: navega por niveles en vez de pasarse del tope', async () => {
+    const ctxGrande: ContextoDeRecados = { destinos: Array.from({ length: 30 }, (_x, i) => ({ destino: `destino-${i}`, tipo: 'herramienta', estado_del_brazo: 'opera' })), abiertos: [] }
+    const t = await decisionCon([])
+    const primeraLlamada = async (tope: number, conContexto: boolean) => {
+      const a = armar(t, { topeDeEntradaTokens: tope, ...(conContexto ? contexto(ctxGrande) : {}) })
+      await razonar(a.deps, cuerpo())
+      return a.peticiones[0]?.system
+    }
+    // el tope más bajo con el que la lista (sin bloque) todavía cabe en UNA llamada
+    let borde = 0
+    for (let tope = 400; tope < 20_000; tope += 10) { if ((await primeraLlamada(tope, false)) === INSTRUCCION_DEL_PORTERO) { borde = tope; break } }
+    expect(borde).toBeGreaterThan(0)
+    expect(await primeraLlamada(borde, false)).toBe(INSTRUCCION_DEL_PORTERO)
+    expect(await primeraLlamada(borde, true)).not.toBe(INSTRUCCION_DEL_PORTERO) // con el bloque ya no cabe: el portero lo sabe
   })
 })
 
