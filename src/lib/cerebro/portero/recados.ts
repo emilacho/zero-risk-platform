@@ -24,6 +24,9 @@ export interface FaltanteConForma {
 
 export const MAXIMO_DE_DESTINOS_DE_PRUEBA = 30
 export const MAXIMO_DE_RECADOS_DE_PRUEBA = 50
+/** lo que el portero ve de cada recado abierto: basta para reconocer «lo mismo»; un recado largo no encarece cada pedido del cliente */
+export const MAXIMO_DE_CARACTERES_POR_RECADO = 300
+const recortado = (t: string): string => (t.length > MAXIMO_DE_CARACTERES_POR_RECADO ? `${t.slice(0, MAXIMO_DE_CARACTERES_POR_RECADO)}…` : t)
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const texto = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max
@@ -33,7 +36,7 @@ export function bloqueDeRecados(ctx: ContextoDeRecados | null): string {
   if (!ctx || (ctx.destinos.length === 0 && ctx.abiertos.length === 0)) return ''
   const partes: string[] = []
   if (ctx.destinos.length > 0) partes.push(`\n<destinos>\n${comoDato(ctx.destinos.map((d) => `${d.destino} · ${d.tipo} · ${d.estado_del_brazo}`).join('\n'))}\n</destinos>`)
-  if (ctx.abiertos.length > 0) partes.push(`\n<recados_abiertos>\n${comoDato(ctx.abiertos.map((r) => `[R${r.numero}] ${r.que_falta} → ${r.destino}`).join('\n'))}\n</recados_abiertos>`)
+  if (ctx.abiertos.length > 0) partes.push(`\n<recados_abiertos>\n${comoDato(ctx.abiertos.map((r) => `[R${r.numero}] ${recortado(r.que_falta)} → ${r.destino}`).join('\n'))}\n</recados_abiertos>`)
   return partes.join('')
 }
 

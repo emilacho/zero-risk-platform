@@ -201,6 +201,25 @@ describe('en modo prueba el contexto lo manda quien prueba (no se lee ninguna ta
   })
 })
 
+describe('condiciones 2 y 4 de CC#3', () => {
+  it('2 · el texto de un recado largo se recorta en el bloque (≈ 300 caracteres, con «…»); uno corto queda igual', () => {
+    const largo = 'x'.repeat(2000)
+    const b = bloqueDeRecados({ destinos: [], abiertos: [{ numero: 5, que_falta: largo, destino: 'apify' }, { numero: 6, que_falta: 'corto', destino: 'apify' }] })
+    const lineas = b.split('\n').filter((l) => l.startsWith('[R'))
+    expect(lineas[0].length).toBeLessThanOrEqual(330)
+    expect(lineas[0]).toMatch(/^\[R5\] x{300}… → apify$/)
+    expect(lineas[1]).toBe('[R6] corto → apify')
+  })
+  it('2 · el peor caso del bloque (50 recados de 2.000 caracteres) ya no pesa decenas de miles de tokens', () => {
+    const b = bloqueDeRecados({ destinos: [], abiertos: Array.from({ length: 50 }, (_x, i) => ({ numero: i + 1, que_falta: 'y'.repeat(2000), destino: 'apify' })) })
+    expect(b.length).toBeLessThan(20_000)
+  })
+  it('4 · el ejemplo de la forma del JSON no empuja a «bloquea: true»: trae un valor neutro', () => {
+    expect(INSTRUCCION_DEL_PORTERO).not.toMatch(/"bloquea":true,/)
+    expect(INSTRUCCION_DEL_PORTERO).toMatch(/"bloquea":true o false/)
+  })
+})
+
 describe('helpers', () => {
   const detalle = [{ que: 'a', para_que: null, bloquea: true, destino_propuesto: 'apify', razon: null, recado_existente: null }, { que: 'b', para_que: null, bloquea: false, destino_propuesto: null, razon: null, recado_existente: null }]
   it('`conForma` toma SOLO los faltantes que siguen declarados (los que la verificación descartó no salen) y respeta el orden', () => {

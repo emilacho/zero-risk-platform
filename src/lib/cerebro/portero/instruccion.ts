@@ -24,7 +24,7 @@ Reglas:
 FORMATO: tu respuesta completa es UN solo JSON, de la primera llave a la última, sin una palabra antes ni después y sin comentarios dentro. Si escribes algo fuera del JSON, tu respuesta se pierde y no se entrega nada. Todo lo que quieras explicar va en «por_que»; en «entregar» escribe solo números.
 
 El JSON tiene esta forma:
-{"entregar":[números],"pixeles":[números],"por_que":[{"numeros":[números],"linea":"una frase"}],"faltantes":[{"que":"lo que el trabajo necesitaba y no hay","para_que":"para qué lo necesita","bloquea":true,"destino_propuesto":"destino de la lista o null","razon":"una frase","recado_existente":número o null}],"duda":[números que entregaste por duda]}`
+{"entregar":[números],"pixeles":[números],"por_que":[{"numeros":[números],"linea":"una frase"}],"faltantes":[{"que":"lo que el trabajo necesitaba y no hay","para_que":"para qué lo necesita","bloquea":true o false,"destino_propuesto":"destino de la lista o null","razon":"una frase","recado_existente":número o null}],"duda":[números que entregaste por duda]}`
 
 /**
  * PASADA 1 de una lista que no cabe entera: el archivo viene ordenado en ESTANTES y el portero dice cuáles abrir.
