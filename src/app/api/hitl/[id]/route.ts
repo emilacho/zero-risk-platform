@@ -69,7 +69,7 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
     const { data: previa } = await supabase.from('hitl_queue').select('metadata').eq('id', ctx.params.id).maybeSingle()
     if (!previa) return NextResponse.json({ error: 'not_found' }, { status: 404 })
     updates.metadata = {
-      ...((previa.metadata ?? {}) as Record<string, unknown>),
+      ...(previa.metadata !== null && typeof previa.metadata === 'object' && !Array.isArray(previa.metadata) ? (previa.metadata as Record<string, unknown>) : {}), // un `metadata` que no es un objeto se trata como {}
       decision_humana: { frase, hora, estado: body.status, reviewer: body.reviewer ?? null, ...(horaDeLaFrase ? { hora_de_la_frase: horaDeLaFrase } : {}) },
     }
   }

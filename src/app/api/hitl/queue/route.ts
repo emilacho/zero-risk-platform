@@ -37,6 +37,14 @@ export async function POST(request: Request) {
   }
 
   const supabase = getSupabaseAdmin()
+  // la pieza que se aprueba tiene que ser del MISMO cliente que la fila: no se ata una decisión de un cliente a la pieza de otro (y sin `client_id` no se adivina)
+  if (traeOutputId) {
+    if (!body.client_id) return NextResponse.json({ error: 'client_id_required_with_output_id', detail: 'con `output_id` hace falta `client_id`' }, { status: 400 })
+    const { data: salida, error: errSalida } = await supabase.from('client_historical_outputs').select('client_id').eq('id', outputIdCrudo as string).maybeSingle()
+    if (errSalida) return NextResponse.json({ error: errSalida.message }, { status: 500 })
+    if (!salida) return NextResponse.json({ error: 'output_id_not_found', detail: 'no existe una salida con ese `output_id`' }, { status: 400 })
+    if (String(salida.client_id) !== String(body.client_id)) return NextResponse.json({ error: 'output_id_other_client', detail: 'la salida es de otro cliente' }, { status: 400 })
+  }
   const row = {
     client_id: body.client_id ?? null,
     // hitl_queue carries legacy V2 NOT-NULL columns (agent_name, risk_type,
