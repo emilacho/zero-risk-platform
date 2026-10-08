@@ -86,6 +86,10 @@ describe('abrir', () => {
     expect(m.filas).toHaveLength(2)
     expect(((await procesarRecado(m, { accion: 'leer', client_id: C1 }, AHORA)).cuerpo as { recados: unknown[] }).recados).toHaveLength(1)
     expect(((await procesarRecado(m, { accion: 'leer', client_id: C1, prueba: true }, AHORA)).cuerpo as { recados: unknown[] }).recados).toHaveLength(1)
+    await abrir({ prueba: true, clave_de_agrupacion: 'solo-de-prueba' })
+    const claves = async (prueba: boolean) => ((await procesarRecado(m, { accion: 'leer', client_id: C1, prueba }, AHORA)).cuerpo as { recados: Array<{ clave_de_agrupacion: string }> }).recados.map((x) => x.clave_de_agrupacion)
+    expect(await claves(false)).toEqual(['horario-sede-gye'])
+    expect((await claves(true)).sort()).toEqual(['horario-sede-gye', 'solo-de-prueba'])
   })
   it('la carrera la resuelve la base: si otro escribió el mismo recado entre la lectura y la escritura, se devuelve el que ganó (sin duplicar)', async () => {
     m.carrera = true
@@ -224,6 +228,11 @@ describe('leer', () => {
 describe('el sobre', () => {
   it('una acción desconocida o un cuerpo que no es objeto → 400', async () => {
     for (const x of [null, 'x', [1], {}, { accion: 'borrar' }, { accion: 'repartir' }]) expect((await procesarRecado(m, x, AHORA)).status, JSON.stringify(x)).toBe(400)
+    // una acción desconocida con datos completos sigue siendo 400 (no se interpreta como otra cosa)
+    const r = await procesarRecado(m, { accion: 'repartir', client_id: C1, numero: 1, clave_de_agrupacion: 'k', que_falta: 'x', destino: 'apify' }, AHORA)
+    expect(r.status).toBe(400)
+    expect(r.cuerpo).toMatchObject({ error: 'accion_desconocida' })
+    expect(m.filas).toHaveLength(0)
   })
 })
 
