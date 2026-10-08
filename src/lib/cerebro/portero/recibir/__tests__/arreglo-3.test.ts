@@ -107,12 +107,14 @@ describe('3 · el último elemento incompleto pasa al tramo siguiente (no se par
     expect(producto8).toHaveLength(1)
     expect(String(producto8[0].contenido)).toMatch(/CN-008[\s\S]*Precio: 18 USD[\s\S]*Garantía/)
   })
-  it('aunque el modelo SÍ incluya los segmentos marcados en sus fichas, quedan fuera de ese tramo (no se duplican)', async () => {
-    const { base, correr } = armar(conMarcador(22)) // agrupa todo el tramo 1 (1-24) Y marca 22: los 22-24 se descartan de esa respuesta
+  it('aunque el modelo SÍ incluya los segmentos marcados en sus fichas, quedan fuera de ese tramo: la ficha que los trae empieza en el producto incompleto, no en el anterior', async () => {
+    const { base, correr } = armar(agrupa(4, 300, (_ns, llamada) => (llamada === 1 ? { incompleto_desde: 22 } : {}))) // el tramo 1 agrupa de a 4 → [21-24] mezclaría el producto 7 con el 8
     const r = await correr(cuerpo({ texto: catalogo(30) }))
     expect(r.c.segmentos.residuales).toBe(0)
     expect(firmas(base)).toHaveLength(90)
-    expect(new Set(firmas(base)).size).toBeLessThanOrEqual(90)
+    const delOcho = base.fichas.filter((f) => String(f.contenido).includes('CN-008'))
+    expect(delOcho).toHaveLength(1)
+    expect(String(delOcho[0].contenido).startsWith('Producto 8 · código CN-008')).toBe(true)
   })
   it('un marcador inválido se IGNORA con una nota y nada se pierde: fuera del tramo, en el primer segmento, no entero, o con más de 8 segmentos por arrastrar', async () => {
     for (const malo of [999, 1, 0, -3, 22.5, '22', null]) {
@@ -121,12 +123,22 @@ describe('3 · el último elemento incompleto pasa al tramo siguiente (no se par
       expect(r.c.segmentos.residuales, String(malo)).toBe(0)
       expect(firmas(base), String(malo)).toHaveLength(90)
       expect(numerosDelMensaje(m.espia.peticiones[1])[0], String(malo)).toBe(25) // sin arrastre: el tramo siguiente empieza donde terminó
+      if (malo !== null) expect(r.c.notas.join(' '), String(malo)).toMatch(/incompleto_desde/) // se dice que no se usó
     }
     expect(MAXIMO_DE_SEGMENTOS_ARRASTRADOS).toBe(8)
     const { base, m, correr } = armar(conMarcador(10)) // 15 segmentos por arrastrar (10-24) > 8: se ignora
     await correr(cuerpo({ texto: catalogo(30) }))
     expect(numerosDelMensaje(m.espia.peticiones[1])[0]).toBe(25)
     expect(firmas(base)).toHaveLength(90)
+  })
+  it('una marca en el PRIMER segmento de un tramo (aunque quepa en el arrastre) no se usa: no habría avance', async () => {
+    const { base, m, correr } = armar(agrupa(1, 300, (ns) => ({ incompleto_desde: ns[0] })), { topeDeEntradaTokens: 1_700 })
+    const r = await correr(cuerpo({ texto: catalogo(4) })) // 12 segmentos en varios tramos chicos
+    expect(m.espia.peticiones.map((p) => numerosDelMensaje(p))).toEqual(Array.from({ length: 12 }, (_x, k) => [k + 1])) // cada tramo trae SOLO lo suyo: la marca en su primer segmento no arrastra nada
+    expect(m.espia.peticiones.length).toBeGreaterThan(2)
+    expect(m.espia.peticiones.length).toBeLessThanOrEqual(12)
+    expect(r.c.segmentos.residuales).toBe(0)
+    expect(firmas(base)).toHaveLength(12)
   })
   it('en el ÚLTIMO tramo el marcador se ignora (no hay a dónde arrastrar) y los segmentos se archivan', async () => {
     const { base, correr } = armar(agrupa(3, 300, (ns) => ({ incompleto_desde: ns[ns.length - 1] })))
@@ -135,11 +147,15 @@ describe('3 · el último elemento incompleto pasa al tramo siguiente (no se par
     expect(firmas(base)).toHaveLength(12)
   })
   it('tras una respuesta cortada y dividida el marcador de las mitades no se usa (solo vale en tramos enteros)', async () => {
-    const cortaLaPrimera: Respuesta = (p, llamada) => (llamada === 1 ? { texto: '{"fichas":[{"clase":"p', stop_reason: 'max_tokens', usage: { input_tokens: 2500, output_tokens: 2000 } } : (agrupa(3, 300, () => ({ incompleto_desde: numerosDelMensaje(p)[0] + 1 }))(p, llamada) as never))
-    const { base, correr } = armar(cortaLaPrimera)
+    const cortaLaPrimera: Respuesta = (p, llamada) => (llamada === 1 ? { texto: '{"fichas":[{"clase":"p', stop_reason: 'max_tokens', usage: { input_tokens: 2500, output_tokens: 2000 } } : (agrupa(3, 300, (ns) => ({ incompleto_desde: ns[ns.length - 1] }))(p, llamada) as never))
+    const { base, m, correr } = armar(cortaLaPrimera)
     const r = await correr(cuerpo({ texto: catalogo(30) }))
     expect(r.c.segmentos.residuales).toBe(0)
     expect(firmas(base)).toHaveLength(90)
+    const largos = m.espia.peticiones.map((p) => numerosDelMensaje(p))
+    expect(largos[1][0]).toBe(1) // primera mitad
+    expect(largos[2][0]).toBe(13) // segunda mitad: nadie arrastró nada de la primera
+    expect(largos[3][0]).toBe(25) // y el siguiente tramo entero empieza donde terminó el cortado
   })
   it('con el marcador, TODO el catálogo de 24 productos entra sin dejar un producto partido en las fronteras (fichas = 24 productos)', async () => {
     // el modelo simulado agrupa por producto reconociendo el nombre («Producto n · código»): un producto cortado en la frontera se declara incompleto
