@@ -21,7 +21,7 @@
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { PRECIOS_OFICIALES, type ModeloPorCorrida } from './modelo-por-corrida.js'
-import { opcionDeRazonamiento, type ModoDeRazonamiento, opcionDeTope, cortadoPorTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
+import { opcionDeRazonamiento, type ModoDeRazonamiento, opcionDeTope, cortadoPorTope, cerradaPorTope, mensajeDeCierreConTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
   armarBloquesDeImagen,
@@ -80,6 +80,8 @@ type SDKAssistantStreamMessage = {
 type SDKResultStreamMessage = {
   type: 'result'
   subtype?: string
+  /** cómo cerró el ÚLTIMO turno (`end_turn` = terminó de hablar) · en los mensajes `assistant` por bloque viene null: la parada real llega aquí */
+  stop_reason?: string | null
   /** el SDK marca así los fallos (p.ej. «response exceeded the 32000 output token maximum») · `result` trae el texto y `errors` el detalle */
   is_error?: boolean
   result?: string
@@ -246,6 +248,8 @@ export interface DiscoveryToolCallCapture {
 export interface AgentRunResult {
   success: boolean
   response: string
+  /** el tope de gasto saltó AL CERRAR y `response` es el texto final completo (no un parcial) · solo está cuando pasó */
+  cerradaPorTope?: boolean
   sessionId: string | null
   inputTokens: number
   outputTokens: number
@@ -626,6 +630,10 @@ export interface StreamDrainResult {
   /** la causa textual del fallo (`result`/`errors` del SDK o la excepción de salida) · null si no hubo */
   resultMessage?: string | null
   responseText: string
+  /** el texto del CIERRE: lo que el último turno escribió DESPUÉS de la última herramienta (sin la narración anterior) · '' si el último paso fue una herramienta o no hubo texto */
+  textoFinal?: string
+  /** el último turno es una respuesta de cierre (texto, sin herramienta pendiente, no cortada por largo) · base para `cerradaPorTope` */
+  cierreConTexto?: boolean
   sessionId: string | null
   inputTokens: number
   outputTokens: number
@@ -659,6 +667,9 @@ export interface StreamDrainResult {
 /** `toleraSalidaTrasCorte`: SÓLO para pedidos con tope por corrida (opt-in) · sin él, cualquier excepción del SDK sube igual que siempre */
 export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: { toleraSalidaTrasCorte?: boolean }): Promise<StreamDrainResult> {
   let responseText = ''
+  // texto del CIERRE: se vacía cada vez que el empleado pide una herramienta o llega un resultado de herramienta · lo que queda al final es lo escrito después de la última
+  let textoFinal = ''
+  let resultStopReason: string | null = null
   let resultSubtype: string | null = null
   let resultIsError = false
   let resultMessage: string | null = null
@@ -693,8 +704,10 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
       const content = (msg as SDKAssistantStreamMessage).message?.content
       if (content) {
         for (const block of content) {
+          if (block.type === 'tool_use') textoFinal = ''
           if (block.type === 'text' && typeof block.text === 'string') {
             responseText += block.text
+            textoFinal += block.text
           } else if (
             block.type === 'tool_use' &&
             typeof block.name === 'string' &&
@@ -740,6 +753,9 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
           }
         }
       }
+    } else if (msg.type === 'user') {
+      // resultado de una herramienta: el turno siguiente es otro; lo escrito antes ya no es el cierre
+      textoFinal = ''
     } else if (msg.type === 'result') {
       const r = msg as SDKResultStreamMessage
       inputTokens = r.usage?.input_tokens ?? 0
@@ -750,6 +766,7 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
       cacheCreation1hTokens = r.usage?.cache_creation?.ephemeral_1h_input_tokens ?? 0
       sessionId = sessionId ?? r.session_id ?? null
       resultSubtype = typeof r.subtype === 'string' ? r.subtype : null
+      resultStopReason = typeof r.stop_reason === 'string' ? r.stop_reason : null
       resultIsError = r.is_error === true
       resultMessage = resultIsError ? [typeof r.result === 'string' ? r.result : '', ...(Array.isArray(r.errors) ? r.errors : [])].filter((x) => x !== '').join(' | ').slice(0, 500) || null : null
     }
@@ -762,6 +779,9 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
 
   return {
     responseText,
+    textoFinal,
+    // cierre COMPLETO: lo último escrito es texto (ninguna herramienta pendiente) Y el SDK dice que el turno terminó por `end_turn` (no por largo, rechazo ni corte)
+    cierreConTexto: textoFinal.trim() !== '' && resultStopReason === 'end_turn',
     resultSubtype,
     resultIsError,
     resultMessage,
@@ -929,6 +949,8 @@ function logExecution(
     fidelityForcedEmit?: Record<string, unknown>
     /** causa del fallo del SDK (corte por tope u otro error del resultado) · null/ausente = corrida sana */
     fallo?: string | null
+    /** el tope saltó AL CERRAR y el texto final está completo: se guarda y se marca (metadata `cerrada_por_tope`) · null/ausente = no aplica */
+    cerradaPorTope?: { tope: number; costoUsd: number } | null
   },
 ): void {
   const { canonicalSlug, input, skills, drain, modelId, startedAtMs, durationMs, costUsd, brainEnrichment, cacheMetrics, fidelityForcedEmit } = args
@@ -1033,7 +1055,8 @@ function logExecution(
     // Sprint 8D transparency enhancement · canonical forensics deep self-contained
     // truncated 2000 chars + ellipsis · full payloads viven en Anthropic console retention
     input_summary: input.task.length > 2000 ? input.task.slice(0, 2000) + '…' : input.task,
-    output_summary: drain.responseText.length > 2000 ? drain.responseText.slice(0, 2000) + '…' : drain.responseText,
+    // el resumen es el CIERRE (texto final), no la narración del principio · sin cierre (último paso = herramienta) queda el texto entero como siempre
+    output_summary: ((t) => (t.length > 2000 ? t.slice(0, 2000) + '…' : t))((drain.textoFinal ?? '').trim() !== '' ? (drain.textoFinal as string) : drain.responseText),
     metadata: {
       source: 'agent-runner-railway',
       caller: 'agent-runner',
@@ -1048,6 +1071,8 @@ function logExecution(
       thinking_mode: input.thinkingMode ?? null,
       // MODELO por corrida (opt-in · relevo 25) · solo está la llave cuando el pedido lo trajo (el libro de siempre no cambia)
       ...(input.modelOverride ? { model_override: input.modelOverride } : {}),
+      // el tope de gasto saltó AL CERRAR y la respuesta final está completa: se guardó (no se descartó) · solo está la llave cuando pasó
+      ...(args.cerradaPorTope ? { cerrada_por_tope: true, cerrada_por_tope_detalle: mensajeDeCierreConTope(args.cerradaPorTope.tope, args.cerradaPorTope.costoUsd) } : {}),
       // límites de «mirar afuera» de la corrida (opt-in) · quedan en el libro para auditar · null = sin límites (como siempre)
       mirar_afuera_limites: input.mirarAfueraLimites ?? null,
       task_text: input.task.substring(0, 200),
@@ -1227,6 +1252,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   let drain: StreamDrainResult
   // ¿el SDK cortó por el tope de la corrida? (sólo puede ser true si el pedido trajo `maxBudgetUsd`)
   let cortePorTope = false
+  let cierreCortado = false
   let falloDelSdk: string | null = null
   // El cable para mirar · lo que de verdad se entregó al modelo (para el registro) · [] si no hubo imágenes.
   let imagenesEntregadas: ImagenEntregada[] = []
@@ -1271,6 +1297,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       )
       drain = wrapped.result
       cortePorTope = cortadoPorTope(input.maxBudgetUsd, drain.resultSubtype)
+      cierreCortado = cerradaPorTope(input.maxBudgetUsd, drain.resultSubtype, drain.cierreConTexto, drain.textoFinal)
       falloDelSdk = falloDelResultado(input.maxBudgetUsd, drain.resultSubtype, drain.resultIsError, drain.resultMessage)
       if (wrapped.retry.retried) {
         console.log(
@@ -1612,7 +1639,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     cache_creation_1h_tokens: drain.cacheCreation1hTokens,
   }
 
-  const falloFinal: string | null = cortePorTope ? mensajeDeCorte(input.maxBudgetUsd as number, costUsd) : falloDelSdk !== null ? mensajeDeFalloDelSdk(falloDelSdk, costUsd) : null
+  const falloFinal: string | null = cierreCortado ? null : cortePorTope ? mensajeDeCorte(input.maxBudgetUsd as number, costUsd) : falloDelSdk !== null ? mensajeDeFalloDelSdk(falloDelSdk, costUsd) : null
 
   // 5. Best-effort log · include brain enrichment + cache markers.
   //    Dual-write · `agents_log` (Railway runner forensics) + `agent_invocations`
@@ -1624,13 +1651,16 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     cacheMetrics: cacheMetricsMeta,
     fidelityForcedEmit: fidelityForcedEmitDebug,
     fallo: falloFinal,
+    cerradaPorTope: cierreCortado ? { tope: input.maxBudgetUsd as number, costoUsd: costUsd } : null,
   })
 
   const result: AgentRunResult = {
     // un corte por presupuesto o un error del resultado es un FALLO declarado, nunca un éxito con texto parcial
     success: falloFinal === null,
     ...(falloFinal !== null ? { error: falloFinal } : {}),
-    response: drain.responseText,
+    // tope saltado AL CERRAR con el texto final completo: se entrega ese texto (no el parcial de un corte a medias) y se marca
+    response: cierreCortado ? (drain.textoFinal as string) : drain.responseText,
+    ...(cierreCortado ? { cerradaPorTope: true } : {}),
     sessionId: drain.sessionId,
     inputTokens: drain.inputTokens,
     outputTokens: drain.outputTokens,
