@@ -388,7 +388,7 @@ describe('filas: lotes por fecha y marcas', () => {
   it('marcar: transiciones legales sí, ilegales 409 con el detalle', async () => {
     const { al, id } = await campanaActiva()
     expect((await filasMarcar(al, { ...wf(), campana_id: id, estado: 'lista_para_brief', fila_ids: ['s1-d1-a'] })).status).toBe(200)
-    expect((await filasMarcar(al, { ...wf(), campana_id: id, estado: 'aprobada', fila_ids: ['s1-d1-b'] })).status).toBe(409) // validada → aprobada no existe
+    expect((await filasMarcar(al, { ...wf(), campana_id: id, estado: 'aprobada', fila_ids: ['s1-d4-b'] })).status).toBe(409) // validada → aprobada no existe
     expect((await filasMarcar(al, { ...wf(), campana_id: id, estado: 'briefeada', fila_ids: ['s1-d1-a'] })).status).toBe(200)
     expect((await filasMarcar(al, { ...wf(), campana_id: id, estado: 'briefeada', fila_ids: ['no-existe'] })).status).toBe(409)
     expect((await filasListar(al, { ...wf(), campana_id: id, estado: 'briefeada' })).cuerpo.total).toBe(1)
@@ -517,5 +517,69 @@ describe('el reloj del vigía', () => {
 describe('el reloj de las esperas se usa en la bandeja (condición 5)', () => {
   it('expires_in_hours de un ítem de la bandeja supera a la alerta de 72 h', () => {
     expect(expiresInHours('2026-10-09T12:00:00Z', '2026-10-10')).toBeGreaterThan(72)
+  })
+})
+
+describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
+  it('🔴 tras 3 intentos fallidos de la misma llamada, un cuarto preparar no abre otra: necesita_humano (cadencia con tope, nunca reintento infinito)', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    for (let i = 0; i < 3; i++) {
+      const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+      await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, error: 'x' } }, AHORA)
+    }
+    al.campanas[0].estado = 'estrategia' // Emilio la devolvió a estrategia para otro intento
+    const cuarta = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    expect(cuarta.cuerpo.error).toBe('intentos_agotados')
+    expect(al.corridas).toHaveLength(3)
+  })
+  it('una llamada ya hecha (misma clave) no se repite ni se cobra otra vez', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    const mala = { ...A.estrategia, pilares: [{ clave: 'x', nombre: 'x', pct: 90 }] }
+    await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(mala) }, AHORA) // la llamada sirvió (ok) pero pide corrección
+    const otra = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    expect(otra.cuerpo.ya_hecha).toBe(true)
+    expect(al.corridas).toHaveLength(1)
+  })
+  it('el calendario exige una estrategia VALIDADA aunque la campaña esté en calendario', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    al.campanas[0].estado = 'calendario'
+    expect((await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).cuerpo.code).toBe('E-SIN-ESTRATEGIA')
+  })
+  it('un bloqueo que no es de dato deja dicho POR QUÉ la campaña necesita a Emilio', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, tema: 'Ritual de revisión de la semana' } : p)) }
+    const { g } = await tandaDe(al, id, 1, mala)
+    const p2 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
+    await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [piezaBuena(A, 4, 'b', 'Ritual de revisión de la semana')], ajustes_al_patron: [] }) }, AHORA)
+    expect(al.campanas[0].estado_motivo).toMatch(/tras la única corrección/)
+  })
+  it('una fila con un dato declarado PENDIENTE no sale a producción: queda en investigación con su reloj', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    const t = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 2 && p.slot === 'd' ? { ...p, tema: 'El café de la casa a un precio especial: $2,00', pendientes: ['confirmar el precio $2,00 con fuente'] } : p)) }
+    const { g } = await tandaDe(al, id, 1, t)
+    expect(g!.cuerpo).toMatchObject({ ok: true, en_investigacion: 1, validadas: 15 })
+    expect((await al.filas(id)).find((f) => f.id === 's2-d4-d')!.estado).toBe('en_investigacion')
+    expect(al.esperas.some((e) => e.objeto_tipo === 'dato_en_investigacion' && e.objeto_id === 's2-d4-d' && e.estado === 'viva')).toBe(true)
+  })
+  it('los lotes solo salen de una campaña ACTIVA (una pausada no se briefea aunque tenga filas)', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    await tandaDe(al, id, 1, tandaBuena(A))
+    expect(((await filasLotes(al, { ...wf(), campana_id: id, hoy: '2026-10-12' }, AHORA)).cuerpo.lotes as unknown[]).length).toBeGreaterThan(0)
+    al.campanas[0].estado = 'pausada'
+    expect((await filasLotes(al, { ...wf(), campana_id: id, hoy: '2026-10-12' }, AHORA)).cuerpo.lotes).toEqual([])
+  })
+  it('en ensayo los avisos se REGISTRAN, no se mandan, salvo que alertas_en_ensayo diga «enviar»', async () => {
+    const al = almacen({ config: { estado_cadena: 'ensayo', clientes_ensayo: [A.clientId], flujos: ['wf-cadena', 'wf-vigia'] } })
+    const vig = { workflow_id: 'wf-vigia', workflow_execution_id: 'v' }
+    expect((await relojDeLaCadena(al, vig, AHORA)).cuerpo.enviar_alertas).toBe(false)
+    al.config.set('alertas_en_ensayo', 'enviar')
+    expect((await relojDeLaCadena(al, vig, AHORA)).cuerpo.enviar_alertas).toBe(true)
   })
 })
