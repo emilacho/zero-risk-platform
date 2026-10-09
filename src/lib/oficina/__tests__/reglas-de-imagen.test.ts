@@ -51,7 +51,7 @@ describe('② chequearPrompts: ANTES de gastar la imagen', () => {
 describe('③ decideImagen: el curador describe, el CÓDIGO decide', () => {
   const obs = (o: Partial<ObservacionDeImagen> = {}): ObservacionDeImagen => ({
     indice: 0, reglas: [{ id: 'o1', presente: true }, { id: 'o2', presente: true }, { id: 'p1', presente: false }, { id: 'p2', presente: false }, { id: 'p3', presente: false }],
-    texto_visible: [], marcas: [], personas: 0, ...o,
+    texto_en_imagen: [], marcas: [], personas: 0, ...o,
   })
   it('pasa cuando todo obligatorio está y ningún prohibido', () => { expect(decideImagen(obs(), reglas, propios).pasa).toBe(true) })
   it('un obligatorio ausente o "no se ve" FALLA', () => {
@@ -70,8 +70,8 @@ describe('③ decideImagen: el curador describe, el CÓDIGO decide', () => {
     expect(r.pasa).toBe(false); expect(r.fallas[0].codigo).toBe('regla_omitida')
   })
   it('teléfono, usuario o enlace ajenos en el texto visible FALLAN; los del cliente no', () => {
-    expect(decideImagen(obs({ texto_visible: ['RUKUTÚ 0997664119 @rukutuio'] }), reglas, propios).fallas.map((f) => f.codigo)).toContain('dato_ajeno')
-    expect(decideImagen(obs({ texto_visible: ['Pide al 0997744288 · @marca.propia · www.marca-propia.ec/menu'] }), reglas, propios).pasa).toBe(true)
+    expect(decideImagen(obs({ texto_en_imagen: ['RUKUTÚ 0997664119 @rukutuio'] }), reglas, propios).fallas.map((f) => f.codigo)).toContain('dato_ajeno')
+    expect(decideImagen(obs({ texto_en_imagen: ['Pide al 0997744288 · @marca.propia · www.marca-propia.ec/menu'] }), reglas, propios).pasa).toBe(true)
   })
   it('una marca ajena visible FALLA', () => {
     expect(decideImagen(obs({ marcas: ['Rukutú'] }), reglas, propios).fallas[0].codigo).toBe('marca_ajena')

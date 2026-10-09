@@ -48,7 +48,7 @@ export function chequearPrompts(prompts: string[], reglas: ReglasDeImagen, propi
 export interface ObservacionDeImagen {
   indice: number
   reglas: Array<{ id: string; presente: boolean | 'no_se_ve'; evidencia?: string }>
-  texto_visible: string[]
+  texto_en_imagen: string[]
   marcas: string[]
   personas: number
   producto?: string
@@ -89,7 +89,7 @@ export function decideImagen(obs: ObservacionDeImagen, reglas: ReglasDeImagen, p
     if (v === undefined) fallas.push({ codigo: 'regla_omitida', detalle: `el curador no se pronunció sobre el prohibido «${r.id}»` })
     else if (v === true) fallas.push({ codigo: 'prohibido_presente', detalle: `aparece el prohibido «${r.id}» (${r.texto})` })
   }
-  for (const a of datosAjenos(obs.texto_visible, propios)) fallas.push({ codigo: 'dato_ajeno', detalle: `texto visible con ${a} que no es del cliente` })
+  for (const a of datosAjenos(obs.texto_en_imagen, propios)) fallas.push({ codigo: 'dato_ajeno', detalle: `texto visible con ${a} que no es del cliente` })
   for (const m of obs.marcas) {
     if (m.trim() && propios.marcas_ajenas.some((x) => x && normalizar(m).includes(normalizar(x)))) fallas.push({ codigo: 'marca_ajena', detalle: `marca ajena visible («${m}»)` })
   }

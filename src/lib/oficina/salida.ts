@@ -40,11 +40,11 @@ export const ESQUEMAS: Record<string, Esq> = {
       imagenes: {
         t: 'arr', min: 1, max: 6,
         de: {
-          t: 'obj', req: ['indice', 'reglas', 'texto_visible', 'marcas', 'personas'],
+          t: 'obj', req: ['indice', 'reglas', 'texto_en_imagen', 'marcas', 'personas'],
           props: {
             indice: { t: 'num', min: 0, max: 20 },
             reglas: { t: 'arr', max: 40, de: { t: 'obj', req: ['id', 'presente'], props: { id: str(1, 60), presente: { t: 'enum', v: [true, false, 'no_se_ve'] }, evidencia: str(0, 400) } } },
-            texto_visible: { t: 'arr', de: str(0, 200), max: 30 }, marcas: { t: 'arr', de: str(0, 120), max: 20 },
+            texto_en_imagen: { t: 'arr', de: str(0, 200), max: 30 }, marcas: { t: 'arr', de: str(0, 120), max: 20 },
             personas: { t: 'num', min: 0, max: 50 }, producto: str(0, 200), elementos_visibles: { t: 'arr', de: str(0, 120), max: 40 },
           },
         },

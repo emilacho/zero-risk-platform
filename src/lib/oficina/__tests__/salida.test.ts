@@ -56,7 +56,7 @@ describe('① el formato de la salida lo hace cumplir el código', () => {
 
 describe('esquemas de la observación y de las fichas', () => {
   it('la observación acepta presente = true | false | "no_se_ve" y rechaza otro valor', () => {
-    const ok = { imagenes: [{ indice: 0, reglas: [{ id: 'a', presente: 'no_se_ve' }], texto_visible: [], marcas: [], personas: 0 }], preferencia: [0] }
+    const ok = { imagenes: [{ indice: 0, reglas: [{ id: 'a', presente: 'no_se_ve' }], texto_en_imagen: [], marcas: [], personas: 0 }], preferencia: [0] }
     expect(procesarSalida(JSON.stringify(ok), 'observacion_imagen.v1', 0, 1).ok).toBe(true)
     const mala = JSON.parse(JSON.stringify(ok)); mala.imagenes[0].reglas[0].presente = 'quizás'
     expect(procesarSalida(JSON.stringify(mala), 'observacion_imagen.v1', 1, 1).ok).toBe(false)
