@@ -61,6 +61,8 @@ export interface ResultadoRecoleccion {
   /** dos fichas de Mapas distintas pasaron la prueba para la MISMA sede: se DECLARAN (y, si difieren en un dato, ese dato queda en conflicto, nunca se elige uno) */
   choques: ChoqueDeFichas[]
   nuevas: number
+  /** datos que se volvieron a leer y siguen IGUAL: se anota «reconfirmado» con la fecha de esa lectura, sin crear una observación nueva */
+  reconfirmadas: number
   fuentes_leidas: { sitio: number; instagram: number; mapas: number }
 }
 
@@ -93,7 +95,7 @@ function esDeLaCuentaPropia(fila: FilaApify, propio: string | null): boolean {
 const primerItem = (r: unknown): Record<string, unknown> | null => (Array.isArray(r) ? (r[0] as Record<string, unknown>) ?? null : r && typeof r === 'object' ? (r as Record<string, unknown>) : null)
 
 export async function recolectarSedes(supabase: SupabaseClient, clientId: string): Promise<ResultadoRecoleccion> {
-  const vacio: ResultadoRecoleccion = { ok: false, sedes: [], textos_propios: [], descartes: [], de_la_cuenta: 0, mapas_por_sede: [], choques: [], nuevas: 0, fuentes_leidas: { sitio: 0, instagram: 0, mapas: 0 } }
+  const vacio: ResultadoRecoleccion = { ok: false, sedes: [], textos_propios: [], descartes: [], de_la_cuenta: 0, mapas_por_sede: [], choques: [], nuevas: 0, reconfirmadas: 0, fuentes_leidas: { sitio: 0, instagram: 0, mapas: 0 } }
   try {
     const cli = RAPIDO(await supabase.from('clients').select('id,name,website_url,config').eq('id', clientId).limit(1), 'leer el cliente') as Array<{ id: string; name: string; website_url?: string | null; config: unknown }>
     if (!cli[0]) return { ...vacio, error: 'el cliente ' + clientId + ' no existe' }
@@ -155,21 +157,24 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
       const nuevas = RAPIDO(await supabase.from('client_sedes').insert(faltantes.map((s) => ({ client_id: clientId, clave: s.clave, ciudad: s.ciudad }))).select('id,clave,ciudad'), 'guardar las sedes') as Array<{ id: string; clave: string; ciudad: string }>
       for (const s of nuevas) porClave.set(s.clave, s)
     }
-    const guardadas = RAPIDO(await supabase.from('client_sede_datos').select('sede_id,campo,fuente,valor_norm,valor_texto,observado_en').eq('client_id', clientId), 'leer las observaciones') as Array<{ sede_id: string | null; campo: string; fuente: string; valor_norm: unknown; valor_texto: string; observado_en: string }>
+    const guardadas = RAPIDO(await supabase.from('client_sede_datos').select('id,sede_id,campo,fuente,valor_norm,valor_texto,observado_en,reconfirmado_en').eq('client_id', clientId), 'leer las observaciones') as Array<{ id: string; reconfirmado_en: string | null; sede_id: string | null; campo: string; fuente: string; valor_norm: unknown; valor_texto: string; observado_en: string }>
     const llave = (sedeId: string | null, campo: string, fuente: string, norm: unknown, texto: string, cuando: string | null) =>
       [sedeId || '', campo, fuente, JSON.stringify(norm ?? texto), String(cuando ? new Date(cuando).toISOString() : '')].join('|')
     const ya = new Set(guardadas.map((g) => llave(g.sede_id, g.campo, g.fuente, g.valor_norm, g.valor_texto, g.observado_en)))
     // D2 · una ficha raspada varias veces con el MISMO contenido no duplica observaciones: se compara con LO ÚLTIMO guardado de cada (sede · campo · fuente) y sólo se agrega si cambió
     //      (A → B → A sí agrega la vuelta a A: se compara con lo último, no con «alguna vez existió»)
-    const ultimo = new Map<string, { cuando: number; valor: string }>()
+    //      Lo que se vuelve a leer y sigue IGUAL no crea fila: se anota «reconfirmado» en esa última fila con la fecha de la lectura (`observado_en` no se toca)
+    type Ultimo = { cuando: number; valor: string; reconf: number; id: string | null; pendiente: Record<string, unknown> | null }
+    const ultimo = new Map<string, Ultimo>()
     const grupo = (sedeId: string | null, campo: string, fuente: string) => [sedeId || '', campo, fuente].join('|')
     const valorDe = (norm: unknown, texto: string) => JSON.stringify(norm ?? texto)
     for (const g of guardadas) {
       const k = grupo(g.sede_id, g.campo, g.fuente)
       const c = new Date(g.observado_en).getTime()
-      if (!ultimo.has(k) || c >= ultimo.get(k)!.cuando) ultimo.set(k, { cuando: c, valor: valorDe(g.valor_norm, g.valor_texto) })
+      if (!ultimo.has(k) || c >= ultimo.get(k)!.cuando) ultimo.set(k, { cuando: c, valor: valorDe(g.valor_norm, g.valor_texto), reconf: g.reconfirmado_en ? new Date(g.reconfirmado_en).getTime() : 0, id: g.id, pendiente: null })
     }
     const aInsertar: Record<string, unknown>[] = []
+    const reconfirmaciones = new Map<string, number>()
     let deLaCuenta = 0
     const enOrden = [...obs].sort((x, y) => String(x.observado_en ?? '').localeCompare(String(y.observado_en ?? '')))
     for (const o of enOrden) {
@@ -183,12 +188,22 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
       const g = grupo(sede ? sede.id : null, o.campo, o.fuente)
       const cuando = new Date(o.observado_en).getTime()
       const previo = ultimo.get(g)
-      if (previo && cuando >= previo.cuando && previo.valor === valorDe(o.valor_norm, o.valor_texto)) continue // el mismo contenido que lo último guardado
+      if (previo && cuando >= previo.cuando && previo.valor === valorDe(o.valor_norm, o.valor_texto)) {
+        // el mismo contenido que lo último guardado: no hay fila nueva; si esta lectura es MÁS NUEVA que la última confirmación, se anota
+        if (cuando > Math.max(previo.cuando, previo.reconf)) {
+          previo.reconf = cuando
+          if (previo.pendiente) previo.pendiente.reconfirmado_en = o.observado_en
+          else if (previo.id) reconfirmaciones.set(previo.id, cuando)
+        }
+        continue
+      }
       ya.add(k)
-      if (!previo || cuando >= previo.cuando) ultimo.set(g, { cuando, valor: valorDe(o.valor_norm, o.valor_texto) })
-      aInsertar.push({ client_id: clientId, sede_id: sede ? sede.id : null, campo: o.campo, valor_texto: o.valor_texto, valor_norm: o.valor_norm ?? null, fuente: o.fuente, fuente_ref: o.fuente_ref, alcance: sede ? 'sede' : 'cuenta', observado_en: o.observado_en })
+      const fila: Record<string, unknown> = { client_id: clientId, sede_id: sede ? sede.id : null, campo: o.campo, valor_texto: o.valor_texto, valor_norm: o.valor_norm ?? null, fuente: o.fuente, fuente_ref: o.fuente_ref, alcance: sede ? 'sede' : 'cuenta', observado_en: o.observado_en }
+      if (!previo || cuando >= previo.cuando) ultimo.set(g, { cuando, valor: valorDe(o.valor_norm, o.valor_texto), reconf: 0, id: null, pendiente: fila })
+      aInsertar.push(fila)
     }
     if (aInsertar.length) RAPIDO(await supabase.from('client_sede_datos').insert(aInsertar), 'guardar las observaciones')
+    for (const [id, cuando] of reconfirmaciones) RAPIDO(await supabase.from('client_sede_datos').update({ reconfirmado_en: new Date(cuando).toISOString() }).eq('id', id).eq('client_id', clientId), 'anotar la reconfirmación')
 
     // ── la ficha resuelta, desde TODO lo guardado (no sólo lo de hoy) ──
     const todas = RAPIDO(await supabase.from('client_sede_datos').select('sede_id,campo,valor_texto,valor_norm,fuente,fuente_ref,alcance,observado_en').eq('client_id', clientId), 'leer la ficha de sedes') as Array<{ sede_id: string | null; campo: Observacion['campo']; valor_texto: string; valor_norm: unknown; fuente: Observacion['fuente']; fuente_ref: string | null; alcance: Observacion['alcance']; observado_en: string }>
@@ -231,7 +246,7 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
       if (!elegida.r.direccion) falta.push('dirección'); if (!elegida.r.horario) falta.push('horario'); if (!elegida.r.telefono) falta.push('teléfono'); if (elegida.r.puntaje === null) falta.push('puntaje'); if (elegida.r.resenas === null) falta.push('reseñas'); if (elegida.r.fotos === null) falta.push('fotos')
       mapas_por_sede.push({ sede: s.clave, ciudad: s.ciudad, ficha: { titulo: String(elegida.a.item.title || ''), ref: elegida.a.ref, prueba: elegida.a.prueba, observado_en: elegida.a.cuando }, aporta: elegida.r, falta })
     }
-    return { ok: true, sedes, textos_propios: textos, descartes, de_la_cuenta: deLaCuenta, mapas_por_sede, choques, nuevas: aInsertar.length, fuentes_leidas: { sitio: nSitio, instagram: nIg, mapas: nMapas } }
+    return { ok: true, sedes, textos_propios: textos, descartes, de_la_cuenta: deLaCuenta, mapas_por_sede, choques, nuevas: aInsertar.length, reconfirmadas: reconfirmaciones.size + aInsertar.filter((f) => f.reconfirmado_en).length, fuentes_leidas: { sitio: nSitio, instagram: nIg, mapas: nMapas } }
   } catch (e) {
     return { ...vacio, error: e instanceof Error ? e.message : String(e) }
   }

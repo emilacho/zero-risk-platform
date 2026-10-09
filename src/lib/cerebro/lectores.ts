@@ -197,11 +197,13 @@ export async function leerSitio(ctx: Contexto): Promise<Salida> {
   return exito({ sitio: estadoDeFuente(sitio), productos: estadoDeFuente(lineasCatalogo.length, detalleProductos) }, [...lineas, ...lineasCatalogo])
 }
 
+const masNueva = (a: string | null, b: string | null): string | null => (a && b ? (new Date(b).getTime() > new Date(a).getTime() ? b : a) : a ?? b)
+
 // ── sedes y sus datos (se acumulan observaciones: queda la última de cada sede, campo y fuente) ──
 export async function leerSedes(ctx: Contexto): Promise<Salida> {
   const [s, d] = await Promise.all([
     leer(ctx, { tabla: 'client_sedes', columnas: ['id', 'clave', 'ciudad', 'created_at', 'updated_at'], donde: { client_id: ctx.cliente } }),
-    leer(ctx, { tabla: 'client_sede_datos', columnas: ['id', 'sede_id', 'campo', 'valor_texto', 'fuente', 'alcance', 'observado_en'], donde: { client_id: ctx.cliente } }),
+    leer(ctx, { tabla: 'client_sede_datos', columnas: ['id', 'sede_id', 'campo', 'valor_texto', 'fuente', 'alcance', 'observado_en', 'reconfirmado_en'], donde: { client_id: ctx.cliente } }),
   ])
   const fuentes: Partial<Record<NombreDeFuente, EstadoDeFuente>> = {}
   const lineas: Ficha[] = []
@@ -232,7 +234,8 @@ export async function leerSedes(ctx: Contexto): Promise<Salida> {
       ld.push(linea(ctx, {
         ref: `client_sede_datos:${f.id}`, estante: 'E2', clase: 'dato_de_sede', titulo: `${campo} · ${sede ?? 'cuenta'} · ${fuente}`, que_es: texto(f.valor_texto) ?? '',
         origen: fuente === 'dueno' ? 'dueno' : 'su_fuente', estado: fuente === 'dueno' ? 'dicho_por_dueno' : 'visto_en_su_fuente',
-        fecha: iso(f.observado_en), plazo, sede, observaciones_anteriores: orden.length - 1,
+        // la vigencia corre desde la lectura MÁS NUEVA: si se volvió a leer y seguía igual, no vence por haber sido visto hace tiempo
+        fecha: masNueva(iso(f.observado_en), iso(f.reconfirmado_en)), plazo, sede, observaciones_anteriores: orden.length - 1,
       }))
     }
     lineas.push(...ld); fuentes.datos_de_sede = estadoDeFuente(ld.length)

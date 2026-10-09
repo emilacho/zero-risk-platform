@@ -23,8 +23,8 @@ function baseEnMemoria(tablas: Record<string, Fila[]>, opciones: { fallaEn?: str
   const nuevoId = () => '00000000-0000-4000-8000-' + String(++n).padStart(12, '0')
   const llamadas: { tabla: string; op: string; filas?: number }[] = []
   function from(tabla: string) {
-    const q: { filtros: [string, unknown][]; en: [string, unknown[]][]; orden: [string, boolean] | null; tope: number | null; insertadas: Fila[] | null; proyectar: boolean } =
-      { filtros: [], en: [], orden: null, tope: null, insertadas: null, proyectar: false }
+    const q: { filtros: [string, unknown][]; en: [string, unknown[]][]; orden: [string, boolean] | null; tope: number | null; insertadas: Fila[] | null; proyectar: boolean; cambios: Fila | null } =
+      { filtros: [], en: [], orden: null, tope: null, insertadas: null, proyectar: false, cambios: null }
     const api: Record<string, unknown> = {
       select: () => api, // sirve tanto para leer como para encadenar tras un insert
       eq: (c: string, v: unknown) => { q.filtros.push([c, v]); return api },
@@ -38,9 +38,11 @@ function baseEnMemoria(tablas: Record<string, Fila[]>, opciones: { fallaEn?: str
         llamadas.push({ tabla, op: 'insert', filas: con.length })
         return api
       },
+      update: (v: Fila) => { q.cambios = v; return api }, // anotar «reconfirmado» en una fila ya guardada
       then: (ok: (v: unknown) => unknown) => {
         if (opciones.fallaEn === tabla) return Promise.resolve({ data: null, error: { message: 'la base no contesta' } }).then(ok)
         let filas = q.insertadas ?? (tablas[tabla] || []).filter((f) => q.filtros.every(([c, v]) => f[c] === v) && q.en.every(([c, vs]) => vs.includes(f[c])))
+        if (q.cambios) { for (const f of filas) Object.assign(f, q.cambios); llamadas.push({ tabla, op: 'update', filas: filas.length }); return Promise.resolve({ data: filas, error: null }).then(ok) }
         if (q.orden) { const [c, asc] = q.orden; filas = [...filas].sort((a, b) => (String(a[c]) < String(b[c]) ? -1 : 1) * (asc ? 1 : -1)) }
         if (q.tope !== null) filas = filas.slice(0, q.tope)
         if (!q.insertadas) llamadas.push({ tabla, op: 'select' })

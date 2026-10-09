@@ -40,30 +40,30 @@ function armar(contesta: Contesta, over: Partial<DepsDeEtiquetar> = {}, t: Tabla
   }
   return { deps, espia, base }
 }
-const bueno = (extra: Record<string, unknown> = {}) => JSON.stringify({ que_muestra: 'un plato de pescado con arroz sobre una mesa de madera', producto_visto: ['Servicio uno'], texto_visible: 'PLATO DEL DÍA', confianza: 'alta', ...extra })
+const bueno = (extra: Record<string, unknown> = {}) => JSON.stringify({ que_muestra: 'un plato de pescado con arroz sobre una mesa de madera', producto_visto: ['Servicio uno'], texto_visible: 'PLATO DEL DÍA', confianza: 'alta', con_personas: 'no', tipo_de_toma: 'producto', ...extra })
 const cuerpo = (extra: Record<string, unknown> = {}) => ({ cliente: A, foto: 'f1', workflow_id: 'wf-etiquetar', workflow_execution_id: 'ex-1', ...extra })
 const salida = (r: { cuerpo: Record<string, unknown> }) => r.cuerpo as Record<string, any>
 
 afterEach(() => { vi.restoreAllMocks() })
 
-describe('el camino feliz: UNA llamada, escribe EXACTAMENTE las 6 columnas de etiqueta', () => {
+describe('el camino feliz: UNA llamada, escribe EXACTAMENTE las 9 columnas de etiqueta (6 + la toma)', () => {
   it('lee la foto del cliente, baja la foto de nuestro almacén, llama UNA vez al modelo y guarda lo que muestra', async () => {
     const { deps, espia } = armar(bueno())
     const r = await etiquetar(deps, cuerpo())
     expect(r.status).toBe(200)
     expect(salida(r)).toMatchObject({ modo: 'etiquetado', escribio: true, llamo_al_modelo: true })
-    expect(salida(r).etiqueta).toEqual({ que_muestra: 'un plato de pescado con arroz sobre una mesa de madera', producto_visto: ['Servicio uno'], texto_visible: 'PLATO DEL DÍA', confianza: 'alta' })
+    expect(salida(r).etiqueta).toEqual({ que_muestra: 'un plato de pescado con arroz sobre una mesa de madera', producto_visto: ['Servicio uno'], texto_visible: 'PLATO DEL DÍA', confianza: 'alta', con_personas: false, tipo_de_toma: 'producto', formato: null })
     expect(espia.bajadas).toEqual([`${ALMACEN}/${A}/f1.jpg`])
     expect(espia.peticiones).toHaveLength(1)
     expect(espia.escrituras).toHaveLength(1)
   })
-  it('escribe EXACTAMENTE las 6 columnas de etiqueta (que_muestra, producto_visto, etiquetada_en, etiqueta_modelo, texto_visible, etiqueta_confianza): jamás `producto`, `url`, `caption`…', async () => {
+  it('escribe EXACTAMENTE las 9 columnas (las 6 de la etiqueta + con_personas, tipo_de_toma, formato): jamás `producto`, `url`, `caption`…', async () => {
     const { deps, espia } = armar(bueno())
     await etiquetar(deps, cuerpo())
     const e = espia.escrituras[0]
-    const SEIS = ['etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra', 'texto_visible']
-    expect(Object.keys(e.valores).sort()).toEqual(SEIS)
-    expect([...COLUMNAS_QUE_ESCRIBE].sort()).toEqual(SEIS)
+    const NUEVE = ['con_personas', 'etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'formato', 'producto_visto', 'que_muestra', 'texto_visible', 'tipo_de_toma']
+    expect(Object.keys(e.valores).sort()).toEqual(NUEVE)
+    expect([...COLUMNAS_QUE_ESCRIBE].sort()).toEqual(NUEVE)
     expect(e).toMatchObject({ foto_id: 'f1', cliente: A })
     expect(e.valores.etiquetada_en).toBe(AHORA.toISOString())
     expect(e.valores.etiqueta_modelo).toBe(MODELO)
@@ -81,7 +81,7 @@ describe('el camino feliz: UNA llamada, escribe EXACTAMENTE las 6 columnas de et
     expect(salida(r).etiqueta.texto_visible).toBe('PLATO DEL DÍA')
     expect(salida(r).etiqueta.confianza).toBe('media')
     expect(String(espia.registros[0].response_text)).toMatch(/PLATO DEL DÍA/)
-    expect(salida(r).columnas_escritas.sort()).toEqual(['etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'producto_visto', 'que_muestra', 'texto_visible'])
+    expect(salida(r).columnas_escritas.sort()).toEqual(['con_personas', 'etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'formato', 'producto_visto', 'que_muestra', 'texto_visible', 'tipo_de_toma'])
   })
   it('un texto visible vacío se guarda vacío (no se inventa) y una confianza rara se guarda como «baja»; el texto largo se guarda acotado', async () => {
     const vacio = armar(bueno({ texto_visible: '', confianza: 'segurísima' }))
@@ -89,7 +89,7 @@ describe('el camino feliz: UNA llamada, escribe EXACTAMENTE las 6 columnas de et
     expect(vacio.espia.escrituras[0].valores).toMatchObject({ texto_visible: '', etiqueta_confianza: 'baja' })
     const largo = armar(bueno({ texto_visible: 'y'.repeat(2000) }))
     await etiquetar(largo.deps, cuerpo())
-    expect(largo.espia.escrituras[0].valores.texto_visible.length).toBeLessThanOrEqual(500)
+    expect(largo.espia.escrituras[0].valores.texto_visible!.length).toBeLessThanOrEqual(500)
   })
   it('la petición al modelo: Sonnet 5.5, razonamiento al mínimo, tope de salida, tiempo, la foto en base64, SIN temperatura', async () => {
     const { deps, espia } = armar(bueno())
