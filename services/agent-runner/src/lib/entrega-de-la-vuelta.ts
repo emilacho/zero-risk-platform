@@ -146,6 +146,8 @@ export function cuerpoDeLaVuelta(
     durationMs?: number
     brainEnrichment?: unknown
     cacheMetrics?: unknown
+    structuredOutput?: unknown
+    structuredOutputValid?: boolean
     error?: string
   },
   contexto: { agentName: string; dispatchKey: string | null },
@@ -174,6 +176,9 @@ export function cuerpoDeLaVuelta(
     duration_ms: result.durationMs,
     ...(result.brainEnrichment ? { brain_enrichment: result.brainEnrichment } : {}),
     ...(result.cacheMetrics ? { cache_metrics: result.cacheMetrics } : {}),
+    // SALIDA ESTRUCTURADA · solo cuando se pidió esquema · la vuelta lleva el objeto y si es válido (ausente ⇒ la vuelta de siempre)
+    ...(result.structuredOutputValid !== undefined ? { structured_output_valid: result.structuredOutputValid } : {}),
+    ...(result.structuredOutput !== undefined ? { structured_output: result.structuredOutput } : {}),
     ...marca,
   }
 }
