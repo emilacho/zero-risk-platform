@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS public.cadena_calendario_filas (
   sede               text,
   requiere_abierto   boolean     NOT NULL DEFAULT false,
   depende_de         text[]      NOT NULL DEFAULT '{}',
+  pieza_fija         text,
   datos              jsonb       NOT NULL DEFAULT '[]'::jsonb,
   pendientes         text[]      NOT NULL DEFAULT '{}',
   tipo_salida        integer,
