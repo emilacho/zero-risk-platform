@@ -13,19 +13,28 @@ export const MODELOS_POR_CORRIDA = ['claude-opus-5-5', 'claude-opus-5', 'claude-
 export type ModeloPorCorrida = (typeof MODELOS_POR_CORRIDA)[number]
 
 /**
+ * Ids con precio oficial que se usan SOLO por la fila del agente (`agents.model` → `MODEL_MAP`), NO por `model_override` (relevo 38 · `design-image-prompt-engineer` a Sonnet 5.5).
+ * La lista de override y su copia de la ruta no cambian: abrirla a Sonnet 5.5 es una decisión aparte (y los agentes que fuerzan una herramienta fallarían: Sonnet 5.5 rechaza `tool_choice` any/tool con 400).
+ */
+export const MODELOS_SOLO_POR_FILA = ['claude-sonnet-5-5'] as const
+export type ModeloSoloPorFila = (typeof MODELOS_SOLO_POR_FILA)[number]
+
+/**
  * PRECIOS OFICIALES · US$ por millón de tokens · fuente: https://platform.claude.com/docs/en/about-claude/pricing (tabla «Model pricing», leída el 2026-10-09).
  *   claude-fable-5-1 · entrada 10 · salida 50 · lectura de caché 0,25 (0,025× la entrada)
  *   claude-opus-5-5  · entrada 4  · salida 20 · lectura de caché 0,20 (0,05× la entrada)
  *   claude-opus-5 / 4-8 / 4-7 · entrada 5 · salida 25 · lectura de caché 0,50 (0,1×)
  * Las escrituras de caché valen 1,25× (5 min) y 2× (1 h) la entrada en todos estos modelos (Opus 5.5: 5 y 8 sobre 4; Fable 5.1: 12,50 y 20 sobre 10).
+ *   claude-sonnet-5-5 · entrada 2 · salida 10 · lectura de caché 0,10 (0,05× la entrada) · escritura 5 min 2,50 · 1 h 4 (relevo 38 · fuente: https://platform.claude.com/docs/en/models/sonnet-5-5/overview)
  * Solo estos ids tienen precio propio; el resto sigue con la tabla por familia de siempre (no se cambió el costo de ningún modelo que ya corría).
  */
-export const PRECIOS_OFICIALES: Record<ModeloPorCorrida, { entrada: number; salida: number; lecturaCache: number }> = {
+export const PRECIOS_OFICIALES: Record<ModeloPorCorrida | ModeloSoloPorFila, { entrada: number; salida: number; lecturaCache: number }> = {
   'claude-opus-5-5': { entrada: 4, salida: 20, lecturaCache: 0.2 },
   'claude-opus-5': { entrada: 5, salida: 25, lecturaCache: 0.5 },
   'claude-opus-4-8': { entrada: 5, salida: 25, lecturaCache: 0.5 },
   'claude-opus-4-7': { entrada: 5, salida: 25, lecturaCache: 0.5 },
   'claude-fable-5-1': { entrada: 10, salida: 50, lecturaCache: 0.25 },
+  'claude-sonnet-5-5': { entrada: 2, salida: 10, lecturaCache: 0.1 },
 }
 
 export type ModeloResuelto = { ok: true; valor: ModeloPorCorrida | null } | { ok: false; motivo: string }
