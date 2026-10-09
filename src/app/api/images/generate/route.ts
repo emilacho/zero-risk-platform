@@ -3,7 +3,8 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString } from '@/lib/validation'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { capture } from '@/lib/posthog'
-import { PRICING_BY_SIZE, priceForSize } from '@/lib/image-pricing'
+import { PRICING_BY_SIZE, costForImage, type ImageUsage } from '@/lib/image-pricing'
+import { imageBytesFromItem, sniffImageFormat, type ImagesApiItem } from '@/lib/image-response'
 import { randomUUID } from 'node:crypto'
 import { checkInternalKey } from '@/lib/internal-auth'
 
@@ -11,13 +12,21 @@ import { checkInternalKey } from '@/lib/internal-auth'
 //
 // POST /api/images/generate
 // Body: { prompt, client_id?, agent_slug?, size?, model?, caller? }
-// Uses gpt-image-1 (Stack canonical · STACK_FINAL_V3). The model returns
-// base64 only (no `response_format: "url"` like DALL-E 3), so we decode and
-// upload to the `agent-images` Supabase Storage bucket to produce a stable
-// public URL the caller can paste into Notion / GHL / dashboards.
+// Modelo: body.model › env IMAGE_MODEL › 'gpt-image-1' (se retira el 23-oct-2026;
+// el reemplazo se activa cambiando IMAGE_MODEL, sin tocar código). La respuesta
+// puede traer `b64_json` o `url`: en ambos casos se sube al bucket
+// `agent-images` de Supabase Storage para dar una URL pública estable que el
+// llamador pueda pegar en Notion / dashboards. Costo: real por tokens si la
+// respuesta trae `usage` (ver image-pricing.ts).
 
 const STORAGE_BUCKET = 'agent-images'
-const DEFAULT_MODEL = 'gpt-image-1'
+const FALLBACK_MODEL = 'gpt-image-1'
+const QUALITIES = new Set(['low', 'medium', 'high', 'auto'])
+
+/** Modelo por defecto · leído en cada pedido para que un cambio de env aplique sin redeploy de código. */
+function defaultModel(): string {
+  return sanitizeString(process.env.IMAGE_MODEL, 50) || FALLBACK_MODEL
+}
 const DEFAULT_SIZE = '1024x1024'
 
 export const runtime = 'nodejs'
@@ -46,7 +55,9 @@ export async function POST(request: Request) {
   }
 
   const size = sanitizeString(body.size as string | undefined, 20) || DEFAULT_SIZE
-  const model = sanitizeString(body.model as string | undefined, 50) || DEFAULT_MODEL
+  const model = sanitizeString(body.model as string | undefined, 50) || defaultModel()
+  const qualityRaw = sanitizeString(body.quality as string | undefined, 10)
+  const quality = qualityRaw && QUALITIES.has(qualityRaw) ? qualityRaw : null
   const agentSlug = sanitizeString(body.agent_slug as string | undefined, 60) || null
   const caller = sanitizeString(body.caller as string | undefined, 40) || 'api'
   const resolvedClientId = resolveClientIdFromBody(body)
@@ -71,7 +82,8 @@ export async function POST(request: Request) {
 
   // --- 1. Call OpenAI Images API -------------------------------------------
   let openaiData: {
-    data?: Array<{ b64_json?: string; revised_prompt?: string }>
+    data?: ImagesApiItem[]
+    usage?: ImageUsage
     error?: { message?: string; type?: string }
   }
   let openaiStatus = 0
@@ -82,7 +94,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${openaiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ prompt, model, size, n: 1 }),
+      body: JSON.stringify({ prompt, model, size, n: 1, ...(quality ? { quality } : {}) }),
     })
     openaiStatus = openaiRes.status
     openaiData = await openaiRes.json()
@@ -103,8 +115,13 @@ export async function POST(request: Request) {
     )
   }
 
-  if (openaiStatus >= 400 || !openaiData?.data?.[0]?.b64_json) {
-    const errMsg = openaiData?.error?.message || `openai_status_${openaiStatus}`
+  const imageBuffer =
+    openaiStatus < 400 ? await imageBytesFromItem(openaiData?.data?.[0]) : null
+
+  if (openaiStatus >= 400 || !imageBuffer) {
+    const errMsg =
+      openaiData?.error?.message ||
+      (openaiStatus < 400 ? 'no_image_in_response' : `openai_status_${openaiStatus}`)
     await persistFailure({
       supabase,
       clientId: resolvedClientId,
@@ -130,16 +147,15 @@ export async function POST(request: Request) {
   }
 
   // --- 2. Decode + upload to Supabase Storage -----------------------------
-  const b64 = openaiData.data[0].b64_json!
-  const revisedPrompt = openaiData.data[0].revised_prompt ?? null
-  const imageBuffer = Buffer.from(b64, 'base64')
+  const revisedPrompt = openaiData.data?.[0]?.revised_prompt ?? null
+  const format = sniffImageFormat(imageBuffer)
   const generationId = randomUUID()
-  const storagePath = `${resolvedClientId ?? 'system'}/${generationId}.png`
+  const storagePath = `${resolvedClientId ?? 'system'}/${generationId}.${format.ext}`
 
   const uploadRes = await supabase.storage
     .from(STORAGE_BUCKET)
     .upload(storagePath, imageBuffer, {
-      contentType: 'image/png',
+      contentType: format.contentType,
       upsert: false,
     })
 
@@ -166,7 +182,11 @@ export async function POST(request: Request) {
   const imageUrl = publicUrlData.publicUrl
 
   // --- 3. Persist agent_image_generations row -----------------------------
-  const costUsd = priceForSize(size)
+  const { cost_usd: costUsd, basis: costBasis } = costForImage({
+    model,
+    size,
+    usage: openaiData.usage,
+  })
 
   const { data: row, error: insertError } = await supabase
     .from('agent_image_generations')
@@ -185,7 +205,7 @@ export async function POST(request: Request) {
       caller,
       // raw_response excluded · holds the b64 blob which we already store in
       // Storage. Keep DB small.
-      raw_response: { revised_prompt: revisedPrompt },
+      raw_response: { revised_prompt: revisedPrompt, usage: openaiData.usage ?? null, cost_basis: costBasis, quality },
     })
     .select('id, created_at')
     .single()
@@ -200,6 +220,7 @@ export async function POST(request: Request) {
     model,
     size,
     cost_usd: costUsd,
+    cost_basis: costBasis,
     generation_id: generationId,
   })
 
@@ -210,6 +231,7 @@ export async function POST(request: Request) {
     storage_path: storagePath,
     revised_prompt: revisedPrompt,
     cost_usd: costUsd,
+    cost_basis: costBasis,
     model,
     size,
     client_id: resolvedClientId,
@@ -221,7 +243,7 @@ export async function GET() {
   return NextResponse.json({
     endpoint: '/api/images/generate',
     method: 'POST',
-    model: DEFAULT_MODEL,
+    model: defaultModel(),
     sizes_supported: Object.keys(PRICING_BY_SIZE),
     pricing_usd: PRICING_BY_SIZE,
     body_shape: {
@@ -229,7 +251,8 @@ export async function GET() {
       client_id: 'string (optional · multi-path resolver Fix 8b)',
       agent_slug: 'string (optional)',
       size: '"1024x1024" | "1024x1536" | "1536x1024"',
-      model: 'string (default gpt-image-1)',
+      model: 'string (default env IMAGE_MODEL, else gpt-image-1)',
+      quality: '"low" | "medium" | "high" | "auto" (optional · omitted = provider default)',
       caller: 'string (optional · audit attribution)',
     },
   })
