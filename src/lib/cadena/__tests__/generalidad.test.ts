@@ -46,7 +46,7 @@ describe('cero contacto con el cliente: ningún destino ni valor apunta al dueñ
     expect(malos).toEqual([])
   })
   it('no hay recados, ni contacto, ni WhatsApp al cliente', () => {
-    const malos = CODIGO.filter((c) => /sala[_]recados|recado|contactar al cliente/i.test(c.src.replace(/sala[_]destinos[_]de[_]recado/g, ''))).map((c) => c.f.split(/[\/]/).pop())
+    const malos = CODIGO.filter((c) => /sala[_]recados|recado|contactar al cliente/i.test(c.src.replace(/sala[_]destinos[_]de[_]recado|almacenDeRecados|sala-recados\/almacen-supabase|leerDestino/g, ''))).map((c) => c.f.split(/[\\/]/).pop())
     expect(malos).toEqual([])
   })
 })

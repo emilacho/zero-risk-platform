@@ -3,6 +3,7 @@
  * La migración NO está aplicada: hasta entonces nada llega aquí. `client_id` es TEXTO en todas las tablas de la cadena.
  */
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { almacenDeSupabase as almacenDeRecados } from '@/lib/sala-recados/almacen-supabase'
 import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
 import { horarioDeNorm } from './horario'
 import { normalizar } from './texto'
@@ -38,7 +39,8 @@ export function almacenDeSupabase(): Almacen {
     async journeyExiste(journeyId, clientId) {
       return (await lista<{ stream_id: string }>(db.from('sala_event_log').select('stream_id').eq('stream_id', journeyId).eq('client_id', clientId).limit(1))).length > 0
     },
-    async estadoDelBrazo(destino) { return (await uno<{ estado_del_brazo: 'opera' | 'por_configurar' | 'no_existe' }>(db.from('sala_destinos_de_recado').select('estado_del_brazo').eq('destino', destino).maybeSingle()))?.estado_del_brazo ?? null },
+    // el estado del brazo lo lee el almacén de la sala (el ÚNICO que nombra esas tablas: lo vigila una prueba permanente)
+    async estadoDelBrazo(destino) { return (await almacenDeRecados().leerDestino(destino))?.estado_del_brazo ?? null },
 
     async cargarContexto(clientId, planId): Promise<ContextoDelCliente | null> {
       const plan = await uno<{ content_text: string | null; content: string | null; created_at: string }>(db.from('client_historical_outputs').select('content_text, content, created_at').eq('id', planId).eq('client_id', clientId).maybeSingle())
@@ -51,13 +53,8 @@ export function almacenDeSupabase(): Almacen {
       const refs: Referencia[] = [{ id: planId, client_id: clientId, origen: 'plan', texto: planTexto }]
       if (manual?.content_text) refs.push({ id: `manual:${manual.id}`, client_id: clientId, origen: 'manual', texto: manual.content_text })
 
-      const ahora = new Date().toISOString()
-      for (const f of await lista<{ id: string; contenido: string | null; titulo: string | null; firmas: string[] | null; sede: string | null; vigente_hasta: string | null }>(
-        db.from('cerebro_fichas').select('id, contenido, titulo, firmas, sede, vigente_hasta').eq('client_id', clientId).is('retirada_en', null).eq('descartada', false).limit(300),
-      )) {
-        if (f.vigente_hasta && f.vigente_hasta < ahora) continue
-        refs.push({ id: `ficha:${f.id}`, client_id: clientId, origen: 'ficha', firmada: Array.isArray(f.firmas) && f.firmas.length > 0, vigente: true, sede: f.sede, texto: [f.titulo, f.contenido].filter(Boolean).join(': ') })
-      }
+      // 🔴 las fichas del cerebro NO se leen aquí: solo el portero del cerebro toca esas tablas (prueba permanente `cerebro-paso-2-aislamiento`).
+      //    Hasta que el portero tenga una puerta de LECTURA para la cadena, el cliente no aporta fichas firmadas (F0): la jerarquía corre sobre el manual, el plan y las observaciones de sede.
       const sedesDb = await lista<{ id: string; clave: string; ciudad: string }>(db.from('client_sedes').select('id, clave, ciudad').eq('client_id', clientId).limit(50))
       const datos = await lista<{ id: string; sede_id: string | null; campo: string; valor_texto: string; valor_norm: unknown; fuente: 'sitio' | 'instagram' | 'mapas'; observado_en: string }>(
         db.from('client_sede_datos').select('id, sede_id, campo, valor_texto, valor_norm, fuente, observado_en').eq('client_id', clientId).order('observado_en', { ascending: false }).limit(500),
