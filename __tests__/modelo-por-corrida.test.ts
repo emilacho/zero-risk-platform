@@ -22,6 +22,7 @@ vi.mock('@/lib/agent-async-callback', async (orig) => ({ ...(await orig<typeof i
 import { POST } from '@/app/api/agents/run-sdk/route'
 import { MODELOS_POR_CORRIDA, modeloPorCorridaValido } from '@/lib/modelo-por-corrida'
 import { MODELOS_POR_CORRIDA as DEL_CORREDOR, resolverModelo } from '../services/agent-runner/src/lib/modelo-por-corrida'
+import { _precioKey } from '../services/agent-runner/src/lib/precios-por-modelo'
 
 const RAIZ = process.cwd()
 const leer = (rel: string): string => fs.readFileSync(path.join(RAIZ, rel), 'utf8').replace(/\r/g, '')
@@ -38,10 +39,11 @@ beforeEach(() => {
 })
 
 describe('la lista corta', () => {
-  it('es la MISMA en la ruta y en el corredor (una sola fuente de verdad probada) y solo trae la familia Opus', () => {
+  it('es la MISMA en la ruta y en el corredor (una sola fuente de verdad probada) y solo trae la familia Opus y Fable 5.1', () => {
     expect([...MODELOS_POR_CORRIDA]).toEqual([...DEL_CORREDOR])
-    expect(MODELOS_POR_CORRIDA.every((m) => /^claude-opus-[0-9]+(-[0-9]+)?$/.test(m))).toBe(true)
+    expect(MODELOS_POR_CORRIDA.every((m) => /^claude-(opus-[0-9]+(-[0-9]+)?|fable-5-1)$/.test(m))).toBe(true)
     expect(MODELOS_POR_CORRIDA).toContain('claude-opus-5-5')
+    expect(MODELOS_POR_CORRIDA).toContain('claude-fable-5-1')
     // el texto de ambos archivos declara la misma lista (por si alguien la edita en un lado)
     const a = /MODELOS_POR_CORRIDA = (\[[^\]]*\])/.exec(leer('src/lib/modelo-por-corrida.ts'))?.[1]
     const b = /MODELOS_POR_CORRIDA = (\[[^\]]*\])/.exec(leer('services/agent-runner/src/lib/modelo-por-corrida.ts'))?.[1]
@@ -49,7 +51,8 @@ describe('la lista corta', () => {
   })
   it('modeloPorCorridaValido acepta SOLO los de la lista, tal cual escritos', () => {
     for (const m of MODELOS_POR_CORRIDA) expect(modeloPorCorridaValido(m)).toBe(true)
-    for (const mal of ['claude-sonnet', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-opus', 'claude-opus-4-6', 'CLAUDE-OPUS-5-5', ' claude-opus-5-5', 'claude-opus-5-5 ', '', null, undefined, 5, {}, ['claude-opus-5-5']]) expect(modeloPorCorridaValido(mal), String(mal)).toBe(false)
+    expect(modeloPorCorridaValido('claude-fable-5-1')).toBe(true)
+    for (const mal of ['claude-sonnet', 'claude-sonnet-5-5', 'claude-fable', 'CLAUDE-FABLE-5-1', 'claude-fable-5', 'claude-opus', 'claude-opus-4-6', 'CLAUDE-OPUS-5-5', ' claude-opus-5-5', 'claude-opus-5-5 ', '', null, undefined, 5, {}, ['claude-opus-5-5']]) expect(modeloPorCorridaValido(mal), String(mal)).toBe(false)
   })
 })
 
@@ -64,7 +67,7 @@ describe('resolverModelo (corredor)', () => {
     expect(resolverModelo(undefined, undefined, undefined, 'claude-opus-4-7')).toEqual({ ok: true, valor: 'claude-opus-4-7' })
   })
   it('algo fuera de la lista (o `null` explícito) se RECHAZA con el motivo, no se ignora', () => {
-    for (const mal of ['claude-sonnet-5-5', 'claude-fable-5-1', 'opus', '', null, 7, true]) {
+    for (const mal of ['claude-sonnet-5-5', 'claude-fable-5', 'opus', '', null, 7, true]) {
       const r = resolverModelo(mal)
       expect(r.ok, String(mal)).toBe(false)
       if (!r.ok) expect(r.motivo).toContain('model_override debe ser uno de')
@@ -77,7 +80,7 @@ describe('resolverModelo (corredor)', () => {
 describe('🔴 la ruta run-sdk: un id mal escrito se rechaza ANTES de medir el freno y de llamar al corredor', () => {
   it.each([
     ['fuera de la lista', { model_override: 'claude-sonnet-5-5' }],
-    ['de otra familia', { model_override: 'claude-fable-5-1' }],
+    ['de otra familia', { model_override: 'claude-haiku-4-5' }],
     ['vacío', { model_override: '' }],
     ['nulo', { model_override: null }],
     ['número', { model_override: 5 }],
@@ -126,8 +129,9 @@ describe('el corredor: el override vale solo para esa corrida y queda en el libr
     expect(indice).toMatch(/\.\.\.\(modelo\.valor !== null \? \{ modelOverride: modelo\.valor \} : \{\}\)/)
     expect(indice.indexOf('resolverModelo(body.modelOverride')).toBeLessThan(indice.indexOf('const input: AgentRunInput'))
   })
-  it('el precio de la corrida se calcula con la tabla de Opus (un id de la lista contiene «opus»)', () => {
-    expect(MODELOS_POR_CORRIDA.every((m) => m.includes('opus'))).toBe(true)
-    expect(runner).toMatch(/model\.includes\('opus'\) \? 'opus'/)
+  it('el precio de la corrida sale de la tabla oficial por modelo: TODO id de la lista tiene su propia fila (nunca cae en la de Sonnet)', () => {
+    for (const m of MODELOS_POR_CORRIDA) expect(_precioKey(m), m).not.toBe('sonnet')
+    expect(runner).toMatch(/import \{ _costFor \} from '\.\/precios-por-modelo\.js'/)
+    expect(runner).toMatch(/const costFor = _costFor/)
   })
 })

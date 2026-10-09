@@ -22,6 +22,7 @@ import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ModeloPorCorrida } from './modelo-por-corrida.js'
 import { opcionDeRazonamiento, type ModoDeRazonamiento, opcionDeTope, cortadoPorTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
+import { _costFor } from './precios-por-modelo.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
   armarBloquesDeImagen,
@@ -33,6 +34,11 @@ import {
   type ModoImagenes,
 } from './imagenes-en-el-pedido.js'
 import { instrumentClaudeAgentSdk } from './braintrust.js'
+
+// SDK 0.3.142+ conecta los servidores MCP EN SEGUNDO PLANO (un servidor lento queda `pending` en el turno 1 y sus herramientas no están).
+// Los agentes del corredor dependen de ellas desde el primer turno (client-brain, emit_*), así que se restaura la espera de siempre.
+// Una variable ya definida en Railway manda sobre este valor por defecto.
+process.env.MCP_CONNECTION_NONBLOCKING ??= '0'
 
 // Braintrust · traza cada `query()` del Claude Agent SDK · pass-through (cero
 // overhead) cuando BRAINTRUST_API_KEY no está en el env de Railway. El wrapper
@@ -291,46 +297,7 @@ const MODEL_MAP: Record<string, string> = {
   'claude-opus-4-6': 'claude-opus-4-6',
 }
 
-// Precios (USD / 1M tokens) Sonnet 4.6 — ajustar por modelo si hace falta
-const COST_PER_M = {
-  sonnet: { input: 3, output: 15 },
-  haiku: { input: 1, output: 5 },
-  opus: { input: 15, output: 75 },
-}
-
-/**
- * @internal Exported for unit testing. Not part of the public API.
- *
- * Sprint 8 · cache-aware cost. Anthropic prompt caching pricing per docs ·
- *   - regular input · 1.0× base
- *   - cache_read    · 0.1× base (90% off · the win)
- *   - cache write 5m TTL · 1.25× base
- *   - cache write 1h TTL · 2.0× base
- *
- * `inTok` from `usage.input_tokens` is the REGULAR input (Anthropic excludes
- * cached portions from this number). Cache reads / writes are billed via the
- * separate counters passed here.
- */
-export function _costFor(
-  model: string,
-  inTok: number,
-  outTok: number,
-  cacheRead = 0,
-  cache5mWrite = 0,
-  cache1hWrite = 0,
-): number {
-  const key = model.includes('haiku') ? 'haiku' : model.includes('opus') ? 'opus' : 'sonnet'
-  const p = COST_PER_M[key as keyof typeof COST_PER_M]
-  const baseIn = p.input / 1_000_000
-  return (
-    inTok * baseIn +
-    outTok * (p.output / 1_000_000) +
-    cacheRead * baseIn * 0.1 +
-    cache5mWrite * baseIn * 1.25 +
-    cache1hWrite * baseIn * 2.0
-  )
-}
-
+export { _costFor }
 const costFor = _costFor
 
 // ---------- Internal helpers ----------
