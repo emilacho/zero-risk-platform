@@ -510,7 +510,7 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
 }
 
 // ───────────────────────── cierres
-async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<Respuesta> {
+export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<Respuesta> {
   const e = enc.estado_del_motor
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: 'fallido', con_desacuerdo: true })
   await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 Encargo fallido · ${enc.brief_id}: ${motivo}`, dry_run: enc.dry_run })
