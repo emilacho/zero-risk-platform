@@ -77,3 +77,9 @@ describe('migración de la cadena · solo aditiva, apagada, sin contacto con el 
     expect(REVERSA.match(/DROP TABLE IF EXISTS/g)?.length).toBe(11)
   })
 })
+
+describe('la fila guarda la clave de su pieza fija (el chequeo de dependencias del plan la necesita)', () => {
+  it('cadena_calendario_filas tiene pieza_fija', () => {
+    expect(CODIGO).toMatch(/CREATE TABLE IF NOT EXISTS public\.cadena_calendario_filas[\s\S]*?pieza_fija\s+text/)
+  })
+})
