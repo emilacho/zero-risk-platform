@@ -22,7 +22,7 @@ export function entornoDe(request: Request): Entorno {
     baseUrl: new URL(request.url).origin, internalKey: process.env.INTERNAL_API_KEY ?? '',
     openaiKey: process.env.OPENAI_API_KEY, revisorModelo: process.env.OFICINA_REVISOR_MODEL,
     revisorPrecioEntrada: num(process.env.OFICINA_REVISOR_PRECIO_ENTRADA_USD_M), revisorPrecioSalida: num(process.env.OFICINA_REVISOR_PRECIO_SALIDA_USD_M),
-    slackToken: process.env.OFICINA_SLACK_BOT_TOKEN, slackCanalHilo: process.env.OFICINA_SLACK_CANAL, slackCanalAlertas: process.env.OFICINA_SLACK_ALERTAS,
+    slackToken: process.env.SLACK_BOT_TOKEN, slackCanalHilo: process.env.OFICINA_SLACK_CANAL, slackCanalAlertas: process.env.OFICINA_SLACK_ALERTAS,
   }
 }
 
