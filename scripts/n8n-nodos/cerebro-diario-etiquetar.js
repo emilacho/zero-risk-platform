@@ -16,7 +16,7 @@ async function etiquetarFotos(d) {
   const gastoHoy = hoy.body.reduce((s, x) => s + (Number(x.cost_usd) || 0), 0)
   salida.gasto_de_hoy_antes_usd = Number(gastoHoy.toFixed(6))
   // 2 · las fotos PROPIAS sin etiqueta, las más nuevas primero (se piden más que el tope para poder saltar las que ya agotaron sus intentos)
-  const fotos = await leer(d.SB + '/rest/v1/client_social_images?select=id,etiquetada_en&client_id=eq.' + d.cliente + '&owner_role=eq.propio&etiquetada_en=is.null&order=posted_at.desc.nullslast&limit=' + T.fotos_por_cliente_dia * 4, d.auth)
+  const fotos = await leer(d.SB + '/rest/v1/client_social_images?select=id,etiquetada_en&client_id=eq.' + d.cliente + '&owner_role=eq.propio&etiquetada_en=is.null&estado=eq.ok&order=posted_at.desc.nullslast&limit=' + T.fotos_por_cliente_dia * 4, d.auth)
   if (fotos.statusCode !== 200 || !Array.isArray(fotos.body)) { salida.parado = 'no_se_pudo_leer_las_fotos (HTTP ' + fotos.statusCode + ')'; return salida }
   const ids = fotos.body.map((f) => String(f.id)).filter((id) => UUID.test(id))
   salida.sin_etiqueta = ids.length

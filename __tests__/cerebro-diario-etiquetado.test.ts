@@ -69,6 +69,8 @@ describe('el bloque del etiquetado diario', () => {
     await etiquetarFotos(d)
     const fotos = gets.find((u) => u.includes('client_social_images')) as string
     expect(fotos).toContain('select=id,etiquetada_en&'); expect(fotos).toContain('client_id=eq.' + CLIENTE); expect(fotos).toContain('owner_role=eq.propio'); expect(fotos).toContain('etiquetada_en=is.null')
+    // una foto que el raspador no pudo copiar (`no_bajo`) no tiene archivo: no entra a la fila (sin esto, dos así al frente la bloquean para siempre)
+    expect(fotos).toContain('&estado=eq.ok&')
     const intentos = gets.find((u) => u.includes('foto_id')) as string
     expect(intentos).toContain('agent_name=eq.etiquetador-del-cerebro'); expect(intentos).toContain('cost_usd=gt.0'); expect(intentos).toContain(id(1))
     const gasto = gets.find((u) => u.includes('created_at=gte')) as string
