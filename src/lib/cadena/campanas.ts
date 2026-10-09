@@ -1,0 +1,109 @@
+/**
+ * /api/cadena/campanas · abrir · avanzar · cierre (diseño v2 §3.4, §3.7, condición 6 de CC#3).
+ */
+import type { Almacen, Campana, EstadoCampana } from './almacen'
+import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
+import { DIAS_DE_CAMPANA } from './constantes'
+import { fechaInicioPorRegla, sumarDias } from './fechas'
+import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
+
+export const RESULTADOS_DE_CABLE = ['cadena_abierta', 'lote_briefeado', 'necesita_humano', 'plan_no_coincide', 'pasarela_ok'] as const
+
+const TRANSICIONES: Record<EstadoCampana, EstadoCampana[]> = {
+  abierta: ['estrategia', 'necesita_humano', 'cerrada'],
+  estrategia: ['calendario', 'necesita_humano', 'cerrada'],
+  calendario: ['activa', 'necesita_humano', 'cerrada'],
+  activa: ['necesita_humano', 'pausada', 'cerrada'],
+  necesita_humano: ['estrategia', 'calendario', 'activa', 'pausada', 'cerrada'],
+  pausada: ['activa', 'necesita_humano', 'cerrada'],
+  cerrada: [],
+  reemplazada: [],
+}
+export const transicionValida = (de: EstadoCampana, a: EstadoCampana): boolean => TRANSICIONES[de]?.includes(a) ?? false
+
+export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+  const clientId = cadena(cuerpo.client_id)
+  if (!clientId) return err(400, 'E-CLIENT-ID', 'falta client_id')
+  const s = leerSeco(cuerpo)
+  if (!s.ok) return s.r
+  const noAut = await autorizarLlamada(al, cuerpo, clientId)
+  if (noAut) return noAut
+  const cerrada = await compuerta(al, clientId, s.seco)
+  if (cerrada) return cerrada
+
+  // el plan debe existir y ser de ESTE cliente; si no coincide se cierra sin escribir nada
+  const plan = await al.resolverPlan(clientId, cadena(cuerpo.plan_id))
+  if (!plan) return { status: 409, cuerpo: { error: 'plan_no_coincide', resultado: 'plan_no_coincide', code: 'E-PLAN-NO-COINCIDE', detalle: 'el plan no existe, no es un plan de 90 días o es de otro cliente: no se escribió nada' } }
+
+  // idempotencia: el mismo sobre dos veces no abre dos campañas
+  const ya = await al.campanaPorPlan(clientId, plan.plan_id, s.seco)
+  if (ya) return { status: 200, cuerpo: { ya_abierta: true, campana: ya } }
+
+  const ctx = await al.cargarContexto(clientId, plan.plan_id)
+  if (!ctx) return err(409, 'E-CONTEXTO', 'no se pudo armar el contexto del cliente (plan o manual ilegibles)')
+
+  // 🔴 condición 6 (CC#3): un plan NUEVO del mismo cliente reemplaza a la campaña anterior; el sobre nuevo no cae como «duplicado»
+  const viva = await al.campanaViva(clientId, s.seco)
+  let reemplaza: string | null = null
+  if (viva) {
+    await al.actualizarCampana(viva.id, { estado: 'reemplazada', estado_motivo: `reemplazada por el plan ${plan.plan_id}` })
+    await resolverEsperas(al, viva.id, 'fecha_inicio_propuesta')
+    reemplaza = viva.id
+  }
+
+  // fecha de inicio por regla: días hábiles solo si hay feriados nacionales VERIFICADOS (porque algún cliente los declaró); si no, corridos con aviso
+  const nacionales = ctx.pais ? (await al.fechasEspeciales(ctx.pais, [], plan.fecha, sumarDias(plan.fecha, 30))).filter((f) => f.estado === 'verificada' && f.alcance === 'nacional') : []
+  const ini = fechaInicioPorRegla(plan.fecha, nacionales.length ? new Set(nacionales.map((f) => f.fecha)) : null)
+  const nueva = await al.insertarCampana({
+    client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ini.fecha, fecha_inicio_origen: 'regla', fecha_fin: sumarDias(ini.fecha, DIAS_DE_CAMPANA - 1),
+    zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: ini.aviso,
+    presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: false,
+    sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
+  })
+  await abrirEsperaDe(al, nueva, 'fecha_inicio_propuesta', nueva.id, 'la fecha de inicio calculada por regla queda firme el día anterior', ahora, { fechaInicio: nueva.fecha_inicio })
+  return { status: 201, cuerpo: { campana: nueva, aviso_fecha_inicio: ini.aviso, reemplaza_a: reemplaza } }
+}
+
+export async function avanzarCampana(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+  const id = cadena(cuerpo.campana_id)
+  const a = cadena(cuerpo.a) as EstadoCampana | null
+  if (!id || !a) return err(400, 'E-CAMPOS', 'faltan campana_id o a')
+  const c = await al.campana(id)
+  if (!c) return err(404, 'E-CAMPANA', 'la campaña no existe')
+  const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
+  if (noAut) return noAut
+  const cerrada = await compuerta(al, c.client_id, c.seco)
+  if (cerrada) return cerrada
+  if (!transicionValida(c.estado, a)) return err(409, 'E-TRANSICION', `una campaña ${c.estado} no puede pasar a ${a}`)
+  if (a === 'necesita_humano') {
+    const r = await ponerNecesitaHumano(al, c, cadena(cuerpo.motivo) ?? 'sin motivo', ahora)
+    return { status: 200, cuerpo: { campana: r.campana, alerta: r.alerta } }
+  }
+  if (c.estado === 'necesita_humano') await resolverEsperas(al, c.id, 'necesita_humano')
+  const n = await al.actualizarCampana(id, { estado: a, estado_motivo: cadena(cuerpo.motivo) })
+  if (a === 'pausada') await abrirEsperaDe(al, n, 'campana_pausada', n.id, 'campaña pausada: se revisa en el resumen semanal', ahora, {}, `pausa:${n.id}:${ahora.slice(0, 10)}`)
+  if (c.estado === 'pausada') await resolverEsperas(al, c.id, 'campana_pausada')
+  return { status: 200, cuerpo: { campana: n } }
+}
+
+/** El cable de vuelta a la sala lo arma LA CAMPAÑA con el `worker_id` fijo de la puerta (no `$workflow.id` del sub-flujo): así la sala rotula el viaje como BRIEF. */
+export async function cierreDeCampana(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
+  const id = cadena(cuerpo.campana_id)
+  const resultado = cadena(cuerpo.resultado)
+  if (!id || !resultado) return err(400, 'E-CAMPOS', 'faltan campana_id o resultado')
+  if (!(RESULTADOS_DE_CABLE as readonly string[]).includes(resultado)) return err(400, 'E-RESULTADO', `resultado debe ser uno de ${RESULTADOS_DE_CABLE.join(' | ')}`)
+  const c = await al.campana(id)
+  if (!c) return err(404, 'E-CAMPANA', 'la campaña no existe')
+  const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
+  if (noAut) return noAut
+  const puerta = cadena(await al.leerConfig('puerta_workflow_id'))
+  if (!puerta) return err(503, 'E-PUERTA-SIN-ID', 'falta cadena_config.puerta_workflow_id: sin él el cable no puede llevar el worker_id de la puerta')
+  const journey = cadena(c.sala_ref._journey_id)
+  if (!journey) return { status: 200, cuerpo: { payload_cable: null, motivo: 'la campaña no viene de un viaje de la sala (nada a quien contestar)' } }
+  return {
+    status: 200,
+    cuerpo: { payload_cable: { worker_id: puerta, _journey_id: journey, _sala_correlation_id: cadena(c.sala_ref._sala_correlation_id), client_id: c.client_id, resultado, campana_id: c.id } },
+  }
+}
+
+export type { Campana }
