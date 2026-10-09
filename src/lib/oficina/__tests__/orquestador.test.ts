@@ -171,7 +171,7 @@ describe('rama FOTO REAL', () => {
   const guion = (foto: string): Guion => ({
     paquete: () => ({ texto: 'material' }),
     direccion_visual: () => ({ texto: direccionReal(foto) }),
-    mirar: () => ({ texto: JSON.stringify({ imagenes: [{ indice: 0, reglas: [], texto_visible: [], marcas: [], personas: 0 }], preferencia: [0] }) }),
+    mirar: () => ({ texto: JSON.stringify({ imagenes: [{ indice: 0, reglas: [], texto_en_imagen: [], marcas: [], personas: 0 }], preferencia: [0] }) }),
     texto: () => ({ texto: JSON.stringify({ pie_de_foto: 'Encebollado a $5.50. Pídelo por WhatsApp al 0997744288.', hashtags: ['#encebollado'] }) }),
     revision_jefe: () => ({ texto: FICHAS_VACIAS }),
   })
@@ -190,7 +190,7 @@ describe('rama FOTO REAL', () => {
     const M = crearMemoria({ parte: PARTE_OTRO_PRODUCTO })
     const id = await abierto(M)
     const g = { ...guion('7a75e500'), prompts: () => ({ texto: BUENOS_PROMPTS }) } as Guion
-    const { pasos } = await correr(M, id, { ...g, mirar: (_n, t) => ({ texto: JSON.stringify({ imagenes: indicesDe(t).map((indice) => ({ indice, reglas: [], texto_visible: [], marcas: [], personas: 0 })), preferencia: indicesDe(t) }) }) })
+    const { pasos } = await correr(M, id, { ...g, mirar: (_n, t) => ({ texto: JSON.stringify({ imagenes: indicesDe(t).map((indice) => ({ indice, reglas: [], texto_en_imagen: [], marcas: [], personas: 0 })), preferencia: indicesDe(t) }) }) })
     expect(pasos).toContain('prompts')
     expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => f.id === 'vd-foto-invalida')).toBe(true)
   })

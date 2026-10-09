@@ -39,6 +39,9 @@ export interface Descartada { id: string; motivos: string[] }
 export const FORMATOS_IMPOSIBLES: Record<string, string[]> = { '1:1': ['panoramica', 'horizontal'], '4:5': ['panoramica', 'horizontal'] }
 const TOMAS_NO_SIRVEN = ['logo', 'texto_afiche']
 
+/** la confianza de la etiqueta de una foto (el ÚNICO sitio que lee esa columna fuera de la selección) */
+export const confianzaDeLaFoto = (fotos: FotoEtiquetada[], id: string | undefined): FotoEtiquetada['etiqueta_confianza'] | undefined => fotos.find((x) => x.id === id)?.etiqueta_confianza
+
 export function candidatasFoto(fotos: FotoEtiquetada[], pedido: PedidoDeFoto, propios: PropiosDelCliente): { candidatas: Candidata[]; descartadas: Descartada[] } {
   const candidatas: Candidata[] = []
   const descartadas: Descartada[] = []

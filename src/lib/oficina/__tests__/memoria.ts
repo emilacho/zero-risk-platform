@@ -156,7 +156,7 @@ export const observacion = (indices: number[], opts: { falta?: string; ajeno?: s
       { id: 'o1', presente: opts.falta === 'o1' ? false : true, evidencia: 'visible' }, { id: 'o2', presente: true, evidencia: 'centro' },
       { id: 'p1', presente: false, evidencia: 'no hay' }, { id: 'p2', presente: false, evidencia: 'no hay' }, { id: 'p3', presente: false, evidencia: 'no hay' },
     ],
-    texto_visible: opts.ajeno ? [opts.ajeno] : [], marcas: [], personas: 0, producto: 'ceviche',
+    texto_en_imagen: opts.ajeno ? [opts.ajeno] : [], marcas: [], personas: 0, producto: 'ceviche',
   })),
   preferencia: indices,
 })

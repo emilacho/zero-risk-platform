@@ -11,7 +11,7 @@ import { parsearBrief, prohibePersonas, proporcionDelBrief, protagonistasDelBrie
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import { aUtc, chequeosDeEntrega, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoCiego } from './ciego'
-import { candidatasFoto } from './fotos'
+import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
 import { construirTarea, fuentesDelCiego, INSTRUCCION_DEL_CIEGO, type ContextoDePedido } from './pedidos'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
@@ -463,7 +463,7 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
       const reglasBrutas = v.reglas_de_imagen as ReglasDeImagen
       const ci = citasExisten(reglasBrutas, b.brief.texto)
       for (const x of ci.rechazadas) fichas.push(fichaNueva(`vd-regla-${x.id}`, 'chequeo', 'imagen', 'sugerencia', `regla de imagen «${x.id}» descartada: ${x.motivo}`, 'citas literales del brief'))
-      const conf = modo === 'real' ? b.F.fotos.find((f) => f.id === fotoId)?.etiqueta_confianza : null
+      const conf = modo === 'real' ? confianzaDeLaFoto(b.F.fotos, fotoId) : null
       const derivada = derivarDecision(modo, conf)
       return { res: { costo_usd: 0, artefacto: { ...v, reglas_de_imagen: ci.validas, reglas_rechazadas: ci.rechazadas, decision: { ...dec, foto_id: fotoId, ...derivada } }, ...(fichas.length ? { fichas } : {}) } }
     }
