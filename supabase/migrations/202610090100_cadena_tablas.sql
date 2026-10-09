@@ -267,7 +267,7 @@ INSERT INTO public.cadena_plazos (tipo, recordatorio_horas, alerta_horas, vence_
   ('vigia_latido',          NULL, NULL, 18,   NULL,                          'alerta_vigia_parado',  'El vigía deja latido; si pasan más de 18 h sin latido, alarma.')
 ON CONFLICT (tipo) DO NOTHING;
 
--- qué se puede en cada red: configuración; los formatos de video esperan al brazo (sala_destinos_de_recado.video = por_configurar)
+-- qué se puede en cada red: configuración; los formatos de video esperan al brazo (el destino de video de la sala está por_configurar)
 INSERT INTO public.cadena_formatos_por_red (red, formato, lead_dias, produccion, max_por_dia) VALUES
   ('instagram','foto',            3,'opera',        3),
   ('instagram','carrusel',        4,'opera',        2),
