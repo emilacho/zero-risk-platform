@@ -10,7 +10,7 @@ const indices = (task) => [...String(task).matchAll(/índice (\d+)/g)].map((m) =
 const SIMULADOS = {
   'visual_direction.v1': () => ({ resumen: '(simulado) dirección visual', decision: { modo: 'generada', motivo: '(simulado)' }, reglas_de_imagen: { obligatorio: [], prohibido: [] } }),
   'prompts.v1': () => ({ prompts: [{ prompt: '(simulado) un plato visto desde arriba con luz natural lateral, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) cenital' }, { prompt: '(simulado) el mismo plato a nivel de mesa con fondo desenfocado, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) nivel de mesa' }] }),
-  'observacion_imagen.v1': (task) => { const ix = indices(task); return { imagenes: ix.map((indice) => ({ indice, reglas: [], texto_visible: [], marcas: [], personas: 0 })), preferencia: ix } },
+  'observacion_imagen.v1': (task) => { const ix = indices(task); return { imagenes: ix.map((indice) => ({ indice, reglas: [], texto_en_imagen: [], marcas: [], personas: 0 })), preferencia: ix } },
   'pieza_post.v1': () => ({ pie_de_foto: '(simulado) pie de foto de prueba', hashtags: [] }),
   'fichas.v1': () => ({ fichas: [] }),
   'resolucion.v1': () => ({ respuestas: [] }),
