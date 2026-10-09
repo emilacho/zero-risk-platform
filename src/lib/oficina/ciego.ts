@@ -14,8 +14,9 @@ export function armarPedidoCiego(fuentes: Record<string, unknown>): { ok: true; 
   return { ok: true, pedido }
 }
 
-export interface DestinoDeRecado { destino: string; tipo: 'herramienta' | 'agente' | 'persona'; estado_del_brazo: 'opera' | 'por_configurar' | 'no_existe' | string }
+export interface DestinoDeRecado { destino: string; tipo: 'herramienta' | 'agente' | 'persona'; estado_del_brazo: 'opera' | 'por_configurar' | 'no_existe' | string; activo?: boolean }
 export function destinoPermitidoParaOficina(d: DestinoDeRecado): { ok: true } | { ok: false; motivo: string } {
+  if (d.activo === false) return { ok: false, motivo: `el destino «${d.destino}» está apagado` }
   if (d.tipo !== 'herramienta') return { ok: false, motivo: `el destino «${d.destino}» es de tipo «${d.tipo}»: la oficina solo pide cosas a herramientas (nunca a una persona)` }
   if (d.estado_del_brazo !== 'opera') return { ok: false, motivo: `el destino «${d.destino}» no opera (${d.estado_del_brazo})` }
   return { ok: true }

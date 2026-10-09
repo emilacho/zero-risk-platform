@@ -145,6 +145,9 @@ describe('el revisor ciego y los recados', () => {
   it('un recado a una PERSONA (`dueno`) se rechaza: el único humano es Emilio', () => {
     expect(destinoPermitidoParaOficina({ destino: 'dueno', tipo: 'persona', estado_del_brazo: 'opera' })).toMatchObject({ ok: false })
   })
+  it('un destino apagado (`activo = false`) no se usa, aunque sea una herramienta que opera', () => {
+    expect(destinoPermitidoParaOficina({ destino: 'imagen', tipo: 'herramienta', estado_del_brazo: 'opera', activo: false })).toMatchObject({ ok: false })
+  })
   it('un recado a una herramienta que opera se permite; a una que no opera, no', () => {
     expect(destinoPermitidoParaOficina({ destino: 'imagen', tipo: 'herramienta', estado_del_brazo: 'opera' })).toEqual({ ok: true })
     expect(destinoPermitidoParaOficina({ destino: 'video', tipo: 'herramienta', estado_del_brazo: 'por_configurar' })).toMatchObject({ ok: false })
