@@ -20,7 +20,7 @@
 
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { ModeloPorCorrida } from './modelo-por-corrida.js'
+import { PRECIOS_OFICIALES, type ModeloPorCorrida } from './modelo-por-corrida.js'
 import { opcionDeRazonamiento, type ModoDeRazonamiento, opcionDeTope, cortadoPorTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
@@ -319,6 +319,12 @@ export function _costFor(
   cache5mWrite = 0,
   cache1hWrite = 0,
 ): number {
+  // Relevo 26 · los ids de `MODELOS_POR_CORRIDA` tienen su PRECIO OFICIAL propio (Opus 5.5 y Fable 5.1 ya no caen en la tarifa de familia); el resto sigue como siempre
+  const oficial = (PRECIOS_OFICIALES as Record<string, { entrada: number; salida: number; lecturaCache: number } | undefined>)[model]
+  if (oficial) {
+    const entrada = oficial.entrada / 1_000_000
+    return inTok * entrada + outTok * (oficial.salida / 1_000_000) + cacheRead * (oficial.lecturaCache / 1_000_000) + cache5mWrite * entrada * 1.25 + cache1hWrite * entrada * 2.0
+  }
   const key = model.includes('haiku') ? 'haiku' : model.includes('opus') ? 'opus' : 'sonnet'
   const p = COST_PER_M[key as keyof typeof COST_PER_M]
   const baseIn = p.input / 1_000_000
