@@ -61,6 +61,7 @@ import {
 } from '@/lib/agent-async-callback'
 import { makeCallbackAttemptLogger } from '@/lib/agent-async-callback/persist-attempt'
 import { waitUntil } from '@vercel/functions'
+import { MODELOS_POR_CORRIDA, modeloPorCorridaValido } from '@/lib/modelo-por-corrida'
 
 export const runtime = 'nodejs'
 // Sprint 12 Track U · P0 #2 bump 300→800s · Track R audit identified Journey B
@@ -899,6 +900,19 @@ export async function POST(request: Request) {
       }
       razonamientoDelPedido = razCrudo
     }
+    // MODELO por corrida (opt-in · relevo 25) · un id fuera de la lista corta se rechaza ANTES de gastar · `null` explícito tampoco es «ausente»
+    const modArriba = (body as unknown as { model_override?: unknown }).model_override
+    const modCrudo = modArriba !== undefined ? modArriba : ctx.model_override
+    let modeloDelPedido: string | null = null
+    if (modCrudo !== undefined) {
+      if (!modeloPorCorridaValido(modCrudo)) {
+        return NextResponse.json(
+          { error: 'model_override_invalid', code: 'E-MODEL-OVERRIDE-INVALID', detail: `model_override debe ser uno de ${MODELOS_POR_CORRIDA.join(' | ')} · un id mal escrito no se ignora` },
+          { status: 400 },
+        )
+      }
+      modeloDelPedido = modCrudo
+    }
     // LÍMITES de «mirar afuera» (opt-in · CC#1 · 01-oct) · la forma se valida ANTES de gastar (también arriba, antes del acuse 202 de la vuelta por callback)
     const lim = validarLimitesDeMirarAfuera(body)
     if (!lim.ok) return NextResponse.json(LIMITES_MIRAR_AFUERA_INVALIDOS, { status: 400 })
@@ -1046,6 +1060,8 @@ export async function POST(request: Request) {
       ...(topeDelPedido !== null ? { max_budget_usd: topeDelPedido } : {}),
       // RAZONAMIENTO limitado (opt-in) · ausente ⇒ el cuerpo de siempre
       ...(razonamientoDelPedido !== null ? { thinking_mode: razonamientoDelPedido } : {}),
+      // MODELO por corrida (opt-in) · ausente ⇒ el cuerpo de siempre
+      ...(modeloDelPedido !== null ? { model_override: modeloDelPedido } : {}),
       // LÍMITES de «mirar afuera» por corrida (opt-in) · ausente ⇒ el cuerpo de siempre
       ...(limitesMirarAfuera !== null ? { mirar_afuera_limites: limitesMirarAfuera } : {}),
       // ARQ 2026-09-30 · la vuelta la entrega el corredor (sólo si el pedido interno lo trae · ausente ⇒ cuerpo de siempre).

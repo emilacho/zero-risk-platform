@@ -20,6 +20,7 @@
 
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { ModeloPorCorrida } from './modelo-por-corrida.js'
 import { opcionDeRazonamiento, type ModoDeRazonamiento, opcionDeTope, cortadoPorTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
@@ -153,6 +154,8 @@ export interface AgentRunInput {
   maxBudgetUsd?: number
   /** RAZONAMIENTO limitado por corrida · OPT-IN · ver tope-por-corrida.ts · ausente ⇒ opciones del SDK de siempre */
   thinkingMode?: ModoDeRazonamiento
+  /** MODELO por corrida · OPT-IN (relevo 25) · uno de `MODELOS_POR_CORRIDA` ya validado · ausente ⇒ el modelo del agente (`agents.model`/registro) como siempre */
+  modelOverride?: ModeloPorCorrida
   /** LÍMITES de «mirar afuera» por corrida · OPT-IN (CC#1 · 01-oct) · {maxPedidos, permitidos} ya validados · ausente ⇒ el montaje de siempre · ver mcp/mirar-afuera-limites.js */
   mirarAfueraLimites?: { maxPedidos: number | null; permitidos: string[] | null }
   /**
@@ -1037,6 +1040,8 @@ function logExecution(
       nominal_agent: canonicalSlug,
       // RAZONAMIENTO limitado (opt-in) · null = razonamiento completo (como siempre) · queda en el libro para comparar corridas
       thinking_mode: input.thinkingMode ?? null,
+      // MODELO por corrida (opt-in · relevo 25) · solo está la llave cuando el pedido lo trajo (el libro de siempre no cambia)
+      ...(input.modelOverride ? { model_override: input.modelOverride } : {}),
       // límites de «mirar afuera» de la corrida (opt-in) · quedan en el libro para auditar · null = sin límites (como siempre)
       mirar_afuera_limites: input.mirarAfueraLimites ?? null,
       task_text: input.task.substring(0, 200),
@@ -1200,7 +1205,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
 
   // 3. Build SDK options.
   const modelKey = agentCfg.model || 'claude-sonnet'
-  const modelId = MODEL_MAP[modelKey] ?? MODEL_MAP['claude-sonnet']
+  const modelId = input.modelOverride ?? MODEL_MAP[modelKey] ?? MODEL_MAP['claude-sonnet']
   const options = buildSdkOptions(modelId, systemPrompt, input)
 
   // 4. Execute SDK query + drain stream · Sprint 8D Fase 1 wrap with retry
