@@ -25,6 +25,7 @@ import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.j
 import { validarDireccionDeVuelta, esperaForzadaMs, emitirEventoPostHog } from './lib/entrega-de-la-vuelta.js'
 import { correrYEntregar } from './lib/correr-y-entregar.js'
 import { resolverTopeUsd, resolverRazonamiento } from './lib/tope-por-corrida.js'
+import { resolverModelo } from './lib/modelo-por-corrida.js'
 import { limitesDelPedido, ecoDeLimites, CAPACIDADES_DEL_CORREDOR } from './lib/mirar-afuera-pedido.js'
 
 /**
@@ -159,6 +160,8 @@ interface RunSdkBody {
   /** RAZONAMIENTO limitado por corrida · opt-in · ver lib/tope-por-corrida.ts */
   thinkingMode?: unknown
   thinking_mode?: unknown
+  modelOverride?: unknown
+  model_override?: unknown
   /** LÍMITES de «mirar afuera» por corrida · opt-in · ver lib/mcp/mirar-afuera-limites.js */
   mirarAfueraLimites?: unknown
   mirar_afuera_limites?: unknown
@@ -361,6 +364,13 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     return
   }
 
+  // MODELO por corrida (opt-in · relevo 25) · un id fuera de la lista corta se rechaza (400) ANTES de gastar: ignorarlo correría el agente en otro modelo del que se creía
+  const modelo = resolverModelo(body.modelOverride, body.model_override, ctxObj.modelOverride, ctxObj.model_override)
+  if (!modelo.ok) {
+    res.status(400).json({ success: false, error: 'model_override_invalid', code: 'E-MODEL-OVERRIDE-INVALID', detail: modelo.motivo })
+    return
+  }
+
   // LÍMITES de «mirar afuera» (opt-in) · un límite MAL ESCRITO se rechaza (400) ANTES de gastar: ignorarlo dejaría pasar un cupo que se creía puesto
   const limitesMirar = limitesDelPedido(body as unknown as Record<string, unknown>, ctxObj as Record<string, unknown>)
   if (!limitesMirar.ok) {
@@ -382,6 +392,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     dryRun,
     ...(tope.valor !== null ? { maxBudgetUsd: tope.valor } : {}),
     ...(razonamiento.valor !== null ? { thinkingMode: razonamiento.valor } : {}),
+    ...(modelo.valor !== null ? { modelOverride: modelo.valor } : {}),
     ...(limitesMirar.valor ? { mirarAfueraLimites: limitesMirar.valor } : {}),
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }
