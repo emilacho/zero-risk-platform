@@ -26,6 +26,7 @@ import { validarDireccionDeVuelta, esperaForzadaMs, emitirEventoPostHog } from '
 import { correrYEntregar } from './lib/correr-y-entregar.js'
 import { resolverTopeUsd, resolverRazonamiento } from './lib/tope-por-corrida.js'
 import { resolverModelo } from './lib/modelo-por-corrida.js'
+import { resolverEsquema } from './lib/salida-estructurada.js'
 import { limitesDelPedido, ecoDeLimites, CAPACIDADES_DEL_CORREDOR } from './lib/mirar-afuera-pedido.js'
 
 // SDK 0.3.x (relevo 26) · desde la 0.3.142 los servidores MCP se conectan EN SEGUNDO PLANO: la sesión arranca antes de que estén listos y la primera vuelta podría quedarse sin las herramientas del cerebro.
@@ -166,6 +167,9 @@ interface RunSdkBody {
   thinking_mode?: unknown
   modelOverride?: unknown
   model_override?: unknown
+  /** SALIDA ESTRUCTURADA por corrida · opt-in · ver lib/salida-estructurada.ts */
+  outputSchema?: unknown
+  output_schema?: unknown
   /** LÍMITES de «mirar afuera» por corrida · opt-in · ver lib/mcp/mirar-afuera-limites.js */
   mirarAfueraLimites?: unknown
   mirar_afuera_limites?: unknown
@@ -375,6 +379,14 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     return
   }
 
+  // SALIDA ESTRUCTURADA (opt-in · cadena) · un esquema MAL ESCRITO se rechaza (400) ANTES de gastar: ignorarlo pagaría un texto libre donde se pidió un objeto
+  const extraObj = body.extra && typeof body.extra === 'object' ? (body.extra as Record<string, unknown>) : {}
+  const esquema = resolverEsquema(body.outputSchema, body.output_schema, ctxObj.outputSchema, ctxObj.output_schema, extraObj.output_schema)
+  if (!esquema.ok) {
+    res.status(400).json({ success: false, error: 'output_schema_invalid', code: 'E-OUTPUT-SCHEMA-INVALID', detail: esquema.motivo })
+    return
+  }
+
   // LÍMITES de «mirar afuera» (opt-in) · un límite MAL ESCRITO se rechaza (400) ANTES de gastar: ignorarlo dejaría pasar un cupo que se creía puesto
   const limitesMirar = limitesDelPedido(body as unknown as Record<string, unknown>, ctxObj as Record<string, unknown>)
   if (!limitesMirar.ok) {
@@ -397,6 +409,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     ...(tope.valor !== null ? { maxBudgetUsd: tope.valor } : {}),
     ...(razonamiento.valor !== null ? { thinkingMode: razonamiento.valor } : {}),
     ...(modelo.valor !== null ? { modelOverride: modelo.valor } : {}),
+    ...(esquema.valor !== null ? { outputSchema: esquema.valor } : {}),
     ...(limitesMirar.valor ? { mirarAfueraLimites: limitesMirar.valor } : {}),
     extra: (body.extra as Record<string, unknown> | undefined) ?? undefined,
   }

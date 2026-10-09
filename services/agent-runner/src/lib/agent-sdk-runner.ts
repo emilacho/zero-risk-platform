@@ -21,6 +21,7 @@
 import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { PRECIOS_OFICIALES, type ModeloPorCorrida } from './modelo-por-corrida.js'
+import { falloDeSalidaEstructurada, hashDeEsquema } from './salida-estructurada.js'
 import { opcionDeRazonamiento, type ModoDeRazonamiento, opcionDeTope, cortadoPorTope, cerradaPorTope, mensajeDeCierreConTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
@@ -82,6 +83,8 @@ type SDKResultStreamMessage = {
   subtype?: string
   /** cómo cerró el ÚLTIMO turno (`end_turn` = terminó de hablar) · en los mensajes `assistant` por bloque viene null: la parada real llega aquí */
   stop_reason?: string | null
+  /** el objeto contra el `outputFormat` pedido */
+  structured_output?: unknown
   /** el SDK marca así los fallos (p.ej. «response exceeded the 32000 output token maximum») · `result` trae el texto y `errors` el detalle */
   is_error?: boolean
   result?: string
@@ -158,6 +161,8 @@ export interface AgentRunInput {
   thinkingMode?: ModoDeRazonamiento
   /** MODELO por corrida · OPT-IN (relevo 25) · uno de `MODELOS_POR_CORRIDA` ya validado · ausente ⇒ el modelo del agente (`agents.model`/registro) como siempre */
   modelOverride?: ModeloPorCorrida
+  /** SALIDA ESTRUCTURADA por corrida · OPT-IN (cadena) · un JSON Schema ya validado por `salida-estructurada.ts` · ausente ⇒ texto libre como siempre */
+  outputSchema?: Record<string, unknown>
   /** LÍMITES de «mirar afuera» por corrida · OPT-IN (CC#1 · 01-oct) · {maxPedidos, permitidos} ya validados · ausente ⇒ el montaje de siempre · ver mcp/mirar-afuera-limites.js */
   mirarAfueraLimites?: { maxPedidos: number | null; permitidos: string[] | null }
   /**
@@ -250,6 +255,9 @@ export interface AgentRunResult {
   response: string
   /** el tope de gasto saltó AL CERRAR y `response` es el texto final completo (no un parcial) · solo está cuando pasó */
   cerradaPorTope?: boolean
+  /** el objeto que el SDK entregó contra el `output_schema` pedido · solo está cuando se pidió esquema Y llegó */
+  structuredOutput?: unknown
+  structuredOutputValid?: boolean
   sessionId: string | null
   inputTokens: number
   outputTokens: number
@@ -607,6 +615,8 @@ function buildSdkOptions(
     ...opcionDeTope(input.maxBudgetUsd),
     // RAZONAMIENTO limitado (opt-in) · vacío sin modo ⇒ las opciones de siempre
     ...opcionDeRazonamiento(input.thinkingMode),
+    // SALIDA ESTRUCTURADA (opt-in) · vacío sin esquema ⇒ las opciones de siempre
+    ...(input.outputSchema ? { outputFormat: { type: 'json_schema' as const, schema: input.outputSchema } } : {}),
   }
 }
 
@@ -632,6 +642,8 @@ export interface StreamDrainResult {
   responseText: string
   /** el texto del CIERRE: lo que el último turno escribió DESPUÉS de la última herramienta (sin la narración anterior) · '' si el último paso fue una herramienta o no hubo texto */
   textoFinal?: string
+  /** el objeto estructurado del mensaje `result` (si se pidió `outputFormat`) · undefined si no llegó */
+  structuredOutput?: unknown
   /** el último turno es una respuesta de cierre (texto, sin herramienta pendiente, no cortada por largo) · base para `cerradaPorTope` */
   cierreConTexto?: boolean
   sessionId: string | null
@@ -671,6 +683,7 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
   let textoFinal = ''
   let resultStopReason: string | null = null
   let resultSubtype: string | null = null
+  let structuredOutput: unknown = undefined
   let resultIsError = false
   let resultMessage: string | null = null
   let sessionId: string | null = null
@@ -767,6 +780,7 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
       sessionId = sessionId ?? r.session_id ?? null
       resultSubtype = typeof r.subtype === 'string' ? r.subtype : null
       resultStopReason = typeof r.stop_reason === 'string' ? r.stop_reason : null
+      structuredOutput = r.structured_output
       resultIsError = r.is_error === true
       resultMessage = resultIsError ? [typeof r.result === 'string' ? r.result : '', ...(Array.isArray(r.errors) ? r.errors : [])].filter((x) => x !== '').join(' | ').slice(0, 500) || null : null
     }
@@ -782,6 +796,7 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
     textoFinal,
     // cierre COMPLETO: lo último escrito es texto (ninguna herramienta pendiente) Y el SDK dice que el turno terminó por `end_turn` (no por largo, rechazo ni corte)
     cierreConTexto: textoFinal.trim() !== '' && resultStopReason === 'end_turn',
+    ...(structuredOutput !== undefined ? { structuredOutput } : {}),
     resultSubtype,
     resultIsError,
     resultMessage,
@@ -1071,6 +1086,8 @@ function logExecution(
       thinking_mode: input.thinkingMode ?? null,
       // MODELO por corrida (opt-in · relevo 25) · solo está la llave cuando el pedido lo trajo (el libro de siempre no cambia)
       ...(input.modelOverride ? { model_override: input.modelOverride } : {}),
+      // SALIDA ESTRUCTURADA (opt-in) · el sello del esquema que se usó queda en el libro para auditar · solo está la llave cuando el pedido lo trajo
+      ...(input.outputSchema ? { output_schema_hash: hashDeEsquema(input.outputSchema), structured_output_received: drain.structuredOutput !== undefined && drain.structuredOutput !== null } : {}),
       // el tope de gasto saltó AL CERRAR y la respuesta final está completa: se guardó (no se descartó) · solo está la llave cuando pasó
       ...(args.cerradaPorTope ? { cerrada_por_tope: true, cerrada_por_tope_detalle: mensajeDeCierreConTope(args.cerradaPorTope.tope, args.cerradaPorTope.costoUsd) } : {}),
       // límites de «mirar afuera» de la corrida (opt-in) · quedan en el libro para auditar · null = sin límites (como siempre)
@@ -1298,6 +1315,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
       drain = wrapped.result
       cortePorTope = cortadoPorTope(input.maxBudgetUsd, drain.resultSubtype)
       cierreCortado = cerradaPorTope(input.maxBudgetUsd, drain.resultSubtype, drain.cierreConTexto, drain.textoFinal)
+      // con esquema pedido, un cierre cortado por tope solo vale si el OBJETO llegó: el texto libre no se da por respuesta
+      if (cierreCortado && input.outputSchema && (drain.structuredOutput === undefined || drain.structuredOutput === null)) cierreCortado = false
       falloDelSdk = falloDelResultado(input.maxBudgetUsd, drain.resultSubtype, drain.resultIsError, drain.resultMessage)
       if (wrapped.retry.retried) {
         console.log(
@@ -1639,7 +1658,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     cache_creation_1h_tokens: drain.cacheCreation1hTokens,
   }
 
-  const falloFinal: string | null = cierreCortado ? null : cortePorTope ? mensajeDeCorte(input.maxBudgetUsd as number, costUsd) : falloDelSdk !== null ? mensajeDeFalloDelSdk(falloDelSdk, costUsd) : null
+  const falloDeEsquema = falloDeSalidaEstructurada(input.outputSchema, drain.resultSubtype, drain.structuredOutput)
+  const falloFinal: string | null = cierreCortado ? null : cortePorTope ? mensajeDeCorte(input.maxBudgetUsd as number, costUsd) : falloDelSdk !== null ? mensajeDeFalloDelSdk(falloDelSdk, costUsd) : falloDeEsquema !== null ? mensajeDeFalloDelSdk(falloDeEsquema, costUsd) : null
 
   // 5. Best-effort log · include brain enrichment + cache markers.
   //    Dual-write · `agents_log` (Railway runner forensics) + `agent_invocations`
@@ -1661,6 +1681,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     // tope saltado AL CERRAR con el texto final completo: se entrega ese texto (no el parcial de un corte a medias) y se marca
     response: cierreCortado ? (drain.textoFinal as string) : drain.responseText,
     ...(cierreCortado ? { cerradaPorTope: true } : {}),
+    ...(input.outputSchema ? { structuredOutputValid: falloFinal === null && drain.structuredOutput !== undefined && drain.structuredOutput !== null } : {}),
+    ...(input.outputSchema && falloFinal === null && drain.structuredOutput !== undefined ? { structuredOutput: drain.structuredOutput } : {}),
     sessionId: drain.sessionId,
     inputTokens: drain.inputTokens,
     outputTokens: drain.outputTokens,
