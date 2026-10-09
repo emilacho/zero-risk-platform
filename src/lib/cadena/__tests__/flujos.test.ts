@@ -132,7 +132,7 @@ describe('ESTRUCTURA · los flujos nuevos y la copia', () => {
   })
   it('cero contacto con el cliente: ningún nodo nuevo manda recados, correos ni WhatsApp a nadie del negocio', () => {
     const src = NUEVOS.map((k) => JSON.stringify(FLUJOS[k])).join('\n')
-    expect(src).not.toMatch(/sala_recados|api\/sala\/recados|whatsapp|resend|twilio|due[nñ]o/i)
+    expect(src).not.toMatch(/sala[_]recados|api\/sala\/recados|whatsapp|resend|twilio|due[nñ]o/i)
   })
 })
 
