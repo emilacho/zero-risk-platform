@@ -64,7 +64,7 @@ export interface ResultadoDePaso {
   /** fichas nuevas */
   fichas?: Ficha[]
   /** cierra (marca `tomada` con razón) las fichas abiertas de ese origen/donde antes de sumar las nuevas (p. ej. una observación nueva reemplaza la anterior) */
-  reemplazar_fichas?: { origen: Ficha['origen']; donde?: string }
+  reemplazar_fichas?: { origen: Ficha['origen']; donde?: string | string[] }
   /** el paso se ejecutó como vuelta de `vuelta` (lo devolvió `siguientePaso`) */
   vuelta?: string
   /** resolución de fichas existentes por id */
@@ -84,7 +84,7 @@ export function registrarPaso(e: Estado, p: Plantilla, indice: number, r: Result
   let fichas = e.fichas.map((f) => ({ ...f }))
   if (r.reemplazar_fichas) {
     const q = r.reemplazar_fichas
-    fichas = fichas.map((f) => (f.estado === 'abierta' && f.origen === q.origen && (!q.donde || f.donde === q.donde) ? { ...f, estado: 'tomada' as const, razon: 'reemplazada por una observación nueva' } : f))
+    fichas = fichas.map((f) => (f.estado === 'abierta' && f.origen === q.origen && (!q.donde || (Array.isArray(q.donde) ? q.donde.includes(f.donde) : f.donde === q.donde)) ? { ...f, estado: 'tomada' as const, razon: 'reemplazada por una observación nueva' } : f))
   }
   for (const res of r.resoluciones ?? []) fichas = fichas.map((f) => (f.id === res.id ? { ...f, estado: res.estado, razon: res.razon } : f))
   fichas = [...fichas, ...(r.fichas ?? [])]

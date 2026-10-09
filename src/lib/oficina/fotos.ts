@@ -8,6 +8,8 @@ import { datosAjenos, type PropiosDelCliente } from './reglas-de-imagen'
 
 export interface FotoEtiquetada {
   id: string
+  /** dirección de la copia de la foto en nuestro bucket (la que ve el curador y la que se entrega) */
+  url?: string | null
   estado?: string | null
   que_muestra?: string | null
   producto_visto?: string[] | null
@@ -19,7 +21,7 @@ export interface FotoEtiquetada {
 }
 export interface PedidoDeFoto {
   /** lo que protagoniza el brief (p. ej. el producto); si está vacío no se filtra por producto */
-  protagonista: string
+  protagonista: string | string[]
   prohibe_personas: boolean
   /** proporción pedida por el brief: '1:1' · '4:5' */
   proporcion: string
@@ -41,12 +43,13 @@ export function candidatasFoto(fotos: FotoEtiquetada[], pedido: PedidoDeFoto, pr
   const candidatas: Candidata[] = []
   const descartadas: Descartada[] = []
   const ahora = pedido.ahora ?? new Date()
+  const protas = (Array.isArray(pedido.protagonista) ? pedido.protagonista : [pedido.protagonista]).map((x) => x.trim()).filter(Boolean)
   for (const f of fotos) {
     const m: string[] = []
     if (f.estado && f.estado !== 'ok') m.push(`estado «${f.estado}»`)
     if (!f.tipo_de_toma || !f.etiqueta_confianza) m.push('sin etiquetar')
-    if (pedido.protagonista.trim() && !(f.producto_visto ?? []).some((p) => contienePalabra(p, pedido.protagonista) || contienePalabra(pedido.protagonista, p))) {
-      m.push(`el protagonista del brief («${pedido.protagonista}») no está en lo que muestra la foto`)
+    if (protas.length && !(f.producto_visto ?? []).some((p) => protas.some((x) => contienePalabra(p, x) || contienePalabra(x, p)))) {
+      m.push(`el protagonista del brief («${protas.join(' / ')}») no está en lo que muestra la foto`)
     }
     if (f.texto_visible && f.texto_visible.trim()) {
       const aj = datosAjenos([f.texto_visible], propios)
