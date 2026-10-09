@@ -29,11 +29,12 @@ export async function vencerBandeja(db: Db, ahora: Date): Promise<{ vencidas: st
   return { vencidas }
 }
 
-export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Promise<{ reanudar: string[]; fallidos: string[] }> {
+export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Promise<{ reanudar: string[]; fallidos: string[]; cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> }> {
   const limite = new Date(ahora.getTime() - MINUTOS_PARA_DAR_POR_MUERTO * 60_000).toISOString()
   const r = (await db.from('oficina_turnos').select('encargo_id,n,paso,inicio').eq('estado', 'corriendo').lt('inicio', limite)) as { data: Fila[] | null; error: { message: string } | null }
   if (r.error) throw new Error(`vigía · leer los pasos vivos: ${r.error.message}`)
   const reanudar: string[] = [], fallidos: string[] = []
+  const cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> = []
   for (const t of r.data ?? []) {
     const enc = await P.almacen.leerEncargo(String(t.encargo_id))
     if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido'].includes(enc.estado)) continue
@@ -43,11 +44,12 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Prom
     if (veces >= 1) {
       await fallar(P, enc, `el paso «${String(t.paso)}» murió dos veces (sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min)`)
       fallidos.push(enc.id)
+      cierres.push({ encargo_id: enc.id, resultado_para_la_sala: 'fallido', sala_ref: enc.sala_ref, client_id: enc.client_id, brief_id: enc.brief_id })
       continue
     }
     const estado = { ...enc.estado_del_motor, vueltas: { ...enc.estado_del_motor.vueltas, [clave]: veces + 1 } }
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: estado, gasto_usd: enc.gasto_usd })
     reanudar.push(enc.id)
   }
-  return { reanudar, fallidos }
+  return { reanudar, fallidos, cierres }
 }

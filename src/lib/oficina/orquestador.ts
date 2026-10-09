@@ -114,7 +114,15 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
   for (let vuelta = 0; vuelta < 80; vuelta++) {
     if (['cerrado', 'cerrado_por_tope', 'fallido'].includes(enc.estado)) return r(200, { accion: 'cerrado', estado: enc.estado, con_desacuerdo: enc.con_desacuerdo })
     const abierto = await P.almacen.turnoAbierto(enc.id)
-    if (abierto) return r(200, { accion: 'esperar', turno: { n: abierto.n, paso: abierto.paso, agente: abierto.agente, dispatch_key: abierto.dispatch_key }, nota: 'ya hay un paso esperando respuesta' })
+    if (abierto) {
+      // un «siguiente» repetido no abre otro paso: ENTREGA DE NUEVO el mismo pedido (mismo número, misma dispatch_key)
+      const sg = siguientePaso(enc.estado_del_motor, pl)
+      if (sg.accion === 'ejecutar' && (sg.paso.tipo === 'agente' || sg.paso.tipo === 'portero')) {
+        const a = armarPedido(enc, pl, sg.paso, enc.estado_del_motor)
+        return r(200, { accion: 'esperar', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: abierto.tipo, agente: abierto.agente, dispatch_key: abierto.dispatch_key, pedido: a.pedido } })
+      }
+      return r(200, { accion: 'esperar', turno: { n: abierto.n, paso: abierto.paso, agente: abierto.agente, dispatch_key: abierto.dispatch_key }, nota: 'ya hay un paso esperando respuesta' })
+    }
     const sig = siguientePaso(enc.estado_del_motor, pl)
     if (sig.accion === 'fin') return cerrar(P, enc, pl, false)
     if (sig.accion === 'cierre_por_tope') return cerrarPorTope(P, enc, pl, sig.razon, sig.detalle)
@@ -136,14 +144,11 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       // portero y agente: salto sin llamar a nadie si no hay nada que hacer
       const salto = saltoPorFalta(paso, e)
       if (salto) { enc = await aplicar(P, enc, pl, sig.indice, salto, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: paso.tipo, agente: null, dispatch_key: null, cost_usd: 0 } }); continue }
-      const agente = paso.quien === 'dueno_del_donde' ? AGENTE_DEL_TEXTO : paso.quien
+      const { agente, pedido } = armarPedido(enc, pl, paso, e)
       const n = turnoDe(e)
-      const ctx = contexto2(e)
-      const fichasPropias = paso.clave === 'corrige' || paso.clave === 'decide' ? fichasQueTocan(e, paso) : []
-      const t = paso.tipo === 'agente' ? construirTarea(paso.clave, ctx!, { fichas: fichasPropias }) : null
       const dispatch_key = `${enc.id}:${n}`
       await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: e.gasto_usd, estado: 'en_paso', turno: { n, paso: paso.clave, tipo: paso.tipo, agente, estado: 'corriendo', dispatch_key, cost_usd: 0 } })
-      return r(200, { accion: 'esperar', turno: { n, paso: paso.clave, tipo: paso.tipo, agente, dispatch_key, pedido: pedidoDe(enc, paso, agente, t, e) } })
+      return r(200, { accion: 'esperar', turno: { n, paso: paso.clave, tipo: paso.tipo, agente, dispatch_key, pedido } })
     } catch (err) {
       return fallar(P, enc, `error interno en «${paso.clave}»: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -152,14 +157,29 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
 }
 const contexto2 = (e: Estado): ContextoDePedido | null => (datos(e, 'encargo') ? contexto(e) : null)
 
-function pedidoDe(enc: Encargo, paso: Paso, agente: string, t: { task: string; images: string[]; esquema: string } | null, e: Estado): Record<string, unknown> {
+/** el agente y el pedido de un paso de agente o de portero (puro: sale del estado, así se puede volver a entregar) */
+function armarPedido(enc: Encargo, pl: Plantilla, paso: Paso, e: Estado, errorDeFormato?: string): { agente: string; pedido: Record<string, unknown> } {
+  const agente = paso.quien === 'dueno_del_donde' ? AGENTE_DEL_TEXTO : paso.quien
+  const fichasPropias = paso.clave === 'corrige' || paso.clave === 'decide' ? fichasQueTocan(e, paso) : []
+  const t = paso.tipo === 'agente' ? construirTarea(paso.clave, contexto2(e)!, { fichas: fichasPropias, ...(errorDeFormato ? { errorDeFormato } : {}) }) : null
+  return { agente, pedido: pedidoDe(enc, pl, paso, agente, t, e) }
+}
+
+/** la indicación de ESTE agente en ESTA sala: sus reglas numeradas (encima de su identidad; la identidad no se edita) */
+export function indicacionDe(pl: Plantilla, agente: string): string {
+  const reglas = pl.indicaciones[agente] ?? []
+  if (!reglas.length) return ''
+  return ['Indicación de esta sala (capa local; el texto de tu identidad no cambia):', ...reglas.map((x, i) => `${i + 1}. ${x.regla}`)].join('\n')
+}
+
+function pedidoDe(enc: Encargo, pl: Plantilla, paso: Paso, agente: string, t: { task: string; images: string[]; esquema: string } | null, e: Estado): Record<string, unknown> {
   if (paso.tipo === 'portero') {
     const b = base(e)
-    return { destino: 'portero', cuerpo: { cliente: enc.client_id, voy_a_producir: `${b.brief.id} · ${b.brief.red} · ${b.brief.formato}: ${b.brief.que_es}`, ya_trae: ['manual_vigente', 'fotos_etiquetadas'], ronda: 1 }, dry_run: enc.dry_run }
+    return { destino: 'portero', cuerpo: { cliente: enc.client_id, voy_a_producir: { entregable: b.brief.id, red: b.brief.red, formato: b.brief.formato, que_es: b.brief.que_es, protagonista: b.brief.protagonista }, ya_trae: ['manual_vigente', 'fotos_etiquetadas'], ronda: 1 }, dry_run: enc.dry_run }
   }
   return {
     agent_name: agente, task: t!.task, images: t!.images.map((url) => ({ url })), esquema: t!.esquema,
-    extra: { indicacion_oficina: `oficina:${paso.clave}` }, max_budget_usd: paso.tope_usd, thinking_mode: 'disabled', dry_run: enc.dry_run, client_id: enc.client_id,
+    extra: { indicacion_oficina: indicacionDe(pl, agente), paso_de_la_oficina: paso.clave, encargo_id: enc.id }, max_budget_usd: paso.tope_usd, thinking_mode: 'disabled', dry_run: enc.dry_run, client_id: enc.client_id,
     workflow_hint: 'oficina · turno',
   }
 }
@@ -407,15 +427,11 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   if (!p.ok && p.accion === 'reintentar') {
     const nuevo: Estado = { ...e, vueltas: { ...e.vueltas, [`fmt:${paso.clave}`]: intentos + 1 }, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, turno: { ...turnoBase, n, estado: 'hecho', error: 'formato: reintento' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
-    const reabierto = await P.almacen.leerEncargo(enc.id)
-    const ctx = contexto2(nuevo)
-    const fichasPropias = paso.clave === 'corrige' || paso.clave === 'decide' ? fichasQueTocan(nuevo, paso) : []
-    const t = construirTarea(paso.clave, ctx!, { fichas: fichasPropias, errorDeFormato: p.mensaje_de_error })
+    const { agente, pedido } = armarPedido(enc, pl, paso, nuevo, p.mensaje_de_error)
     const n2 = turnoDe(nuevo)
     const dk = `${enc.id}:${n2}`
-    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', turno: { n: n2, paso: paso.clave, tipo: paso.tipo, agente: abierto.agente, estado: 'corriendo', dispatch_key: dk, cost_usd: 0 } })
-    void reabierto
-    return r(200, { accion: 'esperar', reintento_de_formato: true, turno: { n: n2, paso: paso.clave, tipo: paso.tipo, agente: abierto.agente, dispatch_key: dk, pedido: pedidoDe(enc, paso, abierto.agente ?? paso.quien, t, nuevo) } })
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', turno: { n: n2, paso: paso.clave, tipo: paso.tipo, agente, estado: 'corriendo', dispatch_key: dk, cost_usd: 0 } })
+    return r(200, { accion: 'esperar', reintento_de_formato: true, turno: { n: n2, paso: paso.clave, tipo: paso.tipo, agente, dispatch_key: dk, pedido } })
   }
   if (!p.ok) {
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), fichas: [...e.fichas, fichaNueva(`formato-${paso.clave}`, 'chequeo', 'formato', 'bloquea', p.ficha.que ?? 'formato inválido')], turno: { ...turnoBase, n, estado: 'fallo', error: p.errores.join(' · ') }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
@@ -514,7 +530,7 @@ export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<
   const e = enc.estado_del_motor
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: 'fallido', con_desacuerdo: true })
   await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 Encargo fallido · ${enc.brief_id}: ${motivo}`, dry_run: enc.dry_run })
-  return r(200, { accion: 'cerrado', estado: 'fallido', motivo, resultado_para_la_sala: 'fallido' })
+  return r(200, { accion: 'cerrado', estado: 'fallido', motivo, resultado_para_la_sala: 'fallido', sala_ref: enc.sala_ref, simulado: enc.dry_run })
 }
 
 async function cerrarPorTope(P: Puertos, enc: Encargo, pl: Plantilla, razon: string, detalle: string): Promise<Respuesta> {

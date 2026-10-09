@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const ahora = P.ahora()
     const v = await vencerBandeja(db, ahora)
     const m = await revisarPasosMuertos(P, db, ahora)
-    return NextResponse.json({ accion: 'vigilado', vencidas: v.vencidas, reanudar: m.reanudar, fallidos: m.fallidos }, { status: 200 })
+    return NextResponse.json({ accion: 'vigilado', vencidas: v.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'oficina_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

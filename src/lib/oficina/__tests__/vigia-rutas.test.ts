@@ -70,7 +70,7 @@ describe('el vigía y los pasos muertos', () => {
   it('un paso «corriendo» de menos de 12 min no se toca', async () => {
     const { db, P, hora } = await conPasoColgado()
     envejecer(db, hora.v, 5)
-    expect(await revisarPasosMuertos(P, db, hora.v)).toEqual({ reanudar: [], fallidos: [] })
+    expect(await revisarPasosMuertos(P, db, hora.v)).toEqual({ reanudar: [], fallidos: [], cierres: [] })
     expect(vivo(db).estado).toBe('corriendo')
   })
   it('a los 12 min se da por muerto y se reintenta UNA vez (mismo número de paso)', async () => {
@@ -78,7 +78,7 @@ describe('el vigía y los pasos muertos', () => {
     const n = vivo(db).n
     envejecer(db, hora.v, MINUTOS_PARA_DAR_POR_MUERTO + 1)
     const r = await revisarPasosMuertos(P, db, hora.v)
-    expect(r).toEqual({ reanudar: [id], fallidos: [] })
+    expect(r).toEqual({ reanudar: [id], fallidos: [], cierres: [] })
     expect(vivo(db).estado).toBe('muerto')
     const re = await avanzar(P, id)
     expect(re.cuerpo).toMatchObject({ accion: 'esperar', turno: { n } }) // se re-arma el MISMO paso
@@ -89,13 +89,14 @@ describe('el vigía y los pasos muertos', () => {
     envejecer(db, hora.v, 20); await revisarPasosMuertos(P, db, hora.v); await avanzar(P, id); envejecer(db, hora.v, 20)
     const r = await revisarPasosMuertos(P, db, hora.v)
     expect(r.fallidos).toEqual([id])
+    expect(r.cierres).toEqual([{ encargo_id: id, resultado_para_la_sala: 'fallido', sala_ref: null, client_id: CLIENTE, brief_id: 'BRF-0003' }])
     expect(db.tablas['oficina_encargos'][0].estado).toBe('fallido')
   })
   it('un encargo ya cerrado no se revive', async () => {
     const { db, P, hora } = await conPasoColgado()
     db.tablas['oficina_encargos'][0].estado = 'cerrado'
     envejecer(db, hora.v, 60)
-    expect(await revisarPasosMuertos(P, db, hora.v)).toEqual({ reanudar: [], fallidos: [] })
+    expect(await revisarPasosMuertos(P, db, hora.v)).toEqual({ reanudar: [], fallidos: [], cierres: [] })
   })
 })
 
