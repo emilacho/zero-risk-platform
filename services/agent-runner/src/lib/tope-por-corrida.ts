@@ -37,6 +37,20 @@ export function cortadoPorTope(maxBudgetUsd: number | null | undefined, resultSu
   return typeof maxBudgetUsd === 'number' && maxBudgetUsd > 0 && resultSubtype === SUBTIPO_CORTE_POR_PRESUPUESTO
 }
 
+/**
+ * TOPE SALTADO AL CERRAR · relevo 29 · CC#1 · corrida 170711 (Fable 5.1, calendario de 12 semanas): el SDK cortó por presupuesto DESPUÉS de que el empleado escribiera su respuesta final entera
+ * (gastado US$ 2,23 de 2,50 y 11.186 caracteres perdidos, nadie los guardó). Si el corte llega cuando el último turno ya es un CIERRE (texto, sin herramienta pendiente, parada normal) la respuesta
+ * está COMPLETA: se guarda y se marca `cerrada_por_tope` en vez de descartarla. Si el último paso fue una herramienta o no hay texto de cierre, sigue siendo un FALLO con texto parcial (como siempre).
+ * Sólo aplica a pedidos con tope (opt-in) cortados por presupuesto.
+ */
+export function cerradaPorTope(maxBudgetUsd: number | null | undefined, resultSubtype: string | null | undefined, cierreConTexto: boolean | undefined, textoFinal: string | null | undefined): boolean {
+  return cortadoPorTope(maxBudgetUsd, resultSubtype) && cierreConTexto === true && typeof textoFinal === 'string' && textoFinal.trim() !== ''
+}
+
+export function mensajeDeCierreConTope(maxBudgetUsd: number, costoUsd: number): string {
+  return `${SUBTIPO_CORTE_POR_PRESUPUESTO} · el tope de gasto (US$ ${maxBudgetUsd}) saltó AL CERRAR · gastado ≈ US$ ${costoUsd.toFixed(4)} · la respuesta final estaba COMPLETA y se guardó`
+}
+
 export function mensajeDeCorte(maxBudgetUsd: number, costoUsd: number): string {
   return (
     `${SUBTIPO_CORTE_POR_PRESUPUESTO} · el empleado alcanzó el tope de gasto de la corrida (US$ ${maxBudgetUsd}) y se DETUVO · ` +
