@@ -4,11 +4,11 @@
  */
 import { atender } from '@/lib/cadena/puerta-http'
 import { almacenDeSupabase } from '@/lib/cadena/almacen-supabase'
-import { validarSinEscribir } from '@/lib/cadena/pasos'
+import { ACCIONES } from '@/lib/cadena/acciones'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  return atender(request, { validar: validarSinEscribir }, almacenDeSupabase)
+  return atender(request, ACCIONES.validar, almacenDeSupabase)
 }

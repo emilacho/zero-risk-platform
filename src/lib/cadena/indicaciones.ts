@@ -93,6 +93,29 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
   ].join('\n')
 }
 
+export interface PedidoDeFechas { tipo: string; ambito: string; anio: number; paginas: { url: string; texto: string }[] }
+
+/** Extraer fechas de un TIPO y un ÁMBITO que el cliente declaró, de páginas que el CÓDIGO ya descargó. El código luego comprueba cada cita contra la página. */
+export function tareaDeFechas(p: PedidoDeFechas): string {
+  const MAX = 40_000
+  let usado = 0
+  const paginas = p.paginas.map((x) => { const t = x.texto.slice(0, Math.max(0, MAX - usado)); usado += t.length; return '## PÁGINA ' + x.url + '\n' + t }).join('\n\n')
+  return [
+    '# Qué te pido',
+    'Del texto de las páginas de abajo, extrae las fechas de «' + p.tipo + '» que valen en «' + p.ambito + '» durante ' + p.anio + '.',
+    '',
+    '# Reglas',
+    lineas([
+      'Solo fechas que el texto dice EXPLÍCITAMENTE. No completes con lo que sepas ni calcules fechas que el texto no trae.',
+      'Cada fecha lleva `fuente_url` (la página de donde sale) y `cita_literal`: la frase copiada TAL CUAL de esa página, que menciona el día y el mes. Si no puedes copiar la frase, no listes la fecha.',
+      '`fecha` en formato AAAA-MM-DD. `alcance`: `nacional` si vale para todo el país, `local` si solo para el ámbito.',
+      'Lo que busques y no encuentres va en `no_encontrado`. Una lista de fechas vacía es una respuesta válida.',
+    ]),
+    '',
+    paginas,
+  ].join('\n')
+}
+
 function referencias(ctx: ContextoDelCliente): string {
   if (!ctx.referencias.length) return '(no hay referencias: no escribas datos concretos)'
   return ctx.referencias

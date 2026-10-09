@@ -1,0 +1,561 @@
+{
+ "name": "Zero Risk — Cadena · vigía (reloj 2×/día · CC#1)",
+ "nodes": [
+  {
+   "name": "Cada 12 horas",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "0 6,18 * * *"
+      }
+     ]
+    }
+   },
+   "position": [
+    0,
+    0
+   ],
+   "id": "1aaaa3d0-67ec-1100-2435-0b1a74a3242e"
+  },
+  {
+   "name": "1 · Pedido del reloj",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 1 · PEDIDO DEL RELOJ · el vigía corre 2 veces al día (esperado medible: 2 ejecuciones/día) · el lunes por la mañana pide además el resumen semanal\nconst ahora = new Date()\nconst lunesTemprano = ahora.getUTCDay() === 1 && ahora.getUTCHours() < 12\nreturn [{ json: { pedido: { accion: 'reloj', resumen: lunesTemprano, workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) } } }]\n"
+   },
+   "position": [
+    280,
+    0
+   ],
+   "id": "e0740bcb-cc1f-32fc-b7ee-f60909f979cd"
+  },
+  {
+   "name": "1 · Reloj",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/esperas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.pedido) }}",
+    "options": {
+     "timeout": 120000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    560,
+    0
+   ],
+   "id": "1e74b3b8-4f22-e7b7-1544-2771a1d77cc5"
+  },
+  {
+   "name": "1 · Avisos",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 1 · AVISOS · UN solo mensaje a #alertas por pasada, agrupado por campaña (nunca uno por fila: el ruido es lo que mata una bandeja) · dice QUÉ HACER, no solo qué pasó\n// En ensayo o en seco el reloj devuelve `enviar_alertas: false`: se REGISTRAN en la ejecución y no se mandan.\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nif (status !== 200) throw new Error('VIGIA_RELOJ_' + String(b.code || b.error || status) + ' · ' + String(b.detalle || b.detail || 'sin detalle') + ' · el reloj NO corrió: esto mismo es una alarma')\nif (b.inactivo === true) return [{ json: { enviar: false, hay: false, nota: String(b.motivo || 'cadena apagada') } }]\nconst alertas = Array.isArray(b.alertas) ? b.alertas : []\nconst L = []\nfor (const a of alertas) {\n  L.push('*' + (a.campana_id === 'sistema' ? 'La cadena' : 'Campaña ' + a.campana_id) + '*')\n  for (const l of a.lineas || []) L.push('• ' + l)\n  L.push('')\n}\nif (alertas.length) L.push('*Qué hacer:* revisa la bandeja de aprobaciones; lo que no se apruebe antes de su fecha vence y no se publica solo.')\nconst slack = { channel: 'C0B7XUUEBHA', text: L.join(String.fromCharCode(10)) }\nreturn [{ json: { enviar: b.enviar_alertas === true && alertas.length > 0, hay: alertas.length > 0, slack, registrado: alertas, latido: b.latido || null } }]\n"
+   },
+   "position": [
+    840,
+    0
+   ],
+   "id": "0a52053e-116d-44b0-f0dc-9f39a9d664f3"
+  },
+  {
+   "name": "1 · ¿Hay avisos para mandar?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.enviar === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    1120,
+    0
+   ],
+   "id": "904d6810-30c1-85b0-d7a1-f9074dc62c53"
+  },
+  {
+   "name": "1 · Aviso · #alertas",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "https://slack.com/api/chat.postMessage",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json; charset=utf-8"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.slack) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    1400,
+    -200
+   ],
+   "id": "344acc6d-e21e-4c51-adc3-bec4ec4faea3"
+  },
+  {
+   "name": "2 · Campañas activas",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/campanas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ accion: 'activas', workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    1680,
+    0
+   ],
+   "id": "ca22306f-8e8a-2295-9b5d-cdf243972bc6"
+  },
+  {
+   "name": "2 · Expandir",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 2 · UNA FILA POR CAMPAÑA ACTIVA · sin campañas, un solo ítem `ninguna` (la corrida termina limpia, no «en error»)\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nif (status !== 200) throw new Error('VIGIA_CAMPANAS_' + String(b.code || b.error || status) + ' · ' + String(b.detalle || b.detail || 'sin detalle'))\nconst cs = Array.isArray(b.campanas) ? b.campanas : []\nif (cs.length === 0) return [{ json: { ninguna: true } }]\nreturn cs.map((c) => ({ json: { ninguna: false, campana_id: c.id, client_id: c.client_id, seco: c.seco === true, sala_ref: c.sala_ref || {} } }))\n"
+   },
+   "position": [
+    1960,
+    0
+   ],
+   "id": "f0bee6ae-b176-702a-1c0b-00999ceccc97"
+  },
+  {
+   "name": "2 · ¿Hay campañas?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.ninguna === false }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    2240,
+    0
+   ],
+   "id": "ea9fcbb5-344d-e384-32cb-5579ffa2cff7"
+  },
+  {
+   "name": "3 · Lotes",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/filas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ accion: 'lotes', campana_id: $json.campana_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    2520,
+    -200
+   ],
+   "id": "812fde54-df42-26c0-4155-c7691f6b8381"
+  },
+  {
+   "name": "3 · Sobres de lote",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 3 · UN SOBRE POR LOTE · a la sala (`cadena/vigia` · `briefear`), con clave de idempotencia `campana:semana-iso:version`: el mismo lote repetido no abre un viaje nuevo\nconst campanas = $('2 · Expandir').all()\nconst out = []\n$input.all().forEach((r, i) => {\n  const c = campanas[i] && campanas[i].json\n  const j = r.json || {}\n  const b = j.body && typeof j.body === 'object' ? j.body : {}\n  if (!c) return\n  if (Number(j.statusCode) !== 200) throw new Error('VIGIA_LOTES_' + String(b.code || b.error || j.statusCode) + ' · campaña ' + c.campana_id + ' · ' + String(b.detalle || b.detail || 'sin detalle'))\n  for (const l of b.lotes || []) {\n    out.push({ json: { sobre: {\n      source: 'cadena/vigia', intent: 'briefear',\n      payload: { modo: 'parte', campana_id: c.campana_id, lote: l.lote, fila_ids: l.fila_ids, dry_run: c.seco === true, client_id: c.client_id },\n      idempotency_key: l.idempotency_key, logical_period: l.lote, tenant_id: c.client_id, client_id: c.client_id,\n    } } })\n  }\n})\nreturn out\n"
+   },
+   "position": [
+    2800,
+    -200
+   ],
+   "id": "a39c914b-5364-9556-908d-69fb9f489033"
+  },
+  {
+   "name": "3 · Sobre a la sala (lote)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.SALA_INTAKE_URL || \"https://zero-risk-platform.vercel.app/api/sala/intake\" }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.SALA_INGRESS_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.sobre) }}",
+    "options": {
+     "timeout": 20000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    3080,
+    -200
+   ],
+   "id": "62148deb-08ee-6086-3ec2-e954d9c8e0ab"
+  },
+  {
+   "name": "4 · Tanda siguiente",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/calendario' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ accion: 'siguiente', campana_id: $json.campana_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    2520,
+    200
+   ],
+   "id": "78eafc1d-aacc-0997-c39d-34191210b57f"
+  },
+  {
+   "name": "4 · Sobres de tanda",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 4 · UN SOBRE POR TANDA QUE TOCA ABRIR · calendario rodante: la tanda N+1 se abre cuando faltan ≤ 14 días para que termine la N · clave `campana:tanda-N`\nconst campanas = $('2 · Expandir').all()\nconst out = []\n$input.all().forEach((r, i) => {\n  const c = campanas[i] && campanas[i].json\n  const j = r.json || {}\n  const b = j.body && typeof j.body === 'object' ? j.body : {}\n  if (!c) return\n  if (Number(j.statusCode) !== 200) throw new Error('VIGIA_TANDA_' + String(b.code || b.error || j.statusCode) + ' · campaña ' + c.campana_id + ' · ' + String(b.detalle || b.detail || 'sin detalle'))\n  if (!Number.isInteger(b.tanda)) return\n  out.push({ json: { sobre: {\n    source: 'cadena/vigia', intent: 'briefear',\n    payload: { modo: 'tanda_siguiente', campana_id: c.campana_id, tanda: b.tanda, dry_run: c.seco === true, client_id: c.client_id },\n    idempotency_key: c.campana_id + ':tanda-' + b.tanda, logical_period: 'tanda-' + b.tanda, tenant_id: c.client_id, client_id: c.client_id,\n  } } })\n})\nreturn out\n"
+   },
+   "position": [
+    2800,
+    200
+   ],
+   "id": "390b0722-24e0-185d-5442-edb7639eea88"
+  },
+  {
+   "name": "4 · Sobre a la sala (tanda)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.SALA_INTAKE_URL || \"https://zero-risk-platform.vercel.app/api/sala/intake\" }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.SALA_INGRESS_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.sobre) }}",
+    "options": {
+     "timeout": 20000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    3080,
+    200
+   ],
+   "id": "9d51ea0a-a420-784a-dd13-84f00abafdf9"
+  }
+ ],
+ "connections": {
+  "Cada 12 horas": {
+   "main": [
+    [
+     {
+      "node": "1 · Pedido del reloj",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "1 · Pedido del reloj": {
+   "main": [
+    [
+     {
+      "node": "1 · Reloj",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "1 · Reloj": {
+   "main": [
+    [
+     {
+      "node": "1 · Avisos",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "1 · Avisos": {
+   "main": [
+    [
+     {
+      "node": "1 · ¿Hay avisos para mandar?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "1 · ¿Hay avisos para mandar?": {
+   "main": [
+    [
+     {
+      "node": "1 · Aviso · #alertas",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "2 · Campañas activas",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "1 · Aviso · #alertas": {
+   "main": [
+    [
+     {
+      "node": "2 · Campañas activas",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "2 · Campañas activas": {
+   "main": [
+    [
+     {
+      "node": "2 · Expandir",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "2 · Expandir": {
+   "main": [
+    [
+     {
+      "node": "2 · ¿Hay campañas?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "2 · ¿Hay campañas?": {
+   "main": [
+    [
+     {
+      "node": "3 · Lotes",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "4 · Tanda siguiente",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "3 · Lotes": {
+   "main": [
+    [
+     {
+      "node": "3 · Sobres de lote",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "3 · Sobres de lote": {
+   "main": [
+    [
+     {
+      "node": "3 · Sobre a la sala (lote)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "4 · Tanda siguiente": {
+   "main": [
+    [
+     {
+      "node": "4 · Sobres de tanda",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "4 · Sobres de tanda": {
+   "main": [
+    [
+     {
+      "node": "4 · Sobre a la sala (tanda)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

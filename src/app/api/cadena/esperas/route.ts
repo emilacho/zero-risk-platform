@@ -4,11 +4,11 @@
  */
 import { atender } from '@/lib/cadena/puerta-http'
 import { almacenDeSupabase } from '@/lib/cadena/almacen-supabase'
-import { relojDeLaCadena } from '@/lib/cadena/reloj'
+import { ACCIONES } from '@/lib/cadena/acciones'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  return atender(request, { reloj: relojDeLaCadena }, almacenDeSupabase)
+  return atender(request, ACCIONES.esperas, almacenDeSupabase)
 }

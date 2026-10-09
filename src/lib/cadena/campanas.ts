@@ -86,24 +86,74 @@ export async function avanzarCampana(al: Almacen, cuerpo: Record<string, unknown
   return { status: 200, cuerpo: { campana: n } }
 }
 
-/** El cable de vuelta a la sala lo arma LA CAMPAÑA con el `worker_id` fijo de la puerta (no `$workflow.id` del sub-flujo): así la sala rotula el viaje como BRIEF. */
+/**
+ * El cable de vuelta a la sala lo arma LA PUERTA con su `worker_id` fijo (no `$workflow.id` de un sub-flujo): así la sala rotula el viaje como BRIEF.
+ * Con campaña, el viaje sale de su `sala_ref`; sin campaña (p. ej. `plan_no_coincide`: no se abrió nada) sale del propio pedido (`client_id` + `journey_id`),
+ * y el viaje se comprueba contra la sala igual que en cualquier otra llamada.
+ */
 export async function cierreDeCampana(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
   const id = cadena(cuerpo.campana_id)
   const resultado = cadena(cuerpo.resultado)
-  if (!id || !resultado) return err(400, 'E-CAMPOS', 'faltan campana_id o resultado')
-  if (!(RESULTADOS_DE_CABLE as readonly string[]).includes(resultado)) return err(400, 'E-RESULTADO', `resultado debe ser uno de ${RESULTADOS_DE_CABLE.join(' | ')}`)
-  const c = await al.campana(id)
-  if (!c) return err(404, 'E-CAMPANA', 'la campaña no existe')
-  const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
+  if (!resultado) return err(400, 'E-CAMPOS', 'falta resultado')
+  if (!(RESULTADOS_DE_CABLE as readonly string[]).includes(resultado)) return err(400, 'E-RESULTADO', 'resultado debe ser uno de ' + RESULTADOS_DE_CABLE.join(' | '))
+  let clientId: string | null, journey: string | null, correlacion: string | null
+  if (id) {
+    const c = await al.campana(id)
+    if (!c) return err(404, 'E-CAMPANA', 'la campaña no existe')
+    clientId = c.client_id
+    journey = cadena(c.sala_ref._journey_id)
+    correlacion = cadena(c.sala_ref._sala_correlation_id)
+  } else {
+    clientId = cadena(cuerpo.client_id)
+    journey = cadena(cuerpo.journey_id)
+    correlacion = cadena(cuerpo.sala_correlation_id)
+    if (!clientId) return err(400, 'E-CAMPOS', 'sin campana_id hacen falta client_id y journey_id')
+  }
+  const noAut = await autorizarLlamada(al, cuerpo, clientId)
   if (noAut) return noAut
   const puerta = cadena(await al.leerConfig('puerta_workflow_id'))
   if (!puerta) return err(503, 'E-PUERTA-SIN-ID', 'falta cadena_config.puerta_workflow_id: sin él el cable no puede llevar el worker_id de la puerta')
-  const journey = cadena(c.sala_ref._journey_id)
-  if (!journey) return { status: 200, cuerpo: { payload_cable: null, motivo: 'la campaña no viene de un viaje de la sala (nada a quien contestar)' } }
+  if (!journey) return { status: 200, cuerpo: { payload_cable: null, motivo: 'no viene de un viaje de la sala (nada a quien contestar)' } }
+  if (!id && !(await al.journeyExiste(journey, clientId))) return err(403, 'E-VIAJE', 'el viaje no existe para este cliente en la sala')
   return {
     status: 200,
-    cuerpo: { payload_cable: { worker_id: puerta, _journey_id: journey, _sala_correlation_id: cadena(c.sala_ref._sala_correlation_id), client_id: c.client_id, resultado, campana_id: c.id } },
+    cuerpo: { payload_cable: { worker_id: puerta, _journey_id: journey, _sala_correlation_id: correlacion, client_id: clientId, resultado, ...(id ? { campana_id: id } : {}) } },
   }
 }
-
 export type { Campana }
+
+// ─────────────────────────────────────────────────────────────── lo que la puerta y el vigía necesitan saber (solo lecturas)
+
+/** El modo efectivo de la puerta para un cliente: `pasarela` (reenvía a la parte original, neutral) o `cadena`. Depende SOLO del interruptor, no del `seco` del pedido. */
+export async function estadoDeLaCadena(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
+  const clientId = cadena(cuerpo.client_id)
+  if (!clientId) return err(400, 'E-CLIENT-ID', 'falta client_id')
+  const noAut = await autorizarLlamada(al, cuerpo, clientId)
+  if (noAut) return noAut
+  const estado = await al.leerConfig('estado_cadena')
+  const lista = await al.leerConfig('clientes_ensayo')
+  const admitido = estado === 'encendida' || (estado === 'ensayo' && Array.isArray(lista) && lista.includes(clientId))
+  return { status: 200, cuerpo: { estado_cadena: estado ?? 'apagada', admitido, modo: admitido ? 'cadena' : 'pasarela' } }
+}
+
+/** El viaje de la sala existe para ESTE cliente (la puerta lo comprueba antes de hacer nada: la sala no firma el cuerpo). */
+export async function verificarViaje(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
+  const clientId = cadena(cuerpo.client_id), journey = cadena(cuerpo.journey_id)
+  if (!clientId || !journey) return err(400, 'E-CAMPOS', 'faltan client_id o journey_id')
+  const noAut = await autorizarLlamada(al, cuerpo, clientId)
+  if (noAut) return noAut
+  return { status: 200, cuerpo: { existe: await al.journeyExiste(journey, clientId) } }
+}
+
+/** Las campañas que el vigía recorre: las activas (con su `seco`, para que un ensayo se recorra en seco). */
+export async function campanasActivas(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
+  const wf = cadena(cuerpo.workflow_id), ex = cadena(cuerpo.workflow_execution_id)
+  if (!wf || !ex) return err(400, 'E-WORKFLOW-CTX', 'la llamada necesita workflow_id y workflow_execution_id (los dos, siempre)')
+  const flujos = await al.leerConfig('flujos')
+  if (!(Array.isArray(flujos) && flujos.includes(wf))) return err(403, 'E-WORKFLOW-DESCONOCIDO', 'solo lo llama un flujo de la cadena')
+  const estado = await al.leerConfig('estado_cadena')
+  const lista = await al.leerConfig('clientes_ensayo')
+  const todas = await al.campanasActivas()
+  const visibles = todas.filter((c) => c.seco || estado === 'encendida' || (estado === 'ensayo' && Array.isArray(lista) && lista.includes(c.client_id)))
+  return { status: 200, cuerpo: { campanas: visibles.map((c) => ({ id: c.id, client_id: c.client_id, seco: c.seco, sala_ref: c.sala_ref })) } }
+}

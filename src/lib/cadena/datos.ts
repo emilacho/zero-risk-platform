@@ -5,7 +5,13 @@
  */
 import { createHash } from 'node:crypto'
 import type { Almacen } from './almacen'
-import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
+import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
+import { modeloDeLaCadena, CABECERA_SALTAR_EDITOR } from './constantes'
+import { ESQUEMA_FECHAS_ESPECIALES } from './esquemas'
+import { tareaDeFechas } from './indicaciones'
+import { prepararCorrida } from './nucleo'
+import { cuerpoDeRunSdk } from './pasos'
+import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { esFechaIso, restarDias, semanaIso } from './fechas'
 import { citaAparece, normalizar } from './texto'
 import type { Fila } from './tipos'
@@ -13,7 +19,7 @@ import type { Fila } from './tipos'
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
 const MARCAS_LEGALES: Partial<Record<Fila['estado'], Fila['estado'][]>> = {
-  validada: ['lista_para_brief', 'cancelada'],
+  validada: ['lista_para_brief', 'briefeada', 'cancelada'],
   lista_para_brief: ['briefeada', 'cancelada'],
   briefeada: ['en_oficina', 'perdio_su_fecha', 'cancelada'],
   en_oficina: ['aprobada', 'perdio_su_fecha', 'cancelada'],
@@ -29,8 +35,9 @@ export async function filasListar(al: Almacen, cuerpo: Record<string, unknown>):
   const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
   if (noAut) return noAut
   const estado = cadena(cuerpo.estado)
-  const filas = (await al.filas(id, Math.max(1, await al.ultimaVersionDeCalendario(id)))).filter((f) => !estado || f.estado === estado)
-  return { status: 200, cuerpo: { filas, total: filas.length } }
+  const version = Math.max(1, await al.ultimaVersionDeCalendario(id))
+  const filas = (await al.filas(id, version)).filter((f) => !estado || f.estado === estado)
+  return { status: 200, cuerpo: { filas, total: filas.length, version, campana: { id: c.id, plan_id: c.plan_id, client_id: c.client_id, fecha_inicio: c.fecha_inicio, fecha_fin: c.fecha_fin, estado: c.estado, seco: c.seco } } }
 }
 
 /**
@@ -111,6 +118,46 @@ export async function fechasCobertura(al: Almacen, cuerpo: Record<string, unknow
   return { status: 200, cuerpo: { estado: 'investigar', intento: intentos, dominios } }
 }
 
+/**
+ * `preparar` de las fechas: recibe las páginas YA descargadas por el código (nodo HTTP) y devuelve el cuerpo completo del run-sdk + abre la corrida con plazo.
+ * Una investigación por tipo, ámbito y año (la clave de la corrida); sin presupuesto o agotados los intentos, el tipo queda sin_fuente y la campaña sigue.
+ */
+export async function fechasPreparar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+  const pais = cadena(cuerpo.pais), tipo = cadena(cuerpo.tipo), ambito = cadena(cuerpo.ambito), anio = Number(cuerpo.anio), id = cadena(cuerpo.campana_id)
+  const paginas = Array.isArray(cuerpo.paginas) ? (cuerpo.paginas as { url?: unknown; texto?: unknown }[]).filter((p): p is { url: string; texto: string } => typeof p.url === 'string' && typeof p.texto === 'string' && p.texto.trim() !== '') : []
+  if (!pais || !tipo || !ambito || !Number.isInteger(anio) || !id) return err(400, 'E-CAMPOS', 'faltan campana_id, pais, tipo, ambito o anio')
+  const c = await al.campana(id)
+  if (!c) return err(404, 'E-CAMPANA', 'la campaña no existe')
+  const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
+  if (noAut) return noAut
+  const cerrada = await compuerta(al, c.client_id, c.seco)
+  if (cerrada) return cerrada
+  const k = { pais: clave(pais), tipo: clave(tipo), ambito_clave: clave(ambito), anio }
+  if (!paginas.length) {
+    const cob = await al.coberturaDe(k.pais, k.tipo, k.ambito_clave, k.anio)
+    await al.guardarCobertura({ ...k, estado: 'sin_fuente', intentos: cob?.intentos ?? 0 })
+    return { status: 200, cuerpo: { estado: 'sin_fuente', motivo: 'no se pudo descargar ninguna página: no hay nada que extraer (el tipo queda sin fuente; la campaña sigue)' } }
+  }
+  const esquema = validarEsquemaDeSalida(ESQUEMA_FECHAS_ESPECIALES)
+  if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema de fechas no es válido')
+  const modelo = await modeloDeLaCadena(al)
+  const prep = await prepararCorrida(al, c, 'fechas', 'f:' + k.tipo + ':' + k.ambito_clave + ':' + anio, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash)
+  if (prep.tipo === 'ya_hecha') return { status: 200, cuerpo: { ya_hecha: true } }
+  if (prep.tipo === 'en_curso') return err(409, 'E-EN-CURSO', 'ya hay una investigación en curso para este tipo (dentro de su plazo)')
+  if (prep.tipo !== 'lista') {
+    const cob = await al.coberturaDe(k.pais, k.tipo, k.ambito_clave, k.anio)
+    await al.guardarCobertura({ ...k, estado: 'sin_fuente', intentos: cob?.intentos ?? 3 })
+    return { status: 200, cuerpo: { estado: 'sin_fuente', motivo: prep.tipo === 'presupuesto_agotado' ? 'el presupuesto de planificación se agotó' : 'la investigación agotó sus 3 intentos' } }
+  }
+  return {
+    status: 200,
+    cuerpo: {
+      corrida_id: prep.corrida.id, intento: prep.corrida.intento, plazo_en: prep.corrida.plazo_en, headers: { [CABECERA_SALTAR_EDITOR]: '1' },
+      run_sdk: cuerpoDeRunSdk('fechas', modelo, tareaDeFechas({ tipo, ambito, anio, paginas }), esquema.valor, c.client_id, { contrato: 'fechas_especiales.v1' }),
+    },
+  }
+}
+
 interface FechaExtraida { fecha: string; nombre: string; alcance: string; fuente_url: string; cita_literal: string }
 
 /** La cita comprueba la fecha: aparece LITERAL en la página descargada Y menciona el día y el mes de esa fecha. */
@@ -124,7 +171,8 @@ export function citaRespaldaLaFecha(f: FechaExtraida, texto: string): boolean {
 export async function fechasGuardar(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
   const pais = cadena(cuerpo.pais), tipo = cadena(cuerpo.tipo), ambito = cadena(cuerpo.ambito), anio = Number(cuerpo.anio)
   const id = cadena(cuerpo.campana_id)
-  const resultado = cuerpo.resultado as { fechas?: FechaExtraida[] } | undefined
+  const crudo = cuerpo.resultado as { success?: boolean; structured_output?: { fechas?: FechaExtraida[] }; cost_usd?: number; error?: string; fechas?: FechaExtraida[] } | undefined
+  const resultado = (crudo?.structured_output ?? crudo) as { fechas?: FechaExtraida[] } | undefined
   const paginas = Array.isArray(cuerpo.paginas) ? (cuerpo.paginas as { url?: string; texto?: string }[]) : []
   if (!pais || !tipo || !ambito || !Number.isInteger(anio) || !id || !resultado || !Array.isArray(resultado.fechas)) return err(400, 'E-CAMPOS', 'faltan campana_id, pais, tipo, ambito, anio o resultado.fechas')
   const c = await al.campana(id)
@@ -132,6 +180,8 @@ export async function fechasGuardar(al: Almacen, cuerpo: Record<string, unknown>
   const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
   if (noAut) return noAut
   const k = { pais: clave(pais), tipo: clave(tipo), ambito_clave: clave(ambito), anio }
+  const corridaId = Number(cuerpo.corrida_id)
+  if (Number.isInteger(corridaId)) await al.cerrarCorrida(corridaId, { estado: crudo?.success === false ? 'fallida' : 'ok', costo_usd: typeof crudo?.cost_usd === 'number' ? crudo.cost_usd : null, plazo_en: null, error: crudo?.success === false ? String(crudo.error ?? 'la llamada falló').slice(0, 400) : null })
   const porUrl = new Map(paginas.filter((p) => typeof p.url === 'string' && typeof p.texto === 'string').map((p) => [p.url as string, p.texto as string]))
   const buenas: (FechaExtraida & { hash: string })[] = []
   const descartadas: string[] = []
