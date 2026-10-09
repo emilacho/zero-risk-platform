@@ -1,0 +1,201 @@
+[
+ {
+  "id": "062ec4fa",
+  "estado": "ok",
+  "que_muestra": "Logotipo circular con fondo morado oscuro y la palabra «NAUFRAGO» escrita en letras turquesa de estilo manuscrito irregular. No se ve ningún plato, bebida ni persona.",
+  "producto_visto": [],
+  "texto_visible": "NAUFRAGO",
+  "con_personas": false,
+  "tipo_de_toma": "texto_afiche",
+  "formato": "cuadrado",
+  "etiqueta_confianza": "alta"
+ },
+ {
+  "id": "1e201f00",
+  "estado": "ok",
+  "que_muestra": "Retrato vertical de una mujer joven de cabello largo castaño, sentada al aire libre en una silla de madera con tela rosa/roja, que mira su reloj inteligente negro en la muñeca. Lleva una gorra negra con un parche bordado, un top negro de un solo hombro y tiene tatuajes visibles; al fondo se ve un entorno de playa desenfocado con estructuras de caña.",
+  "producto_visto": [],
+  "texto_visible": "Berrel Panamá Est. 2019 (parche de la gorra)",
+  "con_personas": true,
+  "tipo_de_toma": "personas",
+  "formato": "vertical",
+  "etiqueta_confianza": "alta"
+ },
+ {
+  "id": "49ba83e2",
+  "estado": "ok",
+  "que_muestra": "Una mujer con traje de baño rojo, de pie en lo alto de una torre de vigilancia de madera en la playa, mira por unos binoculares. Se ve el techo de lámina, una tela verde colgada, salvavidas naranjas, palmeras y un cielo azul con nubes, tomado desde abajo.",
+  "producto_visto": [],
+  "texto_visible": "",
+  "con_personas": true,
+  "tipo_de_toma": "ambiente",
+  "formato": "vertical",
+  "etiqueta_confianza": "alta"
+ },
+ {
+  "id": "5d92d79f",
+  "estado": "ok",
+  "que_muestra": "Imagen dividida en dos partes: arriba, un hombre sonriente con ropa de trabajo gris y guantes sostiene un manojo de raíces de yuca recién arrancadas en una plantación verde; abajo, vista cenital de un cuenco negro con encebollado (caldo anaranjado con pescado, yuca, cebolla morada en tiras e hierbas) y una mano con uñas azules que lo remueve con una cuchara.",
+  "producto_visto": [
+   "Encebollados"
+  ],
+  "texto_visible": "De la pachamama al encebollado",
+  "con_personas": true,
+  "tipo_de_toma": "producto",
+  "formato": "vertical",
+  "etiqueta_confianza": "media"
+ },
+ {
+  "id": "61f992dc",
+  "estado": "ok",
+  "que_muestra": "Primer plano de un cuenco oscuro con una sopa anaranjada con hierbas verdes picadas por encima, mientras una mano exprime un limón sobre ella y el jugo cae en gotas. Al fondo, desenfocado, hay un caballete de pizarra naranja y un segundo plato de sopa en primer plano a la izquierda.",
+  "producto_visto": [
+   "Encebollados"
+  ],
+  "texto_visible": "",
+  "con_personas": true,
+  "tipo_de_toma": "producto",
+  "formato": "vertical",
+  "etiqueta_confianza": "media"
+ },
+ {
+  "id": "6d85f0a0",
+  "estado": "ok",
+  "que_muestra": "Vista cenital de una mesa de madera clara con un tazón oscuro de encebollado (caldo anaranjado con cebolla morada en rodajas y cilantro picado encima), un bol blanco con limones partidos por la mitad y exprimidor rojo, una bolsita de chifles (chips de plátano verde) y una botella de salsa picante.",
+  "producto_visto": [
+   "Chifle",
+   "Encebollados"
+  ],
+  "texto_visible": "Etiqueta de la botella de salsa picante con letra pequeña ilegible.",
+  "con_personas": false,
+  "tipo_de_toma": "producto",
+  "formato": "vertical",
+  "etiqueta_confianza": "media"
+ },
+ {
+  "id": "780fc5e1",
+  "estado": "ok",
+  "que_muestra": "Sobre una mesa de restaurante, con un mural de esqueletos al fondo y una silla turquesa, hay un tazón oscuro grande con un caldo amarillo-anaranjado, cebolla morada en pluma, chifles (plátano frito) y cilantro, que parece un encebollado. Detrás hay dos botellas de café frío de la marca ONC, una de sabor Café + Limón y otra de Café + Maracuyá. También se ven un salero, un pimentero y un exprimidor de limón rojo.",
+  "producto_visto": [
+   "Encebollados"
+  ],
+  "texto_visible": "ONC; CAFÉ + LIMÓN; CAFÉ + MARACUYÁ; KETO; ENERGÍA NATURAL; SIN AZÚCAR",
+  "con_personas": false,
+  "tipo_de_toma": "producto",
+  "formato": "vertical",
+  "etiqueta_confianza": "media"
+ },
+ {
+  "id": "7a75e500",
+  "estado": "ok",
+  "que_muestra": "Sobre una mesa clara, un frasco de vidrio con salsa de ají naranja y etiqueta «RUKUTÚ» junto a un bol blanco con ceviche: cebolla morada en juliana, cilantro, pimiento verde, tomate y zanahoria picados, medio aguacate cubierto con una salsa cremosa de maní y puntos de ají. De fondo, un mural de un esqueleto con camisa turquesa, gafas de sol y barba que sostiene un bol humeante, junto a una tabla de surf morada.",
+  "producto_visto": [
+   "Ceviches"
+  ],
+  "texto_visible": "RUKUTÚ, 0997664119, @RUKUTUIO",
+  "con_personas": false,
+  "tipo_de_toma": "producto",
+  "formato": "vertical",
+  "etiqueta_confianza": "media"
+ },
+ {
+  "id": "8a2feb10",
+  "estado": "ok",
+  "que_muestra": "Rincón de un local con paredes rojo intenso y techo amarillo mostaza, un mural de paisaje con río, barcas y vegetación, una mesa de madera oscura con un florero de cristal, sillones rosa-rojizos y sillas azules con cojines rojos, y espejos decorativos en la pared. Encima lleva una tarjeta semitransparente con el título de la publicación. No se ve comida, bebida ni ningún producto.",
+  "producto_visto": [],
+  "texto_visible": "5 Lugares para conocer en Olón",
+  "con_personas": false,
+  "tipo_de_toma": "ambiente",
+  "formato": "vertical",
+  "etiqueta_confianza": "alta"
+ },
+ {
+  "id": "bc3684b9",
+  "estado": "ok",
+  "que_muestra": "Dos hombres sonriendo y haciendo el gesto de 'shaka' sentados a una mesa blanca en un restaurante al aire libre, con tazones de sopa de pescado con cebolla morada en primer plano y frente a ellos, un pan en un plato, botellas de salsa, vasos con bebida roja y un mural pintado en la pared sobre un mapa del tesoro y una botella.",
+  "producto_visto": [
+   "Encebollados",
+   "Pan"
+  ],
+  "texto_visible": "Vine buscando oro y encontré Encebollados; botella de salsa con la marca «Cholula»/«Caqui» parcialmente legible",
+  "con_personas": true,
+  "tipo_de_toma": "personas",
+  "formato": "vertical",
+  "etiqueta_confianza": "media"
+ },
+ {
+  "id": "d40a09bf",
+  "estado": "ok",
+  "que_muestra": "Logotipo circular sobre fondo negro: un círculo morado oscuro con la palabra «NAUFRAGO» escrita en letras verde turquesa de trazo irregular, tipo pincel. No aparece comida, bebida ni personas.",
+  "producto_visto": [],
+  "texto_visible": "NAUFRAGO",
+  "con_personas": false,
+  "tipo_de_toma": "texto_afiche",
+  "formato": "cuadrado",
+  "etiqueta_confianza": "alta"
+ },
+ {
+  "id": "e7ea463f",
+  "estado": "ok",
+  "que_muestra": "Primer plano de un plato hondo gris con caldo naranja (encebollado) con trozos de pescado y cilantro picado por encima. Al fondo se ven botellas de salsa, un cesto con cubiertos y un frasco de ají sobre una mesa clara. Encima hay un texto superpuesto en letras blancas.",
+  "producto_visto": [
+   "Encebollados"
+  ],
+  "texto_visible": "“¡El encebollado Náufrago no solo es una explosión de sabor, también está lleno de beneficios para tu salud! ¿Quieres saber cuáles? ¡Te lo cuento ahora!”",
+  "con_personas": false,
+  "tipo_de_toma": "producto",
+  "formato": "vertical",
+  "etiqueta_confianza": "media"
+ },
+ {
+  "id": "ef0921ad",
+  "estado": "ok",
+  "que_muestra": "Primer plano de un tazón oscuro con caldo naranja, con cebolla morada en tiras finas y hierbas verdes picadas (cilantro y similares) esparcidas encima. Se ve el caldo, pero no se distingue si lleva camarón, pescado u otra proteína ni el tamaño de la porción.",
+  "producto_visto": [
+   "Encebollados"
+  ],
+  "texto_visible": "",
+  "con_personas": false,
+  "tipo_de_toma": "producto",
+  "formato": "vertical",
+  "etiqueta_confianza": "media"
+ },
+ {
+  "id": "f7493d12",
+  "estado": "ok",
+  "que_muestra": "Primer plano de un tazón oscuro de encebollado (caldo anaranjado con cebolla morada encurtida y cilantro picado por encima) sobre un plato, en una mesa de restaurante. Al fondo hay un cartel de mesa de la bebida ONC (limonada + café) con una botella oscura, además de botellas de salsas, servilletas y un frasco de ají.",
+  "producto_visto": [
+   "Encebollados"
+  ],
+  "texto_visible": "y con un buen encebollado; REFRÉSCATE Y PONTE; ¡PÍDELA AQUÍ!; LIMONADA + CAFÉ; ONC CAFÉ + LIMÓN",
+  "con_personas": false,
+  "tipo_de_toma": "producto",
+  "formato": "vertical",
+  "etiqueta_confianza": "media"
+ },
+ {
+  "id": "fc2b94c8",
+  "estado": "ok",
+  "que_muestra": "Vista cenital de una mesa de madera clara con un plato hondo oscuro de encebollado (caldo naranja con cebolla morada en tiras y cilantro picado encima). Al lado hay un bol blanco con limones partidos por la mitad, una bolsita transparente de chifles (chips de plátano verde) y una botella de salsa picante a la izquierda.",
+  "producto_visto": [
+   "Encebollados",
+   "Chifle"
+  ],
+  "texto_visible": "",
+  "con_personas": false,
+  "tipo_de_toma": "producto",
+  "formato": "vertical",
+  "etiqueta_confianza": "media"
+ },
+ {
+  "id": "ff42157b",
+  "estado": "ok",
+  "que_muestra": "Fachada de un pequeño local de comida con techo de bambú y calamina y un letrero morado con la palabra NAUFRAGO en letras turquesa. Se ve una barra de madera con ventanilla de atención, un menú impreso en una pantalla, un mural de playa con una palmera y un esqueleto con camisa turquesa, y sillas turquesa en la terraza. En la mesa del fondo hay vasos con bebida, pero no se distingue ningún plato del catálogo.",
+  "producto_visto": [],
+  "texto_visible": "NAUFRAGO; Vine buscando oro y encontré Encebollado (texto del mural); menú impreso con el nombre NAUFRAGO",
+  "con_personas": false,
+  "tipo_de_toma": "ambiente",
+  "formato": "vertical",
+  "etiqueta_confianza": "alta"
+ }
+]
