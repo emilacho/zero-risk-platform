@@ -139,7 +139,7 @@ export interface Almacen {
   abrirEspera(e: Omit<EsperaFila, 'id'>): Promise<{ espera: EsperaFila; creada: boolean }>
   esperasVivas(): Promise<EsperaFila[]>
   actualizarEspera(id: number, patch: Partial<EsperaFila>): Promise<void>
-  /** estado del brazo ejecutor en la sala (`sala_destinos_de_recado.estado_del_brazo`): `video` está por_configurar hasta que alguien lo construya */
+  /** estado del brazo ejecutor en la sala (lo lee el almacén de recados de la sala): el de `video` está por_configurar hasta que alguien lo construya */
   estadoDelBrazo(destino: string): Promise<'opera' | 'por_configurar' | 'no_existe' | null>
   // fechas especiales
   coberturaDe(pais: string, tipo: string, ambitoClave: string, anio: number): Promise<FechaCobertura | null>
