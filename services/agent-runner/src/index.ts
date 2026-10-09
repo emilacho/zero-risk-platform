@@ -28,6 +28,10 @@ import { resolverTopeUsd, resolverRazonamiento } from './lib/tope-por-corrida.js
 import { resolverModelo } from './lib/modelo-por-corrida.js'
 import { limitesDelPedido, ecoDeLimites, CAPACIDADES_DEL_CORREDOR } from './lib/mirar-afuera-pedido.js'
 
+// SDK 0.3.x (relevo 26) · desde la 0.3.142 los servidores MCP se conectan EN SEGUNDO PLANO: la sesión arranca antes de que estén listos y la primera vuelta podría quedarse sin las herramientas del cerebro.
+// Con `0` el SDK espera como antes (registro de cambios del SDK, 0.3.142). Solo si nadie lo fijó ya.
+if (process.env.MCP_CONNECTION_NONBLOCKING === undefined) process.env.MCP_CONNECTION_NONBLOCKING = '0'
+
 /**
  * Capture an agent error in Sentry with canonical context tags. Sprint
  * Monitoreo §144 · workflow_id + client_id + agent_slug so the dashboard can
