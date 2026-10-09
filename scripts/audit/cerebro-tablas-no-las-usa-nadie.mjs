@@ -15,8 +15,25 @@
 import fs from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
-export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|producto_visto|etiquetada_en|etiqueta_modelo|texto_visible|etiqueta_confianza)\b/
+export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|producto_visto|etiquetada_en|etiqueta_modelo|texto_visible|etiqueta_confianza|con_personas|tipo_de_toma)\b/
 export const FLUJOS_A_VIGILAR = { lVCLzxQCKNkd3uS0: 'pieza', X9F0zp6LQ2xGEYVS: 'planeacion', '3lyknrP3PoS2KzUf': 'apify_service' }
+
+/**
+ * EXCEPCIONES DECLARADAS (relevo 21 · decisión de Lenovo): un flujo y un nodo que pueden NOMBRAR `etiquetada_en` SOLO para LEER qué fotos propias siguen sin etiqueta
+ * (`client_social_images?select=id,etiquetada_en&…` y su filtro `etiquetada_en=is.null`). Es el etiquetado diario: la corrida diaria pide `etiquetar` por cada foto nueva.
+ * Solo lectura por la FORMA de la dirección: cualquier otro uso del nombre (un cuerpo de escritura, otra columna del cerebro) sigue siendo una infracción.
+ * Quien ESCRIBE las columnas sigue siendo solo la ruta del portero (lo prueba `cerebro-paso-2-aislamiento.test.ts`).
+ */
+export const EXCEPCIONES = {
+  EZXAFQvKZsJlvGNO: { nodo: '② Ejecutar el plan y medir', nombres: ['etiquetada_en'], lectura: [/client_social_images\?select=id,etiquetada_en(?=&)/g, /&etiquetada_en=is\.null(?=&)/g] },
+}
+/** ¿lo que nombra este nodo queda cubierto por la excepción declarada de su flujo? (se quita la lectura permitida y se vuelve a mirar) */
+export function cubiertoPorExcepcion(flujoId, nodoNombre, texto) {
+  const e = EXCEPCIONES[flujoId]
+  if (!e || e.nodo !== nodoNombre) return false
+  const resto = e.lectura.reduce((t, r) => t.replace(r, ''), texto)
+  return resto !== texto && !NOMBRES_NUEVOS.test(resto)
+}
 
 export function usaSelectEstrella(texto) {
   return /client_social_images[^\n"'`]{0,300}[?&]select=\*/.test(texto) || /[?&]select=\*[^\n"'`]{0,300}client_social_images/.test(texto)
@@ -31,7 +48,7 @@ export function revisarFlujos(flujos) {
     for (const n of f.nodes ?? []) {
       const texto = JSON.stringify(n)
       const nuevo = texto.match(NOMBRES_NUEVOS)
-      if (nuevo) infracciones.push({ flujo: f.id, nombre: f.name ?? '', activo: f.active === true, nodo: n.name ?? '', tipo: 'nombra_algo_del_cerebro', detalle: nuevo[1] })
+      if (nuevo && !cubiertoPorExcepcion(f.id, n.name ?? '', texto)) infracciones.push({ flujo: f.id, nombre: f.name ?? '', activo: f.active === true, nodo: n.name ?? '', tipo: 'nombra_algo_del_cerebro', detalle: nuevo[1] })
       if (usaSelectEstrella(texto)) infracciones.push({ flujo: f.id, nombre: f.name ?? '', activo: f.active === true, nodo: n.name ?? '', tipo: 'select_estrella_sobre_client_social_images', detalle: 'select=*' })
     }
   }

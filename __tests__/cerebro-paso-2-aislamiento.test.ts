@@ -32,13 +32,18 @@ const TODOS = CARPETAS.flatMap((c) => archivos(c))
 const leer = (rel: string): string => fs.readFileSync(path.join(RAIZ, rel), 'utf8')
 
 // ───────────────────────── A · las tablas y columnas nuevas son solo del portero del cerebro
-export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|producto_visto|etiquetada_en|etiqueta_modelo|texto_visible|etiqueta_confianza)\b/
+export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|producto_visto|etiquetada_en|etiqueta_modelo|texto_visible|etiqueta_confianza|con_personas|tipo_de_toma)\b/
 /** quién PUEDE nombrarlas: la migración y su reversa, los guiones de auditoría, el cerebro (su carpeta), la ruta del portero y estas dos pruebas */
 export const PUEDEN_NOMBRARLAS = [
   /^supabase\/migrations\/202610060100_cerebro_paso_2_tablas_y_columnas\.sql$/,
   /^supabase\/reversas\/202610060100_cerebro_paso_2_REVERSA\.sql$/,
   /^supabase\/migrations\/202610070100_cerebro_fotos_texto_visible_y_etiqueta_confianza\.sql$/,
   /^supabase\/reversas\/202610070100_cerebro_fotos_texto_visible_y_etiqueta_confianza_REVERSA\.sql$/,
+  /^supabase\/migrations\/202610080300_cerebro_fotos_toma\.sql$/,
+  /^supabase\/reversas\/202610080300_cerebro_fotos_toma_REVERSA\.sql$/,
+  /^__tests__\/relevo-19-migraciones\.test\.ts$/,
+  /^scripts\/n8n-nodos\/cerebro-diario-etiquetar\.js$/,
+  /^__tests__\/cerebro-diario-etiquetado\.test\.ts$/,
   /^scripts\/audit\/cerebro-tablas-no-las-usa-nadie\.mjs$/,
   /^scripts\/audit\/cerebro-paso-2-verifica-base\.mjs$/,
   /^src\/lib\/cerebro\//,
