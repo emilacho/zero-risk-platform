@@ -1,0 +1,25 @@
+=== BASELINE ssLtw · 20 nodos · versionId f536524e-3e57-4e8f-ad13-8a8df2bcecd5 · active false ===
+huella de los 17 NO tocados: b88a1bf32652b4173c39c28b1a51f135387b201529de4e11cdb243abcd00a741
+arreglo 6 · cable: IF ciclos out#1 ↛ [BB] Consolidador → [BB] Lazo A prep → [BB] Execute Lazo A corrección → [BB] Judge prep ✅
+arreglo 7 · umbral → >= 2 (cap=1 · exactamente 1 corrección) + no_progress (inerte hoy) ✅
+arreglo 8.b · juez: MAX=2 + progreso monótono con try/catch (C1) ✅
+arreglo 8.b · Return scores → best_draft ✅
+
+=== VERIFICACIÓN ssLtw ===
+V2 nodos            : 20 → 22 (esperado 22) ✅
+V5 aristas colgando : 0 ✅
+V6 arista vieja out#1→Consolidador ELIMINADA: ✅
+V7 Judge prep / Consolidador / lentes / Promote sin tocar: ✅
+V8 umbral: ✅ >= 2
+V9 MAX_FIDELITY_CYCLES: ✅ 2
+V4 huella NO tocados: b88a1bf32652b4173c39c28b1a51f135387b201529de4e11cdb243abcd00a741
+     ✅ IDÉNTICA
+V12 sintaxis:
+     ✅ [BB] Faithfulness judge
+     ✅ Return scores a parent (grade-cimiento gate)
+     ✅ [BB] Lazo A prep
+
+>>> VEREDICTO: ✅ VERDE
+
+PUT · HTTP 200 · nodos 22 · versionId ec47f3ad-ecc1-4c17-a389-e810312790f8 · active false
+vivo: 22 nodos · huella NO tocados b88a1bf32652b4173c39c28b1a51f135387b201529de4e11cdb243abcd00a741 · active false

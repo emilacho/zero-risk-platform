@@ -1,0 +1,12 @@
+punto de retorno · ssLtw ec47f3ad-ecc1-4c17-a389-e810312790f8 (22) · LazoA 256713ea-2186-49df-86c0-d371d4844634 (11)
+🔴 Return scores → fuente directa ($json en agotado · Promote prep en PASS) + _return_source ✅
+🟡 reviewers_ok propagado en Re-síntesis prep y parse ✅
+
+V12 sintaxis:
+  ✅ todos compilan
+huella ssLtw (21 no editados): ✅ idéntica
+huella LazoA (9 no editados) : ✅ idéntica
+
+>>> VEREDICTO: ✅ VERDE
+PUT ssLtw · HTTP 200 · nodos 22 · versionId 1a2f33f9-08f7-486a-8402-cf7d3059c8ad · active false
+PUT LazoA · HTTP 200 · nodos 11 · versionId c1499299-667c-4c40-af21-848a39294588 · active false

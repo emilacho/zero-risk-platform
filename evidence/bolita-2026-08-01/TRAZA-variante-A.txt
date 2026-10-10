@@ -1,0 +1,28 @@
+════ VARIANTE A · exec 76129 · success · 2026-08-01T10:28:43.615Z ════
+nodos ejecutados: 17
+
+  ✅ A2 · juez run0 · scores vacíos → {"positioning":0,"icp_summary":0,"voice_description":0,"customer_angle":0,"retention_notes":0}
+  ✅ A2 · juez run0 · low_fields = los 2 gateados → ["positioning","icp_summary"]
+  ✅ A2 · juez run0 · pass:false · exhausted:false
+  ✅ A2 · el try/catch NO lanzó (el nodo produjo salida)
+  ✅ A4 · Lazo A prep · _fidelity_cycle = 2 → 2
+  ✅ A11 · Promote → canon NUNCA alcanzado
+
+  el sub-proceso devolvió: {"brand_book_draft":{"client_id":"00000000-0000-4000-8000-000000000001","positioning":"","icp_summary":"","voice_description":"","forbidden_words":[],"required_terminology":[],"customer_angle":"","retention_notes":"","_build":{"source":"onboarding_collaborativ
+  ✅ A7 · Exit · _fidelity_cycle = 2 (del trigger) → 2
+  ✅ A7 · Exit · _draft_preserved: false → false
+  ✅ A6 · resynth_ok: false (el run-sdk estaba apagado) → false
+  ✅ A5 · reviewers_ok = 0 → 0
+  ✅ A8 · juez run1 existe (la reentrada funcionó) → 2
+  ✅ A8 · juez run1 · fidelity_cycle = 2 → 2
+  ✅ A8 · juez run1 · exhausted: true → true
+  ✅ A8 · juez run1 · no_progress → true
+  ❌ B · juez run1 · pass → false
+
+  🔑 A10 · Return scores a parent:
+  ✅ A10 · fidelity_cycle = 2 → 2
+  ✅ A10 · _return_source = 'json_directo' → "json_directo"
+  ✅ track_pass → false
+  ✅ track_exhausted → true
+
+  orden real: Webhook · smoke trigger → Validate Deal Data → Confirm barato · competitor list → [BB] Fan-out prep → Lente · brand-strategist → Lente · editor-en-jefe → Lente · jefe-client-success → [BB] Merge lentes (esperar 3) → [BB] Consolidador → [BB] Judge prep → [BB] Judge · run-sdk → [BB] Faithfulness judge → [BB] IF · fidelidad PASS → [BB] IF · ciclos agotados → [BB] Lazo A prep → [BB] Execute Lazo A corrección → Return scores a parent (grade-cimiento gate)
