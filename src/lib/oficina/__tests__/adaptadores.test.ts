@@ -33,7 +33,7 @@ function fetchFalso(o: { revisorTexto?: string; imagenOk?: boolean; slackOk?: bo
     llamadas.push({ url: u, init })
     const json = (x: unknown, status = 200) => new Response(JSON.stringify(x), { status, headers: { 'content-type': 'application/json' } })
     if (u.endsWith('/api/images/generate')) return o.imagenOk === false ? json({ error: 'sin saldo' }, 402) : json({ image_url: `https://bucket.test/img-${++n}.png`, generation_id: `gen-${n}`, cost_usd: 0.014 })
-    if (u.startsWith('https://api.openai.com')) return json({ output_text: o.revisorTexto ?? JSON.stringify({ fichas: [] }), usage: { input_tokens: 1000, output_tokens: 200 } })
+    if (u.startsWith('https://api.openai.com')) return json({ output_text: o.revisorTexto ?? '', usage: { input_tokens: 1000, output_tokens: 200 } })
     if (u.startsWith('https://slack.com')) return o.slackOk === false ? json({ ok: false, error: 'not_in_channel' }) : json({ ok: true, ts: `171.${llamadas.length}` })
     if (u.startsWith('https://bucket.test/') || u.startsWith('https://fotos.test/')) return new Response(new Uint8Array(png(1024, 1024)), { status: 200 })
     return json({}, 404)
@@ -106,8 +106,16 @@ describe('INTEGRACIÓN · almacén real (base falsa) + adaptadores + orquestador
     const rev = llamadas.find((x) => x.url.startsWith('https://api.openai.com'))!
     const cuerpo = JSON.parse(String(rev.init!.body))
     expect(cuerpo.model).toBe('modelo-revisor')
-    expect(Object.keys(JSON.parse(cuerpo.input[0].content[0].text)).sort()).toEqual(['brief', 'imagen', 'instruccion', 'manual', 'material_portero', 'pieza', 'plan', 'visual_direction'].filter((k) => k !== 'plan'))
-    expect(JSON.stringify(cuerpo)).not.toMatch(/fichas_jefe/)
+    // el revisor recibe TEXTO: la pregunta abierta + el cerebro del cliente + la pieza (y su imagen); sin claves, sin rúbrica, sin nada del jefe
+    const texto = String(cuerpo.input[0].content[0].text)
+    expect(texto).toMatch(/^Te comparto una pieza, que se usa para .+ Usa el contexto para entender lo que te comparto, no para justificarlo\./)
+    expect(texto).not.toMatch(/\{qué es\}|\{uso\}|\{público\}|\{objetivo\}/)
+    const pos = ['## Resumen del encargo', '## La pieza', '## Contexto de la marca'].map((x) => texto.indexOf(x))
+    expect(pos.every((p) => p >= 0) && pos[0] < pos[1] && pos[1] < pos[2], 'orden: resumen → pieza → contexto').toBe(true)
+    for (const s of ['### Manual de marca del cliente — ', '### El brief de este entregable — ', '### Lo que reunió el portero — ']) expect(texto).toContain(s)
+    expect(cuerpo.input[0].content[1]).toMatchObject({ type: 'input_image' })
+    expect(JSON.stringify(cuerpo)).not.toMatch(/fichas_jefe|visual_direction|rúbrica/)
+    expect(cuerpo.reasoning).toBeUndefined(); expect(cuerpo.text).toBeUndefined() // ni parámetros de formato ni de razonamiento: pregunta abierta
 
     // Slack: una raíz y el resto en el hilo; la raíz se guarda en el encargo
     const slack = llamadas.filter((x) => x.url.startsWith('https://slack.com'))
@@ -120,7 +128,7 @@ describe('INTEGRACIÓN · almacén real (base falsa) + adaptadores + orquestador
   it('el costo del revisor sale de los tokens × el precio del entorno (1000×2 + 200×10 por millón)', async () => {
     const db = sembrar(); const { f } = fetchFalso()
     const P = crearPuertos(db, ENV, f)
-    const r = await P.revisor({ pedido: { x: 1 }, dry_run: false })
+    const r = await P.revisor({ texto: 'x', imagenes_urls: [], dry_run: false })
     expect(r).toMatchObject({ ok: true, modelo: 'modelo-revisor' })
     if (r.ok) expect(r.costo_usd).toBeCloseTo((1000 * 2 + 200 * 10) / 1e6, 9)
   })
@@ -175,13 +183,13 @@ describe('cada adaptador por separado', () => {
   })
   it('revisor: sin clave o sin modelo ⇒ «no configurado» (no se inventa un nombre de modelo); en dry_run no llama', async () => {
     const { f, llamadas } = fetchFalso()
-    expect(await crearPuertos(sembrar(), { ...ENV, openaiKey: undefined }, f).revisor({ pedido: {}, dry_run: false })).toMatchObject({ ok: false, error: expect.stringMatching(/OPENAI_API_KEY/) })
-    expect(await crearPuertos(sembrar(), { ...ENV, revisorModelo: undefined }, f).revisor({ pedido: {}, dry_run: false })).toMatchObject({ ok: false, error: expect.stringMatching(/OFICINA_REVISOR_MODEL/) })
-    expect(await crearPuertos(sembrar(), ENV, f).revisor({ pedido: {}, dry_run: true })).toMatchObject({ ok: true, costo_usd: 0 })
+    expect(await crearPuertos(sembrar(), { ...ENV, openaiKey: undefined }, f).revisor({ texto: 'x', imagenes_urls: [], dry_run: false })).toMatchObject({ ok: false, error: expect.stringMatching(/OPENAI_API_KEY/) })
+    expect(await crearPuertos(sembrar(), { ...ENV, revisorModelo: undefined }, f).revisor({ texto: 'x', imagenes_urls: [], dry_run: false })).toMatchObject({ ok: false, error: expect.stringMatching(/OFICINA_REVISOR_MODEL/) })
+    expect(await crearPuertos(sembrar(), ENV, f).revisor({ texto: 'x', imagenes_urls: [], dry_run: true })).toMatchObject({ ok: true, costo_usd: 0 })
     expect(llamadas).toHaveLength(0)
   })
   it('revisor con imagen: la manda como input_image', async () => {
-    const { f, llamadas } = fetchFalso(); await crearPuertos(sembrar(), ENV, f).revisor({ pedido: { a: 1 }, dry_run: false, imagen_url: 'https://bucket.test/x.png' })
+    const { f, llamadas } = fetchFalso(); await crearPuertos(sembrar(), ENV, f).revisor({ texto: 'la pieza', imagenes_urls: ['https://bucket.test/x.png'], dry_run: false })
     const c = JSON.parse(String(llamadas[0].init!.body)); expect(c.input[0].content[1]).toEqual({ type: 'input_image', image_url: 'https://bucket.test/x.png' })
   })
   it('bandeja: una pieza de OTRO cliente o inexistente se rechaza (no se ata una decisión a la pieza de otro)', async () => {

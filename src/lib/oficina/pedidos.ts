@@ -3,6 +3,7 @@
  * Agnóstico: ninguna frase nombra a un cliente. El formato de la respuesta lo hace cumplir `salida.ts`; aquí solo se explica el contrato en palabras.
  */
 import type { BriefLeido } from './brief'
+import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
 import type { Estado, Ficha } from './tipos'
 import type { FuentesCompletas } from './puertos'
 import type { ReglasDeImagen } from './reglas-de-imagen'
@@ -18,6 +19,7 @@ export const CONTRATOS_EN_TEXTO: Record<string, string> = {
   'observacion_imagen.v1': '{"imagenes": [{"indice": 0, "reglas": [{"id": "o1", "presente": true, "evidencia": "…"}], "texto_en_imagen": ["…"], "marcas": ["…"], "personas": 0, "producto": "…", "elementos_visibles": ["…"]}], "preferencia": [0]}  (presente = true | false | "no_se_ve"; describes, no apruebas)',
   'pieza_post.v1': '{"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…", "necesito": []}',
   'fichas.v1': '{"fichas": [{"que": "…", "donde": "texto|hashtags|imagen", "contra_que": "…", "gravedad": "bloquea|sugerencia", "propuesta": "…"}]}',
+  'resolucion_solo.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}]}',
   'resolucion.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "pieza": {"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…"}}  (pieza solo si cambias algo)',
 }
 
@@ -85,7 +87,14 @@ export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fic
     case 'corrige':
     case 'decide': {
       esquema = 'resolucion.v1'
-      task = `${base}\n## La pieza actual\n${pieza(c.art('pieza_post'))}\n\n## Hallazgos que te tocan (${clave === 'corrige' ? 'del jefe de marketing' : 'del revisor externo ciego'})\n${seccionDeFichas(extra?.fichas ?? [])}\n\n## Tu trabajo\nResponde ítem por ítem: «tomada» (y corriges la pieza) o «no_tomada» con una línea de razón. Si cambias algo, devuelve la pieza completa nueva en \`pieza\`. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
+      task = `${base}\n## La pieza actual\n${pieza(c.art('pieza_post'))}\n\n## ${clave === 'corrige' ? 'Hallazgos que te tocan (del jefe de marketing)' : 'Opinión libre del revisor externo (no es una lista de errores ni una orden: es una mirada distinta a la tuya)'}\n${seccionDeFichas(extra?.fichas ?? [])}\n\n## Tu trabajo\nResponde ítem por ítem: «tomada» (y corriges la pieza) o «no_tomada» con una línea de razón. Tú decides qué tomas y qué no. Si cambias algo, devuelve la pieza completa nueva en \`pieza\`. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
+      return finalizar(task)
+    }
+    case 'decide_imagen': {
+      esquema = 'resolucion_solo.v1'
+      const fin = c.art('imagen_final') ?? {}
+      images = fin.url ? [String(fin.url)] : []
+      task = `${base}\n## Tu dirección visual\n${String(c.art('visual_direction')?.resumen ?? '')}\n\n## La pieza completa (texto e imagen que ves)\n${pieza(c.art('pieza_post'))}\n\n## Opinión libre del revisor externo sobre ESTA pieza (no es una lista de errores ni una orden: es una mirada distinta a la tuya)\n${seccionDeFichas(extra?.fichas ?? [])}\n\n## Tu trabajo\nResponde sobre TU parte (la imagen y la dirección visual): «tomada» si aceptas que la imagen debería cambiar, o «no_tomada» con una línea de razón. Tú decides. La imagen NO se vuelve a generar en esta ronda: una persona decide si se rehace. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
       return finalizar(task)
     }
     default:
@@ -93,19 +102,26 @@ export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fic
   }
 }
 
-/** el pedido al revisor ciego: SOLO la lista cerrada de artefactos (ver ciego.ts); sin hilo, sin fichas del jefe, sin respuestas del autor */
-export function fuentesDelCiego(c: ContextoDePedido): Record<string, unknown> {
+export const FUNCION_DEL_MANUAL = 'lo vigente: identidad, voz y reglas de la marca (es la norma; manda si hay contradicción)'
+export const FUNCION_DEL_PLAN = 'aspiración: lo que el cliente quiere lograr; no es un hecho ya cumplido'
+export const FUNCION_DEL_BRIEF = 'el encargo concreto de esta pieza'
+export const FUNCION_DEL_PORTERO = 'hechos que reunió el portero del cliente (datos, precios, fotos); pueden estar incompletos'
+/** el resumen del encargo sale SOLO del brief; lo que el brief no dice no se inventa */
+export const resumenDelEncargo = (b: ContextoDePedido['brief']): ResumenDelEncargo => ({ red: b.red, formato: b.formato, que_es: b.que_es, objetivo: b.mensaje, llamado: b.llamado })
+
+/** lo que el revisor externo recibe de la sala 1: la pieza, su imagen y el cerebro del cliente que lee la sala (manual, plan, brief, lo del portero). Nada del hilo ni de las fichas: esta función no los recibe. */
+export function contextoDelRevisor(c: ContextoDePedido): { pieza: string; imagenes: string[]; contexto: ContextoDelRevisor[]; encargo: ResumenDelEncargo } {
   const fin = c.art('imagen_final') ?? {}
   return {
     pieza: pieza(c.art('pieza_post')),
-    ...(fin.url ? { imagen: { url: fin.url, origen: fin.origen, nota: fin.nota ?? null } } : {}),
-    visual_direction: String((c.art('visual_direction') ?? {}).resumen ?? ''),
-    manual: recortaManual(c.fuentes.manual_texto),
-    ...(c.fuentes.plan_texto ? { plan: recortaManual(c.fuentes.plan_texto) } : {}),
-    brief: c.brief.texto,
-    material_portero: String(c.art('material_portero')?.texto ?? ''),
+    encargo: resumenDelEncargo(c.brief),
+    imagenes: fin.url ? [String(fin.url)] : [],
+    contexto: [
+      { titulo: 'Manual de marca del cliente', funcion: FUNCION_DEL_MANUAL, texto: recortaManual(c.fuentes.manual_texto) },
+      { titulo: 'Plan de trabajo del cliente', funcion: FUNCION_DEL_PLAN, texto: c.fuentes.plan_texto ? recortaManual(c.fuentes.plan_texto) : '' },
+      { titulo: 'El brief de este entregable', funcion: FUNCION_DEL_BRIEF, texto: c.brief.texto },
+      { titulo: 'Lo que reunió el portero', funcion: FUNCION_DEL_PORTERO, texto: String(c.art('material_portero')?.texto ?? '') },
+    ],
   }
 }
 const recortaManual = (t: string) => recorta(t, 12000)
-
-export const INSTRUCCION_DEL_CIEGO = `Eres un revisor externo e independiente. Recibes una pieza de marketing (pie de foto, hashtags e imagen) y el contexto del cliente. No ves ninguna conversación previa. Aporta PERSPECTIVA: qué cambiarías y por qué, contra el manual, el plan y el brief. Responde solo con este JSON: ${CONTRATOS_EN_TEXTO['fichas.v1']}`

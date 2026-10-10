@@ -11,6 +11,8 @@ const generada: Condicion = { tipo: 'si_artefacto', artefacto: 'visual_direction
 const requiereMirar: Condicion = { tipo: 'si_artefacto', artefacto: 'visual_direction', campo: 'decision.requiere_mirar', igual: true }
 const fichasJefe: Condicion = { tipo: 'si_fichas_abiertas', origen: 'jefe', gravedad: 'bloquea' }
 const fichasExterna: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa' }
+// la opinión libre llega a cada dueño en SU parte: el curador responde por la imagen (no se rehace en la ronda; decide una persona)
+const externaImagen: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'imagen' }
 const cambioPieza: Condicion = { tipo: 'si_cambio', artefacto: 'pieza_post' }
 
 export const POST_IMG: Plantilla = {
@@ -79,12 +81,17 @@ export const POST_IMG: Plantilla = {
     {
       clave: 'revisor_externo', tipo: 'externo', quien: 'GPT', condicion: siempre, ronda: 2,
       entrada: ['pieza_post', 'imagen_final', 'visual_direction', 'material_portero'], salida_artefacto: 'fichas_externas', tope_usd: 0.5,
-      salida: { esquema: 'fichas.v1', reintento_formato: 1 },
+      salida: { esquema: 'opinion_libre.v1', reintento_formato: 0 },
     },
     {
       clave: 'decide', tipo: 'agente', quien: QUIEN_DINAMICO, condicion: fichasExterna, ronda: 2,
       entrada: ['fichas_externas', 'pieza_post'], salida_artefacto: 'pieza_post', tope_usd: 0.2,
       salida: { esquema: 'resolucion.v1', reintento_formato: 1 },
+    },
+    {
+      clave: 'decide_imagen', tipo: 'agente', quien: 'marketing_instagram_curator', condicion: externaImagen, ronda: 2,
+      entrada: ['fichas_externas', 'visual_direction', 'imagen_final'], salida_artefacto: 'respuesta_imagen', tope_usd: 0.1,
+      salida: { esquema: 'resolucion_solo.v1', reintento_formato: 1 },
     },
     { clave: 'chequeos_3', tipo: 'codigo', quien: 'sala', funcion: 'chequeos', condicion: cambioPieza, entrada: ['pieza_post', 'imagen_final'], salida_artefacto: 'chequeos', tope_usd: 0 },
     { clave: 'entrega', tipo: 'codigo', quien: 'sala', funcion: 'empaquetar_entrega', condicion: siempre, entrada: ['pieza_post', 'imagen_final', 'chequeos'], salida_artefacto: 'entrega', tope_usd: 0 },

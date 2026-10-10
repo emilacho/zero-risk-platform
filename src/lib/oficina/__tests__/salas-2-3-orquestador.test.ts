@@ -70,7 +70,7 @@ const BASE_C = {
   laminas: () => ({ texto: j({ laminas: LAMINAS }) }),
   revision_jefe: () => ({ texto: FICHAS_VACIAS }),
   corrige_texto: () => ({ texto: '{"respuestas": []}' }), ajusta_laminas: () => ({ texto: '{"respuestas": []}' }), corrige_laminas: () => ({ texto: '{"respuestas": []}' }),
-  decide_texto: () => ({ texto: '{"respuestas": []}' }), ajusta_laminas_2: () => ({ texto: '{"respuestas": []}' }), decide_laminas: () => ({ texto: '{"respuestas": []}' }),
+  decide_texto: () => ({ texto: '{"respuestas": []}' }), decide_imagen: () => ({ texto: '{"respuestas": []}' }), ajusta_laminas_2: () => ({ texto: '{"respuestas": []}' }), decide_laminas: () => ({ texto: '{"respuestas": []}' }),
 }
 
 const ESTRUCTURA = { elementos: [
@@ -84,7 +84,7 @@ const COPY_KIT = { elementos: [
 const BASE_K = {
   paquete: BASE_C.paquete, direccion_visual: BASE_C.direccion_visual, prompts: BASE_C.prompts, mirar: BASE_C.mirar,
   narrativa: () => ({ texto: j(ESTRUCTURA) }), texto: () => ({ texto: j(COPY_KIT) }), revision_jefe: BASE_C.revision_jefe,
-  corrige_texto: BASE_C.corrige_texto, corrige_estructura: () => ({ texto: '{"respuestas": []}' }), decide_texto: BASE_C.decide_texto, decide_estructura: () => ({ texto: '{"respuestas": []}' }),
+  corrige_texto: BASE_C.corrige_texto, decide_imagen: BASE_C.decide_imagen, corrige_estructura: () => ({ texto: '{"respuestas": []}' }), decide_texto: BASE_C.decide_texto, decide_estructura: () => ({ texto: '{"respuestas": []}' }),
 }
 const guionKit = (o: Partial<Record<keyof typeof BASE_K, Guion[string]>> = {}): Guion => ({ ...BASE_K, ...o } as Guion)
 
@@ -201,10 +201,18 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     expect(pasos).toContain('corrige_laminas'); expect(pasos).not.toContain('corrige_texto')
     expect(M.llamadas.render).toBe(2)
   })
-  it('el revisor ciego recibe SOLO la lista cerrada: la pieza y hasta 4 láminas dibujadas; nada del hilo ni de las fichas del jefe', async () => {
+  it('🔴 el revisor externo recibe la pieza (texto + hasta 4 láminas dibujadas) y el cerebro del cliente, con UNA pregunta abierta; sin reglas y sin nada del jefe ni del diseñador', async () => {
     const { M, id } = await abiertoC()
-    await correr(M, id, guionCarrusel({ revision_jefe: () => ({ texto: j({ fichas: [{ que: 'detalle menor', donde: 'texto', contra_que: 'brief', gravedad: 'sugerencia', propuesta: 'x' }] }) }) }))
+    await correr(M, id, guionCarrusel({ revision_jefe: () => ({ texto: j({ fichas: [{ que: 'SECRETO-DEL-JEFE', donde: 'texto', contra_que: 'brief', gravedad: 'sugerencia', propuesta: 'x' }] }) }) }))
     expect(M.llamadas.revisor).toBe(1)
+    const t = M.llamadas.revisorPedidos[0]
+    expect(t).toMatch(/^Te comparto una pieza, que se usa para .+ Usa el contexto para entender lo que te comparto, no para justificarlo\./)
+    expect(t).not.toMatch(/\{qué es\}|\{uso\}|\{público\}|\{objetivo\}/)
+    const pos = ['## Resumen del encargo', '## La pieza', '## Contexto de la marca'].map((x) => t.indexOf(x))
+    expect(pos.every((p) => p >= 0) && pos[0] < pos[1] && pos[1] < pos[2], 'orden: resumen → pieza → contexto').toBe(true)
+    for (const s of ['### Manual de marca del cliente — ', '### Plan de trabajo del cliente — ', '### El brief de este entregable — ', '### Lo que reunió el portero — ']) expect(t).toContain(s)
+    expect(t).toContain('Texto base:'); expect(t).toContain('Láminas:')
+    expect(t).not.toMatch(/SECRETO-DEL-JEFE|visual_direction|reglas_de_imagen|gravedad|rúbrica|JSON/i)
     expect(M.llamadas.revisorImagenes[0].length).toBeGreaterThanOrEqual(3); expect(M.llamadas.revisorImagenes[0].length).toBeLessThanOrEqual(4)
     expect(M.llamadas.revisorImagenes[0].every((u) => /\.test\//.test(u))).toBe(true)
   })
@@ -351,14 +359,14 @@ describe('SALA 2 · más reglas del orquestador de láminas', () => {
   })
   it('un hallazgo del revisor externo sobre el texto (ronda 2): decide el autor, el diseñador vuelve a recortar y se dibuja otra vez', async () => {
     const { M, id } = await abiertoC()
-    M.revisorTexto = () => ({ ok: true, texto: j({ fichas: [{ que: 'el cierre es flojo', donde: 'texto', contra_que: 'brief', gravedad: 'sugerencia', propuesta: 'más claro' }] }), costo_usd: 0.1, modelo: 'r' })
+    M.revisorTexto = () => ({ ok: true, texto: 'Yo cambiaría el cierre: lo siento flojo, y la tercera idea se repite con la primera.', costo_usd: 0.1, modelo: 'r' })
     const nueva = { ...COPIA, texto_base: TEXTO_BASE.replace('Lo preparamos al momento', 'Lo hacemos al momento') }
     const lam = LAMINAS.map((l, i) => (i === 3 ? { ...l, headline: 'Lo hacemos al momento' } : l))
     const { pasos } = await correr(M, id, guionCarrusel({
       decide_texto: (_n, t) => ({ texto: j({ respuestas: [{ id: /\[(ext-[^\]]+)\]/.exec(t)![1], estado: 'tomada', razon: 'ok' }], copia: nueva }) }),
       ajusta_laminas_2: () => ({ texto: j({ respuestas: [], laminas: lam }) }),
     }))
-    expect(pasos.slice(-2)).toEqual(['decide_texto', 'ajusta_laminas_2'])
+    expect(pasos.slice(-3)).toEqual(['decide_texto', 'ajusta_laminas_2', 'decide_imagen'])
     expect(M.llamadas.render).toBe(2)
     expect(JSON.stringify(M.llamadas.renderPedidos[1].slides)).toMatch(/Lo hacemos al momento/)
   })
@@ -462,6 +470,44 @@ describe('SALA 3 · kit de historias y estados · punta a punta con modelo simul
     const fondos = M.llamadas.renderPedidos[0].slides.map((s) => s.background_image_url)
     expect(fondos[0]).toMatch(/img\.test/); expect(fondos[1]).toBeNull(); expect(fondos[2]).toBeNull()
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' })
+  })
+  it('la opinión libre del revisor sobre el kit llega a TODOS los que hicieron algo: autor, narrador y curador; cada uno responde sobre SU parte, una sola vez', async () => {
+    const { M, id } = await abiertoK()
+    M.revisorTexto = () => ({ ok: true, texto: 'La semana se siente repetitiva: tres historias dicen casi lo mismo.', costo_usd: 0.1, modelo: 'r' })
+    const resp = (estado: string, razon: string) => (_n: number, t: string) => ({ texto: j({ respuestas: [{ id: /\[(ext-[^\]]+)\]/.exec(t)![1], estado, razon }] }) })
+    const { pasos, tareas, ultima } = await correr(M, id, guionKit({
+      decide_texto: resp('no_tomada', 'cada historia tiene su pilar'), decide_estructura: resp('tomada', 'el ritmo sí se repite'), decide_imagen: resp('no_tomada', 'la paleta es la del manual'),
+    }))
+    const r2 = pasos.slice(pasos.indexOf('revisor_externo') + 1)
+    for (const p of ['decide_texto', 'decide_estructura', 'decide_imagen']) expect(r2.filter((x) => x === p), p).toHaveLength(1)
+    expect(tareas['decide_texto'][0]).toMatch(/Opinión libre del revisor externo[\s\S]*repetitiva/)
+    expect(tareas['decide_estructura'][0]).toMatch(/repetitiva/); expect(tareas['decide_imagen'][0]).toMatch(/repetitiva/)
+    const ext = M.encargos.get(id)!.estado_del_motor.fichas.filter((f) => f.origen === 'externa')
+    expect(ext.map((f) => [f.donde, f.estado, f.razon])).toEqual([['texto', 'no_tomada', 'cada historia tiene su pilar'], ['imagen', 'no_tomada', 'la paleta es la del manual'], ['estructura', 'tomada', 'el ritmo sí se repite']])
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+    expect(M.llamadas.revisorPedidos[0]).toMatch(/## La pieza\ne01/)
+  })
+  it('carrusel: la opinión llega al autor, al diseñador (laminas) y al curador (imagen); el diseñador se llama UNA vez aunque haya dos motivos (copia cambiada + opinión)', async () => {
+    const { M, id } = await abiertoC()
+    M.revisorTexto = () => ({ ok: true, texto: 'El orden de las láminas no me convence; la cuarta sobra.', costo_usd: 0.1, modelo: 'r' })
+    const nueva = { ...COPIA, texto_base: TEXTO_BASE.replace('Lo preparamos al momento', 'Lo hacemos al momento') }
+    const lam = LAMINAS.map((l, i) => (i === 3 ? { ...l, headline: 'Lo hacemos al momento' } : l))
+    const resp = (estado: string, razon: string, extra: Record<string, unknown> = {}) => (_n: number, t: string) => ({ texto: j({ respuestas: [{ id: /\[(ext-[^\]]+)\]/.exec(t)![1], estado, razon }], ...extra }) })
+    const { pasos } = await correr(M, id, guionCarrusel({ decide_texto: resp('tomada', 'ok', { copia: nueva }), ajusta_laminas_2: () => ({ texto: j({ respuestas: [{ id: 'ext-x', estado: 'no_tomada', razon: 'x' }], laminas: lam }) }), decide_imagen: resp('no_tomada', 'la foto es la correcta') }))
+    const r2 = pasos.slice(pasos.indexOf('revisor_externo') + 1)
+    expect(r2.filter((x) => x === 'ajusta_laminas_2')).toHaveLength(1)
+    expect(r2.filter((x) => x === 'decide_imagen')).toHaveLength(1)
+    const ext = M.encargos.get(id)!.estado_del_motor.fichas.filter((f) => f.origen === 'externa')
+    expect(ext.map((f) => f.donde).sort()).toEqual(['imagen', 'laminas', 'texto'])
+    expect(ext.every((f) => f.estado !== 'abierta')).toBe(true)
+  })
+  it('carrusel: si el autor NO cambia el texto, la opinión sobre las láminas igual llega al diseñador (cualquiera de dos motivos)', async () => {
+    const { M, id } = await abiertoC()
+    M.revisorTexto = () => ({ ok: true, texto: 'Las láminas se sienten apretadas.', costo_usd: 0.1, modelo: 'r' })
+    const { pasos } = await correr(M, id, guionCarrusel({ ajusta_laminas_2: (_n, t) => ({ texto: j({ respuestas: [{ id: /\[(ext-[^\]]+)\]/.exec(t)![1], estado: 'no_tomada', razon: 'caben bien' }], laminas: LAMINAS }) }) }))
+    expect(pasos.slice(pasos.indexOf('revisor_externo') + 1).filter((x) => x === 'ajusta_laminas_2')).toHaveLength(1)
+    const lam = M.encargos.get(id)!.estado_del_motor.fichas.find((f) => f.origen === 'externa' && f.donde === 'laminas')!
+    expect(lam).toMatchObject({ estado: 'no_tomada', razon: 'caben bien' })
   })
   it('un elemento del kit que no se entiende cierra el encargo FALLIDO, visible, sin adivinar', async () => {
     const roto = BRIEF_KIT.replace('| servicio', '| servicio\n  - mañana temprano | video | tema | pilar')

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { POST_IMG, validarPlantilla, siguientePaso, estadoInicial, registrarPaso, evaluar, puedeResolver, duenoDeLaFicha } from '../index'
-import type { Plantilla, Ficha } from '../index'
+import type { Plantilla, Ficha, Condicion } from '../index'
 import { simular } from './simular'
 
 const real = { direccion_visual: { costo_usd: 0.07, artefacto: { decision: { modo: 'real', requiere_mirar: false } } } }
@@ -164,5 +164,25 @@ describe('GENERICIDAD: el mismo motor corre una plantilla de juguete sin cambiar
     const fs = await import('node:fs'), path = await import('node:path')
     const src = ['motor.ts', 'plantilla.ts'].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n')
     expect(src).not.toMatch(/post_img|carrusel|historia/i)
+  })
+})
+
+describe('condición «cualquiera»: un mismo empleado atiende dos motivos en UNA llamada', () => {
+  const abierta = (donde: string): Ficha => ({ id: 'x-' + donde, origen: 'externa', donde, gravedad: 'sugerencia', estado: 'abierta' } as Ficha)
+  const cond: Condicion = { tipo: 'cualquiera', de: [{ tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'laminas' }, { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'texto' }] }
+  it('se cumple si se cumple alguna; no si ninguna', () => {
+    const e0 = estadoInicial()
+    expect(evaluar(cond, e0)).toBe(false)
+    expect(evaluar(cond, { ...e0, fichas: [abierta('imagen')] })).toBe(false)
+    expect(evaluar(cond, { ...e0, fichas: [abierta('laminas')] })).toBe(true)
+    expect(evaluar(cond, { ...e0, fichas: [abierta('texto'), abierta('laminas')] })).toBe(true)
+    expect(evaluar({ tipo: 'cualquiera', de: [] }, e0)).toBe(false)
+  })
+  it('validarPlantilla la acepta con 2 o más condiciones válidas y rechaza una vacía, de una sola, o con una inventada dentro', () => {
+    const con = (c: unknown): string[] => validarPlantilla({ ...POST_IMG, pasos: POST_IMG.pasos.map((p) => (p.clave === 'decide' ? { ...p, condicion: c as never } : p)) })
+    expect(con(cond)).toEqual([])
+    expect(con({ tipo: 'cualquiera', de: [] }).join()).toMatch(/al menos dos/)
+    expect(con({ tipo: 'cualquiera', de: [{ tipo: 'siempre' }] }).join()).toMatch(/al menos dos/)
+    expect(con({ tipo: 'cualquiera', de: [{ tipo: 'siempre' }, { tipo: 'inventada' }] }).join()).toMatch(/fuera del vocabulario/)
   })
 })

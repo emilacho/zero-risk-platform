@@ -7,7 +7,7 @@
 export const TIPOS_DE_PASO = ['portero', 'agente', 'codigo', 'externo', 'brazo'] as const
 export type TipoDePaso = (typeof TIPOS_DE_PASO)[number]
 
-export const TIPOS_DE_CONDICION = ['siempre', 'si_artefacto', 'si_fichas_abiertas', 'si_cambio'] as const
+export const TIPOS_DE_CONDICION = ['siempre', 'si_artefacto', 'si_fichas_abiertas', 'si_cambio', 'cualquiera'] as const
 
 export type OrigenDeFicha = 'chequeo' | 'jefe' | 'externa'
 export type Gravedad = 'bloquea' | 'sugerencia'
@@ -17,6 +17,8 @@ export type Condicion =
   | { tipo: 'si_artefacto'; artefacto: string; campo: string; igual: unknown }
   | { tipo: 'si_fichas_abiertas'; origen?: OrigenDeFicha; donde?: string | string[]; gravedad?: Gravedad }
   | { tipo: 'si_cambio'; artefacto: string | string[] }
+  /** se cumple si se cumple ALGUNA de las condiciones (así un mismo empleado atiende dos motivos en UNA sola llamada) */
+  | { tipo: 'cualquiera'; de: Condicion[] }
 
 /** vuelta acotada: tras ejecutar el paso, si `si` se cumple y quedan vueltas, se regresa al paso `paso` (clave) */
 export interface VueltaA { paso: string; max: number; si: Condicion }
