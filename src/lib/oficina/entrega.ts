@@ -80,8 +80,9 @@ export function chequeosDeEntrega(archivos: ArchivoDeEntrega[], fila: FilaDeForm
 /** instante UTC (ISO) de una fecha y hora LOCALES en una zona IANA; null si falta la fecha o la zona no existe (la pieza no vence: se declara) */
 export function aUtc(fecha: string | null | undefined, hora: string | null | undefined, zona: string | null | undefined): string | null {
   if (!fecha || !esFechaReal(fecha) || !zona) return null
+  if (hora && !esHoraReal(hora.slice(0, 5))) return null // una hora que no existe no se corrige sola (antes caía a medianoche y la pieza vencía horas antes)
   const [y, mo, d] = fecha.split('-').map(Number)
-  const [h, mi] = (hora && esHoraReal(hora.slice(0, 5)) ? hora.slice(0, 5) : '00:00').split(':').map(Number)
+  const [h, mi] = (hora ? hora.slice(0, 5) : '00:00').split(':').map(Number)
   try {
     const dtf = new Intl.DateTimeFormat('en-US', { timeZone: zona, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
     const desfase = (t: number) => {

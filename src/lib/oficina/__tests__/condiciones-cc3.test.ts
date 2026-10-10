@@ -40,7 +40,8 @@ describe('#469 H2 · una fecha que no existe no se corrige sola: se rechaza', ()
     expect(aUtc('2026-10-12', '09:00', null)).toBeNull()
     expect(aUtc('2026-10-12', '09:00', 'Mars/Olympus')).toBeNull()
     expect(aUtc('2026-10-12', '09:00', 'America/Guayaquil')).toBe('2026-10-12T14:00:00.000Z')
-    expect(aUtc('2026-10-12', '25:99', 'America/Guayaquil')).toBe('2026-10-12T05:00:00.000Z')
+    expect(aUtc('2026-10-12', '25:99', 'America/Guayaquil')).toBeNull() // CC#1: una hora imposible NO cae a medianoche
+    expect(aUtc('2026-10-12', null, 'America/Guayaquil')).toBe('2026-10-12T05:00:00.000Z') // sin hora sí: medianoche local, como siempre
   })
 })
 
@@ -61,5 +62,25 @@ describe('#471 · un encargo CERRADO no se vuelve a cerrar (sin segunda pieza ni
     await avanzar(M.P, id)
     await avanzar(M.P, id)
     expect(M.llamadas.bandeja.length).toBe(antes)
+  })
+})
+
+// ───────────────────────── lo que CC#1 marcó (relevo 46)
+import fs from 'node:fs'
+import { datosDeContacto } from '../texto'
+
+describe('CC#1 · condiciones que quedaban', () => {
+  it('una fecha con ESPACIOS («2026 10 09», «09 10 2026») no es un teléfono ajeno; los teléfonos con espacios siguen siéndolo', () => {
+    const tel = (t: string) => datosDeContacto(t).telefonos.length
+    for (const t of ['Desde el 2026 10 09', 'el 09 10 2026']) expect(tel(t), t).toBe(0)
+    for (const t of ['Escríbenos al 099 123 4567', 'al 042 345 678', 'Tel 2 345 678', 'WhatsApp +593 99 123 4567']) expect(tel(t), t).toBe(1)
+  })
+  it('el nodo «Vigilar» del vigía espera 300 s (lo mismo que su ruta) y el resto de los tiempos de #474 siguen', () => {
+    const src = fs.readFileSync('scripts/worker-staging/oficina/construir-oficina.mjs', 'utf8')
+    expect(/http\(N\.vigia,[^\n]*timeout: 300000/.test(src)).toBe(true)
+    expect(/http\(N\.registrar,[^\n]*timeout: 300000/.test(src)).toBe(true)
+    expect(/http\(N\.rearmar,[^\n]*timeout: 300000/.test(src)).toBe(true)
+    expect(/http\(N\.abrir,[^\n]*timeout: 120000/.test(src)).toBe(true)
+    expect(fs.readFileSync('src/app/api/oficina/vigia/route.ts', 'utf8')).toMatch(/maxDuration = 300/)
   })
 })

@@ -56,7 +56,7 @@ const RE_URL = /\b(?:https?:\/\/|www\.)[^\s)]+/gi
 /** una fecha («2026-10-09», «09/10/2026»), un rango («10-11-12») o una cifra con separador de miles («1.250.000») NO es un teléfono (condición C1 de CC#1). Estrecha a propósito (CC#3): un rango son 3 grupos, no 5 («09-91-23-45-67» es un teléfono), y una cifra con miles no empieza en 0 («099.123.456» es un teléfono) */
 export function esFechaORangoOCifra(t: string): boolean {
   const s = t.trim()
-  return /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(s) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$/.test(s) || /^\d{1,2}(?:\s?[-–]\s?\d{1,2}){2}$/.test(s) || /^[1-9]\d{0,2}(?:[.,]\d{3})+(?:[.,]\d{1,2})?$/.test(s)
+  return /^\d{4}[-/.\s]\d{1,2}[-/.\s]\d{1,2}$/.test(s) || /^\d{1,2}[-/.\s]\d{1,2}[-/.\s]\d{2,4}$/.test(s) || /^\d{1,2}(?:\s?[-–]\s?\d{1,2}){2}$/.test(s) || /^[1-9]\d{0,2}(?:[.,]\d{3})+(?:[.,]\d{1,2})?$/.test(s)
 }
 
 /** ¿«AAAA-MM-DD» es un día que EXISTE? (el 31 de febrero o el mes 13 no se corrigen solos: se rechazan, condición CC#3 #469 H2) */
