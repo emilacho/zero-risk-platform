@@ -47,7 +47,7 @@ function fetchFalso(o: { render?: 'ok' | 'error' | 'sin_urls' } = {}): { f: type
       const m = MEDIDAS_DE_PLATAFORMA[body.platform]
       return json({ carousel_id: 'cars-1', platform: body.platform, width: m.ancho, height: m.alto, slide_urls: body.slides.map((_, i) => `https://bucket.test/${body.subcarpeta}/slide-${i + 1}-${m.ancho}x${m.alto}.png`), fonts_usadas: ['Caveat', 'Inter'], fonts_faltantes: ['Homemade Apple'], timings_ms: body.slides.map(() => 90) })
     }
-    if (u.startsWith('https://api.openai.com')) return json({ output_text: j({ fichas: [] }), usage: { input_tokens: 1000, output_tokens: 200 } })
+    if (u.startsWith('https://api.openai.com')) return json({ output_text: '', usage: { input_tokens: 1000, output_tokens: 200 } })
     if (u.startsWith('https://slack.com')) return json({ ok: true, ts: `171.${llamadas.length}` })
     if (u.startsWith('https://bucket.test/') || u.startsWith('https://fotos.test/')) { const q = /-(\d+)x(\d+)\.png$/.exec(u); return new Response(new Uint8Array(png(q ? Number(q[1]) : 1024, q ? Number(q[2]) : 1024)), { status: 200 }) }
     return json({}, 404)
@@ -146,14 +146,14 @@ describe('frontera: la oficina NO escribe en el bucket de la web del cliente', (
 describe('el revisor ciego con varias imágenes', () => {
   it('manda TODAS las imágenes como entrada de imagen, en el mismo mensaje', async () => {
     const { f, llamadas } = fetchFalso()
-    const r = await crearPuertos(sembrar(), ENV, f).revisor({ pedido: { x: 1 }, dry_run: false, imagenes_urls: ['https://a.test/1.png', 'https://a.test/2.png', 'https://a.test/3.png'] })
+    const r = await crearPuertos(sembrar(), ENV, f).revisor({ texto: 'x', dry_run: false, imagenes_urls: ['https://a.test/1.png', 'https://a.test/2.png', 'https://a.test/3.png'] })
     expect(r).toMatchObject({ ok: true })
     const cuerpo = JSON.parse(String(llamadas[0].init!.body))
     expect(cuerpo.input[0].content.filter((c: { type: string }) => c.type === 'input_image').map((c: { image_url: string }) => c.image_url)).toEqual(['https://a.test/1.png', 'https://a.test/2.png', 'https://a.test/3.png'])
   })
   it('con la imagen sola de siempre (sala 1) sigue mandando una', async () => {
     const { f, llamadas } = fetchFalso()
-    await crearPuertos(sembrar(), ENV, f).revisor({ pedido: { x: 1 }, dry_run: false, imagen_url: 'https://a.test/1.png' })
+    await crearPuertos(sembrar(), ENV, f).revisor({ texto: 'x', dry_run: false, imagenes_urls: ['https://a.test/1.png'] })
     expect(JSON.parse(String(llamadas[0].init!.body)).input[0].content.filter((c: { type: string }) => c.type === 'input_image')).toHaveLength(1)
   })
 })

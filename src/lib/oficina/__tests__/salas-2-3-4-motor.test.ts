@@ -30,7 +30,7 @@ describe('las plantillas de las salas 2 y 3 son válidas contra el vocabulario c
   }
   it('no cambia el vocabulario: los tipos de condición y de paso son los de la sala 1', () => {
     const tipos = (p: Plantilla) => new Set(p.pasos.flatMap((s) => [s.condicion.tipo, ...(s.vuelve_a ? [s.vuelve_a.si.tipo] : [])]))
-    for (const p of [CARRUSEL_IG_V1, KIT_HISTORIAS]) for (const t of tipos(p)) expect(['siempre', 'si_artefacto', 'si_fichas_abiertas', 'si_cambio']).toContain(t)
+    for (const p of [CARRUSEL_IG_V1, KIT_HISTORIAS]) for (const t of tipos(p)) expect(['siempre', 'si_artefacto', 'si_fichas_abiertas', 'si_cambio', 'cualquiera']).toContain(t)
   })
   it('una plantilla que inventa una función, un esquema o un validador sigue rechazada', () => {
     const c = JSON.parse(JSON.stringify(CARRUSEL_IG_V1)) as Plantilla
@@ -104,13 +104,13 @@ describe('el motor recorre el carrusel sin conocerlo', () => {
     const sug = simular(CARRUSEL_IG_V1, { revision_jefe: { costo_usd: 0, artefacto: {}, fichas: [f({ gravedad: 'sugerencia' })] } })
     expect(sug.claves.some((c) => c.startsWith('corrige'))).toBe(false)
     const ext = simular(CARRUSEL_IG_V1, {
-      revisor_externo: { costo_usd: 0, artefacto: {}, fichas: [f({ id: 'x1', origen: 'externa', donde: 'hashtags', gravedad: 'sugerencia' })] },
+      revisor_externo: { costo_usd: 0, artefacto: {}, fichas: [f({ id: 'x1', origen: 'externa', donde: 'texto', gravedad: 'sugerencia' })] },
       decide_texto: { costo_usd: 0, artefacto: { texto_base: 'y' }, resoluciones: [{ id: 'x1', estado: 'tomada', razon: 'ok' }] },
     })
     expect(ext.claves.slice(ext.claves.indexOf('revisor_externo'), ext.claves.indexOf('entrega'))).toEqual(['revisor_externo', 'decide_texto', 'ajusta_laminas_2', 'armar_3', 'render_3', 'chequeos_3'])
   })
   it('no hay una tercera ronda: aunque queden fichas abiertas, termina', () => {
-    const { final, claves } = simular(CARRUSEL_IG_V1, { revisor_externo: { costo_usd: 0, artefacto: {}, fichas: [f({ id: 'q', origen: 'externa', donde: 'laminas' })] }, decide_laminas: { costo_usd: 0, artefacto: { laminas: [] }, resoluciones: [{ id: 'q', estado: 'no_tomada', razon: 'no' }] } })
+    const { final, claves } = simular(CARRUSEL_IG_V1, { revisor_externo: { costo_usd: 0, artefacto: {}, fichas: [f({ id: 'q', origen: 'externa', donde: 'texto' })] }, decide_texto: { costo_usd: 0, artefacto: { texto_base: 'z' }, resoluciones: [{ id: 'q', estado: 'no_tomada', razon: 'no' }] } })
     expect(final.accion).toBe('fin'); expect(claves.filter((c) => c === 'revisor_externo')).toHaveLength(1)
   })
 })
@@ -242,7 +242,12 @@ describe('armar lo que se dibuja', () => {
     expect(r.slides[2].cta).toBe('Pide')
   })
   it('carrusel: una lámina sin imagen lleva null, nunca undefined ni una dirección inventada', () => {
-    expect(armarLaminasDeCarrusel([{ rol: 'hook', headline: 'A' }], {}).slides[0]).toEqual({ headline: 'A', background_image_url: null })
+    expect(armarLaminasDeCarrusel([{ rol: 'hook', headline: 'A' }], {}).slides[0]).toEqual({ headline: 'A', background_image_url: null, pie: null })
+  })
+  it('carrusel: el pie es «desliza» (SIN flecha: la tipografía no la trae y saldría un cuadrito ▯) en todas menos la última, que no lleva pie', () => {
+    const { slides } = armarLaminasDeCarrusel([{ rol: 'hook', headline: 'A' }, { rol: 'proof', headline: 'B' }, { rol: 'cta', headline: 'C' }], {})
+    expect(slides.map((x) => x.pie)).toEqual(['desliza', 'desliza', null])
+    expect(JSON.stringify(slides)).not.toMatch(/[→↑←↗]/)
   })
   it('kit: una lámina por elemento de la ESTRUCTURA con el texto del autor, sin pie ni indicador', () => {
     const r = armarLaminasDeKit(

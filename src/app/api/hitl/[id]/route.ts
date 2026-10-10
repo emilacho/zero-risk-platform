@@ -75,7 +75,14 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
   }
 
   const { data, error } = await supabase.from('hitl_queue').update(updates).eq('id', ctx.params.id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    // la tabla solo admite pending|approved|rejected|edited: «expired» e «in_review» pasan la puerta de esta ruta (como siempre) pero la base los rechaza (23514).
+    // Se dice claro en vez de un 500 genérico: una pieza vencida se cierra con rejected + decision.vencida = true (lo que hace el vigía de la oficina).
+    if (error.code === '23514') {
+      return NextResponse.json({ error: 'estado_no_admitido_por_la_bandeja', detail: `la bandeja no admite el estado «${body.status}»; para cerrar una pieza vencida use rejected con decision.vencida = true` }, { status: 409 })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   // Side-effect: propagate decision to the source entity, if metadata says so.
   const meta = (data?.metadata ?? {}) as Record<string, unknown>

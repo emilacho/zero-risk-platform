@@ -13,7 +13,7 @@ import {
   type ElementoDeCopyKit, type ElementoDeEstructura, type ImagenDeRef, type Lamina,
 } from './laminas'
 import type { ResultadoDePaso } from './motor'
-import { construirTareaLaminas, fuentesDelCiegoLaminas, INSTRUCCION_DEL_CIEGO_LAMINAS, type ContextoLaminas } from './pedidos-laminas'
+import { construirTareaLaminas, contextoDelRevisorLaminas, type ContextoLaminas } from './pedidos-laminas'
 import type { Cambios, Encargo, FuentesCompletas, Puertos } from './puertos'
 import { chequearPrompts, citasExisten, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { ROLES_DE_LAMINA } from './salida'
@@ -32,6 +32,8 @@ const refsValidosDe = (b: BaseL): string[] => (b.familia === 'kit' ? b.elementos
 interface ImagenDecidida { ref: string; modo: 'real' | 'generada' | 'ninguna'; foto_id?: string; motivo: string }
 const direccion = (e: Estado) => datos(e, 'visual_direction') as ({ imagenes?: ImagenDecidida[]; refs_generadas?: string[] } & Record<string, unknown>) | undefined
 const refsGeneradas = (e: Estado): string[] => direccion(e)?.refs_generadas ?? []
+/** las imágenes que la re-imagen (pedida por la opinión) vuelve a generar */
+const refsDeLaReImagen = (e: Estado): string[] => arr<string>(datos(e, 'respuesta_imagen')?.refs)
 /** índice de las fotos reales que el curador mira (no chocan con los de las imágenes generadas) */
 const BASE_INDICE_REAL = 1000
 
@@ -69,6 +71,7 @@ const DONDE_DEL_PASO: Record<string, string[]> = {
   corrige_texto: ['texto', 'hashtags'], decide_texto: ['texto', 'hashtags'],
   ajusta_laminas: ['laminas'], ajusta_laminas_2: ['laminas'], corrige_laminas: ['laminas'], decide_laminas: ['laminas'],
   corrige_estructura: ['estructura'], decide_estructura: ['estructura'],
+  decide_imagen: ['imagen'],
 }
 /** fichas abiertas que ESTE paso debe atender: las de su ronda (jefe: las que bloquean; externa: todas) cuyo «donde» le pertenece */
 export function fichasQueTocanL(e: Estado, paso: Paso): Ficha[] {
@@ -103,8 +106,8 @@ export async function ejecutarCodigoL(P: Puertos, enc: Encargo, pl: Plantilla, p
   switch (paso.funcion) {
     case 'abrir_laminas': return abrir(P, enc, pl)
     case 'asignar_fotos': return asignarFotos(P, pl, e)
-    case 'chequear_prompts_ref': return chequearPromptsRef(e)
-    case 'imagen_ref': return imagenRef(P, enc, pl)
+    case 'chequear_prompts_ref': return chequearPromptsRef(e, paso.clave.startsWith('reimagen_'))
+    case 'imagen_ref': return imagenRef(P, enc, pl, paso.clave.startsWith('reimagen_'))
     case 'elegir_version_ref': return elegirVersionRef(e)
     case 'armar_laminas': return armar(e)
     case 'render_laminas': return render(P, enc)
@@ -158,9 +161,9 @@ function asignarFotos(P: Puertos, pl: Plantilla, e: Estado): SalidaCodigoL {
   return { res: { costo_usd: 0, artefacto: { ...cf, protagonistas: protas, prohibe_personas: prohibe, reuso_permitido: reusoPermitido, reusadas: cf.candidatas.filter((c) => c.reusada).map((c) => c.id) } } }
 }
 
-function chequearPromptsRef(e: Estado): SalidaCodigoL {
+function chequearPromptsRef(e: Estado, esRe = false): SalidaCodigoL {
   const b = baseL(e)
-  const gen = refsGeneradas(e)
+  const gen = esRe ? refsDeLaReImagen(e) : refsGeneradas(e)
   const pr = arr<{ ref: string; prompts: Array<{ prompt: string; idea_en_una_linea: string }> }>(datos(e, 'prompts')?.imagenes)
   const reglas = reglasParaPrompts(e, b.brief, b.F)
   const porRef: Record<string, { indices: number[]; prompts: Array<{ prompt: string; idea_en_una_linea: string }> }> = {}
@@ -172,6 +175,10 @@ function chequearPromptsRef(e: Estado): SalidaCodigoL {
     if (!ch.pasan.length) fichas.push(fichaNueva(`prompts-ninguno-${ref}`, 'chequeo', 'imagen', 'sugerencia', `ningún prompt de «${ref}» cumple las reglas del brief: esa lámina sale sin imagen generada`, 'reglas de imagen del brief', 'declarar la lámina sin imagen generada'))
   }
   const ninguno = gen.length > 0 && gen.every((r) => !porRef[r].prompts.length)
+  if (esRe) {
+    // la re-imagen no bloquea nada: lo que no cumple se queda como estaba y se dice
+    return { res: { costo_usd: 0, artefacto: { por_ref: porRef, ninguno }, fichas: ninguno ? [fichaNueva(`reimagen-prompts-ninguno-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'ningún prompt de la re-imagen cumple las reglas del brief: se quedan las imágenes anteriores', 'reglas de imagen del brief', 'una persona decide si se rehacen')] : [] } }
+  }
   const repeticion = (e.vueltas['chequear_prompts'] ?? 0) >= 1
   return {
     res: {
@@ -182,7 +189,7 @@ function chequearPromptsRef(e: Estado): SalidaCodigoL {
   }
 }
 
-async function imagenRef(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCodigoL> {
+async function imagenRef(P: Puertos, enc: Encargo, pl: Plantilla, esRe = false): Promise<SalidaCodigoL> {
   const e = enc.estado_del_motor
   const porRef = (datos(e, 'prompts_validos')?.por_ref ?? {}) as Record<string, { prompts: Array<{ prompt: string }> }>
   const maxRefs = Number(pl.limites.imagenes_generadas_max ?? 2)
@@ -191,7 +198,9 @@ async function imagenRef(P: Puertos, enc: Encargo, pl: Plantilla): Promise<Salid
   const intento = ((datos(e, 'imagenes')?.ultimo_intento as number | undefined) ?? 0) + 1
   const aceptadas = (datos(e, 'observacion_imagen')?.aceptadas ?? {}) as Record<string, number[]>
   // en una regeneración solo se rehacen las imágenes que todavía no tienen una versión aceptada
-  const pendientes = refsGeneradas(e).filter((r) => porRef[r]?.prompts?.length && (intento === 1 || !(aceptadas[r]?.length))).slice(0, maxRefs)
+  // re-imagen: solo las que el curador aceptó rehacer (aunque ya tengan una versión aceptada); si ningún prompt es válido no se inventa una tanda vacía
+  const pendientes = (esRe ? refsDeLaReImagen(e).filter((r) => porRef[r]?.prompts?.length) : refsGeneradas(e).filter((r) => porRef[r]?.prompts?.length && (intento === 1 || !(aceptadas[r]?.length)))).slice(0, maxRefs)
+  if (esRe && pendientes.length === 0) return { res: { costo_usd: 0 } }
   const items = [...previo]
   const gastos: NonNullable<Cambios['gastos']> = []
   const fichas: Ficha[] = []
@@ -428,14 +437,14 @@ export function procesarValorL(paso: Paso, v: Record<string, unknown>, enc: Enca
       if (r) return r
       return { res: { costo_usd: 0, artefacto: { elementos: sin(els, b.elementos.map((x) => x.ref)) } } }
     }
-    case 'prompts': {
-      const gen = refsGeneradas(e)
+    case 'prompts': case 'reimagen_prompts': {
+      const gen = paso.clave === 'reimagen_prompts' ? refsDeLaReImagen(e) : refsGeneradas(e)
       const imgs = arr<{ ref: string; prompts: unknown[] }>(v.imagenes)
       const r = retry([...refsInvalidos(imgs.map((x) => x.ref), gen).map((x) => `«${x}» no es una imagen a generar`), ...gen.filter((g) => !imgs.some((x) => x.ref === g)).map((g) => `faltan los prompts de «${g}»`)])
       if (r) return r
       return { res: { costo_usd: 0, artefacto: { imagenes: sin(imgs, gen) } } }
     }
-    case 'mirar': return mirar(v, b, e, pl)
+    case 'mirar': case 'reimagen_mirar': return mirar(v, b, e, pl, paso.clave === 'reimagen_mirar')
     case 'texto': {
       if (b.familia === 'carrusel') return { res: { costo_usd: 0, artefacto: v } }
       const els = arr<ElementoDeCopyKit>(v.elementos)
@@ -455,7 +464,7 @@ export function procesarValorL(paso: Paso, v: Record<string, unknown>, enc: Enca
       const fs = arr<{ que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string }>(v.fichas).map((f, i) => fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', f.donde, f.gravedad, f.que, f.contra_que, f.propuesta))
       return { res: { costo_usd: 0, artefacto: { fichas: fs.length }, fichas: fs } }
     }
-    case 'corrige_texto': case 'decide_texto': case 'ajusta_laminas': case 'ajusta_laminas_2': case 'corrige_laminas': case 'decide_laminas': case 'corrige_estructura': case 'decide_estructura':
+    case 'corrige_texto': case 'decide_texto': case 'ajusta_laminas': case 'ajusta_laminas_2': case 'corrige_laminas': case 'decide_laminas': case 'corrige_estructura': case 'decide_estructura': case 'decide_imagen':
       return resolver(paso, v, b, e, pl, retry)
     default: return { res: { costo_usd: 0, artefacto: v } }
   }
@@ -495,12 +504,21 @@ function direccionVisual(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Pl
   return { res: { costo_usd: 0, artefacto: { ...v, imagenes: efectivas, reglas_de_imagen: ci.validas, reglas_rechazadas: ci.rechazadas, refs_generadas: gen, hay_generadas: gen.length > 0, requiere_mirar: requiere }, ...(fichas.length ? { fichas } : {}) } }
 }
 
-function mirar(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla): ProcesoL {
+function mirar(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, esRe = false): ProcesoL {
   const mostradas = imagenesAMirarL(e)
   const validos = new Set(mostradas.map((i) => i.indice))
   const filtradas = arr<ObservacionDeImagen>(v.imagenes).filter((o) => validos.has(o.indice))
   const ver = veredictoDeImagenes(filtradas, reglasVisuales(e, b.brief), b.F.propios, false)
   const aceptadas: Record<string, number[]> = { ...((datos(e, 'observacion_imagen')?.aceptadas ?? {}) as Record<string, number[]>) }
+  if (esRe) {
+    // re-imagen: para cada imagen rehecha, si alguna nueva cumple REEMPLAZA a la anterior; si ninguna cumple se queda la anterior (y se dice). Lo que no se rehizo no se toca.
+    const nuevas: Record<string, number[]> = {}
+    for (const i of ver.pasan) { const ref = refDeIndice(e, i); if (ref) nuevas[ref] = [...(nuevas[ref] ?? []), i] }
+    const fallidas = refsDeLaReImagen(e).filter((r) => !nuevas[r]?.length)
+    const fichasRe = fallidas.map((r) => fichaNueva(`reimagen-no-cumplio-${r}-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `la imagen nueva de «${r}» (re-imagen que pidió la opinión) no cumple el brief: se queda la anterior`, 'reglas de imagen del brief', 'una persona decide si se rehace'))
+    if (!Object.keys(nuevas).length) return { res: { costo_usd: 0, fichas: fichasRe } }
+    return { res: { costo_usd: 0, artefacto: { observaciones: filtradas, aceptadas: { ...aceptadas, ...nuevas }, preferencia: v.preferencia, veredicto: { pasan: ver.pasan, porImagen: ver.porImagen, regenerar: false, refs_sin_imagen: [] } }, fichas: fichasRe } }
+  }
   for (const i of ver.pasan) { const ref = refDeIndice(e, i); if (ref) aceptadas[ref] = [...new Set([...(aceptadas[ref] ?? []), i])] }
   const gen = refsGeneradas(e)
   const refsSin = gen.filter((r) => !(aceptadas[r]?.length))
@@ -543,7 +561,21 @@ function resolver(paso: Paso, v: Record<string, unknown>, b: BaseL, e: Estado, p
       const r = retry(problemasDeLaminas(lam, e, pl))
       if (r) return r
       // «ajusta» (el autor cambió el texto) SIEMPRE deja una versión nueva de las láminas, aunque no cambien: así el kit se vuelve a armar, dibujar y chequear contra el texto vigente
-      if (v.laminas || paso.clave.startsWith('ajusta')) artefacto = { laminas: lam }
+      // en la ronda 2 el diseñador también atiende la OPINIÓN: si el texto no cambió y no devolvió láminas nuevas, no hay versión nueva (no se vuelve a dibujar por gusto)
+      const textoCambio = (['copy_carrusel', 'copy_kit'] as const).some((n) => { const a = e.artefactos[n]; return !!a && a.version > a.version_consumida })
+      if (v.laminas || (paso.clave.startsWith('ajusta') && (paso.clave !== 'ajusta_laminas_2' || textoCambio))) artefacto = { laminas: lam }
+      break
+    }
+    case 'decide_imagen': {
+      // UNA re-imagen por opinión, solo de imágenes generadas, y solo si al encargo le queda margen del tope de regeneraciones (el control ③ comparte ese tope)
+      const tomada = validas.find((x) => x.estado === 'tomada')
+      const gen = refsGeneradas(e)
+      const pedidas = arr<string>(v.rehacer).filter((r) => gen.includes(r))
+      const refs = (pedidas.length ? pedidas : gen).slice(0, Number(pl.limites.imagenes_generadas_max ?? 2))
+      const tope = Number(pl.pasos.find((p) => p.clave === 'mirar')?.vuelve_a?.max ?? 0)
+      const motivo = !tomada ? null : !refs.length ? 'no hay imágenes generadas que rehacer (son fotos reales o no hay): no se puede re-imaginar' : (e.vueltas['mirar'] ?? 0) >= tope ? 'el encargo ya usó su tope de regeneraciones de imagen' : null
+      const si = !!tomada && motivo === null
+      artefacto = { re_imagen: si, refs: si ? refs : [], por_rehacer_humano: !!tomada && !si, motivo, razon: tomada?.razon ?? null }
       break
     }
     case 'corrige_estructura': case 'decide_estructura': {
@@ -560,13 +592,8 @@ function resolver(paso: Paso, v: Record<string, unknown>, b: BaseL, e: Estado, p
   return { res: { costo_usd: 0, ...(artefacto ? { artefacto } : {}), resoluciones } }
 }
 
-// ───────────────────────── revisor externo (ciego) de una pieza de láminas
-export function pedidoCiegoL(pl: Plantilla, e: Estado): { fuentes: Record<string, unknown>; instruccion: string; imagenes: string[] } {
-  const c = contextoL(pl, e)
-  const fuentes = fuentesDelCiegoLaminas(c)
-  const imagenes = arr<{ url: string }>(fuentes.imagenes).map((x) => x.url)
-  return { fuentes, instruccion: INSTRUCCION_DEL_CIEGO_LAMINAS, imagenes }
-}
+// ───────────────────────── revisor externo (opinión libre) de una pieza de láminas
+export const contextoDeRevisorL = (pl: Plantilla, e: Estado) => contextoDelRevisorLaminas(contextoL(pl, e))
 
 // ───────────────────────── cierre: lo que va a la salida (`draft`) y a la bandeja
 export function resumenDeCierreL(enc: Encargo, e: Estado, pl: Plantilla): { titulo: string; tituloBandeja: string; contenido: Record<string, unknown>; vista_previa: string; expires_at: string | null; generada: boolean; red: string; version: number } | null {

@@ -4,7 +4,8 @@ import { validarSobre, decidirPuerta, claveDeIdempotencia, CONFIG_APAGADA, TARGE
 import type { ConfigDeOficina } from '../sobre'
 import { nombreDeArchivo, textoParaCopiar, leerMedidas, manifiesto, chequeosDeEntrega, aUtc, filasQueVencen } from '../entrega'
 import type { FilaDeFormato } from '../entrega'
-import { armarPedidoCiego, destinoPermitidoParaOficina } from '../ciego'
+import { armarPedidoAlRevisor, destinoPermitidoParaOficina, OBJETIVO_SIN_DATO, PREGUNTA_AL_REVISOR, preguntaDelEncargo, PUBLICO_SIN_DATO } from '../ciego'
+import { preguntaAlRevisor } from '../../revisor-gpt'
 
 const PARTE = '426af72d-12c0-471c-9fda-2a2978db5175'
 const base = { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: true }
@@ -140,11 +141,40 @@ describe('hora local → UTC y vencimiento de la bandeja', () => {
 })
 
 describe('el revisor ciego y los recados', () => {
-  it('el pedido se arma SOLO con la lista cerrada; una clave del hilo o de las fichas del jefe lo rechaza', () => {
-    expect(armarPedidoCiego({ pieza: 'p', imagen: 'i', manual: 'm', brief: 'b' })).toMatchObject({ ok: true })
-    expect(armarPedidoCiego({ pieza: 'p', hilo: '...' })).toEqual({ ok: false, sobran: ['hilo'] })
-    expect(armarPedidoCiego({ pieza: 'p', fichas_jefe: [] })).toEqual({ ok: false, sobran: ['fichas_jefe'] })
-    expect(armarPedidoCiego({ pieza: 'p', respuestas_del_autor: [] })).toEqual({ ok: false, sobran: ['respuestas_del_autor'] })
+  it('el pedido al revisor: la pregunta única (con huecos) con el resumen del encargo → la PIEZA → el contexto rotulado por nombre y función; sin reglas, rúbrica ni formato de salida', () => {
+    const p = armarPedidoAlRevisor({
+      pieza: 'Pie de foto: hola', imagenes: ['https://x/1.png', ''],
+      encargo: { red: 'Instagram', formato: 'carrusel', que_es: 'un carrusel de 5 láminas', objetivo: 'que pidan por WhatsApp', llamado: 'Escríbenos' },
+      contexto: [{ titulo: 'Manual de marca del cliente', funcion: 'lo vigente', texto: 'Voz directa' }, { titulo: 'Plan de trabajo del cliente', funcion: 'aspiración', texto: '  ' }, { titulo: 'El brief de este entregable', texto: 'Brief X' }],
+    })
+    expect(p.texto.startsWith('Te comparto una pieza, que se usa para Instagram, apunta a ' + PUBLICO_SIN_DATO + ' y busca que pidan por WhatsApp, junto con el contexto de la marca.')).toBe(true)
+    expect(p.texto).toContain('Usa el contexto para entender lo que te comparto, no para justificarlo.')
+    const pos = ['## Resumen del encargo', '## La pieza', '## Contexto de la marca'].map((x) => p.texto.indexOf(x))
+    expect(pos[0]).toBeGreaterThan(0); expect(pos[0]).toBeLessThan(pos[1]); expect(pos[1]).toBeLessThan(pos[2])
+    expect(p.texto).toContain('- Red y formato: Instagram · carrusel')
+    expect(p.texto).toContain('### Manual de marca del cliente — lo vigente\nVoz directa')
+    expect(p.texto).toContain('### El brief de este entregable\nBrief X') // sin función declarada: solo el nombre
+    expect(p.texto).toContain('## La pieza\nPie de foto: hola')
+    expect(p.texto).toContain('Si dos se contradicen, vale el manual de marca vigente')
+    expect(p.texto).not.toContain('Plan de trabajo') // un contexto vacío se omite: no se inventa
+    expect(p.imagenes).toEqual(['https://x/1.png'])
+    expect(p.texto).not.toMatch(/gravedad|bloquea|sugerencia|rúbrica|JSON|"fichas"|debes|obligatorio/i)
+  })
+  it('la pregunta no deja huecos sin llenar: sin dato, lo dice (no inventa nada); y es la MISMA para una pieza y para otra cosa (manual)', () => {
+    const q = preguntaDelEncargo({ red: '' })
+    expect(q).not.toMatch(/\{|\}/)
+    expect(q).toContain('una red social'); expect(q).toContain(PUBLICO_SIN_DATO); expect(q).toContain(OBJETIVO_SIN_DATO)
+    for (const h of ['{qué es}', '{uso}', '{público}', '{objetivo}']) expect(PREGUNTA_AL_REVISOR).toContain(h)
+    // una sola pregunta para todo: lo que cambia son los cuatro huecos
+    const manual = preguntaAlRevisor({ que_es: 'el manual de marca de un negocio', uso: 'guiar todo lo que se produzca', publico: 'quien describe el material', objetivo: 'ser fiel a lo que el negocio es' })
+    expect(manual.startsWith('Te comparto el manual de marca de un negocio, que se usa para guiar todo lo que se produzca, apunta a quien describe el material y busca ser fiel a lo que el negocio es, junto con el contexto de la marca.')).toBe(true)
+    expect(manual.replace(/Te comparto .*? junto con el contexto de la marca\./, '')).toBe(q.replace(/Te comparto .*? junto con el contexto de la marca\./, ''))
+  })
+  it('una pieza con más láminas que las adjuntas lo dice; el revisor es ciego POR CONSTRUCCIÓN: solo recibe pieza, imágenes, contexto y resumen (no el estado, no el hilo, no las fichas)', () => {
+    expect(armarPedidoAlRevisor.length).toBe(1)
+    const p = armarPedidoAlRevisor({ pieza: 'p', contexto: [], nota_pieza: 'solo se adjuntan 4 de las 8 láminas' })
+    expect(p.texto).toContain('## La pieza\np\n\n(solo se adjuntan 4 de las 8 láminas)'); expect(p.imagenes).toEqual([])
+    expect(armarPedidoAlRevisor({ pieza: 'p', contexto: [] }).texto).toBe(PREGUNTA_AL_REVISOR + '\n\n## La pieza\np')
   })
   it('un recado a una PERSONA (`dueno`) se rechaza: el único humano es Emilio', () => {
     expect(destinoPermitidoParaOficina({ destino: 'dueno', tipo: 'persona', estado_del_brazo: 'opera' })).toMatchObject({ ok: false })

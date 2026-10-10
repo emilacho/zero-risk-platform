@@ -12,10 +12,20 @@ const generada: Condicion = { tipo: 'si_artefacto', artefacto: 'visual_direction
 const requiereMirar: Condicion = { tipo: 'si_artefacto', artefacto: 'visual_direction', campo: 'requiere_mirar', igual: true }
 const jefeTexto: Condicion = { tipo: 'si_fichas_abiertas', origen: 'jefe', donde: ['texto', 'hashtags'], gravedad: 'bloquea' }
 const jefeLaminas: Condicion = { tipo: 'si_fichas_abiertas', origen: 'jefe', donde: 'laminas', gravedad: 'bloquea' }
-const externaTexto: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: ['texto', 'hashtags'] }
+// la opinión libre del revisor externo llega como UNA ficha `externa` en «texto»: el autor decide qué toma (y si cambia el texto, el diseñador vuelve a recortar)
+const externaTexto: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'texto' }
+// y llega también a quien dibuja (láminas) y al curador (imagen): cada uno decide sobre su parte, con razón
 const externaLaminas: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'laminas' }
+const externaImagen: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'imagen' }
 const cambioCopia: Condicion = { tipo: 'si_cambio', artefacto: 'copy_carrusel' }
-const cambioPieza: Condicion = { tipo: 'si_cambio', artefacto: ['copy_carrusel', 'laminas'] }
+const cambioPieza: Condicion = { tipo: 'si_cambio', artefacto: ['copy_carrusel', 'laminas', 'imagenes_elegidas'] }
+// la opinión «tomada» del curador dispara UNA re-imagen (con los controles de siempre) si al encargo le queda margen; cada paso siguiente corre solo si el anterior dejó algo nuevo
+const reImagen: Condicion = { tipo: 'si_artefacto', artefacto: 'respuesta_imagen', campo: 're_imagen', igual: true }
+const cambioPrompts: Condicion = { tipo: 'si_cambio', artefacto: 'prompts' }
+const cambioPromptsValidos: Condicion = { tipo: 'si_cambio', artefacto: 'prompts_validos' }
+const cambioImagenes: Condicion = { tipo: 'si_cambio', artefacto: 'imagenes' }
+const cambioObservacion: Condicion = { tipo: 'si_cambio', artefacto: 'observacion_imagen' }
+
 const cambioArmado: Condicion = { tipo: 'si_cambio', artefacto: 'laminas_armadas' }
 const cambioRender: Condicion = { tipo: 'si_cambio', artefacto: 'render' }
 
@@ -111,7 +121,7 @@ export const CARRUSEL_IG_V1: Plantilla = {
     {
       clave: 'revisor_externo', tipo: 'externo', quien: 'GPT', condicion: siempre, ronda: 2,
       entrada: ['copy_carrusel', 'laminas', 'render', 'visual_direction', 'material_portero'], salida_artefacto: 'fichas_externas', tope_usd: 0.6,
-      salida: { esquema: 'fichas.v1', reintento_formato: 1 },
+      salida: { esquema: 'opinion_libre.v1', reintento_formato: 0 },
     },
     {
       clave: 'decide_texto', tipo: 'agente', quien: 'content-creator', condicion: externaTexto, ronda: 2,
@@ -119,15 +129,28 @@ export const CARRUSEL_IG_V1: Plantilla = {
       salida: { esquema: 'resolucion_copy_base.v1', reintento_formato: 1 },
     },
     {
-      clave: 'ajusta_laminas_2', tipo: 'agente', quien: 'carousel-designer', condicion: cambioCopia, ronda: 2,
+      clave: 'ajusta_laminas_2', tipo: 'agente', quien: 'carousel-designer', condicion: { tipo: 'cualquiera', de: [cambioCopia, externaLaminas] }, ronda: 2,
       entrada: ['fichas_externas', 'copy_carrusel', 'laminas'], salida_artefacto: 'laminas', tope_usd: 0.5,
       salida: { esquema: 'resolucion_laminas.v1', reintento_formato: 1 }, valida: ['texto_laminas_en_copy', 'contrato_de_lamina'],
     },
     {
-      clave: 'decide_laminas', tipo: 'agente', quien: 'carousel-designer', condicion: externaLaminas, ronda: 2,
-      entrada: ['fichas_externas', 'copy_carrusel', 'laminas'], salida_artefacto: 'laminas', tope_usd: 0.5,
-      salida: { esquema: 'resolucion_laminas.v1', reintento_formato: 1 }, valida: ['texto_laminas_en_copy', 'contrato_de_lamina'],
+      clave: 'decide_imagen', tipo: 'agente', quien: 'marketing_instagram_curator', condicion: externaImagen, ronda: 2,
+      entrada: ['fichas_externas', 'visual_direction', 'render'], salida_artefacto: 'respuesta_imagen', tope_usd: 0.1,
+      salida: { esquema: 'resolucion_solo.v1', reintento_formato: 1 },
     },
+    {
+      clave: 'reimagen_prompts', tipo: 'agente', quien: 'design-image-prompt-engineer', condicion: reImagen, ronda: 2,
+      entrada: ['visual_direction', 'fichas_externas', 'respuesta_imagen'], salida_artefacto: 'prompts', tope_usd: 0.2,
+      salida: { esquema: 'prompts_por_ref.v1', reintento_formato: 1 }, valida: ['refs_validos'],
+    },
+    { clave: 'reimagen_chequear_prompts', tipo: 'codigo', quien: 'sala', funcion: 'chequear_prompts_ref', condicion: cambioPrompts, ronda: 2, entrada: ['prompts', 'visual_direction'], salida_artefacto: 'prompts_validos', tope_usd: 0 },
+    { clave: 'reimagen_imagen', tipo: 'codigo', quien: 'sala', funcion: 'imagen_ref', condicion: cambioPromptsValidos, ronda: 2, entrada: ['prompts_validos'], salida_artefacto: 'imagenes', tope_usd: 0.2 },
+    {
+      clave: 'reimagen_mirar', tipo: 'agente', quien: 'marketing_instagram_curator', condicion: cambioImagenes, ronda: 2,
+      entrada: ['imagenes', 'visual_direction'], salida_artefacto: 'observacion_imagen', tope_usd: 0.2,
+      salida: { esquema: 'observacion_imagenes.v1', reintento_formato: 1 }, valida: ['decide_imagen'],
+    },
+    { clave: 'reimagen_elegir_version', tipo: 'codigo', quien: 'sala', funcion: 'elegir_version_ref', condicion: cambioObservacion, ronda: 2, entrada: ['imagenes', 'observacion_imagen', 'visual_direction'], salida_artefacto: 'imagenes_elegidas', tope_usd: 0 },
     { clave: 'armar_3', tipo: 'codigo', quien: 'sala', funcion: 'armar_laminas', condicion: cambioPieza, entrada: ['copy_carrusel', 'laminas', 'imagenes_elegidas'], salida_artefacto: 'laminas_armadas', tope_usd: 0 },
     { clave: 'render_3', tipo: 'codigo', quien: 'sala', funcion: 'render_laminas', condicion: cambioArmado, entrada: ['laminas_armadas'], salida_artefacto: 'render', tope_usd: 0 },
     { clave: 'chequeos_3', tipo: 'codigo', quien: 'sala', funcion: 'chequeos_laminas', condicion: cambioRender, entrada: ['copy_carrusel', 'laminas', 'laminas_armadas', 'render', 'imagenes_elegidas', 'observacion_imagen'], salida_artefacto: 'chequeos', tope_usd: 0 },

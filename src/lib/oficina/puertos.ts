@@ -92,7 +92,9 @@ export interface Almacen {
 }
 
 export type ResultadoImagen = { ok: true; url: string; generation_id: string; costo_usd: number } | { ok: false; error: string }
-export type ResultadoRevisor = { ok: true; texto: string; costo_usd: number; modelo: string } | { ok: false; error: string }
+/** un intento al revisor GPT y el resultado: viven en el módulo común `src/lib/revisor-gpt.ts` (los comparte la revisión del manual) */
+export type { IntentoDelRevisor } from '../revisor-gpt'
+export type ResultadoRevisor = import('../revisor-gpt').ResultadoDelRevisor
 export type ResultadoRender = { ok: true; urls: string[]; ancho: number; alto: number; fonts_usadas: string[]; fonts_faltantes: string[]; timings_ms: number[] } | { ok: false; error: string }
 /** lo que se le manda al brazo que dibuja láminas (subconjunto de su contrato; el tamaño lo fija la plataforma) */
 export interface PedidoDeRender {
@@ -113,7 +115,7 @@ export interface Puertos {
   /** genera UNA imagen (1024×1024, calidad explícita); en dry_run NO llama al proveedor */
   imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean }): Promise<ResultadoImagen>
   /** el revisor ciego (otro proveedor); en dry_run NO llama al proveedor */
-  revisor(p: { pedido: Record<string, unknown>; dry_run: boolean; imagen_url?: string | null; imagenes_urls?: string[] }): Promise<ResultadoRevisor>
+  revisor(p: { texto: string; imagenes_urls: string[]; dry_run: boolean }): Promise<ResultadoRevisor>
   /** el brazo que dibuja láminas (PNG); en dry_run NO llama al brazo ni escribe en el bucket */
   renderLaminas(p: PedidoDeRender): Promise<ResultadoRender>
   descargar(url: string): Promise<Buffer | null>

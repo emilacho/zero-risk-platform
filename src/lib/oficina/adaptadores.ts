@@ -8,12 +8,16 @@ import { extraerCatalogo } from '../cerebro/datos-estructurados'
 import { datosDeContacto } from './texto'
 import { almacenDeSupabase, type Db } from './almacen-supabase'
 import type { FotoEtiquetada } from './fotos'
+import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt } from '../revisor-gpt'
 import type { FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
 import type { Registro } from './chequeos'
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string }
+export interface Entorno { baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void> }
+
+/** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
+export { ESPERAS_DEL_REVISOR_MS }
 
 /** el marcador de una imagen simulada (dry_run): `descargar` la reconoce y no sale a la red */
 export const PREFIJO_DRY = 'https://dry.invalid/'
@@ -125,21 +129,10 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
     },
     async revisor(p): Promise<ResultadoRevisor> {
-      if (p.dry_run) return { ok: true, texto: JSON.stringify({ fichas: [] }), costo_usd: 0, modelo: 'simulado (dry_run)' }
-      if (!env.openaiKey) return { ok: false, error: 'OPENAI_API_KEY no configurada' }
-      if (!env.revisorModelo) return { ok: false, error: 'OFICINA_REVISOR_MODEL no configurado (el nombre del modelo del revisor no está verificado)' }
-      try {
-        const contenido: Array<Record<string, unknown>> = [{ type: 'input_text', text: JSON.stringify(p.pedido) }]
-        for (const u of p.imagenes_urls ?? (p.imagen_url ? [p.imagen_url] : [])) contenido.push({ type: 'input_image', image_url: u })
-        const r = await f('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${env.openaiKey}` }, body: JSON.stringify({ model: env.revisorModelo, input: [{ role: 'user', content: contenido }] }) })
-        const j = (await r.json().catch(() => ({}))) as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }>; usage?: { input_tokens?: number; output_tokens?: number }; error?: { message?: string } }
-        if (!r.ok) return { ok: false, error: j.error?.message ?? `HTTP ${r.status}` }
-        const texto = j.output_text ?? j.output?.flatMap((o) => o.content ?? []).map((c) => c.text ?? '').join('') ?? ''
-        // precio: del entorno; sin él, un valor conservador para que el freno cuente algo (se declara como estimación en el libro)
-        const pin = env.revisorPrecioEntrada ?? 5, pout = env.revisorPrecioSalida ?? 30
-        const costo = ((j.usage?.input_tokens ?? 0) * pin + (j.usage?.output_tokens ?? 0) * pout) / 1_000_000
-        return { ok: true, texto, costo_usd: costo, modelo: env.revisorModelo }
-      } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+      if (p.dry_run) return { ok: true, texto: '', costo_usd: 0, modelo: 'simulado (dry_run)' }
+      if (!env.openaiKey) return { ok: false, error: 'OPENAI_API_KEY no configurada', costo_usd: 0, intentos: [] }
+      if (!env.revisorModelo) return { ok: false, error: 'OFICINA_REVISOR_MODEL no configurado (el nombre del modelo del revisor no está verificado)', costo_usd: 0, intentos: [] }
+      return llamarRevisorGpt({ f, apiKey: env.openaiKey, modelo: env.revisorModelo, precioEntrada: env.revisorPrecioEntrada, precioSalida: env.revisorPrecioSalida, texto: p.texto, imagenes_urls: p.imagenes_urls, esperasMs: env.esperasRevisorMs, esperar: env.esperar })
     },
     async renderLaminas(p): Promise<ResultadoRender> {
       const medidas = MEDIDAS_DE_PLATAFORMA[p.plataforma]

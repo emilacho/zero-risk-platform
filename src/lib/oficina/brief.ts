@@ -3,7 +3,7 @@
  * Aquí se saca UN brief por su identificador, con sus listas (vocabulario obligatorio, prohibido, negativos) como dato. Lo que el brief no trae queda vacío: nada se inventa.
  * Cuando la cadena emita briefs con listas visuales (`visual_obligatorio[]`, `visual_prohibido[]`), esta función las leerá del mismo modo (campos «VISUAL OBLIGATORIO» / «VISUAL PROHIBIDO»).
  */
-import { aparicionesDe, normalizar } from './texto'
+import { aparicionesDe, esFechaReal, esHoraReal, normalizar } from './texto'
 
 export interface BriefLeido {
   id: string
@@ -96,7 +96,7 @@ export function elementosDelKit(b: Pick<BriefLeido, 'elementos'>): { elementos: 
     const p = linea.split('|').map((x) => x.trim())
     const cuando = /^(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2}))?$/.exec(p[0] ?? '')
     const destino = normalizar(p[1] ?? '')
-    if (p.length < 4 || !(cuando || /^sin fecha$/i.test(p[0])) || !(destino === 'historia' || destino === 'estado') || !p[2] || !p[3]) { ilegibles.push(linea); return }
+    if (p.length < 4 || !(cuando ? esFechaReal(cuando[1]) && (!cuando[2] || esHoraReal(cuando[2])) : /^sin fecha$/i.test(p[0])) || !(destino === 'historia' || destino === 'estado') || !p[2] || !p[3]) { ilegibles.push(linea); return }
     elementos.push({ ref: `e${String(elementos.length + 1).padStart(2, '0')}`, fecha: cuando?.[1] ?? null, hora: cuando?.[2] ?? null, destino, tema: p[2], pilar: p[3], datos: (p[4] ?? '').split(';').map((x) => x.trim()).filter(Boolean) })
   })
   return { elementos, ilegibles }
@@ -137,6 +137,7 @@ export function fechaLimiteDelBrief(aprueba: string): { fecha: string; hora: str
   const mes = MESES[normalizar(m[2])]
   if (!mes) return null
   const dia = Number(m[1])
-  if (dia < 1 || dia > 31) return null
-  return { fecha: `${m[3]}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`, hora: '00:00' }
+  const fecha = `${m[3]}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+  if (!esFechaReal(fecha)) return null
+  return { fecha, hora: '00:00' }
 }

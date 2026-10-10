@@ -11,7 +11,17 @@ const generada: Condicion = { tipo: 'si_artefacto', artefacto: 'visual_direction
 const requiereMirar: Condicion = { tipo: 'si_artefacto', artefacto: 'visual_direction', campo: 'decision.requiere_mirar', igual: true }
 const fichasJefe: Condicion = { tipo: 'si_fichas_abiertas', origen: 'jefe', gravedad: 'bloquea' }
 const fichasExterna: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa' }
+// la opinión libre llega a cada dueño en SU parte: el curador responde por la imagen (no se rehace en la ronda; decide una persona)
+const externaImagen: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'imagen' }
 const cambioPieza: Condicion = { tipo: 'si_cambio', artefacto: 'pieza_post' }
+// la imagen nueva cambia lo que se entrega: se vuelve a chequear la pieza
+const cambioPiezaOImagen: Condicion = { tipo: 'cualquiera', de: [{ tipo: 'si_cambio', artefacto: 'pieza_post' }, { tipo: 'si_cambio', artefacto: 'imagen_final' }] }
+// la opinión «tomada» del curador dispara UNA re-imagen (con los controles de siempre) si al encargo le queda margen; cada paso siguiente corre solo si el anterior dejó algo nuevo
+const reImagen: Condicion = { tipo: 'si_artefacto', artefacto: 'respuesta_imagen', campo: 're_imagen', igual: true }
+const cambioPrompts: Condicion = { tipo: 'si_cambio', artefacto: 'prompts' }
+const cambioPromptsValidos: Condicion = { tipo: 'si_cambio', artefacto: 'prompts_validos' }
+const cambioImagenes: Condicion = { tipo: 'si_cambio', artefacto: 'imagenes' }
+const cambioObservacion: Condicion = { tipo: 'si_cambio', artefacto: 'observacion_imagen' }
 
 export const POST_IMG: Plantilla = {
   tipo: 'post_img',
@@ -79,14 +89,33 @@ export const POST_IMG: Plantilla = {
     {
       clave: 'revisor_externo', tipo: 'externo', quien: 'GPT', condicion: siempre, ronda: 2,
       entrada: ['pieza_post', 'imagen_final', 'visual_direction', 'material_portero'], salida_artefacto: 'fichas_externas', tope_usd: 0.5,
-      salida: { esquema: 'fichas.v1', reintento_formato: 1 },
+      salida: { esquema: 'opinion_libre.v1', reintento_formato: 0 },
     },
     {
       clave: 'decide', tipo: 'agente', quien: QUIEN_DINAMICO, condicion: fichasExterna, ronda: 2,
       entrada: ['fichas_externas', 'pieza_post'], salida_artefacto: 'pieza_post', tope_usd: 0.2,
       salida: { esquema: 'resolucion.v1', reintento_formato: 1 },
     },
-    { clave: 'chequeos_3', tipo: 'codigo', quien: 'sala', funcion: 'chequeos', condicion: cambioPieza, entrada: ['pieza_post', 'imagen_final'], salida_artefacto: 'chequeos', tope_usd: 0 },
+    {
+      clave: 'decide_imagen', tipo: 'agente', quien: 'marketing_instagram_curator', condicion: externaImagen, ronda: 2,
+      entrada: ['fichas_externas', 'visual_direction', 'imagen_final'], salida_artefacto: 'respuesta_imagen', tope_usd: 0.1,
+      salida: { esquema: 'resolucion_solo.v1', reintento_formato: 1 },
+    },
+    {
+      clave: 'reimagen_prompts', tipo: 'agente', quien: 'design-image-prompt-engineer', condicion: reImagen, ronda: 2,
+      entrada: ['visual_direction', 'fichas_externas', 'respuesta_imagen'], salida_artefacto: 'prompts', tope_usd: 0.2,
+      salida: { esquema: 'prompts.v1', reintento_formato: 1 },
+    },
+    { clave: 'reimagen_chequear_prompts', tipo: 'codigo', quien: 'sala', funcion: 'chequear_prompts', condicion: cambioPrompts, ronda: 2, entrada: ['prompts', 'visual_direction'], salida_artefacto: 'prompts_validos', tope_usd: 0 },
+    { clave: 'reimagen_imagen', tipo: 'codigo', quien: 'sala', funcion: 'imagen', condicion: cambioPromptsValidos, ronda: 2, entrada: ['prompts_validos'], salida_artefacto: 'imagenes', tope_usd: 0.1 },
+    {
+      clave: 'reimagen_mirar', tipo: 'agente', quien: 'marketing_instagram_curator', condicion: cambioImagenes, ronda: 2,
+      entrada: ['imagenes', 'visual_direction'], salida_artefacto: 'observacion_imagen', tope_usd: 0.2,
+      salida: { esquema: 'observacion_imagen.v1', reintento_formato: 1 }, valida: ['decide_imagen'],
+    },
+    { clave: 'reimagen_elegir_version', tipo: 'codigo', quien: 'sala', funcion: 'elegir_version', condicion: cambioObservacion, ronda: 2, entrada: ['imagenes', 'observacion_imagen'], salida_artefacto: 'imagen_elegida', tope_usd: 0 },
+    { clave: 'reimagen_acabado', tipo: 'codigo', quien: 'sala', funcion: 'acabado_imagen', condicion: { tipo: 'si_cambio', artefacto: 'imagen_elegida' }, ronda: 2, entrada: ['imagen_elegida', 'candidatas_foto'], salida_artefacto: 'imagen_final', tope_usd: 0 },
+    { clave: 'chequeos_3', tipo: 'codigo', quien: 'sala', funcion: 'chequeos', condicion: cambioPiezaOImagen, entrada: ['pieza_post', 'imagen_final'], salida_artefacto: 'chequeos', tope_usd: 0 },
     { clave: 'entrega', tipo: 'codigo', quien: 'sala', funcion: 'empaquetar_entrega', condicion: siempre, entrada: ['pieza_post', 'imagen_final', 'chequeos'], salida_artefacto: 'entrega', tope_usd: 0 },
     { clave: 'cierre', tipo: 'codigo', quien: 'sala', funcion: 'cierre', condicion: siempre, entrada: ['entrega'], salida_artefacto: 'cierre', tope_usd: 0 },
   ],

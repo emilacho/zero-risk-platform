@@ -41,13 +41,11 @@ describe('la migración: SOLO datos, repetible y sin encender nada', () => {
     expect(s).not.toMatch(/oficina_config/)
     for (const t of ['carrusel_ig_v1', 'kit_historias']) expect(filaDe(s, t)).toMatch(/,\s*false\s*\)\s*$/)
   })
-  it('cada plantilla sembrada es IDÉNTICA a la del código (pasos, indicaciones y límites) y es válida', () => {
+  it('cada plantilla sembrada es VÁLIDA contra el vocabulario cerrado (la migración 202610100300 la lleva después a la definición actual del código: ver su prueba)', () => {
     for (const [tipo, p] of [['carrusel_ig_v1', CARRUSEL_IG_V1], ['kit_historias', KIT_HISTORIAS]] as const) {
       const f = filaDe(s, tipo)
-      expect(bloque(f, 'pasos')).toEqual(JSON.parse(JSON.stringify(p.pasos)))
-      expect(bloque(f, 'ind')).toEqual(JSON.parse(JSON.stringify(p.indicaciones)))
-      expect(bloque(f, 'lim')).toEqual(JSON.parse(JSON.stringify(p.limites)))
-      expect(validarPlantilla(bloque(f, 'pasos') ? { ...p, pasos: bloque(f, 'pasos') as never } : p)).toEqual([])
+      expect(validarPlantilla({ ...p, pasos: bloque(f, 'pasos') as never, indicaciones: bloque(f, 'ind') as never, limites: bloque(f, 'lim') as never })).toEqual([])
+      expect(bloque(f, 'lim')).toEqual(JSON.parse(JSON.stringify(p.limites))) // los límites no cambiaron
     }
   })
   it('las tres especificaciones de entrega nacen SIN VERIFICAR (los límites avisan, no bloquean) y no inventan formatos que el motor no produce', () => {

@@ -105,6 +105,8 @@ export const ESQUEMAS: Record<string, Esq> = {
     t: 'obj', req: ['fichas'],
     props: { fichas: { t: 'arr', max: 12, de: { t: 'obj', req: ['que', 'donde', 'contra_que', 'gravedad', 'propuesta'], props: { que: str(1, 500), donde: str(1, 200), contra_que: str(1, 400), gravedad: { t: 'enum', v: ['bloquea', 'sugerencia'] }, propuesta: str(1, 600) } } } },
   },
+  /** el que dirige la imagen (curador) solo responde a la opinión: tomada / no tomada, con razón; no entrega pieza */
+  'resolucion_solo.v1': { t: 'obj', req: ['respuestas'], props: { respuestas, rehacer: { t: 'arr', max: 12, de: str(1, 40) } } },
   'resolucion.v1': {
     t: 'obj', req: ['respuestas'], ignorar: IGNORAR_TAMANO,
     props: {
@@ -125,6 +127,8 @@ function conMaxImagenes(esq: Esq, n: number): Esq {
   return { ...o, props: { ...o.props, imagenes: { ...imgs, max: n, de: { ...item, props: { ...item.props, indice: ancho(item.props.indice) } } }, preferencia: { ...pref, max: n, de: ancho(pref.de) } } }
 }
 ESQUEMAS['observacion_imagenes.v1'] = conMaxImagenes(ESQUEMAS['observacion_imagen.v1'], 12)
+/** la opinión del revisor externo es TEXTO LIBRE (sin campos, sin rúbrica): lo único que se exige es que haya texto */
+ESQUEMAS['opinion_libre.v1'] = { t: 'str', min: 1, max: 20000 }
 
 /** quita el envoltorio: cercas ``` (con o sin «json») y prosa fuera de las llaves */
 export function limpiarSalida(texto: string): { ok: true; json: string; envoltorio: boolean } | { ok: false; error: string } {

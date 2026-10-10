@@ -7,15 +7,15 @@
  * reintento cierra el encargo como `fallido` (visible, nunca relleno); un fallo de Slack nunca frena nada; nadie pregunta al cliente.
  */
 import crypto from 'node:crypto'
-import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
+import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, esPostDeImagen, type BriefLeido } from './brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import { aUtc, chequeosDeEntrega, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
-import { armarPedidoCiego } from './ciego'
-import { armarPedidoL, ejecutarCodigoL, familiaDeLaminas, pedidoCiegoL, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
+import { armarPedidoAlRevisor } from './ciego'
+import { armarPedidoL, contextoDeRevisorL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
-import { construirTarea, fuentesDelCiego, INSTRUCCION_DEL_CIEGO, type ContextoDePedido } from './pedidos'
+import { construirTarea, contextoDelRevisor, type ContextoDePedido } from './pedidos'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { procesarSalida } from './salida'
@@ -26,6 +26,7 @@ export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const sha = (x: unknown) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex')
 const AGENTE_DEL_TEXTO = 'content-creator'
+const AGENTE_DE_LA_IMAGEN = 'marketing_instagram_curator'
 
 // ───────────────────────── lo que se arma a partir del estado
 interface Base { brief: BriefLeido; proporcion: string; F: FuentesCompletas }
@@ -152,7 +153,7 @@ function armarPedido(enc: Encargo, pl: Plantilla, paso: Paso, e: Estado, errorDe
     return { agente: paso.quien, pedido: pedidoDe(enc, pl, paso, paso.quien, t, e) }
   }
   const agente = paso.quien === 'dueno_del_donde' ? AGENTE_DEL_TEXTO : paso.quien
-  const fichasPropias = paso.clave === 'corrige' || paso.clave === 'decide' ? fichasQueTocan(e, paso) : []
+  const fichasPropias = paso.clave === 'corrige' || paso.clave === 'decide' || paso.clave === 'decide_imagen' ? fichasQueTocan(e, paso) : []
   const t = paso.tipo === 'agente' ? construirTarea(paso.clave, contexto2(e)!, { fichas: fichasPropias, ...(errorDeFormato ? { errorDeFormato } : {}) }) : null
   return { agente, pedido: pedidoDe(enc, pl, paso, agente, t, e) }
 }
@@ -179,7 +180,8 @@ function pedidoDe(enc: Encargo, pl: Plantilla, paso: Paso, agente: string, t: { 
 /** fichas abiertas cuyo dueño es el agente del texto (las de imagen o sin dueño se declaran sin tomar: la imagen solo se rehace en «mirar») */
 function fichasQueTocan(e: Estado, paso: Paso): Ficha[] {
   const origen = paso.clave === 'corrige' ? 'jefe' : 'externa'
-  return e.fichas.filter((f) => f.estado === 'abierta' && f.origen === origen && duenoDeLaFicha(f) === AGENTE_DEL_TEXTO && (origen === 'externa' || f.gravedad === 'bloquea'))
+  const dueno = paso.clave === 'decide_imagen' ? AGENTE_DE_LA_IMAGEN : AGENTE_DEL_TEXTO
+  return e.fichas.filter((f) => f.estado === 'abierta' && f.origen === origen && duenoDeLaFicha(f) === dueno && (origen === 'externa' || f.gravedad === 'bloquea'))
 }
 
 function saltoPorFalta(paso: Paso, e: Estado): ResultadoDePaso | null {
@@ -187,7 +189,7 @@ function saltoPorFalta(paso: Paso, e: Estado): ResultadoDePaso | null {
     const origen = paso.clave === 'corrige' ? 'jefe' : 'externa'
     const propias = fichasQueTocan(e, paso)
     // las demás abiertas de ese origen no tienen quién las resuelva en esta ronda: se declaran SIN tomar
-    const huerfanas = e.fichas.filter((f) => f.estado === 'abierta' && f.origen === origen && !propias.includes(f) && (origen === 'externa' || f.gravedad === 'bloquea'))
+    const huerfanas = e.fichas.filter((f) => f.estado === 'abierta' && f.origen === origen && !propias.includes(f) && (origen === 'externa' ? duenoDeLaFicha(f) !== AGENTE_DE_LA_IMAGEN : f.gravedad === 'bloquea'))
     if (propias.length === 0) {
       return { costo_usd: 0, resoluciones: huerfanas.map((f) => ({ id: f.id, estado: 'no_tomada' as const, razon: duenoDeLaFicha(f) ? 'sin respuesta' : 'sin dueño en esta ronda: la imagen solo se rehace en el paso «mirar»; se declara' })) }
     }
@@ -233,7 +235,9 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       const b = base(e)
       const prompts = ((datos(e, 'prompts')?.prompts ?? []) as Array<{ prompt: string; idea_en_una_linea: string }>)
       const ch = chequearPrompts(prompts.map((p) => p.prompt), reglasParaPrompts(e, b.brief, b.F), b.F.propios)
+      const esRe = paso.clave.startsWith('reimagen_')
       const repeticion = (e.vueltas['chequear_prompts'] ?? 0) >= 1
+      if (esRe && ch.ninguno) return { res: { costo_usd: 0, artefacto: { indices: [], ninguno: true, fallan: ch.fallan, prompts: [] }, fichas: [fichaNueva(`reimagen-prompts-ninguno-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'ningún prompt de la re-imagen cumple las reglas del brief: se queda la imagen anterior', 'reglas de imagen del brief', 'una persona decide si se rehace')] } }
       const res: ResultadoDePaso = {
         costo_usd: 0,
         artefacto: { indices: ch.pasan, ninguno: ch.ninguno, fallan: ch.fallan, prompts: ch.pasan.map((i) => prompts[i]) },
@@ -245,6 +249,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       const b = base(e)
       const validos = ((datos(e, 'prompts_validos')?.prompts ?? []) as Array<{ prompt: string }>).slice(0, Number(pl.limites.imagenes_generadas_max ?? 3))
       const previo = (datos(e, 'imagenes')?.items ?? []) as Array<Record<string, unknown>>
+      if (validos.length === 0 && paso.clave.startsWith('reimagen_')) return { res: { costo_usd: 0 } } // la re-imagen sin prompts válidos no inventa una tanda vacía
       const intento = ((datos(e, 'imagenes')?.ultimo_intento as number | undefined) ?? 0) + 1
       const items = [...previo]
       const nuevos: Array<{ indice: number; url: string }> = []
@@ -364,30 +369,49 @@ async function empaquetar(P: Puertos, enc: Encargo, pl: Plantilla): Promise<Sali
   }
 }
 
+// ───────────────────────── re-imagen que pide la opinión
+/** ¿queda una imagen que el curador quiso cambiar y la sala no pudo rehacer? (sin margen, sin imagen generada, o la nueva no cumplió) */
+export const imagenPorRehacer = (e: Estado): boolean => datos(e, 'respuesta_imagen')?.por_rehacer_humano === true || e.fichas.some((f) => f.id.startsWith('reimagen-'))
+/** el encargo tiene UNA re-imagen por opinión, y solo si le queda margen del tope de regeneraciones (el control ③ comparte ese tope) y la imagen es generada */
+export function decidirReImagen(e: Estado, pl: Plantilla, tomada: boolean): { si: boolean; motivo: string | null } {
+  if (!tomada) return { si: false, motivo: null }
+  const modo = ((datos(e, 'visual_direction')?.decision as { modo?: string } | undefined)?.modo) ?? 'ninguna'
+  if (modo !== 'generada') return { si: false, motivo: 'la imagen no es generada (es una foto real o no hay): no se puede re-imaginar' }
+  const tope = Number(pl.pasos.find((p) => p.clave === 'mirar')?.vuelve_a?.max ?? 0)
+  if ((e.vueltas['mirar'] ?? 0) >= tope) return { si: false, motivo: 'el encargo ya usó su tope de regeneraciones de imagen' }
+  return { si: true, motivo: null }
+}
+
 // ───────────────────────── revisor externo
-async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso): Promise<{ res: ResultadoDePaso; gastos: Cambios['gastos'] }> {
+/** los «donde» que tienen dueño en la ronda 2: texto (autor) e imagen (curador) siempre; en el carrusel lo que dibuja el diseñador; en el kit lo que estructura el narrador */
+export function duenosDeLaOpinion(pl: Plantilla): string[] {
+  const fam = familiaDeLaminas(pl)
+  return ['texto', 'imagen', ...(fam === 'carrusel' ? ['laminas'] : fam === 'kit' ? ['estructura'] : [])]
+}
+/**
+ * El revisor externo (GPT) da su OPINIÓN LIBRE: recibe la pieza y el cerebro del cliente que lee la sala, sin reglas, sin rúbrica y sin formato (firma de Emilio, 10-oct).
+ * Su texto se guarda como OPINIÓN: una sola ficha `externa` de gravedad «sugerencia» que lleva el texto entero; nunca bloquea ni cuenta como desacuerdo. El AUTOR (`decide`) decide qué toma.
+ * Sigue ciego al hilo y a las fichas del jefe: `armarPedidoAlRevisor` solo recibe la pieza, las imágenes y el contexto.
+ */
+async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, _paso: Paso): Promise<{ res: ResultadoDePaso; gastos: Cambios['gastos'] }> {
+  void _paso
   const e = enc.estado_del_motor
-  const lam = familiaDeLaminas(pl) ? pedidoCiegoL(pl, e) : null
-  const ciego = armarPedidoCiego(lam ? lam.fuentes : fuentesDelCiego(contexto(e)))
-  if (!ciego.ok) throw new Error(`pedido ciego inválido: ${ciego.sobran.join(', ')}`)
-  const fin = datos(e, 'imagen_final') ?? {}
-  let total = 0
-  const gastos: NonNullable<Cambios['gastos']> = []
-  for (let intento = 0; intento <= (paso.salida?.reintento_formato ?? 0); intento++) {
-    const rev = await P.revisor({ pedido: { instruccion: lam ? lam.instruccion : INSTRUCCION_DEL_CIEGO, ...ciego.pedido }, dry_run: enc.dry_run, imagen_url: lam ? null : (fin.url as string | undefined) ?? null, ...(lam ? { imagenes_urls: lam.imagenes } : {}) })
-    if (!rev.ok) {
-      return { res: { costo_usd: total, artefacto: { sin_revision: true, motivo: rev.error }, fichas: [fichaNueva('externa-no-respondio', 'externa', 'proceso', 'bloquea', `el revisor externo no respondió (${rev.error}): la pieza va sin segunda mirada`, 'revisión externa firmada', 'revisar a mano')] }, gastos }
-    }
-    total += rev.costo_usd
-    gastos.push({ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: rev.costo_usd, base: 'usage' })
-    const p = procesarSalida(rev.texto, paso.salida!.esquema, intento, paso.salida!.reintento_formato)
-    if (p.ok) {
-      const fs = (p.valor.fichas as Array<{ que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string }>).map((f, i) => fichaNueva(`ext-${e.pasos_ejecutados}-${i}`, 'externa', f.donde, f.gravedad, f.que, f.contra_que, f.propuesta))
-      return { res: { costo_usd: total, artefacto: { fichas: fs.length, modelo: rev.modelo }, fichas: fs }, gastos }
-    }
-    if (p.accion === 'falla_visible') return { res: { costo_usd: total, artefacto: { sin_revision: true, motivo: p.errores.join(' · ') }, fichas: [fichaNueva('externa-formato', 'externa', 'proceso', 'bloquea', 'la respuesta del revisor externo no cumple el formato tras el reintento: la pieza va sin segunda mirada', 'contrato de formato')] }, gastos }
+  const pedido = armarPedidoAlRevisor(familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : contextoDelRevisor(contexto(e)))
+  const rev = await P.revisor({ texto: pedido.texto, imagenes_urls: pedido.imagenes, dry_run: enc.dry_run })
+  if (!rev.ok) {
+    // firma de Emilio: tras los 3 reintentos (los hace el adaptador) la pieza sigue a la bandeja marcada «sin segunda mirada» y se avisa en el hilo de #oficina-creativa; nunca bloquea
+    const intentos = rev.intentos ?? []
+    const costo = rev.costo_usd ?? 0
+    const gastosFallo: NonNullable<Cambios['gastos']> = costo > 0 ? [{ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: costo, base: 'usage' }] : []
+    await P.avisar({ canal: 'hilo', encargo_id: enc.id, texto: `⚠️ Sin segunda mirada · ${enc.brief_id}: el revisor externo no respondió tras ${intentos.length || 1} intento(s) (${rev.error}); la pieza va a la bandeja sin su opinión`, dry_run: enc.dry_run })
+    return { res: { costo_usd: costo, artefacto: { sin_revision: true, motivo: rev.error, intentos }, fichas: [fichaNueva('externa-no-respondio', 'externa', 'proceso', 'sugerencia', `el revisor externo no respondió (${rev.error}): la pieza va sin segunda mirada`, 'revisión externa firmada', 'revisar a mano')] }, gastos: gastosFallo }
   }
-  throw new Error('revisor externo: salida de ciclo inalcanzable')
+  const gastos: NonNullable<Cambios['gastos']> = [{ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: rev.costo_usd, base: 'usage' }]
+  const opinion = rev.texto.trim()
+  if (!opinion) return { res: { costo_usd: rev.costo_usd, artefacto: { opinion: null, sin_opinion: true, modelo: rev.modelo, intentos: rev.intentos ?? [] } }, gastos }
+  // la opinión llega a TODOS los que hicieron algo (autor, curador y quien dibuja o estructura): una ficha por dueño, con el mismo texto; cada uno decide sobre SU parte, con razón (firma de Emilio, 10-oct)
+  const fichas = duenosDeLaOpinion(pl).map((d) => fichaNueva(d === 'texto' ? `ext-opinion-${e.pasos_ejecutados}` : `ext-opinion-${e.pasos_ejecutados}-${d}`, 'externa', d, 'sugerencia', opinion, 'opinión libre del revisor externo (sin criterios ni reglas)', `quien hizo la parte «${d}» decide qué toma y qué no, con razón`))
+  return { res: { costo_usd: rev.costo_usd, artefacto: { opinion, modelo: rev.modelo, intentos: rev.intentos ?? [] }, fichas }, gastos }
 }
 
 // ───────────────────────── recibir el resultado de un agente / del portero
@@ -491,14 +515,17 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
       const derivada = derivarDecision(modo, conf)
       return { res: { costo_usd: 0, artefacto: { ...v, reglas_de_imagen: ci.validas, reglas_rechazadas: ci.rechazadas, decision: { ...dec, foto_id: fotoId, ...derivada } }, ...(fichas.length ? { fichas } : {}) } }
     }
-    case 'prompts': return { res: { costo_usd: 0, artefacto: v } }
-    case 'mirar': {
+    case 'prompts': case 'reimagen_prompts': return { res: { costo_usd: 0, artefacto: v } }
+    case 'mirar': case 'reimagen_mirar': {
+      const esRe = paso.clave === 'reimagen_mirar'
       const obs = v.imagenes as ObservacionDeImagen[]
       const validos = new Set(imagenesAMirar(e).map((i) => i.indice))
       const filtradas = obs.filter((o) => validos.has(o.indice))
       const modo = ((datos(e, 'visual_direction')?.decision as { modo?: string } | undefined)?.modo) ?? 'ninguna'
-      const puede = modo === 'generada' && (e.vueltas['mirar'] ?? 0) < Number(pl.pasos.find((p) => p.clave === 'mirar')?.vuelve_a?.max ?? 0)
+      const puede = !esRe && modo === 'generada' && (e.vueltas['mirar'] ?? 0) < Number(pl.pasos.find((p) => p.clave === 'mirar')?.vuelve_a?.max ?? 0)
       const ver = veredictoDeImagenes(filtradas, reglasVisuales(e, b.brief), b.F.propios, puede)
+      // re-imagen que no cumple el brief: NO se pisa la observación ni la imagen anterior (se queda la que estaba) y se dice
+      if (esRe && ver.pasan.length === 0) return { res: { costo_usd: 0, fichas: [fichaNueva(`reimagen-no-cumplio-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'la imagen nueva (re-imagen que pidió la opinión) no cumple el brief: se queda la anterior', 'reglas de imagen del brief', 'una persona decide si se rehace')] } }
       const fichas: Ficha[] = []
       if (ver.pasan.length === 0 && !ver.regenerar) fichas.push(fichaNueva(`mirar-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `ninguna imagen cumple el brief: ${ver.porImagen.flatMap((x) => x.fallas.map((f) => f.detalle)).slice(0, 4).join(' · ') || 'sin observaciones'}`, 'reglas de imagen del brief', 'la pieza sale sin imagen o con la mejor disponible, declarado'))
       return { res: { costo_usd: 0, artefacto: { observaciones: filtradas, preferencia: v.preferencia, veredicto: ver }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' } } }
@@ -516,7 +543,7 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
       const huerfanas = mias.filter((f) => !validas.some((x) => x.id === f.id))
       const pieza = v.pieza as Record<string, unknown> | undefined
       const origen = paso.clave === 'corrige' ? 'jefe' : 'externa'
-      const otras = e.fichas.filter((f) => f.estado === 'abierta' && f.origen === origen && !mias.includes(f) && (origen === 'externa' || f.gravedad === 'bloquea'))
+      const otras = e.fichas.filter((f) => f.estado === 'abierta' && f.origen === origen && !mias.includes(f) && (origen === 'externa' ? duenoDeLaFicha(f) !== AGENTE_DE_LA_IMAGEN : f.gravedad === 'bloquea'))
       return {
         res: {
           costo_usd: 0,
@@ -528,6 +555,15 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
           ],
         },
       }
+    }
+    case 'decide_imagen': {
+      const mias = fichasQueTocan(e, paso)
+      const respuestas = v.respuestas as Array<{ id: string; estado: 'tomada' | 'no_tomada'; razon: string }>
+      const validas = respuestas.filter((x) => mias.some((f) => f.id === x.id))
+      const huerfanas = mias.filter((f) => !validas.some((x) => x.id === f.id))
+      const tomada = validas.find((x) => x.estado === 'tomada')
+      const re = decidirReImagen(e, pl, !!tomada)
+      return { res: { costo_usd: 0, artefacto: { re_imagen: re.si, por_rehacer_humano: !!tomada && !re.si, motivo: re.motivo, razon: tomada?.razon ?? null }, resoluciones: [...validas.map((x) => ({ id: x.id, estado: x.estado, razon: x.razon })), ...huerfanas.map((f) => ({ id: f.id, estado: 'no_tomada' as const, razon: 'el empleado no respondió este hallazgo' }))] } }
     }
     default: return { res: { costo_usd: 0, artefacto: v } }
   }
@@ -561,12 +597,15 @@ async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean,
   let output_id: string | null = null, hitl_id: string | null = null
   const desacuerdos = abiertasQueBloquean.map((f) => `${f.donde}: ${f.que ?? ''}`)
   if (!enc.dry_run && (pz || lam) && b) {
-    const contenido = lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }
-    const metadata = { origen: 'oficina', familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos }
+    // la opinión libre del revisor externo viaja con la pieza, rotulada como OPINIÓN (y lo que el autor decidió con ella)
+    const opinion = opinionExterna(e)
+    const sinSegunda = datos(e, 'fichas_externas')?.sin_revision === true
+    const contenido = { ...(lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }), ...(opinion ? { opinion_externa: opinion } : {}) }
+    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}) }
     const s = await P.salida({ client_id: enc.client_id, titulo: lam ? lam.titulo : `Pieza ${enc.brief_id} · ${b.brief.red}`, contenido, metadata })
     if (s.ok) {
       output_id = s.output_id
-      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`, vista_previa: lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
+      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: (sinSegunda ? '⚠️ SIN SEGUNDA MIRADA · ' : '') + (imagenPorRehacer(e) ? '🖼️ IMAGEN POR REHACER (decide una persona) · ' : '') + (lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`), vista_previa: lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
       if (q.ok) hitl_id = q.id
     }
   }
