@@ -95,7 +95,8 @@ export function quitarClausula(texto: string, clausula: string): string {
   const despues = cola.replace(/^[\s.!?…,;)]+/, '')
   if (antes && despues) return `${/[.!?…]$/.test(antes) ? antes : `${antes}.`} ${despues}`.trim()
   if (antes) return `${antes}${cola.match(/^[\s,;)]*([.!?…]+)/)?.[1] ?? ''}`
-  return despues.trim()
+  // r62 · al inicio del texto no queda un guion ni unos dos puntos colgando
+  return despues.replace(/^[\s—–:;,-]+/, '').trim()
 }
 
 /** A3 (Lenovo 10-oct): la cláusula sin respaldo que el cliente NO dijo SALE del manual (queda en `retirados`); D2: lo que el cliente dijo se escribe «el cliente dice: «…»».

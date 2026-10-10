@@ -51,7 +51,7 @@ export interface EntradaDeHechos {
 export interface InformeDeHechos { hechos: Hecho[]; resumen: Record<EstadoDeHecho, number>; sin_respaldo: Hecho[] }
 
 /** campos que NO son prosa a chequear: listas de términos, visuales, la frase propia que escribe el código y datos internos */
-export const CAMPOS_EXCLUIDOS = ['forbidden_words', 'required_terminology', 'primary_colors', 'typography', 'tagline', 'frases_propias', 'eslogan_literal', 'client_id', 'competitor_mentions_policy', 'logo_usage_notes']
+export const CAMPOS_EXCLUIDOS = ['forbidden_words', 'required_terminology', 'primary_colors', 'typography', 'tagline', 'frases_propias', 'eslogan_literal', 'client_id', 'competitor_mentions_policy', 'logo_usage_notes', 'visual']
 
 export const PREFIJO_PENDIENTE = 'PENDIENTE: '
 export const PREFIJO_DECLARACION = 'el cliente dice: '
