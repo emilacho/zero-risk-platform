@@ -6,7 +6,7 @@
  */
 
 // ── Render pipeline ────────────────────────────────────────────────────
-export { renderSlide, renderCarousel, TEMPLATES } from './render'
+export { renderSlide, renderCarousel, familiasDeMarca, TEMPLATES } from './render'
 export type { RenderOptions } from './render'
 
 // ── Templates (also importable individually for previews) ──────────────
@@ -17,8 +17,8 @@ export { FacebookFeed } from './templates/FacebookFeed'
 export { TwitterCard } from './templates/TwitterCard'
 
 // ── Fonts ──────────────────────────────────────────────────────────────
-export { loadDefaultFonts, registerFont, getRegisteredFonts, clearFontCache } from './fonts'
-export type { FontEntry, FontWeight, FontStyle } from './fonts'
+export { loadDefaultFonts, registerFont, getRegisteredFonts, clearFontCache, resolverFamilia, cargarFuentesDeMarca, informeDeFuentes, slugDeFuente } from './fonts'
+export type { FontEntry, FontWeight, FontStyle, ResolverOpciones, InformeDeFuentes } from './fonts'
 
 // ── Types ──────────────────────────────────────────────────────────────
 export type {

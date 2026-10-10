@@ -3,7 +3,7 @@
  *
  * Renders N carousel slides via @zero-risk/carousel-engine (satori → SVG →
  * resvg → PNG), uploads each PNG to Supabase Storage under
- *   `client-websites/{client_slug}/carousels/{date}/slide-{n}.png`,
+ *   `client-websites/{client_slug}/carousels/{date}[/{subcarpeta}]/slide-{n}.png`,
  * and returns the public URLs.
  *
  * Auth · standard `x-api-key: <INTERNAL_API_KEY>` (same as the rest of the
@@ -15,6 +15,7 @@ import { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { bucketDeLaRuta, rutaDeLamina, validarExtrasDeLamina, validarSubcarpeta } from '@/lib/carousel-ruta'
 import {
   PLATFORM_SPECS,
   renderCarousel,
@@ -30,7 +31,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const STORAGE_BUCKET = 'client-websites'
+
 const VALID_PLATFORMS: CarouselPlatform[] = [
   'instagram-feed',
   'instagram-reel',
@@ -91,7 +92,12 @@ function validateRequest(raw: unknown): { ok: true; data: CarouselGenerateReques
     if (typeof slide.headline !== 'string' || !slide.headline.trim()) {
       return { ok: false, error: `slides[${i}].headline required (non-empty string)` }
     }
+    const extra = validarExtrasDeLamina(slide, i)
+    if (extra) return { ok: false, error: extra }
   }
+
+  const sub = validarSubcarpeta(r.subcarpeta)
+  if (!sub.ok) return { ok: false, error: sub.error }
 
   if (r.date !== undefined && typeof r.date !== 'string') {
     return { ok: false, error: 'date must be a string (YYYY-MM-DD)' }
@@ -125,6 +131,11 @@ export async function POST(request: Request) {
   const carouselId = req.carousel_id ?? deriveCarouselId(req)
   const spec = PLATFORM_SPECS[req.platform]
 
+  // ── Bucket · frontera: el de la web del cliente salvo llamadas de la oficina (con `subcarpeta`), que exigen el suyo
+  const dest = bucketDeLaRuta(req.subcarpeta, { OFICINA_BUCKET: process.env.OFICINA_BUCKET })
+  if (!dest.ok) return NextResponse.json({ error: dest.error }, { status: 500 })
+  const bucket = dest.bucket
+
   // ── Render N slides in parallel ───────────────────────────────────
   let rendered
   try {
@@ -155,9 +166,9 @@ export async function POST(request: Request) {
   const timingsMs: number[] = []
 
   for (const slide of rendered) {
-    const path = `${req.client_slug}/carousels/${date}/slide-${slide.slide_index}.png`
+    const path = rutaDeLamina(req.client_slug, date, req.subcarpeta, slide.slide_index)
     const { error: upErr } = await supabase.storage
-      .from(STORAGE_BUCKET)
+      .from(bucket)
       .upload(path, slide.png, {
         contentType: 'image/png',
         upsert: true,
@@ -174,7 +185,7 @@ export async function POST(request: Request) {
         { status: 502 },
       )
     }
-    const { data: pub } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
+    const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path)
     slideUrls.push(pub.publicUrl)
     timingsMs.push(slide.durationMs)
   }
@@ -187,6 +198,9 @@ export async function POST(request: Request) {
     slide_urls: slideUrls,
     thumbnail_url: slideUrls[0],
     timings_ms: timingsMs,
+    fonts_usadas: rendered[0].fonts_usadas,
+    fonts_faltantes: rendered[0].fonts_faltantes,
+    ...(req.subcarpeta ? { subcarpeta: req.subcarpeta } : {}),
   }
   return NextResponse.json(response, { status: 200 })
 }
