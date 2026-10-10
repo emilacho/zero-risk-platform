@@ -22,6 +22,17 @@ export interface FuentesCompletas {
   /** vocabulario de productos del cliente (lo que muestran sus fotos), para saber qué protagoniza un brief */
   vocabulario_de_productos: string[]
   zona: string | null
+  /** identidad visual para dibujar láminas (colores, tipografías, logo, usuario); null = el manual no la trae (las salas de láminas fallan visibles, no inventan una) */
+  marca?: MarcaParaRender | null
+  /** slug del cliente (carpeta del bucket del brazo) */
+  slug?: string | null
+}
+
+export interface MarcaParaRender {
+  logo_url?: string | null
+  colors: { primary: string; secondary?: string; accent?: string }
+  fonts: { family: string; headline_family?: string }
+  brand_handle?: string
 }
 
 export interface Encargo {
@@ -82,6 +93,15 @@ export interface Almacen {
 
 export type ResultadoImagen = { ok: true; url: string; generation_id: string; costo_usd: number } | { ok: false; error: string }
 export type ResultadoRevisor = { ok: true; texto: string; costo_usd: number; modelo: string } | { ok: false; error: string }
+export type ResultadoRender = { ok: true; urls: string[]; ancho: number; alto: number; fonts_usadas: string[]; fonts_faltantes: string[]; timings_ms: number[] } | { ok: false; error: string }
+/** lo que se le manda al brazo que dibuja láminas (subconjunto de su contrato; el tamaño lo fija la plataforma) */
+export interface PedidoDeRender {
+  client_id: string; encargo_id: string; plataforma: string; marca: MarcaParaRender; slug: string
+  slides: Array<{ headline: string; body?: string; cta?: string; eyebrow?: string; background_image_url?: string | null; pie?: string | null; ocultar_indicador?: boolean }>
+  /** la oficina siempre manda `oficina/{encargo_id}`: dos piezas del mismo día no se pisan */
+  subcarpeta: string
+  dry_run: boolean
+}
 
 export interface Puertos {
   almacen: Almacen
@@ -91,7 +111,9 @@ export interface Puertos {
   /** genera UNA imagen (1024×1024, calidad explícita); en dry_run NO llama al proveedor */
   imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean }): Promise<ResultadoImagen>
   /** el revisor ciego (otro proveedor); en dry_run NO llama al proveedor */
-  revisor(p: { pedido: Record<string, unknown>; dry_run: boolean; imagen_url?: string | null }): Promise<ResultadoRevisor>
+  revisor(p: { pedido: Record<string, unknown>; dry_run: boolean; imagen_url?: string | null; imagenes_urls?: string[] }): Promise<ResultadoRevisor>
+  /** el brazo que dibuja láminas (PNG); en dry_run NO llama al brazo ni escribe en el bucket */
+  renderLaminas(p: PedidoDeRender): Promise<ResultadoRender>
   descargar(url: string): Promise<Buffer | null>
   guardarArchivos(ruta: string, archivos: Array<{ nombre: string; bytes: Buffer; tipo: string }>): Promise<{ ok: true; urls: Record<string, string> } | { ok: false; error: string }>
   /** salida `draft` en client_historical_outputs; NO se llama en dry_run */

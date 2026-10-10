@@ -67,7 +67,7 @@ export const CARRUSEL_IG_V1: Plantilla = {
       // el curador SOLO describe; el código decide contra obligatorio/prohibido; si falla y se puede regenerar: vuelve a `imagen` (≤ 2 veces)
       clave: 'mirar', tipo: 'agente', quien: 'marketing_instagram_curator', condicion: requiereMirar,
       entrada: ['imagenes', 'visual_direction'], salida_artefacto: 'observacion_imagen', tope_usd: 0.2,
-      salida: { esquema: 'observacion_imagen.v1', reintento_formato: 1 }, valida: ['decide_imagen'],
+      salida: { esquema: 'observacion_imagenes.v1', reintento_formato: 1 }, valida: ['decide_imagen'],
       vuelve_a: { paso: 'imagen', max: 2, si: { tipo: 'si_artefacto', artefacto: 'observacion_imagen', campo: 'veredicto.regenerar', igual: true } },
     },
     { clave: 'elegir_version', tipo: 'codigo', quien: 'sala', funcion: 'elegir_version_ref', condicion: siempre, entrada: ['imagenes', 'observacion_imagen', 'visual_direction'], salida_artefacto: 'imagenes_elegidas', tope_usd: 0 },

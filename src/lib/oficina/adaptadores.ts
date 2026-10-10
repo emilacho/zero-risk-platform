@@ -8,7 +8,7 @@ import { extraerCatalogo } from '../cerebro/datos-estructurados'
 import { datosDeContacto } from './texto'
 import { almacenDeSupabase, type Db } from './almacen-supabase'
 import type { FotoEtiquetada } from './fotos'
-import type { FuentesCompletas, Puertos, ResultadoImagen, ResultadoRevisor } from './puertos'
+import type { FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
 import type { Registro } from './chequeos'
 
 type Fila = Record<string, unknown>
@@ -27,6 +27,27 @@ const cuerpoPng = (w: number, h: number): Buffer => {
   return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.alloc(10))), chunk('IEND', Buffer.alloc(0))])
 }
 
+/** tamaños de cada plataforma del brazo de láminas (los mismos que `PLATFORM_SPECS` del motor de carruseles) */
+export const MEDIDAS_DE_PLATAFORMA: Record<string, { ancho: number; alto: number }> = {
+  'instagram-feed': { ancho: 1080, alto: 1350 }, 'instagram-reel': { ancho: 1080, alto: 1920 }, tiktok: { ancho: 1080, alto: 1920 }, 'facebook-feed': { ancho: 1200, alto: 630 }, 'twitter-card': { ancho: 1200, alto: 675 },
+}
+
+const RE_HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
+/** colores, tipografías, logo y usuario del cliente para dibujar láminas: del manual (`primary_colors`, `typography`) y, si faltan, de la ficha (`brand_colors`, `brand_fonts`). Sin color primario ⇒ null (no se inventa una paleta). */
+export function marcaDelCliente(manual: Fila, cliente: Fila, handles: string[]): MarcaParaRender | null {
+  const hex = (x: unknown): string | null => { const v = typeof x === 'string' ? x : (x as { hex?: unknown } | null)?.hex; return typeof v === 'string' && RE_HEX.test(v.trim()) ? v.trim() : null }
+  let colores = lista<unknown>(manual.primary_colors).map(hex).filter((x): x is string => !!x)
+  if (!colores.length) colores = lista<unknown>(cliente.brand_colors).map(hex).filter((x): x is string => !!x)
+  if (!colores.length) return null
+  const tipos = (lista<unknown>(manual.typography).length ? lista<unknown>(manual.typography) : lista<unknown>(cliente.brand_fonts)).map((x) => (typeof x === 'string' ? x : (x as { family?: unknown; name?: unknown } | null)?.family ?? (x as { name?: unknown } | null)?.name)).filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim())
+  return {
+    colors: { primary: colores[0], ...(colores[1] ? { secondary: colores[1] } : {}), ...(colores[2] ? { accent: colores[2] } : {}) },
+    fonts: { family: tipos[0] ?? 'Inter', ...(tipos[1] ? { headline_family: tipos[1] } : {}) },
+    ...(typeof cliente.logo_url === 'string' && cliente.logo_url ? { logo_url: cliente.logo_url } : {}),
+    ...(handles[0] ? { brand_handle: handles[0] } : {}),
+  }
+}
+
 /** el registro (tuteo / voseo) que fija el manual; sin dato, «sin_dato» (el chequeo solo avisa) */
 export function registroDelManual(voz: string | null | undefined): Registro {
   const t = (voz ?? '').toLowerCase()
@@ -42,7 +63,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     ahora,
     async fuentes(clientId) {
       try {
-        const cl = (await db.from('clients').select('id,name,country,language,config').eq('id', clientId).limit(1)) as { data: Fila[] | null; error: { message: string } | null }
+        const cl = (await db.from('clients').select('id,name,country,language,config,slug,logo_url,website_url').eq('id', clientId).limit(1)) as { data: Fila[] | null; error: { message: string } | null }
         if (cl.error) return { error: `clients: ${cl.error.message}` }
         const cliente = cl.data?.[0]
         if (!cliente) return { error: 'el cliente no existe (¿falta la ficha previa?)' }
@@ -76,6 +97,8 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
           propios: { telefonos, handles, urls: cliente.website_url ? [String(cliente.website_url)] : [], marcas_ajenas: competidores.map((c) => c.toLowerCase()) },
           fotos, usos, vocabulario_de_productos: [...new Set(fotos.flatMap((x) => x.producto_visto ?? []))],
           zona: config.zona_horaria ?? config.timezone ?? null,
+          slug: typeof cliente.slug === 'string' && cliente.slug ? cliente.slug : null,
+          marca: marcaDelCliente(manual, cliente, handles),
         }
         return out
       } catch (e) { return { error: e instanceof Error ? e.message : String(e) } }
@@ -101,7 +124,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       if (!env.revisorModelo) return { ok: false, error: 'OFICINA_REVISOR_MODEL no configurado (el nombre del modelo del revisor no está verificado)' }
       try {
         const contenido: Array<Record<string, unknown>> = [{ type: 'input_text', text: JSON.stringify(p.pedido) }]
-        if (p.imagen_url) contenido.push({ type: 'input_image', image_url: p.imagen_url })
+        for (const u of p.imagenes_urls ?? (p.imagen_url ? [p.imagen_url] : [])) contenido.push({ type: 'input_image', image_url: u })
         const r = await f('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${env.openaiKey}` }, body: JSON.stringify({ model: env.revisorModelo, input: [{ role: 'user', content: contenido }] }) })
         const j = (await r.json().catch(() => ({}))) as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }>; usage?: { input_tokens?: number; output_tokens?: number }; error?: { message?: string } }
         if (!r.ok) return { ok: false, error: j.error?.message ?? `HTTP ${r.status}` }
@@ -112,8 +135,19 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         return { ok: true, texto, costo_usd: costo, modelo: env.revisorModelo }
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
     },
+    async renderLaminas(p): Promise<ResultadoRender> {
+      const medidas = MEDIDAS_DE_PLATAFORMA[p.plataforma]
+      if (!medidas) return { ok: false, error: `plataforma «${p.plataforma}» desconocida` }
+      if (p.dry_run) return { ok: true, urls: p.slides.map((_, i) => `${PREFIJO_DRY}lamina-${i + 1}-${medidas.ancho}x${medidas.alto}.png`), ancho: medidas.ancho, alto: medidas.alto, fonts_usadas: [p.marca.fonts.family], fonts_faltantes: [], timings_ms: [] }
+      try {
+        const r = await f(`${env.baseUrl}/api/carousel/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify({ client_slug: p.slug, platform: p.plataforma, brand: p.marca, slides: p.slides, subcarpeta: p.subcarpeta }) })
+        const j = (await r.json().catch(() => ({}))) as Fila
+        if (!r.ok || !Array.isArray(j.slide_urls)) return { ok: false, error: String(j.detail ?? j.error ?? `HTTP ${r.status}`) }
+        return { ok: true, urls: (j.slide_urls as unknown[]).map(String), ancho: Number(j.width ?? medidas.ancho), alto: Number(j.height ?? medidas.alto), fonts_usadas: lista<string>(j.fonts_usadas), fonts_faltantes: lista<string>(j.fonts_faltantes), timings_ms: lista<number>(j.timings_ms) }
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+    },
     async descargar(url) {
-      if (url.startsWith(PREFIJO_DRY)) return cuerpoPng(1024, 1024)
+      if (url.startsWith(PREFIJO_DRY)) { const m = /-(\d{2,5})x(\d{2,5})\.png$/.exec(url); return m ? cuerpoPng(Number(m[1]), Number(m[2])) : cuerpoPng(1024, 1024) }
       try {
         const r = await f(url)
         return r.ok ? Buffer.from(await r.arrayBuffer()) : null

@@ -7,10 +7,12 @@
  * reintento cierra el encargo como `fallido` (visible, nunca relleno); un fallo de Slack nunca frena nada; nadie pregunta al cliente.
  */
 import crypto from 'node:crypto'
+import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { parsearBrief, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, esPostDeImagen, type BriefLeido } from './brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import { aUtc, chequeosDeEntrega, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoCiego } from './ciego'
+import { armarPedidoL, ejecutarCodigoL, familiaDeLaminas, pedidoCiegoL, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
 import { construirTarea, fuentesDelCiego, INSTRUCCION_DEL_CIEGO, type ContextoDePedido } from './pedidos'
@@ -23,23 +25,9 @@ import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla } fro
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const sha = (x: unknown) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex')
-const datos = (e: Estado, n: string): Record<string, unknown> | undefined => e.artefactos[n]?.datos
 const AGENTE_DEL_TEXTO = 'content-creator'
 
 // ───────────────────────── lo que se arma a partir del estado
-function reglasVisuales(e: Estado, brief: BriefLeido): ReglasDeImagen {
-  const rv = (datos(e, 'visual_direction')?.reglas_de_imagen ?? { obligatorio: [], prohibido: [] }) as ReglasDeImagen
-  return {
-    obligatorio: [...rv.obligatorio, ...brief.visual_obligatorio.map((t, i) => ({ id: `brief-o${i + 1}`, texto: t }))],
-    prohibido: [...rv.prohibido, ...brief.visual_prohibido.map((t, i) => ({ id: `brief-p${i + 1}`, texto: t }))],
-  }
-}
-/** para los prompts además se vigilan las palabras prohibidas del manual y del brief */
-function reglasParaPrompts(e: Estado, brief: BriefLeido, F: FuentesCompletas): ReglasDeImagen {
-  const v = reglasVisuales(e, brief)
-  const palabras = [...F.fuentes.palabras_prohibidas, ...brief.prohibido]
-  return { obligatorio: v.obligatorio, prohibido: [...v.prohibido, ...palabras.map((p, i) => ({ id: `txt-p${i + 1}`, texto: `palabra prohibida «${p}»`, claves: [p] }))] }
-}
 interface Base { brief: BriefLeido; proporcion: string; F: FuentesCompletas }
 function base(e: Estado): Base { return datos(e, 'encargo') as unknown as Base }
 /** lo que el curador debe mirar AHORA: con imagen generada, la última tanda; con foto real, la foto elegida */
@@ -61,7 +49,6 @@ const contexto = (e: Estado): ContextoDePedido => {
   const b = base(e)
   return { fuentes: b.F, brief: b.brief, proporcion: b.proporcion, estado: e, reglas: reglasVisuales(e, b.brief), imagenesAMirar: imagenesAMirar(e), art: (n) => datos(e, n) }
 }
-const fichaNueva = (id: string, origen: Ficha['origen'], donde: string, gravedad: Ficha['gravedad'], que: string, contra_que = 'proceso de la oficina', propuesta = 'revisar'): Ficha => ({ id, origen, donde, gravedad, estado: 'abierta', que, contra_que, propuesta })
 const turnoDe = (e: Estado) => e.pasos_ejecutados + 1
 
 // ───────────────────────── abrir
@@ -137,12 +124,12 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
         continue
       }
       if (paso.tipo === 'externo') {
-        const out = await ejecutarExterno(P, enc, paso)
+        const out = await ejecutarExterno(P, enc, pl, paso)
         enc = await aplicar(P, enc, pl, sig.indice, out.res, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'externo', agente: paso.quien, dispatch_key: null, cost_usd: out.res.costo_usd }, gastos: out.gastos })
         continue
       }
       // portero y agente: salto sin llamar a nadie si no hay nada que hacer
-      const salto = saltoPorFalta(paso, e)
+      const salto = familiaDeLaminas(pl) ? saltoL(paso, e) : saltoPorFalta(paso, e)
       if (salto) { enc = await aplicar(P, enc, pl, sig.indice, salto, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: paso.tipo, agente: null, dispatch_key: null, cost_usd: 0 } }); continue }
       const { agente, pedido } = armarPedido(enc, pl, paso, e)
       const n = turnoDe(e)
@@ -159,6 +146,11 @@ const contexto2 = (e: Estado): ContextoDePedido | null => (datos(e, 'encargo') ?
 
 /** el agente y el pedido de un paso de agente o de portero (puro: sale del estado, así se puede volver a entregar) */
 function armarPedido(enc: Encargo, pl: Plantilla, paso: Paso, e: Estado, errorDeFormato?: string): { agente: string; pedido: Record<string, unknown> } {
+  if (familiaDeLaminas(pl)) {
+    // salas 2 y 3: el agente de cada paso es el que dice la plantilla (los hallazgos tienen un paso por dueño)
+    const t = paso.tipo === 'agente' ? armarPedidoL(pl, paso, e, errorDeFormato ? { errorDeFormato } : undefined) : null
+    return { agente: paso.quien, pedido: pedidoDe(enc, pl, paso, paso.quien, t, e) }
+  }
   const agente = paso.quien === 'dueno_del_donde' ? AGENTE_DEL_TEXTO : paso.quien
   const fichasPropias = paso.clave === 'corrige' || paso.clave === 'decide' ? fichasQueTocan(e, paso) : []
   const t = paso.tipo === 'agente' ? construirTarea(paso.clave, contexto2(e)!, { fichas: fichasPropias, ...(errorDeFormato ? { errorDeFormato } : {}) }) : null
@@ -311,7 +303,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
     }
     case 'empaquetar_entrega': return empaquetar(P, enc, pl)
     case 'cierre': return { res: { costo_usd: 0, artefacto: { cerrado_en: P.ahora().toISOString() } } }
-    default: return { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
+    default: return familiaDeLaminas(pl) ? ejecutarCodigoL(P, enc, pl, paso) : { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
   }
 }
 
@@ -365,15 +357,16 @@ async function empaquetar(P: Puertos, enc: Encargo, pl: Plantilla): Promise<Sali
 }
 
 // ───────────────────────── revisor externo
-async function ejecutarExterno(P: Puertos, enc: Encargo, paso: Paso): Promise<{ res: ResultadoDePaso; gastos: Cambios['gastos'] }> {
+async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso): Promise<{ res: ResultadoDePaso; gastos: Cambios['gastos'] }> {
   const e = enc.estado_del_motor
-  const ciego = armarPedidoCiego(fuentesDelCiego(contexto(e)))
+  const lam = familiaDeLaminas(pl) ? pedidoCiegoL(pl, e) : null
+  const ciego = armarPedidoCiego(lam ? lam.fuentes : fuentesDelCiego(contexto(e)))
   if (!ciego.ok) throw new Error(`pedido ciego inválido: ${ciego.sobran.join(', ')}`)
   const fin = datos(e, 'imagen_final') ?? {}
   let total = 0
   const gastos: NonNullable<Cambios['gastos']> = []
   for (let intento = 0; intento <= (paso.salida?.reintento_formato ?? 0); intento++) {
-    const rev = await P.revisor({ pedido: { instruccion: INSTRUCCION_DEL_CIEGO, ...ciego.pedido }, dry_run: enc.dry_run, imagen_url: (fin.url as string | undefined) ?? null })
+    const rev = await P.revisor({ pedido: { instruccion: lam ? lam.instruccion : INSTRUCCION_DEL_CIEGO, ...ciego.pedido }, dry_run: enc.dry_run, imagen_url: lam ? null : (fin.url as string | undefined) ?? null, ...(lam ? { imagenes_urls: lam.imagenes } : {}) })
     if (!rev.ok) {
       return { res: { costo_usd: total, artefacto: { sin_revision: true, motivo: rev.error }, fichas: [fichaNueva('externa-no-respondio', 'externa', 'proceso', 'bloquea', `el revisor externo no respondió (${rev.error}): la pieza va sin segunda mirada`, 'revisión externa firmada', 'revisar a mano')] }, gastos }
     }
@@ -424,23 +417,26 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   // agente: contrato de formato
   const intentos = e.vueltas[`fmt:${paso.clave}`] ?? 0
   const p = procesarSalida(res.texto, paso.salida!.esquema, intentos, paso.salida!.reintento_formato)
-  if (!p.ok && p.accion === 'reintentar') {
+  /** un reintento: la misma pregunta con el error literal (de formato, o de lo que la sala comprueba por código) */
+  const pedirReintento = async (mensaje: string, motivo: string): Promise<Respuesta> => {
     const nuevo: Estado = { ...e, vueltas: { ...e.vueltas, [`fmt:${paso.clave}`]: intentos + 1 }, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }
-    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, turno: { ...turnoBase, n, estado: 'hecho', error: 'formato: reintento' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
-    const { agente, pedido } = armarPedido(enc, pl, paso, nuevo, p.mensaje_de_error)
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, turno: { ...turnoBase, n, estado: 'hecho', error: motivo }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
+    const { agente, pedido } = armarPedido(enc, pl, paso, nuevo, mensaje)
     const n2 = turnoDe(nuevo)
     const dk = `${enc.id}:${n2}`
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', turno: { n: n2, paso: paso.clave, tipo: paso.tipo, agente, estado: 'corriendo', dispatch_key: dk, cost_usd: 0 } })
     return r(200, { accion: 'esperar', reintento_de_formato: true, turno: { n: n2, paso: paso.clave, tipo: paso.tipo, agente, dispatch_key: dk, pedido } })
   }
+  if (!p.ok && p.accion === 'reintentar') return pedirReintento(p.mensaje_de_error, 'formato: reintento')
   if (!p.ok) {
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), fichas: [...e.fichas, fichaNueva(`formato-${paso.clave}`, 'chequeo', 'formato', 'bloquea', p.ficha.que ?? 'formato inválido')], turno: { ...turnoBase, n, estado: 'fallo', error: p.errores.join(' · ') }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
     return fallar(P, { ...enc, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, p.ficha.que ?? 'formato inválido')
   }
-  const proc = procesarValor(paso, p.valor, enc, e, pl)
-  if (proc.fallido) {
-    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), turno: { ...turnoBase, n, estado: 'fallo', error: proc.fallido }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
-    return fallar(P, { ...enc, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, proc.fallido)
+  const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = familiaDeLaminas(pl) ? procesarValorL(paso, p.valor, enc, e, pl, intentos) : procesarValor(paso, p.valor, enc, e, pl)
+  if (proc.reintentar !== undefined) return pedirReintento(proc.reintentar, 'validación de la sala: reintento')
+  if (proc.fallido || !proc.res) {
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), turno: { ...turnoBase, n, estado: 'fallo', error: proc.fallido ?? 'sin resultado' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
+    return fallar(P, { ...enc, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, proc.fallido ?? 'el paso no produjo resultado')
   }
   await aplicarResultado(P, enc, pl, sig.indice, { ...proc.res, costo_usd: costo }, { vuelta: sig.vuelta, turno: { ...turnoBase, estado: 'hecho' }, gastos: gastoModelo, n })
   return avanzar(P, enc.id)
@@ -539,8 +535,9 @@ async function cerrarPorTope(P: Puertos, enc: Encargo, pl: Plantilla, razon: str
 }
 
 async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean, nota?: string): Promise<Respuesta> {
-  void pl
   const e = enc.estado_del_motor
+  // salas 2 y 3: el resumen de lo que va a la salida y a la bandeja sale de las láminas (null para el post de la sala 1)
+  const lam = resumenDeCierreL(enc, e, pl)
   const abiertasQueBloquean = e.fichas.filter((f) => f.gravedad === 'bloquea' && (f.estado === 'abierta' || f.estado === 'no_tomada'))
   const conDesacuerdo = abiertasQueBloquean.length > 0 || parcial
   const estadoFinal: Encargo['estado'] = parcial ? 'cerrado_por_tope' : 'cerrado'
@@ -548,16 +545,16 @@ async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean,
   const fin = datos(e, 'imagen_final')
   const ent = datos(e, 'entrega')
   const b = datos(e, 'encargo') ? base(e) : null
-  const generada = fin?.origen === 'generada'
+  const generada = lam ? lam.generada : fin?.origen === 'generada'
   let output_id: string | null = null, hitl_id: string | null = null
   const desacuerdos = abiertasQueBloquean.map((f) => `${f.donde}: ${f.que ?? ''}`)
-  if (!enc.dry_run && pz && b) {
-    const contenido = { pie_de_foto: pz.pie_de_foto, hashtags: pz.hashtags, llamado: pz.llamado ?? null, nota_para_quien_publica: pz.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }
+  if (!enc.dry_run && (pz || lam) && b) {
+    const contenido = lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }
     const metadata = { origen: 'oficina', familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos }
-    const s = await P.salida({ client_id: enc.client_id, titulo: `Pieza ${enc.brief_id} · ${b.brief.red}`, contenido, metadata })
+    const s = await P.salida({ client_id: enc.client_id, titulo: lam ? lam.titulo : `Pieza ${enc.brief_id} · ${b.brief.red}`, contenido, metadata })
     if (s.ok) {
       output_id = s.output_id
-      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`, vista_previa: String(pz.pie_de_foto ?? '').slice(0, 280), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: (ent?.expires_at as string | null | undefined) ?? null })
+      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`, vista_previa: lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
       if (q.ok) hitl_id = q.id
     }
   }
