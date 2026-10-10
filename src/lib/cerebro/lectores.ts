@@ -12,6 +12,7 @@ import { type ClaseDePlazo, type Plazos, vigenciaDe } from './plazos'
 import { resumirTexto } from './resumen'
 import { type DecisionAtada, type DecisionDelDueno, type Estado, type EstadoDeFuente, type Ficha, type NombreDeFuente, type Origen, pesoDeTexto } from './tipos'
 import { derivarVersiones } from './versiones'
+import { avisoDeProvisionales } from '../manual/lectura'
 
 export interface Contexto { consulta: Consulta; cliente: string; ahora: Date; plazos: Plazos }
 export interface Salida {
@@ -99,7 +100,7 @@ export async function leerManual(ctx: Contexto): Promise<Salida> {
     const cuerpo = texto(f.content_text) ?? ''
     return linea(ctx, {
       ref: `client_brand_books:${f.id}`, estante: 'E1', clase: 'manual', titulo: `Manual de marca · versión ${version}`,
-      que_es: 'Manual de marca (voz, valores, posicionamiento, vocabulario y palabras prohibidas)',
+      que_es: `Manual de marca (voz, valores, posicionamiento, vocabulario y palabras prohibidas)${vigente && avisoDeProvisionales(f.content_text) ? ` · ${avisoDeProvisionales(f.content_text)}` : ''}`,
       origen: 'producido', estado: f.human_validated === true ? 'aprobado' : 'borrador sin aprobar',
       fecha: iso(f.created_at), plazo: 'sin_plazo', version, vigente, reemplazada: !vigente, versiones_anteriores: vigente ? filas.length - 1 : 0,
       peso: pesoDeTexto(cuerpo), ...(vigente ? { contenido: cuerpo } : {}),
