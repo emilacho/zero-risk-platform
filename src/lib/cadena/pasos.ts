@@ -12,6 +12,7 @@ import { expandirPatron, fusionarTanda } from './expandir-patron'
 import { tareaDeCalendario, tareaDeEstrategia } from './indicaciones'
 import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, semanaDeId } from './nucleo'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
+import { diasEntre, fechaDeFila } from './fechas'
 import type { Ajuste, Estrategia, Fila, FormatosPorRed, Hallazgo, TandaAgente } from './tipos'
 import { lexicoDesdeConfig, type LexicoAfirmaciones } from './afirmaciones'
 import { problemasDeEsquema, validarEstrategia } from './validador-estrategia'
@@ -47,7 +48,7 @@ async function cargar(al: Almacen, cuerpo: Record<string, unknown>): Promise<{ o
   return { ok: true, p: { campana, ctx, formatos: await al.formatos(), lexico: lexicoDesdeConfig(await al.leerConfig('lexico_afirmaciones')) } }
 }
 
-function cuerpoDeRunSdk(paso: Paso, modelo: string, tarea: string, esquema: Record<string, unknown>, clientId: string, extra: Record<string, unknown> = {}) {
+export function cuerpoDeRunSdk(paso: Paso, modelo: string, tarea: string, esquema: Record<string, unknown>, clientId: string, extra: Record<string, unknown> = {}) {
   return {
     agent: AGENTE_POR_PASO[paso],
     task: tarea,
@@ -86,9 +87,10 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
   const c = await cargar(al, cuerpo)
   if (!c.ok) return c.r
   const { campana, ctx, formatos } = c.p
-  if (campana.estado !== 'abierta' && campana.estado !== 'estrategia') return err(409, 'E-ESTADO', `la campaña está ${campana.estado}: la estrategia solo se prepara con la campaña abierta o en estrategia`)
+  // una estrategia ya validada es «ya hecha» en cualquier estado de la campaña (repetir un sub-flujo no gasta ni falla)
   const ultima = await al.ultimaEstrategia(campana.id)
   if (ultima?.estado === 'validada') return { status: 200, cuerpo: { ya_hecha: true, version: ultima.version } }
+  if (campana.estado !== 'abierta' && campana.estado !== 'estrategia') return err(409, 'E-ESTADO', `la campaña está ${campana.estado}: la estrategia solo se prepara con la campaña abierta o en estrategia`)
   const version = (ultima?.version ?? 0) + 1
   const fichas = Array.isArray((cuerpo.correccion as { fichas?: unknown } | undefined)?.fichas) ? ((cuerpo.correccion as { fichas: never[] }).fichas) : null
   const esquema = validarEsquemaDeSalida(ESQUEMA_ESTRATEGIA)
@@ -141,7 +143,10 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
   }
   await al.insertarEstrategia({ campana_id: campana.id, version, estado: 'validada', contenido: objeto as Estrategia, agente: AGENTE_POR_PASO.estrategia, modelo: corrida.modelo, costo_usd: leerResultado(cuerpo.resultado).cost_usd ?? null, workflow_execution_id: corrida.workflow_execution_id, seco: campana.seco })
   await al.actualizarCampana(campana.id, { estado: 'calendario' })
-  return { status: 200, cuerpo: { ok: true, version, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que) } }
+  // los tipos de fechas que ESTE cliente declaró (puede ser ninguno: lo normal) y los años de la campaña: el flujo investiga solo eso
+  const anios = [...new Set([campana.fecha_inicio.slice(0, 4), campana.fecha_fin.slice(0, 4)].map(Number))]
+  const fechasPedidas = ctx.pais ? (objeto as Estrategia).fechas_que_importan.flatMap((f) => anios.map((anio) => ({ pais: ctx.pais, tipo: f.tipo, ambito: f.ambito, anio }))) : []
+  return { status: 200, cuerpo: { ok: true, version, fechas_pedidas: fechasPedidas, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que) } }
 }
 
 // ─────────────────────────────────────────────────────────────── CALENDARIO
@@ -308,3 +313,27 @@ export async function validarSinEscribir(al: Almacen, cuerpo: Record<string, unk
   return err(400, 'E-TIPO', 'tipo debe ser estrategia o calendario')
 }
 
+
+/**
+ * ¿Toca abrir otra tanda? Cuando faltan ≤ 14 días para que termine la última materializada (calendario rodante, diseño v2 §6).
+ * Devuelve `{ tanda }` o `{ tanda: null, motivo }`.
+ */
+export async function calendarioSiguiente(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+  const id = cadena(cuerpo.campana_id)
+  if (!id) return err(400, 'E-CAMPOS', 'falta campana_id')
+  const c = await al.campana(id)
+  if (!c) return err(404, 'E-CAMPANA', 'la campaña no existe')
+  const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
+  if (noAut) return noAut
+  if (c.estado !== 'activa') return { status: 200, cuerpo: { tanda: null, motivo: `la campaña está ${c.estado}` } }
+  const version = Math.max(1, await al.ultimaVersionDeCalendario(id))
+  const hechas = (await al.filas(id, version)).filter((f) => f.estado !== 'esquema')
+  const ultima = hechas.reduce((m, f) => Math.max(m, f.tanda), 0)
+  if (ultima === 0) return { status: 200, cuerpo: { tanda: null, motivo: 'todavía no hay una primera tanda' } }
+  if (ultima >= TOTAL_DE_TANDAS) return { status: 200, cuerpo: { tanda: null, motivo: 'ya están todas las tandas' } }
+  const finDeLaTanda = fechaDeFila(c.fecha_inicio, semanasDeTanda(ultima).slice(-1)[0], 7)
+  const hoy = (cadena(cuerpo.hoy) ?? ahora).slice(0, 10)
+  const faltan = diasEntre(hoy, finDeLaTanda)
+  if (faltan > 14) return { status: 200, cuerpo: { tanda: null, motivo: `faltan ${faltan} días para que termine la tanda ${ultima} (se abre a los 14)` } }
+  return { status: 200, cuerpo: { tanda: ultima + 1, faltan_dias: faltan } }
+}

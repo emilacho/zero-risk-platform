@@ -5,11 +5,11 @@
 import { atender } from '@/lib/cadena/puerta-http'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { almacenDeSupabase } from '@/lib/cadena/almacen-supabase'
-import { filasListar, filasLotes, filasMarcar } from '@/lib/cadena/datos'
+import { ACCIONES } from '@/lib/cadena/acciones'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  return atender(request, { listar: (al, c) => filasListar(al, c), lotes: filasLotes, marcar: filasMarcar }, almacenDeSupabase, undefined, checkInternalKey)
+  return atender(request, ACCIONES.filas, almacenDeSupabase, undefined, checkInternalKey)
 }

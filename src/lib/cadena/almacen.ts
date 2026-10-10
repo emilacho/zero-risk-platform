@@ -117,6 +117,8 @@ export interface Almacen {
   actualizarCampana(id: string, patch: Partial<Campana>): Promise<Campana>
   campanasEnEspera(): Promise<Campana[]>
   campanasActivas(): Promise<Campana[]>
+  /** campañas que todavía arman su estrategia o su calendario (`abierta` · `estrategia` · `calendario`): si una llamada falló quedan ahí y nadie las mira sin el barrido del vigía */
+  campanasEnArmado(): Promise<Campana[]>
   // estrategias
   ultimaEstrategia(campanaId: string): Promise<EstrategiaGuardada | null>
   insertarEstrategia(e: EstrategiaGuardada): Promise<void>

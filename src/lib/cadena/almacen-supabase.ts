@@ -90,6 +90,7 @@ export function almacenDeSupabase(): Almacen {
     async insertarCampana(c) { const { data, error } = await db.from('cadena_campanas').insert(c).select().single(); if (error) fallo(error); return data as Campana },
     async actualizarCampana(id, patch) { const { data, error } = await db.from('cadena_campanas').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('id', id).select().single(); if (error) fallo(error); return data as Campana },
     async campanasEnEspera() { return lista<Campana>(db.from('cadena_campanas').select('*').in('estado', ['necesita_humano', 'pausada']).limit(500)) },
+    async campanasEnArmado() { return lista<Campana>(db.from('cadena_campanas').select('*').in('estado', ['abierta', 'estrategia', 'calendario']).limit(500)) },
     async campanasActivas() { return lista<Campana>(db.from('cadena_campanas').select('*').eq('estado', 'activa').limit(500)) },
 
     async ultimaEstrategia(campanaId) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },

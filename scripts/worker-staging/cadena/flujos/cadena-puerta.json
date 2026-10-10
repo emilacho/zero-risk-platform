@@ -1,0 +1,1236 @@
+{
+ "name": "Zero Risk — Cadena · puerta (webhook · CC#1)",
+ "nodes": [
+  {
+   "name": "Webhook · cadena",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "webhookId": "e56e9ee3-9c18-3092-d312-3af9d59401f3",
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "zero-risk/cadena",
+    "responseMode": "onReceived",
+    "options": {}
+   },
+   "position": [
+    0,
+    0
+   ],
+   "id": "5a5e27da-2471-011d-678e-ddff627ca713"
+  },
+  {
+   "name": "⓪ Llave y origen",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ⓪ LA LLAVE Y EL ORIGEN · cadena · puerta · CC#1 · 2026-10-09 · diseño v2 §3.4 + condición 1 de CC#3\n// 🔴 ORDEN QUE IMPORTA (condición 1): PRIMERO la llave de despacho, DESPUÉS el cuerpo. La sala no firma el cuerpo y el webhook es una dirección pública:\n// quien llegue sin la llave no consigue que se lea ni un campo (ni `target_step_id`). Falla CERRADO: sin la llave en el entorno el flujo queda cerrado.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) throw new Error('PUERTA_CERRADA · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo paga y queda cerrado hasta que exista · E67')\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) throw new Error('PUERTA_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo paga y solo lo despierta la sala · E67')\n\n// recién ahora se lee el cuerpo\nconst body = w.body && typeof w.body === 'object' ? w.body : {}\nif (typeof body.client_id !== 'string' || !/^[0-9a-fA-F-]{36}$/.test(body.client_id)) throw new Error('PUERTA_CLIENTE_INVALIDO · client_id debe ser un uuid · se DETIENE y no escribe nada')\nif (typeof body._journey_id !== 'string' || body._journey_id.trim() === '') throw new Error('PUERTA_SIN_VIAJE · falta _journey_id (lo pone la sala) · se DETIENE y no escribe nada')\nif (typeof body.dry_run !== 'boolean') throw new Error('PUERTA_DRY_RUN_AUSENTE · el sobre debe traer dry_run explícito (true o false) · no se asume · se DETIENE antes de gastar')\n\n// el modo lo decide la SALA (`target_step_id` lo escribe el despachador DESPUÉS del payload: no se falsifica desde el cuerpo) · cualquier `modo` del cuerpo se ignora salvo para el vigía y de una lista cerrada\nconst paso = String(body.target_step_id || '')\nlet modo = null\nif (paso === 'router.dispatch.planeacion/plan-listo.briefear') modo = 'abrir'\nelse if (paso === 'router.dispatch.cadena/vigia.briefear') {\n  if (body.modo !== 'parte' && body.modo !== 'tanda_siguiente') throw new Error('PUERTA_MODO_INVALIDO · el vigía manda parte | tanda_siguiente · llegó ' + JSON.stringify(body.modo))\n  modo = body.modo\n} else throw new Error('PUERTA_ORIGEN_DESCONOCIDO · target_step_id ' + JSON.stringify(paso) + ' no es de la cadena · no se escribe nada')\n\nreturn [{\n  json: {\n    modo,\n    client_id: body.client_id,\n    tenant_id: body.tenant_id || body.client_id,\n    _journey_id: body._journey_id,\n    _sala_correlation_id: body._sala_correlation_id || null,\n    plan_id: typeof body.plan_id === 'string' ? body.plan_id : null,\n    campana_id: typeof body.campana_id === 'string' ? body.campana_id : null,\n    lote: typeof body.lote === 'string' ? body.lote : null,\n    tanda: Number.isInteger(body.tanda) ? body.tanda : null,\n    fila_ids: Array.isArray(body.fila_ids) ? body.fila_ids.filter((x) => typeof x === 'string') : [],\n    dry_run: body.dry_run,\n    // los simulacros (respuestas enlatadas de los agentes) SOLO existen en seco\n    simulacros: body.dry_run === true && body._simulacros && typeof body._simulacros === 'object' ? body._simulacros : null,\n    // para la pasarela: el cuerpo ENTERO, sin tocar un campo\n    cuerpo_original: JSON.stringify(body),\n  },\n}]\n"
+   },
+   "position": [
+    280,
+    0
+   ],
+   "id": "63d10e48-0425-2eb8-6d7f-9e61cd80ab50"
+  },
+  {
+   "name": "⓪ ¿Existe el viaje?",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/campanas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ accion: 'verificar_viaje', client_id: $json.client_id, journey_id: $json._journey_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    560,
+    0
+   ],
+   "id": "ccada3e6-07b5-949d-255f-7df0ce2d27e5"
+  },
+  {
+   "name": "⓪ Guarda del viaje",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ⓪ GUARDA DEL VIAJE · el `_journey_id` y el `client_id` del sobre tienen que existir JUNTOS en la sala (condición 1 de CC#3): si no, no se hace nada\nconst r = $input.first().json || {}\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nif (Number(r.statusCode) !== 200) throw new Error('PUERTA_VIAJE_NO_COMPROBABLE · ' + String(b.code || b.error || r.statusCode) + ' · ' + String(b.detalle || b.detail || 'sin detalle') + ' · se DETIENE y no escribe nada')\nif (b.existe !== true) throw new Error('PUERTA_VIAJE_NO_EXISTE · el viaje del sobre no existe para este cliente en la sala · se DETIENE y no escribe nada')\nreturn [{ json: $('⓪ Llave y origen').last().json }]\n"
+   },
+   "position": [
+    840,
+    0
+   ],
+   "id": "3de0ddf4-3348-5d8e-b3c3-11a4f4c9a2f7"
+  },
+  {
+   "name": "⓪ ¿Qué modo?",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/campanas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ accion: 'estado', client_id: $json.client_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    1120,
+    0
+   ],
+   "id": "b96bb134-f9e9-8f54-0abb-78806d50a65a"
+  },
+  {
+   "name": "⓪ Decidir",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ⓪ DECIDIR · pasarela o cadena · lo dice el INTERRUPTOR (apagada · ensayo · encendida), no el sobre\n// Pasarela = NEUTRAL: reenvía el cuerpo entero a la parte original y no cambia nada observable. Solo el sobre de abrir tiene sentido en pasarela: un sobre del vigía con la cadena apagada se DETIENE (no es de la parte original).\nconst s = $('⓪ Llave y origen').last().json\nconst r = $input.first().json || {}\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nif (Number(r.statusCode) !== 200) throw new Error('PUERTA_ESTADO_NO_COMPROBABLE · ' + String(b.code || b.error || r.statusCode) + ' · ' + String(b.detalle || b.detail || 'sin detalle') + ' · se DETIENE y no escribe nada')\nconst efectivo = b.modo === 'cadena' ? 'cadena' : 'pasarela'\nif (efectivo === 'pasarela' && s.modo !== 'abrir') throw new Error('PUERTA_CADENA_APAGADA · llegó un sobre del vigía (' + s.modo + ') pero la cadena está ' + String(b.estado_cadena) + ' · no se reenvía a la parte original · se DETIENE')\nreturn [{ json: { ...s, efectivo, estado_cadena: b.estado_cadena || null } }]\n"
+   },
+   "position": [
+    1400,
+    0
+   ],
+   "id": "591aea02-940e-8386-75ab-8270f6cb171f"
+  },
+  {
+   "name": "¿Pasarela?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.efectivo === 'pasarela' }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    1680,
+    0
+   ],
+   "id": "53aae991-ad63-c6f9-a73b-27c64df0917a"
+  },
+  {
+   "name": "Pasarela · reenviar a la parte",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.N8N_PUBLIC_URL || 'https://n8n-production-72be.up.railway.app') + '/webhook/zero-risk/brief' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-sala-dispatch-key",
+       "value": "={{ $env.SALA_DISPATCH_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ $json.cuerpo_original }}",
+    "options": {
+     "timeout": 30000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    1960,
+    -600
+   ],
+   "id": "0f63bcd6-bd3c-dd0c-4230-322bc4235080"
+  },
+  {
+   "name": "Pasarela · ¿salió?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// PASARELA · ¿SALIÓ? · si el reenvío a la parte original falla, NO se traga el sobre: falla ruidosa (la sala lo ve como `webhook_failed` y reintenta, como hoy)\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nif (!(status >= 200 && status < 300)) throw new Error('PUERTA_PASARELA_FALLO · la parte original no aceptó el sobre (HTTP ' + String(r.statusCode) + ') · el sobre NO se perdió en silencio')\nreturn [{ json: { resultado: 'pasarela_ok', http: status } }]\n"
+   },
+   "position": [
+    2240,
+    -600
+   ],
+   "id": "558382ff-4197-5137-c1d7-ffc8424bd728"
+  },
+  {
+   "name": "¿Modo abrir?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.modo === 'abrir' }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    1960,
+    0
+   ],
+   "id": "58e365a6-d943-6344-1b05-f374b36f480b"
+  },
+  {
+   "name": "1 · Abrir campaña",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/campanas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ accion: 'abrir', client_id: $json.client_id, plan_id: $json.plan_id, seco: $json.dry_run, sala_ref: { _journey_id: $json._journey_id, _sala_correlation_id: $json._sala_correlation_id }, workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    2240,
+    -200
+   ],
+   "id": "71c1bcec-3823-e0cd-af66-6b49a2e07019"
+  },
+  {
+   "name": "1 · ¿Abierta?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 1 · ¿ABIERTA? · lo que dijo `abrir`: abierta · ya estaba abierta (el mismo sobre dos veces no abre dos campañas) · el plan no coincide (no se escribió nada) · todo lo demás falla ruidoso\nconst s = $('⓪ Decidir').last().json\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nif (status === 201 && b.campana && b.campana.id) return [{ json: { ...s, sigue: true, campana_id: b.campana.id, reemplaza_a: b.reemplaza_a || null } }]\nif (status === 200 && b.ya_abierta === true) return [{ json: { ...s, sigue: false, resultado: 'cadena_abierta', campana_id: b.campana ? b.campana.id : null, nota: 'ya estaba abierta: no se repite el trabajo' } }]\nif (status === 409 && b.resultado === 'plan_no_coincide') return [{ json: { ...s, sigue: false, resultado: 'plan_no_coincide', campana_id: null, nota: String(b.detalle || '') } }]\nthrow new Error('PUERTA_ABRIR_' + String(b.code || b.error || status) + ' · ' + String(b.detalle || b.detail || 'sin detalle') + ' · se DETIENE')\n"
+   },
+   "position": [
+    2520,
+    -200
+   ],
+   "id": "ed5c7d48-fcd6-2870-7ccb-d26e52957880"
+  },
+  {
+   "name": "1 · ¿Sigue?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.sigue === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    2800,
+    -200
+   ],
+   "id": "fe79a6bd-5f4d-3281-b4f2-e60358fef8ab"
+  },
+  {
+   "name": "2 · Entrada de la estrategia",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 2 · ENTRADA DE LA ESTRATEGIA · la puerta propaga `seco` EXPLÍCITO y el simulacro (solo en seco) · el sub-flujo pone sus propios workflow ids\nconst s = $input.first().json\nconst sim = s.simulacros && Array.isArray(s.simulacros.estrategia) ? s.simulacros.estrategia : null\nreturn [{ json: { campana_id: s.campana_id, seco: s.dry_run === true, simulacro: sim } }]\n"
+   },
+   "position": [
+    3080,
+    -400
+   ],
+   "id": "235ff938-9cda-226f-66d1-44ff6ae11530"
+  },
+  {
+   "name": "2 · Estrategia (sub-flujo)",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.2,
+   "parameters": {
+    "workflowId": {
+     "__rl": true,
+     "value": "@@ID_ESTRATEGIA@@",
+     "mode": "id"
+    },
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   },
+   "position": [
+    3360,
+    -400
+   ],
+   "id": "de87596e-ae6e-9984-aa70-04366fff428b"
+  },
+  {
+   "name": "2 · ¿Estrategia?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 2 · ¿ESTRATEGIA? · terminó bien (o ya estaba hecha) → sigue; si la campaña necesita a Emilio → se corta aquí y se avisa por el cable\nconst s = $('1 · ¿Abierta?').last().json\nconst r = $input.first().json || {}\nif (r.resultado === 'ok' || r.resultado === 'ya_hecha') return [{ json: { ...s, sigue: true, fechas_pedidas: Array.isArray(r.fechas_pedidas) ? r.fechas_pedidas : [] } }]\nreturn [{ json: { ...s, sigue: false, resultado: 'necesita_humano', alerta: r.alerta || null, nota: 'la estrategia no quedó validada: ' + String(r.resultado) } }]\n"
+   },
+   "position": [
+    3640,
+    -400
+   ],
+   "id": "367c5fc1-98f0-20bd-b726-928c1d8cee3a"
+  },
+  {
+   "name": "2 · ¿Sigue?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.sigue === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    3920,
+    -400
+   ],
+   "id": "682690f1-c380-5b41-77b9-aaf552cb0a06"
+  },
+  {
+   "name": "3 · Fechas · expandir",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 3 · FECHAS ESPECIALES · SOLO los tipos que la estrategia de ESTE cliente declaró. Lista vacía (lo normal) = nada se investiga y nada se bloquea.\nconst s = $input.first().json\nconst pedidos = Array.isArray(s.fechas_pedidas) ? s.fechas_pedidas : []\nreturn [{ json: { ...s, hay_fechas: pedidos.length > 0 } }]\n"
+   },
+   "position": [
+    4200,
+    -600
+   ],
+   "id": "d6d1742a-b8f7-41cb-4f12-9890718f2f3b"
+  },
+  {
+   "name": "3 · Fechas · ¿hay?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.hay_fechas === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    4480,
+    -600
+   ],
+   "id": "a88d5534-bd24-894b-a2d0-68eee45382da"
+  },
+  {
+   "name": "3 · Fechas · una por tipo",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 3 · UNA FILA POR TIPO Y AÑO · cada una entra al sub-flujo de fechas con `seco` explícito y, solo en seco, su simulacro\nconst s = $input.first().json\nconst sim = s.simulacros && s.simulacros.fechas && typeof s.simulacros.fechas === 'object' ? s.simulacros.fechas : null\nreturn s.fechas_pedidas.map((p) => ({ json: { campana_id: s.campana_id, seco: s.dry_run === true, pais: p.pais, tipo: p.tipo, ambito: p.ambito, anio: p.anio, simulacro: sim } }))\n"
+   },
+   "position": [
+    4760,
+    -800
+   ],
+   "id": "af3091c3-937e-3a21-8cb0-b1031bb220a6"
+  },
+  {
+   "name": "3 · Fechas (sub-flujo)",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.2,
+   "parameters": {
+    "workflowId": {
+     "__rl": true,
+     "value": "@@ID_FECHAS@@",
+     "mode": "id"
+    },
+    "mode": "each",
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   },
+   "position": [
+    5040,
+    -800
+   ],
+   "id": "16b42f68-dc5b-48a4-a958-c75d748d6449"
+  },
+  {
+   "name": "3 · Juntar",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 3 · JUNTAR · vuelve UN solo ítem (si no, el calendario correría una vez por tipo) · una fecha sin fuente NUNCA detiene la campaña\nconst s = $('3 · Fechas · ¿hay?').last().json\nreturn [{ json: { ...s, fechas_hechas: $input.all().map((i) => i.json.resultado) } }]\n"
+   },
+   "position": [
+    5320,
+    -800
+   ],
+   "id": "c927de8f-4a48-5af0-2ce3-8c9733aab2f9"
+  },
+  {
+   "name": "4 · Entrada del calendario",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 4 · ENTRADA DEL CALENDARIO (tanda 1) · `seco` explícito y el simulacro de la tanda 1 (solo en seco)\nconst s = $('2 · ¿Estrategia?').last().json\nconst sim = s.simulacros && Array.isArray(s.simulacros.calendario) ? s.simulacros.calendario : null\nreturn [{ json: { campana_id: s.campana_id, seco: s.dry_run === true, tanda: 1, simulacro: sim } }]\n"
+   },
+   "position": [
+    5600,
+    -600
+   ],
+   "id": "9539e5dc-0b26-8a6a-7632-fcb5058437fb"
+  },
+  {
+   "name": "4 · Calendario tanda 1 (sub-flujo)",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.2,
+   "parameters": {
+    "workflowId": {
+     "__rl": true,
+     "value": "@@ID_CALENDARIO@@",
+     "mode": "id"
+    },
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   },
+   "position": [
+    5880,
+    -600
+   ],
+   "id": "eb8ab6d1-3a48-1a79-1696-816e59451e1c"
+  },
+  {
+   "name": "4 · ¿Calendario?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// 4 · ¿CALENDARIO? · el resultado que el cable le cuenta a la sala: la cadena abrió, o la campaña necesita a Emilio\nconst s = $('2 · ¿Estrategia?').last().json\nconst r = $input.first().json || {}\nconst bien = r.resultado === 'ok' || r.resultado === 'ya_hecha'\nreturn [{ json: { ...s, resultado: bien ? 'cadena_abierta' : 'necesita_humano', alerta: bien ? null : (r.alerta || null), nota: bien ? 'estrategia validada y tanda 1 materializada' : 'la tanda 1 no quedó: ' + String(r.resultado) } }]\n"
+   },
+   "position": [
+    6160,
+    -600
+   ],
+   "id": "c5ead7f0-4178-7644-d085-2aad70fff519"
+  },
+  {
+   "name": "¿Modo parte?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.modo === 'parte' }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    2240,
+    200
+   ],
+   "id": "a9ecdf67-a1dc-d375-459b-b05ddf4bd016"
+  },
+  {
+   "name": "Parte · armar",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// PARTE · el lote por fecha que mandó el vigía → la copia de la parte «por filas» (la original no se toca). Nada de decidir aquí: la copia valida el lote.\nconst s = $input.first().json\nif (!s.campana_id || !s.lote || !Array.isArray(s.fila_ids) || s.fila_ids.length === 0) throw new Error('PUERTA_PARTE_SIN_LOTE · el sobre del vigía debe traer campana_id, lote y fila_ids · se DETIENE y no escribe nada')\nconst cuerpo = { client_id: s.client_id, tenant_id: s.tenant_id, campana_id: s.campana_id, lote: s.lote, fila_ids: s.fila_ids, dry_run: s.dry_run, _journey_id: s._journey_id, _sala_correlation_id: s._sala_correlation_id }\nreturn [{ json: { ...s, cuerpo_parte: JSON.stringify(cuerpo) } }]\n"
+   },
+   "position": [
+    2520,
+    200
+   ],
+   "id": "5a19aaf8-cd51-0387-b6eb-261edbc6b86c"
+  },
+  {
+   "name": "Parte · pedir a la copia por filas",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.N8N_PUBLIC_URL || 'https://n8n-production-72be.up.railway.app') + '/webhook/zero-risk/cadena-parte' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-sala-dispatch-key",
+       "value": "={{ $env.SALA_DISPATCH_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ $json.cuerpo_parte }}",
+    "options": {
+     "timeout": 30000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    2800,
+    200
+   ],
+   "id": "e531411f-7803-9ea4-0324-7b12c518a667"
+  },
+  {
+   "name": "Parte · ¿salió?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// PASARELA · ¿SALIÓ? · si el reenvío a la parte original falla, NO se traga el sobre: falla ruidosa (la sala lo ve como `webhook_failed` y reintenta, como hoy)\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nif (!(status >= 200 && status < 300)) throw new Error('PUERTA_PASARELA_FALLO · la parte original no aceptó el sobre (HTTP ' + String(r.statusCode) + ') · el sobre NO se perdió en silencio')\nreturn [{ json: { resultado: 'pasarela_ok', http: status } }]\n"
+   },
+   "position": [
+    3080,
+    200
+   ],
+   "id": "a100efde-f936-fb4a-eb29-f110be7d7254"
+  },
+  {
+   "name": "Tanda · entrada",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// TANDA SIGUIENTE · el vigía pidió abrir la tanda N de una campaña ya activa · `seco` explícito, simulacro solo en seco\nconst s = $input.first().json\nif (!s.campana_id || !Number.isInteger(s.tanda) || s.tanda < 2) throw new Error('PUERTA_TANDA_INVALIDA · el sobre del vigía debe traer campana_id y tanda ≥ 2 · se DETIENE y no escribe nada')\nconst sim = s.simulacros && Array.isArray(s.simulacros.calendario) ? s.simulacros.calendario : null\nreturn [{ json: { campana_id: s.campana_id, seco: s.dry_run === true, tanda: s.tanda, simulacro: sim } }]\n"
+   },
+   "position": [
+    2520,
+    400
+   ],
+   "id": "9bcdc41a-3552-aa36-58f8-be5a78e3ff01"
+  },
+  {
+   "name": "Tanda · Calendario (sub-flujo)",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.2,
+   "parameters": {
+    "workflowId": {
+     "__rl": true,
+     "value": "@@ID_CALENDARIO@@",
+     "mode": "id"
+    },
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   },
+   "position": [
+    2800,
+    400
+   ],
+   "id": "01e11227-5bc2-4e61-3dbf-4176443b6015"
+  },
+  {
+   "name": "Tanda · ¿resultado?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// TANDA · ¿RESULTADO? · lo que el cable le cuenta a la sala\nconst s = $('⓪ Decidir').last().json\nconst r = $input.first().json || {}\nconst bien = r.resultado === 'ok' || r.resultado === 'ya_hecha'\nreturn [{ json: { ...s, resultado: bien ? 'cadena_abierta' : 'necesita_humano', alerta: bien ? null : (r.alerta || null), nota: 'tanda ' + String(s.tanda) + ': ' + String(r.resultado) } }]\n"
+   },
+   "position": [
+    3080,
+    400
+   ],
+   "id": "e8b6a6aa-7793-7b9f-39a6-a733538f03f8"
+  },
+  {
+   "name": "Cable · armar",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// CABLE · ARMAR EL PEDIDO DE CIERRE · UN solo cable por viaje, y lo manda LA PUERTA con su `worker_id` (los sub-flujos no llaman a la sala): así la sala rotula el viaje como BRIEF\n// El resultado ∈ cadena_abierta · lote_briefeado · necesita_humano · plan_no_coincide · pasarela_ok. El que arma el payload es la ruta (`cierre`), con el id de la puerta guardado en cadena_config.\nconst s = $input.first().json\nconst ok = ['cadena_abierta', 'lote_briefeado', 'necesita_humano', 'plan_no_coincide', 'pasarela_ok']\nif (!ok.includes(s.resultado)) throw new Error('PUERTA_RESULTADO_INVALIDO · ' + JSON.stringify(s.resultado))\nconst pedido = { accion: 'cierre', resultado: s.resultado, client_id: s.client_id, journey_id: s._journey_id, sala_correlation_id: s._sala_correlation_id, workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) }\nif (s.campana_id) pedido.campana_id = s.campana_id\nreturn [{ json: { ...s, pedido_cierre: pedido } }]\n"
+   },
+   "position": [
+    6440,
+    0
+   ],
+   "id": "74cf116e-9c78-a90e-f962-815abc6a27e1"
+  },
+  {
+   "name": "Cable · cierre",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/campanas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.pedido_cierre) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    6720,
+    0
+   ],
+   "id": "974e4a02-ec00-8336-064a-24a166fbbf85"
+  },
+  {
+   "name": "Cable · ¿hay cable?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.body && $json.body.payload_cable !== null && $json.body.payload_cable !== undefined }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    7000,
+    0
+   ],
+   "id": "20b406cb-59c9-4572-9f5f-aa0ef48e524e"
+  },
+  {
+   "name": "Cable · enviar a la sala",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "x-source",
+       "value": "n8n-cadena"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.body.payload_cable) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    7280,
+    0
+   ],
+   "id": "2aa1b703-a7f8-c186-6f6f-715bfe3273fb"
+  },
+  {
+   "name": "Cable · ¿volvió?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// CABLE · ¿VOLVIÓ? · el cable de vuelta no puede ser mudo: si no volvió, la sala nunca se entera de que el viaje terminó\nconst r = $input.first().json || {}\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nconst volvio = Number(r.statusCode) >= 200 && Number(r.statusCode) < 300 && (b.ok === true || b.kind === 'accepted' || b.kind === 'duplicate' || b.event_id !== undefined)\nlet corr = null\ntry { corr = $('⓪ Llave y origen').last().json._sala_correlation_id || null } catch (e) { corr = null }\nif (corr && !volvio) throw new Error('CABLE_DE_VUELTA_MUDO · la sala NO se enteró de que el viaje terminó · código ' + String(b.code || b.error || r.statusCode || 'sin código'))\nconst prev = $('Cable · armar').last().json\nreturn [{ json: { cierre: 'cadena_terminada', resultado: prev.resultado, vuelta_ok: volvio, despachado_por_la_sala: !!corr } }]\n"
+   },
+   "position": [
+    7560,
+    0
+   ],
+   "id": "2962200c-67f0-9769-663c-95366afe9699"
+  }
+ ],
+ "connections": {
+  "Webhook · cadena": {
+   "main": [
+    [
+     {
+      "node": "⓪ Llave y origen",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ Llave y origen": {
+   "main": [
+    [
+     {
+      "node": "⓪ ¿Existe el viaje?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ ¿Existe el viaje?": {
+   "main": [
+    [
+     {
+      "node": "⓪ Guarda del viaje",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ Guarda del viaje": {
+   "main": [
+    [
+     {
+      "node": "⓪ ¿Qué modo?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ ¿Qué modo?": {
+   "main": [
+    [
+     {
+      "node": "⓪ Decidir",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ Decidir": {
+   "main": [
+    [
+     {
+      "node": "¿Pasarela?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿Pasarela?": {
+   "main": [
+    [
+     {
+      "node": "Pasarela · reenviar a la parte",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "¿Modo abrir?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Pasarela · reenviar a la parte": {
+   "main": [
+    [
+     {
+      "node": "Pasarela · ¿salió?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿Modo abrir?": {
+   "main": [
+    [
+     {
+      "node": "1 · Abrir campaña",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "¿Modo parte?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "1 · Abrir campaña": {
+   "main": [
+    [
+     {
+      "node": "1 · ¿Abierta?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "1 · ¿Abierta?": {
+   "main": [
+    [
+     {
+      "node": "1 · ¿Sigue?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "1 · ¿Sigue?": {
+   "main": [
+    [
+     {
+      "node": "2 · Entrada de la estrategia",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Cable · armar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "2 · Entrada de la estrategia": {
+   "main": [
+    [
+     {
+      "node": "2 · Estrategia (sub-flujo)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "2 · Estrategia (sub-flujo)": {
+   "main": [
+    [
+     {
+      "node": "2 · ¿Estrategia?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "2 · ¿Estrategia?": {
+   "main": [
+    [
+     {
+      "node": "2 · ¿Sigue?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "2 · ¿Sigue?": {
+   "main": [
+    [
+     {
+      "node": "3 · Fechas · expandir",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Cable · armar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "3 · Fechas · expandir": {
+   "main": [
+    [
+     {
+      "node": "3 · Fechas · ¿hay?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "3 · Fechas · ¿hay?": {
+   "main": [
+    [
+     {
+      "node": "3 · Fechas · una por tipo",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "4 · Entrada del calendario",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "3 · Fechas · una por tipo": {
+   "main": [
+    [
+     {
+      "node": "3 · Fechas (sub-flujo)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "3 · Fechas (sub-flujo)": {
+   "main": [
+    [
+     {
+      "node": "3 · Juntar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "3 · Juntar": {
+   "main": [
+    [
+     {
+      "node": "4 · Entrada del calendario",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "4 · Entrada del calendario": {
+   "main": [
+    [
+     {
+      "node": "4 · Calendario tanda 1 (sub-flujo)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "4 · Calendario tanda 1 (sub-flujo)": {
+   "main": [
+    [
+     {
+      "node": "4 · ¿Calendario?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "4 · ¿Calendario?": {
+   "main": [
+    [
+     {
+      "node": "Cable · armar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿Modo parte?": {
+   "main": [
+    [
+     {
+      "node": "Parte · armar",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Tanda · entrada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Parte · armar": {
+   "main": [
+    [
+     {
+      "node": "Parte · pedir a la copia por filas",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Parte · pedir a la copia por filas": {
+   "main": [
+    [
+     {
+      "node": "Parte · ¿salió?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Tanda · entrada": {
+   "main": [
+    [
+     {
+      "node": "Tanda · Calendario (sub-flujo)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Tanda · Calendario (sub-flujo)": {
+   "main": [
+    [
+     {
+      "node": "Tanda · ¿resultado?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Tanda · ¿resultado?": {
+   "main": [
+    [
+     {
+      "node": "Cable · armar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Cable · armar": {
+   "main": [
+    [
+     {
+      "node": "Cable · cierre",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Cable · cierre": {
+   "main": [
+    [
+     {
+      "node": "Cable · ¿hay cable?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Cable · ¿hay cable?": {
+   "main": [
+    [
+     {
+      "node": "Cable · enviar a la sala",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Cable · enviar a la sala": {
+   "main": [
+    [
+     {
+      "node": "Cable · ¿volvió?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

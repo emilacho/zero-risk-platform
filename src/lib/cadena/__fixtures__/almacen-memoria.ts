@@ -79,6 +79,7 @@ export class AlmacenMemoria implements Almacen {
     return structuredClone(c)
   }
   async campanasEnEspera() { return structuredClone(this.campanas.filter((c) => c.estado === 'necesita_humano' || c.estado === 'pausada')) }
+  async campanasEnArmado() { return structuredClone(this.campanas.filter((c) => c.estado === 'abierta' || c.estado === 'estrategia' || c.estado === 'calendario')) }
   async campanasActivas() { return structuredClone(this.campanas.filter((c) => c.estado === 'activa')) }
   async ultimaEstrategia(campanaId: string) { return this.estrategias.filter((e) => e.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
   async insertarEstrategia(e: EstrategiaGuardada) { this.estrategias.push(e) }

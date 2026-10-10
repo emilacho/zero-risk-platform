@@ -48,6 +48,16 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
     }
   }
 
+  // 2b · barrido de campañas ATASCADAS (#466 C3 de CC#3): una campaña que sigue armando su estrategia o su calendario y cuya última llamada murió (vencida · fallida · cerrada por tope),
+  //      sin ninguna en curso, no la mira nadie más: se avisa con «qué hacer». Una campaña sin llamadas (recién abierta) no es un atasco.
+  for (const c of await al.campanasEnArmado()) {
+    const corridas = (await al.corridasDeCampana(c.id)).sort((a, b) => a.id - b.id)
+    if (!corridas.length || corridas.some((x) => x.estado === 'en_curso')) continue
+    const ultima = corridas[corridas.length - 1]
+    if (ultima.estado === 'ok') continue
+    lineas.push({ campana_id: c.id, texto: `la campaña quedó en «${c.estado}»: su última llamada (${ultima.paso}, intento ${ultima.intento}) terminó ${ultima.estado} y no hay ninguna en curso. Qué hacer: reenviar el sobre del plan para que la cadena reintente` })
+  }
+
   // 3 · el brazo de video: cuando opera, las filas que esperaban pasan a `validada`
   if ((await al.estadoDelBrazo('video')) === 'opera') {
     for (const c of await al.campanasActivas()) {
