@@ -62,6 +62,7 @@ import {
 import { makeCallbackAttemptLogger } from '@/lib/agent-async-callback/persist-attempt'
 import { waitUntil } from '@vercel/functions'
 import { MODELOS_POR_CORRIDA, modeloPorCorridaValido } from '@/lib/modelo-por-corrida'
+import { resolverEsquema } from '@/lib/salida-estructurada'
 
 export const runtime = 'nodejs'
 // Sprint 12 Track U · P0 #2 bump 300→800s · Track R audit identified Journey B
@@ -273,6 +274,11 @@ interface AgentRunResultProxy {
   discoveryToolCall?: DiscoveryToolCallProxyMeta
   brandSectionToolCall?: DiscoveryToolCallProxyMeta
   fidelityScoresToolCall?: DiscoveryToolCallProxyMeta
+  /** el tope saltó AL CERRAR y `response` es el texto final completo (el corredor lo marca) */
+  cerradaPorTope?: boolean
+  /** SALIDA ESTRUCTURADA (opt-in) · el objeto que el modelo entregó contra el `output_schema` pedido */
+  structuredOutput?: unknown
+  structuredOutputValid?: boolean
   error?: string
 }
 
@@ -913,6 +919,16 @@ export async function POST(request: Request) {
       }
       modeloDelPedido = modCrudo
     }
+    // SALIDA ESTRUCTURADA (opt-in · cadena) · un esquema MAL ESCRITO se rechaza ANTES de gastar · `null` explícito tampoco es «ausente» · ausente ⇒ cuerpo de siempre
+    const exObj = body.extra && typeof body.extra === 'object' ? (body.extra as Record<string, unknown>) : {}
+    const esquemaArriba = (body as unknown as { output_schema?: unknown }).output_schema
+    const esquemaDelPedido = resolverEsquema(esquemaArriba, ctx.output_schema, exObj.output_schema)
+    if (!esquemaDelPedido.ok) {
+      return NextResponse.json(
+        { error: 'output_schema_invalid', code: 'E-OUTPUT-SCHEMA-INVALID', detail: esquemaDelPedido.motivo },
+        { status: 400 },
+      )
+    }
     // LÍMITES de «mirar afuera» (opt-in · CC#1 · 01-oct) · la forma se valida ANTES de gastar (también arriba, antes del acuse 202 de la vuelta por callback)
     const lim = validarLimitesDeMirarAfuera(body)
     if (!lim.ok) return NextResponse.json(LIMITES_MIRAR_AFUERA_INVALIDOS, { status: 400 })
@@ -1062,6 +1078,8 @@ export async function POST(request: Request) {
       ...(razonamientoDelPedido !== null ? { thinking_mode: razonamientoDelPedido } : {}),
       // MODELO por corrida (opt-in) · ausente ⇒ el cuerpo de siempre
       ...(modeloDelPedido !== null ? { model_override: modeloDelPedido } : {}),
+      // SALIDA ESTRUCTURADA (opt-in) · el corredor se la pasa al SDK · ausente ⇒ el cuerpo de siempre
+      ...(esquemaDelPedido.valor !== null ? { output_schema: esquemaDelPedido.valor } : {}),
       // LÍMITES de «mirar afuera» por corrida (opt-in) · ausente ⇒ el cuerpo de siempre
       ...(limitesMirarAfuera !== null ? { mirar_afuera_limites: limitesMirarAfuera } : {}),
       // ARQ 2026-09-30 · la vuelta la entrega el corredor (sólo si el pedido interno lo trae · ausente ⇒ cuerpo de siempre).
@@ -1353,6 +1371,9 @@ export async function POST(request: Request) {
       ...(discoveryToolCall ? { discoveryToolCall } : {}),
       ...(brandSectionToolCall ? { brandSectionToolCall } : {}),
       ...(fidelityScoresToolCall ? { fidelityScoresToolCall } : {}),
+      ...(result.cerradaPorTope === true ? { cerradaPorTope: true } : {}),
+      ...(result.structuredOutputValid !== undefined ? { structuredOutputValid: result.structuredOutputValid } : {}),
+      ...(result.structuredOutput !== undefined ? { structuredOutput: result.structuredOutput } : {}),
       error: result.error,
     }
 
@@ -1509,6 +1530,7 @@ export async function POST(request: Request) {
       duration_ms: result.durationMs,
       ...(result.brainEnrichment ? { brain_enrichment: result.brainEnrichment } : {}),
       ...(result.cacheMetrics ? { cache_metrics: result.cacheMetrics } : {}),
+      ...camposDeLaVueltaDelCorredor(result),
       // SPEC lazo agentico 2026-06-06 CC#3↔CC#4 convergence · path A canonical
       // (response.body.discovery_output) · the n8n worker reads from here for
       // APIFY_WIRE dynamic targets. Path B (clients.config.apify.competitor_list)
@@ -1644,6 +1666,19 @@ export async function POST(request: Request) {
       },
       { status: 500 },
     )
+  }
+}
+
+/**
+ * Lo que la vuelta del corredor añade a la respuesta (pura, para poder probarla sin correr el corredor):
+ *  · `cerrada_por_tope`: el tope saltó AL CERRAR y `response` es el texto final completo (solo está la llave cuando pasó)
+ *  · SALIDA ESTRUCTURADA (opt-in): el objeto y si es válido; ausentes ⇒ la respuesta de siempre
+ */
+export function camposDeLaVueltaDelCorredor(result: { cerradaPorTope?: boolean; structuredOutputValid?: boolean; structuredOutput?: unknown }): Record<string, unknown> {
+  return {
+    ...(result.cerradaPorTope === true ? { cerrada_por_tope: true } : {}),
+    ...(result.structuredOutputValid !== undefined ? { structured_output_valid: result.structuredOutputValid } : {}),
+    ...(result.structuredOutput !== undefined ? { structured_output: result.structuredOutput } : {}),
   }
 }
 
