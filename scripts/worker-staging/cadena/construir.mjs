@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url'
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url))
 const NODOS = path.join(AQUI, 'nodos')
-const leer = (f) => fs.readFileSync(path.join(NODOS, f), 'utf8')
+// el código de los nodos siempre con saltos LF (en Windows el repositorio puede traerlos CRLF: el flujo construido no debe depender del sistema donde se arma)
+const leer = (f) => fs.readFileSync(path.join(NODOS, f), 'utf8').replace(/\r\n/g, '\n')
 const uuid = (s) => { const h = createHash('md5').update(s).digest('hex'); return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}` }
 
 export const IDS_DE_RELLENO = { estrategia: '@@ID_ESTRATEGIA@@', calendario: '@@ID_CALENDARIO@@', fechas: '@@ID_FECHAS@@', puerta: '@@ID_PUERTA@@' }
