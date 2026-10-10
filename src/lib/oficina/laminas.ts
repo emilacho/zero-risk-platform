@@ -114,7 +114,9 @@ function limpia(l: LaminaParaDibujar): LaminaParaDibujar {
 }
 
 // ── cifras que nadie le dio al autor ─────────────────────────────────────────────────
-/** porcentajes y cifras sueltas que NO aparecen en ninguna fuente (manual, plan, brief, material, datos verificados). Un porcentaje inventado bloquea; otra cifra avisa. */
+/** porcentajes y cifras sueltas que NO aparecen en ninguna fuente (manual, plan, brief, material, datos verificados). Un porcentaje inventado bloquea; otra cifra avisa.
+ *  LÍMITE DECLARADO (CC#3 #469 H3): se valida por PRESENCIA, no por referencia. Un «30» pasa si «30» aparece en CUALQUIER fuente (un precio, una fecha), aunque la afirmación sea otra;
+ *  detecta cifras fabricadas, no afirmaciones mal atribuidas. Ignora cifras de un dígito y las de 4 o más (años). Es una primera red: la atribución la revisan los jefes y el humano. */
 export function cifrasFueraDeFuentes(textos: string[], fuentes: string[]): Array<{ cifra: string; porcentaje: boolean }> {
   // los precios con «$» los verifica `chequeosDePost` contra la carta; aquí solo porcentajes y cifras sueltas
   const base = ` ${normalizar(fuentes.join(' \n ')).replace(/,/g, '.')} `

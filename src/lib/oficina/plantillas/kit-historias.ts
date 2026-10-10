@@ -143,7 +143,7 @@ export const KIT_HISTORIAS: Plantilla = {
     ],
     'design-visual-storyteller': [
       regla('Entregas solo piezas fijas 9:16; nada de video, animación ni medios interactivos.', 'codigo:salida'),
-      regla('Entregas únicamente la ESTRUCTURA de cada elemento (rol, beat, foto_slot, mood, sugerencia_interactiva opcional). No escribes ningún texto que aparezca en la imagen: lo escribe content-creator.', 'codigo:sin_texto_en_estructura'),
+      regla('Entregas únicamente la ESTRUCTURA de cada elemento (rol, beat, foto_slot, mood, sugerencia_interactiva opcional). No escribes ningún texto que aparezca en la imagen: lo escribe content-creator.', 'guia'),
       regla('El arco, el ritmo, el tono y las emociones los deciden el manual y el brief de este cliente; aquí no hay estructura obligatoria.', 'guia'),
       regla('No uses cifras, porcentajes ni resultados que no estén en el manual, el plan o el brief (ignora los de tu identidad).', 'codigo:chequeos_laminas'),
       regla('Devuelves solo el JSON del contrato.', 'codigo:salida'),
