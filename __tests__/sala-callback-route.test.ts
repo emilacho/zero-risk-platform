@@ -261,6 +261,51 @@ describe('POST /api/sala/callback · happy path · terminal append', () => {
   })
 })
 
+describe('🔴 relevo 62 · dos flujos con la MISMA correlación el MISMO día no se tragan uno al otro (medido en la prueba desde cero, ejecución 172229)', () => {
+  const orig = process.env.SALA_WORKFLOW_DISPATCH_ENABLED
+  beforeEach(() => {
+    sharedStorage = new InMemoryEventLogStorage()
+    process.env.SALA_WORKFLOW_DISPATCH_ENABLED = 'true'
+    process.env.SALA_CALLBACK_API_KEY = 'test-callback-key'
+  })
+  afterEach(() => {
+    if (orig === undefined) delete process.env.SALA_WORKFLOW_DISPATCH_ENABLED
+    else process.env.SALA_WORKFLOW_DISPATCH_ENABLED = orig
+    delete process.env.SALA_CALLBACK_API_KEY
+  })
+  const ALTA = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+  const PLAN = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
+
+  it('el cierre de la alta (ONBOARD) y el de la planeación (PRODUCE), con la misma correlación y fecha, dejan DOS asientos y el segundo es del flujo que vuelve', async () => {
+    const { POST } = await importRoute()
+    const r1 = await (await POST(makeReq(validBody({ worker_id: 'LyVoKcrypS5uLyuu', _journey_id: ALTA, ts: '2026-10-10T13:26:38Z' }), { 'x-api-key': 'test-callback-key' }))).json()
+    const r2 = await (await POST(makeReq(validBody({ worker_id: 'X9F0zp6LQ2xGEYVS', _journey_id: PLAN, ts: '2026-10-10T13:39:15Z' }), { 'x-api-key': 'test-callback-key' }))).json()
+    expect(r1.ok).toBe(true); expect(r2.ok).toBe(true)
+    expect(r2.event_id).not.toBe(r1.event_id) // antes devolvía el id del primero y NO escribía nada
+    const alta = await sharedStorage.select({ tenant_id: TENANT, stream_id: ALTA })
+    const plan = await sharedStorage.select({ tenant_id: TENANT, stream_id: PLAN })
+    expect(alta).toHaveLength(1); expect(plan).toHaveLength(1)
+    expect(alta[0].journey_type).toBe('ONBOARD'); expect(plan[0].journey_type).toBe('PRODUCE')
+    expect(plan[0].step_id).toBe('journey_completed')
+  })
+
+  it('la repetición del MISMO flujo (misma correlación y mismo journey) sigue siendo UNA sola: el reintento de un cable no duplica', async () => {
+    const { POST } = await importRoute()
+    const cuerpo = validBody({ worker_id: 'X9F0zp6LQ2xGEYVS', _journey_id: PLAN, ts: '2026-10-10T13:39:15Z' })
+    const a = await (await POST(makeReq(cuerpo, { 'x-api-key': 'test-callback-key' }))).json()
+    const b = await (await POST(makeReq(cuerpo, { 'x-api-key': 'test-callback-key' }))).json()
+    expect(b.event_id).toBe(a.event_id)
+    expect(await sharedStorage.select({ tenant_id: TENANT, stream_id: PLAN })).toHaveLength(1)
+  })
+
+  it('misma correlación, mismo journey y mismo día pero OTRO flujo trabajador: son dos cierres distintos', async () => {
+    const { POST } = await importRoute()
+    await POST(makeReq(validBody({ worker_id: 'X9F0zp6LQ2xGEYVS', _journey_id: PLAN }), { 'x-api-key': 'test-callback-key' }))
+    await POST(makeReq(validBody({ worker_id: 'PQdIgbuFexuBsoh8', _journey_id: PLAN }), { 'x-api-key': 'test-callback-key' }))
+    expect(await sharedStorage.select({ tenant_id: TENANT, stream_id: PLAN })).toHaveLength(2)
+  })
+})
+
 describe('GET /api/sala/callback · info', () => {
   it('canon · returns endpoint metadata + contract pointer', async () => {
     const { GET } = await importRoute()
@@ -269,6 +314,6 @@ describe('GET /api/sala/callback · info', () => {
     const body = await res.json()
     expect(body.endpoint).toBe('/api/sala/callback')
     expect(body.contract).toMatch(/MODELB-ADAPTER/)
-    expect(body.dedup_key).toBe('_sala_correlation_id')
+    expect(body.dedup_key).toBe('_sala_correlation_id + _journey_id + worker_id')
   })
 })

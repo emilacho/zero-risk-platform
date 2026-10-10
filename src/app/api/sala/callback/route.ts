@@ -86,7 +86,10 @@ export async function POST(request: Request) {
     operation_type,
     client_id: body.client_id,
     logical_period,
-    input_hash: body._sala_correlation_id,
+    // 🔴 relevo 62 · antes era SOLO la correlación: la alta y la planeación de un mismo trato comparten correlación (y a veces el día), así que el cierre de la planeación se
+    // «deduplicaba» contra el de la alta, devolvía el id del primero y NO escribía el journey_completed de PRODUCE (medido en la prueba desde cero, ejecución 172229).
+    // Ahora un cierre es único por (correlación, journey, flujo que vuelve): el reintento del MISMO cable sigue siendo uno solo.
+    input_hash: `${body._sala_correlation_id}::${stream_id}::${body.worker_id}`,
   })
   const eventInput: EventAppendInput = {
     tenant_id,
@@ -149,6 +152,6 @@ export async function GET() {
       summary: 'object (optional · terminal worker output)',
       ts: 'ISO 8601',
     },
-    dedup_key: '_sala_correlation_id',
+    dedup_key: '_sala_correlation_id + _journey_id + worker_id',
   })
 }
