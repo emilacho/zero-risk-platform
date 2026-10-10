@@ -4,7 +4,7 @@
  * Tight, minimal · Twitter/X link-preview style. Single column ·
  * headline-dominant · slim footer with brand handle + indicator.
  */
-import { resolveBrand, fitHeadlineSize } from './shared'
+import { resolveBrand, fitHeadlineSize, conFotoDeFondo } from './shared'
 import type { TemplateProps } from '../types'
 
 export function TwitterCard({ brand, content, slide_index, total_slides }: TemplateProps) {
@@ -18,7 +18,7 @@ export function TwitterCard({ brand, content, slide_index, total_slides }: Templ
     targetLines: 3,
   })
 
-  return (
+  const root = (
     <div
       style={{
         display: 'flex',
@@ -140,6 +140,7 @@ export function TwitterCard({ brand, content, slide_index, total_slides }: Templ
         ) : (
           <div style={{ display: 'flex' }} />
         )}
+        {content.ocultar_indicador ? null : (
         <div
           style={{
             display: 'flex',
@@ -150,7 +151,9 @@ export function TwitterCard({ brand, content, slide_index, total_slides }: Templ
         >
           {slide_index} / {total_slides}
         </div>
+        )}
       </div>
     </div>
   )
+  return conFotoDeFondo(root, content, W, H)
 }

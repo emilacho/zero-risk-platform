@@ -13,7 +13,7 @@ import { InstagramReel } from './templates/InstagramReel'
 import { TikTok } from './templates/TikTok'
 import { FacebookFeed } from './templates/FacebookFeed'
 import { TwitterCard } from './templates/TwitterCard'
-import { loadDefaultFonts, type FontEntry } from './fonts'
+import { cargarFuentesDeMarca, informeDeFuentes, type FontEntry, type ResolverOpciones } from './fonts'
 import {
   PLATFORM_SPECS,
   type BrandTokens,
@@ -32,11 +32,18 @@ export const TEMPLATES: Record<CarouselPlatform, TemplateRenderer> = {
   'twitter-card':   TwitterCard,
 }
 
+/** The families the templates will ask satori for (body + headline). */
+export function familiasDeMarca(brand: BrandTokens): string[] {
+  return [brand.fonts.family || 'Inter', brand.fonts.headline_family || brand.fonts.family || 'Inter']
+}
+
 export interface RenderOptions {
   /** Pre-loaded fonts · skip default Inter loader. Useful for tests. */
   fonts?: FontEntry[]
   /** Override the resvg fit · default fitTo width based on platform. */
   resvgFitTo?: { mode: 'width' | 'height' | 'zoom'; value: number }
+  /** Options for the brand-font resolver (tests inject `fetchImpl`). */
+  fontResolver?: ResolverOpciones
 }
 
 /**
@@ -63,7 +70,8 @@ export async function renderSlide(args: {
 
   const t0 = Date.now()
 
-  const fonts = options.fonts ?? (await loadDefaultFonts())
+  const fonts = options.fonts ?? (await cargarFuentesDeMarca(familiasDeMarca(brand), options.fontResolver)).fonts
+  const informe = informeDeFuentes(familiasDeMarca(brand), fonts)
 
   const svg = await satori(
     Template({ brand, content, slide_index, total_slides }) as React.ReactElement,
@@ -94,6 +102,8 @@ export async function renderSlide(args: {
     height: spec.height,
     png,
     durationMs: Date.now() - t0,
+    fonts_usadas: informe.usadas,
+    fonts_faltantes: informe.faltantes,
   }
 }
 
@@ -111,7 +121,7 @@ export async function renderCarousel(args: {
   if (!slides.length) throw new Error('renderCarousel: at least one slide required')
 
   // Eagerly load fonts once so each renderSlide call doesn't re-fetch.
-  const fonts = options?.fonts ?? (await loadDefaultFonts())
+  const fonts = options?.fonts ?? (await cargarFuentesDeMarca(familiasDeMarca(brand), options?.fontResolver)).fonts
 
   const total = slides.length
   return Promise.all(

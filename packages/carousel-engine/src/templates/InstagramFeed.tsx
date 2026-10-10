@@ -5,11 +5,12 @@
  * Brand handle + slide indicator top bar · eyebrow over a big headline ·
  * body paragraph · CTA pill bottom-right.
  */
-import { resolveBrand, fitHeadlineSize } from './shared'
+import { resolveBrand, fitHeadlineSize, conFotoDeFondo, resolverPie } from './shared'
 import type { TemplateProps } from '../types'
 
 export function InstagramFeed({ brand, content, slide_index, total_slides }: TemplateProps) {
   const b = resolveBrand(brand)
+  const pie = resolverPie(content, 'desliza →')
   const W = 1080
   const H = 1350
   const headlineSize = fitHeadlineSize(content.headline, {
@@ -19,7 +20,7 @@ export function InstagramFeed({ brand, content, slide_index, total_slides }: Tem
     targetLines: 4,
   })
 
-  return (
+  const root = (
     <div
       style={{
         display: 'flex',
@@ -55,6 +56,7 @@ export function InstagramFeed({ brand, content, slide_index, total_slides }: Tem
           ) : null}
           <span>{b.brandHandle}</span>
         </div>
+        {content.ocultar_indicador ? null : (
         <div
           style={{
             display: 'flex',
@@ -69,6 +71,7 @@ export function InstagramFeed({ brand, content, slide_index, total_slides }: Tem
         >
           {String(slide_index).padStart(2, '0')} / {String(total_slides).padStart(2, '0')}
         </div>
+        )}
       </div>
 
       {/* Spacer */}
@@ -134,7 +137,11 @@ export function InstagramFeed({ brand, content, slide_index, total_slides }: Tem
           width: '100%',
         }}
       >
-        <div style={{ display: 'flex', fontSize: 22, opacity: 0.6 }}>desliza →</div>
+        {pie !== null ? (
+          <div style={{ display: 'flex', fontSize: 22, opacity: 0.6 }}>{pie}</div>
+        ) : (
+          <div style={{ display: 'flex' }} />
+        )}
         {content.cta ? (
           <div
             style={{
@@ -155,4 +162,5 @@ export function InstagramFeed({ brand, content, slide_index, total_slides }: Tem
       </div>
     </div>
   )
+  return conFotoDeFondo(root, content, W, H)
 }

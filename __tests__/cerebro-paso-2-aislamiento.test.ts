@@ -50,6 +50,9 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/app\/api\/brain\/portero\//,
   /^__tests__\/cerebro-paso-2-(aislamiento|migracion)\.test\.ts$/,
   /^__tests__\/cerebro-fotos-2-columnas\.test\.ts$/,
+  // oficina de creativos (sala 1) · LECTURA de las etiquetas de las fotos para descartar las que no sirven: los ÚNICOS que las nombran son el lector `fotos.ts` y el adaptador que las SELECCIONA (`adaptadores.ts`); no escriben nada
+  /^src\/lib\/oficina\/(fotos|adaptadores)\.ts$/,
+  /^src\/lib\/oficina\/__tests__\/fotos-chequeos\.test\.ts$/,
 ]
 export const quienNombra = (archivosYTextos: Array<{ rel: string; texto: string }>): string[] =>
   archivosYTextos.filter(({ rel, texto }) => NOMBRES_NUEVOS.test(texto) && !PUEDEN_NOMBRARLAS.some((r) => r.test(rel))).map((x) => x.rel)

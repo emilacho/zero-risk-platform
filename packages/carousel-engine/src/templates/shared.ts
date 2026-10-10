@@ -7,6 +7,7 @@
  * each template only worries about layout.
  */
 
+import { Children, cloneElement, createElement, type ReactElement } from 'react'
 import type { BrandTokens, SlideContent, TemplateProps } from '../types'
 
 export interface ResolvedBrand {
@@ -55,3 +56,41 @@ export function fitHeadlineSize(
 }
 
 export type { SlideContent, TemplateProps }
+
+/**
+ * Footer cue text: `undefined` → the template's default · `null`/blank → none · string → that text.
+ */
+export function resolverPie(content: SlideContent, porDefecto: string): string | null {
+  if (content.pie === undefined) return porDefecto
+  if (content.pie === null) return null
+  return content.pie.trim() ? content.pie : null
+}
+
+/** Dark layer over the photo so the template text stays readable. */
+export const CAPA_DE_CONTRASTE = 'rgba(0,0,0,0.5)'
+
+/**
+ * Background photo. Without `background_image_url` returns `root` UNCHANGED (same object: the render is
+ * identical to the one before this feature). With it: the root gets `position: relative` and two absolute
+ * layers (photo with objectFit cover + dark contrast layer) are inserted BEFORE its children.
+ */
+export function conFotoDeFondo(root: ReactElement, content: SlideContent, W: number, H: number): ReactElement {
+  const url = content.background_image_url
+  if (!url) return root
+  const props = root.props as { style?: Record<string, unknown>; children?: unknown }
+  const capas = [
+    createElement('img', {
+      key: 'fondo-foto',
+      src: url,
+      alt: '',
+      width: W,
+      height: H,
+      style: { position: 'absolute', top: 0, left: 0, width: W, height: H, objectFit: 'cover' },
+    }),
+    createElement('div', {
+      key: 'fondo-capa',
+      style: { display: 'flex', position: 'absolute', top: 0, left: 0, width: W, height: H, backgroundColor: CAPA_DE_CONTRASTE },
+    }),
+  ]
+  return cloneElement(root, { style: { ...(props.style ?? {}), position: 'relative' } }, ...capas, ...Children.toArray(props.children as never))
+}

@@ -7,13 +7,13 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: () => ({}) }))
 const { _costFor } = await import('../agent-sdk-runner')
-const { MODELOS_POR_CORRIDA, PRECIOS_OFICIALES } = await import('../modelo-por-corrida')
+const { MODELOS_POR_CORRIDA, MODELOS_SOLO_POR_FILA, PRECIOS_OFICIALES } = await import('../modelo-por-corrida')
 const M = 1_000_000
 const casi = (a: number, b: number) => expect(a).toBeCloseTo(b, 9)
 
 describe('cada id de la lista corta tiene su precio oficial', () => {
-  it('la tabla de precios cubre EXACTAMENTE los ids de la lista (ni uno sin precio, ni un precio sin id)', () => {
-    expect(Object.keys(PRECIOS_OFICIALES).sort()).toEqual([...MODELOS_POR_CORRIDA].sort())
+  it('la tabla de precios cubre EXACTAMENTE los ids de la lista de override MÁS los que solo usa la fila del agente (ni uno sin precio, ni un precio sin id)', () => {
+    expect(Object.keys(PRECIOS_OFICIALES).sort()).toEqual([...MODELOS_POR_CORRIDA, ...MODELOS_SOLO_POR_FILA].sort())
   })
   it.each([
     // id, entrada, salida, lectura de caché, escritura 5 min, escritura 1 h  (US$ por millón)
@@ -22,6 +22,8 @@ describe('cada id de la lista corta tiene su precio oficial', () => {
     ['claude-opus-4-8', 5, 25, 0.5, 6.25, 10],
     ['claude-opus-4-7', 5, 25, 0.5, 6.25, 10],
     ['claude-fable-5-1', 10, 50, 0.25, 12.5, 20],
+    // relevo 38 · https://platform.claude.com/docs/en/models/sonnet-5-5/overview · entrada 2 · salida 10 · escritura 5 min 2,50 · 1 h 4 · lectura 0,10
+    ['claude-sonnet-5-5', 2, 10, 0.1, 2.5, 4],
   ])('%s · entrada %d · salida %d · caché leída %d · escritura 5 min %d · 1 h %d', (id, ent, sal, lec, e5, e1) => {
     casi(_costFor(id, M, 0), ent)
     casi(_costFor(id, 0, M), sal)

@@ -318,6 +318,9 @@ const esValido = (pt: Record<string, unknown>): boolean => pt.valido !== false &
 /** Las decisiones del dueño que cuentan: las resueltas en la cola (aprobó · rechazó · pidió un cambio). Pendiente, en revisión o vencida NO es una decisión. */
 const DECISION_DE_LA_COLA: Record<string, DecisionDelDueno> = { approved: 'aprobada', rejected: 'rechazada', edited: 'cambio_pedido' }
 
+/** Una fila que la oficina VENCIÓ (`decision.vencida = true`, estado `rejected`) NO es una decisión del dueño: nadie la rechazó, simplemente no se aprobó a tiempo. */
+const esVencida = (f: Fila): boolean => objeto(f.decision).vencida === true
+
 /** lo que dijo la decisión de la cola, en texto: lo decidido y las notas (nada se inventa) */
 function detalleDeLaCola(f: Fila): string | null {
   const dec = objeto(f.decision)
@@ -351,7 +354,7 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
     for (const f of cola.filas) {
       const decision = DECISION_DE_LA_COLA[String(f.status)]
       const salida = f.output_id === null || f.output_id === undefined ? '' : String(f.output_id)
-      if (!decision || !salida) continue
+      if (!decision || !salida || esVencida(f)) continue
       const fecha = iso(f.resolved_at) ?? iso(f.created_at)
       const previa = ultimaPorPieza.get(salida)
       if (!previa || String(fecha ?? '') > String(previa.fecha ?? '') || (fecha === previa.fecha && String(f.id) > previa.id)) ultimaPorPieza.set(salida, { decision, fecha, id: String(f.id), detalle: detalleDeLaCola(f) })
@@ -419,7 +422,7 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
 export async function leerDecisionesDeLaCola(ctx: Contexto): Promise<Salida> {
   const r = await leer(ctx, { tabla: 'hitl_queue', columnas: ['id', 'type', 'status', 'output_id', 'decision', 'resolution_notes', 'resolved_at', 'created_at'], donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['decisiones_del_aprobador'], r.error)
-  const lineas = r.filas.filter((f) => DECISION_DE_LA_COLA[String(f.status)]).map((f) => {
+  const lineas = r.filas.filter((f) => DECISION_DE_LA_COLA[String(f.status)] && !esVencida(f)).map((f) => {
     const dec = objeto(f.decision)
     const contenido = [`${texto(f.type) ?? 'revisión'} · ${f.status}`, Object.keys(dec).length ? JSON.stringify(dec) : null, texto(f.resolution_notes)].filter(Boolean).join(' · ')
     const salida = f.output_id === null || f.output_id === undefined || String(f.output_id) === '' ? null : String(f.output_id)

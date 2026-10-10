@@ -1,0 +1,686 @@
+{
+ "name": "Zero Risk — Cadena · fechas especiales (sub-flujo · CC#1)",
+ "nodes": [
+  {
+   "name": "Entrada · sub-flujo",
+   "type": "n8n-nodes-base.executeWorkflowTrigger",
+   "typeVersion": 1.1,
+   "parameters": {
+    "inputSource": "passthrough"
+   },
+   "position": [
+    0,
+    0
+   ],
+   "id": "5fac1e3c-bdcd-1494-be11-e5d70de80fae"
+  },
+  {
+   "name": "⓪ Entrada",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ⓪ ENTRADA · cadena · fechas especiales · SOLO corre si el cliente declaró este tipo de fecha (la lista vacía no investiga NADA)\n// Paga un agente: `seco` explícito o se DETIENE antes de gastar. El simulacro (páginas y respuesta enlatadas) SOLO existe en seco.\nconst e = $input.first().json || {}\nif (typeof e.campana_id !== 'string' || e.campana_id.trim() === '') throw new Error('CADENA_SIN_CAMPANA · falta campana_id · se DETIENE y no escribe nada')\nif (typeof e.seco !== 'boolean') throw new Error('CADENA_SECO_AUSENTE · el pedido debe traer seco explícito (true o false) · se DETIENE antes de gastar')\nfor (const k of ['pais', 'tipo', 'ambito']) if (typeof e[k] !== 'string' || e[k].trim() === '') throw new Error('CADENA_FECHAS_SIN_' + k.toUpperCase() + ' · falta ' + k)\nif (!Number.isInteger(e.anio)) throw new Error('CADENA_FECHAS_SIN_ANIO · falta anio (entero)')\nconst simulacro = e.seco === true && e.simulacro && typeof e.simulacro === 'object' ? e.simulacro : null\nreturn [{ json: { paso: 'fechas', campana_id: e.campana_id, seco: e.seco, pais: e.pais, tipo: e.tipo, ambito: e.ambito, anio: e.anio, simulacro, workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) } }]\n"
+   },
+   "position": [
+    280,
+    0
+   ],
+   "id": "62773b2b-d0fa-9ef2-61f2-503193400cef"
+  },
+  {
+   "name": "① Cobertura",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/fechas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ accion: 'cobertura', campana_id: $json.campana_id, pais: $json.pais, tipo: $json.tipo, ambito: $json.ambito, anio: $json.anio, workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id }) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    560,
+    0
+   ],
+   "id": "ac2f631b-d9a8-0f63-ff2b-3694ff992aad"
+  },
+  {
+   "name": "① ¿Qué dijo?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ① ¿QUÉ DIJO `cobertura`? · ya verificada o sin fuente = FIN (no se repite el gasto) · investigar = una fila por dominio permitido (la lista sale de cadena_config, vacía por defecto)\nconst s = $('⓪ Entrada').last().json\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nif (status !== 200) throw new Error('CADENA_COBERTURA_' + String(b.code || b.error || status) + ' · ' + String(b.detalle || b.detail || 'sin detalle'))\nif (b.estado === 'ya_verificada' || b.estado === 'sin_fuente') return [{ json: { ...s, fin: true, resultado: b.estado, detalle: b } }]\nif (b.estado === 'investigar' && Array.isArray(b.dominios) && b.dominios.length > 0) return b.dominios.map((d) => ({ json: { ...s, fin: false, dominio: String(d), intento: b.intento } }))\nthrow new Error('CADENA_COBERTURA_NO_ENTENDIDA · ' + JSON.stringify(b).slice(0, 300))\n"
+   },
+   "position": [
+    840,
+    0
+   ],
+   "id": "30edb1f8-693b-736a-0d90-77ed4f425e73"
+  },
+  {
+   "name": "① ¿Termina?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.fin === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    1120,
+    0
+   ],
+   "id": "97aec202-a0bc-efd9-b436-94e7d08a0bc3"
+  },
+  {
+   "name": "② ¿Simulacro?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.simulacro !== null && $json.seco === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    1400,
+    0
+   ],
+   "id": "79a3e716-8eea-40bc-1977-cffa98056af9"
+  },
+  {
+   "name": "② Páginas simuladas",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ② PÁGINAS SIMULADAS · SOLO en seco: las páginas enlatadas del ensayo (cero descargas)\nconst s = $input.first().json\nconst sim = s.simulacro || {}\nreturn [{ json: { ...s, paginas: Array.isArray(sim.paginas) ? sim.paginas : [] } }]\n"
+   },
+   "position": [
+    1680,
+    -200
+   ],
+   "id": "6b009ead-6417-a4e9-1cdf-d80d37aa92c6"
+  },
+  {
+   "name": "② Descargar la página",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "GET",
+    "url": "={{ $json.dominio }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": []
+    },
+    "options": {
+     "timeout": 30000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true,
+       "responseFormat": "text"
+      }
+     }
+    }
+   },
+   "position": [
+    1680,
+    200
+   ],
+   "id": "d0def84b-700f-953d-d931-8aaf6e3c9d89"
+  },
+  {
+   "name": "② Juntar las páginas",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ② JUNTAR LAS PÁGINAS · el CÓDIGO descargó las páginas (nodo HTTP); aquí solo se limpian a texto. El agente NUNCA navega: lee lo que el código bajó.\nconst filas = $('① ¿Qué dijo?').all()\nconst respuestas = $input.all()\nconst aTexto = (html) => String(html || '')\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ').replace(/<style[\\s\\S]*?<\\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\").replace(/\\s+/g, ' ').trim()\nconst paginas = []\nrespuestas.forEach((r, i) => {\n  const j = r.json || {}\n  const url = filas[i] && filas[i].json ? filas[i].json.dominio : null\n  const cuerpo = typeof j.body === 'string' ? j.body : ''\n  if (url && Number(j.statusCode) >= 200 && Number(j.statusCode) < 300 && cuerpo) paginas.push({ url, texto: aTexto(cuerpo).slice(0, 60000) })\n})\nconst s = filas[0].json\nreturn [{ json: { ...s, paginas } }]\n"
+   },
+   "position": [
+    1960,
+    200
+   ],
+   "id": "2be8eb02-afec-7ebb-0aad-fddc6063b782"
+  },
+  {
+   "name": "③ Armar preparar",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ③ ARMAR `preparar` de las fechas · las páginas ya descargadas viajan en el pedido; la ruta arma el cuerpo completo del agente\nconst s = $input.first().json\nconst pedido = { accion: 'preparar', campana_id: s.campana_id, seco: s.seco, pais: s.pais, tipo: s.tipo, ambito: s.ambito, anio: s.anio, paginas: s.paginas || [], workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nreturn [{ json: { ...s, pedido } }]\n"
+   },
+   "position": [
+    2240,
+    0
+   ],
+   "id": "150c4713-aea0-1490-96bf-cc229db41204"
+  },
+  {
+   "name": "③ Preparar",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/fechas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.pedido) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    2520,
+    0
+   ],
+   "id": "dbffe115-dd93-6737-f307-bf79a93113c2"
+  },
+  {
+   "name": "③ ¿Qué dijo?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ③ ¿QUÉ DIJO `preparar`? · lista para llamar · ya hecha · sin fuente (el tipo queda sin fuente y la campaña SIGUE) · lo demás falla ruidoso antes de gastar\nconst s = $('③ Armar preparar').last().json\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nconst base = { ...s }\ndelete base.pedido; delete base.paginas\nif (status === 200 && b.run_sdk) return [{ json: { ...base, fin: false, corrida_id: b.corrida_id, headers: b.headers || {}, run_sdk: b.run_sdk } }]\nif (status === 200 && (b.ya_hecha === true || b.estado === 'sin_fuente')) return [{ json: { ...base, fin: true, resultado: b.ya_hecha ? 'ya_hecha' : 'sin_fuente', detalle: b } }]\nthrow new Error('CADENA_FECHAS_PREPARAR_' + String(b.code || b.error || status) + ' · ' + String(b.detalle || b.detail || 'sin detalle') + ' · no se llamó a ningún agente')\n"
+   },
+   "position": [
+    2800,
+    0
+   ],
+   "id": "d83e0a83-d968-c708-ead0-77b13c05afb7"
+  },
+  {
+   "name": "③ ¿Termina?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.fin === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    3080,
+    0
+   ],
+   "id": "9a9f1cb8-f650-cfe1-5a00-0917928bcbc5"
+  },
+  {
+   "name": "④ ¿Simulacro del agente?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.simulacro !== null && $json.seco === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    3360,
+    0
+   ],
+   "id": "8de91231-1057-17b4-1c4f-56b4cc288758"
+  },
+  {
+   "name": "④ Simulacro",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ④ SIMULACRO · SOLO en seco: la respuesta enlatada del agente (cero llamadas al modelo)\nconst s = $input.first().json\nconst sim = s.simulacro && s.simulacro.respuesta\nif (sim === undefined || sim === null) throw new Error('CADENA_SIMULACRO_AGOTADO · el ensayo no trae respuesta simulada para las fechas')\nconst body = sim.__fallo ? { success: false, error: String(sim.__fallo), cost_usd: 0 } : { success: true, structured_output: sim, cost_usd: 0 }\nreturn [{ json: { ...s, agente: { statusCode: 200, body } } }]\n"
+   },
+   "position": [
+    3640,
+    -200
+   ],
+   "id": "b703f829-7531-da90-950f-b089179986d0"
+  },
+  {
+   "name": "④ Armar la llamada",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ④ ARMAR LA LLAMADA AL AGENTE · contexto del flujo sobre el cuerpo que armó la ruta (workflow ids siempre · dry_run explícito)\nconst s = $input.first().json\nconst llamada = { ...s.run_sdk, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id, force_restart: true, dry_run: s.seco === true }\nreturn [{ json: { ...s, llamada } }]\n"
+   },
+   "position": [
+    3640,
+    200
+   ],
+   "id": "cc014dd6-5356-2d90-bbd6-c3b1114e2c46"
+  },
+  {
+   "name": "④ Agente (run-sdk)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/agents/run-sdk' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "x-skip-editor-middleware",
+       "value": "={{ $json.headers['x-skip-editor-middleware'] }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.llamada) }}",
+    "options": {
+     "timeout": 290000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    3920,
+    200
+   ],
+   "id": "5019fc05-497d-6075-d9f4-59169994a187"
+  },
+  {
+   "name": "⑤ Armar guardar",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ⑤ ARMAR `guardar` · el resultado del agente tal cual + las páginas: el CÓDIGO comprueba cada cita contra el texto descargado\nconst entrada = $input.first().json || {}\nconst simulado = !!(entrada.agente && entrada.paso)\nconst s = simulado ? entrada : $('④ Armar la llamada').last().json\nconst resp = simulado ? entrada.agente : entrada\nconst b = resp.body && typeof resp.body === 'object' ? resp.body : {}\nconst ok = Number(resp.statusCode) === 200 && b.success === true\nconst resultado = ok\n  ? { success: true, structured_output: b.structured_output, cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null }\n  : { success: false, error: String(b.error || b.detail || ('HTTP ' + resp.statusCode)).slice(0, 400), cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null }\nconst paginas = $('③ Armar preparar').last().json.paginas || []\nconst guardar = { accion: 'guardar', campana_id: s.campana_id, seco: s.seco, corrida_id: s.corrida_id, pais: s.pais, tipo: s.tipo, ambito: s.ambito, anio: s.anio, paginas, resultado, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nreturn [{ json: { ...s, guardar } }]\n"
+   },
+   "position": [
+    4200,
+    0
+   ],
+   "id": "27a6cdd6-96de-b178-26d1-7f5d1a7501c7"
+  },
+  {
+   "name": "⑤ Guardar",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/fechas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.guardar) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    4480,
+    0
+   ],
+   "id": "8e019a69-9005-7957-bf46-5f2715667434"
+  },
+  {
+   "name": "⑥ Salida",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ⑥ SALIDA · lo que el sub-flujo de fechas le devuelve a la puerta (una fecha sin fuente NUNCA detiene la campaña: solo deja pendientes las FILAS que dependen de ella)\n// Llega por dos caminos: el FIN temprano (ya verificada / sin fuente: un ítem con `resultado`) o la respuesta de `guardar` (fullResponse).\nconst e = $input.first().json || {}\nconst esRespuesta = e.statusCode !== undefined && e.body !== undefined\nconst b = esRespuesta ? (e.body && typeof e.body === 'object' ? e.body : {}) : (e.detalle && typeof e.detalle === 'object' ? e.detalle : {})\nif (esRespuesta && Number(e.statusCode) >= 400) throw new Error('CADENA_FECHAS_GUARDAR_' + String(b.code || b.error || e.statusCode) + ' · ' + String(b.detalle || b.detail || 'sin detalle'))\nconst entrada = $('⓪ Entrada').last().json\nreturn [{ json: { paso: 'fechas', campana_id: entrada.campana_id, tipo: entrada.tipo, resultado: esRespuesta ? (b.estado || 'ok') : (e.resultado || 'ok'), verificadas: b.verificadas ?? 0, descartadas: b.descartadas || [] } }]\n"
+   },
+   "position": [
+    4760,
+    0
+   ],
+   "id": "c0db1150-4d57-2d76-e435-6fdc9d8825e8"
+  }
+ ],
+ "connections": {
+  "Entrada · sub-flujo": {
+   "main": [
+    [
+     {
+      "node": "⓪ Entrada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ Entrada": {
+   "main": [
+    [
+     {
+      "node": "① Cobertura",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① Cobertura": {
+   "main": [
+    [
+     {
+      "node": "① ¿Qué dijo?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① ¿Qué dijo?": {
+   "main": [
+    [
+     {
+      "node": "① ¿Termina?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① ¿Termina?": {
+   "main": [
+    [
+     {
+      "node": "⑥ Salida",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "② ¿Simulacro?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② ¿Simulacro?": {
+   "main": [
+    [
+     {
+      "node": "② Páginas simuladas",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "② Descargar la página",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Descargar la página": {
+   "main": [
+    [
+     {
+      "node": "② Juntar las páginas",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Páginas simuladas": {
+   "main": [
+    [
+     {
+      "node": "③ Armar preparar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Juntar las páginas": {
+   "main": [
+    [
+     {
+      "node": "③ Armar preparar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "③ Armar preparar": {
+   "main": [
+    [
+     {
+      "node": "③ Preparar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "③ Preparar": {
+   "main": [
+    [
+     {
+      "node": "③ ¿Qué dijo?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "③ ¿Qué dijo?": {
+   "main": [
+    [
+     {
+      "node": "③ ¿Termina?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "③ ¿Termina?": {
+   "main": [
+    [
+     {
+      "node": "⑥ Salida",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "④ ¿Simulacro del agente?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "④ ¿Simulacro del agente?": {
+   "main": [
+    [
+     {
+      "node": "④ Simulacro",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "④ Armar la llamada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "④ Armar la llamada": {
+   "main": [
+    [
+     {
+      "node": "④ Agente (run-sdk)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "④ Simulacro": {
+   "main": [
+    [
+     {
+      "node": "⑤ Armar guardar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "④ Agente (run-sdk)": {
+   "main": [
+    [
+     {
+      "node": "⑤ Armar guardar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑤ Armar guardar": {
+   "main": [
+    [
+     {
+      "node": "⑤ Guardar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑤ Guardar": {
+   "main": [
+    [
+     {
+      "node": "⑥ Salida",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

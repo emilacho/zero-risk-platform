@@ -5,11 +5,12 @@
  * subtle body line · brand footer with subtle scroll cue. Designed to
  * be readable on a phone preview at small sizes.
  */
-import { resolveBrand, fitHeadlineSize } from './shared'
+import { resolveBrand, fitHeadlineSize, conFotoDeFondo, resolverPie } from './shared'
 import type { TemplateProps } from '../types'
 
 export function InstagramReel({ brand, content, slide_index, total_slides }: TemplateProps) {
   const b = resolveBrand(brand)
+  const pie = resolverPie(content, '↑ desliza para más')
   const W = 1080
   const H = 1920
   const headlineSize = fitHeadlineSize(content.headline, {
@@ -19,7 +20,7 @@ export function InstagramReel({ brand, content, slide_index, total_slides }: Tem
     targetLines: 4,
   })
 
-  return (
+  const root = (
     <div
       style={{
         display: 'flex',
@@ -48,6 +49,7 @@ export function InstagramReel({ brand, content, slide_index, total_slides }: Tem
         ) : (
           <div style={{ display: 'flex', fontSize: 28, fontWeight: 600 }}>{b.brandHandle}</div>
         )}
+        {content.ocultar_indicador ? null : (
         <div
           style={{
             display: 'flex',
@@ -63,6 +65,7 @@ export function InstagramReel({ brand, content, slide_index, total_slides }: Tem
         >
           {slide_index} · {total_slides}
         </div>
+        )}
       </div>
 
       {/* Mid spacer */}
@@ -143,6 +146,7 @@ export function InstagramReel({ brand, content, slide_index, total_slides }: Tem
       ) : null}
 
       {/* Footer */}
+      {pie !== null ? (
       <div
         style={{
           display: 'flex',
@@ -153,8 +157,10 @@ export function InstagramReel({ brand, content, slide_index, total_slides }: Tem
           textTransform: 'uppercase',
         }}
       >
-        ↑ desliza para más
+        {pie}
       </div>
+      ) : null}
     </div>
   )
+  return conFotoDeFondo(root, content, W, H)
 }
