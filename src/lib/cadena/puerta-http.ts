@@ -9,8 +9,8 @@ import type { Respuesta } from './autorizar'
 
 export type Manejador = (al: Almacen, cuerpo: Record<string, unknown>, ahora: string) => Promise<Respuesta>
 
-export async function atender(request: Request, acciones: Record<string, Manejador>, almacen: () => Almacen, reloj: () => string = () => new Date().toISOString()): Promise<Response> {
-  const auth = checkInternalKey(request)
+export async function atender(request: Request, acciones: Record<string, Manejador>, almacen: () => Almacen, reloj: () => string = () => new Date().toISOString(), autenticar: typeof checkInternalKey = checkInternalKey): Promise<Response> {
+  const auth = autenticar(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
   let cuerpo: unknown
   try { cuerpo = await request.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }

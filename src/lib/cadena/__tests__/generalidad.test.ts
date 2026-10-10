@@ -75,7 +75,11 @@ describe('un solo lugar nombra las tablas de la cadena', () => {
       const src = readFileSync(join(raiz, r, 'route.ts'), 'utf8')
       expect(src).toMatch(/atender\(request,/)
       expect(src).not.toMatch(/getSupabase/)
+      // la llave se nombra en la propia ruta (el lint de endpoints lo exige) y se pasa a la puerta
+      expect(src).toMatch(/atender\(request,[^\n]*, checkInternalKey\)/)
     }
-    expect(readFileSync(join(DIR, 'puerta-http.ts'), 'utf8')).toMatch(/checkInternalKey\(request\)[\s\S]{0,200}status: 401/)
+    const puerta = readFileSync(join(DIR, 'puerta-http.ts'), 'utf8')
+    expect(puerta).toMatch(/autenticar\(request\)[\s\S]{0,200}status: 401/)
+    expect(puerta).toMatch(/autenticar: typeof checkInternalKey = checkInternalKey/)
   })
 })
