@@ -9,28 +9,20 @@
  */
 
 /**
- * LA PREGUNTA · la versión literal que dio el propio revisor (consulta del 10-oct, firmada por Emilio: `raw/tasks/2026-10-10-LISTO-CC2-consulta-gpt.md`).
- * Los tres huecos se llenan con datos del encargo; cambiar el texto es cambiar una firma.
+ * LA PREGUNTA y el PEDIDO viven en `src/lib/revisor-gpt.ts` (los comparte la revisión del manual): UNA sola pregunta con huecos {qué es} {uso} {público} {objetivo} (firma D3, 10-oct),
+ * generalización de la versión literal que dio el propio revisor. Aquí queda lo propio de la oficina: el resumen del encargo sale SOLO del brief.
  */
-export const PREGUNTA_AL_REVISOR = 'Te comparto una pieza para {red}, dirigida a {público}, que busca {objetivo}, junto con el contexto de la marca. Dame una lectura independiente: qué funciona, qué puede fallar y qué cambiarías, si cambiarías algo. Puedes cuestionar también la idea o el enfoque. Sé concreto y apóyate en lo que ves; distingue lo que observas de lo que supones sobre el público. Usa el contexto para entender la pieza, no para justificarla.'
+import { armarPedido, preguntaAlRevisor, PREGUNTA_AL_REVISOR, PUBLICO_SIN_DATO, OBJETIVO_SIN_DATO, type ContextoDelRevisor, type PedidoAlRevisor } from '../revisor-gpt'
+export { PREGUNTA_AL_REVISOR, PUBLICO_SIN_DATO, OBJETIVO_SIN_DATO }
+export type { ContextoDelRevisor, PedidoAlRevisor }
 
 /** lo que se sabe del encargo (todo sale del brief; lo que no está se dice, no se inventa) */
 export interface ResumenDelEncargo { red: string; publico?: string; objetivo?: string; formato?: string; que_es?: string; llamado?: string }
-export const PUBLICO_SIN_DATO = 'el público del cliente (lo describen los documentos de abajo)'
-export const OBJETIVO_SIN_DATO = 'lo que pide el brief'
 
+/** la pregunta de una PIEZA de la oficina: qué es = «una pieza», uso = la red */
 export function preguntaDelEncargo(r: Pick<ResumenDelEncargo, 'red' | 'publico' | 'objetivo'>): string {
-  return PREGUNTA_AL_REVISOR
-    .replace('{red}', r.red.trim() || 'una red social')
-    .replace('{público}', (r.publico ?? '').trim() || PUBLICO_SIN_DATO)
-    .replace('{objetivo}', (r.objetivo ?? '').trim() || OBJETIVO_SIN_DATO)
+  return preguntaAlRevisor({ que_es: 'una pieza', uso: r.red.trim() || 'una red social', publico: r.publico, objetivo: r.objetivo })
 }
-
-/** un documento de apoyo: su nombre y SU FUNCIÓN (para que el revisor sepa qué es hecho, qué es aspiración y cuál manda si se contradicen) */
-export interface ContextoDelRevisor { titulo: string; texto: string; funcion?: string }
-export interface PedidoAlRevisor { texto: string; imagenes: string[] }
-
-const INTRO_CONTEXTO = 'Los documentos mezclan hechos (lo que el cliente es y tiene) con aspiraciones (lo que quiere lograr). Cada uno dice qué es. Si dos se contradicen, vale el manual de marca vigente. Es un resumen de lo vigente, no el historial.'
 
 /**
  * Arma el pedido al revisor, en este orden: la pregunta (con el resumen del encargo) → la PIEZA completa → el contexto del cliente.
@@ -38,20 +30,15 @@ const INTRO_CONTEXTO = 'Los documentos mezclan hechos (lo que el cliente es y ti
  */
 export function armarPedidoAlRevisor(a: { pieza: string; contexto: ContextoDelRevisor[]; imagenes?: string[]; encargo?: ResumenDelEncargo; nota_pieza?: string }): PedidoAlRevisor {
   const enc = a.encargo
-  const partes = [enc ? preguntaDelEncargo(enc) : PREGUNTA_AL_REVISOR]
-  if (enc) {
-    const filas = [
-      enc.formato || enc.red ? `- Red y formato: ${[enc.red, enc.formato].filter(Boolean).join(' · ')}` : '',
-      enc.que_es ? `- Qué es: ${enc.que_es}` : '',
-      enc.objetivo ? `- Lo que busca: ${enc.objetivo}` : '',
-      enc.llamado ? `- Llamado a la acción: ${enc.llamado}` : '',
-    ].filter(Boolean)
-    if (filas.length) partes.push(`## Resumen del encargo\n${filas.join('\n')}`)
-  }
-  partes.push(`## La pieza\n${a.pieza.trim() || '(sin texto)'}${a.nota_pieza ? `\n\n(${a.nota_pieza})` : ''}`)
-  const docs = a.contexto.filter((c) => c.texto.trim())
-  if (docs.length) partes.push(`## Contexto de la marca\n${INTRO_CONTEXTO}\n\n${docs.map((c) => `### ${c.titulo}${c.funcion ? ` — ${c.funcion}` : ''}\n${c.texto.trim()}`).join('\n\n')}`)
-  return { texto: partes.join('\n\n'), imagenes: (a.imagenes ?? []).filter((u) => typeof u === 'string' && u !== '') }
+  const resumen = enc
+    ? [
+        enc.formato || enc.red ? `- Red y formato: ${[enc.red, enc.formato].filter(Boolean).join(' · ')}` : '',
+        enc.que_es ? `- Qué es: ${enc.que_es}` : '',
+        enc.objetivo ? `- Lo que busca: ${enc.objetivo}` : '',
+        enc.llamado ? `- Llamado a la acción: ${enc.llamado}` : '',
+      ]
+    : []
+  return armarPedido({ pregunta: enc ? preguntaDelEncargo(enc) : PREGUNTA_AL_REVISOR, resumen, revisado: a.pieza, nota: a.nota_pieza, contexto: a.contexto, imagenes: a.imagenes })
 }
 
 export interface DestinoDeRecado { destino: string; tipo: 'herramienta' | 'agente' | 'persona'; estado_del_brazo: 'opera' | 'por_configurar' | 'no_existe' | string; activo?: boolean }
