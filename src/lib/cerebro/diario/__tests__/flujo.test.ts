@@ -28,11 +28,18 @@ async function correr(js: string, c: Contexto = {}): Promise<Array<{ json: any }
 }
 
 describe('la forma del flujo', () => {
-  it('lo dispara el horario de las 08:30 UTC (DESPUÉS del de la mañana, 06:30) o una entrada a mano con llave; no tiene `active` (n8n lo crea INACTIVO)', () => {
+  it('lo dispara el horario de las 08:30 de la hora de n8n (≈ 12:30 UTC; la mañana corre a las 06:30 de n8n ≈ 10:30 UTC) (DESPUÉS del de la mañana, 06:30) o una entrada a mano con llave; no tiene `active` (n8n lo crea INACTIVO)', () => {
     expect(flujo).not.toHaveProperty('active')
     const reloj = flujo.nodes.find((n) => n.type === 'n8n-nodes-base.scheduleTrigger')!
     expect(reloj.parameters.rule.interval[0].expression).toBe('30 8 * * *')
     expect(flujo.nodes.filter((n) => n.type === 'n8n-nodes-base.webhook')).toHaveLength(1)
+  })
+  it('la hora se dice en «hora de n8n», NO en UTC (la zona de la instancia va ≈ 4 h detrás de UTC): ni el nombre del nodo ni el constructor prometen «UTC» para el horario', () => {
+    expect(nodo(N.horario).name).toMatch(/hora de n8n/)
+    const src = fs.readFileSync(`${DIR}/construir-diario.mjs`, 'utf8')
+    expect(src).toMatch(/HORA DE n8n, NO en UTC/)
+    expect(src).not.toMatch(/08:30 UTC/)
+    expect(JSON.stringify(flujo)).not.toMatch(/08:30 UTC/)
   })
   it('NO llama al flujo de la mañana ni lo toca (B1 de CC#3): ni su id, ni su dirección, ni su horario', () => {
     const j = JSON.stringify(flujo)

@@ -4,7 +4,7 @@
 //   node construir-diario.mjs --crear              → crea el flujo REAL en n8n, INACTIVO (no se publica ni se activa)
 //   node construir-diario.mjs --actualizar=<id>    → PUT del JSON (nunca cambia si está activo o no)
 //
-// ARRANCA DESPUÉS del flujo de la mañana (`EZXAFQvKZsJlvGNO`, horario `30 6 * * *`) y NO lo llama ni lo toca (B1 de CC#3): su horario es las 08:30 UTC (se verifica la hora real de disparo del de la mañana en n8n
+// ARRANCA DESPUÉS del flujo de la mañana (`EZXAFQvKZsJlvGNO`, horario `30 6 * * *`) y NO lo llama ni lo toca (B1 de CC#3): su horario es `30 8 * * *` en la HORA DE n8n, NO en UTC (medido por CC#1: el de la mañana, rotulado 06:30, corre a las 10:30 UTC, o sea la zona de la instancia va 4 h detrás de UTC, y este correrá hacia las 12:30 UTC, DESPUÉS de la mañana: NO se «arregla» a UTC o correría antes) (la hora real se vuelve a verificar en n8n
 // antes de encender). Hace: ① plan de la AMPLIACIÓN (lo que la mañana no cubre: Mapas propio + reseñas, comentarios, reparto) · ② ampliar (llamadas al Servicio de Apify, solo con dry_run=false) ·
 // ③ correr (comparar, limpio y ordenado, oportunidades) · ④ cierre. NO tiene paso de avisar (D-5) ni ningún paso de modelo.
 // 🔴 Por construcción: NINGÚN nodo reintenta · toda llamada HTTP entrega siempre salida (neverError) · con `dry_run` no se llama a ningún proveedor · el flujo NO lee ninguna tabla (todo lo decide la app) ·
@@ -18,7 +18,7 @@ const leer = (f) => fs.readFileSync(join(aqui, f), 'utf8')
 const VERCEL = 'https://zero-risk-platform.vercel.app'
 const JSON_H = { name: 'Content-Type', value: 'application/json' }
 const LLAVE_INTERNA = { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' }
-export const NOMBRES = { web: 'Webhook · a mano (con llave)', horario: 'Horario diario 08:30 UTC', entrada: '⓪ Entrada', plan: '① Plan de la ampliación', separar: '① Un elemento por cliente', ampliar: '② Ampliar (Servicio de Apify)', pedido: '③ Pedido a correr', correr: '③ Correr (comparar · limpiar · preparar)', cierre: '④ Cierre' }
+export const NOMBRES = { web: 'Webhook · a mano (con llave)', horario: 'Horario diario 08:30 (hora de n8n)', entrada: '⓪ Entrada', plan: '① Plan de la ampliación', separar: '① Un elemento por cliente', ampliar: '② Ampliar (Servicio de Apify)', pedido: '③ Pedido a correr', correr: '③ Correr (comparar · limpiar · preparar)', cierre: '④ Cierre' }
 const N = NOMBRES
 
 const code = (nombre, archivo, pos) => ({ parameters: { jsCode: leer(archivo) }, name: nombre, type: 'n8n-nodes-base.code', typeVersion: 2, position: pos })

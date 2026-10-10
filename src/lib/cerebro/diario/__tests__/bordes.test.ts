@@ -1,4 +1,6 @@
 /** Bordes que las mutaciones dejaron vivos (comportamiento real, no relleno). */
+import fs from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DbFalsa } from '../../../oficina/__tests__/dbfalsa'
 import { correrDiario } from '../correr'
@@ -6,6 +8,7 @@ import { contenidoDeInstagram, contenidoDeMapas, huellaDeInstagram, huellaDeMapa
 import { observar } from '../observar'
 import { planDeLimpieza } from '../ordenar'
 import { planDeAmpliacion } from '../plan'
+import { oportunidadDeComentarios, oportunidadDeResenas } from '../preparar'
 import { senalesDeComentarios, senalesDeResenas } from '../resenas'
 import { rutaPlan, validar } from '../rutas'
 
@@ -100,6 +103,41 @@ describe('rutas · bordes', () => {
     const db2 = act(cliente()).semilla('cerebro_diario_corridas', [{ id: 'k', client_id: C, dia: '2026-10-10', gasto_usd: 0.97 }])
     const c2 = ((await rutaPlan(db2, { dry_run: true }, AHORA)).body as { clientes: Array<{ gastado_hoy_usd: number; plan: { hacer: unknown[] } }> }).clientes[0]
     expect(c2.gastado_hoy_usd).toBe(0.97); expect(c2.plan.hacer).toEqual([])
+  })
+})
+
+describe('reversa de la migración · se NIEGA a borrar si hay datos (convención de la cadena y la oficina)', () => {
+  const sql = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8').replace(/--.*$/gm, '')
+  const rev = sql('supabase/reversas/202610100900_cerebro_diario_REVERSA.sql')
+  it('trae un guardián que aborta con RAISE EXCEPTION y mira las 4 tablas ANTES del primer DROP, dentro de una sola transacción', () => {
+    expect(rev).toMatch(/RAISE EXCEPTION 'REVERSA ABORTADA/)
+    const guarda = rev.slice(0, rev.indexOf('$guarda$;'))
+    for (const t of ['cerebro_vigilancia', 'cerebro_diario_corridas', 'cerebro_avisos', 'cerebro_oportunidades']) expect(guarda, t).toContain(t)
+    expect(rev.indexOf('RAISE EXCEPTION')).toBeLessThan(rev.indexOf('DROP TABLE'))
+    expect(rev).toMatch(/BEGIN;[\s\S]*COMMIT;/)
+    expect((rev.match(/DROP TABLE IF EXISTS/g) ?? []).length).toBe(4)
+  })
+  it('borra exactamente las 4 tablas de la migración, ni una más', () => {
+    const mig = sql('supabase/migrations/202610100900_cerebro_diario.sql')
+    const creadas = [...mig.matchAll(/CREATE TABLE IF NOT EXISTS public\.([a-z_]+)/g)].map((m) => m[1]).sort()
+    const borradas = [...rev.matchAll(/DROP TABLE IF EXISTS public\.([a-z_]+)/g)].map((m) => m[1]).sort()
+    expect(borradas).toEqual(creadas)
+  })
+})
+
+describe('C3 · `cita` es SIEMPRE nula en las oportunidades de reseñas y comentarios', () => {
+  it('las funciones de oportunidad no pasan texto', () => {
+    const ahora = new Date('2026-10-10T00:00:00Z')
+    expect(oportunidadDeResenas(senalesDeResenas([{ stars: 1, text: 'Demora excesiva' }, { stars: 1, text: 'Demora excesiva' }, { stars: 2, text: 'Demora excesiva' }]), ahora)!.cita).toBeNull()
+    expect(oportunidadDeComentarios(senalesDeComentarios(['hola promo', 'otra promo', 'la promo']), ahora)!.cita).toBeNull()
+  })
+  it('en la base, ninguna oportunidad de clase señal_* guarda una cita (de reseñas ni de comentarios) tras una corrida completa', async () => {
+    const mapas = { id: 'm1', client_id: C, ensayo: false, apify_function: 'own_google_maps_profile', params: {}, respuesta: [{ title: 'X', reviews: [{ stars: 1, text: 'Demora excesiva Juan' }, { stars: 1, text: 'Demora excesiva Juan' }, { stars: 2, text: 'Demora excesiva Juan' }, { stars: 5, text: 'Excelente' }] }], created_at: '2026-10-10T08:00:00Z' }
+    const db = cliente().semilla('apify_raw', [mapas])
+    await corre(db)
+    const senales = db.tablas['cerebro_oportunidades'].filter((o) => String(o.clase).startsWith('senal_'))
+    expect(senales.length).toBeGreaterThan(0)
+    for (const o of senales) { expect(o.cita).toBeNull(); expect(JSON.stringify(o)).not.toMatch(/Excelente|Juan Perez/) }
   })
 })
 
