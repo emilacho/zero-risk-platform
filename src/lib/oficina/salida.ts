@@ -19,8 +19,53 @@ const str = (min = 1, max = 4000): Esq => ({ t: 'str', min, max })
 const regla: Esq = { t: 'obj', props: { id: str(1, 60), texto: str(1, 400), claves: { t: 'arr', de: str(1, 80), max: 12 }, cita: str(1, 600) }, req: ['id', 'texto'] }
 const necesito: Esq = { t: 'arr', max: 3, de: { t: 'obj', props: { que: str(1, 300), para_que: str(1, 300), bloquea: { t: 'bool' } }, req: ['que'] } }
 const IGNORAR_TAMANO = ['tamaño', 'tamano', 'size', 'aspect_ratio', 'relacion_de_aspecto', 'ar']
+/** salas 2-3: la plataforma y el tamaño los pone la sala (una sola plataforma por encargo); y nadie le pregunta nada al cliente: `open_questions` se descarta y se anota */
+const IGNORAR_LAMINAS = [...IGNORAR_TAMANO, 'platform', 'plataforma', 'platforms_requested', 'dimensiones', 'open_questions', 'preguntas']
+
+/** roles de lámina (contrato del diseñador de carruseles) */
+export const ROLES_DE_LAMINA = ['hook', 'problem', 'reframe', 'proof', 'social-proof', 'benefit', 'objection', 'cta', 'cierre'] as const
+/** topes DUROS del formato de una lámina (contrato del diseñador); los límites finos por red viven en `limites` de la plantilla */
+export const LIMITES_DE_LAMINA = { eyebrow: 24, headline: 90, body: 220, cta: 32 } as const
+
+const lamina: Esq = {
+  t: 'obj', req: ['rol', 'headline'], ignorar: IGNORAR_LAMINAS,
+  props: { orden: { t: 'num', min: 1, max: 30 }, rol: { t: 'enum', v: [...ROLES_DE_LAMINA] }, eyebrow: str(0, LIMITES_DE_LAMINA.eyebrow), headline: str(1, LIMITES_DE_LAMINA.headline), body: str(0, LIMITES_DE_LAMINA.body), cta: str(0, LIMITES_DE_LAMINA.cta) },
+}
+const copiaCarrusel: Esq = { t: 'obj', req: ['texto_base', 'pie_de_foto', 'hashtags'], ignorar: IGNORAR_LAMINAS, props: { texto_base: str(1, 5000), pie_de_foto: str(1, 3000), hashtags: { t: 'arr', de: str(1, 80), max: 40 }, llamado: str(0, 300), nota_para_quien_publica: str(0, 600), necesito } }
+/** un elemento de texto del kit: SOLO texto (lo escribe `content-creator`, único autor) */
+const elementoDeCopyKit: Esq = {
+  t: 'obj', req: ['ref', 'headline'], ignorar: IGNORAR_LAMINAS,
+  props: { ref: str(1, 60), eyebrow: str(0, LIMITES_DE_LAMINA.eyebrow), headline: str(1, LIMITES_DE_LAMINA.headline), body: str(0, LIMITES_DE_LAMINA.body), cta: str(0, LIMITES_DE_LAMINA.cta), acompanamiento: str(0, 1500), hashtags: { t: 'arr', de: str(1, 80), max: 40 } },
+}
+/** un elemento de ESTRUCTURA del kit: sin ningún campo de texto de imagen (extra: false ⇒ cualquier clave de más falla el formato) */
+const elementoDeEstructura: Esq = {
+  t: 'obj', req: ['ref', 'rol', 'beat', 'mood'],
+  props: { ref: str(1, 60), rol: str(1, 60), beat: str(1, 200), foto_slot: str(0, 80), mood: str(1, 120), sugerencia_interactiva: str(0, 160) },
+}
+const respuestas: Esq = { t: 'arr', max: 12, de: { t: 'obj', req: ['id', 'estado', 'razon'], props: { id: str(1, 80), estado: { t: 'enum', v: ['tomada', 'no_tomada'] }, razon: str(1, 600) } } }
 
 export const ESQUEMAS: Record<string, Esq> = {
+  'direccion_imagenes.v1': {
+    t: 'obj', req: ['resumen', 'imagenes', 'reglas_de_imagen'], ignorar: IGNORAR_LAMINAS,
+    props: {
+      resumen: str(1, 1500), paleta: { t: 'arr', de: str(1, 40), max: 8 }, estilo: str(1, 600),
+      imagenes: { t: 'arr', max: 30, de: { t: 'obj', req: ['ref', 'modo', 'motivo'], props: { ref: str(1, 60), modo: { t: 'enum', v: ['real', 'generada', 'ninguna'] }, foto_id: str(1, 80), motivo: str(1, 600) } } },
+      reglas_de_imagen: { t: 'obj', req: ['obligatorio', 'prohibido'], props: { obligatorio: { t: 'arr', de: regla, max: 20 }, prohibido: { t: 'arr', de: regla, max: 20 } } },
+      necesito,
+    },
+  },
+  'prompts_por_ref.v1': {
+    t: 'obj', req: ['imagenes'], ignorar: IGNORAR_LAMINAS,
+    props: { imagenes: { t: 'arr', min: 1, max: 8, de: { t: 'obj', req: ['ref', 'prompts'], ignorar: IGNORAR_LAMINAS, props: { ref: str(1, 60), prompts: { t: 'arr', min: 2, max: 3, de: { t: 'obj', req: ['prompt', 'idea_en_una_linea'], ignorar: IGNORAR_LAMINAS, props: { prompt: str(20, 2500), idea_en_una_linea: str(1, 240) } } } } } } },
+  },
+  'copy_base.v1': copiaCarrusel,
+  'laminas.v1': { t: 'obj', req: ['laminas'], ignorar: IGNORAR_LAMINAS, props: { laminas: { t: 'arr', min: 1, max: 10, de: lamina }, necesito } },
+  'estructura.v1': { t: 'obj', req: ['elementos'], props: { elementos: { t: 'arr', min: 1, max: 30, de: elementoDeEstructura } } },
+  'copy_kit.v1': { t: 'obj', req: ['elementos'], ignorar: IGNORAR_LAMINAS, props: { elementos: { t: 'arr', min: 1, max: 30, de: elementoDeCopyKit }, necesito } },
+  'resolucion_copy_base.v1': { t: 'obj', req: ['respuestas'], ignorar: IGNORAR_LAMINAS, props: { respuestas, copia: copiaCarrusel } },
+  'resolucion_laminas.v1': { t: 'obj', req: ['respuestas'], ignorar: IGNORAR_LAMINAS, props: { respuestas, laminas: { t: 'arr', min: 1, max: 10, de: lamina } } },
+  'resolucion_copy_kit.v1': { t: 'obj', req: ['respuestas'], ignorar: IGNORAR_LAMINAS, props: { respuestas, elementos: { t: 'arr', min: 1, max: 30, de: elementoDeCopyKit } } },
+  'resolucion_estructura.v1': { t: 'obj', req: ['respuestas'], props: { respuestas, elementos: { t: 'arr', min: 1, max: 30, de: elementoDeEstructura } } },
   'visual_direction.v1': {
     t: 'obj', req: ['resumen', 'decision', 'reglas_de_imagen'], ignorar: IGNORAR_TAMANO,
     props: {

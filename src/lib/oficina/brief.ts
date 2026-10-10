@@ -23,11 +23,13 @@ export interface BriefLeido {
   variantes: string
   negativos: string[]
   aprueba: string
+  /** brief de KIT (sala 3): los elementos de la semana, una línea cada uno (ver `elementosDelKit`) */
+  elementos?: string[]
   /** el texto completo de la sección, tal cual (lo que se cita al extraer reglas) */
   texto: string
 }
 
-const CAMPOS_LISTA = new Set(['VOCABULARIO OBLIGATORIO', 'PROHIBIDO', 'NEGATIVOS', 'VISUAL OBLIGATORIO', 'VISUAL PROHIBIDO'])
+const CAMPOS_LISTA = new Set(['VOCABULARIO OBLIGATORIO', 'PROHIBIDO', 'NEGATIVOS', 'VISUAL OBLIGATORIO', 'VISUAL PROHIBIDO', 'ELEMENTOS'])
 
 /** corta la sección de un brief (desde su «### ID ·» hasta el siguiente «### » o «## ») */
 export function seccionDelBrief(parte: string, id: string): string | null {
@@ -66,7 +68,32 @@ export function parsearBrief(parte: string, id: string): BriefLeido | null {
     vocabulario_obligatorio: listas['VOCABULARIO OBLIGATORIO'] ?? [], prohibido: listas['PROHIBIDO'] ?? [],
     sintaxis: g('SINTAXIS'), visual: g('VISUAL'), visual_obligatorio: listas['VISUAL OBLIGATORIO'] ?? [], visual_prohibido: listas['VISUAL PROHIBIDO'] ?? [],
     llamado: g('LLAMADO A LA ACCIÓN'), variantes: g('VARIANTES'), negativos: listas['NEGATIVOS'] ?? [], aprueba: g('APRUEBA Y PARA CUÁNDO'), texto: sec,
+    ...(listas['ELEMENTOS'] ? { elementos: listas['ELEMENTOS'] } : {}),
   }
+}
+
+/** ¿es un carrusel? («Instagram · carrusel»); nunca un post de una sola imagen */
+export const esCarrusel = (b: BriefLeido): boolean => /carrusel|carousel/i.test(b.formato) || /carrusel|carousel/i.test(b.que_es)
+/** ¿es el kit semanal de historias y estados? */
+export const esKitDeHistorias = (b: BriefLeido): boolean => /kit/i.test(b.formato) || (/historia|estado/i.test(b.formato) && (b.elementos?.length ?? 0) > 0)
+
+export interface ElementoDelKit { ref: string; fecha: string | null; hora: string | null; destino: 'historia' | 'estado'; tema: string; pilar: string; datos: string[] }
+/**
+ * Los elementos de un brief de kit. FORMATO PROVISIONAL (la cadena aún no emite kits; contrato pedido en el diseño §6.2): una línea por elemento bajo «- ELEMENTOS:»,
+ *   `AAAA-MM-DD HH:MM | historia|estado | tema | pilar | dato; dato`   (fecha y hora opcionales: «sin fecha | estado | tema | pilar»)
+ * Una línea que no se entiende NO se adivina: va en `ilegibles` y el encargo falla visible.
+ */
+export function elementosDelKit(b: Pick<BriefLeido, 'elementos'>): { elementos: ElementoDelKit[]; ilegibles: string[] } {
+  const elementos: ElementoDelKit[] = []
+  const ilegibles: string[] = []
+  ;(b.elementos ?? []).forEach((linea) => {
+    const p = linea.split('|').map((x) => x.trim())
+    const cuando = /^(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2}))?$/.exec(p[0] ?? '')
+    const destino = normalizar(p[1] ?? '')
+    if (p.length < 4 || !(cuando || /^sin fecha$/i.test(p[0])) || !(destino === 'historia' || destino === 'estado') || !p[2] || !p[3]) { ilegibles.push(linea); return }
+    elementos.push({ ref: `e${String(elementos.length + 1).padStart(2, '0')}`, fecha: cuando?.[1] ?? null, hora: cuando?.[2] ?? null, destino, tema: p[2], pilar: p[3], datos: (p[4] ?? '').split(';').map((x) => x.trim()).filter(Boolean) })
+  })
+  return { elementos, ilegibles }
 }
 
 /** ¿es un post de imagen fija? (el brief dice «Instagram · imagen» / «imagen fija») */
