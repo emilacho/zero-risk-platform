@@ -8,6 +8,7 @@
  *  · `recomprobar` = S5 sobre el manual que devolvió el autor: re-evalúa y cierra la puerta (lo que reintroduzca sin cita vuelve a salir).
  */
 import { declaracionDelCliente, evaluarHechos, hojasDeTexto, type EntradaDeHechos, type Hecho, type InformeDeHechos } from './hechos'
+import { palabrasDe } from './texto'
 
 export type EstadoDeCampo = 'verificado' | 'afirmacion_del_cliente' | 'con_pendientes' | 'sin_hechos'
 export interface MetaDeCampo { estado: EstadoDeCampo; provisional: boolean; pendientes: number; hechos: number }
@@ -118,9 +119,12 @@ export function cerrarPuerta<T extends Record<string, unknown>>(manual: T, infor
     if (sale(h)) {
       const actual = leerRuta(cur, h.ruta)
       const clave = h.ruta + '\u0000' + h.frase
-      const entera = (porOracion.get(clave) ?? 0) >= 2
+      // M1-c · si de la oración solo quedaría un fragmento sin sentido (una palabra, o un resto que empieza en minúscula: «siempre.»), sale la oración ENTERA
+      const resto = quitarClausula(h.frase, h.clausula).trim()
+      const fragmento = typeof actual === 'string' && (palabrasDe(resto).length < 2 || /^[a-záéíóúñ]/.test(resto))
+      const entera = (porOracion.get(clave) ?? 0) >= 2 || fragmento
       if (entera && oracionesQuitadas.has(clave)) { registrar(h); continue }
-      const objetivo = entera ? h.frase : h.clausula
+      const objetivo = entera && typeof actual === 'string' && localizar(actual, h.frase) ? h.frase : h.clausula
       if (typeof actual !== 'string' || !localizar(actual, objetivo)) { no.push(h); continue }
       cur = ponerRuta(cur, h.ruta, quitarClausula(actual, objetivo))
       cambios.push({ ruta: h.ruta, de: objetivo, a: '', por: 'retirada' })
