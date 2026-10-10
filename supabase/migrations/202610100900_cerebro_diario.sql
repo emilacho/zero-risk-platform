@@ -1,8 +1,8 @@
 -- EL PORTERO DIARIO DEL CEREBRO · CC#2 · 2026-10-10 · P1 · PROPUESTA (NO APLICADA) · espera la firma de Emilio/Lenovo.
--- 🔴 SOLO ADITIVA: 4 tablas NUEVAS y VACÍAS. No toca ni borra ninguna fila ni ninguna columna existente (ni `cerebro_fichas`, ni `client_brain_chunks`).
+-- 🔴 SOLO ADITIVA: 4 tablas NUEVAS y VACÍAS. No toca ni borra ninguna fila ni ninguna columna existente (ni las tablas de fichas e ingresos del cerebro, ni los trozos del cerebro).
 -- 🔴 Quién las usa: SOLO las rutas `/api/brain/diario/*` (llave de servicio). Hasta que alguien encienda el flujo «mantenimiento diario» (inactivo), nadie las lee ni las escribe.
 -- 🔴 La lección del proyecto: CREATE TABLE no alcanza. Cada tabla lleva en la MISMA migración RLS + REVOKE a anon/authenticated + GRANT a service_role + política de servicio.
--- 🔴 IDEMPOTENTE (IF NOT EXISTS / bloques DO). Una sola transacción. Sin disparadores. `client_id` es TEXTO (sin llaves foráneas hacia tablas viejas: igual que `cerebro_fichas`).
+-- 🔴 IDEMPOTENTE (IF NOT EXISTS / bloques DO). Una sola transacción. Sin disparadores. `client_id` es TEXTO (sin llaves foráneas hacia tablas viejas: igual que las demás tablas del cerebro).
 -- REVERSA: `supabase/reversas/202610100900_cerebro_diario_REVERSA.sql` (las tablas nuevas están vacías hasta la primera corrida real).
 
 BEGIN;
