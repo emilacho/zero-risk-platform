@@ -50,6 +50,7 @@ import {
   type ShouldSkipResult,
 } from './workflow-checkpoint.js'
 import { buildDryRunFakeResponse } from './dry-run-mode.js'
+import { costoDeBusquedasWeb, costoEfectivoDeCorrida } from './libro-de-costos.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
 // `msg.message`, `msg.usage`, etc. to collapse to `{}`. We re-declare the
@@ -82,6 +83,8 @@ type SDKResultStreamMessage = {
   subtype?: string
   /** cómo cerró el ÚLTIMO turno (`end_turn` = terminó de hablar) · en los mensajes `assistant` por bloque viene null: la parada real llega aquí */
   stop_reason?: string | null
+  /** lo que el propio SDK cuenta que costó la corrida (puede faltar, sobre todo en un corte) · se usa SOLO si el cálculo por tokens diría 0 */
+  total_cost_usd?: number
   /** el SDK marca así los fallos (p.ej. «response exceeded the 32000 output token maximum») · `result` trae el texto y `errors` el detalle */
   is_error?: boolean
   result?: string
@@ -104,6 +107,8 @@ type SDKResultStreamMessage = {
       ephemeral_5m_input_tokens?: number
       ephemeral_1h_input_tokens?: number
     }
+    /** herramientas del lado del servidor (búsqueda web): se cobran aparte, US$ 0,01 cada una */
+    server_tool_use?: { web_search_requests?: number }
   }
 }
 type SDKStreamMessage =
@@ -295,11 +300,12 @@ const MODEL_MAP: Record<string, string> = {
   'claude-opus-4-6': 'claude-opus-4-6',
 }
 
-// Precios (USD / 1M tokens) Sonnet 4.6 — ajustar por modelo si hace falta
+// Precios (USD / 1M tokens) · fuente: platform.claude.com/docs/en/about-claude/pricing (tabla «Model pricing», leída el 2026-10-10)
+// Opus 4.6 = 5 / 25 (el libro lo estimaba a 15 / 75, 3 veces de más) · lectura de caché 0,50 (0,1 × entrada, como el resto de la familia)
 const COST_PER_M = {
   sonnet: { input: 3, output: 15 },
   haiku: { input: 1, output: 5 },
-  opus: { input: 15, output: 75 },
+  opus: { input: 5, output: 25 },
 }
 
 /**
@@ -322,12 +328,14 @@ export function _costFor(
   cacheRead = 0,
   cache5mWrite = 0,
   cache1hWrite = 0,
+  webSearches = 0,
 ): number {
+  const busquedas = costoDeBusquedasWeb(webSearches)
   // Relevo 26 · los ids de `MODELOS_POR_CORRIDA` tienen su PRECIO OFICIAL propio (Opus 5.5 y Fable 5.1 ya no caen en la tarifa de familia); el resto sigue como siempre
   const oficial = (PRECIOS_OFICIALES as Record<string, { entrada: number; salida: number; lecturaCache: number } | undefined>)[model]
   if (oficial) {
     const entrada = oficial.entrada / 1_000_000
-    return inTok * entrada + outTok * (oficial.salida / 1_000_000) + cacheRead * (oficial.lecturaCache / 1_000_000) + cache5mWrite * entrada * 1.25 + cache1hWrite * entrada * 2.0
+    return inTok * entrada + outTok * (oficial.salida / 1_000_000) + cacheRead * (oficial.lecturaCache / 1_000_000) + cache5mWrite * entrada * 1.25 + cache1hWrite * entrada * 2.0 + busquedas
   }
   const key = model.includes('haiku') ? 'haiku' : model.includes('opus') ? 'opus' : 'sonnet'
   const p = COST_PER_M[key as keyof typeof COST_PER_M]
@@ -337,7 +345,8 @@ export function _costFor(
     outTok * (p.output / 1_000_000) +
     cacheRead * baseIn * 0.1 +
     cache5mWrite * baseIn * 1.25 +
-    cache1hWrite * baseIn * 2.0
+    cache1hWrite * baseIn * 2.0 +
+    busquedas
   )
 }
 
@@ -647,6 +656,10 @@ export interface StreamDrainResult {
   cacheReadInputTokens: number
   cacheCreation5mTokens: number
   cacheCreation1hTokens: number
+  /** búsquedas web que cobró la API en la corrida (`usage.server_tool_use.web_search_requests`) · ausente = 0 */
+  webSearchRequests?: number
+  /** `total_cost_usd` del mensaje `result` si llegó · ausente/null = el SDK no lo informó */
+  sdkTotalCostUsd?: number | null
   /**
    * Canon canonical · SPEC lazo agentico 2026-06-05 follow-up · Discovery
    * tool-call capture · null when the agent did NOT invoke `emit_discovery_output`
@@ -680,6 +693,8 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
   let cacheReadInputTokens = 0
   let cacheCreation5mTokens = 0
   let cacheCreation1hTokens = 0
+  let webSearchRequests = 0
+  let sdkTotalCostUsd: number | null = null
   // SPEC lazo agentico 2026-06-05 follow-up · capture every tool_use of the
   // canonical Discovery tool · keep the LAST one (final answer) · the count
   // surfaces forensics when the agent emits more than once.
@@ -764,6 +779,8 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
       cacheReadInputTokens = r.usage?.cache_read_input_tokens ?? 0
       cacheCreation5mTokens = r.usage?.cache_creation?.ephemeral_5m_input_tokens ?? 0
       cacheCreation1hTokens = r.usage?.cache_creation?.ephemeral_1h_input_tokens ?? 0
+      webSearchRequests = r.usage?.server_tool_use?.web_search_requests ?? 0
+      sdkTotalCostUsd = typeof r.total_cost_usd === 'number' && Number.isFinite(r.total_cost_usd) ? r.total_cost_usd : null
       sessionId = sessionId ?? r.session_id ?? null
       resultSubtype = typeof r.subtype === 'string' ? r.subtype : null
       resultStopReason = typeof r.stop_reason === 'string' ? r.stop_reason : null
@@ -792,6 +809,8 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
     cacheReadInputTokens,
     cacheCreation5mTokens,
     cacheCreation1hTokens,
+    webSearchRequests,
+    sdkTotalCostUsd,
     discoveryToolCall:
       lastDiscoveryInput !== null
         ? {
@@ -951,6 +970,8 @@ function logExecution(
     fallo?: string | null
     /** el tope saltó AL CERRAR y el texto final está completo: se guarda y se marca (metadata `cerrada_por_tope`) · null/ausente = no aplica */
     cerradaPorTope?: { tope: number; costoUsd: number } | null
+    /** cómo se obtuvo el costo anotado (tokens · total del SDK · tope como cota) y cuántas búsquedas web cobró la API */
+    libroDeCostos?: { base: string; cota: boolean; busquedasWeb: number }
   },
 ): void {
   const { canonicalSlug, input, skills, drain, modelId, startedAtMs, durationMs, costUsd, brainEnrichment, cacheMetrics, fidelityForcedEmit } = args
@@ -1071,6 +1092,8 @@ function logExecution(
       thinking_mode: input.thinkingMode ?? null,
       // MODELO por corrida (opt-in · relevo 25) · solo está la llave cuando el pedido lo trajo (el libro de siempre no cambia)
       ...(input.modelOverride ? { model_override: input.modelOverride } : {}),
+      // cómo se llegó al costo (tokens · total del SDK · TOPE como cota pesimista) y las búsquedas web cobradas aparte · el libro nunca queda mudo sobre su propia base
+      ...(args.libroDeCostos ? { cost_basis: args.libroDeCostos.base, cost_is_upper_bound: args.libroDeCostos.cota, web_search_requests: args.libroDeCostos.busquedasWeb } : {}),
       // el tope de gasto saltó AL CERRAR y la respuesta final está completa: se guardó (no se descartó) · solo está la llave cuando pasó
       ...(args.cerradaPorTope ? { cerrada_por_tope: true, cerrada_por_tope_detalle: mensajeDeCierreConTope(args.cerradaPorTope.tope, args.cerradaPorTope.costoUsd) } : {}),
       // límites de «mirar afuera» de la corrida (opt-in) · quedan en el libro para auditar · null = sin límites (como siempre)
@@ -1352,6 +1375,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
               drain.cacheCreation5mTokens + forced.result.cacheCreation5mTokens,
             cacheCreation1hTokens:
               drain.cacheCreation1hTokens + forced.result.cacheCreation1hTokens,
+            webSearchRequests: (drain.webSearchRequests ?? 0) + (forced.result.webSearchRequests ?? 0),
+            sdkTotalCostUsd: drain.sdkTotalCostUsd != null || forced.result.sdkTotalCostUsd != null ? (drain.sdkTotalCostUsd ?? 0) + (forced.result.sdkTotalCostUsd ?? 0) : null,
           }
           console.log(
             `[forced-emit] ${canonicalSlug} · emission RECOVERED on forced turn · emission_count=${drain.discoveryToolCall?.emission_count}`,
@@ -1604,14 +1629,18 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   }
 
   const durationMs = Date.now() - startedAt
-  const costUsd = costFor(
+  const costoCalculado = costFor(
     modelId,
     drain.inputTokens,
     drain.outputTokens,
     drain.cacheReadInputTokens,
     drain.cacheCreation5mTokens,
     drain.cacheCreation1hTokens,
+    drain.webSearchRequests ?? 0,
   )
+  // 🔴 un corte por tope puede llegar sin `usage` y quedar en US$ 0 aunque costó: se anota lo que el SDK informó y, si no, el TOPE como cota pesimista (declarado)
+  const costoDeLaCorrida = costoEfectivoDeCorrida({ calculado: costoCalculado, sdkTotal: drain.sdkTotalCostUsd, corte: cortePorTope || cierreCortado, tope: input.maxBudgetUsd })
+  const costUsd = costoDeLaCorrida.costo
 
   const brainEnrichmentMeta: BrainEnrichmentResultMeta = {
     brain_hit: enrichment.brain_hit,
@@ -1652,6 +1681,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     fidelityForcedEmit: fidelityForcedEmitDebug,
     fallo: falloFinal,
     cerradaPorTope: cierreCortado ? { tope: input.maxBudgetUsd as number, costoUsd: costUsd } : null,
+    libroDeCostos: { base: costoDeLaCorrida.base, cota: costoDeLaCorrida.cota, busquedasWeb: drain.webSearchRequests ?? 0 },
   })
 
   const result: AgentRunResult = {

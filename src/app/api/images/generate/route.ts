@@ -7,6 +7,7 @@ import { PRICING_BY_SIZE, costForImage, type ImageUsage } from '@/lib/image-pric
 import { imageBytesFromItem, sniffImageFormat, type ImagesApiItem } from '@/lib/image-response'
 import { randomUUID } from 'node:crypto'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { registrarImagenEnElLibro } from '@/lib/image-ledger'
 
 // Sprint #6 Brazo 1 · GPT Image generation wrapper
 //
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
   }
 
   const supabase = getSupabaseAdmin()
+  const startedAtMs = Date.now()
 
   capture('image_generation_invoked', resolvedClientId ?? 'system', {
     model,
@@ -215,6 +217,14 @@ export async function POST(request: Request) {
     // gets the URL anyway so the work isn't lost, but logs the failure.
     console.error('[images/generate] insert failed:', insertError.message)
   }
+
+  // El costo de la imagen entra TAMBIÉN al libro de invocaciones (una fila por imagen, atada a su generation_id): el freno §150 suma ese libro y antes no veía las imágenes.
+  await registrarImagenEnElLibro(supabase, {
+    generationId: row?.id ?? generationId, clientId: resolvedClientId, agentSlug, model, size, quality, caller, costUsd, costBasis,
+    startedAtMs, endedAtMs: Date.now(),
+    workflowId: sanitizeString(body.workflow_id as string | undefined, 80) || null,
+    workflowExecutionId: sanitizeString(body.workflow_execution_id as string | undefined, 120) || null,
+  })
 
   capture('image_generation_completed', resolvedClientId ?? 'system', {
     model,

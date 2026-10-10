@@ -101,6 +101,8 @@ export async function GET() {
         spend_usd_total: Number(totalSpend.toFixed(6)),
         spend_usd_30d: Number(spend30d.toFixed(6)),
         image_spend_usd_30d: Number(imageSpend30d.toFixed(6)),
+        // desde el relevo 41 cada imagen también deja una fila en agent_invocations: el gasto en imágenes YA está dentro de spend_usd_*; image_spend_usd_30d es su detalle (no sumarlos)
+        image_spend_included_in_spend: true,
         workflows_n8n: workflowsCount, // null si n8n API no responde
       },
       sources: {

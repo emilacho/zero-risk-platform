@@ -47,8 +47,8 @@ const MODEL_MAP: Record<string, string> = {
 // when tokens > 0 (the bug LOTE-C blind dry-run surfaced: hardcoded cost_usd=0
 // downstream broke cost-alerts cron + /agents/stats + /costs end-to-end).
 const MODEL_PRICING: Record<string, { in: number; out: number }> = {
-  'claude-opus-4-7':            { in: 15 / 1_000_000, out: 75 / 1_000_000 },
-  'claude-opus-4-6':            { in: 15 / 1_000_000, out: 75 / 1_000_000 },
+  'claude-opus-4-7':            { in: 5 / 1_000_000, out: 25 / 1_000_000 },
+  'claude-opus-4-6':            { in: 5 / 1_000_000, out: 25 / 1_000_000 },
   'claude-sonnet-4-6':          { in:  3 / 1_000_000, out: 15 / 1_000_000 },
   'claude-haiku-4-5-20251001':  { in:  1 / 1_000_000, out:  5 / 1_000_000 },
 }

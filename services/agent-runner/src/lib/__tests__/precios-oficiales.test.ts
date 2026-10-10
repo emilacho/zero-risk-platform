@@ -46,11 +46,11 @@ describe('🔴 Opus 5.5 ya NO se estima con la tabla vieja de Opus (15/75: 3,75 
   })
 })
 
-describe('los modelos que ya corrían NO cambian de costo (tabla por familia de siempre)', () => {
+describe('los modelos que ya corrían tienen su tabla por familia (Opus 4.6 corregido en el relevo 41; Sonnet y Haiku no cambian)', () => {
   it.each([
     ['claude-haiku-4-5-20251001', 1, 5, 0.1],
     ['claude-sonnet-4-6', 3, 15, 0.3],
-    ['claude-opus-4-6', 15, 75, 1.5],
+    ['claude-opus-4-6', 5, 25, 0.5], // relevo 41: antes 15 / 75 (3 veces de más); fuente oficial leída el 2026-10-10
   ])('%s · entrada %d · salida %d · caché leída %d', (id, ent, sal, lec) => {
     casi(_costFor(id, M, 0), ent)
     casi(_costFor(id, 0, M), sal)
