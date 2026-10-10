@@ -76,6 +76,8 @@ const PALABRAS_FECHA_ESPECIAL = /\b(feriado|festivo|puente|temporada (?:alta|baj
 
 const activa = (f: Fila) => f.estado !== 'cancelada' && f.estado !== 'descartada_sin_fuente'
 const materializada = (f: Fila) => f.estado !== 'esquema'
+/** lo que se valida: materializada y viva (una fila que salió o se canceló ya no se juzga) */
+const validable = (f: Fila) => materializada(f) && activa(f)
 
 export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
   const out: Hallazgo[] = []
@@ -104,7 +106,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
     }
   }
 
-  for (const f of filas.filter(materializada)) {
+  for (const f of filas.filter(validable)) {
     // ─── V02 · un solo formato, de la lista
     if (/[\/+,;]|\s(?:o|y|u|e|and)\s/i.test(f.formato)) out.push(h('V02', 'bloquea', f, `el formato «${f.formato}» no es uno solo`, 'un solo formato por fila', 'elegir UN formato'))
     else if (!(ins.formatos[f.red] ?? []).some((x) => x.formato === f.formato)) out.push(h('V02', 'bloquea', f, `el formato «${f.formato}» no existe para ${f.red}`, 'cadena_formatos_por_red', 'usar un formato de la lista de esa red'))
@@ -206,7 +208,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
   }
 
   // ─── V11 · dependencias entre filas y las del plan; nunca hacia un video que espera
-  for (const f of filas.filter(materializada)) {
+  for (const f of filas.filter(validable)) {
     for (const dep of f.depende_de) {
       const a = porId.get(dep)
       if (!a) out.push(h('V11', 'bloquea', f, `depende de «${dep}», que no existe`, 'dependencias', 'quitar la dependencia o apuntar a una fila real'))
@@ -226,7 +228,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
 
   // ─── V12 · revisiones: toda fila «revisión» cae en un hito de revisión del plan
   const diasRevision = estrategia.hitos.filter((x) => x.tipo === 'revision').map((x) => x.dia)
-  for (const f of filas.filter(materializada)) {
+  for (const f of filas.filter(validable)) {
     if (/\b(?:revision|ritual de revision|checkpoint)\b/.test(normalizar(f.tema ?? ''))) {
       const dia = diaDeCampana(campana.fecha_inicio, f.fecha)
       if (!diasRevision.includes(dia)) out.push(h('V12', 'bloquea', f, `una fila de revisión cae en el día ${dia} y el plan fija las revisiones en ${diasRevision.join(', ') || '(ninguna)'}`, 'hitos del plan', 'poner la revisión en un día del plan o quitarla'))
