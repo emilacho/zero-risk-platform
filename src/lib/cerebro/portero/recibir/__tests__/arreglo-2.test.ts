@@ -101,7 +101,7 @@ describe('3 · un documento largo no retrocede', () => {
   it('el tope de llamadas sigue a los segmentos (24 por pasada + 4 de margen), nunca baja de 12 y tiene un techo absoluto', () => {
     expect(llamadasMaximasPara(10)).toBe(12)
     expect(llamadasMaximasPara(561)).toBe(Math.ceil(561 / MAX_SEGMENTOS_POR_PASADA) + 4)
-    expect(llamadasMaximasPara(100_000)).toBe(MAXIMO_ABSOLUTO_DE_LLAMADAS)
+    expect(llamadasMaximasPara(100_000)).toBe(32) // el número, no la constante (C2 de CC#3)
   })
   it('un reglamento de 561 artículos con un modelo de salida corta entra COMPLETO: las pasadas crecen con lo que la salida deja (pocas, no 24)', async () => {
     const { base, m, correr } = armar(agrupa(40, 300), { topeDeGastoPorIngresoUsd: 5, topeDeGastoPorLlamadaUsd: 1 })
@@ -198,5 +198,24 @@ describe('2b · `reemplaza` de una ficha larga va solo en su primera parte', () 
     expect(r.fichas[0]).toMatchObject({ version_de: 'vieja-1', ref: 'ficha:vieja-1' })
     expect(r.fichas.slice(1).every((f) => f.version_de === null && f.ref === `ficha:${f.id}`)).toBe(true)
     expect(r.retiradas).toEqual([])
+  })
+})
+
+describe('C1 de CC#3 · R2-13 (561 artículos) con la salida MEDIDA y con salida densa', () => {
+  it('con la salida medida en el libro (≈ 13,5 tokens por segmento): completo en ≤ 12 llamadas y ≤ US$ 0,40', async () => {
+    const { base, m, correr } = armar((p) => agrupa(40, Math.round(13.5 * numerosDelMensaje(p).length))(p, 0))
+    const r = await correr(cuerpo({ texto: reglamento(561) }))
+    expect(r.c).toMatchObject({ estado: 'fichado', cobertura: 1, segmentos: { total: 561, residuales: 0 } })
+    expect(m.espia.peticiones.length).toBeLessThanOrEqual(12)
+    expect(r.c.costo_usd).toBeLessThanOrEqual(0.4)
+    expect(base.fichas.flatMap((f) => f.firmas as string[])).toHaveLength(561)
+  })
+  it('con salida densa (≈ 70 tokens por segmento: una ficha por artículo): la pasada no crece, y si no cabe en el gasto queda PARCIAL declarado sin perder ningún segmento', async () => {
+    const { base, correr } = armar((p) => agrupa(1, 70 * numerosDelMensaje(p).length > 1900 ? 1900 : 70 * numerosDelMensaje(p).length)(p, 0))
+    const r = await correr(cuerpo({ texto: reglamento(561) }))
+    expect(['fichado', 'parcial']).toContain(r.c.estado)
+    expect(r.c.costo_usd).toBeLessThanOrEqual(0.4 + 0.08)
+    expect(base.fichas.flatMap((f) => f.firmas as string[])).toHaveLength(561) // nada se pierde: lo no visto queda «sin clasificar»
+    if (r.c.estado === 'parcial') expect(String(r.c.motivo)).toMatch(/tope_de_gasto_del_ingreso|tope_de_pasadas|cobertura baja/)
   })
 })
