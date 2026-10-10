@@ -29,6 +29,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateInput } from '@/lib/input-validator'
+import { fusionarUrlReparto, urlsDeReparto } from '@/lib/clients/url-reparto'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -236,6 +237,25 @@ export async function POST(request: Request) {
 
   const clientId = clientUpsert.id as string
 
+  // ─── 1b. url_reparto (D-3 · opcional) → clients.config.apify.url_reparto · se fusiona, no se pisa nada más ───────
+  let urlReparto: { guardadas: number; descartadas: string[]; error?: string } | null = null
+  const pedidas = (body as { url_reparto?: unknown }).url_reparto
+  if (pedidas !== undefined && pedidas !== null) {
+    const u = urlsDeReparto(pedidas)
+    urlReparto = { guardadas: 0, descartadas: u.descartadas }
+    if (u.validas.length > 0) {
+      try {
+        const { data: fila, error: eLeer } = await supabase.from('clients').select('config').eq('id', clientId).maybeSingle()
+        if (eLeer) throw new Error(eLeer.message)
+        const { error: eEsc } = await supabase.from('clients').update({ config: fusionarUrlReparto((fila as { config?: unknown } | null)?.config, u.validas) }).eq('id', clientId)
+        if (eEsc) throw new Error(eEsc.message)
+        urlReparto.guardadas = u.validas.length
+      } catch (e: unknown) {
+        urlReparto.error = (e instanceof Error ? e.message : String(e)).slice(0, 200)
+      }
+    }
+  }
+
   // ─── 2. INSERT client_brand_books (optional) ────────────────────────────
   let brandBookId: string | null = null
   let brandBookError: string | null = null
@@ -320,6 +340,7 @@ export async function POST(request: Request) {
       client_journey_state: journeyStateId !== null,
     },
     ...(brandBookError ? { brand_book_error: brandBookError } : {}),
+    ...(urlReparto ? { url_reparto: urlReparto } : {}),
     ...(journeyStateError ? { journey_state_error: journeyStateError } : {}),
   })
 }
