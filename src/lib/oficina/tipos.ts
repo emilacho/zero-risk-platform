@@ -15,8 +15,8 @@ export type Gravedad = 'bloquea' | 'sugerencia'
 export type Condicion =
   | { tipo: 'siempre' }
   | { tipo: 'si_artefacto'; artefacto: string; campo: string; igual: unknown }
-  | { tipo: 'si_fichas_abiertas'; origen?: OrigenDeFicha; donde?: string; gravedad?: Gravedad }
-  | { tipo: 'si_cambio'; artefacto: string }
+  | { tipo: 'si_fichas_abiertas'; origen?: OrigenDeFicha; donde?: string | string[]; gravedad?: Gravedad }
+  | { tipo: 'si_cambio'; artefacto: string | string[] }
 
 /** vuelta acotada: tras ejecutar el paso, si `si` se cumple y quedan vueltas, se regresa al paso `paso` (clave) */
 export interface VueltaA { paso: string; max: number; si: Condicion }

@@ -23,11 +23,10 @@ export function evaluar(c: Condicion, e: Estado): boolean {
       return !!a && leer(a.datos, c.campo) === c.igual
     }
     case 'si_cambio': {
-      const a = e.artefactos[c.artefacto]
-      return !!a && a.version > a.version_consumida
+      return (Array.isArray(c.artefacto) ? c.artefacto : [c.artefacto]).some((n) => { const a = e.artefactos[n]; return !!a && a.version > a.version_consumida })
     }
     case 'si_fichas_abiertas':
-      return e.fichas.some((f) => f.estado === 'abierta' && (!c.origen || f.origen === c.origen) && (!c.donde || f.donde === c.donde) && (!c.gravedad || f.gravedad === c.gravedad))
+      return e.fichas.some((f) => f.estado === 'abierta' && (!c.origen || f.origen === c.origen) && (!c.donde || (Array.isArray(c.donde) ? c.donde.includes(f.donde) : f.donde === c.donde)) && (!c.gravedad || f.gravedad === c.gravedad))
   }
 }
 

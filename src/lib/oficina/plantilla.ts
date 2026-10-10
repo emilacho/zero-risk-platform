@@ -7,15 +7,24 @@ import { TIPOS_DE_CONDICION, TIPOS_DE_PASO, type Condicion, type Plantilla } fro
 /** funciones de código registradas (lista CERRADA; se amplía con cada sala, por PR) */
 export const FUNCIONES_REGISTRADAS = [
   'abrir', 'elegir_foto', 'chequear_prompts', 'imagen', 'elegir_version', 'acabado_imagen', 'chequeos', 'empaquetar_entrega', 'cierre',
+  // piezas de varias láminas: varias imágenes por pieza (una por «ref»), láminas armadas y dibujadas por código
+  'abrir_laminas', 'asignar_fotos', 'chequear_prompts_ref', 'imagen_ref', 'elegir_version_ref', 'armar_laminas', 'render_laminas', 'chequeos_laminas', 'empaquetar_entrega_laminas',
 ] as const
 /** funciones de código que SÍ gastan (un proveedor de imágenes, no un modelo de texto): su tope puede ser mayor que 0 */
-export const FUNCIONES_CON_GASTO = ['imagen'] as const
+export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref'] as const
 /** validadores de código sobre la salida de un agente */
-export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'decide_imagen'] as const
+export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'decide_imagen', 'texto_laminas_en_copy', 'contrato_de_lamina', 'sin_texto_en_estructura', 'refs_validos'] as const
 /** esquemas de salida registrados (ver salida.ts) */
-export const ESQUEMAS_REGISTRADOS = ['visual_direction.v1', 'prompts.v1', 'observacion_imagen.v1', 'pieza_post.v1', 'fichas.v1', 'resolucion.v1'] as const
+export const ESQUEMAS_REGISTRADOS = [
+  'visual_direction.v1', 'prompts.v1', 'observacion_imagen.v1', 'pieza_post.v1', 'fichas.v1', 'resolucion.v1',
+  'direccion_imagenes.v1', 'prompts_por_ref.v1', 'copy_base.v1', 'laminas.v1', 'estructura.v1', 'copy_kit.v1',
+  'resolucion_copy_base.v1', 'resolucion_laminas.v1', 'resolucion_copy_kit.v1', 'resolucion_estructura.v1',
+] as const
 /** quién puede hacer cumplir una regla de indicación */
-export const APLICADORES_DE_CODIGO = ['salida', 'chequeos', 'chequear_prompts', 'decide_imagen', 'citas_existen', 'motor'] as const
+export const APLICADORES_DE_CODIGO = [
+  'salida', 'chequeos', 'chequear_prompts', 'decide_imagen', 'citas_existen', 'motor',
+  'texto_laminas_en_copy', 'contrato_de_lamina', 'sin_texto_en_estructura', 'refs_validos', 'chequeos_laminas',
+] as const
 /** `quien` que no es un agente concreto: lo resuelve la sala por la ficha (dueño del `donde`) */
 export const QUIEN_DINAMICO = 'dueno_del_donde'
 
@@ -31,8 +40,9 @@ function erroresDeCondicion(c: Condicion | undefined, donde: string, artefactos:
     else if (!artefactos.has(c.artefacto)) e.push(`${donde}: el artefacto «${c.artefacto}» no lo produce ningún paso`)
   }
   if (c.tipo === 'si_cambio') {
-    if (!c.artefacto) e.push(`${donde}: si_cambio pide artefacto`)
-    else if (!artefactos.has(c.artefacto)) e.push(`${donde}: el artefacto «${c.artefacto}» no lo produce ningún paso`)
+    const lista = Array.isArray(c.artefacto) ? c.artefacto : c.artefacto ? [c.artefacto] : []
+    if (!lista.length) e.push(`${donde}: si_cambio pide artefacto`)
+    for (const n of lista) if (!artefactos.has(n)) e.push(`${donde}: el artefacto «${n}» no lo produce ningún paso`)
   }
   return e
 }
