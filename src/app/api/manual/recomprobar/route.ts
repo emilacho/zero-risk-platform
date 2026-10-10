@@ -3,6 +3,7 @@
  * La revisión del manual nace APAGADA: nadie la llama todavía (el flujo n8n es inactivo).
  */
 import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { autorizar } from '@/lib/manual/rutas'
 import { rutaRecomprobar } from '@/lib/manual/rutas'
@@ -13,6 +14,9 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function POST(request: Request) {
+  // la llave interna se comprueba AQUÍ (el lint de canon la exige en el archivo de la ruta); `autorizar` añade la llave de despacho donde corresponde
+  const llave = checkInternalKey(request)
+  if (!llave.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: llave.reason }, { status: 401 })
   const no = autorizar(request, false)
   if (no) return NextResponse.json(no.body, { status: no.status })
   let cuerpo: unknown
