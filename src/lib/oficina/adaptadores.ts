@@ -103,6 +103,12 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         return out
       } catch (e) { return { error: e instanceof Error ? e.message : String(e) } }
     },
+    async plan(planId, clientId) {
+      const r = (await db.from('client_historical_outputs').select('content').eq('id', planId).eq('client_id', clientId).limit(1)) as { data: Fila[] | null; error: { message: string } | null }
+      if (r.error) return null
+      const c = r.data?.[0]?.content
+      return typeof c === 'string' && c.trim() ? c : null
+    },
     async parte(parteId, clientId) {
       const r = (await db.from('client_historical_outputs').select('content').eq('id', parteId).eq('client_id', clientId).eq('output_type', 'campaign_brief_pack').limit(1)) as { data: Fila[] | null; error: { message: string } | null }
       if (r.error) throw new Error(`leer la parte: ${r.error.message}`)

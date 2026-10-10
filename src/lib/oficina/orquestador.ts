@@ -8,7 +8,7 @@
  */
 import crypto from 'node:crypto'
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
-import { parsearBrief, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, esPostDeImagen, type BriefLeido } from './brief'
+import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, esPostDeImagen, type BriefLeido } from './brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import { aUtc, chequeosDeEntrega, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoCiego } from './ciego'
@@ -215,6 +215,9 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       if (!parte) return { res: { costo_usd: 0 }, fallido: `la parte ${enc.parte_id} no existe para este cliente` }
       const brief = parsearBrief(parte.texto, enc.brief_id)
       if (!brief) return { res: { costo_usd: 0 }, fallido: `el brief ${enc.brief_id} no está en la parte` }
+      const planId = planDeOrigen(parte.texto)
+      const plan = planId ? await P.plan(planId, enc.client_id) : null
+      if (plan) fu.plan_texto = plan
       if (!esPostDeImagen(brief)) return { res: { costo_usd: 0 }, fallido: `el brief ${enc.brief_id} no es un post de imagen (${brief.formato}): esta sala hace post con foto` }
       const proporcion = proporcionDelBrief(brief, String(pl.limites.formato_por_omision ?? '1:1'))
       return { res: { costo_usd: 0, artefacto: { brief, proporcion, F: fu } } }
@@ -281,6 +284,11 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       if (modo === 'real') {
         const id = (vd.decision as { foto_id?: string }).foto_id
         const f = b.F.fotos.find((x) => x.id === id)
+        // control ③ también para la foto real: si el curador la miró y el código la rechazó, se DESCARTA (queda declarado), no se entrega
+        const obs = datos(e, 'observacion_imagen')
+        if (obs && !((obs.veredicto as { pasan?: number[] } | undefined)?.pasan ?? []).includes(0)) {
+          return { res: { costo_usd: 0, artefacto: { origen: 'ninguna', nota: 'la foto real elegida no cumple el brief y se descartó' } } }
+        }
         const nota = f && f.formato === 'vertical' && b.proporcion === '1:1' ? 'la foto real es vertical y el brief pide 1:1: recortar al publicar' : null
         return { res: { costo_usd: 0, artefacto: { origen: 'real', url: f?.url ?? null, foto_id: id, nota } }, usos: id ? [{ foto_id: id, rol: 'pieza' }] : undefined }
       }
@@ -438,7 +446,11 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), turno: { ...turnoBase, n, estado: 'fallo', error: proc.fallido ?? 'sin resultado' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
     return fallar(P, { ...enc, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, proc.fallido ?? 'el paso no produjo resultado')
   }
-  await aplicarResultado(P, enc, pl, sig.indice, { ...proc.res, costo_usd: costo }, { vuelta: sig.vuelta, turno: { ...turnoBase, estado: 'hecho' }, gastos: gastoModelo, n })
+  // C2 de CC#1: el contador de reintento de formato es del PASE, no del paso: al aceptar la salida se reinicia (si no, el segundo pase de una vuelta ya no tendría reintento)
+  const { [`fmt:${paso.clave}`]: _fmt, ...vueltasSinFormato } = e.vueltas
+  void _fmt
+  const encLimpio: Encargo = { ...enc, estado_del_motor: { ...e, vueltas: vueltasSinFormato } }
+  await aplicarResultado(P, encLimpio, pl, sig.indice, { ...proc.res, costo_usd: costo }, { vuelta: sig.vuelta, turno: { ...turnoBase, estado: 'hecho' }, gastos: gastoModelo, n })
   return avanzar(P, enc.id)
 }
 

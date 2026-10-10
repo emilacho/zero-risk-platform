@@ -72,6 +72,12 @@ export function parsearBrief(parte: string, id: string): BriefLeido | null {
   }
 }
 
+/** el plan del que sale la parte: «Plan de origen: <uuid>» en su encabezado; null si no lo dice */
+export function planDeOrigen(parte: string): string | null {
+  const m = /Plan de origen:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(parte)
+  return m ? m[1].toLowerCase() : null
+}
+
 /** ¿es un carrusel? («Instagram · carrusel»); nunca un post de una sola imagen */
 export const esCarrusel = (b: BriefLeido): boolean => /carrusel|carousel/i.test(b.formato) || /carrusel|carousel/i.test(b.que_es)
 /** ¿es el kit semanal de historias y estados? */

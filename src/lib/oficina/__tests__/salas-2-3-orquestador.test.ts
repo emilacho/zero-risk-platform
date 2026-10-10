@@ -38,7 +38,7 @@ const BRIEF_KIT = `### BRF-0200 · Instagram · kit_historias
   - 2026-10-16 12:00 | historia | mensaje de la semana | marca
 - LLAMADO A LA ACCIÓN: Escríbenos
 `
-const parteCon = (b: string) => `# PARTE DE TRABAJO\n\n## Entregables\n\n${b}\n### BRF-9999 · Instagram · imagen\n- QUÉ ES: otro\n`
+const parteCon = (b: string) => `# PARTE DE TRABAJO\nPlan de origen: 29d6daeb-a95a-4328-9c10-cf3cddc236f7 · Manual: versión 1\n\n## Entregables\n\n${b}\n### BRF-9999 · Instagram · imagen\n- QUÉ ES: otro\n`
 
 const REGLAS = { obligatorio: [{ id: 'o1', texto: 'el plato completo', claves: ['plato'], cita: 'El plato aparece completo' }], prohibido: [{ id: 'p1', texto: 'personas', claves: ['personas'], cita: 'No aparecen personas' }] }
 const sinImagenes = j({ resumen: 'Fondo de la marca', imagenes: [], reglas_de_imagen: { obligatorio: [], prohibido: [] } })
@@ -361,6 +361,13 @@ describe('SALA 2 · más reglas del orquestador de láminas', () => {
     expect(pasos.slice(-2)).toEqual(['decide_texto', 'ajusta_laminas_2'])
     expect(M.llamadas.render).toBe(2)
     expect(JSON.stringify(M.llamadas.renderPedidos[1].slides)).toMatch(/Lo hacemos al momento/)
+  })
+  it('el plan de origen de la parte se lee y viaja en la tarea de cada empleado de láminas', async () => {
+    const { M, id } = await abiertoC()
+    const { tareas } = await correr(M, id, guionCarrusel())
+    expect(M.llamadas.planes).toEqual(['29d6daeb-a95a-4328-9c10-cf3cddc236f7'])
+    expect(tareas['texto'][0]).toMatch(/Plan de trabajo del cliente[\s\S]*PLAN DE TRABAJO DE PRUEBA/)
+    expect(tareas['laminas'][0]).toMatch(/PLAN DE TRABAJO DE PRUEBA/)
   })
   it('el jefe ve las láminas dibujadas: portada, una intermedia y la última', async () => {
     const { M, id } = await abiertoC()

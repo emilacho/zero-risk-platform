@@ -49,7 +49,7 @@ export interface Memoria {
   artefactos: Array<{ encargo_id: string; tipo: string; version: number; sha256: string }>
   gastos: NonNullable<Cambios['gastos']>
   usos: Array<{ foto_id: string; rol: string | null }>
-  llamadas: { imagen: number; imagenReal: number; revisor: number; revisorReal: number; salida: number; bandeja: Array<Record<string, unknown>>; salidas: Array<Record<string, unknown>>; avisos: Array<{ canal: string; texto: string }>; archivos: string[]; guardadoDeArchivos: number; render: number; renderReal: number; renderPedidos: PedidoDeRender[]; revisorImagenes: string[][] }
+  llamadas: { imagen: number; imagenReal: number; revisor: number; revisorReal: number; salida: number; bandeja: Array<Record<string, unknown>>; salidas: Array<Record<string, unknown>>; avisos: Array<{ canal: string; texto: string }>; archivos: string[]; guardadoDeArchivos: number; render: number; renderReal: number; renderPedidos: PedidoDeRender[]; revisorImagenes: string[][]; planes: string[] }
   config: ConfigDeOficina
   plantilla: { plantilla: Plantilla; activo: boolean } | null
   /** guion del revisor externo: texto por llamada */
@@ -59,10 +59,10 @@ export interface Memoria {
   renderFalla: (n: number) => boolean
 }
 
-export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOficina>; fuentes?: Partial<FuentesCompletas>; tope?: number; plantilla?: Plantilla } = {}): Memoria {
+export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOficina>; fuentes?: Partial<FuentesCompletas>; tope?: number; plantilla?: Plantilla; plan?: string | null } = {}): Memoria {
   const m: Memoria = {
     encargos: new Map(), turnos: new Map(), artefactos: [], gastos: [], usos: [],
-    llamadas: { imagen: 0, imagenReal: 0, revisor: 0, revisorReal: 0, salida: 0, bandeja: [], salidas: [], avisos: [], archivos: [], guardadoDeArchivos: 0, render: 0, renderReal: 0, renderPedidos: [], revisorImagenes: [] },
+    llamadas: { imagen: 0, imagenReal: 0, revisor: 0, revisorReal: 0, salida: 0, bandeja: [], salidas: [], avisos: [], archivos: [], guardadoDeArchivos: 0, render: 0, renderReal: 0, renderPedidos: [], revisorImagenes: [], planes: [] },
     config: { estado: 'encendida', familias_activas: o.plantilla ? [o.plantilla.familia] : ['post_img'], clientes_ensayo: [], ...(o.config ?? {}) },
     plantilla: { plantilla: JSON.parse(JSON.stringify(o.plantilla ?? POST_IMG)), activo: true },
     revisorTexto: () => ({ ok: true, texto: JSON.stringify({ fichas: [] }), costo_usd: 0.1, modelo: 'revisor-simulado' }),
@@ -102,6 +102,7 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
     almacen, ahora: () => new Date('2026-10-10T12:00:00Z'),
     fuentes: async () => ({ ...FUENTES, ...(o.fuentes ?? {}) }),
     parte: async () => ({ texto: o.parte ?? PARTE_REAL }),
+    plan: async (id) => { m.llamadas.planes.push(id); return o.plan === undefined ? 'PLAN DE TRABAJO DE PRUEBA: serie de posts de producto antes de la pauta.' : o.plan },
     imagen: async (p) => {
       m.llamadas.imagen++
       if (!p.dry_run) m.llamadas.imagenReal++

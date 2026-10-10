@@ -108,6 +108,8 @@ export interface Puertos {
   ahora(): Date
   fuentes(clientId: string): Promise<FuentesCompletas | { error: string }>
   parte(parteId: string, clientId: string): Promise<{ texto: string } | null>
+  /** el plan de trabajo del que sale la parte (su texto), o null si no se puede leer; solo lectura */
+  plan(planId: string, clientId: string): Promise<string | null>
   /** genera UNA imagen (1024×1024, calidad explícita); en dry_run NO llama al proveedor */
   imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean }): Promise<ResultadoImagen>
   /** el revisor ciego (otro proveedor); en dry_run NO llama al proveedor */

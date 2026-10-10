@@ -69,7 +69,7 @@ const describirElementos = (els: ElementoDelKit[]) => els.map((e) => `- ${e.ref}
 export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?: { fichas?: Ficha[]; errorDeFormato?: string }): { task: string; images: string[]; esquema: string } {
   const F = c.fuentes
   const kit = c.familia === 'kit'
-  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (guía, no regla al pie de la letra)\n${c.brief.texto}\n`
+  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (guía, no regla al pie de la letra)\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, 8000)}\n` : ''}`
   const datosVerificados = `## Datos verificados del cliente (solo estos; no inventes otros)\nTeléfonos: ${F.propios.telefonos.join(', ') || '(no se pudieron leer)'}\nUsuarios: ${F.propios.handles.join(', ') || '(no se pudieron leer)'}\nPrecios de la carta: ${F.fuentes.precios.join(', ') || '(no hay carta guardada)'}`
   const refs = kit ? `Elementos del kit (cada uno es una lámina fija 9:16):\n${describirElementos(c.elementos)}` : `Roles de lámina posibles (el ref de una imagen es un rol): ${ROLES_DE_LAMINA.join(', ')}`
   const pieza = describirPieza(c)
