@@ -4,6 +4,7 @@
  */
 import crypto from 'node:crypto'
 import type { Ficha } from './tipos'
+import { esFechaReal, esHoraReal } from './texto'
 
 const ascii = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 
@@ -78,9 +79,9 @@ export function chequeosDeEntrega(archivos: ArchivoDeEntrega[], fila: FilaDeForm
 
 /** instante UTC (ISO) de una fecha y hora LOCALES en una zona IANA; null si falta la fecha o la zona no existe (la pieza no vence: se declara) */
 export function aUtc(fecha: string | null | undefined, hora: string | null | undefined, zona: string | null | undefined): string | null {
-  if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !zona) return null
+  if (!fecha || !esFechaReal(fecha) || !zona) return null
   const [y, mo, d] = fecha.split('-').map(Number)
-  const [h, mi] = (hora && /^\d{2}:\d{2}/.test(hora) ? hora : '00:00').split(':').map(Number)
+  const [h, mi] = (hora && esHoraReal(hora.slice(0, 5)) ? hora.slice(0, 5) : '00:00').split(':').map(Number)
   try {
     const dtf = new Intl.DateTimeFormat('en-US', { timeZone: zona, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
     const desfase = (t: number) => {

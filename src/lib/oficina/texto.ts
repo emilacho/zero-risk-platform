@@ -59,6 +59,21 @@ export function esFechaORangoOCifra(t: string): boolean {
   return /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(s) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$/.test(s) || /^\d{1,2}(?:\s?[-–]\s?\d{1,2}){2}$/.test(s) || /^[1-9]\d{0,2}(?:[.,]\d{3})+(?:[.,]\d{1,2})?$/.test(s)
 }
 
+/** ¿«AAAA-MM-DD» es un día que EXISTE? (el 31 de febrero o el mes 13 no se corrigen solos: se rechazan, condición CC#3 #469 H2) */
+export function esFechaReal(f: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(f)
+  if (!m) return false
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  const dt = new Date(Date.UTC(y, mo - 1, d))
+  return mo >= 1 && mo <= 12 && dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d
+}
+
+/** ¿«HH:MM» es una hora que EXISTE? (00:00 a 23:59) */
+export function esHoraReal(h: string): boolean {
+  const m = /^(\d{2}):(\d{2})$/.exec(h)
+  return !!m && Number(m[1]) <= 23 && Number(m[2]) <= 59
+}
+
 export interface DatosDeContacto { telefonos: string[]; handles: string[]; urls: string[] }
 export function datosDeContacto(texto: string): DatosDeContacto {
   return {
