@@ -13,7 +13,7 @@ import {
   type ElementoDeCopyKit, type ElementoDeEstructura, type ImagenDeRef, type Lamina,
 } from './laminas'
 import type { ResultadoDePaso } from './motor'
-import { construirTareaLaminas, fuentesDelCiegoLaminas, INSTRUCCION_DEL_CIEGO_LAMINAS, type ContextoLaminas } from './pedidos-laminas'
+import { construirTareaLaminas, contextoDelRevisorLaminas, type ContextoLaminas } from './pedidos-laminas'
 import type { Cambios, Encargo, FuentesCompletas, Puertos } from './puertos'
 import { chequearPrompts, citasExisten, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { ROLES_DE_LAMINA } from './salida'
@@ -67,8 +67,8 @@ export function contextoL(pl: Plantilla, e: Estado): ContextoLaminas {
 // ───────────────────────── de quién es cada hallazgo
 const DONDE_DEL_PASO: Record<string, string[]> = {
   corrige_texto: ['texto', 'hashtags'], decide_texto: ['texto', 'hashtags'],
-  ajusta_laminas: ['laminas'], ajusta_laminas_2: ['laminas'], corrige_laminas: ['laminas'], decide_laminas: ['laminas'],
-  corrige_estructura: ['estructura'], decide_estructura: ['estructura'],
+  ajusta_laminas: ['laminas'], ajusta_laminas_2: ['laminas'], corrige_laminas: ['laminas'],
+  corrige_estructura: ['estructura'],
 }
 /** fichas abiertas que ESTE paso debe atender: las de su ronda (jefe: las que bloquean; externa: todas) cuyo «donde» le pertenece */
 export function fichasQueTocanL(e: Estado, paso: Paso): Ficha[] {
@@ -560,13 +560,8 @@ function resolver(paso: Paso, v: Record<string, unknown>, b: BaseL, e: Estado, p
   return { res: { costo_usd: 0, ...(artefacto ? { artefacto } : {}), resoluciones } }
 }
 
-// ───────────────────────── revisor externo (ciego) de una pieza de láminas
-export function pedidoCiegoL(pl: Plantilla, e: Estado): { fuentes: Record<string, unknown>; instruccion: string; imagenes: string[] } {
-  const c = contextoL(pl, e)
-  const fuentes = fuentesDelCiegoLaminas(c)
-  const imagenes = arr<{ url: string }>(fuentes.imagenes).map((x) => x.url)
-  return { fuentes, instruccion: INSTRUCCION_DEL_CIEGO_LAMINAS, imagenes }
-}
+// ───────────────────────── revisor externo (opinión libre) de una pieza de láminas
+export const contextoDeRevisorL = (pl: Plantilla, e: Estado) => contextoDelRevisorLaminas(contextoL(pl, e))
 
 // ───────────────────────── cierre: lo que va a la salida (`draft`) y a la bandeja
 export function resumenDeCierreL(enc: Encargo, e: Estado, pl: Plantilla): { titulo: string; tituloBandeja: string; contenido: Record<string, unknown>; vista_previa: string; expires_at: string | null; generada: boolean; red: string; version: number } | null {

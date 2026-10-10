@@ -49,7 +49,7 @@ export interface Memoria {
   artefactos: Array<{ encargo_id: string; tipo: string; version: number; sha256: string }>
   gastos: NonNullable<Cambios['gastos']>
   usos: Array<{ foto_id: string; rol: string | null }>
-  llamadas: { imagen: number; imagenReal: number; revisor: number; revisorReal: number; salida: number; bandeja: Array<Record<string, unknown>>; salidas: Array<Record<string, unknown>>; avisos: Array<{ canal: string; texto: string }>; archivos: string[]; guardadoDeArchivos: number; render: number; renderReal: number; renderPedidos: PedidoDeRender[]; revisorImagenes: string[][]; planes: string[] }
+  llamadas: { imagen: number; imagenReal: number; revisor: number; revisorReal: number; salida: number; bandeja: Array<Record<string, unknown>>; salidas: Array<Record<string, unknown>>; avisos: Array<{ canal: string; texto: string }>; archivos: string[]; guardadoDeArchivos: number; render: number; renderReal: number; renderPedidos: PedidoDeRender[]; revisorImagenes: string[][]; revisorPedidos: string[]; planes: string[] }
   config: ConfigDeOficina
   plantilla: { plantilla: Plantilla; activo: boolean } | null
   /** guion del revisor externo: texto por llamada */
@@ -62,10 +62,11 @@ export interface Memoria {
 export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOficina>; fuentes?: Partial<FuentesCompletas>; tope?: number; plantilla?: Plantilla; plan?: string | null } = {}): Memoria {
   const m: Memoria = {
     encargos: new Map(), turnos: new Map(), artefactos: [], gastos: [], usos: [],
-    llamadas: { imagen: 0, imagenReal: 0, revisor: 0, revisorReal: 0, salida: 0, bandeja: [], salidas: [], avisos: [], archivos: [], guardadoDeArchivos: 0, render: 0, renderReal: 0, renderPedidos: [], revisorImagenes: [], planes: [] },
+    llamadas: { imagen: 0, imagenReal: 0, revisor: 0, revisorReal: 0, salida: 0, bandeja: [], salidas: [], avisos: [], archivos: [], guardadoDeArchivos: 0, render: 0, renderReal: 0, renderPedidos: [], revisorImagenes: [], revisorPedidos: [], planes: [] },
     config: { estado: 'encendida', familias_activas: o.plantilla ? [o.plantilla.familia] : ['post_img'], clientes_ensayo: [], ...(o.config ?? {}) },
     plantilla: { plantilla: JSON.parse(JSON.stringify(o.plantilla ?? POST_IMG)), activo: true },
-    revisorTexto: () => ({ ok: true, texto: JSON.stringify({ fichas: [] }), costo_usd: 0.1, modelo: 'revisor-simulado' }),
+    // por omisión el revisor externo no opina nada (texto vacío): no hay opinión que el autor deba decidir
+    revisorTexto: () => ({ ok: true, texto: '', costo_usd: 0.1, modelo: 'revisor-simulado' }),
     imagenFalla: () => false,
     renderFalla: () => false,
     P: undefined as unknown as Puertos,
@@ -109,7 +110,7 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
       if (m.imagenFalla(m.llamadas.imagen)) return { ok: false, error: 'proveedor caído' }
       return p.dry_run ? { ok: true, url: `https://dry.test/${m.llamadas.imagen}.png`, generation_id: `dry-${m.llamadas.imagen}`, costo_usd: 0 } : { ok: true, url: `https://img.test/${m.llamadas.imagen}.png`, generation_id: `g-${m.llamadas.imagen}`, costo_usd: 0.014 }
     },
-    revisor: async (p) => { m.llamadas.revisor++; if (!p.dry_run) m.llamadas.revisorReal++; m.llamadas.revisorImagenes.push(p.imagenes_urls ?? (p.imagen_url ? [p.imagen_url] : [])); return m.revisorTexto(m.llamadas.revisor) },
+    revisor: async (p) => { m.llamadas.revisor++; if (!p.dry_run) m.llamadas.revisorReal++; m.llamadas.revisorImagenes.push(p.imagenes_urls); m.llamadas.revisorPedidos.push(p.texto); return m.revisorTexto(m.llamadas.revisor) },
     renderLaminas: async (p) => {
       m.llamadas.render++; if (!p.dry_run) m.llamadas.renderReal++; m.llamadas.renderPedidos.push(p)
       if (m.renderFalla(m.llamadas.render)) return { ok: false, error: 'el brazo no respondió' }

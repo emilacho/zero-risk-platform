@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { abrirEncargo, avanzar, recibirResultado } from '../orquestador'
+import { PREGUNTA_AL_REVISOR } from '../ciego'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { BUENOS_PROMPTS, CLIENTE, PARTE, PARTE_OTRO_PRODUCTO, PARTE_REAL, PIEZA_OK, FICHAS_VACIAS, crearMemoria, correr, direccionGenerada, direccionReal, observacion, REGLAS_CEVICHE, type Guion, type Memoria } from './memoria'
 
@@ -328,24 +329,44 @@ describe('rondas: jefe-marketing → el que escribe corrige → revisor ciego �
     const { pasos } = await correr(M, id, guionGenerada({ jefe: () => ({ texto: JSON.stringify({ fichas: [{ que: 'x', donde: 'texto', contra_que: 'y', gravedad: 'sugerencia', propuesta: 'z' }] }) }) }))
     expect(pasos).not.toContain('corrige')
   })
-  it('el revisor ciego recibe SOLO la lista cerrada (nada del hilo ni de las fichas del jefe)', async () => {
+  it('🔴 el revisor externo recibe la pieza + el CEREBRO del cliente (manual, plan, brief, portero) y UNA pregunta abierta: sin reglas, sin rúbrica, sin formato; y NADA del hilo ni de las fichas del jefe', async () => {
     const M = crearMemoria()
-    let visto: Record<string, unknown> = {}
-    const original = M.P.revisor
-    M.P.revisor = async (p) => { visto = p.pedido; return original(p) }
     const id = await abierto(M)
     await correr(M, id, guionGenerada({ jefe: () => ({ texto: JSON.stringify({ fichas: [{ que: 'SECRETO-DEL-JEFE', donde: 'texto', contra_que: 'y', gravedad: 'sugerencia', propuesta: 'z' }] }) }) }))
-    expect(Object.keys(visto).sort()).toEqual(['brief', 'imagen', 'instruccion', 'manual', 'material_portero', 'pieza', 'plan', 'visual_direction'])
-    expect(JSON.stringify(visto)).not.toMatch(/SECRETO-DEL-JEFE|fichas_jefe/)
+    expect(M.llamadas.revisor).toBe(1)
+    const t = M.llamadas.revisorPedidos[0]
+    expect(t.startsWith(PREGUNTA_AL_REVISOR)).toBe(true)
+    for (const seccion of ['## Manual de marca del cliente', '## Plan de trabajo del cliente', '## El brief de este entregable', '## Lo que reunió el portero', '## La pieza']) expect(t).toContain(seccion)
+    expect(t).toContain('PLAN DE TRABAJO DE PRUEBA'); expect(t).toContain('material del portero')
+    expect(t).not.toMatch(/SECRETO-DEL-JEFE|fichas_jefe|visual_direction|reglas_de_imagen/)
+    expect(t).not.toMatch(/gravedad|"bloquea"|"sugerencia"|rúbrica|esquema|JSON/i)
+    expect(M.llamadas.revisorImagenes[0]).toHaveLength(1)
   })
-  it('hallazgo del revisor ciego ⇒ «decide»: el autor lo toma o no, con razón', async () => {
+  it('la opinión LIBRE del revisor externo ⇒ «decide»: el autor decide qué toma, con razón; la opinión se guarda rotulada como opinión y no cuenta como desacuerdo', async () => {
     const M = crearMemoria()
-    M.revisorTexto = () => ({ ok: true, texto: JSON.stringify({ fichas: [{ que: 'el tono es corto', donde: 'texto', contra_que: 'manual', gravedad: 'sugerencia', propuesta: 'alargar' }] }), costo_usd: 0.12, modelo: 'sim' })
-    const id = await abierto(M)
-    const { pasos, ultima } = await correr(M, id, guionGenerada({ decide: (_n, t) => ({ texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'no_tomada', razon: 'el manual pide frases cortas' })) }) }) }))
+    const OPINION = 'A mí el tono me parece corto y la imagen fría; cambiaría el cierre. Y ojo con el precio, que no lo veo en ningún lado.'
+    M.revisorTexto = () => ({ ok: true, texto: OPINION, costo_usd: 0.12, modelo: 'sim' })
+    const id = await abierto(M, sobre({ dry_run: false }))
+    const { pasos, ultima, tareas } = await correr(M, id, guionGenerada({ decide: (_n, t) => ({ texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'no_tomada', razon: 'el manual pide frases cortas' })) }) }) }))
     expect(pasos.at(-1)).toBe('decide')
-    expect(M.encargos.get(id)!.estado_del_motor.fichas.find((f) => f.origen === 'externa')).toMatchObject({ estado: 'no_tomada', razon: 'el manual pide frases cortas' })
-    expect(ultima.cuerpo.con_desacuerdo).toBe(false) // no_tomada de una SUGERENCIA no bloquea
+    expect(tareas['decide'][0]).toContain(OPINION)
+    expect(tareas['decide'][0]).toMatch(/Opinión libre del revisor externo/)
+    const f = M.encargos.get(id)!.estado_del_motor.fichas.find((x) => x.origen === 'externa')!
+    expect(f).toMatchObject({ gravedad: 'sugerencia', estado: 'no_tomada', razon: 'el manual pide frases cortas', que: OPINION })
+    expect(ultima.cuerpo.con_desacuerdo).toBe(false)
+    // viaja con la pieza, rotulada, y con lo que el autor decidió
+    const oe = (M.llamadas.salidas[0] as { contenido: { opinion_externa: Record<string, unknown> } }).contenido.opinion_externa
+    expect(oe).toMatchObject({ texto: OPINION, modelo: 'sim', el_autor: { estado: 'no_tomada', razon: 'el manual pide frases cortas' } })
+    expect(String(oe.aviso)).toMatch(/no es un dato confirmado/)
+    expect((M.llamadas.bandeja[0].metadata as { opinion_externa: { texto: string } }).opinion_externa.texto).toBe(OPINION)
+  })
+  it('el autor puede TOMAR la opinión y cambiar la pieza (se re-chequea)', async () => {
+    const M = crearMemoria()
+    M.revisorTexto = () => ({ ok: true, texto: 'Falta decir que hay delivery.', costo_usd: 0.1, modelo: 'sim' })
+    const id = await abierto(M)
+    const { pasos } = await correr(M, id, guionGenerada({ decide: (_n, t) => ({ texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'tomada', razon: 'sí, falta' })), pieza: { pie_de_foto: 'Ceviche de Olón a $7.00 con delivery. Pídelo al 0997744288.', hashtags: ['#ceviche'] } }) }) }))
+    expect(pasos.at(-1)).toBe('decide')
+    expect(String(M.encargos.get(id)!.estado_del_motor.artefactos['pieza_post'].datos.pie_de_foto)).toMatch(/delivery/)
   })
   it('una ficha del jefe sobre la IMAGEN que bloquea no tiene dueño en esta ronda: se declara sin tomar y el encargo sale con desacuerdo', async () => {
     const M = crearMemoria()
@@ -361,12 +382,22 @@ describe('rondas: jefe-marketing → el que escribe corrige → revisor ciego �
     expect(pasos).not.toContain('decide')
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: true })
   })
-  it('el revisor externo que devuelve basura dos veces ⇒ pieza sin segunda mirada, con desacuerdo', async () => {
-    const M = crearMemoria(); M.revisorTexto = () => ({ ok: true, texto: 'no json', costo_usd: 0.1, modelo: 'sim' })
+  it('un revisor externo que no opina nada (texto vacío) ⇒ no hay opinión que decidir: no se abre «decide», no hay desacuerdo y se anota que no opinó', async () => {
+    const M = crearMemoria(); M.revisorTexto = () => ({ ok: true, texto: '   ', costo_usd: 0.1, modelo: 'sim' })
     const id = await abierto(M)
-    const { ultima } = await correr(M, id, guionGenerada())
-    expect(M.llamadas.revisor).toBe(2)
-    expect(ultima.cuerpo.con_desacuerdo).toBe(true)
+    const { ultima, pasos } = await correr(M, id, guionGenerada())
+    expect(pasos).not.toContain('decide')
+    expect(M.llamadas.revisor).toBe(1) // ya no hay reintento por formato: no hay formato
+    expect(ultima.cuerpo.con_desacuerdo).toBe(false)
+    expect(M.encargos.get(id)!.estado_del_motor.artefactos['fichas_externas'].datos).toMatchObject({ sin_opinion: true })
+  })
+  it('cualquier texto del revisor sirve: no se exige ningún campo ni forma (ni JSON, ni lista de fichas)', async () => {
+    for (const texto of ['{"fichas": []}', 'no json, solo una frase', '- punto uno\n- punto dos', 'x']) {
+      const M = crearMemoria(); M.revisorTexto = () => ({ ok: true, texto, costo_usd: 0.1, modelo: 'sim' })
+      const id = await abierto(M)
+      const { ultima } = await correr(M, id, guionGenerada({ decide: (_n, t) => ({ texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'no_tomada', razon: 'r' })) }) }) }))
+      expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+    }
   })
 })
 

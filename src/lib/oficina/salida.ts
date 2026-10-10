@@ -125,6 +125,8 @@ function conMaxImagenes(esq: Esq, n: number): Esq {
   return { ...o, props: { ...o.props, imagenes: { ...imgs, max: n, de: { ...item, props: { ...item.props, indice: ancho(item.props.indice) } } }, preferencia: { ...pref, max: n, de: ancho(pref.de) } } }
 }
 ESQUEMAS['observacion_imagenes.v1'] = conMaxImagenes(ESQUEMAS['observacion_imagen.v1'], 12)
+/** la opinión del revisor externo es TEXTO LIBRE (sin campos, sin rúbrica): lo único que se exige es que haya texto */
+ESQUEMAS['opinion_libre.v1'] = { t: 'str', min: 1, max: 20000 }
 
 /** quita el envoltorio: cercas ``` (con o sin «json») y prosa fuera de las llaves */
 export function limpiarSalida(texto: string): { ok: true; json: string; envoltorio: boolean } | { ok: false; error: string } {

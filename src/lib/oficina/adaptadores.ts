@@ -125,12 +125,12 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
     },
     async revisor(p): Promise<ResultadoRevisor> {
-      if (p.dry_run) return { ok: true, texto: JSON.stringify({ fichas: [] }), costo_usd: 0, modelo: 'simulado (dry_run)' }
+      if (p.dry_run) return { ok: true, texto: '', costo_usd: 0, modelo: 'simulado (dry_run)' }
       if (!env.openaiKey) return { ok: false, error: 'OPENAI_API_KEY no configurada' }
       if (!env.revisorModelo) return { ok: false, error: 'OFICINA_REVISOR_MODEL no configurado (el nombre del modelo del revisor no está verificado)' }
       try {
-        const contenido: Array<Record<string, unknown>> = [{ type: 'input_text', text: JSON.stringify(p.pedido) }]
-        for (const u of p.imagenes_urls ?? (p.imagen_url ? [p.imagen_url] : [])) contenido.push({ type: 'input_image', image_url: u })
+        const contenido: Array<Record<string, unknown>> = [{ type: 'input_text', text: p.texto }]
+        for (const u of p.imagenes_urls) contenido.push({ type: 'input_image', image_url: u })
         const r = await f('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${env.openaiKey}` }, body: JSON.stringify({ model: env.revisorModelo, input: [{ role: 'user', content: contenido }] }) })
         const j = (await r.json().catch(() => ({}))) as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }>; usage?: { input_tokens?: number; output_tokens?: number }; error?: { message?: string } }
         if (!r.ok) return { ok: false, error: j.error?.message ?? `HTTP ${r.status}` }

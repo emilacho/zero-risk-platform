@@ -7,15 +7,15 @@
  * reintento cierra el encargo como `fallido` (visible, nunca relleno); un fallo de Slack nunca frena nada; nadie pregunta al cliente.
  */
 import crypto from 'node:crypto'
-import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
+import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, esPostDeImagen, type BriefLeido } from './brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import { aUtc, chequeosDeEntrega, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
-import { armarPedidoCiego } from './ciego'
-import { armarPedidoL, ejecutarCodigoL, familiaDeLaminas, pedidoCiegoL, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
+import { armarPedidoAlRevisor } from './ciego'
+import { armarPedidoL, contextoDeRevisorL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
-import { construirTarea, fuentesDelCiego, INSTRUCCION_DEL_CIEGO, type ContextoDePedido } from './pedidos'
+import { construirTarea, contextoDelRevisor, type ContextoDePedido } from './pedidos'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { procesarSalida } from './salida'
@@ -365,29 +365,24 @@ async function empaquetar(P: Puertos, enc: Encargo, pl: Plantilla): Promise<Sali
 }
 
 // ───────────────────────── revisor externo
-async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso): Promise<{ res: ResultadoDePaso; gastos: Cambios['gastos'] }> {
+/**
+ * El revisor externo (GPT) da su OPINIÓN LIBRE: recibe la pieza y el cerebro del cliente que lee la sala, sin reglas, sin rúbrica y sin formato (firma de Emilio, 10-oct).
+ * Su texto se guarda como OPINIÓN: una sola ficha `externa` de gravedad «sugerencia» que lleva el texto entero; nunca bloquea ni cuenta como desacuerdo. El AUTOR (`decide`) decide qué toma.
+ * Sigue ciego al hilo y a las fichas del jefe: `armarPedidoAlRevisor` solo recibe la pieza, las imágenes y el contexto.
+ */
+async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, _paso: Paso): Promise<{ res: ResultadoDePaso; gastos: Cambios['gastos'] }> {
+  void _paso
   const e = enc.estado_del_motor
-  const lam = familiaDeLaminas(pl) ? pedidoCiegoL(pl, e) : null
-  const ciego = armarPedidoCiego(lam ? lam.fuentes : fuentesDelCiego(contexto(e)))
-  if (!ciego.ok) throw new Error(`pedido ciego inválido: ${ciego.sobran.join(', ')}`)
-  const fin = datos(e, 'imagen_final') ?? {}
-  let total = 0
-  const gastos: NonNullable<Cambios['gastos']> = []
-  for (let intento = 0; intento <= (paso.salida?.reintento_formato ?? 0); intento++) {
-    const rev = await P.revisor({ pedido: { instruccion: lam ? lam.instruccion : INSTRUCCION_DEL_CIEGO, ...ciego.pedido }, dry_run: enc.dry_run, imagen_url: lam ? null : (fin.url as string | undefined) ?? null, ...(lam ? { imagenes_urls: lam.imagenes } : {}) })
-    if (!rev.ok) {
-      return { res: { costo_usd: total, artefacto: { sin_revision: true, motivo: rev.error }, fichas: [fichaNueva('externa-no-respondio', 'externa', 'proceso', 'bloquea', `el revisor externo no respondió (${rev.error}): la pieza va sin segunda mirada`, 'revisión externa firmada', 'revisar a mano')] }, gastos }
-    }
-    total += rev.costo_usd
-    gastos.push({ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: rev.costo_usd, base: 'usage' })
-    const p = procesarSalida(rev.texto, paso.salida!.esquema, intento, paso.salida!.reintento_formato)
-    if (p.ok) {
-      const fs = (p.valor.fichas as Array<{ que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string }>).map((f, i) => fichaNueva(`ext-${e.pasos_ejecutados}-${i}`, 'externa', f.donde, f.gravedad, f.que, f.contra_que, f.propuesta))
-      return { res: { costo_usd: total, artefacto: { fichas: fs.length, modelo: rev.modelo }, fichas: fs }, gastos }
-    }
-    if (p.accion === 'falla_visible') return { res: { costo_usd: total, artefacto: { sin_revision: true, motivo: p.errores.join(' · ') }, fichas: [fichaNueva('externa-formato', 'externa', 'proceso', 'bloquea', 'la respuesta del revisor externo no cumple el formato tras el reintento: la pieza va sin segunda mirada', 'contrato de formato')] }, gastos }
+  const pedido = armarPedidoAlRevisor(familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : contextoDelRevisor(contexto(e)))
+  const rev = await P.revisor({ texto: pedido.texto, imagenes_urls: pedido.imagenes, dry_run: enc.dry_run })
+  if (!rev.ok) {
+    return { res: { costo_usd: 0, artefacto: { sin_revision: true, motivo: rev.error }, fichas: [fichaNueva('externa-no-respondio', 'externa', 'proceso', 'bloquea', `el revisor externo no respondió (${rev.error}): la pieza va sin segunda mirada`, 'revisión externa firmada', 'revisar a mano')] }, gastos: [] }
   }
-  throw new Error('revisor externo: salida de ciclo inalcanzable')
+  const gastos: NonNullable<Cambios['gastos']> = [{ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: rev.costo_usd, base: 'usage' }]
+  const opinion = rev.texto.trim()
+  if (!opinion) return { res: { costo_usd: rev.costo_usd, artefacto: { opinion: null, sin_opinion: true, modelo: rev.modelo } }, gastos }
+  const ficha = fichaNueva(`ext-opinion-${e.pasos_ejecutados}`, 'externa', 'texto', 'sugerencia', opinion, 'opinión libre del revisor externo (sin criterios ni reglas)', 'el autor decide qué toma y qué no')
+  return { res: { costo_usd: rev.costo_usd, artefacto: { opinion, modelo: rev.modelo }, fichas: [ficha] }, gastos }
 }
 
 // ───────────────────────── recibir el resultado de un agente / del portero
@@ -561,8 +556,10 @@ async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean,
   let output_id: string | null = null, hitl_id: string | null = null
   const desacuerdos = abiertasQueBloquean.map((f) => `${f.donde}: ${f.que ?? ''}`)
   if (!enc.dry_run && (pz || lam) && b) {
-    const contenido = lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }
-    const metadata = { origen: 'oficina', familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos }
+    // la opinión libre del revisor externo viaja con la pieza, rotulada como OPINIÓN (y lo que el autor decidió con ella)
+    const opinion = opinionExterna(e)
+    const contenido = { ...(lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }), ...(opinion ? { opinion_externa: opinion } : {}) }
+    const metadata = { origen: 'oficina', familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor } } : {}) }
     const s = await P.salida({ client_id: enc.client_id, titulo: lam ? lam.titulo : `Pieza ${enc.brief_id} · ${b.brief.red}`, contenido, metadata })
     if (s.ok) {
       output_id = s.output_id

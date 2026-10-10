@@ -79,7 +79,7 @@ export const POST_IMG: Plantilla = {
     {
       clave: 'revisor_externo', tipo: 'externo', quien: 'GPT', condicion: siempre, ronda: 2,
       entrada: ['pieza_post', 'imagen_final', 'visual_direction', 'material_portero'], salida_artefacto: 'fichas_externas', tope_usd: 0.5,
-      salida: { esquema: 'fichas.v1', reintento_formato: 1 },
+      salida: { esquema: 'opinion_libre.v1', reintento_formato: 0 },
     },
     {
       clave: 'decide', tipo: 'agente', quien: QUIEN_DINAMICO, condicion: fichasExterna, ronda: 2,

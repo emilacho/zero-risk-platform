@@ -12,8 +12,8 @@ const generada: Condicion = { tipo: 'si_artefacto', artefacto: 'visual_direction
 const requiereMirar: Condicion = { tipo: 'si_artefacto', artefacto: 'visual_direction', campo: 'requiere_mirar', igual: true }
 const jefeTexto: Condicion = { tipo: 'si_fichas_abiertas', origen: 'jefe', donde: ['texto', 'hashtags'], gravedad: 'bloquea' }
 const jefeLaminas: Condicion = { tipo: 'si_fichas_abiertas', origen: 'jefe', donde: 'laminas', gravedad: 'bloquea' }
-const externaTexto: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: ['texto', 'hashtags'] }
-const externaLaminas: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'laminas' }
+// la opinión libre del revisor externo llega como UNA ficha `externa` en «texto»: el autor decide qué toma (y si cambia el texto, el diseñador vuelve a recortar)
+const externaTexto: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'texto' }
 const cambioCopia: Condicion = { tipo: 'si_cambio', artefacto: 'copy_carrusel' }
 const cambioPieza: Condicion = { tipo: 'si_cambio', artefacto: ['copy_carrusel', 'laminas'] }
 const cambioArmado: Condicion = { tipo: 'si_cambio', artefacto: 'laminas_armadas' }
@@ -111,7 +111,7 @@ export const CARRUSEL_IG_V1: Plantilla = {
     {
       clave: 'revisor_externo', tipo: 'externo', quien: 'GPT', condicion: siempre, ronda: 2,
       entrada: ['copy_carrusel', 'laminas', 'render', 'visual_direction', 'material_portero'], salida_artefacto: 'fichas_externas', tope_usd: 0.6,
-      salida: { esquema: 'fichas.v1', reintento_formato: 1 },
+      salida: { esquema: 'opinion_libre.v1', reintento_formato: 0 },
     },
     {
       clave: 'decide_texto', tipo: 'agente', quien: 'content-creator', condicion: externaTexto, ronda: 2,
@@ -120,11 +120,6 @@ export const CARRUSEL_IG_V1: Plantilla = {
     },
     {
       clave: 'ajusta_laminas_2', tipo: 'agente', quien: 'carousel-designer', condicion: cambioCopia, ronda: 2,
-      entrada: ['fichas_externas', 'copy_carrusel', 'laminas'], salida_artefacto: 'laminas', tope_usd: 0.5,
-      salida: { esquema: 'resolucion_laminas.v1', reintento_formato: 1 }, valida: ['texto_laminas_en_copy', 'contrato_de_lamina'],
-    },
-    {
-      clave: 'decide_laminas', tipo: 'agente', quien: 'carousel-designer', condicion: externaLaminas, ronda: 2,
       entrada: ['fichas_externas', 'copy_carrusel', 'laminas'], salida_artefacto: 'laminas', tope_usd: 0.5,
       salida: { esquema: 'resolucion_laminas.v1', reintento_formato: 1 }, valida: ['texto_laminas_en_copy', 'contrato_de_lamina'],
     },

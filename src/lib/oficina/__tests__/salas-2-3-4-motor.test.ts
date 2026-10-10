@@ -104,13 +104,13 @@ describe('el motor recorre el carrusel sin conocerlo', () => {
     const sug = simular(CARRUSEL_IG_V1, { revision_jefe: { costo_usd: 0, artefacto: {}, fichas: [f({ gravedad: 'sugerencia' })] } })
     expect(sug.claves.some((c) => c.startsWith('corrige'))).toBe(false)
     const ext = simular(CARRUSEL_IG_V1, {
-      revisor_externo: { costo_usd: 0, artefacto: {}, fichas: [f({ id: 'x1', origen: 'externa', donde: 'hashtags', gravedad: 'sugerencia' })] },
+      revisor_externo: { costo_usd: 0, artefacto: {}, fichas: [f({ id: 'x1', origen: 'externa', donde: 'texto', gravedad: 'sugerencia' })] },
       decide_texto: { costo_usd: 0, artefacto: { texto_base: 'y' }, resoluciones: [{ id: 'x1', estado: 'tomada', razon: 'ok' }] },
     })
     expect(ext.claves.slice(ext.claves.indexOf('revisor_externo'), ext.claves.indexOf('entrega'))).toEqual(['revisor_externo', 'decide_texto', 'ajusta_laminas_2', 'armar_3', 'render_3', 'chequeos_3'])
   })
   it('no hay una tercera ronda: aunque queden fichas abiertas, termina', () => {
-    const { final, claves } = simular(CARRUSEL_IG_V1, { revisor_externo: { costo_usd: 0, artefacto: {}, fichas: [f({ id: 'q', origen: 'externa', donde: 'laminas' })] }, decide_laminas: { costo_usd: 0, artefacto: { laminas: [] }, resoluciones: [{ id: 'q', estado: 'no_tomada', razon: 'no' }] } })
+    const { final, claves } = simular(CARRUSEL_IG_V1, { revisor_externo: { costo_usd: 0, artefacto: {}, fichas: [f({ id: 'q', origen: 'externa', donde: 'texto' })] }, decide_texto: { costo_usd: 0, artefacto: { texto_base: 'z' }, resoluciones: [{ id: 'q', estado: 'no_tomada', razon: 'no' }] } })
     expect(final.accion).toBe('fin'); expect(claves.filter((c) => c === 'revisor_externo')).toHaveLength(1)
   })
 })

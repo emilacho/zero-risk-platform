@@ -4,7 +4,7 @@ import { validarSobre, decidirPuerta, claveDeIdempotencia, CONFIG_APAGADA, TARGE
 import type { ConfigDeOficina } from '../sobre'
 import { nombreDeArchivo, textoParaCopiar, leerMedidas, manifiesto, chequeosDeEntrega, aUtc, filasQueVencen } from '../entrega'
 import type { FilaDeFormato } from '../entrega'
-import { armarPedidoCiego, destinoPermitidoParaOficina } from '../ciego'
+import { armarPedidoAlRevisor, destinoPermitidoParaOficina, PREGUNTA_AL_REVISOR } from '../ciego'
 
 const PARTE = '426af72d-12c0-471c-9fda-2a2978db5175'
 const base = { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: true }
@@ -140,11 +140,20 @@ describe('hora local → UTC y vencimiento de la bandeja', () => {
 })
 
 describe('el revisor ciego y los recados', () => {
-  it('el pedido se arma SOLO con la lista cerrada; una clave del hilo o de las fichas del jefe lo rechaza', () => {
-    expect(armarPedidoCiego({ pieza: 'p', imagen: 'i', manual: 'm', brief: 'b' })).toMatchObject({ ok: true })
-    expect(armarPedidoCiego({ pieza: 'p', hilo: '...' })).toEqual({ ok: false, sobran: ['hilo'] })
-    expect(armarPedidoCiego({ pieza: 'p', fichas_jefe: [] })).toEqual({ ok: false, sobran: ['fichas_jefe'] })
-    expect(armarPedidoCiego({ pieza: 'p', respuestas_del_autor: [] })).toEqual({ ok: false, sobran: ['respuestas_del_autor'] })
+  it('el pedido al revisor es UNA pregunta abierta + el contexto del cliente + la pieza: sin reglas, sin rúbrica, sin lista de criterios ni formato de salida', () => {
+    const p = armarPedidoAlRevisor({ pieza: 'Pie de foto: hola', imagenes: ['https://x/1.png', ''], contexto: [{ titulo: 'Manual de marca del cliente', texto: 'Voz directa' }, { titulo: 'Plan de trabajo del cliente', texto: '  ' }, { titulo: 'El brief de este entregable', texto: 'Brief X' }] })
+    expect(p.texto.startsWith(PREGUNTA_AL_REVISOR)).toBe(true)
+    expect(p.texto).toContain('## Manual de marca del cliente\nVoz directa')
+    expect(p.texto).toContain('## El brief de este entregable\nBrief X')
+    expect(p.texto).toContain('## La pieza\nPie de foto: hola')
+    expect(p.texto).not.toContain('Plan de trabajo') // un contexto vacío se omite: no se inventa
+    expect(p.imagenes).toEqual(['https://x/1.png'])
+    expect(p.texto).not.toMatch(/gravedad|bloquea|sugerencia|rúbrica|JSON|"fichas"|debes|obligatorio/i)
+  })
+  it('el revisor es ciego POR CONSTRUCCIÓN: la función solo recibe pieza, imágenes y contexto (no el estado, no el hilo, no las fichas)', () => {
+    expect(armarPedidoAlRevisor.length).toBe(1)
+    const p = armarPedidoAlRevisor({ pieza: 'p', contexto: [] })
+    expect(p.texto).toBe(`${PREGUNTA_AL_REVISOR}\n\n## La pieza\np`); expect(p.imagenes).toEqual([])
   })
   it('un recado a una PERSONA (`dueno`) se rechaza: el único humano es Emilio', () => {
     expect(destinoPermitidoParaOficina({ destino: 'dueno', tipo: 'persona', estado_del_brazo: 'opera' })).toMatchObject({ ok: false })

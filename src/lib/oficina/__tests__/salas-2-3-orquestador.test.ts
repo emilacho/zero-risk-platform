@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { abrirEncargo, avanzar } from '../orquestador'
 import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
 import { KIT_HISTORIAS } from '../plantillas/kit-historias'
+import { PREGUNTA_AL_REVISOR } from '../ciego'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import type { Plantilla } from '../tipos'
 import { CLIENTE, PARTE, FICHAS_VACIAS, FUENTES, correr, crearMemoria, type Guion, type Memoria } from './memoria'
@@ -201,10 +202,15 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     expect(pasos).toContain('corrige_laminas'); expect(pasos).not.toContain('corrige_texto')
     expect(M.llamadas.render).toBe(2)
   })
-  it('el revisor ciego recibe SOLO la lista cerrada: la pieza y hasta 4 láminas dibujadas; nada del hilo ni de las fichas del jefe', async () => {
+  it('🔴 el revisor externo recibe la pieza (texto + hasta 4 láminas dibujadas) y el cerebro del cliente, con UNA pregunta abierta; sin reglas y sin nada del jefe ni del diseñador', async () => {
     const { M, id } = await abiertoC()
-    await correr(M, id, guionCarrusel({ revision_jefe: () => ({ texto: j({ fichas: [{ que: 'detalle menor', donde: 'texto', contra_que: 'brief', gravedad: 'sugerencia', propuesta: 'x' }] }) }) }))
+    await correr(M, id, guionCarrusel({ revision_jefe: () => ({ texto: j({ fichas: [{ que: 'SECRETO-DEL-JEFE', donde: 'texto', contra_que: 'brief', gravedad: 'sugerencia', propuesta: 'x' }] }) }) }))
     expect(M.llamadas.revisor).toBe(1)
+    const t = M.llamadas.revisorPedidos[0]
+    expect(t.startsWith(PREGUNTA_AL_REVISOR)).toBe(true)
+    for (const s of ['## Manual de marca del cliente', '## Plan de trabajo del cliente', '## El brief de este entregable', '## Lo que reunió el portero', '## La pieza']) expect(t).toContain(s)
+    expect(t).toContain('Texto base:'); expect(t).toContain('Láminas:')
+    expect(t).not.toMatch(/SECRETO-DEL-JEFE|visual_direction|reglas_de_imagen|gravedad|rúbrica|JSON/i)
     expect(M.llamadas.revisorImagenes[0].length).toBeGreaterThanOrEqual(3); expect(M.llamadas.revisorImagenes[0].length).toBeLessThanOrEqual(4)
     expect(M.llamadas.revisorImagenes[0].every((u) => /\.test\//.test(u))).toBe(true)
   })
@@ -351,7 +357,7 @@ describe('SALA 2 · más reglas del orquestador de láminas', () => {
   })
   it('un hallazgo del revisor externo sobre el texto (ronda 2): decide el autor, el diseñador vuelve a recortar y se dibuja otra vez', async () => {
     const { M, id } = await abiertoC()
-    M.revisorTexto = () => ({ ok: true, texto: j({ fichas: [{ que: 'el cierre es flojo', donde: 'texto', contra_que: 'brief', gravedad: 'sugerencia', propuesta: 'más claro' }] }), costo_usd: 0.1, modelo: 'r' })
+    M.revisorTexto = () => ({ ok: true, texto: 'Yo cambiaría el cierre: lo siento flojo, y la tercera idea se repite con la primera.', costo_usd: 0.1, modelo: 'r' })
     const nueva = { ...COPIA, texto_base: TEXTO_BASE.replace('Lo preparamos al momento', 'Lo hacemos al momento') }
     const lam = LAMINAS.map((l, i) => (i === 3 ? { ...l, headline: 'Lo hacemos al momento' } : l))
     const { pasos } = await correr(M, id, guionCarrusel({
@@ -462,6 +468,18 @@ describe('SALA 3 · kit de historias y estados · punta a punta con modelo simul
     const fondos = M.llamadas.renderPedidos[0].slides.map((s) => s.background_image_url)
     expect(fondos[0]).toMatch(/img\.test/); expect(fondos[1]).toBeNull(); expect(fondos[2]).toBeNull()
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' })
+  })
+  it('la opinión libre del revisor sobre el kit llega al autor del texto; el narrador no es árbitro de ella', async () => {
+    const { M, id } = await abiertoK()
+    M.revisorTexto = () => ({ ok: true, texto: 'La semana se siente repetitiva: tres historias dicen casi lo mismo.', costo_usd: 0.1, modelo: 'r' })
+    const { pasos, tareas, ultima } = await correr(M, id, guionKit({
+      decide_texto: (_n, t) => ({ texto: j({ respuestas: [{ id: /\[(ext-[^\]]+)\]/.exec(t)![1], estado: 'no_tomada', razon: 'cada historia tiene su pilar' }] }) }),
+    }))
+    expect(pasos.slice(-1)).toEqual(['decide_texto'])
+    expect(pasos).not.toContain('decide_estructura')
+    expect(tareas['decide_texto'][0]).toMatch(/Opinión libre del revisor externo[\s\S]*repetitiva/)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+    expect(M.llamadas.revisorPedidos[0]).toMatch(/## La pieza\ne01/)
   })
   it('un elemento del kit que no se entiende cierra el encargo FALLIDO, visible, sin adivinar', async () => {
     const roto = BRIEF_KIT.replace('| servicio', '| servicio\n  - mañana temprano | video | tema | pilar')

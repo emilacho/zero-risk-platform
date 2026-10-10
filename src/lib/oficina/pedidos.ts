@@ -3,6 +3,7 @@
  * Agnóstico: ninguna frase nombra a un cliente. El formato de la respuesta lo hace cumplir `salida.ts`; aquí solo se explica el contrato en palabras.
  */
 import type { BriefLeido } from './brief'
+import type { ContextoDelRevisor } from './ciego'
 import type { Estado, Ficha } from './tipos'
 import type { FuentesCompletas } from './puertos'
 import type { ReglasDeImagen } from './reglas-de-imagen'
@@ -85,7 +86,7 @@ export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fic
     case 'corrige':
     case 'decide': {
       esquema = 'resolucion.v1'
-      task = `${base}\n## La pieza actual\n${pieza(c.art('pieza_post'))}\n\n## Hallazgos que te tocan (${clave === 'corrige' ? 'del jefe de marketing' : 'del revisor externo ciego'})\n${seccionDeFichas(extra?.fichas ?? [])}\n\n## Tu trabajo\nResponde ítem por ítem: «tomada» (y corriges la pieza) o «no_tomada» con una línea de razón. Si cambias algo, devuelve la pieza completa nueva en \`pieza\`. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
+      task = `${base}\n## La pieza actual\n${pieza(c.art('pieza_post'))}\n\n## ${clave === 'corrige' ? 'Hallazgos que te tocan (del jefe de marketing)' : 'Opinión libre del revisor externo (no es una lista de errores ni una orden: es una mirada distinta a la tuya)'}\n${seccionDeFichas(extra?.fichas ?? [])}\n\n## Tu trabajo\nResponde ítem por ítem: «tomada» (y corriges la pieza) o «no_tomada» con una línea de razón. Tú decides qué tomas y qué no. Si cambias algo, devuelve la pieza completa nueva en \`pieza\`. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
       return finalizar(task)
     }
     default:
@@ -93,19 +94,18 @@ export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fic
   }
 }
 
-/** el pedido al revisor ciego: SOLO la lista cerrada de artefactos (ver ciego.ts); sin hilo, sin fichas del jefe, sin respuestas del autor */
-export function fuentesDelCiego(c: ContextoDePedido): Record<string, unknown> {
+/** lo que el revisor externo recibe de la sala 1: la pieza, su imagen y el cerebro del cliente que lee la sala (manual, plan, brief, lo del portero). Nada del hilo ni de las fichas: esta función no los recibe. */
+export function contextoDelRevisor(c: ContextoDePedido): { pieza: string; imagenes: string[]; contexto: ContextoDelRevisor[] } {
   const fin = c.art('imagen_final') ?? {}
   return {
     pieza: pieza(c.art('pieza_post')),
-    ...(fin.url ? { imagen: { url: fin.url, origen: fin.origen, nota: fin.nota ?? null } } : {}),
-    visual_direction: String((c.art('visual_direction') ?? {}).resumen ?? ''),
-    manual: recortaManual(c.fuentes.manual_texto),
-    ...(c.fuentes.plan_texto ? { plan: recortaManual(c.fuentes.plan_texto) } : {}),
-    brief: c.brief.texto,
-    material_portero: String(c.art('material_portero')?.texto ?? ''),
+    imagenes: fin.url ? [String(fin.url)] : [],
+    contexto: [
+      { titulo: 'Manual de marca del cliente', texto: recortaManual(c.fuentes.manual_texto) },
+      { titulo: 'Plan de trabajo del cliente', texto: c.fuentes.plan_texto ? recortaManual(c.fuentes.plan_texto) : '' },
+      { titulo: 'El brief de este entregable', texto: c.brief.texto },
+      { titulo: 'Lo que reunió el portero', texto: String(c.art('material_portero')?.texto ?? '') },
+    ],
   }
 }
 const recortaManual = (t: string) => recorta(t, 12000)
-
-export const INSTRUCCION_DEL_CIEGO = `Eres un revisor externo e independiente. Recibes una pieza de marketing (pie de foto, hashtags e imagen) y el contexto del cliente. No ves ninguna conversación previa. Aporta PERSPECTIVA: qué cambiarías y por qué, contra el manual, el plan y el brief. Responde solo con este JSON: ${CONTRATOS_EN_TEXTO['fichas.v1']}`

@@ -113,7 +113,7 @@ export interface Puertos {
   /** genera UNA imagen (1024×1024, calidad explícita); en dry_run NO llama al proveedor */
   imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean }): Promise<ResultadoImagen>
   /** el revisor ciego (otro proveedor); en dry_run NO llama al proveedor */
-  revisor(p: { pedido: Record<string, unknown>; dry_run: boolean; imagen_url?: string | null; imagenes_urls?: string[] }): Promise<ResultadoRevisor>
+  revisor(p: { texto: string; imagenes_urls: string[]; dry_run: boolean }): Promise<ResultadoRevisor>
   /** el brazo que dibuja láminas (PNG); en dry_run NO llama al brazo ni escribe en el bucket */
   renderLaminas(p: PedidoDeRender): Promise<ResultadoRender>
   descargar(url: string): Promise<Buffer | null>

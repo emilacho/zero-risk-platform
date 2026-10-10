@@ -17,7 +17,7 @@ export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'de
 /** esquemas de salida registrados (ver salida.ts) */
 export const ESQUEMAS_REGISTRADOS = [
   'visual_direction.v1', 'prompts.v1', 'observacion_imagen.v1', 'pieza_post.v1', 'fichas.v1', 'resolucion.v1',
-  'direccion_imagenes.v1', 'prompts_por_ref.v1', 'observacion_imagenes.v1', 'copy_base.v1', 'laminas.v1', 'estructura.v1', 'copy_kit.v1',
+  'direccion_imagenes.v1', 'prompts_por_ref.v1', 'observacion_imagenes.v1', 'opinion_libre.v1', 'copy_base.v1', 'laminas.v1', 'estructura.v1', 'copy_kit.v1',
   'resolucion_copy_base.v1', 'resolucion_laminas.v1', 'resolucion_copy_kit.v1', 'resolucion_estructura.v1',
 ] as const
 /** quién puede hacer cumplir una regla de indicación */

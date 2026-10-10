@@ -4,6 +4,7 @@
  */
 import type { ElementoDelKit } from './brief'
 import { AVISO_DEL_CEREBRO, describirReglas, type ContextoDePedido } from './pedidos'
+import type { ContextoDelRevisor } from './ciego'
 import { ROLES_DE_LAMINA, LIMITES_DE_LAMINA } from './salida'
 import type { Ficha, Limites } from './tipos'
 
@@ -120,7 +121,7 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
     case 'corrige_texto':
     case 'decide_texto': {
       esquema = kit ? 'resolucion_copy_kit.v1' : 'resolucion_copy_base.v1'
-      return fin(`${base}\n## La pieza actual\n${pieza}\n\n## Hallazgos que te tocan (${clave === 'corrige_texto' ? 'del jefe de marketing' : 'del revisor externo ciego'})\n${fichas}\n\n## Tu trabajo\nResponde ítem por ítem: «tomada» (y corriges el texto) o «no_tomada» con una línea de razón. ${kit ? 'Si cambias algo, devuelve en `elementos` solo los elementos que cambian (por su ref), completos.' : 'Si cambias algo, devuelve la `copia` completa nueva (el diseñador volverá a recortar las láminas de tu texto).'} No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
+      return fin(`${base}\n## La pieza actual\n${pieza}\n\n## ${clave === 'corrige_texto' ? 'Hallazgos que te tocan (del jefe de marketing)' : 'Opinión libre del revisor externo (no es una lista de errores ni una orden: es una mirada distinta a la tuya)'}\n${fichas}\n\n## Tu trabajo\nResponde ítem por ítem: «tomada» (y corriges el texto) o «no_tomada» con una línea de razón. Tú decides qué tomas y qué no. ${kit ? 'Si cambias algo, devuelve en `elementos` solo los elementos que cambian (por su ref), completos.' : 'Si cambias algo, devuelve la `copia` completa nueva (el diseñador volverá a recortar las láminas de tu texto).'} No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
     }
     case 'ajusta_laminas':
     case 'ajusta_laminas_2':
@@ -139,16 +140,16 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
   }
 }
 
-/** el pedido al revisor ciego de una pieza de láminas: SOLO la lista cerrada (ver ciego.ts) */
-export function fuentesDelCiegoLaminas(c: ContextoLaminas): Record<string, unknown> {
+/** lo que el revisor externo recibe de una pieza de láminas: la pieza, hasta 4 láminas dibujadas y el cerebro del cliente que lee la sala. Nada del hilo ni de las fichas: esta función no los recibe. */
+export function contextoDelRevisorLaminas(c: ContextoLaminas): { pieza: string; imagenes: string[]; contexto: ContextoDelRevisor[] } {
   return {
     pieza: describirPieza(c),
-    ...(c.png.length ? { imagenes: laminasDeMuestra(c.png, 4).map((url) => ({ url })) } : {}),
-    visual_direction: s((c.art('visual_direction') ?? {}).resumen),
-    manual: recorta(c.fuentes.manual_texto, 12000),
-    ...(c.fuentes.plan_texto ? { plan: recorta(c.fuentes.plan_texto, 12000) } : {}),
-    brief: c.brief.texto,
-    material_portero: s(c.art('material_portero')?.texto),
+    imagenes: laminasDeMuestra(c.png, 4),
+    contexto: [
+      { titulo: 'Manual de marca del cliente', texto: recorta(c.fuentes.manual_texto, 12000) },
+      { titulo: 'Plan de trabajo del cliente', texto: c.fuentes.plan_texto ? recorta(c.fuentes.plan_texto, 12000) : '' },
+      { titulo: 'El brief de este entregable', texto: c.brief.texto },
+      { titulo: 'Lo que reunió el portero', texto: s(c.art('material_portero')?.texto) },
+    ],
   }
 }
-export const INSTRUCCION_DEL_CIEGO_LAMINAS = `Eres un revisor externo e independiente. Recibes una pieza de marketing de varias láminas (texto, láminas dibujadas) y el contexto del cliente. No ves ninguna conversación previa. Aporta PERSPECTIVA: qué cambiarías y por qué, contra el manual, el plan y el brief. Responde solo con este JSON: {"fichas": [{"que": "…", "donde": "texto|hashtags|laminas|estructura|imagen", "contra_que": "…", "gravedad": "bloquea|sugerencia", "propuesta": "…"}]}`
