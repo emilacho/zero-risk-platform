@@ -8,7 +8,7 @@ import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { DbFalsa } from './dbfalsa'
 import { CLIENTE, FICHAS_VACIAS, FOTOS, PARTE, correr, png, type Guion, type Memoria } from './memoria'
 
-const ENV: Entorno = { baseUrl: 'https://app.test', internalKey: 'k-interna', openaiKey: 'sk-test', revisorModelo: 'modelo-revisor', slackToken: 'xoxb-test' }
+const ENV: Entorno = { baseUrl: 'https://app.test', internalKey: 'k-interna', openaiKey: 'sk-test', revisorModelo: 'modelo-revisor', slackToken: 'xoxb-test', bucket: 'oficina-test' }
 const j = (x: unknown) => JSON.stringify(x)
 
 const BRIEF = `### BRF-0100 · Instagram · carrusel
@@ -115,6 +115,34 @@ describe('el brazo que dibuja láminas (puerto renderLaminas)', () => {
   })
 })
 
+describe('frontera: la oficina NO escribe en el bucket de la web del cliente', () => {
+  const sinBucket: Entorno = { ...ENV, bucket: undefined }
+  it('sin OFICINA_BUCKET la entrega no se guarda (falla visible) y nunca cae en «client-websites»', async () => {
+    const db = sembrar()
+    const r = await crearPuertos(db, sinBucket, fetchFalso().f).guardarArchivos('oficina/c/e', [{ nombre: 'a.png', bytes: png(10, 10), tipo: 'image/png' }])
+    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/OFICINA_BUCKET/) })
+    expect(Object.keys(db.archivos)).toEqual([])
+  })
+  it('con OFICINA_BUCKET, guarda en ESE bucket', async () => {
+    const db = sembrar()
+    const r = await crearPuertos(db, { ...ENV, bucket: 'oficina-creativos' }, fetchFalso().f).guardarArchivos('oficina/c/e', [{ nombre: 'a.png', bytes: png(10, 10), tipo: 'image/png' }])
+    expect(r.ok).toBe(true); expect([...db.bucketsUsados]).toEqual(['oficina-creativos'])
+  })
+  it('el brazo de láminas tampoco: sin bucket no se llama (antes de gastar), y en dry_run no hace falta', async () => {
+    const { f, llamadas } = fetchFalso()
+    const p = { client_id: CLIENTE, encargo_id: 'e', plataforma: 'instagram-feed', marca: { colors: { primary: '#112233' }, fonts: { family: 'Inter' } }, slug: 's', slides: [{ headline: 'A' }], subcarpeta: 'oficina/e' }
+    expect(await crearPuertos(sembrar(), sinBucket, f).renderLaminas({ ...p, dry_run: false } as never)).toMatchObject({ ok: false, error: expect.stringMatching(/OFICINA_BUCKET/) })
+    expect(llamadas).toEqual([])
+    expect((await crearPuertos(sembrar(), sinBucket, f).renderLaminas({ ...p, dry_run: true } as never)).ok).toBe(true)
+  })
+  it('la ruta lee OFICINA_BUCKET del entorno y no tiene ningún «client-websites» escrito', () => {
+    const fs = require('node:fs') as typeof import('node:fs'), path = require('node:path') as typeof import('node:path')
+    const dir = path.join(process.cwd(), 'src/lib/oficina')
+    expect(fs.readFileSync(path.join(dir, 'ruta.ts'), 'utf8')).toMatch(/process\.env\.OFICINA_BUCKET/)
+    for (const a of ['adaptadores.ts', 'ruta.ts', 'orquestador-laminas.ts', 'orquestador.ts']) expect(fs.readFileSync(path.join(dir, a), 'utf8').replace(/\/\/.*$/gm, '')).not.toMatch(/['"`]client-websites['"`]/)
+  })
+})
+
 describe('el revisor ciego con varias imágenes', () => {
   it('manda TODAS las imágenes como entrada de imagen, en el mismo mensaje', async () => {
     const { f, llamadas } = fetchFalso()
@@ -170,6 +198,7 @@ describe('INTEGRACIÓN · carrusel con almacén real (base falsa) + adaptadores,
     expect(pieza).toMatchObject({ status: 'draft' }); expect(String(pieza.content)).toMatch(/Cada mañana/)
     const nombres = Object.keys(db.archivos).map((p) => p.split('/').pop())
     expect(nombres.filter((n) => n!.endsWith('.png'))).toEqual(['sin-fecha_sin-hora_instagram_carrusel_BRF-0100_01-de-05.png', 'sin-fecha_sin-hora_instagram_carrusel_BRF-0100_02-de-05.png', 'sin-fecha_sin-hora_instagram_carrusel_BRF-0100_03-de-05.png', 'sin-fecha_sin-hora_instagram_carrusel_BRF-0100_04-de-05.png', 'sin-fecha_sin-hora_instagram_carrusel_BRF-0100_05-de-05.png'])
+    expect([...db.bucketsUsados]).toEqual(['oficina-test']) // jamás el bucket de la web del cliente
     const turnos = db.tablas['oficina_turnos']
     expect(turnos.every((t) => t.estado === 'hecho')).toBe(true)
     expect(JSON.stringify(db.tablas['oficina_artefactos'].map((x) => x.tipo))).toMatch(/render/)

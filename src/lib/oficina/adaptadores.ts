@@ -139,6 +139,8 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       const medidas = MEDIDAS_DE_PLATAFORMA[p.plataforma]
       if (!medidas) return { ok: false, error: `plataforma «${p.plataforma}» desconocida` }
       if (p.dry_run) return { ok: true, urls: p.slides.map((_, i) => `${PREFIJO_DRY}lamina-${i + 1}-${medidas.ancho}x${medidas.alto}.png`), ancho: medidas.ancho, alto: medidas.alto, fonts_usadas: [p.marca.fonts.family], fonts_faltantes: [], timings_ms: [] }
+      // el brazo guarda las láminas en el bucket de la oficina (OFICINA_BUCKET en su propio entorno); aquí se falla antes de gastar si no está configurado
+      if (!(env.bucket ?? '').trim()) return { ok: false, error: 'OFICINA_BUCKET no configurado: las láminas no se guardan en el bucket de la web del cliente' }
       try {
         const r = await f(`${env.baseUrl}/api/carousel/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify({ client_slug: p.slug, platform: p.plataforma, brand: p.marca, slides: p.slides, subcarpeta: p.subcarpeta }) })
         const j = (await r.json().catch(() => ({}))) as Fila
@@ -154,7 +156,9 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       } catch { return null }
     },
     async guardarArchivos(ruta, archivos) {
-      const bucket = env.bucket ?? 'client-websites'
+      // frontera: el bucket `client-websites` es de la WEB del cliente (dueño: CC#4). La oficina escribe SOLO en el suyo; sin `OFICINA_BUCKET` no escribe (falla visible)
+      const bucket = (env.bucket ?? '').trim()
+      if (!bucket) return { ok: false, error: 'OFICINA_BUCKET no configurado: la oficina no escribe en el bucket de la web del cliente' }
       const urls: Record<string, string> = {}
       const storage = (db as unknown as { storage: { from(b: string): { upload(p: string, b: Buffer, o: Record<string, unknown>): Promise<{ error: { message: string } | null }>; getPublicUrl(p: string): { data: { publicUrl: string } } } } }).storage
       for (const a of archivos) {

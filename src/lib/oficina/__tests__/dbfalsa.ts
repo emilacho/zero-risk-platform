@@ -21,11 +21,14 @@ export class DbFalsa {
   fallar: Record<string, string> = {}
   archivos: Record<string, { bytes: Buffer; contentType: string }> = {}
   storageFalla: string | null = null
+  /** en qué buckets se escribió (para probar la frontera: la oficina no escribe en el bucket de la web del cliente) */
+  bucketsUsados = new Set<string>()
   semilla(t: string, filas: Fila[]) { this.tablas[t] = [...(this.tablas[t] ?? []), ...filas.map((f) => ({ ...f }))]; return this }
   from(t: string) { return new Consulta(this, t) }
   storage = {
-    from: (_b: string) => ({
+    from: (bucket: string) => ({
       upload: async (p: string, b: Buffer, o: { contentType?: string }) => {
+        this.bucketsUsados.add(bucket)
         if (this.storageFalla) return { error: { message: this.storageFalla } }
         if (this.archivos[p]) return { error: { message: 'ya existe' } }
         this.archivos[p] = { bytes: b, contentType: o.contentType ?? '' }
