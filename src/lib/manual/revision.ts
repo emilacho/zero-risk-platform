@@ -52,7 +52,7 @@ export function borradorDeContentText(contentText: unknown): Record<string, unkn
 }
 
 /** lee TODO lo que S0/S1/S3 necesitan. Un error de lectura se devuelve (nunca se lee como «vacío»). */
-export async function leerInsumos(db: Db, clientId: string): Promise<ResultadoDeInsumos> {
+export async function leerInsumos(db: Db, clientId: string, opciones: { sinManualPrevio?: boolean } = {}): Promise<ResultadoDeInsumos> {
   const falla = (que: string, m: string): ResultadoDeInsumos => ({ ok: false, status: 502, error: 'lectura_fallida', detalle: `${que}: ${m}` })
   const cl = await db.from('clients').select('*').eq('id', clientId).limit(1)
   if (cl.error) return falla('clients', cl.error.message)
@@ -62,8 +62,9 @@ export async function leerInsumos(db: Db, clientId: string): Promise<ResultadoDe
   const mb = await db.from('client_brand_books').select('id, version, content_text, created_at').eq('client_id', clientId).order('version', { ascending: false }).limit(1)
   if (mb.error) return falla('client_brand_books', mb.error.message)
   const vigente = lista(mb.data)[0]
-  if (!vigente) return { ok: false, status: 409, error: 'sin_manual', detalle: 'el cliente no tiene manual que revisar (la revisión corrige el que existe; un manual de cero lo escribe el alta)' }
-  const manual = borradorDeContentText(vigente.content_text)
+  // r62 · el alta chequea el manual ANTES de guardarlo: aún no hay versión vigente (solo con esta opción; sin ella, igual que siempre)
+  if (!vigente && !opciones.sinManualPrevio) return { ok: false, status: 409, error: 'sin_manual', detalle: 'el cliente no tiene manual que revisar (la revisión corrige el que existe; un manual de cero lo escribe el alta)' }
+  const manual = vigente ? borradorDeContentText(vigente.content_text) : {}
   if (!manual) return { ok: false, status: 409, error: 'manual_ilegible', detalle: 'el manual vigente no trae `brand_book_draft` legible; no se adivina' }
 
   const rr = await db.from('apify_raw').select('id, apify_function, params, respuesta, ensayo').eq('client_id', clientId).eq('ensayo', false).order('created_at', { ascending: true }).limit(TOPE_DE_FILAS_DE_RASPADO)
@@ -82,13 +83,13 @@ export async function leerInsumos(db: Db, clientId: string): Promise<ResultadoDe
   const sintesis: Fuente[] = icps.map((d, i) => fuenteDeSintesis(`icp${i}`, 'documento de perfil de cliente ideal', JSON.stringify({ segmento: d.audience_segment, criterios: d.decision_criteria, mensajes: d.key_messages_for_segment, objeciones: d.objections })))
   const dudas = detectarDudas(icps.map((d, i) => ({ origen: `perfil de cliente ideal ${i + 1} · objeciones`, texto: texto(d.objections) })))
 
-  const version = Number(vigente.version) || null
+  const version = Number(vigente?.version) || null
   return {
     ok: true,
     insumos: {
       client_id: clientId, client_name: texto(cliente.name) || 'cliente', version_vigente: version, manual,
       fuentes: [...fuentesDeRaspado(filas, propios), ...humanas, ...sintesis], dudas, propios, filas_leidas: filas.length,
-      foto: { version, huella: huellaDe(texto(vigente.content_text)), creado_en: (vigente.created_at as string | null) ?? null },
+      foto: { version, huella: huellaDe(texto(vigente?.content_text)), creado_en: (vigente?.created_at as string | null) ?? null },
     },
   }
 }
@@ -130,9 +131,10 @@ export interface ResultadoDeCierre extends Recomprobacion {
   hechos_visibles: InformeDeHechos['hechos']
 }
 /** lo que devolvió el autor pasa por la puerta: re-evalúa, retira lo que no tiene cita (queda SOLO en `retirados`), y el código escribe el eslogan si `tagline` está vacío */
-export function cerrarRevision(ins: Insumos, despues: Record<string, unknown>): ResultadoDeCierre {
+export function cerrarRevision(ins: Insumos, despues: Record<string, unknown>, opciones: { sinEslogan?: boolean } = {}): ResultadoDeCierre {
   const r = recomprobar(ins.manual, despues, { fuentes: ins.fuentes, dudas: ins.dudas })
-  const e = aplicarEslogan(r.manual, frasesPropias(ins.fuentes))
+  // r62 · el chequeo del alta SACA lo sin fuente pero NO escribe el eslogan por código (firma: eso es M2/M3)
+  const e: { manual: Record<string, unknown>; aplicado: boolean; motivo?: 'sin_eslogan' | 'tagline_ocupado'; una_sola_fuente?: boolean } = opciones.sinEslogan ? { manual: r.manual, aplicado: false } : aplicarEslogan(r.manual, frasesPropias(ins.fuentes))
   const previo = evaluarHechos({ manual: despues, fuentes: ins.fuentes, dudas: ins.dudas })
   return { ...r, hechos_visibles: previo.hechos.filter((h) => h.estado === 'verificado' || h.estado === 'afirmacion_del_cliente' || h.estado === 'con_duda'), manual: e.manual, eslogan: { aplicado: e.aplicado, ...(e.motivo ? { motivo: e.motivo } : {}), ...(e.una_sola_fuente ? { una_sola_fuente: true } : {}) } }
 }

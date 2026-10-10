@@ -57,8 +57,8 @@ export function validarCuerpo(cuerpo: unknown, o: { exigeDryRun: boolean }): Res
   return { cuerpo, client_id: cuerpo.client_id, dry_run, workflow_id: wf, workflow_execution_id: ex }
 }
 
-async function insumosOError(db: Db, clientId: string): Promise<Insumos | Respuesta> {
-  const r = await leerInsumos(db, clientId)
+async function insumosOError(db: Db, clientId: string, opciones: { sinManualPrevio?: boolean } = {}): Promise<Insumos | Respuesta> {
+  const r = await leerInsumos(db, clientId, opciones)
   return r.ok ? r.insumos : err(r.status, r.error, r.detalle)
 }
 const esRespuesta = (x: unknown): x is Respuesta => esObjeto(x) && typeof (x as { status?: unknown }).status === 'number' && esObjeto((x as { body?: unknown }).body)
@@ -71,10 +71,13 @@ const manualDe = (cuerpo: Record<string, unknown>, ins: Insumos, campo: string):
 // `/api/manual/materia` y `/api/manual/hechos` NO viven aquí: ya existen en `main` (CC#1, #480) y el alta las llama; esta revisión no las duplica ni las cambia.
 export async function rutaRecomprobar(db: Db, cuerpo: unknown): Promise<Respuesta> {
   const v = validarCuerpo(cuerpo, { exigeDryRun: false }); if (esRespuesta(v)) return v
-  const ins = await insumosOError(db, v.client_id); if (esRespuesta(ins)) return ins
+  // r62 · dos opciones del alta, apagadas por omisión: `sin_manual_previo` (el manual aún no se guardó) y `sin_eslogan` (no escribir el eslogan por código)
+  const sinManualPrevio = v.cuerpo.sin_manual_previo === true
+  if (sinManualPrevio && v.cuerpo.despues === undefined) return err(400, 'entrada_invalida', '`sin_manual_previo` exige `despues`')
+  const ins = await insumosOError(db, v.client_id, { sinManualPrevio }); if (esRespuesta(ins)) return ins
   const despues = manualDe(v.cuerpo, ins, 'despues'); if (esRespuesta(despues)) return despues
   if (v.cuerpo.despues === undefined) return err(400, 'entrada_invalida', 'falta `despues` (el manual que devolvió el autor)')
-  const r = cerrarRevision(ins, despues)
+  const r = cerrarRevision(ins, despues, { sinEslogan: v.cuerpo.sin_eslogan === true })
   // `retirados` es el REGISTRO INTERNO: lo recibe el flujo para guardarlo en el borrador; no es para ninguna bandeja ni canal
   return { status: 200, body: { manual: r.manual, limpio: r.limpio, introducidos: r.introducidos.map((h) => ({ ruta: h.ruta, clausula: h.clausula, estado: h.estado })), cambios: r.cambios, retirados: r.retirados, eslogan: r.eslogan } }
 }

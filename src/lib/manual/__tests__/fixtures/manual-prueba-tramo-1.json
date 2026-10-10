@@ -1,0 +1,260 @@
+{
+ "client_id": "96864e88-79bc-47ff-8f8e-5bf88610ec7d",
+ "positioning": "Náufrago se diferencia por un origen geográfico específico — marisco de Olón, fresco y artesanal — tanto en su local costero como en delivery directo a Guayaquil. Ocupa un espacio competitivo que las cadenas masivas (La Casa del Encebollado con 10 locales, Los Cebiches de la Rumiñahui con 7 locales y $14,5M de facturación) no pueden replicar por escala, y que los competidores artesanales de Guayaquil (El Divino, Cuarto de Libra) no cubren porque carecen de origen costero verificable. En Olón, se diferencia de Ceviches Don Villón y Cabaña D'Jerry por el anclaje explícito al marisco local de Olón como señal de origen. El único competidor con un diferenciador de origen costero comparable es Cevichería Pepe 3 (origen manabita), pero Náufrago ancla su promesa en un punto geográfico específico — Olón — que funciona como denominación de origen implícita.",
+ "icp_summary": "Náufrago atiende cuatro segmentos diferenciados, unidos por la valoración de frescura verificable y sabor auténtico costero:\n\nSEGMENTO 1 — Turista y residente de Olón / Ruta del Spondylus (canal físico)\nConsume ceviche y encebollado en restaurante durante su visita costera. Dolor: muchos restaurantes de playa usan marisco congelado sin declararlo, y la oferta gastronómica en Olón es limitada y poco diferenciada. Meta: encontrar el ceviche más auténtico de la zona y poder recomendarlo. Canales de descubrimiento: Google Maps y TripAdvisor. Criterio de decisión: frescura del marisco con origen local verificable. Proceso de compra: búsqueda en Google Maps o TripAdvisor → visita directa → consumo en sitio o takeaway.\n\nSEGMENTO 2 — Consumidor urbano de Guayaquil (delivery, horario desayuno/almuerzo)\nBusca ceviche y encebollado artesanal de calidad a domicilio. Dolor: las cadenas grandes sacrifican calidad por volumen; el ceviche estándar no tiene sabor de marisco fresco. Meta: almorzar bien sin perder tiempo ni ir a un local físico. Canales: Instagram (descubrimiento), WhatsApp (pedido), Rappi (aspiracional — Náufrago aún no está presente). Criterio: frescura y calidad del marisco. Proceso: descubrimiento en Instagram o recomendación → pedido directo por WhatsApp → pago contra entrega o transferencia.\n\nSEGMENTO 3 — Turistas nacionales en zona costera Santa Elena\nViaja a la costa y busca un restaurante de mariscos de calidad para la experiencia y para compartir en redes sociales. Dolor: opciones limitadas de ceviche artesanal de calidad en pueblos pequeños, y falta de información online del restaurante (no encuentra horarios ni detalles antes de ir). Meta: comer el ceviche más auténtico de la zona y recomendarlo a amigos. Canales: Google Maps e Instagram. Criterio: reseñas en Google Maps e Instagram. Proceso: espontáneo; decide en el momento o el día anterior; busca en Google Maps o Instagram; visita presencial.\n\nSEGMENTO 4 — Guayaquileños urbanos que buscan sabor costero artesanal a domicilio\nQuiere disfrutar ceviche y encebollado con sabor auténtico de playa sin salir de Guayaquil. Dolores: el ceviche de restaurante corriente no tiene el sabor del marisco fresco de playa; desconfianza sobre si el marisco llega realmente fresco en delivery; desconocimiento de la marca (\"no conozco esta marca, ¿es de confianza?\"); competidores más baratos o más conocidos cerca. Meta: disfrutar sabor auténtico de playa a domicilio en horario de almuerzo. Canales: Instagram (descubrimiento), WhatsApp (pedido), Rappi (aspiracional). Rango de precio esperado: $7-$15 por pedido. Contenido preferido: fotos de platos y marisco fresco, video corto de preparación, storytelling de origen costero (la playa, Olón), reseñas de clientes.",
+ "voice_description": "Voz directa y conversacional, coherente con el canal WhatsApp/teléfono como punto de contacto principal. No habla como cadena: sin boletines corporativos ni listas de beneficios genéricos. Habla como alguien que sabe exactamente de dónde viene el marisco porque lo trajo él mismo. Tono: cercano sin ser informal en exceso, orgulloso sin ser arrogante, transparente (el origen es la prueba, no el eslogan). Testeo de voz: si la misma frase podría salir de una cevichería de cadena, reescribir. Ritmo: frases cortas y declarativas, sin subordinadas largas ni eufemismos de marketing.",
+ "forbidden_words": [
+  "premium",
+  "el mejor",
+  "los mejores",
+  "calidad garantizada",
+  "variedad inigualable",
+  "fresquísimo",
+  "100% natural",
+  "artesanal (sin ancla de origen)",
+  "de primera calidad",
+  "sabores únicos",
+  "experiencia gastronómica",
+  "exquisito",
+  "delicioso (sin especificidad)",
+  "lo más selecto",
+  "industrial",
+  "franquicia",
+  "producción masiva (para describir a Náufrago)",
+  "genérico",
+  "estándar",
+  "congelado (para describir producto propio)",
+  "low cost"
+ ],
+ "required_terminology": [
+  "Olón",
+  "marisco de Olón",
+  "fresco de Olón",
+  "origen costero",
+  "Santa Elena",
+  "pedido por WhatsApp",
+  "ceviche",
+  "encebollado",
+  "entrega a domicilio",
+  "directo del mar",
+  "origen verificable",
+  "frescura de origen",
+  "artesanal",
+  "costero",
+  "delivery directo",
+  "del mar a tu mesa"
+ ],
+ "customer_angle": "El cliente de Náufrago opera en dos journeys distintos que comparten un driver común: la búsqueda de autenticidad que las cadenas no pueden ofrecer. El segmento costero (S1/S3) decide de forma espontánea, descubre por Google Maps o Instagram, y valora que el restaurante declare abiertamente que su marisco es fresco y local — en un contexto donde \"muchos restaurantes de playa usan marisco congelado sin declararlo\". El segmento urbano-delivery (S2/S4) descubre en Instagram, ordena por WhatsApp, y enfrenta una objeción de primera compra crítica: \"¿el marisco es realmente fresco si llega en delivery?\" Superar esa objeción es el umbral de conversión; una vez superada, el cliente tiene alta propensión a recomendar (goal explícito en S3) y a repetir. El canal WhatsApp crea una relación directa entre marca y cliente que ningún agregador de delivery puede interceptar.",
+ "retention_notes": "El principal motor de retención es la confirmación de frescura en la primera experiencia: cuando el cliente verifica que el marisco cumple la promesa de origen Olón, se activa el comportamiento evangelizador (compartir en redes, recomendar a amigos) documentado como goal en S3. El canal WhatsApp directo es un activo de retención subutilizado: permite seguimiento post-pedido, comunicación de disponibilidad y construcción de relación sin ceder datos ni margen a plataformas. Riesgo primario de retención: la ausencia en Rappi y Uber Eats deja la recompra expuesta — cuando un cliente de S2/S4 busca ceviche en una app, los competidores consolidados (Pez Azul, Papaceviche, Carmaos) capturan esa demanda repetida. Riesgo secundario: baja visibilidad digital fuera de Instagram genera abandono en S1/S3 que no encuentran información de horarios o disponibilidad antes de visitar. Palanca de expansión natural: clientes de S3 (turistas) que viven en Guayaquil y descubren Náufrago en Olón son candidatos directos a convertirse en clientes delivery de S4.",
+ "personalidad": [
+  "Auténtico: el diferenciador es geográfico y verificable (Olón, Santa Elena), no una promesa vacía",
+  "Directo: WhatsApp como canal principal impone una voz sin rodeos y sin intermediarios",
+  "Cercano: operación pequeña frente a cadenas de 7-40 locales; el trato es de persona a persona",
+  "Transparente: la frescura se prueba con origen nombrado, no con adjetivos",
+  "Orgulloso de origen: Olón no es una coartada de marketing, es el argumento central de toda la propuesta"
+ ],
+ "tagline_opciones": [
+  "Del mar de Olón a tu puerta",
+  "Marisco de Olón. Sin escalas.",
+  "Náufrago: el mar llega a vos"
+ ],
+ "mensajes_clave": [
+  "Nuestro marisco viene de Olón: sabés exactamente de dónde es y cuándo llegó. (Rebate objeción S4: ¿es realmente fresco en delivery?)",
+  "Sin volumen industrial, sin bodega. El ceviche que pedís hoy salió del mar ayer. (Rebate pain point S2: cadenas sacrifican calidad por volumen)",
+  "El sabor de playa sin salir de Guayaquil. Pedilo por WhatsApp. (Responde goal S4: disfrutar ceviche auténtico sin ir a un local físico)",
+  "En Olón, el marisco más fresco lo tenés a dos pasos. (Responde goal S3: encontrar calidad artesanal durante el viaje a la costa)",
+  "Origen verificable: Olón, Santa Elena. No adivinás — sabés. (Rebate objeción de confianza S4: no conozco esta marca)"
+ ],
+ "mision": "Náufrago elabora ceviche y encebollado artesanal con marisco fresco de origen Olón, sirviendo a comensales en su local costero y a guayaquileños vía delivery directo por WhatsApp — sin intermediarios, sin congelados.",
+ "proposito": "Demostrar que el sabor auténtico de la playa no requiere estar en la playa: conectar a cada cliente con el marisco real de Olón, sin cadenas, sin atajos.",
+ "propuestas_de_valor": [
+  "Origen geográfico verificable (Olón, Santa Elena): ninguna cadena con múltiples locales — ni La Casa del Encebollado (10 locales), ni Los Cebiches de la Rumiñahui (7 locales, $14,5M facturación) — puede replicar un claim de origen costero específico y propio. Solo Cevichería Pepe 3 (manabita) tiene un diferenciador comparable.",
+  "Marisco fresco no congelado, declarado: ataca directamente el pain más crítico del segmento físico ('muchos restaurantes de playa usan marisco congelado sin declararlo') y la objeción de confianza del segmento delivery ('¿es realmente fresco?'). Diferenciador tangible vs. competidores físicos en Olón (Ceviches Don Villón, Cabaña D'Jerry) que no enfatizan este atributo.",
+  "Canal directo WhatsApp sin comisión de plataforma: el cliente ordena sin intermediarios, Náufrago conserva el margen completo y el dato de cliente. Diferenciador operacional vs. Pez Azul, Papaceviche y Carmaos que dependen de Rappi/Uber Eats.",
+  "Calidad artesanal sostenida vs. volumen masivo: las cadenas grandes 'sacrifican calidad por volumen' (pain explícito S2). Náufrago opera a escala pequeña donde el control de calidad es estructuralmente más simple — ventaja que se vuelve creíble solo si la narrativa de origen la acompaña.",
+  "Presencia dual autenticada (Olón físico + delivery Guayaquil): el restaurante existe en el lugar de origen del marisco que entrega en la ciudad — ningún competidor boutique del canal delivery en Guayaquil tiene esa trazabilidad verificable in situ."
+ ],
+ "_field_meta": {
+  "personalidad": {
+   "estado": "provisional",
+   "provisional": true,
+   "gateado": false,
+   "fuente": "Canal directo WhatsApp + escala pequeña vs cadenas + diferenciador Olón + objección S4 sobre confianza/frescura",
+   "confianza": 0.7,
+   "lente": "editor-en-jefe"
+  },
+  "tagline_opciones": {
+   "estado": "provisional",
+   "provisional": true,
+   "gateado": false,
+   "fuente": "Positioning geográfico Olón (discovery_summary) + nombre de marca Náufrago (connotación marítima) + canal delivery",
+   "confianza": 0.62,
+   "lente": "editor-en-jefe"
+  },
+  "mensajes_clave": {
+   "estado": "provisional",
+   "provisional": true,
+   "gateado": false,
+   "fuente": "ICP pain_points S1/S2/S4 (marisco congelado, cadenas-volumen) + ICP goals S3/S4 (sabor auténtico, delivery eficiente) + objections S3/S4 (frescura en delivery, confianza marca)",
+   "confianza": 0.82,
+   "lente": "editor-en-jefe"
+  },
+  "mision": {
+   "estado": "provisional",
+   "provisional": true,
+   "gateado": false,
+   "fuente": "industry (restaurante ceviche/encebollado) + discovery_summary (dual market Olón físico + Guayaquil delivery vía WhatsApp) + icp_signals buying_process S1-S4",
+   "confianza": 0.75,
+   "lente": "jefe-client-success"
+  },
+  "proposito": {
+   "estado": "provisional",
+   "provisional": true,
+   "gateado": false,
+   "fuente": "icp pain_points S1 ('marisco congelado sin declararlo'), S4 ('sabor del marisco fresco de playa') + goals S3/S4 (autenticidad sin desplazamiento físico) — inferido, no declarado explícitamente por el ",
+   "confianza": 0.6,
+   "lente": "jefe-client-success"
+  },
+  "propuestas_de_valor": {
+   "estado": "provisional",
+   "provisional": true,
+   "gateado": false,
+   "fuente": "discovery_summary (competitive_landscape: La Casa del Encebollado, Los Cebiches de la Rumiñahui, Pepe 3, Pez Azul) + icp pain_points S1/S2 + icp objections S4",
+   "confianza": 0.8,
+   "lente": "jefe-client-success"
+  }
+ },
+ "_build": {
+  "source": "onboarding_collaborative_build",
+  "lenses": [
+   "brand-strategist",
+   "editor-en-jefe",
+   "jefe-client-success"
+  ],
+  "cycle": 1,
+  "corrections_applied": 0,
+  "structured_ok": {
+   "brand-strategist": true,
+   "editor-en-jefe": true,
+   "jefe-client-success": true
+  },
+  "structured_ok_all": true
+ },
+ "visual": {
+  "version": 1,
+  "capa_grafica": {
+   "paleta": [
+    {
+     "color": "#1a0828",
+     "rol": "principal"
+    },
+    {
+     "color": "#51d4b4",
+     "rol": "acento"
+    },
+    {
+     "color": "#2d1135",
+     "rol": "secundario"
+    }
+   ],
+   "tipografias": [
+    {
+     "nombre": "Caveat",
+     "rol": "titulos"
+    },
+    {
+     "nombre": "Inter",
+     "rol": "cuerpo"
+    }
+   ],
+   "logo_url": "https://ordaeyxvvvdqsznsecjx.supabase.co/storage/v1/object/public/client-social-images/96864e88-79bc-47ff-8f8e-5bf88610ec7d/propio/naufrago.ec/logo-hd.jpg"
+  },
+  "capa_producto": {
+   "paleta_observada": [
+    "naranja caldo (#d4622a)",
+    "verde cilantro (#4a7c3f)",
+    "amarillo plátano frito (#e8b84b)",
+    "blanco hueso (bowl)",
+    "verde lima (#8ab840)",
+    "crema/marfil (leche de tigre)",
+    "rojo-naranja (hot sauce)",
+    "morado cebolla encurtida"
+   ],
+   "luz": "Luz natural difusa en ambas fotos de producto — sin flash, sombras suaves, temperatura cálida en la foto del caldo; luz exterior brillante en la foto del ceviche con mural de fondo",
+   "encuadre": "Foto 2: cenital/picado pronunciado mostrando el bowl y los acompañamientos sobre mesa clara. Foto 3: nivel de mesa en plano medio-cercano, bowl en primer plano con mural colorido desenfocado al fondo",
+   "que_aparece": [
+    "bowl con caldo/supe de mariscos",
+    "ceviche/tiradito con leche de tigre",
+    "cilantro fresco",
+    "cebolla encurtida",
+    "limones/limas cortados",
+    "patacones/chips de plátano",
+    "salsa hot sauce (botella Tabasco)",
+    "aguacate",
+    "salsa Rukutú en frasco de vidrio",
+    "mural urbano estilo street art con esqueleto surfista"
+   ],
+   "que_no_aparece": [
+    "personas comiendo",
+    "interior del local completo",
+    "equipo de cocina",
+    "logo de Naufrago en las fotos de producto",
+    "packaging propio de la marca"
+   ]
+  },
+  "reglas": {
+   "debe": [
+    "Respetar el contraste violeta oscuro (#1a0828 o #2d1135) con el acento turquesa (#51d4b4) como firma visual de la marca en cualquier placa o pieza gráfica",
+    "Usar tipografía de trazo manual/orgánico (Caveat) para titulares, coherente con el lettering artesanal del logo",
+    "Fotografiar el producto con luz natural difusa, sin flash, priorizando la riqueza cromática del caldo, el verde de las hierbas y el amarillo del plátano",
+    "Permitir que el contexto cultural aparezca en el fondo (muros, arte urbano) como elemento de identidad del local"
+   ],
+   "no_debe": [
+    "Agregar colores nuevos a las piezas gráficas que no estén en la paleta declarada — los naranjas y verdes del producto son del mundo real, no de la marca gráfica",
+    "Usar fondos blancos o neutros en placas de marca: el negro/violeta profundo es el hogar visual del logo y los textos"
+   ],
+   "capa_que_manda": {
+    "foto_de_producto": "producto",
+    "placa_logo_o_titulo": "grafica",
+    "anuncio_con_texto_encima": "La foto de producto gobierna el fondo y la atmósfera; la capa gráfica (color #1a0828 semitransparente o bloque de color turquesa #51d4b4) gobierna el texto superpuesto para garantizar legibilidad sin tapar el plato"
+   }
+  },
+  "muestra": {
+   "piezas_totales_en_el_feed": 12,
+   "fotos_totales": 2,
+   "videos_totales": 10,
+   "fotos_miradas": 2,
+   "fecha_mas_vieja": "2024-08-27T17:16:11.000Z",
+   "fecha_mas_nueva": "2026-05-24T18:26:54.000Z",
+   "no_observado": [
+    "10 publicaciones de video no se analizaron (el modelo sólo ve imágenes)",
+    "otras redes del cliente (TikTok, Facebook, YouTube) no se incluyeron en esta derivación",
+    "material de competidores excluido a propósito (R6): no se mira, no puede salir en una pieza"
+   ]
+  },
+  "brain_hit": false,
+  "legible": true,
+  "error": null,
+  "nota": null
+ },
+ "gated_fields_only": true,
+ "campos_gateados": [
+  "positioning",
+  "icp_summary"
+ ],
+ "campos_provisionales": [
+  "personalidad",
+  "tagline_opciones",
+  "mensajes_clave",
+  "mision",
+  "proposito",
+  "propuestas_de_valor"
+ ],
+ "campos_ausentes": [],
+ "lentes_ok": {
+  "brand-strategist": true,
+  "editor-en-jefe": true,
+  "jefe-client-success": true
+ },
+ "provisional": false
+}
