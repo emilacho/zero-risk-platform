@@ -1,12 +1,13 @@
 /**
  * OFICINA · SALA 1 · PR 2 · la FORMA de la migración y de su reversa (pruebas permanentes). La migración queda SIN APLICAR: se aplica primero en copia (CC#3) y luego en producción.
- * Debe ser SOLO ADITIVA, repetible y cerrada; la plantilla sembrada debe ser EXACTAMENTE `POST_IMG` (el SQL no se puede desviar del código probado); la oficina nace APAGADA;
+ * Debe ser SOLO ADITIVA, repetible y cerrada; la plantilla sembrada debe ser EXACTAMENTE la fotografía congelada de la v1 (`fixtures/plantillas/post-img-v1.json`: la migración 1 NO se reescribe cuando el código de `POST_IMG` evoluciona; cada cambio de plantilla trae su propia migración de datos y su propia prueba); la oficina nace APAGADA;
  * los artefactos solo se agregan; la reversa se NIEGA a borrar datos; y NADIE más que la propia oficina nombra estas tablas.
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { POST_IMG } from '../src/lib/oficina/plantillas/post-img'
+import POST_IMG_V1 from './fixtures/plantillas/post-img-v1.json'
 import { validarPlantilla } from '../src/lib/oficina/plantilla'
 
 const RAIZ = process.cwd()
@@ -64,14 +65,15 @@ describe('nace APAGADA y las siembras son exactamente lo probado', () => {
   it('config: una fila, estado apagada, sin familias ni clientes de ensayo', () => {
     expect(sql(MIGRACION)).toMatch(/INSERT INTO public\.oficina_config \(id, estado, familias_activas, clientes_ensayo\) VALUES \(1, 'apagada', '\{\}', '\{\}'\) ON CONFLICT \(id\) DO NOTHING/)
   })
-  it('la plantilla `post_img` se siembra INACTIVA y es IDÉNTICA a POST_IMG (pasos, indicaciones y límites)', () => {
+  it('la plantilla `post_img` se siembra INACTIVA y es IDÉNTICA a la fotografía congelada de la v1 (pasos, indicaciones y límites)', () => {
     const s = leer(MIGRACION)
     const toma = (tag: string) => JSON.parse(new RegExp(`\\$${tag}\\$([\\s\\S]*?)\\$${tag}\\$::jsonb`).exec(s)![1])
-    expect(toma('pasos')).toEqual(JSON.parse(JSON.stringify(POST_IMG.pasos)))
-    expect(toma('ind')).toEqual(JSON.parse(JSON.stringify(POST_IMG.indicaciones)))
-    expect(toma('lim')).toEqual(JSON.parse(JSON.stringify(POST_IMG.limites)))
+    expect(toma('pasos')).toEqual(POST_IMG_V1.pasos)
+    expect(toma('ind')).toEqual(POST_IMG_V1.indicaciones)
+    expect(toma('lim')).toEqual(POST_IMG_V1.limites)
     expect(s).toMatch(/,\s*2,\s*10,\s*false\s*\)\s*ON CONFLICT \(tipo\) DO NOTHING/)
     expect(validarPlantilla({ ...POST_IMG, pasos: toma('pasos'), indicaciones: toma('ind'), limites: toma('lim') })).toEqual([])
+    expect(POST_IMG_V1.pasos.map((p) => p.clave)).not.toContain('decide_imagen') // es la v1: antes de que la opinión llegara a cada dueño
   })
   it('solo se siembra `post_img` (el carrusel queda como fila futura)', () => {
     expect([...sql(MIGRACION).matchAll(/INSERT INTO public\.oficina_tipos_de_grupo/g)]).toHaveLength(1)
