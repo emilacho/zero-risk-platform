@@ -1530,11 +1530,7 @@ export async function POST(request: Request) {
       duration_ms: result.durationMs,
       ...(result.brainEnrichment ? { brain_enrichment: result.brainEnrichment } : {}),
       ...(result.cacheMetrics ? { cache_metrics: result.cacheMetrics } : {}),
-      // el tope saltó AL CERRAR y `response` es el texto final completo (solo está la llave cuando pasó)
-      ...(result.cerradaPorTope === true ? { cerrada_por_tope: true } : {}),
-      // SALIDA ESTRUCTURADA (opt-in) · solo cuando se pidió esquema · el objeto y si es válido (ausente ⇒ la respuesta de siempre)
-      ...(result.structuredOutputValid !== undefined ? { structured_output_valid: result.structuredOutputValid } : {}),
-      ...(result.structuredOutput !== undefined ? { structured_output: result.structuredOutput } : {}),
+      ...camposDeLaVueltaDelCorredor(result),
       // SPEC lazo agentico 2026-06-06 CC#3↔CC#4 convergence · path A canonical
       // (response.body.discovery_output) · the n8n worker reads from here for
       // APIFY_WIRE dynamic targets. Path B (clients.config.apify.competitor_list)
@@ -1670,6 +1666,19 @@ export async function POST(request: Request) {
       },
       { status: 500 },
     )
+  }
+}
+
+/**
+ * Lo que la vuelta del corredor añade a la respuesta (pura, para poder probarla sin correr el corredor):
+ *  · `cerrada_por_tope`: el tope saltó AL CERRAR y `response` es el texto final completo (solo está la llave cuando pasó)
+ *  · SALIDA ESTRUCTURADA (opt-in): el objeto y si es válido; ausentes ⇒ la respuesta de siempre
+ */
+export function camposDeLaVueltaDelCorredor(result: { cerradaPorTope?: boolean; structuredOutputValid?: boolean; structuredOutput?: unknown }): Record<string, unknown> {
+  return {
+    ...(result.cerradaPorTope === true ? { cerrada_por_tope: true } : {}),
+    ...(result.structuredOutputValid !== undefined ? { structured_output_valid: result.structuredOutputValid } : {}),
+    ...(result.structuredOutput !== undefined ? { structured_output: result.structuredOutput } : {}),
   }
 }
 
