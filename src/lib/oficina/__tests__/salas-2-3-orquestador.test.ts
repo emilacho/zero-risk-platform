@@ -533,3 +533,39 @@ describe('las plantillas de láminas no cambian el comportamiento de la sala 1',
     expect(FUENTES.marca?.colors.primary).toBeTruthy(); expect(FUENTES.slug).toBeTruthy()
   })
 })
+
+describe('CC#3 #471 · lo que sus mutaciones dejaron vivo en la entrega y en la elección de la foto', () => {
+  it('foto REAL elegida: la lámina lleva EXACTAMENTE la dirección de esa foto (no la de otra)', async () => {
+    const { M, id } = await abiertoC({ dry_run: false })
+    let foto = ''
+    await correr(M, id, guionCarrusel({
+      direccion_visual: (_n, t) => { foto = /^- (\S+): muestra/m.exec(t)![1]; return { texto: j({ resumen: 'foto real', imagenes: [{ ref: 'hook', modo: 'real', foto_id: foto, motivo: 'sirve' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } }) } },
+      mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }),
+    }))
+    expect(M.llamadas.renderPedidos[0].slides[0].background_image_url).toBe(`https://fotos.test/${foto}.jpg`)
+    expect(M.llamadas.renderPedidos[0].slides.slice(1).every((s) => !s.background_image_url)).toBe(true)
+  })
+  it('la marca «imagen GENERADA» aparece en la hoja de entrega y en la bandeja SOLO si alguna imagen es generada', async () => {
+    const dir = j({ resumen: 'x', imagenes: [{ ref: 'e01', modo: 'generada', motivo: 'm' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } })
+    const conGen = await abiertoK({ dry_run: false })
+    await correr(conGen.M, conGen.id, guionKit({ direccion_visual: () => ({ texto: dir }), prompts: () => ({ texto: promptsDe(['e01']) }), mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }) }))
+    const hoja = (M: Memoria) => Object.entries(M.llamadas.contenidos).find(([n]) => n.endsWith('_publicar.md'))![1]
+    expect(hoja(conGen.M)).toMatch(/GENERADA/)
+    expect(JSON.stringify(conGen.M.llamadas.bandeja[0])).toMatch(/"imagen_generada":true/)
+    const sinGen = await abiertoK({ dry_run: false })
+    await correr(sinGen.M, sinGen.id, guionKit())
+    expect(hoja(sinGen.M)).not.toMatch(/GENERADA/)
+    expect(JSON.stringify(sinGen.M.llamadas.bandeja[0])).not.toMatch(/"imagen_generada":true/)
+  })
+  it('kit: el límite de texto de WhatsApp se comprueba SOLO en los elementos de estado (cada destino con su fila)', async () => {
+    const largo = 'a'.repeat(750) // estado: tope 700 · historia de Instagram: tope 2200
+    const copia = (ref: string) => ({ elementos: COPY_KIT.elementos.map((c) => (c.ref === ref ? { ...c, acompanamiento: largo } : c)) })
+    const enEstado = await abiertoK({ dry_run: false })
+    await correr(enEstado.M, enEstado.id, guionKit({ texto: () => ({ texto: j(copia('e02')) }) }))
+    const largos = (M: Memoria, id: string) => fichas(M, id).filter((f) => f.donde === 'texto' && /ent\d+-/.test(f.id))
+    expect(largos(enEstado.M, enEstado.id).length).toBeGreaterThan(0)
+    const enHistoria = await abiertoK({ dry_run: false })
+    await correr(enHistoria.M, enHistoria.id, guionKit({ texto: () => ({ texto: j(copia('e01')) }) }))
+    expect(largos(enHistoria.M, enHistoria.id)).toEqual([])
+  })
+})
