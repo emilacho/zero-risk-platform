@@ -242,7 +242,12 @@ describe('armar lo que se dibuja', () => {
     expect(r.slides[2].cta).toBe('Pide')
   })
   it('carrusel: una lámina sin imagen lleva null, nunca undefined ni una dirección inventada', () => {
-    expect(armarLaminasDeCarrusel([{ rol: 'hook', headline: 'A' }], {}).slides[0]).toEqual({ headline: 'A', background_image_url: null })
+    expect(armarLaminasDeCarrusel([{ rol: 'hook', headline: 'A' }], {}).slides[0]).toEqual({ headline: 'A', background_image_url: null, pie: null })
+  })
+  it('carrusel: el pie es «desliza» (SIN flecha: la tipografía no la trae y saldría un cuadrito ▯) en todas menos la última, que no lleva pie', () => {
+    const { slides } = armarLaminasDeCarrusel([{ rol: 'hook', headline: 'A' }, { rol: 'proof', headline: 'B' }, { rol: 'cta', headline: 'C' }], {})
+    expect(slides.map((x) => x.pie)).toEqual(['desliza', 'desliza', null])
+    expect(JSON.stringify(slides)).not.toMatch(/[→↑←↗]/)
   })
   it('kit: una lámina por elemento de la ESTRUCTURA con el texto del autor, sin pie ni indicador', () => {
     const r = armarLaminasDeKit(

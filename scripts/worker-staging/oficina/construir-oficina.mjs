@@ -138,7 +138,7 @@ export function construirVigia({ nombre = 'Zero Risk — Oficina · el vigía (v
   const llaveEnv = { name: 'x-sala-dispatch-key', value: '={{ $env.SALA_DISPATCH_KEY }}' }
   const nodes = [
     { parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 10 }] } }, name: N.reloj, type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2, position: x(0) },
-    http(N.vigia, `${VERCEL}/api/oficina/vigia`, x(1), { headers: [llaveEnv], body: '={{ JSON.stringify({}) }}', timeout: 60000 }),
+    http(N.vigia, `${VERCEL}/api/oficina/vigia`, x(1), { headers: [llaveEnv], body: '={{ JSON.stringify({}) }}', timeout: 300000 }),
     code(N.pend, 'vigia-n1-reanudar.js', x(2)),
     cond(N.esRean, '={{ $json.tipo }}', esIgual, x(3), 'reanudar'),
     http(N.rearmar, `${VERCEL}/api/oficina/turnos`, x(4, -120), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "siguiente", encargo_id: $json.encargo_id }) }}', timeout: 300000 }),

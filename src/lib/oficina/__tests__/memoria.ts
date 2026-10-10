@@ -49,7 +49,7 @@ export interface Memoria {
   artefactos: Array<{ encargo_id: string; tipo: string; version: number; sha256: string }>
   gastos: NonNullable<Cambios['gastos']>
   usos: Array<{ foto_id: string; rol: string | null }>
-  llamadas: { imagen: number; imagenReal: number; revisor: number; revisorReal: number; salida: number; bandeja: Array<Record<string, unknown>>; salidas: Array<Record<string, unknown>>; avisos: Array<{ canal: string; texto: string }>; archivos: string[]; guardadoDeArchivos: number; render: number; renderReal: number; renderPedidos: PedidoDeRender[]; revisorImagenes: string[][]; revisorPedidos: string[]; planes: string[] }
+  llamadas: { imagen: number; imagenReal: number; revisor: number; revisorReal: number; salida: number; bandeja: Array<Record<string, unknown>>; salidas: Array<Record<string, unknown>>; avisos: Array<{ canal: string; texto: string }>; archivos: string[]; contenidos: Record<string, string>; guardadoDeArchivos: number; render: number; renderReal: number; renderPedidos: PedidoDeRender[]; revisorImagenes: string[][]; revisorPedidos: string[]; planes: string[] }
   config: ConfigDeOficina
   plantilla: { plantilla: Plantilla; activo: boolean } | null
   /** guion del revisor externo: texto por llamada */
@@ -62,7 +62,7 @@ export interface Memoria {
 export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOficina>; fuentes?: Partial<FuentesCompletas>; tope?: number; plantilla?: Plantilla; plan?: string | null } = {}): Memoria {
   const m: Memoria = {
     encargos: new Map(), turnos: new Map(), artefactos: [], gastos: [], usos: [],
-    llamadas: { imagen: 0, imagenReal: 0, revisor: 0, revisorReal: 0, salida: 0, bandeja: [], salidas: [], avisos: [], archivos: [], guardadoDeArchivos: 0, render: 0, renderReal: 0, renderPedidos: [], revisorImagenes: [], revisorPedidos: [], planes: [] },
+    llamadas: { imagen: 0, imagenReal: 0, revisor: 0, revisorReal: 0, salida: 0, bandeja: [], salidas: [], avisos: [], archivos: [], contenidos: {}, guardadoDeArchivos: 0, render: 0, renderReal: 0, renderPedidos: [], revisorImagenes: [], revisorPedidos: [], planes: [] },
     config: { estado: 'encendida', familias_activas: o.plantilla ? [o.plantilla.familia] : ['post_img'], clientes_ensayo: [], ...(o.config ?? {}) },
     plantilla: { plantilla: JSON.parse(JSON.stringify(o.plantilla ?? POST_IMG)), activo: true },
     // por omisión el revisor externo no opina nada (texto vacío): no hay opinión que el autor deba decidir
@@ -118,7 +118,7 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
       return { ok: true, urls: p.slides.map((_, i) => `https://${p.dry_run ? 'dry' : 'lam'}.test/${p.encargo_id}/${i + 1}-${med[0]}x${med[1]}.png`), ancho: med[0], alto: med[1], fonts_usadas: [p.marca.fonts.family], fonts_faltantes: [], timings_ms: [] }
     },
     descargar: async (url) => { const q = /-(\d{2,5})x(\d{2,5})\.png$/.exec(url); return q ? png(Number(q[1]), Number(q[2])) : png(1024, 1024) },
-    guardarArchivos: async (ruta, archivos) => { m.llamadas.guardadoDeArchivos++; m.llamadas.archivos.push(...archivos.map((a) => a.nombre)); return { ok: true, urls: Object.fromEntries(archivos.map((a) => [a.nombre, `https://bucket.test/${ruta}/${a.nombre}`])) } },
+    guardarArchivos: async (ruta, archivos) => { m.llamadas.guardadoDeArchivos++; m.llamadas.archivos.push(...archivos.map((a) => a.nombre)); for (const a of archivos) if (/\.(md|txt|json)$/.test(a.nombre)) m.llamadas.contenidos[a.nombre] = a.bytes.toString('utf8'); return { ok: true, urls: Object.fromEntries(archivos.map((a) => [a.nombre, `https://bucket.test/${ruta}/${a.nombre}`])) } },
     salida: async (p) => { m.llamadas.salida++; m.llamadas.salidas.push(p as never); return { ok: true, output_id: '99999999-9999-4999-8999-999999999999' } },
     bandeja: async (p) => { m.llamadas.bandeja.push(p as never); return { ok: true, id: '88888888-8888-4888-8888-888888888888' } },
     avisar: async (p) => { m.llamadas.avisos.push({ canal: p.canal, texto: p.texto }) },

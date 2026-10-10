@@ -22,6 +22,11 @@ describe('C1 · una fecha, un rango o una cifra con miles NO es un teléfono', (
     for (const t of ['0997 744 288', '+593 997 744 288', '099-774-4288', '(02) 255-1234', '0997744288']) expect(esFechaORangoOCifra(t), t).toBe(false)
     expect(datosDeContacto('Escríbenos al 0997 744 288 o al +593 99 774 4288').telefonos).toEqual(['997744288', '997744288'])
   })
+  it('regresión CC#3: teléfonos con puntos o guiones SIGUEN detectándose; fechas, rangos y miles no', () => {
+    const tel = (t: string) => datosDeContacto(t).telefonos.length
+    for (const t of ['Llámanos al 099.123.456', 'al 042.345.678', 'llama 09-91-23-45-67', 'Ref 099,123,456', 'Escríbenos al 0991234567', 'WhatsApp +593 99 123 4567', 'Reserva: 593-99-123-4567', 'Tel 2 345 678']) expect(tel(t), t).toBe(1)
+    for (const t of ['Desde el 2026-10-09', 'del 10-11-12', 'más de 1.250.000 platos', 'Precio 1,250,000']) expect(tel(t), t).toBe(0)
+  })
   it('un pie de foto con una fecha o una cifra grande no abre ficha de teléfono ajeno; uno con un teléfono ajeno, sí', () => {
     const base = { fuentes: { palabras_prohibidas: [], telefonos: ['+593 997 744 288'], handles: [], precios: [], competidores: [], registro: 'tuteo' as const }, limites: { pie_de_foto_max: 2200, hashtags_max: 30, limites_verificados: false } }
     const limpio = chequeosDePost({ ...base, pieza: { pie_de_foto: 'Desde el 2026-10-09 y hasta el 10-11-12, más de 1.250.000 platos servidos.', hashtags: [] } })
