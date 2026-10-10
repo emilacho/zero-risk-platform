@@ -78,10 +78,11 @@ export function refsInvalidos(refs: string[], validos: string[]): string[] {
  */
 export function armarLaminasDeCarrusel(laminas: Lamina[], imagenesPorRol: Record<string, ImagenDeRef>): { slides: LaminaParaDibujar[]; sinLamina: string[] } {
   const usadas = new Set<string>()
-  const slides = laminas.map((l) => {
+  const slides = laminas.map((l, i) => {
     const img = !usadas.has(l.rol) ? imagenesPorRol[l.rol] : undefined
     if (img) usadas.add(l.rol)
-    return limpia({ headline: l.headline, body: l.body, cta: l.cta, eyebrow: l.eyebrow, background_image_url: img?.url ?? null })
+    // el pie por omisión del brazo es «desliza →» y la flecha NO existe en la tipografía (sale un cuadrito ▯, ya con Inter): se manda un pie sin flecha, y la última lámina no lo lleva
+    return { ...limpia({ headline: l.headline, body: l.body, cta: l.cta, eyebrow: l.eyebrow, background_image_url: img?.url ?? null }), pie: i < laminas.length - 1 ? 'desliza' : null }
   })
   return { slides, sinLamina: Object.keys(imagenesPorRol).filter((r) => !usadas.has(r)) }
 }
