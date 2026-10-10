@@ -127,6 +127,7 @@ export async function rutaBorrador(db: Db, cuerpo: unknown): Promise<Respuesta> 
   const op = esObjeto(v.cuerpo.opinion) ? (v.cuerpo.opinion as unknown as OpinionDeGpt) : null
   const costo = typeof v.cuerpo.costo_usd === 'number' && Number.isFinite(v.cuerpo.costo_usd) ? v.cuerpo.costo_usd : 0
   const respuesta = Array.isArray(v.cuerpo.respuesta_del_autor) ? (v.cuerpo.respuesta_del_autor as never) : null
-  const r = await guardarBorrador(db, { insumos: ins, cierre, opinion: op, respuesta_del_autor: respuesta, costo_usd: costo, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id, dry_run: v.dry_run })
+  const fid = esObjeto(v.cuerpo.fidelidad) ? (v.cuerpo.fidelidad as never) : null
+  const r = await guardarBorrador(db, { insumos: ins, cierre, opinion: op, fidelidad: fid, respuesta_del_autor: respuesta, costo_usd: costo, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id, dry_run: v.dry_run })
   return { status: r.ok ? 200 : 502, body: { ...r, retirados_en_el_registro_interno: cierre.retirados.length } }
 }

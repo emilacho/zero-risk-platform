@@ -20,6 +20,8 @@ export interface EntradaDelBorrador {
   opinion?: OpinionDeGpt | null
   /** la respuesta del autor a la opinión (S7): tomada / no tomada, cada una con su razón */
   respuesta_del_autor?: Array<{ punto: string; decision: 'tomada' | 'no_tomada'; razon: string }> | null
+  /** el veredicto del juez de fidelidad (solo con fuente cruda): puntajes de los campos que puntúa y cuáles quedaron bajo el umbral */
+  fidelidad?: { umbral: number; puntajes: Record<string, number | null>; bajo_umbral: string[] } | null
   costo_usd: number
   workflow_id: string
   workflow_execution_id: string
@@ -57,7 +59,7 @@ export function armarTarjeta(e: EntradaDelBorrador): { titulo: string; vista_pre
     metadata: {
       version_nueva: nueva, version_vigente: ins.version_vigente, manual_en_limpio: limpio.texto, diferencias, hechos, dudas,
       opinion_de_gpt: opinion, respuesta_del_autor: e.respuesta_del_autor ?? null,
-      costo_usd: e.costo_usd, eslogan: cierre.eslogan, ...(opinion && 'error' in opinion ? { sin_segunda_mirada: true } : {}),
+      costo_usd: e.costo_usd, eslogan: cierre.eslogan, fidelidad: e.fidelidad ?? null, ...(opinion && 'error' in opinion ? { sin_segunda_mirada: true } : {}),
       workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id,
     },
   }
