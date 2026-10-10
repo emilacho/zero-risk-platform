@@ -3,8 +3,8 @@
  * Agnóstico: ninguna frase nombra a un cliente. El formato de la respuesta lo hace cumplir `salida.ts`; aquí solo se explica el contrato en palabras.
  */
 import type { ElementoDelKit } from './brief'
-import { AVISO_DEL_CEREBRO, describirReglas, type ContextoDePedido } from './pedidos'
-import type { ContextoDelRevisor } from './ciego'
+import { AVISO_DEL_CEREBRO, describirReglas, FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PORTERO, resumenDelEncargo, type ContextoDePedido } from './pedidos'
+import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
 import { ROLES_DE_LAMINA, LIMITES_DE_LAMINA } from './salida'
 import type { Ficha, Limites } from './tipos'
 
@@ -141,15 +141,18 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
 }
 
 /** lo que el revisor externo recibe de una pieza de láminas: la pieza, hasta 4 láminas dibujadas y el cerebro del cliente que lee la sala. Nada del hilo ni de las fichas: esta función no los recibe. */
-export function contextoDelRevisorLaminas(c: ContextoLaminas): { pieza: string; imagenes: string[]; contexto: ContextoDelRevisor[] } {
+export function contextoDelRevisorLaminas(c: ContextoLaminas): { pieza: string; imagenes: string[]; contexto: ContextoDelRevisor[]; encargo: ResumenDelEncargo; nota_pieza?: string } {
+  const muestra = laminasDeMuestra(c.png, 4)
   return {
     pieza: describirPieza(c),
-    imagenes: laminasDeMuestra(c.png, 4),
+    imagenes: muestra,
+    encargo: resumenDelEncargo(c.brief),
+    ...(c.png.length > muestra.length ? { nota_pieza: `solo se adjuntan ${muestra.length} de las ${c.png.length} láminas (portada, intermedias y última); el texto de todas está arriba` } : {}),
     contexto: [
-      { titulo: 'Manual de marca del cliente', texto: recorta(c.fuentes.manual_texto, 12000) },
-      { titulo: 'Plan de trabajo del cliente', texto: c.fuentes.plan_texto ? recorta(c.fuentes.plan_texto, 12000) : '' },
-      { titulo: 'El brief de este entregable', texto: c.brief.texto },
-      { titulo: 'Lo que reunió el portero', texto: s(c.art('material_portero')?.texto) },
+      { titulo: 'Manual de marca del cliente', funcion: FUNCION_DEL_MANUAL, texto: recorta(c.fuentes.manual_texto, 12000) },
+      { titulo: 'Plan de trabajo del cliente', funcion: FUNCION_DEL_PLAN, texto: c.fuentes.plan_texto ? recorta(c.fuentes.plan_texto, 12000) : '' },
+      { titulo: 'El brief de este entregable', funcion: FUNCION_DEL_BRIEF, texto: c.brief.texto },
+      { titulo: 'Lo que reunió el portero', funcion: FUNCION_DEL_PORTERO, texto: s(c.art('material_portero')?.texto) },
     ],
   }
 }

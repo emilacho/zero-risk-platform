@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { abrirEncargo, avanzar } from '../orquestador'
 import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
 import { KIT_HISTORIAS } from '../plantillas/kit-historias'
-import { PREGUNTA_AL_REVISOR } from '../ciego'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import type { Plantilla } from '../tipos'
 import { CLIENTE, PARTE, FICHAS_VACIAS, FUENTES, correr, crearMemoria, type Guion, type Memoria } from './memoria'
@@ -207,8 +206,11 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     await correr(M, id, guionCarrusel({ revision_jefe: () => ({ texto: j({ fichas: [{ que: 'SECRETO-DEL-JEFE', donde: 'texto', contra_que: 'brief', gravedad: 'sugerencia', propuesta: 'x' }] }) }) }))
     expect(M.llamadas.revisor).toBe(1)
     const t = M.llamadas.revisorPedidos[0]
-    expect(t.startsWith(PREGUNTA_AL_REVISOR)).toBe(true)
-    for (const s of ['## Manual de marca del cliente', '## Plan de trabajo del cliente', '## El brief de este entregable', '## Lo que reunió el portero', '## La pieza']) expect(t).toContain(s)
+    expect(t).toMatch(/^Te comparto una pieza para .+ Usa el contexto para entender la pieza, no para justificarla\./)
+    expect(t).not.toMatch(/\{red\}|\{público\}|\{objetivo\}/)
+    const pos = ['## Resumen del encargo', '## La pieza', '## Contexto de la marca'].map((x) => t.indexOf(x))
+    expect(pos.every((p) => p >= 0) && pos[0] < pos[1] && pos[1] < pos[2], 'orden: resumen → pieza → contexto').toBe(true)
+    for (const s of ['### Manual de marca del cliente — ', '### Plan de trabajo del cliente — ', '### El brief de este entregable — ', '### Lo que reunió el portero — ']) expect(t).toContain(s)
     expect(t).toContain('Texto base:'); expect(t).toContain('Láminas:')
     expect(t).not.toMatch(/SECRETO-DEL-JEFE|visual_direction|reglas_de_imagen|gravedad|rúbrica|JSON/i)
     expect(M.llamadas.revisorImagenes[0].length).toBeGreaterThanOrEqual(3); expect(M.llamadas.revisorImagenes[0].length).toBeLessThanOrEqual(4)

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { abrirEncargo, avanzar, recibirResultado } from '../orquestador'
-import { PREGUNTA_AL_REVISOR } from '../ciego'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { BUENOS_PROMPTS, CLIENTE, PARTE, PARTE_OTRO_PRODUCTO, PARTE_REAL, PIEZA_OK, FICHAS_VACIAS, crearMemoria, correr, direccionGenerada, direccionReal, observacion, REGLAS_CEVICHE, type Guion, type Memoria } from './memoria'
 
@@ -335,8 +334,11 @@ describe('rondas: jefe-marketing → el que escribe corrige → revisor ciego �
     await correr(M, id, guionGenerada({ jefe: () => ({ texto: JSON.stringify({ fichas: [{ que: 'SECRETO-DEL-JEFE', donde: 'texto', contra_que: 'y', gravedad: 'sugerencia', propuesta: 'z' }] }) }) }))
     expect(M.llamadas.revisor).toBe(1)
     const t = M.llamadas.revisorPedidos[0]
-    expect(t.startsWith(PREGUNTA_AL_REVISOR)).toBe(true)
-    for (const seccion of ['## Manual de marca del cliente', '## Plan de trabajo del cliente', '## El brief de este entregable', '## Lo que reunió el portero', '## La pieza']) expect(t).toContain(seccion)
+    expect(t).toMatch(/^Te comparto una pieza para .+ Usa el contexto para entender la pieza, no para justificarla\./)
+    expect(t).not.toMatch(/\{red\}|\{público\}|\{objetivo\}/)
+    const pos = ['## Resumen del encargo', '## La pieza', '## Contexto de la marca'].map((x) => t.indexOf(x))
+    expect(pos.every((p) => p >= 0) && pos[0] < pos[1] && pos[1] < pos[2], 'orden: resumen → pieza → contexto').toBe(true)
+    for (const seccion of ['### Manual de marca del cliente — ', '### Plan de trabajo del cliente — ', '### El brief de este entregable — ', '### Lo que reunió el portero — ']) expect(t).toContain(seccion)
     expect(t).toContain('PLAN DE TRABAJO DE PRUEBA'); expect(t).toContain('material del portero')
     expect(t).not.toMatch(/SECRETO-DEL-JEFE|fichas_jefe|visual_direction|reglas_de_imagen/)
     expect(t).not.toMatch(/gravedad|"bloquea"|"sugerencia"|rúbrica|esquema|JSON/i)

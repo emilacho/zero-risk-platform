@@ -3,7 +3,7 @@
  * Agnóstico: ninguna frase nombra a un cliente. El formato de la respuesta lo hace cumplir `salida.ts`; aquí solo se explica el contrato en palabras.
  */
 import type { BriefLeido } from './brief'
-import type { ContextoDelRevisor } from './ciego'
+import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
 import type { Estado, Ficha } from './tipos'
 import type { FuentesCompletas } from './puertos'
 import type { ReglasDeImagen } from './reglas-de-imagen'
@@ -94,17 +94,25 @@ export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fic
   }
 }
 
+export const FUNCION_DEL_MANUAL = 'lo vigente: identidad, voz y reglas de la marca (es la norma; manda si hay contradicción)'
+export const FUNCION_DEL_PLAN = 'aspiración: lo que el cliente quiere lograr; no es un hecho ya cumplido'
+export const FUNCION_DEL_BRIEF = 'el encargo concreto de esta pieza'
+export const FUNCION_DEL_PORTERO = 'hechos que reunió el portero del cliente (datos, precios, fotos); pueden estar incompletos'
+/** el resumen del encargo sale SOLO del brief; lo que el brief no dice no se inventa */
+export const resumenDelEncargo = (b: ContextoDePedido['brief']): ResumenDelEncargo => ({ red: b.red, formato: b.formato, que_es: b.que_es, objetivo: b.mensaje, llamado: b.llamado })
+
 /** lo que el revisor externo recibe de la sala 1: la pieza, su imagen y el cerebro del cliente que lee la sala (manual, plan, brief, lo del portero). Nada del hilo ni de las fichas: esta función no los recibe. */
-export function contextoDelRevisor(c: ContextoDePedido): { pieza: string; imagenes: string[]; contexto: ContextoDelRevisor[] } {
+export function contextoDelRevisor(c: ContextoDePedido): { pieza: string; imagenes: string[]; contexto: ContextoDelRevisor[]; encargo: ResumenDelEncargo } {
   const fin = c.art('imagen_final') ?? {}
   return {
     pieza: pieza(c.art('pieza_post')),
+    encargo: resumenDelEncargo(c.brief),
     imagenes: fin.url ? [String(fin.url)] : [],
     contexto: [
-      { titulo: 'Manual de marca del cliente', texto: recortaManual(c.fuentes.manual_texto) },
-      { titulo: 'Plan de trabajo del cliente', texto: c.fuentes.plan_texto ? recortaManual(c.fuentes.plan_texto) : '' },
-      { titulo: 'El brief de este entregable', texto: c.brief.texto },
-      { titulo: 'Lo que reunió el portero', texto: String(c.art('material_portero')?.texto ?? '') },
+      { titulo: 'Manual de marca del cliente', funcion: FUNCION_DEL_MANUAL, texto: recortaManual(c.fuentes.manual_texto) },
+      { titulo: 'Plan de trabajo del cliente', funcion: FUNCION_DEL_PLAN, texto: c.fuentes.plan_texto ? recortaManual(c.fuentes.plan_texto) : '' },
+      { titulo: 'El brief de este entregable', funcion: FUNCION_DEL_BRIEF, texto: c.brief.texto },
+      { titulo: 'Lo que reunió el portero', funcion: FUNCION_DEL_PORTERO, texto: String(c.art('material_portero')?.texto ?? '') },
     ],
   }
 }

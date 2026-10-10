@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { crearPuertos, registroDelManual, PREFIJO_DRY, type Entorno } from '../adaptadores'
 import { almacenDeSupabase } from '../almacen-supabase'
-import { PREGUNTA_AL_REVISOR } from '../ciego'
 import { abrirEncargo } from '../orquestador'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { POST_IMG } from '../plantillas/post-img'
@@ -109,8 +108,11 @@ describe('INTEGRACIÓN · almacén real (base falsa) + adaptadores + orquestador
     expect(cuerpo.model).toBe('modelo-revisor')
     // el revisor recibe TEXTO: la pregunta abierta + el cerebro del cliente + la pieza (y su imagen); sin claves, sin rúbrica, sin nada del jefe
     const texto = String(cuerpo.input[0].content[0].text)
-    expect(texto.startsWith(PREGUNTA_AL_REVISOR)).toBe(true)
-    for (const s of ['## Manual de marca del cliente', '## El brief de este entregable', '## Lo que reunió el portero', '## La pieza']) expect(texto).toContain(s)
+    expect(texto).toMatch(/^Te comparto una pieza para .+ Usa el contexto para entender la pieza, no para justificarla\./)
+    expect(texto).not.toMatch(/\{red\}|\{público\}|\{objetivo\}/)
+    const pos = ['## Resumen del encargo', '## La pieza', '## Contexto de la marca'].map((x) => texto.indexOf(x))
+    expect(pos.every((p) => p >= 0) && pos[0] < pos[1] && pos[1] < pos[2], 'orden: resumen → pieza → contexto').toBe(true)
+    for (const s of ['### Manual de marca del cliente — ', '### El brief de este entregable — ', '### Lo que reunió el portero — ']) expect(texto).toContain(s)
     expect(cuerpo.input[0].content[1]).toMatchObject({ type: 'input_image' })
     expect(JSON.stringify(cuerpo)).not.toMatch(/fichas_jefe|visual_direction|rúbrica/)
     expect(cuerpo.reasoning).toBeUndefined(); expect(cuerpo.text).toBeUndefined() // ni parámetros de formato ni de razonamiento: pregunta abierta
