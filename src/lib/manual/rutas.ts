@@ -11,9 +11,7 @@ import { checkLlaveDeLaSala } from '../oficina/ruta'
 import { llamarRevisorGpt } from '../revisor-gpt'
 import { guardarBorrador, type OpinionDeGpt } from './borrador'
 import { armarPedidoDelManual } from './pedido-gpt'
-import { evaluarHechos } from './hechos'
 import { ordenarMateria } from './materia'
-import { frasesPropias } from './frases-propias'
 import { cerrarRevision, leerInsumos, prepararRevision, type Db, type Insumos } from './revision'
 import { renderManualLimpio } from '../brand-book-render-limpio'
 
@@ -69,20 +67,8 @@ const manualDe = (cuerpo: Record<string, unknown>, ins: Insumos, campo: string):
   return esObjeto(cuerpo[campo]) ? (cuerpo[campo] as Record<string, unknown>) : err(400, 'entrada_invalida', `\`${campo}\` debe ser un objeto (el manual)`)
 }
 
-// ───────────────────────── rutas puras (US$ 0, sin escribir)
-export async function rutaMateria(db: Db, cuerpo: unknown): Promise<Respuesta> {
-  const v = validarCuerpo(cuerpo, { exigeDryRun: false }); if (esRespuesta(v)) return v
-  const ins = await insumosOError(db, v.client_id); if (esRespuesta(ins)) return ins
-  const m = ordenarMateria(ins.fuentes)
-  return { status: 200, body: { materia: m.texto, bloques: m.bloques.map((b) => ({ bloque: b.bloque, leidos: b.leidos, total: b.total, recortado: b.recortado })), recortes: m.recortes, total_original: m.total_original, total_leido: m.total_leido, frases_propias: frasesPropias(ins.fuentes), filas_leidas: ins.filas_leidas } }
-}
-export async function rutaHechos(db: Db, cuerpo: unknown): Promise<Respuesta> {
-  const v = validarCuerpo(cuerpo, { exigeDryRun: false }); if (esRespuesta(v)) return v
-  const ins = await insumosOError(db, v.client_id); if (esRespuesta(ins)) return ins
-  const manual = manualDe(v.cuerpo, ins, 'manual'); if (esRespuesta(manual)) return manual
-  const informe = evaluarHechos({ manual, fuentes: ins.fuentes, dudas: ins.dudas })
-  return { status: 200, body: { informe, version_vigente: ins.version_vigente } }
-}
+// ───────────────────────── ruta pura (US$ 0, sin escribir)
+// `/api/manual/materia` y `/api/manual/hechos` NO viven aquí: ya existen en `main` (CC#1, #480) y el alta las llama; esta revisión no las duplica ni las cambia.
 export async function rutaRecomprobar(db: Db, cuerpo: unknown): Promise<Respuesta> {
   const v = validarCuerpo(cuerpo, { exigeDryRun: false }); if (esRespuesta(v)) return v
   const ins = await insumosOError(db, v.client_id); if (esRespuesta(ins)) return ins

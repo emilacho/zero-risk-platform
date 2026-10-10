@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
 import { avisoDeProvisionales, camposDelManual } from '../lectura'
-import { autorizar, rutaBorrador, rutaHechos, rutaMateria, rutaOpinion, rutaRecomprobar, rutaRevisar, validarCuerpo } from '../rutas'
+import { autorizar, rutaBorrador, rutaOpinion, rutaRecomprobar, rutaRevisar, validarCuerpo } from '../rutas'
 import { TIPO_DE_BANDEJA, TIPO_DE_BORRADOR } from '../borrador'
 import { guardarNotaDeRechazo, promoverManualRevisado } from '../promover'
 import { filaInstagram, filaSitio, PROPIOS } from './apoyo'
@@ -106,12 +106,8 @@ describe('M2 · /revisar (S0/S1/S3) y las rutas puras: US$ 0, sin modelo, sin es
     const db = new DbFalsa().semilla('clients', [{ id: C, name: 'X', config: {} }]).semilla('client_brand_books', [{ id: 'b', client_id: C, version: 1, content_text: 'no es json' }])
     expect(await rutaRevisar(db, { client_id: C, dry_run: true })).toMatchObject({ status: 409, body: { error: 'manual_ilegible' } })
   })
-  it('materia / hechos / recomprobar son puras y exigen solo cliente válido', async () => {
+  it('recomprobar es pura y exige cliente válido y `despues`', async () => {
     const db = base()
-    const m = await rutaMateria(db, { client_id: C })
-    expect(m.status).toBe(200); expect(String(m.body.materia)).not.toMatch(/TEXTO SINTÉTICO|únicos con trazabilidad/)
-    const h = await rutaHechos(db, { client_id: C })
-    expect((h.body as any).version_vigente).toBe(2)
     expect((await rutaRecomprobar(db, { client_id: C })).status).toBe(400) // falta `despues`
     expect(nada(db)).toBe(true)
   })
