@@ -11,6 +11,7 @@ import type { FotoEtiquetada } from './fotos'
 import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt } from '../revisor-gpt'
 import type { FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
 import type { Registro } from './chequeos'
+import { avisoDeProvisionales } from '../manual/lectura'
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
@@ -90,7 +91,8 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         const handles = Object.values(config.apify?.own_handles ?? {}).filter(Boolean).map((h) => (String(h).startsWith('@') ? String(h) : `@${h}`))
         const competidores = (config.apify?.competitor_list ?? []).map((c) => c.name ?? '').filter(Boolean)
         const nombre = String(cliente.name ?? 'cliente')
-        const manual_texto = renderManualLimpio({ brand_book: manual, client_name: nombre, country: (cliente.country as string | null) ?? null }).texto
+        const avisoProvisional = avisoDeProvisionales(manual.content_text)
+        const manual_texto = renderManualLimpio({ brand_book: manual, client_name: nombre, country: (cliente.country as string | null) ?? null }).texto + (avisoProvisional ? `\n\n${avisoProvisional}` : '')
         const out: FuentesCompletas = {
           cliente_nombre: nombre, manual_texto, plan_texto: null,
           fuentes: {
