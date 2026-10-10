@@ -4,12 +4,12 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const DIR = 'src/lib/manual'
-const archivos = [...fs.readdirSync(DIR).filter((f) => f.endsWith('.ts')).map((f) => path.join(DIR, f))]
+const archivos = [...fs.readdirSync(DIR).filter((f) => f.endsWith('.ts')).map((f) => path.join(DIR, f)), 'src/lib/revisor-gpt.ts']
 const PROHIBIDAS = ['naufrago', 'náufrago', 'olon', 'olón', 'guayaquil', 'ecuador', 'ceviche', 'encebollado', 'marisco', 'restaurante', 'ghost kitchen', 'peniche', 'goeurope', 'surf', 'seguridad industrial', 'zero risk']
 
 describe('agnóstico', () => {
   it('ningún archivo de la librería nombra a un cliente, una ciudad o un rubro (ni en las listas de datos)', () => {
-    expect(archivos.length).toBeGreaterThanOrEqual(10)
+    expect(archivos.length).toBeGreaterThanOrEqual(12)
     for (const f of archivos) {
       const t = fs.readFileSync(f, 'utf8').toLowerCase()
       for (const p of PROHIBIDAS) expect(t.includes(p), `${f} nombra «${p}»`).toBe(false)

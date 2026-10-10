@@ -1,6 +1,6 @@
-/** R6 (provisional viaja), la puerta final (S5), la evidencia del juez (D1) (el pedido a GPT ciego viaja con el revisor común). Cliente sintético. Sin modelo. */
+/** R6 (provisional viaja), la puerta final (S5), la evidencia del juez (D1) y el pedido a GPT ciego (D3). Cliente sintético. Sin modelo. */
 import { describe, expect, it } from 'vitest'
-import { aplicarMeta, camposFirmes, cerrarPuerta, declaracionDelCliente, evaluarHechos, evidenciaParaElJuez, fuentesDeRaspado, metaDeCampos, ordenarMateria, quitarClausula, recomprobar, restituirPendientes } from '..'
+import { aplicarMeta, armarPedidoDelManual, camposFirmes, cerrarPuerta, declaracionDelCliente, evaluarHechos, evidenciaParaElJuez, fuentesDeRaspado, metaDeCampos, ordenarMateria, preguntaDelManual, quitarClausula, recomprobar, restituirPendientes } from '..'
 import { F, filaInstagram, filaSitio, PROPIOS } from './apoyo'
 
 const propio = (id: string, t: string) => F(id, 'primaria_propia', t)
@@ -108,5 +108,30 @@ describe('D1 · el juez de fidelidad recibe SOLO fuente cruda (R4 aplicada al ju
   it('un tope que corta una fuente lo dice dentro del texto', () => {
     const e = evidenciaParaElJuez([propio('p', 'a'.repeat(2000)), propio('q', 'b'.repeat(2000))], 1000)
     expect(e.recortada).toBe(true); expect(e.texto).toMatch(/\[bloque recortado: se leyeron \d+ de \d+ caracteres\]/)
+  })
+})
+
+describe('D3 · el pedido a GPT ciego usa la MISMA pregunta que la oficina; ciego por construcción', () => {
+  const materia = ordenarMateria(fuentesDeRaspado([filaSitio('s', [{ url: 'https://www.clinicaejemplo.test/', title: 'Clínica Ejemplo', text: 'Atendemos con cita previa.' }]), filaInstagram('i', 'clinicaejemplo', 'Sonríe sin miedo')], PROPIOS))
+  it('la pregunta del manual sale de los cuatro huecos y trae la misma indicación que la de una pieza', () => {
+    const q = preguntaDelManual()
+    expect(q.startsWith('Te comparto el manual de marca de un negocio, que se usa para guiar todo lo que se produzca para ese negocio, apunta a ')).toBe(true)
+    expect(q).toContain('Sé concreto y apóyate en lo que ves; distingue lo que observas de lo que supones sobre el público.')
+    expect(q).not.toMatch(/\{|\}/)
+    expect(preguntaDelManual({ publico: 'familias', objetivo: 'más citas' })).toContain('apunta a familias y busca más citas')
+  })
+  it('orden: pregunta → el manual completo → el material crudo rotulado por bloque y función; sin reglas ni hallazgos', () => {
+    const p = armarPedidoDelManual({ manualEnLimpio: 'MANUAL EN LIMPIO', materia })
+    const pos = ['## El manual de marca', '## Material crudo de las páginas y redes propias'].map((x) => p.texto.indexOf(x))
+    expect(pos[0]).toBeGreaterThan(0); expect(pos[0]).toBeLessThan(pos[1])
+    expect(p.texto).toContain('### Título y descripción del sitio propio — lo que el cliente publicó de sí mismo')
+    expect(p.texto).toContain('Atendemos con cita previa.'); expect(p.texto).toContain('Sonríe sin miedo')
+    expect(p.texto).not.toMatch(/sin_cita|solo_sintesis|PENDIENTE:|gravedad|rúbrica|fichas|puntaje|fidelidad/)
+    expect(p.imagenes).toEqual([])
+    expect(armarPedidoDelManual.length).toBe(1) // solo recibe lo que se le pasa: no hay por dónde colar el estado del ciclo
+  })
+  it('si hay bloques recortados, el pedido lo dice', () => {
+    const grande = ordenarMateria(fuentesDeRaspado([filaSitio('s', [{ url: 'https://www.clinicaejemplo.test/x', text: 'a '.repeat(5000) }])], PROPIOS))
+    expect(armarPedidoDelManual({ manualEnLimpio: 'M', materia: grande }).texto).toMatch(/Algunos bloques están recortados \(otras_paginas: 3000 de \d+ caracteres\)/)
   })
 })
