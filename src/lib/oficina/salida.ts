@@ -105,6 +105,8 @@ export const ESQUEMAS: Record<string, Esq> = {
     t: 'obj', req: ['fichas'],
     props: { fichas: { t: 'arr', max: 12, de: { t: 'obj', req: ['que', 'donde', 'contra_que', 'gravedad', 'propuesta'], props: { que: str(1, 500), donde: str(1, 200), contra_que: str(1, 400), gravedad: { t: 'enum', v: ['bloquea', 'sugerencia'] }, propuesta: str(1, 600) } } } },
   },
+  /** el que dirige la imagen (curador) solo responde a la opinión: tomada / no tomada, con razón; no entrega pieza */
+  'resolucion_solo.v1': { t: 'obj', req: ['respuestas'], props: { respuestas } },
   'resolucion.v1': {
     t: 'obj', req: ['respuestas'], ignorar: IGNORAR_TAMANO,
     props: {

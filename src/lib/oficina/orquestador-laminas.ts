@@ -67,8 +67,9 @@ export function contextoL(pl: Plantilla, e: Estado): ContextoLaminas {
 // ───────────────────────── de quién es cada hallazgo
 const DONDE_DEL_PASO: Record<string, string[]> = {
   corrige_texto: ['texto', 'hashtags'], decide_texto: ['texto', 'hashtags'],
-  ajusta_laminas: ['laminas'], ajusta_laminas_2: ['laminas'], corrige_laminas: ['laminas'],
-  corrige_estructura: ['estructura'],
+  ajusta_laminas: ['laminas'], ajusta_laminas_2: ['laminas'], corrige_laminas: ['laminas'], decide_laminas: ['laminas'],
+  corrige_estructura: ['estructura'], decide_estructura: ['estructura'],
+  decide_imagen: ['imagen'],
 }
 /** fichas abiertas que ESTE paso debe atender: las de su ronda (jefe: las que bloquean; externa: todas) cuyo «donde» le pertenece */
 export function fichasQueTocanL(e: Estado, paso: Paso): Ficha[] {
@@ -455,7 +456,7 @@ export function procesarValorL(paso: Paso, v: Record<string, unknown>, enc: Enca
       const fs = arr<{ que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string }>(v.fichas).map((f, i) => fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', f.donde, f.gravedad, f.que, f.contra_que, f.propuesta))
       return { res: { costo_usd: 0, artefacto: { fichas: fs.length }, fichas: fs } }
     }
-    case 'corrige_texto': case 'decide_texto': case 'ajusta_laminas': case 'ajusta_laminas_2': case 'corrige_laminas': case 'decide_laminas': case 'corrige_estructura': case 'decide_estructura':
+    case 'corrige_texto': case 'decide_texto': case 'ajusta_laminas': case 'ajusta_laminas_2': case 'corrige_laminas': case 'decide_laminas': case 'corrige_estructura': case 'decide_estructura': case 'decide_imagen':
       return resolver(paso, v, b, e, pl, retry)
     default: return { res: { costo_usd: 0, artefacto: v } }
   }

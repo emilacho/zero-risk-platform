@@ -23,12 +23,13 @@ export function reglasParaPrompts(e: Estado, brief: BriefLeido, F: FuentesComple
 }
 
 /** la opinión libre del revisor externo y lo que decidió el autor con ella (null si no hubo opinión). Se guarda como OPINIÓN: nunca como dato confirmado. */
-export function opinionExterna(e: Estado): { texto: string; modelo: string | null; el_autor: { estado: string; razon: string | null } | null; aviso: string } | null {
+export function opinionExterna(e: Estado): { texto: string; modelo: string | null; el_autor: { estado: string; razon: string | null } | null; por_dueno: Array<{ donde: string; estado: string; razon: string | null }>; aviso: string } | null {
   const a = datos(e, 'fichas_externas')
   const texto = typeof a?.opinion === 'string' ? a.opinion : null
   if (!texto) return null
   const f = e.fichas.find((x) => x.id.startsWith('ext-opinion'))
-  return { texto, modelo: typeof a?.modelo === 'string' ? a.modelo : null, el_autor: f ? { estado: f.estado, razon: f.razon ?? null } : null, aviso: 'opinión libre de un revisor externo; no es un dato confirmado' }
+  const por_dueno = e.fichas.filter((x) => x.id.startsWith('ext-opinion')).map((x) => ({ donde: x.donde, estado: x.estado, razon: x.razon ?? null }))
+  return { texto, modelo: typeof a?.modelo === 'string' ? a.modelo : null, el_autor: f ? { estado: f.estado, razon: f.razon ?? null } : null, por_dueno, aviso: 'opinión libre de un revisor externo; no es un dato confirmado' }
 }
 
 export const fichaNueva =(id: string, origen: Ficha['origen'], donde: string, gravedad: Ficha['gravedad'], que: string, contra_que = 'proceso de la oficina', propuesta = 'revisar'): Ficha => ({ id, origen, donde, gravedad, estado: 'abierta', que, contra_que, propuesta })

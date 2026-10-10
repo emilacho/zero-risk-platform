@@ -18,7 +18,7 @@ export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'de
 export const ESQUEMAS_REGISTRADOS = [
   'visual_direction.v1', 'prompts.v1', 'observacion_imagen.v1', 'pieza_post.v1', 'fichas.v1', 'resolucion.v1',
   'direccion_imagenes.v1', 'prompts_por_ref.v1', 'observacion_imagenes.v1', 'opinion_libre.v1', 'copy_base.v1', 'laminas.v1', 'estructura.v1', 'copy_kit.v1',
-  'resolucion_copy_base.v1', 'resolucion_laminas.v1', 'resolucion_copy_kit.v1', 'resolucion_estructura.v1',
+  'resolucion_copy_base.v1', 'resolucion_laminas.v1', 'resolucion_copy_kit.v1', 'resolucion_estructura.v1', 'resolucion_solo.v1',
 ] as const
 /** quién puede hacer cumplir una regla de indicación */
 export const APLICADORES_DE_CODIGO = [
@@ -43,6 +43,10 @@ function erroresDeCondicion(c: Condicion | undefined, donde: string, artefactos:
     const lista = Array.isArray(c.artefacto) ? c.artefacto : c.artefacto ? [c.artefacto] : []
     if (!lista.length) e.push(`${donde}: si_cambio pide artefacto`)
     for (const n of lista) if (!artefactos.has(n)) e.push(`${donde}: el artefacto «${n}» no lo produce ningún paso`)
+  }
+  if (c.tipo === 'cualquiera') {
+    if (!Array.isArray(c.de) || c.de.length < 2) e.push(`${donde}: cualquiera pide al menos dos condiciones`)
+    else c.de.forEach((x, i) => e.push(...erroresDeCondicion(x, `${donde} (cualquiera #${i + 1})`, artefactos)))
   }
   return e
 }

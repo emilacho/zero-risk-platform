@@ -15,6 +15,9 @@ const jefeTexto: Condicion = { tipo: 'si_fichas_abiertas', origen: 'jefe', donde
 const jefeEstructura: Condicion = { tipo: 'si_fichas_abiertas', origen: 'jefe', donde: 'estructura', gravedad: 'bloquea' }
 // la opinión libre del revisor externo llega como UNA ficha `externa` en «texto»: el autor decide qué toma
 const externaTexto: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'texto' }
+// y llega también a quien estructura (narrador) y al curador (imagen): cada uno decide sobre su parte, con razón
+const externaEstructura: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'estructura' }
+const externaImagen: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', donde: 'imagen' }
 const cambioKit: Condicion = { tipo: 'si_cambio', artefacto: ['copy_kit', 'estructura'] }
 const cambioArmado: Condicion = { tipo: 'si_cambio', artefacto: 'laminas_armadas' }
 const cambioRender: Condicion = { tipo: 'si_cambio', artefacto: 'render' }
@@ -111,6 +114,16 @@ export const KIT_HISTORIAS: Plantilla = {
       clave: 'decide_texto', tipo: 'agente', quien: 'content-creator', condicion: externaTexto, ronda: 2,
       entrada: ['fichas_externas', 'copy_kit'], salida_artefacto: 'copy_kit', tope_usd: 0.25,
       salida: { esquema: 'resolucion_copy_kit.v1', reintento_formato: 1 }, valida: ['contrato_de_lamina', 'refs_validos'],
+    },
+    {
+      clave: 'decide_estructura', tipo: 'agente', quien: 'design-visual-storyteller', condicion: externaEstructura, ronda: 2,
+      entrada: ['fichas_externas', 'estructura'], salida_artefacto: 'estructura', tope_usd: 0.2,
+      salida: { esquema: 'resolucion_estructura.v1', reintento_formato: 1 }, valida: ['sin_texto_en_estructura', 'refs_validos'],
+    },
+    {
+      clave: 'decide_imagen', tipo: 'agente', quien: 'marketing_instagram_curator', condicion: externaImagen, ronda: 2,
+      entrada: ['fichas_externas', 'visual_direction', 'render'], salida_artefacto: 'respuesta_imagen', tope_usd: 0.1,
+      salida: { esquema: 'resolucion_solo.v1', reintento_formato: 1 },
     },
     { clave: 'armar_3', tipo: 'codigo', quien: 'sala', funcion: 'armar_laminas', condicion: cambioKit, entrada: ['copy_kit', 'estructura', 'imagenes_elegidas'], salida_artefacto: 'laminas_armadas', tope_usd: 0 },
     { clave: 'render_3', tipo: 'codigo', quien: 'sala', funcion: 'render_laminas', condicion: cambioArmado, entrada: ['laminas_armadas'], salida_artefacto: 'render', tope_usd: 0 },

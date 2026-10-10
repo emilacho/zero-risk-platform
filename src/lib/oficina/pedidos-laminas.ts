@@ -26,6 +26,7 @@ const arr = (a: unknown): unknown[] => (Array.isArray(a) ? a : [])
 const s = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v))
 
 export const CONTRATOS_LAMINAS: Record<string, string> = {
+  'resolucion_solo.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}]}',
   'direccion_imagenes.v1': '{"resumen": "…", "paleta": ["…"], "estilo": "…", "imagenes": [{"ref": "<ref de la lista>", "modo": "real|generada|ninguna", "foto_id": "(solo si modo=real)", "motivo": "…"}], "reglas_de_imagen": {"obligatorio": [{"id": "o1", "texto": "…", "claves": ["…"], "cita": "copia LITERAL del brief"}], "prohibido": [{"id": "p1", "texto": "…", "claves": ["…"], "cita": "copia LITERAL del brief"}]}, "necesito": []}',
   'prompts_por_ref.v1': '{"imagenes": [{"ref": "<ref a generar>", "prompts": [{"prompt": "…", "idea_en_una_linea": "…"}, {"prompt": "…", "idea_en_una_linea": "…"}]}]}  (2 o 3 prompts por imagen; no escribas tamaño ni parámetros: los fija la sala)',
   'observacion_imagenes.v1': '{"imagenes": [{"indice": 0, "reglas": [{"id": "o1", "presente": true, "evidencia": "…"}], "texto_en_imagen": ["…"], "marcas": ["…"], "personas": 0, "producto": "…", "elementos_visibles": ["…"]}], "preferencia": [0]}  (presente = true | false | "no_se_ve"; describes, no apruebas)',
@@ -129,6 +130,11 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
     case 'decide_laminas': {
       esquema = 'resolucion_laminas.v1'
       return fin(`${base}\n## Texto del autor (la versión vigente; de aquí recortas)\n${pieza}\n\n## Hallazgos de láminas que te tocan\n${fichas}\n\n## Tu trabajo\n${clave.startsWith('ajusta') ? 'El autor cambió su texto: vuelve a recortar las láminas de ESTE texto (cada titular, texto o llamado debe ser un trozo exacto) y atiende de paso los hallazgos de arriba. Devuelve la lista completa en `laminas`.' : 'Responde ítem por ítem: «tomada» (y corriges las láminas) o «no_tomada» con una línea de razón. No escribes texto nuevo: recortas del texto del autor.'} Un solo llamado a la acción. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
+    }
+    case 'decide_imagen': {
+      esquema = 'resolucion_solo.v1'
+      images = laminasDeMuestra(c.png, 4)
+      return fin(`${base}\n## Tu dirección visual\n${s(c.art('visual_direction')?.resumen)}\n\n## La pieza completa (texto de todas las piezas; las imágenes que ves son las dibujadas)\n${pieza}\n\n## Opinión libre del revisor externo sobre ESTA pieza (no es una lista de errores ni una orden: es una mirada distinta a la tuya)\n${fichas}\n\n## Tu trabajo\nResponde sobre TU parte (las imágenes y la dirección visual): «tomada» si aceptas que alguna imagen debería cambiar, o «no_tomada» con una línea de razón. Tú decides. Las imágenes NO se vuelven a generar en esta ronda: una persona decide si se rehacen. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
     }
     case 'corrige_estructura':
     case 'decide_estructura': {

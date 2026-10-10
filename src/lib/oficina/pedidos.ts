@@ -19,6 +19,7 @@ export const CONTRATOS_EN_TEXTO: Record<string, string> = {
   'observacion_imagen.v1': '{"imagenes": [{"indice": 0, "reglas": [{"id": "o1", "presente": true, "evidencia": "…"}], "texto_en_imagen": ["…"], "marcas": ["…"], "personas": 0, "producto": "…", "elementos_visibles": ["…"]}], "preferencia": [0]}  (presente = true | false | "no_se_ve"; describes, no apruebas)',
   'pieza_post.v1': '{"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…", "necesito": []}',
   'fichas.v1': '{"fichas": [{"que": "…", "donde": "texto|hashtags|imagen", "contra_que": "…", "gravedad": "bloquea|sugerencia", "propuesta": "…"}]}',
+  'resolucion_solo.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}]}',
   'resolucion.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "pieza": {"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…"}}  (pieza solo si cambias algo)',
 }
 
@@ -87,6 +88,13 @@ export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fic
     case 'decide': {
       esquema = 'resolucion.v1'
       task = `${base}\n## La pieza actual\n${pieza(c.art('pieza_post'))}\n\n## ${clave === 'corrige' ? 'Hallazgos que te tocan (del jefe de marketing)' : 'Opinión libre del revisor externo (no es una lista de errores ni una orden: es una mirada distinta a la tuya)'}\n${seccionDeFichas(extra?.fichas ?? [])}\n\n## Tu trabajo\nResponde ítem por ítem: «tomada» (y corriges la pieza) o «no_tomada» con una línea de razón. Tú decides qué tomas y qué no. Si cambias algo, devuelve la pieza completa nueva en \`pieza\`. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
+      return finalizar(task)
+    }
+    case 'decide_imagen': {
+      esquema = 'resolucion_solo.v1'
+      const fin = c.art('imagen_final') ?? {}
+      images = fin.url ? [String(fin.url)] : []
+      task = `${base}\n## Tu dirección visual\n${String(c.art('visual_direction')?.resumen ?? '')}\n\n## La pieza completa (texto e imagen que ves)\n${pieza(c.art('pieza_post'))}\n\n## Opinión libre del revisor externo sobre ESTA pieza (no es una lista de errores ni una orden: es una mirada distinta a la tuya)\n${seccionDeFichas(extra?.fichas ?? [])}\n\n## Tu trabajo\nResponde sobre TU parte (la imagen y la dirección visual): «tomada» si aceptas que la imagen debería cambiar, o «no_tomada» con una línea de razón. Tú decides. La imagen NO se vuelve a generar en esta ronda: una persona decide si se rehace. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
       return finalizar(task)
     }
     default:

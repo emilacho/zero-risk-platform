@@ -30,7 +30,7 @@ describe('las plantillas de las salas 2 y 3 son válidas contra el vocabulario c
   }
   it('no cambia el vocabulario: los tipos de condición y de paso son los de la sala 1', () => {
     const tipos = (p: Plantilla) => new Set(p.pasos.flatMap((s) => [s.condicion.tipo, ...(s.vuelve_a ? [s.vuelve_a.si.tipo] : [])]))
-    for (const p of [CARRUSEL_IG_V1, KIT_HISTORIAS]) for (const t of tipos(p)) expect(['siempre', 'si_artefacto', 'si_fichas_abiertas', 'si_cambio']).toContain(t)
+    for (const p of [CARRUSEL_IG_V1, KIT_HISTORIAS]) for (const t of tipos(p)) expect(['siempre', 'si_artefacto', 'si_fichas_abiertas', 'si_cambio', 'cualquiera']).toContain(t)
   })
   it('una plantilla que inventa una función, un esquema o un validador sigue rechazada', () => {
     const c = JSON.parse(JSON.stringify(CARRUSEL_IG_V1)) as Plantilla
