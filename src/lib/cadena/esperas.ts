@@ -18,7 +18,23 @@ export interface Reloj { recordatorio_en: string | null; alerta_en: string | nul
 const H = 3_600_000
 const iso = (ms: number) => new Date(ms).toISOString()
 
-export interface ContextoPlazo { fechaPieza?: string; fechaInicio?: string; leadDiasVideo?: number }
+export interface ContextoPlazo { fechaPieza?: string; fechaInicio?: string; leadDiasVideo?: number; /** zona IANA de la campaña: «el final del día de la pieza» es el suyo, no el de UTC */ zona?: string | null }
+
+/**
+ * Instante (ms UTC) del FINAL del día `fecha` (23:59:59) en la zona IANA `zona`. Sin zona, o con una zona que no existe, el final del día UTC
+ * (el comportamiento de antes). 🔴 #459 menor (CC#3): en UTC−5 una pieza vencía 5 h antes de acabar su día local.
+ */
+export function finDelDiaEnZona(fecha: string, zona?: string | null): number {
+  const utc = Date.parse(`${fecha}T23:59:59Z`)
+  if (!zona) return utc
+  try {
+    const dtf = new Intl.DateTimeFormat('en-US', { timeZone: zona, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    const desfase = (t: number) => { const p = Object.fromEntries(dtf.formatToParts(new Date(t)).map((x) => [x.type, x.value])); return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - t }
+    let t = utc - desfase(utc)
+    t = utc - desfase(t)
+    return t
+  } catch { return utc }
+}
 
 /** Calcula el reloj de una espera nueva. Siempre devuelve `vence_en` (V21: una espera sin plazo no existe). */
 export function calcularReloj(p: PlazoCfg, ahora: string, ctx: ContextoPlazo = {}): Reloj {
@@ -26,7 +42,7 @@ export function calcularReloj(p: PlazoCfg, ahora: string, ctx: ContextoPlazo = {
   if (Number.isNaN(t0)) throw new Error(`ahora inválido: ${ahora}`)
   let vence: number
   if (p.vence_horas != null) vence = t0 + p.vence_horas * H
-  else if (p.vence_regla === 'fecha_de_la_pieza' && ctx.fechaPieza) vence = Date.parse(`${ctx.fechaPieza}T23:59:59Z`)
+  else if (p.vence_regla === 'fecha_de_la_pieza' && ctx.fechaPieza) vence = finDelDiaEnZona(ctx.fechaPieza, ctx.zona)
   else if (p.vence_regla === 'fecha_menos_lead_dias_video' && ctx.fechaPieza) vence = Date.parse(`${sumarDias(ctx.fechaPieza, -(ctx.leadDiasVideo ?? 5))}T00:00:00Z`)
   else if (p.vence_regla === 'fecha_inicio_menos_1_dia' && ctx.fechaInicio) vence = Date.parse(`${sumarDias(ctx.fechaInicio, -1)}T00:00:00Z`)
   else if (p.vence_regla === 'resumen_semanal') vence = t0 + 7 * 24 * H
@@ -45,8 +61,8 @@ export function calcularReloj(p: PlazoCfg, ahora: string, ctx: ContextoPlazo = {
  * nunca ve la aprobación. Los ítems de la bandeja se crean con `expires_in_hours` = horas hasta el final del día de la pieza,
  * y nunca menos que 1 h más que la alerta (`alertaHoras`), para que la alerta salga ANTES de que el ítem caduque.
  */
-export function expiresInHours(ahora: string, fechaPieza: string, alertaHoras = 72): number {
-  const hasta = Math.ceil((Date.parse(`${fechaPieza}T23:59:59Z`) - Date.parse(ahora)) / H)
+export function expiresInHours(ahora: string, fechaPieza: string, alertaHoras = 72, zona?: string | null): number {
+  const hasta = Math.ceil((finDelDiaEnZona(fechaPieza, zona) - Date.parse(ahora)) / H)
   return Math.max(hasta, alertaHoras + 1)
 }
 

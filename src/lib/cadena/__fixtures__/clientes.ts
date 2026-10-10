@@ -161,3 +161,11 @@ export function filasDe(c: ClienteFixture, t: TandaAgente, formatos: FormatosPor
   const esq = expandirPatron(c.estrategia, c.campana, c.campana.semanas, c.campana.tanda, formatos)
   return fusionarTanda(esq, t, c.estrategia, c.campana, c.campana.tanda, formatos).filas
 }
+
+/** el contexto que el almacén real armaría de la base, para las pruebas de los manejadores */
+export function contextoDe(c: ClienteFixture): import('../almacen').ContextoDelCliente {
+  return {
+    clientId: c.clientId, nombreDelNegocio: c.conocidos[0] ?? 'Negocio de práctica', pais: 'pais-de-practica', zonaHoraria: 'UTC', planTexto: c.planTexto,
+    manualTexto: c.referencias.find((r) => r.origen === 'manual')?.texto ?? '', forbiddenWords: c.forbiddenWords, sedes: c.sedes, referencias: c.referencias, fechaDelPlan: '2026-10-08',
+  }
+}

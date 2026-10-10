@@ -97,3 +97,7 @@ export function minutos(hhmm: unknown): number | null {
   const h = Number(m[1]), mi = Number(m[2])
   return h > 23 || mi > 59 ? null : h * 60 + mi
 }
+
+export function restarDias(iso: string, n: number): string {
+  return sumarDias(iso, -n)
+}

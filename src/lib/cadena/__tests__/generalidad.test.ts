@@ -46,14 +46,36 @@ describe('cero contacto con el cliente: ningún destino ni valor apunta al dueñ
     expect(malos).toEqual([])
   })
   it('no hay recados, ni contacto, ni WhatsApp al cliente', () => {
-    const malos = CODIGO.filter((c) => /sala[_]recados|recado|contactar al cliente/i.test(c.src.replace(/sala[_]destinos[_]de[_]recado/g, ''))).map((c) => c.f.split(/[\/]/).pop())
+    const malos = CODIGO.filter((c) => /sala[_]recados|recado|contactar al cliente/i.test(c.src.replace(/sala[_]destinos[_]de[_]recado|almacenDeRecados|sala-recados\/almacen-supabase|leerDestino/g, ''))).map((c) => c.f.split(/[\\/]/).pop())
     expect(malos).toEqual([])
   })
 })
 
 describe('funciones puras: el validador no tiene red ni base dentro', () => {
-  it('ningún módulo de la cadena importa red, base ni sistema de archivos', () => {
-    const malos = CODIGO.filter((c) => /from ['"](?:node:)?(?:fs|http|https|net|child_process|@supabase|pg)\b|\bfetch\(|getSupabase|process\.env/.test(c.src)).map((c) => c.f.split(/[\\/]/).pop())
+  it('ningún módulo de la cadena importa red, base ni sistema de archivos (salvo el almacén de Supabase, que es EL lugar de la base)', () => {
+    const malos = CODIGO.filter((c) => !/almacen-supabase.ts$/.test(c.f)).filter((c) => /from ['"](?:node:)?(?:fs|http|https|net|child_process|@supabase|pg)\b|\bfetch\(|getSupabase|process\.env/.test(c.src)).map((c) => c.f.split(/[\\/]/).pop())
     expect(malos).toEqual([])
+  })
+})
+
+describe('un solo lugar nombra las tablas de la cadena', () => {
+  it('solo `almacen-supabase.ts` (y la migración) escriben `from(\'cadena_…\')` en todo el código de la aplicación', () => {
+    const raiz = join(__dirname, '..', '..', '..', '..')
+    const recorrer = (d: string): string[] => readdirSync(d).flatMap((n) => {
+      const p = join(d, n)
+      if (/^(node_modules|\.next|__tests__|__fixtures__)$/.test(n)) return []
+      return statSync(p).isDirectory() ? recorrer(p) : /\.tsx?$/.test(n) ? [p] : []
+    })
+    const malos = recorrer(join(raiz, 'src')).filter((f) => !/almacen-supabase\.ts$/.test(f) && /from\(\s*['"]cadena_/.test(readFileSync(f, 'utf8'))).map((f) => f.split(/[\/]/).slice(-3).join('/'))
+    expect(malos).toEqual([])
+  })
+  it('las 7 rutas existen, piden la llave interna y no tocan la base directamente', () => {
+    const raiz = join(__dirname, '..', '..', '..', 'app', 'api', 'cadena')
+    for (const r of ['campanas', 'estrategia', 'calendario', 'validar', 'filas', 'fechas', 'esperas']) {
+      const src = readFileSync(join(raiz, r, 'route.ts'), 'utf8')
+      expect(src).toMatch(/atender\(request,/)
+      expect(src).not.toMatch(/getSupabase/)
+    }
+    expect(readFileSync(join(DIR, 'puerta-http.ts'), 'utf8')).toMatch(/checkInternalKey\(request\)[\s\S]{0,200}status: 401/)
   })
 })
