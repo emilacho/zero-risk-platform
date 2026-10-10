@@ -293,6 +293,8 @@ const MODEL_MAP: Record<string, string> = {
   'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-opus-4-6': 'claude-opus-4-6',
+  // relevo 38 · Sonnet 5.5 · SOLO por nombre completo (el alias 'claude-sonnet' sigue en 4.6 y ningún otro agente cambia) · una fila de `agents` con `model = claude-sonnet-5-5` lo usa
+  'claude-sonnet-5-5': 'claude-sonnet-5-5',
 }
 
 // Precios (USD / 1M tokens) Sonnet 4.6 — ajustar por modelo si hace falta
