@@ -6,7 +6,7 @@
 -- 🔴 IDEMPOTENTE (repetible): IF NOT EXISTS, ON CONFLICT DO NOTHING y bloques DO para lo que no admite IF NOT EXISTS. `client_id` es TEXTO sin llave hacia tablas viejas (igual que las del cerebro y la sala). Una sola transacción.
 -- 🔴 NO ESPERA SIN RELOJ (V21): `cadena_esperas.vence_en` es NOT NULL; `cadena_corridas.plazo_en` es NOT NULL mientras la llamada está en curso (CC#3 cond. 2); el vigía deja `ultimo_latido` en `cadena_config` (cond. 2).
 -- ORDEN AL PUBLICAR: (1) respaldo confirmado y CERO corridas → (2) esta migración → (3) lectura de permisos y RLS → (4) NOTIFY (ya incluido al final).
--- REVERSA: `supabase/reversas/202610090100_cadena_tablas_REVERSA.sql` (se niega a borrar si hay campañas, estrategias, filas o corridas).
+-- REVERSA: `supabase/reversas/202610090200_cadena_tablas_REVERSA.sql` (se niega a borrar si hay campañas, estrategias, filas o corridas).
 
 BEGIN;
 
@@ -308,6 +308,9 @@ BEGIN
   END LOOP;
 END
 $cadena$;
+-- las secuencias heredan permisos por defecto a anon/authenticated en Supabase: se cierran igual que las tablas (condición 2 de CC#3)
+REVOKE ALL ON SEQUENCE public.cadena_estrategias_id_seq, public.cadena_validaciones_id_seq, public.cadena_fechas_especiales_id_seq,
+  public.cadena_esperas_id_seq, public.cadena_corridas_id_seq FROM PUBLIC, anon, authenticated;
 GRANT USAGE, SELECT ON SEQUENCE public.cadena_estrategias_id_seq, public.cadena_validaciones_id_seq, public.cadena_fechas_especiales_id_seq,
   public.cadena_esperas_id_seq, public.cadena_corridas_id_seq TO service_role;
 
@@ -317,6 +320,11 @@ COMMENT ON TABLE public.cadena_esperas IS 'CADENA · todo lo que espera tiene re
 COMMENT ON TABLE public.cadena_corridas IS 'CADENA · guardarraíles 1–5: cada llamada con workflow_id + workflow_execution_id, plazo mientras está en curso y clave de idempotencia.';
 
 COMMIT;
+
+-- COMPROBACIÓN POSTERIOR AL APLICAR (debe dar 0 filas): permisos que anon/authenticated NO deben tener, y tablas sin RLS
+--   select c.relname from pg_class c where c.relname like 'cadena_%' and c.relkind='r' and (not c.relrowsecurity or has_table_privilege('anon',c.oid,'SELECT') or has_table_privilege('authenticated',c.oid,'SELECT'));
+--   select c.relname from pg_class c where c.relname like 'cadena_%' and c.relkind='S' and (has_sequence_privilege('anon',c.oid,'USAGE') or has_sequence_privilege('authenticated',c.oid,'USAGE'));
+-- Y aplicar JUNTO el SQL de cadena_config (flujos + puerta_workflow_id): sin 'flujos' cada workflow_id de los flujos de la cadena recibe 403 E-WORKFLOW-DESCONOCIDO.
 
 -- 🔴 una tabla nueva no la ve PostgREST hasta recargar su catálogo (medido 03-oct)
 NOTIFY pgrst, 'reload schema';

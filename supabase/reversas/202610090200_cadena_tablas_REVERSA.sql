@@ -1,3 +1,4 @@
+-- OJO: esta reversa también borra cadena_config (interruptor, clientes de ensayo, flujos, puerta_workflow_id y latido del vigía). Al volver atrás se pierde esa semilla: re-aplicar la migración y el SQL de cadena_config.
 -- REVERSA de las tablas de la cadena (PR 1) · CC#1 · 2026-10-09 · deja el esquema IDÉNTICO a antes.
 -- 🔴 SE NIEGA A BORRAR DATOS: si alguna tabla de trabajo (campañas, estrategias, filas, validaciones, esperas, corridas, fechas) tiene filas, ABORTA con error y no borra nada. Primero EXPORTAR.
 --    Las tres tablas de datos de ajuste (config, plazos, formatos) se borran con sus semillas; si alguien AÑADIÓ filas fuera de la siembra, también aborta.
