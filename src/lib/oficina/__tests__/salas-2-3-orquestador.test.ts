@@ -66,6 +66,7 @@ const BASE_C = {
   direccion_visual: () => ({ texto: sinImagenes }),
   prompts: () => ({ texto: promptsDe(['hook']) }),
   mirar: (_n: number, t: string) => ({ texto: observacion(indicesDe(t)) }),
+  reimagen_prompts: () => ({ texto: promptsDe(['hook']) }), reimagen_mirar: (_n: number, t: string) => ({ texto: observacion(indicesDe(t)) }),
   texto: () => ({ texto: j(COPIA) }),
   laminas: () => ({ texto: j({ laminas: LAMINAS }) }),
   revision_jefe: () => ({ texto: FICHAS_VACIAS }),
@@ -82,7 +83,7 @@ const COPY_KIT = { elementos: [
   { ref: 'e03', headline: 'Escríbenos', cta: 'Escríbenos', acompanamiento: 'Te esperamos.' },
 ] }
 const BASE_K = {
-  paquete: BASE_C.paquete, direccion_visual: BASE_C.direccion_visual, prompts: BASE_C.prompts, mirar: BASE_C.mirar,
+  paquete: BASE_C.paquete, direccion_visual: BASE_C.direccion_visual, prompts: BASE_C.prompts, mirar: BASE_C.mirar, reimagen_prompts: () => ({ texto: promptsDe(['e01']) }), reimagen_mirar: BASE_C.mirar,
   narrativa: () => ({ texto: j(ESTRUCTURA) }), texto: () => ({ texto: j(COPY_KIT) }), revision_jefe: BASE_C.revision_jefe,
   corrige_texto: BASE_C.corrige_texto, decide_imagen: BASE_C.decide_imagen, corrige_estructura: () => ({ texto: '{"respuestas": []}' }), decide_texto: BASE_C.decide_texto, decide_estructura: () => ({ texto: '{"respuestas": []}' }),
 }
@@ -570,5 +571,82 @@ describe('CC#3 #471 · lo que sus mutaciones dejaron vivo en la entrega y en la 
     const enHistoria = await abiertoK({ dry_run: false })
     await correr(enHistoria.M, enHistoria.id, guionKit({ texto: () => ({ texto: j(copia('e01')) }) }))
     expect(largos(enHistoria.M, enHistoria.id)).toEqual([])
+  })
+})
+
+describe('relevo 46 · la opinión «tomada» del curador dispara UNA re-imagen (con los controles de siempre) si al encargo le queda margen', () => {
+  const OPINION = 'Las imágenes se ven frías y planas.'
+  const toma = (rehacer?: string[]) => (_n: number, t: string) => ({ texto: j({ respuestas: [...t.matchAll(/\[(ext-[^\]]+)\]/g)].map((x) => ({ id: x[1], estado: 'tomada', razon: 'sí, está plana' })), ...(rehacer ? { rehacer } : {}) }) })
+  const conOpinion = (M: Memoria) => { M.revisorTexto = () => ({ ok: true, texto: OPINION, costo_usd: 0.1, modelo: 'r' }) }
+  const dirGenerada = () => ({ texto: conImagenGenerada() })
+
+  it('carrusel: se rehace SOLO la imagen que el curador dijo («hook»), la lámina se vuelve a armar y dibujar con la imagen NUEVA y la bandeja no dice «por rehacer»', async () => {
+    const { M, id } = await abiertoC({ dry_run: false }); conOpinion(M)
+    let antes = -1
+    const { pasos, tareas } = await correr(M, id, guionCarrusel({ direccion_visual: dirGenerada, decide_imagen: (n, t) => { antes = M.llamadas.imagen; return toma(['hook'])(n, t) } }))
+    expect(pasos.slice(pasos.indexOf('decide_imagen'))).toEqual(['decide_imagen', 'reimagen_prompts', 'reimagen_mirar'])
+    expect(tareas['reimagen_prompts'][0]).toMatch(/fr[ií]as y planas/); expect(tareas['reimagen_prompts'][0]).toMatch(/ÚNICA re-imagen/)
+    expect(M.llamadas.imagen).toBe(antes + 2) // una tanda nueva (2 versiones) de «hook»
+    expect(M.llamadas.render).toBe(2)
+    const fondo = (i: number) => M.llamadas.renderPedidos[i].slides[0].background_image_url
+    expect(fondo(0)).not.toBe(fondo(1)); expect(fondo(1)).toMatch(/img\.test/)
+    expect(String(M.llamadas.bandeja[0].titulo)).not.toMatch(/IMAGEN POR REHACER/)
+    expect((M.llamadas.salidas[0].metadata as Record<string, unknown>).re_imagen_hecha).toBe(true)
+    expect(M.encargos.get(id)!.estado_del_motor.artefactos['respuesta_imagen'].datos).toMatchObject({ re_imagen: true, refs: ['hook'] })
+  })
+  it('carrusel: la imagen nueva NO cumple el brief ⇒ se queda la anterior (no se vuelve a dibujar), ficha que lo dice y bandeja «imagen por rehacer»', async () => {
+    const { M, id } = await abiertoC({ dry_run: false }); conOpinion(M)
+    await correr(M, id, guionCarrusel({ direccion_visual: dirGenerada, decide_imagen: toma(['hook']), reimagen_mirar: (_n, t) => ({ texto: observacion(indicesDe(t), { falta: true }) }) }))
+    expect(M.llamadas.render).toBe(1)
+    const e = M.encargos.get(id)!.estado_del_motor
+    expect(e.fichas.some((x) => x.id.startsWith('reimagen-no-cumplio') && x.gravedad === 'sugerencia')).toBe(true)
+    expect(e.fichas.some((x) => x.donde === 'imagen' && x.gravedad === 'bloquea' && x.estado === 'abierta')).toBe(false)
+    expect(String(M.llamadas.bandeja[0].titulo)).toMatch(/IMAGEN POR REHACER/)
+  })
+  it('carrusel: ningún prompt nuevo pasa el control ②: no se genera nada, no se vuelve a dibujar, se queda la imagen anterior y la bandeja dice «imagen por rehacer»', async () => {
+    const { M, id } = await abiertoC({ dry_run: false }); conOpinion(M)
+    const malos = j({ imagenes: [{ ref: 'hook', prompts: [{ prompt: 'Una mesa de madera vacía junto a una ventana luminosa.', idea_en_una_linea: 'a' }, { prompt: 'Una ventana luminosa con cortinas claras.', idea_en_una_linea: 'b' }] }] })
+    let antes = -1
+    const { pasos } = await correr(M, id, guionCarrusel({ direccion_visual: dirGenerada, reimagen_prompts: () => ({ texto: malos }), decide_imagen: (n, t) => { antes = M.llamadas.imagen; return toma(['hook'])(n, t) } }))
+    expect(pasos).toContain('reimagen_prompts'); expect(pasos).not.toContain('reimagen_mirar')
+    expect(M.llamadas.imagen).toBe(antes); expect(M.llamadas.render).toBe(1)
+    const e = M.encargos.get(id)!.estado_del_motor
+    expect((e.artefactos['imagenes'].datos as { ultimo_intento: number }).ultimo_intento).toBe(1)
+    expect(e.fichas.some((x) => x.id.startsWith('reimagen-prompts-ninguno'))).toBe(true)
+    expect(String(M.llamadas.bandeja[0].titulo)).toMatch(/IMAGEN POR REHACER/)
+  })
+  it('carrusel: sin imágenes generadas (fondo de la marca) «tomada» no se puede rehacer: bandeja «imagen por rehacer», cero imágenes', async () => {
+    const { M, id } = await abiertoC({ dry_run: false }); conOpinion(M)
+    const { pasos } = await correr(M, id, guionCarrusel({ decide_imagen: toma() }))
+    expect(pasos).not.toContain('reimagen_prompts'); expect(M.llamadas.imagen).toBe(0)
+    expect(String(M.llamadas.bandeja[0].titulo)).toMatch(/IMAGEN POR REHACER/)
+    expect(M.encargos.get(id)!.estado_del_motor.artefactos['respuesta_imagen'].datos).toMatchObject({ re_imagen: false, por_rehacer_humano: true })
+  })
+  it('carrusel: el encargo YA gastó sus 2 regeneraciones del control ③ ⇒ no hay re-imagen: bandeja «imagen por rehacer»', async () => {
+    const { M, id } = await abiertoC({ dry_run: false }); conOpinion(M)
+    let n = 0
+    const { pasos } = await correr(M, id, guionCarrusel({ direccion_visual: dirGenerada, mirar: (_n, t) => ({ texto: observacion(indicesDe(t), n++ < 2 ? { falta: true } : {}) }), decide_imagen: toma(['hook']) }))
+    expect(pasos).not.toContain('reimagen_prompts')
+    expect(M.encargos.get(id)!.estado_del_motor.artefactos['respuesta_imagen'].datos).toMatchObject({ re_imagen: false, motivo: expect.stringMatching(/tope de regeneraciones/) })
+    expect(String(M.llamadas.bandeja[0].titulo)).toMatch(/IMAGEN POR REHACER/)
+  })
+  it('carrusel: «no_tomada» no rehace nada', async () => {
+    const { M, id } = await abiertoC({ dry_run: false }); conOpinion(M)
+    const { pasos } = await correr(M, id, guionCarrusel({ direccion_visual: dirGenerada }))
+    expect(pasos).not.toContain('reimagen_prompts'); expect(M.llamadas.render).toBe(1)
+    expect(String(M.llamadas.bandeja[0].titulo)).not.toMatch(/IMAGEN POR REHACER/)
+  })
+  it('kit: se rehace SOLO el elemento que el curador dijo (e01); los demás no se tocan', async () => {
+    const { M, id } = await abiertoK({ dry_run: false }); conOpinion(M)
+    const dir = j({ resumen: 'x', imagenes: [{ ref: 'e01', modo: 'generada', motivo: 'm' }, { ref: 'e03', modo: 'generada', motivo: 'm' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } })
+    let antes = -1
+    const { pasos } = await correr(M, id, guionKit({
+      direccion_visual: () => ({ texto: dir }), prompts: () => ({ texto: promptsDe(['e01', 'e03']) }),
+      decide_imagen: (n, t) => { antes = M.llamadas.imagen; return toma(['e01'])(n, t) },
+    }))
+    expect(pasos.slice(pasos.indexOf('decide_imagen'))).toEqual(['decide_imagen', 'reimagen_prompts', 'reimagen_mirar'])
+    expect(M.llamadas.imagen).toBe(antes + 2) // solo e01
+    const f0 = M.llamadas.renderPedidos[0].slides.map((x) => x.background_image_url), f1 = M.llamadas.renderPedidos[1].slides.map((x) => x.background_image_url)
+    expect(f1[0]).not.toBe(f0[0]); expect(f1[2]).toBe(f0[2]) // e03 intacta
   })
 })

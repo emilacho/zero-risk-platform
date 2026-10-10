@@ -8,7 +8,7 @@ const abrir = (M: Memoria, cuerpo: unknown = sobre(), extra: Record<string, unkn
 const indicesDe = (tarea: string) => [...tarea.matchAll(/índice (\d+)/g)].map((x) => Number(x[1]))
 const idsDe = (tarea: string, pref: string) => [...tarea.matchAll(new RegExp(`\\[(${pref}-[^\\]]+)\\]`, 'g'))].map((x) => x[1])
 
-const guionGenerada = (o: { mirar?: Guion[string]; texto?: string; jefe?: Guion[string]; corrige?: Guion[string]; decide?: Guion[string]; decide_imagen?: Guion[string]; prompts?: string } = {}): Guion => ({
+const guionGenerada = (o: { mirar?: Guion[string]; texto?: string; jefe?: Guion[string]; corrige?: Guion[string]; decide?: Guion[string]; decide_imagen?: Guion[string]; reimagen_prompts?: Guion[string]; reimagen_mirar?: Guion[string]; prompts?: string } = {}): Guion => ({
   paquete: () => ({ texto: 'material del portero: fotos etiquetadas, sedes, manual vigente' }),
   direccion_visual: () => ({ texto: direccionGenerada() }),
   prompts: () => ({ texto: o.prompts ?? BUENOS_PROMPTS }),
@@ -18,6 +18,8 @@ const guionGenerada = (o: { mirar?: Guion[string]; texto?: string; jefe?: Guion[
   corrige: o.corrige ?? (() => ({ texto: '{"respuestas": []}' })),
   decide: o.decide ?? (() => ({ texto: '{"respuestas": []}' })),
   decide_imagen: o.decide_imagen ?? (() => ({ texto: '{"respuestas": []}' })),
+  reimagen_prompts: o.reimagen_prompts ?? (() => ({ texto: o.prompts ?? BUENOS_PROMPTS })),
+  reimagen_mirar: o.reimagen_mirar ?? ((_n, t) => ({ texto: observacion(indicesDe(t)) })),
 })
 
 async function abierto(M: Memoria, cuerpo: unknown = sobre()) {
@@ -221,6 +223,16 @@ describe('rama FOTO REAL', () => {
     const fin = M.encargos.get(id)!.estado_del_motor.artefactos['imagen_final'].datos as { origen: string; url: string; nota: string }
     expect(fin).toMatchObject({ origen: 'real', url: 'https://fotos.test/ef0921ad.jpg' }); expect(fin.nota).toMatch(/recortar/)
   })
+  it('«tomada» sobre una foto REAL no se puede re-imaginar (no hay imagen generada): bandeja «imagen por rehacer» y cero imágenes generadas', async () => {
+    const M = crearMemoria({ parte: PARTE_OTRO_PRODUCTO })
+    M.revisorTexto = () => ({ ok: true, texto: 'La foto no me convence.', costo_usd: 0.1, modelo: 'sim' })
+    const id = await abierto(M, sobre({ dry_run: false }))
+    const g = { ...guion('ef0921ad'), decide: () => ({ texto: '{"respuestas": []}' }), decide_imagen: (_n: number, t: string) => ({ texto: JSON.stringify({ respuestas: [...t.matchAll(/\[(ext-[^\]]+)\]/g)].map((x) => ({ id: x[1], estado: 'tomada', razon: 'sí' })) }) }) } as Guion
+    const { pasos } = await correr(M, id, g)
+    expect(pasos).toContain('decide_imagen'); expect(pasos).not.toContain('reimagen_prompts')
+    expect(M.llamadas.imagen).toBe(0)
+    expect(String(M.llamadas.bandeja[0].titulo)).toMatch(/IMAGEN POR REHACER/)
+  })
   it('si el curador elige una foto que NO es candidata, el código manda generar (no confía en el modelo)', async () => {
     const M = crearMemoria({ parte: PARTE_OTRO_PRODUCTO })
     const id = await abierto(M)
@@ -398,23 +410,75 @@ describe('rondas: jefe-marketing → el que escribe corrige → revisor ciego �
     expect(String(M.llamadas.bandeja[0].titulo)).not.toMatch(/SIN SEGUNDA MIRADA/)
     expect((M.llamadas.salidas[0].metadata as Record<string, unknown>).sin_segunda_mirada).toBeUndefined()
   })
-  it('la opinión llega también al CURADOR de la imagen: responde sobre SU parte, una vez; si «toma», la bandeja lo dice y la imagen NO se rehace sola', async () => {
-    const M = crearMemoria()
-    M.revisorTexto = () => ({ ok: true, texto: 'La imagen se ve fría y plana.', costo_usd: 0.1, modelo: 'sim' })
+  const OPINION_IMG = 'La imagen se ve fría y plana.'
+  const conOpinion = (M: Memoria) => { M.revisorTexto = () => ({ ok: true, texto: OPINION_IMG, costo_usd: 0.1, modelo: 'sim' }) }
+  it('la opinión llega también al CURADOR de la imagen: responde sobre SU parte, una vez', async () => {
+    const M = crearMemoria(); conOpinion(M)
     const id = await abierto(M, sobre({ dry_run: false }))
-    const imgAntes = () => M.llamadas.imagen
-    let imagenes = 0
-    const { pasos, tareas } = await correr(M, id, guionGenerada({ decide_imagen: (_n, t) => { imagenes = imgAntes(); return { texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'tomada', razon: 'sí, está plana' })) }) } } }))
+    const { pasos, tareas } = await correr(M, id, guionGenerada({ decide_imagen: (_n, t) => ({ texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'no_tomada', razon: 'la luz es la del manual' })) }) }) }))
     expect(pasos.filter((x) => x === 'decide_imagen')).toHaveLength(1)
     expect(tareas['decide_imagen'][0]).toMatch(/Opinión libre del revisor externo[\s\S]*fría y plana/)
-    expect(tareas['decide_imagen'][0]).toMatch(/NO se vuelve a generar en esta ronda/)
-    expect(M.llamadas.imagen).toBe(imagenes) // tras aceptar, no se genera otra imagen
+    expect(tareas['decide_imagen'][0]).toMatch(/todavía le queda su re-imagen/)
+    expect(pasos).not.toContain('reimagen_prompts') // «no tomada» ⇒ no se rehace nada
     const ext = M.encargos.get(id)!.estado_del_motor.fichas.filter((f) => f.origen === 'externa')
-    expect(ext.map((f) => [f.donde, f.estado])).toEqual([['texto', 'no_tomada'], ['imagen', 'tomada']])
+    expect(ext.map((f) => [f.donde, f.estado])).toEqual([['texto', 'no_tomada'], ['imagen', 'no_tomada']])
+  })
+  it('«tomada» con margen: se dispara UNA re-imagen con los controles de siempre (prompts nuevos → ② chequeo → generar → ③ mirar → elegir → acabado → re-chequeo) y la imagen cambia', async () => {
+    const M = crearMemoria(); conOpinion(M)
+    const id = await abierto(M, sobre({ dry_run: false }))
+    let imagenesAntes = -1
+    const { pasos, tareas } = await correr(M, id, guionGenerada({ decide_imagen: (_n, t) => { imagenesAntes = M.llamadas.imagen; return { texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'tomada', razon: 'sí, está plana' })) }) } } }))
+    const r2 = pasos.slice(pasos.indexOf('decide_imagen'))
+    expect(r2).toEqual(['decide_imagen', 'reimagen_prompts', 'reimagen_mirar']) // los turnos de empleados; el resto son pasos de código (chequeo de prompts, generar, elegir, acabado, re-chequeo)
+    expect(tareas['reimagen_prompts'][0]).toMatch(/fría y plana/); expect(tareas['reimagen_prompts'][0]).toMatch(/ÚNICA re-imagen/)
+    expect(M.llamadas.imagen).toBe(imagenesAntes + 2) // una tanda nueva (2 versiones), ni una más
+    const e = M.encargos.get(id)!.estado_del_motor
+    expect((e.artefactos['imagen_final'].datos as { origen: string; url: string }).url).toMatch(/img\.test\/[3-9]/) // la imagen NUEVA, no la primera
+    expect(String(M.llamadas.bandeja[0].titulo)).not.toMatch(/IMAGEN POR REHACER/)
+    const md = M.llamadas.salidas[0].metadata as Record<string, unknown>
+    expect(md.re_imagen_hecha).toBe(true); expect(md.imagen_por_rehacer).toBeUndefined()
+  })
+  it('«tomada» pero el encargo YA usó su tope de regeneraciones: no se rehace y la bandeja dice «imagen por rehacer»', async () => {
+    const M = crearMemoria(); conOpinion(M)
+    const id = await abierto(M, sobre({ dry_run: false }))
+    let nMirar = 0
+    const { pasos } = await correr(M, id, guionGenerada({
+      mirar: (_n, t) => ({ texto: observacion(indicesDe(t), nMirar++ < 2 ? { falta: 'o1' } : {}) }), // falla 2 veces (gasta las 2 regeneraciones) y pasa a la 3.ª
+      decide_imagen: (_n, t) => ({ texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'tomada', razon: 'sí, está plana' })) }) }),
+    }))
+    expect(pasos).not.toContain('reimagen_prompts')
     expect(String(M.llamadas.bandeja[0].titulo)).toMatch(/IMAGEN POR REHACER/)
     const md = M.llamadas.salidas[0].metadata as Record<string, unknown>
-    expect(md.imagen_por_rehacer).toBe(true)
-    expect((md.opinion_externa as { por_dueno: Array<{ donde: string; estado: string }> }).por_dueno.map((x) => [x.donde, x.estado])).toEqual([['texto', 'no_tomada'], ['imagen', 'tomada']])
+    expect(md.imagen_por_rehacer).toBe(true); expect(md.re_imagen_hecha).toBeUndefined()
+    expect(M.encargos.get(id)!.estado_del_motor.artefactos['respuesta_imagen'].datos).toMatchObject({ re_imagen: false, por_rehacer_humano: true, motivo: expect.stringMatching(/tope de regeneraciones/) })
+  })
+  it('«tomada» con margen pero la imagen NUEVA no cumple el brief: se queda la anterior, ficha que lo dice y bandeja «imagen por rehacer»', async () => {
+    const M = crearMemoria(); conOpinion(M)
+    const id = await abierto(M, sobre({ dry_run: false }))
+    const { pasos } = await correr(M, id, guionGenerada({
+      decide_imagen: (_n, t) => ({ texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'tomada', razon: 'sí' })) }) }),
+      reimagen_mirar: (_n, t) => ({ texto: observacion(indicesDe(t), { falta: 'o1' }) }),
+    }))
+    expect(pasos).toContain('reimagen_mirar'); expect(pasos).not.toContain('reimagen_elegir_version')
+    const e = M.encargos.get(id)!.estado_del_motor
+    expect((e.artefactos['imagen_final'].datos as { origen: string; url: string }).url).toMatch(/img\.test\/[12]\./) // la primera, intacta
+    expect(e.fichas.some((f) => f.id.startsWith('reimagen-no-cumplio') && f.gravedad === 'sugerencia')).toBe(true)
+    expect(String(M.llamadas.bandeja[0].titulo)).toMatch(/IMAGEN POR REHACER/)
+    expect(e.fichas.some((f) => f.gravedad === 'bloquea' && f.estado === 'abierta' && f.donde === 'imagen')).toBe(false) // no bloquea: la pieza ya tenía una imagen buena
+  })
+  it('«tomada» con margen pero NINGÚN prompt nuevo pasa el control ②: no se genera ni una imagen más, se queda la anterior y la bandeja dice «imagen por rehacer»', async () => {
+    const M = crearMemoria(); conOpinion(M)
+    const id = await abierto(M, sobre({ dry_run: false }))
+    const malos = JSON.stringify({ prompts: [{ prompt: 'Un ceviche en un bowl de madera.', idea_en_una_linea: 'a' }, { prompt: 'Otro ceviche distinto, en cerámica.', idea_en_una_linea: 'b' }] })
+    let antes = -1
+    const { pasos } = await correr(M, id, guionGenerada({ reimagen_prompts: () => ({ texto: malos }), decide_imagen: (_n, t) => { antes = M.llamadas.imagen; return { texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'tomada', razon: 'sí' })) }) } } }))
+    expect(pasos).toContain('reimagen_prompts'); expect(pasos).not.toContain('reimagen_mirar')
+    expect(M.llamadas.imagen).toBe(antes)
+    const e = M.encargos.get(id)!.estado_del_motor
+    expect((e.artefactos['imagenes'].datos as { ultimo_intento: number }).ultimo_intento).toBe(1) // ni una tanda vacía
+    expect((e.artefactos['imagen_final'].datos as { url: string }).url).toMatch(/img\.test\/[12]\./)
+    expect(e.fichas.some((x) => x.id.startsWith('reimagen-prompts-ninguno') && x.gravedad === 'sugerencia')).toBe(true)
+    expect(String(M.llamadas.bandeja[0].titulo)).toMatch(/IMAGEN POR REHACER/)
   })
   it('si el curador NO toma la opinión, la bandeja no lleva la marca de imagen por rehacer; y el autor y el curador no se pisan las fichas', async () => {
     const M = crearMemoria()

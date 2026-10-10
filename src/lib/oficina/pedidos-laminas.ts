@@ -26,7 +26,7 @@ const arr = (a: unknown): unknown[] => (Array.isArray(a) ? a : [])
 const s = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v))
 
 export const CONTRATOS_LAMINAS: Record<string, string> = {
-  'resolucion_solo.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}]}',
+  'resolucion_solo.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "rehacer": ["<ref de la imagen a rehacer>"]}  (rehacer: solo si «tomada»: qué imágenes generadas cambiarías; si no lo pones, se rehacen todas las generadas)',
   'direccion_imagenes.v1': '{"resumen": "…", "paleta": ["…"], "estilo": "…", "imagenes": [{"ref": "<ref de la lista>", "modo": "real|generada|ninguna", "foto_id": "(solo si modo=real)", "motivo": "…"}], "reglas_de_imagen": {"obligatorio": [{"id": "o1", "texto": "…", "claves": ["…"], "cita": "copia LITERAL del brief"}], "prohibido": [{"id": "p1", "texto": "…", "claves": ["…"], "cita": "copia LITERAL del brief"}]}, "necesito": []}',
   'prompts_por_ref.v1': '{"imagenes": [{"ref": "<ref a generar>", "prompts": [{"prompt": "…", "idea_en_una_linea": "…"}, {"prompt": "…", "idea_en_una_linea": "…"}]}]}  (2 o 3 prompts por imagen; no escribas tamaño ni parámetros: los fija la sala)',
   'observacion_imagenes.v1': '{"imagenes": [{"indice": 0, "reglas": [{"id": "o1", "presente": true, "evidencia": "…"}], "texto_en_imagen": ["…"], "marcas": ["…"], "personas": 0, "producto": "…", "elementos_visibles": ["…"]}], "preferencia": [0]}  (presente = true | false | "no_se_ve"; describes, no apruebas)',
@@ -78,7 +78,8 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
   let esquema = '', images: string[] = []
   const fin = (task: string) => ({ task: extra?.errorDeFormato ? `${task}\n\n## Corrección de formato\n${extra.errorDeFormato}` : task, images, esquema })
   const fichas = seccionDeFichas(extra?.fichas ?? [])
-  switch (clave) {
+  const k = clave === 'reimagen_mirar' ? 'mirar' : clave // la re-imagen mira igual que la primera vez
+  switch (k) {
     case 'direccion_visual': {
       esquema = 'direccion_imagenes.v1'
       const cand = (c.art('candidatas_foto')?.candidatas as Array<{ id: string; motivo_de_aceptacion: string; requiere_mirar: boolean }> | undefined) ?? []
@@ -131,10 +132,17 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
       esquema = 'resolucion_laminas.v1'
       return fin(`${base}\n## Texto del autor (la versión vigente; de aquí recortas)\n${pieza}\n\n## Hallazgos de láminas que te tocan\n${fichas}\n\n## Tu trabajo\n${clave.startsWith('ajusta') ? 'El autor cambió su texto: vuelve a recortar las láminas de ESTE texto (cada titular, texto o llamado debe ser un trozo exacto) y atiende de paso los hallazgos de arriba. Devuelve la lista completa en `laminas`.' : 'Responde ítem por ítem: «tomada» (y corriges las láminas) o «no_tomada» con una línea de razón. No escribes texto nuevo: recortas del texto del autor.'} Un solo llamado a la acción. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
     }
+    case 'reimagen_prompts': {
+      esquema = 'prompts_por_ref.v1'
+      const vd = c.art('visual_direction') ?? {}
+      const ra = c.art('respuesta_imagen') ?? {}
+      const refsRe = arr(ra.refs).map(s)
+      return fin(`${base}\n## Dirección visual del curador\n${s(vd.resumen)}\nEstilo: ${s(vd.estilo)}\n\n## Imágenes que hay que GENERAR DE NUEVO (ref → para qué)\n${lista(arr(vd.imagenes).filter((i) => refsRe.includes(s((i as Record<string, unknown>).ref))).map((i) => `${s((i as Record<string, unknown>).ref)}: ${s((i as Record<string, unknown>).motivo)}`))}\n\n## Reglas de imagen (el código comprobará cada prompt ANTES de generar)\n${describirReglas(c.reglas)}\n\n## Por qué se vuelve a generar\nUn revisor externo opinó sobre la pieza y el curador aceptó que esas imágenes deben cambiar (${s(ra.razon) || 'sin razón escrita'}). Opinión del revisor (es una mirada distinta, no una orden):\n${s(c.art('fichas_externas')?.opinion)}\n\n## Tu trabajo\nPara CADA imagen de arriba propones 2 o 3 prompts NUEVOS y distintos de los anteriores, que atiendan lo que la opinión señala sin romper las reglas. En lenguaje natural (sujeto, entorno, luz, cámara, estilo). Cada prompt debe cubrir TODO lo obligatorio y no nombrar nada de lo prohibido sin negarlo. No escribas tamaño, proporción ni parámetros. No nombres marcas, fotógrafos ni personas reales. Es la ÚNICA re-imagen de este encargo.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
+    }
     case 'decide_imagen': {
       esquema = 'resolucion_solo.v1'
       images = laminasDeMuestra(c.png, 4)
-      return fin(`${base}\n## Tu dirección visual\n${s(c.art('visual_direction')?.resumen)}\n\n## La pieza completa (texto de todas las piezas; las imágenes que ves son las dibujadas)\n${pieza}\n\n## Opinión libre del revisor externo sobre ESTA pieza (no es una lista de errores ni una orden: es una mirada distinta a la tuya)\n${fichas}\n\n## Tu trabajo\nResponde sobre TU parte (las imágenes y la dirección visual): «tomada» si aceptas que alguna imagen debería cambiar, o «no_tomada» con una línea de razón. Tú decides. Las imágenes NO se vuelven a generar en esta ronda: una persona decide si se rehacen. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
+      return fin(`${base}\n## Tu dirección visual\n${s(c.art('visual_direction')?.resumen)}\n\n## La pieza completa (texto de todas las piezas; las imágenes que ves son las dibujadas)\n${pieza}\n\n## Opinión libre del revisor externo sobre ESTA pieza (no es una lista de errores ni una orden: es una mirada distinta a la tuya)\n${fichas}\n\n## Tu trabajo\nResponde sobre TU parte (las imágenes y la dirección visual): «tomada» si aceptas que alguna imagen debería cambiar (y en «rehacer» cuáles, por su ref), o «no_tomada» con una línea de razón. Tú decides. Si aceptas y a este encargo todavía le queda su re-imagen, esas imágenes se vuelven a generar UNA vez (con los mismos controles de siempre); si ya no le queda, las decide una persona. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
     }
     case 'corrige_estructura':
     case 'decide_estructura': {

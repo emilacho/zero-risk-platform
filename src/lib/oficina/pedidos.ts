@@ -49,7 +49,8 @@ export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fic
   const datosVerificados = `## Datos verificados del cliente (solo estos; no inventes otros)\nTeléfonos: ${F.propios.telefonos.join(', ') || '(no se pudieron leer)'}\nUsuarios: ${F.propios.handles.join(', ') || '(no se pudieron leer)'}\nPrecios de la carta: ${F.fuentes.precios.join(', ') || '(no hay carta guardada)'}`
   let task = '', esquema = '', images: string[] = []
   const finalizar = (t: string) => ({ task: extra?.errorDeFormato ? `${t}\n\n## Corrección de formato\n${extra.errorDeFormato}` : t, images, esquema })
-  switch (clave) {
+  const k = clave === 'reimagen_mirar' ? 'mirar' : clave // la re-imagen mira igual que la primera vez
+  switch (k) {
     case 'direccion_visual': {
       esquema = 'visual_direction.v1'
       const cand = (c.art('candidatas_foto')?.candidatas as Array<{ id: string; motivo_de_aceptacion: string; requiere_mirar: boolean }> | undefined) ?? []
@@ -90,11 +91,18 @@ export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fic
       task = `${base}\n## La pieza actual\n${pieza(c.art('pieza_post'))}\n\n## ${clave === 'corrige' ? 'Hallazgos que te tocan (del jefe de marketing)' : 'Opinión libre del revisor externo (no es una lista de errores ni una orden: es una mirada distinta a la tuya)'}\n${seccionDeFichas(extra?.fichas ?? [])}\n\n## Tu trabajo\nResponde ítem por ítem: «tomada» (y corriges la pieza) o «no_tomada» con una línea de razón. Tú decides qué tomas y qué no. Si cambias algo, devuelve la pieza completa nueva en \`pieza\`. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
       return finalizar(task)
     }
+    case 'reimagen_prompts': {
+      esquema = 'prompts.v1'
+      const vd = c.art('visual_direction') ?? {}
+      const ra = c.art('respuesta_imagen') ?? {}
+      task = `${base}\n## Dirección visual del curador\n${String(vd.resumen ?? '')}\nEstilo: ${String(vd.estilo ?? '')}\n\n## Reglas de imagen (el código comprobará cada prompt ANTES de generar)\n${describirReglas(c.reglas)}\n\n## Por qué se vuelve a generar la imagen\nUn revisor externo opinó sobre la pieza y el curador aceptó que la imagen debe cambiar (${String(ra.razon ?? 'sin razón escrita')}). Opinión del revisor (es una mirada distinta, no una orden):\n${String(c.art('fichas_externas')?.opinion ?? '')}\n\n## Tu trabajo\nPropones 2 o 3 prompts de imagen NUEVOS y distintos de los anteriores, que atiendan lo que la opinión señala sobre la imagen sin romper las reglas de arriba. En lenguaje natural (sujeto, entorno, luz, cámara, estilo). Cada prompt debe cubrir TODO lo obligatorio y no nombrar nada de lo prohibido sin negarlo. No escribas tamaño, proporción ni parámetros. No nombres marcas, fotógrafos ni personas reales. Es la ÚNICA re-imagen de este encargo.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
+      return finalizar(task)
+    }
     case 'decide_imagen': {
       esquema = 'resolucion_solo.v1'
       const fin = c.art('imagen_final') ?? {}
       images = fin.url ? [String(fin.url)] : []
-      task = `${base}\n## Tu dirección visual\n${String(c.art('visual_direction')?.resumen ?? '')}\n\n## La pieza completa (texto e imagen que ves)\n${pieza(c.art('pieza_post'))}\n\n## Opinión libre del revisor externo sobre ESTA pieza (no es una lista de errores ni una orden: es una mirada distinta a la tuya)\n${seccionDeFichas(extra?.fichas ?? [])}\n\n## Tu trabajo\nResponde sobre TU parte (la imagen y la dirección visual): «tomada» si aceptas que la imagen debería cambiar, o «no_tomada» con una línea de razón. Tú decides. La imagen NO se vuelve a generar en esta ronda: una persona decide si se rehace. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
+      task = `${base}\n## Tu dirección visual\n${String(c.art('visual_direction')?.resumen ?? '')}\n\n## La pieza completa (texto e imagen que ves)\n${pieza(c.art('pieza_post'))}\n\n## Opinión libre del revisor externo sobre ESTA pieza (no es una lista de errores ni una orden: es una mirada distinta a la tuya)\n${seccionDeFichas(extra?.fichas ?? [])}\n\n## Tu trabajo\nResponde sobre TU parte (la imagen y la dirección visual): «tomada» si aceptas que la imagen debería cambiar, o «no_tomada» con una línea de razón. Tú decides. Si aceptas y a este encargo todavía le queda su re-imagen, la imagen se vuelve a generar UNA vez (con los mismos controles de siempre); si ya no le queda, la decide una persona. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
       return finalizar(task)
     }
     default:
