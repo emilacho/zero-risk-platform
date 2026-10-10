@@ -5,7 +5,7 @@
  * bottom caption bar). Headline left-aligned · chunky · accent
  * underline. Brand handle as a TikTok-style @handle pill.
  */
-import { resolveBrand, fitHeadlineSize } from './shared'
+import { resolveBrand, fitHeadlineSize, conFotoDeFondo } from './shared'
 import type { TemplateProps } from '../types'
 
 export function TikTok({ brand, content, slide_index, total_slides }: TemplateProps) {
@@ -23,7 +23,7 @@ export function TikTok({ brand, content, slide_index, total_slides }: TemplatePr
     targetLines: 5,
   })
 
-  return (
+  const root = (
     <div
       style={{
         display: 'flex',
@@ -59,6 +59,7 @@ export function TikTok({ brand, content, slide_index, total_slides }: TemplatePr
         >
           {b.brandHandle || '@brand'}
         </div>
+        {content.ocultar_indicador ? null : (
         <div
           style={{
             display: 'flex',
@@ -75,6 +76,7 @@ export function TikTok({ brand, content, slide_index, total_slides }: TemplatePr
         >
           {slide_index}/{total_slides}
         </div>
+        )}
       </div>
 
       {/* Spacer */}
@@ -164,4 +166,5 @@ export function TikTok({ brand, content, slide_index, total_slides }: TemplatePr
       ) : null}
     </div>
   )
+  return conFotoDeFondo(root, content, W, H)
 }

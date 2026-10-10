@@ -64,8 +64,18 @@ export interface SlideContent {
   cta?: string
   /** Optional eyebrow above headline (e.g., "PARTE 1", "CASO 02"). */
   eyebrow?: string
-  /** Optional background image URL · template decides placement. */
+  /**
+   * Optional background photo (https URL or `data:image/...` URI). Drawn full-bleed behind the
+   * content with a dark contrast layer. Absent/null = the slide renders exactly as before.
+   */
   background_image_url?: string | null
+  /**
+   * Footer cue text ("desliza →" and similar; only templates that have one: instagram-feed, instagram-reel).
+   * `undefined` = the template's default text · `null` or '' = no footer cue · string = that text.
+   */
+  pie?: string | null
+  /** true = do not draw the "n / N" slide indicator (a single story/status is not a carousel). Default false. */
+  ocultar_indicador?: boolean
 }
 
 // ── Template input ─────────────────────────────────────────────────────
@@ -93,6 +103,11 @@ export interface CarouselGenerateRequest {
   date?: string
   /** Optional · use as carousel_id (idempotent) · defaults to derived hash. */
   carousel_id?: string
+  /**
+   * Optional · sub-path under `{slug}/carousels/{date}/` (e.g. `oficina/{encargo_id}`). Two carousels of the
+   * same client on the same day with different `subcarpeta` never overwrite each other. Absent = today's path.
+   */
+  subcarpeta?: string
 }
 
 export interface CarouselGenerateResponse {
@@ -106,6 +121,12 @@ export interface CarouselGenerateResponse {
   thumbnail_url: string
   /** Per-slide render timing for cost tracking. */
   timings_ms: number[]
+  /** Brand font families actually drawn (Inter always included). */
+  fonts_usadas: string[]
+  /** Brand font families that could NOT be loaded and fell back to Inter (never silent). */
+  fonts_faltantes: string[]
+  /** Echo of the sub-path used, when one was sent. */
+  subcarpeta?: string
 }
 
 // ── Render result (engine-level · pre-upload) ──────────────────────────
@@ -117,4 +138,6 @@ export interface RenderedSlide {
   height: number
   png: Buffer
   durationMs: number
+  fonts_usadas: string[]
+  fonts_faltantes: string[]
 }

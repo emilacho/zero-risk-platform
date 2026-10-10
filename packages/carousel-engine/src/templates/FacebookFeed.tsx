@@ -5,11 +5,13 @@
  * format so headlines breathe. Slide indicator bottom-right when part
  * of a carousel.
  */
-import { resolveBrand, fitHeadlineSize } from './shared'
+import { resolveBrand, fitHeadlineSize, conFotoDeFondo } from './shared'
 import type { TemplateProps } from '../types'
 
 export function FacebookFeed({ brand, content, slide_index, total_slides }: TemplateProps) {
   const b = resolveBrand(brand)
+  // on top of a photo the text sits on the dark contrast layer: light text (the default surface text is dark)
+  const colorTexto = content.background_image_url ? b.textOnPrimary : b.textOnSurface
   const W = 1200
   const H = 630
   const headlineSize = fitHeadlineSize(content.headline, {
@@ -19,7 +21,7 @@ export function FacebookFeed({ brand, content, slide_index, total_slides }: Temp
     targetLines: 3,
   })
 
-  return (
+  const root = (
     <div
       style={{
         display: 'flex',
@@ -27,7 +29,7 @@ export function FacebookFeed({ brand, content, slide_index, total_slides }: Temp
         width: W,
         height: H,
         backgroundColor: b.surface,
-        color: b.textOnSurface,
+        color: colorTexto,
         fontFamily: b.fontFamily,
       }}
     >
@@ -68,9 +70,11 @@ export function FacebookFeed({ brand, content, slide_index, total_slides }: Temp
               {content.eyebrow}
             </div>
           ) : null}
+          {content.ocultar_indicador ? null : (
           <div style={{ display: 'flex', fontSize: 20, opacity: 0.7 }}>
             slide {slide_index} de {total_slides}
           </div>
+          )}
         </div>
       </div>
 
@@ -93,7 +97,7 @@ export function FacebookFeed({ brand, content, slide_index, total_slides }: Temp
             fontWeight: 700,
             lineHeight: 1.1,
             letterSpacing: -1,
-            color: b.textOnSurface,
+            color: colorTexto,
           }}
         >
           {content.headline}
@@ -107,7 +111,7 @@ export function FacebookFeed({ brand, content, slide_index, total_slides }: Temp
               opacity: 0.78,
               marginTop: 24,
               maxWidth: 720,
-              color: b.textOnSurface,
+              color: colorTexto,
             }}
           >
             {content.body}
@@ -134,4 +138,5 @@ export function FacebookFeed({ brand, content, slide_index, total_slides }: Temp
       </div>
     </div>
   )
+  return conFotoDeFondo(root, content, W, H)
 }

@@ -3,7 +3,7 @@
  *
  * Renders N carousel slides via @zero-risk/carousel-engine (satori → SVG →
  * resvg → PNG), uploads each PNG to Supabase Storage under
- *   `client-websites/{client_slug}/carousels/{date}/slide-{n}.png`,
+ *   `client-websites/{client_slug}/carousels/{date}[/{subcarpeta}]/slide-{n}.png`,
  * and returns the public URLs.
  *
  * Auth · standard `x-api-key: <INTERNAL_API_KEY>` (same as the rest of the
@@ -15,6 +15,7 @@ import { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { rutaDeLamina, validarExtrasDeLamina, validarSubcarpeta } from '@/lib/carousel-ruta'
 import {
   PLATFORM_SPECS,
   renderCarousel,
@@ -91,7 +92,12 @@ function validateRequest(raw: unknown): { ok: true; data: CarouselGenerateReques
     if (typeof slide.headline !== 'string' || !slide.headline.trim()) {
       return { ok: false, error: `slides[${i}].headline required (non-empty string)` }
     }
+    const extra = validarExtrasDeLamina(slide, i)
+    if (extra) return { ok: false, error: extra }
   }
+
+  const sub = validarSubcarpeta(r.subcarpeta)
+  if (!sub.ok) return { ok: false, error: sub.error }
 
   if (r.date !== undefined && typeof r.date !== 'string') {
     return { ok: false, error: 'date must be a string (YYYY-MM-DD)' }
@@ -155,7 +161,7 @@ export async function POST(request: Request) {
   const timingsMs: number[] = []
 
   for (const slide of rendered) {
-    const path = `${req.client_slug}/carousels/${date}/slide-${slide.slide_index}.png`
+    const path = rutaDeLamina(req.client_slug, date, req.subcarpeta, slide.slide_index)
     const { error: upErr } = await supabase.storage
       .from(STORAGE_BUCKET)
       .upload(path, slide.png, {
@@ -187,6 +193,9 @@ export async function POST(request: Request) {
     slide_urls: slideUrls,
     thumbnail_url: slideUrls[0],
     timings_ms: timingsMs,
+    fonts_usadas: rendered[0].fonts_usadas,
+    fonts_faltantes: rendered[0].fonts_faltantes,
+    ...(req.subcarpeta ? { subcarpeta: req.subcarpeta } : {}),
   }
   return NextResponse.json(response, { status: 200 })
 }

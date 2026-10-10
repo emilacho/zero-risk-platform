@@ -71,3 +71,84 @@ export async function loadDefaultFonts(): Promise<FontEntry[]> {
   }
   return [FONT_CACHE.get(regKey)!, FONT_CACHE.get(boldKey)!]
 }
+
+// ── Brand font resolver (fontsource via jsDelivr) ──────────────────────
+/** Family name → fontsource slug ("Alfa Slab One" → "alfa-slab-one"). */
+export function slugDeFuente(family: string): string {
+  return family.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+const urlDeFuente = (slug: string, weight: FontWeight) =>
+  `https://cdn.jsdelivr.net/fontsource/fonts/${slug}@latest/latin-${weight}-normal.ttf`
+
+export interface ResolverOpciones {
+  /** inject for tests (default: global fetch) */
+  fetchImpl?: (url: string) => Promise<{ ok: boolean; status: number; arrayBuffer(): Promise<ArrayBuffer> }>
+  /** extra tries after the first failure (default 1) */
+  reintentos?: number
+}
+
+async function bajar(url: string, o: ResolverOpciones): Promise<ArrayBuffer | null> {
+  const f = o.fetchImpl ?? ((u: string) => fetch(u))
+  for (let i = 0; i <= (o.reintentos ?? 1); i++) {
+    try {
+      const r = await f(url)
+      if (r.ok) return await r.arrayBuffer()
+      if (r.status === 404) return null // that weight does not exist: retrying changes nothing
+    } catch {
+      /* network blip: try again */
+    }
+  }
+  return null
+}
+
+/**
+ * Load a brand family (regular 400 + bold 700 when they exist) and cache it. Returns the weights found,
+ * or [] when the family could not be loaded (the caller reports it; it is never silent).
+ */
+export async function resolverFamilia(family: string, o: ResolverOpciones = {}): Promise<FontEntry[]> {
+  const slug = slugDeFuente(family)
+  if (!slug) return []
+  const encontrados: FontEntry[] = []
+  for (const weight of [400, 700] as FontWeight[]) {
+    const k = cacheKey(family, weight, 'normal')
+    const previo = FONT_CACHE.get(k)
+    if (previo) {
+      encontrados.push(previo)
+      continue
+    }
+    const data = await bajar(urlDeFuente(slug, weight), o)
+    if (!data) continue
+    const entry: FontEntry = { name: family, data, weight, style: 'normal' }
+    FONT_CACHE.set(k, entry)
+    encontrados.push(entry)
+  }
+  return encontrados
+}
+
+export interface InformeDeFuentes {
+  fonts: FontEntry[]
+  /** brand families drawn with their own font (Inter always included) */
+  usadas: string[]
+  /** brand families that could not be loaded: drawn with Inter, and reported */
+  faltantes: string[]
+}
+
+/** Which brand families the loaded `fonts` really cover. Pure. */
+export function informeDeFuentes(familias: string[], fonts: FontEntry[]): { usadas: string[]; faltantes: string[] } {
+  const cargadas = new Set(fonts.map((f) => f.name))
+  const unicas = Array.from(new Set(familias.map((f) => f.trim()).filter(Boolean)))
+  return {
+    usadas: Array.from(new Set(['Inter', ...unicas.filter((f) => cargadas.has(f))])),
+    faltantes: unicas.filter((f) => !cargadas.has(f)),
+  }
+}
+
+/** Inter + every non-Inter brand family that can be found. */
+export async function cargarFuentesDeMarca(familias: string[], o: ResolverOpciones = {}): Promise<InformeDeFuentes> {
+  const fonts = [...(await loadDefaultFonts())]
+  for (const fam of Array.from(new Set(familias.map((f) => f.trim()).filter((f) => f && f !== 'Inter')))) {
+    fonts.push(...(await resolverFamilia(fam, o)))
+  }
+  return { fonts, ...informeDeFuentes(familias, fonts) }
+}
