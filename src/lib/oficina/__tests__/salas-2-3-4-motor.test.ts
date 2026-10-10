@@ -289,7 +289,7 @@ describe('chequeos duros de las láminas', () => {
     const c = base()
     c.problemas_de_contrato = ['3 láminas']; c.texto_fuera_del_autor = [{ lamina: 2, campo: 'headline', texto: 'inventado' }]; c.imagenes_sin_lamina = ['proof']; c.fonts_faltantes = ['Caveat']; c.fotos_reusadas = ['f1']
     const fs = chequeosDeLaminas(c)
-    expect(fs.filter((x) => x.gravedad === 'bloquea').map((x) => x.donde).sort()).toEqual(['imagen', 'laminas', 'laminas'])
+    expect(fs.filter((x) => x.gravedad === 'bloquea').map((x) => x.donde).sort()).toEqual(['laminas', 'laminas', 'laminas'])
     expect(fs.filter((x) => x.gravedad === 'sugerencia').map((x) => x.que).join('|')).toMatch(/Caveat/)
     expect(fs.filter((x) => x.gravedad === 'sugerencia').map((x) => x.que).join('|')).toMatch(/f1/)
   })

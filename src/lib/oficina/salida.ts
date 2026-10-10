@@ -114,6 +114,18 @@ export const ESQUEMAS: Record<string, Esq> = {
   },
 }
 
+/** la misma observación de imágenes, para piezas con VARIAS imágenes (carrusel, kit): hasta 12 en vez de 6 */
+function conMaxImagenes(esq: Esq, n: number): Esq {
+  const o = esq as Extract<Esq, { t: 'obj' }>
+  const imgs = o.props.imagenes as Extract<Esq, { t: 'arr' }>
+  const pref = o.props.preferencia as Extract<Esq, { t: 'arr' }>
+  // el índice de una imagen puede ser alto: las fotos reales que el curador mira numeran desde 1000 para no chocar con las generadas
+  const item = imgs.de as Extract<Esq, { t: 'obj' }>
+  const ancho = (x: Esq): Esq => ({ ...(x as Extract<Esq, { t: 'num' }>), max: 2000 })
+  return { ...o, props: { ...o.props, imagenes: { ...imgs, max: n, de: { ...item, props: { ...item.props, indice: ancho(item.props.indice) } } }, preferencia: { ...pref, max: n, de: ancho(pref.de) } } }
+}
+ESQUEMAS['observacion_imagenes.v1'] = conMaxImagenes(ESQUEMAS['observacion_imagen.v1'], 12)
+
 /** quita el envoltorio: cercas ``` (con o sin «json») y prosa fuera de las llaves */
 export function limpiarSalida(texto: string): { ok: true; json: string; envoltorio: boolean } | { ok: false; error: string } {
   if (typeof texto !== 'string' || !texto.trim()) return { ok: false, error: 'salida_vacia' }

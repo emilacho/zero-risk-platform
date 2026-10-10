@@ -184,8 +184,8 @@ export function chequeosDeLaminas(c: ContextoDeChequeoLaminas): Ficha[] {
   }
   // 4 · tipografías e imágenes
   for (const t of c.fonts_faltantes) nueva('laminas', 'sugerencia', `la tipografía del manual «${t}» no está disponible: se dibujó con otra`, 'manual de marca', 'cargar la tipografía')
-  for (const r of c.imagenes_sin_lamina) nueva('imagen', 'bloquea', `hay una imagen para «${r}» y ninguna lámina la usa`, 'imágenes por rol', 'usar el rol en una lámina o descartar la imagen')
-  for (const id of c.fotos_reusadas) nueva('imagen', 'sugerencia', `la foto «${id}» ya se usó dentro de la ventana de reuso`, 'no repetir fotos', 'elegir otra si existe')
+  for (const r of c.imagenes_sin_lamina) nueva('laminas', 'bloquea', `hay una imagen para «${r}» y ninguna lámina la usa`, 'imágenes por rol', 'usar el rol en una lámina o descartar la imagen')
+  for (const id of c.fotos_reusadas) nueva('laminas', 'sugerencia', `la foto «${id}» ya se usó dentro de la ventana de reuso`, 'no repetir fotos', 'elegir otra si existe')
   return f
 }
 

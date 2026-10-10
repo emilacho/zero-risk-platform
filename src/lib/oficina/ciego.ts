@@ -4,7 +4,7 @@
  *    ni las fichas del jefe, ni las respuestas del autor puede entrar: si llega una clave fuera de la lista, se rechaza.
  *  · Recados: «el único humano en el circuito es Emilio» (09-oct). Un «necesito…» de la oficina solo va a destinos de tipo HERRAMIENTA que operan; `dueno` (persona) queda excluido por código.
  */
-export const CLAVES_DEL_PEDIDO_CIEGO = ['pieza', 'imagen', 'visual_direction', 'manual', 'plan', 'brief', 'material_portero'] as const
+export const CLAVES_DEL_PEDIDO_CIEGO = ['pieza', 'imagen', 'imagenes', 'visual_direction', 'manual', 'plan', 'brief', 'material_portero'] as const
 
 export function armarPedidoCiego(fuentes: Record<string, unknown>): { ok: true; pedido: Record<string, unknown> } | { ok: false; sobran: string[] } {
   const sobran = Object.keys(fuentes).filter((k) => !(CLAVES_DEL_PEDIDO_CIEGO as readonly string[]).includes(k))

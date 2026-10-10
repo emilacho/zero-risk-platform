@@ -8,7 +8,7 @@ import { leerMedidas } from '../entrega'
 import { DbFalsa } from './dbfalsa'
 import { BUENOS_PROMPTS, CLIENTE, FOTOS, PARTE, PARTE_REAL, PIEZA_OK, FICHAS_VACIAS, correr, direccionGenerada, observacion, png, type Guion, type Memoria } from './memoria'
 
-const ENV: Entorno = { baseUrl: 'https://app.test', internalKey: 'k-interna', openaiKey: 'sk-test', revisorModelo: 'modelo-revisor', revisorPrecioEntrada: 2, revisorPrecioSalida: 10, slackToken: 'xoxb-test' }
+const ENV: Entorno = { baseUrl: 'https://app.test', internalKey: 'k-interna', openaiKey: 'sk-test', revisorModelo: 'modelo-revisor', revisorPrecioEntrada: 2, revisorPrecioSalida: 10, slackToken: 'xoxb-test', bucket: 'oficina-test' }
 
 function sembrar(): DbFalsa {
   const db = new DbFalsa()
