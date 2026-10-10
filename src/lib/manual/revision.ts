@@ -94,7 +94,11 @@ export async function leerInsumos(db: Db, clientId: string): Promise<ResultadoDe
 }
 
 // ───────────────────────── S0 · S1 · S3 (todo código, US$ 0)
+/** la tarea del juez admite 14.000 caracteres (el corredor acepta 16.000): campos + instrucción + evidencia deben caber, y la evidencia es lo que cede */
+export const TOPE_DE_EVIDENCIA_DEL_JUEZ = 10_000
 export interface Preparacion {
+  /** el manual vigente tal cual (para el autor del ciclo) */
+  manual_vigente: Record<string, unknown>
   foto: Insumos['foto']
   filas_leidas: number
   materia: Pick<Materia, 'texto' | 'recortes' | 'total_original' | 'total_leido'>
@@ -110,9 +114,9 @@ export function prepararRevision(ins: Insumos): Preparacion {
   const informe = evaluarHechos({ manual: ins.manual, fuentes: ins.fuentes, dudas: ins.dudas })
   const taglineYa = typeof ins.manual.tagline === 'string' && ins.manual.tagline.trim() !== ''
   const sin_hallazgos = informe.sin_respaldo.length === 0 && (taglineYa || !frases.eslogan)
-  const ev = evidenciaParaElJuez(ins.fuentes)
+  const ev = evidenciaParaElJuez(ins.fuentes, TOPE_DE_EVIDENCIA_DEL_JUEZ)
   return {
-    foto: ins.foto, filas_leidas: ins.filas_leidas,
+    manual_vigente: ins.manual, foto: ins.foto, filas_leidas: ins.filas_leidas,
     materia: { texto: materia.texto, recortes: materia.recortes, total_original: materia.total_original, total_leido: materia.total_leido },
     frases, informe, sin_hallazgos,
     evidencia_del_juez: { texto: ev.texto, fuentes_usadas: ev.fuentes_usadas, excluidas: ev.excluidas, recortada: ev.recortada },
