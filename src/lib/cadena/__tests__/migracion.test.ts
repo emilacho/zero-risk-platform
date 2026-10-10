@@ -53,6 +53,10 @@ describe('migración de la cadena · solo aditiva, apagada, sin contacto con el 
     expect(CODIGO).not.toMatch(/"encendida"'::jsonb\)/)
   })
 
+  it('el plazo de la llamada al agente nace en 6 minutos (el nodo corta a los 290 s; con 15 la base ganaría al código)', () => {
+    expect(CODIGO).toMatch(/\('plazo_llamada_agente_minutos',\s*'6'::jsonb\)/)
+  })
+
   it('cero contacto con el cliente: ningún destino, valor ni columna apunta al dueño', () => {
     expect(CODIGO).not.toMatch(/due[nñ]o/i)
     expect(CODIGO).toMatch(/verificado_por IS NULL OR verificado_por = 'codigo'/)
