@@ -149,7 +149,7 @@ function soporteDeCerteza(id: string, clausula: string, frase: string, ix: Indic
     if (lit) return porTipoDeCerteza(lit.tipo, clausula.trim(), lit)
   }
   // 2 · una oración de una fuente con LA MISMA palabra de certeza y contexto compartido (≥ 2 palabras de contenido, sin contar la certeza)
-  const sinCerteza = (t: string) => { const w = palabrasDe(t); const m = new Set(buscarCerteza(w, lista).flatMap((x) => [x.indice, x.indice + 1])); return w.filter((_, i) => !m.has(i)).join(' ') }
+  const sinCerteza = (t: string) => { const w = palabrasDe(t); const m = new Set(buscarCerteza(w, lista).flatMap((x) => Array.from({ length: x.palabra.split(' ').length }, (_, k) => x.indice + k))); return w.filter((_, i) => !m.has(i)).join(' ') }
   const base = sinCerteza(frase)
   const halladas = ix.oraciones.filter((o) => mencionaCerteza(o.palabras, id, lista) && contenidoCompartido(sinCerteza(o.texto), base) >= 2)
   if (!halladas.length) return SIN
