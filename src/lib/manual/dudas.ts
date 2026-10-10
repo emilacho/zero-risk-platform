@@ -18,7 +18,7 @@ export function detectarDudas(textos: Array<{ origen: string; texto: string }>):
   const out: Duda[] = []
   for (const t of textos) {
     // un texto puede ser una lista JSON de objeciones: se parte también por comillas de lista
-    for (const f of partirEnFrases(String(t.texto).replace(/","/g, '.\n').replace(/^\["|"\]$/g, ''))) {
+    for (const f of partirEnFrases(String(t.texto).replace(/","/g, '\n').replace(/^\["|"\]$/g, ''))) {
       const n = normalizar(f)
       if (MARCAS_DE_DUDA_ES.some((r) => r.test(n))) out.push({ origen: t.origen, frase: f.trim(), terminos: [...new Set(contenidoDe(f))] })
     }

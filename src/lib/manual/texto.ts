@@ -37,7 +37,7 @@ export function partirEnFrases(texto: unknown): string[] {
 /** partir una frase en cláusulas (coma, dos puntos, punto y coma, paréntesis, rayas): la unidad que se corrige sin tocar el resto de la frase */
 export function partirEnClausulas(frase: string): string[] {
   // no se corta una coma entre dígitos («1,231») ni una raya entre cifras («$7–$9»)
-  return frase.split(/(?<!\d),|,(?!\d)|[;:()]|\s[—–]\s|\s-\s/).map((c) => c.trim()).filter((c) => palabrasDe(c).length >= 1)
+  return frase.split(/(?<!\d),|,(?!\d)|[;:()]|\s[—–]\s|\s-\s/).map((c) => c.trim().replace(/[.!?…]+$/, '')).filter((c) => palabrasDe(c).length >= 1)
 }
 
 /** palabras de relleno del español que no cuentan como «contenido» al medir el contexto compartido (dato, no regla de negocio) */

@@ -46,7 +46,7 @@ export function metaDeCampos(manual: Record<string, unknown>, informe: InformeDe
 }
 
 /** escribe `_field_meta` para TODOS los campos de texto (conserva lo que ya traía cada campo y lo pisa con el estado nuevo) */
-export function aplicarMeta<T extends Record<string, unknown>>(manual: T, informe: InformeDeHechos, excluir?: string[]): T {
+export function aplicarMeta<T extends Record<string, unknown>>(manual: T, informe: InformeDeHechos, excluir?: string[]): T & { _field_meta: Record<string, unknown> } {
   const previa = (manual._field_meta && typeof manual._field_meta === 'object' ? manual._field_meta : {}) as Record<string, Record<string, unknown>>
   const nueva = metaDeCampos(manual, informe, excluir)
   const merged: Record<string, unknown> = { ...previa }

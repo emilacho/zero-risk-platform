@@ -12,16 +12,16 @@ export type PapelDeLugar = 'origen_producto' | 'sede' | 'reparto' | 'mercado' | 
 export const PATRONES_DE_ORIGEN_ES: RegExp[] = [
   /\b(viene|vienen|proviene|provienen|procede|proceden|llega|llegan|traido|traida|traidos|traidas|directo|directa|directos|directas)\s+(de|desde)\b/,
   /\borige(n|nes)\b/,
-  /\bde nuestros (productores|proveedores|pescadores|agricultores|criadores)\b/,
+  /\bde nuestros (productores|proveedores)\b/,
 ]
 export const frasePideOrigen = (frase: string): boolean => PATRONES_DE_ORIGEN_ES.some((r) => r.test(normalizar(frase)))
 
 /** papeles de un lugar en la oración de una FUENTE (orden = precedencia) */
 const PAPELES: Array<[Exclude<PapelDeLugar, 'sin_papel'>, RegExp]> = [
-  ['origen_producto', /\b(traemos|traen|proveedor|proveedores|compramos|proviene|provienen|procede|proceden|llega de|llegan de|llega desde|llegan desde|pescamos|cosechamos|cosechad[oa]s? en|de nuestros (productores|pescadores|agricultores))\b/],
+  ['origen_producto', /\b(traemos|traen|proveedor|proveedores|compramos|proviene|provienen|procede|proceden|llega de|llegan de|llega desde|llegan desde|de nuestros (productores|proveedores))\b/],
   ['reparto', /\b(entregamos|delivery|reparto|repartimos|envios?|llevamos a)\b/],
   ['mercado', /\b(clientes|turistas|visitantes|publico|mercado)\s+(de|en)\b/],
-  ['sede', /\b(restaurante|local|sucursal|tienda|oficinas?|cocina|cocinamos|ubicad[oa]s?|estamos|visitanos|direccion|sede|ghost kitchen)\b/],
+  ['sede', /\b(local|sucursal|tienda|oficinas?|ubicad[oa]s?|estamos|visitanos|encuentranos|direccion|sede)\b/],
 ]
 
 /** nombres propios de lugar en una frase del manual: secuencias con mayúscula que no abren la frase (heurística; lo no capturado simplemente no se chequea como lugar) */

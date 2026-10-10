@@ -27,7 +27,7 @@ export function esFilaPropia(f: Pick<FilaDeRaspado, 'apify_function' | 'params'>
 }
 
 function primerTitular(markdown: string): string {
-  const m = /^#{1,2}\s+(.+)$/m.exec(markdown)
+  const m = /^#{1,2}[ \t]+(.+)$/m.exec(markdown) // la misma línea: un «# » vacío no se traga el texto que sigue
   return m ? m[1].trim() : ''
 }
 
