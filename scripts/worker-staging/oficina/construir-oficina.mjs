@@ -63,7 +63,7 @@ export function construirPuerta({ path = 'zero-risk/oficina', nombre = 'Zero Ris
     code(N.sobre, 'puerta-n0-sobre.js', x(1)),
     cond(N.fam, '={{ $json.tiene_familia }}', esVerdadero, x(2)),
     // el cuerpo ORIGINAL de la sala viaja tal cual (la ruta valida el resto y no lee nada de dentro del payload)
-    http(N.abrir, `${VERCEL}/api/oficina/encargos`, x(3, -150), { headers: [LLAVE], body: '={{ JSON.stringify($json.body) }}', timeout: 60000 }),
+    http(N.abrir, `${VERCEL}/api/oficina/encargos`, x(3, -150), { headers: [LLAVE], body: '={{ JSON.stringify($json.body) }}', timeout: 120000 }),
     code(N.ruta, 'puerta-n1-ruta.js', x(4, -150)),
     cond(N.ifPas, '={{ $json.ruta }}', esIgual, x(5, -150), 'pasarela'),
     cond(N.ifTur, '={{ $json.ruta }}', esIgual, x(6, -150), 'turno'),
@@ -113,7 +113,7 @@ export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zer
     { parameters: { resume: 'webhook', httpMethod: 'POST', limitWaitTime: true, resumeAmount: 1800, resumeUnit: 'seconds', options: {} }, name: N.espera, type: 'n8n-nodes-base.wait', typeVersion: 1.1, position: x(8, 250), webhookId: webhookId + '-espera' },
     code(N.vuelta, 'turno-n3-vuelta.js', x(9, 250)),
     // ── registrar y seguir
-    http(N.registrar, `${VERCEL}/api/oficina/turnos`, x(10, 0), { headers: [LLAVE], body: '={{ JSON.stringify($json.resultado_body) }}', timeout: 120000 }),
+    http(N.registrar, `${VERCEL}/api/oficina/turnos`, x(10, 0), { headers: [LLAVE], body: '={{ JSON.stringify($json.resultado_body) }}', timeout: 300000 }),
     code(N.sigue, 'turno-n4-sigue.js', x(11, 0)),
     cond(N.ifEsperar, '={{ $json.ruta }}', esIgual, x(12, 0), 'esperar'),
     SIGUIENTE(N.siguiente, x(13, -100)),
@@ -141,7 +141,7 @@ export function construirVigia({ nombre = 'Zero Risk — Oficina · el vigía (v
     http(N.vigia, `${VERCEL}/api/oficina/vigia`, x(1), { headers: [llaveEnv], body: '={{ JSON.stringify({}) }}', timeout: 60000 }),
     code(N.pend, 'vigia-n1-reanudar.js', x(2)),
     cond(N.esRean, '={{ $json.tipo }}', esIgual, x(3), 'reanudar'),
-    http(N.rearmar, `${VERCEL}/api/oficina/turnos`, x(4, -120), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "siguiente", encargo_id: $json.encargo_id }) }}', timeout: 120000 }),
+    http(N.rearmar, `${VERCEL}/api/oficina/turnos`, x(4, -120), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "siguiente", encargo_id: $json.encargo_id }) }}', timeout: 300000 }),
     code(N.paso, 'vigia-n2-rearmar.js', x(5, -120)),
     SIGUIENTE(N.turno, x(6, -120)),
     CABLE(N.cable, x(4, 150)),
