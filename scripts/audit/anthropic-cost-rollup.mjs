@@ -18,8 +18,8 @@
  * confiar en stored value · canonical.
  *
  * Pricing reference (USD per 1M tokens · Anthropic 2026) ·
- *   - claude-opus-4-7    · in $15.00 · out $75.00
- *   - claude-opus-4-6    · in $15.00 · out $75.00
+ *   - claude-opus-4-7    · in $5.00 · out $25.00
+ *   - claude-opus-4-6    · in $5.00 · out $25.00
  *   - claude-sonnet-4-6  · in  $3.00 · out $15.00
  *   - claude-haiku-4-5   · in  $1.00 · out  $5.00
  *
@@ -39,9 +39,9 @@ const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABAS
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const MODEL_PRICING = {
-  "claude-opus-4-7": { input: 15, output: 75 },
-  "claude-opus-4-6": { input: 15, output: 75 },
-  "claude-opus": { input: 15, output: 75 },
+  "claude-opus-4-7": { input: 5, output: 25 },
+  "claude-opus-4-6": { input: 5, output: 25 },
+  "claude-opus": { input: 5, output: 25 },
   "claude-sonnet-4-6": { input: 3, output: 15 },
   "claude-sonnet": { input: 3, output: 15 },
   "claude-haiku-4-5-20251001": { input: 1, output: 5 },
