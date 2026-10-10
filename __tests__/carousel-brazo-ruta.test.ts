@@ -4,15 +4,15 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const subidas: Array<{ path: string; opts: Record<string, unknown> }> = []
+const subidas: Array<{ path: string; opts: Record<string, unknown>; bucket: string }> = []
 let renderLlamado: Array<{ slides: Array<Record<string, unknown>> }> = []
 
 vi.mock('@/lib/internal-auth', () => ({ checkInternalKey: () => ({ ok: true }) }))
 vi.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: () => ({
     storage: {
-      from: (_b: string) => ({
-        upload: async (path: string, _png: Buffer, opts: Record<string, unknown>) => { subidas.push({ path, opts }); return { error: null } },
+      from: (bucket: string) => ({
+        upload: async (path: string, _png: Buffer, opts: Record<string, unknown>) => { subidas.push({ path, opts, bucket }); return { error: null } },
         getPublicUrl: (path: string) => ({ data: { publicUrl: `https://bucket.test/${path}` } }),
       }),
     },
@@ -30,6 +30,7 @@ vi.mock('../packages/carousel-engine/src', async (orig) => {
 })
 
 import { POST } from '../src/app/api/carousel/generate/route'
+import { bucketDeLaRuta } from '../src/lib/carousel-ruta'
 
 const cuerpo = (extra: Record<string, unknown> = {}, slide: Record<string, unknown> = {}) => ({
   client_slug: 'cliente-demo',
@@ -41,7 +42,44 @@ const cuerpo = (extra: Record<string, unknown> = {}, slide: Record<string, unkno
 })
 const llamar = (b: unknown) => POST(new Request('http://x/api/carousel/generate', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'k' }, body: JSON.stringify(b) }))
 
-beforeEach(() => { subidas.length = 0; renderLlamado = [] })
+beforeEach(() => { subidas.length = 0; renderLlamado = []; process.env.OFICINA_BUCKET = 'oficina-test' })
+
+// ── frontera: el bucket `client-websites` es de la web del cliente; la oficina escribe en el suyo
+describe('bucketDeLaRuta (función pura)', () => {
+  it('sin subcarpeta: el bucket de siempre, aunque exista OFICINA_BUCKET', () => {
+    expect(bucketDeLaRuta(undefined, {})).toEqual({ ok: true, bucket: 'client-websites' })
+    expect(bucketDeLaRuta(undefined, { OFICINA_BUCKET: 'x' })).toEqual({ ok: true, bucket: 'client-websites' })
+  })
+  it('con subcarpeta: OFICINA_BUCKET, sin valor por omisión', () => {
+    expect(bucketDeLaRuta('oficina/e1', { OFICINA_BUCKET: 'bucket-oficina' })).toEqual({ ok: true, bucket: 'bucket-oficina' })
+    for (const env of [{}, { OFICINA_BUCKET: '' }, { OFICINA_BUCKET: '   ' }]) {
+      expect(bucketDeLaRuta('oficina/e1', env)).toEqual({ ok: false, error: 'oficina_bucket_not_configured' })
+    }
+  })
+})
+
+describe('la ruta y el bucket', () => {
+  it('con subcarpeta sube al OFICINA_BUCKET, nunca a client-websites', async () => {
+    await llamar(cuerpo({ subcarpeta: 'oficina/e1' }))
+    expect(subidas.length).toBe(2)
+    expect(subidas.every((s) => s.bucket === 'oficina-test')).toBe(true)
+  })
+  it('con subcarpeta y sin OFICINA_BUCKET: 500 oficina_bucket_not_configured ANTES de renderizar o subir', async () => {
+    delete process.env.OFICINA_BUCKET
+    const r = await llamar(cuerpo({ subcarpeta: 'oficina/e1' }))
+    expect(r.status).toBe(500)
+    expect((await r.json()).error).toBe('oficina_bucket_not_configured')
+    expect(renderLlamado.length).toBe(0)
+    expect(subidas.length).toBe(0)
+  })
+  it('sin subcarpeta: client-websites y ruta de hoy, con o sin OFICINA_BUCKET', async () => {
+    delete process.env.OFICINA_BUCKET
+    const r = await llamar(cuerpo())
+    expect(r.status).toBe(200)
+    expect(subidas.every((s) => s.bucket === 'client-websites')).toBe(true)
+    expect(subidas[0].path).toBe('cliente-demo/carousels/2026-10-10/slide-1.png')
+  })
+})
 
 describe('ruta de guardado', () => {
   it('SIN subcarpeta: la ruta de siempre (compatibilidad)', async () => {

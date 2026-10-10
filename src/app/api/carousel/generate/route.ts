@@ -15,7 +15,7 @@ import { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { rutaDeLamina, validarExtrasDeLamina, validarSubcarpeta } from '@/lib/carousel-ruta'
+import { bucketDeLaRuta, rutaDeLamina, validarExtrasDeLamina, validarSubcarpeta } from '@/lib/carousel-ruta'
 import {
   PLATFORM_SPECS,
   renderCarousel,
@@ -31,7 +31,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const STORAGE_BUCKET = 'client-websites'
+
 const VALID_PLATFORMS: CarouselPlatform[] = [
   'instagram-feed',
   'instagram-reel',
@@ -131,6 +131,11 @@ export async function POST(request: Request) {
   const carouselId = req.carousel_id ?? deriveCarouselId(req)
   const spec = PLATFORM_SPECS[req.platform]
 
+  // ── Bucket · frontera: el de la web del cliente salvo llamadas de la oficina (con `subcarpeta`), que exigen el suyo
+  const dest = bucketDeLaRuta(req.subcarpeta, { OFICINA_BUCKET: process.env.OFICINA_BUCKET })
+  if (!dest.ok) return NextResponse.json({ error: dest.error }, { status: 500 })
+  const bucket = dest.bucket
+
   // ── Render N slides in parallel ───────────────────────────────────
   let rendered
   try {
@@ -163,7 +168,7 @@ export async function POST(request: Request) {
   for (const slide of rendered) {
     const path = rutaDeLamina(req.client_slug, date, req.subcarpeta, slide.slide_index)
     const { error: upErr } = await supabase.storage
-      .from(STORAGE_BUCKET)
+      .from(bucket)
       .upload(path, slide.png, {
         contentType: 'image/png',
         upsert: true,
@@ -180,7 +185,7 @@ export async function POST(request: Request) {
         { status: 502 },
       )
     }
-    const { data: pub } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
+    const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path)
     slideUrls.push(pub.publicUrl)
     timingsMs.push(slide.durationMs)
   }

@@ -43,3 +43,16 @@ export function validarExtrasDeLamina(slide: Record<string, unknown>, i: number)
   if (o !== undefined && typeof o !== 'boolean') return `slides[${i}].ocultar_indicador must be a boolean`
   return null
 }
+
+/** Bucket de la web del cliente (dueño CC#4): lo que la ruta ha usado siempre. */
+export const BUCKET_DE_LA_WEB = 'client-websites'
+
+/**
+ * Frontera: con `subcarpeta` (llamadas de la oficina) el bucket es `OFICINA_BUCKET`, SIN valor por omisión: si falta,
+ * error ANTES de renderizar o subir. Sin `subcarpeta` la ruta es exactamente la de siempre.
+ */
+export function bucketDeLaRuta(subcarpeta: string | undefined, env: { OFICINA_BUCKET?: string }): { ok: true; bucket: string } | { ok: false; error: string } {
+  if (!subcarpeta) return { ok: true, bucket: BUCKET_DE_LA_WEB }
+  const b = env.OFICINA_BUCKET?.trim()
+  return b ? { ok: true, bucket: b } : { ok: false, error: 'oficina_bucket_not_configured' }
+}
