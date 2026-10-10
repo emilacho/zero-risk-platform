@@ -156,6 +156,16 @@ describe('PATCH /api/hitl/[id]', () => {
       expect(Object.keys(registro.find((x) => x.op === 'update')?.datos as object).sort(), status).toEqual(['decision', 'reviewer', 'status'])
     }
   })
+  it('si la base rechaza el estado (23514: «expired» o «in_review» no existen en la tabla), la respuesta es un 409 claro con la salida correcta; cualquier otro error de la base sigue siendo 500', async () => {
+    errorDeUpdate = { message: 'new row violates check constraint "hitl_queue_status_check"', code: '23514' }
+    const r = await patch({ status: 'expired' })
+    expect(r.status).toBe(409)
+    expect(r.json.error).toBe('estado_no_admitido_por_la_bandeja')
+    expect(r.json.detail).toMatch(/expired[\s\S]*rejected[\s\S]*decision\.vencida/)
+    errorDeUpdate = { message: 'connection reset', code: '08006' }
+    expect((await patch({ status: 'rejected' })).status).toBe(500)
+    errorDeUpdate = null
+  })
   it('`edited` se acepta (antes 400), escribe las dos fechas y NO propaga a otras tablas', async () => {
     filaActual = { id: 'x', type: 'seo_playbook_review', metadata: { task_id: 'T1' } }
     const r = await patch({ status: 'edited', reviewer: 'emilio' })
