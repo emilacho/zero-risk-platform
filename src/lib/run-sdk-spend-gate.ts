@@ -124,6 +124,8 @@ export interface SpendGateResult {
     /** La VARA POR CORRIDA cortó · una sola corrida paso su techo (§ arriba). */
     | 'run_over_cap'
   readonly cap_usd?: number
+  /** Si la ficha del cliente trae un tope MÁS BAJO (`config.spend_cap_usd`), el que rigió. Solo puede BAJAR el techo, nunca subirlo. */
+  readonly cap_override_usd?: number
   readonly spent_usd?: number
   /** Ficha canónica contra la que se acumuló (B1) · útil para forense. */
   readonly canonical_client_id?: string | null
@@ -306,6 +308,24 @@ export async function resolveClientFamily(
 }
 
 /**
+ * Tope POR CLIENTE (relevo 59 · la prueba desde cero): `clients.config.spend_cap_usd` (número > 0) BAJA el techo de las 24 h de ESE cliente por debajo del genérico; nunca lo sube.
+ * Es la «puerta ANTES de cada llamada de modelo»: la corrida que llegue con el gasto ya al tope no se lanza. Falla ABIERTO (sin ficha, sin dato o error ⇒ null ⇒ techo genérico):
+ * el freno nunca se rompe por esta lectura. Ojo: cuenta lo ya REGISTRADO; las llamadas en vuelo (aún sin fila) no entran: por eso el tope se pone con margen.
+ */
+export async function resolveClientCapOverrideUsd(supabase: SupabaseClient, clientId: string): Promise<number | null> {
+  try {
+    const { data, error } = await supabase.from('clients').select('config').eq('id', clientId).maybeSingle()
+    if (error) return null
+    const cfg = (data as { config?: unknown } | null)?.config
+    const v = cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? (cfg as Record<string, unknown>).spend_cap_usd : undefined
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN
+    return Number.isFinite(n) && n > 0 ? n : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Evalúa el freno de gasto §150 GENÉRICO para una invocación de run-sdk.
  *
  * Compatibilidad · el tercer parámetro acepta el `nowMs` histórico (número) o el
@@ -410,11 +430,14 @@ export async function checkRunSdkSpendCap(
     const spent = sumCost(data)
     recordGateSuccess('run-sdk')
 
-    const cap = resolveRunSpendCapUsd()
+    const capGenerico = resolveRunSpendCapUsd()
+    const override = await resolveClientCapOverrideUsd(supabase, String(clientId))
+    const cap = override !== null ? Math.min(capGenerico, override) : capGenerico
     const runCap = resolveRunScopedCapUsd()
     const runId = opts.runId ?? null
     const base = {
       cap_usd: cap,
+      ...(override !== null && override < capGenerico ? { cap_override_usd: override } : {}),
       spent_usd: spent,
       canonical_client_id: canonical,
       family_size: family.length,

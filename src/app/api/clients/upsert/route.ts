@@ -30,6 +30,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateInput } from '@/lib/input-validator'
 import { fusionarUrlReparto, urlsDeReparto } from '@/lib/clients/url-reparto'
+import { fusionarHandlesPropios, handlesPropios } from '@/lib/clients/own-handles'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -237,22 +238,31 @@ export async function POST(request: Request) {
 
   const clientId = clientUpsert.id as string
 
-  // ─── 1b. url_reparto (D-3 · opcional) → clients.config.apify.url_reparto · se fusiona, no se pisa nada más ───────
+  // ─── 1b. url_reparto (D-3) y own_handles (r59) · opcionales → clients.config.apify.* · UNA lectura y UNA escritura, se fusiona sin pisar nada más ───────
   let urlReparto: { guardadas: number; descartadas: string[]; error?: string } | null = null
+  let ownHandles: { guardados: string[]; descartados: string[]; error?: string } | null = null
   const pedidas = (body as { url_reparto?: unknown }).url_reparto
-  if (pedidas !== undefined && pedidas !== null) {
-    const u = urlsDeReparto(pedidas)
-    urlReparto = { guardadas: 0, descartadas: u.descartadas }
-    if (u.validas.length > 0) {
-      try {
-        const { data: fila, error: eLeer } = await supabase.from('clients').select('config').eq('id', clientId).maybeSingle()
-        if (eLeer) throw new Error(eLeer.message)
-        const { error: eEsc } = await supabase.from('clients').update({ config: fusionarUrlReparto((fila as { config?: unknown } | null)?.config, u.validas) }).eq('id', clientId)
-        if (eEsc) throw new Error(eEsc.message)
-        urlReparto.guardadas = u.validas.length
-      } catch (e: unknown) {
-        urlReparto.error = (e instanceof Error ? e.message : String(e)).slice(0, 200)
-      }
+  const pedidosH = (body as { own_handles?: unknown }).own_handles
+  const u = pedidas !== undefined && pedidas !== null ? urlsDeReparto(pedidas) : null
+  const h = pedidosH !== undefined && pedidosH !== null ? handlesPropios(pedidosH) : null
+  if (u) urlReparto = { guardadas: 0, descartadas: u.descartadas }
+  if (h) ownHandles = { guardados: [], descartados: h.descartados }
+  const hayU = !!u && u.validas.length > 0, hayH = !!h && Object.keys(h.validos).length > 0
+  if (hayU || hayH) {
+    try {
+      const { data: fila, error: eLeer } = await supabase.from('clients').select('config').eq('id', clientId).maybeSingle()
+      if (eLeer) throw new Error(eLeer.message)
+      let cfg: unknown = (fila as { config?: unknown } | null)?.config
+      if (hayH) cfg = fusionarHandlesPropios(cfg, h!.validos)
+      if (hayU) cfg = fusionarUrlReparto(cfg, u!.validas)
+      const { error: eEsc } = await supabase.from('clients').update({ config: cfg }).eq('id', clientId)
+      if (eEsc) throw new Error(eEsc.message)
+      if (hayU) urlReparto!.guardadas = u!.validas.length
+      if (hayH) ownHandles!.guardados = Object.keys(h!.validos)
+    } catch (e: unknown) {
+      const msg = (e instanceof Error ? e.message : String(e)).slice(0, 200)
+      if (hayU) urlReparto!.error = msg
+      if (hayH) ownHandles!.error = msg
     }
   }
 
@@ -341,6 +351,7 @@ export async function POST(request: Request) {
     },
     ...(brandBookError ? { brand_book_error: brandBookError } : {}),
     ...(urlReparto ? { url_reparto: urlReparto } : {}),
+    ...(ownHandles ? { own_handles: ownHandles } : {}),
     ...(journeyStateError ? { journey_state_error: journeyStateError } : {}),
   })
 }
