@@ -12,6 +12,8 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
+import { TIPO_DE_BANDEJA } from '@/lib/manual/borrador'
+import { guardarNotaDeRechazo, promoverManualRevisado } from '@/lib/manual/promover'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -102,6 +104,16 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
       const col = table === 'seo_engagements' ? 'task_id' : 'id'
       await supabase.from(table).update({ status: newStatus }).eq(col, refId)
     }
+  }
+
+  // Manual de marca revisado (M2): aprobar PROMUEVE el borrador a la versión vigente firmada; rechazar guarda la nota en el borrador. Es el único tipo con este efecto.
+  if (data?.type === TIPO_DE_BANDEJA && data.output_id && data.client_id && (body.status === 'approved' || body.status === 'rejected')) {
+    if (body.status === 'approved') {
+      const promocion = await promoverManualRevisado(supabase, { output_id: String(data.output_id), client_id: String(data.client_id), aprobador: String(body.reviewer ?? 'emilio'), frase_del_aprobador: frase })
+      return NextResponse.json({ item: data, promocion }, { status: promocion.ok ? 200 : 207 })
+    }
+    const nota = await guardarNotaDeRechazo(supabase, { output_id: String(data.output_id), client_id: String(data.client_id), nota: frase ?? '', rechazado_por: String(body.reviewer ?? 'emilio') })
+    return NextResponse.json({ item: data, nota_de_rechazo: nota })
   }
 
   return NextResponse.json({ item: data })
