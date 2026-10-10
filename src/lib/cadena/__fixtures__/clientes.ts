@@ -12,7 +12,7 @@ const RAIZ = join(__dirname, '..', '..', '..', '..')
 
 /** Los formatos salen de la SIEMBRA REAL de la migración (así prueba y tabla no se separan). */
 export function formatosDeLaMigracion(): FormatosPorRed {
-  const sql = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610090100_cadena_tablas.sql'), 'utf8')
+  const sql = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610090200_cadena_tablas.sql'), 'utf8')
   const out: FormatosPorRed = {}
   for (const m of sql.matchAll(/\('(instagram|facebook|tiktok|linkedin|youtube|whatsapp)',\s*'(\w+)',\s*(\d+),\s*'(opera|espera_brazo)',\s*(\d+)\)/g)) {
     ;(out[m[1]] ??= []).push({ formato: m[2], lead_dias: Number(m[3]), produccion: m[4] as 'opera' | 'espera_brazo', max_por_dia: Number(m[5]) })

@@ -5,7 +5,7 @@
  *
  * Alcance de la corrección (§10.4): `fila` (se parchea sola) o `tanda` (frecuencia y reparto son del conjunto).
  */
-import { hallarAfirmaciones, hallarFechasEnTema, hallarVoseo } from './afirmaciones'
+import { hallarAfirmaciones, hallarFechasEnTema, hallarVoseo, type LexicoAfirmaciones } from './afirmaciones'
 import { diaDeCampana, diaSemanaIso, fechaDeFila, minutos, sumarDias } from './fechas'
 import { alcanza, nivelEfectivo, resolverDato, type Candidato } from './fuentes'
 import { normalizar } from './texto'
@@ -40,6 +40,8 @@ export interface InsumosCalendario {
   forbiddenWords?: string[]
   /** nombres propios que NO son un origen de producto (sedes, nombre del negocio) */
   conocidos?: string[]
+  /** léxico de afirmaciones leído de cadena_config.lexico_afirmaciones (dato, no código); sin él, la base del idioma */
+  lexico?: LexicoAfirmaciones
   totalesDeclarados?: { total_filas?: number; por_pilar?: Record<string, number> }
   /** candidatos por tipo de dato (p. ej. «horario»): activan C01–C04 */
   candidatosPorDato?: Record<string, Candidato[]>
@@ -195,6 +197,12 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
   if (ins.totalesDeclarados) {
     const real = filas.filter((f) => activa(f) && materializada(f)).length
     if (ins.totalesDeclarados.total_filas != null && ins.totalesDeclarados.total_filas !== real) out.push(h('V10', 'aviso', null, `el total declarado (${ins.totalesDeclarados.total_filas}) no coincide con el recalculado (${real})`, 'los totales los calcula el código', 'no declarar totales'))
+    // por pilar: lo declarado también se recalcula (el agente no declara totales; si lo hace, que coincida)
+    const vivas = filas.filter((f) => activa(f) && materializada(f))
+    for (const [pilar, n] of Object.entries(ins.totalesDeclarados.por_pilar ?? {})) {
+      const r = vivas.filter((f) => f.pilar === pilar).length
+      if (n !== r) out.push(h('V10', 'aviso', null, `el total declarado del pilar «${pilar}» (${n}) no coincide con el recalculado (${r})`, 'los totales los calcula el código', 'no declarar totales'))
+    }
   }
 
   // ─── V11 · dependencias entre filas y las del plan; nunca hacia un video que espera
@@ -245,7 +253,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
 function chequeoDeDatos(f: Fila, ins: InsumosCalendario, refPorId: Map<string, Referencia>, conocidos: string[]): Hallazgo[] {
   const out: Hallazgo[] = []
   const tema = f.tema ?? ''
-  const encontrados = hallarAfirmaciones(tema, conocidos)
+  const encontrados = hallarAfirmaciones(tema, conocidos, { lexico: ins.lexico })
   const compacto = (s: string) => normalizar(s).replace(/[\s.,]/g, '')
 
   const validarDato = (d: DatoDeterminado, claseMin: Clase) => {
@@ -276,12 +284,19 @@ function chequeoDeDatos(f: Fila, ins: InsumosCalendario, refPorId: Map<string, R
 
   // 1 · cada cifra y afirmación del TEXTO necesita un dato declarado que la respalde (o un pendiente)
   for (const hl of encontrados) {
-    const cubre = f.datos.find((d) => compacto(`${d.valor} ${d.dato}`).includes(compacto(hl.texto)))
+    // D2 (relevo 41): una AFIRMACIÓN se cubre solo si el `valor` (no el texto libre `dato`) contiene la frase detectada; una cifra, como siempre, por valor o dato
+    const cubre = f.datos.find((d) => compacto(hl.tipo === 'afirmacion' ? d.valor : `${d.valor} ${d.dato}`).includes(compacto(hl.texto)))
     if (!cubre) {
       const excusado = f.pendientes.some((p) => compacto(p).includes(compacto(hl.texto)) || normalizar(p).includes(normalizar(hl.subtipo)))
       if (excusado) out.push(h('V14', 'aviso', f, `«${hl.texto}» queda pendiente de fuente`, 'datos con fuente', 'se investiga con fuente; si no hay, la fila sale'))
       else out.push(h('V14', 'bloquea', f, hl.tipo === 'cifra' ? `la cifra «${hl.texto}» (${hl.subtipo}) no está en datos[] con fuente` : `la afirmación «${hl.texto}» (${hl.subtipo}) no tiene respaldo`, 'cada cifra y cada afirmación de origen, frescura, porción, trazabilidad o garantía necesita respaldo F0/F1/F2', 'respaldarla en datos[], cambiar el tema o quitarla'))
-    } else validarDato(cubre, hl.clase)
+    } else {
+      // …y la referencia citada debe CONTENER la frase entera: un valor suelto que sí aparece en el plan no respalda «llega el mismo día»
+      const ref = refPorId.get(cubre.ref)
+      if (hl.tipo === 'afirmacion' && ref && ref.client_id === ins.clientId && !compacto(ref.texto).includes(compacto(hl.texto))) {
+        out.push(h('V14', 'bloquea', f, `la afirmación «${hl.texto}» (${hl.subtipo}) cita una referencia que no la dice (${cubre.ref})`, 'la referencia contiene la afirmación entera', 'citar la fuente que lo dice, cambiar el tema o quitarla'))
+      } else validarDato(cubre, hl.clase)
+    }
   }
   // 2 · los datos declarados aunque no estén en el texto también se validan
   const ya = new Set(encontrados.flatMap((hl) => f.datos.filter((d) => compacto(`${d.valor} ${d.dato}`).includes(compacto(hl.texto))).map((d) => d.dato + d.valor)))
