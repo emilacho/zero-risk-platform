@@ -16,6 +16,9 @@ export interface FuentesDelCliente {
   precios: string[]
   competidores: string[]
   registro: Registro
+  /** false = no se pudieron leer los teléfonos / usuarios del cliente: lo que no esté en la lista es «no verificado» (sugerencia), nunca «falso» (bloquea) */
+  telefonos_verificables?: boolean
+  handles_verificables?: boolean
 }
 export interface PiezaDePost { pie_de_foto: string; hashtags: string[]; llamado?: string; nota_para_quien_publica?: string }
 export interface ContextoDeChequeo {
@@ -63,9 +66,11 @@ export function chequeosDePost(c: ContextoDeChequeo): Ficha[] {
   // 3 · datos: teléfonos, @ y precios solo los del cliente
   const dc = datosDeContacto(todo)
   const tel = new Set(c.fuentes.telefonos.map(digitosDeTelefono))
-  for (const t of dc.telefonos) if (!tel.has(t)) f.push(ficha('texto', 'bloquea', `teléfono ${t} que no es del cliente`, 'ficha del cliente y sedes', 'usar solo el teléfono del cliente', n++))
+  const telGrav: Ficha['gravedad'] = c.fuentes.telefonos_verificables === false ? 'sugerencia' : 'bloquea'
+  const hanGrav: Ficha['gravedad'] = c.fuentes.handles_verificables === false ? 'sugerencia' : 'bloquea'
+  for (const t of dc.telefonos) if (!tel.has(t)) f.push(ficha('texto', telGrav, `teléfono ${t} que no es del cliente${telGrav === 'sugerencia' ? ' (no se pudo verificar: no hay teléfonos del cliente leídos)' : ''}`, 'ficha del cliente y sedes', 'usar solo el teléfono del cliente', n++))
   const han = new Set(c.fuentes.handles.map((h) => normalizar(h.startsWith('@') ? h : `@${h}`)))
-  for (const h of dc.handles) if (!han.has(h)) f.push(ficha('texto', 'bloquea', `usuario ${h} que no es del cliente`, 'ficha del cliente', 'usar solo los usuarios del cliente', n++))
+  for (const h of dc.handles) if (!han.has(h)) f.push(ficha('texto', hanGrav, `usuario ${h} que no es del cliente${hanGrav === 'sugerencia' ? ' (no se pudo verificar: no hay usuarios del cliente leídos)' : ''}`, 'ficha del cliente', 'usar solo los usuarios del cliente', n++))
   const precios = [...texto.matchAll(/(?:US\$|\$)\s?(\d+(?:[.,]\d{1,2})?)/g)].map((m) => m[1].replace(',', '.'))
   const buenos = new Set(c.fuentes.precios.map((p) => Number(p.replace(',', '.')).toFixed(2)))
   for (const p of precios) {

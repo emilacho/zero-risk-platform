@@ -97,9 +97,13 @@ describe('sala 4 · entrega «lista para publicar»', () => {
     return chequeosDeEntrega(arch, f, texto, manifiesto(arch, {}))
   }
   it('medidas correctas ⇒ sin fichas', () => { expect(chequear(png(1080, 1080))).toEqual([]) })
-  it('medidas distintas BLOQUEAN aunque la fila no esté verificada', () => {
+  it('una PROPORCIÓN distinta BLOQUEA aunque la fila no esté verificada', () => {
     const f = chequear(png(1080, 1350))
     expect(f[0]).toMatchObject({ gravedad: 'bloquea' }); expect(f[0].que).toMatch(/1080×1350/)
+  })
+  it('la proporción correcta con otro tamaño (1024×1024 generada) solo avisa', () => {
+    const f = chequear(png(1024, 1024))
+    expect(f).toHaveLength(1); expect(f[0].gravedad).toBe('sugerencia'); expect(f[0].que).toMatch(/proporción correcta/)
   })
   it('un archivo ilegible bloquea; un formato sin especificación bloquea', () => {
     expect(chequear(Buffer.from('xx'))[0].que).toMatch(/no es una imagen legible/)

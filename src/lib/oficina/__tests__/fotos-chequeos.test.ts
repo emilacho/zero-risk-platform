@@ -102,6 +102,10 @@ describe('chequeos duros del post', () => {
     expect(mensajes(ctx({ pie: 'Escríbenos al 0997664119' }))).toMatch(/teléfono 997664119/)
     expect(mensajes(ctx({ pie: 'Síguenos en @otro_negocio' }))).toMatch(/usuario @otro_negocio/)
   })
+  it('si no se pudieron LEER los teléfonos o usuarios del cliente, lo desconocido es «no verificado» (sugerencia), nunca «falso»', () => {
+    expect(mensajes(ctx({ pie: 'Escríbenos al 0997664119', fuentes: { telefonos: [], telefonos_verificables: false } as never }))).toMatch(/^sugerencia:texto:teléfono/)
+    expect(mensajes(ctx({ pie: 'Síguenos en @otro_negocio', fuentes: { handles: [], handles_verificables: false } as never }))).toMatch(/^sugerencia:texto:usuario/)
+  })
   it('precio fuera de la carta bloquea; sin carta es solo sugerencia', () => {
     expect(mensajes(ctx({ pie: 'Ceviche a $8.00' }))).toMatch(/bloquea:texto:precio \$8.00/)
     expect(chequeosDePost(ctx({ pie: 'Ceviche a $9,50' }))).toEqual([])
