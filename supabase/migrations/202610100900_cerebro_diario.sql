@@ -3,7 +3,7 @@
 -- 🔴 Quién las usa: SOLO las rutas `/api/brain/diario/*` (llave de servicio). Hasta que alguien encienda el flujo «mantenimiento diario» (inactivo), nadie las lee ni las escribe.
 -- 🔴 La lección del proyecto: CREATE TABLE no alcanza. Cada tabla lleva en la MISMA migración RLS + REVOKE a anon/authenticated + GRANT a service_role + política de servicio.
 -- 🔴 IDEMPOTENTE (IF NOT EXISTS / bloques DO). Una sola transacción. Sin disparadores. `client_id` es TEXTO (sin llaves foráneas hacia tablas viejas: igual que `cerebro_fichas`).
--- REVERSA: `supabase/reversas/202610100100_cerebro_diario_REVERSA.sql` (las tablas nuevas están vacías hasta la primera corrida real).
+-- REVERSA: `supabase/reversas/202610100900_cerebro_diario_REVERSA.sql` (las tablas nuevas están vacías hasta la primera corrida real).
 
 BEGIN;
 

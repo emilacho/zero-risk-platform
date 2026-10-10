@@ -129,7 +129,7 @@ describe('garantías', () => {
     for (const { nombre, texto } of fuentes()) expect(texto, nombre).not.toMatch(/cerebro_avisos/)
   })
   it('la migración es aditiva (solo CREATE/ALTER ... ENABLE/GRANT; nada de DROP/ALTER de lo existente) y cada tabla nueva lleva RLS, REVOKE y GRANT en la misma migración', () => {
-    const sql = sinComentariosSql(fs.readFileSync(path.join(RAIZ, 'supabase/migrations/202610100100_cerebro_diario.sql'), 'utf8'))
+    const sql = sinComentariosSql(fs.readFileSync(path.join(RAIZ, 'supabase/migrations/202610100900_cerebro_diario.sql'), 'utf8'))
     const sinPermisos = sql.replace(/GRANT [^;]*;/g, '')
     expect(sinPermisos).not.toMatch(/\bDROP\b|\bTRUNCATE\b|\bDELETE\b|ALTER TABLE public\.(client_|cerebro_fichas|cerebro_ingresos)/i)
     const tablas = [...sql.matchAll(/CREATE TABLE IF NOT EXISTS public\.([a-z_]+)/g)].map((m) => m[1])
@@ -137,7 +137,7 @@ describe('garantías', () => {
     for (const t of tablas) { expect(sql).toMatch(new RegExp(`ALTER TABLE public\\.${t}\\s+ENABLE ROW LEVEL SECURITY`)); expect(sql).toContain(t) }
     expect(sql).toMatch(/REVOKE ALL ON [^;]*FROM PUBLIC, anon, authenticated/); expect(sql).toMatch(/GRANT SELECT, INSERT, UPDATE, DELETE ON [^;]*TO service_role/)
     expect(sql).toMatch(/BEGIN;/); expect(sql).toMatch(/COMMIT;/)
-    expect(fs.existsSync(path.join(RAIZ, 'supabase/reversas/202610100100_cerebro_diario_REVERSA.sql'))).toBe(true)
+    expect(fs.existsSync(path.join(RAIZ, 'supabase/reversas/202610100900_cerebro_diario_REVERSA.sql'))).toBe(true)
   })
 })
 function sinComentariosSql(t: string): string { return t.replace(/--.*$/gm, '') }
