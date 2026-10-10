@@ -538,10 +538,13 @@ describe('CC#3 #471 · lo que sus mutaciones dejaron vivo en la entrega y en la 
   it('foto REAL elegida: la lámina lleva EXACTAMENTE la dirección de esa foto (no la de otra)', async () => {
     const { M, id } = await abiertoC({ dry_run: false })
     let foto = ''
-    await correr(M, id, guionCarrusel({
+    const { pedidos } = await correr(M, id, guionCarrusel({
       direccion_visual: (_n, t) => { foto = /^- (\S+): muestra/m.exec(t)![1]; return { texto: j({ resumen: 'foto real', imagenes: [{ ref: 'hook', modo: 'real', foto_id: foto, motivo: 'sirve' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } }) } },
       mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }),
     }))
+    // si la foto no es de confianza alta, al empleado que mira se le muestra ESA foto
+    const vistas = (pedidos['mirar'] ?? []).flatMap((p) => (p.images as Array<{ url: string }> | string[] | undefined) ?? []).map((x) => (typeof x === 'string' ? x : x.url))
+    if (vistas.length) expect(vistas).toContain(`https://fotos.test/${foto}.jpg`)
     expect(M.llamadas.renderPedidos[0].slides[0].background_image_url).toBe(`https://fotos.test/${foto}.jpg`)
     expect(M.llamadas.renderPedidos[0].slides.slice(1).every((s) => !s.background_image_url)).toBe(true)
   })
