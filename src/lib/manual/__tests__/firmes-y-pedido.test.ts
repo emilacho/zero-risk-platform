@@ -1,6 +1,6 @@
 /** R6 (provisional viaja), la puerta final (S5), la evidencia del juez (D1) y el pedido a GPT ciego (D3). Cliente sintético. Sin modelo. */
 import { describe, expect, it } from 'vitest'
-import { aplicarMeta, armarPedidoDelManual, camposFirmes, cerrarPuerta, declaracionDelCliente, evaluarHechos, evidenciaParaElJuez, fuentesDeRaspado, metaDeCampos, ordenarMateria, preguntaDelManual, recomprobar, restituirPendientes } from '..'
+import { aplicarMeta, armarPedidoDelManual, camposFirmes, cerrarPuerta, declaracionDelCliente, evaluarHechos, evidenciaParaElJuez, fuentesDeRaspado, metaDeCampos, ordenarMateria, preguntaDelManual, quitarClausula, recomprobar, restituirPendientes } from '..'
 import { F, filaInstagram, filaSitio, PROPIOS } from './apoyo'
 
 const propio = (id: string, t: string) => F(id, 'primaria_propia', t)
@@ -14,11 +14,13 @@ const MANUAL = {
 
 describe('la puerta final · cerrar lo que sigue sin respaldo, SOLO la cláusula', () => {
   const fuentes = [propio('s', 'Hacemos implantes certificados con cita previa. Hola. Somos los mejores del barrio.')]
-  it('reemplaza únicamente la cláusula con la marca sin respaldo por `PENDIENTE:`; el resto de la frase creativa se respeta', () => {
+  it('QUITA únicamente la cláusula con la marca sin respaldo (A3): el resto de la frase creativa se respeta y la cláusula queda en el registro interno', () => {
     const inf = evaluarHechos({ manual: MANUAL, fuentes })
     const c = cerrarPuerta(MANUAL, inf)
-    expect(c.manual.mision).toBe('Cuidar sonrisas, PENDIENTE: afirmación sin fuente («trazabilidad»).')
-    expect(c.cambios.find((x) => x.ruta === 'mision')).toEqual({ ruta: 'mision', de: 'con trazabilidad verificable de cada material', a: 'PENDIENTE: afirmación sin fuente («trazabilidad»)', por: 'pendiente' })
+    expect(c.manual.mision).toBe('Cuidar sonrisas.')
+    expect(c.cambios.find((x) => x.ruta === 'mision')).toEqual({ ruta: 'mision', de: 'con trazabilidad verificable de cada material', a: '', por: 'retirada' })
+    expect(c.retirados.find((x) => x.ruta === 'mision')).toEqual({ ruta: 'mision', clausula: 'con trazabilidad verificable de cada material', estado: 'sin_cita', marca: 'certeza', motivo: 'afirmación de certeza sin cita' })
+    expect(JSON.stringify(c.manual)).not.toContain('PENDIENTE')
     expect(c.manual.voice_description).toBe(MANUAL.voice_description) // creativo: intacto
     expect(MANUAL.mision).toContain('trazabilidad') // el original no se muta
   })
@@ -71,19 +73,25 @@ describe('S5 · recomprobar lo que devolvió el autor', () => {
     const r = recomprobar(antes, despues, { fuentes })
     expect(r.limpio).toBe(false)
     expect(r.introducidos.map((h) => h.clausula)).toEqual(['con garantía total de resultados'])
-    expect(r.manual.mision).toBe('Cuidar sonrisas, PENDIENTE: afirmación sin fuente («garantia»).')
+    expect(r.manual.mision).toBe('Cuidar sonrisas.')
+    expect(r.retirados.map((x) => x.clausula)).toEqual(['con garantía total de resultados'])
   })
-  it('si el autor QUITA un PENDIENTE, se restituye al final del mismo campo', () => {
+  it('un PENDIENTE heredado de una versión vieja no se restituye: la puerta ya no escribe marcas, la cláusula sin cita sale', () => {
     const despues = { positioning: 'Clínica cercana.', mision: 'Cuidar sonrisas.' }
     const r = recomprobar(antes, despues, { fuentes })
-    expect(r.restituidos).toEqual([{ ruta: 'positioning', pendiente: 'PENDIENTE: afirmación sin fuente («trazabilidad»)' }])
-    expect(r.manual.positioning).toBe('Clínica cercana. PENDIENTE: afirmación sin fuente («trazabilidad»)')
+    expect(r.manual.positioning).toBe('Clínica cercana.'); expect(r.retirados).toEqual([])
     expect(restituirPendientes(antes, despues).manual.mision).toBe('Cuidar sonrisas.')
+  })
+  it('quitarClausula deja el texto ordenado (sin coma ni punto colgando, sin dobles espacios)', () => {
+    expect(quitarClausula('Uno, con garantía total y más.', 'con garantía total')).toBe('Uno. y más.')
+    expect(quitarClausula('Uno. Dos sin fuente. Tres.', 'Dos sin fuente')).toBe('Uno. Tres.')
+    expect(quitarClausula('Solo esto', 'Solo esto')).toBe('')
+    expect(quitarClausula('abc', 'zzz')).toBe('abc')
   })
   it('si el autor devuelve algo limpio y con respaldo, la puerta no cambia nada y el resultado trae `_field_meta` de todos los campos', () => {
     const despues = { positioning: 'Clínica cercana. PENDIENTE: afirmación sin fuente («trazabilidad»)', mision: 'Cuidar sonrisas con implantes certificados con cita previa.' }
     const r = recomprobar(antes, despues, { fuentes })
-    expect(r.limpio).toBe(true); expect(r.cambios.filter((c) => c.por === 'pendiente')).toEqual([])
+    expect(r.limpio).toBe(true); expect(r.cambios.filter((c) => c.por === 'retirada')).toEqual([])
     expect(Object.keys(r.manual._field_meta as object).sort()).toEqual(['mision', 'positioning'])
   })
 })

@@ -17,9 +17,11 @@ describe('bordes · R1', () => {
   it('lo de la alta (datos del trato) y lo que no es propio no cuenta como canal; un texto vacío no rompe nada', () => {
     const a = F('a', 'primaria_propia', 'Trabajamos con pasión y respeto siempre', 'alta', 'dato')
     const b = p('b', 'sitio', 'titulo', 'Trabajamos con pasión y respeto siempre')
-    expect(frasesPropias([a, b]).estado_eslogan).toBe('sin_dato')
-    expect(frasesPropias([F('h', 'humana', 'Trabajamos con pasión y respeto siempre', 'sitio', 'titulo'), b]).estado_eslogan).toBe('sin_dato')
-    expect(frasesPropias([p('v', 'instagram', 'biografia', '   '), b]).estado_eslogan).toBe('sin_dato')
+    // ni la alta, ni lo humano, ni un texto vacío suman un segundo canal: el título solo se acepta como UNA sola fuente (D2 de CC#3)
+    for (const otro of [a, F('h', 'humana', 'Trabajamos con pasión y respeto siempre', 'sitio', 'titulo'), p('v', 'instagram', 'biografia', '   ')]) {
+      const r = frasesPropias([otro, b])
+      expect(r.eslogan).toMatchObject({ una_sola_fuente: true, fuentes: [{ fuente_id: 'b' }] })
+    }
   })
 })
 

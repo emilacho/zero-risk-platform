@@ -14,7 +14,7 @@ export const FRASES_VACIAS_ES = [
 ]
 
 export interface UbicacionDeFrase { fuente_id: string; canal: CanalDeFuente; rol: RolDeFuente; rotulo: string }
-export interface FrasePropia { literal: string; tipo: 'biografia' | 'titulo' | 'repetida'; fuentes: UbicacionDeFrase[] }
+export interface FrasePropia { literal: string; tipo: 'biografia' | 'titulo' | 'repetida'; fuentes: UbicacionDeFrase[]; /** true si solo vive en UNA fuente posicional (biografía o título/meta): se acepta, marcada */ una_sola_fuente?: boolean }
 export interface FrasesPropias { eslogan: FrasePropia | null; estado_eslogan: 'hallado' | 'sin_dato'; repetidas: FrasePropia[]; fuentes_propias_leidas: number }
 
 interface Normalizado { norm: string; mapa: number[] }
@@ -43,6 +43,20 @@ export function literalDe(original: string, n: Normalizado, desde: number, hasta
 
 const N = 4
 const palabrasDe = (norm: string) => (norm ? norm.split(' ') : [])
+
+/** D2 de CC#3: un cliente con UNA sola fuente propia también tiene eslogan si es POSICIONAL: la línea de la biografía (o, si no hay, el segmento del título/meta) con ≥ 4 palabras, sin datos de contacto ni frases vacías */
+function unaSolaFuente(propias: Fuente[], vacias: string[]): FrasePropia | null {
+  const norm = (t: string) => normalizarConIndices(t).norm
+  const ok = (t: string) => palabrasDe(norm(t)).length >= N && !vacias.some((v) => norm(t).includes(v)) && !/[@]|https?:|www\.|\d{4,}|📍|📞|📲|✉/.test(t)
+  const elegir = (rol: RolDeFuente, partir: RegExp): FrasePropia | null => {
+    for (const f of propias.filter((x) => x.rol === rol)) {
+      const c = f.texto.split(partir).map((x) => x.replace(/\s+/g, ' ').trim()).filter(ok).sort((a, b) => b.length - a.length)[0]
+      if (c) return { literal: c, tipo: rol === 'biografia' ? 'biografia' : 'titulo', fuentes: [{ fuente_id: f.id, canal: f.canal, rol: f.rol, rotulo: f.rotulo }], una_sola_fuente: true }
+    }
+    return null
+  }
+  return elegir('biografia', /\n+/) ?? elegir('titulo', /\s[·|–—-]\s|\n/) ?? elegir('meta', /\n/)
+}
 
 export function frasesPropias(fuentes: Fuente[], opciones: { maxRepetidas?: number; frasesVacias?: string[] } = {}): FrasesPropias {
   const propias = fuentes.filter((f) => f.tipo === 'primaria_propia' && f.canal !== 'alta' && f.texto.trim())
@@ -94,21 +108,22 @@ export function frasesPropias(fuentes: Fuente[], opciones: { maxRepetidas?: numb
   // el eslogan: la candidata privilegiada más larga; empate → la que está en más canales
   const priv = todas.filter((t) => t.privilegiada).sort((a, b) => b.largo - a.largo || b.fuentes.length - a.fuentes.length || a.prioridad - b.prioridad)
   const elegido = priv[0] ?? null
+  const sola = elegido ? null : unaSolaFuente(propias, vacias)
   const limpia = (t: (typeof todas)[number]): FrasePropia => ({ literal: t.literal, tipo: t.tipo, fuentes: t.fuentes })
   const repetidas = todas
     .filter((t) => t !== elegido && !(elegido && elegido.norm.includes(t.norm)))
     .sort((a, b) => b.largo - a.largo)
     .slice(0, opciones.maxRepetidas ?? 10)
     .map(limpia)
-  return { eslogan: elegido ? limpia(elegido) : null, estado_eslogan: elegido ? 'hallado' : 'sin_dato', repetidas, fuentes_propias_leidas: propias.length }
+  return { eslogan: elegido ? limpia(elegido) : sola, estado_eslogan: elegido || sola ? 'hallado' : 'sin_dato', repetidas, fuentes_propias_leidas: propias.length }
 }
 
 /** el código escribe el eslogan en `tagline` SOLO si está vacío (nunca pisa lo que ya hay) y sin pasar por el modelo */
-export function aplicarEslogan<T extends Record<string, unknown>>(manual: T, fp: FrasesPropias): { manual: T; aplicado: boolean; motivo?: 'sin_eslogan' | 'tagline_ocupado' } {
+export function aplicarEslogan<T extends Record<string, unknown>>(manual: T, fp: FrasesPropias): { manual: T; aplicado: boolean; motivo?: 'sin_eslogan' | 'tagline_ocupado'; una_sola_fuente?: boolean } {
   if (!fp.eslogan) return { manual, aplicado: false, motivo: 'sin_eslogan' }
   const actual = manual.tagline
   if (typeof actual === 'string' && actual.trim()) return { manual, aplicado: false, motivo: 'tagline_ocupado' }
-  return { manual: { ...manual, tagline: fp.eslogan.literal }, aplicado: true }
+  return { manual: { ...manual, tagline: fp.eslogan.literal }, aplicado: true, ...(fp.eslogan.una_sola_fuente ? { una_sola_fuente: true } : {}) }
 }
 
 export { esPrimaria }

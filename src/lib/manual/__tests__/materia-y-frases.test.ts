@@ -98,7 +98,9 @@ describe('R1 · las frases propias del cliente, literales y por código', () => 
   })
   it('lo de competidores NO cuenta: una frase que solo repite un competidor no es del cliente', () => {
     const solo = frasesPropias(fuentesDeRaspado([filaInstagram('i', 'clinicaejemplo', 'Agenda por WhatsApp hoy mismo'), filaInstagram('c', 'competidor', 'Sonríe sin miedo, siempre contigo')], PROPIOS))
-    expect(solo.estado_eslogan).toBe('sin_dato'); expect(solo.eslogan).toBeNull()
+    // lo único que halla es la biografía PROPIA (una sola fuente); jamás la frase del competidor
+    expect(solo.eslogan).toMatchObject({ literal: 'Agenda por WhatsApp hoy mismo', una_sola_fuente: true })
+    expect(solo.eslogan!.fuentes.map((f) => f.fuente_id)).toEqual(['raspado:i:0'])
   })
   it('las frases vacías de cualquier sitio no se cuelan como eslogan', () => {
     const f = fuentesDeRaspado([
@@ -107,9 +109,20 @@ describe('R1 · las frases propias del cliente, literales y por código', () => 
     ], PROPIOS)
     expect(frasesPropias(f).eslogan).toBeNull()
   })
-  it('sin candidata ⇒ hueco declarado (nunca inventado ni parafraseado); una sola fuente no basta', () => {
+  it('sin candidata ⇒ hueco declarado (nunca inventado ni parafraseado); el texto corriente de una sola página no es eslogan', () => {
     const r = frasesPropias(fuentesDeRaspado([filaSitio('s', [{ url: 'https://www.clinicaejemplo.test/', title: 'Clínica Ejemplo', text: 'Algo único de esta página sola' }])], PROPIOS))
     expect(r).toMatchObject({ estado_eslogan: 'sin_dato', eslogan: null, repetidas: [] })
+  })
+  it('D2 CC#3 · un cliente con UNA sola fuente propia sí tiene eslogan si es posicional (biografía, o título/meta), marcado «de una sola fuente»', () => {
+    const bio = frasesPropias(fuentesDeRaspado([filaInstagram('i', 'clinicaejemplo', 'Sonríe sin miedo, siempre contigo\n📍 Ciudad Ejemplo\nescríbenos: info@x.test')], PROPIOS))
+    expect(bio).toMatchObject({ estado_eslogan: 'hallado', eslogan: { literal: 'Sonríe sin miedo, siempre contigo', tipo: 'biografia', una_sola_fuente: true } })
+    const tit = frasesPropias(fuentesDeRaspado([filaSitio('s', [{ url: 'https://www.clinicaejemplo.test/', title: 'Clínica Ejemplo · Cuidamos tu sonrisa cada día', text: 'Texto de la página' }])], PROPIOS))
+    expect(tit.eslogan).toMatchObject({ literal: 'Cuidamos tu sonrisa cada día', una_sola_fuente: true })
+    expect(aplicarEslogan({ tagline: null }, bio)).toMatchObject({ aplicado: true, una_sola_fuente: true })
+  })
+  it('D2 · lo posicional de una sola fuente no se cuela si es vacío, trae contacto o es de un competidor', () => {
+    expect(frasesPropias(fuentesDeRaspado([filaInstagram('i', 'clinicaejemplo', 'Todos los derechos reservados\nllámanos al 0999999999')], PROPIOS)).eslogan).toBeNull()
+    expect(frasesPropias(fuentesDeRaspado([filaInstagram('c', 'competidor', 'Sonríe sin miedo, siempre contigo')], PROPIOS)).eslogan).toBeNull()
   })
   it('las repetidas que NO viven en biografía ni título van como material (máx. 10), nunca como eslogan', () => {
     const f = fuentesDeRaspado([

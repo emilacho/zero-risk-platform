@@ -87,12 +87,14 @@ describe('piloto · R3 R4 R5 R7 lo que el manual afirma y nadie respalda', () =>
 
 describe('piloto · R6 y la puerta final sobre el manual de hoy', () => {
   const r = recomprobar({}, P.manual, { fuentes: [...raspado, ...sintesis], dudas })
-  it('después de la puerta, ningún hecho queda sin respaldo en la prosa (todo lo dudoso es `PENDIENTE:` o «el cliente dice»); `positioning` queda marcado provisional', () => {
+  it('después de la puerta, ningún hecho queda sin respaldo en la prosa (lo dudoso sale del manual o es «el cliente dice»)', () => {
     expect(r.informe.sin_respaldo.filter((h) => h.estado !== 'con_duda')).toEqual([])
-    expect(JSON.stringify(r.manual)).toContain('PENDIENTE: ')
-    expect((r.manual._field_meta as Record<string, { provisional: boolean }>).positioning.provisional).toBe(true)
+    expect(JSON.stringify(r.manual)).not.toContain('PENDIENTE')
+    expect(r.retirados.length).toBeGreaterThan(0) // lo retirado queda SOLO en el registro interno
+    // el posicionamiento de hoy es TODO afirmación sin cita (A3): sale entero del manual y queda en el registro interno; el campo no inventa nada
+    expect(r.manual.positioning).toBe('')
+    expect(r.retirados.filter((x) => x.ruta === 'positioning').length).toBeGreaterThanOrEqual(4)
     const f = camposFirmes(r.manual)
-    expect(f.provisionales).toEqual(expect.arrayContaining(['positioning', 'propuestas_de_valor']))
     expect(f.sin_revisar).toEqual([])
   })
   it('no toca lo creativo: la descripción de voz queda tal cual', () => {

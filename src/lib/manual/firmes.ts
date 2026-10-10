@@ -1,13 +1,13 @@
 /**
- * R6 · «PROVISIONAL» VIAJA · y la PUERTA FINAL (S5): lo que sigue sin respaldo se cierra como `PENDIENTE:` y el autor no puede deshacerlo. PURO.
+ * R6 · «PROVISIONAL» VIAJA · y la PUERTA FINAL (S5): lo que sigue sin respaldo y el cliente NO dijo SALE del manual (queda solo en un registro interno) y el autor no puede reintroducirlo. PURO.
  *
  *  · `metaDeCampos` deja un estado en TODOS los campos de texto (también `positioning`, `icp_summary`…): {estado, provisional, pendientes}.
  *  · `camposFirmes(manual)` es lo que leen TODOS los lectores (planeación, el manual en limpio, la oficina, la cadena): un campo provisional NO es F0, entra como F2 con aviso.
- *  · `cerrarPuerta` reemplaza SOLO la cláusula con la marca sin respaldo por `PENDIENTE: …` (el resto de la frase creativa se respeta) y escribe lo que el cliente dice de sí mismo
+ *  · `cerrarPuerta` QUITA SOLO la cláusula con la marca sin respaldo (el resto de la frase creativa se respeta; regla A3 de Lenovo, 10-oct) y escribe lo que el cliente dice de sí mismo
  *    como «el cliente dice: «…»» (firma D2).
- *  · `recomprobar` = S5 sobre el manual que devolvió el autor: re-evalúa, cierra la puerta y RESTITUYE cualquier PENDIENTE que el autor haya quitado.
+ *  · `recomprobar` = S5 sobre el manual que devolvió el autor: re-evalúa y cierra la puerta (lo que reintroduzca sin cita vuelve a salir).
  */
-import { declaracionDelCliente, evaluarHechos, hojasDeTexto, PREFIJO_PENDIENTE, type EntradaDeHechos, type Hecho, type InformeDeHechos } from './hechos'
+import { declaracionDelCliente, evaluarHechos, hojasDeTexto, type EntradaDeHechos, type Hecho, type InformeDeHechos } from './hechos'
 
 export type EstadoDeCampo = 'verificado' | 'afirmacion_del_cliente' | 'con_pendientes' | 'sin_hechos'
 export interface MetaDeCampo { estado: EstadoDeCampo; provisional: boolean; pendientes: number; hechos: number }
@@ -70,34 +70,71 @@ export function camposFirmes(manual: Record<string, unknown>, excluir?: string[]
 }
 
 // ───────────────────────── la puerta final
-function hueco(h: Hecho): string {
-  const d = h.detalle.find((x) => x.estado === h.estado) ?? h.detalle[0]
-  switch (d.marca) {
-    case 'certeza': return `${PREFIJO_PENDIENTE}afirmación sin fuente («${d.texto}»)`
-    case 'cifra': return `${PREFIJO_PENDIENTE}dato sin fuente (${d.texto})`
-    case 'lugar': return `${PREFIJO_PENDIENTE}origen sin fuente`
-    case 'fecha': return `${PREFIJO_PENDIENTE}fecha sin fuente`
-    default: return `${PREFIJO_PENDIENTE}cita sin fuente`
-  }
+export interface CambioDeCierre { ruta: string; de: string; a: string; por: 'retirada' | 'declaracion_del_cliente' }
+/** lo que sale del manual y queda SOLO aquí (auditoría interna) · NUNCA a la bandeja ni a Slack (firma de Emilio 10-oct: «si no existe no es necesario para mí verlo») */
+export interface RetiradoDelManual { ruta: string; clausula: string; estado: Hecho['estado']; marca: string; motivo: string }
+const MOTIVO: Record<string, string> = { certeza: 'afirmación de certeza sin cita', cifra: 'cifra sin cita', lugar: 'origen sin cita', fecha: 'fecha sin cita' }
+
+const escapar = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** dónde está la cláusula en el texto real. Las citas entre comillas se enmascaran al evaluar (quedan como espacios en la cláusula): ahí puede haber una cita cualquiera. */
+export function localizar(texto: string, clausula: string): { i: number; largo: number } | null {
+  const i = texto.indexOf(clausula)
+  if (i >= 0) return { i, largo: clausula.length }
+  const trozos = clausula.split(/\s{2,}/).filter(Boolean)
+  if (trozos.length < 2) return null
+  const m = new RegExp(trozos.map((t) => escapar(t.trim())).join('\\s*(?:"[^"]*"|«[^»]*»|“[^”]*”)?\\s*')).exec(texto)
+  return m ? { i: m.index, largo: m[0].length } : null
 }
 
-export interface CambioDeCierre { ruta: string; de: string; a: string; por: 'pendiente' | 'declaracion_del_cliente' }
-export function cerrarPuerta<T extends Record<string, unknown>>(manual: T, informe: InformeDeHechos): { manual: T; cambios: CambioDeCierre[]; no_aplicados: Hecho[] } {
+/** quita la cláusula (con su puntuación de cola) y deja el texto ordenado: sin coma ni punto colgando, sin paréntesis vacíos */
+export function quitarClausula(texto: string, clausula: string): string {
+  const loc = localizar(texto, clausula)
+  if (!loc) return texto
+  const cola = texto.slice(loc.i + loc.largo)
+  const antes = texto.slice(0, loc.i).replace(/[\s,;:(]+$/, (m) => (m.includes('(') ? m.replace(/[\s,;:]*\([\s,;:(]*$/, '') : ''))
+  const despues = cola.replace(/^[\s.!?…,;)]+/, '')
+  if (antes && despues) return `${/[.!?…]$/.test(antes) ? antes : `${antes}.`} ${despues}`.trim()
+  if (antes) return `${antes}${cola.match(/^[\s,;)]*([.!?…]+)/)?.[1] ?? ''}`
+  return despues.trim()
+}
+
+/** A3 (Lenovo 10-oct): la cláusula sin respaldo que el cliente NO dijo SALE del manual (queda en `retirados`); D2: lo que el cliente dijo se escribe «el cliente dice: «…»».
+ *  Si una misma oración pierde DOS o más cláusulas, sale la oración entera (lo que sobraría son fragmentos sin sentido). */
+export function cerrarPuerta<T extends Record<string, unknown>>(manual: T, informe: InformeDeHechos): { manual: T; cambios: CambioDeCierre[]; retirados: RetiradoDelManual[]; no_aplicados: Hecho[] } {
   let cur = manual
   const cambios: CambioDeCierre[] = []
+  const retirados: RetiradoDelManual[] = []
   const no: Hecho[] = []
-  for (const h of informe.hechos) {
-    let nuevo: string | null = null
-    let por: CambioDeCierre['por'] = 'pendiente'
-    if (h.estado === 'sin_cita' || h.estado === 'solo_sintesis') nuevo = hueco(h)
-    else if (h.estado === 'afirmacion_del_cliente' && h.cita_literal) { nuevo = declaracionDelCliente(h.cita_literal); por = 'declaracion_del_cliente' }
-    if (nuevo === null) continue
-    const actual = leerRuta(cur, h.ruta)
-    if (typeof actual !== 'string' || !actual.includes(h.clausula)) { no.push(h); continue }
-    cur = ponerRuta(cur, h.ruta, actual.replace(h.clausula, nuevo))
-    cambios.push({ ruta: h.ruta, de: h.clausula, a: nuevo, por })
+  const sale = (h: Hecho) => h.estado === 'sin_cita' || h.estado === 'solo_sintesis'
+  const porOracion = new Map<string, number>()
+  for (const h of informe.hechos) if (sale(h)) porOracion.set(h.ruta + '\u0000' + h.frase, (porOracion.get(h.ruta + '\u0000' + h.frase) ?? 0) + 1)
+  const registrar = (h: Hecho) => {
+    const d = h.detalle.find((x) => x.estado === h.estado) ?? h.detalle[0]
+    retirados.push({ ruta: h.ruta, clausula: h.clausula, estado: h.estado, marca: d.marca, motivo: MOTIVO[d.marca] ?? 'cita sin fuente' })
   }
-  return { manual: cur, cambios, no_aplicados: no }
+  const oracionesQuitadas = new Set<string>()
+  for (const h of informe.hechos) {
+    if (sale(h)) {
+      const actual = leerRuta(cur, h.ruta)
+      const clave = h.ruta + '\u0000' + h.frase
+      const entera = (porOracion.get(clave) ?? 0) >= 2
+      if (entera && oracionesQuitadas.has(clave)) { registrar(h); continue }
+      const objetivo = entera ? h.frase : h.clausula
+      if (typeof actual !== 'string' || !localizar(actual, objetivo)) { no.push(h); continue }
+      cur = ponerRuta(cur, h.ruta, quitarClausula(actual, objetivo))
+      cambios.push({ ruta: h.ruta, de: objetivo, a: '', por: 'retirada' })
+      if (entera) oracionesQuitadas.add(clave)
+      registrar(h)
+    } else if (h.estado === 'afirmacion_del_cliente' && h.cita_literal) {
+      const actual = leerRuta(cur, h.ruta)
+      const loc = typeof actual === 'string' ? localizar(actual, h.clausula) : null
+      if (typeof actual !== 'string' || !loc) { no.push(h); continue }
+      const nuevo = declaracionDelCliente(h.cita_literal)
+      cur = ponerRuta(cur, h.ruta, actual.slice(0, loc.i) + nuevo + actual.slice(loc.i + loc.largo))
+      cambios.push({ ruta: h.ruta, de: h.clausula, a: nuevo, por: 'declaracion_del_cliente' })
+    }
+  }
+  return { manual: cur, cambios, retirados, no_aplicados: no }
 }
 
 /** el autor no puede quitar un `PENDIENTE`: si falta en su versión, se vuelve a poner al final del mismo campo */
@@ -122,19 +159,19 @@ export function restituirPendientes<T extends Record<string, unknown>>(antes: Re
 export interface Recomprobacion {
   manual: Record<string, unknown>
   informe: InformeDeHechos
-  /** lo que el autor dejó sin respaldo (ya cerrado como PENDIENTE) */
+  /** lo que el autor dejó sin respaldo (ya retirado del manual) */
   introducidos: Hecho[]
   cambios: CambioDeCierre[]
-  restituidos: Array<{ ruta: string; pendiente: string }>
+  /** registro interno (auditoría): lo que salió del manual · NO va a la bandeja ni a Slack */
+  retirados: RetiradoDelManual[]
   /** true si el autor NO dejó nada sin respaldo (la puerta no tuvo que cerrar nada) */
   limpio: boolean
 }
-/** S5 / S7: re-evalúa lo que devolvió el autor, cierra la puerta y restituye lo que quitó. El resultado ya lleva `_field_meta` de todos los campos. */
-export function recomprobar(antes: Record<string, unknown>, despues: Record<string, unknown>, entrada: Omit<EntradaDeHechos, 'manual'>): Recomprobacion {
+/** S5 / S7: re-evalúa lo que devolvió el autor y cierra la puerta (lo que reintroduzca sin cita vuelve a salir). El resultado ya lleva `_field_meta` de todos los campos. */
+export function recomprobar(_antes: Record<string, unknown>, despues: Record<string, unknown>, entrada: Omit<EntradaDeHechos, 'manual'>): Recomprobacion {
   const informe = evaluarHechos({ ...entrada, manual: despues })
   const cierre = cerrarPuerta(despues, informe)
-  const rest = restituirPendientes(antes, cierre.manual)
-  const finalInforme = evaluarHechos({ ...entrada, manual: rest.manual })
-  const manual = aplicarMeta(rest.manual, finalInforme, entrada.excluir)
-  return { manual, informe: finalInforme, introducidos: informe.sin_respaldo.filter((h) => h.estado !== 'con_duda'), cambios: cierre.cambios, restituidos: rest.restituidos, limpio: informe.sin_respaldo.every((h) => h.estado === 'con_duda') }
+  const finalInforme = evaluarHechos({ ...entrada, manual: cierre.manual })
+  const manual = aplicarMeta(cierre.manual, finalInforme, entrada.excluir)
+  return { manual, informe: finalInforme, introducidos: informe.sin_respaldo.filter((h) => h.estado !== 'con_duda'), cambios: cierre.cambios, retirados: cierre.retirados, limpio: informe.sin_respaldo.every((h) => h.estado === 'con_duda') }
 }
