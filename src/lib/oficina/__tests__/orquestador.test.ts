@@ -121,6 +121,40 @@ describe('rama FOTO GENERADA · punta a punta con modelo simulado (dry_run)', ()
   })
 })
 
+describe('el PEDIDO que recibe n8n para cada empleado', () => {
+  it('lleva la indicación real de ESE agente, el tope del paso, el razonamiento apagado, el dry_run y el cliente; el curador recibe las URL de las imágenes', async () => {
+    const M = crearMemoria()
+    const id = await abierto(M)
+    const { pedidos } = await correr(M, id, guionGenerada())
+    const p = pedidos['prompts'][0] as { agent_name: string; extra: { indicacion_oficina: string; paso_de_la_oficina: string; encargo_id: string }; max_budget_usd: number; thinking_mode: string; dry_run: boolean; client_id: string }
+    expect(p.agent_name).toBe('design-image-prompt-engineer')
+    const lineas = p.extra.indicacion_oficina.split('\n')
+    expect(lineas[0]).toBe('Indicación de esta sala (capa local; el texto de tu identidad no cambia):')
+    expect(lineas[1]).toMatch(/^1\. Propones 2 o 3 prompts/)
+    expect(lineas).toHaveLength(6) // encabezado + las 5 reglas firmadas
+    expect(p.extra).toMatchObject({ paso_de_la_oficina: 'prompts', encargo_id: id })
+    expect(p).toMatchObject({ max_budget_usd: 0.2, thinking_mode: 'disabled', dry_run: true, client_id: CLIENTE })
+    const m = pedidos['mirar'][0] as { agent_name: string; images: Array<{ url: string }> }
+    expect(m.agent_name).toBe('marketing_instagram_curator'); expect(m.images.length).toBeGreaterThan(0); expect(m.images[0].url.startsWith('https://dry.test/')).toBe(true)
+    expect((pedidos['paquete'][0] as { destino: string; cuerpo: { cliente: string; voy_a_producir: Record<string, unknown> } }).cuerpo).toMatchObject({ cliente: CLIENTE, voy_a_producir: { entregable: 'BRF-0003', red: 'Instagram' } })
+  })
+})
+
+describe('un «siguiente» repetido no abre otro paso', () => {
+  it('con un paso ya esperando, ENTREGA DE NUEVO el mismo pedido (mismo número y misma dispatch_key) y no gasta ni escribe de más', async () => {
+    const M = crearMemoria()
+    const a = await abrir(M)
+    const id = String(a.cuerpo.encargo_id)
+    const t1 = a.cuerpo.turno as { n: number; dispatch_key: string; pedido: Record<string, unknown> }
+    const filas = M.turnos.get(id)!.size
+    const b = await avanzar(M.P, id)
+    const t2 = b.cuerpo.turno as { n: number; dispatch_key: string; pedido: Record<string, unknown> }
+    expect(b.cuerpo.reentrega).toBe(true)
+    expect(t2.n).toBe(t1.n); expect(t2.dispatch_key).toBe(t1.dispatch_key); expect(t2.pedido).toEqual(t1.pedido)
+    expect(M.turnos.get(id)!.size).toBe(filas)
+  })
+})
+
 describe('control ③ · mirar la imagen y regenerar ≤ 2 veces', () => {
   it('si la imagen falla el obligatorio se regenera, y a la 3.ª se descarta: ficha que bloquea y la pieza sigue SIN imagen', async () => {
     const M = crearMemoria()

@@ -111,13 +111,15 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
 export type Guion = Record<string, (n: number, tarea: string) => { texto?: string; error?: string; costo_usd?: number }>
 
 /** recorre el encargo: cada vez que el orquestador espera a un empleado, responde el guion; devuelve la última respuesta y el rastro de pasos */
-export async function correr(M: Memoria, encargoId: string, guion: Guion, max = 60): Promise<{ ultima: Respuesta; pasos: string[]; tareas: Record<string, string[]> }> {
+export async function correr(M: Memoria, encargoId: string, guion: Guion, max = 60): Promise<{ ultima: Respuesta; pasos: string[]; tareas: Record<string, string[]>; pedidos: Record<string, Array<Record<string, unknown>>> }> {
   let ultima = await avanzar(M.P, encargoId)
   const pasos: string[] = []
   const tareas: Record<string, string[]> = {}
+  const pedidos: Record<string, Array<Record<string, unknown>>> = {}
   const veces: Record<string, number> = {}
   for (let i = 0; i < max && ultima.cuerpo.accion === 'esperar'; i++) {
-    const t = ultima.cuerpo.turno as { n: number; paso: string; pedido?: { task?: string } }
+    const t = ultima.cuerpo.turno as { n: number; paso: string; pedido?: { task?: string } & Record<string, unknown> }
+    ;(pedidos[t.paso] ??= []).push((t.pedido ?? {}) as Record<string, unknown>)
     pasos.push(t.paso)
     veces[t.paso] = (veces[t.paso] ?? 0) + 1
     const tarea = t.pedido?.task ?? ''
@@ -127,7 +129,7 @@ export async function correr(M: Memoria, encargoId: string, guion: Guion, max = 
     const r = g(veces[t.paso], tarea)
     ultima = await recibirResultado(M.P, encargoId, t.n, { ...r, workflow_execution_id: `ex-${t.n}`, costo_usd: r.costo_usd ?? 0.07 })
   }
-  return { ultima, pasos, tareas }
+  return { ultima, pasos, tareas, pedidos }
 }
 
 // ── respuestas de modelo simuladas (JSON)
