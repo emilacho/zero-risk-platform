@@ -14,6 +14,7 @@ import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, semanaDeId } from 
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
 import type { Ajuste, Estrategia, Fila, FormatosPorRed, Hallazgo, TandaAgente } from './tipos'
+import { lexicoDesdeConfig, type LexicoAfirmaciones } from './afirmaciones'
 import { problemasDeEsquema, validarEstrategia } from './validador-estrategia'
 import { validarTodo, type FechaEspecialVerificada, type InsumosCalendario } from './validador-calendario'
 
@@ -30,6 +31,8 @@ interface Preparado {
   campana: Campana
   ctx: ContextoDelCliente
   formatos: FormatosPorRed
+  /** léxico de afirmaciones: dato de `cadena_config.lexico_afirmaciones` (D3), sin publicar para cambiarlo */
+  lexico: LexicoAfirmaciones
 }
 async function cargar(al: Almacen, cuerpo: Record<string, unknown>): Promise<{ ok: true; p: Preparado } | { ok: false; r: Respuesta }> {
   const id = cadena(cuerpo.campana_id)
@@ -42,7 +45,7 @@ async function cargar(al: Almacen, cuerpo: Record<string, unknown>): Promise<{ o
   if (cerrada) return { ok: false, r: cerrada }
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
   if (!ctx) return { ok: false, r: err(409, 'E-CONTEXTO', 'no se pudo armar el contexto del cliente') }
-  return { ok: true, p: { campana, ctx, formatos: await al.formatos() } }
+  return { ok: true, p: { campana, ctx, formatos: await al.formatos(), lexico: lexicoDesdeConfig(await al.leerConfig('lexico_afirmaciones')) } }
 }
 
 export function cuerpoDeRunSdk(paso: Paso, modelo: string, tarea: string, esquema: Record<string, unknown>, clientId: string, extra: Record<string, unknown> = {}) {
@@ -162,11 +165,11 @@ function omitidosImplicitos(e: Estrategia, semanas: number[], filas: Fila[]): Aj
   return out
 }
 
-function insumosDe(c: Campana, ctx: ContextoDelCliente, e: Estrategia, formatos: FormatosPorRed, tanda: number, semanas: number[], filas: Fila[], previas: Fila[], ajustes: Ajuste[], fechas: FechaEspecialVerificada[], ahora: string): InsumosCalendario {
+function insumosDe(c: Campana, ctx: ContextoDelCliente, e: Estrategia, formatos: FormatosPorRed, tanda: number, semanas: number[], filas: Fila[], previas: Fila[], ajustes: Ajuste[], fechas: FechaEspecialVerificada[], ahora: string, lexico?: LexicoAfirmaciones): InsumosCalendario {
   return {
     campana: { fecha_inicio: c.fecha_inicio, fecha_fin: c.fecha_fin, tanda, semanas }, estrategia: e, planTexto: ctx.planTexto, formatos, sedes: ctx.sedes,
     referencias: ctx.referencias, clientId: ctx.clientId, ahora: ahora.slice(0, 10), filas, filasPrevias: previas, ajustes, fechasEspeciales: fechas,
-    forbiddenWords: ctx.forbiddenWords, conocidos: [ctx.nombreDelNegocio],
+    forbiddenWords: ctx.forbiddenWords, conocidos: [ctx.nombreDelNegocio], lexico,
   }
 }
 
@@ -216,7 +219,7 @@ const esTanda = (x: unknown): x is TandaAgente => !!x && typeof x === 'object' &
 export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
   const c = await cargar(al, cuerpo)
   if (!c.ok) return c.r
-  const { campana, ctx, formatos } = c.p
+  const { campana, ctx, formatos, lexico } = c.p
   const tanda = Number(cuerpo.tanda ?? 1)
   const corrida = (await al.corridasDeCampana(campana.id)).find((x) => x.id === Number(cuerpo.corrida_id) && x.paso === 'calendario')
   if (!corrida) return err(404, 'E-CORRIDA', 'la corrida no existe para esta campaña')
@@ -240,7 +243,7 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   const base = esCorreccion && modo === 'filas' ? guardadas.filter((f) => f.tanda === tanda && f.estado !== 'esquema') : esqNuevo
   let { filas } = fusionarTanda(base, objeto, estr, campana, tanda, formatos)
   const ajustes = esCorreccion ? [...(objeto.ajustes_al_patron ?? []), ...omitidosImplicitos(estr, semanas, filas)] : objeto.ajustes_al_patron ?? []
-  let hs: Hallazgo[] = validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, fechas, ahora))
+  let hs: Hallazgo[] = validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, fechas, ahora, lexico))
   await al.guardarValidaciones(campana.id, 'calendario', version, tanda, esCorreccion ? 2 : 1, hs, campana.seco)
   const plan = planDeCorreccion(hs)
 
@@ -259,7 +262,7 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
     // dato sin fuente: la FILA sale (nunca se le pregunta a nadie del cliente) y se vuelve a validar con el slot anotado como omitido
     salen.push(...res.filasQueSalen)
     filas = filas.map((f) => (salen.includes(f.id) ? { ...f, estado: 'descartada_sin_fuente' as const } : f))
-    hs = validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, [...ajustes, ...res.ajustes], fechas, ahora))
+    hs = validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, [...ajustes, ...res.ajustes], fechas, ahora, lexico))
     await al.guardarValidaciones(campana.id, 'calendario', version, tanda, 2, hs, campana.seco)
     if (hs.some((h) => h.severidad === 'bloquea')) {
       await al.guardarFilas(campana.id, version, 1, filas, campana.seco)
@@ -290,7 +293,7 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
 export async function validarSinEscribir(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
   const c = await cargar(al, cuerpo)
   if (!c.ok) return c.r
-  const { campana, ctx, formatos } = c.p
+  const { campana, ctx, formatos, lexico } = c.p
   if (cuerpo.tipo === 'estrategia') {
     const hs = validarEstrategia(cuerpo.estrategia, { planTexto: ctx.planTexto, formatos })
     return { status: 200, cuerpo: { hallazgos: hs, bloquea: hs.some((h) => h.severidad === 'bloquea'), forma_valida: problemasDeEsquema(cuerpo.estrategia).length === 0 } }
@@ -304,7 +307,7 @@ export async function validarSinEscribir(al: Almacen, cuerpo: Record<string, unk
     const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
     const previas = (await al.filas(campana.id, version)).filter((f) => f.tanda < tanda && f.estado !== 'esquema')
     const { filas } = fusionarTanda(expandirPatron(estr, campana, semanas, tanda, formatos), cuerpo.tanda_agente, estr, campana, tanda, formatos)
-    const hs = validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, cuerpo.tanda_agente.ajustes_al_patron, await fechasDeclaradas(al, ctx, estr, campana), ahora))
+    const hs = validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, cuerpo.tanda_agente.ajustes_al_patron, await fechasDeclaradas(al, ctx, estr, campana), ahora, lexico))
     return { status: 200, cuerpo: { hallazgos: hs, bloquea: hs.some((h) => h.severidad === 'bloquea') } }
   }
   return err(400, 'E-TIPO', 'tipo debe ser estrategia o calendario')

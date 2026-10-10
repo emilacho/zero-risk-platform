@@ -11,7 +11,7 @@ import type { ConfianzaTrozo, Fila, FormatosPorRed, Hallazgo, Referencia, SedeIn
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
 
-const fallo = (e: { message?: string } | null): never => { throw new Error(e?.message ?? 'error de la base') }
+const fallo = (e: { message?: string; code?: string } | null): never => { throw Object.assign(new Error(e?.message ?? 'error de la base'), { code: e?.code }) }
 const clave = (x: string) => normalizar(x).replace(/\s+/g, '_')
 const FUENTE_FUERTE: Record<string, number> = { sitio: 3, instagram: 2, mapas: 1 }
 
@@ -90,6 +90,7 @@ export function almacenDeSupabase(): Almacen {
     async insertarCampana(c) { const { data, error } = await db.from('cadena_campanas').insert(c).select().single(); if (error) fallo(error); return data as Campana },
     async actualizarCampana(id, patch) { const { data, error } = await db.from('cadena_campanas').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('id', id).select().single(); if (error) fallo(error); return data as Campana },
     async campanasEnEspera() { return lista<Campana>(db.from('cadena_campanas').select('*').in('estado', ['necesita_humano', 'pausada']).limit(500)) },
+    async campanasEnArmado() { return lista<Campana>(db.from('cadena_campanas').select('*').in('estado', ['abierta', 'estrategia', 'calendario']).limit(500)) },
     async campanasActivas() { return lista<Campana>(db.from('cadena_campanas').select('*').eq('estado', 'activa').limit(500)) },
 
     async ultimaEstrategia(campanaId) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
@@ -128,6 +129,7 @@ export function almacenDeSupabase(): Almacen {
       return { corrida: data as Corrida, creada: true }
     },
     async cerrarCorrida(id, patch) { const { error } = await db.from('cadena_corridas').update({ ...patch, terminada_en: patch.estado && patch.estado !== 'en_curso' ? new Date().toISOString() : null }).eq('id', id); if (error) fallo(error) },
+    async descartarCorrida(id) { const { error } = await db.from('cadena_corridas').delete().eq('id', id).eq('estado', 'en_curso'); if (error) fallo(error) },
     async corridasDeCampana(campanaId) { return lista<Corrida>(db.from('cadena_corridas').select('*').eq('campana_id', campanaId).limit(1000)) },
     async corridasEnCurso() { return lista<Corrida>(db.from('cadena_corridas').select('*').eq('estado', 'en_curso').limit(1000)) },
 

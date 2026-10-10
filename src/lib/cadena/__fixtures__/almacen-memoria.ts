@@ -14,7 +14,7 @@ const RAIZ = join(__dirname, '..', '..', '..', '..')
 
 /** los plazos salen de la SIEMBRA REAL de la migración */
 export function plazosDeLaMigracion(): PlazoCfg[] {
-  const sql = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610090100_cadena_tablas.sql'), 'utf8')
+  const sql = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610090200_cadena_tablas.sql'), 'utf8')
   const bloque = sql.slice(sql.indexOf('INSERT INTO public.cadena_plazos'), sql.indexOf('ON CONFLICT (tipo)'))
   const out: PlazoCfg[] = []
   for (const m of bloque.matchAll(/\('([a-z_]+)',\s*(NULL|\d+),\s*(NULL|\d+),\s*(NULL|\d+),\s*(NULL|'[a-z_0-9]+'),\s*'([a-z_]+)'/g)) {
@@ -35,7 +35,7 @@ export interface SemillaMemoria {
 
 export class AlmacenMemoria implements Almacen {
   config = new Map<string, unknown>([
-    ['estado_cadena', 'apagada'], ['clientes_ensayo', []], ['dominios_fechas', {}], ['alertas_en_ensayo', 'registrar'], ['ultimo_latido', null], ['latido_max_horas', 18], ['plazo_llamada_agente_minutos', 15],
+    ['estado_cadena', 'apagada'], ['clientes_ensayo', []], ['dominios_fechas', {}], ['alertas_en_ensayo', 'registrar'], ['ultimo_latido', null], ['latido_max_horas', 18], ['plazo_llamada_agente_minutos', 6],
   ])
   campanas: Campana[] = []
   estrategias: EstrategiaGuardada[] = []
@@ -79,6 +79,7 @@ export class AlmacenMemoria implements Almacen {
     return structuredClone(c)
   }
   async campanasEnEspera() { return structuredClone(this.campanas.filter((c) => c.estado === 'necesita_humano' || c.estado === 'pausada')) }
+  async campanasEnArmado() { return structuredClone(this.campanas.filter((c) => c.estado === 'abierta' || c.estado === 'estrategia' || c.estado === 'calendario')) }
   async campanasActivas() { return structuredClone(this.campanas.filter((c) => c.estado === 'activa')) }
   async ultimaEstrategia(campanaId: string) { return this.estrategias.filter((e) => e.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
   async insertarEstrategia(e: EstrategiaGuardada) { this.estrategias.push(e) }
@@ -112,6 +113,7 @@ export class AlmacenMemoria implements Almacen {
     if (!c) throw new Error('no existe')
     Object.assign(c, patch)
   }
+  async descartarCorrida(id: number) { this.corridas = this.corridas.filter((c) => !(c.id === id && c.estado === 'en_curso')) }
   async corridasDeCampana(campanaId: string) { return structuredClone(this.corridas.filter((c) => c.campana_id === campanaId)) }
   async corridasEnCurso() { return structuredClone(this.corridas.filter((c) => c.estado === 'en_curso')) }
   async abrirEspera(e: Omit<EsperaFila, 'id'>) {

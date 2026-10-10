@@ -7,9 +7,10 @@ import { createHash } from 'node:crypto'
 import type { Almacen } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { modeloDeLaCadena, CABECERA_SALTAR_EDITOR } from './constantes'
+import { expiresInHours } from './esperas'
 import { ESQUEMA_FECHAS_ESPECIALES } from './esquemas'
 import { tareaDeFechas } from './indicaciones'
-import { prepararCorrida } from './nucleo'
+import { abrirEsperaDe, prepararCorrida, resolverEsperas } from './nucleo'
 import { cuerpoDeRunSdk } from './pasos'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { esFechaIso, restarDias, semanaIso } from './fechas'
@@ -67,7 +68,7 @@ export async function filasLotes(al: Almacen, cuerpo: Record<string, unknown>, a
   return { status: 200, cuerpo: { lotes, version } }
 }
 
-export async function filasMarcar(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
+export async function filasMarcar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string = new Date().toISOString()): Promise<Respuesta> {
   const id = cadena(cuerpo.campana_id)
   const estado = cadena(cuerpo.estado) as Fila['estado'] | null
   const ids = Array.isArray(cuerpo.fila_ids) ? (cuerpo.fila_ids as unknown[]).filter((x): x is string => typeof x === 'string') : []
@@ -87,7 +88,18 @@ export async function filasMarcar(al: Almacen, cuerpo: Record<string, unknown>):
   }
   if (ilegales.length) return err(409, 'E-TRANSICION', ilegales.join(' · '))
   await al.cambiarEstadoDeFilas(id, version, ids, estado)
-  return { status: 200, cuerpo: { ok: true, marcadas: ids.length } }
+  // 🔴 #464 C3 (CC#3): el reloj de la bandeja tiene PRODUCTOR. Una fila briefeada espera la aprobación de Emilio hasta el final de SU día (en la zona de la campaña):
+  //    si no se aprueba, el vigía la marca `perdio_su_fecha` y nunca se publica sola. `expires_in_hours` es lo que el flujo le pasa al ítem de la bandeja (nunca menos que la alerta + 1 h).
+  const expiraEn: Record<string, number> = {}
+  if (estado === 'briefeada') {
+    for (const fid of ids) {
+      const f = filas.find((x) => x.id === fid)!
+      await abrirEsperaDe(al, c, 'aprobacion_bandeja', fid, 'la pieza espera la aprobación de Emilio en la bandeja', ahora, { fechaPieza: f.fecha, zona: c.zona_horaria })
+      expiraEn[fid] = expiresInHours(ahora, f.fecha, 72, c.zona_horaria)
+    }
+  } else if (estado === 'aprobada') for (const fid of ids) await resolverEsperas(al, id, 'aprobacion_bandeja', fid)
+  else if (estado === 'cancelada' || estado === 'perdio_su_fecha') for (const fid of ids) await resolverEsperas(al, id, 'aprobacion_bandeja', fid, 'cancelada')
+  return { status: 200, cuerpo: { ok: true, marcadas: ids.length, ...(estado === 'briefeada' ? { expires_in_hours: expiraEn } : {}) } }
 }
 
 // ─────────────────────────────────────────────────────────────── FECHAS ESPECIALES (solo si el cliente declaró tipos)

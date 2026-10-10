@@ -176,7 +176,7 @@ describe('la estrategia: preparar y guardar', () => {
     expect(r.cuerpo.headers).toEqual({ 'x-skip-editor-middleware': '1' })
     const corrida = al.corridas[0]
     expect(corrida).toMatchObject({ estado: 'en_curso', paso: 'estrategia', salida_estructurada: true, revision_editor: 'saltada_por_diseno' })
-    expect(corrida.plazo_en).toBe('2026-10-09T12:15:00.000Z')
+    expect(corrida.plazo_en).toBe('2026-10-09T12:06:00.000Z')
     expect(al.campanas[0].estado).toBe('estrategia')
   })
   it('🔴 la indicación no filtra datos de un cliente ni una forma de contactar al dueño', async () => {

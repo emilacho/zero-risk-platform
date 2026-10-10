@@ -7,8 +7,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const RAIZ = join(__dirname, '..', '..', '..', '..')
-const SQL = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610090100_cadena_tablas.sql'), 'utf8')
-const REVERSA = readFileSync(join(RAIZ, 'supabase', 'reversas', '202610090100_cadena_tablas_REVERSA.sql'), 'utf8')
+const SQL = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610090200_cadena_tablas.sql'), 'utf8')
+const REVERSA = readFileSync(join(RAIZ, 'supabase', 'reversas', '202610090200_cadena_tablas_REVERSA.sql'), 'utf8')
 const CODIGO = SQL.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n')
 
 const TABLAS = [
@@ -41,6 +41,11 @@ describe('migración de la cadena · solo aditiva, apagada, sin contacto con el 
     expect(CODIGO).toContain("NOTIFY pgrst, 'reload schema'")
   })
 
+  it('las 5 secuencias se cierran a anon/authenticated como las tablas (Supabase les da permisos por defecto)', () => {
+    expect(CODIGO).toMatch(/REVOKE ALL ON SEQUENCE[\s\S]*?FROM PUBLIC, anon, authenticated/)
+    const seqs = CODIGO.match(/REVOKE ALL ON SEQUENCE([\s\S]*?)FROM PUBLIC/)?.[1].match(/cadena_\w+_seq/g) ?? []
+    expect(new Set(seqs).size).toBe(5)
+  })
   it('el interruptor nace APAGADO y con clientes de ensayo vacíos', () => {
     expect(CODIGO).toMatch(/\('estado_cadena',\s*'"apagada"'::jsonb\)/)
     expect(CODIGO).toMatch(/\('clientes_ensayo',\s*'\[\]'::jsonb\)/)

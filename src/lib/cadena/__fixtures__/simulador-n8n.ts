@@ -1,7 +1,8 @@
 /**
  * SIMULADOR DE FLUJOS n8n (lo justo para los flujos de la cadena) · para PROBAR el grafo entero sin encender nada, sin red y sin modelo.
  *
- * Soporta los tipos que usan los flujos: webhook · scheduleTrigger · executeWorkflowTrigger · code (una vez para todos los ítems) · if (v2) · httpRequest · executeWorkflow (una vez / uno por ítem).
+ * Soporta los tipos que usan los flujos: webhook · scheduleTrigger · executeWorkflowTrigger · code (una vez para todos los ítems) · if (v2) · httpRequest · wait (la vuelta ya llegó: pasa los ítems) · executeWorkflow (una vez / uno por ítem).
+ * Un nodo HTTP con `onError: continueRegularOutput` que falla (red, tiempo) entrega `{ error: { message } }` y el flujo sigue, como n8n.
  * Reglas de n8n que respeta: un nodo corre una vez por cada llegada de datos; `$('nodo')` ve la ÚLTIMA corrida de ese nodo (los bucles reescriben); el IF decide por ítem (salida 0 = verdadero, 1 = falso);
  * un nodo sin salida de datos detiene esa rama; una excepción en un nodo de código ABORTA la ejecución (como un fallo real).
  * Las expresiones `={{ … }}` se evalúan con `$json`, `$('nodo')`, `$env`, `$workflow`, `$execution`.
@@ -74,13 +75,17 @@ export class SimuladorN8n {
             let cuerpo: unknown = crudo
             if (typeof crudo === 'string') { try { cuerpo = JSON.parse(crudo) } catch { cuerpo = crudo } }
             const full = p.options?.response?.response?.fullResponse === true
-            const r = await this.o.http({ metodo: p.method ?? 'GET', url: String(this.evaluar(p.url, c)), cabeceras, cuerpo, cuerpoCrudo: typeof crudo === 'string' ? crudo : undefined, timeout: p.options?.timeout, texto: p.options?.response?.response?.responseFormat === 'text' }, { flujoId, nodo: nombre })
+            let r: RespuestaHttp
+            try { r = await this.o.http({ metodo: p.method ?? 'GET', url: String(this.evaluar(p.url, c)), cabeceras, cuerpo, cuerpoCrudo: typeof crudo === 'string' ? crudo : undefined, timeout: p.options?.timeout, texto: p.options?.response?.response?.responseFormat === 'text' }, { flujoId, nodo: nombre }) } catch (e) { if (nodo.onError !== 'continueRegularOutput') throw e; out.push({ json: { error: { message: e instanceof Error ? e.message : String(e) } } }); continue }
             if (!full && r.statusCode >= 400 && nodo.onError !== 'continueRegularOutput' && p.options?.response?.response?.neverError !== true) throw new Error(`«${nombre}»: HTTP ${r.statusCode}`)
-            out.push({ json: full ? { statusCode: r.statusCode, headers: r.headers ?? {}, body: r.body } : r.body })
+            // n8n parte una respuesta que es una LISTA en un ítem por elemento (una lista vacía llega como un ítem vacío)
+            if (!full && Array.isArray(r.body)) out.push(...(r.body.length ? r.body.map((x: unknown) => ({ json: x })) : [{ json: {} }]))
+            else out.push({ json: full ? { statusCode: r.statusCode, headers: r.headers ?? {}, body: r.body } : r.body })
           }
           salidas = [out]
           break
         }
+        case 'wait': salidas = [items]; break
         case 'executeWorkflow': {
           const id = nodo.parameters.workflowId?.value ?? nodo.parameters.workflowId
           if (!this.o.flujos[id]) throw new Error(`«${nombre}» llama al flujo ${String(id)}, que el simulador no tiene`)

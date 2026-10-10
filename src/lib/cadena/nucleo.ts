@@ -25,10 +25,17 @@ export async function abrirEsperaDe(
   return r.espera
 }
 
-export async function resolverEsperas(al: Almacen, campanaId: string, tipo: string, objetoId?: string): Promise<void> {
+export async function resolverEsperas(al: Almacen, campanaId: string, tipo: string, objetoId?: string, estado: 'resuelta' | 'cancelada' = 'resuelta'): Promise<void> {
   for (const e of await al.esperasVivas()) {
-    if (e.campana_id === campanaId && e.objeto_tipo === tipo && (objetoId === undefined || e.objeto_id === objetoId)) await al.actualizarEspera(e.id, { estado: 'resuelta' })
+    if (e.campana_id === campanaId && e.objeto_tipo === tipo && (objetoId === undefined || e.objeto_id === objetoId)) await al.actualizarEspera(e.id, { estado })
   }
+}
+
+/** Cancela TODAS las esperas vivas de una campaña (reemplazada o cerrada): ningún aviso ni vencimiento de una campaña muerta (CC#3 #464 C2). */
+export async function cancelarEsperasDeCampana(al: Almacen, campanaId: string): Promise<number> {
+  let n = 0
+  for (const e of await al.esperasVivas()) if (e.campana_id === campanaId) { await al.actualizarEspera(e.id, { estado: 'cancelada' }); n++ }
+  return n
 }
 
 /** Una campaña que necesita a Emilio: queda en `necesita_humano` CON su reloj (aviso inmediato, a las 48 h, y a los 7 días pasa a pausada). */
@@ -76,10 +83,17 @@ export async function prepararCorrida(
   const gastado = await gastoDeCampana(al, campana.id)
   if (gastado + topeDelPaso(paso) > campana.presupuesto_planificacion_usd) return { tipo: 'presupuesto_agotado', gastado, presupuesto: campana.presupuesto_planificacion_usd }
   const plazoMin = await plazoDeLlamadaMinutos(al)
-  const { corrida } = await al.abrirCorrida({
+  const { corrida, creada } = await al.abrirCorrida({
     campana_id: campana.id, paso, clave_idempotencia: clave, intento, workflow_id: workflowId, workflow_execution_id: workflowExecutionId,
     modelo, costo_usd: null, estado: 'en_curso', plazo_en: new Date(Date.parse(ahora) + plazoMin * 60_000).toISOString(), error: null,
     revision_editor: paso === 'brief' ? 'conservada' : 'saltada_por_diseno', salida_estructurada: esquemaHash !== null, esquema_hash: esquemaHash, seco: campana.seco,
   })
+  // 🔴 #464 C1 (CC#3): el índice único decidió la carrera. Si OTRA llamada abrió este mismo intento antes, esta NO paga: la corrida ya existe y es de la otra.
+  if (!creada) return corrida.estado === 'ok' ? { tipo: 'ya_hecha', corrida } : { tipo: 'en_curso', corrida }
+  // …y como el intento sale de contar lo anterior, dos llamadas simultáneas pueden abrir intentos DISTINTOS (el único no las junta): gana la de menor id, la otra se descarta ANTES de gastar.
+  const ganadora = (await al.corridasDeCampana(campana.id))
+    .filter((c) => c.paso === paso && c.clave_idempotencia === clave && c.estado === 'en_curso' && c.id < corrida.id)
+    .sort((a, b) => a.id - b.id)[0]
+  if (ganadora) { await al.descartarCorrida(corrida.id); return { tipo: 'en_curso', corrida: ganadora } }
   return { tipo: 'lista', corrida }
 }

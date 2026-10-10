@@ -20,7 +20,7 @@ export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'valida
   estrategia: { preparar: estrategiaPreparar, guardar: estrategiaGuardar },
   calendario: { preparar: calendarioPreparar, guardar: calendarioGuardar, siguiente: calendarioSiguiente },
   validar: { validar: validarSinEscribir },
-  filas: { listar: (al, c) => filasListar(al, c), lotes: filasLotes, marcar: (al, c) => filasMarcar(al, c) },
+  filas: { listar: (al, c) => filasListar(al, c), lotes: filasLotes, marcar: filasMarcar },
   fechas: { cobertura: (al, c) => fechasCobertura(al, c), preparar: fechasPreparar, guardar: (al, c) => fechasGuardar(al, c) },
   esperas: { reloj: relojDeLaCadena },
 }

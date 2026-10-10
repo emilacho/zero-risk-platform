@@ -25,6 +25,11 @@ export const SEMANAS_DE_TANDA = 4
 /** semanas con fecha desde el día 1 (el panorama): se arma por código, sin modelo */
 export const SEMANAS_DE_PANORAMA = 12
 export const MAXIMO_DE_INTENTOS = 3
+/**
+ * Plazo de una llamada a un agente. 🔴 #464 C4 (CC#3): el nodo HTTP de los flujos espera 290 s; con un plazo de 15 min una llamada perdida dejaba la corrida «en curso» 15 min
+ * (y el resultado se perdía). El plazo alcanza al nodo + margen: 6 min. Los flujos además cierran la corrida como fallida AL INSTANTE si el nodo falla (ver el flujo de #466).
+ */
+export const PLAZO_DE_LLAMADA_POR_DEFECTO_MIN = 6
 export const CABECERA_SALTAR_EDITOR = 'x-skip-editor-middleware'
 
 /** pasos que saltan la revisión del editor por diseño (§8): estructura interna, no texto que se publica */
@@ -36,5 +41,5 @@ export async function modeloDeLaCadena(al: Almacen): Promise<string> {
 }
 export async function plazoDeLlamadaMinutos(al: Almacen): Promise<number> {
   const v = await al.leerConfig('plazo_llamada_agente_minutos')
-  return typeof v === 'number' && v > 0 ? v : 15
+  return typeof v === 'number' && v > 0 ? v : PLAZO_DE_LLAMADA_POR_DEFECTO_MIN
 }

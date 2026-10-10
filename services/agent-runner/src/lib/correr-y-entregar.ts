@@ -27,8 +27,6 @@ export interface DepsDeEntrega {
     durationMs?: number
     brainEnrichment?: unknown
     cacheMetrics?: unknown
-    structuredOutput?: unknown
-    structuredOutputValid?: boolean
     error?: string
   }>
   entregar?: (url: URL, cuerpo: unknown, alIntentar: (i: IntentoDeEntrega) => void) => Promise<ResultadoDeEntrega>

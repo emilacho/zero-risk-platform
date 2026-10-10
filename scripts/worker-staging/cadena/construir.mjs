@@ -47,8 +47,9 @@ const si = (name, expresion) => ({
   name, type: 'n8n-nodes-base.if', typeVersion: 2,
   parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' }, combinator: 'and', conditions: [{ leftValue: `={{ ${expresion} }}`, rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }] } },
 })
-const http = (name, { url, cuerpo, metodo = 'POST', cabeceras = [], timeout = 60000, texto = false, interna = true }) => ({
+const http = (name, { url, cuerpo, metodo = 'POST', cabeceras = [], timeout = 60000, texto = false, interna = true, onError = null }) => ({
   name, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+  ...(onError ? { onError } : {}),
   parameters: {
     method: metodo, url,
     sendHeaders: true,
@@ -82,6 +83,8 @@ export function flujoDePaso({ paso, ruta, conTanda }) {
   // 🔴 la cabecera de saltar la revisión del editor la lleva SOLO el nodo del agente de estos tres flujos (estrategia · calendario · fechas) y su valor sale de la ruta
   f.add(http('② Agente (run-sdk)', {
     url: `={{ ${BASE_API} + '/api/agents/run-sdk' }}`, cuerpo: '={{ JSON.stringify($json.llamada) }}', timeout: 290000,
+    // 🔴 relevo 41 (#464 C4): si la llamada se corta (red, 290 s) el flujo NO muere: el error sigue de largo y `guardar` cierra la corrida como FALLIDA al instante (la siguiente vuelta reintenta, máx. 3)
+    onError: 'continueRegularOutput',
     cabeceras: [{ name: 'x-skip-editor-middleware', value: "={{ $json.headers['x-skip-editor-middleware'] }}" }],
   }), 8, 1)
   f.add(codigo('③ Armar guardar', 'paso-armar-guardar.js'), 9, 0)
@@ -120,7 +123,7 @@ export function flujoDeFechas() {
   f.add(codigo('④ Simulacro', 'fechas-simulacro.js'), 13, -1)
   f.add(codigo('④ Armar la llamada', 'fechas-armar-llamada.js'), 13, 1)
   f.add(http('④ Agente (run-sdk)', {
-    url: `={{ ${BASE_API} + '/api/agents/run-sdk' }}`, cuerpo: '={{ JSON.stringify($json.llamada) }}', timeout: 290000,
+    url: `={{ ${BASE_API} + '/api/agents/run-sdk' }}`, cuerpo: '={{ JSON.stringify($json.llamada) }}', timeout: 290000, onError: 'continueRegularOutput',
     cabeceras: [{ name: 'x-skip-editor-middleware', value: "={{ $json.headers['x-skip-editor-middleware'] }}" }],
   }), 14, 1)
   f.add(codigo('⑤ Armar guardar', 'fechas-armar-guardar.js'), 15, 0)
@@ -148,6 +151,10 @@ export function flujoDelVigia() {
   f.add(llamadaCadena('1 · Reloj', 'esperas', '$json.pedido', 120000), 2, 0)
   f.add(codigo('1 · Avisos', 'vigia-avisos.js'), 3, 0)
   f.add(si('1 · ¿Hay avisos para mandar?', '$json.enviar === true'), 4, 0)
+  // 🔴 relevo 41 (#466 C2): el latido lo vigila alguien de AFUERA. Cada pasada que llegó hasta aquí (el reloj contestó 200) avisa a un vigilante externo (Healthchecks u otro) cuya alarma es «sin aviso en 18 h».
+  //    Si la variable no existe no se avisa a nadie (y se nota: el vigilante externo da la alarma por falta de aviso).
+  f.add(si('1 · ¿Hay vigilante externo?', '!!$env.CADENA_VIGIA_PING_URL'), 4, 1)
+  f.add(http('1 · Latido · vigilante externo', { url: '={{ $env.CADENA_VIGIA_PING_URL }}', metodo: 'GET', interna: false, timeout: 15000, texto: true, onError: 'continueRegularOutput' }), 5, 1)
   f.add(http('1 · Aviso · #alertas', {
     url: 'https://slack.com/api/chat.postMessage', cuerpo: '={{ JSON.stringify($json.slack) }}', interna: false,
     cabeceras: [{ name: 'Authorization', value: '=Bearer {{ $env.SLACK_BOT_TOKEN }}' }, { name: 'Content-Type', value: 'application/json; charset=utf-8' }],
@@ -161,7 +168,7 @@ export function flujoDelVigia() {
   f.add(llamadaCadena('4 · Tanda siguiente', 'calendario', "{ accion: 'siguiente', campana_id: $json.campana_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id }"), 9, 1)
   f.add(codigo('4 · Sobres de tanda', 'vigia-sobres-tanda.js'), 10, 1)
   f.add(http('4 · Sobre a la sala (tanda)', { url: '={{ $env.SALA_INTAKE_URL || "https://zero-risk-platform.vercel.app/api/sala/intake" }}', cuerpo: '={{ JSON.stringify($json.sobre) }}', interna: false, timeout: 20000, cabeceras: [{ name: 'x-api-key', value: '={{ $env.SALA_INGRESS_API_KEY }}' }] }), 11, 1)
-  f.unir('Cada 12 horas', '1 · Pedido del reloj'); f.unir('1 · Pedido del reloj', '1 · Reloj'); f.unir('1 · Reloj', '1 · Avisos'); f.unir('1 · Avisos', '1 · ¿Hay avisos para mandar?')
+  f.unir('Cada 12 horas', '1 · Pedido del reloj'); f.unir('1 · Pedido del reloj', '1 · Reloj'); f.unir('1 · Reloj', '1 · Avisos'); f.unir('1 · Avisos', '1 · ¿Hay avisos para mandar?'); f.unir('1 · Avisos', '1 · ¿Hay vigilante externo?'); f.unir('1 · ¿Hay vigilante externo?', '1 · Latido · vigilante externo', 0)
   f.unir('1 · ¿Hay avisos para mandar?', '1 · Aviso · #alertas', 0); f.unir('1 · ¿Hay avisos para mandar?', '2 · Campañas activas', 1)
   f.unir('1 · Aviso · #alertas', '2 · Campañas activas')
   f.unir('2 · Campañas activas', '2 · Expandir'); f.unir('2 · Expandir', '2 · ¿Hay campañas?')

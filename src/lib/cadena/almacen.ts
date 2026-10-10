@@ -117,6 +117,8 @@ export interface Almacen {
   actualizarCampana(id: string, patch: Partial<Campana>): Promise<Campana>
   campanasEnEspera(): Promise<Campana[]>
   campanasActivas(): Promise<Campana[]>
+  /** campañas que todavía arman su estrategia o su calendario (`abierta` · `estrategia` · `calendario`): si una llamada falló quedan ahí y nadie las mira sin el barrido del vigía */
+  campanasEnArmado(): Promise<Campana[]>
   // estrategias
   ultimaEstrategia(campanaId: string): Promise<EstrategiaGuardada | null>
   insertarEstrategia(e: EstrategiaGuardada): Promise<void>
@@ -132,6 +134,8 @@ export interface Almacen {
   /** idempotente: si ya existe devuelve la existente con `creada: false` */
   abrirCorrida(c: Omit<Corrida, 'id'>): Promise<{ corrida: Corrida; creada: boolean }>
   cerrarCorrida(id: number, patch: Partial<Corrida>): Promise<void>
+  /** descarta una corrida que ESTA llamada acaba de abrir y perdió una carrera (nunca llamó al modelo: no hay costo que registrar) */
+  descartarCorrida(id: number): Promise<void>
   corridasDeCampana(campanaId: string): Promise<Corrida[]>
   corridasEnCurso(): Promise<Corrida[]>
   // esperas

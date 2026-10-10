@@ -5,7 +5,7 @@ import type { Almacen, Campana, EstadoCampana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
 import { DIAS_DE_CAMPANA } from './constantes'
 import { fechaInicioPorRegla, sumarDias } from './fechas'
-import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
+import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 
 export const RESULTADOS_DE_CABLE = ['cadena_abierta', 'lote_briefeado', 'necesita_humano', 'plan_no_coincide', 'pasarela_ok'] as const
 
@@ -37,6 +37,8 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
 
   // idempotencia: el mismo sobre dos veces no abre dos campañas
   const ya = await al.campanaPorPlan(clientId, plan.plan_id, s.seco)
+  // 🔴 #464 C5a (CC#3): reenviar el sobre de un plan YA REEMPLAZADO no «tiene éxito»: lo dice, y no abre ni revive nada
+  if (ya && ya.estado === 'reemplazada') return err(409, 'E-PLAN-REEMPLAZADO', 'este plan ya fue reemplazado por uno más nuevo: no se abre nada', { campana: ya })
   if (ya) return { status: 200, cuerpo: { ya_abierta: true, campana: ya } }
 
   const ctx = await al.cargarContexto(clientId, plan.plan_id)
@@ -47,19 +49,31 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   let reemplaza: string | null = null
   if (viva) {
     await al.actualizarCampana(viva.id, { estado: 'reemplazada', estado_motivo: `reemplazada por el plan ${plan.plan_id}` })
-    await resolverEsperas(al, viva.id, 'fecha_inicio_propuesta')
     reemplaza = viva.id
   }
+  // 🔴 #464 C5b/C5c (CC#3): reemplazar y luego insertar no es atómico. Si la inserción falla se DEVUELVE la campaña anterior a como estaba (el cliente nunca se queda sin campaña viva
+  //    por un error nuestro); si falló porque OTRO sobre igual ganó la carrera (único del plan), se contesta «ya abierta», no un 500.
+  const devolverLaViva = async () => { if (viva) await al.actualizarCampana(viva.id, { estado: viva.estado, estado_motivo: viva.estado_motivo }) }
 
   // fecha de inicio por regla: días hábiles solo si hay feriados nacionales VERIFICADOS (porque algún cliente los declaró); si no, corridos con aviso
   const nacionales = ctx.pais ? (await al.fechasEspeciales(ctx.pais, [], plan.fecha, sumarDias(plan.fecha, 30))).filter((f) => f.estado === 'verificada' && f.alcance === 'nacional') : []
   const ini = fechaInicioPorRegla(plan.fecha, nacionales.length ? new Set(nacionales.map((f) => f.fecha)) : null)
-  const nueva = await al.insertarCampana({
+  let nueva: Campana
+  try { nueva = await al.insertarCampana({
     client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ini.fecha, fecha_inicio_origen: 'regla', fecha_fin: sumarDias(ini.fecha, DIAS_DE_CAMPANA - 1),
     zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: ini.aviso,
     presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: false,
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
-  })
+  }) } catch (e) {
+    const duplicado = (e as { code?: string })?.code === '23505' || /23505|duplicate key|un_plan/i.test(String((e as Error)?.message ?? ''))
+    const ganadora = duplicado ? await al.campanaPorPlan(clientId, plan.plan_id, s.seco) : null
+    // si OTRO sobre igual ganó la carrera, ÉL ya reemplazó a la anterior: no se la devuelve a la vida (habría dos vivas)
+    if (ganadora) return { status: 200, cuerpo: { ya_abierta: true, campana: ganadora } }
+    await devolverLaViva()
+    throw e
+  }
+  // la campaña reemplazada ya no existe para el vigía: sus esperas (la fecha de inicio, la bandeja, lo que investigaba…) se cancelan TODAS
+  if (viva) await cancelarEsperasDeCampana(al, viva.id)
   await abrirEsperaDe(al, nueva, 'fecha_inicio_propuesta', nueva.id, 'la fecha de inicio calculada por regla queda firme el día anterior', ahora, { fechaInicio: nueva.fecha_inicio })
   return { status: 201, cuerpo: { campana: nueva, aviso_fecha_inicio: ini.aviso, reemplaza_a: reemplaza } }
 }
@@ -81,6 +95,7 @@ export async function avanzarCampana(al: Almacen, cuerpo: Record<string, unknown
   }
   if (c.estado === 'necesita_humano') await resolverEsperas(al, c.id, 'necesita_humano')
   const n = await al.actualizarCampana(id, { estado: a, estado_motivo: cadena(cuerpo.motivo) })
+  if (a === 'cerrada') await cancelarEsperasDeCampana(al, c.id) // una campaña cerrada no deja relojes vivos
   if (a === 'pausada') await abrirEsperaDe(al, n, 'campana_pausada', n.id, 'campaña pausada: se revisa en el resumen semanal', ahora, {}, `pausa:${n.id}:${ahora.slice(0, 10)}`)
   if (c.estado === 'pausada') await resolverEsperas(al, c.id, 'campana_pausada')
   return { status: 200, cuerpo: { campana: n } }
