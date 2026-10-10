@@ -75,8 +75,7 @@ export async function rutaPlan(db: Db, cuerpo: unknown, ahora: Date = new Date()
     const vigentes = lista(vg.data)
     const ultima: Partial<Record<FuenteDeAmpliacion, string | null>> = {}
     for (const f of ['mapas', 'comentarios', 'reparto'] as const) {
-      const fuente = f === 'mapas' ? 'mapas' : f
-      const ts = vigentes.filter((x) => x.fuente === fuente).map((x) => String(x.reconfirmado_en ?? x.observado_en ?? '')).filter(Boolean).sort()
+      const ts = vigentes.filter((x) => x.fuente === f).map((x) => String(x.reconfirmado_en ?? x.observado_en ?? '')).filter(Boolean).sort()
       ultima[f] = ts.length ? ts[ts.length - 1] : null
     }
     const g = await gastoDeHoy(db, id, ahora)
