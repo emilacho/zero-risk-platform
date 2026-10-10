@@ -92,7 +92,9 @@ export interface Almacen {
 }
 
 export type ResultadoImagen = { ok: true; url: string; generation_id: string; costo_usd: number } | { ok: false; error: string }
-export type ResultadoRevisor = { ok: true; texto: string; costo_usd: number; modelo: string } | { ok: false; error: string }
+/** un intento al revisor GPT: qué pasó y cuánto costó (un intento que falla puede costar si el proveedor ya lo contó) */
+export interface IntentoDelRevisor { n: number; resultado: string; http: number | null; costo_usd: number; espera_antes_ms: number }
+export type ResultadoRevisor = { ok: true; texto: string; costo_usd: number; modelo: string; intentos?: IntentoDelRevisor[] } | { ok: false; error: string; costo_usd?: number; intentos?: IntentoDelRevisor[] }
 export type ResultadoRender = { ok: true; urls: string[]; ancho: number; alto: number; fonts_usadas: string[]; fonts_faltantes: string[]; timings_ms: number[] } | { ok: false; error: string }
 /** lo que se le manda al brazo que dibuja láminas (subconjunto de su contrato; el tamaño lo fija la plataforma) */
 export interface PedidoDeRender {

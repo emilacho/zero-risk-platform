@@ -8,12 +8,16 @@ import { extraerCatalogo } from '../cerebro/datos-estructurados'
 import { datosDeContacto } from './texto'
 import { almacenDeSupabase, type Db } from './almacen-supabase'
 import type { FotoEtiquetada } from './fotos'
-import type { FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
+import type { FuentesCompletas, IntentoDelRevisor, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
 import type { Registro } from './chequeos'
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string }
+export interface Entorno { baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void> }
+
+/** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
+export const ESPERAS_DEL_REVISOR_MS = [5_000, 20_000, 60_000]
+const sumaDeIntentos = (xs: IntentoDelRevisor[]) => +xs.reduce((a, x) => a + x.costo_usd, 0).toFixed(8)
 
 /** el marcador de una imagen simulada (dry_run): `descargar` la reconoce y no sale a la red */
 export const PREFIJO_DRY = 'https://dry.invalid/'
@@ -126,20 +130,43 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     },
     async revisor(p): Promise<ResultadoRevisor> {
       if (p.dry_run) return { ok: true, texto: '', costo_usd: 0, modelo: 'simulado (dry_run)' }
-      if (!env.openaiKey) return { ok: false, error: 'OPENAI_API_KEY no configurada' }
-      if (!env.revisorModelo) return { ok: false, error: 'OFICINA_REVISOR_MODEL no configurado (el nombre del modelo del revisor no está verificado)' }
-      try {
-        const contenido: Array<Record<string, unknown>> = [{ type: 'input_text', text: p.texto }]
-        for (const u of p.imagenes_urls) contenido.push({ type: 'input_image', image_url: u })
-        const r = await f('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${env.openaiKey}` }, body: JSON.stringify({ model: env.revisorModelo, input: [{ role: 'user', content: contenido }] }) })
-        const j = (await r.json().catch(() => ({}))) as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }>; usage?: { input_tokens?: number; output_tokens?: number }; error?: { message?: string } }
-        if (!r.ok) return { ok: false, error: j.error?.message ?? `HTTP ${r.status}` }
-        const texto = j.output_text ?? j.output?.flatMap((o) => o.content ?? []).map((c) => c.text ?? '').join('') ?? ''
-        // precio: del entorno; sin él, un valor conservador para que el freno cuente algo (se declara como estimación en el libro)
-        const pin = env.revisorPrecioEntrada ?? 5, pout = env.revisorPrecioSalida ?? 30
-        const costo = ((j.usage?.input_tokens ?? 0) * pin + (j.usage?.output_tokens ?? 0) * pout) / 1_000_000
-        return { ok: true, texto, costo_usd: costo, modelo: env.revisorModelo }
-      } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+      if (!env.openaiKey) return { ok: false, error: 'OPENAI_API_KEY no configurada', costo_usd: 0, intentos: [] }
+      if (!env.revisorModelo) return { ok: false, error: 'OFICINA_REVISOR_MODEL no configurado (el nombre del modelo del revisor no está verificado)', costo_usd: 0, intentos: [] }
+      // firma de Emilio (10-oct): hasta 3 REINTENTOS con espera creciente (5 s, 20 s, 60 s) ante red, 5xx o 429; una llave o un modelo equivocados (401/403/404 y demás 4xx) NO se reintentan
+      const esperas = env.esperasRevisorMs ?? ESPERAS_DEL_REVISOR_MS
+      const dormir = env.esperar ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)))
+      const contenido: Array<Record<string, unknown>> = [{ type: 'input_text', text: p.texto }]
+      for (const u of p.imagenes_urls) contenido.push({ type: 'input_image', image_url: u })
+      const cuerpo = JSON.stringify({ model: env.revisorModelo, input: [{ role: 'user', content: contenido }] })
+      const intentos: IntentoDelRevisor[] = []
+      let ultimoError = ''
+      for (let k = 0; k <= esperas.length; k++) {
+        const espera = k === 0 ? 0 : esperas[k - 1]
+        if (espera > 0) await dormir(espera)
+        const intento = (resultado: string, costo_usd: number, http?: number): IntentoDelRevisor => ({ n: k + 1, resultado, http: http ?? null, costo_usd, espera_antes_ms: espera })
+        let reintentable = false
+        try {
+          const r = await f('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${env.openaiKey}` }, body: cuerpo })
+          const j = (await r.json().catch(() => ({}))) as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }>; usage?: { input_tokens?: number; output_tokens?: number }; error?: { message?: string } }
+          // precio: del entorno; sin él, un valor conservador para que el freno cuente algo (se declara como estimación en el libro)
+          const pin = env.revisorPrecioEntrada ?? 5, pout = env.revisorPrecioSalida ?? 30
+          const costo = ((j.usage?.input_tokens ?? 0) * pin + (j.usage?.output_tokens ?? 0) * pout) / 1_000_000
+          if (r.ok) {
+            const texto = j.output_text ?? j.output?.flatMap((o) => o.content ?? []).map((c) => c.text ?? '').join('') ?? ''
+            intentos.push(intento('ok', costo, r.status))
+            return { ok: true, texto, costo_usd: sumaDeIntentos(intentos), modelo: env.revisorModelo, intentos }
+          }
+          ultimoError = j.error?.message ?? `HTTP ${r.status}`
+          reintentable = r.status === 429 || r.status >= 500
+          intentos.push(intento(reintentable ? `http_${r.status}` : `rechazado_${r.status}`, costo, r.status))
+        } catch (e) {
+          ultimoError = e instanceof Error ? e.message : String(e)
+          reintentable = true
+          intentos.push(intento('red', 0))
+        }
+        if (!reintentable) break
+      }
+      return { ok: false, error: ultimoError, costo_usd: sumaDeIntentos(intentos), intentos }
     },
     async renderLaminas(p): Promise<ResultadoRender> {
       const medidas = MEDIDAS_DE_PLATAFORMA[p.plataforma]

@@ -376,13 +376,18 @@ async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, _paso: P
   const pedido = armarPedidoAlRevisor(familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : contextoDelRevisor(contexto(e)))
   const rev = await P.revisor({ texto: pedido.texto, imagenes_urls: pedido.imagenes, dry_run: enc.dry_run })
   if (!rev.ok) {
-    return { res: { costo_usd: 0, artefacto: { sin_revision: true, motivo: rev.error }, fichas: [fichaNueva('externa-no-respondio', 'externa', 'proceso', 'bloquea', `el revisor externo no respondió (${rev.error}): la pieza va sin segunda mirada`, 'revisión externa firmada', 'revisar a mano')] }, gastos: [] }
+    // firma de Emilio: tras los 3 reintentos (los hace el adaptador) la pieza sigue a la bandeja marcada «sin segunda mirada» y se avisa en el hilo de #oficina-creativa; nunca bloquea
+    const intentos = rev.intentos ?? []
+    const costo = rev.costo_usd ?? 0
+    const gastosFallo: NonNullable<Cambios['gastos']> = costo > 0 ? [{ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: costo, base: 'usage' }] : []
+    await P.avisar({ canal: 'hilo', encargo_id: enc.id, texto: `⚠️ Sin segunda mirada · ${enc.brief_id}: el revisor externo no respondió tras ${intentos.length || 1} intento(s) (${rev.error}); la pieza va a la bandeja sin su opinión`, dry_run: enc.dry_run })
+    return { res: { costo_usd: costo, artefacto: { sin_revision: true, motivo: rev.error, intentos }, fichas: [fichaNueva('externa-no-respondio', 'externa', 'proceso', 'sugerencia', `el revisor externo no respondió (${rev.error}): la pieza va sin segunda mirada`, 'revisión externa firmada', 'revisar a mano')] }, gastos: gastosFallo }
   }
   const gastos: NonNullable<Cambios['gastos']> = [{ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: rev.costo_usd, base: 'usage' }]
   const opinion = rev.texto.trim()
-  if (!opinion) return { res: { costo_usd: rev.costo_usd, artefacto: { opinion: null, sin_opinion: true, modelo: rev.modelo } }, gastos }
+  if (!opinion) return { res: { costo_usd: rev.costo_usd, artefacto: { opinion: null, sin_opinion: true, modelo: rev.modelo, intentos: rev.intentos ?? [] } }, gastos }
   const ficha = fichaNueva(`ext-opinion-${e.pasos_ejecutados}`, 'externa', 'texto', 'sugerencia', opinion, 'opinión libre del revisor externo (sin criterios ni reglas)', 'el autor decide qué toma y qué no')
-  return { res: { costo_usd: rev.costo_usd, artefacto: { opinion, modelo: rev.modelo }, fichas: [ficha] }, gastos }
+  return { res: { costo_usd: rev.costo_usd, artefacto: { opinion, modelo: rev.modelo, intentos: rev.intentos ?? [] }, fichas: [ficha] }, gastos }
 }
 
 // ───────────────────────── recibir el resultado de un agente / del portero
@@ -558,12 +563,13 @@ async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean,
   if (!enc.dry_run && (pz || lam) && b) {
     // la opinión libre del revisor externo viaja con la pieza, rotulada como OPINIÓN (y lo que el autor decidió con ella)
     const opinion = opinionExterna(e)
+    const sinSegunda = datos(e, 'fichas_externas')?.sin_revision === true
     const contenido = { ...(lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }), ...(opinion ? { opinion_externa: opinion } : {}) }
-    const metadata = { origen: 'oficina', familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor } } : {}) }
+    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor } } : {}) }
     const s = await P.salida({ client_id: enc.client_id, titulo: lam ? lam.titulo : `Pieza ${enc.brief_id} · ${b.brief.red}`, contenido, metadata })
     if (s.ok) {
       output_id = s.output_id
-      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`, vista_previa: lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
+      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: (sinSegunda ? '⚠️ SIN SEGUNDA MIRADA · ' : '') + (lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`), vista_previa: lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
       if (q.ok) hitl_id = q.id
     }
   }

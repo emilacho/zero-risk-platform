@@ -4,7 +4,7 @@ import path from 'node:path'
 import zlib from 'node:zlib'
 import { POST_IMG } from '../plantillas/post-img'
 import { avanzar, recibirResultado, type Respuesta } from '../orquestador'
-import type { Almacen, Cambios, Encargo, FuentesCompletas, PedidoDeRender, Puertos, TurnoRegistrado } from '../puertos'
+import type { Almacen, Cambios, Encargo, FuentesCompletas, PedidoDeRender, Puertos, TurnoRegistrado , ResultadoRevisor } from '../puertos'
 import type { FotoEtiquetada } from '../fotos'
 import type { FilaDeFormato } from '../entrega'
 import type { ConfigDeOficina } from '../sobre'
@@ -53,7 +53,7 @@ export interface Memoria {
   config: ConfigDeOficina
   plantilla: { plantilla: Plantilla; activo: boolean } | null
   /** guion del revisor externo: texto por llamada */
-  revisorTexto: (n: number) => { ok: true; texto: string; costo_usd: number; modelo: string } | { ok: false; error: string }
+  revisorTexto: (n: number) => ResultadoRevisor
   imagenFalla: (n: number) => boolean
   /** el brazo que dibuja láminas falla en la llamada n */
   renderFalla: (n: number) => boolean
