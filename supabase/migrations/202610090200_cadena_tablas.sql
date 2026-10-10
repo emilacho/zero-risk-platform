@@ -251,7 +251,7 @@ INSERT INTO public.cadena_config (clave, valor) VALUES
   ('alertas_en_ensayo',   '"registrar"'::jsonb),
   ('ultimo_latido',       'null'::jsonb),
   ('latido_max_horas',    '18'::jsonb),
-  ('plazo_llamada_agente_minutos', '15'::jsonb)
+  ('plazo_llamada_agente_minutos', '6'::jsonb)
 ON CONFLICT (clave) DO NOTHING;
 
 -- plazos de §7.2 ajustados a las correcciones de Emilio: NADA espera a una persona del cliente; lo humano es la bandeja de Emilio.
