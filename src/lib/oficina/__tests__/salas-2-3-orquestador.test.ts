@@ -543,7 +543,7 @@ describe('CC#3 #471 · lo que sus mutaciones dejaron vivo en la entrega y en la 
       mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }),
     }))
     // si la foto no es de confianza alta, al empleado que mira se le muestra ESA foto
-    const vistas = (pedidos['mirar'] ?? []).flatMap((p) => (p.images as Array<{ url: string }> | string[] | undefined) ?? []).map((x) => (typeof x === 'string' ? x : x.url))
+    const vistas = (pedidos['mirar'] ?? []).flatMap((p) => ((p.images as Array<string | { url: string }> | undefined) ?? []).map((x) => (typeof x === 'string' ? x : x.url)))
     if (vistas.length) expect(vistas).toContain(`https://fotos.test/${foto}.jpg`)
     expect(M.llamadas.renderPedidos[0].slides[0].background_image_url).toBe(`https://fotos.test/${foto}.jpg`)
     expect(M.llamadas.renderPedidos[0].slides.slice(1).every((s) => !s.background_image_url)).toBe(true)
