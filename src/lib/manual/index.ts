@@ -1,0 +1,10 @@
+/** Revisión del manual de marca · M1 (librerías puras, sin modelo). Diseño: docs/DISENO-2026-10-10-revision-del-manual.md */
+export * from './texto'
+export * from './procedencia'
+export * from './materia'
+export * from './frases-propias'
+export * from './palabras-de-certeza.es'
+export * from './lugares'
+export * from './dudas'
+export * from './hechos'
+export * from './firmes'
