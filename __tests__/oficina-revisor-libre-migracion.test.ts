@@ -42,11 +42,16 @@ describe('la migración del revisor libre', () => {
       expect(validarPlantilla({ ...p, pasos: bloque(u, 'pasos') as never })).toEqual([])
     }
   })
-  it('el revisor externo queda SIN formato ni rúbrica en las tres, y las salas 2 y 3 ya no tienen los pasos de decisión por dueño', () => {
+  it('el revisor externo queda SIN formato ni rúbrica en las tres, y la opinión llega a cada dueño: decide_imagen en las tres, decide_estructura en el kit y UNA sola llamada del diseñador en el carrusel', () => {
     for (const [tipo] of PLANTILLAS) {
-      const pasos = bloque(updateDe(s, tipo), 'pasos') as Array<{ clave: string; salida?: { esquema: string; reintento_formato: number } }>
+      const pasos = bloque(updateDe(s, tipo), 'pasos') as Array<{ clave: string; quien: string; condicion: { tipo: string }; salida?: { esquema: string; reintento_formato: number } }>
+      const claves = pasos.map((x) => x.clave)
       expect(pasos.find((x) => x.clave === 'revisor_externo')!.salida).toEqual({ esquema: 'opinion_libre.v1', reintento_formato: 0 })
-      expect(pasos.map((x) => x.clave)).not.toContain('decide_laminas'); expect(pasos.map((x) => x.clave)).not.toContain('decide_estructura')
+      expect(claves).toContain('decide_imagen')
+      expect(pasos.find((x) => x.clave === 'decide_imagen')).toMatchObject({ quien: 'marketing_instagram_curator', salida: { esquema: 'resolucion_solo.v1' } })
+      expect(claves).not.toContain('decide_laminas') // el diseñador atiende la opinión en «ajusta_laminas_2» (condición «cualquiera»): una sola llamada
+      expect(claves.includes('decide_estructura'), tipo).toBe(tipo === 'kit_historias')
+      if (tipo === 'carrusel_ig_v1') expect(pasos.find((x) => x.clave === 'ajusta_laminas_2')!.condicion.tipo).toBe('cualquiera')
     }
   })
   it('agnóstica: ningún dato nombra a un cliente, una ciudad o un producto', () => {
