@@ -24,7 +24,6 @@ export interface ContextoDeObservacion { propios: Propios; hostsDeReparto?: stri
 
 const arr = (x: unknown): Array<Record<string, unknown>> => (Array.isArray(x) ? (x.filter((v) => v && typeof v === 'object') as Array<Record<string, unknown>>) : [])
 const hostDe = (u: string): string => { try { return new URL(u.includes('://') ? u : `https://${u}`).host.replace(/^www\./, '').toLowerCase() } catch { return '' } }
-const codigoDe = (u: string): string => /instagram\.com\/(?:p|reel)\/([^/?#]+)/i.exec(u)?.[1] ?? ''
 
 export function observar(filas: FilaCruda[], ctx: ContextoDeObservacion): Observacion[] {
   const out = new Map<string, Observacion>()
@@ -67,7 +66,6 @@ export function observar(filas: FilaCruda[], ctx: ContextoDeObservacion): Observ
       poner({ ...base, fuente: 'comentarios', ref: 'publicaciones_propias', huella: sha(JSON.stringify(s)), contenido: { senales: s }, lineas: [frasePorComentarios(s)], senales: s })
     }
   }
-  void codigoDe
   return [...out.values()]
 }
 
