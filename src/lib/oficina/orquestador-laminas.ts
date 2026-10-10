@@ -5,7 +5,7 @@
  * No publica en ninguna red: la entrega (sala 4) deja los archivos y la hoja de pasos para publicar A MANO.
  */
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
-import { elementosDelKit, esCarrusel, esKitDeHistorias, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
+import { elementosDelKit, esCarrusel, planDeOrigen, esKitDeHistorias, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
 import { aUtc, chequeosDeEntrega, leerMedidas, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega, type FilaDeFormato } from './entrega'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import {
@@ -122,6 +122,9 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   if (!parte) return { res: { costo_usd: 0 }, fallido: `la parte ${enc.parte_id} no existe para este cliente` }
   const brief = parsearBrief(parte.texto, enc.brief_id)
   if (!brief) return { res: { costo_usd: 0 }, fallido: `el brief ${enc.brief_id} no está en la parte` }
+  const planId = planDeOrigen(parte.texto)
+  const plan = planId ? await P.plan(planId, enc.client_id) : null
+  if (plan) fu.plan_texto = plan
   let elementos: ElementoDelKit[] = []
   if (fam === 'carrusel') {
     if (!esCarrusel(brief)) return { res: { costo_usd: 0 }, fallido: `el brief ${enc.brief_id} no es un carrusel (${brief.formato}): esta sala arma carruseles` }

@@ -53,10 +53,16 @@ const RE_TELEFONO = /\+?\d[\d\s().-]{6,}\d/g
 const RE_HANDLE = /@[\p{L}0-9_.]{2,}/gu
 const RE_URL = /\b(?:https?:\/\/|www\.)[^\s)]+/gi
 
+/** una fecha («2026-10-09», «09/10/2026»), un rango («10-11-12») o una cifra con separador de miles («1.250.000») NO es un teléfono (condición C1 de CC#1) */
+export function esFechaORangoOCifra(t: string): boolean {
+  const s = t.trim()
+  return /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(s) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$/.test(s) || /^\d{1,2}(?:\s?[-–]\s?\d{1,2}){2,}$/.test(s) || /^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?$/.test(s)
+}
+
 export interface DatosDeContacto { telefonos: string[]; handles: string[]; urls: string[] }
 export function datosDeContacto(texto: string): DatosDeContacto {
   return {
-    telefonos: (texto.match(RE_TELEFONO) ?? []).map((t) => digitosDeTelefono(t)).filter((d) => d.length >= 7),
+    telefonos: (texto.match(RE_TELEFONO) ?? []).filter((t) => !esFechaORangoOCifra(t)).map((t) => digitosDeTelefono(t)).filter((d) => d.length >= 7),
     handles: (texto.match(RE_HANDLE) ?? []).map((h) => normalizar(h)),
     urls: (texto.match(RE_URL) ?? []).map((u) => normalizar(u)),
   }
