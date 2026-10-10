@@ -7,6 +7,7 @@ const UNICOS: Record<string, string[][]> = {
   oficina_fichas: [['encargo_id', 'ficha_id']],
   oficina_gastos: [['ref_tabla', 'ref_id']],
   oficina_uso_de_fotos: [['encargo_id', 'foto_id']],
+  cerebro_diario_corridas: [['client_id', 'dia']],
 }
 const hay = (v: unknown) => v !== null && v !== undefined
 
@@ -75,6 +76,7 @@ class Consulta {
     const o = { ...f }
     if (this.t === 'oficina_encargos') { o.id ??= `00000000-0000-4000-8000-${String(++this.db.secuencia).padStart(12, '0')}`; o.estado ??= 'abierto'; o.version_encargo ??= 1; o.gasto_usd ??= 0; o.con_desacuerdo ??= false; o.imagen_generada ??= false }
     else if (this.t.startsWith('oficina_') && this.t !== 'oficina_config' && this.t !== 'oficina_tipos_de_grupo' && this.t !== 'oficina_entrega_formatos' && this.t !== 'oficina_fichas') o.id ??= ++this.db.secuencia
+    else if (this.t.startsWith('cerebro_')) o.id ??= `88888888-8888-4888-8888-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'client_historical_outputs' || this.t === 'hitl_queue') o.id ??= `77777777-7777-4777-8777-${String(++this.db.secuencia).padStart(12, '0')}`
     return o
   }
