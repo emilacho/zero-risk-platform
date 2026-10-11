@@ -113,8 +113,8 @@ export function buildCorrectionPrompt(
   const lines: string[] = []
   lines.push(
     `Esta es tu pieza (borrador previo). La Jefatura la revisó y pide correcciones ` +
-      `CONCRETAS. Corregí ÚNICAMENTE los puntos listados abajo · NO regeneres la ` +
-      `pieza completa · mantené todo lo demás igual. Ciclo de revisión ${pkg.revision_count}/3.`,
+      `CONCRETAS. Corrige ÚNICAMENTE los puntos listados abajo · NO regeneres la ` +
+      `pieza completa · mantén todo lo demás igual. Ciclo de revisión ${pkg.revision_count}/3.`,
   )
   lines.push('')
   lines.push('--- BORRADOR PREVIO ---')
@@ -134,7 +134,7 @@ export function buildCorrectionPrompt(
   }
   lines.push('')
   lines.push(
-    'Devolvé la pieza corregida completa, con SOLO esos cambios aplicados.',
+    'Devuelve la pieza corregida completa, con SOLO esos cambios aplicados.',
   )
   return lines.join('\n')
 }

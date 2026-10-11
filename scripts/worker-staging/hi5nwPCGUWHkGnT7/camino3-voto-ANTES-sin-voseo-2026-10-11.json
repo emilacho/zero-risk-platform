@@ -1,0 +1,1125 @@
+{
+ "id": "hi5nwPCGUWHkGnT7",
+ "name": "Camino III · 3-of-N Voting Gate · Sprint 7.6",
+ "description": null,
+ "active": true,
+ "activeVersionId": "ee46e169-38ae-48bc-93ef-a98741410554",
+ "createdAt": "2026-06-29T17:14:03.064Z",
+ "updatedAt": "2026-10-08T07:42:08.775Z",
+ "isArchived": false,
+ "versionId": "ee46e169-38ae-48bc-93ef-a98741410554",
+ "versionCounter": 6,
+ "sourceWorkflowId": null,
+ "triggerCount": 1,
+ "nodes": [
+  {
+   "id": "webhook-entry",
+   "name": "Webhook · POST /camino-iii-voting-gate",
+   "webhookId": "camino-iii-voting-gate-sprint7p6",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    200,
+    400
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "camino-iii-voting-gate",
+    "responseMode": "responseNode",
+    "options": {}
+   }
+  },
+  {
+   "id": "validate-input",
+   "name": "Validate payload",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    420,
+    400
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "id": "item-type-required",
+       "leftValue": "={{ $json.body.item_type }}",
+       "rightValue": "",
+       "operator": {
+        "type": "string",
+        "operation": "notEmpty"
+       }
+      },
+      {
+       "id": "item-id-required",
+       "leftValue": "={{ $json.body.item_id }}",
+       "rightValue": "",
+       "operator": {
+        "type": "string",
+        "operation": "notEmpty"
+       }
+      }
+     ],
+     "combinator": "and"
+    }
+   }
+  },
+  {
+   "id": "create-review",
+   "name": "Create review row",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    640,
+    320
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/reviews",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({\n  item_type: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type,\n  item_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id,\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  campaign_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.campaign_id || null,\n  payload: $('Webhook · POST /camino-iii-voting-gate').first().json.body.payload || {},\n  expected_votes_count: 3,\n  metadata: { trigger: 'camino-iii-voting-gate', triggered_at: new Date().toISOString() }\n}) }}",
+    "options": {
+     "timeout": 10000
+    }
+   }
+  },
+  {
+   "id": "invoke-editor",
+   "name": "Vote A · editor-en-jefe",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "continueOnFail": true,
+   "position": [
+    860,
+    220
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({\n  agent: 'editor-en-jefe',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  task: 'Sos un revisor Camino III (editor-en-jefe). Emití tu voto sobre el item ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type + ' (id ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id + ', review ' + $('Create review row').first().json.review.id + '). ' + 'Contenido a revisar: ' + JSON.stringify($('Webhook · POST /camino-iii-voting-gate').first().json.body.payload) + '. ' + 'IMPORTANTE: respondé SOLO con un JSON exacto, sin prosa ni markdown: {\"vote\":\"green|amber|red\",\"rationale\":\"motivo breve\",\"confidence\":0.0,\"concerns\":[],\"corrections\":[]}. Si votás red DEBES incluir >=1 objeto en corrections con forma exacta {\"eje\":\"factual|voz|posicionamiento|cliente\",\"severidad\":\"red|amber\",\"donde\":\"ancla en la pieza\",\"problema\":\"qué está mal\",\"por_que\":\"contra qué regla del brand book choca\",\"cambio_sugerido\":\"la corrección concreta\"}'\n}) }}",
+    "options": {
+     "timeout": 120000
+    }
+   }
+  },
+  {
+   "id": "invoke-brand",
+   "name": "Vote B · brand-strategist",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "continueOnFail": true,
+   "position": [
+    860,
+    400
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({\n  agent: 'brand-strategist',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  task: 'Sos un revisor Camino III (brand-strategist). Emití tu voto sobre el item ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type + ' (id ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id + ', review ' + $('Create review row').first().json.review.id + '). ' + 'Contenido a revisar: ' + JSON.stringify($('Webhook · POST /camino-iii-voting-gate').first().json.body.payload) + '. ' + 'IMPORTANTE: respondé SOLO con un JSON exacto, sin prosa ni markdown: {\"vote\":\"green|amber|red\",\"rationale\":\"motivo breve\",\"confidence\":0.0,\"concerns\":[],\"corrections\":[]}. Si votás red DEBES incluir >=1 objeto en corrections con forma exacta {\"eje\":\"factual|voz|posicionamiento|cliente\",\"severidad\":\"red|amber\",\"donde\":\"ancla en la pieza\",\"problema\":\"qué está mal\",\"por_que\":\"contra qué regla del brand book choca\",\"cambio_sugerido\":\"la corrección concreta\"}'\n}) }}",
+    "options": {
+     "timeout": 120000
+    }
+   }
+  },
+  {
+   "id": "invoke-cs",
+   "name": "Vote C · jefe-client-success",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "continueOnFail": true,
+   "position": [
+    860,
+    580
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({\n  agent: 'jefe-client-success',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  task: 'Sos un revisor Camino III (jefe-client-success). Emití tu voto sobre el item ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type + ' (id ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id + ', review ' + $('Create review row').first().json.review.id + '). ' + 'Contenido a revisar: ' + JSON.stringify($('Webhook · POST /camino-iii-voting-gate').first().json.body.payload) + '. ' + 'IMPORTANTE: respondé SOLO con un JSON exacto, sin prosa ni markdown: {\"vote\":\"green|amber|red\",\"rationale\":\"motivo breve\",\"confidence\":0.0,\"concerns\":[],\"corrections\":[]}. Si votás red DEBES incluir >=1 objeto en corrections con forma exacta {\"eje\":\"factual|voz|posicionamiento|cliente\",\"severidad\":\"red|amber\",\"donde\":\"ancla en la pieza\",\"problema\":\"qué está mal\",\"por_que\":\"contra qué regla del brand book choca\",\"cambio_sugerido\":\"la corrección concreta\"}'\n}) }}",
+    "options": {
+     "timeout": 120000
+    }
+   }
+  },
+  {
+   "id": "record-vote-a",
+   "name": "Record vote A",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "continueOnFail": true,
+   "position": [
+    1080,
+    220
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/votes",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'editor-en-jefe',\n  raw_agent_output: $json.response || JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+    "options": {
+     "timeout": 10000
+    }
+   }
+  },
+  {
+   "id": "record-vote-b",
+   "name": "Record vote B",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "continueOnFail": true,
+   "position": [
+    1080,
+    400
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/votes",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'brand-strategist',\n  raw_agent_output: $json.response || JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+    "options": {
+     "timeout": 10000
+    }
+   }
+  },
+  {
+   "id": "record-vote-c",
+   "name": "Record vote C",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "continueOnFail": true,
+   "position": [
+    1080,
+    580
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/votes",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'jefe-client-success',\n  raw_agent_output: $json.response || JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+    "options": {
+     "timeout": 10000
+    }
+   }
+  },
+  {
+   "id": "fetch-final",
+   "name": "Fetch final tabulation",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1300,
+    400
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/reviews/{{ $('Create review row').first().json.review.id }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 10000
+    }
+   }
+  },
+  {
+   "id": "respond-success",
+   "name": "Respond · 200",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1520,
+    400
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({\n  ok: $json.ok,\n  review_id: $json.review.id,\n  status: $json.review.status,\n  decision_reason: $json.review.decision_reason,\n  votes: {\n    green: $json.review.green_count,\n    amber: $json.review.amber_count,\n    red: $json.review.red_count\n  },\n  tabulation: $json.tabulation,\n  votes_detail: $json.votes\n}) }}"
+   }
+  },
+  {
+   "id": "respond-validation-fail",
+   "name": "Respond · 400 validation",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    640,
+    540
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseCode": 400,
+    "responseBody": "={{ JSON.stringify({ ok: false, error: 'validation_failed', detail: 'item_type + item_id required in body' }) }}"
+   }
+  },
+  {
+   "id": "df116ca9-ffe5-4858-bd90-a0336b1c7e15",
+   "name": "Merge · wait for 3 votes",
+   "type": "n8n-nodes-base.merge",
+   "typeVersion": 3,
+   "position": [
+    1080,
+    400
+   ],
+   "parameters": {
+    "mode": "combine",
+    "combineBy": "combineByPosition",
+    "numberInputs": 3,
+    "options": {}
+   }
+  },
+  {
+   "id": "llave-webhook-",
+   "name": "⓪ Llave · Webhook · POST /camino-iii-vot",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    340,
+    280
+   ],
+   "parameters": {
+    "jsCode": "// ⓪ LA LLAVE · CC#2 · relevo 15 (2026-10-08) · mismo patrón que `zero-risk/brief` y `zero-risk/pieza` (lección E67).\n// Este flujo GASTA (modelo, Apify, imagen o video) o PUBLICA hacia afuera (redes, correo). Por eso exige la llave de despacho del motor en la cabecera\n// `x-sala-dispatch-key` (la misma `SALA_DISPATCH_KEY` del entorno de n8n; no se copia a ningún otro sitio) y, si falta, se DETIENE antes de tocar nada.\n// Falla CERRADO: sin la llave en el entorno, el flujo queda cerrado. Los disparos con horario (cron) y las llamadas internas entre flujos no pasan por aquí.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) {\n  throw new Error('FLUJO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo gasta o publica y queda cerrado hasta que exista · E67.')\n}\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) {\n  throw new Error('FLUJO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo gasta o publica y solo lo despierta la sala · E67.')\n}\nreturn $input.all()\n"
+   }
+  }
+ ],
+ "connections": {
+  "Webhook · POST /camino-iii-voting-gate": {
+   "main": [
+    [
+     {
+      "node": "⓪ Llave · Webhook · POST /camino-iii-vot",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Validate payload": {
+   "main": [
+    [
+     {
+      "node": "Create review row",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond · 400 validation",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create review row": {
+   "main": [
+    [
+     {
+      "node": "Vote A · editor-en-jefe",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Vote B · brand-strategist",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Vote C · jefe-client-success",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Vote A · editor-en-jefe": {
+   "main": [
+    [
+     {
+      "node": "Record vote A",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Vote B · brand-strategist": {
+   "main": [
+    [
+     {
+      "node": "Record vote B",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Vote C · jefe-client-success": {
+   "main": [
+    [
+     {
+      "node": "Record vote C",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Record vote A": {
+   "main": [
+    [
+     {
+      "node": "Merge · wait for 3 votes",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Record vote B": {
+   "main": [
+    [
+     {
+      "node": "Merge · wait for 3 votes",
+      "type": "main",
+      "index": 1
+     }
+    ]
+   ]
+  },
+  "Record vote C": {
+   "main": [
+    [
+     {
+      "node": "Merge · wait for 3 votes",
+      "type": "main",
+      "index": 2
+     }
+    ]
+   ]
+  },
+  "Fetch final tabulation": {
+   "main": [
+    [
+     {
+      "node": "Respond · 200",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Merge · wait for 3 votes": {
+   "main": [
+    [
+     {
+      "node": "Fetch final tabulation",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ Llave · Webhook · POST /camino-iii-vot": {
+   "main": [
+    [
+     {
+      "node": "Validate payload",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "nodeGroups": [],
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "staticData": null,
+ "pinData": null,
+ "meta": null,
+ "tags": [],
+ "shared": [
+  {
+   "role": "workflow:owner",
+   "workflowId": "hi5nwPCGUWHkGnT7",
+   "projectId": "xKBOyp07nrGbu4ob",
+   "project": {
+    "id": "xKBOyp07nrGbu4ob",
+    "name": "Emilio  Perez  <emilacho@hotmail.com>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-04-18T13:41:21.856Z",
+    "updatedAt": "2026-04-18T13:51:26.012Z"
+   },
+   "createdAt": "2026-06-29T17:14:03.064Z",
+   "updatedAt": "2026-06-29T17:14:03.064Z"
+  }
+ ],
+ "activeVersion": {
+  "versionId": "ee46e169-38ae-48bc-93ef-a98741410554",
+  "workflowId": "hi5nwPCGUWHkGnT7",
+  "nodes": [
+   {
+    "id": "webhook-entry",
+    "name": "Webhook · POST /camino-iii-voting-gate",
+    "webhookId": "camino-iii-voting-gate-sprint7p6",
+    "type": "n8n-nodes-base.webhook",
+    "typeVersion": 2,
+    "position": [
+     200,
+     400
+    ],
+    "parameters": {
+     "httpMethod": "POST",
+     "path": "camino-iii-voting-gate",
+     "responseMode": "responseNode",
+     "options": {}
+    }
+   },
+   {
+    "id": "validate-input",
+    "name": "Validate payload",
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+     420,
+     400
+    ],
+    "parameters": {
+     "conditions": {
+      "options": {
+       "caseSensitive": true,
+       "leftValue": "",
+       "typeValidation": "strict"
+      },
+      "conditions": [
+       {
+        "id": "item-type-required",
+        "leftValue": "={{ $json.body.item_type }}",
+        "rightValue": "",
+        "operator": {
+         "type": "string",
+         "operation": "notEmpty"
+        }
+       },
+       {
+        "id": "item-id-required",
+        "leftValue": "={{ $json.body.item_id }}",
+        "rightValue": "",
+        "operator": {
+         "type": "string",
+         "operation": "notEmpty"
+        }
+       }
+      ],
+      "combinator": "and"
+     }
+    }
+   },
+   {
+    "id": "create-review",
+    "name": "Create review row",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     640,
+     320
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/reviews",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       },
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({\n  item_type: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type,\n  item_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id,\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  campaign_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.campaign_id || null,\n  payload: $('Webhook · POST /camino-iii-voting-gate').first().json.body.payload || {},\n  expected_votes_count: 3,\n  metadata: { trigger: 'camino-iii-voting-gate', triggered_at: new Date().toISOString() }\n}) }}",
+     "options": {
+      "timeout": 10000
+     }
+    }
+   },
+   {
+    "id": "invoke-editor",
+    "name": "Vote A · editor-en-jefe",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "continueOnFail": true,
+    "position": [
+     860,
+     220
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       },
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({\n  agent: 'editor-en-jefe',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  task: 'Sos un revisor Camino III (editor-en-jefe). Emití tu voto sobre el item ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type + ' (id ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id + ', review ' + $('Create review row').first().json.review.id + '). ' + 'Contenido a revisar: ' + JSON.stringify($('Webhook · POST /camino-iii-voting-gate').first().json.body.payload) + '. ' + 'IMPORTANTE: respondé SOLO con un JSON exacto, sin prosa ni markdown: {\"vote\":\"green|amber|red\",\"rationale\":\"motivo breve\",\"confidence\":0.0,\"concerns\":[],\"corrections\":[]}. Si votás red DEBES incluir >=1 objeto en corrections con forma exacta {\"eje\":\"factual|voz|posicionamiento|cliente\",\"severidad\":\"red|amber\",\"donde\":\"ancla en la pieza\",\"problema\":\"qué está mal\",\"por_que\":\"contra qué regla del brand book choca\",\"cambio_sugerido\":\"la corrección concreta\"}'\n}) }}",
+     "options": {
+      "timeout": 120000
+     }
+    }
+   },
+   {
+    "id": "invoke-brand",
+    "name": "Vote B · brand-strategist",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "continueOnFail": true,
+    "position": [
+     860,
+     400
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       },
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({\n  agent: 'brand-strategist',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  task: 'Sos un revisor Camino III (brand-strategist). Emití tu voto sobre el item ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type + ' (id ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id + ', review ' + $('Create review row').first().json.review.id + '). ' + 'Contenido a revisar: ' + JSON.stringify($('Webhook · POST /camino-iii-voting-gate').first().json.body.payload) + '. ' + 'IMPORTANTE: respondé SOLO con un JSON exacto, sin prosa ni markdown: {\"vote\":\"green|amber|red\",\"rationale\":\"motivo breve\",\"confidence\":0.0,\"concerns\":[],\"corrections\":[]}. Si votás red DEBES incluir >=1 objeto en corrections con forma exacta {\"eje\":\"factual|voz|posicionamiento|cliente\",\"severidad\":\"red|amber\",\"donde\":\"ancla en la pieza\",\"problema\":\"qué está mal\",\"por_que\":\"contra qué regla del brand book choca\",\"cambio_sugerido\":\"la corrección concreta\"}'\n}) }}",
+     "options": {
+      "timeout": 120000
+     }
+    }
+   },
+   {
+    "id": "invoke-cs",
+    "name": "Vote C · jefe-client-success",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "continueOnFail": true,
+    "position": [
+     860,
+     580
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       },
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({\n  agent: 'jefe-client-success',\n  client_id: $('Webhook · POST /camino-iii-voting-gate').first().json.body.client_id || null,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  task: 'Sos un revisor Camino III (jefe-client-success). Emití tu voto sobre el item ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_type + ' (id ' + $('Webhook · POST /camino-iii-voting-gate').first().json.body.item_id + ', review ' + $('Create review row').first().json.review.id + '). ' + 'Contenido a revisar: ' + JSON.stringify($('Webhook · POST /camino-iii-voting-gate').first().json.body.payload) + '. ' + 'IMPORTANTE: respondé SOLO con un JSON exacto, sin prosa ni markdown: {\"vote\":\"green|amber|red\",\"rationale\":\"motivo breve\",\"confidence\":0.0,\"concerns\":[],\"corrections\":[]}. Si votás red DEBES incluir >=1 objeto en corrections con forma exacta {\"eje\":\"factual|voz|posicionamiento|cliente\",\"severidad\":\"red|amber\",\"donde\":\"ancla en la pieza\",\"problema\":\"qué está mal\",\"por_que\":\"contra qué regla del brand book choca\",\"cambio_sugerido\":\"la corrección concreta\"}'\n}) }}",
+     "options": {
+      "timeout": 120000
+     }
+    }
+   },
+   {
+    "id": "record-vote-a",
+    "name": "Record vote A",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "continueOnFail": true,
+    "position": [
+     1080,
+     220
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/votes",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       },
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'editor-en-jefe',\n  raw_agent_output: $json.response || JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+     "options": {
+      "timeout": 10000
+     }
+    }
+   },
+   {
+    "id": "record-vote-b",
+    "name": "Record vote B",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "continueOnFail": true,
+    "position": [
+     1080,
+     400
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/votes",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       },
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'brand-strategist',\n  raw_agent_output: $json.response || JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+     "options": {
+      "timeout": 10000
+     }
+    }
+   },
+   {
+    "id": "record-vote-c",
+    "name": "Record vote C",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "continueOnFail": true,
+    "position": [
+     1080,
+     580
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/votes",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       },
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({\n  review_id: $('Create review row').first().json.review.id,\n  reviewer_agent: 'jefe-client-success',\n  raw_agent_output: $json.response || JSON.stringify($json),\n  agent_invocation_id: $json.invocation_id || null,\n  duration_ms: $json.duration_ms || null,\n  cost_usd: $json.cost_usd || null\n}) }}",
+     "options": {
+      "timeout": 10000
+     }
+    }
+   },
+   {
+    "id": "fetch-final",
+    "name": "Fetch final tabulation",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     1300,
+     400
+    ],
+    "parameters": {
+     "method": "GET",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/camino-iii/reviews/{{ $('Create review row').first().json.review.id }}",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "options": {
+      "timeout": 10000
+     }
+    }
+   },
+   {
+    "id": "respond-success",
+    "name": "Respond · 200",
+    "type": "n8n-nodes-base.respondToWebhook",
+    "typeVersion": 1.1,
+    "position": [
+     1520,
+     400
+    ],
+    "parameters": {
+     "respondWith": "json",
+     "responseBody": "={{ JSON.stringify({\n  ok: $json.ok,\n  review_id: $json.review.id,\n  status: $json.review.status,\n  decision_reason: $json.review.decision_reason,\n  votes: {\n    green: $json.review.green_count,\n    amber: $json.review.amber_count,\n    red: $json.review.red_count\n  },\n  tabulation: $json.tabulation,\n  votes_detail: $json.votes\n}) }}"
+    }
+   },
+   {
+    "id": "respond-validation-fail",
+    "name": "Respond · 400 validation",
+    "type": "n8n-nodes-base.respondToWebhook",
+    "typeVersion": 1.1,
+    "position": [
+     640,
+     540
+    ],
+    "parameters": {
+     "respondWith": "json",
+     "responseCode": 400,
+     "responseBody": "={{ JSON.stringify({ ok: false, error: 'validation_failed', detail: 'item_type + item_id required in body' }) }}"
+    }
+   },
+   {
+    "id": "df116ca9-ffe5-4858-bd90-a0336b1c7e15",
+    "name": "Merge · wait for 3 votes",
+    "type": "n8n-nodes-base.merge",
+    "typeVersion": 3,
+    "position": [
+     1080,
+     400
+    ],
+    "parameters": {
+     "mode": "combine",
+     "combineBy": "combineByPosition",
+     "numberInputs": 3,
+     "options": {}
+    }
+   },
+   {
+    "id": "llave-webhook-",
+    "name": "⓪ Llave · Webhook · POST /camino-iii-vot",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     340,
+     280
+    ],
+    "parameters": {
+     "jsCode": "// ⓪ LA LLAVE · CC#2 · relevo 15 (2026-10-08) · mismo patrón que `zero-risk/brief` y `zero-risk/pieza` (lección E67).\n// Este flujo GASTA (modelo, Apify, imagen o video) o PUBLICA hacia afuera (redes, correo). Por eso exige la llave de despacho del motor en la cabecera\n// `x-sala-dispatch-key` (la misma `SALA_DISPATCH_KEY` del entorno de n8n; no se copia a ningún otro sitio) y, si falta, se DETIENE antes de tocar nada.\n// Falla CERRADO: sin la llave en el entorno, el flujo queda cerrado. Los disparos con horario (cron) y las llamadas internas entre flujos no pasan por aquí.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) {\n  throw new Error('FLUJO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo gasta o publica y queda cerrado hasta que exista · E67.')\n}\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) {\n  throw new Error('FLUJO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo gasta o publica y solo lo despierta la sala · E67.')\n}\nreturn $input.all()\n"
+    }
+   }
+  ],
+  "connections": {
+   "Webhook · POST /camino-iii-voting-gate": {
+    "main": [
+     [
+      {
+       "node": "⓪ Llave · Webhook · POST /camino-iii-vot",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Validate payload": {
+    "main": [
+     [
+      {
+       "node": "Create review row",
+       "type": "main",
+       "index": 0
+      }
+     ],
+     [
+      {
+       "node": "Respond · 400 validation",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Create review row": {
+    "main": [
+     [
+      {
+       "node": "Vote A · editor-en-jefe",
+       "type": "main",
+       "index": 0
+      },
+      {
+       "node": "Vote B · brand-strategist",
+       "type": "main",
+       "index": 0
+      },
+      {
+       "node": "Vote C · jefe-client-success",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Vote A · editor-en-jefe": {
+    "main": [
+     [
+      {
+       "node": "Record vote A",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Vote B · brand-strategist": {
+    "main": [
+     [
+      {
+       "node": "Record vote B",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Vote C · jefe-client-success": {
+    "main": [
+     [
+      {
+       "node": "Record vote C",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Record vote A": {
+    "main": [
+     [
+      {
+       "node": "Merge · wait for 3 votes",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Record vote B": {
+    "main": [
+     [
+      {
+       "node": "Merge · wait for 3 votes",
+       "type": "main",
+       "index": 1
+      }
+     ]
+    ]
+   },
+   "Record vote C": {
+    "main": [
+     [
+      {
+       "node": "Merge · wait for 3 votes",
+       "type": "main",
+       "index": 2
+      }
+     ]
+    ]
+   },
+   "Fetch final tabulation": {
+    "main": [
+     [
+      {
+       "node": "Respond · 200",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Merge · wait for 3 votes": {
+    "main": [
+     [
+      {
+       "node": "Fetch final tabulation",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⓪ Llave · Webhook · POST /camino-iii-vot": {
+    "main": [
+     [
+      {
+       "node": "Validate payload",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   }
+  },
+  "nodeGroups": [],
+  "authors": "Emilio  Perez ",
+  "name": null,
+  "description": null,
+  "autosaved": false,
+  "createdAt": "2026-10-08T07:42:08.778Z",
+  "updatedAt": "2026-10-08T07:42:08.778Z",
+  "workflowPublishHistory": [
+   {
+    "id": 2375,
+    "workflowId": "hi5nwPCGUWHkGnT7",
+    "versionId": "ee46e169-38ae-48bc-93ef-a98741410554",
+    "event": "activated",
+    "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-10-08T07:42:09.084Z"
+   }
+  ]
+ }
+}
