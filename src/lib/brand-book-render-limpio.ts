@@ -61,22 +61,14 @@ export function nombreDelManual(clientName: string): string {
   return `Manual de Marca · ${String(clientName || '').trim() || 'Cliente'}`
 }
 
-function ajustar(texto: string, ancho = ANCHO): string {
+/**
+ * Un párrafo = UNA línea. Antes se cortaba a 76 columnas con saltos duros: al convertir a documento de Drive cada salto era un párrafo nuevo y el PDF salía con frases cortadas
+ * («… valora» / «consistencia pedido a pedido»). Es el documento el que acomoda el ancho.
+ */
+function ajustar(texto: string): string {
   return String(texto)
     .split('\n')
-    .map((par) => {
-      if (!par.trim()) return ''
-      const out: string[] = []
-      let linea = ''
-      for (const w of par.trim().split(/\s+/)) {
-        if ((linea ? linea.length + 1 : 0) + w.length > ancho) {
-          if (linea) out.push(linea)
-          linea = w
-        } else linea += (linea ? ' ' : '') + w
-      }
-      if (linea) out.push(linea)
-      return out.join('\n')
-    })
+    .map((par) => par.trim().split(/\s+/).filter(Boolean).join(' '))
     .join('\n')
 }
 
@@ -84,11 +76,62 @@ function titulo(t: string): string {
   return `\n${t}\n${'─'.repeat(Math.min(ANCHO, t.length + 4))}\n`
 }
 
-function vinetas(a: unknown): string {
+// ───────────────────────── presentación para un lector (ronda 71)
+/** los asteriscos de markdown no se imprimen: lo en negrita queda como texto, los encabezados como líneas */
+export function sinMarkdown(t: string): string {
+  return String(t)
+    .replace(/\*\*([\s\S]+?)\*\*/g, '$1')
+    .replace(/__([\s\S]+?)__/g, '$1')
+    .replace(/(^|[\s(«"])\*(?=\S)([^*\n]+?)\*(?=$|[\s.,;:!?)»"])/gm, '$1$2')
+    .replace(/\*\*|__/g, '')
+    .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
+}
+
+/** «[frase propia del cliente, verbatim, …]» → nota discreta; «[propuesta del agente — …]» → «propuesta»; cualquier otra anotación entre corchetes se quita */
+export function presentarEtiquetas(t: string): string {
+  return String(t)
+    .replace(/\s*\[\s*frase propia del cliente[^\]]*\]/gi, ' — frase del cliente')
+    .replace(/\s*\[\s*propuesta del agente[^\]]*\]/gi, ' — propuesta')
+    .replace(/\s*\[[^\]\n]*\]/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+}
+
+/** «Segmento 1 — Residente local o visitante…» (encabezados del resumen de a quién le hablamos) → { 1: 'Residente local o visitante…' } */
+export function nombresDeSegmentos(icpSummary: unknown): Record<number, string> {
+  const out: Record<number, string> = {}
+  for (const m of String(icpSummary ?? '').matchAll(/^[ \t]*\**[ \t]*Segmento[ \t]+(\d+)[ \t]*[—–-][ \t]*(.+?)[ \t]*\**[ \t]*$/gm)) {
+    const nombre = m[2].replace(/\*+/g, '').replace(/[.\s]+$/, '').trim()
+    if (nombre) out[Number(m[1])] = nombre
+  }
+  return out
+}
+
+/** «S1», «S1 y S3», «S2, S4», «S1/S3», «S1-S4» (las claves internas de los segmentos) → el nombre del segmento. Si algún número no tiene nombre, esa mención se deja como está. */
+export function ponerNombresDeSegmento(t: string, nombres: Record<number, string>): string {
+  if (!Object.keys(nombres).length) return t
+  return String(t).replace(/\bS([1-9])(?:\s*(?:,|\/|–|-|y|e)\s*S([1-9]))*\b/g, (m) => {
+    const piezas = [...m.matchAll(/S([1-9])|(–|-)/g)]
+    const nums: number[] = []
+    for (let i = 0; i < piezas.length; i++) {
+      if (piezas[i][1]) nums.push(Number(piezas[i][1]))
+    }
+    // rango «S1-S4»: un guion entre dos claves, y solo ahí
+    const rango = /^S([1-9])\s*[–-]\s*S([1-9])$/.exec(m)
+    const lista = rango ? Array.from({ length: Math.max(0, Number(rango[2]) - Number(rango[1]) + 1) }, (_, k) => Number(rango[1]) + k) : nums
+    if (!lista.length || lista.some((n) => !nombres[n])) return m
+    const dichos = lista.map((n) => `«${nombres[n]}»`)
+    return dichos.length === 1 ? dichos[0] : `${dichos.slice(0, -1).join(', ')} y ${dichos[dichos.length - 1]}`
+  })
+}
+
+/** todo lo anterior, en el orden que lee bien */
+function paraElLector(t: string, nombres: Record<number, string>): string {
+  return ponerNombresDeSegmento(presentarEtiquetas(sinMarkdown(t)), nombres).replace(/\bICP\b/g, 'perfil de cliente ideal')
+}
+
+function vinetas(a: unknown, nombres: Record<number, string> = {}): string {
   const arr = Array.isArray(a) ? a : []
-  return arr
-    .map((x) => ajustar('• ' + String(x), ANCHO - 2).replace(/\n/g, '\n  '))
-    .join('\n')
+  return arr.map((x) => '• ' + ajustar(paraElLector(String(x), nombres))).join('\n')
 }
 
 const lleno = (v: unknown): boolean =>
@@ -114,6 +157,8 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     }
   }
 
+  // las claves S1–S4 de los segmentos salen con el nombre que les da el propio resumen de a quién le hablamos
+  const nombres = nombresDeSegmentos(draft.icp_summary)
   const secciones: string[] = []
   const omitidas: string[] = []
   const fugas: string[] = []
@@ -125,7 +170,8 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     const { clean } = extractTrailingCaveat(raw)
     const t = detectInternalTerms(clean)
     if (t.length) fugas.push(`${campo}: ${t.join(', ')}`)
-    return clean
+    const presentado = paraElLector(clean, nombres)
+    return campo === 'icp_summary' ? presentado.replace(/\n(?=Segmento \d+ [—–-] )/g, '\n\n') : presentado
   }
 
   let o = ''
@@ -165,7 +211,7 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
       const a = draft[campo]
       if (!lleno(a)) { omitidas.push(campo); continue }
       secciones.push(campo)
-      o += titulo(tit) + vinetas(a) + '\n'
+      o += titulo(tit) + vinetas(a, nombres) + '\n'
     }
   }
 
