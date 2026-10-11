@@ -4,11 +4,21 @@
 // Orden de autoridad: 1) lo que el manual DECLARA · 2) lo que el manual ESCRIBE (≥ 2 marcas de un lado y 0 del otro) · 3) el país de la ficha, por omisión y DECLARADO como omisión · 4) sin dato (se dice).
 
 // DATO · registro por omisión por país (claves en minúsculas y sin tildes). Un país que no está aquí NO tiene registro por omisión.
-const REGISTRO_POR_PAIS = {
-  ecuador: 'tuteo', colombia: 'tuteo', mexico: 'tuteo', peru: 'tuteo', chile: 'tuteo', venezuela: 'tuteo', bolivia: 'tuteo', espana: 'tuteo',
-  cuba: 'tuteo', panama: 'tuteo', 'republica dominicana': 'tuteo', 'puerto rico': 'tuteo',
-  argentina: 'voseo', uruguay: 'voseo', paraguay: 'voseo',
+// ═══ PAÍS → TRATO · ÚNICA FUENTE (ronda 67 · CC#1 · 2026-10-11) ═══
+// El trato habitual del país SÓLO cuando nadie lo dijo (baja confianza · se declara) · sin país conocido no hay default. UNA sola tabla: la planeación, el alta, el brief, la pieza y la copia por filas
+// llevan ESTE MISMO bloque (lo pega el constructor y una prueba exige que sea idéntico). Las claves son el nombre en minúsculas y sin tildes; los códigos de dos letras y los alias entran por `paisNormal`.
+// Es un DATO (se amplía sin tocar la lógica): la UNIÓN verificada de las tres tablas que se habían apartado (el detector: 12 países; el registro de la planeación: 15, con Colombia, Cuba, Puerto Rico y República Dominicana, sin Costa Rica).
+var POR_PAIS = { argentina: 'vos', uruguay: 'vos', paraguay: 'vos', ecuador: 'tu', mexico: 'tu', peru: 'tu', chile: 'tu', espana: 'tu', bolivia: 'tu', venezuela: 'tu', panama: 'tu', colombia: 'tu', cuba: 'tu', 'puerto rico': 'tu', 'republica dominicana': 'tu', 'costa rica': 'usted' }
+var CODIGO_PAIS = { ar: 'argentina', uy: 'uruguay', py: 'paraguay', ec: 'ecuador', mx: 'mexico', pe: 'peru', cl: 'chile', es: 'espana', bo: 'bolivia', ve: 'venezuela', pa: 'panama', co: 'colombia', cu: 'cuba', pr: 'puerto rico', do: 'republica dominicana', cr: 'costa rica' }
+var ALIAS_PAIS = { dominicana: 'republica dominicana', 'rep dominicana': 'republica dominicana', spain: 'espana' }
+/** el país como lo escribe una ficha («Ecuador.», «EC», «República Dominicana», «Rep. Dominicana») → la clave de la tabla; texto sin reconocer vuelve normalizado (nunca se adivina) */
+function paisNormal(s) {
+  var t = String(s === undefined || s === null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return CODIGO_PAIS[t] || ALIAS_PAIS[t] || t
 }
+// ═══ fin país → trato ═══
+// el registro de la planeación se DERIVA de la única tabla (tu → tuteo · vos → voseo · usted → formal): no hay segunda lista de países
+const REGISTRO_POR_PAIS = (() => { const r = {}; const m = { tu: 'tuteo', vos: 'voseo', usted: 'formal' }; Object.keys(POR_PAIS).forEach((k) => { r[k] = m[POR_PAIS[k]] }); return r })()
 const _sinTildes = (s) => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
 // «palabra completa» con letras Unicode (\b no sirve con tildes)
 const _pal = (alt) => new RegExp('(?<![\\p{L}\\p{N}])(?:' + alt + ')(?![\\p{L}\\p{N}])', 'giu')
@@ -75,7 +85,7 @@ function registroDelManual(fila) {
 
 /** el registro final: el del manual si lo hay; si no, el del país de la ficha (declarado como omisión); si no, sin dato */
 function registroFinal(delManual, pais) {
-  const p = _sinTildes(pais)
+  const p = paisNormal(pais)
   const porPais = p && Object.prototype.hasOwnProperty.call(REGISTRO_POR_PAIS, p) ? REGISTRO_POR_PAIS[p] : null
   const hayManual = delManual && delManual.registro && delManual.registro !== 'sin_dato'
   // r63 · R-1: un registro solo INFERIDO (nadie lo declaró) no le gana a la regla del país: el manual puede venir contagiado por las instrucciones internas. Solo lo DECLARADO lo cambia.

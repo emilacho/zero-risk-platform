@@ -46,8 +46,19 @@ function mencionesDelTexto(texto) {
   return out
 }
 
-// el trato habitual del país SÓLO cuando nadie lo dijo (baja confianza · se declara) · sin país conocido no hay default
-var POR_PAIS = { argentina: 'vos', uruguay: 'vos', paraguay: 'vos', ecuador: 'tu', mexico: 'tu', peru: 'tu', chile: 'tu', espana: 'tu', bolivia: 'tu', venezuela: 'tu', panama: 'tu', 'costa rica': 'usted' }
+// ═══ PAÍS → TRATO · ÚNICA FUENTE (ronda 67 · CC#1 · 2026-10-11) ═══
+// El trato habitual del país SÓLO cuando nadie lo dijo (baja confianza · se declara) · sin país conocido no hay default. UNA sola tabla: la planeación, el alta, el brief, la pieza y la copia por filas
+// llevan ESTE MISMO bloque (lo pega el constructor y una prueba exige que sea idéntico). Las claves son el nombre en minúsculas y sin tildes; los códigos de dos letras y los alias entran por `paisNormal`.
+// Es un DATO (se amplía sin tocar la lógica): la UNIÓN verificada de las tres tablas que se habían apartado (el detector: 12 países; el registro de la planeación: 15, con Colombia, Cuba, Puerto Rico y República Dominicana, sin Costa Rica).
+var POR_PAIS = { argentina: 'vos', uruguay: 'vos', paraguay: 'vos', ecuador: 'tu', mexico: 'tu', peru: 'tu', chile: 'tu', espana: 'tu', bolivia: 'tu', venezuela: 'tu', panama: 'tu', colombia: 'tu', cuba: 'tu', 'puerto rico': 'tu', 'republica dominicana': 'tu', 'costa rica': 'usted' }
+var CODIGO_PAIS = { ar: 'argentina', uy: 'uruguay', py: 'paraguay', ec: 'ecuador', mx: 'mexico', pe: 'peru', cl: 'chile', es: 'espana', bo: 'bolivia', ve: 'venezuela', pa: 'panama', co: 'colombia', cu: 'cuba', pr: 'puerto rico', do: 'republica dominicana', cr: 'costa rica' }
+var ALIAS_PAIS = { dominicana: 'republica dominicana', 'rep dominicana': 'republica dominicana', spain: 'espana' }
+/** el país como lo escribe una ficha («Ecuador.», «EC», «República Dominicana», «Rep. Dominicana») → la clave de la tabla; texto sin reconocer vuelve normalizado (nunca se adivina) */
+function paisNormal(s) {
+  var t = String(s === undefined || s === null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return CODIGO_PAIS[t] || ALIAS_PAIS[t] || t
+}
+// ═══ fin país → trato ═══
 
 /**
  * `manual` = { voice_description, writing_style, tone_guidelines } · `ficha` = { config, country, market }
@@ -74,8 +85,8 @@ function resolverTrato(manual, ficha) {
     if (pos.length === 1) return { trato: pos[0], fuente: 'manual', evidencia: 'la descripción de voz del manual lo dice (' + pos[0] + (me.negados.length ? ' · niega ' + me.negados.join(', ') : '') + ')' }
     if (pos.length > 1) return { trato: 'conflicto', fuente: 'manual', evidencia: 'la descripción de voz menciona más de un trato (' + pos.join(' y ') + ') sin negar ninguno · no se puede elegir' }
   }
-  var pais = sinTildes(f.country).trim() || sinTildes(String(f.market || '').split(/[·|,;\/]/).pop()).trim()
-  if (pais && POR_PAIS[pais]) return { trato: POR_PAIS[pais], fuente: 'default_por_pais', evidencia: 'ni el manual ni la ficha lo dicen: se usa el trato habitual de «' + pais + '» (BAJA confianza · conviene ponerlo en el manual)' }
+  var pais = paisNormal(f.country) || paisNormal(String(f.market || '').split(/[·|,;\/]/).pop())
+  if (pais && Object.prototype.hasOwnProperty.call(POR_PAIS, pais)) return { trato: POR_PAIS[pais], fuente: 'default_por_pais', evidencia: 'ni el manual ni la ficha lo dicen: se usa el trato habitual de «' + pais + '» (BAJA confianza · conviene ponerlo en el manual)' }
   return { trato: 'no_definido', fuente: 'ninguna', evidencia: 'ni el manual ni la ficha dicen el trato y no hay país conocido · NO se comprueba' }
 }
 
@@ -184,5 +195,5 @@ function bloqueDeTrato(resolucion) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { resolverTrato: resolverTrato, formasDeTrato: formasDeTrato, chequearTrato: chequearTrato, bloqueDeTrato: bloqueDeTrato, tratoDeValor: tratoDeValor, mencionesDelTexto: mencionesDelTexto }
+  module.exports = { POR_PAIS: POR_PAIS, CODIGO_PAIS: CODIGO_PAIS, ALIAS_PAIS: ALIAS_PAIS, paisNormal: paisNormal, resolverTrato: resolverTrato, formasDeTrato: formasDeTrato, chequearTrato: chequearTrato, bloqueDeTrato: bloqueDeTrato, tratoDeValor: tratoDeValor, mencionesDelTexto: mencionesDelTexto }
 }
