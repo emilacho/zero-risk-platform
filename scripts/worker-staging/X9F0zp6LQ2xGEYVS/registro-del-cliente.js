@@ -75,9 +75,14 @@ function registroDelManual(fila) {
 
 /** el registro final: el del manual si lo hay; si no, el del país de la ficha (declarado como omisión); si no, sin dato */
 function registroFinal(delManual, pais) {
-  if (delManual && delManual.registro && delManual.registro !== 'sin_dato') return Object.assign({}, delManual, { aviso: null })
   const p = _sinTildes(pais)
   const porPais = p && Object.prototype.hasOwnProperty.call(REGISTRO_POR_PAIS, p) ? REGISTRO_POR_PAIS[p] : null
+  const hayManual = delManual && delManual.registro && delManual.registro !== 'sin_dato'
+  // r63 · R-1: un registro solo INFERIDO (nadie lo declaró) no le gana a la regla del país: el manual puede venir contagiado por las instrucciones internas. Solo lo DECLARADO lo cambia.
+  if (hayManual && delManual.fuente === 'inferido_de_los_textos_del_manual' && porPais && porPais !== delManual.registro) {
+    return { registro: porPais, fuente: 'por_omision_del_pais_de_la_ficha', pruebas: ['país de la ficha: ' + String(pais).trim(), 'los textos del manual solo sugieren ' + delManual.registro + ' (' + (delManual.pruebas || [])[0] + ')'], aviso: 'el manual no lo declara: sus textos solo sugieren ' + delManual.registro + ' y la regla del país de la ficha es ' + porPais + ' · manda el país' }
+  }
+  if (hayManual) return Object.assign({}, delManual, { aviso: null })
   if (porPais) return { registro: porPais, fuente: 'por_omision_del_pais_de_la_ficha', pruebas: ['país de la ficha: ' + String(pais).trim()], aviso: 'el manual no fija el registro: se usa el del país de la ficha por omisión' }
   return { registro: 'sin_dato', fuente: 'sin_dato', pruebas: [], aviso: 'el manual no fija el registro y el país de la ficha no tiene uno por omisión' }
 }

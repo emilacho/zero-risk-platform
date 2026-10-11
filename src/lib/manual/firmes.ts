@@ -163,7 +163,8 @@ export function cerrarPuerta<T extends Record<string, unknown>>(manual: T, infor
 }
 
 /** lo que queda de una oración tras quitarle una cláusula: puntuación huérfana, minúscula tras punto o paréntesis sin par */
-const restoRoto = (t: string): boolean => /\.\s+[a-záéíóúñ]/.test(t) || /(^|\s)[:;,]/.test(t) || /\s[:;,]\s*\.?$/.test(t) || (t.match(/\(/g) ?? []).length !== (t.match(/\)/g) ?? []).length
+const PUNTO_Y_MINUSCULA = /(?<!\b(?:vs|etc|ej|sr|sra|dr|dra|aprox|núm|num))\.\s+[a-záéíóúñ]/ // «vs. competidores» o «etc. y» son abreviaturas, no una oración cortada
+const restoRoto = (t: string): boolean => PUNTO_Y_MINUSCULA.test(t) || /(^|\s)[:;,]/.test(t) || /\s[:;,]\s*\.?$/.test(t) || (t.match(/\(/g) ?? []).length !== (t.match(/\)/g) ?? []).length
 
 const LARGO_QUE_JUSTIFICA_LA_REGLA_DE_LA_MITAD = 150
 /** ¿el retiro dejó el texto mutilado? (r63 · CC#3 §3): queda vacío, empieza en minúscula, trae puntuación huérfana, o perdió más de la mitad de un campo largo */
@@ -172,7 +173,7 @@ export function mutilado(antes: string, ahora: string): boolean {
   if (!t) return false // vacío del todo: no queda nada que esté mutilado (A3)
   if (/^[a-záéíóúñ¿¡]/.test(t) && !/^[a-záéíóúñ¿¡]/.test(antes.trim())) return true
   if (/(^|\s)[:;,]/.test(t) && !/(^|\s)[:;,]/.test(antes)) return true
-  if (/\.\s+[a-záéíóúñ]/.test(t) && !/\.\s+[a-záéíóúñ]/.test(antes)) return true
+  if (PUNTO_Y_MINUSCULA.test(t) && !PUNTO_Y_MINUSCULA.test(antes)) return true
   return antes.length >= LARGO_QUE_JUSTIFICA_LA_REGLA_DE_LA_MITAD && t.length < antes.length / 2
 }
 

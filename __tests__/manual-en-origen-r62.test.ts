@@ -173,6 +173,25 @@ describe('② «Sacar lo sin fuente» · el manual v1 de hoy contra la puerta RE
     expect(llamadas[0].body).toMatchObject({ client_id: C, sin_manual_previo: true, sin_eslogan: true })
     expect(llamadas.filter((l) => l.url.endsWith('/api/manual/recomprobar'))).toHaveLength(1)
   })
+  it('r63 · SIN FRAGMENTOS: ningún texto del manual que sale empieza en minúscula ni trae puntuación huérfana; lo mutilado queda PENDIENTE y provisional; en listas se quita el elemento entero', async () => {
+    const { out } = await correrSacar(baseFalsa())
+    const m = out[0].json.brand_book_draft as Record<string, any>
+    const hojas: Array<[string, string]> = []
+    const ver = (v: unknown, r: string): void => { if (typeof v === 'string') { hojas.push([r, v]); return } if (Array.isArray(v)) v.forEach((x, i) => ver(x, `${r}[${i}]`)); else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) ver(x, `${r}.${k}`) }
+    for (const c of ['positioning', 'icp_summary', 'voice_description', 'mision', 'personalidad', 'mensajes_clave', 'propuestas_de_valor']) ver(m[c], c)
+    expect(hojas.length).toBeGreaterThan(5)
+    for (const [r, t] of hojas) {
+      if (r.includes('[')) expect(t.trim(), r).not.toBe('')            // un elemento de lista vacío no se deja (un campo suelto que sale entero queda vacío: A3)
+      expect(t, r).not.toMatch(/^\s*[a-záéíóúñ]/)                        // «sabés exactamente…» · «sirviendo a comensales…»
+      expect(t, r).not.toMatch(/\.\s+:|(?<!\b(?:vs|etc|ej))\.\s+[a-záéíóúñ]|(^|\s)[:;,]\s/)  // «. :» · «Cercano. el trato…» · coma/dos puntos sueltos
+    }
+    expect(m.positioning).toBe('PENDIENTE: reescribir con fuente')      // «marisco de Olón, fresco… En Olón.» ya no se guarda como si fuera el posicionamiento
+    expect(m._field_meta.positioning).toMatchObject({ provisional: true })
+    expect(m.personalidad.length).toBeLessThan(MANUAL.personalidad.length) // lo mutilado se quitó entero, no se dejó «Transparente. no con adjetivos»
+    const reg = (await (async () => { const db = baseFalsa(); await correrSacar(db); return db.tablas['client_historical_outputs'][0].provenance_tag as any })()).registro_interno.retirados as Array<{ marca: string }>
+    expect(reg.some((x) => x.marca === 'fragmento')).toBe(true)         // lo quitado va solo al registro interno
+    expect(JSON.stringify(m)).not.toMatch(/fragmento/)
+  })
   it('el registro interno guarda lo sacado (con su cláusula y motivo) · NUNCA bandeja · el manual no lleva el texto sacado', async () => {
     const db = baseFalsa()
     const { out } = await correrSacar(db)

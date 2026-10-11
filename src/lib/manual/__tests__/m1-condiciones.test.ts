@@ -212,3 +212,33 @@ describe('M1-e · huecos de la mutación de CC#3 sobre M2', () => {
     expect(nueva.primary_colors).toEqual(['#112233']); expect(Object.keys(nueva)).not.toContain('typography')
   })
 })
+
+// ───────────────────────── r63 · el relato de origen COMO AFIRMACIÓN sigue saliendo (CC#3 §4 de #490) y la puerta no deja fragmentos
+describe('r63 · origen como afirmación sale; origen como adorno o voz se queda', () => {
+  const sale = (t: string) => ids(t).includes('origen')
+  it.each(['Náufrago se diferencia por un origen geográfico específico', 'La transparencia: el origen es la prueba, no el eslogan', 'Está el restaurante en el lugar de origen del marisco', 'Funciona como denominación de origen implícita'])('«%s» SÍ', (t) => {
+    expect(sale(t), t).toBe(true)
+  })
+  it.each(['Storytelling de origen costero', 'Orgulloso de origen', 'Cocina de origen marino', 'La narrativa de origen la acompaña', 'Un claim de origen costero propio'])('«%s» NO', (t) => {
+    expect(sale(t), t).toBe(false)
+  })
+})
+describe('r63 · lo mutilado no se guarda: campo → PENDIENTE; lista → se quita el elemento', () => {
+  const fuentes = [F('s', 'primaria_propia', 'Hola somos un restaurante familiar.')]
+  const cierra = (manual: Record<string, unknown>) => cerrarPuerta(manual, evaluarHechos({ manual, fuentes }))
+  it('un campo largo que pierde más de la mitad queda PENDIENTE y lo que sobraba va solo al registro interno', () => {
+    const largo = 'Garantía total de resultados en cada pedido que sale de la cocina de la casa y llega hasta tu puerta cada día de la semana. Pedidos garantizados con trazabilidad verificable de cada ingrediente y cada proveedor del mercado. Sí.'
+    const c = cierra({ posicion: largo })
+    expect(c.manual.posicion).toBe('PENDIENTE: reescribir con fuente')
+    expect(c.retirados.some((r) => r.marca === 'fragmento')).toBe(true)
+  })
+  it('en una lista, el elemento mutilado o vacío sale ENTERO (nunca queda «», ni «Transparente. no con adjetivos»)', () => {
+    const c = cierra({ personalidad: ['Cercana y simple siempre.', 'Garantía total, siempre.', 'Transparente: el origen es la prueba, no con adjetivos'] })
+    expect(c.manual.personalidad).toEqual(['Cercana y simple siempre.'])
+    expect(c.retirados.length).toBeGreaterThanOrEqual(2)
+  })
+  it('un campo sano no se toca; «vs.» y «etc.» no cuentan como oración cortada', () => {
+    const m = { a: 'Rápido vs. los demás, etc. y siempre cercano.' }
+    expect(cierra(m).manual).toEqual(m)
+  })
+})
