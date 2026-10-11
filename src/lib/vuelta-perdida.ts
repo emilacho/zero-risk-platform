@@ -36,6 +36,19 @@ export function esVueltaPerdidaPorConexion(cuerpo: unknown): boolean {
   return err.length > 0 && SEÑALES_DE_CONEXION_PERDIDA.test(err)
 }
 
+/**
+ * El tope de espera de la recuperación DENTRO del trabajo interno: 120 s (E92/E96) salvo que la vuelta por callback haya fijado un plazo (epoch ms) válido y futuro,
+ * y entonces es lo que falta hasta ese plazo (nunca menos de 120 s ni más de 790 s). Lo que llegue mal escrito o vencido se ignora: rige el de siempre.
+ */
+export function topeDeRecuperacionInterna(vence: string | null | undefined, ahoraMs: number): number {
+  const base = 120_000
+  const v = Number(vence)
+  if (!vence || !Number.isFinite(v)) return base
+  const queda = v - ahoraMs
+  if (queda <= base) return base
+  return Math.min(queda, 790_000)
+}
+
 /** cuánto se puede esperar todavía · 0 si no queda margen */
 export function topeDeEsperaMs(empezoEnMs: number, ahoraMs: number): number {
   const queda = empezoEnMs + PRESUPUESTO_DE_LA_FUNCION_MS - MARGEN_PARA_ENTREGAR_MS - ahoraMs

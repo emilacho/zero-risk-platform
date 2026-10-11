@@ -1,0 +1,286 @@
+{
+  "id": "EZXAFQvKZsJlvGNO",
+  "name": "Zero Risk — Cerebro · ponerse al día (diario)",
+  "description": null,
+  "active": true,
+  "activeVersionId": "3e5fadee-be72-47c3-b45e-2d9f582b0361",
+  "createdAt": "2026-10-08T09:03:58.621Z",
+  "updatedAt": "2026-10-09T06:50:57.690Z",
+  "isArchived": false,
+  "versionId": "3e5fadee-be72-47c3-b45e-2d9f582b0361",
+  "versionCounter": 6,
+  "sourceWorkflowId": null,
+  "triggerCount": 2,
+  "nodes": [
+    {
+      "id": "wh-ensayo",
+      "name": "Webhook · a mano (con llave)",
+      "webhookId": "cerebro-diario-ensayo",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/cerebro-diario-ensayo",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hKo5XOxoVHcazlc9",
+          "name": "Portero · llave de los webhooks (x-portero-key)"
+        }
+      }
+    },
+    {
+      "id": "sch-diario",
+      "name": "Horario diario 06:30 UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 6 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "code-plan",
+      "name": "① Plan del día (topes escritos)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// ① PLAN DEL DÍA · CEREBRO · PONERSE AL DÍA (diario) · CC#2 · relevo 18 (2026-10-08) · firmado por Emilio: sitio + sedes + Instagram propio. Competidores y anuncios: NO.\n// Este nodo SOLO LEE y decide qué se hace, con los TOPES ESCRITOS AQUÍ. El nodo ② ejecuta lo que este nodo deja en `acciones` (y vuelve a comprobar el tope antes de cada llamada).\n// «Cliente activo» = ALTA REALIZADA (Emilio 08-oct): no archivado ni dado de baja, con manual de marca y plan de 90 días. El alta no se toca.\nconst SB = 'https://ordaeyxvvvdqsznsecjx.supabase.co'\nconst API = 'https://zero-risk-platform.vercel.app'\nconst auth = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }\nconst UUID = /^[0-9a-fA-F-]{36}$/\nlet viaWebhook = false\nlet entrada = {}\ntry { const w = $('Webhook · a mano (con llave)').first(); viaWebhook = true; entrada = (w.json && w.json.body) || {} } catch (e) { viaWebhook = false }\nconst SOLO = typeof entrada.cliente === 'string' && UUID.test(entrada.cliente) ? entrada.cliente : null\n// por horario SIEMPRE se ejecuta; a mano solo si se pide `ejecutar: true` Y se nombra UN cliente (limita el alcance de una prueba)\nconst EJECUTAR = viaWebhook ? (entrada.ejecutar === true && SOLO !== null) : true\nconst DIAS = 1\n\n// ── lo medido (243 corridas reales de Apify) · US$ por corrida\nconst COSTO = {\n  website_content_scraper: { prom: 0.0228, max: 0.0536 },\n  instagram_scraper: { prom: 0.0023, max: 0.0023 },\n  recolectar_sedes: { prom: 0, max: 0 },\n}\n// ── TOPES ESCRITOS EN EL FLUJO (firmados): nada que vigilar\nconst TOPE_CORRIDAS_POR_CLIENTE_DIA = 6\nconst TOPE_USD_POR_CLIENTE_DIA = 0.3\nconst TOPE_USD_TOTAL_DIA = 3.0\n// ── ETIQUETADO DIARIO (relevo 21 · firmado): fotos PROPIAS nuevas sin etiqueta, una llamada al modelo por foto (≈ US$ 0,009 medido en las 16 reales; peor caso 0,0286). Topes escritos aquí:\nconst TOPES_ETIQUETAR = { fotos_por_cliente_dia: 5, usd_dia: 0.1, intentos_por_foto: 2, peor_caso_usd: 0.0286 }\nconst POR_TABLA = { client_web_pages: 'pagina', client_social_images: 'instagram', client_sede_datos: 'sedes', client_sedes: 'sedes' }\n\nconst leer = async (url, headers) => this.helpers.httpRequest({ url, method: 'GET', json: true, headers, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 25000 })\nconst rest = async (ruta) => {\n  const r = await leer(SB + '/rest/v1/' + ruta, auth)\n  if (r.statusCode !== 200) throw new Error('LECTURA_FALLIDA · ' + ruta.slice(0, 60) + ' · HTTP ' + r.statusCode)\n  return r.body\n}\n// una corrida de Apify puede dejar VARIAS filas en `apify_raw` (el Servicio guarda una por página leída, con el mismo instante): una corrida = función + segundo de creación\nconst corridasDe = (filas) => { const vistas = {}; for (const r of filas) vistas[r.apify_function + '|' + String(r.created_at).slice(0, 19)] = r.apify_function; return Object.keys(vistas).map((k) => vistas[k]) }\nconst norm = (h) => String(h || '').trim().toLowerCase().replace(/^@/, '')\n\nconst hoy0 = new Date(); hoy0.setUTCHours(0, 0, 0, 0)\nconst clientes = await rest('clients?select=id,name,status,archived_at,config&order=created_at.asc&limit=500')\n// gasto máximo calculado de HOY en todos los clientes (corridas reales ya hechas × su máximo medido) para el tope total\nconst hoyTodos = await rest('apify_raw?select=apify_function,created_at&ensayo=eq.false&created_at=gte.' + hoy0.toISOString() + '&limit=1000')\nlet usdTotalHoyMax = 0\nfor (const f of corridasDe(hoyTodos)) usdTotalHoyMax += (COSTO[f] ? COSTO[f].max : 0.0536)\n\nconst salida = { flujo: 'EZXAFQvKZsJlvGNO', via: viaWebhook ? 'webhook a mano' : 'horario', ejecutar: EJECUTAR, solo_cliente: SOLO, generado_en: new Date().toISOString(), topes: { corridas_por_cliente: TOPE_CORRIDAS_POR_CLIENTE_DIA, usd_por_cliente: TOPE_USD_POR_CLIENTE_DIA, usd_total: TOPE_USD_TOTAL_DIA, etiquetar: TOPES_ETIQUETAR }, clientes: [], excluidos: [] }\n\nfor (const c of clientes) {\n  if (SOLO && c.id !== SOLO) continue\n  const esPrueba = /^prueba/i.test(String(c.id)) || /^prueba/i.test(String(c.name))\n  const baja = ['churned', 'archived', 'inactive', 'lost', 'cancelled'].includes(String(c.status))\n  const [manual, plan] = await Promise.all([\n    rest('client_brand_books?select=id&client_id=eq.' + c.id + '&limit=1'),\n    rest('client_historical_outputs?select=id,provenance_tag&client_id=eq.' + c.id + '&output_type=eq.campaign_plan_90d&limit=5'),\n  ])\n  const planReal = (plan || []).filter((p) => !(p.provenance_tag && typeof p.provenance_tag === 'object' && Object.keys(p.provenance_tag).some((k) => k.indexOf('prueba') === 0)))\n  const motivos = []\n  if (esPrueba) motivos.push('cliente de prueba')\n  if (c.archived_at) motivos.push('archivado')\n  if (baja) motivos.push('dado de baja (' + c.status + ')')\n  if (!manual.length) motivos.push('sin manual de marca')\n  if (!planReal.length) motivos.push('sin plan de 90 días')\n  if (motivos.length) { salida.excluidos.push({ cliente: c.id, nombre: c.name, motivos }); continue }\n\n  const hoyC = await rest('apify_raw?select=apify_function,created_at&client_id=eq.' + c.id + '&ensayo=eq.false&created_at=gte.' + hoy0.toISOString() + '&limit=200')\n  const hoyCorridas = corridasDe(hoyC)\n  let corridas = hoyCorridas.length, usdMax = 0\n  for (const f of hoyCorridas) usdMax += (COSTO[f] ? COSTO[f].max : 0.0536)\n  const acciones = [], no_hace = []\n  const pedir = (funcion, params, detalle) => {\n    const k = COSTO[funcion]\n    if (corridas >= TOPE_CORRIDAS_POR_CLIENTE_DIA || usdMax + k.max > TOPE_USD_POR_CLIENTE_DIA || usdTotalHoyMax + k.max > TOPE_USD_TOTAL_DIA) { no_hace.push({ funcion, detalle, por_que: 'no cabe en el tope del día' }); return }\n    corridas += 1; usdMax += k.max; usdTotalHoyMax += k.max\n    acciones.push({ tipo: 'apify', funcion, params, detalle, usd_prom: k.prom, usd_max: k.max })\n  }\n\n  // 1 · lo vencido, agrupado por su FILA de origen (tabla → raspador: correspondencia estructural)\n  const v = await leer(API + '/api/brain/portero/vencidos?cliente=' + c.id + '&dias=' + DIAS, { 'x-api-key': $env.INTERNAL_API_KEY })\n  let sedes = false\n  const vencidasAntes = []\n  if (v.statusCode !== 200 || !v.body || v.body.estado === 'error_de_lectura') {\n    no_hace.push({ detalle: 'no se pudo leer `vencidos` (HTTP ' + v.statusCode + ')', por_que: 'un fallo de lectura NUNCA se lee como «no vence nada»' })\n  } else {\n    for (const f of (v.body.vencidas || [])) vencidasAntes.push(f.ref)\n    const grupos = new Map()\n    for (const f of (v.body.vencidas || []).concat(v.body.por_vencer || [])) {\n      const origen = String(f.ref || '').split('#')[0]\n      const g = grupos.get(origen) || { origen, tabla: origen.split(':')[0], fichas: 0 }\n      g.fichas += 1; grupos.set(origen, g)\n    }\n    for (const g of grupos.values()) {\n      const que = POR_TABLA[g.tabla]\n      const det = g.fichas + ' ficha(s) de ' + g.origen.slice(0, 48)\n      if (que === 'pagina') {\n        const fila = await rest('client_web_pages?select=url,owner_role&id=eq.' + g.origen.split(':')[1] + '&limit=1')\n        const propia = fila[0] && fila[0].owner_role === 'propio'\n        if (!fila[0] || !fila[0].url) no_hace.push({ detalle: det, por_que: 'la página de origen no tiene dirección' })\n        else if (!propia) no_hace.push({ detalle: det, por_que: 'página de un competidor: competidores NO están firmados en esta ronda' })\n        else pedir('website_content_scraper', { url: fila[0].url }, det + ' · ' + fila[0].url)\n      } else if (que === 'sedes') {\n        sedes = true\n      } else if (que === 'instagram') {\n        // las fotos propias no vencen; si alguna lo hiciera, la corrida de Instagram de abajo ya las cubre\n      } else {\n        no_hace.push({ detalle: det, por_que: 'su tabla (' + g.tabla + ') no se renueva raspando en esta ronda' })\n      }\n    }\n  }\n  // 2 · novedades propias: Instagram propio (la cuenta sale de la ficha del cliente; si falta, de sus fotos propias)\n  const cfgIg = norm(c.config && c.config.apify && c.config.apify.own_handles && c.config.apify.own_handles.instagram)\n  let handle = cfgIg\n  if (!handle) { const fp = await rest('client_social_images?select=handle&client_id=eq.' + c.id + '&owner_role=eq.propio&limit=1'); handle = norm(fp[0] && fp[0].handle) }\n  if (!handle) no_hace.push({ detalle: 'novedades propias', por_que: 'no hay cuenta propia de Instagram conocida' })\n  else pedir('instagram_scraper', { usernames: [handle], resultsLimit: 3 }, 'cuenta @' + handle)\n  // 3 · sedes: se re-leen con lo ya guardado (US$ 0) SIEMPRE después de raspar, y también si solo vencieron datos de sede\n  if (sedes || acciones.length) acciones.push({ tipo: 'recolectar', funcion: 'recolectar_sedes', params: { client_id: c.id }, detalle: 're-leer las sedes con lo ya guardado', usd_prom: 0, usd_max: 0 })\n  no_hace.push({ detalle: 'competidores y anuncios', por_que: 'fuera de la ronda firmada (A): no se adelanta' })\n  salida.clientes.push({ cliente: c.id, nombre: c.name, corridas_reales_antes: hoyCorridas.length, vencidas_antes: vencidasAntes, acciones, no_hace })\n}\nreturn [{ json: salida }]\n"
+      }
+    },
+    {
+      "id": "code-ejec",
+      "name": "② Ejecutar el plan y medir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// ② EJECUTAR EL PLAN · CEREBRO · PONERSE AL DÍA (diario) · CC#2 · relevo 18\n// Ejecuta SOLO lo que ① dejó en `acciones`: raspar por el Servicio de Apify (`respuesta`, sin ensayo) y re-leer sedes. Antes de CADA llamada vuelve a contar las corridas reales de hoy\n// del cliente (el tope manda aunque el plan diga otra cosa). Mide: antes/después de lo vencido, filas, costo real de cada corrida (API de Apify) y duración.\n// ETIQUETA las fotos PROPIAS nuevas sin etiqueta (bloque `etiquetarFotos`, topes escritos en ①; la etiqueta la escribe la ruta del portero), NO toca competidores ni anuncios, NO escribe a mano en ninguna tabla: lo guardado lo guarda el Servicio (como hoy) y `recolectar` (US$ 0).\nconst SB = 'https://ordaeyxvvvdqsznsecjx.supabase.co'\nconst API = 'https://zero-risk-platform.vercel.app'\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst auth = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }\nconst plan = $input.first().json\nconst TOPE_CORRIDAS = plan.topes.corridas_por_cliente\nconst hoy0 = new Date(); hoy0.setUTCHours(0, 0, 0, 0)\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o })\nconst salida = { ...plan, ejecutado_en: new Date().toISOString(), resultados: [] }\nif (!plan.ejecutar) { salida.nota = 'EJECUTAR = falso: solo el plan, nada llamado'; return [{ json: salida }] }\n\n// ───── BLOQUE · ETIQUETADO DIARIO (idéntico a scripts/n8n-nodos/cerebro-diario-etiquetar.js de la rama) ─────\n// ETIQUETADO DIARIO · bloque del nodo «② Ejecutar el plan y medir» del flujo `EZXAFQvKZsJlvGNO` (Cerebro · ponerse al día, diario) · relevo 21 (CC#1, firma de Emilio «SI APROBADO»).\n// El flujo pega este archivo TAL CUAL dentro del nodo ②; la prueba `__tests__/cerebro-diario-etiquetado.test.ts` ejecuta ESTE MISMO texto con una base y una ruta simuladas.\n// Qué hace: después de raspar, pide `etiquetar` (la ruta del portero, UNA llamada al modelo por foto, sin reintentos) para cada foto PROPIA del cliente que todavía no tiene etiqueta.\n//   · LEE solo el id y la marca de «etiquetada» de `client_social_images` (excepción declarada en el detector de flujos vivos) y el libro (`agent_invocations`) para contar intentos y gasto.\n//   · NO escribe en ninguna tabla: la etiqueta la escribe la ruta del portero. Nunca manda `forzar` ni `solo_toma`.\n// Topes (vienen escritos en el nodo ①, `plan.topes.etiquetar`): fotos por cliente y día · gasto de etiquetar por día (cualquier origen, leído del libro) · intentos por foto de por vida · paro si el modelo no responde.\nasync function etiquetarFotos(d) {\n  const T = d.topes\n  const salida = { tope: T, sin_etiqueta: 0, elegibles: 0, llamadas: [], gastado_usd: 0, gasto_de_hoy_antes_usd: null, agotadas: [], parado: null }\n  const leer = async (url, headers) => d.leer(url, headers)\n  const UUID = /^[0-9a-fA-F-]{36}$/\n  if (!UUID.test(String(d.cliente))) { salida.parado = 'cliente_invalido'; return salida }\n  // 1 · el gasto de HOY de quien etiqueta (también lo de una corrida a mano). Si no se puede leer, NO se etiqueta: un fallo de lectura nunca se lee como «hoy no se gastó nada».\n  const hoy = await leer(d.SB + '/rest/v1/agent_invocations?select=cost_usd&agent_name=eq.etiquetador-del-cerebro&created_at=gte.' + d.hoy0 + '&limit=1000', d.auth)\n  if (hoy.statusCode !== 200 || !Array.isArray(hoy.body)) { salida.parado = 'no_se_pudo_leer_el_gasto_de_hoy (HTTP ' + hoy.statusCode + ')'; return salida }\n  const gastoHoy = hoy.body.reduce((s, x) => s + (Number(x.cost_usd) || 0), 0)\n  salida.gasto_de_hoy_antes_usd = Number(gastoHoy.toFixed(6))\n  // 2 · las fotos PROPIAS sin etiqueta, las más nuevas primero (se piden más que el tope para poder saltar las que ya agotaron sus intentos)\n  const fotos = await leer(d.SB + '/rest/v1/client_social_images?select=id,etiquetada_en&client_id=eq.' + d.cliente + '&owner_role=eq.propio&etiquetada_en=is.null&estado=eq.ok&order=posted_at.desc.nullslast&limit=' + T.fotos_por_cliente_dia * 4, d.auth)\n  if (fotos.statusCode !== 200 || !Array.isArray(fotos.body)) { salida.parado = 'no_se_pudo_leer_las_fotos (HTTP ' + fotos.statusCode + ')'; return salida }\n  const ids = fotos.body.map((f) => String(f.id)).filter((id) => UUID.test(id))\n  salida.sin_etiqueta = ids.length\n  if (!ids.length) return salida\n  // 3 · intentos de cada una = llamadas al modelo que se COBRARON (costo > 0) y no dejaron etiqueta. Una llamada cortada por falta de saldo cuesta 0 y no gasta un intento.\n  const lib = await leer(d.SB + '/rest/v1/agent_invocations?select=metadata&agent_name=eq.etiquetador-del-cerebro&cost_usd=gt.0&metadata-%3E%3Efoto_id=in.(' + ids.join(',') + ')&limit=1000', d.auth)\n  if (lib.statusCode !== 200 || !Array.isArray(lib.body)) { salida.parado = 'no_se_pudo_leer_los_intentos (HTTP ' + lib.statusCode + ')'; return salida }\n  const intentos = {}\n  for (const r of lib.body) { const k = r && r.metadata && r.metadata.foto_id; if (k) intentos[k] = (intentos[k] || 0) + 1 }\n  const elegibles = []\n  for (const id of ids) { if ((intentos[id] || 0) >= T.intentos_por_foto) salida.agotadas.push({ foto: id, intentos: intentos[id] }); else elegibles.push(id) }\n  salida.elegibles = elegibles.length\n  // 4 · una por una: antes de CADA llamada se comprueba el tope del día contra el peor caso de una foto\n  let seguidasSinModelo = 0\n  for (const id of elegibles) {\n    if (salida.llamadas.length >= T.fotos_por_cliente_dia) { salida.parado = 'tope_de_fotos_del_cliente'; break }\n    if (gastoHoy + salida.gastado_usd + T.peor_caso_usd > T.usd_dia) { salida.parado = 'tope_de_gasto_del_dia'; break }\n    const t0 = Date.now()\n    const r = await d.enviar(d.API + '/api/brain/portero/etiquetar', { cliente: d.cliente, foto: id, workflow_id: d.flujoId, workflow_execution_id: d.ejecucionId })\n    const b = r.body && typeof r.body === 'object' ? r.body : {}\n    const costo = typeof b.costo_usd === 'number' && b.costo_usd >= 0 ? b.costo_usd : 0\n    salida.gastado_usd = Number((salida.gastado_usd + costo).toFixed(6))\n    const ll = { foto: id, http: r.statusCode, modo: b.modo || null, llamo_al_modelo: b.llamo_al_modelo === true, escribio: b.escribio === true, costo_usd: costo, columnas_escritas: b.columnas_escritas || null, ms: Date.now() - t0 }\n    if (r.statusCode !== 200) ll.error = String(b.error || b.detail || '').slice(0, 160)\n    if (b.motivo_de_respaldo) ll.motivo_de_respaldo = b.motivo_de_respaldo\n    salida.llamadas.push(ll)\n    // la puerta cerrada (llave, flujo) o el modelo caído: no se sigue golpeando\n    if (r.statusCode === 401 || r.statusCode === 403) { salida.parado = 'la_ruta_rechazo (HTTP ' + r.statusCode + ')'; break }\n    seguidasSinModelo = b.llamo_al_modelo === true ? 0 : seguidasSinModelo + 1\n    if (seguidasSinModelo >= 2) { salida.parado = 'el_modelo_no_responde (2 seguidas)'; break }\n  }\n  return salida\n}\n// ───── fin del bloque ─────\n\nfor (const c of plan.clientes) {\n  const res = { cliente: c.cliente, nombre: c.nombre, llamadas: [], vencidas_antes_n: c.vencidas_antes.length }\n  for (const a of c.acciones) {\n    const t0 = Date.now()\n    if (a.tipo === 'apify') {\n      const hoy = await http({ url: SB + '/rest/v1/apify_raw?select=apify_function,created_at&client_id=eq.' + c.cliente + '&ensayo=eq.false&created_at=gte.' + hoy0.toISOString() + '&limit=200', method: 'GET', headers: auth })\n      // una corrida = función + segundo (el Servicio deja varias filas por corrida)\n      const n = Array.isArray(hoy.body) ? new Set(hoy.body.map((r) => r.apify_function + '|' + String(r.created_at).slice(0, 19))).size : 999\n      if (n >= TOPE_CORRIDAS) { res.llamadas.push({ funcion: a.funcion, hecho: false, por_que: 'tope de corridas del día (' + n + '/' + TOPE_CORRIDAS + ')' }); continue }\n      const r = await http({ url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\n        body: { client_id: c.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, metadata: { llamado_por: 'cerebro-diario', calling_workflow_id: plan.flujo } } })\n      const b = r.body && typeof r.body === 'object' ? r.body : {}\n      const ll = { funcion: a.funcion, hecho: r.statusCode === 200 && b.ok === true, http: r.statusCode, ms: Date.now() - t0, apify_run_id: b.apify_run_id || null, sin_resultados: b.sin_resultados === true, guardado_en: b.guardado_en || null, cost_estimate_usd: b.cost_estimate_usd || 0, cero: b.cero ? (b.cero.clase || b.cero.motivo || 'cero') : null }\n      if (!ll.hecho) ll.error = String(b.error || b.message || b.validation_errors || (r.body && r.body.toString ? r.body.toString().slice(0, 120) : '')).slice(0, 160)\n      if (ll.apify_run_id && $env.APIFY_API_TOKEN) {\n        const u = await http({ url: 'https://api.apify.com/v2/actor-runs/' + ll.apify_run_id, method: 'GET', headers: { Authorization: 'Bearer ' + $env.APIFY_API_TOKEN } })\n        const d = u.body && u.body.data\n        if (d) { ll.costo_real_usd = d.usageTotalUsd === undefined ? null : Number(d.usageTotalUsd); ll.estado_apify = d.status }\n      }\n      res.llamadas.push(ll)\n    } else if (a.tipo === 'recolectar') {\n      const r = await http({ url: API + '/api/clients/sedes/recolectar', method: 'POST', headers: { 'x-api-key': $env.INTERNAL_API_KEY, 'Content-Type': 'application/json' }, body: a.params })\n      const b = r.body && typeof r.body === 'object' ? r.body : {}\n      res.llamadas.push({ funcion: a.funcion, hecho: r.statusCode === 200 && b.ok !== false, http: r.statusCode, ms: Date.now() - t0, error: b.ok === false ? String(b.error || '').slice(0, 120) : undefined })\n    }\n  }\n  // después: ¿se re-fecharon las vencidas?\n  const v = await http({ url: API + '/api/brain/portero/vencidos?cliente=' + c.cliente + '&dias=1', method: 'GET', headers: { 'x-api-key': $env.INTERNAL_API_KEY } })\n  if (v.statusCode === 200 && v.body && v.body.vencidas) {\n    const despues = v.body.vencidas.map((f) => f.ref)\n    res.vencidas_despues_n = despues.length\n    res.siguen_vencidas = c.vencidas_antes.filter((r) => despues.indexOf(r) !== -1).length\n    res.ya_no_vencidas = c.vencidas_antes.filter((r) => despues.indexOf(r) === -1).length\n    res.nuevas_vencidas = despues.filter((r) => c.vencidas_antes.indexOf(r) === -1).length\n  } else res.vencidas_despues = 'no se pudo leer `vencidos` (HTTP ' + v.statusCode + ')'\n  res.costo_real_total_usd = Number(res.llamadas.reduce((s, l) => s + (l.costo_real_usd || 0), 0).toFixed(4))\n  // etiquetar las fotos propias nuevas (después de raspar). Un fallo aquí NO tumba el resto de la corrida.\n  try { res.etiquetado = await etiquetarFotos({ SB, API, auth, hoy0: hoy0.toISOString(), cliente: c.cliente, topes: plan.topes.etiquetar, flujoId: plan.flujo, ejecucionId: String($execution.id), leer: (u, h) => http({ url: u, method: 'GET', headers: h }), enviar: (u, b) => http({ url: u, method: 'POST', headers: { 'x-api-key': $env.INTERNAL_API_KEY, 'Content-Type': 'application/json' }, body: b, timeout: 60000 }) }) } catch (e) { res.etiquetado = { error: String((e && e.message) || e).slice(0, 200) } }\n  salida.resultados.push(res)\n}\nreturn [{ json: salida }]\n"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook · a mano (con llave)": {
+      "main": [
+        [
+          {
+            "node": "① Plan del día (topes escritos)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Horario diario 06:30 UTC": {
+      "main": [
+        [
+          {
+            "node": "① Plan del día (topes escritos)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "① Plan del día (topes escritos)": {
+      "main": [
+        [
+          {
+            "node": "② Ejecutar el plan y medir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {
+    "node:Horario diario 06:30 UTC": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "EZXAFQvKZsJlvGNO",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "updatedAt": "2026-04-18T13:51:26.012Z"
+      },
+      "createdAt": "2026-10-08T09:03:58.621Z",
+      "updatedAt": "2026-10-08T09:03:58.621Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "3e5fadee-be72-47c3-b45e-2d9f582b0361",
+    "workflowId": "EZXAFQvKZsJlvGNO",
+    "nodes": [
+      {
+        "id": "wh-ensayo",
+        "name": "Webhook · a mano (con llave)",
+        "webhookId": "cerebro-diario-ensayo",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "zero-risk/cerebro-diario-ensayo",
+          "authentication": "headerAuth",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "hKo5XOxoVHcazlc9",
+            "name": "Portero · llave de los webhooks (x-portero-key)"
+          }
+        }
+      },
+      {
+        "id": "sch-diario",
+        "name": "Horario diario 06:30 UTC",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          200
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "30 6 * * *"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "code-plan",
+        "name": "① Plan del día (topes escritos)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          300,
+          100
+        ],
+        "parameters": {
+          "jsCode": "// ① PLAN DEL DÍA · CEREBRO · PONERSE AL DÍA (diario) · CC#2 · relevo 18 (2026-10-08) · firmado por Emilio: sitio + sedes + Instagram propio. Competidores y anuncios: NO.\n// Este nodo SOLO LEE y decide qué se hace, con los TOPES ESCRITOS AQUÍ. El nodo ② ejecuta lo que este nodo deja en `acciones` (y vuelve a comprobar el tope antes de cada llamada).\n// «Cliente activo» = ALTA REALIZADA (Emilio 08-oct): no archivado ni dado de baja, con manual de marca y plan de 90 días. El alta no se toca.\nconst SB = 'https://ordaeyxvvvdqsznsecjx.supabase.co'\nconst API = 'https://zero-risk-platform.vercel.app'\nconst auth = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }\nconst UUID = /^[0-9a-fA-F-]{36}$/\nlet viaWebhook = false\nlet entrada = {}\ntry { const w = $('Webhook · a mano (con llave)').first(); viaWebhook = true; entrada = (w.json && w.json.body) || {} } catch (e) { viaWebhook = false }\nconst SOLO = typeof entrada.cliente === 'string' && UUID.test(entrada.cliente) ? entrada.cliente : null\n// por horario SIEMPRE se ejecuta; a mano solo si se pide `ejecutar: true` Y se nombra UN cliente (limita el alcance de una prueba)\nconst EJECUTAR = viaWebhook ? (entrada.ejecutar === true && SOLO !== null) : true\nconst DIAS = 1\n\n// ── lo medido (243 corridas reales de Apify) · US$ por corrida\nconst COSTO = {\n  website_content_scraper: { prom: 0.0228, max: 0.0536 },\n  instagram_scraper: { prom: 0.0023, max: 0.0023 },\n  recolectar_sedes: { prom: 0, max: 0 },\n}\n// ── TOPES ESCRITOS EN EL FLUJO (firmados): nada que vigilar\nconst TOPE_CORRIDAS_POR_CLIENTE_DIA = 6\nconst TOPE_USD_POR_CLIENTE_DIA = 0.3\nconst TOPE_USD_TOTAL_DIA = 3.0\n// ── ETIQUETADO DIARIO (relevo 21 · firmado): fotos PROPIAS nuevas sin etiqueta, una llamada al modelo por foto (≈ US$ 0,009 medido en las 16 reales; peor caso 0,0286). Topes escritos aquí:\nconst TOPES_ETIQUETAR = { fotos_por_cliente_dia: 5, usd_dia: 0.1, intentos_por_foto: 2, peor_caso_usd: 0.0286 }\nconst POR_TABLA = { client_web_pages: 'pagina', client_social_images: 'instagram', client_sede_datos: 'sedes', client_sedes: 'sedes' }\n\nconst leer = async (url, headers) => this.helpers.httpRequest({ url, method: 'GET', json: true, headers, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 25000 })\nconst rest = async (ruta) => {\n  const r = await leer(SB + '/rest/v1/' + ruta, auth)\n  if (r.statusCode !== 200) throw new Error('LECTURA_FALLIDA · ' + ruta.slice(0, 60) + ' · HTTP ' + r.statusCode)\n  return r.body\n}\n// una corrida de Apify puede dejar VARIAS filas en `apify_raw` (el Servicio guarda una por página leída, con el mismo instante): una corrida = función + segundo de creación\nconst corridasDe = (filas) => { const vistas = {}; for (const r of filas) vistas[r.apify_function + '|' + String(r.created_at).slice(0, 19)] = r.apify_function; return Object.keys(vistas).map((k) => vistas[k]) }\nconst norm = (h) => String(h || '').trim().toLowerCase().replace(/^@/, '')\n\nconst hoy0 = new Date(); hoy0.setUTCHours(0, 0, 0, 0)\nconst clientes = await rest('clients?select=id,name,status,archived_at,config&order=created_at.asc&limit=500')\n// gasto máximo calculado de HOY en todos los clientes (corridas reales ya hechas × su máximo medido) para el tope total\nconst hoyTodos = await rest('apify_raw?select=apify_function,created_at&ensayo=eq.false&created_at=gte.' + hoy0.toISOString() + '&limit=1000')\nlet usdTotalHoyMax = 0\nfor (const f of corridasDe(hoyTodos)) usdTotalHoyMax += (COSTO[f] ? COSTO[f].max : 0.0536)\n\nconst salida = { flujo: 'EZXAFQvKZsJlvGNO', via: viaWebhook ? 'webhook a mano' : 'horario', ejecutar: EJECUTAR, solo_cliente: SOLO, generado_en: new Date().toISOString(), topes: { corridas_por_cliente: TOPE_CORRIDAS_POR_CLIENTE_DIA, usd_por_cliente: TOPE_USD_POR_CLIENTE_DIA, usd_total: TOPE_USD_TOTAL_DIA, etiquetar: TOPES_ETIQUETAR }, clientes: [], excluidos: [] }\n\nfor (const c of clientes) {\n  if (SOLO && c.id !== SOLO) continue\n  const esPrueba = /^prueba/i.test(String(c.id)) || /^prueba/i.test(String(c.name))\n  const baja = ['churned', 'archived', 'inactive', 'lost', 'cancelled'].includes(String(c.status))\n  const [manual, plan] = await Promise.all([\n    rest('client_brand_books?select=id&client_id=eq.' + c.id + '&limit=1'),\n    rest('client_historical_outputs?select=id,provenance_tag&client_id=eq.' + c.id + '&output_type=eq.campaign_plan_90d&limit=5'),\n  ])\n  const planReal = (plan || []).filter((p) => !(p.provenance_tag && typeof p.provenance_tag === 'object' && Object.keys(p.provenance_tag).some((k) => k.indexOf('prueba') === 0)))\n  const motivos = []\n  if (esPrueba) motivos.push('cliente de prueba')\n  if (c.archived_at) motivos.push('archivado')\n  if (baja) motivos.push('dado de baja (' + c.status + ')')\n  if (!manual.length) motivos.push('sin manual de marca')\n  if (!planReal.length) motivos.push('sin plan de 90 días')\n  if (motivos.length) { salida.excluidos.push({ cliente: c.id, nombre: c.name, motivos }); continue }\n\n  const hoyC = await rest('apify_raw?select=apify_function,created_at&client_id=eq.' + c.id + '&ensayo=eq.false&created_at=gte.' + hoy0.toISOString() + '&limit=200')\n  const hoyCorridas = corridasDe(hoyC)\n  let corridas = hoyCorridas.length, usdMax = 0\n  for (const f of hoyCorridas) usdMax += (COSTO[f] ? COSTO[f].max : 0.0536)\n  const acciones = [], no_hace = []\n  const pedir = (funcion, params, detalle) => {\n    const k = COSTO[funcion]\n    if (corridas >= TOPE_CORRIDAS_POR_CLIENTE_DIA || usdMax + k.max > TOPE_USD_POR_CLIENTE_DIA || usdTotalHoyMax + k.max > TOPE_USD_TOTAL_DIA) { no_hace.push({ funcion, detalle, por_que: 'no cabe en el tope del día' }); return }\n    corridas += 1; usdMax += k.max; usdTotalHoyMax += k.max\n    acciones.push({ tipo: 'apify', funcion, params, detalle, usd_prom: k.prom, usd_max: k.max })\n  }\n\n  // 1 · lo vencido, agrupado por su FILA de origen (tabla → raspador: correspondencia estructural)\n  const v = await leer(API + '/api/brain/portero/vencidos?cliente=' + c.id + '&dias=' + DIAS, { 'x-api-key': $env.INTERNAL_API_KEY })\n  let sedes = false\n  const vencidasAntes = []\n  if (v.statusCode !== 200 || !v.body || v.body.estado === 'error_de_lectura') {\n    no_hace.push({ detalle: 'no se pudo leer `vencidos` (HTTP ' + v.statusCode + ')', por_que: 'un fallo de lectura NUNCA se lee como «no vence nada»' })\n  } else {\n    for (const f of (v.body.vencidas || [])) vencidasAntes.push(f.ref)\n    const grupos = new Map()\n    for (const f of (v.body.vencidas || []).concat(v.body.por_vencer || [])) {\n      const origen = String(f.ref || '').split('#')[0]\n      const g = grupos.get(origen) || { origen, tabla: origen.split(':')[0], fichas: 0 }\n      g.fichas += 1; grupos.set(origen, g)\n    }\n    for (const g of grupos.values()) {\n      const que = POR_TABLA[g.tabla]\n      const det = g.fichas + ' ficha(s) de ' + g.origen.slice(0, 48)\n      if (que === 'pagina') {\n        const fila = await rest('client_web_pages?select=url,owner_role&id=eq.' + g.origen.split(':')[1] + '&limit=1')\n        const propia = fila[0] && fila[0].owner_role === 'propio'\n        if (!fila[0] || !fila[0].url) no_hace.push({ detalle: det, por_que: 'la página de origen no tiene dirección' })\n        else if (!propia) no_hace.push({ detalle: det, por_que: 'página de un competidor: competidores NO están firmados en esta ronda' })\n        else pedir('website_content_scraper', { url: fila[0].url }, det + ' · ' + fila[0].url)\n      } else if (que === 'sedes') {\n        sedes = true\n      } else if (que === 'instagram') {\n        // las fotos propias no vencen; si alguna lo hiciera, la corrida de Instagram de abajo ya las cubre\n      } else {\n        no_hace.push({ detalle: det, por_que: 'su tabla (' + g.tabla + ') no se renueva raspando en esta ronda' })\n      }\n    }\n  }\n  // 2 · novedades propias: Instagram propio (la cuenta sale de la ficha del cliente; si falta, de sus fotos propias)\n  const cfgIg = norm(c.config && c.config.apify && c.config.apify.own_handles && c.config.apify.own_handles.instagram)\n  let handle = cfgIg\n  if (!handle) { const fp = await rest('client_social_images?select=handle&client_id=eq.' + c.id + '&owner_role=eq.propio&limit=1'); handle = norm(fp[0] && fp[0].handle) }\n  if (!handle) no_hace.push({ detalle: 'novedades propias', por_que: 'no hay cuenta propia de Instagram conocida' })\n  else pedir('instagram_scraper', { usernames: [handle], resultsLimit: 3 }, 'cuenta @' + handle)\n  // 3 · sedes: se re-leen con lo ya guardado (US$ 0) SIEMPRE después de raspar, y también si solo vencieron datos de sede\n  if (sedes || acciones.length) acciones.push({ tipo: 'recolectar', funcion: 'recolectar_sedes', params: { client_id: c.id }, detalle: 're-leer las sedes con lo ya guardado', usd_prom: 0, usd_max: 0 })\n  no_hace.push({ detalle: 'competidores y anuncios', por_que: 'fuera de la ronda firmada (A): no se adelanta' })\n  salida.clientes.push({ cliente: c.id, nombre: c.name, corridas_reales_antes: hoyCorridas.length, vencidas_antes: vencidasAntes, acciones, no_hace })\n}\nreturn [{ json: salida }]\n"
+        }
+      },
+      {
+        "id": "code-ejec",
+        "name": "② Ejecutar el plan y medir",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          600,
+          100
+        ],
+        "parameters": {
+          "jsCode": "// ② EJECUTAR EL PLAN · CEREBRO · PONERSE AL DÍA (diario) · CC#2 · relevo 18\n// Ejecuta SOLO lo que ① dejó en `acciones`: raspar por el Servicio de Apify (`respuesta`, sin ensayo) y re-leer sedes. Antes de CADA llamada vuelve a contar las corridas reales de hoy\n// del cliente (el tope manda aunque el plan diga otra cosa). Mide: antes/después de lo vencido, filas, costo real de cada corrida (API de Apify) y duración.\n// ETIQUETA las fotos PROPIAS nuevas sin etiqueta (bloque `etiquetarFotos`, topes escritos en ①; la etiqueta la escribe la ruta del portero), NO toca competidores ni anuncios, NO escribe a mano en ninguna tabla: lo guardado lo guarda el Servicio (como hoy) y `recolectar` (US$ 0).\nconst SB = 'https://ordaeyxvvvdqsznsecjx.supabase.co'\nconst API = 'https://zero-risk-platform.vercel.app'\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst auth = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }\nconst plan = $input.first().json\nconst TOPE_CORRIDAS = plan.topes.corridas_por_cliente\nconst hoy0 = new Date(); hoy0.setUTCHours(0, 0, 0, 0)\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o })\nconst salida = { ...plan, ejecutado_en: new Date().toISOString(), resultados: [] }\nif (!plan.ejecutar) { salida.nota = 'EJECUTAR = falso: solo el plan, nada llamado'; return [{ json: salida }] }\n\n// ───── BLOQUE · ETIQUETADO DIARIO (idéntico a scripts/n8n-nodos/cerebro-diario-etiquetar.js de la rama) ─────\n// ETIQUETADO DIARIO · bloque del nodo «② Ejecutar el plan y medir» del flujo `EZXAFQvKZsJlvGNO` (Cerebro · ponerse al día, diario) · relevo 21 (CC#1, firma de Emilio «SI APROBADO»).\n// El flujo pega este archivo TAL CUAL dentro del nodo ②; la prueba `__tests__/cerebro-diario-etiquetado.test.ts` ejecuta ESTE MISMO texto con una base y una ruta simuladas.\n// Qué hace: después de raspar, pide `etiquetar` (la ruta del portero, UNA llamada al modelo por foto, sin reintentos) para cada foto PROPIA del cliente que todavía no tiene etiqueta.\n//   · LEE solo el id y la marca de «etiquetada» de `client_social_images` (excepción declarada en el detector de flujos vivos) y el libro (`agent_invocations`) para contar intentos y gasto.\n//   · NO escribe en ninguna tabla: la etiqueta la escribe la ruta del portero. Nunca manda `forzar` ni `solo_toma`.\n// Topes (vienen escritos en el nodo ①, `plan.topes.etiquetar`): fotos por cliente y día · gasto de etiquetar por día (cualquier origen, leído del libro) · intentos por foto de por vida · paro si el modelo no responde.\nasync function etiquetarFotos(d) {\n  const T = d.topes\n  const salida = { tope: T, sin_etiqueta: 0, elegibles: 0, llamadas: [], gastado_usd: 0, gasto_de_hoy_antes_usd: null, agotadas: [], parado: null }\n  const leer = async (url, headers) => d.leer(url, headers)\n  const UUID = /^[0-9a-fA-F-]{36}$/\n  if (!UUID.test(String(d.cliente))) { salida.parado = 'cliente_invalido'; return salida }\n  // 1 · el gasto de HOY de quien etiqueta (también lo de una corrida a mano). Si no se puede leer, NO se etiqueta: un fallo de lectura nunca se lee como «hoy no se gastó nada».\n  const hoy = await leer(d.SB + '/rest/v1/agent_invocations?select=cost_usd&agent_name=eq.etiquetador-del-cerebro&created_at=gte.' + d.hoy0 + '&limit=1000', d.auth)\n  if (hoy.statusCode !== 200 || !Array.isArray(hoy.body)) { salida.parado = 'no_se_pudo_leer_el_gasto_de_hoy (HTTP ' + hoy.statusCode + ')'; return salida }\n  const gastoHoy = hoy.body.reduce((s, x) => s + (Number(x.cost_usd) || 0), 0)\n  salida.gasto_de_hoy_antes_usd = Number(gastoHoy.toFixed(6))\n  // 2 · las fotos PROPIAS sin etiqueta, las más nuevas primero (se piden más que el tope para poder saltar las que ya agotaron sus intentos)\n  const fotos = await leer(d.SB + '/rest/v1/client_social_images?select=id,etiquetada_en&client_id=eq.' + d.cliente + '&owner_role=eq.propio&etiquetada_en=is.null&estado=eq.ok&order=posted_at.desc.nullslast&limit=' + T.fotos_por_cliente_dia * 4, d.auth)\n  if (fotos.statusCode !== 200 || !Array.isArray(fotos.body)) { salida.parado = 'no_se_pudo_leer_las_fotos (HTTP ' + fotos.statusCode + ')'; return salida }\n  const ids = fotos.body.map((f) => String(f.id)).filter((id) => UUID.test(id))\n  salida.sin_etiqueta = ids.length\n  if (!ids.length) return salida\n  // 3 · intentos de cada una = llamadas al modelo que se COBRARON (costo > 0) y no dejaron etiqueta. Una llamada cortada por falta de saldo cuesta 0 y no gasta un intento.\n  const lib = await leer(d.SB + '/rest/v1/agent_invocations?select=metadata&agent_name=eq.etiquetador-del-cerebro&cost_usd=gt.0&metadata-%3E%3Efoto_id=in.(' + ids.join(',') + ')&limit=1000', d.auth)\n  if (lib.statusCode !== 200 || !Array.isArray(lib.body)) { salida.parado = 'no_se_pudo_leer_los_intentos (HTTP ' + lib.statusCode + ')'; return salida }\n  const intentos = {}\n  for (const r of lib.body) { const k = r && r.metadata && r.metadata.foto_id; if (k) intentos[k] = (intentos[k] || 0) + 1 }\n  const elegibles = []\n  for (const id of ids) { if ((intentos[id] || 0) >= T.intentos_por_foto) salida.agotadas.push({ foto: id, intentos: intentos[id] }); else elegibles.push(id) }\n  salida.elegibles = elegibles.length\n  // 4 · una por una: antes de CADA llamada se comprueba el tope del día contra el peor caso de una foto\n  let seguidasSinModelo = 0\n  for (const id of elegibles) {\n    if (salida.llamadas.length >= T.fotos_por_cliente_dia) { salida.parado = 'tope_de_fotos_del_cliente'; break }\n    if (gastoHoy + salida.gastado_usd + T.peor_caso_usd > T.usd_dia) { salida.parado = 'tope_de_gasto_del_dia'; break }\n    const t0 = Date.now()\n    const r = await d.enviar(d.API + '/api/brain/portero/etiquetar', { cliente: d.cliente, foto: id, workflow_id: d.flujoId, workflow_execution_id: d.ejecucionId })\n    const b = r.body && typeof r.body === 'object' ? r.body : {}\n    const costo = typeof b.costo_usd === 'number' && b.costo_usd >= 0 ? b.costo_usd : 0\n    salida.gastado_usd = Number((salida.gastado_usd + costo).toFixed(6))\n    const ll = { foto: id, http: r.statusCode, modo: b.modo || null, llamo_al_modelo: b.llamo_al_modelo === true, escribio: b.escribio === true, costo_usd: costo, columnas_escritas: b.columnas_escritas || null, ms: Date.now() - t0 }\n    if (r.statusCode !== 200) ll.error = String(b.error || b.detail || '').slice(0, 160)\n    if (b.motivo_de_respaldo) ll.motivo_de_respaldo = b.motivo_de_respaldo\n    salida.llamadas.push(ll)\n    // la puerta cerrada (llave, flujo) o el modelo caído: no se sigue golpeando\n    if (r.statusCode === 401 || r.statusCode === 403) { salida.parado = 'la_ruta_rechazo (HTTP ' + r.statusCode + ')'; break }\n    seguidasSinModelo = b.llamo_al_modelo === true ? 0 : seguidasSinModelo + 1\n    if (seguidasSinModelo >= 2) { salida.parado = 'el_modelo_no_responde (2 seguidas)'; break }\n  }\n  return salida\n}\n// ───── fin del bloque ─────\n\nfor (const c of plan.clientes) {\n  const res = { cliente: c.cliente, nombre: c.nombre, llamadas: [], vencidas_antes_n: c.vencidas_antes.length }\n  for (const a of c.acciones) {\n    const t0 = Date.now()\n    if (a.tipo === 'apify') {\n      const hoy = await http({ url: SB + '/rest/v1/apify_raw?select=apify_function,created_at&client_id=eq.' + c.cliente + '&ensayo=eq.false&created_at=gte.' + hoy0.toISOString() + '&limit=200', method: 'GET', headers: auth })\n      // una corrida = función + segundo (el Servicio deja varias filas por corrida)\n      const n = Array.isArray(hoy.body) ? new Set(hoy.body.map((r) => r.apify_function + '|' + String(r.created_at).slice(0, 19))).size : 999\n      if (n >= TOPE_CORRIDAS) { res.llamadas.push({ funcion: a.funcion, hecho: false, por_que: 'tope de corridas del día (' + n + '/' + TOPE_CORRIDAS + ')' }); continue }\n      const r = await http({ url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\n        body: { client_id: c.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, metadata: { llamado_por: 'cerebro-diario', calling_workflow_id: plan.flujo } } })\n      const b = r.body && typeof r.body === 'object' ? r.body : {}\n      const ll = { funcion: a.funcion, hecho: r.statusCode === 200 && b.ok === true, http: r.statusCode, ms: Date.now() - t0, apify_run_id: b.apify_run_id || null, sin_resultados: b.sin_resultados === true, guardado_en: b.guardado_en || null, cost_estimate_usd: b.cost_estimate_usd || 0, cero: b.cero ? (b.cero.clase || b.cero.motivo || 'cero') : null }\n      if (!ll.hecho) ll.error = String(b.error || b.message || b.validation_errors || (r.body && r.body.toString ? r.body.toString().slice(0, 120) : '')).slice(0, 160)\n      if (ll.apify_run_id && $env.APIFY_API_TOKEN) {\n        const u = await http({ url: 'https://api.apify.com/v2/actor-runs/' + ll.apify_run_id + '?token=' + $env.APIFY_API_TOKEN, method: 'GET', headers: {} })\n        const d = u.body && u.body.data\n        if (d) { ll.costo_real_usd = d.usageTotalUsd === undefined ? null : Number(d.usageTotalUsd); ll.estado_apify = d.status }\n      }\n      res.llamadas.push(ll)\n    } else if (a.tipo === 'recolectar') {\n      const r = await http({ url: API + '/api/clients/sedes/recolectar', method: 'POST', headers: { 'x-api-key': $env.INTERNAL_API_KEY, 'Content-Type': 'application/json' }, body: a.params })\n      const b = r.body && typeof r.body === 'object' ? r.body : {}\n      res.llamadas.push({ funcion: a.funcion, hecho: r.statusCode === 200 && b.ok !== false, http: r.statusCode, ms: Date.now() - t0, error: b.ok === false ? String(b.error || '').slice(0, 120) : undefined })\n    }\n  }\n  // después: ¿se re-fecharon las vencidas?\n  const v = await http({ url: API + '/api/brain/portero/vencidos?cliente=' + c.cliente + '&dias=1', method: 'GET', headers: { 'x-api-key': $env.INTERNAL_API_KEY } })\n  if (v.statusCode === 200 && v.body && v.body.vencidas) {\n    const despues = v.body.vencidas.map((f) => f.ref)\n    res.vencidas_despues_n = despues.length\n    res.siguen_vencidas = c.vencidas_antes.filter((r) => despues.indexOf(r) !== -1).length\n    res.ya_no_vencidas = c.vencidas_antes.filter((r) => despues.indexOf(r) === -1).length\n    res.nuevas_vencidas = despues.filter((r) => c.vencidas_antes.indexOf(r) === -1).length\n  } else res.vencidas_despues = 'no se pudo leer `vencidos` (HTTP ' + v.statusCode + ')'\n  res.costo_real_total_usd = Number(res.llamadas.reduce((s, l) => s + (l.costo_real_usd || 0), 0).toFixed(4))\n  // etiquetar las fotos propias nuevas (después de raspar). Un fallo aquí NO tumba el resto de la corrida.\n  try { res.etiquetado = await etiquetarFotos({ SB, API, auth, hoy0: hoy0.toISOString(), cliente: c.cliente, topes: plan.topes.etiquetar, flujoId: plan.flujo, ejecucionId: String($execution.id), leer: (u, h) => http({ url: u, method: 'GET', headers: h }), enviar: (u, b) => http({ url: u, method: 'POST', headers: { 'x-api-key': $env.INTERNAL_API_KEY, 'Content-Type': 'application/json' }, body: b, timeout: 60000 }) }) } catch (e) { res.etiquetado = { error: String((e && e.message) || e).slice(0, 200) } }\n  salida.resultados.push(res)\n}\nreturn [{ json: salida }]\n"
+        }
+      }
+    ],
+    "connections": {
+      "Webhook · a mano (con llave)": {
+        "main": [
+          [
+            {
+              "node": "① Plan del día (topes escritos)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Horario diario 06:30 UTC": {
+        "main": [
+          [
+            {
+              "node": "① Plan del día (topes escritos)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "① Plan del día (topes escritos)": {
+        "main": [
+          [
+            {
+              "node": "② Ejecutar el plan y medir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-10-09T06:50:57.693Z",
+    "updatedAt": "2026-10-09T06:50:57.693Z",
+    "workflowPublishHistory": [
+      {
+        "id": 2404,
+        "workflowId": "EZXAFQvKZsJlvGNO",
+        "versionId": "3e5fadee-be72-47c3-b45e-2d9f582b0361",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-10-09T06:50:57.859Z"
+      }
+    ]
+  }
+}
