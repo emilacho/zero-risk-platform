@@ -81,6 +81,7 @@ function bloquePrimerNivel(ctx) {
   var id = (ctx && ctx.identidad) || { colores: [], tipografias: [] }, mo = (ctx && ctx.moneda) || { codigo: null, fuente: 'sin dato' }
   var L = []
   L.push('══════ EL PLAN A PRIMER NIVEL ══════')
+  L.push('Este bloque MANDA sobre el documento de referencia donde se contradigan: no hay un reparto fijo del presupuesto entre canales (lo propones tú desde la meta) y ninguna regla interna que el documento mencione se le muestra al cliente.')
   L.push('')
   L.push('QUÉ SE LE MUESTRA AL CLIENTE. El plan lo lee el dueño del negocio. No escribas en él reglas ni topes internos de la agencia, ni a quién se le atribuyen, ni nombres de campos, tablas, variables o herramientas internas (nada con guiones bajos ni en código).')
   L.push('Cuando cites de dónde sale un dato, nómbralo en lenguaje llano (por ejemplo «la ficha pública del negocio en el mapa», «las estadísticas del sitio», «la biblioteca pública de anuncios»), no por su nombre interno.')

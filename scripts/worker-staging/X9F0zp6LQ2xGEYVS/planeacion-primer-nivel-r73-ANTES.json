@@ -3,12 +3,12 @@
   "name": "Zero Risk — planeacion (esqueleto B0 · piezas se pegan en C2)",
   "description": null,
   "active": true,
-  "activeVersionId": "481ed43c-f2ab-4703-b377-0bf89e5dd3cf",
+  "activeVersionId": "595d0e4b-1499-4188-afbc-b2f72d2e5a5a",
   "createdAt": "2026-09-09T13:37:28.243Z",
-  "updatedAt": "2026-10-11T16:26:36.845Z",
+  "updatedAt": "2026-10-11T17:17:32.750Z",
   "isArchived": false,
-  "versionId": "481ed43c-f2ab-4703-b377-0bf89e5dd3cf",
-  "versionCounter": 50,
+  "versionId": "595d0e4b-1499-4188-afbc-b2f72d2e5a5a",
+  "versionCounter": 52,
   "sourceWorkflowId": null,
   "triggerCount": 1,
   "nodes": [
@@ -1586,7 +1586,7 @@
     }
   ],
   "activeVersion": {
-    "versionId": "481ed43c-f2ab-4703-b377-0bf89e5dd3cf",
+    "versionId": "595d0e4b-1499-4188-afbc-b2f72d2e5a5a",
     "workflowId": "X9F0zp6LQ2xGEYVS",
     "nodes": [
       {
@@ -3139,16 +3139,16 @@
     "name": null,
     "description": null,
     "autosaved": false,
-    "createdAt": "2026-10-11T16:26:36.849Z",
-    "updatedAt": "2026-10-11T16:26:36.849Z",
+    "createdAt": "2026-10-11T17:17:32.754Z",
+    "updatedAt": "2026-10-11T17:17:32.754Z",
     "workflowPublishHistory": [
       {
-        "id": 2557,
+        "id": 2569,
         "workflowId": "X9F0zp6LQ2xGEYVS",
-        "versionId": "481ed43c-f2ab-4703-b377-0bf89e5dd3cf",
+        "versionId": "595d0e4b-1499-4188-afbc-b2f72d2e5a5a",
         "event": "activated",
         "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
-        "createdAt": "2026-10-11T16:26:37.023Z"
+        "createdAt": "2026-10-11T17:17:32.963Z"
       }
     ]
   }

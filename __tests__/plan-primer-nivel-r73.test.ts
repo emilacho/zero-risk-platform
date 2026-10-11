@@ -161,6 +161,7 @@ describe('5 · las instrucciones al redactor (generales)', () => {
     const t = texto(clientes[0])
     for (const re of [/NO SALE DE UN TOPE|SALE DE LA META/, /DOS ESCENARIOS/, /capacidad operativa/, /PREGUNTA/, /MOMENTOS DE COMPRA/, /No uses un calendario fijo de ning/, /IDEA DE MARCA/, /meta de recordaci/, /DISPONIBILIDAD/, /CALENDARIO DE 12 SEMANAS/, /RECOMPRA Y RETENCI/, /AGÉNTICA/, /variantes creativas/, /IDENTIDAD VISUAL Y MONEDA/]) expect(t).toMatch(re)
     expect(t).toMatch(/no escribas en él reglas ni topes internos/i)
+    expect(t).toMatch(/Este bloque MANDA sobre el documento de referencia/); expect(t).toMatch(/no hay un reparto fijo del presupuesto entre canales/)
   })
   it.each(clientes)('$rubro: lleva SUS colores, tipografías y moneda, y no los de otro', (c) => {
     const t = texto(c)
