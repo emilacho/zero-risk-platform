@@ -1,0 +1,485 @@
+{
+ "id": "PzZ3b6cY6DYmIaOQ",
+ "name": "Zero Risk — Oficina · la puerta (sobre producir → encargo o pasarela) · CC#2",
+ "description": null,
+ "active": false,
+ "activeVersionId": null,
+ "createdAt": "2026-10-09T14:58:31.653Z",
+ "updatedAt": "2026-10-10T09:24:12.111Z",
+ "isArchived": false,
+ "versionId": "5ca131c4-2f89-44db-a6ec-bd831253df48",
+ "versionCounter": 3,
+ "sourceWorkflowId": null,
+ "triggerCount": 0,
+ "nodes": [
+  {
+   "name": "Webhook · oficina",
+   "webhookId": "oficina-puerta-0001",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "zero-risk/oficina",
+    "responseMode": "onReceived",
+    "options": {}
+   },
+   "id": "453c7d95-c8ea-4eaa-a35a-2dea92906e5d"
+  },
+  {
+   "name": "⓪ Sobre · llave",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ⓪ SOBRE · LLAVE · CC#2 · 2026-10-09 · flujo `zero-risk/oficina` (la PUERTA de la oficina de creativos). INACTIVO hasta que Emilio diga.\r\n// Solo lo despierta la sala (llave de despacho, lección E67). NO valida el resto del sobre: si NO trae `familia`, el cuerpo sigue TAL CUAL a la pieza simple (pasarela) y ella valida lo suyo;\r\n// si trae `familia`, la ruta /api/oficina/encargos valida (dry_run explícito, uuid, tope) ANTES de gastar nada.\r\nconst w = $input.first().json || {}\r\nconst body = w.body && typeof w.body === 'object' && !Array.isArray(w.body) ? w.body : {}\r\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\r\n\r\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\r\nif (!esperada) {\r\n  throw new Error('OFICINA_CERRADA · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · esta puerta queda cerrada hasta que exista · E67.')\r\n}\r\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\r\nlet ok = recibida.length === esperada.length\r\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\r\nif (!ok) {\r\n  throw new Error('OFICINA_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · solo la sala despierta esta puerta · E67.')\r\n}\r\n\r\nreturn [{ json: { body, llave: recibida, tiene_familia: typeof body.familia === 'string' && body.familia.trim() !== '' } }]\r\n"
+   },
+   "id": "3ad5413e-b0ea-414c-9b04-62d90928d31b"
+  },
+  {
+   "name": "⓪ ¿Trae familia?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.tiene_familia }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "id": "9d37fb53-d0ef-43ad-b439-1233b5063603"
+  },
+  {
+   "name": "① Abrir el encargo",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    780,
+    -150
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/oficina/encargos",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-sala-dispatch-key",
+       "value": "={{ $json.llave }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.body) }}",
+    "options": {
+     "timeout": 120000,
+     "response": {
+      "response": {
+       "neverError": true,
+       "fullResponse": true
+      }
+     }
+    }
+   },
+   "id": "1c28cb6f-e8fd-4924-a716-9b011f3a1e23"
+  },
+  {
+   "name": "① ¿Qué pasó?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1040,
+    -150
+   ],
+   "parameters": {
+    "jsCode": "// ① ¿QUÉ PASÓ AL ABRIR? · CC#2 · 2026-10-09 · decide el camino de la puerta con la respuesta REAL de /api/oficina/encargos (HTTP con respuesta completa: statusCode + body).\r\n//   409 `oficina_no_abre` (apagada · familia no activa · cliente fuera del ensayo)  → PASARELA: el sobre sigue, intacto, por la pieza simple (el comportamiento de hoy)\r\n//   200 `esperar`                                                                   → TURNO: arranca el flujo de turnos con el primer paso\r\n//   200 `cerrado`                                                                   → CABLE: el encargo cerró al abrir (fallido, p. ej. la parte no existe) y la sala se entera\r\n//   200 `ya_existia`                                                                → NADA: el mismo pedido ya tiene encargo (idempotente)\r\n// Cualquier otra cosa se DETIENE con su motivo (nunca se traga un error ni se manda a la pasarela por duda).\r\nconst s = $('⓪ Sobre · llave').first().json\r\nconst e = $input.first().json || {}\r\nif (e.error && typeof e.error === 'object') {\r\n  throw new Error('OFICINA_ABRIR_NO_LLEGO · la llamada a /api/oficina/encargos falló antes de recibir respuesta (' + String(e.error.message || e.error.name || 'sin detalle').slice(0, 160) + ') · se DETIENE: no se manda a la pieza simple por duda')\r\n}\r\nconst status = Number(e.statusCode)\r\nconst b = e.body && typeof e.body === 'object' ? e.body : {}\r\n\r\nconst cable = (resultado) => ({\r\n  event_type: 'run_completed',\r\n  worker_id: $workflow.id,\r\n  worker_name: 'oficina',\r\n  resultado,\r\n  brief_id: s.body.brief_id || null,\r\n  client_id: s.body.client_id || null,\r\n  tenant_id: s.body.tenant_id || s.body.client_id || null,\r\n  _sala_correlation_id: s.body._sala_correlation_id || null,\r\n  _journey_id: s.body._journey_id || null,\r\n  ts: new Date().toISOString(),\r\n})\r\nconst base = { llave: s.llave, cuerpo_original: s.body }\r\n\r\nif (status === 409 && b.error === 'oficina_no_abre') return [{ json: { ...base, ruta: 'pasarela', motivo: b.motivo || null } }]\r\nif (status === 200 && b.accion === 'esperar' && b.encargo_id && b.turno) return [{ json: { ...base, ruta: 'turno', turno_body: { encargo_id: b.encargo_id, turno: b.turno } } }]\r\nif (status === 200 && b.accion === 'cerrado') return [{ json: { ...base, ruta: 'cable', payload_cable: cable(String(b.resultado_para_la_sala || 'fallido')), motivo: b.motivo || null } }]\r\nif (status === 200 && b.accion === 'ya_existia') return [{ json: { ...base, ruta: 'nada', encargo_id: b.encargo_id || null } }]\r\nthrow new Error('OFICINA_ABRIR_RECHAZADO · /api/oficina/encargos contestó ' + status + ' · ' + String(b.error || b.detalle || JSON.stringify(b)).slice(0, 240) + ' · se DETIENE')\r\n"
+   },
+   "id": "d35d1b6e-24d0-46bf-9325-e92ae37329f8"
+  },
+  {
+   "name": "① ¿Pasarela?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1300,
+    -150
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.ruta }}",
+       "rightValue": "pasarela",
+       "operator": {
+        "type": "string",
+        "operation": "equals"
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "id": "cecb2461-99fa-41e1-a95e-53ec821a6ae3"
+  },
+  {
+   "name": "① ¿Turno?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1560,
+    -150
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.ruta }}",
+       "rightValue": "turno",
+       "operator": {
+        "type": "string",
+        "operation": "equals"
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "id": "95d7f9d9-e83e-4eef-b2fc-ff3e480f603f"
+  },
+  {
+   "name": "① ¿Cable?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1820,
+    -150
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.ruta }}",
+       "rightValue": "cable",
+       "operator": {
+        "type": "string",
+        "operation": "equals"
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "id": "3c985f88-1e97-4222-ac88-8488c604df61"
+  },
+  {
+   "name": "Pasarela · pieza simple",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    1560,
+    150
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\\/+$/, '') }}/zero-risk/pieza",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-sala-dispatch-key",
+       "value": "={{ $json.llave }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.cuerpo_original || $json.body) }}",
+    "options": {
+     "timeout": 30000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   },
+   "id": "fb389097-e26e-4461-a180-a6e3522ed7be"
+  },
+  {
+   "name": "Turno · arrancar",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    1820,
+    -300
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\\/+$/, '') }}/zero-risk/oficina-turno",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-sala-dispatch-key",
+       "value": "={{ $json.llave }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.turno_body) }}",
+    "options": {
+     "timeout": 30000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   },
+   "id": "e819f29e-7b08-4519-88b6-fa4fb9aca079"
+  },
+  {
+   "name": "Cable de vuelta · sala",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    2080,
+    -50
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "x-source",
+       "value": "n8n-oficina"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.payload_cable) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   },
+   "id": "1ae1a87d-f260-4ca5-ab0f-dd7117314a86"
+  }
+ ],
+ "connections": {
+  "Webhook · oficina": {
+   "main": [
+    [
+     {
+      "node": "⓪ Sobre · llave",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ Sobre · llave": {
+   "main": [
+    [
+     {
+      "node": "⓪ ¿Trae familia?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ ¿Trae familia?": {
+   "main": [
+    [
+     {
+      "node": "① Abrir el encargo",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Pasarela · pieza simple",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① Abrir el encargo": {
+   "main": [
+    [
+     {
+      "node": "① ¿Qué pasó?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① ¿Qué pasó?": {
+   "main": [
+    [
+     {
+      "node": "① ¿Pasarela?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① ¿Pasarela?": {
+   "main": [
+    [
+     {
+      "node": "Pasarela · pieza simple",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "① ¿Turno?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① ¿Turno?": {
+   "main": [
+    [
+     {
+      "node": "Turno · arrancar",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "① ¿Cable?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① ¿Cable?": {
+   "main": [
+    [
+     {
+      "node": "Cable de vuelta · sala",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "nodeGroups": [],
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "staticData": null,
+ "pinData": null,
+ "meta": null,
+ "tags": [],
+ "shared": [
+  {
+   "role": "workflow:owner",
+   "workflowId": "PzZ3b6cY6DYmIaOQ",
+   "projectId": "xKBOyp07nrGbu4ob",
+   "project": {
+    "id": "xKBOyp07nrGbu4ob",
+    "name": "Emilio  Perez  <emilacho@hotmail.com>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-04-18T13:41:21.856Z",
+    "updatedAt": "2026-04-18T13:51:26.012Z"
+   },
+   "createdAt": "2026-10-09T14:58:31.653Z",
+   "updatedAt": "2026-10-09T14:58:31.653Z"
+  }
+ ],
+ "activeVersion": null
+}

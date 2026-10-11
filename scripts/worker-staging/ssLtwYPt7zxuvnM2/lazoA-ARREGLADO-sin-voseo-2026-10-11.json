@@ -1,0 +1,450 @@
+{
+ "id": "kSSAvCbEfHs2Hoa0",
+ "name": "Zero Risk — Brand Book · Lazo A corrección (sub-workflow)",
+ "description": null,
+ "active": false,
+ "activeVersionId": null,
+ "createdAt": "2026-06-29T20:26:07.642Z",
+ "updatedAt": "2026-10-10T17:10:04.148Z",
+ "isArchived": false,
+ "versionId": "b19d9849-ec82-494e-8528-cf27249627a3",
+ "versionCounter": 31,
+ "sourceWorkflowId": null,
+ "triggerCount": 0,
+ "nodes": [
+  {
+   "id": "bba-trigger",
+   "name": "Lazo A · trigger (Execute Workflow)",
+   "type": "n8n-nodes-base.executeWorkflowTrigger",
+   "typeVersion": 1,
+   "position": [
+    120,
+    400
+   ],
+   "parameters": {}
+  },
+  {
+   "id": "bba--bba-review-prep",
+   "name": "[BBA] Review prep",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    360,
+    400
+   ],
+   "parameters": {
+    "jsCode": "// Lazo A · Review prep · arma la tarea de revisión para los 3 jefes sobre el\n// borrador consolidado. Patrón SPEC-camino-iii-lazo-correccion: los jefes\n// DIAGNOSTICAN (emiten correcciones accionables), el consolidador CORRIGE.\n//\n// 2026-08-04 (diff v2) · 3 cambios:\n//  (a) FORMAT + TU EJE van ANTES de la evidencia · el recorte de cola sólo puede\n//      comerse EVIDENCIA, nunca la instrucción de salida ni el eje del revisor.\n//  (b) evidencia por LÍNEAS ETIQUETADAS con tope por campo · NO JSON.stringify().slice(),\n//      que con 8 claves corta a mitad de token y entrega JSON roto.\n//  (c) centinelas ('unknown') tratados como vacío · 2ª capa (la 1ª está en Fan-out prep).\nconst inp = $json;\nconst draft = inp.brand_book_draft || {};\nconst grounding = inp._grounding_refs || {};\nconst clientId = inp.client_id || draft.client_id;\nconst cycle = Number(inp.cycle) || 0;\n// [GUARD P0 · CC#2 2026-07-02 re-apply post-revert] Skip degenerado · si EVIDENCIA\n// o BORRADOR vacíos ({}/sin keys) → 0 items (los 3 revisores no corren · loop termina).\nconst _draftEmpty = !draft || typeof draft !== 'object' || Object.keys(draft).length === 0;\nconst _groundingEmpty = !grounding || typeof grounding !== 'object' || Object.keys(grounding).length === 0;\nif (_draftEmpty || _groundingEmpty) {\n  console.warn('[BBA][guard] skip review · brand_book_draft o _grounding_refs vacios · client=' + (clientId || '?') + ' cycle=' + cycle);\n  return [];\n}\n\nconst FORMAT =\n  'Emite SOLO JSON: {\"corrections\":[{eje,campo,severidad,donde,problema,por_que,cambio_sugerido}]}.\\n' +\n  '- eje: \"factual\"|\"voz\"|\"posicionamiento\"|\"cliente\"\\n' +\n  '- campo: EXACTAMENTE uno de \"positioning\"|\"icp_summary\"|\"voice_description\"|' +\n  '\"forbidden_words\"|\"required_terminology\"|\"customer_angle\"|\"retention_notes\"\\n' +\n  '- severidad: \"rojo\"|\"ámbar\" (rojo = choca con la evidencia / regla dura)\\n' +\n  '- Regla: NO emitas \"rojo\" sin un objeto-corrección accionable. Sin prosa.\\n' +\n  '- Si el borrador ya está bien en TU eje, devuelve {\"corrections\":[]}.';\n\n// evidencia por líneas etiquetadas · nunca produce JSON a medias\nconst SENTINELAS = new Set(['unknown', 'no especificado', 'n/a', 'na', '-', '']);\nconst ev = (v) => { const s = String(v == null ? '' : v).trim().toLowerCase(); return SENTINELAS.has(s) ? '' : String(v).trim(); };\nconst ln = (label, v, max) => {\n  const a = Array.isArray(v) ? v : (v ? [v] : []);\n  const items = a.map((s) => typeof s === 'string' ? s : (s && (s.name || s.audience_segment)) || '')\n                 .filter(Boolean).slice(0, 3).map((t) => String(t).replace(/\\s+/g, ' ').trim().slice(0, max));\n  return items.length ? '- ' + label + ': ' + items.join(' · ') + '\\n' : '';\n};\nconst icp = grounding.icp_signals || {};\nconst evidenciaTxt =\n  (ev(grounding.client_name) ? 'Cliente: ' + ev(grounding.client_name) + '\\n' : '') +\n  (ev(grounding.industry) ? 'Industria: ' + ev(grounding.industry) + '\\n' : '') +\n  'Resumen: ' + String(grounding.discovery_summary || '').slice(0, 1200) + '\\n' +\n  ln('Competidores', (grounding.competitors || []).map((c) => c && c.name), 60) +\n  ln('Segmentos ICP', icp.segments, 90) +\n  ln('Dolores', icp.pain_points, 110) +\n  ln('Objetivos', icp.goals, 110) +\n  ln('Objeciones', icp.objections, 110) +\n  ln('Canales preferidos', icp.preferred_channels, 60);\n\n// HEAD · lo que NUNCA se puede recortar (instrucción + diagnóstico del juez)\nconst head =\n  'Eres revisor de un borrador de BRAND BOOK. Diagnostica (NO reescribas) contra la ' +\n  'EVIDENCIA real del cliente. Tu rol corrige solo TU eje.\\n\\n' +\n  FORMAT + '\\n\\n' +\n  (Array.isArray(inp.low_fields) && inp.low_fields.length\n    ? 'EL JUEZ REPROBÓ estos campos (groundedness < 0.85): ' +\n      inp.low_fields.map((f) => f + ' (' + ((inp.scores || {})[f] == null ? '?' : (inp.scores || {})[f]) + ')').join(' · ') +\n      '. Prioriza correcciones que SUBAN su groundedness contra la EVIDENCIA.\\n\\n'\n    : '');\n// TAIL · lo recortable, en orden de importancia creciente hacia el final\n// PROYECCION AL LAZO (2026-08-09 CC#2) · el borrador REAL mide ~9.874 ch y la ventana del\n// prompt es 3.000/2.500 ⇒ JSON.stringify(draft).slice() cortaba por el final y voice_description,\n// customer_angle y retention_notes NO LLEGABAN NUNCA a sus revisores (hallazgo CC#1 · voz 0.50).\n// El presupuesto esta al filo (Review ~7.923 vs 7.900) ⇒ NO se agranda la ventana: se PROYECTA.\n// Cada revisor recibe SUS campos con holgura y el resto como contexto corto ⇒ los 5 entran\n// ENTEROS para quien los diagnostica. Recorte POR CAMPO, nunca un slice global (no parte JSON).\n// OJO: esto achica SOLO el texto del prompt. El canal de datos (brand_book_draft en el return)\n// sigue llevando el borrador COMPLETO · si se proyectara ahi, se perderian campos en el cierre.\nconst _txt = (v, max) => {\n  if (v === undefined || v === null) return undefined;\n  if (Array.isArray(v)) { const o = []; let n = 0;\n    for (const it of v) { const s = String(typeof it === \"string\" ? it : JSON.stringify(it));\n      if (n + s.length > max) break; o.push(s.slice(0, max)); n += s.length; } return o; }\n  const s = String(v); return s.length > max ? s.slice(0, max) : s;\n};\nconst _proyectar = (d, mios, capMio, capOtro, ventana) => {\n  const ORDEN = [\"positioning\",\"icp_summary\",\"voice_description\",\"forbidden_words\",\"required_terminology\",\"customer_angle\",\"retention_notes\"];\n  let otro = capOtro;\n  for (let intento = 0; intento < 6; intento++) {\n    const out = {};\n    for (const f of ORDEN) {\n      if (d[f] === undefined || d[f] === null) continue;\n      const v = _txt(d[f], mios.indexOf(f) !== -1 ? capMio : otro);\n      if (v !== undefined && !(Array.isArray(v) ? v.length === 0 : !String(v).trim())) out[f] = v;\n    }\n    const s = JSON.stringify(out);\n    if (s.length <= ventana || otro <= 40) return { obj: out, txt: s, _otro: otro };\n    otro = Math.floor(otro / 2);\n  }\n  return { obj: {}, txt: \"{}\", _otro: otro };\n};\n\n// ventana 3.000 · el que diagnostica ve SUS campos con 1.000, el resto como contexto 250.\nconst MIOS = {\n  \"brand-strategist\": [\"positioning\", \"icp_summary\"],\n  \"editor-en-jefe\": [\"voice_description\", \"forbidden_words\", \"required_terminology\"],\n  \"jefe-client-success\": [\"customer_angle\", \"retention_notes\"],\n};\nconst _proy = {};\nfor (const k of Object.keys(MIOS)) _proy[k] = _proyectar(draft, MIOS[k], 1000, 250, 3000);\nconst tailFor = (k) =>\n  'BORRADOR:\\n' + _proy[k].txt + '\\n\\n' +\n  'EVIDENCIA:\\n' + evidenciaTxt.slice(0, 4000);\n\nconst cap = (t) => t.slice(0, 7900);\nconst reviewers = [\n  { reviewer: 'brand-strategist', agent: 'brand-strategist',\n    task: cap(head + 'TU EJE: posicionamiento + ICP · ¿el posicionamiento contradice la evidencia? ¿ICP refleja la data?\\n\\n' + tailFor('brand-strategist')) },\n  // 2026-08-28 · el editor-en-jefe salió del lazo de CORRECCIÓN: su eje no gatea,\n  // así que su dictamen nunca podía llegar al productor (4 de 4 descartadas en la\n  // corrida 89028). Sigue siendo lente en la CONSTRUCCIÓN del manual · otro flujo.\n  { reviewer: 'jefe-client-success', agent: 'jefe-client-success',\n    task: cap(head + 'TU EJE: cliente · ¿el ICP/ángulo refleja la retención? ¿algo no aterriza en valor cliente?\\n\\n' + tailFor('jefe-client-success')) },\n];\n\n// FIX-FORWARD · UN solo item con las 3 tasks keyed por revisor (patrón [BB] Fan-out prep).\nconst tasks = {\n  'brand-strategist': reviewers[0].task,\n  'jefe-client-success': reviewers[1].task,\n};\nreturn [{ json: {\n  tasks, brand_book_draft: draft, _grounding_refs: grounding, client_id: clientId, cycle,\n  low_fields: Array.isArray(inp.low_fields) ? inp.low_fields : [],\n  scores: inp.scores || {},\n  _evidencia_chars: evidenciaTxt.length,\n  _draft_chars: JSON.stringify(draft).length,\n  _draft_proy_chars: { \"brand-strategist\": _proy[\"brand-strategist\"].txt.length, \"editor-en-jefe\": _proy[\"editor-en-jefe\"].txt.length, \"jefe-client-success\": _proy[\"jefe-client-success\"].txt.length },\n} }];"
+   }
+  },
+  {
+   "id": "bba-rev-brand-strategist",
+   "name": "Revisor · brand-strategist",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    600,
+    200
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"agent\": \"brand-strategist\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bba-revisor-brand-strategist-c{{ $json.cycle }}\",\n  \"task\": {{ JSON.stringify($json.tasks['brand-strategist']) }},\n  \"context\": { \"role\": \"brand_book_corrector\", \"reviewer\": \"brand-strategist\" }\n}",
+    "options": {
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     },
+     "timeout": 800000
+    }
+   }
+  },
+  {
+   "id": "bba-rev-jefe-client-success",
+   "name": "Revisor · jefe-client-success",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    600,
+    600
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"agent\": \"jefe-client-success\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bba-revisor-jefe-client-success-c{{ $json.cycle }}\",\n  \"task\": {{ JSON.stringify($json.tasks['jefe-client-success']) }},\n  \"context\": { \"role\": \"brand_book_corrector\", \"reviewer\": \"jefe-client-success\" }\n}",
+    "options": {
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     },
+     "timeout": 800000
+    }
+   }
+  },
+  {
+   "id": "bba--bba-merge-corrections",
+   "name": "[BBA] Merge corrections",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    860,
+    400
+   ],
+   "parameters": {
+    "jsCode": "// Lazo A · Merge corrections · consolida las correcciones de los 3 jefes y\r\n// decide si hay que seguir corrigiendo. NO vinculante (no es voto pass/reject ·\r\n// spec Lazo A): es mejora iterativa hasta converger o agotar 3 ciclos (§150).\r\n//\r\n// Input: items de los 3 review-agents (cada uno con `response` = JSON corrections)\r\n// Output: { brand_book_draft, _grounding_refs, client_id, cycle, corrections, keep_going }\r\n\r\n// FIX 2026-06-30 (Fix B · recorte de volumen) · Lazo A a 1 ciclo. Es NO VINCULANTE\r\n// (la fidelidad decide canon · no estos votos) · y era el multiplicador de costo\r\n// (corría 3-4 ciclos × 3 revisores POR cada ciclo de fidelidad → ~60 invocaciones).\r\n// Ahora · 1 pasada de diagnóstico + a lo sumo 1 re-síntesis · Re-síntesis → Exit\r\n// (sin loop-back · ver build-correction-subworkflow.mjs).\r\nconst MAX_CYCLES = 3;\r\nconst items = $input.all();\n\n// 2026-08-01 · CAUSA RAÍZ (commit 486ceaf \"el Lazo A borraba el draft\"): el borrador y la\n// evidencia se toman del TRIGGER, no de items[0] — items[0] es la RESPUESTA HTTP de un\n// revisor, y el nodo HTTP reemplaza el ítem ⇒ draft = {} ⇒ el juez puntuaba 0.\nconst trig = (() => { try { return $('Lazo A · trigger (Execute Workflow)').first().json || {}; } catch (e) { return {}; } })();\n// 2026-08-28 (Sprint B · pieza d) · con la arista de vuelta puesta, el lazo da\n// más de una vuelta. Si el nodo releyera el disparador: el contador quedaría\n// congelado (bucle infinito) y el borrador volvería al original (la corrección\n// de la vuelta anterior se perdería). Preferimos lo que dejó la vuelta previa;\n// en la 1ª vuelta `$('…parse')` lanza porque el nodo aún no corrió → disparador.\nconst previo = (() => { try { return $('[BBA] Re-síntesis parse').first().json || {}; } catch (e) { return {}; } })();\nconst hayVueltaPrevia = !!(previo && previo.brand_book_draft && Object.keys(previo.brand_book_draft).length);\nconst src = hayVueltaPrevia ? previo : trig;\nconst draft = src.brand_book_draft || {};\nconst cycle = Number(src.cycle) || 0;\n// La EVIDENCIA y los CAMPOS BAJOS salen SIEMPRE del disparador: son el insumo fijo\n// del lazo, la re-síntesis no los reescribe, y `Re-síntesis parse` no propaga\n// `low_fields` — tomarlos del previo ensancharía el alcance en la vuelta 2.\nconst grounding = trig._grounding_refs || {};\nconst clientId = trig.client_id || draft.client_id;\nconst lowFields = Array.isArray(trig.low_fields) ? trig.low_fields : [];\r\n\r\nconst VALID_EJE = new Set(['factual', 'voz', 'posicionamiento', 'cliente']);\r\nconst VALID_SEV = new Set(['rojo', 'ámbar', 'ambar']);\r\n\r\n// 2026-08-28 (③) · los dictámenes ilegibles se CUENTAN. Antes se tragaban en\n// silencio y «el revisor no encontró nada» se leía igual que «el revisor habló y\n// no le entendimos».\nconst _rotos = [];\nfunction extract(item, idx) {\n  var text = '';\n  try {\n    const j = item.json || {};\n    const body = j.body || j;\n    text = typeof body.response === 'string' ? body.response : JSON.stringify(body);\n    const m = text.match(/\\{[\\s\\S]*\\}/);\n    if (!m) { _rotos.push({ i: idx, motivo: 'sin_json', muestra: String(text).slice(0, 140) }); return []; }\n    const arr = (JSON.parse(m[0]).corrections) || [];\n    return Array.isArray(arr) ? arr : [];\n  } catch (e) {\n    _rotos.push({ i: idx, motivo: String((e && e.message) || e).slice(0, 120), muestra: String(text).slice(0, 140) });\n    console.warn('[BBA][roto] dictamen ilegible · revisor #' + idx + ' · ' + String((e && e.message) || e));\n    return [];\n  }\n}\r\n\r\n// consolida + sanea · descarta correcciones malformadas (no rompe el lazo ·\r\n// hardening como en camino-iii voto-red-nunca-se-dropea, PR #233).\r\nconst corrections = [];\nfor (let _i = 0; _i < items.length; _i++) {\n  const it = items[_i];\n  for (const c of extract(it, _i)) {\r\n    if (!c || typeof c !== 'object') continue;\r\n    const eje = String(c.eje || '').toLowerCase();\r\n    const sev = String(c.severidad || '').toLowerCase();\r\n    if (!VALID_EJE.has(eje)) continue;\r\n    corrections.push({\r\n      eje,\n      campo: String(c.campo || ''),   // se propaga · sin esto el productor no lo ve\n      severidad: VALID_SEV.has(sev) ? sev.replace('ambar', 'ámbar') : 'ámbar',\r\n      donde: String(c.donde || ''),\r\n      problema: String(c.problema || ''),\r\n      por_que: String(c.por_que || ''),\r\n      cambio_sugerido: String(c.cambio_sugerido || ''),\r\n    });\r\n  }\r\n}\r\n\r\n// Re-sintetizar UNA vez si hay correcciones accionables · Re-síntesis → Exit\r\n// (no hay loop-back · el cap de 1 ciclo lo da el wiring, no este contador).\r\n// ADR-020 §7.3 · SOLO el ROJO dispara re-síntesis · el ámbar es advisory y NO itera.\n// 2ª capa · relevancia-al-gate: solo amerita ciclo lo que puede mover la fidelidad\n// (ejes factual/posicionamiento → positioning · icp_summary). Lo estilístico jamás cicla.\n// 2026-08-04 (diff v2) · VOCABULARIO. Los revisores emiten el vocabulario que este mismo\n// workflow les define en [BBA] Review prep (\"factual\"|\"voz\"|\"posicionamiento\"|\"cliente\").\n// El filtro TRADUCE ese vocabulario a los campos que el juez realmente gatea. Antes exigía\n// {factual,posicionamiento} y se comía en silencio TODOS los rojos de 'cliente' — que es\n// justo donde vive el ICP (forense CC#1 · exec 76545 · el campo que hizo fallar el tiro).\nconst EJE_A_CAMPO = {\n  posicionamiento: ['positioning'],\n  cliente: ['icp_summary'],\n  factual: ['positioning', 'icp_summary'],\n  voz: [],\n};\n// 2ª capa (§7.3 relevancia-al-gate) · sólo amerita ciclo lo que puede mover EL campo QUE FALLÓ.\nconst objetivo = (Array.isArray(lowFields) && lowFields.length) ? lowFields : ['positioning', 'icp_summary'];\n// 2026-08-28 · el filtro mira EL CAMPO. Medido en 88939 y 89028: 3 rojos sobre\n// campos que el productor tiene PROHIBIDO escribir bloqueaban sólo por compartir\n// eje con uno gateado. Al productor le llegaba «arreglá retention_notes» con la\n// orden de reescribir únicamente positioning/icp_summary.\nconst CAMPOS_VALIDOS = ['positioning', 'icp_summary', 'voice_description',\n  'forbidden_words', 'required_terminology', 'customer_angle', 'retention_notes'];\nconst _ruta = { declarado: 0, donde: 0, eje: 0 };\nfunction campoDe(c) {\n  const dec = String(c.campo || '').trim();\n  if (CAMPOS_VALIDOS.indexOf(dec) !== -1) { _ruta.declarado++; return dec; }\n  // red · el primer token de `donde` · convención observada 24/24, nunca pedida\n  const tok = String(c.donde || '').trim().split(/[\\s\\u00b7,:(]/)[0];\n  if (CAMPOS_VALIDOS.indexOf(tok) !== -1) { _ruta.donde++; return tok; }\n  _ruta.eje++; return null;   // sin campo legible → se cae al eje (bloquea de más)\n}\nconst apuntaAlObjetivo = (c) => {\n  const campo = campoDe(c);\n  return campo ? objetivo.indexOf(campo) !== -1\n               : (EJE_A_CAMPO[c.eje] || []).some((f) => objetivo.indexOf(f) !== -1);\n};\nconst bloqueantes = corrections.filter((c) =>\n  c.severidad === 'rojo' &&\n  apuntaAlObjetivo(c) &&\n  c.cambio_sugerido.trim().length > 0);\n// U1 (Consejero) · lo que el filtro DESCARTA tiene que VERSE. Sin esto, un eje nuevo o mal\n// escrito se traga correcciones válidas en silencio — el defecto de 76545, otra vez.\nconst _desc = {};\nfor (const c of corrections) {\n  if (bloqueantes.indexOf(c) !== -1) continue;\n  const mapea = apuntaAlObjetivo(c);   // el descarte cuenta la MISMA historia que el filtro\n  const motivo = !(c.eje in EJE_A_CAMPO) ? 'eje_desconocido'\n               : !mapea ? 'eje_no_gateado'\n               : c.severidad !== 'rojo' ? 'no_rojo'\n               : 'sin_cambio_sugerido';\n  const k = c.eje + '|' + c.severidad + '|' + motivo;\n  if (!_desc[k]) _desc[k] = { eje: c.eje, severidad: c.severidad, motivo, conteo: 0 };\n  _desc[k].conteo++;\n}\nconst ejes_descartados = Object.keys(_desc).map((k) => _desc[k]);\n// §7.3 · presupuesto top-N · el creador recibe foco, no un volcado de nitpicks.\nconst TOP_N = 5;\nconst bloqueantes_top = bloqueantes.slice(0, TOP_N);\n// 2026-08-28 (Sprint B · pieza c) · el tope entra en la DECISIÓN. Antes esta\n// línea sólo miraba los bloqueantes y `MAX_CYCLES` era un número muerto: con la\n// arista de vuelta puesta, un rojo que el creador no logre resolver haría girar\n// el lazo para siempre. Con el tope: hasta 3 correcciones y afuera.\nconst topeAgotado = cycle >= MAX_CYCLES;\nconst keepGoing = bloqueantes_top.length > 0 && !topeAgotado;\n\n// CC#2 F3 · cuenta respuestas PARSEABLES con la clave `corrections` presente (aunque venga\n// vacía) · NO por longitud (un revisor sin hallazgos es legítimo) ni por ausencia de `.error`\n// (un 401 con neverError puede devolver {message}/{detail}/HTML y colarse como OK).\nconst parseable = (it) => { try {\n  const b = (it.json && it.json.body) || it.json || {};\n  const t = typeof b.response === 'string' ? b.response : JSON.stringify(b);\n  const m = t.match(/\\{[\\s\\S]*\\}/);\n  return !!m && Array.isArray(JSON.parse(m[0]).corrections);\n} catch (e) { return false; } };\nconst reviewers_ok = items.filter(parseable).length;\r\n\r\nreturn [{ json: {\n  brand_book_draft: draft,\n  _grounding_refs: grounding,\n  client_id: clientId,\n  cycle,\n  corrections,\n  corrections_bloqueantes: bloqueantes_top,\n  keep_going: keepGoing,\n  reviewers_ok,\n  low_fields: lowFields,\n  ejes_descartados,\n  _lazo_a: { cycle, max_cycles: MAX_CYCLES, tope_agotado: topeAgotado,\n             revisores_rotos: _rotos, ruta_campo: _ruta,\n             motivo_parada: keepGoing ? null : (topeAgotado ? 'tope_agotado' : 'sin_bloqueantes'),\n             corrections_count: corrections.length,\n             bloqueantes_count: bloqueantes.length, keep_going: keepGoing, reviewers_ok,\n             ejes_descartados },\n} }];\r\n"
+   }
+  },
+  {
+   "id": "bba-if-seguir",
+   "name": "[BBA] IF · seguir corrigiendo",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1120,
+    400
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "leftValue": "={{ $json.keep_going }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true"
+       }
+      }
+     ],
+     "combinator": "and"
+    }
+   }
+  },
+  {
+   "id": "bba-exit",
+   "name": "[BBA] Exit · borrador final",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1380,
+    600
+   ],
+   "parameters": {
+    "jsCode": "// [BBA] Exit · borrador final · FAIL-CLOSED (2026-08-01).\n// Los 3 pisos anteriores fallaban ABIERTOS:\n//  (1) fc=0 reseteaba el contador del llamador ⇒ BUCLE INFINITO a ~5 llamadas por vuelta.\n//  (2) un borrador vacío reemplazaba al bueno camino al juez.\n//  (3) corrections se perdía justo en la rama donde SÍ se corrigió.\nconst j = $json;\nconst FC_AGOTADO = 99;   // ante la duda, AGOTADO · nunca reiniciar el contador del llamador\nconst src = (() => { try { return $('Lazo A · trigger (Execute Workflow)').first().json || {}; } catch (e) { return {}; } })();\nlet fc = FC_AGOTADO;\nconst n = Number(src._fidelity_cycle);\nif (Number.isFinite(n) && n > 0) fc = n;\nconst out = j.brand_book_draft;\nconst draftOk = out && typeof out === 'object' && Object.keys(out).length > 0;\n\n// 2026-08-08 (F) · el ciclo NO puede terminar en silencio. Precedente 76545: 5 correcciones\n// emitidas, re-sintesis nunca corrida, resynth_ok:true firmado — descubierto A MANO 6 dias\n// despues. Sin esto el padre imprime el MISMO mensaje si el ciclo trabajo y fallo que si no\n// corrio nunca. INVARIANTE (CC#2): resynth_ok TRUE con el borrador SIN CAMBIAR es imposible.\nconst mc = (() => { try { return $('[BBA] Merge corrections').first().json || {}; } catch (e) { return {}; } })();\n// 2026-08-28 (Sprint B · c.2) · los hechos de la re-síntesis salen de $json\n// cuando el cierre llega por esa rama · y de la ÚLTIMA re-síntesis de la corrida\n// cuando llega por la fusión (tope agotado o convergencia).\nconst _rp = (() => { try { return $('[BBA] Re-síntesis parse').first().json || {}; } catch (e) { return null; } })();\nconst rs = (j.resynth_ok !== undefined) ? j : (_rp || {});\n// el tope frenando NO es el filtro comiéndose las correcciones · son cosas\n// distintas y confundirlas manda a cazar un bug que no existe.\n// (c.3) · dos formas de agotar el tope · la fusión lo detecta cuando el lazo\n// vuelve a pasar por ella · la guarda corta ANTES, así que acá se deduce del ciclo.\nconst _max_c = Number(j._max_cycles) || 0;\nconst _tope_agotado = ((mc._lazo_a || {}).tope_agotado === true)\n  || (_max_c > 0 && (Number(j.cycle) || 0) >= _max_c);\nconst _draft_sin_cambio = draftOk && JSON.stringify(out) === JSON.stringify(src.brand_book_draft || {});\nconst _corr_n = Array.isArray(mc.corrections) ? mc.corrections.length : 0;\nconst _lazo_esteril =\n    (mc.reviewers_ok === 0)                                  ? 'revisores_sin_tool'\n  // CC#2 cond.2 · 4a causa · EL bug de 76545: los revisores SI diagnosticaron y el filtro se\n  // los comio entero. Ojo: tambien dispara si todo era ambar (descarte legitimo §7.3) ⇒ el\n  // detalle de abajo dice cual de las dos cosas fue, sin obligar a mirar la traza.\n  : (mc.keep_going === false && _corr_n > 0 && !_tope_agotado) ? 'filtro_descarto_todo'\n  : (mc.keep_going === true && rs.resynth_ok === false)       ? 'resintesis_sin_tool'\n  : (rs.resynth_ok === true && _draft_sin_cambio)             ? 'resintesis_sin_efecto'\n  : null;   // null = la maquinaria funciono (aunque el manual no alcance)\nconst _esteril_detalle = _lazo_esteril === 'filtro_descarto_todo'\n  ? { corrections: _corr_n, ejes_descartados: mc.ejes_descartados || [] }\n  : (_lazo_esteril ? { corrections: _corr_n, reviewers_ok: mc.reviewers_ok } : null);\nreturn [{ json: {\n  brand_book_draft: draftOk ? out : src.brand_book_draft,   // piso · conserva el previo\n  _grounding_refs: j._grounding_refs || src._grounding_refs,\n  client_id: j.client_id || src.client_id,\n  cycle: j.cycle,\n  _fidelity_cycle: fc,\n  corrections: j.corrections || [],\n  reviewers_ok: (j.reviewers_ok !== undefined ? j.reviewers_ok : null),\n  // 2026-08-04 (diff v2) · el default es NO. `undefined !== false` daba TRUE cuando la\n  // re-síntesis NO corrió: un \"listo falso\" adentro del ciclo. NO toca FC_AGOTADO (otro bloque).\n  resynth_ran: rs.resynth_ok !== undefined,\n  resynth_ok: rs.resynth_ok === true,\n  // por qué paró el lazo · 'tope_agotado' | 'sin_bloqueantes' | null\n  motivo_parada: (mc._lazo_a || {}).motivo_parada || (_tope_agotado ? 'tope_agotado' : null),\n  _draft_preserved: !draftOk,\n  _lazo_esteril,\n  _esteril_detalle,\n  _draft_sin_cambio,\n  _resynth_scope: j._resynth_scope || null,\n  _scope_ausente: j._scope_ausente === true,\n  _fuera_de_alcance: j._fuera_de_alcance || [],\n  _lazo_a_done: true,\n} }];"
+   }
+  },
+  {
+   "id": "d0d99391-45ed-42a3-8e48-120a8c6926e2",
+   "name": "[BBA] Re-síntesis prep",
+   "notes": "r62 · el reescritor recibe las reglas de evidencia; el tope sube lo que suman.",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1120,
+    120
+   ],
+   "parameters": {
+    "jsCode": "// [BBA] Re-síntesis prep · arma el task · SIN llamadas (el fetch salía del Code · CC#2/CC#3).\n// Recorte por ÍTEMS COMPLETOS, no por caracteres: JSON.stringify().slice() corta a mitad de\n// objeto y entrega JSON inválido al modelo (el patrón que ya dañó al juez).\nconst inp = $json;\nconst draft = inp.brand_book_draft || {};\nconst grounding = inp._grounding_refs || {};\nconst clientId = inp.client_id || draft.client_id;\nconst nextCycle = (Number(inp.cycle) || 0) + 1;\n// top-N bloqueantes (§7.3) · si no vinieran, cae a corrections\nconst base = Array.isArray(inp.corrections_bloqueantes) && inp.corrections_bloqueantes.length\n  ? inp.corrections_bloqueantes : (inp.corrections || []);\nconst capItems = (arr, max) => { const out = []; let len = 0;\n  for (const it of arr) { const s = JSON.stringify(it); if (len + s.length > max) break; out.push(it); len += s.length; }\n  return out; };\nconst correcciones = capItems(base, 2500);\n\n// 2026-08-08 (E · anti whack-a-mole) · la re-sintesis pedia TODOS los campos aunque hubiera\n// fallado UNO. positioning saco 8/8 sobre el umbral (0.92-0.97 · medicion 07-ago) y lo\n// mandabamos a reescribir igual. ADR-020 §7: lo que YA pasa el gate NO se sigue corrigiendo.\n// Ademas los bloqueantes que llegan aca solo pueden apuntar a positioning/icp_summary (mapa\n// EJE_A_CAMPO), asi que reescribir voz/angulo/retencion desde ellos seria deriva pura.\nconst GATED = ['positioning', 'icp_summary'];\nconst lowF = (Array.isArray(inp.low_fields) && inp.low_fields.length) ? inp.low_fields : GATED;\nconst objetivo = GATED.filter((f) => lowF.indexOf(f) !== -1);\nconst preservar = GATED.filter((f) => objetivo.indexOf(f) === -1);\n\n// 2026-08-04 (diff v2) · la INSTRUCCIÓN y las CORRECCIONES van ANTES de la evidencia:\n// el recorte de cola sólo puede comerse EVIDENCIA, nunca el insumo de la re-síntesis.\n// Y la evidencia va por LÍNEAS ETIQUETADAS (no JSON.stringify().slice(), que corta a\n// mitad de token con 8 claves). Cuenta: 420 prosa + 2500 corr + 2500 draft + 2400 ev ≈ 7862.\nconst SENTINELAS = new Set(['unknown', 'no especificado', 'n/a', 'na', '-', '']);\nconst ev = (v) => { const s = String(v == null ? '' : v).trim().toLowerCase(); return SENTINELAS.has(s) ? '' : String(v).trim(); };\nconst ln = (label, v, max) => {\n  const a = Array.isArray(v) ? v : (v ? [v] : []);\n  const items = a.map((s) => typeof s === 'string' ? s : (s && (s.name || s.audience_segment)) || '')\n                 .filter(Boolean).slice(0, 3).map((t) => String(t).replace(/\\s+/g, ' ').trim().slice(0, max));\n  return items.length ? '- ' + label + ': ' + items.join(' · ') + '\\n' : '';\n};\nconst _icp = grounding.icp_signals || {};\nconst evidenciaTxt =\n  (ev(grounding.client_name) ? 'Cliente: ' + ev(grounding.client_name) + '\\n' : '') +\n  (ev(grounding.industry) ? 'Industria: ' + ev(grounding.industry) + '\\n' : '') +\n  'Resumen: ' + String(grounding.discovery_summary || '').slice(0, 1200) + '\\n' +\n  ln('Competidores', (grounding.competitors || []).map((c) => c && c.name), 60) +\n  ln('Segmentos ICP', _icp.segments, 90) +\n  ln('Dolores', _icp.pain_points, 110) +\n  ln('Objetivos', _icp.goals, 110) +\n  ln('Objeciones', _icp.objections, 110) +\n  ln('Canales preferidos', _icp.preferred_channels, 60);\n\n// PROYECCION AL LAZO (2026-08-09 CC#2) · el borrador REAL mide ~9.874 ch y la ventana del\n// prompt es 3.000/2.500 ⇒ JSON.stringify(draft).slice() cortaba por el final y voice_description,\n// customer_angle y retention_notes NO LLEGABAN NUNCA a sus revisores (hallazgo CC#1 · voz 0.50).\n// El presupuesto esta al filo (Review ~7.923 vs 7.900) ⇒ NO se agranda la ventana: se PROYECTA.\n// Cada revisor recibe SUS campos con holgura y el resto como contexto corto ⇒ los 5 entran\n// ENTEROS para quien los diagnostica. Recorte POR CAMPO, nunca un slice global (no parte JSON).\n// OJO: esto achica SOLO el texto del prompt. El canal de datos (brand_book_draft en el return)\n// sigue llevando el borrador COMPLETO · si se proyectara ahi, se perderian campos en el cierre.\nconst _txt = (v, max) => {\n  if (v === undefined || v === null) return undefined;\n  if (Array.isArray(v)) { const o = []; let n = 0;\n    for (const it of v) { const s = String(typeof it === \"string\" ? it : JSON.stringify(it));\n      if (n + s.length > max) break; o.push(s.slice(0, max)); n += s.length; } return o; }\n  const s = String(v); return s.length > max ? s.slice(0, max) : s;\n};\nconst _proyectar = (d, mios, capMio, capOtro, ventana) => {\n  const ORDEN = [\"positioning\",\"icp_summary\",\"voice_description\",\"forbidden_words\",\"required_terminology\",\"customer_angle\",\"retention_notes\"];\n  let otro = capOtro;\n  for (let intento = 0; intento < 6; intento++) {\n    const out = {};\n    for (const f of ORDEN) {\n      if (d[f] === undefined || d[f] === null) continue;\n      const v = _txt(d[f], mios.indexOf(f) !== -1 ? capMio : otro);\n      if (v !== undefined && !(Array.isArray(v) ? v.length === 0 : !String(v).trim())) out[f] = v;\n    }\n    const s = JSON.stringify(out);\n    if (s.length <= ventana || otro <= 40) return { obj: out, txt: s, _otro: otro };\n    otro = Math.floor(otro / 2);\n  }\n  return { obj: {}, txt: \"{}\", _otro: otro };\n};\n\n// ventana 2.500 · el ALCANCE (lo que se reescribe) va con 950 · el resto es contexto 120,\n// porque E.b ya garantiza que lo de fuera de alcance vuelve VERBATIM del borrador entero.\nconst _proyRes = _proyectar(draft, objetivo, 950, 120, 2500);\n\n// r62 (CC#1 2026-10-10) · las REGLAS DE EVIDENCIA también llegan al que REESCRIBE (positioning/icp_summary): sin ellas el Lazo A podía reintroducir lo que el cimiento ya no inventa.\nconst REGLAS_EVIDENCIA_R62 = \"\\n\\nREGLAS DE EVIDENCIA (obligatorias): (1) Cada afirmación sobre el cliente lleva su cita literal y de dónde salió; si no hay cita, NO la escribas. Lo que el cliente dice de sí mismo se escribe «el cliente dice: «cita»», NUNCA como hecho comprobado. (2) Las palabras que suben la certeza (origen, verificable, trazabilidad, denominación, certificado, garantizado, único, primero, mejor, ningún competidor) solo pueden aparecer si esa misma palabra o su verificación está en una fuente primaria (el sitio del cliente, su propio perfil social, su propia ficha de mapas). (3) Separa cada lugar por su PAPEL: sede, zona de reparto, origen del producto, mercado. Un lugar que es solo donde está el negocio NUNCA es el origen del producto. (4) No inventes cifras, locales, facturación ni comparaciones con competidores que no estén en la EVIDENCIA; si falta el dato, déjalo fuera o escríbelo «PENDIENTE: …». (5) Un resumen de agente es una síntesis, no una fuente: no lo cites como evidencia.\";\nconst task = (\n  'Eres el consolidador del brand book (el MAKER · no un revisor). Mejora el BORRADOR ' +\n  'aplicando SOLO las CORRECCIONES de los jefes, grounded en la EVIDENCIA. NO inventes ' +\n  'campos nuevos · mantén la estructura.' + REGLAS_EVIDENCIA_R62 + '\\n' +\n  'ALCANCE · reescribe ÚNICAMENTE: ' + objetivo.join(', ') + '.\\n' +\n  (preservar.length\n    ? 'NO TOQUES ' + preservar.join(', ') + ' · ya pasó el gate de fidelidad. Devolvelo EXACTAMENTE igual.\\n'\n    : '') +\n  'LLAMA EL TOOL `emit_brand_section` (pasa lens:\"brand-strategist\") con los campos del ' +\n  'ALCANCE. NO narres · usa el tool.\\n\\n' +\n  'CORRECCIONES:\\n' + JSON.stringify(correcciones) + '\\n\\n' +\n  'BORRADOR:\\n' + _proyRes.txt + '\\n\\n' +\n  'EVIDENCIA:\\n' + evidenciaTxt.slice(0, 2400)\n).slice(0, 7900 + REGLAS_EVIDENCIA_R62.length);   // r62 · el tope sube lo que suman las reglas · la evidencia no cede más\n\nreturn [{ json: { task, _evidencia_chars: evidenciaTxt.length, _draft_chars: JSON.stringify(draft).length, _draft_proy_chars: _proyRes.txt.length, brand_book_draft: draft, _grounding_refs: grounding, client_id: clientId,\n  cycle: nextCycle, corrections: inp.corrections || [], _fidelity_cycle: inp._fidelity_cycle,\n  // 2026-08-28 (Sprint B · c.3) · el tope VIAJA desde la fusión, donde está\n  // definido. La guarda lo lee de acá · no lo vuelve a escribir.\n  _max_cycles: Number((inp._lazo_a || {}).max_cycles) || 0,\n  // CC#3 §3 · reviewers_ok se perdía justo en el camino CORREGIDO\n  reviewers_ok: inp.reviewers_ok,\n  _resynth_scope: objetivo } }];"
+   }
+  },
+  {
+   "id": "e390c16b-5442-43a5-a182-45e30a53acd9",
+   "name": "[BBA] Re-síntesis · run-sdk",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1340,
+    120
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"agent\": \"brand-strategist\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bba-resintesis-c{{ $json.cycle }}\",\n  \"task\": {{ JSON.stringify($json.task) }},\n  \"context\": { \"role\": \"brand_book_consolidator_resynth\", \"cycle\": {{ $json.cycle }} }\n}",
+    "options": {
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     },
+     "timeout": 800000
+    }
+   }
+  },
+  {
+   "id": "f0f557a0-5b41-4a5a-8a72-b4b0796ec7c6",
+   "name": "[BBA] Re-síntesis parse",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1560,
+    120
+   ],
+   "parameters": {
+    "jsCode": "// [BBA] Re-síntesis parse · mezcla la sección mejorada · marca resynth_ok · propaga corrections\n// (la telemetría estaba invertida: llegaban [] justo cuando SÍ se corrigió).\nconst body = ($json && $json.body) || $json || {};\nconst src = (() => { try { return $('[BBA] Re-síntesis prep').first().json || {}; } catch (e) { return {}; } })();\nconst draft = src.brand_book_draft || {};\nconst clientId = src.client_id || draft.client_id;\nlet cand = body.brand_section || null;\nif (!cand && typeof body.response === 'string') {\n  const m = body.response.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { const p = JSON.parse(m[0]); cand = p.brand_book_draft || p; } catch (e) {} }\n}\n// 2026-08-08 (E.b) · el merge era { ...draft, ...cand } ⇒ el modelo podia pisar CUALQUIER campo,\n// incluido uno que YA pasaba el gate. Ahora solo entran los campos del ALCANCE · el resto queda\n// VERBATIM. Lo que intento cambiar fuera de alcance NO se descarta en silencio: se cuenta.\n// CC#2 cond.1 · FALLBACK CERRADO A VACIO: si el alcance no llega, es TUBERIA ROTA, no permiso\n// para re-sintetizar a ciegas. No se acepta nada · el borrador vuelve verbatim · se marca.\nconst scope = (Array.isArray(src._resynth_scope) && src._resynth_scope.length) ? src._resynth_scope : null;\nconst _scope_ausente = scope === null;\nconst enScope = (!_scope_ausente && cand && typeof cand === 'object')\n  ? Object.keys(cand).filter((k) => scope.indexOf(k) !== -1) : [];\n// F2b · antes bastaba con que `cand` fuera un objeto CUALQUIERA (el fallback hace\n// `p.brand_book_draft || p`): un {\"error\":\"...\"} daba resynth_ok=true y ensuciaba el borrador.\n// Ahora exige >=1 campo EN ALCANCE.\nconst resynth_ok = enScope.length > 0;\nconst _fuera_de_alcance = [];\nlet improved = draft;\nif (resynth_ok) {\n  improved = Object.assign({}, draft);\n  for (const k of Object.keys(cand)) {\n    if (enScope.indexOf(k) !== -1) improved[k] = cand[k];\n    else if (JSON.stringify(cand[k]) !== JSON.stringify(draft[k])) _fuera_de_alcance.push(k);\n  }\n  improved.client_id = clientId;\n}\nreturn [{ json: {\n  brand_book_draft: improved,\n  _grounding_refs: src._grounding_refs || {},\n  client_id: clientId,\n  cycle: src.cycle,\n  _max_cycles: Number(src._max_cycles) || 0,   // (c.3) · sigue viajando hacia la guarda\n  corrections: src.corrections || [],\n  resynth_ok,\n  _resynth_scope: scope,\n  _scope_ausente,\n  _fuera_de_alcance,\n  // CC#3 §3 · misma inversión de telemetría que ya se cerró para corrections\n  reviewers_ok: src.reviewers_ok,\n} }];"
+   }
+  },
+  {
+   "id": "bba-merge-revisores-3",
+   "name": "[BBA] Merge revisores (esperar 2)",
+   "type": "n8n-nodes-base.merge",
+   "typeVersion": 3,
+   "position": [
+    660,
+    400
+   ],
+   "parameters": {
+    "mode": "append",
+    "numberInputs": 2
+   }
+  },
+  {
+   "id": "bba-if-quedan-vueltas",
+   "name": "[BBA] IF · quedan vueltas",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1780,
+    120
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "leftValue": "={{ (Number($json.cycle) || 0) < (Number($json._max_cycles) || 0) }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true"
+       }
+      }
+     ],
+     "combinator": "and"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Lazo A · trigger (Execute Workflow)": {
+   "main": [
+    [
+     {
+      "node": "[BBA] Review prep",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "[BBA] Review prep": {
+   "main": [
+    [
+     {
+      "node": "Revisor · brand-strategist",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Revisor · jefe-client-success",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Revisor · brand-strategist": {
+   "main": [
+    [
+     {
+      "node": "[BBA] Merge revisores (esperar 2)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Revisor · jefe-client-success": {
+   "main": [
+    [
+     {
+      "node": "[BBA] Merge revisores (esperar 2)",
+      "type": "main",
+      "index": 2
+     }
+    ]
+   ]
+  },
+  "[BBA] Merge corrections": {
+   "main": [
+    [
+     {
+      "node": "[BBA] IF · seguir corrigiendo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "[BBA] IF · seguir corrigiendo": {
+   "main": [
+    [
+     {
+      "node": "[BBA] Re-síntesis prep",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "[BBA] Exit · borrador final",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "[BBA] Re-síntesis prep": {
+   "main": [
+    [
+     {
+      "node": "[BBA] Re-síntesis · run-sdk",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "[BBA] Re-síntesis · run-sdk": {
+   "main": [
+    [
+     {
+      "node": "[BBA] Re-síntesis parse",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "[BBA] Re-síntesis parse": {
+   "main": [
+    [
+     {
+      "node": "[BBA] IF · quedan vueltas",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "[BBA] IF · quedan vueltas": {
+   "main": [
+    [
+     {
+      "node": "[BBA] Review prep",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "[BBA] Exit · borrador final",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "[BBA] Merge revisores (esperar 2)": {
+   "main": [
+    [
+     {
+      "node": "[BBA] Merge corrections",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "nodeGroups": [],
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "staticData": null,
+ "pinData": null,
+ "meta": null,
+ "tags": [],
+ "shared": [
+  {
+   "role": "workflow:owner",
+   "workflowId": "kSSAvCbEfHs2Hoa0",
+   "projectId": "xKBOyp07nrGbu4ob",
+   "project": {
+    "id": "xKBOyp07nrGbu4ob",
+    "name": "Emilio  Perez  <emilacho@hotmail.com>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-04-18T13:41:21.856Z",
+    "updatedAt": "2026-04-18T13:51:26.012Z"
+   },
+   "createdAt": "2026-06-29T20:26:07.642Z",
+   "updatedAt": "2026-06-29T20:26:07.642Z"
+  }
+ ],
+ "activeVersion": null
+}

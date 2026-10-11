@@ -156,7 +156,9 @@ describe('el libreto y el destino de BRIEF', () => {
   })
   it('BRIEF tiene destino en el mapa: el flujo nuevo, con llave de despacho obligatoria (el obrero PAGA)', () => {
     const t = getJourneyWorkflowTarget('BRIEF')!
-    expect(t).toMatchObject({ workflow_id: 'PQdIgbuFexuBsoh8', webhook_path: 'zero-risk/brief', dispatch_key_required: true })
+    // r63 (relevo 61) · el brief entra por la PUERTA de la cadena; la parte original queda de alias (su cable de vuelta sigue rotulado BRIEF)
+    expect(t).toMatchObject({ workflow_id: 'pBAp5Cx7R39U585i', webhook_path: 'zero-risk/cadena', dispatch_key_required: true })
+    expect(t.alias_workflow_ids).toContain('PQdIgbuFexuBsoh8')
     expect(t.phase_boundaries).toEqual(['journey_completed'])
     expect(isWorkflowJourney('BRIEF')).toBe(true)
   })

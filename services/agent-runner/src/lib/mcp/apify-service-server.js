@@ -58,11 +58,11 @@ server.registerTool(
     title: 'Mirar afuera · pedir un dato público de un negocio',
     description:
       'Pide que se MIRE algo público de un negocio y te devuelve lo que se encontró. ' +
-      'Sirve para no afirmar de memoria: si necesitás saber si un competidor pauta, ' +
+      'Sirve para no afirmar de memoria: si necesitas saber si un competidor pauta, ' +
       'cuántos seguidores tiene, qué dice su ficha de Maps o qué aparece al buscarlo, ' +
-      'pedilo acá en vez de suponerlo. ' +
-      'Decí QUÉ querés mirar y DE QUIÉN; el resto se resuelve solo. ' +
-      '🔴 Leé SIEMPRE el campo `cero` de la respuesta: distingue "se miró y NO HAY" de ' +
+      'pídelo acá en vez de suponerlo. ' +
+      'Di QUÉ quieres mirar y DE QUIÉN; el resto se resuelve solo. ' +
+      '🔴 Lee SIEMPRE el campo `cero` de la respuesta: distingue "se miró y NO HAY" de ' +
       '"NO SE PUDO MIRAR". No son lo mismo y no se pueden escribir igual en un plan.',
     inputSchema: {
       // con límites en el pedido el esquema SÓLO ofrece lo permitido: el modelo ni siquiera puede nombrar las otras opciones
@@ -86,7 +86,7 @@ server.registerTool(
       client_id: z
         .string()
         .nullish()
-        .describe('El cliente a cuyo nombre se mira. Si no lo pasás, se usa el de la corrida.'),
+        .describe('El cliente a cuyo nombre se mira. Si no lo pasas, se usa el de la corrida.'),
     },
   },
   async (args) => {
@@ -162,11 +162,11 @@ server.registerTool(
       guardado_en: j.guardado_en || null,
       nota:
         (j.chunks_count ?? 0) === 0
-          ? 'No se encontró nada · mirá el campo `cero` antes de afirmar que no existe.'
+          ? 'No se encontró nada · mira el campo `cero` antes de afirmar que no existe.'
           : j.materia_prima === true
             ? 'Esto es MATERIA PRIMA: quedó guardado en su tabla (' + (j.guardado_en || 'client_web_pages') +
-              '), NO en el cerebro. Usalo de esta respuesta.'
-            : 'Esto NO entró al cerebro del cliente: es lo que se vio ahora, sin sello. Usalo de esta respuesta, verificá que sea del negocio correcto (misma ciudad, mismo nombre) y declará lo que citaste.',
+              '), NO en el cerebro. Úsalo de esta respuesta.'
+            : 'Esto NO entró al cerebro del cliente: es lo que se vio ahora, sin sello. Úsalo de esta respuesta, verifica que sea del negocio correcto (misma ciudad, mismo nombre) y declara lo que citaste.',
     })
   },
 )

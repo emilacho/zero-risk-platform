@@ -61,7 +61,7 @@ const LISTA = z.union([z.array(z.string()), z.string()])
 const BRAND_SECTION_INPUT_SCHEMA = {
   lens: z
     .enum(['brand-strategist', 'editor-en-jefe', 'jefe-client-success'])
-    .describe('Qué lente sos · determina qué campos llenás'),
+    .describe('Qué lente eres · determina qué campos llenas'),
   // ── GATEADOS · NO SE TOCAN (Consejero §77 · el gate se queda en 2) ────────
   // brand-strategist
   positioning: z.string().optional().describe('Posicionamiento · 1-2 frases grounded en la evidencia'),
@@ -114,10 +114,10 @@ server.registerTool(
   {
     title: 'Emit Brand Book Section',
     description:
-      'Emití TU sección estructurada del brand book. Llamá esto UNA VEZ al final, ' +
+      'Emite TU sección estructurada del brand book. Llama esto UNA VEZ al final, ' +
       'cuando tengas tu sección lista, grounded en la evidencia real del cliente. ' +
-      'Llená SOLO los campos de tu lente (los demás dejalos vacíos). Los args se ' +
-      'validan contra un schema estricto. NO narres · usá el tool · es la ÚNICA forma ' +
+      'Llena SOLO los campos de tu lente (los demás déjalos vacíos). Los args se ' +
+      'validan contra un schema estricto. NO narres · usa el tool · es la ÚNICA forma ' +
       'en que tu sección llega al consolidador.',
     inputSchema: BRAND_SECTION_INPUT_SCHEMA,
   },
@@ -132,7 +132,7 @@ server.registerTool(
           type: 'text',
           text:
             `OK · sección de ${args.lens} recibida (${filled} campos). ` +
-            'Podés parar · el consolidador fusiona las 3 lentes.',
+            'Puedes parar · el consolidador fusiona las 3 lentes.',
         },
       ],
     }
@@ -158,9 +158,9 @@ server.registerTool(
   {
     title: 'Emit Fidelity Scores',
     description:
-      'Emití tus scores de FIDELIDAD (groundedness) por campo del brand book. Cada score ' +
+      'Emite tus scores de FIDELIDAD (groundedness) por campo del brand book. Cada score ' +
       '0..1 mide qué tan soportado por la EVIDENCIA real del cliente está el campo. ' +
-      'Llamá esto UNA VEZ al final. NO narres · usá el tool · es la única forma en que tus ' +
+      'Llama esto UNA VEZ al final. NO narres · usa el tool · es la única forma en que tus ' +
       'scores llegan al decisor de canon.',
     inputSchema: FIDELITY_SCORES_INPUT_SCHEMA,
   },
@@ -169,7 +169,7 @@ server.registerTool(
     process.stderr.write(
       `[brand-section-server] emit_fidelity_scores · campos=${n} · client=${CLIENT_ID || '(none)'}\n`,
     )
-    return { content: [{ type: 'text', text: `OK · ${n} scores de fidelidad recibidos. Podés parar.` }] }
+    return { content: [{ type: 'text', text: `OK · ${n} scores de fidelidad recibidos. Puedes parar.` }] }
   },
 )
 

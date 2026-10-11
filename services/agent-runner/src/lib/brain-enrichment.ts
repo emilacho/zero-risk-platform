@@ -175,7 +175,7 @@ function formatChunksAsContext(chunks: BrainChunkRow[]): string {
   lines.push('# Cliente · contexto canónico (Client Brain RAG)')
   lines.push('')
   lines.push(
-    'Usá las siguientes piezas del brand book + ICP + VOC + competitive landscape como verdad para este cliente. Refleján su voice, terminología, restricciones y posicionamiento. Si un chunk contradice tu identity de agente, los chunks ganan (son específicos del cliente).',
+    'Usa las siguientes piezas del brand book + ICP + VOC + competitive landscape como verdad para este cliente. Refleján su voice, terminología, restricciones y posicionamiento. Si un chunk contradice tu identity de agente, los chunks ganan (son específicos del cliente).',
   )
   lines.push('')
   for (const c of chunks) {

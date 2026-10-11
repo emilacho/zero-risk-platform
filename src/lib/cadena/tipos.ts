@@ -92,7 +92,7 @@ export interface Ficha { que: string; donde: string; contra_que: string; graveda
 export interface Hallazgo { chequeo: string; severidad: Severidad; fila_id: string | null; alcance: Alcance; ficha: Ficha }
 
 /** Red → formatos permitidos (de `cadena_formatos_por_red`). */
-export interface FormatoPermitido { formato: string; produccion: 'opera' | 'espera_brazo'; lead_dias: number; max_por_dia: number | null }
+export interface FormatoPermitido { formato: string; produccion: 'opera' | 'espera_brazo'; lead_dias: number; max_por_dia: number | null; /** r63 · familia de la oficina que produce este formato (dato de `cadena_formatos_por_red.familia`); ausente/null = sin sala */ familia?: string | null }
 export type FormatosPorRed = Record<string, FormatoPermitido[]>
 
 /** Horario de una sede: por día de la semana ISO, tramos [abre, cierra] en HH:MM. Un día sin tramos = cerrado. */

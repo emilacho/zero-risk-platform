@@ -146,9 +146,9 @@ export function buildCreatorReSynthInput(
     draft,
     blocking_corrections: orderByAxisPrecedence(blocking),
     instruction:
-      'Sos el CREADOR original de la pieza. Integrá SOLO las correcciones bloqueantes que ' +
-      'resuelvan el gap de groundedness (triage · elegí cuáles aplicás · NO apliques todas a ' +
-      'ciegas si se contradicen). Los jefes diagnostican, vos reescribís. Devolvé la pieza corregida.',
+      'Eres el CREADOR original de la pieza. Integra SOLO las correcciones bloqueantes que ' +
+      'resuelvan el gap de groundedness (triage · elige cuáles aplicas · NO apliques todas a ' +
+      'ciegas si se contradicen). Los jefes diagnostican, tú reescribes. Devuelve la pieza corregida.',
   }
 }
 
