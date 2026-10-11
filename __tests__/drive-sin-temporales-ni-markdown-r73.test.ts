@@ -16,7 +16,7 @@ const leer = (p: string) => JSON.parse(readFileSync(p, 'utf8')) as Flujo
 const ANTES = leer(join(D, 'texto-a-drive-r73-ANTES.json')), HOY = leer(join(D, 'texto-a-drive-r73-ARREGLADO.json'))
 const ANTES_MD = leer(join(D, 'texto-a-drive-r73-md-ANTES.json')), HOY_MD = leer(join(D, 'texto-a-drive-r73-md-ARREGLADO.json'))
 const MANUAL_ANTES = leer(join(process.cwd(), 'scripts/worker-staging/XTQTgIUMq9OHNs0a/manual-a-drive-r73-ANTES.json')), MANUAL_HOY = leer(join(process.cwd(), 'scripts/worker-staging/XTQTgIUMq9OHNs0a/manual-a-drive-r73-ARREGLADO.json'))
-const PLAN = readFileSync(join(process.cwd(), '__tests__/fixtures/ronda73/plan-52529141.md'), 'utf8')
+const PLAN = readFileSync(join(process.cwd(), '__tests__/fixtures/ronda73/plan-52529141.md'), 'utf8').split('\r\n').join('\n')
 const nodo = (f: Flujo, n: string) => f.nodes.find((x) => x.name === n)!
 const cambian = (a: Flujo, b: Flujo) => a.nodes.filter((n) => JSON.stringify(n) !== JSON.stringify(nodo(b, n.name))).map((n) => n.name)
 const AsyncFunction = Object.getPrototypeOf(async function () { /* */ }).constructor as new (...a: string[]) => (...b: unknown[]) => Promise<any>

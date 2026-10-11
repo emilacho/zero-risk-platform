@@ -1,0 +1,91 @@
+{
+ "id": "0a2ffbd4-957c-4315-a37f-b9e4fbbbb312",
+ "name": "Náufrago",
+ "slug": "naufrago",
+ "website_url": "https://www.naufrago.ec",
+ "industry": "restaurante de mariscos costero ecuatoriano",
+ "market": "Olón, Santa Elena, Ecuador",
+ "status": "onboarding",
+ "preferred_language": "es",
+ "created_at": "2026-10-11T07:33:58.672008+00:00",
+ "updated_at": "2026-10-11T07:56:15.606759+00:00",
+ "domain": null,
+ "country": "Ecuador",
+ "language": "es",
+ "brand_voice": {},
+ "config": {
+  "apify": {
+   "own_handles": {
+    "instagram": "naufrago.ec"
+   },
+   "competitor_list": [
+    {
+     "name": "Cabaña D'Jerry",
+     "website": "https://www.tripadvisor.com/Restaurant_Review-g2025921-d4473899-Reviews-Cabana_D_Jerry-Olon_Santa_Elena_Province.html",
+     "competitor_type": "direct"
+    },
+    {
+     "name": "Rasimar Restaurante",
+     "website": "https://www.tripadvisor.com/Restaurant_Review-g2025921-d6777459-Reviews-Rasimar_Restaurante-Olon_Santa_Elena_Province.html",
+     "competitor_type": "direct"
+    },
+    {
+     "name": "Ceviches Don Villón",
+     "website": "https://restaurantguru.com/Ceviches-Don-Villon-Olon",
+     "competitor_type": "direct"
+    },
+    {
+     "name": "Spondylus Restaurant",
+     "competitor_type": "direct"
+    },
+    {
+     "name": "MOMO Restaurante y Deli",
+     "competitor_type": "indirect"
+    },
+    {
+     "name": "Almacígo",
+     "competitor_type": "alternative"
+    },
+    {
+     "name": "La Churrería",
+     "competitor_type": "indirect"
+    },
+    {
+     "name": "Pigro",
+     "website": "https://restaurantguru.com/Pigro-Olon",
+     "competitor_type": "indirect"
+    }
+   ],
+   "last_populated_source": "auto_discovery_agent",
+   "last_populated_from_discovery_at": "2026-10-11T07:56:15.544Z"
+  },
+  "spend_cap_usd": 6,
+  "business_model": {
+   "text": "Restaurante de cocina marina ecuatoriana (encebollado y ceviche como platos estrella) con operación física en Olón, Santa Elena. Modelo directo al consumidor: el cliente final paga, el restaurante prepara y entrega. Opera jueves a lunes en franja desayuno-almuerzo con servicio de delivery local además de consumo en local. Sin intermediarios de plataforma detectados. Propietario-operador independiente.",
+   "source": "auto_discovery_agent",
+   "captured_at": "2026-10-11T07:56:15.545Z"
+  }
+ },
+ "logo_url": null,
+ "brand_colors": [
+  "#1a0828",
+  "#663772",
+  "#2d1135",
+  "#51d4b4",
+  "#38154b",
+  "#4b2855"
+ ],
+ "brand_fonts": [
+  "Caveat",
+  "Inter",
+  "Alfa Slab One",
+  "Bebas Neue",
+  "DM Serif Display",
+  "Homemade Apple",
+  "Permanent Marker"
+ ],
+ "archived_at": null,
+ "archived_reason": null,
+ "report_url": null,
+ "canonical_client_id": null
+}

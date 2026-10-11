@@ -9,7 +9,7 @@ import { construirCodigo, construirFlujo, FUNCION, NODO } from '../scripts/worke
 
 const W = join(process.cwd(), 'scripts/worker-staging/X9F0zp6LQ2xGEYVS')
 const quitar = new Function(FUNCION + '\nreturn quitarCalentamiento')() as (t: unknown) => { texto: string; quitado: string }
-const PLAN = readFileSync(join(process.cwd(), '__tests__/fixtures/ronda73/plan-52529141.md'), 'utf8')
+const PLAN = readFileSync(join(process.cwd(), '__tests__/fixtures/ronda73/plan-52529141.md'), 'utf8').split('\r\n').join('\n') // el fin de línea del archivo depende de cómo lo bajó git
 const ANTES = JSON.parse(readFileSync(join(W, 'planeacion-r73-ANTES.json'), 'utf8'))
 const HOY = JSON.parse(readFileSync(join(W, 'planeacion-r73-ARREGLADO.json'), 'utf8'))
 
