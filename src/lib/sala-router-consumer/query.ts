@@ -47,6 +47,8 @@ export interface PendingIntakeQueryInput {
   readonly events: ReadonlyArray<PersistedEvent>
   /** Canon canonical · max returned rows (orchestrator bounds further). */
   readonly limit?: number
+  /** DESPACHO INMEDIATO · solo el sobre con este `event_id` (los demás se ignoran) */
+  readonly only_event_id?: string
 }
 
 /** Canon canonical · returns intake events whose stream has no matching
@@ -78,7 +80,8 @@ export function selectPendingIntakeEvents(
       e.event_type === 'step_completed' &&
       typeof e.step_id === 'string' &&
       e.step_id.startsWith(INTAKE_STEP_PREFIX) &&
-      !dispatched_streams.has(e.stream_id)
+      !dispatched_streams.has(e.stream_id) &&
+      (input.only_event_id === undefined || e.event_id === input.only_event_id)
     ) {
       pending.push(e)
     }

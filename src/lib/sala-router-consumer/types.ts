@@ -190,4 +190,6 @@ export interface ConsumerTickInput {
   readonly n8n_base_url?: string
   /** Optional · override fetch for tests (workflow-dispatcher fetcher). */
   readonly fetcher?: typeof fetch
+  /** DESPACHO INMEDIATO · solo este sobre (el que acaba de entrar): el tic no toma otros ni corre el vigilante de reclamos */
+  readonly only_event_id?: string
 }

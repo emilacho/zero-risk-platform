@@ -109,6 +109,7 @@ export async function consumeIntakeTick(
   const pending = selectPendingIntakeEvents({
     events,
     limit: batch_size,
+    ...(input.only_event_id !== undefined ? { only_event_id: input.only_event_id } : {}),
   })
 
   const outcomes: DispatchOutcome[] = []
@@ -240,7 +241,8 @@ export async function consumeIntakeTick(
   // ─── 5 · PAQUETE (⑤) · el vigilante: sobres reclamados que no llegaron a desenlace ───
   // Sólo mira lo que el tic YA leyó (cero consultas nuevas) · avisa UNA vez por sobre (deja un asiento `router.lostalert.*`) · NUNCA rompe el tic.
   let lost_claims: ReadonlyArray<LostClaim> = []
-  if (input.claim_before_fire) {
+  // (el despacho inmediato de UN sobre no corre el vigilante: lo hace el reloj de respaldo, una sola vez por tic)
+  if (input.claim_before_fire && input.only_event_id === undefined) {
     try {
       lost_claims = findLostClaims({ events, now_ms: ahora() })
       const alerta = input.lost_alerter ?? avisarSobrePerdido
@@ -287,6 +289,6 @@ export async function consumeIntakeTick(
     processed: outcomes.length,
     outcomes,
     ...(stopped_by_deadline ? { stopped_by_deadline } : {}),
-    ...(input.claim_before_fire ? { lost_claims } : {}),
+    ...(input.claim_before_fire && input.only_event_id === undefined ? { lost_claims } : {}),
   }
 }
