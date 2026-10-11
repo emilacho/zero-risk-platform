@@ -30,7 +30,7 @@ function escribir<T>(obj: T, ruta: string, valor: unknown): T {
   return obj
 }
 const clonar = <T,>(x: T): T => JSON.parse(JSON.stringify(x)) as T
-const prosaDe = (manual: Record<string, unknown>, incluirListasDeTerminos = false): Hoja[] => {
+const prosaDe = (manual: Record<string, unknown>, incluirListasDeTerminos: boolean): Hoja[] => {
   const out: Hoja[] = []
   for (const [k, v] of Object.entries(manual)) {
     if (esMeta(k)) continue
@@ -67,11 +67,12 @@ function quitarBloquesBalanceados(t: string, abre: string, cierra: string, decid
         if (t[j] === abre) prof++
         else if (t[j] === cierra) { prof--; if (prof === 0) break }
       }
-      if (j < t.length && prof === 0) {
+      if (prof === 0) { // (solo se llega a 0 por el cierre: si el bloque no se cierra, `prof` queda > 0)
         const dentro = t.slice(i + 1, j)
         // se decide por lo que dice el bloque POR SÍ MISMO (sin lo anidado): «(jueves a lunes (dato_interno))» se queda con su paréntesis y pierde solo el interno
         let propio = dentro
-        for (let k = 0; k < 8; k++) { const sin = propio.replace(/\([^()]*\)|\[[^\[\]]*\]/g, ''); if (sin === propio) break; propio = sin }
+        // (cada vuelta acorta el texto: termina sola, sin tope de profundidad)
+        for (let sin = propio.replace(/\([^()]*\)|\[[^\[\]]*\]/g, ''); sin !== propio; sin = propio.replace(/\([^()]*\)|\[[^\[\]]*\]/g, '')) propio = sin
         if (decide(propio)) {
           out = out.replace(/[ \t]+$/, '')
           out += (/[.!?…]$/.test(out) ? ' ' : '') + MARCA

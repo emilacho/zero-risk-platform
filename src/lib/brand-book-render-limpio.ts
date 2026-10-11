@@ -85,6 +85,8 @@ export function sinMarkdown(t: string): string {
     .replace(/(^|[\s(«"])\*(?=\S)([^*\n]+?)\*(?=$|[\s.,;:!?)»"])/gm, '$1$2')
     .replace(/\*\*|__/g, '')
     .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
+    // el escape de markdown (\! \* \_ \# \( …) no se imprime: queda el carácter
+    .replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~\\])/g, '$1')
 }
 
 /** «[frase propia del cliente, verbatim, …]» → nota discreta; «[propuesta del agente — …]» → «propuesta»; cualquier otra anotación entre corchetes se quita */
@@ -113,29 +115,77 @@ export function nombreCorto(nombre: string): string {
   return corto.split(/\s+/).length >= 2 ? corto : sinParentesis
 }
 
-/** «S1», «S1 y S3», «S2, S4», «S1/S3», «S1-S4» (las claves internas de los segmentos) → el nombre del segmento. Si algún número no tiene nombre, esa mención se deja como está. */
+const CLAVES = String.raw`S[1-9](?:\s*(?:,|\/|–|-|y|e)\s*S[1-9])*`
+/** «S1», «S1 y S3», «S2, S4», «S1/S3», «S1-S4» → los números; null si algún número no tiene nombre conocido */
+function numerosDe(m: string, nombres: Record<number, string>): number[] | null {
+  const rango = /^S([1-9])\s*[–-]\s*S([1-9])$/.exec(m)
+  const lista = rango
+    ? Array.from({ length: Math.max(0, Number(rango[2]) - Number(rango[1]) + 1) }, (_, k) => Number(rango[1]) + k)
+    : [...m.matchAll(/S([1-9])/g)].map((x) => Number(x[1]))
+  return lista.length && lista.every((n) => nombres[n]) ? lista : null
+}
+const unidos = (xs: string[]): string => (xs.length === 1 ? xs[0] : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`)
+const SIN_ADJETIVO = new Set(['de', 'del', 'la', 'el', 'en', 'y', 'e', 'que', 'para', 'con', 'por', 'a', 'al', 'su', 'sus', 'es', 'son', 'mas'])
+
+/**
+ * Las claves internas de los segmentos («S1», «S1 y S3», «S2, S4», «S1/S3», «S1-S4») → el NOMBRE del segmento, y que la frase lea como escrita por una persona:
+ *  · «(S2, S4)» entre paréntesis se quita (ya se acaba de describir lo mismo con palabras)
+ *  · «el segmento local S1» ⇒ «el segmento «Nombre»» (sin el calificativo, que repetiría el nombre) y «S3 (veraneantes de temporada)» no repite lo que el nombre ya dice
+ *  · «la objeción latente S3 «posible variación…»» / «el objetivo S2 'disfrutar…'» ⇒ «la objeción latente del segmento «Nombre»: «posible variación…»» (una sola cita, sin comillas encadenadas)
+ * Si algún número no tiene nombre conocido, esa mención se deja como está.
+ */
 export function ponerNombresDeSegmento(t: string, nombres: Record<number, string>): string {
   if (!Object.keys(nombres).length) return t
-  return String(t).replace(/\bS([1-9])(?:\s*(?:,|\/|–|-|y|e)\s*S([1-9]))*\b/g, (m) => {
-    const piezas = [...m.matchAll(/S([1-9])|(–|-)/g)]
-    const nums: number[] = []
-    for (let i = 0; i < piezas.length; i++) {
-      if (piezas[i][1]) nums.push(Number(piezas[i][1]))
-    }
-    // rango «S1-S4»: un guion entre dos claves, y solo ahí
-    const rango = /^S([1-9])\s*[–-]\s*S([1-9])$/.exec(m)
-    const lista = rango ? Array.from({ length: Math.max(0, Number(rango[2]) - Number(rango[1]) + 1) }, (_, k) => Number(rango[1]) + k) : nums
-    if (!lista.length || lista.some((n) => !nombres[n])) return m
-    const dichos = lista.map((n) => `«${nombreCorto(nombres[n])}»`)
-    return dichos.length === 1 ? dichos[0] : `${dichos.slice(0, -1).join(', ')} y ${dichos[dichos.length - 1]}`
+  const dicho = (m: string): string[] | null => { const l = numerosDe(m, nombres); return l ? l.map((n) => `«${nombreCorto(nombres[n])}»`) : null }
+  let out = String(t)
+  // 1 · una mención solo entre paréntesis
+  out = out.replace(new RegExp(String.raw`[ \t]*\(\s*(${CLAVES})\s*\)`, 'g'), (m, k: string) => (numerosDe(k, nombres) ? '' : m))
+  // 2 · «segmento <calificativo> S1»
+  out = out.replace(new RegExp(String.raw`\b(segmentos?)(?:[ \t]+([a-záéíóúñ]+))?[ \t]+(${CLAVES})\b`, 'g'), (m, seg: string, adj: string | undefined, k: string) => {
+    const d = dicho(k)
+    if (!d) return m
+    const calificativo = adj && !SIN_ADJETIVO.has(adj.toLowerCase()) ? '' : adj ? ` ${adj}` : ''
+    return `${seg}${calificativo} ${unidos(d)}`
   })
+  // 3 · la clave pegada a una cita: «… S3 «x»» o «… S2 'x'» ⇒ «… del segmento «N»: «x»»
+  out = out.replace(new RegExp(String.raw`(\bde[ \t]+)?(${CLAVES})(?=[ \t]*(?:«|'))`, 'g'), (m, de: string | undefined, k: string) => {
+    const l = numerosDe(k, nombres)
+    if (!l) return m
+    const d = dicho(k)!
+    return `${l.length === 1 ? 'del segmento' : 'de los segmentos'} ${unidos(d)}:`
+  })
+  out = out.replace(/(»:)[ \t]*'([^'\n]+)'/g, '$1 «$2»')
+  // 4 · las demás menciones, con su nombre
+  out = out.replace(new RegExp(String.raw`\b${CLAVES}\b`, 'g'), (m) => { const d = dicho(m); return d ? unidos(d) : m })
+  // 5 · «Nombre» (descripción que el nombre ya dice) ⇒ sin el paréntesis repetido
+  out = out.replace(/(«([^»]+)»)[ \t]*\(([^()]+)\)/g, (m, cita: string, nombre: string, par: string) => {
+    const pal = (x: string) => x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9ñ]+/).filter((w) => w.length > 2)
+    const del = pal(nombre)
+    const dentro = pal(par)
+    return dentro.length && dentro.every((w) => del.some((n) => n.slice(0, 5) === w.slice(0, 5))) ? cita : m
+  })
+  return out
+}
+
+/** palabras de oficina que un lector no tiene por qué conocer → su equivalente llano */
+export function palabrasLlanas(t: string): string {
+  return String(t)
+    .replace(/\bpool de LTV\b/gi, 'grupo de clientes de valor')
+    .replace(/\bLTV\b/g, 'valor del cliente en el tiempo')
+    .replace(/\bchurn\b/gi, 'abandono')
+    .replace(/\bpool\b/gi, 'grupo')
+    .replace(/\bICP\b/g, 'perfil de cliente ideal')
+    .replace(/\bKPIs?\b/g, 'indicador')
+    .replace(/\bROI\b/g, 'retorno de la inversión')
+    .replace(/\bCTA\b/g, 'llamado a la acción')
+    .replace(/\bfunnel\b/gi, 'embudo')
+    .replace(/\bcopys?\b/gi, 'texto')
+    .replace(/\bgoals\b/gi, 'objetivos').replace(/\bgoal\b/gi, 'objetivo').replace(/\bpain points\b/gi, 'dolores').replace(/\bpain point\b/gi, 'dolor').replace(/\bpain\b/gi, 'dolor')
 }
 
 /** todo lo anterior, en el orden que lee bien */
 function paraElLector(t: string, nombres: Record<number, string>): string {
-  return ponerNombresDeSegmento(presentarEtiquetas(sinMarkdown(t)), nombres)
-    .replace(/\bICP\b/g, 'perfil de cliente ideal')
-    .replace(/\bgoals\b/gi, 'objetivos').replace(/\bgoal\b/gi, 'objetivo').replace(/\bpain points\b/gi, 'dolores').replace(/\bpain point\b/gi, 'dolor').replace(/\bpain\b/gi, 'dolor')
+  return palabrasLlanas(ponerNombresDeSegmento(presentarEtiquetas(sinMarkdown(t)), nombres))
 }
 
 function vinetas(a: unknown, nombres: Record<number, string> = {}): string {
@@ -231,7 +281,7 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     o +=
       ajustar(
         pol === 'never_mention'
-          ? 'No se menciona a la competencia por nombre en ninguna pieza de comunicación.'
+          ? 'En las piezas no se nombra a la competencia.'
           : String(pol),
       ) + '\n'
   }

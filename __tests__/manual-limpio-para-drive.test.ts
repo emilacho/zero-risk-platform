@@ -145,7 +145,7 @@ describe('🟢 CONTROL POSITIVO · el contenido de marca sobrevive entero', () =
     expect(r.texto).toContain('Preparado por Zero Risk · 2026-09-03')
   })
   it('la política de competidores sale en castellano, no como código', () => {
-    expect(r.texto).toContain('No se menciona a la competencia por nombre')
+    expect(r.texto).toContain('En las piezas no se nombra a la competencia')
     expect(r.texto).not.toContain('never_mention')
   })
 })
