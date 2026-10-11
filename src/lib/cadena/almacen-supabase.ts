@@ -4,6 +4,10 @@
  */
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeSupabase as almacenDeRecados } from '@/lib/sala-recados/almacen-supabase'
+import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
+import { isIntakeEnabled, orchestrateIngress, SupabaseIngressTables, type IngressEnvelope } from '@/lib/sala-ingress'
+import { SupabaseEventLogStorage } from '@/lib/sala-event-log'
+import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
 import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
 import { horarioDeNorm } from './horario'
 import { normalizar } from './texto'
@@ -150,6 +154,33 @@ export function almacenDeSupabase(): Almacen {
       let q = db.from('cadena_fechas_especiales').select('id, fecha, nombre, tipo, ambito, alcance, estado').eq('pais', clave(pais)).gte('fecha', desde).lte('fecha', hasta).limit(2000)
       if (tipos.length) q = q.in('tipo', tipos.map(clave))
       return (await lista<{ id: number; fecha: string; nombre: string; tipo: string; ambito: string; alcance: string | null; estado: 'verificada' | 'pendiente' }>(q)).map((f): FechaEspecialVerificada => ({ id: String(f.id), fecha: f.fecha, nombre: f.nombre, tipo: f.tipo, ambito: f.ambito, alcance: f.alcance === 'nacional' ? 'nacional' : 'local', estado: f.estado }))
+    },
+    // ── autoproducir (r65) · el parte guardado, el freno de gasto y el buzón de la sala
+    async parteDe(parteId): Promise<ParteGuardada | null> {
+      const f = await uno<{ id: string; client_id: string; provenance_tag: unknown }>(db.from('client_historical_outputs').select('id, client_id, provenance_tag').eq('id', parteId).eq('output_type', 'campaign_brief_pack').maybeSingle())
+      if (!f) return null
+      const t = f.provenance_tag && typeof f.provenance_tag === 'object' && !Array.isArray(f.provenance_tag) ? (f.provenance_tag as Record<string, unknown>) : {}
+      const lista = Array.isArray(t.familias_por_brief) ? (t.familias_por_brief as Array<Record<string, unknown>>) : []
+      const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
+      return { id: String(f.id), client_id: String(f.client_id), valido: t.valido === true, briefs: lista.map((b) => ({ brief_id: texto(b?.brief_id), fila_id: texto(b?.fila_id), familia: texto(b?.familia) })) }
+    },
+    async frenoDeGasto(clientId) {
+      const r = await checkRunSdkSpendCap(db, clientId)
+      return { bloqueado: r.blocked === true, motivo: r.reason }
+    },
+    async emitirSobre(sobre: SobreDeProducir): Promise<ResultadoDeEmision> {
+      if (!isIntakeEnabled()) return { resultado: 'rechazado', detalle: 'intake_apagado · SALA_INTAKE_ENABLED' }
+      const llave = process.env.INTERNAL_API_KEY
+      if (!llave) return { resultado: 'rechazado', detalle: 'sin_llave_interna' }
+      const r = await orchestrateIngress({
+        envelope: sobre as unknown as IngressEnvelope,
+        auth_request: { source: sobre.source, internal_key: llave, raw_body: JSON.stringify(sobre) },
+        tables: new SupabaseIngressTables(db),
+        storage: new SupabaseEventLogStorage(db),
+      })
+      if (r.kind === 'accepted') return { resultado: 'aceptado', event_id: r.event_id }
+      if (r.kind === 'duplicate') return { resultado: 'duplicado', event_id: r.event_id }
+      return { resultado: 'rechazado', detalle: `${r.code} · ${r.detail}` }
     },
     async guardarFechaEspecial(f) { const { error } = await db.from('cadena_fechas_especiales').upsert({ ...f, verificado_en: f.estado === 'verificada' ? new Date().toISOString() : null, verificado_por: f.estado === 'verificada' ? 'codigo' : null }, { onConflict: 'pais,tipo,ambito,fecha' }); if (error) fallo(error) },
   }

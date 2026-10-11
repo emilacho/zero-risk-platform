@@ -7,6 +7,9 @@ import type { PlazoCfg } from '../esperas'
 import type { Fila, FormatosPorRed, Hallazgo } from '../tipos'
 import type { FechaEspecialVerificada } from '../validador-calendario'
 import { formatosDeLaMigracion } from './clientes'
+import { InMemoryIngressTables, orchestrateIngress, type IngressEnvelope } from '../../sala-ingress'
+import { InMemoryEventLogStorage } from '../../sala-event-log'
+import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from '../autoproducir'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -31,6 +34,12 @@ export interface SemillaMemoria {
   journeys?: { journeyId: string; clientId: string }[]
   fechasEspeciales?: FechaEspecialVerificada[]
   brazoVideo?: 'opera' | 'por_configurar' | 'no_existe' | null
+  /** partes de trabajo guardados (autoproducir) */
+  partes?: ParteGuardada[]
+  /** el freno de gasto de este cliente (autoproducir) */
+  frenoBloqueado?: boolean
+  /** la sala (intake) apagada */
+  intakeApagado?: boolean
 }
 
 export class AlmacenMemoria implements Almacen {
@@ -46,6 +55,13 @@ export class AlmacenMemoria implements Almacen {
   coberturas: FechaCobertura[] = []
   fechas: (FechaEspecialVerificada & { pais: string })[] = []
   private seq = { campana: 0, corrida: 0, espera: 0 }
+  /** la SALA de verdad (el orquestador de intake y su libro) con las filas de producción: la fuente `brief/parte-listo` y la regla `producir` → PIEZAS (puerta de la oficina) */
+  sala = new InMemoryEventLogStorage()
+  private salaTablas = new InMemoryIngressTables()
+    .seedSource({ source: 'brief/parte-listo', tier: 'A', auth_method: 'internal_key', auth_secret_env_var: null, intents_allowed: ['producir'], description: 'prueba', active: true })
+    .seedRule({ id: 'r-producir', source: 'brief/parte-listo', intent: 'producir', journey_type: 'PIEZAS', worker_workflow_id: 'PzZ3b6cY6DYmIaOQ', active: true, priority: 100, description: null })
+  /** cuántas veces se consultó el freno (para probar que lo SECO no lo consulta) */
+  consultasDelFreno = 0
   constructor(private semilla: SemillaMemoria = {}) {
     for (const [k, v] of Object.entries(semilla.config ?? {})) this.config.set(k, v)
     this.fechas = (semilla.fechasEspeciales ?? []).map((f) => ({ ...f, pais: 'x' }))
@@ -137,6 +153,15 @@ export class AlmacenMemoria implements Almacen {
     else this.coberturas.push(c)
   }
   async fechasEspeciales(_pais: string, tipos: string[]) { return this.fechas.filter((f) => !tipos.length || tipos.includes(f.tipo)) }
+  async parteDe(parteId: string): Promise<ParteGuardada | null> { return this.semilla.partes?.find((p) => p.id === parteId) ?? null }
+  async frenoDeGasto(_clientId: string) { this.consultasDelFreno++; return this.semilla.frenoBloqueado ? { bloqueado: true, motivo: 'over_cap' } : { bloqueado: false, motivo: 'under_cap' } }
+  async emitirSobre(sobre: SobreDeProducir): Promise<ResultadoDeEmision> {
+    if (this.semilla.intakeApagado) return { resultado: 'rechazado', detalle: 'intake_apagado' }
+    const r = await orchestrateIngress({ envelope: sobre as unknown as IngressEnvelope, auth_request: { source: sobre.source, internal_key: process.env.INTERNAL_API_KEY, raw_body: JSON.stringify(sobre) }, tables: this.salaTablas, storage: this.sala })
+    if (r.kind === 'accepted') return { resultado: 'aceptado', event_id: r.event_id }
+    if (r.kind === 'duplicate') return { resultado: 'duplicado', event_id: r.event_id }
+    return { resultado: 'rechazado', detalle: `${r.code} · ${r.detail}` }
+  }
   async guardarFechaEspecial(f: { pais: string; tipo: string; ambito: string; anio: number; fecha: string; nombre: string; alcance: string; estado: 'verificada' | 'pendiente' }) {
     this.fechas.push({ id: `fe-${this.fechas.length + 1}`, fecha: f.fecha, nombre: f.nombre, tipo: f.tipo, ambito: f.ambito, alcance: f.alcance === 'nacional' ? 'nacional' : 'local', estado: f.estado, pais: f.pais })
   }
