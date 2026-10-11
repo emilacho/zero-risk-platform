@@ -7,6 +7,7 @@
 import type { FormatosPorRed, Estrategia, Fila, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
+import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
 
 export type EstadoCampana = 'abierta' | 'estrategia' | 'calendario' | 'activa' | 'pausada' | 'necesita_humano' | 'cerrada' | 'reemplazada'
 
@@ -149,5 +150,12 @@ export interface Almacen {
   coberturaDe(pais: string, tipo: string, ambitoClave: string, anio: number): Promise<FechaCobertura | null>
   guardarCobertura(c: FechaCobertura): Promise<void>
   fechasEspeciales(pais: string, tipos: string[], desde: string, hasta: string): Promise<FechaEspecialVerificada[]>
+  // autoproducir (r65) · el parte guardado, el freno de gasto y el buzón de la sala
+  /** el parte de trabajo guardado (`campaign_brief_pack`) con la familia por brief que dejó la copia por filas; `null` si no existe o no es un parte */
+  parteDe(parteId: string): Promise<ParteGuardada | null>
+  /** el freno de gasto §150 (y el tope por cliente de #487) sobre este cliente: `bloqueado` = ya al techo de las 24 h */
+  frenoDeGasto(clientId: string): Promise<{ bloqueado: boolean; motivo?: string }>
+  /** deja UN sobre en la sala (intake) · idempotente por su llave: el repetido vuelve `duplicado` · nunca despacha */
+  emitirSobre(sobre: SobreDeProducir): Promise<ResultadoDeEmision>
   guardarFechaEspecial(f: { pais: string; tipo: string; ambito: string; anio: number; fecha: string; nombre: string; alcance: string; fuente_url: string; cita_literal: string; pagina_hash: string; doble_fuente: boolean; estado: 'verificada' | 'pendiente' }): Promise<void>
 }

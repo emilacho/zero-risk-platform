@@ -204,7 +204,7 @@ describe('debilidad (a) · `recibir/seguridad.ts` importa del filtro EXACTAMENTE
 
 describe('debilidad (c) · la carpeta del filtro NO cambia (huella permanente)', () => {
   /** huella de los 9 archivos de `src/lib/ingress-filter/` (sin pruebas, con saltos de línea normalizados): si alguien toca el filtro a propósito, cambia esta línea y se ve en la revisión */
-  const HUELLA_DEL_FILTRO = 'ab8c4031a22dbc23b011132a96e5433f596b1e7f09345a3aed21b7046d72ffec'
+  const HUELLA_DEL_FILTRO = '18dd93ac3b3abfe2be8e4fa622144afa3f96992cca3f9ce82ed9b1fd97a86b22' // 11-oct (firma de Emilio · «filtro anti-inyección en tuteo»): el prompt del clasificador pasa de «Sos…» a «Eres…»; los patrones que DETECTAN ataques en voseo no se tocan (anterior: ab8c4031…)
   it('la huella de `src/lib/ingress-filter/` es la de siempre', () => {
     const archivos = todosLosArchivos(path.join(RAIZ, 'src/lib/ingress-filter')).sort((a, b) => (a.archivo < b.archivo ? -1 : 1))
     const h = crypto.createHash('sha256')
