@@ -92,7 +92,7 @@ describe('2 · piezas de presentación', () => {
     const n = nombresDeSegmentos('**Segmento 1 — Locales.**\nx\n**Segmento 2 — Turistas de fin de semana.**\n**Segmento 3 — Veraneantes.**\n**Segmento 4 — Visitantes de playa.**')
     expect(n).toEqual({ 1: 'Locales', 2: 'Turistas de fin de semana', 3: 'Veraneantes', 4: 'Visitantes de playa' })
     expect(ponerNombresDeSegmento('Para S1 y S3.', n)).toBe('Para «Locales» y «Veraneantes».')
-    expect(ponerNombresDeSegmento('(S2, S4) y S1/S3', n)).toBe('(«Turistas de fin de semana» y «Visitantes de playa») y «Locales» y «Veraneantes»')
+    expect(ponerNombresDeSegmento('Para S2, S4 y S1/S3', n)).toBe('Para «Turistas de fin de semana», «Visitantes de playa», «Locales» y «Veraneantes»')
     expect(ponerNombresDeSegmento('canal S1-S3', n)).toBe('canal «Locales», «Turistas de fin de semana» y «Veraneantes»')
     expect(nombreCorto('Residente local o visitante de largo plazo en Olón')).toBe('Residente local o visitante de largo plazo')
     expect(nombreCorto('Residentes y veraneantes de temporada en Olón y zonas aledañas (clientes recurrentes)')).toBe('Residentes y veraneantes de temporada')
