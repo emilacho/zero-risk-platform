@@ -122,17 +122,18 @@ describe('el libreto, el destino y la migración de PIEZAS', () => {
   })
   it('🔴 PIEZAS tiene destino: el flujo nuevo, con llave de despacho obligatoria (el obrero PAGA) · y PRODUCE (planeación) NO se tocó', () => {
     const t = getJourneyWorkflowTarget('PIEZAS')!
-    expect(t).toMatchObject({ workflow_id: 'lVCLzxQCKNkd3uS0', webhook_path: 'zero-risk/pieza', dispatch_key_required: true })
+    // r63 (relevo 61) · la pieza entra por la PUERTA de la oficina; la pieza simple queda de alias (su cable de vuelta sigue rotulado PIEZAS)
+    expect(t).toMatchObject({ workflow_id: 'PzZ3b6cY6DYmIaOQ', webhook_path: 'zero-risk/oficina', dispatch_key_required: true, alias_workflow_ids: ['lVCLzxQCKNkd3uS0'] })
     expect(isWorkflowJourney('PIEZAS')).toBe(true)
     expect(JOURNEY_WORKFLOW_MAP.PRODUCE).toMatchObject({ workflow_id: 'X9F0zp6LQ2xGEYVS', webhook_path: 'zero-risk/planeacion' })
-    expect(JOURNEY_WORKFLOW_MAP.BRIEF).toMatchObject({ workflow_id: 'PQdIgbuFexuBsoh8' })
+    expect(JOURNEY_WORKFLOW_MAP.BRIEF).toMatchObject({ workflow_id: 'pBAp5Cx7R39U585i' })
   })
   it('la migración (NO aplicada) siembra la fuente y la regla con el MISMO id que el mapa · columna journey_type, nunca «kind»', () => {
     const sql = leer('supabase/migrations/202610010500_piezas_routing.sql').split('\n').filter((l) => !l.trim().startsWith('--')).join('\n')
     expect(sql).toContain("'brief/parte-listo'")
     expect(sql).toContain("'producir'")
     expect(sql).toContain("'PIEZAS'")
-    expect(sql).toContain(getJourneyWorkflowTarget('PIEZAS')!.workflow_id)
+    expect(sql).toContain(getJourneyWorkflowTarget('PIEZAS')!.alias_workflow_ids![0])   // la migración ORIGINAL siembra la pieza simple; r63 la apunta a la puerta (202610110200)
     expect(sql).toMatch(/journey_type/)
     expect(sql).not.toMatch(/kind/i)
   })

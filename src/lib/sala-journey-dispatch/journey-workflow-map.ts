@@ -80,6 +80,9 @@ export interface JourneyWorkflowTarget {
    *  fila con motivo que un webhook que rechaza en silencio. La marca
    *  `trigger_source` sigue viajando: es rastro, no llave. */
   readonly dispatch_key_required?: boolean
+  /** r63 (CC#1 2026-10-11 · relevo 61) · otros flujos que vuelven a la sala con SU PROPIO `worker_id` y pertenecen a este viaje: la parte original detrás de la puerta de la cadena
+   *  (modo pasarela y viajes ya en vuelo), la pieza simple detrás de la puerta de la oficina. Sin esto el cable de vuelta se rotularía `ONBOARD` (el valor por omisión). */
+  readonly alias_workflow_ids?: ReadonlyArray<string>
 }
 
 /**
@@ -131,10 +134,16 @@ export const JOURNEY_WORKFLOW_MAP: Readonly<
   // dos de ellas fallan EN CALIENTE sin romper la compilación (descartan el sobre al leerlo / impiden escribir el asiento).
   //
   // 🔴 El obrero PAGA (un agente): exige la llave de despacho, como el alta (E67). Sin `SALA_DISPATCH_KEY` no se dispara.
+  //
+  // r63 (relevo 61) · EL BRIEF AHORA ENTRA POR LA PUERTA DE LA CADENA (`pBAp5Cx7R39U585i` · `zero-risk/cadena`). Con la cadena `apagada` (o fuera del ensayo) la puerta REENVÍA el cuerpo,
+  // sin tocar un campo, a la parte original (`PQdIgbuFexuBsoh8` · `zero-risk/brief`) con la misma llave de despacho: PASARELA NEUTRAL. Reversa: volver a los tres campos de abajo.
+  // 🔴 DICHO SIN ADORNO: la parte original (`PQdI…`) devuelve 401 en su nodo BRIEF (le falta `|| $env.INTERNAL_API_KEY`) · esto NO se arregla en el recorrido viejo (encargo de Lenovo, relevo 63);
+  // la pasarela hereda ese defecto tal cual, igual que antes del cableado. El camino nuevo (la cadena encendida) no pasa por ese nodo.
   BRIEF: {
-    workflow_id: 'PQdIgbuFexuBsoh8',
-    webhook_path: 'zero-risk/brief',
-    worker_name: 'brief (parte de trabajo · campaign brief)',
+    workflow_id: 'pBAp5Cx7R39U585i',
+    webhook_path: 'zero-risk/cadena',
+    worker_name: 'cadena (puerta · plan → calendario → parte)',
+    alias_workflow_ids: Object.freeze(['PQdIgbuFexuBsoh8', 'BNXqlaX1oHSfZIpF']),
     phase_boundaries: Object.freeze(['journey_completed']),
     idempotency_suffix: 'brief-worker-dispatch',
     dispatch_key_required: true,
@@ -142,10 +151,14 @@ export const JOURNEY_WORKFLOW_MAP: Readonly<
   // 01-oct · el OCTAVO tipo de viaje: el productor (un brief del parte → una pieza). El nombre evita la colisión con `PRODUCE` (que es planeación).
   // La cadena: el parte listo (o quien lo pida) deja un sobre `brief/parte-listo` · `producir` → la sala despacha PIEZAS. Lo despacha el repartidor y nada más (ADR-018).
   // 🔴 El obrero PAGA (un agente): exige la llave de despacho, como el brief y el alta (E67).
+  //
+  // r63 (relevo 61) · LA PIEZA AHORA ENTRA POR LA PUERTA DE LA OFICINA (`PzZ3b6cY6DYmIaOQ` · `zero-risk/oficina`). Sin `familia` en el sobre, con la oficina `apagada`, con una familia no activa
+  // o fuera del ensayo, la puerta REENVÍA el cuerpo intacto a la pieza simple (`lVCLzxQCKNkd3uS0` · `zero-risk/pieza`): PASARELA NEUTRAL. Reversa: volver a los tres campos de abajo.
   PIEZAS: {
-    workflow_id: 'lVCLzxQCKNkd3uS0',
-    webhook_path: 'zero-risk/pieza',
-    worker_name: 'pieza (el productor · un brief → una pieza)',
+    workflow_id: 'PzZ3b6cY6DYmIaOQ',
+    webhook_path: 'zero-risk/oficina',
+    worker_name: 'oficina (puerta · producir → sala o pieza simple)',
+    alias_workflow_ids: Object.freeze(['lVCLzxQCKNkd3uS0']),
     phase_boundaries: Object.freeze(['journey_completed']),
     idempotency_suffix: 'pieza-worker-dispatch',
     dispatch_key_required: true,
@@ -182,7 +195,7 @@ export function isCanonicalPhase(name: string): name is CanonicalPhaseLyVo {
 export function journeyTypeOfWorkflow(workflow_id: string | null | undefined): JourneyType | undefined {
   if (!workflow_id) return undefined
   for (const [journey, target] of Object.entries(JOURNEY_WORKFLOW_MAP)) {
-    if (target && target.workflow_id === workflow_id) return journey as JourneyType
+    if (target && (target.workflow_id === workflow_id || (target.alias_workflow_ids ?? []).includes(workflow_id))) return journey as JourneyType
   }
   return undefined
 }

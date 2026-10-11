@@ -26,7 +26,7 @@ export function almacenDeSupabase(): Almacen {
     async plazos() { return lista<PlazoCfg>(db.from('cadena_plazos').select('*').limit(100)) },
     async formatos() {
       const out: FormatosPorRed = {}
-      for (const f of await lista<{ red: string; formato: string; lead_dias: number; produccion: 'opera' | 'espera_brazo'; max_por_dia: number | null }>(db.from('cadena_formatos_por_red').select('*').limit(500))) (out[f.red] ??= []).push({ formato: f.formato, produccion: f.produccion, lead_dias: f.lead_dias, max_por_dia: f.max_por_dia })
+      for (const f of await lista<{ red: string; formato: string; lead_dias: number; produccion: 'opera' | 'espera_brazo'; max_por_dia: number | null; familia?: string | null }>(db.from('cadena_formatos_por_red').select('*').limit(500))) (out[f.red] ??= []).push({ formato: f.formato, produccion: f.produccion, lead_dias: f.lead_dias, max_por_dia: f.max_por_dia, familia: f.familia ?? null })
       return out
     },
 
