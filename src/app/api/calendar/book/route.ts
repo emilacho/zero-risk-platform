@@ -44,6 +44,7 @@ import {
 } from '@/lib/calendar/registrar-intento'
 import { avisarAtascoDeAgenda } from '@/lib/calendar/aviso-agenda'
 import { resolveCalendarClientId } from '@/lib/calendar-client-resolver'
+import { zonaDeReserva } from '@/lib/pais/pais-del-cliente'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -51,7 +52,6 @@ export const dynamic = 'force-dynamic'
 const CALCOM_API_BASE = 'https://api.cal.com/v2'
 const CAL_API_VERSION = '2024-08-13'
 const CAL_SLOTS_API_VERSION = '2024-09-04' // /slots requires this version
-const DEFAULT_TIME_ZONE = 'America/Guayaquil'
 const DEFAULT_LANGUAGE = 'es'
 const SLOT_SEARCH_DAYS = 21 // look this many days ahead for an available slot
 
@@ -170,6 +170,18 @@ const CAL_STATUS_MAP: Record<string, string> = {
   rejected: 'cancelled',
 }
 
+/** lee la ficha (país y config) para la zona; de mejor esfuerzo: sin ficha o con error, cae a la reserva / UTC */
+async function leerClienteParaLaZona(clientId?: string): Promise<{ country?: unknown; config?: unknown } | null> {
+  if (!clientId) return null
+  try {
+    const r = await getSupabaseAdmin().from('clients').select('country,config').eq('id', clientId).limit(1)
+    const fila = (r as { data?: unknown[] | null }).data?.[0]
+    return fila && typeof fila === 'object' ? (fila as { country?: unknown; config?: unknown }) : null
+  } catch {
+    return null
+  }
+}
+
 interface BookBody {
   client_id?: string
   contact_email?: string
@@ -235,7 +247,9 @@ export async function POST(req: Request) {
   // → previously surfaced as a hard 502 that broke onboarding (CC#3 2026-07-05).
   // FIX · on an availability rejection, query /slots for the first real
   // available slot and re-book there. Retrying the SAME slot never helps.
-  const timeZone = body.time_zone ?? DEFAULT_TIME_ZONE
+  // La zona es del CLIENTE (ficha: config.timezone, o la de su país si tiene una sola) · sin dato, la que mande la reserva · sin ninguna, UTC. Nunca un país fijo.
+  const cliente = await leerClienteParaLaZona(body.client_id)
+  const { zona: timeZone, origen: zonaOrigen } = zonaDeReserva(cliente, body.time_zone)
   const attendee = {
     name: body.contact_name ?? 'Guest',
     email: body.contact_email,
@@ -421,6 +435,8 @@ export async function POST(req: Request) {
       booking: data,
       cal: { uid: calUid, status: calStatus },
       mode: 'cal-com-cloud',
+      // la zona usada y de dónde salió (ficha · país de la ficha · reserva · UTC neutra)
+      time_zone: { zona: timeZone, origen: zonaOrigen },
       // C7 · el que llama puede ver si la reunion quedo atada, sin ir a la base.
       client_id_resolution: resolution,
       // true when the requested slot was unavailable and we booked the next

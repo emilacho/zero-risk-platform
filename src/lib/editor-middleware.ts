@@ -588,6 +588,16 @@ on client-outcome concerns they may have missed.
 {"status": "approved" | "revision_needed" | "escalated", "issues": ["specific client-outcome risks"], "feedback": "actionable client-success guidance", "severity": "low" | "medium" | "high" | "critical"}`
 }
 
+/** El mercado del CLIENTE que reciba el contexto (país o mercado); sin dato, se le pide al revisor que lo tome del propio cliente. Nunca un país fijo. */
+export function mercadoDelCliente(context: Record<string, unknown> | undefined): string {
+  for (const k of ['country', 'client_country', 'market', 'client_market', 'markets']) {
+    const v = context?.[k]
+    const t = Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()).join(' / ') : typeof v === 'string' ? v.trim() : ''
+    if (t) return t
+  }
+  return "the client's own market, as the brand book and client context state it"
+}
+
 function buildBrandStrategistTaskBrandDeep(params: {
   content: string
   agentSlug: string
@@ -612,7 +622,7 @@ Focus exclusively on:
 1. **Brand Voice Cadence**: Sentence rhythm, paragraph length, emotional energy — matches client's specific tone?
 2. **Brand Personality Consistency**: Reflects the brand personality (e.g. technical authority vs. conversational warmth)?
 3. **Brand Evolution Implications**: Consistent with future positioning direction? Does it lock the client into something unwanted?
-4. **Cultural Sensitivity**: Regional implications (Ecuador, vertical norms) requiring adjustment?
+4. **Cultural Sensitivity**: Regional implications (${mercadoDelCliente(params.context)}, vertical norms) requiring adjustment?
 5. **Trademark / IP Guardian**: Correct use of own trademarks, respects third-party marks?
 6. **Strategic Consistency**: Advances long-term brand strategy, not just immediate campaign objective?
 7. **Competitive Positioning**: Differentiates clearly from competitors in its category?

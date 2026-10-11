@@ -82,7 +82,7 @@ server.registerTool(
       donde: z
         .string()
         .nullish()
-        .describe('País o ciudad · sólo para mapas y anuncios (ej. "Ecuador", "PT", "US").'),
+        .describe('País o ciudad · sólo para mapas y anuncios (ej. "<país>", "<código de 2 letras>", "<ciudad>": el del cliente, nunca copiado de este ejemplo).'),
       client_id: z
         .string()
         .nullish()

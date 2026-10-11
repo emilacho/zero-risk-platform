@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
+import { codigoDePais } from '@/lib/pais/pais-del-cliente'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,13 +24,23 @@ export async function POST(request: Request) {
   const clientId = body.client_id
   const domain = body.domain
   const keywords: string[] = Array.isArray(body.keywords) ? body.keywords.filter(Boolean) : []
-  const country = body.locale?.country ?? 'EC'
+  // El país es del CLIENTE: el que manda el llamador, o el de su ficha. Sin ninguno NO se adivina (antes: 'EC' para todos).
+  const paisDelLlamador = typeof body.locale?.country === 'string' ? body.locale.country.trim() : ''
 
   if (!clientId || !domain || keywords.length === 0) {
     return NextResponse.json({ error: 'client_id, domain, keywords[] required' }, { status: 400 })
   }
 
   const supabase = getSupabaseAdmin()
+
+  let country = paisDelLlamador
+  if (!country) {
+    const { data: ficha } = await supabase.from('clients').select('country').eq('id', clientId).limit(1).maybeSingle()
+    country = codigoDePais(ficha?.country) ?? ''
+  }
+  if (!country) {
+    return NextResponse.json({ error: 'pais_requerido', detail: 'ni locale.country en el cuerpo ni un país reconocible en la ficha del cliente (clients.country): no se adivina' }, { status: 400 })
+  }
 
   // Find latest engagement for this domain to anchor tracking rows.
   const { data: engagement } = await supabase
