@@ -147,7 +147,7 @@ async function correrSacar(db: DbFalsa, opciones: { fallaRuta?: number; fallaReg
   const out = (await fn.call({ helpers: { httpRequest } }, $, j, { ZERO_RISK_API_URL: 'https://app.test', INTERNAL_API_KEY: 'k', SUPABASE_SERVICE_ROLE_KEY: 's' }, { id: '999002' })) as Salida[]
   return { out, llamadas, j }
 }
-const MALAS = ['origen costero verificable', 'denominación de origen implícita', 'el origen es la prueba', 'Origen verificable', 'Orgulloso de origen', 'frescura verificable']
+const MALAS = ['origen costero verificable', 'denominación de origen implícita', 'el origen es la prueba', 'Origen verificable', 'frescura verificable', 'origen geográfico específico', 'el lugar de origen del marisco', 'origen manabita']
 
 describe('② «Sacar lo sin fuente» · el manual v1 de hoy contra la puerta REAL de M2', () => {
   it('el manual v1 trae lo que se midió (rojo): las frases sin fuente están en el borrador de entrada', () => {

@@ -141,6 +141,14 @@ describe('1 · la decisión del dueño queda atada a UNA versión de la cosa', (
     expect(de(l, 'hitl_queue:h1').version_decidida).toBeNull()
   })
 
+  it('r63 · la fila `manual_sacado_en_origen` (registro interno de lo que el chequeo sacó) no entra al catálogo ni cuenta como versión', async () => {
+    const interna = pieza('ms', 'draft', 2, { output_type: 'manual_sacado_en_origen', title: 'Manual de marca · lo sacado por no tener fuente' })
+    const l = await listaDe(tablas([pieza('v1', 'draft', 20), interna], []))
+    expect(l.lineas.some((f) => f.ref === REF('ms'))).toBe(false)
+    expect(l.lineas.some((f) => f.ref === REF('v1'))).toBe(true)
+    expect(de(l, REF('v1')).vigente).toBe(true) // y no desplaza a la pieza real
+  })
+
   it('sin ninguna decisión todo queda como antes: manda la última aprobada por su estado', async () => {
     const l = await listaDe(tablas([pieza('v1', 'approved', 20), pieza('v2', 'draft', 10)], []))
     expect([de(l, REF('v1')).vigente, de(l, REF('v2')).vigente]).toEqual([true, false])
