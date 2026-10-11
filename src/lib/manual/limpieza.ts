@@ -7,7 +7,7 @@
  *  3 · PALABRAS PROHIBIDAS PROPIAS: ninguna parte del manual usa las palabras que el mismo manual lista en `forbidden_words` (salvo para MENCIONARLAS: entre comillas o tras «nunca/evita/sin…»).
  * Todo lo que sale va SOLO al registro interno (nunca a la bandeja ni a Slack).
  */
-import { normalizar } from './texto'
+import { normalizar, palabrasDe } from './texto'
 
 export interface QuitadoPorLimpieza { ruta: string; texto: string; motivo: 'nombre_interno_citado' | 'fragmento' | 'palabra_prohibida_propia' }
 
@@ -49,18 +49,74 @@ const ETIQUETA_ICP = String.raw`\bICP\s+(?:(?:[a-z_]+\s+)?S\d+\b|[a-z]+_[a-z_]+)
 const RE_ETIQUETA_ICP = new RegExp(ETIQUETA_ICP, 'g')
 const tieneNombreInterno = (s: string): boolean => new RegExp(IDENT).test(s) || new RegExp(ETIQUETA_ICP).test(s)
 
+/** marca (invisible) del sitio donde se quitó un bloque: sirve para reconocer, después, la oración que se quedó sin su complemento */
+const MARCA = '\u0001'
+
+/**
+ * Quita los bloques ( … ) o [ … ] ENTEROS (con sus anidados: «(ICP objections S1: «Abre jueves (cierra mar)»)» es UN bloque) cuando `decide(contenido)` lo pide.
+ * Si el bloque iba pegado a un punto, queda un espacio: así «local. (x), lo que…» se ve como «local. , lo que…» y el reparador de fragmentos la reconoce.
+ */
+function quitarBloquesBalanceados(t: string, abre: string, cierra: string, decide: (dentro: string) => boolean): string {
+  let out = ''
+  let i = 0
+  while (i < t.length) {
+    if (t[i] === abre) {
+      let prof = 0
+      let j = i
+      for (; j < t.length; j++) {
+        if (t[j] === abre) prof++
+        else if (t[j] === cierra) { prof--; if (prof === 0) break }
+      }
+      if (j < t.length && prof === 0) {
+        const dentro = t.slice(i + 1, j)
+        // se decide por lo que dice el bloque POR SÍ MISMO (sin lo anidado): «(jueves a lunes (dato_interno))» se queda con su paréntesis y pierde solo el interno
+        let propio = dentro
+        for (let k = 0; k < 8; k++) { const sin = propio.replace(/\([^()]*\)|\[[^\[\]]*\]/g, ''); if (sin === propio) break; propio = sin }
+        if (decide(propio)) {
+          out = out.replace(/[ \t]+$/, '')
+          out += (/[.!?…]$/.test(out) ? ' ' : '') + MARCA
+        } else out += abre + quitarBloquesBalanceados(dentro, abre, cierra, decide) + cierra // este bloque se queda, pero lo anidado se revisa
+        i = j + 1
+        continue
+      }
+    }
+    out += t[i]
+    i++
+  }
+  return out
+}
+
+// ── troncos sin verbo: «La objeción S2 sobre el tiempo de espera.» (lo único que la completaba era la cita que se quitó)
+/** sustantivos que SOLO nombran algo que la cita explicaba (dato del idioma, no de un cliente) */
+const NOMBRES_QUE_PIDEN_SU_CITA = new Set(['objecion', 'dolor', 'objetivo', 'criterio', 'canal', 'dato', 'cita', 'hallazgo', 'duda', 'necesidad', 'motivacion', 'expectativa', 'barrera', 'preocupacion', 'senal', 'evidencia', 'hipotesis', 'preferencia', 'molestia', 'queja', 'pregunta'])
+const DETERMINANTES = new Set(['el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'este', 'esta', 'estos', 'estas', 'ese', 'esa', 'su', 'sus'])
+const VERBOS_QUE_LA_COMPLETARIAN = new Set(['es', 'son', 'esta', 'estan', 'era', 'eran', 'fue', 'fueron', 'hay', 'existe', 'existen', 'resulta', 'representa', 'representan', 'tiene', 'tienen', 'puede', 'pueden', 'debe', 'deben', 'se', 'sigue', 'aparece', 'indica', 'muestra', 'afecta', 'genera', 'activa', 'impide', 'limita', 'explica', 'pesa', 'frena', 'cierra', 'abre'])
+const PREPOSICIONES = new Set(['sobre', 'de', 'del', 'para', 'por', 'acerca', 'respecto', 'en', 'con', 'ante'])
+export function esTroncoSinVerbo(oracion: string): boolean {
+  const w = palabrasDe(oracion.replaceAll(MARCA, ''))
+  if (w.length === 0 || w.length > 12) return false
+  if (!DETERMINANTES.has(w[0]) || !NOMBRES_QUE_PIDEN_SU_CITA.has(w[1])) return false
+  // un tronco lleva su complemento con preposición («… sobre …», «… de …»); «El dato importa.» es una oración completa
+  return w.some((x) => PREPOSICIONES.has(x)) && !w.some((x) => VERBOS_QUE_LA_COMPLETARIAN.has(x))
+}
+function quitarTroncos(t: string): string {
+  return t
+    .split('\n')
+    .map((linea) => (linea.includes(MARCA) ? oraciones(linea).filter((o) => !(o.includes(MARCA) && esTroncoSinVerbo(o))).join(' ') : linea))
+    .join('\n')
+}
+
 export function quitarNombresInternos(texto: string): { texto: string; cambio: boolean } {
-  let t = texto
-  // paréntesis y corchetes que nombran fuentes internas, enteros
-  // si el bloque iba pegado a un punto, queda un espacio: así «local. (x), lo que…» se ve como «local. , lo que…» y el reparador de fragmentos la reconoce
-  const quitaBloque = (re: RegExp) => { t = t.replace(re, (m: string, dentro: string, off: number, todo: string) => (tieneNombreInterno(dentro) ? (/[.!?…]/.test(todo[off - 1] ?? '') ? ' ' : '') : m)) }
-  quitaBloque(/\s*\(([^()]*)\)/g)
-  quitaBloque(/\s*\[([^\[\]]*)\]/g)
-  // anotaciones del autor «[responde a …]» aunque no nombren un campo
-  t = t.replace(/\s*\[\s*responde\s+a\b[^\[\]]*\]/gi, '')
+  // paréntesis y corchetes que nombran fuentes internas (y las anotaciones «[responde a …]» del autor), enteros
+  let t = quitarBloquesBalanceados(texto, '(', ')', tieneNombreInterno)
+  t = quitarBloquesBalanceados(t, '[', ']', (dentro) => tieneNombreInterno(dentro) || /^\s*responde\s+a\b/i.test(dentro))
   // lo que quede suelto en la prosa
   t = t.replace(RE_ETIQUETA_ICP, '').replace(RE_IDENT, '')
-  return { texto: arreglarPuntuacion(t), cambio: t !== texto }
+  // si una cita se quitó dejando «(: «…»)» —nunca—: la puntuación suelta al abrir un paréntesis o corchete se va
+  t = t.replace(/\(\s*[:;,]\s*/g, '(').replace(/\[\s*[:;,]\s*/g, '[')
+  t = quitarTroncos(arreglarPuntuacion(t)).replaceAll(MARCA, '')
+  const limpio = arreglarPuntuacion(t)
+  return { texto: limpio, cambio: limpio !== texto }
 }
 function arreglarPuntuacion(s: string): string {
   return s
