@@ -78,6 +78,10 @@ export async function leerInsumos(db: Db, clientId: string, opciones: { sinManua
   const config = (cliente.config ?? {}) as { apify?: { own_handles?: Record<string, unknown> } }
   const handles = Object.values(config.apify?.own_handles ?? {}).map(texto).filter(Boolean)
   const propios: Propios = { sitio: (cliente.website_url as string | null) ?? null, handles }
+  // coherencia con M1-a: «propio» es igualdad exacta del usuario; sin usuarios declarados en la ficha, TODO el Instagram raspado caería como «de terceros» y lo que solo respalda esa cuenta saldría del manual en silencio
+  if (handles.length === 0 && filas.some((f) => f.apify_function === 'instagram_scraper')) {
+    return { ok: false, status: 409, error: 'sin_usuarios_propios', detalle: 'hay Instagram raspado pero la ficha no declara la cuenta propia (config.apify.own_handles); sin ella no se distingue lo del cliente de lo de terceros' }
+  }
 
   const humanas: Fuente[] = CAMPOS_HUMANOS_DE_LA_FICHA.filter((c) => texto(cliente[c]).trim()).map((c) => fuenteHumana(`ficha:${c}`, `ficha del cliente · ${c}`, `${c}: ${texto(cliente[c]).trim()}`, 'ficha'))
   const sintesis: Fuente[] = icps.map((d, i) => fuenteDeSintesis(`icp${i}`, 'documento de perfil de cliente ideal', JSON.stringify({ segmento: d.audience_segment, criterios: d.decision_criteria, mensajes: d.key_messages_for_segment, objeciones: d.objections })))
@@ -126,17 +130,23 @@ export function prepararRevision(ins: Insumos): Preparacion {
 
 // ───────────────────────── S5 · S7 (puerta final) + eslogan por código
 export interface ResultadoDeCierre extends Recomprobacion {
-  eslogan: { aplicado: boolean; motivo?: string; una_sola_fuente?: boolean }
+  /** M1-b: el eslogan que el código propuso, literal, con sus fuentes y la advertencia visible cuando solo hay UNA */
+  eslogan: { aplicado: boolean; motivo?: string; una_sola_fuente?: boolean; literal?: string; fuentes?: Array<{ rotulo: string; canal: string; rol: string }>; advertencia?: string | null }
   /** los hechos CON respaldo (o declarados por el cliente, o con duda) tal como los vio la puerta ANTES de cerrar: lo que la bandeja puede mostrar con su cita. Nunca incluye lo retirado. */
   hechos_visibles: InformeDeHechos['hechos']
 }
 /** lo que devolvió el autor pasa por la puerta: re-evalúa, retira lo que no tiene cita (queda SOLO en `retirados`), y el código escribe el eslogan si `tagline` está vacío */
 export function cerrarRevision(ins: Insumos, despues: Record<string, unknown>, opciones: { sinEslogan?: boolean } = {}): ResultadoDeCierre {
   const r = recomprobar(ins.manual, despues, { fuentes: ins.fuentes, dudas: ins.dudas })
+  const fp = frasesPropias(ins.fuentes)
   // r62 · el chequeo del alta SACA lo sin fuente pero NO escribe el eslogan por código (firma: eso es M2/M3)
-  const e: { manual: Record<string, unknown>; aplicado: boolean; motivo?: 'sin_eslogan' | 'tagline_ocupado'; una_sola_fuente?: boolean } = opciones.sinEslogan ? { manual: r.manual, aplicado: false } : aplicarEslogan(r.manual, frasesPropias(ins.fuentes))
+  const e: { manual: Record<string, unknown>; aplicado: boolean; motivo?: 'sin_eslogan' | 'tagline_ocupado'; una_sola_fuente?: boolean } = opciones.sinEslogan ? { manual: r.manual, aplicado: false } : aplicarEslogan(r.manual, fp)
   const previo = evaluarHechos({ manual: despues, fuentes: ins.fuentes, dudas: ins.dudas })
-  return { ...r, hechos_visibles: previo.hechos.filter((h) => h.estado === 'verificado' || h.estado === 'afirmacion_del_cliente' || h.estado === 'con_duda'), manual: e.manual, eslogan: { aplicado: e.aplicado, ...(e.motivo ? { motivo: e.motivo } : {}), ...(e.una_sola_fuente ? { una_sola_fuente: true } : {}) } }
+  const solo = e.aplicado && e.una_sola_fuente === true
+  const detalle = e.aplicado && fp.eslogan
+    ? { una_sola_fuente: solo, literal: fp.eslogan.literal, fuentes: fp.eslogan.fuentes.map((u) => ({ rotulo: u.rotulo, canal: u.canal, rol: u.rol })), advertencia: solo ? 'UNA SOLA FUENTE: el eslogan sale de un único lugar (no se repite en otro); confírmalo antes de firmar' : null }
+    : {}
+  return { ...r, hechos_visibles: previo.hechos.filter((h) => h.estado === 'verificado' || h.estado === 'afirmacion_del_cliente' || h.estado === 'con_duda'), manual: e.manual, eslogan: { aplicado: e.aplicado, ...(e.motivo ? { motivo: e.motivo } : {}), ...(e.una_sola_fuente ? { una_sola_fuente: true } : {}), ...detalle } }
 }
 
 /** diferencias por campo entre lo vigente y lo nuevo (solo campos de texto cuyo contenido cambió) */

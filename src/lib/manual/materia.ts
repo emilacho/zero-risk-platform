@@ -16,14 +16,38 @@ const hostDe = (u: string): string => { try { return new URL(u.includes('://') ?
 
 /** ¿esta fila de raspado es del PROPIO cliente? (sitio por dirección; redes por usuario; mapas por el nombre de la función) */
 export function esFilaPropia(f: Pick<FilaDeRaspado, 'apify_function' | 'params'>, propios: Propios): boolean {
-  const p = JSON.stringify(f.params ?? {}).toLowerCase()
   if (f.apify_function.startsWith('own_')) return true
   if (f.apify_function === 'website_content_scraper') {
     const url = txt((f.params as { url?: unknown } | undefined)?.url)
     return !!propios.sitio && !!url && hostDe(url) === hostDe(propios.sitio)
   }
-  const mios = [...propios.handles, ...(propios.otros ?? [])].map((h) => h.replace(/^@/, '').toLowerCase()).filter(Boolean)
-  return mios.some((h) => p.includes(h))
+  // M1-a · IGUALDAD EXACTA del usuario (nunca «contiene»): la fila es propia solo si TODOS sus objetivos reconocibles son del cliente
+  const mios = misUsuarios(propios)
+  const objetivos = objetivosDeLaFila(f.params)
+  return objetivos.length > 0 && objetivos.every((o) => mios.has(o))
+}
+
+const misUsuarios = (propios: Propios): Set<string> => new Set([...propios.handles, ...(propios.otros ?? [])].map(usuarioDe).filter(Boolean))
+/** usuario en minúsculas, sin arroba, desde un usuario suelto o desde una dirección de perfil; '' si es una publicación u otra cosa que no es un perfil */
+function usuarioDe(x: unknown): string {
+  const s = txt(x).trim()
+  if (!s) return ''
+  if (/^[a-z]+:\/\//i.test(s) || /^(www\.)?[a-z0-9-]+\.[a-z]{2,}\//i.test(s)) {
+    try {
+      const partes = new URL(s.includes('://') ? s : `https://${s}`).pathname.split('/').filter(Boolean)
+      if (!partes.length || ['p', 'reel', 'reels', 'tv', 'explore', 'stories', 'hashtag'].includes(partes[0].toLowerCase())) return ''
+      return partes[0].replace(/^@/, '').toLowerCase()
+    } catch { return '' }
+  }
+  return s.replace(/^@/, '').toLowerCase()
+}
+function objetivosDeLaFila(params: unknown): string[] {
+  const p = (params ?? {}) as Record<string, unknown>
+  const crudos: unknown[] = []
+  for (const k of ['usernames', 'username', 'directUrls', 'urls', 'profiles']) { const v = p[k]; if (Array.isArray(v)) crudos.push(...v); else if (v != null) crudos.push(v) }
+  for (const s of arr<{ url?: unknown }>(p.startUrls)) crudos.push(typeof s === 'string' ? s : s?.url)
+  const ya = crudos.map(usuarioDe)
+  return crudos.length && ya.every(Boolean) ? ya : [] // un objetivo que no es un perfil (p. ej. una publicación) vuelve la fila «no propia»
 }
 
 function primerTitular(markdown: string): string {
@@ -66,10 +90,13 @@ export function fuentesDeRaspado(filas: FilaDeRaspado[], propios: Propios): Fuen
   }
   for (const fila of filas) {
     if (fila.ensayo === true) continue // datos sintéticos: jamás
-    const propia = esFilaPropia(fila, propios)
-    const tipo = propia ? 'primaria_propia' : 'tercero'
-    const mio = propia ? 'propio' : 'de terceros'
+    const filaPropia = esFilaPropia(fila, propios)
+    const mios = misUsuarios(propios)
     for (const it of arr<Record<string, unknown>>(fila.respuesta)) {
+      // a nivel de ítem: en una fila mixta, la cuenta del cliente es propia y la del otro es de terceros
+      const propia = filaPropia || (fila.apify_function === 'instagram_scraper' && mios.has(usuarioDe(it.username)))
+      const tipo = propia ? 'primaria_propia' : 'tercero'
+      const mio = propia ? 'propio' : 'de terceros'
       if (fila.apify_function === 'website_content_scraper') {
         const url = txt(it.url)
         const meta = (it.metadata ?? {}) as Record<string, unknown>

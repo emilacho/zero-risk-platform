@@ -53,9 +53,14 @@ export function armarTarjeta(e: EntradaDelBorrador): { titulo: string; vista_pre
   const opinion = e.opinion
     ? e.opinion.ok ? { rotulo: 'opinión del revisor externo (no es un dato confirmado)', texto: e.opinion.texto ?? '' } : { rotulo: 'SIN SEGUNDA MIRADA', error: e.opinion.error ?? 'el revisor externo no respondió' }
     : null
+  // M1-b · el eslogan que propone el código va PRIMERO en la vista previa, con su fuente; con una sola fuente, la advertencia en mayúsculas
+  const es = cierre.eslogan
+  const lineaEslogan = es.aplicado && es.literal
+    ? `Eslogan propuesto: «${es.literal}» · fuente: ${(es.fuentes ?? []).map((f) => f.rotulo).join(' + ') || 'sin dato'}${es.una_sola_fuente ? ' · ⚠️ UNA SOLA FUENTE' : ''}\n\n`
+    : ''
   return {
     titulo: `${opinion && 'error' in opinion ? '⚠️ SIN SEGUNDA MIRADA · ' : ''}Manual de marca · versión ${nueva} · ${ins.client_name}`,
-    vista_previa: limpio.texto.slice(0, 1500),
+    vista_previa: (lineaEslogan + limpio.texto).slice(0, 1500),
     metadata: {
       version_nueva: nueva, version_vigente: ins.version_vigente, manual_en_limpio: limpio.texto, diferencias, hechos, dudas,
       opinion_de_gpt: opinion, respuesta_del_autor: e.respuesta_del_autor ?? null,

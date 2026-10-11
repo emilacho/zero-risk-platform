@@ -87,6 +87,26 @@ describe('el registro FINAL: manual primero, país por omisión, y si no hay nad
     expect(lib.registroFinal(sin, 'Argentina').registro).toBe('voseo')
     expect(lib.registroFinal(sin, '  méxico ').registro).toBe('tuteo') // sin tildes ni mayúsculas ni espacios
   })
+  it('r63 · R-1 · un registro solo INFERIDO que contradice al del país NO gana: manda el país y el conflicto queda DICHO', () => {
+    const inferido = { registro: 'voseo', fuente: 'inferido_de_los_textos_del_manual', pruebas: ['4 marcas de voseo y ninguna de otro registro'] } as Reg
+    const r = lib.registroFinal(inferido, 'Ecuador')
+    expect(r).toMatchObject({ registro: 'tuteo', fuente: 'por_omision_del_pais_de_la_ficha' })
+    expect(r.aviso).toMatch(/voseo/); expect(r.aviso).toMatch(/no lo declara|no está declarado|solo lo sugieren/i)
+    expect(r.pruebas.join(' ')).toMatch(/voseo/) // la sospecha queda a la vista para quien revisa
+  })
+  it('r63 · el caso de CC#3: manual de un cliente de Ecuador escrito SOLO en voseo (sin ninguna marca de tuteo, sin declarar) ⇒ el plan sale en TUTEO', () => {
+    const m = lib.registroDelManual(draft({ mensajes_clave: ['Pedí por WhatsApp', 'Sabés exactamente de dónde viene', 'Lo tenés en casa en media hora'] }))
+    expect(m).toMatchObject({ registro: 'voseo', fuente: 'inferido_de_los_textos_del_manual' }) // lo que vio CC#3
+    expect(lib.registroFinal(m, 'Ecuador')).toMatchObject({ registro: 'tuteo', fuente: 'por_omision_del_pais_de_la_ficha' })
+  })
+  it('r63 · lo DECLARADO en el manual sigue mandando sobre el país; lo inferido que COINCIDE con el país se queda; sin país, el inferido es lo único que hay', () => {
+    expect(lib.registroFinal({ registro: 'voseo', fuente: 'declarado_en_el_manual', pruebas: ['«voseo»'] }, 'Ecuador')).toMatchObject({ registro: 'voseo', aviso: null })
+    const tuteo = { registro: 'tuteo', fuente: 'inferido_de_los_textos_del_manual', pruebas: ['x'] } as Reg
+    expect(lib.registroFinal(tuteo, 'Ecuador')).toMatchObject({ registro: 'tuteo', fuente: 'inferido_de_los_textos_del_manual', aviso: null })
+    const voseo = { registro: 'voseo', fuente: 'inferido_de_los_textos_del_manual', pruebas: ['x'] } as Reg
+    for (const p of ['Atlantis', '', null]) expect(lib.registroFinal(voseo, p)).toMatchObject({ registro: 'voseo', fuente: 'inferido_de_los_textos_del_manual' })
+    expect(lib.registroFinal(voseo, 'Argentina')).toMatchObject({ registro: 'voseo', fuente: 'inferido_de_los_textos_del_manual' }) // el país coincide
+  })
   it('país desconocido, vacío o ausente ⇒ sin dato (no se adivina)', () => {
     for (const p of ['Atlantis', '', null, undefined, 5]) expect(lib.registroFinal(sin, p).registro).toBe('sin_dato')
   })
