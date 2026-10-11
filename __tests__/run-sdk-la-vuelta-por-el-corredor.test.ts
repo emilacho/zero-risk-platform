@@ -100,7 +100,9 @@ describe('la elegibilidad', () => {
   it('🔴 descubrimiento (persiste al cerebro en Vercel) y agentes fuera de la lista NO son elegibles aunque pidan la palanca', () => {
     expect(vueltaPorElCorredorElegible(pedido({ agent: 'onboarding-specialist', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
     expect(vueltaPorElCorredorElegible(pedido({ agent: 'jefe-marketing', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
-    expect(AGENTES_CON_VUELTA_POR_EL_CORREDOR).toEqual(['campaign-brief-agent'])
+    // ronda 69 · decisión explícita: + los dos agentes de diseño de la oficina (sin efectos propios de Vercel); el texto editorial y el descubrimiento siguen fuera
+    expect(AGENTES_CON_VUELTA_POR_EL_CORREDOR).toEqual(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller'])
+    expect(vueltaPorElCorredorElegible(pedido({ agent: 'content-creator', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
   })
   it('el pedido interno lleva la entrega delegada, y un `_runner_delivery` de afuera se PISA', async () => {
     const cuerpo = pedido({ _runner_delivery: { callback_url: 'https://evil.test/x', dispatch_key: 'x' } })
