@@ -28,7 +28,7 @@ export const TABLA = {
   cambiá: 'cambia', ignorá: 'ignora', completá: 'completa', aplicá: 'aplica', ejecutá: 'ejecuta', publicá: 'publica', activá: 'activa', apagá: 'apaga', buscá: 'busca',
   guardá: 'guarda', mandá: 'manda', enviá: 'envía', sacá: 'saca', quitá: 'quita', cargá: 'carga', generá: 'genera', creá: 'crea', armá: 'arma', dejá: 'deja', tomá: 'toma',
   cuidá: 'cuida', evitá: 'evita', contá: 'cuenta', ayudá: 'ayuda', cerrá: 'cierra', empezá: 'empieza', pensá: 'piensa', ubicá: 'ubica', separá: 'separa', juntá: 'junta',
-  comparé: 'compara', limitá: 'limita', respetá: 'respeta', citá: 'cita', copiá: 'copia', pegá: 'pega', nombrá: 'nombra', listá: 'lista', anotá: 'anota', registrá: 'registra',
+  compará: 'compara', limitá: 'limita', respetá: 'respeta', citá: 'cita', copiá: 'copia', pegá: 'pega', nombrá: 'nombra', listá: 'lista', anotá: 'anota', registrá: 'registra',
   clasificá: 'clasifica', identificá: 'identifica', determiná: 'determina', estimá: 'estima', validá: 'valida', contrastá: 'contrasta', cotejá: 'coteja', adjuntá: 'adjunta',
   incorporá: 'incorpora', agrupá: 'agrupa', filtrá: 'filtra', seleccioná: 'selecciona', asigná: 'asigna', reservá: 'reserva', aprobá: 'aprueba', rechazá: 'rechaza',
   cancelá: 'cancela', continuá: 'continúa', terminá: 'termina', finalizá: 'finaliza', entregá: 'entrega', preguntá: 'pregunta', trabajá: 'trabaja', utilizá: 'utiliza',

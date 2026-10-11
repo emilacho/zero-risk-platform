@@ -16,7 +16,7 @@ var _VOS_A_TU = {
   "marcá": "marca", "cambiá": "cambia", "ignorá": "ignora", "completá": "completa", "aplicá": "aplica", "ejecutá": "ejecuta", "publicá": "publica", "activá": "activa",
   "apagá": "apaga", "buscá": "busca", "guardá": "guarda", "mandá": "manda", "enviá": "envía", "sacá": "saca", "quitá": "quita", "cargá": "carga", "generá": "genera",
   "creá": "crea", "armá": "arma", "dejá": "deja", "tomá": "toma", "cuidá": "cuida", "evitá": "evita", "contá": "cuenta", "ayudá": "ayuda", "cerrá": "cierra",
-  "empezá": "empieza", "pensá": "piensa", "ubicá": "ubica", "separá": "separa", "juntá": "junta", "comparé": "compara", "limitá": "limita", "respetá": "respeta",
+  "empezá": "empieza", "pensá": "piensa", "ubicá": "ubica", "separá": "separa", "juntá": "junta", "compará": "compara", "limitá": "limita", "respetá": "respeta",
   "citá": "cita", "copiá": "copia", "pegá": "pega", "nombrá": "nombra", "listá": "lista", "anotá": "anota", "registrá": "registra", "clasificá": "clasifica",
   "identificá": "identifica", "determiná": "determina", "estimá": "estima", "validá": "valida", "contrastá": "contrasta", "cotejá": "coteja", "adjuntá": "adjunta",
   "incorporá": "incorpora", "agrupá": "agrupa", "filtrá": "filtra", "seleccioná": "selecciona", "asigná": "asigna", "reservá": "reserva", "aprobá": "aprueba",
@@ -51,10 +51,14 @@ var _VOS_A_TU = {
   "decis": "dices",
 }
 var _VOS_AMBIGUO_CON_PASADO = function (k) { return /í$/.test(k) && k !== 'vení' && k !== 'decí' }
+/** ¿lo que viene a continuación está donde se escribe un imperativo? (arranque de oración o de viñeta, tras coma / dos puntos / comillas, o tras y/o/e/u) */
+function _enPosicionImperativa(antes) {
+  return /(^|[.!?…:;\n]\s*|[-—–*•]\s*|[(\[¿¡"]\s*|,\s*)$/.test(antes) || /\b(y|o|e|u)\s+$/i.test(antes)
+}
 var _PREP_VOS = /^(a|de|para|con|por|sin|sobre|entre|desde|hacia|hasta|según|segun)$/i
 
 function _mayusculaComoLaOriginal(orig, nueva) {
-  if (orig.length > 1 && orig === orig.toUpperCase()) return nueva.toUpperCase()
+  if (orig === orig.toUpperCase()) return nueva.toUpperCase() // las claves tienen ≥ 3 letras: una «Y» suelta no llega hasta aquí
   if (orig[0] !== orig[0].toLowerCase()) return nueva.charAt(0).toUpperCase() + nueva.slice(1)
   return nueva
 }
@@ -73,14 +77,12 @@ function corregirRegistroDelPlan(texto, registro) {
       var nueva = null
       if (k === 'vos') {
         var prev = (trozo.slice(0, pos + pre.length).match(/(\p{L}+)\s*$/u) || [])[1] || ''
-        nueva = /^con$/i.test(prev) ? null : _PREP_VOS.test(prev) ? 'ti' : 'tú'
-        if (/^con$/i.test(prev)) { return m } // «con vos» ⇒ «contigo» cambia dos palabras: se deja marcado
+        if (/^con$/i.test(prev)) return m // «con vos» ⇒ «contigo» cambia dos palabras: se deja marcado
+        nueva = _PREP_VOS.test(prev) ? 'ti' : 'tú'
       } else if (Object.prototype.hasOwnProperty.call(_VOS_A_TU, k)) {
         if (palabra === 'SOS') return m
         if (_VOS_AMBIGUO_CON_PASADO(k)) {
-          var antes = trozo.slice(0, pos + pre.length)
-          var inicio = /(^|[.!?…:;\n]\s*|[-—–*•]\s*|[(\[¿¡"]\s*|,\s*)$/.test(antes) || /\b(y|o|e|u)\s+$/i.test(antes)
-          if (!inicio) return m
+          if (!_enPosicionImperativa(trozo.slice(0, pos + pre.length))) return m
         }
         nueva = _VOS_A_TU[k]
       }
@@ -91,7 +93,39 @@ function corregirRegistroDelPlan(texto, registro) {
     })
   })
   var resultado = out.join('')
-  return { texto: resultado, corregidas: corregidas, restantes: formasDeVoseo(resultado) }
+  var posibles = voseoDesconocido(resultado).map(function (f) { return f + ' (posible)' })
+  return { texto: resultado, corregidas: corregidas, restantes: formasDeVoseo(resultado).concat(posibles) }
+}
+
+// ── lo que la tabla NO conoce: SOLO se marca, nunca se reescribe (ronda 68 · seguimiento)
+// Una lista de excepciones evita marcar palabras corrientes que terminan igual (más, país, cafés, está, modelo…).
+function _conjunto(lista) { var o = {}; lista.split(/\s+/).forEach(function (w) { if (w) o[w] = true }); return o }
+var _EXC_ACENTUADAS = _conjunto('más además jamás después país atrás detrás quizás demás compás anís cafés bebés papás mamás sofás tés canapés purés comités rosés interés inglés francés portugués holandés japonés irlandés danés cortés revés través marqués ananás estés estás aguarrás')
+var _EXC_FINAL_ACENTUADO = _conjunto('está será hará dará podrá tendrá vendrá saldrá valdrá pondrá habrá cabrá querrá sabrá allá acá papá mamá sofá maná ananá café bebé canapé comité rosé puré bidé jabalí esquí rubí bisturí maní')
+var _EXC_CLITICO = _conjunto('telenovela aguacate chocolate paralelo disparate cancela cazuela mandela escalera consuelo abuelo modelo anhelo aleluya nacela parcela novela vitela tutela cuchilla bolsillo semilla')
+var _CLITICOS_DE_VOS = /^(\p{L}{3,})(ale|ele|ile|ame|eme|ime|ate|ete|ite|alo|elo|ilo|ala|ela|ila|alas|elas|alos|elos|anos|enos|inos)$/u
+
+/** formas que PARECEN voseo y no están en la tabla: acabados -ás/-és/-ís, imperativos en -á/-é/-í al arrancar una frase y con clítico (preguntale, dame…). Devuelve las formas tal como están escritas. */
+function voseoDesconocido(texto) {
+  var sin = String(texto ?? '').replace(/«[^»]*»|`[^`]*`|https?:\/\/\S+/g, ' ')
+  var hallados = [], vistos = {}
+  var re = /(^|[^\p{L}\p{N}_])(\p{L}+)(?![\p{L}\p{N}_])/gu
+  var m
+  while ((m = re.exec(sin)) !== null) {
+    var palabra = m[2], k = palabra.toLowerCase()
+    if (Object.prototype.hasOwnProperty.call(_VOS_A_TU, k)) continue // ya las cubren la corrección y formasDeVoseo («sos»/«SOS» está en la tabla; «vos» no cumple ninguna regla de abajo)
+    var posImperativa = _enPosicionImperativa(sin.slice(0, m.index + m[1].length))
+    var marca = false
+    if (/^\p{L}{2,}(ás|és|ís)$/u.test(k)) marca = !_EXC_ACENTUADAS[k] && !/(ar|er|ir|dr|br|rr)ás$/.test(k) // futuros en -rás (tendrás, harás) son tuteo
+    else if (posImperativa && !_EXC_FINAL_ACENTUADO[k]) {
+      if (/([bcdfghjklmnñpqrstvwxyz]|[iu])á$/.test(k)) marca = k.length >= 5 && !/(ar|er|ir)á$/.test(k)
+      else if (/[bcdfghjklmnñpqrstvwxyz]é$/.test(k)) marca = k.length >= 5
+      else if (/[bcdfghjklmnñpqrstvwxyz]í$/.test(k)) marca = k.length >= 6
+      else if (k.length >= 9 && _CLITICOS_DE_VOS.test(k)) marca = !_EXC_CLITICO[k]
+    }
+    if (marca && !vistos[k]) { vistos[k] = true; hallados.push(palabra) }
+  }
+  return hallados
 }
 
 /** las formas de voseo que siguen en el texto (fuera de lo citado), para marcar lo que no se pudo corregir */
@@ -110,6 +144,6 @@ function formasDeVoseo(texto) {
 /** lo que el sistema escribe al final del plan cuando algo no cuadra (nada si todo está bien) */
 function bloqueDeRevisionDeRegistro(r, registro) {
   if (!r || (!r.restantes.length && registro === 'tuteo')) return ''
-  if (registro === 'tuteo') return '\n\n## Revisión del registro (la hace el sistema)\n- Quedan formas de voseo que no se corrigieron solas: ' + r.restantes.join(', ') + '. El registro de la marca es tuteo: revisar a mano.'
+  if (registro === 'tuteo') return '\n\n## Revisión del registro (la hace el sistema)\n- Quedan formas de voseo (o que lo parecen) que no se corrigieron solas: ' + r.restantes.join(', ') + '. El registro de la marca es tuteo: revisar a mano.'
   return ''
 }
