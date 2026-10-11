@@ -28,14 +28,15 @@ function subconjunto(a, b) {
 }
 
 /**
- * `http(url)` devuelve el JSON (lo pone el nodo: this.helpers.httpRequest · en la prueba, un doble).
+ * `http(url)` devuelve el JSON (lo pone el nodo: this.helpers.httpRequest · en la prueba, un doble). La llave NO va en la dirección (ronda 69): la pone el `http` del nodo en la cabecera `Authorization`;
+ * `token` solo sirve aquí para saber si hay llave.
  * desdeMs/hastaMs = cuándo empezó y terminó ESTA llamada. cuerpo = lo que se mandó al actor.
  */
 async function buscarImporteReal(http, token, cuerpo, desdeMs, hastaMs) {
   if (!token) return { estado: 'sin_importe', motivo: 'sin llave de Apify en el flujo · no se pudo preguntar' }
   var lista
   try {
-    lista = await http('https://api.apify.com/v2/actor-runs?limit=100&desc=1&token=' + token)
+    lista = await http('https://api.apify.com/v2/actor-runs?limit=100&desc=1')
   } catch (e) {
     return { estado: 'sin_importe', motivo: 'no se pudo leer la lista de corridas de Apify · ' + String(e && e.message ? e.message : e).slice(0, 120) }
   }
@@ -55,7 +56,7 @@ async function buscarImporteReal(http, token, cuerpo, desdeMs, hastaMs) {
       var r = vistas[i]
       if (!r.defaultKeyValueStoreId) continue
       try {
-        var entrada = await http('https://api.apify.com/v2/key-value-stores/' + r.defaultKeyValueStoreId + '/records/INPUT?token=' + token)
+        var entrada = await http('https://api.apify.com/v2/key-value-stores/' + r.defaultKeyValueStoreId + '/records/INPUT')
         if (subconjunto(cuerpo, entrada)) elegidas.push(r)
       } catch (e) { /* una entrada que no se pudo leer no es la nuestra: no se adivina */ }
     }

@@ -41,7 +41,7 @@ import { validateWorkflowId } from '@/lib/agent-safety'
 import { normalizeFidelityToolInput } from '@/lib/jefatura/fidelity-grader'
 import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
 import { buscarFilaDelEmpleado, recuperarRespuestaPagada as recuperarRespuestaPagadaImpl } from '@/lib/respuesta-pagada'
-import { recuperarVueltaPerdida } from '@/lib/vuelta-perdida'
+import { recuperarVueltaPerdida, PRESUPUESTO_DE_LA_FUNCION_MS, MARGEN_PARA_ENTREGAR_MS, topeDeRecuperacionInterna } from '@/lib/vuelta-perdida'
 import {
   recordDispatchIntent,
   markDispatchRunning,
@@ -177,7 +177,9 @@ export function validarLimitesDeMirarAfuera(body: unknown): { ok: true; valor: {
   return { ok: true, valor: { ...(maxOk ? { max_pedidos: l!.max_pedidos as number } : {}), ...(permOk ? { permitidos: l!.permitidos as string[] } : {}) } }
 }
 
-export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent']
+// ronda 69 · + los agentes de diseño de la oficina (`carousel-designer`, `design-visual-storyteller`): no persisten descubrimiento, no pasan por revisión editorial y no emiten brand_section/fidelity ⇒ nada que sólo corra en Vercel.
+// `content-creator` (el texto de la oficina) NO entra: está en la lista de revisión editorial; su vuelta se protege con la recuperación del resultado.
+export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller']
 
 export function resolveCallbackMode(body: RunSdkInput): string | null {
   const ctx = (body.context ?? {}) as Record<string, unknown>
@@ -517,11 +519,15 @@ const HOP_BY_HOP_OR_REWRITTEN_HEADERS = new Set([
  * gate has already passed at the outer level · the inner call repeats it
  * (canon defense in depth · zero cost vs the agent SDK call).
  */
+export const ENCABEZADO_VENCE_EN = 'x-zr-vence-en-ms'
+
 export function buildInnerRequestWithoutCallback(
   outerRequest: Request,
   outerBody: RunSdkInput,
   /** ARQ 2026-09-30 · la vuelta la entrega el corredor: el pedido interno lleva la dirección y la clave del despacho para pasárselas. */
   runnerDelivery?: { callback_url: string; dispatch_key: string },
+  /** ronda 69 · hasta cuándo (epoch ms) puede esperar el trabajo interno el resultado de un empleado cuya conexión se cortó · sólo lo pone esta función */
+  venceEnMs?: number,
 ): Request {
   const ctx = (outerBody.context ?? {}) as Record<string, unknown>
   // SHALLOW-OMIT both snake + camel · top-level + context-level. Cero JSON
@@ -550,6 +556,9 @@ export function buildInnerRequestWithoutCallback(
     }
   })
   innerHeaders.set('content-type', 'application/json')
+  // sólo vale el plazo que arma esta función (uno que llegue de afuera se descarta)
+  innerHeaders.delete(ENCABEZADO_VENCE_EN)
+  if (typeof venceEnMs === 'number' && Number.isFinite(venceEnMs)) innerHeaders.set(ENCABEZADO_VENCE_EN, String(Math.floor(venceEnMs)))
   return new Request(outerRequest.url, {
     method: 'POST',
     headers: innerHeaders,
@@ -665,6 +674,7 @@ export async function POST(request: Request) {
             request,
             body,
             elegibilidad.elegible ? { callback_url: callbackUrl, dispatch_key: dispatchKey } : undefined,
+            empezoVueltaEnMs + PRESUPUESTO_DE_LA_FUNCION_MS - MARGEN_PARA_ENTREGAR_MS,
           )
           const innerResponse = await POST(innerRequest)
           innerBody = await innerResponse.json()
@@ -1211,6 +1221,8 @@ export async function POST(request: Request) {
             step: body.step_name ?? null,
             executionId: wfAttr.workflow_execution_id,
             quien: 'run-sdk',
+            // ronda 69 · con vuelta por callback el plazo es lo que queda de la función (antes 120 s fijos): el empleado puede seguir trabajando minutos después del corte
+            topeMs: topeDeRecuperacionInterna(request.headers.get(ENCABEZADO_VENCE_EN), Date.now()),
           },
           {
             buscarFila: () =>

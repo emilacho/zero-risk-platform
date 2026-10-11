@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 const RAIZ = fileURLToPath(new URL('../../', import.meta.url)).replace(/\\/g, '/')
 const leer = (p) => fs.readFileSync(RAIZ + p, 'utf8')
-const MODULO = leer('scripts/worker-staging/3lyknrP3PoS2KzUf/importe-real-de-la-corrida.js').split('\r\n').join('\n').trim()
+const MODULO = leer('scripts/worker-staging/3lyknrP3PoS2KzUf/importe-real-de-la-corrida-r68.js').split('\r\n').join('\n').trim()
 
 export function cambiar(codigo, antes, despues, que) {
   const n = codigo.split(antes).length - 1
