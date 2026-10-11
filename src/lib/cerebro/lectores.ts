@@ -337,6 +337,9 @@ function decisionDelVeredicto(veredicto: string | null, cambios: string | null):
   return cambios && !veredicto ? 'cambio_pedido' : undefined
 }
 
+/** filas que el sistema guarda para auditar y que no son un trabajo para el dueño (dato, no lógica) */
+const TIPOS_DE_REGISTRO_INTERNO = ['manual_sacado_en_origen']
+
 const DECISIONES_NO_LEIDAS = 'las decisiones del dueño no se pudieron leer · la versión vigente puede no reflejar su aprobación'
 
 export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
@@ -347,7 +350,8 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
   ])
   if (r.error) return fallo(['trabajos_hechos', 'decisiones_del_aprobador'], r.error)
   // P1 · una fila marcada como PRUEBA (`provenance_tag.prueba_*`) no existe para la lista ni cuenta como versión
-  const filas = r.filas.filter((f) => !esDePrueba(objeto(f.provenance_tag)))
+  // r63 · una fila del REGISTRO INTERNO (lo que el chequeo sacó del manual) tampoco es un trabajo hecho: no entra al catálogo
+  const filas = r.filas.filter((f) => !esDePrueba(objeto(f.provenance_tag)) && !TIPOS_DE_REGISTRO_INTERNO.includes(String(f.output_type)))
 
   // la ÚLTIMA decisión de la cola sobre cada pieza (sin importar el orden en que lleguen las filas)
   const ultimaPorPieza = new Map<string, { decision: DecisionDelDueno; fecha: string | null; id: string; detalle: string | null }>()

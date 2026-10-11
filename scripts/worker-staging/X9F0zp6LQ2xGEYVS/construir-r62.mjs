@@ -63,6 +63,6 @@ if (process.argv[1] && process.argv[1].endsWith('construir-r62.mjs')) {
   const antes = JSON.parse(readFileSync(join(aqui, 'planeacion-antes-r62-2026-10-10.json'), 'utf8'))
   const nuevo = construir(antes)
   const dir = (process.argv.find((a) => a.startsWith('--salida=')) || '').slice(9) || aqui
-  writeFileSync(join(dir, 'planeacion-construida-r62-2026-10-10.json'), JSON.stringify(nuevo))
-  console.log('escrito planeacion-construida-r62-2026-10-10.json · nodos', nuevo.nodes.length)
+  writeFileSync(join(dir, 'planeacion-construida-r63-2026-10-11.json'), JSON.stringify(nuevo))
+  console.log('escrito planeacion-construida-r63-2026-10-11.json · nodos', nuevo.nodes.length)
 }

@@ -216,11 +216,14 @@ export function evaluarHechos(e: EntradaDeHechos): InformeDeHechos {
     for (const frase of partirEnFrases(enmascarar(h.texto))) {
       // las citas atribuidas se evalúan a nivel de frase (una cita puede cruzar comas)
       const citasTexto = [...frase.matchAll(RE_CITA)].map((m) => m[0])
-      const restante = citasTexto.reduce((a, c) => a.replace(c, ' '), frase)
+      const atribuida = RE_ATRIBUCION.test(normalizar(citasTexto.reduce((a, c) => a.replace(c, ' '), frase)))
+      // M1-d · una cita SIN atribución que lleva una palabra de certeza es la marca hablando con comillas puestas: no se esconde, se evalúa como texto del manual
+      const sueltaConCerteza = (c: string) => !atribuida && buscarCerteza(palabrasDe(c.slice(1, -1)), lista).length > 0
+      const restante = citasTexto.reduce((a, c) => (sueltaConCerteza(c) ? a : a.replace(c, ' ')), frase)
       for (const c of citasTexto) {
         const lit = c.slice(1, -1)
         if (palabrasDe(lit).length < 3) continue
-        if (!RE_ATRIBUCION.test(normalizar(restante))) continue
+        if (!atribuida) continue
         const s = soporteDeCita(lit, ix)
         hechos.push(armar(h, frase, c, ['cita'], [{ marca: 'cita', texto: lit, s }], dudas))
       }
