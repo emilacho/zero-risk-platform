@@ -18,7 +18,7 @@ import {
   type EventLogStorage,
   type ReadFilters,
 } from '@/lib/sala-event-log'
-import { dispatchOneIntake, type CapAlerter, type CapSpendQuery } from './dispatch'
+import { dispatchOneIntake, type CapAlerter, type CapSpendQuery, type CapUsdQuery } from './dispatch'
 import { avisarSobrePerdido, type AlertaDeSobrePerdido } from './aviso-de-sobre-perdido'
 import { buildDispatchMarkerEvent, type MarkerClass } from './marker'
 import { parseIntakeEvent } from './parsing'
@@ -48,9 +48,11 @@ export interface OrchestratorInput extends ConsumerTickInput {
    * When omitted, the cap evaluates with `spent_usd=0` (under_cap pass).
    */
   readonly cap_spend_query?: CapSpendQuery
+  /** el techo de cada cliente (su ficha) · reenviado al despacho */
+  readonly cap_usd_query?: CapUsdQuery
   /** Canon canonical · forwarded to dispatch · tests force cap enforce
    *  without flipping the env. Production reads
-   *  `SALA_NAUFRAGO_RUN_CAP_ENFORCE` via `isNaufragoCapEnforced()`. */
+   *  `SALA_RUN_CAP_ENFORCE` via `isRunCapEnforced()`. */
   readonly cap_enforce_override?: boolean
   /** Canon canonical · forwarded to dispatch · §150 #5 cap-breach alerter.
    *  Production omits (defaults to Slack via dispatchCostMonitorAlert) ·
@@ -153,6 +155,7 @@ export async function consumeIntakeTick(
       n8n_base_url: input.n8n_base_url,
       fetcher: input.fetcher,
       ...(input.cap_spend_query ? { cap_spend_query: input.cap_spend_query } : {}),
+      ...(input.cap_usd_query ? { cap_usd_query: input.cap_usd_query } : {}),
       ...(input.cap_alerter ? { cap_alerter: input.cap_alerter } : {}),
       ...(input.cap_enforce_override !== undefined
         ? { cap_enforce_override: input.cap_enforce_override }

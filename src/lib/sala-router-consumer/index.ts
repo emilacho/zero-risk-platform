@@ -34,6 +34,7 @@ export type { BuildMarkerInput } from './marker'
 export { dispatchOneIntake } from './dispatch'
 export type {
   CapSpendQuery,
+  CapUsdQuery,
   DispatchOneInput,
   DispatchOneResult,
 } from './dispatch'
@@ -44,7 +45,7 @@ export type { CandadoDelTic, TomaDelCandado } from './lock'
 export { findLostClaims } from './query'
 export type { OrchestratorInput } from './orchestrator'
 
-export { wireCapSpendQuerySupabase } from './cap-spend-query'
+export { wireCapSpendQuerySupabase, wireCapUsdQuerySupabase } from './cap-spend-query'
 export type { WireCapSpendQueryOptions } from './cap-spend-query'
 
 /** PAQUETE del repartidor (candado · tope de tiempo · reclamar antes de disparar) · NACE APAGADA · sólo `true` literal lo enciende */

@@ -15,12 +15,11 @@ import { dispatchCostMonitorAlert } from '@/lib/cost-monitor-alert'
 import { buildIdempotencyKey } from '@/lib/sala-event-log'
 import {
   dispatchToWorkflow,
-  evaluateNaufragoRunCap,
+  evaluateRunCap,
   getJourneyWorkflowTarget,
-  isNaufragoCapEnforced,
+  isRunCapEnforced,
   isWorkflowDispatchEnabled,
-  NAUFRAGO_TENANT_IDS,
-  type NaufragoCostCapResult,
+  type RunCapResult,
   type WorkflowDispatchResult,
 } from '@/lib/sala-journey-dispatch'
 import type { DispatchDecision } from '@/lib/sala-router'
@@ -42,6 +41,9 @@ export type CapSpendQuery = (input: {
   readonly stream_id: string
   readonly correlation_id: string
 }) => Promise<number>
+
+/** el techo de ESTE cliente (su ficha: `clients.config.spend_cap_usd`) · null/undefined ⇒ rige el techo general */
+export type CapUsdQuery = (tenant_id: string) => Promise<number | null | undefined>
 
 /**
  * Canon canonical · §150 #5 cap-breach alert context · the real-time nudge
@@ -97,17 +99,19 @@ export interface DispatchOneInput {
   readonly fetcher?: typeof fetch
   /**
    * Canon canonical · optional · forces the §150 cap enforce path (tests).
-   * Production defers to `SALA_NAUFRAGO_RUN_CAP_ENFORCE` env var via
-   * `isNaufragoCapEnforced()`.
+   * Production defers to `SALA_RUN_CAP_ENFORCE` env var via
+   * `isRunCapEnforced()`.
    */
   readonly cap_enforce_override?: boolean
   /**
    * Canon canonical · injected spend query · defaults to a noop returning 0
-   * (cap effectively pass for non-Náufrago tenants OR when no caller wires
+   * (cap effectively pass for no ceiling is wired OR when no caller wires
    * a real query). Production wraps Supabase RPC / select sum (see
    * `wireCapSpendQuerySupabase` in orchestrator).
    */
   readonly cap_spend_query?: CapSpendQuery
+  /** el techo de este cliente (de su ficha) · sin él rige el general */
+  readonly cap_usd_query?: CapUsdQuery
   /**
    * Canon canonical · injected cap-breach alerter · fired ONLY when the
    * §150 #5 per-run cap BLOCKS. Defaults to `defaultCapAlerter` (Slack via
@@ -129,9 +133,9 @@ export interface DispatchOneResult {
   readonly detail: string
   readonly workflow_dispatch_result?: WorkflowDispatchResult
   /** Canon canonical · the cap evaluation outcome · always populated when
-   *  the cap was evaluated (Náufrago tenant + enforce on) · for surface
+   *  the cap was evaluated (enforce on) · for surface
    *  + marker payload + observability. */
-  readonly cap_evaluation?: NaufragoCostCapResult
+  readonly cap_evaluation?: RunCapResult
 }
 
 /**
@@ -217,21 +221,17 @@ export async function dispatchOneIntake(
   }
 
   // ─── 2.5 · cap-wire (SPEC lazo agentico 2026-06-05 · gap §150) ───
-  // Before dispatching · evaluate the Náufrago per-run cap. The cap function
-  // exists since Phase 1.1 (gap #2 fix · UUID engagement verified) · this
-  // is the FIRST call-site that wires it into the dispatch flow. Behavior ·
-  //   - cap NOT enforced (`SALA_NAUFRAGO_RUN_CAP_ENFORCE!=true`) → noop pass
-  //   - cap enforced + tenant NOT Náufrago (UUID or alias) → pass (other_tenant)
-  //   - cap enforced + Náufrago + spend < cap → pass (under_cap)
-  //   - cap enforced + Náufrago + spend >= cap → BLOCK (skipped_cap_blocked)
+  // Before dispatching · evaluate the per-client run cap (ANY tenant · its ceiling comes from its ficha, else the general one). Behavior ·
+  //   - cap NOT enforced (`SALA_RUN_CAP_ENFORCE!=true`) → noop pass
+  //   - cap enforced + spend < cap → pass (under_cap)
+  //   - cap enforced + spend >= cap → BLOCK (skipped_cap_blocked)
   //
   // The spend query is INJECTED so this lib stays pure · the orchestrator
   // wires the production Supabase impl. When no query provided, default to
   // 0 spend (safe · pass through · matches behavior before this PR).
-  let cap_evaluation: NaufragoCostCapResult | undefined
-  const cap_enforced = isNaufragoCapEnforced({ enforce: input.cap_enforce_override })
-  const is_naufrago_tenant = NAUFRAGO_TENANT_IDS.has(intake.tenant_id)
-  if (cap_enforced && is_naufrago_tenant) {
+  let cap_evaluation: RunCapResult | undefined
+  const cap_enforced = isRunCapEnforced({ enforce: input.cap_enforce_override })
+  if (cap_enforced) {
     const spent_usd = input.cap_spend_query
       ? await input.cap_spend_query({
           tenant_id: intake.tenant_id,
@@ -239,17 +239,24 @@ export async function dispatchOneIntake(
           correlation_id: intake.correlation_id,
         })
       : 0
-    cap_evaluation = evaluateNaufragoRunCap({
-      tenant_id: intake.tenant_id,
+    let cap_usd: number | undefined
+    try {
+      const delaFicha = input.cap_usd_query ? await input.cap_usd_query(intake.tenant_id) : null
+      if (typeof delaFicha === 'number' && Number.isFinite(delaFicha) && delaFicha > 0) cap_usd = delaFicha
+    } catch {
+      // sin dato de la ficha rige el techo general · una caída de base no frena la agencia (§148)
+    }
+    cap_evaluation = evaluateRunCap({
       spent_usd,
       enforce: true,
+      ...(cap_usd !== undefined ? { cap_usd } : {}),
     })
     if (cap_evaluation.verdict === 'block') {
       // §150 #5 · real-time alert on cap-block · best-effort. The marker
       // event (orchestrator) is the durable audit record · this is the
       // human-facing nudge. NEVER throws · a Slack/alert outage must not
       // change the skipped_cap_blocked outcome (canon §148 safety-net).
-      // Reached ONLY when enforce ON + Náufrago tenant + over cap → stays
+      // Reached ONLY when enforce ON + over cap → stays
       // inert in shadow (NO flag flipped by this wire).
       const alerter = input.cap_alerter ?? defaultCapAlerter
       try {

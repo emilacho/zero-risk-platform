@@ -3,14 +3,14 @@
  *
  * Validates §150 cap evaluation BEFORE workflow-dispatcher invocation ·
  * skipped_cap_blocked outcome · cap_evaluation surfaces in marker payload ·
- * non-Náufrago tenants pass through · enforce flag default-OFF.
+ * el tope aplica a cualquier cliente (su techo sale de la ficha) · enforce flag default-OFF.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { dispatchOneIntake, type ParsedIntakeEvent } from '@/lib/sala-router-consumer'
 import { buildDispatchMarkerEvent } from '@/lib/sala-router-consumer'
 import type { PersistedEvent } from '@/lib/sala-event-log'
 
-const NAUFRAGO = 'd69100b5-8ad7-4bb0-908c-68b5544065dc'
+const CLIENTE_A = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 const OTHER_TENANT = '11111111-2222-3333-4444-555555555555'
 
 function intake(overrides: Partial<ParsedIntakeEvent> = {}): ParsedIntakeEvent {
@@ -18,8 +18,8 @@ function intake(overrides: Partial<ParsedIntakeEvent> = {}): ParsedIntakeEvent {
     event_id: 'evt-cap-1',
     sequence: 1,
     occurred_at: '2026-06-06T10:00:00Z',
-    tenant_id: NAUFRAGO,
-    client_id: NAUFRAGO,
+    tenant_id: CLIENTE_A,
+    client_id: CLIENTE_A,
     stream_id: '99999999-9999-5999-8999-999999999999',
     correlation_id: 'corr-cap-1',
     causation_id: null,
@@ -43,8 +43,8 @@ function intake(overrides: Partial<ParsedIntakeEvent> = {}): ParsedIntakeEvent {
     event_id: 'evt-cap-1',
     stream_id: '99999999-9999-5999-8999-999999999999',
     correlation_id: 'corr-cap-1',
-    tenant_id: NAUFRAGO,
-    client_id: NAUFRAGO,
+    tenant_id: CLIENTE_A,
+    client_id: CLIENTE_A,
     journey_type: 'ONBOARD',
     intake_source: 'ventas/deal-won',
     intake_intent: 'onboard',
@@ -147,7 +147,7 @@ describe('dispatch · cap-wire · §150 #5 alert on block', () => {
     expect(alerter).toHaveBeenCalledTimes(1)
     expect(alerter).toHaveBeenCalledWith(
       expect.objectContaining({
-        tenant_id: NAUFRAGO,
+        tenant_id: CLIENTE_A,
         cap_usd: 5,
         spent_usd: 7.5,
         workflow_id: 'LyVoKcrypS5uLyuu',
@@ -196,21 +196,36 @@ describe('dispatch · cap-wire · §150 #5 alert on block', () => {
   })
 })
 
-describe('dispatch · cap-wire · non-Náufrago tenant', () => {
-  it('skips cap query · dispatches normally (other_tenant fast-path)', async () => {
+describe('dispatch · cap-wire · el tope aplica a CUALQUIER cliente y su techo sale de su ficha', () => {
+  const alCliente = (over: Record<string, unknown> = {}) => ({
+    intake: intake({ tenant_id: OTHER_TENANT, client_id: OTHER_TENANT }),
+    enabled: true,
+    n8n_base_url: 'https://n8n.test',
+    cap_enforce_override: true,
+    ...over,
+  })
+  it('otro cliente sin techo propio: rige el general (5) y bloquea', async () => {
     const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))
-    const spend = vi.fn(async () => 9999)
-    const r = await dispatchOneIntake({
-      intake: intake({ tenant_id: OTHER_TENANT, client_id: OTHER_TENANT }),
-      enabled: true,
-      n8n_base_url: 'https://n8n.test',
-      fetcher: fetcher as unknown as typeof fetch,
-      cap_enforce_override: true, // enforce ON · still skipped because non-Náufrago
-      cap_spend_query: spend,
-    })
-    expect(r.kind).toBe('dispatched_ok')
-    expect(r.cap_evaluation).toBeUndefined()
-    expect(spend).not.toHaveBeenCalled()
+    const r = await dispatchOneIntake({ ...alCliente(), fetcher: fetcher as unknown as typeof fetch, cap_spend_query: vi.fn(async () => 9999), cap_alerter: vi.fn(async () => {}) })
+    expect(r.kind).toBe('skipped_cap_blocked')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+  it('el techo de la ficha MANDA: 6 bloquea a 7, 20 deja pasar a 7,5', async () => {
+    const f1 = vi.fn(async () => new Response('{}', { status: 200 }))
+    const bloquea = await dispatchOneIntake({ ...alCliente(), fetcher: f1 as unknown as typeof fetch, cap_spend_query: vi.fn(async () => 7), cap_usd_query: vi.fn(async () => 6), cap_alerter: vi.fn(async () => {}) })
+    expect(bloquea.kind).toBe('skipped_cap_blocked')
+    expect(bloquea.cap_evaluation).toMatchObject({ verdict: 'block', cap_usd: 6, spent_usd: 7 })
+    const f2 = vi.fn(async () => new Response('{}', { status: 200 }))
+    const pasa = await dispatchOneIntake({ ...alCliente(), fetcher: f2 as unknown as typeof fetch, cap_spend_query: vi.fn(async () => 7.5), cap_usd_query: vi.fn(async () => 20) })
+    expect(pasa.kind).toBe('dispatched_ok')
+  })
+  it('sin dato en la ficha (null) o con la consulta caída: rige el general · nunca frena por una caída', async () => {
+    const f = vi.fn(async () => new Response('{}', { status: 200 }))
+    const sinDato = await dispatchOneIntake({ ...alCliente(), fetcher: f as unknown as typeof fetch, cap_spend_query: vi.fn(async () => 4), cap_usd_query: vi.fn(async () => null) })
+    expect(sinDato.kind).toBe('dispatched_ok')
+    expect(sinDato.cap_evaluation).toMatchObject({ verdict: 'pass', reason: 'under_cap' })
+    const caida = await dispatchOneIntake({ ...alCliente(), fetcher: f as unknown as typeof fetch, cap_spend_query: vi.fn(async () => 4), cap_usd_query: vi.fn(async () => { throw new Error('base caída') }) })
+    expect(caida.kind).toBe('dispatched_ok')
   })
 })
 

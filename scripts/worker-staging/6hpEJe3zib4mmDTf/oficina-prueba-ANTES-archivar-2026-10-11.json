@@ -1,0 +1,269 @@
+{
+ "id": "6hpEJe3zib4mmDTf",
+ "name": "Zero Risk — Oficina · prueba · social-media-strategist (relevo 25 · CC#1)",
+ "description": null,
+ "active": false,
+ "activeVersionId": null,
+ "createdAt": "2026-10-09T05:18:54.708Z",
+ "updatedAt": "2026-10-10T01:33:13.869Z",
+ "isArchived": false,
+ "versionId": "a4e58189-0d5e-4b7d-95b6-090ead5e3f70",
+ "versionCounter": 8,
+ "sourceWorkflowId": null,
+ "triggerCount": 1,
+ "nodes": [
+  {
+   "id": "n1",
+   "name": "Webhook · prueba (con llave)",
+   "webhookId": "oficina-prueba-sms-cc1",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "zero-risk/oficina-prueba-social-media-strategist",
+    "responseMode": "responseNode",
+    "options": {},
+    "authentication": "headerAuth"
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "hKo5XOxoVHcazlc9",
+     "name": "Portero · llave de los webhooks (x-portero-key)"
+    }
+   }
+  },
+  {
+   "id": "n2",
+   "name": "⓪ Preparar",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ],
+   "parameters": {
+    "jsCode": "\n// ⓪ PREPARAR · PRUEBA social-media-strategist (relevo 25 · firma de Emilio 09-oct) · UNA corrida · tope US$ 2,50 ESCRITO AQUÍ.\n// Regla de Emilio: NO se le dice nada al agente. Solo una línea neutra de entrega + el manual vigente y el plan, COMPLETOS y sin tocar. Su identidad no se toca.\nconst SB = 'https://ordaeyxvvvdqsznsecjx.supabase.co'\nconst auth = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }\nconst TOPE_USD = 2.5\nconst MODELO = 'claude-fable-5-1'\nconst MANUAL_ID = 'ccea5780-0452-4554-8644-927787ab0969'\nconst PLAN_ID = '29d6daeb-a95a-4328-9c10-cf3cddc236f7'\nconst ESTRATEGIA_OPUS = \"# Estrategia social de Náufrago: cómo el contenido sostiene el plan de 90 días\\n\\nEl plan de campaña está bien armado y no lo voy a rehacer. Lo que sigue es la capa social que lo apoya: perfil, contenido orgánico, textos de anuncio y WhatsApp. Antes van cuatro alertas que conviene resolver para no publicar algo que después haya que desmentir.\\n\\n---\\n\\n## 0 · Alertas antes de producir\\n\\n**1. Las 24 reseñas de 4.8 podrían ser de Olón, no del delivery en Guayaquil.**\\n- La ficha de Maps apunta a Olón.\\n- Si esas reseñas son de un local de playa, poner \\\"4.8 en Google\\\" en un anuncio de delivery en Guayaquil promete algo que no está probado.\\n- **Mientras el dueño no lo confirme, no usamos el 4.8 en los anuncios.**\\n\\n**2. La palabra \\\"trazabilidad\\\" hay que poder mostrarla.**\\n- El mensaje \\\"Si no sabes de dónde viene el marisco que pediste, no es Náufrago\\\" es potente, pero solo funciona si hay pruebas visibles: quién provee, cada cuánto llega y cómo viaja.\\n- Necesito que el dueño me diga con qué frecuencia llega el marisco de Olón.\\n- Si no llega a diario, no podemos decir \\\"salió esta mañana\\\". Los textos de abajo tienen ese dato en blanco a propósito.\\n\\n**3. Hay que aclarar si existe un local en Olón.**\\n- La bio dice \\\"📍Olon\\\", Maps apunta a Olón y el segmento 3 son turistas en Olón.\\n- Si hay un local de playa, es un activo de contenido enorme (la prueba viva del origen), pero la bio tiene que dejar claro que **el delivery es en Guayaquil**.\\n\\n**4. El plan arranca con la oferta más difícil.**\\n- El ceviche a $7 compite contra $3.59. El **encebollado a $4 está casi al mismo precio que Pez Azul**: ahí no hay que pelear por precio y el origen se lleva toda la diferencia.\\n- Propongo que la fase 2 pruebe también **qué producto** se anuncia, no solo qué texto: ceviche al mediodía contra encebollado en la mañana de fin de semana.\\n\\n**Estado al día de hoy:** hoy es viernes 9 de octubre, unos 10 días después del plan. Según el calendario, el primer anuncio debería estar activo. ¿El dueño completó las tareas del día 1 (Meta Business Manager, bio, quién responde WhatsApp)? Si no, todo lo de abajo se corre una semana.\\n\\n---\\n\\n## 1 · Canales: dónde sí y dónde no\\n\\n| Canal | Rol | Decisión |\\n|---|---|---|\\n| **Instagram** | Vitrina principal. Ahí cae el tráfico de los anuncios | Activo: 3 posts por semana y stories los días que abre |\\n| **Facebook** | Se cubre con la misma pauta de Meta | Solo se replican los posts, sin estrategia propia |\\n| **WhatsApp Business** | Donde se cierra la venta y se fideliza al cliente | Activo: respuestas rápidas y Estados |\\n| **TikTok** | El plan lo posterga | Respeto la decisión. Como prueba de costo cero, se podrían subir los mismos Reels sin producir nada nuevo. Es decisión del dueño |\\n| **LinkedIn / X** | No aplica para un delivery de consumo final en Guayaquil | Fuera. Más adelante quizás LinkedIn para almuerzos de oficina (jueves, viernes y lunes), pero no en este trimestre |\\n\\n---\\n\\n## 2 · Bio de Instagram (para el día 1)\\n\\n```\\nCeviche y encebollado con marisco de Olón 🌊\\nDelivery en Guayaquil · jueves a lunes · 7am–3pm\\nPide por WhatsApp 👇\\n```\\n- **Enlace:** `wa.me/593997744288?text=Hola,%20quiero%20hacer%20un%20pedido`\\n- **Destacadas:** Menú · Cómo pedir · Olón · Clientes\\n- Si existe el local en Olón, se suma una destacada \\\"Olón 🏄\\\" que lo aclare.\\n\\n---\\n\\n## 3 · Pilares de contenido\\n\\n| Pilar | % | Para qué sirve | A quién le habla |\\n|---|---|---|---|\\n| **Origen: Olón** | 35% | Justifica los $7. Es el único territorio sin dueño | S1, S2, S4 |\\n| **Producto y pedido** | 30% | Precio visible, horario y cómo pedir | S2, S4, S5 |\\n| **Comunidad costera / surf** | 20% | Repetir lo que logró el video de @foillifepodcast | S1 |\\n| **Clientes reales** | 15% | Prueba social (solo reseñas y etiquetas verificadas) | Todos |\\n\\nEn los textos no usamos: premium, gourmet, artesanal, 100% fresco, el mejor, exclusivo, económico.\\n\\n---\\n\\n## 4 · Los 9 posts antes de la pauta\\n\\nAsí queda el perfil. Los posts 1, 3 y 4 van fijados arriba.\\n\\n| # | Formato | Pieza | Texto |\\n|---|---|---|---|\\n| 1 | Reel 20s | El marisco llegando de Olón: cajas, playa, cocina | \\\"Esto salió de Olón [frecuencia real]. Hoy está en tu puerta en Guayaquil.\\\" |\\n| 2 | Foto | Ceviche Náufrago, cenital, precio sobreimpreso | \\\"Pescado curtido en leche de tigre, maní, aguacate. $7. Jueves a lunes.\\\" |\\n| 3 | Carrusel | **Cómo pedir:** horario, zona, WhatsApp y menú con precios | \\\"Pides por WhatsApp. Llega directo a tu puerta. Así de simple.\\\" |\\n| 4 | Reel | Repost o recorte del video de @foillifepodcast (con permiso) | \\\"Ellos ya lo sabían…\\\" |\\n| 5 | Foto/Reel | Quién pesca o provee en Olón, con nombre si da su consentimiento | \\\"Él sabe de dónde viene tu ceviche. Ahora tú también.\\\" |\\n| 6 | Foto | Encebollado de la casa | \\\"Sábado, 8am, encebollado de $4. Ya sabes lo que tienes que hacer…\\\" |\\n| 7 | Reel 15s | Proceso: el curtido y la leche de tigre | \\\"Leche de tigre recién hecha. Sin atajos.\\\" |\\n| 8 | Foto | Ceviche Mixto y Encebollado Mixto para compartir | \\\"El almuerzo del domingo. Sin fila, sin espera. Directo a tu puerta.\\\" |\\n| 9 | Carrusel | Reseñas reales (solo si son del delivery en Guayaquil) | \\\"Lo dicen ellos, no nosotros.\\\" |\\n\\nTodo con material del propio negocio y celular, como dice el plan. El viral salió así.\\n\\n---\\n\\n## 5 · Semana tipo (desde el día 8)\\n\\n| Día | Feed | Stories y Estados de WhatsApp |\\n|---|---|---|\\n| Mié | Post de **origen**, en la noche: \\\"Mañana abrimos…\\\" | El marisco llegando / preparación |\\n| Jue | — | 6:45am \\\"Ya abrimos ☀️\\\" · plato del día · 2:30pm \\\"Última media hora\\\" |\\n| Vie | Post de **producto** con precio | Igual que el jueves y una encuesta (\\\"¿ceviche o encebollado?\\\") |\\n| Sáb | — | Encebollado de mañana · repost de clientes que etiquetaron |\\n| Dom | Post de **comunidad o clientes** | Almuerzo familiar · Mixtos |\\n| Lun | — | \\\"Último día de la semana. Vuelve el jueves.\\\" |\\n| Mar | — | Olón: playa, mar (descanso, sin vender) |\\n\\nEncima de esto va el ritual del plan: 30 minutos al día respondiendo comentarios y comentando en 5 a 10 cuentas de surf, playa y comida guayaquileña.\\n\\n---\\n\\n## 6 · Textos para la pauta (Meta, objetivo: mensajes a WhatsApp)\\n\\n**A · Origen** (el anuncio de la fase 1)\\n> El ceviche que viene del mar de verdad.\\n> Marisco de Olón, curtido en leche de tigre, directo a tu puerta en Guayaquil.\\n> Ceviche Náufrago $7 · jueves a lunes · 7am–3pm.\\n> Escríbenos por WhatsApp 👇\\n\\n**B · Ocasión** (fase 2)\\n> Náufrago es la playa que no tuviste esta semana.\\n> Ceviche y encebollado con marisco de Olón, delivery en Guayaquil.\\n> Solo jueves a lunes, de 7am a 3pm. Pide por WhatsApp.\\n\\n**C · Encebollado de mañana** (la prueba de producto que propongo para la fase 2)\\n> Sábado temprano… y no tienes que salir.\\n> Encebollado con pescado de Olón, desde $4, directo a tu puerta.\\n> Guayaquil · jueves a lunes desde las 7am.\\n\\nLos tres dicen explícitamente el horario, los días y la ciudad, tal como pide el plan.\\n\\n---\\n\\n## 7 · WhatsApp: donde se gana o se pierde la venta\\n\\n**Saber de dónde vino cada mensaje** (para que el dueño pueda reportar sin depender de la memoria):\\n- Anuncios: el texto que llega precargado es *\\\"Hola, vi tu anuncio y quiero pedir\\\"*.\\n- Bio y orgánico: *\\\"Hola, quiero hacer un pedido\\\"*.\\n\\n**Respuestas rápidas:**\\n- `/menu` → \\\"¡Hola! 🌊 Este es el menú de hoy: [precios]. ¿Qué te mandamos y a qué dirección?\\\"\\n- **Mensaje automático fuera de horario** → \\\"Estamos descansando… volvemos el [jueves] a las 7am. Déjanos tu pedido y te escribimos apenas abramos.\\\"\\n- `/gracias` (cuando ya se entregó) → \\\"¿Qué tal estuvo? Si te gustó, etiquétanos en tu story @… o déjanos una reseña aquí: [link]. Nos ayuda muchísimo.\\\"\\n\\nEse último mensaje es el que hace funcionar el ciclo orgánico del plan.\\n\\n---\\n\\n## 8 · Comunidad surf / foil (sin pago, fase 3 o antes)\\n\\n1. Pedirle a @foillifepodcast permiso para usar su video como **anuncio de colaboración** con Meta. Ya está probado y es el mejor activo que tenemos.\\n2. Hacer una lista de 10 a 15 cuentas de surf y foil de la costa ecuatoriana y comentar en sus publicaciones de forma constante durante 3 semanas antes de pedirles nada.\\n3. Proponerles: \\\"ven a probar, cuéntalo si te gusta\\\". Sin guion y sin pago, como dice el plan.\\n\\n---\\n\\n## 9 · Métricas sociales para cada revisión quincenal\\n\\nVan al lado del número central del plan (los contactos por WhatsApp):\\n- Clics al enlace de WhatsApp desde la bio\\n- Visitas al perfil que llegan desde los anuncios\\n- Guardados y compartidos de los posts de origen frente a los de producto (dice qué mensaje pega)\\n- Etiquetas y menciones de clientes por semana\\n- Contactos con el texto del anuncio frente a los del texto orgánico\\n\\n---\\n\\n## Lo que necesito del dueño para cerrar los textos\\n\\n1. ¿Las 24 reseñas son de Olón o del delivery en Guayaquil?\\n2. ¿Existe un local en Olón?\\n3. ¿Cada cuánto llega el marisco y quién lo provee? ¿Esa persona aceptaría salir en cámara?\\n4. ¿Hay permiso de @foillifepodcast para usar su video en un anuncio?\\n5. ¿Cómo van las tareas del día 1 del plan?\\n\\nCon esas cinco respuestas cierro los 9 posts con su texto final y el calendario de octubre y noviembre, fecha por fecha.\"\nconst INDICACION = \"Te comparto la estrategia de redes de Náufrago que ya hizo otro estratega, el manual de marca y el plan de marketing. Con esa estrategia como base, arma el calendario editorial de 12 semanas a partir del lunes 12 de octubre de 2026: para cada pieza, fecha, día, hora, red, formato (reel, carrusel, foto, historia, estado de WhatsApp, anuncio), pilar y de qué trata en una línea. Respeta los pilares, la frecuencia por red y las alertas de esa estrategia. No inventes datos: lo que no esté en los documentos, márcalo como PENDIENTE con lo que hace falta.\"\nconst e = $input.first().json || {}\nconst headers = e.headers && typeof e.headers === 'object' ? e.headers : {}\nconst b = e.body && typeof e.body === 'object' && !Array.isArray(e.body) ? e.body : {}\nconst rechaza = (status, codigo, motivo) => [{ json: { rechazo: { status, codigo, motivo } } }]\nconst llave = String($env.INTERNAL_API_KEY || '').trim()\nif (!llave) return rechaza(500, 'PRUEBA_SIN_LLAVE', 'el entorno de n8n no tiene la llave interna: el flujo queda cerrado')\nif (String(headers['x-api-key'] || '').trim() !== llave) return rechaza(401, 'PRUEBA_LLAVE_INCORRECTA', 'falta o no coincide x-api-key')\nif (b.confirmar_real !== true) return rechaza(400, 'PRUEBA_SIN_CONFIRMAR', 'cuesta dinero real (tope 2,00): exige confirmar_real: true')\nconst sd = $getWorkflowStaticData('global')\nif (sd.corrida_hecha && b.repetir !== true) return rechaza(409, 'PRUEBA_YA_CORRIDA', 'ya se hizo la corrida única (' + sd.corrida_hecha + '); repetir exige repetir: true y una orden nueva')\nconst leer = async (tabla, id) => {\n  const r = await this.helpers.httpRequest({ url: SB + '/rest/v1/' + tabla + '?select=id,client_id,content_text&id=eq.' + id, method: 'GET', json: true, headers: auth, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 25000 })\n  if (r.statusCode !== 200 || !Array.isArray(r.body) || r.body.length !== 1) return { error: tabla + ' HTTP ' + r.statusCode }\n  return r.body[0]\n}\nconst manual = await leer('client_brand_books', MANUAL_ID)\nconst plan = await leer('client_historical_outputs', PLAN_ID)\nif (manual.error || plan.error) return rechaza(502, 'PRUEBA_NO_SE_LEYO', 'no se pudo leer el manual o el plan: ' + (manual.error || plan.error))\nif (typeof manual.content_text !== 'string' || manual.content_text.length < 5000 || typeof plan.content_text !== 'string' || plan.content_text.length < 5000) return rechaza(502, 'PRUEBA_DOCUMENTOS_CORTOS', 'el manual o el plan vinieron vacíos o cortos: no se corre con documentos a medias')\nconst task = INDICACION + '\\n\\n# Estrategia de redes (hecha por otro estratega)\\n\\n' + ESTRATEGIA_OPUS + '\\n\\n# Manual de marca\\n\\n' + manual.content_text + '\\n\\n# Plan de marketing\\n\\n' + plan.content_text\nsd.corrida_hecha = new Date().toISOString() + ' · ejecución ' + String($execution.id)\nconst pedido = { agent: 'social-media-strategist', task, workflow_id: $workflow.id, workflow_execution_id: String($execution.id), step_name: 'prueba-social-media-strategist-naufrago', dry_run: false, max_budget_usd: TOPE_USD, model_override: MODELO }\nreturn [{ json: { rechazo: null, pedido, meta: { manual_chars: manual.content_text.length, plan_chars: plan.content_text.length, task_chars: task.length, tope_usd: TOPE_USD, modelo_pedido: MODELO } } }]\n"
+   }
+  },
+  {
+   "id": "n3",
+   "name": "⓪ ¿Rechazado?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    440,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "id": "5c8f6e14-0b57-4d6e-9a25-bbbb00000001",
+       "leftValue": "={{ !!$json.rechazo }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "n4",
+   "name": "Responder · rechazo",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    -140
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ error: $json.rechazo.codigo, motivo: $json.rechazo.motivo }) }}",
+    "options": {
+     "responseCode": "={{ $json.rechazo.status }}"
+    }
+   }
+  },
+  {
+   "id": "n5",
+   "name": "① Agente · run-sdk",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    660,
+    60
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/agents/run-sdk",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.pedido) }}",
+    "options": {
+     "timeout": 800000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "n6",
+   "name": "② Resumen",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    60
+   ],
+   "parameters": {
+    "jsCode": "\n// ② RESUMEN · la respuesta COMPLETA del agente, sin editar, y lo que cuesta. Nada se publica ni se manda a ningún lado.\nconst e = $input.first().json || {}\nconst r = e.body && typeof e.body === 'object' && !Array.isArray(e.body) ? e.body : e\nconst plan = $('⓪ Preparar').first().json\nconst { task, ...pedidoSinTexto } = plan.pedido\nreturn [{ json: { workflow_id: $workflow.id, workflow_execution_id: String($execution.id), pedido: pedidoSinTexto, meta: plan.meta, respuesta_del_corredor: r } }]\n"
+   }
+  },
+  {
+   "id": "n7",
+   "name": "Responder · resumen",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1100,
+    60
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json) }}",
+    "options": {}
+   }
+  }
+ ],
+ "connections": {
+  "Webhook · prueba (con llave)": {
+   "main": [
+    [
+     {
+      "node": "⓪ Preparar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ Preparar": {
+   "main": [
+    [
+     {
+      "node": "⓪ ¿Rechazado?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ ¿Rechazado?": {
+   "main": [
+    [
+     {
+      "node": "Responder · rechazo",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "① Agente · run-sdk",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① Agente · run-sdk": {
+   "main": [
+    [
+     {
+      "node": "② Resumen",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Resumen": {
+   "main": [
+    [
+     {
+      "node": "Responder · resumen",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "nodeGroups": [],
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "staticData": {
+  "global": {
+   "corrida_hecha": "2026-10-09T09:15:37.143Z · ejecución 170711",
+   "dipe_sonnet": "2026-10-10T01:31:57.283Z · ejecución 171577",
+   "dipe_fable": "2026-10-09T12:52:27.750Z · ejecución 170904"
+  }
+ },
+ "pinData": null,
+ "meta": null,
+ "tags": [],
+ "shared": [
+  {
+   "role": "workflow:owner",
+   "workflowId": "6hpEJe3zib4mmDTf",
+   "projectId": "xKBOyp07nrGbu4ob",
+   "project": {
+    "id": "xKBOyp07nrGbu4ob",
+    "name": "Emilio  Perez  <emilacho@hotmail.com>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-04-18T13:41:21.856Z",
+    "updatedAt": "2026-04-18T13:51:26.012Z"
+   },
+   "createdAt": "2026-10-09T05:18:54.708Z",
+   "updatedAt": "2026-10-09T05:18:54.708Z"
+  }
+ ],
+ "activeVersion": null
+}

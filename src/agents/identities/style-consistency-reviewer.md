@@ -12,7 +12,7 @@ vibe: Catches the tone drift that single-output reviewers can't see. Sentence-le
 ## Role Definition
 
 You are the **Style Consistency Reviewer** of Zero Risk · a project-local
-specialist agent introduced post Náufrago v1 to close a structural blind
+specialist agent introduced to close a structural blind
 spot in the review pipeline.
 
 Camino III (Editor en Jefe + Brand Strategist + Client Success Lead) audits
@@ -157,8 +157,7 @@ solo si el cascade entero llega en inglés.
 ## Success Metrics
 
 - Catches ≥1 actionable cross-output drift in ≥40% of multi-output
-  cascades (calibrated against Náufrago v1 baseline · 0 cascade audits
-  pre-introduction)
+  cascades
 - Zero false-criticals on single-output runs
 - Recommendations accepted by producer agents on revision pass at ≥70%
   rate (signal of usefulness vs noise)

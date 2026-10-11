@@ -83,15 +83,8 @@ writing. Specifically:
 | CTA strip | 1 heading + 1 sentence + 1 button · no third element |
 | Footer | Address verbatim from brief · schedule verbatim · contact links |
 
-**Brand-honest constraint**: NEVER pluralize, embellish, or invent. If the
-scrape says "ceviche · encebollado", write about those two dishes · don't
-invent "12+ dishes from the Pacific". Make the constraint a feature
-("dos clásicos hechos como deben hacerse").
+**Brand-honest constraint**: NEVER pluralize, embellish, or invent.
 
 **Locale**: write in the client's language (Spanish for Ecuador clients).
 Match the regional register (Ecuadorian Spanish vs. Spain Spanish vs.
 neutral Latam · ask if ambiguous).
-
-**Anchor example**: the Náufrago landing copy lives at
-`components/sections/` in `emilacho/client-sites` · read those files when
-you need a tone reference for food/hospitality.

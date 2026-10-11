@@ -33,6 +33,7 @@ import {
   isConsumerEnabled,
   isPaqueteEnabled,
   wireCapSpendQuerySupabase,
+  wireCapUsdQuerySupabase,
   type CandadoDelTic,
 } from '@/lib/sala-router-consumer'
 import { TICK_DEADLINE_MS_DEFAULT, TICK_LOCK_TTL_MS } from '@/lib/sala-router-consumer/types'
@@ -78,6 +79,7 @@ export async function POST(request: Request) {
   // ─── 4 · compose storage + cap-wire (SPEC lazo agentico §gap §150) ───
   let storage: SupabaseEventLogStorage
   let cap_spend_query
+  let cap_usd_query
   let candado: CandadoDelTic | null = null
   try {
     const supabase = getSupabaseAdmin()
@@ -91,9 +93,10 @@ export async function POST(request: Request) {
     // cost_usd by client_id + wall-clock window (started_at). Strategy A
     // (`correlation`) summed by journey_id, but agent_invocations.journey_id
     // is NEVER populated (the §149 correlation lands in workflow_id) → A
-    // always returned $0 → the cap was blind to real spend (~$2.29 Náufrago
+    // always returned $0 → the cap was blind to real spend (~$2.29 of a pilot client
     // invisible). B does not depend on journey_id · it reflects real cost.
     cap_spend_query = wireCapSpendQuerySupabase(supabase, { strategy: 'tenant_window' })
+    cap_usd_query = wireCapUsdQuerySupabase(supabase)
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
     return fail(503, 'supabase_unavailable', detail)
@@ -101,7 +104,7 @@ export async function POST(request: Request) {
 
   // ─── 5 · run one tick ───
   // PAQUETE del repartidor (palanca SALA_ROUTER_PAQUETE_ENABLED · NACE APAGADA · apagada = el camino de siempre, byte a byte)
-  if (candado) return await correrTicConPaquete({ candado, storage, tenant_id, batch_size, scan_window, cap_spend_query })
+  if (candado) return await correrTicConPaquete({ candado, storage, tenant_id, batch_size, scan_window, cap_spend_query, cap_usd_query })
   try {
     const tick = await consumeIntakeTick({
       storage,
@@ -109,6 +112,7 @@ export async function POST(request: Request) {
       batch_size,
       scan_window,
       cap_spend_query,
+      cap_usd_query,
     })
     return NextResponse.json({ ok: true, tick }, { status: 200 })
   } catch (e) {
@@ -128,6 +132,7 @@ async function correrTicConPaquete(a: {
   batch_size: number | undefined
   scan_window: number | undefined
   cap_spend_query: Parameters<typeof consumeIntakeTick>[0]['cap_spend_query']
+  cap_usd_query: Parameters<typeof consumeIntakeTick>[0]['cap_usd_query']
 }): Promise<NextResponse> {
   const deadlineMs = Number(process.env.SALA_ROUTER_TICK_DEADLINE_MS) > 0 ? Number(process.env.SALA_ROUTER_TICK_DEADLINE_MS) : TICK_DEADLINE_MS_DEFAULT
   const inicio = Date.now()
@@ -146,6 +151,7 @@ async function correrTicConPaquete(a: {
         batch_size: a.batch_size,
         scan_window: a.scan_window,
         cap_spend_query: a.cap_spend_query,
+        cap_usd_query: a.cap_usd_query,
         claim_before_fire: true,
         deadline_at_ms,
       })

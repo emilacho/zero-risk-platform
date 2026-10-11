@@ -72,20 +72,18 @@ export {
 } from './modelb-canonical-expression'
 
 export {
-  NAUFRAGO_PHASE1_RUN_CAP_USD,
-  resolveNaufragoCapUsd,
-  NAUFRAGO_DAILY_ALERT_USD,
-  NAUFRAGO_TENANT_ID_UUID,
-  NAUFRAGO_TENANT_ID_HINT,
-  NAUFRAGO_TENANT_IDS,
-  isNaufragoCapEnforced,
-  evaluateNaufragoRunCap,
-  getNaufragoCapSnapshot,
-} from './naufrago-cost-cap'
+  RUN_CAP_DEFAULT_USD,
+  resolveRunCapUsd,
+  capDeLaFicha,
+  DAILY_ALERT_USD,
+  isRunCapEnforced,
+  evaluateRunCap,
+  getRunCapSnapshot,
+} from './tope-por-corrida'
 export type {
-  NaufragoCostCapInput,
-  NaufragoCostCapResult,
-} from './naufrago-cost-cap'
+  RunCapInput,
+  RunCapResult,
+} from './tope-por-corrida'
 export type {
   SalaWebhookAuthResult,
   SalaWebhookAuthInput,

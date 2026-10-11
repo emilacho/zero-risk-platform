@@ -14,7 +14,7 @@ import {
   resolveRunSpendCapUsd,
   DEFAULT_RUN_SPEND_CAP_USD,
 } from '../src/lib/run-sdk-spend-gate'
-import { NAUFRAGO_TENANT_ID_UUID } from '../src/lib/sala-journey-dispatch'
+const CLIENTE_DE_PRUEBA = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 
 function supabaseWith(result: { data: unknown; error: unknown }) {
   const chain = {
@@ -71,7 +71,7 @@ describe('§150 run-sdk spend gate · GENÉRICO', () => {
 
   it('5 · GENÉRICO · Náufrago también cae bajo el techo $8 (sin special-casing · más estricto que $25)', async () => {
     const sb = supabaseWith({ data: [{ cost_usd: 10 }], error: null }) // 10 >= 8
-    const r = await checkRunSdkSpendCap(sb, NAUFRAGO_TENANT_ID_UUID)
+    const r = await checkRunSdkSpendCap(sb, CLIENTE_DE_PRUEBA)
     expect(r.blocked).toBe(true)
     expect(r.cap_usd).toBe(8) // el genérico $8 · no $25 ni $5
   })

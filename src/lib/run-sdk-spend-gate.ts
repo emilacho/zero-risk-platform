@@ -7,7 +7,7 @@
  *
  * Re-plan del go-live · paso (c) · ruling consejero 2026-07-18 13:41 ─────────────
  * El freno anterior era un AGUJERO LATENTE para todo cliente futuro: estaba
- * (a) default-OFF (shadow) y (b) tenant-scoped SÓLO a Náufrago (`NAUFRAGO_TENANT_IDS`),
+ * (a) default-OFF (shadow) y (b) tenant-scoped SÓLO al cliente piloto (una lista de ids fijos),
  * así que Peniche / cualquier `other_tenant` corría SIN red automática. "Un humano
  * mirando NO es un freno" (el incidente de $19 pasó exactamente por eso). Este módulo
  * lo vuelve GENÉRICO:
