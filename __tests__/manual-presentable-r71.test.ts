@@ -5,7 +5,7 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { limpiarManual, esTroncoSinVerbo, quitarNombresInternos } from '../src/lib/manual/limpieza'
-import { nombresDeSegmentos, ponerNombresDeSegmento, presentarEtiquetas, renderManualLimpio, sinMarkdown } from '../src/lib/brand-book-render-limpio'
+import { nombreCorto, nombresDeSegmentos, ponerNombresDeSegmento, presentarEtiquetas, renderManualLimpio, sinMarkdown } from '../src/lib/brand-book-render-limpio'
 
 const D = 'src/lib/manual/__tests__/fixtures/repeticion-r68'
 const V1 = JSON.parse(fs.readFileSync(`${D}/manual-v1.json`, 'utf8')) as Record<string, any>
@@ -63,7 +63,7 @@ describe('2 · el PDF (texto del manual limpio) presentable', () => {
     })
     it(`${nombre}: los segmentos salen con su NOMBRE y como subtítulos; las etiquetas, como nota discreta`, () => {
       expect(t).toContain('Segmento 1 — Residente local o visitante de largo plazo en Olón'); expect(t).not.toContain('**')
-      expect(t).toMatch(/«Residente local o visitante de largo plazo en Olón»/)
+      expect(t).toMatch(/«Residente local o visitante de largo plazo»/); expect(t).not.toMatch(/\b(goal|pain)\b/)
       expect(t).toContain('«Cuando tengas esa hambre de... Náufrago te espera!» — frase del cliente')
       expect(t).toMatch(/«El encebollado y ceviche que llegan a donde estás» — propuesta/)
     })
@@ -94,6 +94,9 @@ describe('2 · piezas de presentación', () => {
     expect(ponerNombresDeSegmento('Para S1 y S3.', n)).toBe('Para «Locales» y «Veraneantes».')
     expect(ponerNombresDeSegmento('(S2, S4) y S1/S3', n)).toBe('(«Turistas de fin de semana» y «Visitantes de playa») y «Locales» y «Veraneantes»')
     expect(ponerNombresDeSegmento('canal S1-S3', n)).toBe('canal «Locales», «Turistas de fin de semana» y «Veraneantes»')
+    expect(nombreCorto('Residente local o visitante de largo plazo en Olón')).toBe('Residente local o visitante de largo plazo')
+    expect(nombreCorto('Residentes y veraneantes de temporada en Olón y zonas aledañas (clientes recurrentes)')).toBe('Residentes y veraneantes de temporada')
+    expect(nombreCorto('Locales')).toBe('Locales'); expect(nombreCorto('Turistas en Playa')).toBe('Turistas en Playa') // un nombre de una sola palabra tras recortar se deja completo
     expect(ponerNombresDeSegmento('Solo S9 aquí', n)).toBe('Solo S9 aquí'); expect(ponerNombresDeSegmento('S1', {})).toBe('S1')
   })
 })

@@ -106,6 +106,13 @@ export function nombresDeSegmentos(icpSummary: unknown): Record<number, string> 
   return out
 }
 
+/** el nombre del segmento para el CORRER del texto: sin la cola de lugar («… en Olón») ni el paréntesis; el subtítulo conserva el nombre completo */
+export function nombreCorto(nombre: string): string {
+  const sinParentesis = nombre.replace(/\s*\([^)]*\)/g, '').trim()
+  const corto = sinParentesis.replace(/\s+en\s+[A-ZÁÉÍÓÚÑ][\wáéíóúñ]*(?:\s+y\s+[\wáéíóúñ ]+)?$/, '').trim()
+  return corto.split(/\s+/).length >= 2 ? corto : sinParentesis
+}
+
 /** «S1», «S1 y S3», «S2, S4», «S1/S3», «S1-S4» (las claves internas de los segmentos) → el nombre del segmento. Si algún número no tiene nombre, esa mención se deja como está. */
 export function ponerNombresDeSegmento(t: string, nombres: Record<number, string>): string {
   if (!Object.keys(nombres).length) return t
@@ -119,14 +126,16 @@ export function ponerNombresDeSegmento(t: string, nombres: Record<number, string
     const rango = /^S([1-9])\s*[–-]\s*S([1-9])$/.exec(m)
     const lista = rango ? Array.from({ length: Math.max(0, Number(rango[2]) - Number(rango[1]) + 1) }, (_, k) => Number(rango[1]) + k) : nums
     if (!lista.length || lista.some((n) => !nombres[n])) return m
-    const dichos = lista.map((n) => `«${nombres[n]}»`)
+    const dichos = lista.map((n) => `«${nombreCorto(nombres[n])}»`)
     return dichos.length === 1 ? dichos[0] : `${dichos.slice(0, -1).join(', ')} y ${dichos[dichos.length - 1]}`
   })
 }
 
 /** todo lo anterior, en el orden que lee bien */
 function paraElLector(t: string, nombres: Record<number, string>): string {
-  return ponerNombresDeSegmento(presentarEtiquetas(sinMarkdown(t)), nombres).replace(/\bICP\b/g, 'perfil de cliente ideal')
+  return ponerNombresDeSegmento(presentarEtiquetas(sinMarkdown(t)), nombres)
+    .replace(/\bICP\b/g, 'perfil de cliente ideal')
+    .replace(/\bgoals\b/gi, 'objetivos').replace(/\bgoal\b/gi, 'objetivo').replace(/\bpain points\b/gi, 'dolores').replace(/\bpain point\b/gi, 'dolor').replace(/\bpain\b/gi, 'dolor')
 }
 
 function vinetas(a: unknown, nombres: Record<number, string> = {}): string {
