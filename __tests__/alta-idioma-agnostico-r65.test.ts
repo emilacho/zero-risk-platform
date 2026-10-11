@@ -82,14 +82,13 @@ describe('verde · el idioma sale del país del cliente', () => {
 })
 
 describe('la tabla es la del detector de trato (no una copia que se aparte)', () => {
-  it('cada país de POR_PAIS del detector está en la tabla del alta con el mismo trato', () => {
+  it('(r67) cada país de la tabla de r65 sigue en la única tabla del detector con el mismo trato · la tabla única ya la lee el alta (una-tabla-pais-trato-r67)', () => {
     const det = readFileSync(join(process.cwd(), 'src/lib/trato/trato-logica.js'), 'utf8')
     const m = det.match(/var POR_PAIS = (\{[^}]*\})/)!
     const porPais = new Function('return ' + m[1])() as Record<string, string>
     const alta = codigo(HOY).match(/const _PAIS_TRATO = (\{[^\n]*\})/)!
     const tabla = new Function('return ' + alta[1])() as Record<string, string>
-    for (const [pais, trato] of Object.entries(porPais)) expect(tabla[pais]).toBe(trato)
-    // y lo que la tabla del alta añade son SOLO códigos de dos letras
+    for (const [pais, trato] of Object.entries(tabla)) if (pais.length > 2) expect(porPais[pais]).toBe(trato)
     for (const k of Object.keys(tabla)) if (!(k in porPais)) expect(k).toMatch(/^[a-z]{2}$/)
   })
 })

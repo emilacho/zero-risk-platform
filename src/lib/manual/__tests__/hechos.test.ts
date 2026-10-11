@@ -160,10 +160,11 @@ describe('la FRONTERA: lo creativo no se chequea jamás', () => {
     const r = evalua({ propuestas_de_valor: ['Una experiencia cálida y cercana, con trazabilidad verificable, pensada para ti'] }, [])
     expect(r.hechos.map((h) => h.clausula)).toEqual(['con trazabilidad verificable'])
   })
-  it('las listas de términos, los colores y lo que escribe el código no son prosa a chequear; las rutas de arreglos y objetos se siguen', () => {
+  it('la lista de palabras prohibidas, los colores y lo que escribe el código no son prosa a chequear; las rutas de arreglos y objetos se siguen', () => {
     const manual = { forbidden_words: ['el mejor'], required_terminology: ['único'], tagline: 'El mejor lugar', primary_colors: ['#fff'], _build: { x: 'único' }, ficha: { nota: 'Somos únicos' }, lista: ['a', 'Somos únicos'] }
-    expect(hojasDeTexto(manual).map((h) => h.ruta)).toEqual(['ficha.nota', 'lista[0]', 'lista[1]'])
-    expect(evalua(manual, []).hechos.map((h) => h.ruta)).toEqual(['ficha.nota', 'lista[1]'])
+    // r67: required_terminology SÍ es prosa a chequear (ahí se coló «origen verificable»); forbidden_words no
+    expect(hojasDeTexto(manual).map((h) => h.ruta)).toEqual(['required_terminology[0]', 'ficha.nota', 'lista[0]', 'lista[1]'])
+    expect(evalua(manual, []).hechos.map((h) => h.ruta)).toEqual(['required_terminology[0]', 'ficha.nota', 'lista[1]'])
   })
   it('lo ya cerrado (PENDIENTE y «el cliente dice») no se vuelve a evaluar', () => {
     const manual = { positioning: `Bonito. PENDIENTE: afirmación sin fuente («único»). ${declaracionDelCliente('Somos únicos en la ciudad')}.` }

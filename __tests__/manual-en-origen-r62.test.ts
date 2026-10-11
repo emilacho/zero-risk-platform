@@ -163,7 +163,10 @@ describe('② «Sacar lo sin fuente» · el manual v1 de hoy contra la puerta RE
     for (const mala of MALAS) expect(t).not.toContain(mala)
     expect(m.visual).toEqual(MANUAL.visual)                                   // la capa visual la arma el código: no es prosa del autor
     expect(m.forbidden_words).toEqual(MANUAL.forbidden_words)
-    expect(m.required_terminology).toEqual(MANUAL.required_terminology)
+    // r67 · los términos obligatorios SÍ se chequean: sale «origen verificable» (la certeza que se había colado ahí) y los demás se quedan, sin hueco
+    expect(m.required_terminology).toEqual(MANUAL.required_terminology.filter((x: string) => x !== 'origen verificable'))
+    expect(m.required_terminology).not.toContain('origen verificable')
+    expect(m.required_terminology).toContain('frescura de origen')
     expect(m.tagline_opciones).toEqual(MANUAL.tagline_opciones)               // las opciones del eslogan no se tocan
     expect(m.tagline).toBeUndefined()                                         // NO se escribe el eslogan por código
     expect(m.voice_description).toContain('Voz directa y conversacional')    // lo creativo se respeta
