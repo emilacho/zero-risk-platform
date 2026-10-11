@@ -133,7 +133,7 @@ describe('POST /api/calendar/book · Cal.com Cloud v2', () => {
     const sent = JSON.parse(opts.body)
     expect(sent.eventTypeId).toBe(6157933)
     expect(sent.attendee.email).toBe('lead@example.com')
-    expect(sent.attendee.timeZone).toBe('America/Guayaquil')
+    expect(sent.attendee.timeZone).toBe('UTC') // r66: sin ficha ni zona en la reserva, UTC neutra (antes: un país fijo)
 
     // Persisted with cloud provider + cal uid
     const inserted = filaDeLaReserva()

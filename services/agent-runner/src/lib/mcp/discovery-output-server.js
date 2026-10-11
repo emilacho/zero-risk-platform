@@ -153,7 +153,7 @@ const DISCOVERY_INPUT_SCHEMA = {
     .array(z.string().min(1))
     .optional()
     .describe(
-      'Cities/regions where the CLIENT itself operates or sells (e.g. ["Guayaquil", "Olón, Santa Elena"]). ' +
+      'Cities/regions where the CLIENT itself operates or sells (e.g. ["<city>", "<town>, <region>"] — values as the client states them, never copied from this example). ' +
         'Only places with evidence (site, maps, social). Omit if unknown.',
     ),
 }
