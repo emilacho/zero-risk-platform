@@ -56,6 +56,17 @@ describe('② lo que NO se toca', () => {
     const expl = 'idioma: "español de Ecuador · sin voseo (tú, no vos: «sabes», «pides»)"'
     expect(barrerTexto(expl).texto).toBe(expl)
   })
+  it('la ENUMERACIÓN de los tres tratos («tú · vos · usted») se queda: es el nombre de las opciones, no una forma de hablar (ronda 66: el barrido la había vuelto «tú · tú · usted» por una barra de palabra que no entiende la tilde)', () => {
+    const linea = "if (r.trato === 'no_definido') return 'F) EL TRATO. El sistema NO sabe qué trato (tú · vos · usted) usa esta marca: ni el manual ni la ficha lo dicen. Escribe con el trato que use el manual en sus ejemplos y DECLÁRALO.'"
+    expect(barrerTexto(linea).texto).toBe(linea)
+    for (const v of ['(tú · vos · usted)', '(tú / vos / usted)', '(tú, vos, usted)', '(tú | vos | usted)', 'TÚ · VOS · USTED']) {
+      const t = `El trato puede ser ${v}; elige uno y declara cuál usas.`
+      expect(barrerTexto(t).texto, v).toBe(t)
+    }
+    // la marca NO depende de `\b` (que no entiende la tilde de «tú»): una línea con las dos palabras separadas, sin la palabra «voseo» ni comillas, queda protegida
+    const a = 'Usa tú o vos según el manual del cliente. Devolvé el resultado.'
+    expect(barrerTexto(a).texto).toBe(a)
+  })
   it('las expresiones regulares y los VALORES del detector de trato («\'vos\'» no se vuelve «tú»)', () => {
     for (const l of [
       "tuteo: [/\\b(?:nunca|jamas|no)\\s+(?:uses?\\s+|usar\\s+)?vos\\b/],",
