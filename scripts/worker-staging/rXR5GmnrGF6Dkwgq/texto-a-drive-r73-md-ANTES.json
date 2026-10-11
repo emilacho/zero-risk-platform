@@ -1,0 +1,1229 @@
+{
+  "id": "rXR5GmnrGF6Dkwgq",
+  "name": "Zero Risk — Texto → Drive (PDF)",
+  "description": null,
+  "active": true,
+  "activeVersionId": "f8814799-80d9-457b-90c0-2f69fb120c5d",
+  "createdAt": "2026-09-11T23:47:54.853Z",
+  "updatedAt": "2026-10-11T16:26:35.374Z",
+  "isArchived": false,
+  "versionId": "f8814799-80d9-457b-90c0-2f69fb120c5d",
+  "versionCounter": 3,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "id": "d-wh",
+      "name": "Documento listo",
+      "webhookId": "texto-a-drive-mtxlwjnp",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/texto-a-drive",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "d-guard",
+      "name": "Leer el pedido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// 🔴 LA ENTRADA · genérica (2026-09-12 · CC#3)\n// El flujo del manual iba a buscar el manual del cliente. Éste recibe el texto\n// ya escrito, así que sirve para cualquier documento — el plan de 90 días, por\n// ejemplo. Todo lo de abajo (carpeta del cliente · documento · PDF · limpieza ·\n// verificación · campana) es el MISMO camino que ya escribe PDFs de verdad.\nconst b = $input.first().json.body || $input.first().json;\nconst texto = String(b.texto || '');\nconst faltan = [];\nif (!b.client_id) faltan.push('client_id');\nif (!b.client_name) faltan.push('client_name');\nif (!texto.trim()) faltan.push('texto');\nreturn [{ json: {\n  hay: faltan.length === 0,\n  motivo: faltan.length ? ('falta ' + faltan.join(' y ') + ' · sin eso no hay documento que escribir') : null,\n  client_id: b.client_id || null,\n  client_name: b.client_name || '(sin nombre)',\n  nombre: b.nombre || ('Documento ' + new Date().toISOString().slice(0, 10)),\n  texto: texto,\n  caracteres: texto.length,\n} }];"
+      }
+    },
+    {
+      "id": "d-if",
+      "name": "Seguir",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json._parar }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d-buscar",
+      "name": "Buscar carpeta del cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        -100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/drive/v3/files?q={{ encodeURIComponent(\"name='\" + $json.client_name.replace(/'/g, \"\\\\'\") + \"' and '1WRmkLvj5CMdbohf4T2INsG0hn5Ebl88d' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false\") }}&fields=files(id,name)&pageSize=1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "c3E4Gpy7CArg3SCO",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "id": "d-carpeta",
+      "name": "Carpeta usar o crear",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "// El defecto del modulo de julio era crear SIEMPRE · su propia especificacion pedia\n// \"saltear si ya existe (consultar primero)\" y no se construyo. Aca se consulta.\nconst prev = $('Seguir').first().json;\nconst r = $json.body || $json;\nconst hallada = (r.files && r.files[0]) ? r.files[0].id : null;\nreturn [{ json: Object.assign({}, prev, { folder_id: hallada, folder_reusada: !!hallada }) }];"
+      }
+    },
+    {
+      "id": "d-crear-carpeta",
+      "name": "Crear carpeta si no existe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -100
+      ],
+      "parameters": {
+        "method": "={{ $json.folder_id ? 'GET' : 'POST' }}",
+        "url": "=https://www.googleapis.com/drive/v3/files{{ $json.folder_id ? '/' + $json.folder_id : '' }}?fields=id",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": "={{ !$json.folder_id }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $json.client_name, mimeType: 'application/vnd.google-apps.folder', parents: ['1WRmkLvj5CMdbohf4T2INsG0hn5Ebl88d'] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "c3E4Gpy7CArg3SCO",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "id": "d-folder-final",
+      "name": "Carpeta definitiva",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1430,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const prev = $('Carpeta usar o crear').first().json;\nconst r = $json.body || $json;\nconst id = prev.folder_id || r.id || null;\nif (!id) { return [{ json: Object.assign({}, prev, { _parar: true, motivo: 'no se pudo obtener la carpeta del cliente' }) }]; }\nreturn [{ json: Object.assign({}, prev, { folder_id: id }) }];"
+      }
+    },
+    {
+      "id": "d-subir-doc",
+      "name": "Subir texto como documento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1650,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "multipart/related; boundary=zr"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "multipart/related; boundary=zr",
+        "body": "={{ '--zr\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n' + JSON.stringify({ name: $json.nombre + ' (temporal)', mimeType: 'application/vnd.google-apps.document' }) + '\\r\\n--zr\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n' + $json.texto + '\\r\\n--zr--' }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "c3E4Gpy7CArg3SCO",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "id": "d-exportar",
+      "name": "Exportar a PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1870,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/drive/v3/files/{{ ($json.body && $json.body.id) || $json.id }}/export?mimeType=application/pdf",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "pdf",
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "c3E4Gpy7CArg3SCO",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "id": "d-subir-pdf",
+      "name": "Subir el PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2090,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=media&fields=id",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/pdf"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "pdf",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "c3E4Gpy7CArg3SCO",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "id": "d-nombrar",
+      "name": "Nombre y carpeta del PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2310,
+        0
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://www.googleapis.com/drive/v3/files/{{ ($json.body && $json.body.id) || $json.id }}?addParents={{ $('Carpeta definitiva').first().json.folder_id }}&removeParents=root&fields=id,name,webViewLink",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('Carpeta definitiva').first().json.nombre }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "c3E4Gpy7CArg3SCO",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "id": "d-limpiar",
+      "name": "Borrar el documento intermedio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2530,
+        0
+      ],
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://www.googleapis.com/drive/v3/files/{{ (($('Subir texto como documento').first().json.body || {}).id) || $('Subir texto como documento').first().json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "c3E4Gpy7CArg3SCO",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "id": "d-verificar",
+      "name": "Verificar que el PDF esta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2750,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// El recibo dice lo que la RESPUESTA de Drive contesto, no lo que se pidio.\nconst patch = $('Nombre y carpeta del PDF').first().json;\nconst r = patch.body || patch;\nconst pdfOk = !!(r && r.id && r.name);\nconst prev = $('Carpeta definitiva').first().json;\n// el documento temporal: Drive contesta 204 (o 200) cuando lo borra · cualquier otra cosa = NO se borro (antes se callaba)\nlet codigo = null, borrado = false;\ntry { const b = $('Borrar el documento intermedio').first().json; codigo = Number(b.statusCode); borrado = codigo === 204 || codigo === 200; } catch (e) { borrado = false; }\nconst ok = pdfOk && borrado;\nconst motivo = !pdfOk ? 'Drive no devolvio el archivo con nombre'\n  : !borrado ? 'el PDF quedo en Drive pero el documento temporal NO se borro (respuesta de Drive: ' + (codigo === null || isNaN(codigo) ? 'sin codigo' : codigo) + ')'\n  : null;\nreturn [{ json: { ok, pdf_ok: pdfOk, intermedio_borrado: borrado, codigo_borrado: (codigo === null || isNaN(codigo)) ? null : codigo,\n  file_id: r && r.id || null, nombre: r && r.name || null,\n  url: r && r.webViewLink || null, folder_id: prev.folder_id,\n  folder_reusada: !!prev.folder_reusada, client_name: prev.client_name,\n  motivo } }];"
+      }
+    },
+    {
+      "id": "d-if-ok",
+      "name": "Salio bien",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2970,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d-campana",
+      "name": "Campana el documento no llego a Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        3190,
+        150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL_EQUIPO }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: ($json.pdf_ok ? ':page_facing_up: *El PDF quedo en Drive, pero el cierre no salio limpio* — ' : ':page_facing_up: *Un documento no llego a Drive* — ') + ($json.motivo || 'la subida fallo') + '\\n• cliente `' + ($json.client_name || '?') + '`\\n' + ($json.pdf_ok ? '• el PDF *si* esta en la carpeta del cliente · lo que falta es borrar el documento \"(temporal)\" de la raiz de Drive (a la papelera)' : '• el texto *si* lo tenemos · lo que falta es el PDF en Drive\\n• se reintenta disparando este flujo de nuevo con el client_id') }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "responder-el-recibo",
+      "name": "Responder el recibo",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2950,
+        140
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Seguir": {
+      "main": [
+        [
+          {
+            "node": "Buscar carpeta del cliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Campana el documento no llego a Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar carpeta del cliente": {
+      "main": [
+        [
+          {
+            "node": "Carpeta usar o crear",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carpeta usar o crear": {
+      "main": [
+        [
+          {
+            "node": "Crear carpeta si no existe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear carpeta si no existe": {
+      "main": [
+        [
+          {
+            "node": "Carpeta definitiva",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carpeta definitiva": {
+      "main": [
+        [
+          {
+            "node": "Subir texto como documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subir texto como documento": {
+      "main": [
+        [
+          {
+            "node": "Exportar a PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exportar a PDF": {
+      "main": [
+        [
+          {
+            "node": "Subir el PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subir el PDF": {
+      "main": [
+        [
+          {
+            "node": "Nombre y carpeta del PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nombre y carpeta del PDF": {
+      "main": [
+        [
+          {
+            "node": "Borrar el documento intermedio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borrar el documento intermedio": {
+      "main": [
+        [
+          {
+            "node": "Verificar que el PDF esta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar que el PDF esta": {
+      "main": [
+        [
+          {
+            "node": "Salio bien",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Responder el recibo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salio bien": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Campana el documento no llego a Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Documento listo": {
+      "main": [
+        [
+          {
+            "node": "Leer el pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer el pedido": {
+      "main": [
+        [
+          {
+            "node": "Seguir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "rXR5GmnrGF6Dkwgq",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "updatedAt": "2026-04-18T13:51:26.012Z"
+      },
+      "createdAt": "2026-09-11T23:47:54.853Z",
+      "updatedAt": "2026-09-11T23:47:54.853Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "f8814799-80d9-457b-90c0-2f69fb120c5d",
+    "workflowId": "rXR5GmnrGF6Dkwgq",
+    "nodes": [
+      {
+        "id": "d-wh",
+        "name": "Documento listo",
+        "webhookId": "texto-a-drive-mtxlwjnp",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "zero-risk/texto-a-drive",
+          "responseMode": "responseNode",
+          "options": {}
+        }
+      },
+      {
+        "id": "d-guard",
+        "name": "Leer el pedido",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// 🔴 LA ENTRADA · genérica (2026-09-12 · CC#3)\n// El flujo del manual iba a buscar el manual del cliente. Éste recibe el texto\n// ya escrito, así que sirve para cualquier documento — el plan de 90 días, por\n// ejemplo. Todo lo de abajo (carpeta del cliente · documento · PDF · limpieza ·\n// verificación · campana) es el MISMO camino que ya escribe PDFs de verdad.\nconst b = $input.first().json.body || $input.first().json;\nconst texto = String(b.texto || '');\nconst faltan = [];\nif (!b.client_id) faltan.push('client_id');\nif (!b.client_name) faltan.push('client_name');\nif (!texto.trim()) faltan.push('texto');\nreturn [{ json: {\n  hay: faltan.length === 0,\n  motivo: faltan.length ? ('falta ' + faltan.join(' y ') + ' · sin eso no hay documento que escribir') : null,\n  client_id: b.client_id || null,\n  client_name: b.client_name || '(sin nombre)',\n  nombre: b.nombre || ('Documento ' + new Date().toISOString().slice(0, 10)),\n  texto: texto,\n  caracteres: texto.length,\n} }];"
+        }
+      },
+      {
+        "id": "d-if",
+        "name": "Seguir",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          660,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json._parar }}",
+                "rightValue": false,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "false"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "d-buscar",
+        "name": "Buscar carpeta del cliente",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          880,
+          -100
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://www.googleapis.com/drive/v3/files?q={{ encodeURIComponent(\"name='\" + $json.client_name.replace(/'/g, \"\\\\'\") + \"' and '1WRmkLvj5CMdbohf4T2INsG0hn5Ebl88d' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false\") }}&fields=files(id,name)&pageSize=1",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleOAuth2Api",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "credentials": {
+          "googleOAuth2Api": {
+            "id": "c3E4Gpy7CArg3SCO",
+            "name": "Google account"
+          }
+        }
+      },
+      {
+        "id": "d-carpeta",
+        "name": "Carpeta usar o crear",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "// El defecto del modulo de julio era crear SIEMPRE · su propia especificacion pedia\n// \"saltear si ya existe (consultar primero)\" y no se construyo. Aca se consulta.\nconst prev = $('Seguir').first().json;\nconst r = $json.body || $json;\nconst hallada = (r.files && r.files[0]) ? r.files[0].id : null;\nreturn [{ json: Object.assign({}, prev, { folder_id: hallada, folder_reusada: !!hallada }) }];"
+        }
+      },
+      {
+        "id": "d-crear-carpeta",
+        "name": "Crear carpeta si no existe",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1320,
+          -100
+        ],
+        "parameters": {
+          "method": "={{ $json.folder_id ? 'GET' : 'POST' }}",
+          "url": "=https://www.googleapis.com/drive/v3/files{{ $json.folder_id ? '/' + $json.folder_id : '' }}?fields=id",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleOAuth2Api",
+          "sendBody": "={{ !$json.folder_id }}",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: $json.client_name, mimeType: 'application/vnd.google-apps.folder', parents: ['1WRmkLvj5CMdbohf4T2INsG0hn5Ebl88d'] }) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "credentials": {
+          "googleOAuth2Api": {
+            "id": "c3E4Gpy7CArg3SCO",
+            "name": "Google account"
+          }
+        }
+      },
+      {
+        "id": "d-folder-final",
+        "name": "Carpeta definitiva",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1430,
+          0
+        ],
+        "parameters": {
+          "jsCode": "const prev = $('Carpeta usar o crear').first().json;\nconst r = $json.body || $json;\nconst id = prev.folder_id || r.id || null;\nif (!id) { return [{ json: Object.assign({}, prev, { _parar: true, motivo: 'no se pudo obtener la carpeta del cliente' }) }]; }\nreturn [{ json: Object.assign({}, prev, { folder_id: id }) }];"
+        }
+      },
+      {
+        "id": "d-subir-doc",
+        "name": "Subir texto como documento",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1650,
+          0
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleOAuth2Api",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "multipart/related; boundary=zr"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "multipart/related; boundary=zr",
+          "body": "={{ '--zr\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n' + JSON.stringify({ name: $json.nombre + ' (temporal)', mimeType: 'application/vnd.google-apps.document' }) + '\\r\\n--zr\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n' + $json.texto + '\\r\\n--zr--' }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            },
+            "timeout": 60000
+          }
+        },
+        "credentials": {
+          "googleOAuth2Api": {
+            "id": "c3E4Gpy7CArg3SCO",
+            "name": "Google account"
+          }
+        }
+      },
+      {
+        "id": "d-exportar",
+        "name": "Exportar a PDF",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1870,
+          0
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://www.googleapis.com/drive/v3/files/{{ ($json.body && $json.body.id) || $json.id }}/export?mimeType=application/pdf",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleOAuth2Api",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "file",
+                "outputPropertyName": "pdf",
+                "neverError": true
+              }
+            },
+            "timeout": 60000
+          }
+        },
+        "credentials": {
+          "googleOAuth2Api": {
+            "id": "c3E4Gpy7CArg3SCO",
+            "name": "Google account"
+          }
+        }
+      },
+      {
+        "id": "d-subir-pdf",
+        "name": "Subir el PDF",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2090,
+          0
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=media&fields=id",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleOAuth2Api",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/pdf"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "binaryData",
+          "inputDataFieldName": "pdf",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            },
+            "timeout": 60000
+          }
+        },
+        "credentials": {
+          "googleOAuth2Api": {
+            "id": "c3E4Gpy7CArg3SCO",
+            "name": "Google account"
+          }
+        }
+      },
+      {
+        "id": "d-nombrar",
+        "name": "Nombre y carpeta del PDF",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2310,
+          0
+        ],
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://www.googleapis.com/drive/v3/files/{{ ($json.body && $json.body.id) || $json.id }}?addParents={{ $('Carpeta definitiva').first().json.folder_id }}&removeParents=root&fields=id,name,webViewLink",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: $('Carpeta definitiva').first().json.nombre }) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "credentials": {
+          "googleOAuth2Api": {
+            "id": "c3E4Gpy7CArg3SCO",
+            "name": "Google account"
+          }
+        }
+      },
+      {
+        "id": "d-limpiar",
+        "name": "Borrar el documento intermedio",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "onError": "continueRegularOutput",
+        "position": [
+          2530,
+          0
+        ],
+        "parameters": {
+          "method": "DELETE",
+          "url": "=https://www.googleapis.com/drive/v3/files/{{ (($('Subir texto como documento').first().json.body || {}).id) || $('Subir texto como documento').first().json.id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleOAuth2Api",
+          "options": {
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "credentials": {
+          "googleOAuth2Api": {
+            "id": "c3E4Gpy7CArg3SCO",
+            "name": "Google account"
+          }
+        }
+      },
+      {
+        "id": "d-verificar",
+        "name": "Verificar que el PDF esta",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2750,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// El recibo dice lo que la RESPUESTA de Drive contesto, no lo que se pidio.\nconst patch = $('Nombre y carpeta del PDF').first().json;\nconst r = patch.body || patch;\nconst pdfOk = !!(r && r.id && r.name);\nconst prev = $('Carpeta definitiva').first().json;\n// el documento temporal: Drive contesta 204 (o 200) cuando lo borra · cualquier otra cosa = NO se borro (antes se callaba)\nlet codigo = null, borrado = false;\ntry { const b = $('Borrar el documento intermedio').first().json; codigo = Number(b.statusCode); borrado = codigo === 204 || codigo === 200; } catch (e) { borrado = false; }\nconst ok = pdfOk && borrado;\nconst motivo = !pdfOk ? 'Drive no devolvio el archivo con nombre'\n  : !borrado ? 'el PDF quedo en Drive pero el documento temporal NO se borro (respuesta de Drive: ' + (codigo === null || isNaN(codigo) ? 'sin codigo' : codigo) + ')'\n  : null;\nreturn [{ json: { ok, pdf_ok: pdfOk, intermedio_borrado: borrado, codigo_borrado: (codigo === null || isNaN(codigo)) ? null : codigo,\n  file_id: r && r.id || null, nombre: r && r.name || null,\n  url: r && r.webViewLink || null, folder_id: prev.folder_id,\n  folder_reusada: !!prev.folder_reusada, client_name: prev.client_name,\n  motivo } }];"
+        }
+      },
+      {
+        "id": "d-if-ok",
+        "name": "Salio bien",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2970,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.ok }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "d-campana",
+        "name": "Campana el documento no llego a Drive",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "onError": "continueRegularOutput",
+        "position": [
+          3190,
+          150
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SLACK_WEBHOOK_URL_EQUIPO }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ text: ($json.pdf_ok ? ':page_facing_up: *El PDF quedo en Drive, pero el cierre no salio limpio* — ' : ':page_facing_up: *Un documento no llego a Drive* — ') + ($json.motivo || 'la subida fallo') + '\\n• cliente `' + ($json.client_name || '?') + '`\\n' + ($json.pdf_ok ? '• el PDF *si* esta en la carpeta del cliente · lo que falta es borrar el documento \"(temporal)\" de la raiz de Drive (a la papelera)' : '• el texto *si* lo tenemos · lo que falta es el PDF en Drive\\n• se reintenta disparando este flujo de nuevo con el client_id') }) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            },
+            "timeout": 15000
+          }
+        }
+      },
+      {
+        "id": "responder-el-recibo",
+        "name": "Responder el recibo",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          2950,
+          140
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify($json) }}"
+        }
+      }
+    ],
+    "connections": {
+      "Seguir": {
+        "main": [
+          [
+            {
+              "node": "Buscar carpeta del cliente",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Campana el documento no llego a Drive",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Buscar carpeta del cliente": {
+        "main": [
+          [
+            {
+              "node": "Carpeta usar o crear",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Carpeta usar o crear": {
+        "main": [
+          [
+            {
+              "node": "Crear carpeta si no existe",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Crear carpeta si no existe": {
+        "main": [
+          [
+            {
+              "node": "Carpeta definitiva",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Carpeta definitiva": {
+        "main": [
+          [
+            {
+              "node": "Subir texto como documento",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Subir texto como documento": {
+        "main": [
+          [
+            {
+              "node": "Exportar a PDF",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Exportar a PDF": {
+        "main": [
+          [
+            {
+              "node": "Subir el PDF",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Subir el PDF": {
+        "main": [
+          [
+            {
+              "node": "Nombre y carpeta del PDF",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Nombre y carpeta del PDF": {
+        "main": [
+          [
+            {
+              "node": "Borrar el documento intermedio",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Borrar el documento intermedio": {
+        "main": [
+          [
+            {
+              "node": "Verificar que el PDF esta",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verificar que el PDF esta": {
+        "main": [
+          [
+            {
+              "node": "Salio bien",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Responder el recibo",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Salio bien": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Campana el documento no llego a Drive",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Documento listo": {
+        "main": [
+          [
+            {
+              "node": "Leer el pedido",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Leer el pedido": {
+        "main": [
+          [
+            {
+              "node": "Seguir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-10-11T16:26:35.376Z",
+    "updatedAt": "2026-10-11T16:26:35.376Z",
+    "workflowPublishHistory": [
+      {
+        "id": 2555,
+        "workflowId": "rXR5GmnrGF6Dkwgq",
+        "versionId": "f8814799-80d9-457b-90c0-2f69fb120c5d",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-10-11T16:26:35.532Z"
+      }
+    ]
+  }
+}

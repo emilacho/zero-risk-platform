@@ -1,0 +1,81 @@
+{
+ "corridas": [
+  {
+   "run_id": "jxeCTwJuab73yUq7n",
+   "actor": "aYG0l9s7dbB7j3gbS",
+   "usd": 0.03148618072760601,
+   "estado": "SUCCEEDED",
+   "momento": "2026-10-11T14:30:04.693Z",
+   "dia": "2026-10-11",
+   "segundos": 67.656,
+   "dataset_id": "GDENgkaIYvZn8eJRG"
+  },
+  {
+   "run_id": "3rqHehpj0l0nNQMwe",
+   "actor": "shu8hvrXbJbY3Eb9W",
+   "usd": 0.0023,
+   "estado": "SUCCEEDED",
+   "momento": "2026-10-11T14:30:04.682Z",
+   "dia": "2026-10-11",
+   "segundos": 14.548,
+   "dataset_id": "TJHt0m0gWJ4gWhtEc"
+  },
+  {
+   "run_id": "gBpbDXBqB4VkdRxor",
+   "actor": "nwua9Gu5YrADL7ZDj",
+   "usd": 0.0152,
+   "estado": "SUCCEEDED",
+   "momento": "2026-10-11T14:30:04.645Z",
+   "dia": "2026-10-11",
+   "segundos": 7.203,
+   "dataset_id": "4cuzIC0fjbt18MFne"
+  },
+  {
+   "run_id": "DywPx8vqGDIeYrVCN",
+   "actor": "CfCwPWpfjpxQhOboS",
+   "usd": 0.24349079225255382,
+   "estado": "SUCCEEDED",
+   "momento": "2026-10-11T14:30:04.623Z",
+   "dia": "2026-10-11",
+   "segundos": 36.745,
+   "dataset_id": "xdgDPQexLMIe99SvC"
+  },
+  {
+   "run_id": "wshsuggxQ3b1R9OBF",
+   "actor": "nFJndFXA5zjCTuudP",
+   "usd": 0.00255,
+   "estado": "SUCCEEDED",
+   "momento": "2026-10-11T14:30:13.219Z",
+   "dia": "2026-10-11",
+   "segundos": 19.313,
+   "dataset_id": "CKNqRarh7nQuCi7Sc"
+  }
+ ],
+ "llamadas": [
+  {
+   "service": "apify:own_google_maps_profile",
+   "amount_usd_exact": 0.0002,
+   "description": "{\"run_id\":\"gBpbDXBqB4VkdRxor\",\"costo_conocido\":true}"
+  },
+  {
+   "service": "apify:instagram_scraper",
+   "amount_usd_exact": 0,
+   "description": "{\"run_id\":\"3rqHehpj0l0nNQMwe\",\"costo_conocido\":true}"
+  },
+  {
+   "service": "apify:google_serp_scraper",
+   "amount_usd_exact": 0.00005,
+   "description": "{\"run_id\":\"wshsuggxQ3b1R9OBF\",\"costo_conocido\":true}"
+  },
+  {
+   "service": "apify:facebook_ads_library_scraper",
+   "amount_usd_exact": 0.18005,
+   "description": "{\"run_id\":\"DywPx8vqGDIeYrVCN\",\"costo_conocido\":true}"
+  },
+  {
+   "service": "apify:website_content_scraper",
+   "amount_usd_exact": 0.013371,
+   "description": "{\"run_id\":\"jxeCTwJuab73yUq7n\",\"costo_conocido\":true}"
+  }
+ ]
+}
