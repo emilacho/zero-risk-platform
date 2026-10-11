@@ -40,6 +40,8 @@ export type {
 } from './dispatch'
 
 export { consumeIntakeTick } from './orchestrator'
+export { despacharAlEntrar, isInmediatoEnabled } from './inmediato'
+export type { EntradaInmediato, ResultadoInmediato } from './inmediato'
 export { CandadoEnMemoria, candadoEnSupabase } from './lock'
 export type { CandadoDelTic, TomaDelCandado } from './lock'
 export { findLostClaims } from './query'
