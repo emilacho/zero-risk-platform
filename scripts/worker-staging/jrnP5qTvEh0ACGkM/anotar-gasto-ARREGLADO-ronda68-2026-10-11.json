@@ -1,0 +1,589 @@
+{
+  "id": "jrnP5qTvEh0ACGkM",
+  "name": "Zero Risk — Apify · anotar el gasto real (diario 05:00)",
+  "description": null,
+  "active": true,
+  "activeVersionId": "61de22fd-8e88-4f71-a20e-2b8444b3e837",
+  "createdAt": "2026-09-05T16:19:22.660Z",
+  "updatedAt": "2026-09-11T19:28:33.517Z",
+  "isArchived": false,
+  "versionId": "61de22fd-8e88-4f71-a20e-2b8444b3e837",
+  "versionCounter": 13,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "id": "cron-diario",
+      "name": "Diario 05:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 5,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "traer-corridas",
+      "name": "Traer corridas de Apify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/actor-runs?limit=200&desc=1&token={{ $env.APIFY_API_TOKEN }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "una-por-corrida",
+      "name": "Una fila por corrida",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Una salida por CORRIDA de las últimas 48 h.\n// 48 y no 24: si el proceso falla un día, al siguiente recupera. La cuenta\n// guarda 31 días, así que nunca se pierde nada.\nconst cuerpo = $input.first().json;\nconst corridas = (cuerpo && cuerpo.data && cuerpo.data.items) || [];\nconst desde = Date.now() - 48 * 3600 * 1000;\nconst out = [];\nfor (const c of corridas) {\n  if (!c.startedAt || new Date(c.startedAt).getTime() < desde) continue;\n  out.push({ json: {\n    run_id: c.id, actor: c.actId, estado: c.status,\n    usd: c.usageTotalUsd || 0,\n    dia: String(c.startedAt).slice(0, 10),\n    momento: c.startedAt,\n    segundos: c.finishedAt ? Math.round((new Date(c.finishedAt) - new Date(c.startedAt)) / 1000) : null,\n    dataset_id: c.defaultDatasetId || null,\n  } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "contar-filas",
+      "name": "Contar las filas de cada corrida",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/datasets/{{ $json.dataset_id }}?token={{ $env.APIFY_API_TOKEN }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "agrupar-por-dia",
+      "name": "Agrupar por día",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Se emparejan por POSICIÓN las corridas con el conteo de su dataset:\n// el paso anterior corre una vez por corrida y conserva el orden.\nconst corridas = $('Una fila por corrida').all().map((i) => i.json);\nconst conteos = $input.all().map((i) => i.json);\n// RONDA 68 · las corridas que YA quedaron anotadas en la fila de su llamada (service='apify:<función>' con run_id) no se suman otra vez aquí:\n// el total del día = esas filas + este resto. Si no se puede leer la libreta, NO se descuenta nada (mejor contar de más que perder gasto) y se dice.\nconst SB_COSTS = 'https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/costs';\nconst anotadas = new Set();\nlet anotadas_lectura = 'ok';\ntry {\n  const desde = new Date(Date.now() - 4 * 86400000).toISOString().slice(0, 10);\n  const filasLlamada = await this.helpers.httpRequest({\n    url: SB_COSTS + '?select=description&service=like.apify:*&date=gte.' + desde,\n    method: 'GET', json: true, timeout: 15000,\n    headers: { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY },\n  });\n  for (const f of (Array.isArray(filasLlamada) ? filasLlamada : [])) {\n    try { const d = JSON.parse(f.description || '{}'); if (d && d.run_id && d.costo_conocido === true) anotadas.add(String(d.run_id)); } catch (e) { /* una descripción que no es JSON no anota nada */ }\n  }\n} catch (e) { anotadas_lectura = 'fallo: no se descontó nada · ' + String(e && e.message ? e.message : e).slice(0, 100); }\nconst porDia = {};\nfor (let k = 0; k < corridas.length; k++) {\n  const c = corridas[k];\n  const r = conteos[k] || {};\n  const filas = (r.data && typeof r.data.itemCount === \"number\") ? r.data.itemCount : null;\n  const d = c.dia;\n  porDia[d] = porDia[d] || { dia: d, corridas: 0, exacto_usd: 0, anotadas: 0, anotadas_usd: 0, cobro_sin_datos: 0, sin_conteo: 0, detalle: [] };\n  porDia[d].corridas += 1;\n  if (anotadas.has(String(c.run_id))) { porDia[d].anotadas += 1; porDia[d].anotadas_usd += c.usd; } else { porDia[d].exacto_usd += c.usd; }\n  // sólo se marca cuando SE SABE que trajo cero · si no se pudo contar, se dice\n  if (filas === null) porDia[d].sin_conteo += 1;\n  else if (c.usd > 0 && filas === 0) porDia[d].cobro_sin_datos += 1;\n  if (porDia[d].detalle.length < 40) porDia[d].detalle.push({ run_id: c.run_id, actor: c.actor, usd: Number(c.usd.toFixed(6)), filas: filas, estado: c.estado, segundos: c.segundos, anotada_en_su_llamada: anotadas.has(String(c.run_id)) });\n}\n// 🔴 UN DÍA SÓLO SE REESCRIBE SI LA VENTANA LO CUBRE ENTERO (2026-09-11 · firma b)\n//\n// El defecto, medido sobre las corridas reales del proveedor:\n//   día 06-sep · gasto real US$ 0,158994\n//     pase del 06-sep 23:59 → escribía 0,158994   ✅\n//     pase del 08-sep 05:00 → escribía 0,034713   🔴 y PISABA al anterior\n//   porque la ventana de 48 h se mueve con «ahora»: las corridas tempranas del día\n//   se caen fuera y gana la reescritura que MENOS ve. Así quedó la libreta con\n//   0,13 donde el proveedor dice 0,158994.\n//\n// ⇒ La regla: se borra y reescribe SÓLO el día que entra completo en la ventana\n//   (ventana_desde <= 00:00 del día). El día que entra a medias NO SE TOCA: la fila\n//   que ya está fue escrita por un pase que veía más.\n// ⇒ Y lo que no se reconcilió queda ESCRITO en las filas que sí se escriben, para\n//   que un día a medias nunca se lea como un día en cero.\nconst VENTANA_MS = 48 * 3600 * 1000;\nconst ahora = Date.now();\nconst ventanaDesde = ahora - VENTANA_MS;\n\nconst completos = [];\nconst parciales = [];\nfor (const d of Object.values(porDia)) {\n  const inicioDia = new Date(d.dia + 'T00:00:00.000Z').getTime();\n  const entero = ventanaDesde <= inicioDia;\n  (entero ? completos : parciales).push({\n    dia: d.dia,\n    cubierto_desde: new Date(Math.max(ventanaDesde, inicioDia)).toISOString(),\n    visto_usd: Number(d.exacto_usd.toFixed(6)),\n    d: d,\n  });\n}\n\n// 🔴 lo que NO se reconcilió, declarado · nunca un día a medias leído como cero\nconst sin_reconciliar = parciales.map((p) => ({\n  dia: p.dia,\n  motivo: 'la ventana de 48 h sólo alcanza este día desde ' + p.cubierto_desde +\n    ' · NO se reescribe su fila para no pisarla con un número más incompleto',\n  visto_en_este_pase_usd: p.visto_usd,\n}));\n\nif (completos.length === 0) {\n  // no hay nada seguro que escribir · se dice, no se escribe un cero\n  return [];\n}\n\nreturn completos.map(({ d }) => ({ json: {\n  fechas: d.dia,\n  category: 'api_call',\n  service: 'apify',\n  amount_usd: Number(d.exacto_usd.toFixed(2)),\n  amount_usd_exact: Number(d.exacto_usd.toFixed(6)),\n  date: d.dia,\n  description: JSON.stringify({\n    tipo: 'costo',\n    es: 'reconciliacion_del_dia',\n    resto_sin_atribuir_a_una_llamada: true,\n    no_sumar_con: \"las filas de llamada (service='apify:<funcion>') CON run_id · ésas ya traen su importe real y esta fila NO las cuenta otra vez\",\n    anotadas_en_su_llamada: d.anotadas,\n    anotadas_usd: Number(d.anotadas_usd.toFixed(6)),\n    total_del_dia_usd: Number((d.exacto_usd + d.anotadas_usd).toFixed(6)),\n    lectura_de_las_anotadas: anotadas_lectura,\n    cobertura: 'completa',\n    ventana_desde: new Date(ventanaDesde).toISOString(),\n    ventana_hasta: new Date(ahora).toISOString(),\n    // 🔴 los días que este pase NO pudo cerrar, con su motivo\n    dias_sin_reconciliar: sin_reconciliar,\n    corridas: d.corridas,\n    exacto_usd: Number(d.exacto_usd.toFixed(6)),\n    aviso_redondeo: (d.exacto_usd > 0 && Number(d.exacto_usd.toFixed(2)) === 0)\n      ? 'el gasto real del día fue ' + d.exacto_usd.toFixed(6) + ' · el 0,00 de amount_usd NO significa gratis'\n      : null,\n    cobro_sin_datos: d.cobro_sin_datos,\n    sin_conteo: d.sin_conteo,\n    detalle: d.detalle,\n  }),\n} }));"
+      }
+    },
+    {
+      "id": "borrar-fila-del-dia",
+      "name": "Borrar la fila del día",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        550,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/costs?service=eq.apify&date=eq.{{ $json.fechas }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "anotar",
+      "name": "Anotar en la libreta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/costs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((({ fechas, ...resto }) => resto)($('Agrupar por día').item.json)) }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Diario 05:00": {
+      "main": [
+        [
+          {
+            "node": "Traer corridas de Apify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traer corridas de Apify": {
+      "main": [
+        [
+          {
+            "node": "Una fila por corrida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Una fila por corrida": {
+      "main": [
+        [
+          {
+            "node": "Contar las filas de cada corrida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contar las filas de cada corrida": {
+      "main": [
+        [
+          {
+            "node": "Agrupar por día",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agrupar por día": {
+      "main": [
+        [
+          {
+            "node": "Borrar la fila del día",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borrar la fila del día": {
+      "main": [
+        [
+          {
+            "node": "Anotar en la libreta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Zurich"
+  },
+  "staticData": {
+    "node:Diario 05:00": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "jrnP5qTvEh0ACGkM",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "updatedAt": "2026-04-18T13:51:26.012Z"
+      },
+      "createdAt": "2026-09-05T16:19:22.660Z",
+      "updatedAt": "2026-09-05T16:19:22.660Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "61de22fd-8e88-4f71-a20e-2b8444b3e837",
+    "workflowId": "jrnP5qTvEh0ACGkM",
+    "nodes": [
+      {
+        "id": "cron-diario",
+        "name": "Diario 05:00",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "days",
+                "triggerAtHour": 5,
+                "triggerAtMinute": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "traer-corridas",
+        "name": "Traer corridas de Apify",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          220,
+          0
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.apify.com/v2/actor-runs?limit=200&desc=1&token={{ $env.APIFY_API_TOKEN }}",
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "una-por-corrida",
+        "name": "Una fila por corrida",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// Una salida por CORRIDA de las últimas 48 h.\n// 48 y no 24: si el proceso falla un día, al siguiente recupera. La cuenta\n// guarda 31 días, así que nunca se pierde nada.\nconst cuerpo = $input.first().json;\nconst corridas = (cuerpo && cuerpo.data && cuerpo.data.items) || [];\nconst desde = Date.now() - 48 * 3600 * 1000;\nconst out = [];\nfor (const c of corridas) {\n  if (!c.startedAt || new Date(c.startedAt).getTime() < desde) continue;\n  out.push({ json: {\n    run_id: c.id, actor: c.actId, estado: c.status,\n    usd: c.usageTotalUsd || 0,\n    dia: String(c.startedAt).slice(0, 10),\n    momento: c.startedAt,\n    segundos: c.finishedAt ? Math.round((new Date(c.finishedAt) - new Date(c.startedAt)) / 1000) : null,\n    dataset_id: c.defaultDatasetId || null,\n  } });\n}\nreturn out;"
+        }
+      },
+      {
+        "id": "contar-filas",
+        "name": "Contar las filas de cada corrida",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          660,
+          0
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.apify.com/v2/datasets/{{ $json.dataset_id }}?token={{ $env.APIFY_API_TOKEN }}",
+          "options": {
+            "timeout": 15000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "agrupar-por-dia",
+        "name": "Agrupar por día",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// Se emparejan por POSICIÓN las corridas con el conteo de su dataset:\n// el paso anterior corre una vez por corrida y conserva el orden.\nconst corridas = $('Una fila por corrida').all().map((i) => i.json);\nconst conteos = $input.all().map((i) => i.json);\nconst porDia = {};\nfor (let k = 0; k < corridas.length; k++) {\n  const c = corridas[k];\n  const r = conteos[k] || {};\n  const filas = (r.data && typeof r.data.itemCount === \"number\") ? r.data.itemCount : null;\n  const d = c.dia;\n  porDia[d] = porDia[d] || { dia: d, corridas: 0, exacto_usd: 0, cobro_sin_datos: 0, sin_conteo: 0, detalle: [] };\n  porDia[d].corridas += 1;\n  porDia[d].exacto_usd += c.usd;\n  // sólo se marca cuando SE SABE que trajo cero · si no se pudo contar, se dice\n  if (filas === null) porDia[d].sin_conteo += 1;\n  else if (c.usd > 0 && filas === 0) porDia[d].cobro_sin_datos += 1;\n  if (porDia[d].detalle.length < 40) porDia[d].detalle.push({ run_id: c.run_id, actor: c.actor, usd: Number(c.usd.toFixed(6)), filas: filas, estado: c.estado, segundos: c.segundos });\n}\n// 🔴 UN DÍA SÓLO SE REESCRIBE SI LA VENTANA LO CUBRE ENTERO (2026-09-11 · firma b)\n//\n// El defecto, medido sobre las corridas reales del proveedor:\n//   día 06-sep · gasto real US$ 0,158994\n//     pase del 06-sep 23:59 → escribía 0,158994   ✅\n//     pase del 08-sep 05:00 → escribía 0,034713   🔴 y PISABA al anterior\n//   porque la ventana de 48 h se mueve con «ahora»: las corridas tempranas del día\n//   se caen fuera y gana la reescritura que MENOS ve. Así quedó la libreta con\n//   0,13 donde el proveedor dice 0,158994.\n//\n// ⇒ La regla: se borra y reescribe SÓLO el día que entra completo en la ventana\n//   (ventana_desde <= 00:00 del día). El día que entra a medias NO SE TOCA: la fila\n//   que ya está fue escrita por un pase que veía más.\n// ⇒ Y lo que no se reconcilió queda ESCRITO en las filas que sí se escriben, para\n//   que un día a medias nunca se lea como un día en cero.\nconst VENTANA_MS = 48 * 3600 * 1000;\nconst ahora = Date.now();\nconst ventanaDesde = ahora - VENTANA_MS;\n\nconst completos = [];\nconst parciales = [];\nfor (const d of Object.values(porDia)) {\n  const inicioDia = new Date(d.dia + 'T00:00:00.000Z').getTime();\n  const entero = ventanaDesde <= inicioDia;\n  (entero ? completos : parciales).push({\n    dia: d.dia,\n    cubierto_desde: new Date(Math.max(ventanaDesde, inicioDia)).toISOString(),\n    visto_usd: Number(d.exacto_usd.toFixed(6)),\n    d: d,\n  });\n}\n\n// 🔴 lo que NO se reconcilió, declarado · nunca un día a medias leído como cero\nconst sin_reconciliar = parciales.map((p) => ({\n  dia: p.dia,\n  motivo: 'la ventana de 48 h sólo alcanza este día desde ' + p.cubierto_desde +\n    ' · NO se reescribe su fila para no pisarla con un número más incompleto',\n  visto_en_este_pase_usd: p.visto_usd,\n}));\n\nif (completos.length === 0) {\n  // no hay nada seguro que escribir · se dice, no se escribe un cero\n  return [];\n}\n\nreturn completos.map(({ d }) => ({ json: {\n  fechas: d.dia,\n  category: 'api_call',\n  service: 'apify',\n  amount_usd: Number(d.exacto_usd.toFixed(2)),\n  amount_usd_exact: Number(d.exacto_usd.toFixed(6)),\n  date: d.dia,\n  description: JSON.stringify({\n    tipo: 'costo',\n    es: 'reconciliacion_del_dia',\n    unica_con_plata: true,\n    no_sumar_con: \"las filas de llamada (service='apify:<funcion>') · ésas van sin importe a propósito\",\n    cobertura: 'completa',\n    ventana_desde: new Date(ventanaDesde).toISOString(),\n    ventana_hasta: new Date(ahora).toISOString(),\n    // 🔴 los días que este pase NO pudo cerrar, con su motivo\n    dias_sin_reconciliar: sin_reconciliar,\n    corridas: d.corridas,\n    exacto_usd: Number(d.exacto_usd.toFixed(6)),\n    aviso_redondeo: (d.exacto_usd > 0 && Number(d.exacto_usd.toFixed(2)) === 0)\n      ? 'el gasto real del día fue ' + d.exacto_usd.toFixed(6) + ' · el 0,00 de amount_usd NO significa gratis'\n      : null,\n    cobro_sin_datos: d.cobro_sin_datos,\n    sin_conteo: d.sin_conteo,\n    detalle: d.detalle,\n  }),\n} }));"
+        }
+      },
+      {
+        "id": "borrar-fila-del-dia",
+        "name": "Borrar la fila del día",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          550,
+          0
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "method": "DELETE",
+          "url": "=https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/costs?service=eq.apify&date=eq.{{ $json.fechas }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 10000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "anotar",
+        "name": "Anotar en la libreta",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          660,
+          0
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "method": "POST",
+          "url": "https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/costs",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify((({ fechas, ...resto }) => resto)($('Agrupar por día').item.json)) }}",
+          "options": {
+            "timeout": 10000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Diario 05:00": {
+        "main": [
+          [
+            {
+              "node": "Traer corridas de Apify",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Traer corridas de Apify": {
+        "main": [
+          [
+            {
+              "node": "Una fila por corrida",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Una fila por corrida": {
+        "main": [
+          [
+            {
+              "node": "Contar las filas de cada corrida",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Contar las filas de cada corrida": {
+        "main": [
+          [
+            {
+              "node": "Agrupar por día",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Agrupar por día": {
+        "main": [
+          [
+            {
+              "node": "Borrar la fila del día",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Borrar la fila del día": {
+        "main": [
+          [
+            {
+              "node": "Anotar en la libreta",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-09-11T19:28:33.520Z",
+    "updatedAt": "2026-09-11T19:28:33.520Z",
+    "workflowPublishHistory": [
+      {
+        "id": 1842,
+        "workflowId": "jrnP5qTvEh0ACGkM",
+        "versionId": "61de22fd-8e88-4f71-a20e-2b8444b3e837",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-09-11T19:28:33.556Z"
+      },
+      {
+        "id": 1843,
+        "workflowId": "jrnP5qTvEh0ACGkM",
+        "versionId": "61de22fd-8e88-4f71-a20e-2b8444b3e837",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-09-11T19:28:33.581Z"
+      }
+    ]
+  }
+}

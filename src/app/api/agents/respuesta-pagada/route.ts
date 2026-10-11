@@ -65,7 +65,7 @@ export async function POST(req: Request) {
 
   const recuperada = await recuperarRespuestaPagada(
     { agent, step, executionId, topeMs, quien: 'respuesta-pagada' },
-    { buscarFila: () => buscarFilaDelEmpleado(agent, step, executionId, desdeMs) },
+    { buscarFila: () => buscarFilaDelEmpleado(agent, step, executionId, desdeMs, { workflowId: typeof body.workflow_id === 'string' ? body.workflow_id : null, clientId: typeof body.client_id === 'string' ? body.client_id : null }) },
   )
 
   const esperaMs = Date.now() - empezo
