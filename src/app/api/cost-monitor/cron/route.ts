@@ -7,7 +7,7 @@
  * $50/día**. Concretamente: daily per-workflow ($10), daily aggregate platform
  * ($100), daily total ($50 · el número canónico de alerta diaria), hourly
  * burst ($15 · subido de $5 · el $5 era ruido con gasto diario legítimo
- * $26-38). El hard-stop §150 (SALA_NAUFRAGO_CAP_USD) es OTRA cosa · no se
+ * $26-38). El hard-stop §150 (SALA_RUN_CAP_USD) es OTRA cosa · no se
  * toca acá. (Corrige el número $30 que venía de un doc deprecado 07-02.)
  *
  * MODES · gated by env var `COST_MONITOR_SHADOW_MODE` (default: "1" = shadow).

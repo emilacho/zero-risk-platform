@@ -285,8 +285,8 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
   // ── §150 spend gate · server-side · covers EVERY caller ───────────────
   // The deepest door: n8n workflows that hit this Railway endpoint directly
   // (JOURNEY B · smoke) bypass the Vercel gates (#240 /run-sdk · #244 /run).
-  // Gating here is the only place that protects all callers. Default-OFF
-  // (shadow) until SALA_NAUFRAGO_RUN_CAP_ENFORCE · §148 safety-net: a query
+  // Gating here is the only place that protects all callers.
+  // (per-client cap · ON unless RUN_SPEND_CAP_ENFORCE=false) · §148 safety-net: a query
   // failure never blocks legit traffic. Over-cap → 429 (no SDK call · no cost).
   try {
     // `as never` · the supabase-js client's generics are too deep for the

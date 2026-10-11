@@ -23,7 +23,8 @@
  * a SAFETY NET · backstops G6 + G5 stay enforce-live independently.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { CapSpendQuery } from './dispatch'
+import type { CapSpendQuery, CapUsdQuery } from './dispatch'
+import { capDeLaFicha } from '@/lib/sala-journey-dispatch'
 import { notifySpendGateDegradation } from '../spend-gate-alert'
 import {
   recordGateFailure,
@@ -123,6 +124,23 @@ export function wireCapSpendQuerySupabase(
       return sumCost(data)
     } catch {
       return gastoTrasFallo(notify, 'Excepcion en el freno del router.', tenant_id)
+    }
+  }
+}
+
+/**
+ * El techo de CADA cliente: `clients.config.spend_cap_usd` de la ficha cuyo id es el tenant. Sin ficha, sin dato o con un fallo de lectura → null (rige el techo general):
+ * una caída de base nunca frena la agencia (§148).
+ */
+export function wireCapUsdQuerySupabase(supabase: SupabaseClient): CapUsdQuery {
+  return async (tenant_id) => {
+    try {
+      const { data, error } = await supabase.from('clients').select('config').eq('id', tenant_id).limit(1)
+      if (error) return null
+      const fila = (data as Array<{ config?: unknown }> | null)?.[0]
+      return capDeLaFicha(fila?.config)
+    } catch {
+      return null
     }
   }
 }

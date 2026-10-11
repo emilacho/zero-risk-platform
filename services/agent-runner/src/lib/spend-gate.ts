@@ -1,5 +1,5 @@
 /**
- * §150 spend gate · agent-runner (Railway) native /run-sdk handler.
+ * §150 spend gate · agent-runner (Railway) native /run-sdk handler · POR CLIENTE, sin ningún cliente nombrado.
  *
  * This is the THIRD (and deepest) agent-invocation door. The Vercel routes
  * `/api/agents/run-sdk` (#240) and `/api/agents/run` (#244) each got the gate,
@@ -10,81 +10,70 @@
  * also lives server-side here for the same reason.
  *
  * The agent-runner is a separate package · it cannot import the Next app's
- * `@/lib/sala-journey-dispatch`, so the §150 canon is REPLICATED here. Keep
- * in sync with `src/lib/sala-journey-dispatch/naufrago-cost-cap.ts`:
- *   - tenant set · Náufrago UUID + legacy 'naufrago' alias
- *   - enforce flag · SALA_NAUFRAGO_RUN_CAP_ENFORCE === 'true' (default-OFF)
- *   - cap · SALA_NAUFRAGO_CAP_USD env (positive number) else $5 default
+ * `@/lib/run-sdk-spend-gate`, so the rule is REPLICATED here. Keep in sync with it:
+ *   - applies to EVERY client (no tenant list)
+ *   - enforce · ON por omisión · se apaga SOLO con el interruptor explícito `RUN_SPEND_CAP_ENFORCE=false`
+ *   - cap · `RUN_SPEND_CAP_USD` (número > 0) o $8 general; la ficha del cliente (`clients.config.spend_cap_usd`) puede BAJARLO, nunca subirlo
  *   - spend · SUM(cost_usd) by client_id over a 24h wall-clock window
  *
  * §148 safety-net · a query failure NEVER blocks legit traffic.
  */
 
-// Keep in sync with NAUFRAGO_TENANT_ID_UUID / NAUFRAGO_TENANT_ID_HINT.
-const NAUFRAGO_TENANT_IDS = new Set<string>([
-  'd69100b5-8ad7-4bb0-908c-68b5544065dc',
-  'naufrago',
-])
-const NAUFRAGO_CAP_USD_DEFAULT = 5.0
+const CAP_USD_DEFAULT = 8.0
 const WINDOW_MS = 24 * 60 * 60 * 1000
 
 export interface SpendGateResult {
   readonly blocked: boolean
-  readonly reason:
-    | 'flag_off'
-    | 'no_client'
-    | 'other_tenant'
-    | 'under_cap'
-    | 'over_cap'
-    | 'query_error'
+  readonly reason: 'flag_off' | 'no_client' | 'under_cap' | 'over_cap' | 'query_error'
   readonly cap_usd?: number
   readonly spent_usd?: number
+  /** el techo de la ficha, si bajó el general */
+  readonly cap_ficha_usd?: number
 }
 
-export function isNaufragoCapEnforced(): boolean {
-  return process.env.SALA_NAUFRAGO_RUN_CAP_ENFORCE === 'true'
+/** ON salvo el interruptor explícito `RUN_SPEND_CAP_ENFORCE=false` */
+export function isCapEnforced(): boolean {
+  return process.env.RUN_SPEND_CAP_ENFORCE !== 'false'
 }
 
-export function resolveNaufragoCapUsd(): number {
-  const raw = process.env.SALA_NAUFRAGO_CAP_USD
+export function resolveCapUsd(): number {
+  const raw = process.env.RUN_SPEND_CAP_USD
   const n = raw != null && raw !== '' ? Number(raw) : NaN
-  return Number.isFinite(n) && n > 0 ? n : NAUFRAGO_CAP_USD_DEFAULT
+  return Number.isFinite(n) && n > 0 ? n : CAP_USD_DEFAULT
 }
 
-// Minimal structural type · matches supabase-js .from().select().eq().gte().
-// `gte` is typed PromiseLike (not Promise) so the real Supabase client is
-// structurally assignable · supabase-js returns a PostgrestFilterBuilder which
-// is a thenable but NOT a full Promise (no catch/finally). `await` only needs
-// `.then()`. Same pattern as agent-invocations-log.ts.
-type SupabaseLike = {
+/** el tope de la ficha (`config.spend_cap_usd`) si es un número > 0; si no, null */
+export function capDeLaFicha(config: unknown): number | null {
+  const v = config && typeof config === 'object' && !Array.isArray(config) ? (config as Record<string, unknown>).spend_cap_usd : undefined
+  const n = typeof v === 'string' ? Number(v) : v
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null
+}
+
+// Minimal structural type · matches supabase-js .from().select().eq() (thenable) and .eq().gte().
+// `PromiseLike` (not Promise) so the real Supabase client is structurally assignable · supabase-js returns a
+// PostgrestFilterBuilder which is a thenable but NOT a full Promise. `await` only needs `.then()`.
+type Filas<T> = PromiseLike<{ data: T[] | null; error: unknown }>
+export interface SupabaseLike {
   from(table: string): {
     select(cols: string): {
-      eq(
-        col: string,
-        val: string,
-      ): {
-        gte(
-          col: string,
-          val: string,
-        ): PromiseLike<{ data: Array<{ cost_usd?: number | string | null }> | null; error: unknown }>
+      eq(col: string, val: string): Filas<{ cost_usd?: number | string | null; config?: unknown }> & {
+        gte(col: string, val: string): Filas<{ cost_usd?: number | string | null }>
       }
     }
   }
 }
 
 /**
- * Evaluate the §150 spend cap. Returns `{ blocked: true }` only when enforce
- * is live AND the client is the Náufrago tenant AND cumulative 24h spend >= cap.
+ * Evaluate the §150 spend cap. Returns `{ blocked: true }` only when enforce is live
+ * AND cumulative 24h spend of the client >= its cap (the general one, or its ficha's if lower).
  */
 export async function checkSpendCap(
   supabase: SupabaseLike,
   clientId: string | null | undefined,
   nowMs: number = Date.now(),
 ): Promise<SpendGateResult> {
-  if (!isNaufragoCapEnforced()) return { blocked: false, reason: 'flag_off' }
+  if (!isCapEnforced()) return { blocked: false, reason: 'flag_off' }
   if (!clientId) return { blocked: false, reason: 'no_client' }
-  if (!NAUFRAGO_TENANT_IDS.has(String(clientId)))
-    return { blocked: false, reason: 'other_tenant' }
 
   try {
     const floor = new Date(nowMs - WINDOW_MS).toISOString()
@@ -99,9 +88,16 @@ export async function checkSpendCap(
       const n = typeof v === 'string' ? Number(v) : (v ?? 0)
       return acc + (Number.isFinite(n) ? Number(n) : 0)
     }, 0)
-    const cap = resolveNaufragoCapUsd()
-    if (spent >= cap)
-      return { blocked: true, reason: 'over_cap', cap_usd: cap, spent_usd: spent }
+    let cap = resolveCapUsd()
+    let capFicha: number | undefined
+    try {
+      const f = await supabase.from('clients').select('config').eq('id', String(clientId))
+      const delaFicha = f.error ? null : capDeLaFicha((f.data ?? [])[0]?.config)
+      if (delaFicha !== null && delaFicha < cap) { cap = delaFicha; capFicha = delaFicha }
+    } catch {
+      // sin dato de la ficha rige el techo general
+    }
+    if (spent >= cap) return { blocked: true, reason: 'over_cap', cap_usd: cap, spent_usd: spent, ...(capFicha !== undefined ? { cap_ficha_usd: capFicha } : {}) }
     return { blocked: false, reason: 'under_cap', spent_usd: spent }
   } catch {
     return { blocked: false, reason: 'query_error' }

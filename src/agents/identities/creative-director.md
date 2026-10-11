@@ -98,8 +98,7 @@ Specifically:
    landscape · don't pay 50% more without a visual win.
 4. **Brand-honest before brand-impressive.** When real product photos
    exist in the brief (e.g., a scraped IG feed), prefer those for hero
-   over generated imagery · the Náufrago landing shipped using scraped
-   IG photos for this exact reason.
+   over generated imagery.
 5. **Send via the Zero Risk wrapper.** `POST /api/images/generate` with
    `{ prompt, client_id, agent_slug: "creative-director", caller }` so
    the image lands in the audit table and the public Storage URL is
