@@ -73,7 +73,31 @@ export function resumirEstructurado(jsonLd: unknown): string {
     for (const v of Object.values(o)) if (v && typeof v === 'object') visitar(v, d + 1)
   }
   visitar(jsonLd)
+  lineas.push(...preciosPublicados(jsonLd))
   return [...new Set(lineas)].join('\n')
+}
+
+/**
+ * r68 · los PRECIOS publicados por el cliente (carta: MenuItem → offers → price) son datos suyos: una cifra del manual que coincide con ellos tiene fuente propia.
+ * Recorrido APARTE y más hondo (la carta cuelga a 6-7 niveles) que solo recoge precios, para no volcar el resto del JSON.
+ */
+export function preciosPublicados(jsonLd: unknown): string[] {
+  const out: string[] = []
+  const ver = (n: unknown, d: number, nombre = ''): void => {
+    if (d > 12 || n == null) return
+    if (Array.isArray(n)) { n.forEach((x) => ver(x, d + 1, nombre)); return }
+    if (typeof n === 'string') { const t = n.trim(); if (t.startsWith('{') || t.startsWith('[')) { try { ver(JSON.parse(t), d + 1, nombre) } catch { /* no es JSON */ } } return }
+    if (typeof n !== 'object') return
+    const o = n as Record<string, unknown>
+    const aqui = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : nombre
+    for (const k of ['price', 'lowPrice', 'highPrice']) {
+      const v = o[k]
+      if (typeof v === 'string' || typeof v === 'number') out.push(`${k === 'price' ? 'precio' : k === 'lowPrice' ? 'precio mínimo' : 'precio máximo'}: ${String(v).trim()}${typeof o.priceCurrency === 'string' ? ' ' + o.priceCurrency : ''}${aqui ? ' · ' + aqui : ''}`)
+    }
+    for (const v of Object.values(o)) if (v && typeof v === 'object') ver(v, d + 1, aqui)
+  }
+  ver(jsonLd, 0)
+  return out
 }
 
 /** FUENTES completas (sin recortar) para comprobar hechos: una por bloque lógico. Filas de ensayo y de terceros NO se mezclan con lo propio. */
