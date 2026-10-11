@@ -1,0 +1,1447 @@
+{
+ "id": "PQdIgbuFexuBsoh8",
+ "name": "Zero Risk — Brief · el parte de trabajo (campaign brief) · CC#1",
+ "description": null,
+ "active": true,
+ "activeVersionId": "3083dfac-89a4-4c9c-9112-4dde667ca07b",
+ "createdAt": "2026-09-29T06:00:28.664Z",
+ "updatedAt": "2026-10-03T03:53:19.556Z",
+ "isArchived": false,
+ "versionId": "3083dfac-89a4-4c9c-9112-4dde667ca07b",
+ "versionCounter": 8,
+ "sourceWorkflowId": null,
+ "triggerCount": 1,
+ "nodes": [
+  {
+   "name": "Webhook · brief",
+   "webhookId": "brief-parte-de-trabajo-0001",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "zero-risk/brief",
+    "responseMode": "onReceived",
+    "options": {}
+   },
+   "id": "aaef7bb7-767d-47a5-b453-bddd9ec6f150"
+  },
+  {
+   "name": "⓪ Sobre · llave · modo seco",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ⓪ EL SOBRE · LA LLAVE · EL MODO SECO · CC#1 · 2026-09-29 · encargo Lenovo §1.\n// Este flujo PAGA (un agente). Por eso: (1) exige la llave de despacho del motor (lección E67: un POST con la marca\n// copiada arrancaba una corrida paga) y (2) exige `dry_run` EXPLÍCITO (true|false) en el sobre · no se asume nunca\n// (lección 28-sep: en otro flujo el dry_run moría en el primer nodo y una prueba «gratis» cobró US$ 0,37).\nconst w = $input.first().json || {}\nconst body = w.body && typeof w.body === 'object' ? w.body : {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\n\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) {\n  throw new Error('BRIEF_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo paga y queda cerrado hasta que exista · E67.')\n}\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) {\n  throw new Error('BRIEF_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo paga y solo lo despierta la sala · E67.')\n}\n\nif (!body.client_id) throw new Error('BRIEF_SIN_CLIENTE · falta client_id en el sobre · se DETIENE y no escribe nada')\n// el client_id se pega en direcciones de la base: solo un uuid, nada más\nif (!/^[0-9a-fA-F-]{36}$/.test(String(body.client_id))) throw new Error('BRIEF_CLIENTE_INVALIDO · client_id no es un uuid · se DETIENE y no escribe nada')\nif (typeof body.dry_run !== 'boolean') {\n  throw new Error('BRIEF_DRY_RUN_AUSENTE · el sobre debe traer dry_run explícito (true o false) · no se asume · se DETIENE antes de gastar')\n}\n\n// TOPE DURO por corrida (opt-in · US$) · un tope MAL ESCRITO detiene la corrida ANTES de gastar: ignorarlo dejaría pagar sin tope (mismo criterio que dry_run).\n// Ausente ⇒ sin tope (como hoy). Presente ⇒ número > 0 y ≤ 50. El corredor lo hace cumplir (el SDK corta) y el corte queda DECLARADO en el parte.\nlet tope_usd = null\nif (body.tope_usd !== undefined) {\n  const n = typeof body.tope_usd === 'number' ? body.tope_usd : (typeof body.tope_usd === 'string' && body.tope_usd.trim() !== '' ? Number(body.tope_usd) : NaN)\n  if (!Number.isFinite(n) || n <= 0 || n > 50) {\n    throw new Error('BRIEF_TOPE_INVALIDO · tope_usd debe ser un número mayor que 0 y hasta 50 · llegó ' + JSON.stringify(body.tope_usd) + ' · se DETIENE antes de gastar: ignorarlo dejaría pagar sin tope')\n  }\n  tope_usd = n\n}\n\n// RAZONAMIENTO limitado (opt-in) · experimento 30-sep · valor mal escrito detiene ANTES de gastar (mismo criterio que el tope) · ausente ⇒ razonamiento completo (como hoy)\n// 🔴 POR DEFECTO APAGADO (GO de Emilio 2026-10-01 tras el experimento: sin razonamiento el brief cabe en UNA respuesta · 16.352 tokens · 5 min · US$ 0,38; con él fallaba por el máximo de 32.000).\n// Ausente ⇒ 'disabled' (la cadena normal planeación→brief NO manda este campo y por eso volvía al fallo). Para volver al razonamiento completo hay que pedirlo: 'completo'.\nlet razonamiento = 'disabled'\nif (body.razonamiento !== undefined) {\n  if (body.razonamiento !== 'disabled' && body.razonamiento !== 'low' && body.razonamiento !== 'medium' && body.razonamiento !== 'completo') {\n    throw new Error('BRIEF_RAZONAMIENTO_INVALIDO · razonamiento debe ser disabled | low | medium | completo · llegó ' + JSON.stringify(body.razonamiento) + ' · se DETIENE antes de gastar')\n  }\n  razonamiento = body.razonamiento === 'completo' ? null : body.razonamiento\n}\n\nreturn [{\n  json: {\n    client_id: String(body.client_id),\n    tenant_id: body.tenant_id || body.client_id,\n    plan_id: body.plan_id || null,\n    dry_run: body.dry_run,\n    forzar: body.forzar === true || body.force_restart === true,\n    desde_worker: body.desde_worker || null,\n    _sala_correlation_id: body._sala_correlation_id || null,\n    _journey_id: body._journey_id || null,\n    // SOLO en modo seco: una respuesta de redactor enlatada para poder probar los chequeos (④) con datos con forma real\n    // sin pagar. En modo real se IGNORA por completo (el nodo ③ ni la mira).\n    simulacro_respuesta: body.dry_run === true && typeof body._simulacro_respuesta === 'string' ? body._simulacro_respuesta : null,\n    tope_usd,\n    razonamiento,\n  },\n}]\n"
+   },
+   "id": "b41d2041-327b-42c8-8845-6926dc8c72ce"
+  },
+  {
+   "name": "① Cargar manual vigente",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "alwaysOutputData": true,
+   "onError": "continueRegularOutput",
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_brand_books?select=id,client_id,version,gate_outcome,created_at,forbidden_words,required_terminology,content_text,voice_description,writing_style,tone_guidelines&client_id=eq.{{ $('⓪ Sobre · llave · modo seco').first().json.client_id }}&order=version.desc&limit=1",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "apikey",
+       "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      },
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "id": "0b7a6e10-6445-4418-9f4a-968a5399cc60"
+  },
+  {
+   "name": "① GUARDA · sin manual aprobado se DETIENE",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ① GUARDA · sin manual APROBADO se DETIENE y no se escribe nada · CC#1 · 2026-09-29.\n// Entrada: la fila más reciente de client_brand_books (versión más alta). Igual criterio que planeación.\nconst env = $('⓪ Sobre · llave · modo seco').first().json\nconst filas = $input.all().map((i) => i.json).filter((r) => r && r.id)\nif (filas.length === 0) {\n  throw new Error('BRIEF_SIN_MANUAL · el cliente ' + env.client_id + ' no tiene manual de marca · se DETIENE y NO escribe nada')\n}\nconst m = filas[0]\nif (m.gate_outcome !== 'paso_la_vara') {\n  throw new Error('BRIEF_MANUAL_NO_APROBADO · manual ' + m.id + ' con gate_outcome=' + JSON.stringify(m.gate_outcome) + ' · se DETIENE y NO escribe nada')\n}\nreturn [{\n  json: {\n    ...env,\n    manual_id: m.id,\n    manual_version: m.version,\n    manual_creado: m.created_at,\n    forbidden_words: Array.isArray(m.forbidden_words) ? m.forbidden_words : [],\n    required_terminology: Array.isArray(m.required_terminology) ? m.required_terminology : [],\n    manual_texto: String(m.content_text || ''),\n    // 03-oct · EL TRATO (tú · vos · usted) sale del manual: su descripción de voz y sus guías de tono viajan a ③ y ④\n    manual_voz: { voice_description: m.voice_description || null, writing_style: m.writing_style || null, tone_guidelines: m.tone_guidelines && typeof m.tone_guidelines === 'object' ? m.tone_guidelines : {} },\n  },\n}]\n"
+   },
+   "id": "156462b2-a048-4981-b815-5f54196e3bd4"
+  },
+  {
+   "name": "② Cargar plan vigente",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "alwaysOutputData": true,
+   "onError": "continueRegularOutput",
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_historical_outputs?select=id,created_at,title,content_text,status&output_type=eq.campaign_plan_90d&client_id=eq.{{ $('⓪ Sobre · llave · modo seco').first().json.client_id }}&order=created_at.desc&limit=1",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "apikey",
+       "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      },
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "id": "187cfd0f-b23b-48ac-95f1-d05eace9e806"
+  },
+  {
+   "name": "② GUARDA · sin plan se DETIENE",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1300,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ② GUARDA · sin plan vigente se DETIENE y no se escribe nada · CC#1 · 2026-09-29.\n// Entrada: la fila más reciente de client_historical_outputs con output_type=campaign_plan_90d.\nconst prev = $('① GUARDA · sin manual aprobado se DETIENE').first().json\nconst filas = $input.all().map((i) => i.json).filter((r) => r && r.id)\nif (filas.length === 0) {\n  throw new Error('BRIEF_SIN_PLAN · el cliente ' + prev.client_id + ' no tiene plan de 90 días vigente · se DETIENE y NO escribe nada')\n}\nconst p = filas[0]\nconst texto = String(p.content_text || '')\nif (!texto.trim()) {\n  throw new Error('BRIEF_PLAN_VACIO · el plan ' + p.id + ' no trae texto · se DETIENE y NO escribe nada')\n}\nreturn [{\n  json: {\n    ...prev,\n    plan_id: p.id,\n    plan_creado: p.created_at,\n    plan_titulo: p.title || null,\n    plan_texto: texto,\n    // el sobre puede nombrar un plan; si el vigente es OTRO se declara (no se obedece a ciegas ni se oculta)\n    plan_del_sobre: prev.plan_id || null,\n    plan_del_sobre_distinto: !!(prev.plan_id && prev.plan_id !== p.id),\n  },\n}]\n"
+   },
+   "id": "5192aaa9-0a5b-4a7f-b10b-845ef292d319"
+  },
+  {
+   "name": "② ¿Ya hay parte de este plan?",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "alwaysOutputData": true,
+   "onError": "continueRegularOutput",
+   "position": [
+    1560,
+    0
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_historical_outputs?select=id,created_at&output_type=eq.campaign_brief_pack&client_id=eq.{{ $('⓪ Sobre · llave · modo seco').first().json.client_id }}&provenance_tag->>plan_id=eq.{{ $('② GUARDA · sin plan se DETIENE').first().json.plan_id }}&limit=1",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "apikey",
+       "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      },
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "id": "b240646f-16f7-4cb8-ade8-107d332e1df0"
+  },
+  {
+   "name": "② ¿Ya hay parte de este plan? · guarda",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1820,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ② ¿YA HAY PARTE DE ESTE PLAN? · decisión de Emilio 09-sep: el mismo plan dos veces NO corre, avisa · CC#1 · 2026-09-29.\n// En modo seco no se aplica (no escribe nada, así que repetir no daña) pero se DECLARA. Con `forzar:true` se permite.\nconst prev = $('② GUARDA · sin plan se DETIENE').first().json\nconst ya = $input.all().map((i) => i.json).filter((r) => r && r.id)\nconst repetido = ya.length > 0\nif (repetido && !prev.forzar && !prev.dry_run) {\n  throw new Error('BRIEF_REPETIDO · ya existe el parte ' + ya[0].id + ' (' + ya[0].created_at + ') del plan ' + prev.plan_id + ' · no corre dos veces el mismo plan · para repetirlo a propósito, el sobre lleva forzar:true')\n}\nreturn [{ json: { ...prev, parte_previo_id: repetido ? ya[0].id : null, repetido_declarado: repetido } }]\n"
+   },
+   "id": "13242e31-cc78-4eb4-9b48-624d44f41073"
+  },
+  {
+   "name": "② Ficha del cliente",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "alwaysOutputData": true,
+   "onError": "continueRegularOutput",
+   "position": [
+    2080,
+    0
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/clients?select=id,name,country,market,config&id=eq.{{ $('⓪ Sobre · llave · modo seco').first().json.client_id }}&limit=1",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "apikey",
+       "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      },
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "id": "ede2be77-195d-406a-bbc7-44cb182f4f89"
+  },
+  {
+   "name": "③ Armar el cuerpo del redactor",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2340,
+    0
+   ],
+   "parameters": {
+    "jsCode": "/**\n * EL TRATO (tú · vos · usted) ES DE LA MARCA, NO UNA REGLA FIJA · CC#1 · 2026-10-03 · encargo Lenovo «cada foto viaja con todo su contexto» punto 5.\n *\n * Lógica PURA (sin red, sin `this`, sin `require`): la usan el flujo del brief, el flujo de la pieza y las pruebas · se pega entera en los nodos Code de n8n (estilo `var` + `function`).\n *\n * 🔴 ESTRUCTURAL, NUNCA POR CLIENTE: el trato se LEE del manual de marca (campo explícito o lo que dice su descripción de voz) o de la ficha del cliente; sólo si ninguno lo dice se usa, DECLARADO\n * y de baja confianza, el trato habitual del país de la ficha. Si no hay nada, queda «no_definido» y NO se comprueba nada (no se inventa una regla).\n * El detector reconoce las FORMAS del español (conjugación regular del voseo y del tuteo sobre verbos de uso comercial), no frases ni clientes.\n */\nfunction sinTildes(s) {\n  return String(s === undefined || s === null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')\n}\n\nvar TRATOS = ['tu', 'vos', 'usted']\n\n/** valor explícito → 'tu' | 'vos' | 'usted' | null */\nfunction tratoDeValor(v) {\n  var t = sinTildes(v).trim()\n  if (!t) return null\n  if (/^(tu|tuteo|tutear)$/.test(t)) return 'tu'\n  if (/^(vos|voseo|vosear)$/.test(t)) return 'vos'\n  if (/^(usted|ustedeo|formal)$/.test(t)) return 'usted'\n  return null\n}\n\n// lo que dice un TEXTO de voz sobre el trato, respetando las negaciones: «Tutea siempre (tú/sabes/pides — nunca vos)» ⇒ tú, y vos queda NEGADO\nvar MENCION = {\n  tu: /\\b(tutea\\w*|tuteo|tutear|tu)\\b/g,\n  vos: /\\b(vos|voseo|vosea\\w*|vosear)\\b/g,\n  usted: /\\b(usted|ustedeo|ustedea\\w*|trato formal)\\b/g,\n}\nfunction mencionesDelTexto(texto) {\n  var t = sinTildes(texto)\n  var out = { tu: 0, vos: 0, usted: 0, negados: [] }\n  TRATOS.forEach(function (k) {\n    var re = new RegExp(MENCION[k].source, 'g')\n    var m\n    while ((m = re.exec(t)) !== null) {\n      // «tu» a secas es un posesivo muy común («tu puerta»): sólo cuenta si va pegado a una indicación de trato (tú/sabes/pides …) o es tuteo/tutea\n      if (m[1] === 'tu' && !/tu\\s*[\\/·,]\\s*(sabes|pides|tienes|quieres|puedes|eres|vienes)/.test(t.slice(m.index, m.index + 30))) continue\n      var antes = t.slice(Math.max(0, m.index - 24), m.index)\n      if (/\\b(nunca|jamas|no|ni|sin|evita|evitar|evites)\\s+(\\w+\\s+){0,2}$/.test(antes)) out.negados.push(k)\n      else out[k] += 1\n    }\n  })\n  return out\n}\n\n// el trato habitual del país SÓLO cuando nadie lo dijo (baja confianza · se declara) · sin país conocido no hay default\nvar POR_PAIS = { argentina: 'vos', uruguay: 'vos', paraguay: 'vos', ecuador: 'tu', mexico: 'tu', peru: 'tu', chile: 'tu', espana: 'tu', bolivia: 'tu', venezuela: 'tu', panama: 'tu', 'costa rica': 'usted' }\n\n/**\n * `manual` = { voice_description, writing_style, tone_guidelines } · `ficha` = { config, country, market }\n * → { trato: 'tu'|'vos'|'usted'|'no_definido'|'conflicto', fuente, evidencia }\n */\nfunction resolverTrato(manual, ficha) {\n  var m = manual || {}\n  var f = ficha || {}\n  var tg = m.tone_guidelines && typeof m.tone_guidelines === 'object' ? m.tone_guidelines : {}\n  var cfg = f.config && typeof f.config === 'object' ? f.config : {}\n  var voz = cfg.voz && typeof cfg.voz === 'object' ? cfg.voz : {}\n  var explicitos = [\n    ['manual.tone_guidelines.trato', tg.trato], ['manual.tone_guidelines.tratamiento', tg.tratamiento], ['manual.tone_guidelines.address_form', tg.address_form],\n    ['ficha.config.voz.trato', voz.trato], ['ficha.config.trato', cfg.trato],\n  ]\n  for (var i = 0; i < explicitos.length; i++) {\n    var v = tratoDeValor(explicitos[i][1])\n    if (v) return { trato: v, fuente: explicitos[i][0].indexOf('manual') === 0 ? 'manual' : 'ficha', evidencia: explicitos[i][0] + ' = «' + explicitos[i][1] + '»' }\n  }\n  var texto = [m.voice_description, m.writing_style, m.tone_guidelines && Object.keys(tg).length ? JSON.stringify(tg) : ''].filter(Boolean).join(' · ')\n  if (texto) {\n    var me = mencionesDelTexto(texto)\n    var pos = TRATOS.filter(function (k) { return me[k] > 0 })\n    if (pos.length === 1) return { trato: pos[0], fuente: 'manual', evidencia: 'la descripción de voz del manual lo dice (' + pos[0] + (me.negados.length ? ' · niega ' + me.negados.join(', ') : '') + ')' }\n    if (pos.length > 1) return { trato: 'conflicto', fuente: 'manual', evidencia: 'la descripción de voz menciona más de un trato (' + pos.join(' y ') + ') sin negar ninguno · no se puede elegir' }\n  }\n  var pais = sinTildes(f.country).trim() || sinTildes(String(f.market || '').split(/[·|,;\\/]/).pop()).trim()\n  if (pais && POR_PAIS[pais]) return { trato: POR_PAIS[pais], fuente: 'default_por_pais', evidencia: 'ni el manual ni la ficha lo dicen: se usa el trato habitual de «' + pais + '» (BAJA confianza · conviene ponerlo en el manual)' }\n  return { trato: 'no_definido', fuente: 'ninguna', evidencia: 'ni el manual ni la ficha dicen el trato y no hay país conocido · NO se comprueba' }\n}\n\n// ───────────────────────────── las formas ─────────────────────────────\n// verbos de uso comercial/llamado a la acción (infinitivos regulares en la conjugación del voseo) · es LENGUA, no clientes\nvar VERBOS = ('pedir mandar escribir enviar llamar contar avisar venir hacer comprar probar reservar consultar mirar seguir sumar unir descubrir elegir disfrutar compartir ordenar encargar contactar visitar ' +\n  'decir tener querer poder saber vivir sentir pasar dejar traer llevar buscar conocer escuchar preguntar responder recibir pagar cambiar usar armar crear ahorrar aprovechar animar inscribir registrar ' +\n  'suscribir invitar acompañar agendar cotizar solicitar averiguar entrar ingresar escoger pensar imaginar atreverse quedar poner salir').split(' ')\nvar CLITICOS = ['', 'lo', 'la', 'los', 'las', 'le', 'les', 'me', 'nos', 'te', 'se']\n\nfunction radical(inf) { return inf.replace(/se$/, '').slice(0, -2) }\nfunction vocalTematica(inf) { var f = inf.replace(/se$/, ''); return f.slice(-2, -1) === 'a' || /ar$/.test(f) ? 'a' : /er$/.test(f) ? 'e' : 'i' }\nvar ACENTO = { a: 'á', e: 'é', i: 'í' }\n\nfunction formasVoseo() {\n  var s = {}\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + ACENTO[v]] = true // pedí · mandá · escribí\n    CLITICOS.slice(1).forEach(function (c) { s[r + v + c] = true }) // pedilo · mandalo · escribinos\n    s[r + ACENTO[v] + 's'] = true // pedís · mandás · tenés (voseo presente)\n    if (v === 'e') s[r + 'és'] = true\n  })\n  ;['sos', 'tenés', 'querés', 'podés', 'sabés', 'venís', 'hacés', 'decís', 'ponés', 'salís', 'vení', 'poné', 'hacé', 'decí', 'tené', 'salí'].forEach(function (w) { s[w] = true })\n  return s\n}\n// el tuteo: pronombre, presente 2.ª persona regular y el imperativo con clítico acentuado («pídelo», «mándanos»)\nfunction acentuarUltimaVocal(stem) {\n  var i = stem.length - 1\n  while (i >= 0 && !/[aeiou]/.test(stem[i])) i--\n  if (i < 0) return stem\n  return stem.slice(0, i) + ({ a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú' })[stem[i]] + stem.slice(i + 1)\n}\nfunction formasTuteo() {\n  var s = {}\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + (v === 'a' ? 'as' : 'es')] = true // mandas · escribes · tienes(irregular: ver abajo)\n    var imp = r + (v === 'a' ? 'a' : 'e')\n    CLITICOS.slice(1).forEach(function (c) { s[acentuarUltimaVocal(imp) + c] = true }) // mándalo · escríbenos\n  })\n  ;['eres', 'tienes', 'quieres', 'puedes', 'sabes', 'vienes', 'haces', 'dices', 'pides', 'pídelo', 'pídela', 'pídenos', 'ven', 'haz', 'dime', 'cuéntanos', 'escríbenos', 'avísanos', 'llámanos', 'mándanos', 'tú'].forEach(function (w) { s[w] = true })\n  return s\n}\n// formas de usted: pronombre (no «ustedes», que es plural neutro) y el imperativo/presente formal regular\nfunction formasUsted() {\n  var s = { usted: true }\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + (v === 'a' ? 'e' : 'a')] = true // mande · escriba\n    CLITICOS.slice(1).forEach(function (c) { s[acentuarUltimaVocal(r + (v === 'a' ? 'e' : 'a')) + c] = true })\n  })\n  return s\n}\nvar VOSEO = formasVoseo(), TUTEO = formasTuteo(), USTED = formasUsted()\n// palabras que coinciden por casualidad con una forma generada y NO son esa forma (sustantivos y adverbios comunes)\nvar FALSOS = { mas: 1, pase: 1, deje: 1, cree: 1, vea: 1, sienta: 1, nos: 1 }\n\n/** las palabras (con tilde) de un texto, en minúscula */\nfunction palabras(texto) { return String(texto || '').toLowerCase().match(/[a-záéíóúüñ]+/g) || [] }\n\n/** las formas de cada trato que aparecen en el texto: { vos: [palabras], tu: [...], usted: [...] } */\nfunction formasDeTrato(texto) {\n  var out = { vos: [], tu: [], usted: [] }\n  var add = function (k, w) { if (out[k].indexOf(w) === -1) out[k].push(w) }\n  palabras(texto).forEach(function (w) {\n    if (w === 'vos') add('vos', w)\n    else if (VOSEO[w]) add('vos', w)\n    else if (TUTEO[w]) add('tu', w)\n    else if (USTED[w] && !FALSOS[w]) add('usted', w)\n  })\n  return out\n}\n\n/**\n * ¿el texto respeta el trato de la marca? → [{ chequeo, detalle, fatal:false }]\n * `donde` = «la pieza» · «el brief». Sin trato definido (o en conflicto) NO se comprueba y se dice.\n */\nfunction chequearTrato(resolucion, texto, donde) {\n  var r = resolucion || { trato: 'no_definido' }\n  var d = donde || 'el texto'\n  if (r.trato === 'no_definido' || r.trato === 'conflicto') return []\n  var formas = formasDeTrato(texto)\n  var otros = TRATOS.filter(function (k) { return k !== r.trato })\n  var hallados = []\n  otros.forEach(function (k) { formas[k].forEach(function (w) { hallados.push({ w: w, k: k }) }) })\n  // el usted «mande/llame» coincide con presentes de 3.ª persona: sólo se avisa si el trato de la marca NO es usted y no hay forma más clara\n  if (!hallados.length) return []\n  var nombre = { tu: 'tuteo', vos: 'voseo', usted: 'usted' }\n  return [{\n    chequeo: 'trato_distinto_al_del_cliente',\n    detalle: d + ' trae formas de otro trato: ' + hallados.slice(0, 6).map(function (x) { return '«' + x.w + '» (' + nombre[x.k] + ')' }).join(' · ') + ' y el trato de la marca es ' + nombre[r.trato] + ' (' + r.fuente + ': ' + r.evidencia + ')',\n    fatal: false,\n  }]\n}\n\n/** el bloque para el pedido/brief: el trato y de dónde sale · y qué hacer si otro texto (el brief) trae otro */\nfunction bloqueDeTrato(resolucion) {\n  var r = resolucion || { trato: 'no_definido', fuente: 'ninguna', evidencia: '' }\n  var nombre = { tu: 'TÚ (tuteo)', vos: 'VOS (voseo)', usted: 'USTED' }\n  if (r.trato === 'no_definido') return 'F) EL TRATO. El sistema NO sabe qué trato (tú · vos · usted) usa esta marca: ni el manual ni la ficha lo dicen. Escribe con el trato que use el manual en sus ejemplos y DECLÁRALO en «no_pude_cumplir» («trato no definido»).'\n  if (r.trato === 'conflicto') return 'F) EL TRATO. El manual menciona más de un trato sin elegir (' + r.evidencia + '). No adivines: declara «trato en conflicto» en «no_pude_cumplir» y evita las formas de segunda persona cuando puedas.'\n  return ['F) EL TRATO de esta marca es ' + nombre[r.trato] + ' (fuente: ' + r.fuente + ' · ' + r.evidencia + ').',\n    '   Todo lo que se lee en la pieza (titular, texto, llamado) va en ese trato, sin mezclar. Si el brief trae formas de OTRO trato (por ejemplo una frase copiada de una conversación), NO las copies:',\n    '   conviértelas al trato de la marca y dilo en «que_miro». El manual de marca manda sobre el brief.'].join('\\n')\n}\n\n\n// ③ ARMAR EL CUERPO DEL REDACTOR · CC#1 · 2026-09-29 · encargo Lenovo §1.2 ③ + §1.3.\n// Un solo agente (`campaign-brief-agent`) produce la lista de entregables Y el brief de cada uno.\n// 🔴 MODO SECO DE VERDAD: `dry_run` viaja en el CUERPO que se manda a /api/agents/run-sdk (campo `cuerpo.dry_run`).\n// El nodo HTTP siguiente manda EXACTAMENTE `JSON.stringify(cuerpo)`, así que lo enviado queda visible como la salida de\n// ESTE nodo en la corrida. En seco el corredor contesta con su respuesta canónica sin llamar al modelo (US$ 0).\n// `force_restart:true` es obligatorio: sin él el corredor sirve un punto de control guardado (vuelve en 0,7 s sin haber corrido).\nconst prev = $('② ¿Ya hay parte de este plan? · guarda').first().json\nlet ficha = {}\ntry { const f = $input.first().json; ficha = Array.isArray(f) ? f[0] || {} : f || {} } catch (e) { ficha = {} }\nconst nombre = String(ficha.name || ficha.client_name || 'cliente')\n// 03-oct · EL TRATO de la marca (tú · vos · usted) sale del manual o de la ficha · lógica de trato-logica.js (pegada arriba por el constructor) · el brief ya NO copia el trato de una conversación\n// (si este archivo se corre SIN la lógica pegada por el constructor, el trato queda «no_definido» y el pedido es el de siempre)\nconst trato = typeof resolverTrato === 'function' ? resolverTrato(prev.manual_voz, ficha) : { trato: 'no_definido', fuente: 'ninguna', evidencia: 'la lógica del trato no está pegada en este nodo' }\n\nconst REFERENCIA = \"---\\r\\ntype: referencia · **el brief de UN entregable** · el documento que baja el plan a trabajo\\r\\nfecha: 2026-09-29\\r\\nautor: Arquitecto de Sistema (Fable)\\r\\nautoridad: **§144 · Emilio · 2026-09-29** · «continuemos con el brief»\\r\\nestado: **referencia · nada construido · `$0`**\\r\\nfunda en mediciones: `raw/tasks/2026-09-25-P1-RESULTADO-CC3-el-plan-bajado-a-piezas.md` *(los 12 campos y la unidad, medidos)* · `docs/INVESTIGACION-2026-09-25-el-brief-marcos-evidencia-y-el-ejemplo-real.md` *(lo que existe en la industria)* · `docs/DISENO-2026-09-26-el-piso-visual-del-manual-de-marca.md`\\r\\nregla: quien actualiza, re-firma\\r\\n---\\r\\n\\r\\n> 🔴 **AVISO AL EMPLEADO QUE LEA ESTO · las cifras del ejemplo son CENTINELAS, no datos.**\\r\\n> **Todo dinero termina en `,77`. Todo conteo termina en `7`.**\\r\\n> ⚠️ **Si una cifra terminada en `,77` aparece en un brief real, ese brief copió el ejemplo en vez de pensar.**\\r\\n\\r\\n---\\r\\n\\r\\n# El brief de un entregable\\r\\n\\r\\n## 0 · Antes de nada · **este nivel no existe en la industria**\\r\\n\\r\\n`[DATO]` **Se buscó en IPA · ISBA · ANA · 4A's · D&AD · WARC · WFA · AICP. Ninguna asociación publicó jamás un marco de brief a nivel de pieza.** Lo único codificado ahí es lo administrativo *(número de trabajo, orden de compra)* y lo de costos *(el formulario de licitación de 1975)*.\\r\\n\\r\\n`[DATO]` **Y la ANA nombra ese vacío como «el área más común de ineficiencia operativa»** de las agencias internas — **sin haberlo resuelto.**\\r\\n\\r\\n⇒ **Esto no copia un estándar. Lo escribe.** *Por eso cada campo de abajo viene con su porqué: si no se puede defender, no va.*\\r\\n\\r\\n📌 **Y los dos marcos más autorizados del mundo se niegan a dar plantilla, a propósito:** *«el formulario pre-impreso lleva a una mentalidad de llenar casillas que conspira contra el pensamiento real»*. **La respuesta a eso no es no tener campos: es que cada campo diga para qué está.**\\r\\n\\r\\n---\\r\\n\\r\\n## 1 · La unidad · **el entregable, y está medida**\\r\\n\\r\\n`[DATO]` Se le preguntó al redactor qué unidad usaría, **sin sugerirle ninguna.** Eligió **entregable de producción**, y descartó dos solo:\\r\\n\\r\\n> *«No \\\"tarea\\\" — porque las tareas operativas las hace el dueño, no quien produce.*\\r\\n> *No \\\"pieza suelta\\\" — porque **una foto aislada no se puede aprobar ni marcar como lista**.*\\r\\n> *Un entregable tiene **un responsable, un criterio de aceptación, y un estado verificable de terminado**.»*\\r\\n\\r\\n🔴 **Ésa es la definición y se adopta entera: la unidad es lo que se puede dar por terminado.**\\r\\n\\r\\n⚠️ **Piso medido:** **la unidad NUNCA es más grande que una plataforma.** *TikTok pide vertical casero; YouTube pide marca temprana y rica. **«Redimensionar la pieza madre» está explícitamente desaconsejado.*** ⇒ **un brief por plataforma, nunca uno por campaña.**\\r\\n\\r\\n---\\r\\n\\r\\n## 2 · Los campos · **doce medidos, cuatro agregados**\\r\\n\\r\\n**Los doce primeros los propuso el redactor, con su justificación. No son míos.** Los cuatro últimos salen de la investigación y del piso visual.\\r\\n\\r\\n| # | campo | por qué tiene que estar |\\r\\n|---|---|---|\\r\\n| **1** | **Qué es el entregable** | una línea. *Si no se puede decir en una línea, son dos entregables* |\\r\\n| **2** | **Objetivo en la plataforma** | **determina el botón disponible.** *Tráfico a WhatsApp → «Enviar mensaje». A la app → «Ver menú». El texto gira alrededor del destino* |\\r\\n| **3** | **Segmento, declarado** | *sin esto el redactor escribe para nadie en particular.* **Sale del manual, no se inventa** |\\r\\n| **4** | **El protagonista · UNO** | 🔴 *«los dos en un solo anuncio diluyen el mensaje»* |\\r\\n| **5** | **Límites de la plataforma** | caracteres de titular, caracteres antes del «ver más», proporción, duración. *Sin el límite se escribe texto que se corta* |\\r\\n| **6** | **Vocabulario obligatorio** | **cuáles de los términos del manual son imprescindibles EN ESTE entregable.** *Sin esto el texto cae en genérico* |\\r\\n| **7** | **Palabras y tonos prohibidos** | la lista del manual **+ lo que no aplica acá** |\\r\\n| **8** | **Construcción sintáctica** | *«¿frases cortas con elipsis, o frase completa por legibilidad en móvil?* **No es decisión que el redactor deba resolver solo»** |\\r\\n| **9** | **El llamado a la acción** | 🔴 *«no es decisión del redactor — es estratégica y va en el brief»* |\\r\\n| **10** | **El visual que acompaña** | 🔴 *«sin saber el visual, el texto puede contradecirlo»*. **Y acá entra el piso visual: qué capa manda, la luz, el encuadre, qué aparece y qué no** |\\r\\n| **11** | **Variantes** | ¿una o dos? Si hay prueba, **qué varía** — titular, ángulo o llamado. *Alguien lo decide antes de producir* |\\r\\n| **12** | **Quién aprueba y para cuándo** | *sin esto el texto se aprueba el mismo día que se quiere activar* |\\r\\n| **+13** | 🔴 **HIPÓTESIS** | **el campo que el mundo de marca no tiene y el de rendimiento sí.** *Un brief de marca afirma; uno de rendimiento asume que la pieza es un TEST.* **Una pieza con hipótesis declarada se puede evaluar después. Una sin hipótesis, no** |\\r\\n| **+14** | 🔴 **LOS NEGATIVOS** | **qué NO hacer, explícito.** *Del único brief real publicado que existe: la marca declara qué tipo de ideas evita. Casi nadie tiene este campo y es el que protege la marca* |\\r\\n| **+15** | **De qué parte del plan sale** | la procedencia. *Un entregable que no se puede rastrear al plan no debería existir* |\\r\\n| **+16** | **Identificador** | 🔴 **la pieza producida va a citar este número.** *El control es la trazabilidad versión↔aprobación, no la firma. **La trazabilidad que se agrega después nunca se agrega*** |\\r\\n\\r\\n---\\r\\n\\r\\n## 3 · Las seis reglas que no se negocian\\r\\n\\r\\n**R1 · Un mensaje por entregable.** *Consenso de toda la industria. «Comunicando cuatro cosas mal, se pierde la oportunidad de comunicar una bien» — y el efecto secundario no es el olvido, es la incredulidad: **la pluralidad de mensajes lleva a desconfiar de la fuente.***\\r\\n\\r\\n**R2 · Un brief por plataforma.** *Ver §1.*\\r\\n\\r\\n**R3 · La audiencia no es «todos».** *Tres criterios: distinta de la población general · suficiente en tamaño para el objetivo · la marca tiene o puede ganarse el derecho a hablarle.* **Y los clichés demográficos son la señal de que no hay estrategia.**\\r\\n\\r\\n**R4 · No se prescribe la solución.** *«Dan barandas, no esposas.»* ⚠️ **Y está medido que se incumple:** *sólo el 9% de los anunciantes admite briefear con el canal ya decidido, pero **el 59% de las agencias dice que pasa «a veces» y el 39% que pasa «seguido»**.*\\r\\n\\r\\n**R5 · Lo que falta se declara, no se rellena.**\\r\\n\\r\\n**R6 · 🔴 Toda derivación visual declara su muestra.** *Cuántas piezas se miraron, cuántas eran foto y cuántas video, y qué NO se pudo observar.*\\r\\n⚠️ **Está medido que sin esta regla no se cumple:** *dos corridas afirmaron «nunca aparecen personas» **mirando dos fotos**, de un cliente cuyas 10 de 12 publicaciones son video.* **Una generalización guardada sin su muestra se lee después como verdad de la marca — y termina rechazando una pieza por una regla que nadie midió.**\\r\\n\\r\\n---\\r\\n\\r\\n## 4 · Un brief completo · **ejemplo con centinelas**\\r\\n\\r\\n> ⚠️ **Rubro a propósito distinto del cliente de las pruebas.** *El sistema es agnóstico: si el ejemplo fuera del mismo rubro, se copiaría.*\\r\\n\\r\\n**Cliente:** gimnasio de barrio, local a la calle, cobra suscripción mensual.\\r\\n\\r\\n```\\r\\nIDENTIFICADOR      BRF-0007\\r\\nQUÉ ES             Anuncio de Instagram, imagen fija, para la franja de la tarde\\r\\nDE QUÉ PARTE       Plan §5 · el camino · semana 3-4 · objetivo: llenar la franja\\r\\nDEL PLAN SALE      horaria ociosa de 14 a 17\\r\\n\\r\\nOBJETIVO           Mensajes a WhatsApp  ⇒  botón disponible: «Enviar mensaje»\\r\\nSEGMENTO           Adulto que trabaja desde casa, 27-47, vive a menos de 17\\r\\n                   cuadras. Dolor declarado: no quiere entrenar con el gimnasio\\r\\n                   lleno. NO es «gente que quiere ponerse en forma»\\r\\nPROTAGONISTA       La franja vacía de la tarde. UNO. No el precio, no las\\r\\n                   máquinas, no el entrenador\\r\\n\\r\\nHIPÓTESIS          Si mostramos el gimnasio VACÍO en vez de lleno, el adulto\\r\\n                   que evita la multitud responde más. Se prueba contra la\\r\\n                   variante de sala llena\\r\\n\\r\\nLÍMITES            Titular ≤ 37 caracteres · texto principal: lo que importa\\r\\n                   en los primeros 2 renglones · proporción 4:5\\r\\nVOCABULARIO        «tu horario», «sin esperar máquina» — del manual\\r\\nOBLIGATORIO\\r\\nPROHIBIDO          «transformá tu cuerpo», «el mejor gimnasio», todo\\r\\n                   superlativo · y no se menciona a la competencia\\r\\nSINTAXIS           Frase completa. En móvil la elipsis se lee como error\\r\\n\\r\\nVISUAL             Capa que manda: PRODUCTO. Sala vacía, luz natural de\\r\\n                   tarde, plano medio a la altura del ojo. Aparece: equipo\\r\\n                   y luz de ventana. NO aparece: personas, logo encima de\\r\\n                   la foto, luz de estudio\\r\\nLLAMADO            «Enviar mensaje»\\r\\nVARIANTES          2 · varía SÓLO el visual (sala vacía / sala con 7\\r\\n                   personas). El texto es idéntico en las dos\\r\\nNEGATIVOS          Esta marca no se ríe de quien no entrena. No promete\\r\\n                   resultados en semanas. No muestra cuerpos como meta\\r\\nAPRUEBA            Emilio · antes del 07 del mes\\r\\nPRESUPUESTO        US$ 47,77 en la prueba de dos semanas\\r\\n```\\r\\n\\r\\n📌 **Notar cuatro cosas del ejemplo:**\\r\\n**①** el segmento **dice qué NO es**, no sólo qué es · **②** la hipótesis **nombra contra qué se prueba** · **③** la variante **cambia una sola cosa** *(si cambian dos, no se sabe cuál funcionó)* · **④** los negativos **son de la marca, no de la pieza**.\\r\\n\\r\\n---\\r\\n\\r\\n## 5 · Las trampas medidas · **y la más cara está arriba del brief**\\r\\n\\r\\n| | |\\r\\n|---|---|\\r\\n| 🔴 **el brief por comité** | *«se llenan de jerga… se agregan audiencias y temas para que cada uno sienta que su área es válida. **Me da vergüenza mandarlos**»* |\\r\\n| **demasiados objetivos** | *«muy malos para la efectividad» — **pero ninguno o muy pocos también**. Lo que importa es la jerarquía* |\\r\\n| **la agencia se autobriefea** | *9% admitido por clientes, **20% reclamado por agencias*** |\\r\\n| 🔴 **usar el trabajo creativo para descubrir la estrategia** | **el 60% lo admite.** *«Si no hay estrategia bien definida, no puede haber brief»* |\\r\\n| **sin criterios de evaluación** | **sólo el 30% los tiene** — *y desde 2003 el 84% dice que debería* |\\r\\n\\r\\n🔴 **Y la más cara de todas está aguas arriba, medida:** *el 80% de los anunciantes cree que escribe buenos briefs; **sólo el 10% de las agencias coincide**. Se estima que **el 33% del presupuesto se desperdicia** por briefs malos.*\\r\\n\\r\\n🟢 **Contra eso tenemos una ventaja estructural que casi nadie tiene:** *nuestro brief no lo escribe un humano apurado — **sale del manual y del plan, que se producen igual todas las veces**. **Nuestra ventaja no es la velocidad: es que el brief no se degrada.***\\r\\n\\r\\n---\\r\\n\\r\\n## 6 · Qué NO va en un brief\\r\\n\\r\\n🚫 **El texto publicitario.** *El brief pide la pieza, no la escribe.*\\r\\n🚫 **Más de un entregable.** *Si hay dos, son dos briefs.*\\r\\n🚫 **Una cifra sin de dónde salió.** *«Si un número no tiene de dónde, el plan asumió.»*\\r\\n🚫 **Un dato que el manual ya gobierna, copiado a mano.** *Se cita el manual; no se duplica, porque la copia envejece.*\\r\\n🚫 **Una regla visual sin su muestra.** *R6.*\\r\\n\\r\\n---\\r\\n\\r\\n## 7 · Lo que este documento NO resuelve · declarado\\r\\n\\r\\n- **El brief de un entregable en VIDEO.** 🔴 *El sistema mira imágenes, no video ni audio.* **De los nueve entregables típicos, el reel es el que no se puede briefear todavía.**\\r\\n- **Cuántos entregables debe tener un plan.** `[DESCONOCIDO]` *El redactor devolvió nueve para un cliente; no está medido si es su criterio estable.*\\r\\n- **Si los campos alcanzan para un entregable que no es un anuncio** *(un listado en una app, una configuración)*. `[DESCONOCIDO]` *La medición eligió un anuncio como ejemplo.*\\r\\n\\r\\n---\\r\\n\\r\\n**Firma:** Arquitecto de Sistema · **Fable** · 2026-09-29\\r\\n*(§144 de Emilio · los 12 primeros campos son del redactor, medidos, no míos · los 4 últimos vienen de la investigación y del piso visual · el ejemplo es de otro rubro a propósito · las cifras son centinelas)*\\r\\n*Regla de mantenimiento: quien actualice este documento, re-firma al pie.*\\r\\n\"\n\nconst REGLAS = [\n  'Eres el planificador que BAJA un plan de marketing a TRABAJO. Vas a producir un PARTE DE TRABAJO para el cliente «' + nombre + '»: la lista CERRADA de entregables del plan, cada uno con su brief.',\n  '',\n  '## Reglas que no se negocian',\n  '1. La unidad es el ENTREGABLE DE PRODUCCIÓN: algo con un responsable, un criterio de aceptación y un estado verificable de terminado. Nunca más grande que UNA plataforma: un brief por plataforma, nunca uno por campaña.',\n  '2. Cada entregable trae su brief con TODOS los campos de la referencia (abajo). UN solo mensaje por brief. La audiencia NUNCA es «todos»: se dice a quién SÍ y a quién NO. No prescribas la solución creativa. NO escribas el texto publicitario: el brief PIDE la pieza, no la escribe.',\n  '3. Lo que falta SE DECLARA en «huecos»; NO se rellena con supuestos. Ninguna cifra sin de dónde salió.',\n  '4. Si el plan CONTRADICE al manual de marca (por ejemplo usa un término que el manual prohíbe, o nombra una plataforma o una cifra que el manual no respalda), NO obedeces al plan: lo DECLARAS en «contradicciones_plan_vs_manual» y en el brief usas lo que dice el manual.',\n  '5. El sistema mira imágenes, NO video ni audio. Toda pieza de video, reel o audio NO lleva brief: va a «pendientes_declarados» con su motivo. Nunca pongas tipo_de_pieza «video» dentro de «entregables».',\n  '6. Toda regla visual declara su MUESTRA (cuántas piezas se miraron, cuántas eran foto y cuántas video, y qué no se pudo observar): tómala del campo visual.muestra del manual. Sin muestra no hay regla visual.',\n  '7. Cada brief cita la parte del plan de donde sale (una sección o una frase TEXTUAL del plan) y lleva un identificador BRF-0001, BRF-0002…',\n  '8. Las cifras y conteos del ejemplo de la referencia son CENTINELAS. Si copias una cifra que termina en ,77 el parte se rechaza. Piensa cada cifra desde el plan.',\n  '9. No inventes presupuestos: si el plan no fija dinero para el entregable, «presupuesto» va null y se declara el hueco.',\n  '10. Usa el vocabulario obligatorio del manual y NUNCA sus palabras prohibidas en lo que el brief pide (solo pueden aparecer en la lista «prohibido» y «negativos»).',\n  '',\n  '## Cómo responder',\n  'Responde EXCLUSIVAMENTE con UN bloque JSON (nada de texto antes ni después) con esta forma exacta:',\n  '{ \"parte\": {',\n  '  \"entregables\": [ {',\n  '    \"id\": \"BRF-0001\", \"plataforma\": \"…\", \"tipo_de_pieza\": \"imagen|texto|listado|configuracion|carrusel|documento|otro\",',\n  '    \"que_es\": \"…\", \"de_que_parte_del_plan\": \"…\", \"objetivo\": \"…\", \"segmento\": \"…\", \"protagonista\": \"…\", \"mensaje\": \"UN solo mensaje\",',\n  '    \"hipotesis\": \"…\", \"limites\": \"…\", \"vocabulario_obligatorio\": [\"…\"], \"prohibido\": [\"…\"], \"sintaxis\": \"…\",',\n  '    \"visual\": { \"capa_que_manda\": \"producto|grafica\", \"descripcion\": \"…\", \"muestra\": \"…\" },',\n  '    \"llamado_a_la_accion\": \"…\", \"variantes\": \"…\", \"negativos\": [\"…\"], \"aprueba_y_para_cuando\": \"…\", \"presupuesto\": null',\n  '  } ],',\n  '  \"pendientes_declarados\": [ { \"entregable\": \"…\", \"plataforma\": \"…\", \"motivo\": \"…\" } ],',\n  '  \"huecos\": [ \"…\" ],',\n  '  \"contradicciones_plan_vs_manual\": [ { \"que\": \"…\", \"plan_dice\": \"…\", \"manual_dice\": \"…\", \"que_se_hizo\": \"…\" } ],',\n  '  \"dependencias\": [ \"…\" ]',\n  '} }',\n].join('\\n')\n\nconst pedido = [\n  REGLAS,\n  '',\n  ...(typeof bloqueDeTrato === 'function' ? [bloqueDeTrato(trato), 'Esto vale para todo texto que el brief PROPONGA al público (mensaje, llamado a la acción, variantes, sintaxis): escríbelo en ese trato. Nunca copies formas de otro trato.', ''] : []),\n  '════════ MANUAL DE MARCA VIGENTE (versión ' + prev.manual_version + ' · id ' + prev.manual_id + ') ════════',\n  prev.manual_texto || '(el manual no trae texto)',\n  '',\n  '════════ PLAN DE 90 DÍAS VIGENTE (id ' + prev.plan_id + ') ════════',\n  prev.plan_texto,\n  '',\n  '════════ REFERENCIA · EL BRIEF DE UN ENTREGABLE (campos, reglas y trampas) ════════',\n  REFERENCIA,\n].join('\\n')\n\nconst cuerpo = {\n  agent: 'campaign-brief-agent',\n  task: pedido,\n  client_id: prev.client_id,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  callback_url: $execution.resumeUrl,\n  // 🔴 LA PALANCA (2026-09-30 · PR #399 en producción) · el corredor de Railway hace el POST de la vuelta y no muere en los 800 s de Vercel.\n  // SÓLO para campaign-brief-agent (lista cerrada en run-sdk) · NO copiar a otro agente ni a otro flujo. Quitarla = todo vuelve a como era.\n  callback_mode: 'runner',\n  force_restart: true,\n  // 🔴 EL INTERRUPTOR LLEGA AL NODO QUE PAGA\n  dry_run: prev.dry_run === true,\n  // TOPE DURO por corrida (opt-in) · el corredor le pasa el presupuesto al SDK y CORTA al alcanzarlo · sin tope en el sobre, el cuerpo es el de siempre\n  ...(typeof prev.tope_usd === 'number' ? { max_budget_usd: prev.tope_usd } : {}),\n  // RAZONAMIENTO limitado (opt-in) · sin él en el sobre, el cuerpo es el de siempre\n  ...(typeof prev.razonamiento === 'string' ? { thinking_mode: prev.razonamiento } : {}),\n}\nreturn [{ json: { ...prev, client_name: nombre, trato, cuerpo, pedido_caracteres: pedido.length } }]\n"
+   },
+   "id": "2fc36bb0-0879-49e0-adfa-59a342de8962"
+  },
+  {
+   "name": "③ Redactor (run-sdk)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    2600,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/agents/run-sdk",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.cuerpo) }}",
+    "options": {
+     "timeout": 60000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   },
+   "id": "50371e8b-ba9d-4210-acd0-c5d3f02f0d9c"
+  },
+  {
+   "name": "③ Esperar al redactor",
+   "webhookId": "brief-parte-de-trabajo-0001-espera",
+   "type": "n8n-nodes-base.wait",
+   "typeVersion": 1.1,
+   "position": [
+    2860,
+    0
+   ],
+   "parameters": {
+    "resume": "webhook",
+    "httpMethod": "POST",
+    "limitWaitTime": true,
+    "resumeAmount": 3600,
+    "resumeUnit": "seconds",
+    "options": {}
+   },
+   "id": "feeb70f6-85ce-40aa-8105-89f77baa41d8"
+  },
+  {
+   "name": "③ ¿Llegó la vuelta?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3120,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ③ ¿LLEGÓ LA VUELTA, O SE AGOTÓ LA ESPERA? · CC#1 · 2026-09-29 · mismo criterio que planeación (12-sep).\n// El Wait sigue por la MISMA salida si contesta y si nadie contesta: sin esta distinción una espera agotada se vería\n// igual que una vuelta vacía y la corrida se iría «exitosa» sin parte.\nconst c = $('③ Armar el cuerpo del redactor').first().json\nconst e = $input.first().json || {}\nconst cuerpo = e.body ? e.body : e\n// 🔴 un FALLO declarado del redactor (`success:false` · p. ej. el corte por tope `error_max_budget_usd`) NO es una vuelta: su texto, si trae, es PARCIAL y no se lee como parte\nconst fallaDelRedactor = cuerpo.success === false ? String(cuerpo.error || cuerpo.error_kind || 'sin detalle') : null\nlet texto = fallaDelRedactor ? '' : String(cuerpo.response || cuerpo.result || cuerpo.output || cuerpo.text || '')\nconst llegoReal = texto.trim().length > 0\n// Simulacro SOLO en modo seco (nunca cobra): permite ejercitar los chequeos con datos de forma real. En modo real no aplica.\nlet simulacro_usado = false\nif (c.dry_run === true && c.simulacro_respuesta) {\n  texto = c.simulacro_respuesta\n  simulacro_usado = true\n}\nconst llego = texto.trim().length > 0\nreturn [{\n  json: {\n    ...c,\n    llego_la_vuelta: llego,\n    vuelta_real: llegoReal,\n    simulacro_usado,\n    texto,\n    caracteres: texto.length,\n    falla_del_redactor: fallaDelRedactor,\n    // la vuelta trae `cost_usd` (snake_case) · antes se leía `costUsd` y salía siempre vacío (medido en la corrida del 29-sep)\n    vuelta_costo_usd: typeof cuerpo.cost_usd === 'number' ? cuerpo.cost_usd : (typeof cuerpo.costUsd === 'number' ? cuerpo.costUsd : null),\n    vuelta_modelo: cuerpo.model || null,\n    motivo: llego ? null : fallaDelRedactor ? ('el redactor FALLÓ · ' + fallaDelRedactor + ' · NO se da por exitosa') : 'la vuelta del redactor NO llegó · se agotó la espera · el parte puede haberse escrito igual y estar en el corredor · NO se da por exitosa',\n  },\n}]\n"
+   },
+   "id": "9b92e0f0-c0bc-4208-bae6-acb3094f9ae2"
+  },
+  {
+   "name": "④ Chequeos",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3380,
+    0
+   ],
+   "parameters": {
+    "jsCode": "/**\n * EL TRATO (tú · vos · usted) ES DE LA MARCA, NO UNA REGLA FIJA · CC#1 · 2026-10-03 · encargo Lenovo «cada foto viaja con todo su contexto» punto 5.\n *\n * Lógica PURA (sin red, sin `this`, sin `require`): la usan el flujo del brief, el flujo de la pieza y las pruebas · se pega entera en los nodos Code de n8n (estilo `var` + `function`).\n *\n * 🔴 ESTRUCTURAL, NUNCA POR CLIENTE: el trato se LEE del manual de marca (campo explícito o lo que dice su descripción de voz) o de la ficha del cliente; sólo si ninguno lo dice se usa, DECLARADO\n * y de baja confianza, el trato habitual del país de la ficha. Si no hay nada, queda «no_definido» y NO se comprueba nada (no se inventa una regla).\n * El detector reconoce las FORMAS del español (conjugación regular del voseo y del tuteo sobre verbos de uso comercial), no frases ni clientes.\n */\nfunction sinTildes(s) {\n  return String(s === undefined || s === null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')\n}\n\nvar TRATOS = ['tu', 'vos', 'usted']\n\n/** valor explícito → 'tu' | 'vos' | 'usted' | null */\nfunction tratoDeValor(v) {\n  var t = sinTildes(v).trim()\n  if (!t) return null\n  if (/^(tu|tuteo|tutear)$/.test(t)) return 'tu'\n  if (/^(vos|voseo|vosear)$/.test(t)) return 'vos'\n  if (/^(usted|ustedeo|formal)$/.test(t)) return 'usted'\n  return null\n}\n\n// lo que dice un TEXTO de voz sobre el trato, respetando las negaciones: «Tutea siempre (tú/sabes/pides — nunca vos)» ⇒ tú, y vos queda NEGADO\nvar MENCION = {\n  tu: /\\b(tutea\\w*|tuteo|tutear|tu)\\b/g,\n  vos: /\\b(vos|voseo|vosea\\w*|vosear)\\b/g,\n  usted: /\\b(usted|ustedeo|ustedea\\w*|trato formal)\\b/g,\n}\nfunction mencionesDelTexto(texto) {\n  var t = sinTildes(texto)\n  var out = { tu: 0, vos: 0, usted: 0, negados: [] }\n  TRATOS.forEach(function (k) {\n    var re = new RegExp(MENCION[k].source, 'g')\n    var m\n    while ((m = re.exec(t)) !== null) {\n      // «tu» a secas es un posesivo muy común («tu puerta»): sólo cuenta si va pegado a una indicación de trato (tú/sabes/pides …) o es tuteo/tutea\n      if (m[1] === 'tu' && !/tu\\s*[\\/·,]\\s*(sabes|pides|tienes|quieres|puedes|eres|vienes)/.test(t.slice(m.index, m.index + 30))) continue\n      var antes = t.slice(Math.max(0, m.index - 24), m.index)\n      if (/\\b(nunca|jamas|no|ni|sin|evita|evitar|evites)\\s+(\\w+\\s+){0,2}$/.test(antes)) out.negados.push(k)\n      else out[k] += 1\n    }\n  })\n  return out\n}\n\n// el trato habitual del país SÓLO cuando nadie lo dijo (baja confianza · se declara) · sin país conocido no hay default\nvar POR_PAIS = { argentina: 'vos', uruguay: 'vos', paraguay: 'vos', ecuador: 'tu', mexico: 'tu', peru: 'tu', chile: 'tu', espana: 'tu', bolivia: 'tu', venezuela: 'tu', panama: 'tu', 'costa rica': 'usted' }\n\n/**\n * `manual` = { voice_description, writing_style, tone_guidelines } · `ficha` = { config, country, market }\n * → { trato: 'tu'|'vos'|'usted'|'no_definido'|'conflicto', fuente, evidencia }\n */\nfunction resolverTrato(manual, ficha) {\n  var m = manual || {}\n  var f = ficha || {}\n  var tg = m.tone_guidelines && typeof m.tone_guidelines === 'object' ? m.tone_guidelines : {}\n  var cfg = f.config && typeof f.config === 'object' ? f.config : {}\n  var voz = cfg.voz && typeof cfg.voz === 'object' ? cfg.voz : {}\n  var explicitos = [\n    ['manual.tone_guidelines.trato', tg.trato], ['manual.tone_guidelines.tratamiento', tg.tratamiento], ['manual.tone_guidelines.address_form', tg.address_form],\n    ['ficha.config.voz.trato', voz.trato], ['ficha.config.trato', cfg.trato],\n  ]\n  for (var i = 0; i < explicitos.length; i++) {\n    var v = tratoDeValor(explicitos[i][1])\n    if (v) return { trato: v, fuente: explicitos[i][0].indexOf('manual') === 0 ? 'manual' : 'ficha', evidencia: explicitos[i][0] + ' = «' + explicitos[i][1] + '»' }\n  }\n  var texto = [m.voice_description, m.writing_style, m.tone_guidelines && Object.keys(tg).length ? JSON.stringify(tg) : ''].filter(Boolean).join(' · ')\n  if (texto) {\n    var me = mencionesDelTexto(texto)\n    var pos = TRATOS.filter(function (k) { return me[k] > 0 })\n    if (pos.length === 1) return { trato: pos[0], fuente: 'manual', evidencia: 'la descripción de voz del manual lo dice (' + pos[0] + (me.negados.length ? ' · niega ' + me.negados.join(', ') : '') + ')' }\n    if (pos.length > 1) return { trato: 'conflicto', fuente: 'manual', evidencia: 'la descripción de voz menciona más de un trato (' + pos.join(' y ') + ') sin negar ninguno · no se puede elegir' }\n  }\n  var pais = sinTildes(f.country).trim() || sinTildes(String(f.market || '').split(/[·|,;\\/]/).pop()).trim()\n  if (pais && POR_PAIS[pais]) return { trato: POR_PAIS[pais], fuente: 'default_por_pais', evidencia: 'ni el manual ni la ficha lo dicen: se usa el trato habitual de «' + pais + '» (BAJA confianza · conviene ponerlo en el manual)' }\n  return { trato: 'no_definido', fuente: 'ninguna', evidencia: 'ni el manual ni la ficha dicen el trato y no hay país conocido · NO se comprueba' }\n}\n\n// ───────────────────────────── las formas ─────────────────────────────\n// verbos de uso comercial/llamado a la acción (infinitivos regulares en la conjugación del voseo) · es LENGUA, no clientes\nvar VERBOS = ('pedir mandar escribir enviar llamar contar avisar venir hacer comprar probar reservar consultar mirar seguir sumar unir descubrir elegir disfrutar compartir ordenar encargar contactar visitar ' +\n  'decir tener querer poder saber vivir sentir pasar dejar traer llevar buscar conocer escuchar preguntar responder recibir pagar cambiar usar armar crear ahorrar aprovechar animar inscribir registrar ' +\n  'suscribir invitar acompañar agendar cotizar solicitar averiguar entrar ingresar escoger pensar imaginar atreverse quedar poner salir').split(' ')\nvar CLITICOS = ['', 'lo', 'la', 'los', 'las', 'le', 'les', 'me', 'nos', 'te', 'se']\n\nfunction radical(inf) { return inf.replace(/se$/, '').slice(0, -2) }\nfunction vocalTematica(inf) { var f = inf.replace(/se$/, ''); return f.slice(-2, -1) === 'a' || /ar$/.test(f) ? 'a' : /er$/.test(f) ? 'e' : 'i' }\nvar ACENTO = { a: 'á', e: 'é', i: 'í' }\n\nfunction formasVoseo() {\n  var s = {}\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + ACENTO[v]] = true // pedí · mandá · escribí\n    CLITICOS.slice(1).forEach(function (c) { s[r + v + c] = true }) // pedilo · mandalo · escribinos\n    s[r + ACENTO[v] + 's'] = true // pedís · mandás · tenés (voseo presente)\n    if (v === 'e') s[r + 'és'] = true\n  })\n  ;['sos', 'tenés', 'querés', 'podés', 'sabés', 'venís', 'hacés', 'decís', 'ponés', 'salís', 'vení', 'poné', 'hacé', 'decí', 'tené', 'salí'].forEach(function (w) { s[w] = true })\n  return s\n}\n// el tuteo: pronombre, presente 2.ª persona regular y el imperativo con clítico acentuado («pídelo», «mándanos»)\nfunction acentuarUltimaVocal(stem) {\n  var i = stem.length - 1\n  while (i >= 0 && !/[aeiou]/.test(stem[i])) i--\n  if (i < 0) return stem\n  return stem.slice(0, i) + ({ a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú' })[stem[i]] + stem.slice(i + 1)\n}\nfunction formasTuteo() {\n  var s = {}\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + (v === 'a' ? 'as' : 'es')] = true // mandas · escribes · tienes(irregular: ver abajo)\n    var imp = r + (v === 'a' ? 'a' : 'e')\n    CLITICOS.slice(1).forEach(function (c) { s[acentuarUltimaVocal(imp) + c] = true }) // mándalo · escríbenos\n  })\n  ;['eres', 'tienes', 'quieres', 'puedes', 'sabes', 'vienes', 'haces', 'dices', 'pides', 'pídelo', 'pídela', 'pídenos', 'ven', 'haz', 'dime', 'cuéntanos', 'escríbenos', 'avísanos', 'llámanos', 'mándanos', 'tú'].forEach(function (w) { s[w] = true })\n  return s\n}\n// formas de usted: pronombre (no «ustedes», que es plural neutro) y el imperativo/presente formal regular\nfunction formasUsted() {\n  var s = { usted: true }\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + (v === 'a' ? 'e' : 'a')] = true // mande · escriba\n    CLITICOS.slice(1).forEach(function (c) { s[acentuarUltimaVocal(r + (v === 'a' ? 'e' : 'a')) + c] = true })\n  })\n  return s\n}\nvar VOSEO = formasVoseo(), TUTEO = formasTuteo(), USTED = formasUsted()\n// palabras que coinciden por casualidad con una forma generada y NO son esa forma (sustantivos y adverbios comunes)\nvar FALSOS = { mas: 1, pase: 1, deje: 1, cree: 1, vea: 1, sienta: 1, nos: 1 }\n\n/** las palabras (con tilde) de un texto, en minúscula */\nfunction palabras(texto) { return String(texto || '').toLowerCase().match(/[a-záéíóúüñ]+/g) || [] }\n\n/** las formas de cada trato que aparecen en el texto: { vos: [palabras], tu: [...], usted: [...] } */\nfunction formasDeTrato(texto) {\n  var out = { vos: [], tu: [], usted: [] }\n  var add = function (k, w) { if (out[k].indexOf(w) === -1) out[k].push(w) }\n  palabras(texto).forEach(function (w) {\n    if (w === 'vos') add('vos', w)\n    else if (VOSEO[w]) add('vos', w)\n    else if (TUTEO[w]) add('tu', w)\n    else if (USTED[w] && !FALSOS[w]) add('usted', w)\n  })\n  return out\n}\n\n/**\n * ¿el texto respeta el trato de la marca? → [{ chequeo, detalle, fatal:false }]\n * `donde` = «la pieza» · «el brief». Sin trato definido (o en conflicto) NO se comprueba y se dice.\n */\nfunction chequearTrato(resolucion, texto, donde) {\n  var r = resolucion || { trato: 'no_definido' }\n  var d = donde || 'el texto'\n  if (r.trato === 'no_definido' || r.trato === 'conflicto') return []\n  var formas = formasDeTrato(texto)\n  var otros = TRATOS.filter(function (k) { return k !== r.trato })\n  var hallados = []\n  otros.forEach(function (k) { formas[k].forEach(function (w) { hallados.push({ w: w, k: k }) }) })\n  // el usted «mande/llame» coincide con presentes de 3.ª persona: sólo se avisa si el trato de la marca NO es usted y no hay forma más clara\n  if (!hallados.length) return []\n  var nombre = { tu: 'tuteo', vos: 'voseo', usted: 'usted' }\n  return [{\n    chequeo: 'trato_distinto_al_del_cliente',\n    detalle: d + ' trae formas de otro trato: ' + hallados.slice(0, 6).map(function (x) { return '«' + x.w + '» (' + nombre[x.k] + ')' }).join(' · ') + ' y el trato de la marca es ' + nombre[r.trato] + ' (' + r.fuente + ': ' + r.evidencia + ')',\n    fatal: false,\n  }]\n}\n\n/** el bloque para el pedido/brief: el trato y de dónde sale · y qué hacer si otro texto (el brief) trae otro */\nfunction bloqueDeTrato(resolucion) {\n  var r = resolucion || { trato: 'no_definido', fuente: 'ninguna', evidencia: '' }\n  var nombre = { tu: 'TÚ (tuteo)', vos: 'VOS (voseo)', usted: 'USTED' }\n  if (r.trato === 'no_definido') return 'F) EL TRATO. El sistema NO sabe qué trato (tú · vos · usted) usa esta marca: ni el manual ni la ficha lo dicen. Escribe con el trato que use el manual en sus ejemplos y DECLÁRALO en «no_pude_cumplir» («trato no definido»).'\n  if (r.trato === 'conflicto') return 'F) EL TRATO. El manual menciona más de un trato sin elegir (' + r.evidencia + '). No adivines: declara «trato en conflicto» en «no_pude_cumplir» y evita las formas de segunda persona cuando puedas.'\n  return ['F) EL TRATO de esta marca es ' + nombre[r.trato] + ' (fuente: ' + r.fuente + ' · ' + r.evidencia + ').',\n    '   Todo lo que se lee en la pieza (titular, texto, llamado) va en ese trato, sin mezclar. Si el brief trae formas de OTRO trato (por ejemplo una frase copiada de una conversación), NO las copies:',\n    '   conviértelas al trato de la marca y dilo en «que_miro». El manual de marca manda sobre el brief.'].join('\\n')\n}\n\n\n// LOS CHEQUEOS DEL PARTE DE TRABAJO · CC#1 · 2026-09-29 · encargo Lenovo §1.2 ④ · arquitectura §4.\n// Lógica PURA (sin red, sin `this`, sin `require` fuera de este archivo): se prueba a costo cero y se pega\n// tal cual dentro del nodo «④ Chequeos» del flujo `zero-risk/brief` (el constructor la antepone al nodo).\n//\n// REGLA DE LA CASA: lo que falle SE DECLARA en el parte · NO se corrige solo · NO se rellena.\n// Por qué en código y no con un juez de pago: los chequeos que importan son CONTABLES y cazan lo que un\n// agente pago no ve (medido: el manual prohibía «ghost kitchen», la usaba 3 veces y el juez lo aprobó 0,94).\n\nvar CAMPOS_OBLIGATORIOS = [\n  'id', 'plataforma', 'tipo_de_pieza', 'que_es', 'de_que_parte_del_plan', 'objetivo', 'segmento', 'protagonista',\n  'mensaje', 'hipotesis', 'limites', 'sintaxis', 'llamado_a_la_accion', 'variantes', 'aprueba_y_para_cuando',\n]\nvar CAMPOS_LISTA = ['vocabulario_obligatorio', 'prohibido', 'negativos']\nvar TIPOS_SIN_VIDEO = ['imagen', 'texto', 'listado', 'configuracion', 'carrusel', 'documento', 'otro']\nvar TIPOS_QUE_NO_SE_BRIEFEAN = ['video', 'audio', 'reel']\nvar CENTINELA = /\\d+[.,]77(?!\\d)/\n\n/** minúsculas, sin tildes, sin signos, espacios simples · para comparar textos. */\nfunction normalizar(s) {\n  return String(s === null || s === undefined ? '' : s)\n    .toLowerCase()\n    .normalize('NFD')\n    .replace(/[̀-ͯ]/g, '')\n    .replace(/[^a-z0-9ñ ]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim()\n}\n\n/** Todos los textos de un valor (string, array, objeto) en una sola cadena. */\nfunction aTexto(v) {\n  if (v === null || v === undefined) return ''\n  if (typeof v === 'string') return v\n  if (Array.isArray(v)) return v.map(aTexto).join(' \\n ')\n  if (typeof v === 'object') return Object.keys(v).map(function (k) { return aTexto(v[k]) }).join(' \\n ')\n  return String(v)\n}\n\n/**\n * LECTOR TOLERANTE DE COMILLAS · CC#1 · 2026-10-01 · GO de Emilio. El redactor a veces escribe comillas dobles SIN ESCAPAR dentro de un texto del JSON\n * («... el mensaje \"Hola, quiero hacer un pedido\"» · pasó en las DOS corridas reales del 29 y el 30-sep) y eso invalidaba un parte completo.\n * Una comilla dentro de un texto sólo lo CIERRA si lo que sigue es estructura JSON (`:` `}` `]` o una coma seguida de `\"` `{` `[` `}` `]`); si no, es parte del texto y se escapa.\n * Es una reparación de FORMATO, nunca de contenido: sólo se acepta si el resultado parsea Y trae la lista «entregables» · se DECLARA (reparado:true + cuántas) · lo que no parsea sigue siendo ilegible.\n */\nfunction repararComillas(s) {\n  var out = ''\n  var dentro = false\n  var reparadas = 0\n  for (var i = 0; i < s.length; i++) {\n    var ch = s[i]\n    if (!dentro) { out += ch; if (ch === '\"') dentro = true; continue }\n    if (ch === '\\\\') { out += ch + (s[i + 1] === undefined ? '' : s[i + 1]); i++; continue }\n    if (ch !== '\"') { out += ch; continue }\n    var j = i + 1\n    while (j < s.length && /\\s/.test(s[j])) j++\n    var sig = s[j]\n    var cierra = sig === ':' || sig === '}' || sig === ']' || sig === undefined\n    if (sig === ',') {\n      var k = j + 1\n      while (k < s.length && /\\s/.test(s[k])) k++\n      cierra = s[k] === '\"' || s[k] === '{' || s[k] === '[' || s[k] === '}' || s[k] === ']'\n    }\n    if (cierra) { out += ch; dentro = false } else { out += '\\\\\"'; reparadas++ }\n  }\n  return { texto: out, reparadas: reparadas }\n}\n\n/** Saca el JSON del texto del redactor (bloque ```json o el primer objeto completo). */\nfunction extraerParte(texto) {\n  var t = String(texto || '')\n  if (!t.trim()) return { legible: false, motivo: 'el redactor devolvió texto vacío' }\n  var candidatos = []\n  var abre = t.indexOf('```json')\n  if (abre !== -1) {\n    var ini = t.indexOf('\\n', abre)\n    var fin = t.indexOf('```', ini + 1)\n    if (ini !== -1 && fin !== -1) candidatos.push(t.slice(ini + 1, fin))\n  }\n  var a = t.indexOf('{')\n  var b = t.lastIndexOf('}')\n  if (a !== -1 && b > a) candidatos.push(t.slice(a, b + 1))\n  for (var i = 0; i < candidatos.length; i++) {\n    try {\n      var j = JSON.parse(candidatos[i])\n      var p = j && j.parte ? j.parte : j\n      if (p && Array.isArray(p.entregables)) return { legible: true, parte: p }\n    } catch (e) { /* se prueba la reparación de comillas y luego el siguiente candidato */ }\n    try {\n      var rep = repararComillas(candidatos[i])\n      if (rep.reparadas > 0) {\n        var j2 = JSON.parse(rep.texto)\n        var p2 = j2 && j2.parte ? j2.parte : j2\n        if (p2 && Array.isArray(p2.entregables)) return { legible: true, parte: p2, reparado: true, comillas_reparadas: rep.reparadas }\n      }\n    } catch (e2) { /* sigue ilegible */ }\n  }\n  return { legible: false, motivo: 'no hay un JSON con la lista «entregables» en la respuesta del redactor' }\n}\n\nfunction palabraPresente(textoNorm, palabra) {\n  var p = normalizar(palabra)\n  if (!p) return false\n  return (' ' + textoNorm + ' ').indexOf(' ' + p + ' ') !== -1\n}\n\n/**\n * Corre TODOS los chequeos. `manual.forbidden_words` = lista de palabras prohibidas del manual (array de strings).\n * `planTexto` = texto del plan vigente (para verificar que la cita a su parte existe).\n * Devuelve {ok, hallazgos[], por_chequeo{}, entregables_revisados}. NO modifica nada.\n */\nfunction chequear(parte, manual, planTexto) {\n  var hallazgos = []\n  var falla = function (chequeo, entregable, detalle) { hallazgos.push({ chequeo: chequeo, entregable: entregable || null, detalle: detalle }) }\n  var ents = parte && Array.isArray(parte.entregables) ? parte.entregables : []\n  if (!ents.length) falla('sin_entregables', null, 'la lista de entregables está vacía · un parte sin entregables no es un parte')\n  var prohibidas = (manual && Array.isArray(manual.forbidden_words) ? manual.forbidden_words : []).filter(Boolean)\n  var planNorm = normalizar(planTexto)\n\n  var ids = {}\n  var mensajes = {}\n  for (var i = 0; i < ents.length; i++) {\n    var e = ents[i] || {}\n    var idE = e.id ? String(e.id) : '(sin id · posición ' + (i + 1) + ')'\n\n    // ── identificador + trazabilidad\n    if (!e.id || !/^BRF-\\d{4}$/.test(String(e.id))) falla('identificador', idE, 'el identificador falta o no tiene la forma BRF-0000')\n    else if (ids[e.id]) falla('identificador', idE, 'el identificador está repetido (también en la posición ' + ids[e.id] + ')')\n    else ids[e.id] = i + 1\n\n    // ── campos completos\n    for (var c = 0; c < CAMPOS_OBLIGATORIOS.length; c++) {\n      var k = CAMPOS_OBLIGATORIOS[c]\n      var v = e[k]\n      if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) falla('campo_faltante', idE, 'falta el campo «' + k + '» (si no se sabe, se declara como hueco · no se deja vacío)')\n    }\n    for (var d = 0; d < CAMPOS_LISTA.length; d++) {\n      if (!Array.isArray(e[CAMPOS_LISTA[d]])) falla('campo_faltante', idE, 'el campo «' + CAMPOS_LISTA[d] + '» debe ser una lista (aunque esté vacía)')\n    }\n\n    // ── R1 · un solo mensaje\n    var msg = e.mensaje\n    if (msg !== undefined && msg !== null) {\n      if (typeof msg !== 'string') falla('un_mensaje', idE, 'el mensaje no es UN texto (es ' + (Array.isArray(msg) ? 'una lista' : typeof msg) + ') · un brief = un mensaje')\n      else {\n        var frases = msg.split(/[.!?¡¿]+/).map(function (s) { return s.trim() }).filter(Boolean)\n        if (frases.length > 2) falla('un_mensaje', idE, 'el mensaje tiene ' + frases.length + ' frases · sospecha de varios mensajes (máximo 2 frases, una idea)')\n        if (msg.length > 260) falla('un_mensaje', idE, 'el mensaje mide ' + msg.length + ' caracteres · una idea cabe en 260')\n      }\n    }\n\n    // ── R3 · el público no es «todos»\n    var seg = normalizar(e.segmento)\n    if (seg) {\n      var cliches = ['todos', 'todo el mundo', 'toda la poblacion', 'publico general', 'cualquier persona', 'cualquiera', 'toda la gente', 'la gente']\n      for (var q = 0; q < cliches.length; q++) {\n        if (seg === cliches[q] || seg.indexOf(cliches[q] + ' ') === 0 || (seg.length < 40 && seg.indexOf(cliches[q]) !== -1)) {\n          falla('publico_no_es_todos', idE, 'el segmento dice «' + e.segmento + '» · no es una audiencia declarada')\n          break\n        }\n      }\n      if (seg.length < 25) falla('publico_no_es_todos', idE, 'el segmento es demasiado corto (' + seg.length + ' caracteres) para ser una audiencia declarada')\n    }\n\n    // ── nada de videos con brief (el sistema no mira video)\n    var tipo = normalizar(e.tipo_de_pieza)\n    if (TIPOS_QUE_NO_SE_BRIEFEAN.indexOf(tipo) !== -1) falla('video_sin_pendiente', idE, 'es una pieza de «' + e.tipo_de_pieza + '» y trae brief · el sistema mira imágenes, no video ni audio · debía ir a «pendientes_declarados»')\n    else if (tipo && TIPOS_SIN_VIDEO.indexOf(tipo) === -1 && TIPOS_QUE_NO_SE_BRIEFEAN.indexOf(tipo) === -1) falla('tipo_desconocido', idE, 'tipo_de_pieza «' + e.tipo_de_pieza + '» no está entre ' + TIPOS_SIN_VIDEO.join('/'))\n\n    // ── R6 · toda regla visual trae su muestra\n    var vis = e.visual\n    if (vis && typeof vis === 'object' && !Array.isArray(vis)) {\n      if (!vis.muestra || !String(vis.muestra).trim()) falla('visual_sin_muestra', idE, 'la regla visual no declara su muestra (cuántas piezas se miraron y qué no se pudo observar) · R6')\n    } else if (typeof vis === 'string' && vis.trim() && normalizar(vis) !== 'n a' && normalizar(vis) !== 'no aplica') {\n      falla('visual_sin_muestra', idE, 'el visual es solo texto sin muestra declarada · debe ser un objeto {capa_que_manda, descripcion, muestra} · R6')\n    } else if (!vis) falla('campo_faltante', idE, 'falta el campo «visual» (si no aplica, se declara «no aplica»)')\n\n    // ── procedencia: cada brief cita su parte del plan y la cita existe\n    var cita = String(e.de_que_parte_del_plan || '')\n    if (cita.trim()) {\n      var citaNorm = normalizar(cita)\n      var hayMarca = /§|seccion|semana|fase|paso|puerta|camino|ciclo|mes\\s*\\d/.test(citaNorm) || citaNorm.length >= 12\n      var enPlan = citaNorm.length >= 12 && planNorm.indexOf(citaNorm) !== -1\n      var comillas = cita.match(/[«\"“]([^»\"”]{12,})[»\"”]/)\n      var textoCitado = comillas ? normalizar(comillas[1]) : ''\n      var citaVerificada = enPlan || (textoCitado && planNorm.indexOf(textoCitado) !== -1)\n      if (!hayMarca) falla('cita_al_plan', idE, 'la cita al plan es demasiado vaga: «' + cita + '»')\n      else if (planNorm && !citaVerificada && !/§/.test(cita)) falla('cita_al_plan', idE, 'la cita «' + cita.slice(0, 80) + '» no se encuentra en el plan · no se puede verificar la procedencia')\n    }\n\n    // ── centinelas: cifras que terminan en ,77 / .77 = copió el documento de referencia\n    var todoElBrief = aTexto(e)\n    var m77 = todoElBrief.match(CENTINELA)\n    if (m77) falla('centinela', idE, 'aparece la cifra «' + m77[0] + '» (termina en ,77) · copió el ejemplo de la referencia en vez de pensar')\n\n    // ── palabras prohibidas del manual, en lo que el brief PIDE (no en las listas de lo prohibido)\n    var pedido = aTexto([e.que_es, e.objetivo, e.segmento, e.protagonista, e.mensaje, e.hipotesis, e.limites, e.sintaxis, e.llamado_a_la_accion, e.variantes, e.visual, e.vocabulario_obligatorio])\n    var pedNorm = normalizar(pedido)\n    for (var w = 0; w < prohibidas.length; w++) {\n      if (palabraPresente(pedNorm, prohibidas[w])) falla('palabra_prohibida', idE, 'usa «' + prohibidas[w] + '», prohibida por el manual (búsqueda literal)')\n    }\n\n    // ── para el chequeo de repetidos\n    var clave = normalizar(e.mensaje)\n    if (clave) (mensajes[clave] = mensajes[clave] || []).push(idE)\n  }\n\n  // ── ningún brief repetido: dos con el mismo mensaje, uno sobra\n  Object.keys(mensajes).forEach(function (m) {\n    if (mensajes[m].length > 1) falla('brief_repetido', mensajes[m].join(' · '), 'comparten el mismo mensaje · «un brief = una estrategia»: uno sobra')\n  })\n\n  // ── centinelas también en lo que declara fuera de los briefs\n  var fuera = aTexto([parte && parte.huecos, parte && parte.contradicciones_plan_vs_manual, parte && parte.pendientes_declarados])\n  var f77 = fuera.match(CENTINELA)\n  if (f77) falla('centinela', null, 'aparece la cifra «' + f77[0] + '» en los huecos/contradicciones/pendientes')\n\n  var por = {}\n  hallazgos.forEach(function (h) { por[h.chequeo] = (por[h.chequeo] || 0) + 1 })\n  return { ok: hallazgos.length === 0, hallazgos: hallazgos, por_chequeo: por, entregables_revisados: ents.length }\n}\n\n\n// ④ CHEQUEOS · cuerpo del nodo · CC#1 · 2026-09-29 (la lógica pura `brief-chequeos.js` va ANTEPUESTA por el constructor).\n// Gratis y en código. Lo que falle SE DECLARA en el parte · NO se corrige solo. Arma la fila que ⑤ guardará y el aviso de ⑥.\nconst c = $input.first().json\nconst ext = c.llego_la_vuelta ? extraerParte(c.texto) : { legible: false, motivo: c.motivo || 'la vuelta del redactor no llegó' }\nconst manual = { forbidden_words: c.forbidden_words || [], required_terminology: c.required_terminology || [] }\nconst parte = ext.legible ? ext.parte : { entregables: [], pendientes_declarados: [], huecos: [], contradicciones_plan_vs_manual: [] }\nconst res = ext.legible\n  ? chequear(parte, manual, c.plan_texto)\n  : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', entregable: null, detalle: ext.motivo }], por_chequeo: { respuesta_no_legible: 1 }, entregables_revisados: 0 }\n\n// ── 03-oct · EL TRATO: el texto que cada brief propone al público respeta el trato de la marca (candidato · no fatal · se DECLARA)\nif (ext.legible && c.trato && typeof chequearTrato === 'function') {\n  parte.entregables.forEach((e) => {\n    const texto = [e && e.mensaje, e && e.llamado_a_la_accion, e && e.variantes, e && e.sintaxis].filter(Boolean).join(' . ')\n    chequearTrato(c.trato, texto, 'el brief ' + (e && e.id)).forEach((h) => { res.hallazgos.push({ chequeo: 'brief_en_otro_trato', entregable: e && e.id, detalle: h.detalle }); res.por_chequeo.brief_en_otro_trato = (res.por_chequeo.brief_en_otro_trato || 0) + 1; res.ok = false })\n  })\n}\n\n// ── EL VEREDICTO · un parte que no vale NO se lee como éxito (encargo Lenovo 30-sep §2) ──────────────────────\n// Inválido = la vuelta no llegó · la respuesta no se pudo leer como parte · trae 0 entregables · o falla un chequeo de CONTEO/CIFRAS\n// (sin_entregables · centinela: la cifra copiada del ejemplo). Los demás hallazgos siguen SOLO declarándose (no se corrigen solos).\n// Nada se rellena: un parte vacío se llama vacío.\nconst CHEQUEOS_FATALES = ['respuesta_no_legible', 'sin_entregables', 'centinela']\nconst motivos = []\nif (!c.llego_la_vuelta) motivos.push(c.falla_del_redactor ? 'el redactor FALLÓ · ' + c.falla_del_redactor : 'la vuelta del redactor NO llegó')\nif (!ext.legible) motivos.push('la respuesta no se pudo leer como parte (' + (ext.motivo || 'sin motivo') + ')')\nif (ext.legible && parte.entregables.length === 0) motivos.push('entregables: 0')\nres.hallazgos.filter((h) => CHEQUEOS_FATALES.indexOf(h.chequeo) !== -1 && h.chequeo !== 'respuesta_no_legible' && h.chequeo !== 'sin_entregables').forEach((h) => motivos.push('falla el chequeo «' + h.chequeo + '»' + (h.entregable ? ' en ' + h.entregable : '')))\nconst parte_valido = motivos.length === 0\nconst motivo_invalido = parte_valido ? null : motivos.join(' · ')\n\n// ── el parte, legible (lo que Emilio lee en Drive) ────────────────────────────────────────────────\nconst L = []\nconst p = (s) => L.push(s === undefined ? '' : s)\nconst lista = (a) => (Array.isArray(a) && a.length ? a.map((x) => '  - ' + (typeof x === 'string' ? x : JSON.stringify(x))).join('\\n') : '  (ninguno)')\nconst hoy = new Date().toISOString().slice(0, 10)\nif (!parte_valido) {\n  p('# ⛔ PARTE NO VÁLIDO · NO USAR')\n  p('Motivo: ' + motivo_invalido)\n  p('Este documento se conserva sólo para diagnóstico. No es un parte de trabajo.')\n  p('')\n}\np('# PARTE DE TRABAJO · ' + c.client_name + ' · ' + hoy)\np('Plan de origen: ' + c.plan_id + ' · Manual: versión ' + c.manual_version + ' (' + c.manual_id + ')' + (c.dry_run ? ' · ⚠️ MODO SECO (no es un parte real)' : ''))\np('')\nif (ext.reparado) p('> ⚠️ Formato reparado: el redactor escribió ' + ext.comillas_reparadas + ' comilla(s) doble(s) sin escapar dentro de un texto y se escaparon para poder leer el parte · el CONTENIDO no se alteró.')\np('## Estado de los chequeos: ' + (res.ok ? '✅ sin hallazgos' : '⚠️ ' + res.hallazgos.length + ' hallazgo(s) DECLARADOS · no se corrigieron solos'))\nif (!res.ok) {\n  Object.keys(res.por_chequeo).forEach((k) => p('- ' + k + ': ' + res.por_chequeo[k]))\n  p('')\n  res.hallazgos.forEach((h) => p('- [' + h.chequeo + ']' + (h.entregable ? ' ' + h.entregable + ' ·' : '') + ' ' + h.detalle))\n}\np('')\nif (c.plan_del_sobre_distinto) p('> ⚠️ El sobre nombraba el plan ' + c.plan_del_sobre + ' pero el plan vigente es ' + c.plan_id + ' · se usó el vigente.')\np('## Entregables (' + parte.entregables.length + ')')\nparte.entregables.forEach((e) => {\n  p('')\n  p('### ' + (e.id || '(sin id)') + ' · ' + (e.plataforma || '?') + ' · ' + (e.tipo_de_pieza || '?'))\n  p('- QUÉ ES: ' + (e.que_es || ''))\n  p('- DE QUÉ PARTE DEL PLAN SALE: ' + (e.de_que_parte_del_plan || ''))\n  p('- OBJETIVO: ' + (e.objetivo || ''))\n  p('- SEGMENTO: ' + (e.segmento || ''))\n  p('- PROTAGONISTA: ' + (e.protagonista || ''))\n  p('- MENSAJE (uno): ' + (typeof e.mensaje === 'string' ? e.mensaje : JSON.stringify(e.mensaje)))\n  p('- HIPÓTESIS: ' + (e.hipotesis || ''))\n  p('- LÍMITES: ' + (e.limites || ''))\n  p('- VOCABULARIO OBLIGATORIO:\\n' + lista(e.vocabulario_obligatorio))\n  p('- PROHIBIDO:\\n' + lista(e.prohibido))\n  p('- SINTAXIS: ' + (e.sintaxis || ''))\n  const v = e.visual\n  p('- VISUAL: ' + (v && typeof v === 'object' ? 'capa que manda: ' + (v.capa_que_manda || '?') + ' · ' + (v.descripcion || '') + ' · MUESTRA: ' + (v.muestra || '(sin muestra)') : String(v || '')))\n  p('- LLAMADO A LA ACCIÓN: ' + (e.llamado_a_la_accion || ''))\n  p('- VARIANTES: ' + (e.variantes || ''))\n  p('- NEGATIVOS:\\n' + lista(e.negativos))\n  p('- APRUEBA Y PARA CUÁNDO: ' + (e.aprueba_y_para_cuando || ''))\n  p('- PRESUPUESTO: ' + (e.presupuesto === null || e.presupuesto === undefined ? '(no fijado por el plan)' : String(e.presupuesto)))\n})\np('')\np('## Pendientes DECLARADOS (no se pueden briefear todavía)')\n;(parte.pendientes_declarados || []).forEach((x) => p('- ' + (x.entregable || '?') + (x.plataforma ? ' · ' + x.plataforma : '') + ' — ' + (x.motivo || '')))\nif (!(parte.pendientes_declarados || []).length) p('(ninguno declarado)')\np('')\np('## Huecos declarados (lo que faltaba y NO se rellenó)')\np(lista(parte.huecos))\np('')\np('## Contradicciones plan ↔ manual (declaradas, no obedecidas)')\n;(parte.contradicciones_plan_vs_manual || []).forEach((x) => p('- ' + (x.que || '?') + ' · el plan dice: ' + (x.plan_dice || '?') + ' · el manual dice: ' + (x.manual_dice || '?') + ' · ' + (x.que_se_hizo || '')))\nif (!(parte.contradicciones_plan_vs_manual || []).length) p('(ninguna declarada)')\np('')\np('## Dependencias')\np(lista(parte.dependencias))\nif (!ext.legible) {\n  p('')\n  p('## ⚠️ Respuesta del redactor (no legible como parte · se guarda tal cual para diagnóstico)')\n  p(String(c.texto || '').slice(0, 6000))\n}\nconst parte_md = L.join('\\n')\n\nconst fila_parte = {\n  client_id: c.client_id,\n  title: (parte_valido ? '' : '⛔ PARTE NO VÁLIDO · ') + 'Parte de trabajo · briefs · ' + hoy,\n  output_type: 'campaign_brief_pack',\n  content: parte_md,\n  content_text: parte_md,\n  producing_agent: 'campaign-brief-agent',\n  status: 'draft',\n  provenance_tag: {\n    fuente: 'brief',\n    workflow_id: $workflow.id,\n    workflow_execution_id: $execution.id,\n    plan_id: c.plan_id,\n    manual_id: c.manual_id,\n    manual_version: c.manual_version,\n    legible: ext.legible,\n    reparado: ext.reparado === true,\n    comillas_reparadas: ext.comillas_reparadas || 0,\n    valido: parte_valido,\n    motivo_invalido,\n    chequeos_ok: res.ok,\n    hallazgos: res.hallazgos.length,\n    por_chequeo: res.por_chequeo,\n    entregables: parte.entregables.length,\n    pendientes: (parte.pendientes_declarados || []).length,\n    huecos: (parte.huecos || []).length,\n    dry_run: c.dry_run === true,\n    guardado_antes_de_drive: true,\n    tope_usd: c.tope_usd === undefined ? null : c.tope_usd,\n    costo_usd: c.vuelta_costo_usd === undefined ? null : c.vuelta_costo_usd,\n    parte: ext.legible ? parte : null,\n  },\n}\nconst payload_cable = {\n  event_type: 'run_completed',\n  worker_id: $workflow.id,\n  worker_name: 'brief',\n  // el cable declara el resultado REAL (el cierre ⑤ lo corrige a parte_no_valido / parte_con_problemas si algo falla)\n  resultado: parte_valido ? 'parte_terminado' : 'parte_no_valido',\n  ...(parte_valido ? {} : { motivo: motivo_invalido }),\n  client_id: c.client_id,\n  tenant_id: c.tenant_id || c.client_id,\n  _sala_correlation_id: c._sala_correlation_id || null,\n  _journey_id: c._journey_id || null,\n  ts: new Date().toISOString(),\n}\nreturn [{\n  json: {\n    client_id: c.client_id,\n    client_name: c.client_name,\n    dry_run: c.dry_run === true,\n    plan_id: c.plan_id,\n    manual_id: c.manual_id,\n    cuerpo_dry_run_enviado: c.cuerpo && c.cuerpo.dry_run,\n    llego_la_vuelta: c.llego_la_vuelta,\n    vuelta_real: c.vuelta_real,\n    simulacro_usado: c.simulacro_usado,\n    vuelta_costo_usd: c.vuelta_costo_usd,\n    vuelta_modelo: c.vuelta_modelo,\n    falla_del_redactor: c.falla_del_redactor || null,\n    tope_usd: c.tope_usd === undefined ? null : c.tope_usd,\n    parte_legible: ext.legible,\n    parte_reparado: ext.reparado === true,\n    comillas_reparadas: ext.comillas_reparadas || 0,\n    parte_valido,\n    motivo_invalido,\n    titulo_parte: fila_parte.title,\n    chequeos_ok: res.ok,\n    hallazgos: res.hallazgos,\n    por_chequeo: res.por_chequeo,\n    entregables: parte.entregables.length,\n    pendientes_declarados: (parte.pendientes_declarados || []).length,\n    _sala_correlation_id: c._sala_correlation_id || null,\n    _journey_id: c._journey_id || null,\n    parte_md,\n    fila_parte,\n    payload_cable,\n  },\n}]\n"
+   },
+   "id": "5741954c-4ebe-4fd9-a4a9-4530c1211991"
+  },
+  {
+   "name": "⑤ ¿Modo seco?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    3640,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json.dry_run }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "id": "1f531dab-21e7-4490-8814-42c244bc519c"
+  },
+  {
+   "name": "⑤ Seco · lo que se habría escrito",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3900,
+    200
+   ],
+   "parameters": {
+    "jsCode": "// ⑤ SECO · LO QUE SE HABRÍA ESCRITO · CC#1 · 2026-09-29. En modo seco NADA se escribe ni se avisa: ni la tabla, ni Drive, ni la sala.\n// Pero llega hasta acá con las MISMAS filas y avisos que el camino real (los arma ④), y aquí se VALIDAN sus formas.\nconst c = $input.first().json\nconst f = c.fila_parte || {}\nconst faltan = []\nfor (const k of ['client_id', 'title', 'output_type', 'content', 'content_text', 'producing_agent', 'status', 'provenance_tag']) {\n  if (f[k] === undefined || f[k] === null || f[k] === '') faltan.push('fila_parte.' + k)\n}\nif (f.output_type !== 'campaign_brief_pack') faltan.push('fila_parte.output_type debe ser campaign_brief_pack')\nif (f.status !== 'draft') faltan.push('fila_parte.status debe ser draft')\nconst a = c.payload_cable || {}\nfor (const k of ['event_type', 'worker_id', 'worker_name', 'resultado', 'client_id']) {\n  if (a[k] === undefined || a[k] === null || a[k] === '') faltan.push('payload_cable.' + k)\n}\nif (a.event_type !== 'run_completed') faltan.push('payload_cable.event_type debe ser run_completed')\nif (a.worker_name !== 'brief') faltan.push('payload_cable.worker_name debe ser brief')\nconst habria_cerrado_como = c.parte_valido === false ? 'ERROR · PARTE_NO_VALIDO · ' + c.motivo_invalido : 'parte_terminado'\nconst salida = {\n  json: {\n    seco: true,\n    escrituras_reales: 0,\n    no_se_escribio_en: ['client_historical_outputs', 'Drive (texto-a-drive)', 'la sala (SALA_CALLBACK_URL)'],\n    dry_run_enviado_al_nodo_que_paga: c.cuerpo_dry_run_enviado,\n    la_vuelta_del_redactor: { llego: c.llego_la_vuelta, real: c.vuelta_real, simulacro: c.simulacro_usado, costo_usd: c.vuelta_costo_usd, modelo: c.vuelta_modelo },\n    chequeos: { legible: c.parte_legible, ok: c.chequeos_ok, por_chequeo: c.por_chequeo, entregables: c.entregables, pendientes: c.pendientes_declarados },\n    habria_guardado: { tabla: 'client_historical_outputs', output_type: f.output_type, status: f.status, titulo: f.title, largo_del_parte: String(f.content || '').length, provenance_tag_claves: Object.keys(f.provenance_tag || {}) },\n    habria_subido_a_drive_con_titulo: f.title,\n    parte_valido: c.parte_valido !== false,\n    motivo_invalido: c.motivo_invalido || null,\n    habria_cerrado_como,\n    habria_avisado: a,\n    formas_validas: faltan.length === 0,\n    faltan,\n  },\n}\n// 🔴 el ensayo ejerce el MISMO veredicto que el camino real: un parte inválido termina la corrida en error (con la salida ya guardada en la ejecución)\nif (c.parte_valido === false) throw new Error('PARTE_NO_VALIDO (modo seco) · ' + c.motivo_invalido + ' · en modo real habría subido a Drive con la marca y cerrado en error')\nreturn [salida]\n"
+   },
+   "id": "2da7fcd8-943d-4150-82fa-5f825389331b"
+  },
+  {
+   "name": "⑤ Guardar el parte",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    3900,
+    -200
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_historical_outputs",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "apikey",
+       "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      },
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "Prefer",
+       "value": "return=representation"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.fila_parte) }}",
+    "options": {
+     "timeout": 30000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   },
+   "id": "2dca67fe-ee88-4290-ab8b-fcee95cd5fb0"
+  },
+  {
+   "name": "⑤ Parte a Drive",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    4160,
+    -200
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://n8n-production-72be.up.railway.app/webhook/zero-risk/texto-a-drive",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ client_id: $('④ Chequeos').first().json.client_id, client_name: ($('④ Chequeos').first().json.client_name || 'cliente'), nombre: ($('④ Chequeos').first().json.titulo_parte || ('Parte de trabajo · briefs · ' + new Date().toISOString().slice(0,10))), texto: String($('④ Chequeos').first().json.parte_md || '') }) }}",
+    "options": {
+     "timeout": 120000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   },
+   "id": "820fe800-ef12-42db-afa4-16c0283fc836"
+  },
+  {
+   "name": "⑤ ¿Guardó y salió el PDF?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    4420,
+    -200
+   ],
+   "parameters": {
+    "jsCode": "// ⑤ ¿GUARDÓ Y SALIÓ EL PDF? · CC#1 · 2026-09-29. Una corrida sin parte guardado o sin PDF NO puede salir exitosa (regla 12-sep de planeación).\n// El guardado va ANTES de Drive a propósito: si Drive falla, el parte NO se pierde.\nconst v = $('④ Chequeos').first().json\nlet guardado = false, guardado_id = null\ntry {\n  const g = $('⑤ Guardar el parte').first().json\n  const gb = g && g.body ? g.body : g\n  const fila = Array.isArray(gb) ? gb[0] : gb\n  guardado = !!(fila && fila.id)\n  guardado_id = (fila && fila.id) || null\n} catch (x) { guardado = false }\nlet rec = null\ntry { const d = $('⑤ Parte a Drive').first().json; rec = d && d.body ? d.body : d } catch (x) { rec = null }\nconst hayPdf = !!(rec && rec.ok === true && rec.file_id)\nconst problemas = []\nif (v.parte_valido === false) problemas.push('PARTE NO VÁLIDO · ' + v.motivo_invalido)\nif (!v.llego_la_vuelta) problemas.push('la vuelta del redactor NO llegó')\nif (!guardado) problemas.push('el parte NO quedó guardado en client_historical_outputs')\nif (!hayPdf) problemas.push('Drive no devolvió un archivo (' + String((rec && rec.motivo) || 'sin motivo') + ')')\nreturn [{\n  json: {\n    ok: problemas.length === 0,\n    parte_guardado: guardado,\n    parte_guardado_id: guardado_id,\n    hay_pdf: hayPdf,\n    file_id: (rec && rec.file_id) || null,\n    url: (rec && rec.url) || null,\n    chequeos_ok: v.chequeos_ok,\n    hallazgos: (v.hallazgos || []).length,\n    entregables: v.entregables,\n    pendientes_declarados: v.pendientes_declarados,\n    problemas,\n    parte_valido: v.parte_valido !== false,\n    motivo_invalido: v.motivo_invalido || null,\n    client_id: v.client_id,\n    // la sala se entera del resultado REAL: un parte con problemas no se anuncia como terminado limpio\n    payload_cable: { ...v.payload_cable, resultado: problemas.length === 0 ? 'parte_terminado' : (v.parte_valido === false ? 'parte_no_valido' : 'parte_con_problemas'), ...(problemas.length ? { problemas } : {}) },\n  },\n}]\n"
+   },
+   "id": "431d64e8-1234-41f5-abd5-4e49370d7df3"
+  },
+  {
+   "name": "⑥ Cable de vuelta · sala",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    4680,
+    -200
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "x-source",
+       "value": "n8n-brief"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "json",
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.payload_cable) }}",
+    "options": {
+     "timeout": 60000
+    }
+   },
+   "id": "ea8e237b-8439-4f8e-bcff-7ccb7e334fc6"
+  },
+  {
+   "name": "⑥ Cable · ¿volvió?",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    4940,
+    -200
+   ],
+   "parameters": {
+    "jsCode": "// ⑥ EL CABLE DE VUELTA NO PUEDE SER MUDO · CC#1 · 2026-09-29 · igual que planeación.\n// Si no volvió, la sala NUNCA se entera de que la corrida terminó y su marca queda sin resolver.\nconst r = $input.first().json || {}\nconst volvio = r.ok === true\nlet corr = null\ntry { corr = $('⓪ Sobre · llave · modo seco').first().json._sala_correlation_id || null } catch (e) { corr = null }\n// Falla RUIDOSA solo si la sala lo despachó: un disparo a mano no tiene a quién contestarle.\nif (corr && !volvio) {\n  throw new Error('CABLE_DE_VUELTA_MUDO · la sala NO se enteró de que la corrida terminó · código ' + String(r.code || r.error || 'sin código'))\n}\n// 🔴 LA CORRIDA NO CIERRA «CORRECTA» SI EL PARTE NO VALE (encargo Lenovo 30-sep §2): el cable YA declaró el resultado real arriba;\n// acá la corrida termina en ERROR visible con el motivo, no en verde. Antes este nodo devolvía siempre `cierre: 'parte_terminado'`.\nlet cierrePrevio = null\ntry { cierrePrevio = $('⑤ ¿Guardó y salió el PDF?').first().json } catch (e) { cierrePrevio = null }\nif (cierrePrevio && cierrePrevio.ok === false) {\n  throw new Error((cierrePrevio.parte_valido === false ? 'PARTE_NO_VALIDO' : 'PARTE_CON_PROBLEMAS') + ' · ' + (cierrePrevio.problemas || []).join(' | ') + ' · la sala ya fue avisada del resultado real')\n}\nreturn [{\n  json: {\n    cierre: 'parte_terminado',\n    vuelta_ok: volvio,\n    vuelta_detalle: volvio ? r.event_id || 'sin event_id' : r.code || r.detail || r.error || 'sin respuesta de la sala',\n    despachado_por_la_sala: !!corr,\n  },\n}]\n"
+   },
+   "id": "24f5f8e2-53e5-40bb-acfd-1b8a88bb8ec4"
+  }
+ ],
+ "connections": {
+  "Webhook · brief": {
+   "main": [
+    [
+     {
+      "node": "⓪ Sobre · llave · modo seco",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ Sobre · llave · modo seco": {
+   "main": [
+    [
+     {
+      "node": "① Cargar manual vigente",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① Cargar manual vigente": {
+   "main": [
+    [
+     {
+      "node": "① GUARDA · sin manual aprobado se DETIENE",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① GUARDA · sin manual aprobado se DETIENE": {
+   "main": [
+    [
+     {
+      "node": "② Cargar plan vigente",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Cargar plan vigente": {
+   "main": [
+    [
+     {
+      "node": "② GUARDA · sin plan se DETIENE",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② GUARDA · sin plan se DETIENE": {
+   "main": [
+    [
+     {
+      "node": "② ¿Ya hay parte de este plan?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② ¿Ya hay parte de este plan?": {
+   "main": [
+    [
+     {
+      "node": "② ¿Ya hay parte de este plan? · guarda",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② ¿Ya hay parte de este plan? · guarda": {
+   "main": [
+    [
+     {
+      "node": "② Ficha del cliente",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Ficha del cliente": {
+   "main": [
+    [
+     {
+      "node": "③ Armar el cuerpo del redactor",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "③ Armar el cuerpo del redactor": {
+   "main": [
+    [
+     {
+      "node": "③ Redactor (run-sdk)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "③ Redactor (run-sdk)": {
+   "main": [
+    [
+     {
+      "node": "③ Esperar al redactor",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "③ Esperar al redactor": {
+   "main": [
+    [
+     {
+      "node": "③ ¿Llegó la vuelta?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "③ ¿Llegó la vuelta?": {
+   "main": [
+    [
+     {
+      "node": "④ Chequeos",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "④ Chequeos": {
+   "main": [
+    [
+     {
+      "node": "⑤ ¿Modo seco?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑤ ¿Modo seco?": {
+   "main": [
+    [
+     {
+      "node": "⑤ Seco · lo que se habría escrito",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "⑤ Guardar el parte",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑤ Guardar el parte": {
+   "main": [
+    [
+     {
+      "node": "⑤ Parte a Drive",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑤ Parte a Drive": {
+   "main": [
+    [
+     {
+      "node": "⑤ ¿Guardó y salió el PDF?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑤ ¿Guardó y salió el PDF?": {
+   "main": [
+    [
+     {
+      "node": "⑥ Cable de vuelta · sala",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑥ Cable de vuelta · sala": {
+   "main": [
+    [
+     {
+      "node": "⑥ Cable · ¿volvió?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "nodeGroups": [],
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "staticData": null,
+ "pinData": null,
+ "meta": null,
+ "tags": [],
+ "shared": [
+  {
+   "role": "workflow:owner",
+   "workflowId": "PQdIgbuFexuBsoh8",
+   "projectId": "xKBOyp07nrGbu4ob",
+   "project": {
+    "id": "xKBOyp07nrGbu4ob",
+    "name": "Emilio  Perez  <emilacho@hotmail.com>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-04-18T13:41:21.856Z",
+    "updatedAt": "2026-04-18T13:51:26.012Z"
+   },
+   "createdAt": "2026-09-29T06:00:28.664Z",
+   "updatedAt": "2026-09-29T06:00:28.664Z"
+  }
+ ],
+ "activeVersion": {
+  "versionId": "3083dfac-89a4-4c9c-9112-4dde667ca07b",
+  "workflowId": "PQdIgbuFexuBsoh8",
+  "nodes": [
+   {
+    "name": "Webhook · brief",
+    "webhookId": "brief-parte-de-trabajo-0001",
+    "type": "n8n-nodes-base.webhook",
+    "typeVersion": 2,
+    "position": [
+     0,
+     0
+    ],
+    "parameters": {
+     "httpMethod": "POST",
+     "path": "zero-risk/brief",
+     "responseMode": "onReceived",
+     "options": {}
+    },
+    "id": "aaef7bb7-767d-47a5-b453-bddd9ec6f150"
+   },
+   {
+    "name": "⓪ Sobre · llave · modo seco",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     260,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ⓪ EL SOBRE · LA LLAVE · EL MODO SECO · CC#1 · 2026-09-29 · encargo Lenovo §1.\n// Este flujo PAGA (un agente). Por eso: (1) exige la llave de despacho del motor (lección E67: un POST con la marca\n// copiada arrancaba una corrida paga) y (2) exige `dry_run` EXPLÍCITO (true|false) en el sobre · no se asume nunca\n// (lección 28-sep: en otro flujo el dry_run moría en el primer nodo y una prueba «gratis» cobró US$ 0,37).\nconst w = $input.first().json || {}\nconst body = w.body && typeof w.body === 'object' ? w.body : {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\n\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) {\n  throw new Error('BRIEF_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo paga y queda cerrado hasta que exista · E67.')\n}\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) {\n  throw new Error('BRIEF_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo paga y solo lo despierta la sala · E67.')\n}\n\nif (!body.client_id) throw new Error('BRIEF_SIN_CLIENTE · falta client_id en el sobre · se DETIENE y no escribe nada')\n// el client_id se pega en direcciones de la base: solo un uuid, nada más\nif (!/^[0-9a-fA-F-]{36}$/.test(String(body.client_id))) throw new Error('BRIEF_CLIENTE_INVALIDO · client_id no es un uuid · se DETIENE y no escribe nada')\nif (typeof body.dry_run !== 'boolean') {\n  throw new Error('BRIEF_DRY_RUN_AUSENTE · el sobre debe traer dry_run explícito (true o false) · no se asume · se DETIENE antes de gastar')\n}\n\n// TOPE DURO por corrida (opt-in · US$) · un tope MAL ESCRITO detiene la corrida ANTES de gastar: ignorarlo dejaría pagar sin tope (mismo criterio que dry_run).\n// Ausente ⇒ sin tope (como hoy). Presente ⇒ número > 0 y ≤ 50. El corredor lo hace cumplir (el SDK corta) y el corte queda DECLARADO en el parte.\nlet tope_usd = null\nif (body.tope_usd !== undefined) {\n  const n = typeof body.tope_usd === 'number' ? body.tope_usd : (typeof body.tope_usd === 'string' && body.tope_usd.trim() !== '' ? Number(body.tope_usd) : NaN)\n  if (!Number.isFinite(n) || n <= 0 || n > 50) {\n    throw new Error('BRIEF_TOPE_INVALIDO · tope_usd debe ser un número mayor que 0 y hasta 50 · llegó ' + JSON.stringify(body.tope_usd) + ' · se DETIENE antes de gastar: ignorarlo dejaría pagar sin tope')\n  }\n  tope_usd = n\n}\n\n// RAZONAMIENTO limitado (opt-in) · experimento 30-sep · valor mal escrito detiene ANTES de gastar (mismo criterio que el tope) · ausente ⇒ razonamiento completo (como hoy)\n// 🔴 POR DEFECTO APAGADO (GO de Emilio 2026-10-01 tras el experimento: sin razonamiento el brief cabe en UNA respuesta · 16.352 tokens · 5 min · US$ 0,38; con él fallaba por el máximo de 32.000).\n// Ausente ⇒ 'disabled' (la cadena normal planeación→brief NO manda este campo y por eso volvía al fallo). Para volver al razonamiento completo hay que pedirlo: 'completo'.\nlet razonamiento = 'disabled'\nif (body.razonamiento !== undefined) {\n  if (body.razonamiento !== 'disabled' && body.razonamiento !== 'low' && body.razonamiento !== 'medium' && body.razonamiento !== 'completo') {\n    throw new Error('BRIEF_RAZONAMIENTO_INVALIDO · razonamiento debe ser disabled | low | medium | completo · llegó ' + JSON.stringify(body.razonamiento) + ' · se DETIENE antes de gastar')\n  }\n  razonamiento = body.razonamiento === 'completo' ? null : body.razonamiento\n}\n\nreturn [{\n  json: {\n    client_id: String(body.client_id),\n    tenant_id: body.tenant_id || body.client_id,\n    plan_id: body.plan_id || null,\n    dry_run: body.dry_run,\n    forzar: body.forzar === true || body.force_restart === true,\n    desde_worker: body.desde_worker || null,\n    _sala_correlation_id: body._sala_correlation_id || null,\n    _journey_id: body._journey_id || null,\n    // SOLO en modo seco: una respuesta de redactor enlatada para poder probar los chequeos (④) con datos con forma real\n    // sin pagar. En modo real se IGNORA por completo (el nodo ③ ni la mira).\n    simulacro_respuesta: body.dry_run === true && typeof body._simulacro_respuesta === 'string' ? body._simulacro_respuesta : null,\n    tope_usd,\n    razonamiento,\n  },\n}]\n"
+    },
+    "id": "b41d2041-327b-42c8-8845-6926dc8c72ce"
+   },
+   {
+    "name": "① Cargar manual vigente",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "alwaysOutputData": true,
+    "onError": "continueRegularOutput",
+    "position": [
+     520,
+     0
+    ],
+    "parameters": {
+     "method": "GET",
+     "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_brand_books?select=id,client_id,version,gate_outcome,created_at,forbidden_words,required_terminology,content_text,voice_description,writing_style,tone_guidelines&client_id=eq.{{ $('⓪ Sobre · llave · modo seco').first().json.client_id }}&order=version.desc&limit=1",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "apikey",
+        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       },
+       {
+        "name": "Authorization",
+        "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       }
+      ]
+     },
+     "options": {
+      "timeout": 30000
+     }
+    },
+    "id": "0b7a6e10-6445-4418-9f4a-968a5399cc60"
+   },
+   {
+    "name": "① GUARDA · sin manual aprobado se DETIENE",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     780,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ① GUARDA · sin manual APROBADO se DETIENE y no se escribe nada · CC#1 · 2026-09-29.\n// Entrada: la fila más reciente de client_brand_books (versión más alta). Igual criterio que planeación.\nconst env = $('⓪ Sobre · llave · modo seco').first().json\nconst filas = $input.all().map((i) => i.json).filter((r) => r && r.id)\nif (filas.length === 0) {\n  throw new Error('BRIEF_SIN_MANUAL · el cliente ' + env.client_id + ' no tiene manual de marca · se DETIENE y NO escribe nada')\n}\nconst m = filas[0]\nif (m.gate_outcome !== 'paso_la_vara') {\n  throw new Error('BRIEF_MANUAL_NO_APROBADO · manual ' + m.id + ' con gate_outcome=' + JSON.stringify(m.gate_outcome) + ' · se DETIENE y NO escribe nada')\n}\nreturn [{\n  json: {\n    ...env,\n    manual_id: m.id,\n    manual_version: m.version,\n    manual_creado: m.created_at,\n    forbidden_words: Array.isArray(m.forbidden_words) ? m.forbidden_words : [],\n    required_terminology: Array.isArray(m.required_terminology) ? m.required_terminology : [],\n    manual_texto: String(m.content_text || ''),\n    // 03-oct · EL TRATO (tú · vos · usted) sale del manual: su descripción de voz y sus guías de tono viajan a ③ y ④\n    manual_voz: { voice_description: m.voice_description || null, writing_style: m.writing_style || null, tone_guidelines: m.tone_guidelines && typeof m.tone_guidelines === 'object' ? m.tone_guidelines : {} },\n  },\n}]\n"
+    },
+    "id": "156462b2-a048-4981-b815-5f54196e3bd4"
+   },
+   {
+    "name": "② Cargar plan vigente",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "alwaysOutputData": true,
+    "onError": "continueRegularOutput",
+    "position": [
+     1040,
+     0
+    ],
+    "parameters": {
+     "method": "GET",
+     "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_historical_outputs?select=id,created_at,title,content_text,status&output_type=eq.campaign_plan_90d&client_id=eq.{{ $('⓪ Sobre · llave · modo seco').first().json.client_id }}&order=created_at.desc&limit=1",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "apikey",
+        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       },
+       {
+        "name": "Authorization",
+        "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       }
+      ]
+     },
+     "options": {
+      "timeout": 30000
+     }
+    },
+    "id": "187cfd0f-b23b-48ac-95f1-d05eace9e806"
+   },
+   {
+    "name": "② GUARDA · sin plan se DETIENE",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1300,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ② GUARDA · sin plan vigente se DETIENE y no se escribe nada · CC#1 · 2026-09-29.\n// Entrada: la fila más reciente de client_historical_outputs con output_type=campaign_plan_90d.\nconst prev = $('① GUARDA · sin manual aprobado se DETIENE').first().json\nconst filas = $input.all().map((i) => i.json).filter((r) => r && r.id)\nif (filas.length === 0) {\n  throw new Error('BRIEF_SIN_PLAN · el cliente ' + prev.client_id + ' no tiene plan de 90 días vigente · se DETIENE y NO escribe nada')\n}\nconst p = filas[0]\nconst texto = String(p.content_text || '')\nif (!texto.trim()) {\n  throw new Error('BRIEF_PLAN_VACIO · el plan ' + p.id + ' no trae texto · se DETIENE y NO escribe nada')\n}\nreturn [{\n  json: {\n    ...prev,\n    plan_id: p.id,\n    plan_creado: p.created_at,\n    plan_titulo: p.title || null,\n    plan_texto: texto,\n    // el sobre puede nombrar un plan; si el vigente es OTRO se declara (no se obedece a ciegas ni se oculta)\n    plan_del_sobre: prev.plan_id || null,\n    plan_del_sobre_distinto: !!(prev.plan_id && prev.plan_id !== p.id),\n  },\n}]\n"
+    },
+    "id": "5192aaa9-0a5b-4a7f-b10b-845ef292d319"
+   },
+   {
+    "name": "② ¿Ya hay parte de este plan?",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "alwaysOutputData": true,
+    "onError": "continueRegularOutput",
+    "position": [
+     1560,
+     0
+    ],
+    "parameters": {
+     "method": "GET",
+     "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_historical_outputs?select=id,created_at&output_type=eq.campaign_brief_pack&client_id=eq.{{ $('⓪ Sobre · llave · modo seco').first().json.client_id }}&provenance_tag->>plan_id=eq.{{ $('② GUARDA · sin plan se DETIENE').first().json.plan_id }}&limit=1",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "apikey",
+        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       },
+       {
+        "name": "Authorization",
+        "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       }
+      ]
+     },
+     "options": {
+      "timeout": 30000
+     }
+    },
+    "id": "b240646f-16f7-4cb8-ade8-107d332e1df0"
+   },
+   {
+    "name": "② ¿Ya hay parte de este plan? · guarda",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1820,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ② ¿YA HAY PARTE DE ESTE PLAN? · decisión de Emilio 09-sep: el mismo plan dos veces NO corre, avisa · CC#1 · 2026-09-29.\n// En modo seco no se aplica (no escribe nada, así que repetir no daña) pero se DECLARA. Con `forzar:true` se permite.\nconst prev = $('② GUARDA · sin plan se DETIENE').first().json\nconst ya = $input.all().map((i) => i.json).filter((r) => r && r.id)\nconst repetido = ya.length > 0\nif (repetido && !prev.forzar && !prev.dry_run) {\n  throw new Error('BRIEF_REPETIDO · ya existe el parte ' + ya[0].id + ' (' + ya[0].created_at + ') del plan ' + prev.plan_id + ' · no corre dos veces el mismo plan · para repetirlo a propósito, el sobre lleva forzar:true')\n}\nreturn [{ json: { ...prev, parte_previo_id: repetido ? ya[0].id : null, repetido_declarado: repetido } }]\n"
+    },
+    "id": "13242e31-cc78-4eb4-9b48-624d44f41073"
+   },
+   {
+    "name": "② Ficha del cliente",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "alwaysOutputData": true,
+    "onError": "continueRegularOutput",
+    "position": [
+     2080,
+     0
+    ],
+    "parameters": {
+     "method": "GET",
+     "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/clients?select=id,name,country,market,config&id=eq.{{ $('⓪ Sobre · llave · modo seco').first().json.client_id }}&limit=1",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "apikey",
+        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       },
+       {
+        "name": "Authorization",
+        "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       }
+      ]
+     },
+     "options": {
+      "timeout": 30000
+     }
+    },
+    "id": "ede2be77-195d-406a-bbc7-44cb182f4f89"
+   },
+   {
+    "name": "③ Armar el cuerpo del redactor",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     2340,
+     0
+    ],
+    "parameters": {
+     "jsCode": "/**\n * EL TRATO (tú · vos · usted) ES DE LA MARCA, NO UNA REGLA FIJA · CC#1 · 2026-10-03 · encargo Lenovo «cada foto viaja con todo su contexto» punto 5.\n *\n * Lógica PURA (sin red, sin `this`, sin `require`): la usan el flujo del brief, el flujo de la pieza y las pruebas · se pega entera en los nodos Code de n8n (estilo `var` + `function`).\n *\n * 🔴 ESTRUCTURAL, NUNCA POR CLIENTE: el trato se LEE del manual de marca (campo explícito o lo que dice su descripción de voz) o de la ficha del cliente; sólo si ninguno lo dice se usa, DECLARADO\n * y de baja confianza, el trato habitual del país de la ficha. Si no hay nada, queda «no_definido» y NO se comprueba nada (no se inventa una regla).\n * El detector reconoce las FORMAS del español (conjugación regular del voseo y del tuteo sobre verbos de uso comercial), no frases ni clientes.\n */\nfunction sinTildes(s) {\n  return String(s === undefined || s === null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')\n}\n\nvar TRATOS = ['tu', 'vos', 'usted']\n\n/** valor explícito → 'tu' | 'vos' | 'usted' | null */\nfunction tratoDeValor(v) {\n  var t = sinTildes(v).trim()\n  if (!t) return null\n  if (/^(tu|tuteo|tutear)$/.test(t)) return 'tu'\n  if (/^(vos|voseo|vosear)$/.test(t)) return 'vos'\n  if (/^(usted|ustedeo|formal)$/.test(t)) return 'usted'\n  return null\n}\n\n// lo que dice un TEXTO de voz sobre el trato, respetando las negaciones: «Tutea siempre (tú/sabes/pides — nunca vos)» ⇒ tú, y vos queda NEGADO\nvar MENCION = {\n  tu: /\\b(tutea\\w*|tuteo|tutear|tu)\\b/g,\n  vos: /\\b(vos|voseo|vosea\\w*|vosear)\\b/g,\n  usted: /\\b(usted|ustedeo|ustedea\\w*|trato formal)\\b/g,\n}\nfunction mencionesDelTexto(texto) {\n  var t = sinTildes(texto)\n  var out = { tu: 0, vos: 0, usted: 0, negados: [] }\n  TRATOS.forEach(function (k) {\n    var re = new RegExp(MENCION[k].source, 'g')\n    var m\n    while ((m = re.exec(t)) !== null) {\n      // «tu» a secas es un posesivo muy común («tu puerta»): sólo cuenta si va pegado a una indicación de trato (tú/sabes/pides …) o es tuteo/tutea\n      if (m[1] === 'tu' && !/tu\\s*[\\/·,]\\s*(sabes|pides|tienes|quieres|puedes|eres|vienes)/.test(t.slice(m.index, m.index + 30))) continue\n      var antes = t.slice(Math.max(0, m.index - 24), m.index)\n      if (/\\b(nunca|jamas|no|ni|sin|evita|evitar|evites)\\s+(\\w+\\s+){0,2}$/.test(antes)) out.negados.push(k)\n      else out[k] += 1\n    }\n  })\n  return out\n}\n\n// el trato habitual del país SÓLO cuando nadie lo dijo (baja confianza · se declara) · sin país conocido no hay default\nvar POR_PAIS = { argentina: 'vos', uruguay: 'vos', paraguay: 'vos', ecuador: 'tu', mexico: 'tu', peru: 'tu', chile: 'tu', espana: 'tu', bolivia: 'tu', venezuela: 'tu', panama: 'tu', 'costa rica': 'usted' }\n\n/**\n * `manual` = { voice_description, writing_style, tone_guidelines } · `ficha` = { config, country, market }\n * → { trato: 'tu'|'vos'|'usted'|'no_definido'|'conflicto', fuente, evidencia }\n */\nfunction resolverTrato(manual, ficha) {\n  var m = manual || {}\n  var f = ficha || {}\n  var tg = m.tone_guidelines && typeof m.tone_guidelines === 'object' ? m.tone_guidelines : {}\n  var cfg = f.config && typeof f.config === 'object' ? f.config : {}\n  var voz = cfg.voz && typeof cfg.voz === 'object' ? cfg.voz : {}\n  var explicitos = [\n    ['manual.tone_guidelines.trato', tg.trato], ['manual.tone_guidelines.tratamiento', tg.tratamiento], ['manual.tone_guidelines.address_form', tg.address_form],\n    ['ficha.config.voz.trato', voz.trato], ['ficha.config.trato', cfg.trato],\n  ]\n  for (var i = 0; i < explicitos.length; i++) {\n    var v = tratoDeValor(explicitos[i][1])\n    if (v) return { trato: v, fuente: explicitos[i][0].indexOf('manual') === 0 ? 'manual' : 'ficha', evidencia: explicitos[i][0] + ' = «' + explicitos[i][1] + '»' }\n  }\n  var texto = [m.voice_description, m.writing_style, m.tone_guidelines && Object.keys(tg).length ? JSON.stringify(tg) : ''].filter(Boolean).join(' · ')\n  if (texto) {\n    var me = mencionesDelTexto(texto)\n    var pos = TRATOS.filter(function (k) { return me[k] > 0 })\n    if (pos.length === 1) return { trato: pos[0], fuente: 'manual', evidencia: 'la descripción de voz del manual lo dice (' + pos[0] + (me.negados.length ? ' · niega ' + me.negados.join(', ') : '') + ')' }\n    if (pos.length > 1) return { trato: 'conflicto', fuente: 'manual', evidencia: 'la descripción de voz menciona más de un trato (' + pos.join(' y ') + ') sin negar ninguno · no se puede elegir' }\n  }\n  var pais = sinTildes(f.country).trim() || sinTildes(String(f.market || '').split(/[·|,;\\/]/).pop()).trim()\n  if (pais && POR_PAIS[pais]) return { trato: POR_PAIS[pais], fuente: 'default_por_pais', evidencia: 'ni el manual ni la ficha lo dicen: se usa el trato habitual de «' + pais + '» (BAJA confianza · conviene ponerlo en el manual)' }\n  return { trato: 'no_definido', fuente: 'ninguna', evidencia: 'ni el manual ni la ficha dicen el trato y no hay país conocido · NO se comprueba' }\n}\n\n// ───────────────────────────── las formas ─────────────────────────────\n// verbos de uso comercial/llamado a la acción (infinitivos regulares en la conjugación del voseo) · es LENGUA, no clientes\nvar VERBOS = ('pedir mandar escribir enviar llamar contar avisar venir hacer comprar probar reservar consultar mirar seguir sumar unir descubrir elegir disfrutar compartir ordenar encargar contactar visitar ' +\n  'decir tener querer poder saber vivir sentir pasar dejar traer llevar buscar conocer escuchar preguntar responder recibir pagar cambiar usar armar crear ahorrar aprovechar animar inscribir registrar ' +\n  'suscribir invitar acompañar agendar cotizar solicitar averiguar entrar ingresar escoger pensar imaginar atreverse quedar poner salir').split(' ')\nvar CLITICOS = ['', 'lo', 'la', 'los', 'las', 'le', 'les', 'me', 'nos', 'te', 'se']\n\nfunction radical(inf) { return inf.replace(/se$/, '').slice(0, -2) }\nfunction vocalTematica(inf) { var f = inf.replace(/se$/, ''); return f.slice(-2, -1) === 'a' || /ar$/.test(f) ? 'a' : /er$/.test(f) ? 'e' : 'i' }\nvar ACENTO = { a: 'á', e: 'é', i: 'í' }\n\nfunction formasVoseo() {\n  var s = {}\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + ACENTO[v]] = true // pedí · mandá · escribí\n    CLITICOS.slice(1).forEach(function (c) { s[r + v + c] = true }) // pedilo · mandalo · escribinos\n    s[r + ACENTO[v] + 's'] = true // pedís · mandás · tenés (voseo presente)\n    if (v === 'e') s[r + 'és'] = true\n  })\n  ;['sos', 'tenés', 'querés', 'podés', 'sabés', 'venís', 'hacés', 'decís', 'ponés', 'salís', 'vení', 'poné', 'hacé', 'decí', 'tené', 'salí'].forEach(function (w) { s[w] = true })\n  return s\n}\n// el tuteo: pronombre, presente 2.ª persona regular y el imperativo con clítico acentuado («pídelo», «mándanos»)\nfunction acentuarUltimaVocal(stem) {\n  var i = stem.length - 1\n  while (i >= 0 && !/[aeiou]/.test(stem[i])) i--\n  if (i < 0) return stem\n  return stem.slice(0, i) + ({ a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú' })[stem[i]] + stem.slice(i + 1)\n}\nfunction formasTuteo() {\n  var s = {}\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + (v === 'a' ? 'as' : 'es')] = true // mandas · escribes · tienes(irregular: ver abajo)\n    var imp = r + (v === 'a' ? 'a' : 'e')\n    CLITICOS.slice(1).forEach(function (c) { s[acentuarUltimaVocal(imp) + c] = true }) // mándalo · escríbenos\n  })\n  ;['eres', 'tienes', 'quieres', 'puedes', 'sabes', 'vienes', 'haces', 'dices', 'pides', 'pídelo', 'pídela', 'pídenos', 'ven', 'haz', 'dime', 'cuéntanos', 'escríbenos', 'avísanos', 'llámanos', 'mándanos', 'tú'].forEach(function (w) { s[w] = true })\n  return s\n}\n// formas de usted: pronombre (no «ustedes», que es plural neutro) y el imperativo/presente formal regular\nfunction formasUsted() {\n  var s = { usted: true }\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + (v === 'a' ? 'e' : 'a')] = true // mande · escriba\n    CLITICOS.slice(1).forEach(function (c) { s[acentuarUltimaVocal(r + (v === 'a' ? 'e' : 'a')) + c] = true })\n  })\n  return s\n}\nvar VOSEO = formasVoseo(), TUTEO = formasTuteo(), USTED = formasUsted()\n// palabras que coinciden por casualidad con una forma generada y NO son esa forma (sustantivos y adverbios comunes)\nvar FALSOS = { mas: 1, pase: 1, deje: 1, cree: 1, vea: 1, sienta: 1, nos: 1 }\n\n/** las palabras (con tilde) de un texto, en minúscula */\nfunction palabras(texto) { return String(texto || '').toLowerCase().match(/[a-záéíóúüñ]+/g) || [] }\n\n/** las formas de cada trato que aparecen en el texto: { vos: [palabras], tu: [...], usted: [...] } */\nfunction formasDeTrato(texto) {\n  var out = { vos: [], tu: [], usted: [] }\n  var add = function (k, w) { if (out[k].indexOf(w) === -1) out[k].push(w) }\n  palabras(texto).forEach(function (w) {\n    if (w === 'vos') add('vos', w)\n    else if (VOSEO[w]) add('vos', w)\n    else if (TUTEO[w]) add('tu', w)\n    else if (USTED[w] && !FALSOS[w]) add('usted', w)\n  })\n  return out\n}\n\n/**\n * ¿el texto respeta el trato de la marca? → [{ chequeo, detalle, fatal:false }]\n * `donde` = «la pieza» · «el brief». Sin trato definido (o en conflicto) NO se comprueba y se dice.\n */\nfunction chequearTrato(resolucion, texto, donde) {\n  var r = resolucion || { trato: 'no_definido' }\n  var d = donde || 'el texto'\n  if (r.trato === 'no_definido' || r.trato === 'conflicto') return []\n  var formas = formasDeTrato(texto)\n  var otros = TRATOS.filter(function (k) { return k !== r.trato })\n  var hallados = []\n  otros.forEach(function (k) { formas[k].forEach(function (w) { hallados.push({ w: w, k: k }) }) })\n  // el usted «mande/llame» coincide con presentes de 3.ª persona: sólo se avisa si el trato de la marca NO es usted y no hay forma más clara\n  if (!hallados.length) return []\n  var nombre = { tu: 'tuteo', vos: 'voseo', usted: 'usted' }\n  return [{\n    chequeo: 'trato_distinto_al_del_cliente',\n    detalle: d + ' trae formas de otro trato: ' + hallados.slice(0, 6).map(function (x) { return '«' + x.w + '» (' + nombre[x.k] + ')' }).join(' · ') + ' y el trato de la marca es ' + nombre[r.trato] + ' (' + r.fuente + ': ' + r.evidencia + ')',\n    fatal: false,\n  }]\n}\n\n/** el bloque para el pedido/brief: el trato y de dónde sale · y qué hacer si otro texto (el brief) trae otro */\nfunction bloqueDeTrato(resolucion) {\n  var r = resolucion || { trato: 'no_definido', fuente: 'ninguna', evidencia: '' }\n  var nombre = { tu: 'TÚ (tuteo)', vos: 'VOS (voseo)', usted: 'USTED' }\n  if (r.trato === 'no_definido') return 'F) EL TRATO. El sistema NO sabe qué trato (tú · vos · usted) usa esta marca: ni el manual ni la ficha lo dicen. Escribe con el trato que use el manual en sus ejemplos y DECLÁRALO en «no_pude_cumplir» («trato no definido»).'\n  if (r.trato === 'conflicto') return 'F) EL TRATO. El manual menciona más de un trato sin elegir (' + r.evidencia + '). No adivines: declara «trato en conflicto» en «no_pude_cumplir» y evita las formas de segunda persona cuando puedas.'\n  return ['F) EL TRATO de esta marca es ' + nombre[r.trato] + ' (fuente: ' + r.fuente + ' · ' + r.evidencia + ').',\n    '   Todo lo que se lee en la pieza (titular, texto, llamado) va en ese trato, sin mezclar. Si el brief trae formas de OTRO trato (por ejemplo una frase copiada de una conversación), NO las copies:',\n    '   conviértelas al trato de la marca y dilo en «que_miro». El manual de marca manda sobre el brief.'].join('\\n')\n}\n\n\n// ③ ARMAR EL CUERPO DEL REDACTOR · CC#1 · 2026-09-29 · encargo Lenovo §1.2 ③ + §1.3.\n// Un solo agente (`campaign-brief-agent`) produce la lista de entregables Y el brief de cada uno.\n// 🔴 MODO SECO DE VERDAD: `dry_run` viaja en el CUERPO que se manda a /api/agents/run-sdk (campo `cuerpo.dry_run`).\n// El nodo HTTP siguiente manda EXACTAMENTE `JSON.stringify(cuerpo)`, así que lo enviado queda visible como la salida de\n// ESTE nodo en la corrida. En seco el corredor contesta con su respuesta canónica sin llamar al modelo (US$ 0).\n// `force_restart:true` es obligatorio: sin él el corredor sirve un punto de control guardado (vuelve en 0,7 s sin haber corrido).\nconst prev = $('② ¿Ya hay parte de este plan? · guarda').first().json\nlet ficha = {}\ntry { const f = $input.first().json; ficha = Array.isArray(f) ? f[0] || {} : f || {} } catch (e) { ficha = {} }\nconst nombre = String(ficha.name || ficha.client_name || 'cliente')\n// 03-oct · EL TRATO de la marca (tú · vos · usted) sale del manual o de la ficha · lógica de trato-logica.js (pegada arriba por el constructor) · el brief ya NO copia el trato de una conversación\n// (si este archivo se corre SIN la lógica pegada por el constructor, el trato queda «no_definido» y el pedido es el de siempre)\nconst trato = typeof resolverTrato === 'function' ? resolverTrato(prev.manual_voz, ficha) : { trato: 'no_definido', fuente: 'ninguna', evidencia: 'la lógica del trato no está pegada en este nodo' }\n\nconst REFERENCIA = \"---\\r\\ntype: referencia · **el brief de UN entregable** · el documento que baja el plan a trabajo\\r\\nfecha: 2026-09-29\\r\\nautor: Arquitecto de Sistema (Fable)\\r\\nautoridad: **§144 · Emilio · 2026-09-29** · «continuemos con el brief»\\r\\nestado: **referencia · nada construido · `$0`**\\r\\nfunda en mediciones: `raw/tasks/2026-09-25-P1-RESULTADO-CC3-el-plan-bajado-a-piezas.md` *(los 12 campos y la unidad, medidos)* · `docs/INVESTIGACION-2026-09-25-el-brief-marcos-evidencia-y-el-ejemplo-real.md` *(lo que existe en la industria)* · `docs/DISENO-2026-09-26-el-piso-visual-del-manual-de-marca.md`\\r\\nregla: quien actualiza, re-firma\\r\\n---\\r\\n\\r\\n> 🔴 **AVISO AL EMPLEADO QUE LEA ESTO · las cifras del ejemplo son CENTINELAS, no datos.**\\r\\n> **Todo dinero termina en `,77`. Todo conteo termina en `7`.**\\r\\n> ⚠️ **Si una cifra terminada en `,77` aparece en un brief real, ese brief copió el ejemplo en vez de pensar.**\\r\\n\\r\\n---\\r\\n\\r\\n# El brief de un entregable\\r\\n\\r\\n## 0 · Antes de nada · **este nivel no existe en la industria**\\r\\n\\r\\n`[DATO]` **Se buscó en IPA · ISBA · ANA · 4A's · D&AD · WARC · WFA · AICP. Ninguna asociación publicó jamás un marco de brief a nivel de pieza.** Lo único codificado ahí es lo administrativo *(número de trabajo, orden de compra)* y lo de costos *(el formulario de licitación de 1975)*.\\r\\n\\r\\n`[DATO]` **Y la ANA nombra ese vacío como «el área más común de ineficiencia operativa»** de las agencias internas — **sin haberlo resuelto.**\\r\\n\\r\\n⇒ **Esto no copia un estándar. Lo escribe.** *Por eso cada campo de abajo viene con su porqué: si no se puede defender, no va.*\\r\\n\\r\\n📌 **Y los dos marcos más autorizados del mundo se niegan a dar plantilla, a propósito:** *«el formulario pre-impreso lleva a una mentalidad de llenar casillas que conspira contra el pensamiento real»*. **La respuesta a eso no es no tener campos: es que cada campo diga para qué está.**\\r\\n\\r\\n---\\r\\n\\r\\n## 1 · La unidad · **el entregable, y está medida**\\r\\n\\r\\n`[DATO]` Se le preguntó al redactor qué unidad usaría, **sin sugerirle ninguna.** Eligió **entregable de producción**, y descartó dos solo:\\r\\n\\r\\n> *«No \\\"tarea\\\" — porque las tareas operativas las hace el dueño, no quien produce.*\\r\\n> *No \\\"pieza suelta\\\" — porque **una foto aislada no se puede aprobar ni marcar como lista**.*\\r\\n> *Un entregable tiene **un responsable, un criterio de aceptación, y un estado verificable de terminado**.»*\\r\\n\\r\\n🔴 **Ésa es la definición y se adopta entera: la unidad es lo que se puede dar por terminado.**\\r\\n\\r\\n⚠️ **Piso medido:** **la unidad NUNCA es más grande que una plataforma.** *TikTok pide vertical casero; YouTube pide marca temprana y rica. **«Redimensionar la pieza madre» está explícitamente desaconsejado.*** ⇒ **un brief por plataforma, nunca uno por campaña.**\\r\\n\\r\\n---\\r\\n\\r\\n## 2 · Los campos · **doce medidos, cuatro agregados**\\r\\n\\r\\n**Los doce primeros los propuso el redactor, con su justificación. No son míos.** Los cuatro últimos salen de la investigación y del piso visual.\\r\\n\\r\\n| # | campo | por qué tiene que estar |\\r\\n|---|---|---|\\r\\n| **1** | **Qué es el entregable** | una línea. *Si no se puede decir en una línea, son dos entregables* |\\r\\n| **2** | **Objetivo en la plataforma** | **determina el botón disponible.** *Tráfico a WhatsApp → «Enviar mensaje». A la app → «Ver menú». El texto gira alrededor del destino* |\\r\\n| **3** | **Segmento, declarado** | *sin esto el redactor escribe para nadie en particular.* **Sale del manual, no se inventa** |\\r\\n| **4** | **El protagonista · UNO** | 🔴 *«los dos en un solo anuncio diluyen el mensaje»* |\\r\\n| **5** | **Límites de la plataforma** | caracteres de titular, caracteres antes del «ver más», proporción, duración. *Sin el límite se escribe texto que se corta* |\\r\\n| **6** | **Vocabulario obligatorio** | **cuáles de los términos del manual son imprescindibles EN ESTE entregable.** *Sin esto el texto cae en genérico* |\\r\\n| **7** | **Palabras y tonos prohibidos** | la lista del manual **+ lo que no aplica acá** |\\r\\n| **8** | **Construcción sintáctica** | *«¿frases cortas con elipsis, o frase completa por legibilidad en móvil?* **No es decisión que el redactor deba resolver solo»** |\\r\\n| **9** | **El llamado a la acción** | 🔴 *«no es decisión del redactor — es estratégica y va en el brief»* |\\r\\n| **10** | **El visual que acompaña** | 🔴 *«sin saber el visual, el texto puede contradecirlo»*. **Y acá entra el piso visual: qué capa manda, la luz, el encuadre, qué aparece y qué no** |\\r\\n| **11** | **Variantes** | ¿una o dos? Si hay prueba, **qué varía** — titular, ángulo o llamado. *Alguien lo decide antes de producir* |\\r\\n| **12** | **Quién aprueba y para cuándo** | *sin esto el texto se aprueba el mismo día que se quiere activar* |\\r\\n| **+13** | 🔴 **HIPÓTESIS** | **el campo que el mundo de marca no tiene y el de rendimiento sí.** *Un brief de marca afirma; uno de rendimiento asume que la pieza es un TEST.* **Una pieza con hipótesis declarada se puede evaluar después. Una sin hipótesis, no** |\\r\\n| **+14** | 🔴 **LOS NEGATIVOS** | **qué NO hacer, explícito.** *Del único brief real publicado que existe: la marca declara qué tipo de ideas evita. Casi nadie tiene este campo y es el que protege la marca* |\\r\\n| **+15** | **De qué parte del plan sale** | la procedencia. *Un entregable que no se puede rastrear al plan no debería existir* |\\r\\n| **+16** | **Identificador** | 🔴 **la pieza producida va a citar este número.** *El control es la trazabilidad versión↔aprobación, no la firma. **La trazabilidad que se agrega después nunca se agrega*** |\\r\\n\\r\\n---\\r\\n\\r\\n## 3 · Las seis reglas que no se negocian\\r\\n\\r\\n**R1 · Un mensaje por entregable.** *Consenso de toda la industria. «Comunicando cuatro cosas mal, se pierde la oportunidad de comunicar una bien» — y el efecto secundario no es el olvido, es la incredulidad: **la pluralidad de mensajes lleva a desconfiar de la fuente.***\\r\\n\\r\\n**R2 · Un brief por plataforma.** *Ver §1.*\\r\\n\\r\\n**R3 · La audiencia no es «todos».** *Tres criterios: distinta de la población general · suficiente en tamaño para el objetivo · la marca tiene o puede ganarse el derecho a hablarle.* **Y los clichés demográficos son la señal de que no hay estrategia.**\\r\\n\\r\\n**R4 · No se prescribe la solución.** *«Dan barandas, no esposas.»* ⚠️ **Y está medido que se incumple:** *sólo el 9% de los anunciantes admite briefear con el canal ya decidido, pero **el 59% de las agencias dice que pasa «a veces» y el 39% que pasa «seguido»**.*\\r\\n\\r\\n**R5 · Lo que falta se declara, no se rellena.**\\r\\n\\r\\n**R6 · 🔴 Toda derivación visual declara su muestra.** *Cuántas piezas se miraron, cuántas eran foto y cuántas video, y qué NO se pudo observar.*\\r\\n⚠️ **Está medido que sin esta regla no se cumple:** *dos corridas afirmaron «nunca aparecen personas» **mirando dos fotos**, de un cliente cuyas 10 de 12 publicaciones son video.* **Una generalización guardada sin su muestra se lee después como verdad de la marca — y termina rechazando una pieza por una regla que nadie midió.**\\r\\n\\r\\n---\\r\\n\\r\\n## 4 · Un brief completo · **ejemplo con centinelas**\\r\\n\\r\\n> ⚠️ **Rubro a propósito distinto del cliente de las pruebas.** *El sistema es agnóstico: si el ejemplo fuera del mismo rubro, se copiaría.*\\r\\n\\r\\n**Cliente:** gimnasio de barrio, local a la calle, cobra suscripción mensual.\\r\\n\\r\\n```\\r\\nIDENTIFICADOR      BRF-0007\\r\\nQUÉ ES             Anuncio de Instagram, imagen fija, para la franja de la tarde\\r\\nDE QUÉ PARTE       Plan §5 · el camino · semana 3-4 · objetivo: llenar la franja\\r\\nDEL PLAN SALE      horaria ociosa de 14 a 17\\r\\n\\r\\nOBJETIVO           Mensajes a WhatsApp  ⇒  botón disponible: «Enviar mensaje»\\r\\nSEGMENTO           Adulto que trabaja desde casa, 27-47, vive a menos de 17\\r\\n                   cuadras. Dolor declarado: no quiere entrenar con el gimnasio\\r\\n                   lleno. NO es «gente que quiere ponerse en forma»\\r\\nPROTAGONISTA       La franja vacía de la tarde. UNO. No el precio, no las\\r\\n                   máquinas, no el entrenador\\r\\n\\r\\nHIPÓTESIS          Si mostramos el gimnasio VACÍO en vez de lleno, el adulto\\r\\n                   que evita la multitud responde más. Se prueba contra la\\r\\n                   variante de sala llena\\r\\n\\r\\nLÍMITES            Titular ≤ 37 caracteres · texto principal: lo que importa\\r\\n                   en los primeros 2 renglones · proporción 4:5\\r\\nVOCABULARIO        «tu horario», «sin esperar máquina» — del manual\\r\\nOBLIGATORIO\\r\\nPROHIBIDO          «transformá tu cuerpo», «el mejor gimnasio», todo\\r\\n                   superlativo · y no se menciona a la competencia\\r\\nSINTAXIS           Frase completa. En móvil la elipsis se lee como error\\r\\n\\r\\nVISUAL             Capa que manda: PRODUCTO. Sala vacía, luz natural de\\r\\n                   tarde, plano medio a la altura del ojo. Aparece: equipo\\r\\n                   y luz de ventana. NO aparece: personas, logo encima de\\r\\n                   la foto, luz de estudio\\r\\nLLAMADO            «Enviar mensaje»\\r\\nVARIANTES          2 · varía SÓLO el visual (sala vacía / sala con 7\\r\\n                   personas). El texto es idéntico en las dos\\r\\nNEGATIVOS          Esta marca no se ríe de quien no entrena. No promete\\r\\n                   resultados en semanas. No muestra cuerpos como meta\\r\\nAPRUEBA            Emilio · antes del 07 del mes\\r\\nPRESUPUESTO        US$ 47,77 en la prueba de dos semanas\\r\\n```\\r\\n\\r\\n📌 **Notar cuatro cosas del ejemplo:**\\r\\n**①** el segmento **dice qué NO es**, no sólo qué es · **②** la hipótesis **nombra contra qué se prueba** · **③** la variante **cambia una sola cosa** *(si cambian dos, no se sabe cuál funcionó)* · **④** los negativos **son de la marca, no de la pieza**.\\r\\n\\r\\n---\\r\\n\\r\\n## 5 · Las trampas medidas · **y la más cara está arriba del brief**\\r\\n\\r\\n| | |\\r\\n|---|---|\\r\\n| 🔴 **el brief por comité** | *«se llenan de jerga… se agregan audiencias y temas para que cada uno sienta que su área es válida. **Me da vergüenza mandarlos**»* |\\r\\n| **demasiados objetivos** | *«muy malos para la efectividad» — **pero ninguno o muy pocos también**. Lo que importa es la jerarquía* |\\r\\n| **la agencia se autobriefea** | *9% admitido por clientes, **20% reclamado por agencias*** |\\r\\n| 🔴 **usar el trabajo creativo para descubrir la estrategia** | **el 60% lo admite.** *«Si no hay estrategia bien definida, no puede haber brief»* |\\r\\n| **sin criterios de evaluación** | **sólo el 30% los tiene** — *y desde 2003 el 84% dice que debería* |\\r\\n\\r\\n🔴 **Y la más cara de todas está aguas arriba, medida:** *el 80% de los anunciantes cree que escribe buenos briefs; **sólo el 10% de las agencias coincide**. Se estima que **el 33% del presupuesto se desperdicia** por briefs malos.*\\r\\n\\r\\n🟢 **Contra eso tenemos una ventaja estructural que casi nadie tiene:** *nuestro brief no lo escribe un humano apurado — **sale del manual y del plan, que se producen igual todas las veces**. **Nuestra ventaja no es la velocidad: es que el brief no se degrada.***\\r\\n\\r\\n---\\r\\n\\r\\n## 6 · Qué NO va en un brief\\r\\n\\r\\n🚫 **El texto publicitario.** *El brief pide la pieza, no la escribe.*\\r\\n🚫 **Más de un entregable.** *Si hay dos, son dos briefs.*\\r\\n🚫 **Una cifra sin de dónde salió.** *«Si un número no tiene de dónde, el plan asumió.»*\\r\\n🚫 **Un dato que el manual ya gobierna, copiado a mano.** *Se cita el manual; no se duplica, porque la copia envejece.*\\r\\n🚫 **Una regla visual sin su muestra.** *R6.*\\r\\n\\r\\n---\\r\\n\\r\\n## 7 · Lo que este documento NO resuelve · declarado\\r\\n\\r\\n- **El brief de un entregable en VIDEO.** 🔴 *El sistema mira imágenes, no video ni audio.* **De los nueve entregables típicos, el reel es el que no se puede briefear todavía.**\\r\\n- **Cuántos entregables debe tener un plan.** `[DESCONOCIDO]` *El redactor devolvió nueve para un cliente; no está medido si es su criterio estable.*\\r\\n- **Si los campos alcanzan para un entregable que no es un anuncio** *(un listado en una app, una configuración)*. `[DESCONOCIDO]` *La medición eligió un anuncio como ejemplo.*\\r\\n\\r\\n---\\r\\n\\r\\n**Firma:** Arquitecto de Sistema · **Fable** · 2026-09-29\\r\\n*(§144 de Emilio · los 12 primeros campos son del redactor, medidos, no míos · los 4 últimos vienen de la investigación y del piso visual · el ejemplo es de otro rubro a propósito · las cifras son centinelas)*\\r\\n*Regla de mantenimiento: quien actualice este documento, re-firma al pie.*\\r\\n\"\n\nconst REGLAS = [\n  'Eres el planificador que BAJA un plan de marketing a TRABAJO. Vas a producir un PARTE DE TRABAJO para el cliente «' + nombre + '»: la lista CERRADA de entregables del plan, cada uno con su brief.',\n  '',\n  '## Reglas que no se negocian',\n  '1. La unidad es el ENTREGABLE DE PRODUCCIÓN: algo con un responsable, un criterio de aceptación y un estado verificable de terminado. Nunca más grande que UNA plataforma: un brief por plataforma, nunca uno por campaña.',\n  '2. Cada entregable trae su brief con TODOS los campos de la referencia (abajo). UN solo mensaje por brief. La audiencia NUNCA es «todos»: se dice a quién SÍ y a quién NO. No prescribas la solución creativa. NO escribas el texto publicitario: el brief PIDE la pieza, no la escribe.',\n  '3. Lo que falta SE DECLARA en «huecos»; NO se rellena con supuestos. Ninguna cifra sin de dónde salió.',\n  '4. Si el plan CONTRADICE al manual de marca (por ejemplo usa un término que el manual prohíbe, o nombra una plataforma o una cifra que el manual no respalda), NO obedeces al plan: lo DECLARAS en «contradicciones_plan_vs_manual» y en el brief usas lo que dice el manual.',\n  '5. El sistema mira imágenes, NO video ni audio. Toda pieza de video, reel o audio NO lleva brief: va a «pendientes_declarados» con su motivo. Nunca pongas tipo_de_pieza «video» dentro de «entregables».',\n  '6. Toda regla visual declara su MUESTRA (cuántas piezas se miraron, cuántas eran foto y cuántas video, y qué no se pudo observar): tómala del campo visual.muestra del manual. Sin muestra no hay regla visual.',\n  '7. Cada brief cita la parte del plan de donde sale (una sección o una frase TEXTUAL del plan) y lleva un identificador BRF-0001, BRF-0002…',\n  '8. Las cifras y conteos del ejemplo de la referencia son CENTINELAS. Si copias una cifra que termina en ,77 el parte se rechaza. Piensa cada cifra desde el plan.',\n  '9. No inventes presupuestos: si el plan no fija dinero para el entregable, «presupuesto» va null y se declara el hueco.',\n  '10. Usa el vocabulario obligatorio del manual y NUNCA sus palabras prohibidas en lo que el brief pide (solo pueden aparecer en la lista «prohibido» y «negativos»).',\n  '',\n  '## Cómo responder',\n  'Responde EXCLUSIVAMENTE con UN bloque JSON (nada de texto antes ni después) con esta forma exacta:',\n  '{ \"parte\": {',\n  '  \"entregables\": [ {',\n  '    \"id\": \"BRF-0001\", \"plataforma\": \"…\", \"tipo_de_pieza\": \"imagen|texto|listado|configuracion|carrusel|documento|otro\",',\n  '    \"que_es\": \"…\", \"de_que_parte_del_plan\": \"…\", \"objetivo\": \"…\", \"segmento\": \"…\", \"protagonista\": \"…\", \"mensaje\": \"UN solo mensaje\",',\n  '    \"hipotesis\": \"…\", \"limites\": \"…\", \"vocabulario_obligatorio\": [\"…\"], \"prohibido\": [\"…\"], \"sintaxis\": \"…\",',\n  '    \"visual\": { \"capa_que_manda\": \"producto|grafica\", \"descripcion\": \"…\", \"muestra\": \"…\" },',\n  '    \"llamado_a_la_accion\": \"…\", \"variantes\": \"…\", \"negativos\": [\"…\"], \"aprueba_y_para_cuando\": \"…\", \"presupuesto\": null',\n  '  } ],',\n  '  \"pendientes_declarados\": [ { \"entregable\": \"…\", \"plataforma\": \"…\", \"motivo\": \"…\" } ],',\n  '  \"huecos\": [ \"…\" ],',\n  '  \"contradicciones_plan_vs_manual\": [ { \"que\": \"…\", \"plan_dice\": \"…\", \"manual_dice\": \"…\", \"que_se_hizo\": \"…\" } ],',\n  '  \"dependencias\": [ \"…\" ]',\n  '} }',\n].join('\\n')\n\nconst pedido = [\n  REGLAS,\n  '',\n  ...(typeof bloqueDeTrato === 'function' ? [bloqueDeTrato(trato), 'Esto vale para todo texto que el brief PROPONGA al público (mensaje, llamado a la acción, variantes, sintaxis): escríbelo en ese trato. Nunca copies formas de otro trato.', ''] : []),\n  '════════ MANUAL DE MARCA VIGENTE (versión ' + prev.manual_version + ' · id ' + prev.manual_id + ') ════════',\n  prev.manual_texto || '(el manual no trae texto)',\n  '',\n  '════════ PLAN DE 90 DÍAS VIGENTE (id ' + prev.plan_id + ') ════════',\n  prev.plan_texto,\n  '',\n  '════════ REFERENCIA · EL BRIEF DE UN ENTREGABLE (campos, reglas y trampas) ════════',\n  REFERENCIA,\n].join('\\n')\n\nconst cuerpo = {\n  agent: 'campaign-brief-agent',\n  task: pedido,\n  client_id: prev.client_id,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  callback_url: $execution.resumeUrl,\n  // 🔴 LA PALANCA (2026-09-30 · PR #399 en producción) · el corredor de Railway hace el POST de la vuelta y no muere en los 800 s de Vercel.\n  // SÓLO para campaign-brief-agent (lista cerrada en run-sdk) · NO copiar a otro agente ni a otro flujo. Quitarla = todo vuelve a como era.\n  callback_mode: 'runner',\n  force_restart: true,\n  // 🔴 EL INTERRUPTOR LLEGA AL NODO QUE PAGA\n  dry_run: prev.dry_run === true,\n  // TOPE DURO por corrida (opt-in) · el corredor le pasa el presupuesto al SDK y CORTA al alcanzarlo · sin tope en el sobre, el cuerpo es el de siempre\n  ...(typeof prev.tope_usd === 'number' ? { max_budget_usd: prev.tope_usd } : {}),\n  // RAZONAMIENTO limitado (opt-in) · sin él en el sobre, el cuerpo es el de siempre\n  ...(typeof prev.razonamiento === 'string' ? { thinking_mode: prev.razonamiento } : {}),\n}\nreturn [{ json: { ...prev, client_name: nombre, trato, cuerpo, pedido_caracteres: pedido.length } }]\n"
+    },
+    "id": "2fc36bb0-0879-49e0-adfa-59a342de8962"
+   },
+   {
+    "name": "③ Redactor (run-sdk)",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     2600,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://zero-risk-platform.vercel.app/api/agents/run-sdk",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify($json.cuerpo) }}",
+     "options": {
+      "timeout": 60000,
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      }
+     }
+    },
+    "id": "50371e8b-ba9d-4210-acd0-c5d3f02f0d9c"
+   },
+   {
+    "name": "③ Esperar al redactor",
+    "webhookId": "brief-parte-de-trabajo-0001-espera",
+    "type": "n8n-nodes-base.wait",
+    "typeVersion": 1.1,
+    "position": [
+     2860,
+     0
+    ],
+    "parameters": {
+     "resume": "webhook",
+     "httpMethod": "POST",
+     "limitWaitTime": true,
+     "resumeAmount": 3600,
+     "resumeUnit": "seconds",
+     "options": {}
+    },
+    "id": "feeb70f6-85ce-40aa-8105-89f77baa41d8"
+   },
+   {
+    "name": "③ ¿Llegó la vuelta?",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     3120,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ③ ¿LLEGÓ LA VUELTA, O SE AGOTÓ LA ESPERA? · CC#1 · 2026-09-29 · mismo criterio que planeación (12-sep).\n// El Wait sigue por la MISMA salida si contesta y si nadie contesta: sin esta distinción una espera agotada se vería\n// igual que una vuelta vacía y la corrida se iría «exitosa» sin parte.\nconst c = $('③ Armar el cuerpo del redactor').first().json\nconst e = $input.first().json || {}\nconst cuerpo = e.body ? e.body : e\n// 🔴 un FALLO declarado del redactor (`success:false` · p. ej. el corte por tope `error_max_budget_usd`) NO es una vuelta: su texto, si trae, es PARCIAL y no se lee como parte\nconst fallaDelRedactor = cuerpo.success === false ? String(cuerpo.error || cuerpo.error_kind || 'sin detalle') : null\nlet texto = fallaDelRedactor ? '' : String(cuerpo.response || cuerpo.result || cuerpo.output || cuerpo.text || '')\nconst llegoReal = texto.trim().length > 0\n// Simulacro SOLO en modo seco (nunca cobra): permite ejercitar los chequeos con datos de forma real. En modo real no aplica.\nlet simulacro_usado = false\nif (c.dry_run === true && c.simulacro_respuesta) {\n  texto = c.simulacro_respuesta\n  simulacro_usado = true\n}\nconst llego = texto.trim().length > 0\nreturn [{\n  json: {\n    ...c,\n    llego_la_vuelta: llego,\n    vuelta_real: llegoReal,\n    simulacro_usado,\n    texto,\n    caracteres: texto.length,\n    falla_del_redactor: fallaDelRedactor,\n    // la vuelta trae `cost_usd` (snake_case) · antes se leía `costUsd` y salía siempre vacío (medido en la corrida del 29-sep)\n    vuelta_costo_usd: typeof cuerpo.cost_usd === 'number' ? cuerpo.cost_usd : (typeof cuerpo.costUsd === 'number' ? cuerpo.costUsd : null),\n    vuelta_modelo: cuerpo.model || null,\n    motivo: llego ? null : fallaDelRedactor ? ('el redactor FALLÓ · ' + fallaDelRedactor + ' · NO se da por exitosa') : 'la vuelta del redactor NO llegó · se agotó la espera · el parte puede haberse escrito igual y estar en el corredor · NO se da por exitosa',\n  },\n}]\n"
+    },
+    "id": "9b92e0f0-c0bc-4208-bae6-acb3094f9ae2"
+   },
+   {
+    "name": "④ Chequeos",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     3380,
+     0
+    ],
+    "parameters": {
+     "jsCode": "/**\n * EL TRATO (tú · vos · usted) ES DE LA MARCA, NO UNA REGLA FIJA · CC#1 · 2026-10-03 · encargo Lenovo «cada foto viaja con todo su contexto» punto 5.\n *\n * Lógica PURA (sin red, sin `this`, sin `require`): la usan el flujo del brief, el flujo de la pieza y las pruebas · se pega entera en los nodos Code de n8n (estilo `var` + `function`).\n *\n * 🔴 ESTRUCTURAL, NUNCA POR CLIENTE: el trato se LEE del manual de marca (campo explícito o lo que dice su descripción de voz) o de la ficha del cliente; sólo si ninguno lo dice se usa, DECLARADO\n * y de baja confianza, el trato habitual del país de la ficha. Si no hay nada, queda «no_definido» y NO se comprueba nada (no se inventa una regla).\n * El detector reconoce las FORMAS del español (conjugación regular del voseo y del tuteo sobre verbos de uso comercial), no frases ni clientes.\n */\nfunction sinTildes(s) {\n  return String(s === undefined || s === null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')\n}\n\nvar TRATOS = ['tu', 'vos', 'usted']\n\n/** valor explícito → 'tu' | 'vos' | 'usted' | null */\nfunction tratoDeValor(v) {\n  var t = sinTildes(v).trim()\n  if (!t) return null\n  if (/^(tu|tuteo|tutear)$/.test(t)) return 'tu'\n  if (/^(vos|voseo|vosear)$/.test(t)) return 'vos'\n  if (/^(usted|ustedeo|formal)$/.test(t)) return 'usted'\n  return null\n}\n\n// lo que dice un TEXTO de voz sobre el trato, respetando las negaciones: «Tutea siempre (tú/sabes/pides — nunca vos)» ⇒ tú, y vos queda NEGADO\nvar MENCION = {\n  tu: /\\b(tutea\\w*|tuteo|tutear|tu)\\b/g,\n  vos: /\\b(vos|voseo|vosea\\w*|vosear)\\b/g,\n  usted: /\\b(usted|ustedeo|ustedea\\w*|trato formal)\\b/g,\n}\nfunction mencionesDelTexto(texto) {\n  var t = sinTildes(texto)\n  var out = { tu: 0, vos: 0, usted: 0, negados: [] }\n  TRATOS.forEach(function (k) {\n    var re = new RegExp(MENCION[k].source, 'g')\n    var m\n    while ((m = re.exec(t)) !== null) {\n      // «tu» a secas es un posesivo muy común («tu puerta»): sólo cuenta si va pegado a una indicación de trato (tú/sabes/pides …) o es tuteo/tutea\n      if (m[1] === 'tu' && !/tu\\s*[\\/·,]\\s*(sabes|pides|tienes|quieres|puedes|eres|vienes)/.test(t.slice(m.index, m.index + 30))) continue\n      var antes = t.slice(Math.max(0, m.index - 24), m.index)\n      if (/\\b(nunca|jamas|no|ni|sin|evita|evitar|evites)\\s+(\\w+\\s+){0,2}$/.test(antes)) out.negados.push(k)\n      else out[k] += 1\n    }\n  })\n  return out\n}\n\n// el trato habitual del país SÓLO cuando nadie lo dijo (baja confianza · se declara) · sin país conocido no hay default\nvar POR_PAIS = { argentina: 'vos', uruguay: 'vos', paraguay: 'vos', ecuador: 'tu', mexico: 'tu', peru: 'tu', chile: 'tu', espana: 'tu', bolivia: 'tu', venezuela: 'tu', panama: 'tu', 'costa rica': 'usted' }\n\n/**\n * `manual` = { voice_description, writing_style, tone_guidelines } · `ficha` = { config, country, market }\n * → { trato: 'tu'|'vos'|'usted'|'no_definido'|'conflicto', fuente, evidencia }\n */\nfunction resolverTrato(manual, ficha) {\n  var m = manual || {}\n  var f = ficha || {}\n  var tg = m.tone_guidelines && typeof m.tone_guidelines === 'object' ? m.tone_guidelines : {}\n  var cfg = f.config && typeof f.config === 'object' ? f.config : {}\n  var voz = cfg.voz && typeof cfg.voz === 'object' ? cfg.voz : {}\n  var explicitos = [\n    ['manual.tone_guidelines.trato', tg.trato], ['manual.tone_guidelines.tratamiento', tg.tratamiento], ['manual.tone_guidelines.address_form', tg.address_form],\n    ['ficha.config.voz.trato', voz.trato], ['ficha.config.trato', cfg.trato],\n  ]\n  for (var i = 0; i < explicitos.length; i++) {\n    var v = tratoDeValor(explicitos[i][1])\n    if (v) return { trato: v, fuente: explicitos[i][0].indexOf('manual') === 0 ? 'manual' : 'ficha', evidencia: explicitos[i][0] + ' = «' + explicitos[i][1] + '»' }\n  }\n  var texto = [m.voice_description, m.writing_style, m.tone_guidelines && Object.keys(tg).length ? JSON.stringify(tg) : ''].filter(Boolean).join(' · ')\n  if (texto) {\n    var me = mencionesDelTexto(texto)\n    var pos = TRATOS.filter(function (k) { return me[k] > 0 })\n    if (pos.length === 1) return { trato: pos[0], fuente: 'manual', evidencia: 'la descripción de voz del manual lo dice (' + pos[0] + (me.negados.length ? ' · niega ' + me.negados.join(', ') : '') + ')' }\n    if (pos.length > 1) return { trato: 'conflicto', fuente: 'manual', evidencia: 'la descripción de voz menciona más de un trato (' + pos.join(' y ') + ') sin negar ninguno · no se puede elegir' }\n  }\n  var pais = sinTildes(f.country).trim() || sinTildes(String(f.market || '').split(/[·|,;\\/]/).pop()).trim()\n  if (pais && POR_PAIS[pais]) return { trato: POR_PAIS[pais], fuente: 'default_por_pais', evidencia: 'ni el manual ni la ficha lo dicen: se usa el trato habitual de «' + pais + '» (BAJA confianza · conviene ponerlo en el manual)' }\n  return { trato: 'no_definido', fuente: 'ninguna', evidencia: 'ni el manual ni la ficha dicen el trato y no hay país conocido · NO se comprueba' }\n}\n\n// ───────────────────────────── las formas ─────────────────────────────\n// verbos de uso comercial/llamado a la acción (infinitivos regulares en la conjugación del voseo) · es LENGUA, no clientes\nvar VERBOS = ('pedir mandar escribir enviar llamar contar avisar venir hacer comprar probar reservar consultar mirar seguir sumar unir descubrir elegir disfrutar compartir ordenar encargar contactar visitar ' +\n  'decir tener querer poder saber vivir sentir pasar dejar traer llevar buscar conocer escuchar preguntar responder recibir pagar cambiar usar armar crear ahorrar aprovechar animar inscribir registrar ' +\n  'suscribir invitar acompañar agendar cotizar solicitar averiguar entrar ingresar escoger pensar imaginar atreverse quedar poner salir').split(' ')\nvar CLITICOS = ['', 'lo', 'la', 'los', 'las', 'le', 'les', 'me', 'nos', 'te', 'se']\n\nfunction radical(inf) { return inf.replace(/se$/, '').slice(0, -2) }\nfunction vocalTematica(inf) { var f = inf.replace(/se$/, ''); return f.slice(-2, -1) === 'a' || /ar$/.test(f) ? 'a' : /er$/.test(f) ? 'e' : 'i' }\nvar ACENTO = { a: 'á', e: 'é', i: 'í' }\n\nfunction formasVoseo() {\n  var s = {}\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + ACENTO[v]] = true // pedí · mandá · escribí\n    CLITICOS.slice(1).forEach(function (c) { s[r + v + c] = true }) // pedilo · mandalo · escribinos\n    s[r + ACENTO[v] + 's'] = true // pedís · mandás · tenés (voseo presente)\n    if (v === 'e') s[r + 'és'] = true\n  })\n  ;['sos', 'tenés', 'querés', 'podés', 'sabés', 'venís', 'hacés', 'decís', 'ponés', 'salís', 'vení', 'poné', 'hacé', 'decí', 'tené', 'salí'].forEach(function (w) { s[w] = true })\n  return s\n}\n// el tuteo: pronombre, presente 2.ª persona regular y el imperativo con clítico acentuado («pídelo», «mándanos»)\nfunction acentuarUltimaVocal(stem) {\n  var i = stem.length - 1\n  while (i >= 0 && !/[aeiou]/.test(stem[i])) i--\n  if (i < 0) return stem\n  return stem.slice(0, i) + ({ a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú' })[stem[i]] + stem.slice(i + 1)\n}\nfunction formasTuteo() {\n  var s = {}\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + (v === 'a' ? 'as' : 'es')] = true // mandas · escribes · tienes(irregular: ver abajo)\n    var imp = r + (v === 'a' ? 'a' : 'e')\n    CLITICOS.slice(1).forEach(function (c) { s[acentuarUltimaVocal(imp) + c] = true }) // mándalo · escríbenos\n  })\n  ;['eres', 'tienes', 'quieres', 'puedes', 'sabes', 'vienes', 'haces', 'dices', 'pides', 'pídelo', 'pídela', 'pídenos', 'ven', 'haz', 'dime', 'cuéntanos', 'escríbenos', 'avísanos', 'llámanos', 'mándanos', 'tú'].forEach(function (w) { s[w] = true })\n  return s\n}\n// formas de usted: pronombre (no «ustedes», que es plural neutro) y el imperativo/presente formal regular\nfunction formasUsted() {\n  var s = { usted: true }\n  VERBOS.forEach(function (inf) {\n    var r = radical(inf), v = vocalTematica(inf)\n    s[r + (v === 'a' ? 'e' : 'a')] = true // mande · escriba\n    CLITICOS.slice(1).forEach(function (c) { s[acentuarUltimaVocal(r + (v === 'a' ? 'e' : 'a')) + c] = true })\n  })\n  return s\n}\nvar VOSEO = formasVoseo(), TUTEO = formasTuteo(), USTED = formasUsted()\n// palabras que coinciden por casualidad con una forma generada y NO son esa forma (sustantivos y adverbios comunes)\nvar FALSOS = { mas: 1, pase: 1, deje: 1, cree: 1, vea: 1, sienta: 1, nos: 1 }\n\n/** las palabras (con tilde) de un texto, en minúscula */\nfunction palabras(texto) { return String(texto || '').toLowerCase().match(/[a-záéíóúüñ]+/g) || [] }\n\n/** las formas de cada trato que aparecen en el texto: { vos: [palabras], tu: [...], usted: [...] } */\nfunction formasDeTrato(texto) {\n  var out = { vos: [], tu: [], usted: [] }\n  var add = function (k, w) { if (out[k].indexOf(w) === -1) out[k].push(w) }\n  palabras(texto).forEach(function (w) {\n    if (w === 'vos') add('vos', w)\n    else if (VOSEO[w]) add('vos', w)\n    else if (TUTEO[w]) add('tu', w)\n    else if (USTED[w] && !FALSOS[w]) add('usted', w)\n  })\n  return out\n}\n\n/**\n * ¿el texto respeta el trato de la marca? → [{ chequeo, detalle, fatal:false }]\n * `donde` = «la pieza» · «el brief». Sin trato definido (o en conflicto) NO se comprueba y se dice.\n */\nfunction chequearTrato(resolucion, texto, donde) {\n  var r = resolucion || { trato: 'no_definido' }\n  var d = donde || 'el texto'\n  if (r.trato === 'no_definido' || r.trato === 'conflicto') return []\n  var formas = formasDeTrato(texto)\n  var otros = TRATOS.filter(function (k) { return k !== r.trato })\n  var hallados = []\n  otros.forEach(function (k) { formas[k].forEach(function (w) { hallados.push({ w: w, k: k }) }) })\n  // el usted «mande/llame» coincide con presentes de 3.ª persona: sólo se avisa si el trato de la marca NO es usted y no hay forma más clara\n  if (!hallados.length) return []\n  var nombre = { tu: 'tuteo', vos: 'voseo', usted: 'usted' }\n  return [{\n    chequeo: 'trato_distinto_al_del_cliente',\n    detalle: d + ' trae formas de otro trato: ' + hallados.slice(0, 6).map(function (x) { return '«' + x.w + '» (' + nombre[x.k] + ')' }).join(' · ') + ' y el trato de la marca es ' + nombre[r.trato] + ' (' + r.fuente + ': ' + r.evidencia + ')',\n    fatal: false,\n  }]\n}\n\n/** el bloque para el pedido/brief: el trato y de dónde sale · y qué hacer si otro texto (el brief) trae otro */\nfunction bloqueDeTrato(resolucion) {\n  var r = resolucion || { trato: 'no_definido', fuente: 'ninguna', evidencia: '' }\n  var nombre = { tu: 'TÚ (tuteo)', vos: 'VOS (voseo)', usted: 'USTED' }\n  if (r.trato === 'no_definido') return 'F) EL TRATO. El sistema NO sabe qué trato (tú · vos · usted) usa esta marca: ni el manual ni la ficha lo dicen. Escribe con el trato que use el manual en sus ejemplos y DECLÁRALO en «no_pude_cumplir» («trato no definido»).'\n  if (r.trato === 'conflicto') return 'F) EL TRATO. El manual menciona más de un trato sin elegir (' + r.evidencia + '). No adivines: declara «trato en conflicto» en «no_pude_cumplir» y evita las formas de segunda persona cuando puedas.'\n  return ['F) EL TRATO de esta marca es ' + nombre[r.trato] + ' (fuente: ' + r.fuente + ' · ' + r.evidencia + ').',\n    '   Todo lo que se lee en la pieza (titular, texto, llamado) va en ese trato, sin mezclar. Si el brief trae formas de OTRO trato (por ejemplo una frase copiada de una conversación), NO las copies:',\n    '   conviértelas al trato de la marca y dilo en «que_miro». El manual de marca manda sobre el brief.'].join('\\n')\n}\n\n\n// LOS CHEQUEOS DEL PARTE DE TRABAJO · CC#1 · 2026-09-29 · encargo Lenovo §1.2 ④ · arquitectura §4.\n// Lógica PURA (sin red, sin `this`, sin `require` fuera de este archivo): se prueba a costo cero y se pega\n// tal cual dentro del nodo «④ Chequeos» del flujo `zero-risk/brief` (el constructor la antepone al nodo).\n//\n// REGLA DE LA CASA: lo que falle SE DECLARA en el parte · NO se corrige solo · NO se rellena.\n// Por qué en código y no con un juez de pago: los chequeos que importan son CONTABLES y cazan lo que un\n// agente pago no ve (medido: el manual prohibía «ghost kitchen», la usaba 3 veces y el juez lo aprobó 0,94).\n\nvar CAMPOS_OBLIGATORIOS = [\n  'id', 'plataforma', 'tipo_de_pieza', 'que_es', 'de_que_parte_del_plan', 'objetivo', 'segmento', 'protagonista',\n  'mensaje', 'hipotesis', 'limites', 'sintaxis', 'llamado_a_la_accion', 'variantes', 'aprueba_y_para_cuando',\n]\nvar CAMPOS_LISTA = ['vocabulario_obligatorio', 'prohibido', 'negativos']\nvar TIPOS_SIN_VIDEO = ['imagen', 'texto', 'listado', 'configuracion', 'carrusel', 'documento', 'otro']\nvar TIPOS_QUE_NO_SE_BRIEFEAN = ['video', 'audio', 'reel']\nvar CENTINELA = /\\d+[.,]77(?!\\d)/\n\n/** minúsculas, sin tildes, sin signos, espacios simples · para comparar textos. */\nfunction normalizar(s) {\n  return String(s === null || s === undefined ? '' : s)\n    .toLowerCase()\n    .normalize('NFD')\n    .replace(/[̀-ͯ]/g, '')\n    .replace(/[^a-z0-9ñ ]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim()\n}\n\n/** Todos los textos de un valor (string, array, objeto) en una sola cadena. */\nfunction aTexto(v) {\n  if (v === null || v === undefined) return ''\n  if (typeof v === 'string') return v\n  if (Array.isArray(v)) return v.map(aTexto).join(' \\n ')\n  if (typeof v === 'object') return Object.keys(v).map(function (k) { return aTexto(v[k]) }).join(' \\n ')\n  return String(v)\n}\n\n/**\n * LECTOR TOLERANTE DE COMILLAS · CC#1 · 2026-10-01 · GO de Emilio. El redactor a veces escribe comillas dobles SIN ESCAPAR dentro de un texto del JSON\n * («... el mensaje \"Hola, quiero hacer un pedido\"» · pasó en las DOS corridas reales del 29 y el 30-sep) y eso invalidaba un parte completo.\n * Una comilla dentro de un texto sólo lo CIERRA si lo que sigue es estructura JSON (`:` `}` `]` o una coma seguida de `\"` `{` `[` `}` `]`); si no, es parte del texto y se escapa.\n * Es una reparación de FORMATO, nunca de contenido: sólo se acepta si el resultado parsea Y trae la lista «entregables» · se DECLARA (reparado:true + cuántas) · lo que no parsea sigue siendo ilegible.\n */\nfunction repararComillas(s) {\n  var out = ''\n  var dentro = false\n  var reparadas = 0\n  for (var i = 0; i < s.length; i++) {\n    var ch = s[i]\n    if (!dentro) { out += ch; if (ch === '\"') dentro = true; continue }\n    if (ch === '\\\\') { out += ch + (s[i + 1] === undefined ? '' : s[i + 1]); i++; continue }\n    if (ch !== '\"') { out += ch; continue }\n    var j = i + 1\n    while (j < s.length && /\\s/.test(s[j])) j++\n    var sig = s[j]\n    var cierra = sig === ':' || sig === '}' || sig === ']' || sig === undefined\n    if (sig === ',') {\n      var k = j + 1\n      while (k < s.length && /\\s/.test(s[k])) k++\n      cierra = s[k] === '\"' || s[k] === '{' || s[k] === '[' || s[k] === '}' || s[k] === ']'\n    }\n    if (cierra) { out += ch; dentro = false } else { out += '\\\\\"'; reparadas++ }\n  }\n  return { texto: out, reparadas: reparadas }\n}\n\n/** Saca el JSON del texto del redactor (bloque ```json o el primer objeto completo). */\nfunction extraerParte(texto) {\n  var t = String(texto || '')\n  if (!t.trim()) return { legible: false, motivo: 'el redactor devolvió texto vacío' }\n  var candidatos = []\n  var abre = t.indexOf('```json')\n  if (abre !== -1) {\n    var ini = t.indexOf('\\n', abre)\n    var fin = t.indexOf('```', ini + 1)\n    if (ini !== -1 && fin !== -1) candidatos.push(t.slice(ini + 1, fin))\n  }\n  var a = t.indexOf('{')\n  var b = t.lastIndexOf('}')\n  if (a !== -1 && b > a) candidatos.push(t.slice(a, b + 1))\n  for (var i = 0; i < candidatos.length; i++) {\n    try {\n      var j = JSON.parse(candidatos[i])\n      var p = j && j.parte ? j.parte : j\n      if (p && Array.isArray(p.entregables)) return { legible: true, parte: p }\n    } catch (e) { /* se prueba la reparación de comillas y luego el siguiente candidato */ }\n    try {\n      var rep = repararComillas(candidatos[i])\n      if (rep.reparadas > 0) {\n        var j2 = JSON.parse(rep.texto)\n        var p2 = j2 && j2.parte ? j2.parte : j2\n        if (p2 && Array.isArray(p2.entregables)) return { legible: true, parte: p2, reparado: true, comillas_reparadas: rep.reparadas }\n      }\n    } catch (e2) { /* sigue ilegible */ }\n  }\n  return { legible: false, motivo: 'no hay un JSON con la lista «entregables» en la respuesta del redactor' }\n}\n\nfunction palabraPresente(textoNorm, palabra) {\n  var p = normalizar(palabra)\n  if (!p) return false\n  return (' ' + textoNorm + ' ').indexOf(' ' + p + ' ') !== -1\n}\n\n/**\n * Corre TODOS los chequeos. `manual.forbidden_words` = lista de palabras prohibidas del manual (array de strings).\n * `planTexto` = texto del plan vigente (para verificar que la cita a su parte existe).\n * Devuelve {ok, hallazgos[], por_chequeo{}, entregables_revisados}. NO modifica nada.\n */\nfunction chequear(parte, manual, planTexto) {\n  var hallazgos = []\n  var falla = function (chequeo, entregable, detalle) { hallazgos.push({ chequeo: chequeo, entregable: entregable || null, detalle: detalle }) }\n  var ents = parte && Array.isArray(parte.entregables) ? parte.entregables : []\n  if (!ents.length) falla('sin_entregables', null, 'la lista de entregables está vacía · un parte sin entregables no es un parte')\n  var prohibidas = (manual && Array.isArray(manual.forbidden_words) ? manual.forbidden_words : []).filter(Boolean)\n  var planNorm = normalizar(planTexto)\n\n  var ids = {}\n  var mensajes = {}\n  for (var i = 0; i < ents.length; i++) {\n    var e = ents[i] || {}\n    var idE = e.id ? String(e.id) : '(sin id · posición ' + (i + 1) + ')'\n\n    // ── identificador + trazabilidad\n    if (!e.id || !/^BRF-\\d{4}$/.test(String(e.id))) falla('identificador', idE, 'el identificador falta o no tiene la forma BRF-0000')\n    else if (ids[e.id]) falla('identificador', idE, 'el identificador está repetido (también en la posición ' + ids[e.id] + ')')\n    else ids[e.id] = i + 1\n\n    // ── campos completos\n    for (var c = 0; c < CAMPOS_OBLIGATORIOS.length; c++) {\n      var k = CAMPOS_OBLIGATORIOS[c]\n      var v = e[k]\n      if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) falla('campo_faltante', idE, 'falta el campo «' + k + '» (si no se sabe, se declara como hueco · no se deja vacío)')\n    }\n    for (var d = 0; d < CAMPOS_LISTA.length; d++) {\n      if (!Array.isArray(e[CAMPOS_LISTA[d]])) falla('campo_faltante', idE, 'el campo «' + CAMPOS_LISTA[d] + '» debe ser una lista (aunque esté vacía)')\n    }\n\n    // ── R1 · un solo mensaje\n    var msg = e.mensaje\n    if (msg !== undefined && msg !== null) {\n      if (typeof msg !== 'string') falla('un_mensaje', idE, 'el mensaje no es UN texto (es ' + (Array.isArray(msg) ? 'una lista' : typeof msg) + ') · un brief = un mensaje')\n      else {\n        var frases = msg.split(/[.!?¡¿]+/).map(function (s) { return s.trim() }).filter(Boolean)\n        if (frases.length > 2) falla('un_mensaje', idE, 'el mensaje tiene ' + frases.length + ' frases · sospecha de varios mensajes (máximo 2 frases, una idea)')\n        if (msg.length > 260) falla('un_mensaje', idE, 'el mensaje mide ' + msg.length + ' caracteres · una idea cabe en 260')\n      }\n    }\n\n    // ── R3 · el público no es «todos»\n    var seg = normalizar(e.segmento)\n    if (seg) {\n      var cliches = ['todos', 'todo el mundo', 'toda la poblacion', 'publico general', 'cualquier persona', 'cualquiera', 'toda la gente', 'la gente']\n      for (var q = 0; q < cliches.length; q++) {\n        if (seg === cliches[q] || seg.indexOf(cliches[q] + ' ') === 0 || (seg.length < 40 && seg.indexOf(cliches[q]) !== -1)) {\n          falla('publico_no_es_todos', idE, 'el segmento dice «' + e.segmento + '» · no es una audiencia declarada')\n          break\n        }\n      }\n      if (seg.length < 25) falla('publico_no_es_todos', idE, 'el segmento es demasiado corto (' + seg.length + ' caracteres) para ser una audiencia declarada')\n    }\n\n    // ── nada de videos con brief (el sistema no mira video)\n    var tipo = normalizar(e.tipo_de_pieza)\n    if (TIPOS_QUE_NO_SE_BRIEFEAN.indexOf(tipo) !== -1) falla('video_sin_pendiente', idE, 'es una pieza de «' + e.tipo_de_pieza + '» y trae brief · el sistema mira imágenes, no video ni audio · debía ir a «pendientes_declarados»')\n    else if (tipo && TIPOS_SIN_VIDEO.indexOf(tipo) === -1 && TIPOS_QUE_NO_SE_BRIEFEAN.indexOf(tipo) === -1) falla('tipo_desconocido', idE, 'tipo_de_pieza «' + e.tipo_de_pieza + '» no está entre ' + TIPOS_SIN_VIDEO.join('/'))\n\n    // ── R6 · toda regla visual trae su muestra\n    var vis = e.visual\n    if (vis && typeof vis === 'object' && !Array.isArray(vis)) {\n      if (!vis.muestra || !String(vis.muestra).trim()) falla('visual_sin_muestra', idE, 'la regla visual no declara su muestra (cuántas piezas se miraron y qué no se pudo observar) · R6')\n    } else if (typeof vis === 'string' && vis.trim() && normalizar(vis) !== 'n a' && normalizar(vis) !== 'no aplica') {\n      falla('visual_sin_muestra', idE, 'el visual es solo texto sin muestra declarada · debe ser un objeto {capa_que_manda, descripcion, muestra} · R6')\n    } else if (!vis) falla('campo_faltante', idE, 'falta el campo «visual» (si no aplica, se declara «no aplica»)')\n\n    // ── procedencia: cada brief cita su parte del plan y la cita existe\n    var cita = String(e.de_que_parte_del_plan || '')\n    if (cita.trim()) {\n      var citaNorm = normalizar(cita)\n      var hayMarca = /§|seccion|semana|fase|paso|puerta|camino|ciclo|mes\\s*\\d/.test(citaNorm) || citaNorm.length >= 12\n      var enPlan = citaNorm.length >= 12 && planNorm.indexOf(citaNorm) !== -1\n      var comillas = cita.match(/[«\"“]([^»\"”]{12,})[»\"”]/)\n      var textoCitado = comillas ? normalizar(comillas[1]) : ''\n      var citaVerificada = enPlan || (textoCitado && planNorm.indexOf(textoCitado) !== -1)\n      if (!hayMarca) falla('cita_al_plan', idE, 'la cita al plan es demasiado vaga: «' + cita + '»')\n      else if (planNorm && !citaVerificada && !/§/.test(cita)) falla('cita_al_plan', idE, 'la cita «' + cita.slice(0, 80) + '» no se encuentra en el plan · no se puede verificar la procedencia')\n    }\n\n    // ── centinelas: cifras que terminan en ,77 / .77 = copió el documento de referencia\n    var todoElBrief = aTexto(e)\n    var m77 = todoElBrief.match(CENTINELA)\n    if (m77) falla('centinela', idE, 'aparece la cifra «' + m77[0] + '» (termina en ,77) · copió el ejemplo de la referencia en vez de pensar')\n\n    // ── palabras prohibidas del manual, en lo que el brief PIDE (no en las listas de lo prohibido)\n    var pedido = aTexto([e.que_es, e.objetivo, e.segmento, e.protagonista, e.mensaje, e.hipotesis, e.limites, e.sintaxis, e.llamado_a_la_accion, e.variantes, e.visual, e.vocabulario_obligatorio])\n    var pedNorm = normalizar(pedido)\n    for (var w = 0; w < prohibidas.length; w++) {\n      if (palabraPresente(pedNorm, prohibidas[w])) falla('palabra_prohibida', idE, 'usa «' + prohibidas[w] + '», prohibida por el manual (búsqueda literal)')\n    }\n\n    // ── para el chequeo de repetidos\n    var clave = normalizar(e.mensaje)\n    if (clave) (mensajes[clave] = mensajes[clave] || []).push(idE)\n  }\n\n  // ── ningún brief repetido: dos con el mismo mensaje, uno sobra\n  Object.keys(mensajes).forEach(function (m) {\n    if (mensajes[m].length > 1) falla('brief_repetido', mensajes[m].join(' · '), 'comparten el mismo mensaje · «un brief = una estrategia»: uno sobra')\n  })\n\n  // ── centinelas también en lo que declara fuera de los briefs\n  var fuera = aTexto([parte && parte.huecos, parte && parte.contradicciones_plan_vs_manual, parte && parte.pendientes_declarados])\n  var f77 = fuera.match(CENTINELA)\n  if (f77) falla('centinela', null, 'aparece la cifra «' + f77[0] + '» en los huecos/contradicciones/pendientes')\n\n  var por = {}\n  hallazgos.forEach(function (h) { por[h.chequeo] = (por[h.chequeo] || 0) + 1 })\n  return { ok: hallazgos.length === 0, hallazgos: hallazgos, por_chequeo: por, entregables_revisados: ents.length }\n}\n\n\n// ④ CHEQUEOS · cuerpo del nodo · CC#1 · 2026-09-29 (la lógica pura `brief-chequeos.js` va ANTEPUESTA por el constructor).\n// Gratis y en código. Lo que falle SE DECLARA en el parte · NO se corrige solo. Arma la fila que ⑤ guardará y el aviso de ⑥.\nconst c = $input.first().json\nconst ext = c.llego_la_vuelta ? extraerParte(c.texto) : { legible: false, motivo: c.motivo || 'la vuelta del redactor no llegó' }\nconst manual = { forbidden_words: c.forbidden_words || [], required_terminology: c.required_terminology || [] }\nconst parte = ext.legible ? ext.parte : { entregables: [], pendientes_declarados: [], huecos: [], contradicciones_plan_vs_manual: [] }\nconst res = ext.legible\n  ? chequear(parte, manual, c.plan_texto)\n  : { ok: false, hallazgos: [{ chequeo: 'respuesta_no_legible', entregable: null, detalle: ext.motivo }], por_chequeo: { respuesta_no_legible: 1 }, entregables_revisados: 0 }\n\n// ── 03-oct · EL TRATO: el texto que cada brief propone al público respeta el trato de la marca (candidato · no fatal · se DECLARA)\nif (ext.legible && c.trato && typeof chequearTrato === 'function') {\n  parte.entregables.forEach((e) => {\n    const texto = [e && e.mensaje, e && e.llamado_a_la_accion, e && e.variantes, e && e.sintaxis].filter(Boolean).join(' . ')\n    chequearTrato(c.trato, texto, 'el brief ' + (e && e.id)).forEach((h) => { res.hallazgos.push({ chequeo: 'brief_en_otro_trato', entregable: e && e.id, detalle: h.detalle }); res.por_chequeo.brief_en_otro_trato = (res.por_chequeo.brief_en_otro_trato || 0) + 1; res.ok = false })\n  })\n}\n\n// ── EL VEREDICTO · un parte que no vale NO se lee como éxito (encargo Lenovo 30-sep §2) ──────────────────────\n// Inválido = la vuelta no llegó · la respuesta no se pudo leer como parte · trae 0 entregables · o falla un chequeo de CONTEO/CIFRAS\n// (sin_entregables · centinela: la cifra copiada del ejemplo). Los demás hallazgos siguen SOLO declarándose (no se corrigen solos).\n// Nada se rellena: un parte vacío se llama vacío.\nconst CHEQUEOS_FATALES = ['respuesta_no_legible', 'sin_entregables', 'centinela']\nconst motivos = []\nif (!c.llego_la_vuelta) motivos.push(c.falla_del_redactor ? 'el redactor FALLÓ · ' + c.falla_del_redactor : 'la vuelta del redactor NO llegó')\nif (!ext.legible) motivos.push('la respuesta no se pudo leer como parte (' + (ext.motivo || 'sin motivo') + ')')\nif (ext.legible && parte.entregables.length === 0) motivos.push('entregables: 0')\nres.hallazgos.filter((h) => CHEQUEOS_FATALES.indexOf(h.chequeo) !== -1 && h.chequeo !== 'respuesta_no_legible' && h.chequeo !== 'sin_entregables').forEach((h) => motivos.push('falla el chequeo «' + h.chequeo + '»' + (h.entregable ? ' en ' + h.entregable : '')))\nconst parte_valido = motivos.length === 0\nconst motivo_invalido = parte_valido ? null : motivos.join(' · ')\n\n// ── el parte, legible (lo que Emilio lee en Drive) ────────────────────────────────────────────────\nconst L = []\nconst p = (s) => L.push(s === undefined ? '' : s)\nconst lista = (a) => (Array.isArray(a) && a.length ? a.map((x) => '  - ' + (typeof x === 'string' ? x : JSON.stringify(x))).join('\\n') : '  (ninguno)')\nconst hoy = new Date().toISOString().slice(0, 10)\nif (!parte_valido) {\n  p('# ⛔ PARTE NO VÁLIDO · NO USAR')\n  p('Motivo: ' + motivo_invalido)\n  p('Este documento se conserva sólo para diagnóstico. No es un parte de trabajo.')\n  p('')\n}\np('# PARTE DE TRABAJO · ' + c.client_name + ' · ' + hoy)\np('Plan de origen: ' + c.plan_id + ' · Manual: versión ' + c.manual_version + ' (' + c.manual_id + ')' + (c.dry_run ? ' · ⚠️ MODO SECO (no es un parte real)' : ''))\np('')\nif (ext.reparado) p('> ⚠️ Formato reparado: el redactor escribió ' + ext.comillas_reparadas + ' comilla(s) doble(s) sin escapar dentro de un texto y se escaparon para poder leer el parte · el CONTENIDO no se alteró.')\np('## Estado de los chequeos: ' + (res.ok ? '✅ sin hallazgos' : '⚠️ ' + res.hallazgos.length + ' hallazgo(s) DECLARADOS · no se corrigieron solos'))\nif (!res.ok) {\n  Object.keys(res.por_chequeo).forEach((k) => p('- ' + k + ': ' + res.por_chequeo[k]))\n  p('')\n  res.hallazgos.forEach((h) => p('- [' + h.chequeo + ']' + (h.entregable ? ' ' + h.entregable + ' ·' : '') + ' ' + h.detalle))\n}\np('')\nif (c.plan_del_sobre_distinto) p('> ⚠️ El sobre nombraba el plan ' + c.plan_del_sobre + ' pero el plan vigente es ' + c.plan_id + ' · se usó el vigente.')\np('## Entregables (' + parte.entregables.length + ')')\nparte.entregables.forEach((e) => {\n  p('')\n  p('### ' + (e.id || '(sin id)') + ' · ' + (e.plataforma || '?') + ' · ' + (e.tipo_de_pieza || '?'))\n  p('- QUÉ ES: ' + (e.que_es || ''))\n  p('- DE QUÉ PARTE DEL PLAN SALE: ' + (e.de_que_parte_del_plan || ''))\n  p('- OBJETIVO: ' + (e.objetivo || ''))\n  p('- SEGMENTO: ' + (e.segmento || ''))\n  p('- PROTAGONISTA: ' + (e.protagonista || ''))\n  p('- MENSAJE (uno): ' + (typeof e.mensaje === 'string' ? e.mensaje : JSON.stringify(e.mensaje)))\n  p('- HIPÓTESIS: ' + (e.hipotesis || ''))\n  p('- LÍMITES: ' + (e.limites || ''))\n  p('- VOCABULARIO OBLIGATORIO:\\n' + lista(e.vocabulario_obligatorio))\n  p('- PROHIBIDO:\\n' + lista(e.prohibido))\n  p('- SINTAXIS: ' + (e.sintaxis || ''))\n  const v = e.visual\n  p('- VISUAL: ' + (v && typeof v === 'object' ? 'capa que manda: ' + (v.capa_que_manda || '?') + ' · ' + (v.descripcion || '') + ' · MUESTRA: ' + (v.muestra || '(sin muestra)') : String(v || '')))\n  p('- LLAMADO A LA ACCIÓN: ' + (e.llamado_a_la_accion || ''))\n  p('- VARIANTES: ' + (e.variantes || ''))\n  p('- NEGATIVOS:\\n' + lista(e.negativos))\n  p('- APRUEBA Y PARA CUÁNDO: ' + (e.aprueba_y_para_cuando || ''))\n  p('- PRESUPUESTO: ' + (e.presupuesto === null || e.presupuesto === undefined ? '(no fijado por el plan)' : String(e.presupuesto)))\n})\np('')\np('## Pendientes DECLARADOS (no se pueden briefear todavía)')\n;(parte.pendientes_declarados || []).forEach((x) => p('- ' + (x.entregable || '?') + (x.plataforma ? ' · ' + x.plataforma : '') + ' — ' + (x.motivo || '')))\nif (!(parte.pendientes_declarados || []).length) p('(ninguno declarado)')\np('')\np('## Huecos declarados (lo que faltaba y NO se rellenó)')\np(lista(parte.huecos))\np('')\np('## Contradicciones plan ↔ manual (declaradas, no obedecidas)')\n;(parte.contradicciones_plan_vs_manual || []).forEach((x) => p('- ' + (x.que || '?') + ' · el plan dice: ' + (x.plan_dice || '?') + ' · el manual dice: ' + (x.manual_dice || '?') + ' · ' + (x.que_se_hizo || '')))\nif (!(parte.contradicciones_plan_vs_manual || []).length) p('(ninguna declarada)')\np('')\np('## Dependencias')\np(lista(parte.dependencias))\nif (!ext.legible) {\n  p('')\n  p('## ⚠️ Respuesta del redactor (no legible como parte · se guarda tal cual para diagnóstico)')\n  p(String(c.texto || '').slice(0, 6000))\n}\nconst parte_md = L.join('\\n')\n\nconst fila_parte = {\n  client_id: c.client_id,\n  title: (parte_valido ? '' : '⛔ PARTE NO VÁLIDO · ') + 'Parte de trabajo · briefs · ' + hoy,\n  output_type: 'campaign_brief_pack',\n  content: parte_md,\n  content_text: parte_md,\n  producing_agent: 'campaign-brief-agent',\n  status: 'draft',\n  provenance_tag: {\n    fuente: 'brief',\n    workflow_id: $workflow.id,\n    workflow_execution_id: $execution.id,\n    plan_id: c.plan_id,\n    manual_id: c.manual_id,\n    manual_version: c.manual_version,\n    legible: ext.legible,\n    reparado: ext.reparado === true,\n    comillas_reparadas: ext.comillas_reparadas || 0,\n    valido: parte_valido,\n    motivo_invalido,\n    chequeos_ok: res.ok,\n    hallazgos: res.hallazgos.length,\n    por_chequeo: res.por_chequeo,\n    entregables: parte.entregables.length,\n    pendientes: (parte.pendientes_declarados || []).length,\n    huecos: (parte.huecos || []).length,\n    dry_run: c.dry_run === true,\n    guardado_antes_de_drive: true,\n    tope_usd: c.tope_usd === undefined ? null : c.tope_usd,\n    costo_usd: c.vuelta_costo_usd === undefined ? null : c.vuelta_costo_usd,\n    parte: ext.legible ? parte : null,\n  },\n}\nconst payload_cable = {\n  event_type: 'run_completed',\n  worker_id: $workflow.id,\n  worker_name: 'brief',\n  // el cable declara el resultado REAL (el cierre ⑤ lo corrige a parte_no_valido / parte_con_problemas si algo falla)\n  resultado: parte_valido ? 'parte_terminado' : 'parte_no_valido',\n  ...(parte_valido ? {} : { motivo: motivo_invalido }),\n  client_id: c.client_id,\n  tenant_id: c.tenant_id || c.client_id,\n  _sala_correlation_id: c._sala_correlation_id || null,\n  _journey_id: c._journey_id || null,\n  ts: new Date().toISOString(),\n}\nreturn [{\n  json: {\n    client_id: c.client_id,\n    client_name: c.client_name,\n    dry_run: c.dry_run === true,\n    plan_id: c.plan_id,\n    manual_id: c.manual_id,\n    cuerpo_dry_run_enviado: c.cuerpo && c.cuerpo.dry_run,\n    llego_la_vuelta: c.llego_la_vuelta,\n    vuelta_real: c.vuelta_real,\n    simulacro_usado: c.simulacro_usado,\n    vuelta_costo_usd: c.vuelta_costo_usd,\n    vuelta_modelo: c.vuelta_modelo,\n    falla_del_redactor: c.falla_del_redactor || null,\n    tope_usd: c.tope_usd === undefined ? null : c.tope_usd,\n    parte_legible: ext.legible,\n    parte_reparado: ext.reparado === true,\n    comillas_reparadas: ext.comillas_reparadas || 0,\n    parte_valido,\n    motivo_invalido,\n    titulo_parte: fila_parte.title,\n    chequeos_ok: res.ok,\n    hallazgos: res.hallazgos,\n    por_chequeo: res.por_chequeo,\n    entregables: parte.entregables.length,\n    pendientes_declarados: (parte.pendientes_declarados || []).length,\n    _sala_correlation_id: c._sala_correlation_id || null,\n    _journey_id: c._journey_id || null,\n    parte_md,\n    fila_parte,\n    payload_cable,\n  },\n}]\n"
+    },
+    "id": "5741954c-4ebe-4fd9-a4a9-4530c1211991"
+   },
+   {
+    "name": "⑤ ¿Modo seco?",
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+     3640,
+     0
+    ],
+    "parameters": {
+     "conditions": {
+      "options": {
+       "caseSensitive": true,
+       "leftValue": "",
+       "typeValidation": "loose"
+      },
+      "combinator": "and",
+      "conditions": [
+       {
+        "leftValue": "={{ $json.dry_run }}",
+        "rightValue": "",
+        "operator": {
+         "type": "boolean",
+         "operation": "true",
+         "singleValue": true
+        }
+       }
+      ]
+     }
+    },
+    "id": "1f531dab-21e7-4490-8814-42c244bc519c"
+   },
+   {
+    "name": "⑤ Seco · lo que se habría escrito",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     3900,
+     200
+    ],
+    "parameters": {
+     "jsCode": "// ⑤ SECO · LO QUE SE HABRÍA ESCRITO · CC#1 · 2026-09-29. En modo seco NADA se escribe ni se avisa: ni la tabla, ni Drive, ni la sala.\n// Pero llega hasta acá con las MISMAS filas y avisos que el camino real (los arma ④), y aquí se VALIDAN sus formas.\nconst c = $input.first().json\nconst f = c.fila_parte || {}\nconst faltan = []\nfor (const k of ['client_id', 'title', 'output_type', 'content', 'content_text', 'producing_agent', 'status', 'provenance_tag']) {\n  if (f[k] === undefined || f[k] === null || f[k] === '') faltan.push('fila_parte.' + k)\n}\nif (f.output_type !== 'campaign_brief_pack') faltan.push('fila_parte.output_type debe ser campaign_brief_pack')\nif (f.status !== 'draft') faltan.push('fila_parte.status debe ser draft')\nconst a = c.payload_cable || {}\nfor (const k of ['event_type', 'worker_id', 'worker_name', 'resultado', 'client_id']) {\n  if (a[k] === undefined || a[k] === null || a[k] === '') faltan.push('payload_cable.' + k)\n}\nif (a.event_type !== 'run_completed') faltan.push('payload_cable.event_type debe ser run_completed')\nif (a.worker_name !== 'brief') faltan.push('payload_cable.worker_name debe ser brief')\nconst habria_cerrado_como = c.parte_valido === false ? 'ERROR · PARTE_NO_VALIDO · ' + c.motivo_invalido : 'parte_terminado'\nconst salida = {\n  json: {\n    seco: true,\n    escrituras_reales: 0,\n    no_se_escribio_en: ['client_historical_outputs', 'Drive (texto-a-drive)', 'la sala (SALA_CALLBACK_URL)'],\n    dry_run_enviado_al_nodo_que_paga: c.cuerpo_dry_run_enviado,\n    la_vuelta_del_redactor: { llego: c.llego_la_vuelta, real: c.vuelta_real, simulacro: c.simulacro_usado, costo_usd: c.vuelta_costo_usd, modelo: c.vuelta_modelo },\n    chequeos: { legible: c.parte_legible, ok: c.chequeos_ok, por_chequeo: c.por_chequeo, entregables: c.entregables, pendientes: c.pendientes_declarados },\n    habria_guardado: { tabla: 'client_historical_outputs', output_type: f.output_type, status: f.status, titulo: f.title, largo_del_parte: String(f.content || '').length, provenance_tag_claves: Object.keys(f.provenance_tag || {}) },\n    habria_subido_a_drive_con_titulo: f.title,\n    parte_valido: c.parte_valido !== false,\n    motivo_invalido: c.motivo_invalido || null,\n    habria_cerrado_como,\n    habria_avisado: a,\n    formas_validas: faltan.length === 0,\n    faltan,\n  },\n}\n// 🔴 el ensayo ejerce el MISMO veredicto que el camino real: un parte inválido termina la corrida en error (con la salida ya guardada en la ejecución)\nif (c.parte_valido === false) throw new Error('PARTE_NO_VALIDO (modo seco) · ' + c.motivo_invalido + ' · en modo real habría subido a Drive con la marca y cerrado en error')\nreturn [salida]\n"
+    },
+    "id": "2da7fcd8-943d-4150-82fa-5f825389331b"
+   },
+   {
+    "name": "⑤ Guardar el parte",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     3900,
+     -200
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/client_historical_outputs",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "apikey",
+        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       },
+       {
+        "name": "Authorization",
+        "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       },
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "Prefer",
+        "value": "return=representation"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify($json.fila_parte) }}",
+     "options": {
+      "timeout": 30000,
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      }
+     }
+    },
+    "id": "2dca67fe-ee88-4290-ab8b-fcee95cd5fb0"
+   },
+   {
+    "name": "⑤ Parte a Drive",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     4160,
+     -200
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://n8n-production-72be.up.railway.app/webhook/zero-risk/texto-a-drive",
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ client_id: $('④ Chequeos').first().json.client_id, client_name: ($('④ Chequeos').first().json.client_name || 'cliente'), nombre: ($('④ Chequeos').first().json.titulo_parte || ('Parte de trabajo · briefs · ' + new Date().toISOString().slice(0,10))), texto: String($('④ Chequeos').first().json.parte_md || '') }) }}",
+     "options": {
+      "timeout": 120000,
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      }
+     }
+    },
+    "id": "820fe800-ef12-42db-afa4-16c0283fc836"
+   },
+   {
+    "name": "⑤ ¿Guardó y salió el PDF?",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     4420,
+     -200
+    ],
+    "parameters": {
+     "jsCode": "// ⑤ ¿GUARDÓ Y SALIÓ EL PDF? · CC#1 · 2026-09-29. Una corrida sin parte guardado o sin PDF NO puede salir exitosa (regla 12-sep de planeación).\n// El guardado va ANTES de Drive a propósito: si Drive falla, el parte NO se pierde.\nconst v = $('④ Chequeos').first().json\nlet guardado = false, guardado_id = null\ntry {\n  const g = $('⑤ Guardar el parte').first().json\n  const gb = g && g.body ? g.body : g\n  const fila = Array.isArray(gb) ? gb[0] : gb\n  guardado = !!(fila && fila.id)\n  guardado_id = (fila && fila.id) || null\n} catch (x) { guardado = false }\nlet rec = null\ntry { const d = $('⑤ Parte a Drive').first().json; rec = d && d.body ? d.body : d } catch (x) { rec = null }\nconst hayPdf = !!(rec && rec.ok === true && rec.file_id)\nconst problemas = []\nif (v.parte_valido === false) problemas.push('PARTE NO VÁLIDO · ' + v.motivo_invalido)\nif (!v.llego_la_vuelta) problemas.push('la vuelta del redactor NO llegó')\nif (!guardado) problemas.push('el parte NO quedó guardado en client_historical_outputs')\nif (!hayPdf) problemas.push('Drive no devolvió un archivo (' + String((rec && rec.motivo) || 'sin motivo') + ')')\nreturn [{\n  json: {\n    ok: problemas.length === 0,\n    parte_guardado: guardado,\n    parte_guardado_id: guardado_id,\n    hay_pdf: hayPdf,\n    file_id: (rec && rec.file_id) || null,\n    url: (rec && rec.url) || null,\n    chequeos_ok: v.chequeos_ok,\n    hallazgos: (v.hallazgos || []).length,\n    entregables: v.entregables,\n    pendientes_declarados: v.pendientes_declarados,\n    problemas,\n    parte_valido: v.parte_valido !== false,\n    motivo_invalido: v.motivo_invalido || null,\n    client_id: v.client_id,\n    // la sala se entera del resultado REAL: un parte con problemas no se anuncia como terminado limpio\n    payload_cable: { ...v.payload_cable, resultado: problemas.length === 0 ? 'parte_terminado' : (v.parte_valido === false ? 'parte_no_valido' : 'parte_con_problemas'), ...(problemas.length ? { problemas } : {}) },\n  },\n}]\n"
+    },
+    "id": "431d64e8-1234-41f5-abd5-4e49370d7df3"
+   },
+   {
+    "name": "⑥ Cable de vuelta · sala",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     4680,
+     -200
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+       },
+       {
+        "name": "x-source",
+        "value": "n8n-brief"
+       }
+      ]
+     },
+     "sendBody": true,
+     "contentType": "json",
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify($json.payload_cable) }}",
+     "options": {
+      "timeout": 60000
+     }
+    },
+    "id": "ea8e237b-8439-4f8e-bcff-7ccb7e334fc6"
+   },
+   {
+    "name": "⑥ Cable · ¿volvió?",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     4940,
+     -200
+    ],
+    "parameters": {
+     "jsCode": "// ⑥ EL CABLE DE VUELTA NO PUEDE SER MUDO · CC#1 · 2026-09-29 · igual que planeación.\n// Si no volvió, la sala NUNCA se entera de que la corrida terminó y su marca queda sin resolver.\nconst r = $input.first().json || {}\nconst volvio = r.ok === true\nlet corr = null\ntry { corr = $('⓪ Sobre · llave · modo seco').first().json._sala_correlation_id || null } catch (e) { corr = null }\n// Falla RUIDOSA solo si la sala lo despachó: un disparo a mano no tiene a quién contestarle.\nif (corr && !volvio) {\n  throw new Error('CABLE_DE_VUELTA_MUDO · la sala NO se enteró de que la corrida terminó · código ' + String(r.code || r.error || 'sin código'))\n}\n// 🔴 LA CORRIDA NO CIERRA «CORRECTA» SI EL PARTE NO VALE (encargo Lenovo 30-sep §2): el cable YA declaró el resultado real arriba;\n// acá la corrida termina en ERROR visible con el motivo, no en verde. Antes este nodo devolvía siempre `cierre: 'parte_terminado'`.\nlet cierrePrevio = null\ntry { cierrePrevio = $('⑤ ¿Guardó y salió el PDF?').first().json } catch (e) { cierrePrevio = null }\nif (cierrePrevio && cierrePrevio.ok === false) {\n  throw new Error((cierrePrevio.parte_valido === false ? 'PARTE_NO_VALIDO' : 'PARTE_CON_PROBLEMAS') + ' · ' + (cierrePrevio.problemas || []).join(' | ') + ' · la sala ya fue avisada del resultado real')\n}\nreturn [{\n  json: {\n    cierre: 'parte_terminado',\n    vuelta_ok: volvio,\n    vuelta_detalle: volvio ? r.event_id || 'sin event_id' : r.code || r.detail || r.error || 'sin respuesta de la sala',\n    despachado_por_la_sala: !!corr,\n  },\n}]\n"
+    },
+    "id": "24f5f8e2-53e5-40bb-acfd-1b8a88bb8ec4"
+   }
+  ],
+  "connections": {
+   "Webhook · brief": {
+    "main": [
+     [
+      {
+       "node": "⓪ Sobre · llave · modo seco",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⓪ Sobre · llave · modo seco": {
+    "main": [
+     [
+      {
+       "node": "① Cargar manual vigente",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "① Cargar manual vigente": {
+    "main": [
+     [
+      {
+       "node": "① GUARDA · sin manual aprobado se DETIENE",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "① GUARDA · sin manual aprobado se DETIENE": {
+    "main": [
+     [
+      {
+       "node": "② Cargar plan vigente",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② Cargar plan vigente": {
+    "main": [
+     [
+      {
+       "node": "② GUARDA · sin plan se DETIENE",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② GUARDA · sin plan se DETIENE": {
+    "main": [
+     [
+      {
+       "node": "② ¿Ya hay parte de este plan?",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② ¿Ya hay parte de este plan?": {
+    "main": [
+     [
+      {
+       "node": "② ¿Ya hay parte de este plan? · guarda",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② ¿Ya hay parte de este plan? · guarda": {
+    "main": [
+     [
+      {
+       "node": "② Ficha del cliente",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② Ficha del cliente": {
+    "main": [
+     [
+      {
+       "node": "③ Armar el cuerpo del redactor",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "③ Armar el cuerpo del redactor": {
+    "main": [
+     [
+      {
+       "node": "③ Redactor (run-sdk)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "③ Redactor (run-sdk)": {
+    "main": [
+     [
+      {
+       "node": "③ Esperar al redactor",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "③ Esperar al redactor": {
+    "main": [
+     [
+      {
+       "node": "③ ¿Llegó la vuelta?",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "③ ¿Llegó la vuelta?": {
+    "main": [
+     [
+      {
+       "node": "④ Chequeos",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "④ Chequeos": {
+    "main": [
+     [
+      {
+       "node": "⑤ ¿Modo seco?",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⑤ ¿Modo seco?": {
+    "main": [
+     [
+      {
+       "node": "⑤ Seco · lo que se habría escrito",
+       "type": "main",
+       "index": 0
+      }
+     ],
+     [
+      {
+       "node": "⑤ Guardar el parte",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⑤ Guardar el parte": {
+    "main": [
+     [
+      {
+       "node": "⑤ Parte a Drive",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⑤ Parte a Drive": {
+    "main": [
+     [
+      {
+       "node": "⑤ ¿Guardó y salió el PDF?",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⑤ ¿Guardó y salió el PDF?": {
+    "main": [
+     [
+      {
+       "node": "⑥ Cable de vuelta · sala",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⑥ Cable de vuelta · sala": {
+    "main": [
+     [
+      {
+       "node": "⑥ Cable · ¿volvió?",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   }
+  },
+  "nodeGroups": [],
+  "authors": "Emilio  Perez ",
+  "name": null,
+  "description": null,
+  "autosaved": false,
+  "createdAt": "2026-10-03T03:53:19.560Z",
+  "updatedAt": "2026-10-03T03:53:19.560Z",
+  "workflowPublishHistory": [
+   {
+    "id": 2310,
+    "workflowId": "PQdIgbuFexuBsoh8",
+    "versionId": "3083dfac-89a4-4c9c-9112-4dde667ca07b",
+    "event": "activated",
+    "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-10-03T03:53:19.804Z"
+   }
+  ]
+ }
+}

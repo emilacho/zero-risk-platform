@@ -380,7 +380,7 @@ export async function checkRunSdkSpendCap(
         detail:
           spent >= cap
             ? 'Cubo system agotado · desde ahora se bloquea TODO lo que entre sin cliente, ' +
-              'incluidas las sondas de salud. Si el tablero parece caído, mirá primero quién ' +
+              'incluidas las sondas de salud. Si el tablero parece caído, mira primero quién ' +
               'agotó el cubo: es compartido. Identificarse (ver convención `system:health`) ' +
               'permite distinguir la sonda del anónimo · subir el techo requiere firma.'
             : esLlamadaIdentificada(agentSlug)
