@@ -62,7 +62,7 @@ const esImperativoA = (w) => w.length >= 4 && w.endsWith('á') && !w.endsWith('r
 const AMBIGUAS = new Set(['pedí', 'escribí', 'decidí', 'definí', 'salí', 'abrí', 'resumí', 'medí', 'recibí', 'corregí', 'repetí', 'vení', 'seguí', 'miré'])
 const RE_TOKEN = /[\p{L}]+/gu
 // una forma dentro de una EXPRESIÓN REGULAR (\b, (?:, .test(, new RegExp) es dato del detector, no texto de instrucción
-const MARCAS_PROTEGIDAS = [/\\b|\(\?:|\.test\(|new RegExp|\[\^/, /_pal\(/, /_VOSEO|_TUTEO|_DECLARA/, /voseo/i, /«vos»/, /\bvos\b[^\n]*\btú\b|\btú\b[^\n]*\bvos\b/i, /\bni vos\b/i, /uses vos/i, /trato de vos/i, /(?:habla|hablar)\s+(?:de\s+)?vos/i]
+const MARCAS_PROTEGIDAS = [/\\b|\(\?:|\.test\(|new RegExp|\[\^/, /_pal\(/, /_VOSEO|_TUTEO|_DECLARA/, /voseo/i, /«vos»/, /(?<![\p{L}])vos(?![\p{L}])[^\n]*(?<![\p{L}])tú(?![\p{L}])|(?<![\p{L}])tú(?![\p{L}])[^\n]*(?<![\p{L}])vos(?![\p{L}])/iu, /\bni vos\b/i, /uses vos/i, /trato de vos/i, /(?:habla|hablar)\s+(?:de\s+)?vos/i]
 
 function conCaja(original, nuevo) {
   if (original.length > 1 && original === original.toUpperCase() && original !== original.toLowerCase()) return nuevo.toUpperCase()
