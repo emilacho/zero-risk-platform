@@ -41,6 +41,7 @@ import { validateWorkflowId } from '@/lib/agent-safety'
 import { normalizeFidelityToolInput } from '@/lib/jefatura/fidelity-grader'
 import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
 import { buscarFilaDelEmpleado, recuperarRespuestaPagada as recuperarRespuestaPagadaImpl } from '@/lib/respuesta-pagada'
+import { recuperarVueltaPerdida } from '@/lib/vuelta-perdida'
 import {
   recordDispatchIntent,
   markDispatchRunning,
@@ -651,6 +652,7 @@ export async function POST(request: Request) {
     waitUntil(
       (async () => {
         // running PROMPT (segundos · D2) · el trabajo arrancó · señal temprana.
+        const empezoVueltaEnMs = Date.now()
         await markDispatchRunning(getSupabaseAdmin(), dispatchKey)
         let innerBody: unknown
         let innerOk = false
@@ -694,6 +696,33 @@ export async function POST(request: Request) {
             error: e instanceof Error ? e.message : String(e),
             error_kind: 'inner_run_threw',
             ack_timestamp: ackTimestamp,
+          }
+        }
+        // RONDA 68 · LA VUELTA QUE SE CORTA NO TIRA EL TRABAJO YA PAGADO: si el error es de CONEXIÓN (`terminated` · el empleado pudo seguir), se espera
+        // su resultado en el libro hasta agotar el presupuesto de la función y la vuelta lleva ESE resultado. Sólo para los agentes sin efectos propios de Vercel
+        // (descubrimiento · revisión editorial siguen su camino). Sin prueba de que el texto esté entero, o con el empleado fallido: el error de siempre.
+        if (!innerOk) {
+          try {
+            const slugVuelta = resolveAgentSlug(String(body.agent ?? ''))
+            if (!isDiscoveryAgentSlug(slugVuelta) && !requiresEditorReview(slugVuelta)) {
+              const recuperada = await recuperarVueltaPerdida(
+                {
+                  cuerpoDelError: innerBody,
+                  agente: slugVuelta,
+                  paso: (body as { step_name?: string | null }).step_name ?? null,
+                  executionId: cbAttr.workflow_execution_id ?? null,
+                  dispatchKey,
+                  empezoEnMs: empezoVueltaEnMs,
+                },
+                { buscarFila: () => buscarFilaDelEmpleado(slugVuelta, (body as { step_name?: string | null }).step_name ?? null, cbAttr.workflow_execution_id ?? null, empezoVueltaEnMs, { workflowId: cbWorkflowId, clientId: cbClientId }) },
+              )
+              if (recuperada) {
+                innerBody = recuperada
+                innerOk = true
+              }
+            }
+          } catch (errRecuperar) {
+            console.warn(`[run-sdk async-callback] la recuperación de la vuelta perdida falló · sale el error de siempre · ${errRecuperar instanceof Error ? errRecuperar.message : String(errRecuperar)}`)
           }
         }
         // Cierre del ledger (best-effort · agent_invocations = fuente del resultado).
@@ -1185,7 +1214,7 @@ export async function POST(request: Request) {
           },
           {
             buscarFila: () =>
-              buscarFilaDelEmpleado(agentName, body.step_name ?? null, wfAttr.workflow_execution_id, attemptStartedAt),
+              buscarFilaDelEmpleado(agentName, body.step_name ?? null, wfAttr.workflow_execution_id, attemptStartedAt, { workflowId: wfAttr.workflow_id, clientId: body.client_id ?? null }),
           },
         )
         if (!recuperada) throw errLectura

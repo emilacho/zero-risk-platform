@@ -97,12 +97,38 @@ export function respuestaDesdeLaFila(fila: FilaInvocacion): RespuestaPagada {
   }
 }
 
+/**
+ * RONDA 68 · EL TEXTO ENTERO SÍ SE GUARDA · en `workflow_checkpoints.output_ref.response` (hasta 100.000 caracteres · lo escribe el corredor al terminar).
+ * La fila de `agent_invocations` sólo guarda 2.000 (`output_summary`), así que una respuesta larga (un plan de 26.000) nunca se podía PROBAR entera
+ * y la recuperación decía «no sé» con el trabajo ya pagado. Si el punto de control de ESTA corrida trae el texto completo y mide EXACTAMENTE lo que la
+ * fila declara, ese es el texto: la fila queda con él (y sigue valiendo la regla de siempre: sin prueba de que esté entero, no se entrega).
+ */
+export interface PuntoDeControl {
+  step_status?: string | null
+  workflow_execution_id?: string | null
+  output_ref?: { response?: unknown; response_truncated?: unknown } | null
+}
+
+/** une la fila (recortada a 2.000) con el texto entero del punto de control SI y sólo si se puede probar que es el mismo texto */
+export function filaConTextoEntero(fila: FilaInvocacion, punto: PuntoDeControl | null, executionId: string | null): FilaInvocacion {
+  if (!punto || !punto.output_ref) return fila
+  if ((punto.step_status ?? '').toLowerCase() !== 'completed') return fila
+  if (executionId && String(punto.workflow_execution_id ?? '') !== String(executionId)) return fila // otra corrida del mismo cliente
+  const texto = punto.output_ref.response
+  if (typeof texto !== 'string' || texto.length === 0 || punto.output_ref.response_truncated === true) return fila
+  const m = (fila.metadata ?? {}) as Record<string, unknown>
+  const declarado = Number(m.response_length_real ?? m.response_length ?? NaN)
+  if (!Number.isFinite(declarado) || declarado !== texto.length) return fila // no se puede probar que sea el mismo texto
+  return { ...fila, output_summary: texto }
+}
+
 /** lee del registro la fila de ESTA invocación · la más reciente del mismo paso y corrida */
 export async function buscarFilaDelEmpleado(
   agente: string,
   paso: string | null,
   executionId: string | null,
   desdeMs: number,
+  punto?: { workflowId: string | null; clientId: string | null },
 ): Promise<FilaInvocacion | null> {
   const supabase = getSupabaseAdmin()
   let q = supabase
@@ -117,7 +143,24 @@ export async function buscarFilaDelEmpleado(
   if (paso) q = q.eq('metadata->>step_name', paso)
   const { data, error } = await q
   if (error) throw new Error(error.message)
-  return data && data[0] ? (data[0] as FilaInvocacion) : null
+  const fila = data && data[0] ? (data[0] as FilaInvocacion) : null
+  if (!fila) return null
+  // RONDA 68 · la fila trae 2.000 caracteres; el texto entero está en el punto de control de esta corrida (mejor esfuerzo: si no se lee, la fila queda como estaba)
+  if (punto && punto.workflowId && punto.clientId && executionId) {
+    try {
+      const { data: cp } = await supabase
+        .from('workflow_checkpoints')
+        .select('step_status,workflow_execution_id,output_ref')
+        .eq('workflow_id', punto.workflowId)
+        .eq('client_id', punto.clientId)
+        .eq('step_name', paso || agente)
+        .maybeSingle()
+      return filaConTextoEntero(fila, (cp as PuntoDeControl | null) ?? null, executionId)
+    } catch {
+      return fila
+    }
+  }
+  return fila
 }
 
 /**
