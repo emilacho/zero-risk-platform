@@ -9,6 +9,7 @@
  */
 import { declaracionDelCliente, PREFIJO_PENDIENTE, evaluarHechos, hojasDeTexto, type EntradaDeHechos, type Hecho, type InformeDeHechos } from './hechos'
 import { palabrasDe } from './texto'
+import { limpiarManual } from './limpieza'
 
 export type EstadoDeCampo = 'verificado' | 'afirmacion_del_cliente' | 'con_pendientes' | 'sin_hechos'
 export interface MetaDeCampo { estado: EstadoDeCampo; provisional: boolean; pendientes: number; hechos: number }
@@ -71,7 +72,7 @@ export function camposFirmes(manual: Record<string, unknown>, excluir?: string[]
 }
 
 // ───────────────────────── la puerta final
-export interface CambioDeCierre { ruta: string; de: string; a: string; por: 'retirada' | 'declaracion_del_cliente' }
+export interface CambioDeCierre { ruta: string; de: string; a: string; por: 'retirada' | 'declaracion_del_cliente' | 'limpieza' }
 /** lo que sale del manual y queda SOLO aquí (auditoría interna) · NUNCA a la bandeja ni a Slack (firma de Emilio 10-oct: «si no existe no es necesario para mí verlo») */
 export interface RetiradoDelManual { ruta: string; clausula: string; estado: Hecho['estado']; marca: string; motivo: string }
 const MOTIVO: Record<string, string> = { certeza: 'afirmación de certeza sin cita', cifra: 'cifra sin cita', lugar: 'origen sin cita', fecha: 'fecha sin cita' }
@@ -208,10 +209,16 @@ export interface Recomprobacion {
   limpio: boolean
 }
 /** S5 / S7: re-evalúa lo que devolvió el autor y cierra la puerta (lo que reintroduzca sin cita vuelve a salir). El resultado ya lleva `_field_meta` de todos los campos. */
-export function recomprobar(_antes: Record<string, unknown>, despues: Record<string, unknown>, entrada: Omit<EntradaDeHechos, 'manual'>): Recomprobacion {
+export function recomprobar(_antes: Record<string, unknown>, despuesCrudo: Record<string, unknown>, entrada: Omit<EntradaDeHechos, 'manual'>): Recomprobacion {
+  // r68 · primero el FORMATO por código: sin nombres internos citados, sin oraciones rotas, sin las palabras que el propio manual prohíbe. Lo quitado va solo al registro interno.
+  const lim = limpiarManual(despuesCrudo)
+  const despues = lim.manual
   const informe = evaluarHechos({ ...entrada, manual: despues })
   const cierre = cerrarPuerta(despues, informe)
   const finalInforme = evaluarHechos({ ...entrada, manual: cierre.manual })
   const manual = aplicarMeta(cierre.manual, finalInforme, entrada.excluir)
-  return { manual, informe: finalInforme, introducidos: informe.sin_respaldo.filter((h) => h.estado !== 'con_duda'), cambios: cierre.cambios, retirados: cierre.retirados, limpio: informe.sin_respaldo.every((h) => h.estado === 'con_duda') }
+  const motivoDe = { nombre_interno_citado: 'nombre interno citado como fuente', fragmento: 'oración rota', palabra_prohibida_propia: 'usa una palabra que el propio manual prohíbe' } as const
+  const cambiosL = lim.quitados.map((q) => ({ ruta: q.ruta, de: q.texto, a: '', por: 'limpieza' as const }))
+  const retiradosL = lim.quitados.map((q) => ({ ruta: q.ruta, clausula: q.texto, estado: 'sin_cita' as const, marca: q.motivo, motivo: motivoDe[q.motivo] }))
+  return { manual, informe: finalInforme, introducidos: informe.sin_respaldo.filter((h) => h.estado !== 'con_duda'), cambios: [...cambiosL, ...cierre.cambios], retirados: [...retiradosL, ...cierre.retirados], limpio: informe.sin_respaldo.every((h) => h.estado === 'con_duda') && lim.quitados.length === 0 }
 }

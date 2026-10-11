@@ -103,7 +103,12 @@ function indexar(fuentes: Fuente[]): Indice {
   for (const f of fuentes) {
     if (f.tipo !== 'tercero') for (const o of partirEnFrases(f.texto)) oraciones.push({ f, texto: o, palabras: palabrasDe(o) }) // lo de terceros no habla del cliente: solo respalda cifras del mercado
     const d = new Set<string>()
-    for (const m of f.texto.matchAll(RE_CIFRA)) { const x = soloDigitos(m[0]); if (x) { d.add(x); d.add(x.replace('%', '')) } }
+    for (const m of f.texto.matchAll(RE_CIFRA)) {
+      const x = soloDigitos(m[0]); if (x) { d.add(x); d.add(x.replace('%', '')) }
+      // r68 · «9.00» y «9», «3.50» y «3.5» son la misma cifra (precios): se guardan también sin los ceros finales del decimal
+      const dec = /^\$?\s?(\d+)[.,](\d*?)0*\s?$/.exec(m[0].trim())
+      if (dec) { d.add(dec[1] + dec[2]); if (!dec[2]) d.add(dec[1]) }
+    }
     for (const m of f.texto.matchAll(/\b(?:19|20)\d{2}\b/g)) d.add(m[0])
     digitosPorFuente.set(f.id, d)
   }
