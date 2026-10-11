@@ -23,7 +23,7 @@ export const PAISES: DatosDePais[] = [
   { iso2: 'HN', nombres: ['honduras'], zona: 'America/Tegucigalpa' },
   { iso2: 'NI', nombres: ['nicaragua'], zona: 'America/Managua' },
   { iso2: 'CU', nombres: ['cuba'], zona: 'America/Havana' },
-  { iso2: 'DO', nombres: ['republica dominicana', 'dominicana'], zona: 'America/Santo_Domingo' },
+  { iso2: 'DO', nombres: ['republica dominicana', 'dominicana', 'rep dominicana'], zona: 'America/Santo_Domingo' },
   { iso2: 'PR', nombres: ['puerto rico'], zona: 'America/Puerto_Rico' },
   // varias zonas: se reconoce el país, pero la zona la dice la ficha o la reserva
   { iso2: 'MX', nombres: ['mexico'] },
@@ -34,7 +34,8 @@ export const PAISES: DatosDePais[] = [
   { iso2: 'BR', nombres: ['brasil', 'brazil'] },
 ]
 
-const sinTildes = (s: unknown): string => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+// misma normalización que `paisNormal` del módulo del detector de trato (única fuente de la tabla país → trato): «Ecuador.», «República Dominicana» y «ec» dan la misma clave
+const sinTildes = (s: unknown): string => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
 
 /** nombre del país («Ecuador») o código de 2 letras («ec») → código de 2 letras en mayúsculas; null si no se reconoce (no se adivina) */
 export function codigoDePais(valor: unknown): string | null {
