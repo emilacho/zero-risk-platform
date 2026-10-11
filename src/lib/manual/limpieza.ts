@@ -45,8 +45,9 @@ const prosaDe = (manual: Record<string, unknown>, incluirListasDeTerminos = fals
 const IDENT = String.raw`(?<![@/.\w-])[a-z][a-z0-9]*(?:_[a-z0-9]+)+(?![\w-])`
 const RE_IDENT = new RegExp(IDENT, 'g')
 /** «ICP goals», «ICP objections S1»: la etiqueta del documento interno de perfil de cliente */
-const RE_ETIQUETA_ICP = /\bICP\s+(?:[a-z_]+\s+)?(?:S\d+\b)?/g
-const tieneNombreInterno = (s: string): boolean => new RegExp(IDENT).test(s) || /\bICP\s+[a-z_]+\b/.test(s)
+const ETIQUETA_ICP = String.raw`\bICP\s+(?:(?:[a-z_]+\s+)?S\d+\b|[a-z]+_[a-z_]+)` // «ICP goals S2», «ICP S3», «ICP buying_process»; la sigla «ICP» sola (o «el ICP del cliente») NO es la etiqueta
+const RE_ETIQUETA_ICP = new RegExp(ETIQUETA_ICP, 'g')
+const tieneNombreInterno = (s: string): boolean => new RegExp(IDENT).test(s) || new RegExp(ETIQUETA_ICP).test(s)
 
 export function quitarNombresInternos(texto: string): { texto: string; cambio: boolean } {
   let t = texto
@@ -79,19 +80,19 @@ function oraciones(linea: string): string[] {
     const c = linea[i]
     if (c === '«') enCita++
     else if (c === '»') enCita = Math.max(0, enCita - 1)
-    if (enCita === 0 && /[.!?…]/.test(c) && (i + 1 >= linea.length || /\s/.test(linea[i + 1])) && !ABREVIATURAS.test(linea.slice(ini, i + 1))) {
+    if (enCita === 0 && /[.!?…]/.test(c) && /\s/.test(linea[i + 1] ?? ' ') && !ABREVIATURAS.test(linea.slice(ini, i + 1))) {
       out.push(linea.slice(ini, i + 1)); ini = i + 1
       while (ini < linea.length && /\s/.test(linea[ini])) ini++
       i = ini - 1
     }
   }
-  if (ini < linea.length) out.push(linea.slice(ini))
+  if (linea.slice(ini).trim()) out.push(linea.slice(ini))
   return out
 }
 /** quita las oraciones rotas: la que empieza en minúscula o con puntuación (huérfana) y, si empieza con coma/punto y coma, también la anterior (la introducción sin sujeto) */
 export function repararFragmentos(texto: string): { texto: string; quitadas: string[] } {
   const quitadas: string[] = []
-  const lineas = texto.split('\n').map((linea) => {
+  const lineas = texto.split('\n').map((linea): string | null => {
     const os = oraciones(linea)
     if (os.length === 0) return linea
     const mantener = os.map(() => true)
@@ -101,14 +102,15 @@ export function repararFragmentos(texto: string): { texto: string; quitadas: str
       const huerfana = /^[,;:]/.test(t0) || (/^[a-záéíóúñ]/.test(t0) && /^[a-záéíóúñ]+(?=[\s,;:]|$)/.test(t0))
       if (!huerfana) return
       mantener[i] = false
-      if (/^[,;:]/.test(o.trim()) && i > 0) mantener[i - 1] = false // «Según el análisis… local.» + «, lo que le otorga…»
+      if (/^[,;:]/.test(t0)) mantener[i - 1] = false // i ≥ 1: el renglón 0 ya salió arriba // «Según el análisis… local.» + «, lo que le otorga…»
     })
     // el primer renglón del campo que arranca en minúscula también es resto de algo cortado, pero solo si no es el único texto
     if (mantener.every(Boolean)) return linea
     os.forEach((o, i) => { if (!mantener[i]) quitadas.push(o.trim()) })
-    return os.filter((_, i) => mantener[i]).join(' ')
+    const quedan = os.filter((_, i) => mantener[i]).join(' ')
+    return quedan === '' ? null : quedan // una línea que se quedó sin nada desaparece (no deja un renglón vacío)
   })
-  return { texto: lineas.join('\n').replace(/\n{3,}/g, '\n\n').trim(), quitadas }
+  return { texto: lineas.filter((l): l is string => l !== null).join('\n').replace(/\n{3,}/g, '\n\n').trim(), quitadas }
 }
 
 // ───────────────────────── 3 · palabras prohibidas propias
@@ -178,11 +180,11 @@ export function limpiarManual(manualEntrada: Record<string, unknown>): Resultado
 }
 function leer(obj: unknown, ruta: string): unknown {
   let cur: unknown = obj
-  for (const p of partesDeRuta(ruta)) { if (cur == null || typeof cur !== 'object') return undefined; cur = (cur as Record<string | number, unknown>)[p] }
+  for (const p of partesDeRuta(ruta)) cur = (cur as Record<string | number, unknown> | null | undefined)?.[p]
   return cur
 }
 /** lo que se quitó, para el registro interno */
 function diferencia(antes: string, despues: string): string {
   const a = [...antes.matchAll(/\([^()]*\)|\[[^\[\]]*\]/g)].map((m) => m[0]).filter((x) => !despues.includes(x))
-  return (a.length ? a.join(' ') : antes.length > 200 ? antes.slice(0, 200) : antes).trim()
+  return (a.length ? a.join(' ') : antes.slice(0, 200)).trim()
 }
