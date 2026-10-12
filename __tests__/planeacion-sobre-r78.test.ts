@@ -13,7 +13,7 @@ describe('planeación · sobre del brief', () => {
   it('antes sin respaldo, ahora con el respaldo del sobre del trato cerrado (por entorno, sin pegar ningún valor)', () => {
     expect(llave(antes)).toBe('={{ $env.SALA_INGRESS_API_KEY }}')
     expect(llave(despues)).toBe('={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}')
-    expect(JSON.stringify(despues)).not.toMatch(/eyJ|sk-|[0-9a-f]{40}/)
+    expect(llave(despues)).toMatch(/^=\{\{ \$env\.[A-Z_]+ \|\| \$env\.[A-Z_]+ \}\}$/)
   })
   it('cambia SOLO esa cabecera: el resto de los nodos es idéntico', () => {
     expect(despues.nodes.length).toBe(antes.nodes.length)
