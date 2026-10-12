@@ -1,6 +1,6 @@
 /** r76 · coincidencia por PALABRA ENTERA (reparo A.4-1 de CC#3): una función compartida; casos trampa de rubros que NO deben caer en un paquete ajeno. */
 import { describe, expect, it } from 'vitest'
-import { claveNormal, clavesQueCoinciden, coincideAlguna, coincideClave } from '../src/lib/texto/clave-de-rubro'
+import { clavesQueCoinciden, coincideAlguna, coincidePorPalabra as coincideClave } from '../src/lib/texto/coincidencia'
 import { PAQUETES_DE_FABRICA, industriaCoincide, lexicoDeLaIndustria } from '../src/lib/cadena/lexico-por-rubro'
 import { BATERIA_DE_RUBROS } from '../src/lib/rubros-de-prueba/baterias'
 import { hallarAfirmaciones } from '../src/lib/cadena/afirmaciones'
@@ -23,8 +23,9 @@ describe('coincideClave · palabra entera, raíz solo con asterisco', () => {
     ['agencia de viajes', 'agencia de viajes', true], ['agencia de viajes y turismo', 'agencia de viajes', true], ['mi agencia de seguros', 'agencia de viajes', false],
   ])('«%s» vs «%s» → %s', (texto, clave, esperado) => { expect(coincideClave(texto, clave)).toBe(esperado) })
 
-  it('la ñ no es la n; sin tildes y sin mayúsculas; vacío no coincide con nada', () => {
-    expect(claveNormal('Cabañas')).not.toBe(claveNormal('Cabanas'))
+  it('la ñ se acepta como n (fichas sin ñ) salvo en una clave corta con ñ; sin tildes ni mayúsculas; vacío no coincide con nada', () => {
+    expect(coincideClave('Cabanas familiares', 'cabañ*')).toBe(true); expect(coincideClave('cabañas', 'cabana')).toBe(true)
+    expect(coincideClave('unas cabañas familiares', 'uñas')).toBe(false); expect(coincideClave('salón de unas', 'uñas')).toBe(false); expect(coincideClave('salón de uñas', 'uñas')).toBe(true)
     expect(coincideClave('CAFÉ', 'cafe')).toBe(true)
     expect(coincideClave('texto', '')).toBe(false); expect(coincideClave('', 'bar')).toBe(false); expect(coincideClave(null, 'bar')).toBe(false)
     expect(coincideClave('x', '*')).toBe(false)
@@ -73,6 +74,30 @@ describe('la función es la única forma de comparar claves de rubro', () => {
   it('lexico-por-rubro no tiene «contiene» sobre texto de industria', () => {
     const src = require('node:fs').readFileSync(require('node:path').join(process.cwd(), 'src/lib/cadena/lexico-por-rubro.ts'), 'utf8')
     expect(src).toMatch(/coincideAlguna/); expect(src).not.toMatch(/t\.includes\(/)
+  })
+})
+
+// ───────────────────────── r77 · más rubros: ninguno de estos cae en `general`, y los trampa siguen en su sitio
+import { familiasDelRubro } from '../src/lib/fuentes-publicas'
+
+describe('r77 · rubros variados caen en su familia (recall) y en su paquete de léxico', () => {
+  it.each([
+    ['pescadería', 'comida', 'alimentos'], ['carnicería y embutidos', 'comida', 'alimentos'], ['frutería y verdulería', 'comida', 'alimentos'], ['hamburguesería artesanal', 'comida', 'alimentos'],
+    ['pizzería', 'comida', 'alimentos'], ['taquería', 'comida', 'alimentos'], ['ghost kitchen', 'comida', 'alimentos'], ['licorería', 'comercio', 'alimentos'],
+    ['abarrotes', 'comercio', 'alimentos'], ['supermercado', 'comercio', 'alimentos'], ['marisquería', 'comida', 'alimentos'], ['heladería', 'comida', null],
+    ['floristería', 'comercio', 'bienes'], ['ferretería', 'comercio', 'bienes'], ['librería', 'comercio', 'bienes'], ['zapatería', 'comercio', 'bienes'],
+    ['perfumería', 'comercio', 'bienes'], ['óptica', 'comercio', 'bienes'], ['modista', 'comercio', 'bienes'], ['sastrería a medida', 'comercio', 'bienes'],
+    ['uñas acrílicas', 'belleza_bienestar', null], ['salón de uñas y pestañas', 'belleza_bienestar', null], ['pediatría', 'salud', null], ['fotografía de bodas', 'servicios_profesionales', null],
+    ['vulcanizadora', 'automotriz', null], ['lavandería', 'servicios_hogar', null], ['guardería infantil', 'educacion', null], ['cabañas sin ñ: cabanas', 'alojamiento', null],
+  ])('«%s» → familia %s · paquete %s', (rubro, familia, paquete) => {
+    expect(familiasDelRubro(rubro), rubro).toContain(familia)
+    expect(familiasDelRubro(rubro), rubro).not.toEqual(['general'])
+    if (paquete) expect(paquetesDe(rubro), rubro).toContain(paquete)
+  })
+  it('las trampa siguen sin caer donde no es', () => {
+    expect(familiasDelRubro('unas cabañas familiares')).not.toContain('belleza_bienestar')
+    expect(familiasDelRubro('barbería')).not.toContain('comida'); expect(familiasDelRubro('apicultura y miel')).toEqual(['general'])
+    expect(paquetesDe('barbería')).toEqual([]); expect(paquetesDe('consultoría de comercio exterior')).toEqual([])
   })
 })
 
