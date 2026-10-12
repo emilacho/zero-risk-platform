@@ -78,6 +78,21 @@ export const RENDER = `
 const ES_FUENTE_PUBLICA = /^(resenas_|publicaciones_|videos_)/.test(apifyFunction);
 const primeroTexto = (o, ks) => { for (const k of ks) { const v = o && o[k]; if (typeof v === 'string' && v.trim()) return v.trim(); } return ''; };
 const aplanar = (v) => String(v == null ? '' : v).replace(/\\s+/g, ' ').trim();
+// ronda 75 · salida REAL de YouTube: «subtitles» es una lista de {srt}; se deja solo lo que se dice (sin números ni tiempos ni líneas repetidas)
+const subtitulosComoTexto = (v) => {
+  if (typeof v === 'string') return v.trim();
+  if (!Array.isArray(v)) return '';
+  const partes = [];
+  for (const s of v) {
+    const crudo = typeof s === 'string' ? s : (s && (s.srt || s.text || s.vtt)) || '';
+    for (const l of String(crudo).split(NL)) {
+      const t = l.trim();
+      if (!t || /^[0-9]+$/.test(t) || t.indexOf('-->') >= 0) continue;
+      if (partes[partes.length - 1] !== t) partes.push(t);
+    }
+  }
+  return partes.join(' ');
+};
 function lineasDeFuente(fn, items) {
   const out = [];
   const meter = (it) => {
@@ -100,7 +115,7 @@ function lineasDeFuente(fn, items) {
       out.push([String(primeroTexto(it, ['time', 'date', 'timestamp', 'createdAt'])).slice(0, 10)].filter(Boolean).join(' · ') + (texto ? ' · «' + aplanar(texto) + '»' : '') + (trans ? ' · lo que se dice en el video: «' + aplanar(trans) + '»' : ''));
     } else {
       const caption = primeroTexto(it, ['caption', 'text', 'description', 'title']);
-      const trans = primeroTexto(it, ['transcript', 'transcription', 'subtitles', 'videoTranscript', 'subtitle']);
+      const trans = primeroTexto(it, ['transcript', 'transcription', 'videoTranscript', 'subtitle']) || subtitulosComoTexto(it.subtitles);
       const url = primeroTexto(it, ['url', 'videoUrl', 'postUrl', 'webVideoUrl', 'inputUrl']);
       if (!caption && !trans) return;
       out.push('video' + (url ? ' ' + url : '') + ' · ' + String(primeroTexto(it, ['timestamp', 'createTimeISO', 'date', 'uploadDate', 'publishedAt'])).slice(0, 10) + (caption ? ' · pie: «' + aplanar(caption) + '»' : '') + ' · ' + (trans ? 'lo que se dice: «' + aplanar(trans) + '»' : 'SIN transcripción'));

@@ -19,6 +19,8 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { renderManualLimpio } from '@/lib/brand-book-render-limpio'
+import { fuentesConsultadas, lineasDeFuentesConsultadas } from '@/lib/fuentes-publicas/consultadas'
+import { cargarFichaYRaspado } from '@/lib/manual/almacen-supabase'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -64,6 +66,10 @@ export async function GET(req: Request, { params }: RouteContext) {
     .eq('id', clientId)
     .maybeSingle()
 
+  // ronda 75 · cuántas reseñas, publicaciones y videos se miraron de verdad (desde lo crudo guardado); si la lectura falla, el manual sale igual que hoy
+  let fuentes_consultadas: string[] = []
+  try { fuentes_consultadas = lineasDeFuentesConsultadas(fuentesConsultadas((await cargarFichaYRaspado(clientId)).filas)) } catch { fuentes_consultadas = [] }
+
   const render = renderManualLimpio({
     brand_book: bb as Record<string, unknown>,
     client_name: (cli?.name as string) ?? 'Cliente',
@@ -71,6 +77,7 @@ export async function GET(req: Request, { params }: RouteContext) {
     country: (cli?.country as string) ?? null,
     website: (cli?.website_url as string) ?? null,
     created_at: (bb as { created_at?: string }).created_at ?? null,
+    fuentes_consultadas,
   })
 
   return NextResponse.json({

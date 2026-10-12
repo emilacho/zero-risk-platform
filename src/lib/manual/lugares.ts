@@ -16,6 +16,25 @@ export const PATRONES_DE_ORIGEN_ES: RegExp[] = [
 ]
 export const frasePideOrigen = (frase: string): boolean => PATRONES_DE_ORIGEN_ES.some((r) => r.test(normalizar(frase)))
 
+/**
+ * H4 (CC#3 · ronda 75) · la regla de lugar SOLO aplica cuando lo que viene de un lugar es un BIEN (producto, insumo, materia prima).
+ * No aplica si el sujeto son personas («nuestros pacientes vienen de…», «los clientes llegan de…») ni si es una historia de fundación («empezamos en…»).
+ * Con un verbo de procedencia basta que el sujeto no sean personas; con la palabra «origen» suelta hace falta además un bien (sustantivo de bien o término del catálogo del cliente).
+ */
+const PERSONAS = /\b(pacientes?|clientes?|usuari[oa]s?|visitantes?|turistas?|huespedes|estudiantes|alumn[oa]s?|socios?|miembros?|personas|gente|equipo|fundador(es|as)?|duen[oa]s?|familias?|vecinos|compradores|asistentes|invitados|candidatos|empleados|colaboradores|nosotros|somos|soy)\b/
+const FUNDACION = /\b(fundad[oa]s?|fundamos|nacimos|nacio|empezamos|comenzamos|iniciamos|historia|leyenda|nombre)\b/
+// sustantivos de bien GENERALES (sin rubro); lo propio de cada negocio llega por el catálogo del cliente (parámetro bienes)
+const BIENES = /\b(productos?|ingredientes?|insumos?|materias? primas?|materiales|mercaderia|mercancias?|articulos?|repuestos?|piezas|componentes|bienes|equipos|suministros)\b/
+const VERBO_DE_PROCEDENCIA = /\b(viene|vienen|proviene|provienen|procede|proceden|llega|llegan|traido|traida|traidos|traidas|directo|directa|directos|directas)\s+(de|desde)\b/
+export function elObjetoEsUnBien(clausula: string, bienes: string[] = []): boolean {
+  const n = normalizar(clausula)
+  if (FUNDACION.test(n)) return false
+  const verbo = VERBO_DE_PROCEDENCIA.exec(n)
+  if (verbo) return !PERSONAS.test(n.slice(0, verbo.index))
+  if (PERSONAS.test(n)) return false
+  return BIENES.test(n) || bienes.some((b) => b.trim().length > 2 && n.includes(normalizar(b)))
+}
+
 /** papeles de un lugar en la oración de una FUENTE (orden = precedencia) */
 const PAPELES: Array<[Exclude<PapelDeLugar, 'sin_papel'>, RegExp]> = [
   ['origen_producto', /\b(traemos|traen|proveedor|proveedores|compramos|proviene|provienen|procede|proceden|llega de|llegan de|llega desde|llegan desde|de nuestros (productores|proveedores))\b/],

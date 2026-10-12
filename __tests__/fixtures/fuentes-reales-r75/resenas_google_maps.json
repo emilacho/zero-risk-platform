@@ -1,0 +1,197 @@
+{
+ "apify_function": "resenas_google_maps",
+ "params": {
+  "startUrls": [
+   {
+    "url": "https://www.google.com/maps/search/?api=1&query=Naufrago&query_place_id=ChIJ3asaJgArLJAR4P0azPMVwBc"
+   }
+  ],
+  "maxReviews": 20
+ },
+ "respuesta": [
+  {
+   "cid": "1711391995246345696",
+   "fid": "0x902c2b00261aabdd:0x17c015f3cc1afde0",
+   "url": "https://www.google.com/maps/search/?api=1&query=Naufrago&query_place_id=ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "city": "Olon",
+   "text": "Buen Servicio, Excelente Comida y buen Ambiente.",
+   "kgmid": "/g/11vz6bdjfm",
+   "price": null,
+   "stars": 5,
+   "state": null,
+   "title": "Naufrago",
+   "rating": null,
+   "street": "663R+25G",
+   "address": "663R+25G, Olon, Ecuador",
+   "placeId": "ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "imageUrl": "https://lh3.googleusercontent.com/grass-cs/AABkmLfzl3EMND1novafXiXWy4bT9Ao9gCP9jV-aZr-6R0kpuBEtYbyQsVxGK2Ro2JAnwzCwO5lQLpKUfG78NA4GmepG9w4rY8gs6i0wzDhvFROu8boJyFZtavHEaiL7N0lLcFN4QXn3yv2IuGwu=w426-h240-k-no",
+   "language": "es",
+   "location": {
+    "lat": -1.7974316,
+    "lng": -80.7595412
+   },
+   "publishAt": "Hace 21 horas",
+   "scrapedAt": "2026-10-12T14:48:20.653Z",
+   "visitedIn": null,
+   "categories": [
+    "Restaurante de desayunos"
+   ],
+   "hotelStars": null,
+   "likesCount": 0,
+   "postalCode": null,
+   "totalScore": 4.8,
+   "countryCode": "EC",
+   "categoryName": "Restaurante de desayunos",
+   "isLocalGuide": true,
+   "neighborhood": null,
+   "reviewOrigin": "Google",
+   "reviewsCount": 26,
+   "searchString": "Direct Detail URL: https://www.google.com/maps/search/?api=1&query=Naufrago&query_place_id=ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "reviewContext": {
+    "Nivel de ruido": "Moderado",
+    "Tiempo de espera": "Menos de 10 min",
+    "Tamaño del grupo": "1 persona, 2 personas, 3-4 personas, 5-8 personas, +9 personas, Para grupos de todos los tamaños",
+    "Precio por persona": "5-10 $"
+   },
+   "textTranslated": null,
+   "isAdvertisement": false,
+   "publishedAtDate": "2026-10-11T17:11:39.226Z",
+   "reviewImageUrls": [],
+   "originalLanguage": "es",
+   "businessProfileId": null,
+   "permanentlyClosed": false,
+   "temporarilyClosed": false,
+   "translatedLanguage": null,
+   "reviewDetailedRating": {
+    "Comida": 5,
+    "Ambiente": 5,
+    "Servicio": 5
+   },
+   "responseFromOwnerDate": null,
+   "responseFromOwnerText": null
+  },
+  {
+   "cid": "1711391995246345696",
+   "fid": "0x902c2b00261aabdd:0x17c015f3cc1afde0",
+   "url": "https://www.google.com/maps/search/?api=1&query=Naufrago&query_place_id=ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "city": "Olon",
+   "text": "The best *encebollado* I’ve ever had is in Olón, Santa Elena, Ecuador 🇪🇨. It’s spectacular—I highly recommend it.",
+   "kgmid": "/g/11vz6bdjfm",
+   "price": null,
+   "stars": 5,
+   "state": null,
+   "title": "Naufrago",
+   "rating": null,
+   "street": "663R+25G",
+   "address": "663R+25G, Olon, Ecuador",
+   "placeId": "ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "imageUrl": "https://lh3.googleusercontent.com/grass-cs/AABkmLfzl3EMND1novafXiXWy4bT9Ao9gCP9jV-aZr-6R0kpuBEtYbyQsVxGK2Ro2JAnwzCwO5lQLpKUfG78NA4GmepG9w4rY8gs6i0wzDhvFROu8boJyFZtavHEaiL7N0lLcFN4QXn3yv2IuGwu=w426-h240-k-no",
+   "language": "es",
+   "location": {
+    "lat": -1.7974316,
+    "lng": -80.7595412
+   },
+   "publishAt": "hace un día",
+   "scrapedAt": "2026-10-12T14:48:20.653Z",
+   "visitedIn": null,
+   "categories": [
+    "Restaurante de desayunos"
+   ],
+   "hotelStars": null,
+   "likesCount": 0,
+   "postalCode": null,
+   "totalScore": 4.8,
+   "countryCode": "EC",
+   "categoryName": "Restaurante de desayunos",
+   "isLocalGuide": true,
+   "neighborhood": null,
+   "reviewOrigin": "Google",
+   "reviewsCount": 26,
+   "searchString": "Direct Detail URL: https://www.google.com/maps/search/?api=1&query=Naufrago&query_place_id=ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "reviewContext": {
+    "Nivel de ruido": "Bajo, pero se puede conversar fácilmente",
+    "Tiempo de espera": "Menos de 10 min",
+    "Tamaño del grupo": "5-8 personas, +9 personas",
+    "Precio por persona": "1-5 $"
+   },
+   "textTranslated": "El mejor *encebollado* que he probado fue en Olón, Santa Elena, Ecuador 🇪🇨. Es espectacular, lo recomiendo muchísimo.",
+   "isAdvertisement": false,
+   "publishedAtDate": "2026-10-11T07:02:09.006Z",
+   "reviewImageUrls": [
+    "https://lh3.googleusercontent.com/grass-cs/AABkmLewW-WbFR4uac93xt2_bWHyP_jRFcN5tU1rtn1lIrUIzuOlP8OhsVzD_Z0e6NFrOAQC7Fi_mEhh0SvrLXGpu1FiWfd_52AJmNGxnta-PB2Ljk3Htvexl9bmNDjTiaQiynF_aXnTA-3yaqWL=k-no",
+    "https://lh3.googleusercontent.com/grass-cs/AABkmLdc2t9j_zdW4Vyor6T--_J2dl76zmkzkVNRk1ueu3qIW5GrZeG1OVl-M1Un4OiR5CCmzfVsGjOW3igYQ_3GDJTxRz_FTRTuyzC97QLBGYSGmUsHVEHo8CmR7Qv2fj3p50uf3cbN5_WbP0gk=k-no",
+    "https://lh3.googleusercontent.com/grass-cs/AABkmLdc5Y8kL-nz4KkdEc_042LWdCMGlgWi3NAr-DYM38cexm1SpRExX-JqGGPmY8aK24Be_6PEaUSuDThhCQM3cja_aauMGFiWG_AY7KHziFBDlh4_WgX8lziRR0yJO1PSCxkx0auvtjpmSVOp=k-no",
+    "https://lh3.googleusercontent.com/grass-cs/AABkmLeaCqElRXKXKJ7OUEm0mZIko4dTqDhq2uyav9PRx1yC4z7JpLB9Ey4zsjB7wtasej2JYNlQypHu6nkGvo4gTuk6vAMSvek5dla7i05-ezMAexwUf0IN1KSisy9TvyoRaQmBbp16LeH3cj8T=k-no",
+    "https://lh3.googleusercontent.com/grass-cs/AABkmLcwpll9NtRE1pB4HlKjlk4Cqkb12h5tEPWBV-gTc-aWqmdD2i6shrhGic-FpuQFJKGV-_YvyCjKQKRTpFaFKkSmApUQzo2oWo4eq-BaFC7kO0hbdX5ekzge9ZjDEvu3dlrvKxCm1JueFtTd=k-no",
+    "https://lh3.googleusercontent.com/grass-cs/AABkmLe-YYH6q8mmYCwKv-a9ZKhXVtlaskUU9oKqB0OV0jFIjgoHhDA_WlR4ApV-IOigoUUNylspm2dcSAPO0ycjObCy1vzqL_wO7EeX6myIFU5LSK1syykcD-M7qToBZJRgD5BOqVxTA1_BEYmk=k-no",
+    "https://lh3.googleusercontent.com/grass-cs/AABkmLfxtWcBw586SgLO4iEOnJJa0u6kP5TMKzr9O7c9nKiyRIQgY9T7qduhlkqPYIwbUgBAswbI4SNCYlkJ2KqZzMA8BUEP6KRPDYbaDGIvFuI0cNmqK_Omt5ySo-YhUU5S_3IV4jBL7sDlFOTW=k-no",
+    "https://lh3.googleusercontent.com/grass-cs/AABkmLerFICWgHDEg9vI_z8cVNw4qJFD5uk3Su4rvX3KxTZL4QA8l8PoM7Op3I6vnTfqJjCFiC3AZ5dLp8-dGkCvS0vFKel7Q_RaBMcK16RWEV1RS6lrOqxJ975mAlQrqQCeLqIIUZlNjyI8_cEv=k-no"
+   ],
+   "originalLanguage": "en",
+   "businessProfileId": null,
+   "permanentlyClosed": false,
+   "temporarilyClosed": false,
+   "translatedLanguage": "es",
+   "reviewDetailedRating": {
+    "Comida": 5,
+    "Ambiente": 5,
+    "Servicio": 5
+   },
+   "responseFromOwnerDate": null,
+   "responseFromOwnerText": null
+  },
+  {
+   "cid": "1711391995246345696",
+   "fid": "0x902c2b00261aabdd:0x17c015f3cc1afde0",
+   "url": "https://www.google.com/maps/search/?api=1&query=Naufrago&query_place_id=ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "city": "Olon",
+   "text": null,
+   "kgmid": "/g/11vz6bdjfm",
+   "price": null,
+   "stars": 5,
+   "state": null,
+   "title": "Naufrago",
+   "rating": null,
+   "street": "663R+25G",
+   "address": "663R+25G, Olon, Ecuador",
+   "placeId": "ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "imageUrl": "https://lh3.googleusercontent.com/grass-cs/AABkmLfzl3EMND1novafXiXWy4bT9Ao9gCP9jV-aZr-6R0kpuBEtYbyQsVxGK2Ro2JAnwzCwO5lQLpKUfG78NA4GmepG9w4rY8gs6i0wzDhvFROu8boJyFZtavHEaiL7N0lLcFN4QXn3yv2IuGwu=w426-h240-k-no",
+   "language": "es",
+   "location": {
+    "lat": -1.7974316,
+    "lng": -80.7595412
+   },
+   "publishAt": "Hace 3 semanas",
+   "scrapedAt": "2026-10-12T14:48:20.653Z",
+   "visitedIn": null,
+   "categories": [
+    "Restaurante de desayunos"
+   ],
+   "hotelStars": null,
+   "likesCount": 0,
+   "postalCode": null,
+   "totalScore": 4.8,
+   "countryCode": "EC",
+   "categoryName": "Restaurante de desayunos",
+   "isLocalGuide": true,
+   "neighborhood": null,
+   "reviewOrigin": "Google",
+   "reviewsCount": 26,
+   "searchString": "Direct Detail URL: https://www.google.com/maps/search/?api=1&query=Naufrago&query_place_id=ChIJ3asaJgArLJAR4P0azPMVwBc",
+   "reviewContext": {},
+   "textTranslated": null,
+   "isAdvertisement": false,
+   "publishedAtDate": "2026-09-20T18:02:27.603Z",
+   "reviewImageUrls": [],
+   "originalLanguage": null,
+   "businessProfileId": null,
+   "permanentlyClosed": false,
+   "temporarilyClosed": false,
+   "translatedLanguage": null,
+   "reviewDetailedRating": {},
+   "responseFromOwnerDate": null,
+   "responseFromOwnerText": null
+  }
+ ],
+ "nota": "salida REAL de Apify (2026-10-12), recortada a 3 filas y sin nombres de personas"
+}

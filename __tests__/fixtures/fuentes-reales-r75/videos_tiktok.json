@@ -1,0 +1,171 @@
+{
+ "apify_function": "videos_tiktok",
+ "params": {
+  "profiles": [
+   "nasa"
+  ],
+  "resultsPerPage": 2
+ },
+ "respuesta": [
+  {
+   "id": "7665075736742530317",
+   "isAd": false,
+   "text": "Something big just landed on TikTok.",
+   "input": "nasa",
+   "isStory": false,
+   "hashtags": [],
+   "isPinned": true,
+   "mentions": [],
+   "diggCount": 103300,
+   "mediaUrls": [],
+   "musicMeta": {
+    "musicId": "7665075815390645006",
+    "playUrl": "https://v16m.tiktokcdn.com/58d282392390dbf1fc7901aa5aecdb74/6ace452b/video/tos/alisg/tos-alisg-v-2370c799-sg/ocdfGeDfhIVQQ7oCzASALKAfQ4N0SAToFcfASr/?a=1180&bti=ODszNWYuMDE6&&bt=125&ft=GcDrcInz7ThB6KOGXq8Zmo&mime_type=audio_mpeg&rc=M2psZmo5cnF3PDMzZzU8NEBpM2psZmo5cnF3PDMzZzU8NEBpNi1yMmRzMGNhLS1kMS9zYSNpNi1yMmRzMGNhLS1kMS9zcw%3D%3D&vvpl=1&l=202610122249543F1B2AA5641F312B25A7&btag=e00078000&sp_exp=hash_v0",
+    "musicName": "original sound",
+    "musicAuthor": "NASA",
+    "musicOriginal": true,
+    "coverMediumUrl": "https://p19-common-sign.tiktokcdn.com/tos-maliva-avt-0068/e5143212a59c09a008bf50f487d54d1f~tplv-tiktokx-cropcenter:720:720.jpeg?dr=14579&refresh_token=4268aed9&x-expires=1791986400&x-signature=DgYZvNYfCxuAu7mX6tKuv6zdNLY%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=my",
+    "originalCoverMediumUrl": "https://p19-common-sign.tiktokcdn.com/tos-maliva-avt-0068/e5143212a59c09a008bf50f487d54d1f~tplv-tiktokx-cropcenter:720:720.jpeg?dr=14579&refresh_token=4268aed9&x-expires=1791986400&x-signature=DgYZvNYfCxuAu7mX6tKuv6zdNLY%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=my"
+   },
+   "playCount": 1600000,
+   "videoMeta": {
+    "width": 720,
+    "format": "mp4",
+    "height": 1280,
+    "coverUrl": "https://p16-common-sign.tiktokcdn.com/tos-useast5-p-0068-tx/oAUhkWfCZC7g6ALj2HZgOeELFvIrALeFYOoGI4~tplv-tiktokx-origin.image?dr=14575&x-expires=1791986400&x-signature=MF9T7H6zGhgAaNE%2FQjtpzDAu64Q%3D&t=4d5b0474&ps=13740610&shp=81f88b70&shcp=43f4a2f9&idc=my",
+    "duration": 25,
+    "definition": "720p",
+    "subtitleLinks": null,
+    "aiVideoSummary": null,
+    "originalCoverUrl": "https://p16-common-sign.tiktokcdn.com/tos-useast5-p-0068-tx/oAUhkWfCZC7g6ALj2HZgOeELFvIrALeFYOoGI4~tplv-tiktokx-origin.image?dr=14575&x-expires=1791986400&x-signature=MF9T7H6zGhgAaNE%2FQjtpzDAu64Q%3D&t=4d5b0474&ps=13740610&shp=81f88b70&shcp=43f4a2f9&idc=my",
+    "transcriptionLink": "https://api.apify.com/v2/key-value-stores/rPM2WVtCV9ThGau22/records/transcription-nasa-20260721200902-7665075736742530317.txt",
+    "aiVideoDescription": null
+   },
+   "authorMeta": {
+    "id": "7664638705177150477",
+    "digg": 0,
+    "fans": 2100000,
+    "heart": 10900000,
+    "video": 56,
+    "roomId": "",
+    "bioLink": "science.nasa.gov/feature/artemis-ii-preliminary-lunar-science-report",
+    "friends": 17,
+    "nickName": "NASA",
+    "ttSeller": false,
+    "verified": true,
+    "following": 23,
+    "signature": "Making the seemingly impossible, possible.✨",
+    "createTime": 1784562949,
+    "profileUrl": "https://www.tiktok.com/@nasa",
+    "hasActiveStory": false,
+    "privateAccount": false,
+    "commerceUserInfo": {
+     "commerceUser": false
+    },
+    "followDatasetUrl": null,
+    "originalAvatarUrl": "https://p19-common-sign.tiktokcdn-us.com/tos-useast5-avt-0068-tx/e5143212a59c09a008bf50f487d54d1f~tplv-tiktokx-cropcenter:720:720.jpeg?dr=9640&refresh_token=30fd3f8e&x-expires=1791986400&x-signature=r3R%2BiRHZdK7hVa%2BLp7EPdvrSlts%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=useast8"
+   },
+   "createTime": 1784664542,
+   "shareCount": 3244,
+   "isSlideshow": false,
+   "isSponsored": false,
+   "repostCount": 0,
+   "webVideoUrl": "https://www.tiktok.com/@nasa/video/7665075736742530317",
+   "collectCount": 7511,
+   "commentCount": 3016,
+   "textLanguage": "en",
+   "createTimeISO": "2026-07-21T20:09:02.000Z",
+   "effectStickers": [],
+   "detailedMentions": [],
+   "commentsDatasetUrl": null,
+   "fromProfileSection": "videos",
+   "hasTikTokShopProduct": false,
+   "shortDramaSeriesInfo": null
+  },
+  {
+   "id": "7695090484124929293",
+   "isAd": false,
+   "text": "NASA’s mission reached across the globe and beyond this week 🚀\n❄️ Inspiration Tour heads to Alaska 🌎 NASA leads at IAC in Antalya 🧑‍🚀 Crew-12 returns home 🌕 Artemis II science data released\n\nHere’s what's new in your NASA Minute!",
+   "input": "nasa",
+   "isStory": false,
+   "hashtags": [],
+   "isPinned": false,
+   "mentions": [],
+   "diggCount": 5394,
+   "mediaUrls": [],
+   "musicMeta": {
+    "musicId": "7695090531973909261",
+    "playUrl": "https://v16m.tiktokcdn.com/21eb224e03b5861ab8c41f062aeaee43/6ace458c/video/tos/alisg/tos-alisg-ve-2370c799-sg/oktoHl5kziEOlOfuOPhgu8AehAQVTCMcVBzTeW/?a=1180&bti=ODszNWYuMDE6&&bt=125&ft=GcDrcInz7ThB6KOGXq8Zmo&mime_type=audio_mpeg&rc=aGRpaGg7aWkzZjo5ZWczNkBpM25zOmw5cjo6ZTMzZzU8NEA0X2AwX2BgNjExM2MvLy02YSNqZ2JpMmQ0NTJhLS1kMS9zcw%3D%3D&vvpl=1&l=202610122249543F1B2AA5641F312B25A7&btag=e00090000&sp_exp=hash_v0",
+    "musicName": "original sound - NASA",
+    "musicAuthor": "NASA",
+    "musicOriginal": false,
+    "coverMediumUrl": "https://p19.tiktokcdn-us.com/aweme/200x200/tos-useast5-avt-0068-tx/e5143212a59c09a008bf50f487d54d1f.jpeg",
+    "originalCoverMediumUrl": "https://p19.tiktokcdn-us.com/aweme/200x200/tos-useast5-avt-0068-tx/e5143212a59c09a008bf50f487d54d1f.jpeg"
+   },
+   "playCount": 70700,
+   "videoMeta": {
+    "width": 720,
+    "format": "mp4",
+    "height": 1280,
+    "coverUrl": "https://p16-common-sign.tiktokcdn.com/tos-useast5-p-0068-tx/oYaQISsbXDAC6KA7AnF2DRqAGEvgvCByQGfeUE~tplv-tiktokx-origin.image?dr=14575&x-expires=1791986400&x-signature=AKQhK9HpuAr2qXWbL0ME2TPMu1E%3D&t=4d5b0474&ps=13740610&shp=81f88b70&shcp=43f4a2f9&idc=my",
+    "duration": 122,
+    "definition": "720p",
+    "subtitleLinks": [
+     {
+      "source": "ASR",
+      "version": "1:big_caption",
+      "language": "eng-US",
+      "tiktokLink": "https://v16-webapp.tiktok.com/1311683305660077075197dbe26b5a68/6acf970c/video/tos/alisg/tos-alisg-v-37c799-sg/0e0af85bb24c4079b2d8b46a9c927ab0/?a=1988&bti=ODszNWYuMDE6&&bt=5248&ft=-ElcomH1PD12NQVhEn-UxHD2hY6e3wv25-cAp&mime_type=video_mp4&rc=anFxeXE5cjw6ZTMzZzczNEBpanFxeXE5cjw6ZTMzZzczNEBtMWgwMmRrMjJhLS1kMS9zYSNtMWgwMmRrMjJhLS1kMS9zcw%3D%3D&l=202610122249543F1B2AA5641F312B25A7&btag=e00048000",
+      "downloadLink": "https://api.apify.com/v2/key-value-stores/rPM2WVtCV9ThGau22/records/subtitle-nasa-20261010172128-7695090484124929293-eng-US.vtt",
+      "sourceUnabbreviated": "automatic speech recognition"
+     }
+    ],
+    "aiVideoSummary": null,
+    "originalCoverUrl": "https://p16-common-sign.tiktokcdn.com/tos-useast5-p-0068-tx/oYaQISsbXDAC6KA7AnF2DRqAGEvgvCByQGfeUE~tplv-tiktokx-origin.image?dr=14575&x-expires=1791986400&x-signature=AKQhK9HpuAr2qXWbL0ME2TPMu1E%3D&t=4d5b0474&ps=13740610&shp=81f88b70&shcp=43f4a2f9&idc=my",
+    "transcriptionLink": null,
+    "aiVideoDescription": null
+   },
+   "authorMeta": {
+    "id": "7664638705177150477",
+    "digg": 0,
+    "fans": 2100000,
+    "heart": 10900000,
+    "video": 56,
+    "roomId": "",
+    "bioLink": "science.nasa.gov/feature/artemis-ii-preliminary-lunar-science-report",
+    "friends": 17,
+    "nickName": "NASA",
+    "ttSeller": false,
+    "verified": true,
+    "following": 23,
+    "signature": "Making the seemingly impossible, possible.✨",
+    "createTime": 1784562949,
+    "profileUrl": "https://www.tiktok.com/@nasa",
+    "hasActiveStory": false,
+    "privateAccount": false,
+    "commerceUserInfo": {
+     "commerceUser": false
+    },
+    "followDatasetUrl": null,
+    "originalAvatarUrl": "https://p19-common-sign.tiktokcdn-us.com/tos-useast5-avt-0068-tx/e5143212a59c09a008bf50f487d54d1f~tplv-tiktokx-cropcenter:720:720.jpeg?dr=9640&refresh_token=30fd3f8e&x-expires=1791986400&x-signature=r3R%2BiRHZdK7hVa%2BLp7EPdvrSlts%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=useast8"
+   },
+   "createTime": 1791652888,
+   "shareCount": 86,
+   "isSlideshow": false,
+   "isSponsored": false,
+   "repostCount": 0,
+   "webVideoUrl": "https://www.tiktok.com/@nasa/video/7695090484124929293",
+   "collectCount": 391,
+   "commentCount": 173,
+   "textLanguage": "en",
+   "createTimeISO": "2026-10-10T17:21:28.000Z",
+   "effectStickers": [],
+   "detailedMentions": [],
+   "commentsDatasetUrl": null,
+   "fromProfileSection": "videos",
+   "hasTikTokShopProduct": false,
+   "shortDramaSeriesInfo": null
+  }
+ ],
+ "nota": "salida REAL de Apify (2026-10-12), recortada a 3 filas y sin nombres de personas"
+}

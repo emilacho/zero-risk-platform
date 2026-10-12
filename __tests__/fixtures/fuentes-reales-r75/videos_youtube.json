@@ -1,0 +1,276 @@
+{
+ "apify_function": "videos_youtube",
+ "params": {
+  "startUrls": [
+   {
+    "url": "https://www.youtube.com/@NASA"
+   }
+  ],
+  "maxResults": 2
+ },
+ "respuesta": [
+  {
+   "id": "ErAqN6gXqZQ",
+   "url": "https://www.youtube.com/watch?v=ErAqN6gXqZQ",
+   "date": "2026-09-30T18:48:20.000Z",
+   "text": "NASA astronauts Jessica Watkins and Luke Delaney, CSA (Canadian Space Agency) astronaut Joshua Kutryk, and Roscosmos cosmonaut Sergey Teteryatnikov are scheduled to lift off to the International Space Station on Thursday, Oct. 1.\n\nOnce they arrive, they'll spend the next several months in orbit, helping us learn how to live in space while running scientific experiments to make life better back on Earth. Watch the live launch with us here on YouTube.\n\nMore info on our Crew-13 launch schedule: https://go.nasa.gov/3V9NKT0\nDownload this video: https://go.nasa.gov/4zaz3Of",
+   "type": "video",
+   "input": "https://www.youtube.com/@NASA",
+   "likes": 1200,
+   "order": 0,
+   "title": "NASA's SpaceX Crew-13 Mission (Official NASA Trailer)",
+   "duration": "00:01:02",
+   "hashtags": [],
+   "location": null,
+   "channelId": "UCLA_DiR1FfKNvjuUpBHmylQ",
+   "fromYTUrl": "https://www.youtube.com/@NASA/videos",
+   "subtitles": [
+    {
+     "srt": "1\n00:00:1,360 --> 00:00:4,243\nLo primero que ves hacer a un niño\n\n2\n00:00:3,243 --> 00:00:4,243\n \n\n3\n00:00:3,297 --> 00:00:6,235\n cuando gatea es intentar entender su\n\n4\n00:00:5,235 --> 00:00:6,235\n \n\n5\n00:00:5,289 --> 00:00:9,074\n entorno. La curiosidad existe en todos\n\n6\n00:00:8,074 --> 00:00:9,074\n \n\n7\n00:00:8,139 --> 00:00:11,661\n y es natural que queramos entender aún\n\n8\n00:00:10,661 --> 00:00:11,661\n \n\n9\n00:00:10,726 --> 00:00:13,279\n más allá de la Tierra.\n\n10\n00:00:12,279 --> 00:00:13,279\n \n\n11\n00:00:12,882 --> 00:00:16,868\n Despegue del Falcon 9 y la Crew Dragon.\n\n12\n00:00:15,868 --> 00:00:16,868\n \n\n13\n00:00:15,968 --> 00:00:18,936\n Vamos NASA. Vamos SpaceX.\n\n14\n00:00:17,936 --> 00:",
+     "type": "auto_generated",
+     "srtUrl": null,
+     "language": "es"
+    }
+   ],
+   "viewCount": 100983,
+   "channelUrl": "https://www.youtube.com/channel/UCLA_DiR1FfKNvjuUpBHmylQ",
+   "channelName": "NASA",
+   "isMonetized": null,
+   "thumbnailUrl": "https://i.ytimg.com/vi/ErAqN6gXqZQ/maxresdefault.jpg",
+   "collaborators": null,
+   "commentsCount": 0,
+   "isMembersOnly": false,
+   "isPaidContent": false,
+   "aiVideoSummary": null,
+   "translatedText": null,
+   "channelLocation": null,
+   "channelUsername": "NASA",
+   "inputChannelUrl": "https://www.youtube.com/@NASA",
+   "isAgeRestricted": false,
+   "translatedTitle": null,
+   "aboutChannelInfo": {
+    "channelId": "UCLA_DiR1FfKNvjuUpBHmylQ",
+    "channelUrl": "https://www.youtube.com/channel/UCLA_DiR1FfKNvjuUpBHmylQ",
+    "channelName": "NASA",
+    "channelLocation": null,
+    "channelUsername": "NASA",
+    "inputChannelUrl": "https://www.youtube.com/@NASA",
+    "isAgeRestricted": false,
+    "channelAvatarUrl": "https://yt3.googleusercontent.com/eIf5fNPcIcj9ig-wZBeq4stFy1lgjWTW1nLT5dYlFkHZprZ03QBiMcbpwNMB6XSBjrSFGtAGQg=s68-c-k-c0x00ffffff-no-rj",
+    "channelBannerUrl": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2560-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+    "channelJoinedDate": "Jun 3, 2008",
+    "channelTotalViews": 1128314680,
+    "isChannelVerified": true,
+    "channelDescription": "NASA's mission is to pioneer the future in space exploration, scientific discovery, and aeronautics research.\r\n\r\nTo do that, we have worked around the world—and off it—for more than 60 years, searching for answers to fundamental questions about our place in the universe. We're exploring space and discovering Earth. Join us on this exciting and important journey.",
+    "channelTotalVideos": 6187,
+    "numberOfSubscribers": 15100000,
+    "channelDescriptionLinks": [
+     {
+      "url": "https://www.nasa.gov",
+      "text": "nasa.gov"
+     },
+     {
+      "url": "https://x.com/nasa",
+      "text": "X"
+     },
+     {
+      "url": "https://www.facebook.com/NASA",
+      "text": "Facebook"
+     },
+     {
+      "url": "https://www.flickr.com/photos/nasahqphoto/",
+      "text": "Flickr"
+     },
+     {
+      "url": "https://www.instagram.com/nasa",
+      "text": "Instagram"
+     },
+     {
+      "url": "https://www.nasa.gov/nasa-policies-and-guidelines-for-digital-and-social-media/",
+      "text": "Commenting Policy"
+     }
+    ]
+   },
+   "channelAvatarUrl": "https://yt3.googleusercontent.com/eIf5fNPcIcj9ig-wZBeq4stFy1lgjWTW1nLT5dYlFkHZprZ03QBiMcbpwNMB6XSBjrSFGtAGQg=s68-c-k-c0x00ffffff-no-rj",
+   "channelBannerUrl": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2560-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+   "descriptionLinks": [
+    {
+     "url": "https://go.nasa.gov/3V9NKT0",
+     "text": "https://go.nasa.gov/3V9NKT0"
+    },
+    {
+     "url": "https://go.nasa.gov/4zaz3Of",
+     "text": "https://go.nasa.gov/4zaz3Of"
+    }
+   ],
+   "transcriptionUrl": "https://api.apify.com/v2/key-value-stores/xSPhvfxD9rrpmTQ4h/records/transcription-ErAqN6gXqZQ",
+   "channelJoinedDate": "Jun 3, 2008",
+   "channelTotalViews": 1128314680,
+   "commentsTurnedOff": false,
+   "isChannelVerified": true,
+   "aiVideoDescription": null,
+   "channelDescription": "NASA's mission is to pioneer the future in space exploration, scientific discovery, and aeronautics research.\r\n\r\nTo do that, we have worked around the world—and off it—for more than 60 years, searching for answers to fundamental questions about our place in the universe. We're exploring space and discovering Earth. Join us on this exciting and important journey.",
+   "channelTotalVideos": 6187,
+   "fromChannelListPage": "videos",
+   "numberOfSubscribers": 15100000,
+   "channelDescriptionLinks": [
+    {
+     "url": "https://www.nasa.gov",
+     "text": "nasa.gov"
+    },
+    {
+     "url": "https://x.com/nasa",
+     "text": "X"
+    },
+    {
+     "url": "https://www.facebook.com/NASA",
+     "text": "Facebook"
+    },
+    {
+     "url": "https://www.flickr.com/photos/nasahqphoto/",
+     "text": "Flickr"
+    },
+    {
+     "url": "https://www.instagram.com/nasa",
+     "text": "Instagram"
+    },
+    {
+     "url": "https://www.nasa.gov/nasa-policies-and-guidelines-for-digital-and-social-media/",
+     "text": "Commenting Policy"
+    }
+   ]
+  },
+  {
+   "id": "IwZVXmQdX1E",
+   "url": "https://www.youtube.com/watch?v=IwZVXmQdX1E",
+   "date": "2026-09-08T18:33:06.000Z",
+   "text": "No aim is too high. No journey is too far. No challenge is too tough. \n\nSince NASA announced plans for a Moon Base in March 2026, work has been moving quickly to turn an ambitious vision into reality. From identifying commercial partners to sending humans around the Moon for the first time in decades, we are advancing the missions, technologies, and capabilities that will help build humanity’s first lunar outpost.\n\nWe’re going back to the Moon. This time, to stay. \n\nLearn more about the Moon Base: https://nasa.gov/moonbase \nDownload this video: https://images.nasa.gov/details/NASA_... \n\nCredit: NASA",
+   "type": "video",
+   "input": "https://www.youtube.com/@NASA",
+   "likes": 8900,
+   "order": 1,
+   "title": "NASA Moon Base: The First Six Months",
+   "duration": "00:01:07",
+   "hashtags": [],
+   "location": null,
+   "channelId": "UCLA_DiR1FfKNvjuUpBHmylQ",
+   "fromYTUrl": "https://www.youtube.com/@NASA/videos",
+   "subtitles": [
+    {
+     "srt": "1\n00:00:0,924 --> 00:00:3,109\nEste es el momento en el que todos\n\n2\n00:00:2,109 --> 00:00:3,109\n \n\n3\n00:00:2,144 --> 00:00:4,435\n deberíamos empezar a creer de nuevo.\n\n4\n00:00:3,435 --> 00:00:4,435\n \n\n5\n00:00:3,560 --> 00:00:5,840\n Ahora rumbo a la Luna.\n\n6\n00:00:4,840 --> 00:00:5,840\n \n\n7\n00:00:5,460 --> 00:00:8,315\n Estados Unidos regresa a la Luna para\n\n8\n00:00:7,315 --> 00:00:8,315\n \n\n9\n00:00:7,366 --> 00:00:9,620\n construir una base lunar.\n\n10\n00:00:8,620 --> 00:00:9,620\n \n\n11\n00:00:8,860 --> 00:00:11,740\n La NASA ha seleccionado a Blue Origin.\n\n12\n00:00:10,740 --> 00:00:11,740\n \n\n13\n00:00:11,019 --> 00:00:14,019\n Puesto de avanzada lunar Astrolabe.\n\n14\n00:00:13,019 --> 00:00:14,019\n \n\n",
+     "type": "auto_generated",
+     "srtUrl": null,
+     "language": "es"
+    }
+   ],
+   "viewCount": 519899,
+   "channelUrl": "https://www.youtube.com/channel/UCLA_DiR1FfKNvjuUpBHmylQ",
+   "channelName": "NASA",
+   "isMonetized": null,
+   "thumbnailUrl": "https://i.ytimg.com/vi/IwZVXmQdX1E/maxresdefault.jpg",
+   "collaborators": null,
+   "commentsCount": 0,
+   "isMembersOnly": false,
+   "isPaidContent": false,
+   "aiVideoSummary": null,
+   "translatedText": null,
+   "channelLocation": null,
+   "channelUsername": "NASA",
+   "inputChannelUrl": "https://www.youtube.com/@NASA",
+   "isAgeRestricted": false,
+   "translatedTitle": null,
+   "aboutChannelInfo": {
+    "channelId": "UCLA_DiR1FfKNvjuUpBHmylQ",
+    "channelUrl": "https://www.youtube.com/channel/UCLA_DiR1FfKNvjuUpBHmylQ",
+    "channelName": "NASA",
+    "channelLocation": null,
+    "channelUsername": "NASA",
+    "inputChannelUrl": "https://www.youtube.com/@NASA",
+    "isAgeRestricted": false,
+    "channelAvatarUrl": "https://yt3.googleusercontent.com/eIf5fNPcIcj9ig-wZBeq4stFy1lgjWTW1nLT5dYlFkHZprZ03QBiMcbpwNMB6XSBjrSFGtAGQg=s68-c-k-c0x00ffffff-no-rj",
+    "channelBannerUrl": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2560-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+    "channelJoinedDate": "Jun 3, 2008",
+    "channelTotalViews": 1128314680,
+    "isChannelVerified": true,
+    "channelDescription": "NASA's mission is to pioneer the future in space exploration, scientific discovery, and aeronautics research.\r\n\r\nTo do that, we have worked around the world—and off it—for more than 60 years, searching for answers to fundamental questions about our place in the universe. We're exploring space and discovering Earth. Join us on this exciting and important journey.",
+    "channelTotalVideos": 6187,
+    "numberOfSubscribers": 15100000,
+    "channelDescriptionLinks": [
+     {
+      "url": "https://www.nasa.gov",
+      "text": "nasa.gov"
+     },
+     {
+      "url": "https://x.com/nasa",
+      "text": "X"
+     },
+     {
+      "url": "https://www.facebook.com/NASA",
+      "text": "Facebook"
+     },
+     {
+      "url": "https://www.flickr.com/photos/nasahqphoto/",
+      "text": "Flickr"
+     },
+     {
+      "url": "https://www.instagram.com/nasa",
+      "text": "Instagram"
+     },
+     {
+      "url": "https://www.nasa.gov/nasa-policies-and-guidelines-for-digital-and-social-media/",
+      "text": "Commenting Policy"
+     }
+    ]
+   },
+   "channelAvatarUrl": "https://yt3.googleusercontent.com/eIf5fNPcIcj9ig-wZBeq4stFy1lgjWTW1nLT5dYlFkHZprZ03QBiMcbpwNMB6XSBjrSFGtAGQg=s68-c-k-c0x00ffffff-no-rj",
+   "channelBannerUrl": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2560-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+   "descriptionLinks": [
+    {
+     "url": "https://nasa.gov/moonbase",
+     "text": "https://nasa.gov/moonbase"
+    },
+    {
+     "url": "https://images.nasa.gov/details/NASA_Moon_Base-First_Six_Months",
+     "text": "https://images.nasa.gov/details/NASA_..."
+    }
+   ],
+   "transcriptionUrl": "https://api.apify.com/v2/key-value-stores/xSPhvfxD9rrpmTQ4h/records/transcription-IwZVXmQdX1E",
+   "channelJoinedDate": "Jun 3, 2008",
+   "channelTotalViews": 1128314680,
+   "commentsTurnedOff": false,
+   "isChannelVerified": true,
+   "aiVideoDescription": null,
+   "channelDescription": "NASA's mission is to pioneer the future in space exploration, scientific discovery, and aeronautics research.\r\n\r\nTo do that, we have worked around the world—and off it—for more than 60 years, searching for answers to fundamental questions about our place in the universe. We're exploring space and discovering Earth. Join us on this exciting and important journey.",
+   "channelTotalVideos": 6187,
+   "fromChannelListPage": "videos",
+   "numberOfSubscribers": 15100000,
+   "channelDescriptionLinks": [
+    {
+     "url": "https://www.nasa.gov",
+     "text": "nasa.gov"
+    },
+    {
+     "url": "https://x.com/nasa",
+     "text": "X"
+    },
+    {
+     "url": "https://www.facebook.com/NASA",
+     "text": "Facebook"
+    },
+    {
+     "url": "https://www.flickr.com/photos/nasahqphoto/",
+     "text": "Flickr"
+    },
+    {
+     "url": "https://www.instagram.com/nasa",
+     "text": "Instagram"
+    },
+    {
+     "url": "https://www.nasa.gov/nasa-policies-and-guidelines-for-digital-and-social-media/",
+     "text": "Commenting Policy"
+    }
+   ]
+  }
+ ],
+ "nota": "salida REAL de Apify (2026-10-12), recortada a 3 filas y sin nombres de personas"
+}

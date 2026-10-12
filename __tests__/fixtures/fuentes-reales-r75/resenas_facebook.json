@@ -1,0 +1,19 @@
+{
+ "apify_function": "resenas_facebook",
+ "params": {
+  "startUrls": [
+   {
+    "url": "https://www.facebook.com/wikipedia/reviews"
+   }
+  ],
+  "resultsLimit": 5
+ },
+ "respuesta": [
+  {
+   "error": "no_items",
+   "inputUrl": "https://www.facebook.com/wikipedia",
+   "errorDescription": "Empty or private data for provided input"
+  }
+ ],
+ "nota": "salida REAL de Apify (2026-10-12), recortada a 3 filas y sin nombres de personas"
+}

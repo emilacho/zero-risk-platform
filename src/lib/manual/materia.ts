@@ -14,6 +14,21 @@ export interface Propios { sitio?: string | null; handles: string[]; /** perfile
 export const FUNCIONES_DE_FUENTES_PUBLICAS = /^(resenas_|publicaciones_|videos_)/
 const REDES_DE_VIDEO: Record<string, CanalDeFuente> = { videos_instagram: 'instagram', videos_tiktok: 'tiktok', videos_youtube: 'youtube', publicaciones_facebook: 'facebook' }
 const PLATAFORMA_DE_RESENAS: Record<string, string> = { resenas_google_maps: 'Google Maps', resenas_tripadvisor: 'Tripadvisor', resenas_booking: 'Booking', resenas_facebook: 'Facebook', resenas_app_store: 'App Store' }
+/** salida REAL de YouTube (ronda 75): «subtitles» es una lista de {srt}; queda solo lo que se dice (sin números, tiempos ni líneas repetidas) */
+export function subtitulosComoTexto(v: unknown): string {
+  if (typeof v === 'string') return v.trim()
+  if (!Array.isArray(v)) return ''
+  const partes: string[] = []
+  for (const s of v) {
+    const crudo = typeof s === 'string' ? s : String((s as Record<string, unknown> | null)?.srt ?? (s as Record<string, unknown> | null)?.text ?? (s as Record<string, unknown> | null)?.vtt ?? '')
+    for (const l of crudo.split('\n')) {
+      const t = l.trim()
+      if (!t || /^[0-9]+$/.test(t) || t.includes('-->')) continue
+      if (partes[partes.length - 1] !== t) partes.push(t)
+    }
+  }
+  return partes.join(' ')
+}
 const primero = (o: Record<string, unknown>, ks: string[]): string => { for (const k of ks) { const v = o[k]; if (typeof v === 'string' && v.trim()) return v.trim() } return '' }
 /** el texto de UNA reseña (sin el nombre de quien opinó) · las tiendas de apps traen las reseñas anidadas en la ficha de la app */
 export function textosDeResenas(it: Record<string, unknown>): string[] {
@@ -141,7 +156,7 @@ export function fuentesDeRaspado(filas: FilaDeRaspado[], propios: Propios): Fuen
         } else {
           const canal = REDES_DE_VIDEO[fila.apify_function] ?? 'otro'
           const pie = primero(it, ['caption', 'text', 'message', 'postText', 'description', 'title'])
-          const dicho = primero(it, ['transcript', 'transcription', 'subtitles', 'videoTranscript', 'subtitle', 'captionText', 'ocrText'])
+          const dicho = primero(it, ['transcript', 'transcription', 'videoTranscript', 'subtitle', 'captionText', 'ocrText']) || subtitulosComoTexto(it.subtitles)
           meter({ clave: fila.id, tipo: 'primaria_propia', canal, rol: fila.apify_function.startsWith('videos_') ? 'cuerpo' : 'leyenda', rotulo: `${canal} propio · ${fila.apify_function.startsWith('videos_') ? 'videos (lo que se dice)' : 'publicaciones'}`, texto: [pie, dicho].filter(Boolean).join('\n') })
         }
         continue
