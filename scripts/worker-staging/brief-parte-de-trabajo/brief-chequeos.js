@@ -127,8 +127,8 @@ function chequear(parte, manual, planTexto) {
     else ids[e.id] = i + 1
 
     // ── campos completos
-    for (var c = 0; c < CAMPOS_OBLIGATORIOS.length; c++) {
-      var k = CAMPOS_OBLIGATORIOS[c]
+    for (var ci = 0; ci < CAMPOS_OBLIGATORIOS.length; ci++) {
+      var k = CAMPOS_OBLIGATORIOS[ci]
       var v = e[k]
       if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) falla('campo_faltante', idE, 'falta el campo «' + k + '» (si no se sabe, se declara como hueco · no se deja vacío)')
     }
