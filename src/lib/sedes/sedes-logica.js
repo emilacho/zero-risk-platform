@@ -604,13 +604,25 @@ function textosPropios(posts, opciones) {
   return out
 }
 
+/** r75 · H1 · la línea del REGISTRO del cliente, con el valor YA resuelto (manual > ficha > país) · {trato:'tu'|'vos'|'usted'|..., fuente}; sin dato, lo declara en vez de elegir */
+function lineaDeRegistro(trato) {
+  var t = trato && trato.trato
+  var f = trato && trato.fuente
+  var de = f === 'manual' ? 'su manual' : f === 'ficha' ? 'su ficha' : f === 'default_por_pais' ? 'su país, por omisión' : 'la resolución del sistema'
+  if (t === 'tu') return '   El registro de este cliente es TUTEO (fijado por ' + de + '): escribe en tuteo («escríbenos», «pídelo»), aunque algún texto de referencia use otra forma.'
+  if (t === 'vos') return '   El registro de este cliente es VOSEO (fijado por ' + de + '): escribe en voseo («escribinos», «pedilo»), aunque algún texto de referencia use otra forma.'
+  if (t === 'usted') return '   El registro de este cliente es de USTED (fijado por ' + de + '): trata de usted («escríbanos», «pídalo»), aunque algún texto de referencia use otra forma.'
+  return '   El registro de este cliente NO está fijado (ni por su manual ni por su país' + (t === 'conflicto' ? ': su manual menciona más de uno' : '') + '): no lo inventes, no imites el registro de los textos de referencia y declara el hueco en «no_pude_cumplir».'
+}
+
 /** El bloque de voz del pedido · si no hay textos propios se DECLARA */
-function bloqueDeVoz(textos) {
+function bloqueDeVoz(textos, trato) {
   if (!textos || !textos.length) {
     return 'E) LA VOZ. No hay textos de posts propios del cliente guardados en el sistema: no tienes una referencia de voz aparte del brief y del manual. Decláralo en «no_pude_cumplir» («sin textos propios de referencia») y escribe con la voz del manual.'
   }
   return ['E) LA VOZ. Estos son textos de posts PROPIOS del cliente (los más recientes primero). Úsalos SÓLO para captar el tono y las palabras de la casa: no los copies, no repitas sus datos (pueden estar viejos) y no importes de ellos nada que el brief prohíba.',
-    '   Algunos pueden ser de colaboradores o estar en otro registro: el manual y el brief mandan. El español es de Ecuador: TUTEA siempre («escríbenos», «pídelo»), aunque algún texto de referencia use otra forma.']
+    '   Algunos pueden ser de colaboradores o estar en otro registro: el manual y el brief mandan.',
+    lineaDeRegistro(trato)]
     .concat(textos.map(function (t, i) { return '   ' + (i + 1) + '. [' + (t.fecha || 's/f') + '] «' + t.texto + '»' })).join('\n')
 }
 
@@ -620,6 +632,6 @@ if (typeof module !== 'undefined' && module.exports) {
     canonicoHorario: canonicoHorario, describirHorario: describirHorario, telefonoNorm: telefonoNorm, extraerJsonLd: extraerJsonLd,
     observacionesDelSitio: observacionesDelSitio, observacionesDeInstagram: observacionesDeInstagram, observacionesDeMaps: observacionesDeMaps, mismoNegocio: mismoNegocio,
     horarioDeMapsEnTexto: function (lista) { var h = horarioDeMaps(lista); return h ? describirHorario(h) : null }, pruebasDePropiedad: pruebasDePropiedad, probarPropiedad: probarPropiedad, cuentasSocialesDe: cuentasSocialesDe, cuentasDeLaFicha: cuentasDeLaFicha, descubrirSedes: descubrirSedes, ultimasPorFuente: ultimasPorFuente, resolverCampo: resolverCampo, resolverSedes: resolverSedes, ubicacionesParaMapas: ubicacionesParaMapas,
-    bloqueDeSedes: bloqueDeSedes, textosPropios: textosPropios, bloqueDeVoz: bloqueDeVoz,
+    bloqueDeSedes: bloqueDeSedes, textosPropios: textosPropios, bloqueDeVoz: bloqueDeVoz, lineaDeRegistro: lineaDeRegistro,
   }
 }

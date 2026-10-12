@@ -7,7 +7,8 @@ import { DIAS_DE_CAMPANA } from './constantes'
 import { fechaInicioPorRegla, sumarDias } from './fechas'
 import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 
-export const RESULTADOS_DE_CABLE = ['cadena_abierta', 'lote_briefeado', 'necesita_humano', 'plan_no_coincide', 'pasarela_ok'] as const
+// r75 · 'cadena_apagada': con la cadena apagada la puerta ya NO reenvía al brief viejo (un solo camino de briefs): deja el plan guardado, anota que no se generan briefs y cierra el viaje con este resultado
+export const RESULTADOS_DE_CABLE = ['cadena_abierta', 'lote_briefeado', 'necesita_humano', 'plan_no_coincide', 'pasarela_ok', 'cadena_apagada'] as const
 
 const TRANSICIONES: Record<EstadoCampana, EstadoCampana[]> = {
   abierta: ['estrategia', 'necesita_humano', 'cerrada'],

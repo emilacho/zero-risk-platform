@@ -2,6 +2,7 @@
  * LOS ADAPTADORES REALES de los puertos de la oficina. NADA de esto corre mientras la oficina esté apagada (la puerta devuelve 409 antes) y NADA llama a un proveedor en `dry_run`.
  * Todo recibe sus dependencias por parámetro (base, `fetch`, claves) para probarse sin red. Un fallo de Slack nunca se lanza; un proveedor sin configurar responde «no configurado», no revienta.
  */
+import { monedaDelCliente } from '@/lib/moneda/por-pais'
 import zlib from 'node:zlib'
 import { renderManualLimpio } from '../brand-book-render-limpio'
 import { extraerCatalogo } from '../cerebro/datos-estructurados'
@@ -97,6 +98,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
           cliente_nombre: nombre, manual_texto, plan_texto: null,
           fuentes: {
             palabras_prohibidas: lista<string>(manual.forbidden_words), telefonos, handles, precios, competidores,
+            moneda: monedaDelCliente({ country: cliente.country, config: cliente.config }, manual as { currency?: unknown }).codigo,
             registro: registroDelManual(manual.voice_description as string | null),
             telefonos_verificables: telefonos.length > 0, handles_verificables: handles.length > 0,
           },

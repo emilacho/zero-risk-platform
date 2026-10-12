@@ -220,13 +220,17 @@ describe('⑥ la voz: los textos de los posts propios', () => {
     expect(yuca.texto).not.toMatch(/#syntropic/)
     expect(new Set(t.map((x: { texto: string }) => x.texto)).size).toBe(t.length)
   })
-  it('sin textos propios el bloque lo DECLARA (no inventa una voz) · con textos manda tutear', () => {
+  it('sin textos propios el bloque lo DECLARA (no inventa una voz) · con textos usa el REGISTRO DEL CLIENTE (r75 · H1): tuteo, voseo, usted, o declara que no está fijado', () => {
     expect(S.bloqueDeVoz([])).toMatch(/No hay textos de posts propios/)
     expect(S.bloqueDeVoz(null)).toMatch(/sin textos propios de referencia/)
-    const b = S.bloqueDeVoz(S.textosPropios(IG.latestPosts))
-    expect(b).toMatch(/TUTEA/)
-    expect(b).toMatch(/no los copies/i)
-    expect(b).toMatch(/\[2026-/)
+    const textos = S.textosPropios(IG.latestPosts)
+    const b = S.bloqueDeVoz(textos, { trato: 'tu', fuente: 'manual' })
+    expect(b).toMatch(/TUTEO \(fijado por su manual\)/); expect(b).toMatch(/no los copies/i); expect(b).toMatch(/\[2026-/)
+    expect(S.bloqueDeVoz(textos, { trato: 'vos', fuente: 'default_por_pais' })).toMatch(/VOSEO \(fijado por su país, por omisión\)[\s\S]*escribinos/)
+    expect(S.bloqueDeVoz(textos, { trato: 'usted', fuente: 'ficha' })).toMatch(/USTED \(fijado por su ficha\)/)
+    for (const sin of [undefined, null, { trato: 'no_definido' }, { trato: 'conflicto' }]) { const x = S.bloqueDeVoz(textos, sin as never); expect(x).toMatch(/NO está fijado/); expect(x).not.toMatch(/TUTEA|TUTEO \(/) }
+    // jamás una regla fija de un país
+    expect(S.bloqueDeVoz(textos, { trato: 'vos', fuente: 'manual' }).split('\n   1. ')[0]).not.toMatch(/Ecuador|TUTEA siempre/)
   })
   it('entradas basura (sin caption, muy cortas, no lista) no rompen nada', () => {
     expect(S.textosPropios(undefined)).toEqual([])

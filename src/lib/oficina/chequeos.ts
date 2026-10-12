@@ -5,6 +5,7 @@
  */
 import { contienePalabra, datosDeContacto, digitosDeTelefono, normalizar } from './texto'
 import type { Ficha } from './tipos'
+import { importesEnTexto, numeroDeImporte } from '@/lib/moneda/por-pais'
 
 export type Registro = 'tuteo' | 'voseo' | 'formal' | 'sin_dato'
 /** lo que el código sabe del cliente (de su manual, su ficha, su carta guardada y sus sedes) */
@@ -15,6 +16,8 @@ export interface FuentesDelCliente {
   /** precios publicados (cifras exactas, p. ej. «7.00»); vacío = no hay carta guardada (no verificable) */
   precios: string[]
   competidores: string[]
+  /** r75 · H5 · moneda del cliente (ficha/manual o país): los precios se comparan POR importe y moneda; null = no se sabe (un «$» suelto se compara solo por el importe) */
+  moneda?: string | null
   registro: Registro
   /** false = no se pudieron leer los teléfonos / usuarios del cliente: lo que no esté en la lista es «no verificado» (sugerencia), nunca «falso» (bloquea) */
   telefonos_verificables?: boolean
@@ -71,11 +74,14 @@ export function chequeosDePost(c: ContextoDeChequeo): Ficha[] {
   for (const t of dc.telefonos) if (!tel.has(t)) f.push(ficha('texto', telGrav, `teléfono ${t} que no es del cliente${telGrav === 'sugerencia' ? ' (no se pudo verificar: no hay teléfonos del cliente leídos)' : ''}`, 'ficha del cliente y sedes', 'usar solo el teléfono del cliente', n++))
   const han = new Set(c.fuentes.handles.map((h) => normalizar(h.startsWith('@') ? h : `@${h}`)))
   for (const h of dc.handles) if (!han.has(h)) f.push(ficha('texto', hanGrav, `usuario ${h} que no es del cliente${hanGrav === 'sugerencia' ? ' (no se pudo verificar: no hay usuarios del cliente leídos)' : ''}`, 'ficha del cliente', 'usar solo los usuarios del cliente', n++))
-  const precios = [...texto.matchAll(/(?:US\$|\$)\s?(\d+(?:[.,]\d{1,2})?)/g)].map((m) => m[1].replace(',', '.'))
-  const buenos = new Set(c.fuentes.precios.map((p) => Number(p.replace(',', '.')).toFixed(2)))
-  for (const p of precios) {
-    if (c.fuentes.precios.length === 0) { f.push(ficha('texto', 'sugerencia', `precio $${p} sin carta guardada para verificarlo`, 'carta del cliente', 'verificar el precio antes de publicar', n++)); continue }
-    if (!buenos.has(Number(p).toFixed(2))) f.push(ficha('texto', 'bloquea', `precio $${p} que no está en la carta del cliente`, 'carta guardada del cliente', 'usar un precio de la carta', n++))
+  // r75 · H5 · precios con la MONEDA del cliente (no solo «$»): importe + moneda; un «$» suelto es del cliente si su moneda es la local; otra moneda explícita no es la suya
+  const monedaCliente = c.fuentes.moneda ?? null
+  const buenos = new Set(c.fuentes.precios.map((p) => numeroDeImporte(String(p)).toFixed(2)))
+  for (const im of importesEnTexto(texto)) {
+    const etiqueta = im.crudo.replace(/\s+/g, ' ').trim()
+    if (monedaCliente && im.moneda && im.moneda !== monedaCliente) { f.push(ficha('texto', 'bloquea', `precio ${etiqueta} en otra moneda (la del cliente es ${monedaCliente})`, 'moneda de la ficha del cliente', `usar precios en ${monedaCliente}`, n++)); continue }
+    if (c.fuentes.precios.length === 0) { f.push(ficha('texto', 'sugerencia', `precio ${etiqueta} sin lista de precios publicada para verificarlo`, 'lista de precios del cliente', 'verificar el precio antes de publicar', n++)); continue }
+    if (!buenos.has(im.valor.toFixed(2))) f.push(ficha('texto', 'bloquea', `precio ${etiqueta} que no está en la lista de precios publicada del cliente`, 'lista de precios publicada del cliente', 'usar un precio de la lista', n++))
   }
 
   // 4 · hashtags: sin competidores, cantidad

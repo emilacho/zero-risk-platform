@@ -641,6 +641,12 @@ describe('r74 · F3 · una llamada de corrección vencida no deja la campaña at
     })
   })
 
+  it('r75 · un solo camino de briefs: el cierre del viaje acepta `cadena_apagada` (la puerta ya no reenvía a la parte vieja con la cadena apagada) y sigue rechazando lo inventado', async () => {
+    const al = almacen()
+    const r = await cierreDeCampana(al, { ...wf(), client_id: A.clientId, journey_id: 'journey-1', sala_correlation_id: 'corr-1', resultado: 'cadena_apagada' })
+    expect(r.status).toBe(200); expect(r.cuerpo.payload_cable).toMatchObject({ resultado: 'cadena_apagada', _journey_id: 'journey-1' })
+    expect((await cierreDeCampana(al, { ...wf(), client_id: A.clientId, journey_id: 'journey-1', resultado: 'inventado' })).status).toBe(400)
+  })
   it('una tanda ya validada sigue contestando «ya hecha» (la idempotencia normal no cambia)', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)

@@ -87,6 +87,10 @@ export interface ContextoDelCliente {
   nombreDelNegocio: string
   pais: string | null
   zonaHoraria: string
+  /** r75 · H3 · la industria de la ficha (carga los paquetes de léxico por rubro) */
+  industria?: string | null
+  /** r75 · H2 · el registro del cliente ya resuelto (manual > ficha > país); `sin_dato` = no se bloquea ni se impone nada */
+  registro?: 'tu' | 'vos' | 'usted' | 'sin_dato'
   /** r74 · de dónde salió la zona: declarada en la ficha · por el país · por defecto de la casa · sin dato (UTC solo como cálculo, y se pregunta) */
   zonaHorariaOrigen?: 'declarada' | 'por_pais' | 'por_defecto_de_la_casa' | 'sin_dato'
   planTexto: string

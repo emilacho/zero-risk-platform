@@ -10,6 +10,7 @@ import { SupabaseEventLogStorage } from '@/lib/sala-event-log'
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
 import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
 import { horarioDeNorm } from './horario'
+import { registroDelCliente } from './registro'
 import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
 import { normalizar } from './texto'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
@@ -52,8 +53,8 @@ export function almacenDeSupabase(): Almacen {
       if (!plan) return null
       const planTexto = plan.content_text ?? plan.content ?? ''
       if (!planTexto) return null
-      const cli = await uno<{ name: string; country: string | null; config: Record<string, unknown> | null }>(db.from('clients').select('name, country, config').eq('id', clientId).maybeSingle())
-      const manual = (await lista<{ id: string; content_text: string | null; forbidden_words: unknown }>(db.from('client_brand_books').select('id, content_text, forbidden_words, version').eq('client_id', clientId).order('version', { ascending: false }).limit(1)))[0]
+      const cli = await uno<{ name: string; country: string | null; market?: string | null; industry?: string | null; config: Record<string, unknown> | null }>(db.from('clients').select('name, country, market, industry, config').eq('id', clientId).maybeSingle())
+      const manual = (await lista<{ id: string; content_text: string | null; forbidden_words: unknown; voice_description?: string | null; writing_style?: string | null; tone_guidelines?: unknown }>(db.from('client_brand_books').select('id, content_text, forbidden_words, version, voice_description, writing_style, tone_guidelines').eq('client_id', clientId).order('version', { ascending: false }).limit(1)))[0]
       const zonaPorDefecto = await almacen.leerConfig('zona_horaria_por_defecto')
       const refs: Referencia[] = [{ id: planId, client_id: clientId, origen: 'plan', texto: planTexto }]
       if (manual?.content_text) refs.push({ id: `manual:${manual.id}`, client_id: clientId, origen: 'manual', texto: manual.content_text })
@@ -88,7 +89,7 @@ export function almacenDeSupabase(): Almacen {
       const zonaCfg = z.zona
       const zonaOrigen: 'declarada' | 'por_pais' | 'por_defecto_de_la_casa' | 'sin_dato' = z.zona ? z.origen : porDefecto ? 'por_defecto_de_la_casa' : 'sin_dato'
       return {
-        clientId, nombreDelNegocio: cli?.name ?? '', pais: cli?.country ?? null, zonaHoraria: zonaCfg ?? porDefecto ?? 'UTC', zonaHorariaOrigen: zonaOrigen,
+        clientId, nombreDelNegocio: cli?.name ?? '', pais: cli?.country ?? null, zonaHoraria: zonaCfg ?? porDefecto ?? 'UTC', zonaHorariaOrigen: zonaOrigen, registro: registroDelCliente(manual, cli).registro, industria: cli?.industry ?? null,
         planTexto, manualTexto: manual?.content_text ?? '', forbiddenWords: fw, sedes, referencias: refs, fechaDelPlan: plan.created_at.slice(0, 10),
       }
     },

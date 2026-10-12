@@ -3,14 +3,18 @@
  * Agnóstico: ninguna lista de comida o rubro; el léxico es dato (`cadena_config.lexico_afirmaciones`) y el cliente de la prueba es sintético.
  */
 import { describe, it, expect } from 'vitest'
-import { hallarAfirmaciones, lexicoDesdeConfig } from '../afirmaciones'
+import { hallarAfirmaciones as hallarBase, lexicoDesdeConfig, type OpcionesAfirmaciones } from '../afirmaciones'
+import { lexicoDeLaIndustria } from '../lexico-por-rubro'
 import { validarTodo, type Hallazgo, type InsumosCalendario, type PiezaAgente, type Referencia, type TandaAgente } from '../index'
 import { clienteA, filasDe, formatosDeLaMigracion, tandaBuena, type ClienteFixture } from '../__fixtures__/clientes'
 
 const FORMATOS = formatosDeLaMigracion()
+/** r75 · H3 · estas pruebas son del rubro de alimentos: el léxico de frescura/origen/porción vive en SU paquete, no en la base */
+const PACK = lexicoDeLaIndustria('restaurante de comida')
+const hallarAfirmaciones = (t: string, c: readonly string[] = [], o: OpcionesAfirmaciones = {}) => hallarBase(t, c, { lexico: lexicoDeLaIndustria('restaurante de comida', o.lexico) })
 const bloq = (hs: Hallazgo[]) => hs.filter((h) => h.severidad === 'bloquea').map((h) => `${h.chequeo}:${h.ficha.que}`)
 function ins(c: ClienteFixture, t: TandaAgente, extra: Partial<InsumosCalendario> = {}): InsumosCalendario {
-  return { campana: c.campana, estrategia: c.estrategia, planTexto: c.planTexto, formatos: FORMATOS, sedes: c.sedes, referencias: c.referencias, clientId: c.clientId, ahora: c.ahora, filas: filasDe(c, t, FORMATOS), forbiddenWords: c.forbiddenWords, conocidos: c.conocidos, ...extra }
+  return { campana: c.campana, estrategia: c.estrategia, planTexto: c.planTexto, formatos: FORMATOS, sedes: c.sedes, referencias: c.referencias, lexico: PACK, clientId: c.clientId, ahora: c.ahora, filas: filasDe(c, t, FORMATOS), forbiddenWords: c.forbiddenWords, conocidos: c.conocidos, ...extra }
 }
 const conPieza = (t: TandaAgente, semana: number, slot: string, cambios: Partial<PiezaAgente>): TandaAgente => ({ ...t, piezas: t.piezas.map((p) => (p.semana === semana && p.slot === slot ? { ...p, ...cambios } : p)) })
 const sub = (hs: ReturnType<typeof hallarAfirmaciones>) => hs.map((h) => `${h.subtipo}:${h.texto}`)

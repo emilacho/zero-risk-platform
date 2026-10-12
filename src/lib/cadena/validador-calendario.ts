@@ -5,7 +5,8 @@
  *
  * Alcance de la corrección (§10.4): `fila` (se parchea sola) o `tanda` (frecuencia y reparto son del conjunto).
  */
-import { hallarAfirmaciones, hallarFechasEnTema, hallarVoseo, type LexicoAfirmaciones } from './afirmaciones'
+import { hallarAfirmaciones, hallarFechasEnTema, type LexicoAfirmaciones } from './afirmaciones'
+import { formasDeOtroRegistro, nombreDelRegistro, type RegistroDelCliente } from './registro'
 import { diaDeCampana, diaSemanaIso, fechaDeFila, minutos, sumarDias } from './fechas'
 import { alcanza, nivelEfectivo, resolverDato, type Candidato } from './fuentes'
 import { normalizar } from './texto'
@@ -38,6 +39,8 @@ export interface InsumosCalendario {
   /** SOLO las de los tipos que el cliente declaró; lista vacía = no hay chequeo de fechas especiales más allá de la regla general */
   fechasEspeciales?: FechaEspecialVerificada[]
   forbiddenWords?: string[]
+  /** r75 · H2 · el registro del cliente (tuteo · voseo · usted); sin dato no se bloquea ningún registro */
+  registro?: RegistroDelCliente
   /** nombres propios que NO son un origen de producto (sedes, nombre del negocio) */
   conocidos?: string[]
   /** léxico de afirmaciones leído de cadena_config.lexico_afirmaciones (dato, no código); sin él, la base del idioma */
@@ -170,8 +173,9 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
     // ─── V15 · palabras prohibidas del manual y voseo
     const prohibidas = (ins.forbiddenWords ?? []).map(normalizar).filter(Boolean)
     for (const p of prohibidas) if (new RegExp(`(?:^|[^a-z0-9])${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^a-z0-9]|$)`).test(nTema)) out.push(h('V15', 'bloquea', f, `el tema usa la palabra prohibida «${p}»`, 'palabras prohibidas del manual', 'reescribir sin esa palabra'))
-    const vos = hallarVoseo(f.tema ?? '')
-    if (vos.length) out.push(h('V15', 'bloquea', f, `el tema usa voseo («${vos[0]}»)`, 'tuteo (regla de idioma del proyecto)', 'reescribir en tuteo'))
+    // r75 · H2 · se bloquean las formas de OTRO registro SOLO si el registro del cliente está fijado (su manual o su país); sin dato no se impone ninguno
+    const otro = formasDeOtroRegistro(ins.registro, f.tema ?? '')
+    if (otro.length) out.push(h('V15', 'bloquea', f, `el tema usa formas de otro registro («${otro[0]}») y el del cliente es ${nombreDelRegistro(ins.registro)}`, `${nombreDelRegistro(ins.registro)} (registro del cliente, fijado por su manual o su país)`, `reescribir en ${nombreDelRegistro(ins.registro)}`))
 
     // ─── V16 · nunca reseñas ni testimonios con nombre sin procedencia
     if (/\b(?:resena|testimonio|opinion de|dice (?:que )?[a-z]+ )\b/.test(nTema) || /[“"][^”"]{12,}[”"]/.test(f.tema ?? '')) {
