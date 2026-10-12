@@ -53,14 +53,15 @@ const resumenDelManual = (draft: Record<string, unknown>, excluir: string[]): st
 }
 
 /** un pedido por agente; la evidencia es la materia del cliente ordenada por código (cede antes que las instrucciones) */
-export function armarPedidos(entrada: { draft: Record<string, unknown>; fuentes: Fuente[]; campos?: string[]; cliente?: string }): { pedidos: Pedido[]; faltantes: string[]; rechazados: Array<{ campo: string; motivo: string }> } {
+export function armarPedidos(entrada: { draft: Record<string, unknown>; fuentes: Fuente[]; campos?: string[]; cliente?: string; /** lo que el DUEÑO corrigió o declaró (una línea por dato): manda sobre todo lo inferido */ delDueno?: string[]; /** campos cuya propuesta ANTERIOR (rotulada «propuesta del agente») se vuelve a proponer porque el dueño la corrigió: solo vale si el campo hoy es una propuesta, nunca un texto del cliente */ reproponer?: string[] }): { pedidos: Pedido[]; faltantes: string[]; rechazados: Array<{ campo: string; motivo: string }> } {
   const faltantes = camposFaltantes(entrada.draft)
+  const reproponibles = (entrada.reproponer ?? []).filter((c) => CAMPOS_PROPONIBLES[c] && tieneRotulo(entrada.draft[c]))
   const rechazados: Array<{ campo: string; motivo: string }> = []
   const pedidos0 = (entrada.campos?.length ? entrada.campos : faltantes)
   const aProponer: string[] = []
   for (const c of pedidos0) {
     if (!CAMPOS_PROPONIBLES[c]) { rechazados.push({ campo: c, motivo: 'campo que no se propone (no está en la lista cerrada)' }); continue }
-    if (!faltantes.includes(c)) { rechazados.push({ campo: c, motivo: 'ya tiene contenido: una propuesta nunca lo pisa' }); continue }
+    if (!faltantes.includes(c) && !reproponibles.includes(c)) { rechazados.push({ campo: c, motivo: 'ya tiene contenido: una propuesta nunca lo pisa (solo una propuesta anterior del agente se puede volver a proponer, si se pide expresamente)' }); continue }
     aProponer.push(c)
   }
   const porAgente = new Map<string, string[]>()
@@ -86,9 +87,14 @@ export function armarPedidos(entrada: { draft: Record<string, unknown>; fuentes:
       'Responde SOLO un objeto JSON, sin texto antes ni después: {"<campo>": {"texto": "…", "razon": "por qué lo propones, en una frase"}} para los de texto, y {"<campo>": {"items": ["…","…"], "razon": "…"}} para los de lista.',
     ].join('\n')
     const manual = resumenDelManual(entrada.draft, campos)
-    const fijo = instr.length + manual.length + 80
+    // lo que dijo el dueño va PRIMERO y completo (es corto y manda): si el manual o la evidencia lo contradicen, gana el dueño
+    const dueno = (entrada.delDueno ?? []).filter((x) => x && x.trim())
+    const previas = campos.filter((c) => reproponibles.includes(c)).map((c) => `- ${c}: ${typeof entrada.draft[c] === 'string' ? entrada.draft[c] : JSON.stringify(entrada.draft[c])}`)
+    const bloquePrevio = previas.length ? `PROPUESTA ANTERIOR QUE SE DESCARTA (el dueño la corrigió; reescríbela de cero con lo que dijo el dueño, sin repetir lo que lo contradiga):\n${previas.join('\n')}\n\n` : ''
+    const bloqueDueno = dueno.length ? `LO QUE DIJO EL DUEÑO (corrección o dato declarado por él: MANDA sobre el manual y sobre cualquier cosa inferida del sitio, las redes o los mapas; si algo los contradice, gana el dueño):\n${dueno.map((x) => '- ' + x).join('\n')}\n\n` : ''
+    const fijo = instr.length + bloqueDueno.length + bloquePrevio.length + manual.length + 80
     const evid = (nuevas + materia.texto).slice(0, Math.max(0, TOPE_DEL_PEDIDO - fijo))
-    pedidos.push({ agente, campos, task: `${instr}\n\nEL MANUAL HASTA AHORA:\n${manual || '(vacío)'}\n\nEVIDENCIA DEL CLIENTE:\n${evid}`.slice(0, TOPE_DEL_PEDIDO) })
+    pedidos.push({ agente, campos, task: `${instr}\n\n${bloqueDueno}${bloquePrevio}EL MANUAL HASTA AHORA:\n${manual || '(vacío)'}\n\nEVIDENCIA DEL CLIENTE:\n${evid}`.slice(0, TOPE_DEL_PEDIDO) })
   }
   return { pedidos, faltantes, rechazados }
 }
@@ -143,7 +149,7 @@ const tieneRotulo = (v: unknown): boolean => (Array.isArray(v) ? v.some(tieneRot
  * Fusiona las propuestas en una COPIA del borrador. Solo llena campos vacíos; cada texto va con su rótulo; la propuesta pasa por el chequeo de hechos (si trae una afirmación
  * de hecho sin respaldo, NO se aplica: una propuesta no es la puerta trasera para colar un hecho). Los demás campos quedan letra por letra iguales.
  */
-export function fusionarPropuestas(draft: Record<string, unknown>, propuestas: Propuesta[], fuentes: Fuente[]): ResultadoDeFusion {
+export function fusionarPropuestas(draft: Record<string, unknown>, propuestas: Propuesta[], fuentes: Fuente[], opciones: { reproponer?: string[] } = {}): ResultadoDeFusion {
   const nuevo: Record<string, unknown> = JSON.parse(JSON.stringify(draft))
   const aplicadas: string[] = []
   const rechazadas: Array<{ campo: string; motivo: string }> = []
@@ -151,7 +157,8 @@ export function fusionarPropuestas(draft: Record<string, unknown>, propuestas: P
   for (const p of propuestas) {
     const def = CAMPOS_PROPONIBLES[p.campo]
     if (!def) { rechazadas.push({ campo: p.campo, motivo: 'campo que no se propone' }); continue }
-    if (!vacio(draft[p.campo])) { rechazadas.push({ campo: p.campo, motivo: 'ya tiene contenido: una propuesta nunca lo pisa' }); continue }
+    const reemplazaPropuesta = (opciones.reproponer ?? []).includes(p.campo) && tieneRotulo(draft[p.campo])
+    if (!vacio(draft[p.campo]) && !reemplazaPropuesta) { rechazadas.push({ campo: p.campo, motivo: 'ya tiene contenido: una propuesta nunca lo pisa' }); continue }
     // el chequeo de hechos mira el TEXTO propuesto (sin el rótulo): una cifra, un lugar de origen, una cita o una palabra de certeza sin fuente lo frenan
     const lista = Array.isArray(p.valor) ? p.valor : [p.valor]
     const informe = evaluarHechos({ manual: { [p.campo]: Array.isArray(p.valor) ? p.valor : p.valor }, fuentes, excluir: [] })

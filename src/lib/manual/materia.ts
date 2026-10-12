@@ -6,6 +6,7 @@
  */
 import type { CanalDeFuente, Fuente, RolDeFuente } from './procedencia'
 import { normalizar } from './texto'
+import { esVozReal } from './voz'
 
 export interface FilaDeRaspado { id: string; apify_function: string; params?: unknown; respuesta?: unknown; ensayo?: boolean | null }
 export interface Propios { sitio?: string | null; handles: string[]; /** perfiles propios de otras redes (opcional) */ otros?: string[] }
@@ -156,7 +157,9 @@ export function fuentesDeRaspado(filas: FilaDeRaspado[], propios: Propios): Fuen
         } else {
           const canal = REDES_DE_VIDEO[fila.apify_function] ?? 'otro'
           const pie = primero(it, ['caption', 'text', 'message', 'postText', 'description', 'title'])
-          const dicho = primero(it, ['transcript', 'transcription', 'videoTranscript', 'subtitle', 'captionText', 'ocrText']) || subtitulosComoTexto(it.subtitles)
+          const dichoCrudo = primero(it, ['transcript', 'transcription', 'videoTranscript', 'subtitle', 'captionText', 'ocrText']) || subtitulosComoTexto(it.subtitles)
+          // ronda 76 · música, onomatopeyas o ruido NO son «lo que se dice»: no entran al manual como voz del negocio
+          const dicho = dichoCrudo && esVozReal(dichoCrudo).voz ? dichoCrudo : ''
           meter({ clave: fila.id, tipo: 'primaria_propia', canal, rol: fila.apify_function.startsWith('videos_') ? 'cuerpo' : 'leyenda', rotulo: `${canal} propio · ${fila.apify_function.startsWith('videos_') ? 'videos (lo que se dice)' : 'publicaciones'}`, texto: [pie, dicho].filter(Boolean).join('\n') })
         }
         continue

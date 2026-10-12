@@ -4,6 +4,8 @@
  *  · aplicar  → lee lo que contestó cada agente, fusiona en una COPIA del borrador y devuelve el cuerpo listo para guardar + las diferencias por campo (solo lo propuesto debe diferir).
  */
 import { armarPedidos, CAMPOS_PROPONIBLES, fusionarPropuestas, leerRespuesta, type Propuesta } from './propuesta'
+import { fuenteHumana } from './materia'
+import type { Fuente } from './procedencia'
 import { borradorDeContentText, diferenciasPorCampo, leerInsumos, type Db } from './revision'
 
 /** anotaciones del borrador (no son campos del manual): la lista de provisionales/ausentes se actualiza y se anota qué campos llevan propuesta */
@@ -12,6 +14,35 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 type Resp = { status: number; body: Record<string, unknown> }
 const obj = (x: unknown): Record<string, unknown> | null => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Record<string, unknown>) : null)
 const camposDe = (c: Record<string, unknown>): string[] | undefined => (Array.isArray(c.campos) ? c.campos.filter((x): x is string => typeof x === 'string') : undefined)
+const repropuestosDe = (c: Record<string, unknown>): string[] | undefined => (Array.isArray(c.reproponer) ? c.reproponer.filter((x): x is string => typeof x === 'string') : undefined)
+
+/**
+ * LO QUE DIJO EL DUEÑO: los datos de sede con `fuente = 'dueno'` (corrección o dato declarado por él). Mandan sobre lo inferido y llegan al agente primero y completos.
+ * Devuelve las líneas para el pedido y las fuentes «humanas» con las que el chequeo de hechos puede respaldar lo que la propuesta diga de ellas.
+ * Si la lectura falla NO se lee como «no hay nada»: se devuelve el error y quien llama decide (aquí: se avisa y no se pide nada).
+ */
+export async function datosDelDueno(db: Db, clientId: string): Promise<{ ok: true; lineas: string[]; fuentes: Fuente[] } | { ok: false; error: string }> {
+  const s = await db.from('client_sedes').select('id, clave, ciudad').eq('client_id', clientId)
+  if (s.error) return { ok: false, error: 'client_sedes: ' + String(s.error.message ?? s.error) }
+  const d = await db.from('client_sede_datos').select('sede_id, campo, valor_texto, fuente, fuente_ref, observado_en').eq('client_id', clientId).eq('fuente', 'dueno')
+  if (d.error) return { ok: false, error: 'client_sede_datos: ' + String(d.error.message ?? d.error) }
+  const ciudad = new Map<string, string>((Array.isArray(s.data) ? s.data : []).map((x: Record<string, unknown>) => [String(x.id), String(x.ciudad ?? x.clave ?? '')]))
+  const filas = (Array.isArray(d.data) ? d.data : []) as Array<Record<string, unknown>>
+  // lo más nuevo de cada (sede, campo): una corrección posterior reemplaza a la anterior
+  const ultimas = new Map<string, Record<string, unknown>>()
+  for (const f of filas) { const k = `${f.sede_id}|${f.campo}`; const p = ultimas.get(k); if (!p || String(f.observado_en) > String(p.observado_en)) ultimas.set(k, f) }
+  const lineas: string[] = []
+  const fuentes: Fuente[] = []
+  for (const f of ultimas.values()) {
+    const donde = f.sede_id ? `sede de ${ciudad.get(String(f.sede_id)) || 'ciudad sin declarar'}` : 'toda la cuenta'
+    const campo = String(f.campo).replace(/_/g, ' ')
+    const fecha = String(f.observado_en ?? '').slice(0, 10)
+    const l = `${donde} · ${campo}: ${String(f.valor_texto)} (corrección del dueño${fecha ? ', ' + fecha : ''})`
+    lineas.push(l)
+    fuentes.push(fuenteHumana(`dueno:${String(f.sede_id)}:${String(f.campo)}`, 'corrección del dueño', l, 'ficha'))
+  }
+  return { ok: true, lineas, fuentes }
+}
 
 export async function rutaPrepararPropuesta(db: Db, cuerpo: unknown): Promise<Resp> {
   const c = obj(cuerpo)
@@ -20,8 +51,10 @@ export async function rutaPrepararPropuesta(db: Db, cuerpo: unknown): Promise<Re
   const r = await leerInsumos(db, c.client_id)
   if (!r.ok) return { status: r.status, body: { error: r.error, detail: r.detalle } }
   const ins = r.insumos
-  const p = armarPedidos({ draft: ins.manual, fuentes: ins.fuentes, campos: camposDe(c), cliente: ins.client_name })
-  return { status: 200, body: { ok: true, client_id: ins.client_id, client_name: ins.client_name, version_base: ins.version_vigente, huella_base: ins.foto.huella, faltantes: p.faltantes, rechazados: p.rechazados, pedidos: p.pedidos } }
+  const dueno = await datosDelDueno(db, c.client_id)
+  if (!dueno.ok) return { status: 502, body: { error: 'lectura_fallida', detail: 'lo que dijo el dueño no se pudo leer: ' + dueno.error + ' · no se pide nada sin saberlo' } }
+  const p = armarPedidos({ draft: ins.manual, fuentes: [...ins.fuentes, ...dueno.fuentes], campos: camposDe(c), cliente: ins.client_name, delDueno: dueno.lineas, reproponer: repropuestosDe(c) })
+  return { status: 200, body: { ok: true, client_id: ins.client_id, datos_del_dueno: dueno.lineas.length, client_name: ins.client_name, version_base: ins.version_vigente, huella_base: ins.foto.huella, faltantes: p.faltantes, rechazados: p.rechazados, pedidos: p.pedidos } }
 }
 
 export async function rutaAplicarPropuesta(db: Db, cuerpo: unknown): Promise<Resp> {
@@ -36,7 +69,10 @@ export async function rutaAplicarPropuesta(db: Db, cuerpo: unknown): Promise<Res
   // el manual NO cambió desde que se prepararon los pedidos (si cambió, lo propuesto podría pisar algo nuevo)
   if (typeof c.version_base === 'number' && c.version_base !== ins.version_vigente) return { status: 409, body: { error: 'el_manual_cambio', detail: `se preparó sobre la versión ${c.version_base} y ahora la vigente es la ${ins.version_vigente}` } }
   if (typeof c.huella_base === 'string' && c.huella_base !== ins.foto.huella) return { status: 409, body: { error: 'el_manual_cambio', detail: 'la huella del manual vigente ya no es la de cuando se prepararon los pedidos' } }
-  const p = armarPedidos({ draft: ins.manual, fuentes: ins.fuentes, campos: camposDe(c), cliente: ins.client_name })
+  const dueno = await datosDelDueno(db, c.client_id)
+  if (!dueno.ok) return { status: 502, body: { error: 'lectura_fallida', detail: 'lo que dijo el dueño no se pudo leer: ' + dueno.error } }
+  const fuentesTodas = [...ins.fuentes, ...dueno.fuentes]
+  const p = armarPedidos({ draft: ins.manual, fuentes: fuentesTodas, campos: camposDe(c), cliente: ins.client_name, delDueno: dueno.lineas, reproponer: repropuestosDe(c) })
   const campos_por_agente = new Map(p.pedidos.map((x) => [x.agente, x.campos]))
   const propuestas: Propuesta[] = []
   const sin_leer: Array<{ campo: string; motivo: string }> = []
@@ -48,7 +84,7 @@ export async function rutaAplicarPropuesta(db: Db, cuerpo: unknown): Promise<Res
     const l = leerRespuesta(o?.response, campos)
     propuestas.push(...l.propuestas); sin_leer.push(...l.sin_leer)
   }
-  const f = fusionarPropuestas(ins.manual, propuestas, ins.fuentes)
+  const f = fusionarPropuestas(ins.manual, propuestas, fuentesTodas, { reproponer: repropuestosDe(c) })
   // GUARDA: lo único que cambió son los campos aplicados, y todos son proponibles
   const inesperado = f.campos_distintos.filter((k) => !f.aplicadas.includes(k) || !CAMPOS_PROPONIBLES[k])
   if (inesperado.length) return { status: 500, body: { error: 'cambio_inesperado', detail: `cambiaron campos que no eran propuestas: ${inesperado.join(', ')}` } }
