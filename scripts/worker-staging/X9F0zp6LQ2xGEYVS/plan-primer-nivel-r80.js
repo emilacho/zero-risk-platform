@@ -201,10 +201,15 @@ function _celdasSinCifra(sec) {
   return out
 }
 
-/** lo que queda pendiente del plan, en UNA línea para la bandeja (qué falta) */
+/** lo que queda pendiente del plan, en UNA línea corta para la bandeja (qué falta): una etiqueta por marca y, en el presupuesto, lo que falta */
+var _ETIQUETA_DE_MARCA = { P1: 'nombra un tope interno de gasto', P2: 'muestra una regla interna de la agencia', P3: 'lleva nombres internos', P4: 'presupuesto incompleto', P5: 'colores o tipografías fuera del manual', P6: 'moneda distinta de la declarada', P7: 'nombra a una persona o dice quién dio un dato' }
 function pendientesDelPlan(r) {
   if (!r || r.ok) return null
-  return r.marcas.map(function (m) { return m.codigo + ' · ' + m.que }).join(' · ')
+  return r.marcas.map(function (m) {
+    var t = _ETIQUETA_DE_MARCA[m.codigo] || m.que
+    if (m.codigo === 'P4') { var i = String(m.que).indexOf('falta '); if (i >= 0) t += ' (' + String(m.que).slice(i + 6).replace(/\s*\([^)]*\)/g, '').slice(0, 170) + ')' }
+    return m.codigo + ' · ' + t
+  }).join(' · ')
 }
 
 /** la sección del presupuesto: desde su encabezado hasta el siguiente encabezado de segundo nivel (sin encabezado: todo el texto) */
