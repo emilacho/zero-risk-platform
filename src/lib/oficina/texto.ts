@@ -43,9 +43,21 @@ export function aparicionesDe(texto: string, clave: string): Array<{ negada: boo
 
 /** r75 · H5 · el número comparable de un teléfono, de CUALQUIER país: los últimos 9 dígitos (como `telefonoNorm` de las sedes), de modo que «0997 744 288» y «+593 997 744 288» —o «+57 300 123 4567» y «300 123 4567»— son el mismo; con menos de 9 dígitos, los que haya sin ceros iniciales */
 export function digitosDeTelefono(s: string): string {
-  const d = s.replace(/\D/g, '')
-  return d.length >= 9 ? d.slice(-9) : d.replace(/^0+/, '')
+  const d = s.replace(/\D/g, '').replace(/^0+/, '')
+  return d.length > 9 ? d.slice(-9) : d
 }
+
+/**
+ * r76 · un teléfono es «el mismo» si lo significativo del más corto (sin el 0 de línea troncal) es el final del más largo y tiene al menos 7 dígitos:
+ * «(02) 2456789» = «+593 2 245 6789» (fijo con y sin prefijo de país), «0997 744 288» = «+593 997 744 288», «300 123 4567» = «+57 300 123 4567».
+ * Sin tabla de países: el prefijo de país es justo lo que sobra por delante.
+ */
+export function mismoTelefono(a: string, b: string): boolean {
+  const x = digitosDeTelefono(a); const y = digitosDeTelefono(b)
+  const [corto, largo] = x.length <= y.length ? [x, y] : [y, x]
+  return corto.length >= 7 && largo.endsWith(corto)
+}
+export const esTelefonoDeLaLista = (t: string, propios: string[]): boolean => propios.some((p) => mismoTelefono(t, p))
 
 const RE_TELEFONO = /\+?\d[\d\s().-]{6,}\d|\d{1,3}(?:,\d{3}){2,}/g
 const RE_HANDLE = /@[\p{L}0-9_.]{2,}/gu

@@ -120,7 +120,7 @@ describe('H5 · la moneda y el teléfono del cliente (no los del primer cliente)
     for (const [propio, escrito] of [['+57 300 123 4567', '300 123 4567'], ['300 123 4567', '+57 300 123 4567'], ['+593 997 744 288', '0997 744 288'], ['0997 744 288', '+593 997 744 288'], ['+34 612 345 678', '612 345 678'], ['+52 55 1234 5678', '55 1234 5678']])
       expect(dice(base('COP', ['1.00'], [propio], `Escríbenos al ${escrito}`)).filter((x) => /teléfono/.test(x)), `${propio} ~ ${escrito}`).toEqual([])
     expect(dice(base('COP', ['1.00'], ['+57 300 123 4567'], 'Escríbenos al +57 311 999 8888')).join('|')).toMatch(/bloquea:teléfono/)
-    expect(digitosDeTelefono('+57 (300) 123-4567')).toBe('001234567'); expect(digitosDeTelefono('12345')).toBe('12345')
+    expect(digitosDeTelefono('+57 (300) 123-4567')).toBe('001234567'); expect(digitosDeTelefono('012345')).toBe('12345')
   })
   it('importes: separadores de miles y decimales en los dos estilos', () => {
     for (const [s, n] of [['45.000', 45000], ['1,250.50', 1250.5], ['1.250,50', 1250.5], ['12,50', 12.5], ['3.5', 3.5], ['7', 7], ['1.000.000', 1000000]] as const) expect(numeroDeImporte(s), s).toBe(n)

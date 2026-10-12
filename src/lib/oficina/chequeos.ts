@@ -3,7 +3,7 @@
  * Cada falla = una ficha `origen: 'chequeo'` con `donde` ∈ texto · hashtags · imagen. Un dato NO verificable = ficha `sugerencia`, no `bloquea`. Diseño: sala 1 §8.
  * Agnóstico: las listas (prohibidas, teléfonos, precios, registro) llegan como DATO del cliente; ningún cliente vive aquí.
  */
-import { contienePalabra, datosDeContacto, digitosDeTelefono, normalizar } from './texto'
+import { contienePalabra, datosDeContacto, esTelefonoDeLaLista, normalizar } from './texto'
 import type { Ficha } from './tipos'
 import { importesEnTexto, numeroDeImporte } from '@/lib/moneda/por-pais'
 
@@ -68,10 +68,9 @@ export function chequeosDePost(c: ContextoDeChequeo): Ficha[] {
 
   // 3 · datos: teléfonos, @ y precios solo los del cliente
   const dc = datosDeContacto(todo)
-  const tel = new Set(c.fuentes.telefonos.map(digitosDeTelefono))
   const telGrav: Ficha['gravedad'] = c.fuentes.telefonos_verificables === false ? 'sugerencia' : 'bloquea'
   const hanGrav: Ficha['gravedad'] = c.fuentes.handles_verificables === false ? 'sugerencia' : 'bloquea'
-  for (const t of dc.telefonos) if (!tel.has(t)) f.push(ficha('texto', telGrav, `teléfono ${t} que no es del cliente${telGrav === 'sugerencia' ? ' (no se pudo verificar: no hay teléfonos del cliente leídos)' : ''}`, 'ficha del cliente y sedes', 'usar solo el teléfono del cliente', n++))
+  for (const t of dc.telefonos) if (!esTelefonoDeLaLista(t, c.fuentes.telefonos)) f.push(ficha('texto', telGrav, `teléfono ${t} que no es del cliente${telGrav === 'sugerencia' ? ' (no se pudo verificar: no hay teléfonos del cliente leídos)' : ''}`, 'ficha del cliente y sedes', 'usar solo el teléfono del cliente', n++))
   const han = new Set(c.fuentes.handles.map((h) => normalizar(h.startsWith('@') ? h : `@${h}`)))
   for (const h of dc.handles) if (!han.has(h)) f.push(ficha('texto', hanGrav, `usuario ${h} que no es del cliente${hanGrav === 'sugerencia' ? ' (no se pudo verificar: no hay usuarios del cliente leídos)' : ''}`, 'ficha del cliente', 'usar solo los usuarios del cliente', n++))
   // r75 · H5 · precios con la MONEDA del cliente (no solo «$»): importe + moneda; un «$» suelto es del cliente si su moneda es la local; otra moneda explícita no es la suya

@@ -4,6 +4,9 @@ import { claveNormal, clavesQueCoinciden, coincideAlguna, coincideClave } from '
 import { PAQUETES_DE_FABRICA, industriaCoincide, lexicoDeLaIndustria } from '../src/lib/cadena/lexico-por-rubro'
 import { BATERIA_DE_RUBROS } from '../src/lib/rubros-de-prueba/baterias'
 import { hallarAfirmaciones } from '../src/lib/cadena/afirmaciones'
+import { mismoTelefono } from '../src/lib/oficina/texto'
+import { formasDeOtroRegistro } from '../src/lib/cadena/registro'
+import { importesEnTexto } from '../src/lib/moneda/por-pais'
 
 const paquetesDe = (industria: string): string[] => Object.entries(PAQUETES_DE_FABRICA).filter(([, p]) => industriaCoincide(industria, p.industria)).map(([k]) => k)
 
@@ -70,5 +73,33 @@ describe('la función es la única forma de comparar claves de rubro', () => {
   it('lexico-por-rubro no tiene «contiene» sobre texto de industria', () => {
     const src = require('node:fs').readFileSync(require('node:path').join(process.cwd(), 'src/lib/cadena/lexico-por-rubro.ts'), 'utf8')
     expect(src).toMatch(/coincideAlguna/); expect(src).not.toMatch(/t\.includes\(/)
+  })
+})
+
+// ───────────────────────── reparos 2, 3 y 4 de CC#3 (A.4)
+describe('A.4-2 · teléfonos fijos con y sin prefijo de país', () => {
+  it.each([
+    ['(02) 2456789', '+593 2 245 6789', true], ['+593 2 245 6789', '02 2456789', true], ['0997 744 288', '+593 997 744 288', true], ['+57 300 123 4567', '300 123 4567', true],
+    ['+34 91 123 45 67', '911 234 567', true], ['(02) 2456789', '(02) 2456780', false], ['0997 744 288', '+593 998 744 288', false], ['123456', '123456', false],
+  ])('%s ~ %s → %s', (a, b, esperado) => { expect(mismoTelefono(a, b)).toBe(esperado) })
+})
+describe('A.4-3 · el voseo en un cliente de tuteo se detecta con el detector del trato', () => {
+  it('tuteo marca los mismos que usted', () => {
+    const t = 'Pedilo ahora, mirá nuestra carta y venite'
+    const tu = formasDeOtroRegistro('tu', t).map((x) => x.toLowerCase())
+    expect(tu.length).toBeGreaterThanOrEqual(3)
+    expect(tu).toEqual(expect.arrayContaining(['pedilo', 'venite']))
+    expect(formasDeOtroRegistro('usted', t).length).toBe(tu.length)
+  })
+  it('tuteo limpio no marca nada; sin dato tampoco', () => {
+    expect(formasDeOtroRegistro('tu', 'Pídelo ahora, mira nuestra lista y ven a vernos')).toEqual([])
+    expect(formasDeOtroRegistro('sin_dato', 'Pedilo ahora')).toEqual([])
+  })
+})
+describe('A.4-4 · «45.000 pesos» es un precio', () => {
+  it('con la palabra de la moneda', () => {
+    expect(importesEnTexto('desde 45.000 pesos').map((x) => [x.valor, x.moneda, x.ambigua])).toEqual([[45000, null, true]])
+    expect(importesEnTexto('12 dólares y 8 euros y 30 soles').map((x) => [x.valor, x.moneda])).toEqual([[12, 'USD'], [8, 'EUR'], [30, 'PEN']])
+    expect(importesEnTexto('un sol por persona solo hoy')).toEqual([])
   })
 })

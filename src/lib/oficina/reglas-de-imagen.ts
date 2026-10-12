@@ -5,7 +5,7 @@
  *  ③ la imagen contra el brief: el curador SOLO describe; `decideImagen` decide por código; si falla se regenera (≤ 2 veces, lo manda el motor); si sigue fallando se descarta esa versión.
  * Más: `citasExisten` (una regla extraída de un brief de texto debe traer una cita que EXISTA en el brief) y `datosAjenos` (teléfono, @ o enlace que no son del cliente).
  */
-import { aparicionesDe, contienePalabra, datosDeContacto, digitosDeTelefono, normalizar } from './texto'
+import { aparicionesDe, contienePalabra, datosDeContacto, esTelefonoDeLaLista, normalizar } from './texto'
 
 export interface ReglaDeImagen { id: string; texto: string; claves?: string[]; cita?: string }
 export interface ReglasDeImagen { obligatorio: ReglaDeImagen[]; prohibido: ReglaDeImagen[] }
@@ -62,11 +62,10 @@ const dominioDe = (u: string): string => normalizar(u).replace(/^https?:\/\//, '
 /** teléfono, @ o enlace en un texto que NO son del cliente */
 export function datosAjenos(textos: string[], propios: Pick<PropiosDelCliente, 'telefonos' | 'handles' | 'urls'>): string[] {
   const d = datosDeContacto(textos.join(' \n '))
-  const tel = new Set(propios.telefonos.map(digitosDeTelefono))
   const han = new Set(propios.handles.map((h) => normalizar(h.startsWith('@') ? h : `@${h}`)))
   const dom = propios.urls.map(dominioDe)
   const fuera: string[] = []
-  for (const t of d.telefonos) if (!tel.has(t)) fuera.push(`teléfono ${t}`)
+  for (const t of d.telefonos) if (!esTelefonoDeLaLista(t, propios.telefonos)) fuera.push(`teléfono ${t}`)
   for (const h of d.handles) if (!han.has(h)) fuera.push(`usuario ${h}`)
   for (const u of d.urls) {
     const base = dominioDe(u)
