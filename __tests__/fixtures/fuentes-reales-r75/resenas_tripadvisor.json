@@ -1,0 +1,149 @@
+{
+ "apify_function": "resenas_tripadvisor",
+ "params": {
+  "startUrls": [
+   {
+    "url": "https://www.tripadvisor.com/Restaurant_Review-g2025921-d4473899-Reviews-Cabana_D_Jerry-Olon_Santa_Elena_Province.html"
+   }
+  ],
+  "maxItemsPerQuery": 10
+ },
+ "respuesta": [
+  {
+   "id": "952359240",
+   "url": "https://www.tripadvisor.com/ShowUserReviews-g2025921-d4473899-r952359240-Cabana_D_Jerry-Olon_Santa_Elena_Province.html",
+   "lang": "en",
+   "text": "The taste of the food is excellent as is the service, we have returned several times during our stay. The quality-price ratio is very good. ",
+   "title": "Excellent meal",
+   "photos": [],
+   "rating": 5,
+   "tripType": "FAMILY",
+   "placeInfo": {
+    "id": "4473899",
+    "rating": 4.6,
+    "webUrl": "https://www.tripadvisor.com/Restaurant_Review-g2025921-d4473899-Reviews-Cabana_D_Jerry-Olon_Santa_Elena_Province.html",
+    "address": "Beach Front, Olon Ecuador",
+    "website": null,
+    "latitude": -1.797753,
+    "longitude": -80.7598,
+    "addressObj": {
+     "city": "Olon",
+     "state": null,
+     "country": "Ecuador",
+     "street1": "Beach Front",
+     "street2": null,
+     "postalcode": null
+    },
+    "locationString": "Olon, Santa Elena Province",
+    "numberOfReviews": 20,
+    "ratingHistogram": {
+     "count1": 0,
+     "count2": 0,
+     "count3": 1,
+     "count4": 7,
+     "count5": 12
+    }
+   },
+   "locationId": "4473899",
+   "subratings": [],
+   "travelDate": "2024-05",
+   "helpfulVotes": 0,
+   "ownerResponse": null,
+   "publishedDate": "2024-05-26",
+   "originalLanguage": "es",
+   "publishedPlatform": null,
+   "isMachineTranslated": true
+  },
+  {
+   "id": "830604541",
+   "url": "https://www.tripadvisor.com/ShowUserReviews-g2025921-d4473899-r830604541-Cabana_D_Jerry-Olon_Santa_Elena_Province.html",
+   "lang": "en",
+   "text": "We visited here while on the beach in Olon.  Great Food, Great Service,  friendly atmosphere and fantastic value for money.  A definite must go while in Olon",
+   "title": "Great Spot right on the beach",
+   "photos": [],
+   "rating": 5,
+   "tripType": null,
+   "placeInfo": {
+    "id": "4473899",
+    "rating": 4.6,
+    "webUrl": "https://www.tripadvisor.com/Restaurant_Review-g2025921-d4473899-Reviews-Cabana_D_Jerry-Olon_Santa_Elena_Province.html",
+    "address": "Beach Front, Olon Ecuador",
+    "website": null,
+    "latitude": -1.797753,
+    "longitude": -80.7598,
+    "addressObj": {
+     "city": "Olon",
+     "state": null,
+     "country": "Ecuador",
+     "street1": "Beach Front",
+     "street2": null,
+     "postalcode": null
+    },
+    "locationString": "Olon, Santa Elena Province",
+    "numberOfReviews": 20,
+    "ratingHistogram": {
+     "count1": 0,
+     "count2": 0,
+     "count3": 1,
+     "count4": 7,
+     "count5": 12
+    }
+   },
+   "locationId": "4473899",
+   "subratings": [],
+   "travelDate": "2022-02",
+   "helpfulVotes": 0,
+   "ownerResponse": null,
+   "publishedDate": "2022-03-09",
+   "originalLanguage": "en",
+   "publishedPlatform": null,
+   "isMachineTranslated": false
+  },
+  {
+   "id": "792282559",
+   "url": "https://www.tripadvisor.com/ShowUserReviews-g2025921-d4473899-r792282559-Cabana_D_Jerry-Olon_Santa_Elena_Province.html",
+   "lang": "en",
+   "text": "My partner and I had visited Jerry's during our previous visit to Olon and had it on our \"not-to-miss\" list for our most recent trip. We actually ate there twice this trip and had calamar both times. Since it was just for a snack the first time, we had the calamar sauteed rather than fried. It was excellent! The second time we had lunch--calamareagain, fried this time, and served with patacones...and a beer. It couldn't be topped!! ",
+   "title": "The Best of the Olon Beach Cabañas!",
+   "photos": [],
+   "rating": 5,
+   "tripType": null,
+   "placeInfo": {
+    "id": "4473899",
+    "rating": 4.6,
+    "webUrl": "https://www.tripadvisor.com/Restaurant_Review-g2025921-d4473899-Reviews-Cabana_D_Jerry-Olon_Santa_Elena_Province.html",
+    "address": "Beach Front, Olon Ecuador",
+    "website": null,
+    "latitude": -1.797753,
+    "longitude": -80.7598,
+    "addressObj": {
+     "city": "Olon",
+     "state": null,
+     "country": "Ecuador",
+     "street1": "Beach Front",
+     "street2": null,
+     "postalcode": null
+    },
+    "locationString": "Olon, Santa Elena Province",
+    "numberOfReviews": 20,
+    "ratingHistogram": {
+     "count1": 0,
+     "count2": 0,
+     "count3": 1,
+     "count4": 7,
+     "count5": 12
+    }
+   },
+   "locationId": "4473899",
+   "subratings": [],
+   "travelDate": "2021-06",
+   "helpfulVotes": 0,
+   "ownerResponse": null,
+   "publishedDate": "2021-06-13",
+   "originalLanguage": "en",
+   "publishedPlatform": null,
+   "isMachineTranslated": false
+  }
+ ],
+ "nota": "salida REAL de Apify (2026-10-12), recortada a 3 filas y sin nombres de personas"
+}

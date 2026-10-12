@@ -42,6 +42,8 @@ export interface ManualLimpioEntrada {
   readonly website?: string | null
   /** Fecha del manual · ISO. */
   readonly created_at?: string | null
+  /** Ronda 75 · «en qué se basó»: líneas ya redactadas (reseñas leídas, videos mirados…) · vacío o ausente = el manual no cambia. */
+  readonly fuentes_consultadas?: readonly string[]
 }
 
 export interface ManualLimpio {
@@ -284,6 +286,12 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
           ? 'En las piezas no se nombra a la competencia.'
           : String(pol),
       ) + '\n'
+  }
+
+  const fuentes = (entrada.fuentes_consultadas ?? []).filter((x) => x && x.trim())
+  if (fuentes.length) {
+    secciones.push('fuentes_consultadas')
+    o += titulo('EN QUÉ SE BASÓ ESTE MANUAL') + fuentes.map((x) => ajustar(x)).join('\n') + '\n'
   }
 
   return {

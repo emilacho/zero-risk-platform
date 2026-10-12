@@ -131,6 +131,20 @@ describe('transform-sections · lo que se escribe', () => {
     expect((await corre('resenas_app_store', [{ appName: 'app', reviews: [{ title: 'Útil', reviewText: 'Me sirve', rating: 5, date: '2026-01-02' }] }])).sections[0].text).toContain('★5 · 2026-01-02 · Útil · «Me sirve»')
     expect((await corre('resenas_facebook', [{ text: 'Lo recomiendo', isRecommended: true, date: '2026-03-04' }])).sections[0].text).toContain('recomienda · 2026-03-04 · «Lo recomiendo»')
   })
+  it('SALIDAS REALES grabadas (ronda 75): cada función deja texto útil en el flujo; YouTube trae los subtítulos como lista de {srt}', async () => {
+    const real = (fn: string) => (JSON.parse(readFileSync(join(process.cwd(), '__tests__/fixtures/fuentes-reales-r75', fn + '.json'), 'utf8')) as { respuesta: any[] }).respuesta
+    for (const fn of ['resenas_google_maps', 'resenas_tripadvisor', 'publicaciones_facebook', 'videos_instagram', 'videos_tiktok', 'videos_youtube']) {
+      const j = await corre(fn, real(fn))
+      expect(j.sections.length, fn).toBeGreaterThan(0)
+      expect(j.sections[0].text.length, fn).toBeGreaterThan(40)
+    }
+    const yt = await corre('videos_youtube', real('videos_youtube'))
+    expect(yt.sections[0].text).toContain('lo que se dice: «Lo primero que ves hacer a un niño')
+    expect(yt.sections[0].text).not.toContain('-->')
+    // una página que no existe: el actor devuelve un error, no una reseña → sin texto, y se declara
+    const fb = await corre('resenas_facebook', real('resenas_facebook'))
+    expect(fb.sections.length).toBe(0)
+  })
   it('videos: pie + transcripción; sin transcripción se DICE', async () => {
     const t = (await corre('videos_instagram', [{ url: 'https://instagram.com/reel/A', caption: 'Pie del video', transcript: 'Hola, hoy les mostramos', timestamp: '2026-09-01T00:00:00Z' }, { url: 'https://instagram.com/reel/B', caption: 'Solo pie' }])).sections[0].text
     expect(t).toContain('video https://instagram.com/reel/A · 2026-09-01 · pie: «Pie del video» · lo que se dice: «Hola, hoy les mostramos»')
