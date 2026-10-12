@@ -132,7 +132,8 @@ export async function cierreDeCampana(al: Almacen, cuerpo: Record<string, unknow
   if (!id && !(await al.journeyExiste(journey, clientId))) return err(403, 'E-VIAJE', 'el viaje no existe para este cliente en la sala')
   return {
     status: 200,
-    cuerpo: { payload_cable: { worker_id: puerta, _journey_id: journey, _sala_correlation_id: correlacion, client_id: clientId, resultado, ...(id ? { campana_id: id } : {}) } },
+    // r73 · el receptor de la sala (`parseCallbackBody`) exige event_type «run_completed», tenant_id (uuid) y ts: sin ellos el cable salía «invalid_event_type» y el flujo moría en CABLE_DE_VUELTA_MUDO
+    cuerpo: { payload_cable: { event_type: 'run_completed', worker_id: puerta, worker_name: 'cadena', _journey_id: journey, _sala_correlation_id: correlacion, tenant_id: clientId, client_id: clientId, ts: new Date().toISOString(), resultado, ...(id ? { campana_id: id } : {}) } },
   }
 }
 export type { Campana }

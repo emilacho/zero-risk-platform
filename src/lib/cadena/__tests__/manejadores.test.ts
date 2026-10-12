@@ -149,6 +149,9 @@ describe('avanzar y cerrar', () => {
     const id = idCampana(await abrir(al, { sala_ref: { _journey_id: 'journey-1', _sala_correlation_id: 'corr-1' } }))
     const r = await cierreDeCampana(al, { ...wf(), campana_id: id, resultado: 'cadena_abierta' })
     expect(r.cuerpo.payload_cable).toMatchObject({ worker_id: 'wf-puerta', _journey_id: 'journey-1', resultado: 'cadena_abierta', client_id: A.clientId })
+    // r73 · lo que EXIGE el receptor de la sala (parseCallbackBody): event_type, tenant_id, ts, correlación y viaje
+    expect(r.cuerpo.payload_cable).toMatchObject({ event_type: 'run_completed', worker_name: 'cadena', tenant_id: A.clientId })
+    expect(Number.isNaN(Date.parse((r.cuerpo.payload_cable as { ts: string }).ts))).toBe(false)
     expect((await cierreDeCampana(al, { ...wf(), campana_id: id, resultado: 'inventado' })).status).toBe(400)
     const sinViaje = almacen()
     const id2 = idCampana(await abrir(sinViaje))
