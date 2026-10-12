@@ -139,6 +139,11 @@ describe('los nodos del flujo', () => {
     const nada = await vuelta('')
     expect(nada.estado_del_plan).toBeNull(); expect(nada.con_pendientes).toBe(false)
   })
+  it('la línea de pendientes del plan v2 REAL cabe en una línea corta y dice qué falta, sin copiar el texto largo del chequeo', () => {
+    const l = M.pendientesDelPlan(M.revisarPlan(REAL, { ...CTX, personas: [] })) as string
+    expect(l.length).toBeLessThanOrEqual(400); expect(l).not.toContain('\n'); expect(l).toMatch(/P4 · presupuesto incompleto \(.*celdas del presupuesto sin cifra.*\)/); expect(l).toMatch(/P7 · nombra a una persona/)
+    expect(M.pendientesDelPlan({ ok: true, marcas: [] })).toBeNull()
+  })
   it('lo que llega al cliente sigue sin lo interno aunque el chequeo marque', async () => {
     const mal = await vuelta(planBueno(clientes[0], (f) => f.replace(/\| \d+ [A-Z]{3} \|/, '| TBD |')))
     expect(mal.texto).not.toMatch(/Revisión del plan \(la hace el sistema\)/); expect(mal.registro_interno.aviso_del_chequeo).toMatch(/Revisión del plan/)
