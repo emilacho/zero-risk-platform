@@ -615,7 +615,7 @@ describe('r74 · F3 · una llamada de corrección vencida no deja la campaña at
         const al = almacen({ contextos: { [cli.clientId]: sinSedes(cli) }, planes: { [cli.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, journeys: [{ journeyId: 'journey-1', clientId: cli.clientId }] })
         const c = await abrirCampana(al, { ...wf(), client_id: cli.clientId, seco: true }, AHORA)
         const id = idCampana(c)
-        expect(al.recolectadas).toContain(cli.clientId)
+        expect(al.recolectadas).toEqual([]) // r75 · en SECO no se recolecta: un ensayo no escribe sedes reales (nota A.4-1 de CC#3)
         expect(String(al.campanas.find((x) => x.id === id)!.estado_motivo)).toContain('sin sede declarada')
         const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
         await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(cli.estrategia) }, AHORA)
@@ -626,6 +626,14 @@ describe('r74 · F3 · una llamada de corrección vencida no deja la campaña at
         expect(al.validaciones.flatMap((v) => v.hallazgos).filter((h) => h.chequeo === 'V06')).toEqual([])
       })
     }
+    it('la recolección de sedes ESCRIBE datos del cliente: se hace en lo REAL y NO en seco', async () => {
+      const real = almacen({ config: { flujos: ['wf-cadena', 'wf-vigia'], puerta_workflow_id: 'wf-puerta', estado_cadena: 'encendida' } })
+      const c = await abrirCampana(real, { ...wf(), client_id: A.clientId, seco: false }, AHORA)
+      expect(c.status).toBe(201); expect(real.recolectadas).toEqual([A.clientId])
+      const seco = almacen()
+      await abrirCampana(seco, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+      expect(seco.recolectadas).toEqual([])
+    })
     it('con sede y horario la regla sigue igual: una hora fuera del horario BLOQUEA; sin horario de la sede, aviso y la fila queda en investigación', async () => {
       const al = almacen()
       const { id } = await conEstrategia(al)
@@ -641,6 +649,12 @@ describe('r74 · F3 · una llamada de corrección vencida no deja la campaña at
     })
   })
 
+  it('r75 · un solo camino de briefs: el cierre del viaje acepta `cadena_apagada` (la puerta ya no reenvía a la parte vieja con la cadena apagada) y sigue rechazando lo inventado', async () => {
+    const al = almacen()
+    const r = await cierreDeCampana(al, { ...wf(), client_id: A.clientId, journey_id: 'journey-1', sala_correlation_id: 'corr-1', resultado: 'cadena_apagada' })
+    expect(r.status).toBe(200); expect(r.cuerpo.payload_cable).toMatchObject({ resultado: 'cadena_apagada', _journey_id: 'journey-1' })
+    expect((await cierreDeCampana(al, { ...wf(), client_id: A.clientId, journey_id: 'journey-1', resultado: 'inventado' })).status).toBe(400)
+  })
   it('una tanda ya validada sigue contestando «ya hecha» (la idempotencia normal no cambia)', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)

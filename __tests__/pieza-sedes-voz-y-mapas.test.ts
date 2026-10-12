@@ -151,7 +151,8 @@ describe('⑥ la voz: el productor recibe los textos de los posts propios del cl
     const t = j.cuerpo.task as string
     expect(t).toContain('E) LA VOZ')
     expect(t).toMatch(/\[2026-\d\d-\d\d\] «/)
-    expect(t).toMatch(/TUTEA siempre/)
+    expect(t).toMatch(/El registro de este cliente es TUTEO \(fijado por/) // r75 · H1: el registro ya resuelto del cliente, no una regla fija
+    expect(t).not.toMatch(/TUTEA siempre|El español es de/)
     expect(t).toMatch(/no los copies/i)
     expect(t).not.toMatch(/#syntropic/) // la cola de hashtags no entra
     expect(j.voz_resumen.textos).toBeGreaterThan(3)

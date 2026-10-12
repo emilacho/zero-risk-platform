@@ -166,6 +166,6 @@ export function filasDe(c: ClienteFixture, t: TandaAgente, formatos: FormatosPor
 export function contextoDe(c: ClienteFixture): import('../almacen').ContextoDelCliente {
   return {
     clientId: c.clientId, nombreDelNegocio: c.conocidos[0] ?? 'Negocio de práctica', pais: 'pais-de-practica', zonaHoraria: 'UTC', planTexto: c.planTexto,
-    manualTexto: c.referencias.find((r) => r.origen === 'manual')?.texto ?? '', forbiddenWords: c.forbiddenWords, sedes: c.sedes, referencias: c.referencias, fechaDelPlan: '2026-10-08',
+    manualTexto: c.referencias.find((r) => r.origen === 'manual')?.texto ?? '', forbiddenWords: c.forbiddenWords, sedes: c.sedes, referencias: c.referencias, fechaDelPlan: '2026-10-08', registro: 'tu',
   }
 }

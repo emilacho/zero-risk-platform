@@ -14,7 +14,8 @@ import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, semanaDeId } from 
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
 import type { Ajuste, Estrategia, Fila, FormatosPorRed, Hallazgo, TandaAgente } from './tipos'
-import { lexicoDesdeConfig, type LexicoAfirmaciones } from './afirmaciones'
+import { type LexicoAfirmaciones } from './afirmaciones'
+import { lexicoDelCliente } from './lexico-por-rubro'
 import { problemasDeEsquema, validarEstrategia } from './validador-estrategia'
 import { validarTodo, type FechaEspecialVerificada, type InsumosCalendario } from './validador-calendario'
 
@@ -45,7 +46,7 @@ async function cargar(al: Almacen, cuerpo: Record<string, unknown>): Promise<{ o
   if (cerrada) return { ok: false, r: cerrada }
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
   if (!ctx) return { ok: false, r: err(409, 'E-CONTEXTO', 'no se pudo armar el contexto del cliente') }
-  return { ok: true, p: { campana, ctx, formatos: await al.formatos(), lexico: lexicoDesdeConfig(await al.leerConfig('lexico_afirmaciones')) } }
+  return { ok: true, p: { campana, ctx, formatos: await al.formatos(), lexico: lexicoDelCliente(ctx.industria, await al.leerConfig('lexico_afirmaciones')) } }
 }
 
 export function cuerpoDeRunSdk(paso: Paso, modelo: string, tarea: string, esquema: Record<string, unknown>, clientId: string, extra: Record<string, unknown> = {}) {
@@ -169,7 +170,7 @@ function insumosDe(c: Campana, ctx: ContextoDelCliente, e: Estrategia, formatos:
   return {
     campana: { fecha_inicio: c.fecha_inicio, fecha_fin: c.fecha_fin, tanda, semanas }, estrategia: e, planTexto: ctx.planTexto, formatos, sedes: ctx.sedes,
     referencias: ctx.referencias, clientId: ctx.clientId, ahora: ahora.slice(0, 10), filas, filasPrevias: previas, ajustes, fechasEspeciales: fechas,
-    forbiddenWords: ctx.forbiddenWords, conocidos: [ctx.nombreDelNegocio], lexico,
+    forbiddenWords: ctx.forbiddenWords, conocidos: [ctx.nombreDelNegocio], lexico, registro: ctx.registro,
   }
 }
 

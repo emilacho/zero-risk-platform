@@ -98,7 +98,7 @@ const REGLAS = [
   '',
   bloqueDeSedes(sedesResueltas, sedesInfo && sedesInfo.error ? sedesInfo : null),
   '',
-  bloqueDeVoz(textosDeVoz),
+  bloqueDeVoz(textosDeVoz, trato),
   '',
   bloqueDeTrato(trato),
   '',

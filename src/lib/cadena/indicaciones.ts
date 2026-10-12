@@ -5,10 +5,11 @@
  */
 import type { ContextoDelCliente } from './almacen'
 import type { Estrategia, Ficha, Fila, Hallazgo } from './tipos'
+import { reglaDeRegistro, type RegistroDelCliente } from './registro'
 
-const REGLAS_COMUNES = [
+const REGLAS_BASE = [
   'Respondes SOLO con el objeto que pide el formato de salida. No escribas nada fuera de él.',
-  'Escribe en tuteo (tú). Nada de voseo.',
+  '@REGISTRO@',
   'No inventes datos. Todo dato concreto (precio, medida, horario, dirección, cantidad, reseña) necesita una referencia (`ref`) a un id de la lista de REFERENCIAS; si no hay referencia, no lo escribas: déjalo como pendiente.',
   'No afirmes origen, frescura, porción, trazabilidad ni garantías («recién», «del día», «alcanza para N», «garantizado», «100 %»…) sin una referencia que lo diga.',
   'No cites reseñas ni testimonios de personas.',
@@ -16,6 +17,8 @@ const REGLAS_COMUNES = [
   'Un solo formato por pieza, elegido de los formatos permitidos de esa red. Si el formato es de video, igual se planea (el sistema lo marca como en espera).',
 ]
 
+/** r75 · H2 · las reglas comunes llevan el REGISTRO DEL CLIENTE (su manual o su país), no uno fijo del proyecto */
+const reglasComunes = (registro: RegistroDelCliente | undefined): string[] => REGLAS_BASE.map((x) => (x === '@REGISTRO@' ? reglaDeRegistro(registro) : x))
 const lineas = (xs: string[]) => xs.map((x) => `- ${x}`).join('\n')
 
 export interface PedidoDeEstrategia { ctx: ContextoDelCliente; formatosPermitidos: Record<string, string[]>; version: number; correccion?: Ficha[] }
@@ -29,7 +32,7 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
     'Lee el PLAN de marketing y el MANUAL de marca de este negocio y devuelve su ESTRATEGIA de redes como un objeto estructurado (canales, excluidos, pilares, fases, hitos, dependencias, fechas que importan, patrón semanal, piezas fijas, pendientes, alertas).',
     '',
     '# Reglas',
-    lineas(REGLAS_COMUNES),
+    lineas(reglasComunes(p.ctx.registro)),
     lineas([
       'Toda `cita_plan` es una frase LITERAL del plan (copiada tal cual). Si el plan no lo dice, no es una regla del plan: no lo cites; si lo propones tú, ponlo como propuesta con su motivo.',
       'Los pilares suman 100. Las fases caen dentro de 90 días.',
@@ -72,7 +75,7 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     `Materializa la TANDA ${p.tanda} del calendario editorial (semanas ${p.semanas.join(', ')}). Para cada slot del patrón semanal y cada semana, escribe el tema de la pieza; agrega las piezas fijas del plan y los ajustes puntuales.`,
     '',
     '# Reglas',
-    lineas(REGLAS_COMUNES),
+    lineas(reglasComunes(p.ctx.registro)),
     lineas([
       'Respeta el patrón semanal, los pilares, la frecuencia por red y las alertas de la ESTRATEGIA. Una pieza fija de la estrategia usa su `pieza_fija` y su tema.',
       'Si una pieza depende de otra (el plan lo pide), pon el id de la antecesora en `depende_de` (formato `s<semana>-d<día>-<slot>`); nunca dependas de una pieza de video.',

@@ -41,12 +41,10 @@ export function aparicionesDe(texto: string, clave: string): Array<{ negada: boo
   return sale
 }
 
-/** solo dígitos de un teléfono, sin prefijo de país 593 ni 0 inicial (para comparar «0997 744 288» con «+593 997 744 288») */
+/** r75 · H5 · el número comparable de un teléfono, de CUALQUIER país: los últimos 9 dígitos (como `telefonoNorm` de las sedes), de modo que «0997 744 288» y «+593 997 744 288» —o «+57 300 123 4567» y «300 123 4567»— son el mismo; con menos de 9 dígitos, los que haya sin ceros iniciales */
 export function digitosDeTelefono(s: string): string {
-  let d = s.replace(/\D/g, '')
-  if (d.startsWith('593')) d = d.slice(3)
-  if (d.startsWith('0')) d = d.slice(1)
-  return d
+  const d = s.replace(/\D/g, '')
+  return d.length >= 9 ? d.slice(-9) : d.replace(/^0+/, '')
 }
 
 const RE_TELEFONO = /\+?\d[\d\s().-]{6,}\d|\d{1,3}(?:,\d{3}){2,}/g

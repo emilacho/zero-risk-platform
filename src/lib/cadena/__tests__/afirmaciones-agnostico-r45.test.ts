@@ -4,8 +4,11 @@
  */
 import { describe, it, expect } from 'vitest'
 import { hallarAfirmaciones } from '../afirmaciones'
+import { lexicoDelCliente } from '../lexico-por-rubro'
 
-const hay = (t: string, conocidos: string[] = []) => hallarAfirmaciones(t, conocidos).length > 0
+// r75 · H3 · la base solo marca lo ESTRUCTURAL; frescura/origen/porción son del paquete del rubro que las vende (se cargan por la industria de la ficha)
+const INDUSTRIA: Record<string, string> = { gastro: 'restaurante de comida', tienda: 'tienda de productos' }
+const hay = (t: string, conocidos: string[] = [], rubro = '') => hallarAfirmaciones(t, conocidos, { lexico: lexicoDelCliente(INDUSTRIA[rubro] ?? rubro, null) }).length > 0
 
 describe('V14 · afirmaciones que necesitan respaldo en cualquier rubro', () => {
   const DEBEN_BLOQUEAR: [string, string][] = [
@@ -32,7 +35,7 @@ describe('V14 · afirmaciones que necesitan respaldo en cualquier rubro', () => 
     ['gastro', 'El marisco llega el mismo día'],
   ]
   for (const [rubro, frase] of DEBEN_BLOQUEAR) {
-    it(`[${rubro}] marca «${frase}»`, () => expect(hay(frase)).toBe(true))
+    it(`[${rubro}] marca «${frase}»`, () => expect(hay(frase, [], rubro)).toBe(true))
   }
 
   const NO_DEBEN_BLOQUEAR: string[] = [

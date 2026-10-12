@@ -27,15 +27,24 @@ export interface LexicoAfirmaciones {
   locativos?: string[]
   /** palabras del FORMATO del plan («5 láminas», «3 pasos»): un número con ellas no es un dato del negocio */
   no_cantidad?: string[]
+  /** r75 · H3 · «de <Lugar>» como origen de producto: SOLO en los paquetes de rubros que venden bienes (en la base está apagado) */
+  origen_lugar?: boolean
+  /** r75 · H3 · palabras cuyo adjetivo es FIGURADO («propuesta fresca», «mirada fresca»): no afirman frescura de un producto */
+  figurado?: string[]
+  /** r75 · H3 · sujetos que son PERSONAS: «nuestros pacientes vienen de Quito» no afirma el origen de un producto */
+  personas?: string[]
 }
 
-type LexicoBase = Required<Omit<LexicoAfirmaciones, 'patrones'>>
+type LexicoBase = Required<Omit<LexicoAfirmaciones, 'patrones' | 'origen_lugar'>>
 export const LEXICO_BASE: LexicoBase = {
   // solo unidades de cualquier negocio; las propias de un rubro («mesas», «habitaciones», «canchas») las cubre la estructura «con N <cosa>» o el léxico del cliente
   cantidad_unidades: ['años', 'anos', 'clientes', 'usuarios', 'pacientes', 'alumnos', 'socios', 'miembros', 'suscriptores', 'empleados', 'sedes', 'sucursales', 'locales', 'personas', 'visitas', 'seguidores', 'productos', 'proyectos', 'casos', 'ventas', 'descargas', 'unidades', 'paises', 'ciudades'],
   no_cantidad: ['posts', 'post', 'publicaciones', 'publicacion', 'laminas', 'lamina', 'slides', 'slide', 'pasos', 'paso', 'fases', 'fase', 'dias', 'dia', 'semanas', 'semana', 'meses', 'mes', 'imagenes', 'imagen', 'fotos', 'foto', 'videos', 'video', 'historias', 'historia', 'reels', 'reel', 'piezas', 'pieza', 'ideas', 'idea', 'ejemplos', 'ejemplo', 'opciones', 'opcion', 'versiones', 'version', 'puntos', 'punto', 'bloques', 'secciones', 'seccion', 'correos', 'mensajes', 'campanas', 'campana', 'preguntas', 'pregunta', 'consejos', 'consejo', 'tips', 'tip', 'razones', 'formas', 'maneras', 'claves', 'palabras', 'lineas', 'veces', 'vez', 'carruseles', 'carrusel', 'redes', 'posteos', 'textos', 'frases', 'titulos', 'hashtags'],
-  ambiente: ['ambiente', 'brisa', 'aire', 'clima', 'temperatura', 'espacio', 'lugar', 'sitio', 'rincon', 'terraza', 'atmosfera', 'salon', 'local'],
-  no_origen: ['resena', 'resenas', 'guia', 'historia', 'opinion', 'foto', 'fotos', 'video', 'videos', 'cuenta', 'perfil', 'equipo', 'gracias', 'parte', 'mensaje', 'publicacion', 'pagina', 'familia', 'carta', 'menu', 'saludos', 'bienvenido', 'bienvenida', 'comentario'],
+  // r75 · H3 · solo lo ESTRUCTURAL del idioma; lo propio de un rubro (terraza, brisa, carta, menú…) vive en los paquetes por rubro
+  ambiente: ['ambiente', 'aire', 'clima', 'temperatura', 'espacio', 'lugar', 'sitio', 'rincon', 'atmosfera', 'local'],
+  no_origen: ['resena', 'resenas', 'guia', 'historia', 'opinion', 'foto', 'fotos', 'video', 'videos', 'cuenta', 'perfil', 'equipo', 'gracias', 'parte', 'mensaje', 'publicacion', 'pagina', 'familia', 'saludos', 'bienvenido', 'bienvenida', 'comentario', 'caso', 'casos'],
+  figurado: ['propuesta', 'propuestas', 'idea', 'ideas', 'mirada', 'miradas', 'estilo', 'estilos', 'look', 'enfoque', 'enfoques', 'diseno', 'disenos', 'imagen', 'vision', 'energia', 'cara', 'concepto', 'conceptos', 'tendencia', 'tendencias', 'marca', 'campana', 'contenido', 'comunicacion', 'lenguaje', 'voz', 'experiencia', 'experiencias', 'perspectiva', 'inspiracion', 'sensacion', 'frescura'],
+  personas: ['pacientes', 'paciente', 'clientes', 'cliente', 'alumnos', 'alumno', 'estudiantes', 'visitantes', 'turistas', 'gente', 'personas', 'usuarios', 'usuario', 'socios', 'vecinos', 'invitados', 'huespedes', 'miembros', 'participantes', 'asistentes', 'equipo', 'profesionales', 'especialistas', 'clientas', 'familias', 'viajeros', 'seguidores', 'comunidad'],
   locativos: ['sede', 'sedes', 'local', 'locales', 'sucursal', 'sucursales', 'oficina', 'ciudad', 'zona', 'barrio', 'visitanos', 'estamos', 'abrimos'],
 }
 
@@ -43,7 +52,7 @@ const escapar = (u: string) => u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /** Cifras que son DATOS (no «3 posts» ni «4 pasos»): dinero, medida, porcentaje, hora, reseñas, puntaje, cantidad con unidad. */
 const cifrasDe = (unidades: readonly string[]): { subtipo: string; re: RegExp; clase: Clase }[] => [
-  { subtipo: 'dinero', re: /(?:US\$|\$)\s?\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\s?(?:dolares|dólares|usd)\b/gi, clase: 'alto' },
+  { subtipo: 'dinero', re: /(?:US\$|\$|€|£|S\/)\s?\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\s?(?:dolares|dólares|euros?|soles|pesos|usd|eur|cop|mxn|pen|gbp)\b|\b(?:usd|eur|cop|mxn|pen|gbp)\s?\d+(?:[.,]\d+)?/gi, clase: 'alto' },
   { subtipo: 'medida', re: /\b\d+(?:[.,]\d+)?\s?(?:g|gr|kg|mg|ml|l|lt|litros?|gramos?|onzas?|oz|cm|mm)(?![a-záéíóúñ0-9])/gi, clase: 'alto' },
   { subtipo: 'porcentaje', re: /\b\d+(?:[.,]\d+)?\s?%/g, clase: 'alto' },
   { subtipo: 'hora', re: /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g, clase: 'alto' },
@@ -58,17 +67,12 @@ const cifrasDe = (unidades: readonly string[]): { subtipo: string; re: RegExp; c
  * Se miden contra el texto normalizado (minúsculas, sin acentos). Todas son «alto». Es la BASE del idioma: se amplía en `cadena_config`.
  */
 export const PATRONES_AFIRMACION: { subtipo: string; re: RegExp }[] = [
-  { subtipo: 'frescura', re: /\b(?:mismo dia|de hoy|hoy mismo|esta (?:manana|tarde|noche)|ayer|recien (?:\w+[ai]d[oa]s?|hech[oa]s?|salid[oa]s?)|(?:capturad|recolectad|cosechad)[oa]s?|fresc[oa]s?|frescura)\b/g },
-  { subtipo: 'origen', re: /\b(?:de la zona|de la costa|del campo|de origen|traid[oa]s? (?:de|desde|ayer|hoy)|llega(?:n)? (?:de|desde)|importad[oa]s?|directo (?:del|de la|de los|de las|desde)\s+\w+)\b/g },
-  { subtipo: 'porcion', re: /\b(?:alcanza(?:n)? para|rinde(?:n)? para|para \d+ personas?|porcion(?:es)? (?:generosa|abundante|grande)s?)\b/g },
-  { subtipo: 'trazabilidad', re: /\b(?:el mismo (?:que|quien)|el es quien|ella es quien|es quien \w+|directo (?:del|de la) \w+|sin intermediarios|de nuestr[oa]s? propi[oa]s? \w+)\b/g },
   { subtipo: 'certificacion', re: /\b(?:certificad[oa]s?|certificacion(?:es)?|acreditad[oa]s?|acreditacion(?:es)?|avalad[oa]s?|homologad[oa]s?|licenciad[oa]s?|patentad[oa]s?|premiad[oa]s?|galardonad[oa]s?|iso ?\d{3,5})\b/g },
   { subtipo: 'ausencia', re: /\bsin (?:\w+ )?(?:ocult[oa]s?|costos?|cargos?|comisiones|cuotas?|letra chica|compromisos?|permanencia|riesgos?|intermediarios|esperas?|filas?|papeleos?|trampas?|sorpresas?|demoras?|limites?|contratos?)\b/g },
   { subtipo: 'garantia', re: /(?:\bgarantizad[oa]s?\b|\b100 ?%|\bcien por ciento\b|\bnunca falla\b|\bsin falta\b)/g },
-  { subtipo: 'composicion', re: /\b(?:sin (?:conservantes|aditivos|quimicos|preservantes|colorantes)|organic[oa]s?|artesanal(?:es)?|hecho a mano)\b/g },
   { subtipo: 'superlativo', re: /\b(?:(?:el|la|los|las) mejor(?:es)?|numero (?:uno|1)|el unico|la unica|lider(?:es)? (?:en|del|de la)|mas \w+ (?:del|de la|de) (?:mercado|pais|ciudad|zona|region|rubro|sector|industria|mundo|categoria|segmento|provincia|canton|barrio)|mas \w+ que (?:cualquier|la competencia|el resto|los demas|otros|nadie|la mayoria)|mejor(?:es)? que (?:cualquier|la competencia|el resto|los demas|otros|nadie)|mejor(?:es)? (?:precio|calidad|servicio|opcion|atencion|garantia))\b/g },
+  { subtipo: 'historia', re: /\b(?:desde (?:19|20)\d{2}|\d+ anos de)\b/g },
   { subtipo: 'servicio', re: /\b(?:(?:entrega|envio|delivery) gratis|24 ?\/ ?7|abierto 24|las 24 horas)\b/g },
-  { subtipo: 'historia', re: /\b(?:receta (?:familiar|de la abuela|secreta|tradicional)|tradicion (?:familiar|de)|desde (?:19|20)\d{2}|\d+ anos de)\b/g },
 ]
 
 /** Lugar propio tras «de/desde» con inicial mayúscula en el texto ORIGINAL (p. ej. «camarón y pescado de Olón»). */
@@ -97,7 +101,8 @@ export function lexicoDesdeConfig(valor: unknown): LexicoAfirmaciones {
       return !!q && typeof q.subtipo === 'string' && typeof q.re === 'string' && q.re.length <= MAX_RE && compila(q.re)
     })
   }
-  for (const k of ['cantidad_unidades', 'ambiente', 'no_origen', 'locativos', 'no_cantidad'] as const) { const l = lista(v[k]); if (l) out[k] = l }
+  for (const k of ['cantidad_unidades', 'ambiente', 'no_origen', 'locativos', 'no_cantidad', 'figurado', 'personas'] as const) { const l = lista(v[k]); if (l) out[k] = l }
+  if (v.origen_lugar === true) out.origen_lugar = true
   return out
 }
 
@@ -109,7 +114,8 @@ export interface OpcionesAfirmaciones { lexico?: LexicoAfirmaciones }
  * Ninguna lista de comida o rubro: lo que ubica un lugar o anuncia un tipo de texto es léxico de la ESTRUCTURA, y es dato en `cadena_config`.
  */
 export function hallarAfirmaciones(tema: string, conocidos: readonly string[] = [], opciones: OpcionesAfirmaciones = {}): Hallado[] {
-  const lx = { ...LEXICO_BASE, ...(opciones.lexico ?? {}) }
+  // lo que trae el cliente (configuración o paquetes de su rubro) REEMPLAZA la lista de la base que nombra; `lexicoDeLaIndustria` ya une base + paquetes para no perder lo estructural
+  const lx: LexicoBase = { ...LEXICO_BASE, ...(opciones.lexico ?? {}) } as LexicoBase
   const out: Hallado[] = []
   const t = String(tema ?? '')
   for (const c of cifrasDe(lx.cantidad_unidades)) for (const m of t.matchAll(new RegExp(c.re.source, c.re.flags))) out.push({ tipo: 'cifra', subtipo: c.subtipo, texto: m[0].trim(), clase: c.clase })
@@ -123,28 +129,36 @@ export function hallarAfirmaciones(tema: string, conocidos: readonly string[] = 
     out.push({ tipo: 'cifra', subtipo: 'cantidad', texto: m[0].trim(), clase: 'alto' })
   }
   const ambiente = new Set(lx.ambiente.map(normalizar))
+  const figurado = new Set(lx.figurado.map(normalizar))
+  const personas = new Set(lx.personas.map(normalizar))
   const extra = (opciones.lexico?.patrones ?? []).map((p) => ({ subtipo: p.subtipo, re: new RegExp(p.re, 'g') }))
   for (const p of [...PATRONES_AFIRMACION, ...extra]) {
     for (const m of n.matchAll(new RegExp(p.re.source, p.re.flags))) {
       const i = m.index ?? 0
-      // «ambiente fresco», «brisa fresca»: lo fresco del AMBIENTE no es una afirmación del producto
+      // «ambiente fresco», «brisa fresca»: lo fresco del AMBIENTE no es una afirmación del producto; «propuesta fresca», «mirada fresca»: es un adjetivo FIGURADO
       if (/^fresc/.test(m[0])) {
         const al = palabras(n.slice(Math.max(0, i - 40), i)).slice(-3)
         const despues = palabras(n.slice(i + m[0].length, i + m[0].length + 30)).slice(0, 2)
         if ([...al, ...despues].some((w) => ambiente.has(w))) continue
+        if ([...al.slice(-2), ...despues.slice(0, 1)].some((w) => figurado.has(w))) continue
       }
+      // «nuestros pacientes vienen de…», «los clientes llegan de…»: el sujeto son PERSONAS, no un producto
+      if (p.subtipo === 'origen' && palabras(n.slice(Math.max(0, i - 60), i)).slice(-6).some((w) => personas.has(w))) continue
       out.push({ tipo: 'afirmacion', subtipo: p.subtipo, texto: m[0].trim(), clase: 'alto' })
     }
   }
   const sedesN = conocidos.map(normalizar).filter(Boolean)
   const locativos = new Set(lx.locativos.map(normalizar))
   const noOrigen = new Set(lx.no_origen.map(normalizar))
+  // «de <Lugar>» como origen de producto SOLO existe en los paquetes de rubros que venden bienes; en la base está apagado (un servicio no "viene de" un lugar)
+  if (!opciones.lexico?.origen_lugar) return out
   for (const m of t.matchAll(new RegExp(LUGAR.source, LUGAR.flags))) {
     const lugar = normalizar(m[1])
     if (NO_LUGAR.has(lugar)) continue
     const antes = palabras(t.slice(Math.max(0, (m.index ?? 0) - 60), m.index ?? 0))
     const cabeza = antes[antes.length - 1] ?? ''
     if (cabeza && noOrigen.has(cabeza)) continue // «reseña de Ana», «guía de Montañita»
+    if (antes.slice(-6).some((w) => personas.has(w))) continue // «nuestros pacientes vienen de Quito»: el sujeto son PERSONAS
     const esConocido = sedesN.some((s) => lugar.startsWith(s) || s.startsWith(lugar))
     if (esConocido && cabeza && locativos.has(cabeza)) continue // «la sede de Olón»
     out.push({ tipo: 'afirmacion', subtipo: 'origen_lugar', texto: m[0].trim(), clase: 'alto' })

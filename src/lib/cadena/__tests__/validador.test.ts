@@ -2,6 +2,7 @@
  * Validador de la cadena · batería permanente. Corre IGUAL con dos clientes distintos (sin parámetros por cliente).
  * Todo sin modelo, sin red, sin base: US$ 0.
  */
+import { lexicoDeLaIndustria } from '../lexico-por-rubro'
 import { describe, it, expect } from 'vitest'
 import {
   citaAparece, normalizar, fechaDeFila, fechaInicioPorRegla, semanaIso, minutos, sumarDias, diaSemanaIso,
@@ -15,10 +16,12 @@ const FORMATOS = formatosDeLaMigracion()
 const bloqueos = (hs: Hallazgo[]) => hs.filter((h) => h.severidad === 'bloquea')
 const chequeos = (hs: Hallazgo[]) => new Set(bloqueos(hs).map((h) => h.chequeo))
 
+// r75 · H3 · estas pruebas son del rubro de alimentos: su léxico de frescura/origen/porción es el PAQUETE de ese rubro (la base solo marca lo estructural)
+const PACK_ALIMENTOS = lexicoDeLaIndustria('restaurante de comida')
 function insumos(c: ClienteFixture, t: TandaAgente, extra: Partial<InsumosCalendario> = {}): InsumosCalendario {
   return {
     campana: c.campana, estrategia: c.estrategia, planTexto: c.planTexto, formatos: FORMATOS, sedes: c.sedes, referencias: c.referencias,
-    clientId: c.clientId, ahora: c.ahora, filas: filasDe(c, t, FORMATOS), forbiddenWords: c.forbiddenWords, conocidos: c.conocidos, ...extra,
+    clientId: c.clientId, ahora: c.ahora, filas: filasDe(c, t, FORMATOS), forbiddenWords: c.forbiddenWords, conocidos: c.conocidos, registro: 'tu', lexico: PACK_ALIMENTOS, ...extra,
   }
 }
 const conPieza = (c: ClienteFixture, t: TandaAgente, semana: number, slot: string, cambios: Partial<PiezaAgente>): TandaAgente => ({
@@ -267,13 +270,13 @@ describe('CC#3 condición 3 · afirmaciones de origen, frescura, porción y traz
   ] as const
   for (const [f, tipo] of frases) {
     it(`«${f}» se detecta como ${tipo}`, () => {
-      expect(hallarAfirmaciones(f, []).some((h) => h.subtipo === tipo)).toBe(true)
+      expect(hallarAfirmaciones(f, [], { lexico: PACK_ALIMENTOS }).some((h) => h.subtipo === tipo)).toBe(true)
     })
   }
   it('un lugar que es una sede o el nombre del negocio NO es un origen de producto', () => {
-    expect(hallarAfirmaciones('visítanos en la sede de Olón', ['Olón']).some((h) => h.subtipo === 'origen_lugar')).toBe(false)
-    expect(hallarAfirmaciones('el menú de Café Brisa', ['Café Brisa']).some((h) => h.subtipo === 'origen_lugar')).toBe(false)
-    expect(hallarAfirmaciones('mira lo que subimos de Instagram', []).some((h) => h.subtipo === 'origen_lugar')).toBe(false)
+    expect(hallarAfirmaciones('visítanos en la sede de Olón', ['Olón'], { lexico: PACK_ALIMENTOS }).some((h) => h.subtipo === 'origen_lugar')).toBe(false)
+    expect(hallarAfirmaciones('el menú de Café Brisa', ['Café Brisa'], { lexico: PACK_ALIMENTOS }).some((h) => h.subtipo === 'origen_lugar')).toBe(false)
+    expect(hallarAfirmaciones('mira lo que subimos de Instagram', [], { lexico: PACK_ALIMENTOS }).some((h) => h.subtipo === 'origen_lugar')).toBe(false)
   })
   it('sin respaldo bloquean igual que una cifra; con un dato F0/F1 que las contenga, pasan; con un trozo no confiable, no', () => {
     const c = clienteA()
