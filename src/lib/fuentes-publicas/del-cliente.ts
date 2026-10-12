@@ -4,7 +4,7 @@
  * en la ficha de OTRO negocio, no entran jamás (se vio en la práctica: un raspado de mapas trae hoteles vecinos con sus propios enlaces).
  */
 import { normalizar } from '../manual/texto'
-import { enlacesDelCliente, type EnlaceDescartado } from './enlaces-propios'
+import { enlacesDelCliente, type EnlaceDescartado, type EnlaceSinConfirmar } from './enlaces-propios'
 import { LIMITES_POR_OMISION, planDeFuentesPublicas, type EntradaDelPlan, type PlanDeFuentesPublicas } from './plan'
 import type { Red } from './catalogo'
 
@@ -30,7 +30,17 @@ const PERFIL_DE_RED: Record<Exclude<Red, 'instagram'>, RegExp> = {
   youtube: /^(www\.)?youtube\.com\/(@[^/?#]+|channel\/[^/?#]+|c\/[^/?#]+|user\/[^/?#]+)\/?$/i,
 }
 
-export type EntradaConDescartes = EntradaDelPlan & { descartados: EnlaceDescartado[] }
+export type EntradaConDescartes = EntradaDelPlan & { descartados: EnlaceDescartado[]; /** enlaces en duda: NO se piden ni se gastan; los confirma una persona o la ficha */ sin_confirmar: EnlaceSinConfirmar[] }
+
+/** los trozos de texto del sitio que rodean a una dirección (para ver si dice «diseñado por…» o «síguenos…») */
+function ventanasDe(valor: unknown, url: string, salida: string[], profundidad = 0): void {
+  if (salida.length >= 8 || profundidad > 5) return
+  if (typeof valor === 'string') {
+    const i = valor.indexOf(url)
+    if (i >= 0) salida.push(valor.slice(Math.max(0, i - 160), i + url.length + 160))
+  } else if (Array.isArray(valor)) for (const x of valor) ventanasDe(x, url, salida, profundidad + 1)
+  else if (valor && typeof valor === 'object') for (const x of Object.values(valor as Record<string, unknown>)) ventanasDe(x, url, salida, profundidad + 1)
+}
 
 export function entradaDelPlanDesdeFicha(ficha: FichaDeFuentes, filas: FilaPropia[], limites?: EntradaDelPlan['limites']): EntradaConDescartes {
   const miHost = host(ficha.website_url ?? '')
@@ -38,6 +48,7 @@ export function entradaDelPlanDesdeFicha(ficha: FichaDeFuentes, filas: FilaPropi
   // ── enlaces: los que aparecen en el sitio propio Y son del cliente (ronda 76): los de salida («qué hacer cerca», otros negocios, «compartir en») no cuentan
   const hallados: string[] = []
   const paginas = new Map<string, Set<string>>() // página del sitio → direcciones que lleva (una página leída varias veces cuenta una vez)
+  const paginasLeidas: unknown[] = []
   for (const f of propias) {
     if (f.apify_function !== 'website_content_scraper' || !miHost) continue
     const u = String(obj(f.params).url ?? obj(f.params).startUrl ?? '')
@@ -48,11 +59,16 @@ export function entradaDelPlanDesdeFicha(ficha: FichaDeFuentes, filas: FilaPropi
       const set = paginas.get(clave) ?? new Set<string>()
       for (const d of direccionesDe(it)) { if (host(d) === miHost) continue; set.add(d); if (!hallados.includes(d)) hallados.push(d) }
       paginas.set(clave, set)
+      paginasLeidas.push(it)
     })
   }
   const paginasPorEnlace = new Map<string, number>()
   for (const set of paginas.values()) for (const d of set) paginasPorEnlace.set(d, (paginasPorEnlace.get(d) ?? 0) + 1)
-  const { propios: enlaces, descartados } = enlacesDelCliente(hallados, { nombre: ficha.name, paginasPorEnlace, paginasLeidas: paginas.size })
+  const ventanasPorEnlace = new Map<string, string[]>()
+  for (const d of hallados) { const v: string[] = []; for (const p of paginasLeidas) ventanasDe(p, d, v); if (v.length) ventanasPorEnlace.set(d, v) }
+  // palabras de ubicación de la ficha (zona y país): sin ellas, un nombre corto nunca se confirma solo por el nombre
+  const ubicacion = [ficha.market, ficha.country].filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+  const { propios: enlaces, sin_confirmar, descartados } = enlacesDelCliente(hallados, { nombre: ficha.name, ubicacion, paginasPorEnlace, paginasLeidas: paginas.size, ventanasPorEnlace })
   // ── redes: lo declarado en la ficha manda; lo que falte, de los enlaces del sitio propio (solo direcciones de PERFIL)
   const declarado = obj(obj(obj(ficha.config).apify).own_handles)
   const redes: Partial<Record<Red, string>> = {}
@@ -82,7 +98,7 @@ export function entradaDelPlanDesdeFicha(ficha: FichaDeFuentes, filas: FilaPropi
     }
   }
   const pais = ficha.country || (ficha.market ? String(ficha.market).split(',').pop()!.trim() : null)
-  return { rubro: ficha.industry ?? null, nombre: ficha.name ?? null, pais: pais ?? null, enlaces, redes, mapas, descartados, ...(limites ? { limites } : {}) }
+  return { rubro: ficha.industry ?? null, nombre: ficha.name ?? null, pais: pais ?? null, enlaces, redes, mapas, descartados, sin_confirmar, ...(limites ? { limites } : {}) }
 }
 
 /** US$ por unidad pedida, MEDIDO en corridas reales el 2026-10-12 (ronda 75) · las que no se corrieron llevan `medido:false` y un valor prudente */
@@ -121,5 +137,8 @@ export function estimarCosto(plan: PlanDeFuentesPublicas): EstimacionDeCosto {
 export function planDeLaFicha(ficha: FichaDeFuentes, filas: FilaPropia[], limites?: EntradaDelPlan['limites']): { entrada: EntradaConDescartes; plan: PlanDeFuentesPublicas; estimado: EstimacionDeCosto } {
   const entrada = entradaDelPlanDesdeFicha(ficha, filas, limites)
   const plan = planDeFuentesPublicas(entrada)
+  // ronda 77 · lo que quedó en duda NO se pide: se anota como «sin confirmar» (con su motivo y su dirección) entre lo omitido
+  const hostDe = (u: string): string => host(u) || u
+  for (const d of entrada.sin_confirmar) plan.omitidas.push({ tipo: 'resenas', plataforma: hostDe(d.url), motivo: `sin confirmar · ${d.motivo} · ${d.url}` })
   return { entrada, plan, estimado: estimarCosto(plan) }
 }
