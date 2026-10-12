@@ -6,7 +6,7 @@
  * CON SU MOTIVO (nunca en silencio, nunca inventando una dirección).
  */
 import { normalizar } from '../manual/texto'
-import { coincideAlguna } from '../texto/coincidencia'
+import { gruposDelNegocio } from '../texto/negocio-del-cliente'
 import { codigoDePais } from '../pais/pais-del-cliente'
 import {
   FAMILIAS, PLATAFORMAS_DE_RESENAS, REDES_CON_CONTENIDO,
@@ -38,7 +38,8 @@ export const LIMITES_POR_OMISION = { resenas: 100, publicaciones: 20, videos: 10
 export function familiasDelRubro(rubro: string | null | undefined): IdDeFamilia[] {
   // ronda 76 · por PALABRA ENTERA (antes por trozo: «barbería» caía en comida, «apicultura» en software, «cabañas» en belleza)
   if (!normalizar(rubro ?? '')) return ['general']
-  const halladas = (Object.keys(FAMILIAS) as Array<keyof typeof FAMILIAS>).filter((f) => coincideAlguna(rubro, FAMILIAS[f]))
+  // ronda 78 · por el NEGOCIO del cliente (la cabeza de la descripción), no por su clientela: «software para restaurantes» es software
+  const halladas = gruposDelNegocio(rubro, FAMILIAS, Object.values(FAMILIAS).flat())
   return halladas.length ? halladas : ['general']
 }
 

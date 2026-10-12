@@ -6,6 +6,8 @@
  */
 import { LEXICO_BASE, lexicoDesdeConfig, type LexicoAfirmaciones } from './afirmaciones'
 import { coincideAlguna } from '../texto/coincidencia'
+import { gruposDelNegocio } from '../texto/negocio-del-cliente'
+import { FAMILIAS } from '../fuentes-publicas/catalogo'
 
 export interface PaqueteDeRubro { industria: string[]; lexico: LexicoAfirmaciones }
 
@@ -71,7 +73,9 @@ export const lexicoDelCliente = (industria: string | null | undefined, config: u
  */
 export function lexicoDeLaIndustria(industria: string | null | undefined, lexicoPlano?: LexicoAfirmaciones, paquetesDeConfig?: Record<string, PaqueteDeRubro>): LexicoAfirmaciones {
   const todos = { ...PAQUETES_DE_FABRICA, ...(paquetesDeConfig ?? {}) }
-  const elegidos = Object.values(todos).filter((p) => industriaCoincide(industria, p.industria)).map((p) => p.lexico)
+  // ronda 78 · por el NEGOCIO del cliente (la cabeza de la descripción), no por su clientela: «software para restaurantes» no recibe el paquete de alimentos
+  const industriasDeLosPaquetes = Object.fromEntries(Object.entries(todos).map(([nombre, p]) => [nombre, p.industria])) as Record<string, readonly string[]>
+  const elegidos = gruposDelNegocio(industria, industriasDeLosPaquetes, Object.values(FAMILIAS).flat()).map((nombre) => todos[nombre].lexico)
   const deLosPaquetes = combinarLexicos(...elegidos)
   const total = combinarLexicos(lexicoPlano, deLosPaquetes)
   // una lista que un paquete aporta SUMA a la de la base (o a la del plano, si la configuración la reemplazó): el paquete nunca borra lo estructural

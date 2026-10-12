@@ -21,7 +21,7 @@ const repropuestosDe = (c: Record<string, unknown>): string[] | undefined => (Ar
  * Devuelve las líneas para el pedido y las fuentes «humanas» con las que el chequeo de hechos puede respaldar lo que la propuesta diga de ellas.
  * Si la lectura falla NO se lee como «no hay nada»: se devuelve el error y quien llama decide (aquí: se avisa y no se pide nada).
  */
-export async function datosDelDueno(db: Db, clientId: string): Promise<{ ok: true; lineas: string[]; fuentes: Fuente[] } | { ok: false; error: string }> {
+export async function datosDelDueno(db: Db, clientId: string): Promise<{ ok: true; lineas: string[]; /** los mismos datos como HECHOS, sin decir quién los dijo (para lo que lee el cliente) */ hechos: string[]; fuentes: Fuente[] } | { ok: false; error: string }> {
   const s = await db.from('client_sedes').select('id, clave, ciudad').eq('client_id', clientId)
   if (s.error) return { ok: false, error: 'client_sedes: ' + String(s.error.message ?? s.error) }
   const d = await db.from('client_sede_datos').select('sede_id, campo, valor_texto, fuente, fuente_ref, observado_en').eq('client_id', clientId).eq('fuente', 'dueno')
@@ -32,6 +32,7 @@ export async function datosDelDueno(db: Db, clientId: string): Promise<{ ok: tru
   const ultimas = new Map<string, Record<string, unknown>>()
   for (const f of filas) { const k = `${f.sede_id}|${f.campo}`; const p = ultimas.get(k); if (!p || String(f.observado_en) > String(p.observado_en)) ultimas.set(k, f) }
   const lineas: string[] = []
+  const hechos: string[] = []
   const fuentes: Fuente[] = []
   for (const f of ultimas.values()) {
     const donde = f.sede_id ? `sede de ${ciudad.get(String(f.sede_id)) || 'ciudad sin declarar'}` : 'toda la cuenta'
@@ -39,9 +40,10 @@ export async function datosDelDueno(db: Db, clientId: string): Promise<{ ok: tru
     const fecha = String(f.observado_en ?? '').slice(0, 10)
     const l = `${donde} · ${campo}: ${String(f.valor_texto)} (corrección del dueño${fecha ? ', ' + fecha : ''})`
     lineas.push(l)
+    hechos.push(`${donde} · ${campo}: ${String(f.valor_texto)}`)
     fuentes.push(fuenteHumana(`dueno:${String(f.sede_id)}:${String(f.campo)}`, 'corrección del dueño', l, 'ficha'))
   }
-  return { ok: true, lineas, fuentes }
+  return { ok: true, lineas, hechos, fuentes }
 }
 
 export async function rutaPrepararPropuesta(db: Db, cuerpo: unknown): Promise<Resp> {
