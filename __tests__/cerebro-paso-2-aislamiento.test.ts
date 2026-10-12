@@ -134,6 +134,8 @@ export const ESCRITORES_CONOCIDOS: Record<string, string> = {
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ARREGLADO-ronda68-2026-10-11.json': 'copia VERSIONADA del flujo del Servicio de Apify tras la ronda 68 (cambian «Guardar lo crudo», «Armar el cuerpo del raspador» y «Armar la fila de la libreta») · los nodos «Fotos · …» son los mismos de siempre; no es un escritor nuevo',
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ANTES-ronda69-2026-10-11.json': 'copia VERSIONADA del flujo del Servicio de Apify antes de la ronda 69 (respaldo para la reversa) · contiene los nodos «Fotos · …» que ya existían; no es un escritor nuevo',
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ARREGLADO-ronda69-2026-10-11.json': 'copia VERSIONADA del flujo del Servicio de Apify tras la ronda 69 (la llave de Apify pasa de la dirección a la cabecera) · los nodos «Fotos · …» son los mismos de siempre; no es un escritor nuevo',
+  'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ANTES-fuentes-2026-10-12.json': 'copia VERSIONADA del flujo del Servicio de Apify antes de las fuentes públicas (respaldo para la reversa) · contiene los nodos «Fotos · …» que ya existían; no es un escritor nuevo',
+  'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ARREGLADO-fuentes-2026-10-12.json': 'copia VERSIONADA del flujo del Servicio de Apify con las 9 funciones de fuentes públicas (aditivo) · los nodos «Fotos · …» son los mismos de siempre; no es un escritor nuevo',
 }
 /** quién, DENTRO de src/ y services/, puede escribir en client_social_images: solo la ruta `etiquetar` del portero (paso 4) y solo UPDATE de las 4 columnas de etiqueta */
 export const ESCRITORES_DE_ETIQUETAS_EN_SRC: Record<string, string> = {
