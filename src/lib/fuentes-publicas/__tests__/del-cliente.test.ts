@@ -81,12 +81,12 @@ describe('ronda 76 · solo cuentan los enlaces que son DEL cliente (la sonda del
     expect(plan.llamadas.find((l) => l.funcion === 'resenas_tripadvisor')!.objetivo).toContain('Hotel_Demo_Mar')
     expect(plan.llamadas.find((l) => l.funcion === 'resenas_booking')!.objetivo).toContain('hotel-demo-mar')
   })
-  it('un perfil de red que NO lleva el nombre y aparece en una sola página no es del cliente; repetido en varias páginas, sí', () => {
+  it('un perfil de red que NO lleva el nombre: en una sola página no es del cliente; repetido sin marca de «nuestro», queda SIN CONFIRMAR (no se pide)', () => {
     const otro = 'https://www.instagram.com/cuenta_de_otro'
     const solo = planDeLaFicha(HOTEL, [paginas('https://hoteldemomar.example', [otro], [], [])]).entrada
     expect(solo.enlaces).toEqual([]); expect(solo.descartados[0].motivo).toMatch(/otro|repite/)
     const pie = planDeLaFicha(HOTEL, [paginas('https://hoteldemomar.example', [otro], [otro], [otro])]).entrada
-    expect(pie.enlaces).toEqual([otro])
+    expect(pie.enlaces).toEqual([]); expect(pie.sin_confirmar.map((x) => x.url)).toEqual([otro])
   })
   it('una página leída varias veces cuenta UNA vez (no inventa un «pie» repitiendo la lectura)', () => {
     const otro = 'https://www.instagram.com/cuenta_de_otro'

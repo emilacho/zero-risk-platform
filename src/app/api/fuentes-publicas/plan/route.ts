@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const f = await getSupabaseAdmin().from('clients').select('name,industry,market,country,website_url,config').eq('id', c.client_id).maybeSingle()
     if (f.error) throw new Error(f.error.message)
     const { entrada, plan, estimado } = planDeLaFicha((f.data ?? {}) as FichaDeFuentes, filas, Object.keys(limites).length ? limites : undefined)
-    return NextResponse.json({ ok: true, client_id: c.client_id, entrada: { rubro: entrada.rubro, pais: entrada.pais, enlaces_del_sitio: entrada.enlaces?.length ?? 0, redes: Object.keys(entrada.redes ?? {}), mapas_propios: !!entrada.mapas, enlaces_descartados: (entrada.descartados ?? []).slice(0, 30) }, ...plan, estimado }, { status: 200 })
+    return NextResponse.json({ ok: true, client_id: c.client_id, entrada: { rubro: entrada.rubro, pais: entrada.pais, enlaces_del_sitio: entrada.enlaces?.length ?? 0, redes: Object.keys(entrada.redes ?? {}), mapas_propios: !!entrada.mapas, enlaces_descartados: (entrada.descartados ?? []).slice(0, 30), enlaces_sin_confirmar: (entrada.sin_confirmar ?? []).slice(0, 30) }, ...plan, estimado }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'plan_fallo', detail: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
