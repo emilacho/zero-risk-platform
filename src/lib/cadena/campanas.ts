@@ -43,7 +43,10 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   if (ya) return { status: 200, cuerpo: { ya_abierta: true, campana: ya } }
 
   // r74 · F4 · antes de armar el contexto, las sedes y su horario se llenan SOLAS con lo que el sistema ya guardó del cliente (con su fuente); si el negocio no tiene sede, no pasa nada y su calendario no se frena
-  const sedesRec = await al.recolectarSedes(clientId).catch((e: unknown) => ({ ok: false, sedes: 0, error: e instanceof Error ? e.message : String(e) }))
+  // 🔴 r75 (nota A.4-1 de CC#3): la recolección ESCRIBE en `client_sedes` y `client_sede_datos` → en SECO no se recolecta (un ensayo no cambia datos reales del cliente); se usa lo que ya haya guardado
+  const sedesRec = s.seco
+    ? { ok: true, sedes: 0, error: undefined as string | undefined, omitida: true }
+    : await al.recolectarSedes(clientId).catch((e: unknown) => ({ ok: false, sedes: 0, error: e instanceof Error ? e.message : String(e), omitida: false }))
   const ctx = await al.cargarContexto(clientId, plan.plan_id)
   if (!ctx) return err(409, 'E-CONTEXTO', 'no se pudo armar el contexto del cliente (plan o manual ilegibles)')
 
