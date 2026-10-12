@@ -205,9 +205,11 @@ function soporteDeFecha(anio: string, ix: Indice): Soporte {
 }
 
 function soporteDeCita(literal: string, ix: Indice): Soporte {
-  const dentro = ix.fuentes.filter((f) => f.tipo !== 'tercero' && contieneLiteral(f.texto, literal))
+  // fuentes públicas: la cita literal de una RESEÑA de un cliente («los clientes dicen: «…»») sí se puede comprobar contra el texto de la reseña
+  const dentro = ix.fuentes.filter((f) => (f.tipo !== 'tercero' || f.canal === 'resenas') && contieneLiteral(f.texto, literal))
   const tipo = mejorTipo(dentro.map((f) => f.tipo))
   const f = dentro.find((x) => x.tipo === tipo) ?? null
+  if (tipo === 'tercero' && f?.canal === 'resenas') return { estado: 'verificado', cita: literal, fuente: f, motivo: 'cita literal de una reseña pública: lo dijo quien opinó, no el negocio' }
   return porTipoDeDato(tipo, f ? literal : '', f)
 }
 

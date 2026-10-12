@@ -10,6 +10,18 @@ import { normalizar } from './texto'
 export interface FilaDeRaspado { id: string; apify_function: string; params?: unknown; respuesta?: unknown; ensayo?: boolean | null }
 export interface Propios { sitio?: string | null; handles: string[]; /** perfiles propios de otras redes (opcional) */ otros?: string[] }
 
+/** las funciones de fuentes públicas del Servicio (reseñas · textos y videos de las redes del propio cliente) */
+export const FUNCIONES_DE_FUENTES_PUBLICAS = /^(resenas_|publicaciones_|videos_)/
+const REDES_DE_VIDEO: Record<string, CanalDeFuente> = { videos_instagram: 'instagram', videos_tiktok: 'tiktok', videos_youtube: 'youtube', publicaciones_facebook: 'facebook' }
+const PLATAFORMA_DE_RESENAS: Record<string, string> = { resenas_google_maps: 'Google Maps', resenas_tripadvisor: 'Tripadvisor', resenas_booking: 'Booking', resenas_facebook: 'Facebook', resenas_app_store: 'App Store' }
+const primero = (o: Record<string, unknown>, ks: string[]): string => { for (const k of ks) { const v = o[k]; if (typeof v === 'string' && v.trim()) return v.trim() } return '' }
+/** el texto de UNA reseña (sin el nombre de quien opinó) · las tiendas de apps traen las reseñas anidadas en la ficha de la app */
+export function textosDeResenas(it: Record<string, unknown>): string[] {
+  if (Array.isArray(it.reviews) && it.reviews.length && !it.text) return (it.reviews as Array<Record<string, unknown>>).flatMap((r) => textosDeResenas(r ?? {}))
+  const bien = primero(it, ['liked']); const mal = primero(it, ['disliked'])
+  const t = primero(it, ['text', 'reviewText', 'review', 'comment', 'body', 'content']) || [bien && `lo que gustó: ${bien}`, mal && `lo que no: ${mal}`].filter(Boolean).join(' · ')
+  return t ? [t] : []
+}
 const txt = (x: unknown): string => (typeof x === 'string' ? x : x == null ? '' : String(x))
 const arr = <T = Record<string, unknown>>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : [])
 const hostDe = (u: string): string => { try { return new URL(u.includes('://') ? u : `https://${u}`).host.replace(/^www\./, '').toLowerCase() } catch { return normalizar(u) } }
@@ -17,6 +29,8 @@ const hostDe = (u: string): string => { try { return new URL(u.includes('://') ?
 /** ¿esta fila de raspado es del PROPIO cliente? (sitio por dirección; redes por usuario; mapas por el nombre de la función) */
 export function esFilaPropia(f: Pick<FilaDeRaspado, 'apify_function' | 'params'>, propios: Propios): boolean {
   if (f.apify_function.startsWith('own_')) return true
+  // fuentes públicas: el plan SOLO las pide con la dirección/usuario del propio negocio (nunca de un competidor)
+  if (FUNCIONES_DE_FUENTES_PUBLICAS.test(f.apify_function)) return true
   if (f.apify_function === 'website_content_scraper') {
     const url = txt((f.params as { url?: unknown } | undefined)?.url)
     return !!propios.sitio && !!url && hostDe(url) === hostDe(propios.sitio)
@@ -119,6 +133,19 @@ export function fuentesDeRaspado(filas: FilaDeRaspado[], propios: Propios): Fuen
     for (const it of arr<Record<string, unknown>>(fila.respuesta)) {
       // a nivel de ítem: en una fila mixta, la cuenta del cliente es propia y la del otro es de terceros
       const propia = filaPropia || (fila.apify_function === 'instagram_scraper' && mios.has(usuarioDe(it.username)))
+      if (FUNCIONES_DE_FUENTES_PUBLICAS.test(fila.apify_function)) {
+        if (fila.apify_function.startsWith('resenas_')) {
+          // lo que el PÚBLICO dijo del negocio: voz de terceros (no del cliente), pero citable literalmente
+          const plataforma = PLATAFORMA_DE_RESENAS[fila.apify_function] ?? fila.apify_function
+          meter({ clave: fila.id, tipo: 'tercero', canal: 'resenas', rol: 'cuerpo', rotulo: `reseñas públicas · ${plataforma}`, texto: textosDeResenas(it).join('\n\n') })
+        } else {
+          const canal = REDES_DE_VIDEO[fila.apify_function] ?? 'otro'
+          const pie = primero(it, ['caption', 'text', 'message', 'postText', 'description', 'title'])
+          const dicho = primero(it, ['transcript', 'transcription', 'subtitles', 'videoTranscript', 'subtitle', 'captionText', 'ocrText'])
+          meter({ clave: fila.id, tipo: 'primaria_propia', canal, rol: fila.apify_function.startsWith('videos_') ? 'cuerpo' : 'leyenda', rotulo: `${canal} propio · ${fila.apify_function.startsWith('videos_') ? 'videos (lo que se dice)' : 'publicaciones'}`, texto: [pie, dicho].filter(Boolean).join('\n') })
+        }
+        continue
+      }
       const tipo = propia ? 'primaria_propia' : 'tercero'
       const mio = propia ? 'propio' : 'de terceros'
       if (fila.apify_function === 'website_content_scraper') {

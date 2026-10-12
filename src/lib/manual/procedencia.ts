@@ -10,7 +10,7 @@
 import { contieneLiteral, normalizar } from './texto'
 
 export type TipoDeFuente = 'primaria_propia' | 'humana' | 'tercero' | 'sintesis'
-export type CanalDeFuente = 'sitio' | 'instagram' | 'mapas' | 'alta' | 'ficha' | 'otro'
+export type CanalDeFuente = 'sitio' | 'instagram' | 'mapas' | 'alta' | 'ficha' | 'otro' | 'facebook' | 'tiktok' | 'youtube' | 'resenas'
 export type RolDeFuente = 'titulo' | 'meta' | 'biografia' | 'leyenda' | 'cuerpo' | 'perfil' | 'estructurado' | 'dato'
 
 export interface Fuente {
