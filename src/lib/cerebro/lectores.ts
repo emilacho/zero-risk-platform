@@ -338,7 +338,8 @@ function decisionDelVeredicto(veredicto: string | null, cambios: string | null):
 }
 
 /** filas que el sistema guarda para auditar y que no son un trabajo para el dueño (dato, no lógica) */
-const TIPOS_DE_REGISTRO_INTERNO = ['manual_sacado_en_origen']
+// 'correccion_del_dueno' (ronda 76): el dato del dueño ya se lee como línea «dicho por el dueño» en las sedes; la fila de respaldo del cerebro no es un trabajo hecho
+const TIPOS_DE_REGISTRO_INTERNO = ['manual_sacado_en_origen', 'correccion_del_dueno']
 
 const DECISIONES_NO_LEIDAS = 'las decisiones del dueño no se pudieron leer · la versión vigente puede no reflejar su aprobación'
 
