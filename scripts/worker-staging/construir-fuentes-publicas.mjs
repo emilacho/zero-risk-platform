@@ -73,6 +73,23 @@ export function armarCuerpo(codigo) {
 }
 
 // ───────────── transform-sections · lo que se escribe en la respuesta y en el crudo (texto legible, sin datos personales)
+/** ronda 76 · ¿la transcripción es VOZ? Misma regla que src/lib/manual/voz.ts (una prueba compara las dos). Va como texto del nodo: sin llaves de plantilla ni comillas invertidas. */
+export const VOZ_JS = String.raw`const MIN_PALABRAS_DE_VOZ = 4;
+const ONOMATOPEYA = /^(b+a*m+|ba+m*|bu+m+|bi+|bu+|la+|na+|da+|do+|doo+|oh+|ah+|eh+|uh+|mm+|hm+|yeah|ye+|ha+|hey|oo+|woo+|sh+|pam|rum|cha+)$/;
+function esVozReal(texto) {
+  const crudo = typeof texto === 'string' ? texto : '';
+  const limpio = crudo.replace(/\[[^\]]{0,40}\]|\([^)]{0,40}\)|[♪♫♬]/g, ' ');
+  if (/\[(music|musica|música|applause|aplausos|noise|ruido)\]/i.test(crudo) && limpio.replace(/[^\p{L}]/gu, '').length < 20) return { voz: false, motivo: 'solo etiqueta de música o ruido' };
+  const palabras = (limpio.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').match(/[a-zñü]+/g) || []);
+  if (palabras.length < MIN_PALABRAS_DE_VOZ) return { voz: false, motivo: 'muy corta (' + palabras.length + ' palabras)' };
+  const onomatopeyas = palabras.filter(function (p) { return ONOMATOPEYA.test(p); }).length;
+  if (onomatopeyas / palabras.length > 0.4) return { voz: false, motivo: 'mayormente sílabas u onomatopeyas' };
+  const distintas = new Set(palabras).size;
+  if (distintas / palabras.length < 0.4) return { voz: false, motivo: 'casi una sola palabra repetida' };
+  return { voz: true, motivo: 'texto de voz' };
+}
+`;
+
 export const RENDER = `
 // FUENTES PÚBLICAS (ronda 71) · reseñas, textos y videos de las plataformas del cliente · una línea por pieza, SIN datos personales de quien opinó.
 const ES_FUENTE_PUBLICA = /^(resenas_|publicaciones_|videos_)/.test(apifyFunction);
@@ -93,6 +110,7 @@ const subtitulosComoTexto = (v) => {
   }
   return partes.join(' ');
 };
+${VOZ_JS}
 function lineasDeFuente(fn, items) {
   const out = [];
   const meter = (it) => {
@@ -115,10 +133,12 @@ function lineasDeFuente(fn, items) {
       out.push([String(primeroTexto(it, ['time', 'date', 'timestamp', 'createdAt'])).slice(0, 10)].filter(Boolean).join(' · ') + (texto ? ' · «' + aplanar(texto) + '»' : '') + (trans ? ' · lo que se dice en el video: «' + aplanar(trans) + '»' : ''));
     } else {
       const caption = primeroTexto(it, ['caption', 'text', 'description', 'title']);
-      const trans = primeroTexto(it, ['transcript', 'transcription', 'videoTranscript', 'subtitle']) || subtitulosComoTexto(it.subtitles);
+      const transCruda = primeroTexto(it, ['transcript', 'transcription', 'videoTranscript', 'subtitle']) || subtitulosComoTexto(it.subtitles);
+      const voz = transCruda ? esVozReal(transCruda) : null;
+      const trans = voz && voz.voz ? transCruda : '';
       const url = primeroTexto(it, ['url', 'videoUrl', 'postUrl', 'webVideoUrl', 'inputUrl']);
-      if (!caption && !trans) return;
-      out.push('video' + (url ? ' ' + url : '') + ' · ' + String(primeroTexto(it, ['timestamp', 'createTimeISO', 'date', 'uploadDate', 'publishedAt'])).slice(0, 10) + (caption ? ' · pie: «' + aplanar(caption) + '»' : '') + ' · ' + (trans ? 'lo que se dice: «' + aplanar(trans) + '»' : 'SIN transcripción'));
+      if (!caption && !transCruda) return;
+      out.push('video' + (url ? ' ' + url : '') + ' · ' + String(primeroTexto(it, ['timestamp', 'createTimeISO', 'date', 'uploadDate', 'publishedAt'])).slice(0, 10) + (caption ? ' · pie: «' + aplanar(caption) + '»' : '') + ' · ' + (trans ? 'lo que se dice: «' + aplanar(trans) + '»' : (transCruda ? 'SIN voz (' + voz.motivo + ')' : 'SIN transcripción')));
     }
   };
   for (const it of items) meter(it);

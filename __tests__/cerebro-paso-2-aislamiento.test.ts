@@ -137,6 +137,8 @@ export const ESCRITORES_CONOCIDOS: Record<string, string> = {
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ANTES-fuentes-2026-10-12.json': 'copia VERSIONADA del flujo del Servicio de Apify antes de las fuentes públicas (respaldo para la reversa) · contiene los nodos «Fotos · …» que ya existían; no es un escritor nuevo',
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ARREGLADO-fuentes-2026-10-12.json': 'copia VERSIONADA del flujo del Servicio de Apify con las 9 funciones de fuentes públicas (aditivo) · los nodos «Fotos · …» son los mismos de siempre; no es un escritor nuevo',
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-VIVO-antes-r75-2026-10-12.json': 'respaldo del flujo del Servicio de Apify justo antes de corregir la lectura de los subtítulos de YouTube (ronda 75) · solo su copia, no escribe nada',
+  'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-VIVO-antes-r76-2026-10-12.json': 'respaldo del flujo del Servicio de Apify justo antes de la ronda 76 (importe estable + voz real) · solo su copia, no escribe nada',
+  'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ARREGLADO-importe-r76-2026-10-12.json': 'copia VERSIONADA del flujo del Servicio de Apify con el importe estable y la voz real (ronda 76) · solo su copia, no escribe nada',
 }
 /** quién, DENTRO de src/ y services/, puede escribir en client_social_images: solo la ruta `etiquetar` del portero (paso 4) y solo UPDATE de las 4 columnas de etiqueta */
 export const ESCRITORES_DE_ETIQUETAS_EN_SRC: Record<string, string> = {

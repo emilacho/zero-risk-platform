@@ -14,22 +14,22 @@ export type IdDeFamilia =
   | 'comida' | 'alojamiento' | 'turismo' | 'software' | 'apps_moviles' | 'comercio' | 'servicios_profesionales' | 'salud' | 'belleza_bienestar'
   | 'automotriz' | 'inmobiliaria' | 'educacion' | 'servicios_hogar' | 'finanzas' | 'general'
 
-/** palabras (sin tildes, minúsculas) que ponen un rubro en una familia · un rubro puede caer en varias */
+/** claves (sin tildes, minúsculas) que ponen un rubro en una familia · un rubro puede caer en varias · PALABRA ENTERA (`src/lib/texto/coincidencia.ts`): «bar» no es «barbería»; una raíz se pide EXPLÍCITA con `*` */
 export const FAMILIAS: Record<Exclude<IdDeFamilia, 'general'>, string[]> = {
-  comida: ['restaurante', 'restaurant', 'cafe', 'cafeteria', 'bar', 'comedor', 'comida', 'cocina', 'gastronom', 'pizzeria', 'panaderia', 'heladeria', 'food', 'catering', 'sushi', 'bakery', 'bistro', 'parrilla', 'delivery de comida', 'ghost kitchen'],
-  alojamiento: ['hotel', 'hostal', 'hostel', 'hospedaje', 'alojamiento', 'cabana', 'posada', 'resort', 'apart', 'lodging', 'bnb', 'glamping', 'villa', 'alquiler vacacional'],
+  comida: ['restaurante', 'restaurant', 'cafe', 'cafeteria', 'bar', 'comedor', 'comida', 'cocina', 'gastronom*', 'pizzeria', 'panaderia', 'heladeria', 'food', 'catering', 'sushi', 'bakery', 'bistro', 'parrilla', 'delivery de comida', 'ghost kitchen'],
+  alojamiento: ['hotel', 'hostal', 'hostel', 'hospedaje', 'alojamiento', 'cabana', 'posada', 'resort', 'apart*', 'lodging', 'bnb', 'glamping', 'villa', 'alquiler vacacional'],
   turismo: ['tour', 'turismo', 'excursion', 'guia', 'aventura', 'surf', 'buceo', 'experiencia', 'agencia de viajes', 'travel', 'actividades', 'parque', 'museo', 'entretenimiento'],
   software: ['software', 'saas', 'plataforma digital', 'aplicacion web', 'crm', 'erp', 'b2b', 'tecnologia', 'startup', 'api', 'devtool', 'herramienta digital', 'inteligencia artificial'],
   apps_moviles: ['app movil', 'aplicacion movil', 'app para ios', 'app para android', 'app store', 'play store', 'juego movil', 'aplicacion para celular'],
   comercio: ['tienda', 'ecommerce', 'e-commerce', 'comercio', 'retail', 'boutique', 'moda', 'ropa', 'calzado', 'accesorios', 'venta online', 'shop', 'store', 'joyeria', 'muebles', 'electrodomesticos', 'supermercado'],
-  servicios_profesionales: ['abogad', 'contab', 'consultor', 'agencia', 'despacho', 'arquitect', 'ingenier', 'notari', 'asesor', 'coaching', 'marketing', 'diseno', 'constructora', 'legal', 'auditor', 'traduccion'],
-  salud: ['clinica', 'medic', 'dental', 'odontolog', 'hospital', 'psicolog', 'fisioterap', 'nutricion', 'salud', 'farmacia', 'veterinar', 'laboratorio', 'doctor', 'terapia'],
-  belleza_bienestar: ['peluquer', 'barber', 'spa', 'salon de belleza', 'belleza', 'estetica', 'gimnasio', 'gym', 'yoga', 'fitness', 'masaje', 'maquillaje', 'unas', 'wellness', 'pilates'],
+  servicios_profesionales: ['abogad*', 'contab*', 'consultor*', 'agencia', 'despacho', 'arquitect*', 'ingenier*', 'notari*', 'asesor*', 'coaching', 'marketing', 'diseno', 'constructora', 'legal', 'auditor', 'traduccion'],
+  salud: ['clinica', 'medic*', 'dental', 'odontolog*', 'hospital', 'psicolog*', 'fisioterap*', 'nutricion', 'salud', 'farmacia', 'veterinar*', 'laboratorio', 'doctor', 'terapia'],
+  belleza_bienestar: ['peluquer*', 'barber*', 'spa', 'salon de belleza', 'belleza', 'estetica', 'gimnasio', 'gym', 'yoga', 'fitness', 'masaje', 'maquillaje', 'manicur*', 'pedicur*', 'wellness', 'pilates'],
   automotriz: ['taller mecanico', 'mecanica', 'automotriz', 'concesionaria', 'lavado de autos', 'repuestos', 'vehiculos', 'autos', 'motos'],
   inmobiliaria: ['inmobiliaria', 'bienes raices', 'propiedades', 'real estate', 'arriendo', 'venta de casas', 'corretaje'],
   educacion: ['escuela', 'colegio', 'academia', 'curso', 'universidad', 'educacion', 'instituto', 'capacitacion', 'tutor', 'idiomas', 'bootcamp'],
-  servicios_hogar: ['plomer', 'electricista', 'limpieza', 'jardiner', 'mudanza', 'reparacion', 'carpinter', 'pintura', 'cerrajer', 'fumigacion', 'mantenimiento del hogar'],
-  finanzas: ['banco', 'cooperativa', 'seguros', 'financier', 'credito', 'fintech', 'inversion', 'prestamos', 'cambio de divisas'],
+  servicios_hogar: ['plomer*', 'electricista', 'limpieza', 'jardiner*', 'mudanza', 'reparacion', 'carpinter*', 'pintura', 'cerrajer*', 'fumigacion', 'mantenimiento del hogar'],
+  finanzas: ['banco', 'cooperativa', 'seguros', 'financier*', 'credito', 'fintech', 'inversion', 'prestamos', 'cambio de divisas'],
 }
 
 export type TipoDeFuentePublica = 'resenas' | 'publicaciones' | 'videos'

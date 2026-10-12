@@ -2,6 +2,7 @@
  * Fuentes públicas · «en qué se basó el manual»: cuenta, desde lo crudo guardado, cuántas reseñas, publicaciones y VIDEOS se miraron de verdad (y de cuántos se leyó lo que dicen).
  * PURO. Un ensayo, una corrida que devolvió un error o una fila vacía no cuentan como «mirado». Las líneas salen en lenguaje llano, listas para el manual en limpio.
  */
+import { esVozReal } from '../manual/voz'
 import { FUNCIONES_DE_FUENTES_PUBLICAS, subtitulosComoTexto, textosDeResenas, type FilaDeRaspado } from '../manual/materia'
 
 const NOMBRE_RESENAS: Record<string, string> = { resenas_google_maps: 'Google Maps', resenas_tripadvisor: 'Tripadvisor', resenas_booking: 'Booking', resenas_facebook: 'Facebook', resenas_app_store: 'App Store', resenas_trustpilot: 'Trustpilot', trustpilot_scraper: 'Trustpilot', software_review_scraper: 'directorios de software' }
@@ -12,11 +13,11 @@ const texto = (it: Record<string, unknown>, ks: string[]): string => { for (cons
 export interface FuentesConsultadas {
   resenas: { total: number; por_plataforma: Record<string, number> }
   publicaciones: { total: number; por_red: Record<string, number> }
-  videos: { vistos: number; con_transcripcion: number; por_red: Record<string, { vistos: number; con_transcripcion: number }> }
+  videos: { vistos: number; con_transcripcion: number; con_voz: number; por_red: Record<string, { vistos: number; con_transcripcion: number; con_voz: number }> }
 }
 
 export function fuentesConsultadas(filas: Array<Pick<FilaDeRaspado, 'apify_function' | 'respuesta' | 'ensayo'>>): FuentesConsultadas {
-  const r: FuentesConsultadas = { resenas: { total: 0, por_plataforma: {} }, publicaciones: { total: 0, por_red: {} }, videos: { vistos: 0, con_transcripcion: 0, por_red: {} } }
+  const r: FuentesConsultadas = { resenas: { total: 0, por_plataforma: {} }, publicaciones: { total: 0, por_red: {} }, videos: { vistos: 0, con_transcripcion: 0, con_voz: 0, por_red: {} } }
   for (const f of filas) {
     if (f.ensayo || !FUNCIONES_DE_FUENTES_PUBLICAS.test(f.apify_function)) continue
     const items = Array.isArray(f.respuesta) ? f.respuesta : []
@@ -35,9 +36,11 @@ export function fuentesConsultadas(filas: Array<Pick<FilaDeRaspado, 'apify_funct
         const pie = texto(it, ['caption', 'text', 'description', 'title'])
         const dicho = texto(it, ['transcript', 'transcription', 'videoTranscript', 'subtitle']) || subtitulosComoTexto(it.subtitles)
         if (!pie && !dicho) continue
-        const e = (r.videos.por_red[red] ??= { vistos: 0, con_transcripcion: 0 })
+        const e = (r.videos.por_red[red] ??= { vistos: 0, con_transcripcion: 0, con_voz: 0 })
         e.vistos++; r.videos.vistos++
         if (dicho) { e.con_transcripcion++; r.videos.con_transcripcion++ }
+        // ronda 76 · «se leyó lo que dicen» solo cuenta cuando hay VOZ: la letra de una música o un ruido transcrito no es lo que dice el negocio
+        if (dicho && esVozReal(dicho).voz) { e.con_voz++; r.videos.con_voz++ }
       }
     }
   }
@@ -48,7 +51,7 @@ export function fuentesConsultadas(filas: Array<Pick<FilaDeRaspado, 'apify_funct
 export function lineasDeFuentesConsultadas(c: FuentesConsultadas): string[] {
   const l: string[] = []
   if (c.resenas.total) l.push(`Reseñas públicas leídas: ${c.resenas.total} (${Object.entries(c.resenas.por_plataforma).map(([k, v]) => `${k} ${v}`).join(' · ')}).`)
-  if (c.videos.vistos) l.push(`Videos mirados: ${c.videos.vistos}, de los que se leyó lo que dicen en ${c.videos.con_transcripcion} (${Object.entries(c.videos.por_red).map(([k, v]) => `${k} ${v.vistos}`).join(' · ')}).`)
+  if (c.videos.vistos) l.push(`Videos mirados: ${c.videos.vistos}; con voz de verdad (se leyó lo que dicen): ${c.videos.con_voz}; los otros ${c.videos.vistos - c.videos.con_voz} sin audio, con música o con ruido (${Object.entries(c.videos.por_red).map(([k, v]) => `${k} ${v.vistos}`).join(' · ')}).`)
   if (c.publicaciones.total) l.push(`Publicaciones leídas: ${c.publicaciones.total} (${Object.entries(c.publicaciones.por_red).map(([k, v]) => `${k} ${v}`).join(' · ')}).`)
   return l
 }

@@ -29,7 +29,7 @@ describe('cuenta lo que se miró de verdad', () => {
   it('las líneas del manual son llanas y vacías si no se miró nada', () => {
     const l = lineasDeFuentesConsultadas(c)
     expect(l.join(' ')).toMatch(/Reseñas públicas leídas: 5/)
-    expect(l.join(' ')).toMatch(/Videos mirados: \d+, de los que se leyó lo que dicen en \d+/)
+    expect(l.join(' ')).toMatch(/Videos mirados: \d+; con voz de verdad \(se leyó lo que dicen\): \d+; los otros \d+ sin audio, con música o con ruido/)
     expect(lineasDeFuentesConsultadas(fuentesConsultadas([]))).toEqual([])
   })
 })
@@ -42,9 +42,19 @@ describe('el manual en limpio', () => {
     expect(b.texto).toBe(a.texto)
   })
   it('con fuentes consultadas lleva una sección al final con el conteo', () => {
-    const r = renderManualLimpio({ brand_book: bb, client_name: 'Cliente Demo', fuentes_consultadas: ['Videos mirados: 3, de los que se leyó lo que dicen en 3 (Instagram 3).'] })
+    const r = renderManualLimpio({ brand_book: bb, client_name: 'Cliente Demo', fuentes_consultadas: ['Videos mirados: 3; con voz de verdad (se leyó lo que dicen): 3; los otros 0 sin audio, con música o con ruido (Instagram 3).'] })
     expect(r.secciones).toContain('fuentes_consultadas')
     expect(r.texto).toMatch(/EN QUÉ SE BASÓ ESTE MANUAL[\s\S]*Videos mirados: 3/)
     expect(r.texto.trimEnd().endsWith('(Instagram 3).')).toBe(true)
+  })
+})
+
+describe('ronda 76 · «se leyó lo que dicen» solo cuenta la voz de verdad', () => {
+  const c = fuentesConsultadas([real('videos_instagram')])
+  it('con las transcripciones reales: la música («Bam bam bilam…») cuenta como visto pero NO como con voz', () => {
+    expect(c.videos.vistos).toBe(3)
+    expect(c.videos.con_transcripcion).toBe(3)
+    expect(c.videos.con_voz).toBe(c.videos.con_transcripcion - 1)
+    expect(lineasDeFuentesConsultadas(c).join(' ')).toContain(`con voz de verdad (se leyó lo que dicen): ${c.videos.con_voz}; los otros 1 sin audio`)
   })
 })
