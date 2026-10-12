@@ -36,7 +36,9 @@ export const PALABRAS_DE_CERTEZA_ES: PalabraDeCerteza[] = [
   { id: 'origen', palabras: ['denominacion', 'de', 'orige*'] },
   // «origen» solo marca cuando se le da un objeto de certeza («origen verificable», «origen real»); «de origen marino» es adorno
   // relato de origen COMO AFIRMACIÓN (r63 · CC#3 §4): «el origen es la prueba», «un origen geográfico específico», «lugar de origen»; «de origen marino», «narrativa de origen», «orgulloso de origen» siguen siendo adorno/voz
-  { id: 'origen', palabras: ['orige*'], antes: ['el', 'un', 'su', 'este', 'nuestro', 'mismo'] },
+  // H4 (CC#3 · ronda 75): FUERA la entrada suelta «el|un|su|nuestro + origen» (marcaba «nuestro origen es humilde», «el origen del nombre»); solo quedan las que llevan objeto de certeza
+  { id: 'origen', palabras: ['orige*', 'es', 'la', 'prueba'] },
+  { id: 'origen', palabras: ['orige*', 'es', 'prueba'] },
   { id: 'origen', palabras: ['lugar', 'de', 'orige*'] },
   { id: 'origen', palabras: ['orige*', 'geograf*'] },
   { id: 'origen', palabras: ['orige*', 'especific*'] },

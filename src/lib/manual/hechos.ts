@@ -15,7 +15,7 @@
 import { buscarCerteza, mencionaCerteza, PALABRAS_DE_CERTEZA_ES, type PalabraDeCerteza } from './palabras-de-certeza.es'
 import { esPrimaria, resolverCita, type Fuente, type TipoDeFuente } from './procedencia'
 import { dudasAtadas, type Duda } from './dudas'
-import { frasePideOrigen, lugaresMencionados, papelDelLugar, respaldoDeOrigen } from './lugares'
+import { elObjetoEsUnBien, frasePideOrigen, lugaresMencionados, papelDelLugar, respaldoDeOrigen } from './lugares'
 import { contenidoCompartido, contieneLiteral, normalizar, palabrasDe, partirEnClausulas, partirEnFrases } from './texto'
 
 export type Marca = 'certeza' | 'cifra' | 'lugar' | 'cita' | 'fecha'
@@ -47,6 +47,8 @@ export interface EntradaDeHechos {
   dudas?: Duda[]
   excluir?: string[]
   certeza?: PalabraDeCerteza[]
+  /** términos de producto del cliente (catálogo): la regla de lugar solo aplica a bienes */
+  bienes?: string[]
 }
 export interface InformeDeHechos { hechos: Hecho[]; resumen: Record<EstadoDeHecho, number>; sin_respaldo: Hecho[] }
 
@@ -242,7 +244,7 @@ export function evaluarHechos(e: EntradaDeHechos): InformeDeHechos {
         for (const d of extraerCifras(clausula)) detalle.push({ marca: 'cifra', texto: d, s: soporteDeCifra(d, ix, cita) })
         const f = RE_FECHA.exec(clausula)
         if (f) detalle.push({ marca: 'fecha', texto: f[2], s: soporteDeFecha(f[2], ix) })
-        if (frasePideOrigen(clausula)) {
+        if (frasePideOrigen(clausula) && elObjetoEsUnBien(clausula, e.bienes)) {
           const lugares = lugaresMencionados(clausula)
           if (lugares.length) detalle.push({ marca: 'lugar', texto: lugares.join(' / '), s: soporteDeLugar(clausula, lugares, ix, cita) })
         }
