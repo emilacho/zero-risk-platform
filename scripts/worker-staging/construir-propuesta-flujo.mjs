@@ -22,7 +22,7 @@ const pedidos = Array.isArray(prep.pedidos) ? prep.pedidos : [];
 if (!pedidos.length) return [{ json: { _parar: true, motivo: 'no hay campos que proponer' + ((prep.rechazados || []).length ? ': ' + prep.rechazados.map(function (r) { return r.campo + ' → ' + r.motivo; }).join(' · ') : ''), faltantes: prep.faltantes || [] } }];
 if (dry) return [{ json: { _parar: true, dry_run: true, motivo: 'dry_run: no se llamó a ningún agente', pedidos: pedidos.map(function (p) { return { agente: p.agente, campos: p.campos, largo_del_pedido: String(p.task).length }; }), faltantes: prep.faltantes || [] } }];
 return pedidos.map(function (p) {
-  return { json: { client_id: prep.client_id, client_name: prep.client_name, agente: p.agente, campos: p.campos, task: p.task, version_base: prep.version_base, huella_base: prep.huella_base, dry_run: false, campos_pedidos: entrada.campos || null } };
+  return { json: { client_id: prep.client_id, client_name: prep.client_name, agente: p.agente, campos: p.campos, task: p.task, version_base: prep.version_base, huella_base: prep.huella_base, dry_run: false, campos_pedidos: entrada.campos || null, reproponer: entrada.reproponer || null } };
 });
 `
 
@@ -34,7 +34,7 @@ const respuestas = $input.all().map(function (x, i) {
   return { agente: (pedidos[i] || {}).agente, response: texto, ok: b.success !== false && !b.error };
 });
 const p0 = pedidos[0] || {};
-return [{ json: { client_id: p0.client_id, client_name: p0.client_name, dry_run: false, campos: pedidos.reduce(function (a, p) { return a.concat(p.campos || []); }, []), version_base: p0.version_base, huella_base: p0.huella_base, respuestas: respuestas.filter(function (r) { return r.ok; }), agentes_sin_respuesta: respuestas.filter(function (r) { return !r.ok; }).map(function (r) { return r.agente; }) } }];
+return [{ json: { client_id: p0.client_id, client_name: p0.client_name, dry_run: false, campos: pedidos.reduce(function (a, p) { return a.concat(p.campos || []); }, []), version_base: p0.version_base, huella_base: p0.huella_base, reproponer: p0.reproponer || null, respuestas: respuestas.filter(function (r) { return r.ok; }), agentes_sin_respuesta: respuestas.filter(function (r) { return !r.ok; }).map(function (r) { return r.agente; }) } }];
 `
 
 export const RECIBO = `// El recibo · dice lo que SUCEDIÓ (no lo que se pidió): versión nueva guardada o no, campos aplicados, rechazados, y el PDF.
@@ -62,14 +62,14 @@ export function construirFlujo() {
   const x = (i) => [i * 240, 0]
   const nodes = [
     { id: 'p-wh', name: 'Pedir propuesta', webhookId: '5b1f0c2e-7a64-4d3b-9c1e-2f4a6d8e0b13', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: x(0), parameters: { httpMethod: 'POST', path: RUTA_WEBHOOK, responseMode: 'onReceived', options: {} } },
-    http('p-prep', 'Preparar', x(1), `={{ ${API} }}/api/manual/propuesta/preparar`, "={{ JSON.stringify({ client_id: $json.body.client_id, campos: $json.body.campos || undefined }) }}"),
+    http('p-prep', 'Preparar', x(1), `={{ ${API} }}/api/manual/propuesta/preparar`, "={{ JSON.stringify({ client_id: $json.body.client_id, campos: $json.body.campos || undefined, reproponer: $json.body.reproponer || undefined }) }}"),
     codigo('p-armar', 'Armar pedidos', x(2), ARMAR),
     si('p-seguir', '¿Seguir?', x(3), '={{ $json._parar }}', 'false'),
     http('p-agente', 'Llamar al agente', x(4), `={{ ${API} }}/api/agents/run-sdk`,
       '={\n  "agent": "{{ $json.agente }}",\n  "client_id": "{{ $json.client_id }}",\n  "workflow_id": "{{ $execution.id }}",\n  "workflow_execution_id": "{{ $execution.id }}",\n  "step_name": "manual_propuesta_{{ $json.campos.join(\'+\') }}",\n  "task": {{ JSON.stringify($json.task) }},\n  "context": { "role": "proponer_campos_del_manual" }\n}',
       { timeout: 800000, nodo: { retryOnFail: false, notes: 'SIN reintento: un reintento se cobra dos veces. Un pedido por agente, de a uno.' }, opciones: { batching: { batch: { batchSize: 1, batchInterval: 0 } } } }),
     codigo('p-reunir', 'Reunir', x(5), REUNIR),
-    http('p-aplicar', 'Aplicar', x(6), `={{ ${API} }}/api/manual/propuesta/aplicar`, '={{ JSON.stringify({ client_id: $json.client_id, dry_run: false, campos: $json.campos, version_base: $json.version_base, huella_base: $json.huella_base, respuestas: $json.respuestas }) }}'),
+    http('p-aplicar', 'Aplicar', x(6), `={{ ${API} }}/api/manual/propuesta/aplicar`, '={{ JSON.stringify({ client_id: $json.client_id, dry_run: false, campos: $json.campos, reproponer: $json.reproponer || undefined, version_base: $json.version_base, huella_base: $json.huella_base, respuestas: $json.respuestas }) }}'),
     si('p-guardar', '¿Guardar?', x(7), '={{ (($json.body || $json).aplicado === true) }}', 'true'),
     http('p-save', 'Guardar versión nueva', x(8), `={{ ${API} }}/api/brand-book/{{ ($('Aplicar').first().json.body || $('Aplicar').first().json).client_id }}`, "={{ JSON.stringify(($('Aplicar').first().json.body || $('Aplicar').first().json).promote_body) }}", { timeout: 800000 }),
     http('p-drive', 'PDF a Drive', x(9), 'https://n8n-production-72be.up.railway.app/webhook/zero-risk/manual-a-drive', "={{ JSON.stringify({ client_id: ($('Aplicar').first().json.body || $('Aplicar').first().json).client_id }) }}", { timeout: 15000, nodo: { onError: 'continueRegularOutput' } }),

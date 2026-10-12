@@ -45,7 +45,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ client_id: $json.body.client_id, campos: $json.body.campos || undefined }) }}",
+        "jsonBody": "={{ JSON.stringify({ client_id: $json.body.client_id, campos: $json.body.campos || undefined, reproponer: $json.body.reproponer || undefined }) }}",
         "options": {
           "response": {
             "response": {
@@ -66,7 +66,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "// Armar los pedidos · un ítem por agente · con dry_run NO se llama a ningún agente (queda dicho lo que se pediría).\nconst entrada = $('Pedir propuesta').first().json.body || $('Pedir propuesta').first().json || {};\nconst prep = $json.body || $json || {};\nconst dry = entrada.dry_run === true;\nif (prep.ok !== true) return [{ json: { _parar: true, motivo: 'preparar falló: ' + [prep.error, prep.detail || prep.detalle].filter(Boolean).join(' · ') } }];\nconst pedidos = Array.isArray(prep.pedidos) ? prep.pedidos : [];\nif (!pedidos.length) return [{ json: { _parar: true, motivo: 'no hay campos que proponer' + ((prep.rechazados || []).length ? ': ' + prep.rechazados.map(function (r) { return r.campo + ' → ' + r.motivo; }).join(' · ') : ''), faltantes: prep.faltantes || [] } }];\nif (dry) return [{ json: { _parar: true, dry_run: true, motivo: 'dry_run: no se llamó a ningún agente', pedidos: pedidos.map(function (p) { return { agente: p.agente, campos: p.campos, largo_del_pedido: String(p.task).length }; }), faltantes: prep.faltantes || [] } }];\nreturn pedidos.map(function (p) {\n  return { json: { client_id: prep.client_id, client_name: prep.client_name, agente: p.agente, campos: p.campos, task: p.task, version_base: prep.version_base, huella_base: prep.huella_base, dry_run: false, campos_pedidos: entrada.campos || null } };\n});\n"
+        "jsCode": "// Armar los pedidos · un ítem por agente · con dry_run NO se llama a ningún agente (queda dicho lo que se pediría).\nconst entrada = $('Pedir propuesta').first().json.body || $('Pedir propuesta').first().json || {};\nconst prep = $json.body || $json || {};\nconst dry = entrada.dry_run === true;\nif (prep.ok !== true) return [{ json: { _parar: true, motivo: 'preparar falló: ' + [prep.error, prep.detail || prep.detalle].filter(Boolean).join(' · ') } }];\nconst pedidos = Array.isArray(prep.pedidos) ? prep.pedidos : [];\nif (!pedidos.length) return [{ json: { _parar: true, motivo: 'no hay campos que proponer' + ((prep.rechazados || []).length ? ': ' + prep.rechazados.map(function (r) { return r.campo + ' → ' + r.motivo; }).join(' · ') : ''), faltantes: prep.faltantes || [] } }];\nif (dry) return [{ json: { _parar: true, dry_run: true, motivo: 'dry_run: no se llamó a ningún agente', pedidos: pedidos.map(function (p) { return { agente: p.agente, campos: p.campos, largo_del_pedido: String(p.task).length }; }), faltantes: prep.faltantes || [] } }];\nreturn pedidos.map(function (p) {\n  return { json: { client_id: prep.client_id, client_name: prep.client_name, agente: p.agente, campos: p.campos, task: p.task, version_base: prep.version_base, huella_base: prep.huella_base, dry_run: false, campos_pedidos: entrada.campos || null, reproponer: entrada.reproponer || null } };\n});\n"
       }
     },
     {
@@ -154,7 +154,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "// Reunir lo que contestó cada agente · una respuesta por pedido, en el mismo orden.\nconst pedidos = $('Armar pedidos').all().map(function (x) { return x.json; });\nconst respuestas = $input.all().map(function (x, i) {\n  const b = (x.json && (x.json.body || x.json)) || {};\n  const texto = typeof b.response === 'string' ? b.response : (typeof b.result === 'string' ? b.result : JSON.stringify(b));\n  return { agente: (pedidos[i] || {}).agente, response: texto, ok: b.success !== false && !b.error };\n});\nconst p0 = pedidos[0] || {};\nreturn [{ json: { client_id: p0.client_id, client_name: p0.client_name, dry_run: false, campos: pedidos.reduce(function (a, p) { return a.concat(p.campos || []); }, []), version_base: p0.version_base, huella_base: p0.huella_base, respuestas: respuestas.filter(function (r) { return r.ok; }), agentes_sin_respuesta: respuestas.filter(function (r) { return !r.ok; }).map(function (r) { return r.agente; }) } }];\n"
+        "jsCode": "// Reunir lo que contestó cada agente · una respuesta por pedido, en el mismo orden.\nconst pedidos = $('Armar pedidos').all().map(function (x) { return x.json; });\nconst respuestas = $input.all().map(function (x, i) {\n  const b = (x.json && (x.json.body || x.json)) || {};\n  const texto = typeof b.response === 'string' ? b.response : (typeof b.result === 'string' ? b.result : JSON.stringify(b));\n  return { agente: (pedidos[i] || {}).agente, response: texto, ok: b.success !== false && !b.error };\n});\nconst p0 = pedidos[0] || {};\nreturn [{ json: { client_id: p0.client_id, client_name: p0.client_name, dry_run: false, campos: pedidos.reduce(function (a, p) { return a.concat(p.campos || []); }, []), version_base: p0.version_base, huella_base: p0.huella_base, reproponer: p0.reproponer || null, respuestas: respuestas.filter(function (r) { return r.ok; }), agentes_sin_respuesta: respuestas.filter(function (r) { return !r.ok; }).map(function (r) { return r.agente; }) } }];\n"
       }
     },
     {
@@ -184,7 +184,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, dry_run: false, campos: $json.campos, version_base: $json.version_base, huella_base: $json.huella_base, respuestas: $json.respuestas }) }}",
+        "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, dry_run: false, campos: $json.campos, reproponer: $json.reproponer || undefined, version_base: $json.version_base, huella_base: $json.huella_base, respuestas: $json.respuestas }) }}",
         "options": {
           "response": {
             "response": {
