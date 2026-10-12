@@ -30,7 +30,7 @@ export function monedaDelCliente(ficha: { country?: unknown; config?: unknown; c
 
 // ───────────────────────── importes dentro de un texto
 export interface Importe { valor: number; moneda: string | null; ambigua: boolean; crudo: string }
-const SIMBOLOS: Array<[RegExp, string | 'ambigua']> = [[/^US\$|^USD/i, 'USD'], [/^€|^EUR/i, 'EUR'], [/^£|^GBP/i, 'GBP'], [/^S\//i, 'PEN'], [/^R\$|^BRL/i, 'BRL'], [/^COP/i, 'COP'], [/^MXN/i, 'MXN'], [/^PEN/i, 'PEN'], [/^ARS/i, 'ARS'], [/^CLP/i, 'CLP'], [/^UYU/i, 'UYU'], [/^CAD|^C\$/i, 'CAD'], [/^\$/, 'ambigua']]
+const SIMBOLOS: Array<[RegExp, string | 'ambigua']> = [[/^US\$|^USD/i, 'USD'], [/^€|^EUR/i, 'EUR'], [/^£|^GBP/i, 'GBP'], [/^S\//i, 'PEN'], [/^R\$|^BRL/i, 'BRL'], [/^COP/i, 'COP'], [/^MXN/i, 'MXN'], [/^PEN/i, 'PEN'], [/^ARS/i, 'ARS'], [/^CLP/i, 'CLP'], [/^UYU/i, 'UYU'], [/^CAD|^C\$/i, 'CAD'], [/^d[oó]lar/i, 'USD'], [/^sol/i, 'PEN'], [/^peso/i, 'ambigua'], [/^\$/, 'ambigua']]
 
 /** «45.000» → 45000 · «1,250.50» → 1250.5 · «12,50» → 12.5 · «3.5» → 3.5 (un solo separador seguido de exactamente 3 dígitos es de miles) */
 export function numeroDeImporte(s: string): number {
@@ -51,10 +51,10 @@ export function importesEnTexto(texto: string): Importe[] {
   const out: Importe[] = []
   const NUM = '\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?'
   const pre = new RegExp(`(US\\$|R\\$|C\\$|S\\/|\\$|€|£|USD|EUR|GBP|COP|MXN|PEN|ARS|CLP|UYU|CAD|BRL)\\s?(${NUM})`, 'gi')
-  const post = new RegExp(`(${NUM})\\s?(USD|EUR|GBP|COP|MXN|PEN|ARS|CLP|UYU|CAD|BRL|€|£)(?![A-Za-z])`, 'gi')
+  const post = new RegExp(`(${NUM})\\s?(USD|EUR|GBP|COP|MXN|PEN|ARS|CLP|UYU|CAD|BRL|€|£|d[oó]lares?|euros?|sol(?:es)?|pesos?)(?![A-Za-zÁÉÍÓÚáéíóúñ])`, 'gi')
   const vistos = new Set<number>()
   let m: RegExpExecArray | null
   while ((m = pre.exec(texto)) !== null) { const [, s, n] = m; const mo = SIMBOLOS.find(([re]) => re.test(s))![1]; vistos.add(m.index); out.push({ valor: numeroDeImporte(n), moneda: mo === 'ambigua' ? null : mo, ambigua: mo === 'ambigua', crudo: m[0] }) }
-  while ((m = post.exec(texto)) !== null) { const [, n, s] = m; const mo = SIMBOLOS.find(([re]) => re.test(s))![1]; out.push({ valor: numeroDeImporte(n), moneda: mo === 'ambigua' ? null : mo, ambigua: false, crudo: m[0] }) }
+  while ((m = post.exec(texto)) !== null) { const [, n, s] = m; const mo = SIMBOLOS.find(([re]) => re.test(s))![1]; out.push({ valor: numeroDeImporte(n), moneda: mo === 'ambigua' ? null : mo, ambigua: mo === 'ambigua', crudo: m[0] }) }
   return out.filter((x) => Number.isFinite(x.valor))
 }

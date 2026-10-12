@@ -33,7 +33,7 @@ describe('palabra entera: lo que SÍ coincide', () => {
 describe('familia de rubro del planificador de fuentes: palabra entera', () => {
   it.each([
     ['barbería', ['belleza_bienestar']], ['tienda de barrio', ['comercio']], ['apicultura y miel', ['general']], ['unas cabañas familiares', ['alojamiento']],
-    ['autoescuela', ['general']], ['restaurante de mariscos costero', ['comida']], ['plataforma SaaS de gestión', ['software']], ['clínica dental', ['salud']], ['hotel boutique', ['alojamiento', 'comercio']],
+    ['autoescuela', ['educacion']], ['restaurante de mariscos costero', ['comida']], ['plataforma SaaS de gestión', ['software']], ['clínica dental', ['salud']], ['hotel boutique', ['alojamiento', 'comercio']],
   ])('«%s»', (rubro, esperadas) => { expect([...familiasDelRubro(rubro)].sort()).toEqual([...esperadas].sort()) })
   it('la batería de rubros cae en su familia', () => {
     const esperada: Record<string, string> = { comida: 'comida', clinica: 'salud', tienda_saas: 'comercio', servicio_b2b: 'servicios_profesionales' }

@@ -4,7 +4,6 @@
  *   · V15 bloquea las formas de OTRO registro solo si el registro está fijado; sin dato no inventa una regla (no bloquea nada).
  * Agnóstico: ningún cliente, ciudad ni rubro.
  */
-import { hallarVoseo } from './afirmaciones'
 const T = require('../trato/trato-logica.js') as TratoLogica
 interface Resolucion { trato: 'tu' | 'vos' | 'usted' | 'conflicto' | 'no_definido'; fuente: string; evidencia: string }
 interface TratoLogica { resolverTrato(manual: unknown, ficha: unknown): Resolucion; formasDeTrato(t: string): { vos: string[]; tu: string[]; usted: string[] } }
@@ -27,11 +26,9 @@ export function reglaDeRegistro(r: RegistroDelCliente | undefined): string {
 
 /** las formas de OTRO registro en un tema, dado el del cliente · sin dato no se marca nada */
 export function formasDeOtroRegistro(r: RegistroDelCliente | undefined, tema: string): string[] {
-  if (r === 'tu') return hallarVoseo(tema)
-  if (r === 'vos' || r === 'usted') {
-    const f = T.formasDeTrato(String(tema ?? ''))
-    return (r === 'vos' ? [...f.tu, ...f.usted] : [...f.tu, ...f.vos])
-  }
-  return []
+  if (r !== 'tu' && r !== 'vos' && r !== 'usted') return []
+  // r76 · UN solo detector para los tres registros (el del trato): antes el tuteo usaba una lista vieja y corta
+  const f = T.formasDeTrato(String(tema ?? ''))
+  return r === 'tu' ? f.vos : r === 'vos' ? [...f.tu, ...f.usted] : [...f.tu, ...f.vos]
 }
 export const nombreDelRegistro = (r: RegistroDelCliente | undefined): string => (r === 'tu' ? 'tuteo' : r === 'vos' ? 'voseo' : r === 'usted' ? 'usted' : 'sin dato')

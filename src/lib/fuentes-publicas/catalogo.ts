@@ -16,19 +16,19 @@ export type IdDeFamilia =
 
 /** claves (sin tildes, minúsculas) que ponen un rubro en una familia · un rubro puede caer en varias · PALABRA ENTERA (`src/lib/texto/coincidencia.ts`): «bar» no es «barbería»; una raíz se pide EXPLÍCITA con `*` */
 export const FAMILIAS: Record<Exclude<IdDeFamilia, 'general'>, string[]> = {
-  comida: ['restaurante', 'restaurant', 'cafe', 'cafeteria', 'bar', 'comedor', 'comida', 'cocina', 'gastronom*', 'pizzeria', 'panaderia', 'heladeria', 'food', 'catering', 'sushi', 'bakery', 'bistro', 'parrilla', 'delivery de comida', 'ghost kitchen'],
-  alojamiento: ['hotel', 'hostal', 'hostel', 'hospedaje', 'alojamiento', 'cabana', 'posada', 'resort', 'apart*', 'lodging', 'bnb', 'glamping', 'villa', 'alquiler vacacional'],
-  turismo: ['tour', 'turismo', 'excursion', 'guia', 'aventura', 'surf', 'buceo', 'experiencia', 'agencia de viajes', 'travel', 'actividades', 'parque', 'museo', 'entretenimiento'],
+  comida: ['restaurante', 'restaurant', 'cafe', 'cafeteria', 'bar', 'comedor', 'comida', 'cocina', 'gastronom*', 'pizzeria', 'panaderia', 'heladeria', 'food', 'catering', 'sushi', 'bakery', 'bistro', 'parrilla', 'delivery de comida', 'ghost kitchen', 'pescader*', 'carnicer*', 'fruter*', 'verduler*', 'hambur*', 'pizzer*', 'taquer*', 'licorer*', 'marisquer*', 'abarrot*', 'cerveceri*', 'dulceri*', 'reposter*', 'sanducher*', 'polleri*', 'asader*', 'jugueri*', 'cocteler*', 'chocolater*', 'food truck', 'chifa', 'mariscos'],
+  alojamiento: ['hotel', 'hostal', 'hostel', 'hospedaje', 'alojamiento', 'cabañ*', 'aparthotel', 'posada', 'resort', 'apart*', 'lodging', 'bnb', 'glamping', 'villa', 'alquiler vacacional'],
+  turismo: ['tour', 'turismo', 'excursion', 'guia', 'aventura', 'surf', 'buceo', 'experiencia', 'agencia de viajes', 'agencia de turismo', 'turistic*', 'travel', 'actividades', 'parque', 'museo', 'entretenimiento'],
   software: ['software', 'saas', 'plataforma digital', 'aplicacion web', 'crm', 'erp', 'b2b', 'tecnologia', 'startup', 'api', 'devtool', 'herramienta digital', 'inteligencia artificial'],
   apps_moviles: ['app movil', 'aplicacion movil', 'app para ios', 'app para android', 'app store', 'play store', 'juego movil', 'aplicacion para celular'],
-  comercio: ['tienda', 'ecommerce', 'e-commerce', 'comercio', 'retail', 'boutique', 'moda', 'ropa', 'calzado', 'accesorios', 'venta online', 'shop', 'store', 'joyeria', 'muebles', 'electrodomesticos', 'supermercado'],
-  servicios_profesionales: ['abogad*', 'contab*', 'consultor*', 'agencia', 'despacho', 'arquitect*', 'ingenier*', 'notari*', 'asesor*', 'coaching', 'marketing', 'diseno', 'constructora', 'legal', 'auditor', 'traduccion'],
-  salud: ['clinica', 'medic*', 'dental', 'odontolog*', 'hospital', 'psicolog*', 'fisioterap*', 'nutricion', 'salud', 'farmacia', 'veterinar*', 'laboratorio', 'doctor', 'terapia'],
-  belleza_bienestar: ['peluquer*', 'barber*', 'spa', 'salon de belleza', 'belleza', 'estetica', 'gimnasio', 'gym', 'yoga', 'fitness', 'masaje', 'maquillaje', 'manicur*', 'pedicur*', 'wellness', 'pilates'],
-  automotriz: ['taller mecanico', 'mecanica', 'automotriz', 'concesionaria', 'lavado de autos', 'repuestos', 'vehiculos', 'autos', 'motos'],
+  comercio: ['tienda', 'ecommerce', 'e-commerce', 'comercio', 'retail', 'boutique', 'moda', 'ropa', 'calzado', 'accesorios', 'venta online', 'shop', 'store', 'joyeria', 'muebles', 'electrodomesticos', 'supermercado', 'floristeri*', 'ferreter*', 'librer*', 'perfumer*', 'optica', 'zapater*', 'jugueter*', 'papeleri*', 'modista', 'sastr*', 'muebleri*', 'minimarket', 'bazar', 'mayorista', 'distribuidora', 'vivero', 'petshop', 'abarrot*', 'licorer*'],
+  servicios_profesionales: ['abogad*', 'contab*', 'consultor*', 'agencia', 'despacho', 'arquitect*', 'ingenier*', 'notari*', 'asesor*', 'coaching', 'marketing', 'diseno', 'constructora', 'legal', 'auditor', 'traduccion', 'fotograf*', 'videograf*', 'imprenta', 'publicidad', 'topograf*'],
+  salud: ['clinica', 'medic*', 'dental', 'odontolog*', 'hospital', 'psicolog*', 'fisioterap*', 'nutricion', 'salud', 'farmacia', 'veterinar*', 'laboratorio', 'doctor', 'terapia', 'optometr*', 'podolog*', 'pediatr*', 'dermatolog*', 'ginecolog*', 'cardiolog*', 'kinesiolog*', 'quiropract*', 'consultorio', 'sanatorio', 'dentista', 'ortodoncia', 'optica'],
+  belleza_bienestar: ['peluquer*', 'barber*', 'spa', 'salon de belleza', 'belleza', 'estetica', 'gimnasio', 'gym', 'yoga', 'fitness', 'masaje', 'maquillaje', 'manicur*', 'pedicur*', 'uñas', 'pestañ*', 'depilacion', 'tatuaj*', 'cejas', 'wellness', 'pilates'],
+  automotriz: ['taller mecanico', 'mecanica', 'automotriz', 'concesionaria', 'lavado de autos', 'repuestos', 'vehiculos', 'autos', 'motos', 'llantas', 'vulcanizadora', 'lubricadora', 'autolavado', 'gomeria', 'mecanico*'],
   inmobiliaria: ['inmobiliaria', 'bienes raices', 'propiedades', 'real estate', 'arriendo', 'venta de casas', 'corretaje'],
-  educacion: ['escuela', 'colegio', 'academia', 'curso', 'universidad', 'educacion', 'instituto', 'capacitacion', 'tutor', 'idiomas', 'bootcamp'],
-  servicios_hogar: ['plomer*', 'electricista', 'limpieza', 'jardiner*', 'mudanza', 'reparacion', 'carpinter*', 'pintura', 'cerrajer*', 'fumigacion', 'mantenimiento del hogar'],
+  educacion: ['escuela', 'colegio', 'academia', 'curso', 'universidad', 'educacion', 'instituto', 'capacitacion', 'tutor', 'idiomas', 'bootcamp', 'guarderia', 'kinder', 'preescolar', 'autoescuela', 'clases'],
+  servicios_hogar: ['plomer*', 'electricista', 'limpieza', 'jardiner*', 'mudanza', 'reparacion', 'carpinter*', 'pintura', 'cerrajer*', 'fumigacion', 'mantenimiento del hogar', 'lavanderi*', 'tapicer*', 'herrer*', 'soldadur*', 'vidrier*', 'gasfiter*', 'aire acondicionado'],
   finanzas: ['banco', 'cooperativa', 'seguros', 'financier*', 'credito', 'fintech', 'inversion', 'prestamos', 'cambio de divisas'],
 }
 
