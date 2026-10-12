@@ -69,7 +69,11 @@ export function sobresDeProducir(parte: ParteGuardada, o: { dry_run: boolean; te
  * Devuelve cuántos sobres salieron (`emitidos`), cuántos ya existían (`duplicados`), cuáles se omitieron y por qué. Con la compuerta cerrada contesta 409 SIN sacar nada.
  */
 export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
-  const campanaId = cadena(cuerpo.campana_id), parteId = cadena(cuerpo.parte_id)
+  const campanaId = cadena(cuerpo.campana_id)
+  // r74 · F7 · EN SECO el parte no se guarda: el flujo de la parte manda un `parte_seco` con lo que HABRÍA guardado (válido + briefs con su familia) y se ensaya autoproducir sin sembrar nada a mano.
+  //   Solo vale con `dry_run: true`; con `dry_run: false` se ignora y se exige un parte guardado de verdad.
+  const parteSeco = cuerpo.dry_run === true && cuerpo.parte_seco && typeof cuerpo.parte_seco === 'object' && !Array.isArray(cuerpo.parte_seco) ? (cuerpo.parte_seco as Record<string, unknown>) : null
+  const parteId = cadena(cuerpo.parte_id) ?? (parteSeco && campanaId ? `seco:${campanaId}:${cadena(parteSeco.lote) ?? 'lote'}` : null)
   if (!campanaId || !parteId) return err(400, 'E-CAMPOS', 'faltan campana_id o parte_id')
   if (typeof cuerpo.dry_run !== 'boolean' && typeof cuerpo.seco !== 'boolean') return err(400, 'E-SECO-INVALIDO', '`dry_run` es obligatorio y debe ser true o false (ausente o mal escrito = no se emite nada)')
   const s = leerSeco(cuerpo); if (!s.ok) return s.r
@@ -83,7 +87,10 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
   const cerrada = await compuerta(al, c.client_id, s.seco)
   if (cerrada) return cerrada
   if (c.estado !== 'activa') return err(409, 'E-CAMPANA-NO-ACTIVA', `la campaña está ${c.estado}: solo una campaña activa deja briefs listos`)
-  const parte = await al.parteDe(parteId)
+  const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
+  const parte: ParteGuardada | null = parteSeco
+    ? { id: parteId, client_id: c.client_id, valido: parteSeco.valido === true, briefs: (Array.isArray(parteSeco.briefs) ? (parteSeco.briefs as Array<Record<string, unknown>>) : []).map((b) => ({ brief_id: texto(b?.brief_id), fila_id: texto(b?.fila_id), familia: texto(b?.familia) })) }
+    : await al.parteDe(parteId)
   if (!parte) return err(404, 'E-PARTE', 'el parte no existe (o no es un parte de trabajo)')
   if (parte.client_id !== c.client_id) return err(403, 'E-PARTE-AJENO', 'el parte no es del cliente de esta campaña')
   if (!parte.valido) return { status: 200, cuerpo: { accion: 'autoproducir', emite: false, motivo: 'parte_no_valido', emitidos: 0, duplicados: 0, rechazados: 0, omitidos: [], sobres: [] } }

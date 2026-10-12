@@ -115,6 +115,11 @@ export class AlmacenMemoria implements Almacen {
   async guardarValidaciones(campanaId: string, objeto: 'estrategia' | 'calendario' | 'brief', version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[]) {
     this.validaciones.push({ campana_id: campanaId, objeto, version, tanda, intento, hallazgos })
   }
+  async hallazgosQueBloquean(campanaId: string, tanda: number) {
+    const v = this.validaciones.filter((x) => x.campana_id === campanaId && x.objeto === 'calendario' && x.tanda === tanda)
+    const ultimo = v.reduce((m, x) => Math.max(m, x.intento), 0)
+    return v.filter((x) => x.intento === ultimo).flatMap((x) => x.hallazgos).filter((h) => h.severidad === 'bloquea').map((h) => ({ ficha: h.ficha, fila_id: h.fila_id }))
+  }
   async corridaPorClave(campanaId: string, paso: string, clave: string, intento: number) { return this.corridas.find((c) => c.campana_id === campanaId && c.paso === paso && c.clave_idempotencia === clave && c.intento === intento) ?? null }
   async abrirCorrida(c: Omit<Corrida, 'id'>) {
     const ya = await this.corridaPorClave(c.campana_id, c.paso, c.clave_idempotencia, c.intento)
@@ -154,6 +159,9 @@ export class AlmacenMemoria implements Almacen {
   }
   async fechasEspeciales(_pais: string, tipos: string[]) { return this.fechas.filter((f) => !tipos.length || tipos.includes(f.tipo)) }
   async parteDe(parteId: string): Promise<ParteGuardada | null> { return this.semilla.partes?.find((p) => p.id === parteId) ?? null }
+  recolectadas: string[] = []
+  async recolectarSedes(clientId: string) { this.recolectadas.push(clientId); return { ok: true, sedes: this.sedesDeLaFicha } }
+  sedesDeLaFicha = 0
   async frenoDeGasto(_clientId: string) { this.consultasDelFreno++; return this.semilla.frenoBloqueado ? { bloqueado: true, motivo: 'over_cap' } : { bloqueado: false, motivo: 'under_cap' } }
   async emitirSobre(sobre: SobreDeProducir): Promise<ResultadoDeEmision> {
     if (this.semilla.intakeApagado) return { resultado: 'rechazado', detalle: 'intake_apagado' }

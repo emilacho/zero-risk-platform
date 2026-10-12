@@ -9,7 +9,7 @@ import {
   type Estrategia,
 } from '../index'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
-import { clienteA, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
+import { clienteA, clienteB, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
 
 const A = clienteA()
 const AHORA = '2026-10-09T12:00:00Z'
@@ -581,5 +581,67 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
     expect((await relojDeLaCadena(al, vig, AHORA)).cuerpo.enviar_alertas).toBe(false)
     al.config.set('alertas_en_ensayo', 'enviar')
     expect((await relojDeLaCadena(al, vig, AHORA)).cuerpo.enviar_alertas).toBe(true)
+  })
+})
+
+describe('r74 · F3 · una llamada de corrección vencida no deja la campaña atascada con un éxito falso', () => {
+  const mala = () => ({ ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, tema: 'Nuestro pan de 45 g' } : p)) })
+  it('verde: el reenvío sin corrección pide la corrección con los hallazgos que bloquearon y la campaña termina activa', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    const { g } = await tandaDe(al, id, 1, mala())
+    expect(g!.cuerpo.correccion).toBe(true)
+    // la corrección se pide y la llamada muere: la corrida queda vencida
+    const p2 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
+    await al.cerrarCorrida(p2.cuerpo.corrida_id as number, { estado: 'vencida', error: 'la llamada pasó su plazo sin volver' })
+    expect((await al.filas(id)).some((f) => f.estado === 'propuesta')).toBe(true)
+    // se reenvía el sobre: preparar SIN corrección (antes contestaba «ya hecha» y la campaña quedaba en `calendario`)
+    const p3 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)
+    expect(p3.status).toBe(200); expect(p3.cuerpo.ya_hecha).toBeUndefined()
+    expect(p3.cuerpo.run_sdk).toBeDefined()
+    // y al guardar, sin avisar que es corrección, la campaña se cierra bien
+    const g3 = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p3.cuerpo.corrida_id, resultado: ok(tandaBuena(A)) }, AHORA) // la corrección derivada es de la tanda entera
+    expect(g3.cuerpo).toMatchObject({ ok: true })
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('activa')
+    expect((await al.filas(id)).some((f) => f.estado === 'propuesta')).toBe(false)
+  })
+  describe('F4 · la regla de «local abierto» aplica SOLO si hay sede (3 rubros: local con sede · servicio sin sede · negocio en línea sin sede)', () => {
+    const sinSedes = (c: typeof A) => ({ ...contextoDe(c), sedes: [] as never[] })
+    for (const [nombre, cli] of [['negocio local sin sede declarada', A], ['servicio a empresas', clienteB()]] as const) {
+      it(`${nombre}: sin sedes las filas «requiere_abierto» NO se frenan (ninguna queda en investigación por falta de horario) y la campaña lo declara`, async () => {
+        const al = almacen({ contextos: { [cli.clientId]: sinSedes(cli) }, planes: { [cli.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, journeys: [{ journeyId: 'journey-1', clientId: cli.clientId }] })
+        const c = await abrirCampana(al, { ...wf(), client_id: cli.clientId, seco: true }, AHORA)
+        const id = idCampana(c)
+        expect(al.recolectadas).toContain(cli.clientId)
+        expect(String(al.campanas.find((x) => x.id === id)!.estado_motivo)).toContain('sin sede declarada')
+        const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+        await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(cli.estrategia) }, AHORA)
+        await tandaDe(al, id, 1, tandaBuena(cli))
+        const filas = (await al.filas(id)).filter((f) => f.tanda === 1 && f.estado !== 'esquema')
+        expect(filas.some((f) => f.requiere_abierto)).toBe(true)
+        expect(filas.filter((f) => f.estado === 'en_investigacion')).toEqual([])
+        expect(al.validaciones.flatMap((v) => v.hallazgos).filter((h) => h.chequeo === 'V06')).toEqual([])
+      })
+    }
+    it('con sede y horario la regla sigue igual: una hora fuera del horario BLOQUEA; sin horario de la sede, aviso y la fila queda en investigación', async () => {
+      const al = almacen()
+      const { id } = await conEstrategia(al)
+      const fuera = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.slot === 'a' && p.semana === 1 ? { ...p, hora: '23:00' } : p)) }
+      const { g } = await tandaDe(al, id, 1, fuera)
+      expect(g!.cuerpo.correccion).toBe(true)
+      expect(al.validaciones.flatMap((v) => v.hallazgos).some((h) => h.chequeo === 'V06' && h.severidad === 'bloquea')).toBe(true)
+      const sinHorario = almacen({ contextos: { [A.clientId]: { ...contextoDe(A), sedes: [{ clave: 'centro', nombre: 'Sede', telefono: null, horario: null }] } } })
+      const e2 = await conEstrategia(sinHorario)
+      await tandaDe(sinHorario, e2.id, 1, tandaBuena(A))
+      expect(sinHorario.validaciones.flatMap((v) => v.hallazgos).some((h) => h.chequeo === 'V06' && h.severidad === 'aviso')).toBe(true)
+      expect((await sinHorario.filas(e2.id)).some((f) => f.estado === 'en_investigacion')).toBe(true)
+    })
+  })
+
+  it('una tanda ya validada sigue contestando «ya hecha» (la idempotencia normal no cambia)', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    await tandaDe(al, id, 1, tandaBuena(A))
+    expect((await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).cuerpo.ya_hecha).toBe(true)
   })
 })

@@ -4,7 +4,7 @@
  * Las rutas y los manejadores (`manejadores/*.ts`) hablan SOLO con esta interfaz: la prueba usa un almacén en memoria y la ruta real,
  * `almacen-supabase.ts` (el único archivo, con las rutas, que nombra las tablas `cadena_*`). Nada de esto se usa hasta que alguien aplique la migración y encienda.
  */
-import type { FormatosPorRed, Estrategia, Fila, Hallazgo, Referencia, SedeInfo } from './tipos'
+import type { FormatosPorRed, Estrategia, Ficha, Fila, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
@@ -87,6 +87,8 @@ export interface ContextoDelCliente {
   nombreDelNegocio: string
   pais: string | null
   zonaHoraria: string
+  /** r74 · de dónde salió la zona: declarada en la ficha · por el país · por defecto de la casa · sin dato (UTC solo como cálculo, y se pregunta) */
+  zonaHorariaOrigen?: 'declarada' | 'por_pais' | 'por_defecto_de_la_casa' | 'sin_dato'
   planTexto: string
   manualTexto: string
   forbiddenWords: string[]
@@ -130,6 +132,8 @@ export interface Almacen {
   ultimaVersionDeCalendario(campanaId: string): Promise<number>
   // validaciones
   guardarValidaciones(campanaId: string, objeto: 'estrategia' | 'calendario' | 'brief', version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[], seco: boolean): Promise<void>
+  /** r74 · los hallazgos que BLOQUEAN del último intento guardado de una tanda del calendario (para pedir la corrección si la llamada de corrección murió) */
+  hallazgosQueBloquean(campanaId: string, tanda: number): Promise<Array<{ ficha: Ficha; fila_id: string | null }>>
   // corridas (guardarraíles 1–5)
   corridaPorClave(campanaId: string, paso: string, clave: string, intento: number): Promise<Corrida | null>
   /** idempotente: si ya existe devuelve la existente con `creada: false` */
@@ -155,6 +159,8 @@ export interface Almacen {
   parteDe(parteId: string): Promise<ParteGuardada | null>
   /** el freno de gasto §150 (y el tope por cliente de #487) sobre este cliente: `bloqueado` = ya al techo de las 24 h */
   frenoDeGasto(clientId: string): Promise<{ bloqueado: boolean; motivo?: string }>
+  /** r74 · F4 · llena las sedes y su horario con lo que el sistema YA guardó del cliente (sitio · Instagram · Mapas), con su fuente · US$ 0 · un fallo se declara, no frena */
+  recolectarSedes(clientId: string): Promise<{ ok: boolean; sedes: number; error?: string }>
   /** deja UN sobre en la sala (intake) · idempotente por su llave: el repetido vuelve `duplicado` · nunca despacha */
   emitirSobre(sobre: SobreDeProducir): Promise<ResultadoDeEmision>
   guardarFechaEspecial(f: { pais: string; tipo: string; ambito: string; anio: number; fecha: string; nombre: string; alcance: string; fuente_url: string; cita_literal: string; pagina_hash: string; doble_fuente: boolean; estado: 'verificada' | 'pendiente' }): Promise<void>

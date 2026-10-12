@@ -134,7 +134,8 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
     }
 
     // ─── V06 · la hora cae dentro del horario de la sede (y se usa el dato de más rango; sin horario NUNCA es «ok»)
-    if (f.requiere_abierto) {
+    // r74 · F4 · la regla de «local abierto» aplica SOLO si el negocio tiene sede (un negocio en línea o de servicio a empresas no tiene horario de local que comprobar: sus filas no se frenan)
+    if (f.requiere_abierto && ins.sedes.length > 0) {
       const sede = ins.sedes.find((s) => s.clave === f.sede)
       const hora = minutos(f.hora)
       if (!sede || !sede.horario) out.push(h('V06', 'aviso', f, 'no hay horario de la sede: no se puede comprobar la hora', 'client_sede_datos', 'PENDIENTE: horario de la sede (se investiga con fuente)'))

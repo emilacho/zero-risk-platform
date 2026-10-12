@@ -10,8 +10,9 @@ import { SupabaseEventLogStorage } from '@/lib/sala-event-log'
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
 import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
 import { horarioDeNorm } from './horario'
+import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
 import { normalizar } from './texto'
-import type { ConfianzaTrozo, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
+import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
 
@@ -81,9 +82,13 @@ export function almacenDeSupabase(): Almacen {
         refs.push({ id: `chunk:${t.id}`, client_id: clientId, origen: 'trozo', confianza, texto: t.chunk_text })
       }
       const fw = Array.isArray(manual?.forbidden_words) ? (manual!.forbidden_words as unknown[]).filter((x): x is string => typeof x === 'string') : []
-      const zonaCfg = typeof cli?.config?.timezone === 'string' ? (cli.config.timezone as string) : null
+      // r74 · F5 · la zona sale de la ficha o del país (tabla de datos); sin dato NO se asume UTC en silencio: UTC queda solo como cálculo y el origen dice «sin_dato» (se pregunta)
+      const z = zonaDelCliente({ timezone: cli?.config?.timezone, country: cli?.country })
+      const porDefecto = typeof zonaPorDefecto === 'string' && zonaPorDefecto ? zonaPorDefecto : null
+      const zonaCfg = z.zona
+      const zonaOrigen: 'declarada' | 'por_pais' | 'por_defecto_de_la_casa' | 'sin_dato' = z.zona ? z.origen : porDefecto ? 'por_defecto_de_la_casa' : 'sin_dato'
       return {
-        clientId, nombreDelNegocio: cli?.name ?? '', pais: cli?.country ?? null, zonaHoraria: zonaCfg ?? (typeof zonaPorDefecto === 'string' ? zonaPorDefecto : 'UTC'),
+        clientId, nombreDelNegocio: cli?.name ?? '', pais: cli?.country ?? null, zonaHoraria: zonaCfg ?? porDefecto ?? 'UTC', zonaHorariaOrigen: zonaOrigen,
         planTexto, manualTexto: manual?.content_text ?? '', forbiddenWords: fw, sedes, referencias: refs, fechaDelPlan: plan.created_at.slice(0, 10),
       }
     },
@@ -121,6 +126,12 @@ export function almacenDeSupabase(): Almacen {
       if (!hallazgos.length) return
       const { error } = await db.from('cadena_validaciones').insert(hallazgos.map((h) => ({ campana_id: campanaId, objeto, objeto_version: version, tanda, intento, chequeo: h.chequeo, severidad: h.severidad, fila_id: h.fila_id, ficha: h.ficha, seco })))
       if (error) fallo(error)
+    },
+
+    async hallazgosQueBloquean(campanaId, tanda) {
+      const filas = await lista<{ intento: number; severidad: string; fila_id: string | null; ficha: Ficha }>(db.from('cadena_validaciones').select('intento, severidad, fila_id, ficha').eq('campana_id', campanaId).eq('objeto', 'calendario').eq('tanda', tanda).limit(1000))
+      const ultimo = filas.reduce((m, x) => Math.max(m, x.intento), 0)
+      return filas.filter((x) => x.intento === ultimo && x.severidad === 'bloquea').map((x) => ({ ficha: x.ficha, fila_id: x.fila_id }))
     },
 
     async corridaPorClave(campanaId, paso, k, intento) { return uno<Corrida>(db.from('cadena_corridas').select('*').eq('campana_id', campanaId).eq('paso', paso).eq('clave_idempotencia', k).eq('intento', intento).maybeSingle()) },
@@ -163,6 +174,13 @@ export function almacenDeSupabase(): Almacen {
       const lista = Array.isArray(t.familias_por_brief) ? (t.familias_por_brief as Array<Record<string, unknown>>) : []
       const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
       return { id: String(f.id), client_id: String(f.client_id), valido: t.valido === true, briefs: lista.map((b) => ({ brief_id: texto(b?.brief_id), fila_id: texto(b?.fila_id), familia: texto(b?.familia) })) }
+    },
+    async recolectarSedes(clientId) {
+      try {
+        const { recolectarSedes } = await import('@/lib/sedes/recolectar')
+        const r = await recolectarSedes(db, clientId)
+        return { ok: r.ok === true, sedes: Array.isArray(r.sedes) ? r.sedes.length : 0, ...(r.ok === true ? {} : { error: String((r as { error?: string }).error ?? 'sin detalle') }) }
+      } catch (e) { return { ok: false, sedes: 0, error: e instanceof Error ? e.message : String(e) } }
     },
     async frenoDeGasto(clientId) {
       const r = await checkRunSdkSpendCap(db, clientId)
