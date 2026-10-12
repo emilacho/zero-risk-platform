@@ -5,7 +5,6 @@
  * Agnóstico: ningún cliente, ciudad ni rubro.
  */
 import { hallarVoseo } from './afirmaciones'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const T = require('../trato/trato-logica.js') as TratoLogica
 interface Resolucion { trato: 'tu' | 'vos' | 'usted' | 'conflicto' | 'no_definido'; fuente: string; evidencia: string }
 interface TratoLogica { resolverTrato(manual: unknown, ficha: unknown): Resolucion; formasDeTrato(t: string): { vos: string[]; tu: string[]; usted: string[] } }
