@@ -5,7 +5,7 @@
  * Agnóstico: ningún cliente, ciudad ni nombre propio; las palabras de industria son las de un tipo de negocio, no las de una marca.
  */
 import { LEXICO_BASE, lexicoDesdeConfig, type LexicoAfirmaciones } from './afirmaciones'
-import { normalizar } from './texto'
+import { coincideAlguna } from '../texto/clave-de-rubro'
 
 export interface PaqueteDeRubro { industria: string[]; lexico: LexicoAfirmaciones }
 
@@ -21,19 +21,18 @@ const RECETA = { subtipo: 'historia', re: '\\b(?:receta (?:familiar|de la abuela
 /** los paquetes que el sistema trae de fábrica (se reemplazan por los de `cadena_config` si existen con la misma clave) */
 export const PAQUETES_DE_FABRICA: Record<string, PaqueteDeRubro> = {
   alimentos: {
-    industria: ['aliment', 'comida', 'gastronom', 'restaur', 'cafeter', 'cafe ', 'panader', 'pasteler', 'bebida', 'cocina', 'bar ', 'heladeri', 'food', 'catering', 'delivery', 'marisc', 'carne', 'fruta', 'verdura', 'agricol', 'pesca', 'lacteo', 'chocolat'],
+    industria: ['aliment*', 'comida', 'gastronom*', 'restaur*', 'cafeter*', 'cafe', 'panader*', 'pasteler*', 'bebida', 'cocina', 'bar', 'heladeri*', 'food', 'catering', 'delivery', 'marisc*', 'carne', 'fruta', 'verdura', 'agricol*', 'pesca', 'lacteo*', 'chocolat*'],
     lexico: { patrones: [FRESCURA, ORIGEN, PORCION, TRAZABILIDAD, COMPOSICION, RECETA], origen_lugar: true, ambiente: ['brisa', 'terraza', 'salon'], no_origen: ['carta', 'menu'] },
   },
   bienes: {
-    industria: ['tienda', 'moda', 'ropa', 'calzado', 'joyer', 'cosmetic', 'artesan', 'mueble', 'decoraci', 'juguet', 'ferreter', 'comercio', 'e-commerce', 'ecommerce', 'retail', 'manufactur', 'fabric', 'producto'],
+    industria: ['tienda', 'moda', 'ropa', 'calzado', 'joyer*', 'cosmetic*', 'artesan*', 'mueble', 'decoraci*', 'juguet*', 'ferreter*', 'comercio electronico', 'comercio minorista', 'e-commerce', 'ecommerce', 'retail', 'manufactur*', 'fabrica', 'producto'],
     lexico: { patrones: [ORIGEN, COMPOSICION, TRAZABILIDAD, NOVEDAD], origen_lugar: true },
   },
 }
 
-/** ¿la industria de la ficha corresponde a este paquete? (palabras de industria en minúsculas y sin acentos; coincidencia por inclusión) */
+/** ¿la industria de la ficha corresponde a este paquete? (palabras de industria; coincidencia por PALABRA ENTERA, raíz solo con asterisco: `texto/clave-de-rubro.ts`) */
 export const industriaCoincide = (industria: string | null | undefined, palabras: readonly string[]): boolean => {
-  const t = ' ' + normalizar(String(industria ?? '')) + ' '
-  return palabras.some((p) => t.includes(normalizar(p)))
+  return coincideAlguna(industria, palabras)
 }
 
 /** une léxicos: listas por unión, patrones por suma, banderas por OR (lo posterior no quita lo anterior) */
