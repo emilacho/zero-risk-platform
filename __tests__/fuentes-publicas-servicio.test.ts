@@ -150,7 +150,7 @@ describe('transform-sections · lo que se escribe', () => {
     expect(t).toContain('video https://instagram.com/reel/A · 2026-09-01 · pie: «Pie del video» · lo que se dice: «Hola, hoy les mostramos»')
     expect(t).toContain('SIN transcripción')
     expect((await corre('videos_tiktok', [{ webVideoUrl: 'https://tiktok.com/v/1', text: 'pie', transcript: 'texto hablado', createTimeISO: '2026-05-05T00:00:00Z' }])).sections[0].section_label).toBe('tiktok_videos_propios')
-    expect((await corre('videos_youtube', [{ url: 'https://youtube.com/watch?v=1', title: 'Título', subtitles: 'palabras', date: '2026-02-02' }])).sections[0].text).toContain('lo que se dice: «palabras»')
+    expect((await corre('videos_youtube', [{ url: 'https://youtube.com/watch?v=1', title: 'Título', subtitles: 'estas son palabras de una persona hablando', date: '2026-02-02' }])).sections[0].text).toContain('lo que se dice: «estas son palabras de una persona hablando»')
   })
   it('publicaciones de Facebook: texto + lo que se dice en el video', async () => {
     expect((await corre('publicaciones_facebook', [{ text: 'Promo de hoy', time: '2026-10-01T00:00:00Z', videoTranscript: 'bienvenidos' }])).sections[0].text).toContain('2026-10-01 · «Promo de hoy» · lo que se dice en el video: «bienvenidos»')

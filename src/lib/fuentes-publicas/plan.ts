@@ -6,6 +6,7 @@
  * CON SU MOTIVO (nunca en silencio, nunca inventando una dirección).
  */
 import { normalizar } from '../manual/texto'
+import { coincideAlguna } from '../texto/coincidencia'
 import { codigoDePais } from '../pais/pais-del-cliente'
 import {
   FAMILIAS, PLATAFORMAS_DE_RESENAS, REDES_CON_CONTENIDO,
@@ -35,9 +36,9 @@ export const LIMITES_POR_OMISION = { resenas: 100, publicaciones: 20, videos: 10
 
 /** las familias de un rubro (puede ser más de una) · sin coincidencia ⇒ `general` (solo aplican las plataformas «de todas») */
 export function familiasDelRubro(rubro: string | null | undefined): IdDeFamilia[] {
-  const t = ` ${normalizar(rubro ?? '')} `
-  if (!t.trim()) return ['general']
-  const halladas = (Object.keys(FAMILIAS) as Array<keyof typeof FAMILIAS>).filter((f) => FAMILIAS[f].some((p) => t.includes(' ' + normalizar(p)) || (p.length >= 5 && t.includes(normalizar(p)))))
+  // ronda 76 · por PALABRA ENTERA (antes por trozo: «barbería» caía en comida, «apicultura» en software, «cabañas» en belleza)
+  if (!normalizar(rubro ?? '')) return ['general']
+  const halladas = (Object.keys(FAMILIAS) as Array<keyof typeof FAMILIAS>).filter((f) => coincideAlguna(rubro, FAMILIAS[f]))
   return halladas.length ? halladas : ['general']
 }
 

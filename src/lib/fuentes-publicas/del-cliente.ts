@@ -4,6 +4,7 @@
  * en la ficha de OTRO negocio, no entran jamás (se vio en la práctica: un raspado de mapas trae hoteles vecinos con sus propios enlaces).
  */
 import { normalizar } from '../manual/texto'
+import { enlacesDelCliente, type EnlaceDescartado } from './enlaces-propios'
 import { LIMITES_POR_OMISION, planDeFuentesPublicas, type EntradaDelPlan, type PlanDeFuentesPublicas } from './plan'
 import type { Red } from './catalogo'
 
@@ -29,17 +30,29 @@ const PERFIL_DE_RED: Record<Exclude<Red, 'instagram'>, RegExp> = {
   youtube: /^(www\.)?youtube\.com\/(@[^/?#]+|channel\/[^/?#]+|c\/[^/?#]+|user\/[^/?#]+)\/?$/i,
 }
 
-export function entradaDelPlanDesdeFicha(ficha: FichaDeFuentes, filas: FilaPropia[], limites?: EntradaDelPlan['limites']): EntradaDelPlan {
+export type EntradaConDescartes = EntradaDelPlan & { descartados: EnlaceDescartado[] }
+
+export function entradaDelPlanDesdeFicha(ficha: FichaDeFuentes, filas: FilaPropia[], limites?: EntradaDelPlan['limites']): EntradaConDescartes {
   const miHost = host(ficha.website_url ?? '')
   const propias = filas.filter((f) => !f.ensayo)
-  // ── enlaces: SOLO los que aparecen en el sitio propio del cliente
-  const enlaces: string[] = []
+  // ── enlaces: los que aparecen en el sitio propio Y son del cliente (ronda 76): los de salida («qué hacer cerca», otros negocios, «compartir en») no cuentan
+  const hallados: string[] = []
+  const paginas = new Map<string, Set<string>>() // página del sitio → direcciones que lleva (una página leída varias veces cuenta una vez)
   for (const f of propias) {
     if (f.apify_function !== 'website_content_scraper' || !miHost) continue
     const u = String(obj(f.params).url ?? obj(f.params).startUrl ?? '')
     if (host(u) !== miHost) continue
-    for (const d of direccionesDe(f.respuesta)) if (!enlaces.includes(d)) enlaces.push(d)
+    const items = Array.isArray(f.respuesta) ? f.respuesta : [f.respuesta]
+    items.forEach((it, i) => {
+      const clave = String(obj(it).url ?? obj(obj(it).metadata).url ?? `${u}#${i}`)
+      const set = paginas.get(clave) ?? new Set<string>()
+      for (const d of direccionesDe(it)) { if (host(d) === miHost) continue; set.add(d); if (!hallados.includes(d)) hallados.push(d) }
+      paginas.set(clave, set)
+    })
   }
+  const paginasPorEnlace = new Map<string, number>()
+  for (const set of paginas.values()) for (const d of set) paginasPorEnlace.set(d, (paginasPorEnlace.get(d) ?? 0) + 1)
+  const { propios: enlaces, descartados } = enlacesDelCliente(hallados, { nombre: ficha.name, paginasPorEnlace, paginasLeidas: paginas.size })
   // ── redes: lo declarado en la ficha manda; lo que falte, de los enlaces del sitio propio (solo direcciones de PERFIL)
   const declarado = obj(obj(obj(ficha.config).apify).own_handles)
   const redes: Partial<Record<Red, string>> = {}
@@ -69,7 +82,7 @@ export function entradaDelPlanDesdeFicha(ficha: FichaDeFuentes, filas: FilaPropi
     }
   }
   const pais = ficha.country || (ficha.market ? String(ficha.market).split(',').pop()!.trim() : null)
-  return { rubro: ficha.industry ?? null, nombre: ficha.name ?? null, pais: pais ?? null, enlaces, redes, mapas, ...(limites ? { limites } : {}) }
+  return { rubro: ficha.industry ?? null, nombre: ficha.name ?? null, pais: pais ?? null, enlaces, redes, mapas, descartados, ...(limites ? { limites } : {}) }
 }
 
 /** US$ por unidad pedida, MEDIDO en corridas reales el 2026-10-12 (ronda 75) · las que no se corrieron llevan `medido:false` y un valor prudente */
@@ -105,7 +118,7 @@ export function estimarCosto(plan: PlanDeFuentesPublicas): EstimacionDeCosto {
   return { total_usd: Math.round(por_llamada.reduce((a, x) => a + x.usd, 0) * 1e4) / 1e4, por_llamada, sin_precio }
 }
 
-export function planDeLaFicha(ficha: FichaDeFuentes, filas: FilaPropia[], limites?: EntradaDelPlan['limites']): { entrada: EntradaDelPlan; plan: PlanDeFuentesPublicas; estimado: EstimacionDeCosto } {
+export function planDeLaFicha(ficha: FichaDeFuentes, filas: FilaPropia[], limites?: EntradaDelPlan['limites']): { entrada: EntradaConDescartes; plan: PlanDeFuentesPublicas; estimado: EstimacionDeCosto } {
   const entrada = entradaDelPlanDesdeFicha(ficha, filas, limites)
   const plan = planDeFuentesPublicas(entrada)
   return { entrada, plan, estimado: estimarCosto(plan) }
