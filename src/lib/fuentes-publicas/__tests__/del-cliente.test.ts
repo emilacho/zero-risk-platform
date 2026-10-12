@@ -50,7 +50,7 @@ describe('costo estimado con precios medidos', () => {
       [mapas([{ title: 'Casa Demo Sabores', placeId: 'ChIJdemo' }])],
     )
     const ig = estimado.por_llamada.find((x) => x.funcion === 'videos_instagram')!
-    expect(ig.usd).toBeCloseTo(0.437, 3)
+    expect(ig.usd).toBeCloseTo(0.557, 3)
     expect(estimado.total_usd).toBeGreaterThan(0.4)
     expect(estimado.total_usd).toBeLessThan(2)
     expect(estimado.sin_precio).toEqual([])

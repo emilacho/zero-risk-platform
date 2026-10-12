@@ -82,7 +82,7 @@ export const COSTO_UNITARIO_USD: Record<string, { usd: number; unidad: string; m
   trustpilot_scraper: { usd: 0.003, unidad: 'reseña', medido: false },
   software_review_scraper: { usd: 0.003, unidad: 'reseña', medido: false },
   publicaciones_facebook: { usd: 0.0042, unidad: 'publicación', medido: true },
-  videos_instagram: { usd: 0.0437, unidad: 'video (con transcripción)', medido: true },
+  videos_instagram: { usd: 0.0557, unidad: 'video (con transcripción)', medido: true },
   videos_tiktok: { usd: 0.024, unidad: 'video (con transcripción)', medido: true },
   videos_youtube: { usd: 0.085, unidad: 'video (con transcripción)', medido: true },
 }
