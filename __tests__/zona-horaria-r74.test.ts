@@ -10,15 +10,15 @@ describe('zonaDelCliente', () => {
     ['negocio local', { country: 'EC' }, 'America/Guayaquil'],
     ['país con tilde y mayúsculas', { country: 'PERÚ' }, 'America/Lima'],
     ['alias', { country: 'Rep. Dominicana' }, 'America/Santo_Domingo'],
-    ['otro continente', { country: 'Francia' }, 'Europe/Paris'],
+
   ])('%s: la zona sale del país y se declara «por_pais»', (_n, ficha, zona) => { expect(zonaDelCliente(ficha)).toEqual({ zona, origen: 'por_pais' }) })
   it('lo declarado en la ficha gana al país; una zona mal escrita no cuenta', () => {
-    expect(zonaDelCliente({ timezone: 'America/Bogota', country: 'Francia' })).toEqual({ zona: 'America/Bogota', origen: 'declarada' })
-    expect(zonaDelCliente({ timezone: 'Mi/Zona', country: 'Francia' })).toEqual({ zona: 'Europe/Paris', origen: 'por_pais' })
-    expect(zonaDelCliente({ timezone: 'UTC', country: 'Francia' }).origen).toBe('por_pais')
+    expect(zonaDelCliente({ timezone: 'America/Bogota', country: 'Ecuador' })).toEqual({ zona: 'America/Bogota', origen: 'declarada' })
+    expect(zonaDelCliente({ timezone: 'Mi/Zona', country: 'Ecuador' })).toEqual({ zona: 'America/Guayaquil', origen: 'por_pais' })
+    expect(zonaDelCliente({ timezone: 'UTC', country: 'Ecuador' }).origen).toBe('por_pais')
   })
   it('países con varias zonas y países desconocidos: SIN DATO (no se asume UTC); se precisan en la ficha', () => {
-    for (const f of [{}, { country: '' }, { country: 'País inventado' }, { country: null }, { country: 'Estados Unidos' }, { country: 'México' }, { country: 'Chile' }, { country: 'España' }, { country: 'Brasil' }]) expect(zonaDelCliente(f), JSON.stringify(f)).toEqual({ zona: null, origen: 'sin_dato' })
+    for (const f of [{}, { country: '' }, { country: 'País inventado' }, { country: null }, { country: 'Estados Unidos' }, { country: 'México' }, { country: 'Chile' }, { country: 'España' }, { country: 'Brasil' }, { country: 'Francia' }]) expect(zonaDelCliente(f), JSON.stringify(f)).toEqual({ zona: null, origen: 'sin_dato' })
     expect(zonaDelCliente({ country: 'México', timezone: 'America/Mexico_City' })).toEqual({ zona: 'America/Mexico_City', origen: 'declarada' })
   })
   it('UNA sola tabla país → zona (la de las reservas): toda zona es real y la de la cadena es exactamente la de `zonaDelPais`', () => {
