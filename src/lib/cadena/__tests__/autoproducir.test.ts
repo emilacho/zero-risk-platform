@@ -38,6 +38,33 @@ const llamar = (al: AlmacenMemoria, c: Campana, extra: Record<string, unknown> =
 
 beforeEach(() => { process.env.INTERNAL_API_KEY = 'k-interna' })
 
+describe('r74 · F7 · el parte de ENSAYO: en seco el parte no se guarda y autoproducir se ensaya sin sembrar nada a mano', () => {
+  const parteSeco = { lote: '2026-W43', valido: true, briefs: [{ brief_id: 'S1', fila_id: 'f1', familia: 'post_img' }, { brief_id: 'S2', fila_id: 'f2', familia: null }] }
+  const sinParteGuardado = async () => { const al = new AlmacenMemoria({ partes: [], config: { flujos: ['wf-copia-por-filas'] } }); const c = await al.insertarCampana(campanaBase()); return { al, c } }
+  it('con dry_run:true y un `parte_seco` válido salen sus sobres (uno por brief, con su familia) aunque NO exista ningún parte guardado', async () => {
+    const { al, c } = await sinParteGuardado()
+    const r = await filasAutoproducir(al, { campana_id: c.id, parte_seco: parteSeco, dry_run: true, ...WF })
+    expect(r.status).toBe(200); expect(r.cuerpo).toMatchObject({ emite: true, dry_run: true, emitidos: 2, rechazados: 0, parte_id: `seco:${c.id}:2026-W43`, sin_familia: 1 })
+    const ev = (await al.sala.select({ tenant_id: CLIENTE })) as unknown as Array<{ payload: { envelope_payload: Record<string, unknown> } }>
+    expect(ev.map((e) => e.payload.envelope_payload).map((p) => [p.brief_id, p.dry_run, p.familia ?? null]).sort()).toEqual([['S1', true, 'post_img'], ['S2', true, null]])
+  })
+  it('repetirlo no duplica (misma llave por brief)', async () => {
+    const { al, c } = await sinParteGuardado()
+    await filasAutoproducir(al, { campana_id: c.id, parte_seco: parteSeco, dry_run: true, ...WF })
+    expect((await filasAutoproducir(al, { campana_id: c.id, parte_seco: parteSeco, dry_run: true, ...WF })).cuerpo).toMatchObject({ emitidos: 0, duplicados: 2 })
+  })
+  it('un parte de ensayo NO válido no emite nada; y con dry_run:false el `parte_seco` se IGNORA (se exige un parte guardado de verdad)', async () => {
+    const { al, c } = await sinParteGuardado()
+    expect((await filasAutoproducir(al, { campana_id: c.id, parte_seco: { ...parteSeco, valido: false }, dry_run: true, ...WF })).cuerpo).toMatchObject({ emite: false, motivo: 'parte_no_valido' })
+    expect((await filasAutoproducir(al, { campana_id: c.id, parte_seco: parteSeco, dry_run: false, ...WF })).status).toBe(400)
+    expect(al.sala.size).toBe(0)
+  })
+  it('el interruptor de la campaña manda también en el ensayo: apagado ⇒ no emite', async () => {
+    const al = new AlmacenMemoria({ partes: [], config: { flujos: ['wf-copia-por-filas'] } }); const c = await al.insertarCampana(campanaBase({ autoproducir: false }))
+    expect((await filasAutoproducir(al, { campana_id: c.id, parte_seco: parteSeco, dry_run: true, ...WF })).cuerpo).toMatchObject({ emite: false, motivo: 'autoproducir_apagado' })
+  })
+})
+
 describe('el ensayo del encargo: 3 briefs (foto · carrusel · sin familia) → 3 sobres correctos, 0 duplicados al repetir', () => {
   it('con TODO apagado (cadena y oficina) y dry_run:true: salen 3 sobres a la sala de PIEZAS (la puerta de la oficina), cada uno con SU familia · el tercero SIN `familia`', async () => {
     const { al, c } = await montar()

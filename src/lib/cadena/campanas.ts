@@ -41,6 +41,8 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   if (ya && ya.estado === 'reemplazada') return err(409, 'E-PLAN-REEMPLAZADO', 'este plan ya fue reemplazado por uno más nuevo: no se abre nada', { campana: ya })
   if (ya) return { status: 200, cuerpo: { ya_abierta: true, campana: ya } }
 
+  // r74 · F4 · antes de armar el contexto, las sedes y su horario se llenan SOLAS con lo que el sistema ya guardó del cliente (con su fuente); si el negocio no tiene sede, no pasa nada y su calendario no se frena
+  const sedesRec = await al.recolectarSedes(clientId).catch((e: unknown) => ({ ok: false, sedes: 0, error: e instanceof Error ? e.message : String(e) }))
   const ctx = await al.cargarContexto(clientId, plan.plan_id)
   if (!ctx) return err(409, 'E-CONTEXTO', 'no se pudo armar el contexto del cliente (plan o manual ilegibles)')
 
@@ -61,7 +63,7 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   let nueva: Campana
   try { nueva = await al.insertarCampana({
     client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ini.fecha, fecha_inicio_origen: 'regla', fecha_fin: sumarDias(ini.fecha, DIAS_DE_CAMPANA - 1),
-    zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: ini.aviso,
+    zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ini.aviso, ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
     presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: false,
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
   }) } catch (e) {

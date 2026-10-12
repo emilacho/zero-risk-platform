@@ -185,7 +185,13 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
   const todas = await al.filas(campana.id, version)
   const delaTanda = todas.filter((f) => f.tanda === tanda && f.estado !== 'esquema')
-  const correccion = cuerpo.correccion && typeof cuerpo.correccion === 'object' ? (cuerpo.correccion as { fichas?: never[]; fila_ids?: string[]; modo?: 'filas' | 'tanda' }) : null
+  let correccion = cuerpo.correccion && typeof cuerpo.correccion === 'object' ? (cuerpo.correccion as { fichas?: never[]; fila_ids?: string[]; modo?: 'filas' | 'tanda' }) : null
+  // r74 · F3 · UNA TANDA GUARDADA PERO SIN VALIDAR (filas `propuesta`) es una corrección pendiente: si la llamada de corrección murió (vencida/fallida) y se reenvía el sobre SIN corrección,
+  // antes la primera pasada (c0, ok) contestaba «ya hecha» y la campaña se quedaba en `calendario` con un éxito falso. Ahora se reconstruye la corrección con los hallazgos que bloquearon.
+  if (!correccion && delaTanda.some((f) => f.estado === 'propuesta')) {
+    const abiertos = await al.hallazgosQueBloquean(campana.id, tanda)
+    correccion = { fichas: abiertos.map((h) => h.ficha) as never[], fila_ids: [...new Set(abiertos.map((h) => h.fila_id).filter((x): x is string => !!x))], modo: 'tanda' }
+  }
   if (!correccion && delaTanda.length > 0 && delaTanda.every((f) => f.estado !== 'propuesta')) return { status: 200, cuerpo: { ya_hecha: true, tanda } }
   const semanas = semanasDeTanda(tanda)
   const esquema = validarEsquemaDeSalida(ESQUEMA_CALENDARIO_TANDA)
@@ -224,7 +230,8 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   const corrida = (await al.corridasDeCampana(campana.id)).find((x) => x.id === Number(cuerpo.corrida_id) && x.paso === 'calendario')
   if (!corrida) return err(404, 'E-CORRIDA', 'la corrida no existe para esta campaña')
   if (corrida.estado !== 'en_curso') return { status: 200, cuerpo: { ya_guardada: true, estado: corrida.estado } }
-  const esCorreccion = cuerpo.correccion === true
+  // r74 · una corrida de CORRECCIÓN (clave `…:c1`) lo es aunque quien guarda no lo diga (el reenvío tras una llamada vencida pide la corrección por su cuenta)
+  const esCorreccion = cuerpo.correccion === true || /:c1$/.test(corrida.clave_idempotencia)
   const modo = cuerpo.modo === 'filas' ? 'filas' : 'tanda'
   const { objeto, reintentar } = await cerrarSegunResultado(al, corrida, leerResultado(cuerpo.resultado))
   if (objeto === null || !esTanda(objeto)) {
