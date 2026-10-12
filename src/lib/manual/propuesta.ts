@@ -46,7 +46,8 @@ const resumenDelManual = (draft: Record<string, unknown>, excluir: string[]): st
   const partes: string[] = []
   for (const k of ['positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes', 'proposito', 'mision', 'personalidad', 'mensajes_clave', 'propuestas_de_valor', 'tagline_opciones']) {
     if (excluir.includes(k) || vacio(draft[k])) continue
-    partes.push(`- ${k}: ${typeof draft[k] === 'string' ? draft[k] : JSON.stringify(draft[k])}`)
+    const t = typeof draft[k] === 'string' ? (draft[k] as string) : JSON.stringify(draft[k])
+    partes.push(`- ${k}: ${t.length > 420 ? t.slice(0, 420) + ' ⟨…⟩' : t}`)
   }
   return partes.join('\n')
 }
@@ -64,7 +65,17 @@ export function armarPedidos(entrada: { draft: Record<string, unknown>; fuentes:
   }
   const porAgente = new Map<string, string[]>()
   for (const c of aProponer) porAgente.set(CAMPOS_PROPONIBLES[c].agente, [...(porAgente.get(CAMPOS_PROPONIBLES[c].agente) ?? []), c])
-  const materia = ordenarMateria(entrada.fuentes)
+  // la evidencia NUEVA (lo que dicen los clientes, lo que se dice en los videos, las publicaciones) tiene su cupo propio: si no, la evidencia de siempre (el sitio) se la come entera
+  const esResena = (f: Fuente) => f.canal === 'resenas'
+  const esVideo = (f: Fuente) => /videos \(lo que se dice\)/.test(f.rotulo)
+  const esPublicacion = (f: Fuente) => f.canal === 'facebook' && /publicaciones/.test(f.rotulo)
+  const bloque = (titulo: string, fs: Fuente[], tope: number): string => {
+    if (!fs.length) return ''
+    const t = fs.map((f) => `(${f.rotulo})\n${f.texto}`).join('\n\n')
+    return `### ${titulo}\n${t.length > tope ? t.slice(0, tope) + '\n⟨recortado: había más⟩' : t}\n\n`
+  }
+  const nuevas = bloque('Lo que dicen los clientes (reseñas públicas)', entrada.fuentes.filter(esResena), 2500) + bloque('Lo que se dice en sus videos', entrada.fuentes.filter(esVideo), 3000) + bloque('Sus publicaciones', entrada.fuentes.filter(esPublicacion), 1200)
+  const materia = ordenarMateria(entrada.fuentes.filter((f) => !esResena(f) && !esVideo(f) && !esPublicacion(f)))
   const pedidos: Pedido[] = []
   for (const [agente, campos] of porAgente) {
     const instr = [
@@ -76,7 +87,7 @@ export function armarPedidos(entrada: { draft: Record<string, unknown>; fuentes:
     ].join('\n')
     const manual = resumenDelManual(entrada.draft, campos)
     const fijo = instr.length + manual.length + 80
-    const evid = materia.texto.slice(0, Math.max(0, TOPE_DEL_PEDIDO - fijo))
+    const evid = (nuevas + materia.texto).slice(0, Math.max(0, TOPE_DEL_PEDIDO - fijo))
     pedidos.push({ agente, campos, task: `${instr}\n\nEL MANUAL HASTA AHORA:\n${manual || '(vacío)'}\n\nEVIDENCIA DEL CLIENTE:\n${evid}`.slice(0, TOPE_DEL_PEDIDO) })
   }
   return { pedidos, faltantes, rechazados }
