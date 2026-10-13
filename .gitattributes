@@ -1,1 +1,7 @@
 scripts/worker-staging/E39-casilla-negocio/nodos/*.js -text
+
+# Los constructores de flujos de n8n leen estos archivos con expresiones regulares que esperan fin de línea LF (p. ej. cortar el module.exports del extractor):
+# en Windows, con core.autocrlf=true, quedaban en CRLF y las pruebas el-nodo-visual-construccion y los-colores-del-sitio fallaban solo ahí.
+scripts/worker-staging/**/*.js text eol=lf
+scripts/worker-staging/**/*.mjs text eol=lf
+scripts/worker-staging/E39-casilla-negocio/nodos/*.js -text
