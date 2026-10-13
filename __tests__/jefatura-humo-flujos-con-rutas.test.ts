@@ -6,7 +6,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DbFalsaJefatura } from './_helpers/dbfalsa-jefatura'
 import { FILAS_DE_POLITICA, sobre } from './_helpers/jefatura-revision'
-// @ts-expect-error · módulo .mjs sin tipos
 import { construirTurno, construirVigia } from '../scripts/worker-staging/jefatura/construir-jefatura.mjs'
 
 const h = vi.hoisted(() => ({ db: null as unknown }))

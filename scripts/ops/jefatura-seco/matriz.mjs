@@ -111,7 +111,11 @@ function limpiarSim(sim, tipo, largo) {
   return { ...sim, ...(tipo === 'plan' ? { largo_a: largo } : {}) }
 }
 
-/** todas las celdas: cliente × registro × tipo × caso (la pieza además × familia en el caso central) */
+/**
+ * todas las celdas: cliente × registro × tipo × caso (la pieza además × familia en el caso central)
+ * @param {{ tipos?: string[], clientes?: string[], registros?: string[], casos?: string[] | null, corrida?: string }} [o]
+ * @returns {any[]}
+ */
 export function celdas({ tipos = TIPOS, clientes = CLIENTES.map((c) => c.id), registros = REGISTROS, casos = null, corrida = 'c0' } = {}) {
   const out = []
   for (const cid of clientes) {

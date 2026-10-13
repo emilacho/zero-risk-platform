@@ -103,7 +103,10 @@ export function comprobar(esc, obs) {
 
 async function dormir(T, ms) { if (T.dormir) await T.dormir(ms) }
 
-/** aplica `siguiente` hasta que el estado sea esperar/cerrado (el conductor hace de n8n) */
+/**
+ * aplica `siguiente` hasta que el estado sea esperar/cerrado (el conductor hace de n8n)
+ * @returns {Promise<any>}
+ */
 export async function correrPorRuta(esc, T, o = {}) {
   const t0 = (T.ahora ?? Date.now)()
   const turnos = [], errores_de_pedido = [], notas = []
@@ -185,7 +188,10 @@ async function elegirVersionDelSeco(esc, T, revision_id, salida) {
   return { adoptada: r1.body.adoptada, ultima: r1.body.ultima, adopto_la_ultima: r1.body.adopto_la_ultima, plan_de_guardado: g, resultado_final: r1.body.resultado, razones: r1.body.razones, evaluaciones, repetida_sin_duplicar }
 }
 
-/** la puerta: lo que la ruta debe negarse a abrir. `base` = el sobre sano de una celda */
+/**
+ * la puerta: lo que la ruta debe negarse a abrir. `base` = el sobre sano de una celda
+ * @returns {Promise<any>}
+ */
 export async function puerta(caso, base, T) {
   const sobre = caso.cambia(JSON.parse(JSON.stringify(base)))
   const r = await T.llamar('revisiones', sobre)
@@ -207,7 +213,10 @@ export async function apagadaNoAbre(base, T) {
   return { id: 'apagada-no-abre', ok: fallos.length === 0, fallos, observado: { abrir: a.status, turnos: t.status, vigia: v.body?.accion } }
 }
 
-/** el recorrido por n8n de verdad: abre, despierta el flujo `jefatura · turno` y espera el cierre mirando `leer` */
+/**
+ * el recorrido por n8n de verdad: abre, despierta el flujo `jefatura · turno` y espera el cierre mirando `leer`
+ * @returns {Promise<any>}
+ */
 export async function correrPorN8n(esc, T, o = {}) {
   const t0 = (T.ahora ?? Date.now)()
   const abre = await T.llamar('revisiones', esc.sobre)

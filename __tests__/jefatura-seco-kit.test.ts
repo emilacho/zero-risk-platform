@@ -30,7 +30,7 @@ describe('el kit: clientes de práctica', () => {
   it('la matriz tiene celdas de los 5 tipos × 3 rubros × 2 registros', () => {
     const r = resumenDeLaMatriz()
     expect(Object.keys(r.por_tipo).sort()).toEqual(['brief', 'calendario', 'estrategia', 'pieza', 'plan'])
-    for (const t of ['pieza', 'brief', 'calendario', 'estrategia', 'plan']) expect(r.por_tipo[t] % 6, t).toBe(0)
+    for (const t of ['pieza', 'brief', 'calendario', 'estrategia', 'plan']) expect((r.por_tipo as Record<string, number>)[t] % 6, t).toBe(0)
   })
 })
 

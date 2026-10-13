@@ -10,7 +10,6 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-// @ts-expect-error · módulo .mjs sin tipos
 import { construirTurno, construirVigia } from '../scripts/worker-staging/jefatura/construir-jefatura.mjs'
 import { CLIENTES } from '../scripts/ops/jefatura-seco/fixtures.mjs'
 
@@ -65,7 +64,7 @@ beforeEach(() => {
 function cli(args: string[], extra: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   return new Promise((resolve) => {
     const p = spawn(process.execPath, [SCRIPT, ...args], {
-      env: { PATH: process.env.PATH ?? '', NEXT_PUBLIC_SUPABASE_URL: base, SUPABASE_SERVICE_ROLE_KEY: 'sk-falsa', N8N_API_KEY: 'nk-falsa', N8N_BASE_URL: base, SALA_DISPATCH_KEY: LLAVE_SECRETA, ...extra },
+      env: { PATH: process.env.PATH ?? '', NEXT_PUBLIC_SUPABASE_URL: base, SUPABASE_SERVICE_ROLE_KEY: 'sk-falsa', N8N_API_KEY: 'nk-falsa', N8N_BASE_URL: base, SALA_DISPATCH_KEY: LLAVE_SECRETA, ...extra } as unknown as NodeJS.ProcessEnv,
     })
     let out = ''
     p.stdout.on('data', (d) => (out += d)); p.stderr.on('data', (d) => (out += d))

@@ -87,7 +87,7 @@ describe('CEGUERA · el pedido al revisor externo no trae fichas ni hilo (3 rubr
   it.each(CLIENTES.flatMap((c: { id: string }) => ['tuteo', 'voseo'].map((r) => [c.id, r] as const)))('%s · %s', (id, registro) => {
     for (const tipo of ['pieza', 'brief', 'calendario', 'estrategia', 'plan']) {
       const cel = celdas({ tipos: [tipo], clientes: [id], registros: [registro], casos: [tipo === 'plan' ? 'A-sin-fichas-gpt-sin-hallazgos' : tipo === 'pieza' ? 'sin-fichas-gpt-vacio' : 'sin-fichas'] })[0]
-      const p = cel.sobre.payload
+      const p = cel.sobre.payload as Json
       const pedido = armarPedidoCiego({ tipo: tipo as never, texto: p.texto, imagenes: p.imagenes, contexto: p.contexto })
       // trae lo revisado COMPLETO y el contexto (el manual vigente entre ellos)
       expect(pedido.texto, `${tipo} trae el artefacto`).toContain(String(p.texto).slice(0, 200))
