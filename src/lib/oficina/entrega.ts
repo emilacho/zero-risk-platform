@@ -17,6 +17,20 @@ export function nombreDeArchivo(a: { fecha?: string | null; hora?: string | null
   return `${fecha}_${hora}_${ascii(a.red)}_${ascii(a.formato)}_${a.brief_id.replace(/[^A-Za-z0-9_-]/g, '-')}_${nn}-de-${NN}.${ascii(a.ext)}`
 }
 
+/**
+ * r79 · D5 · CUÁNDO se publica la pieza: manda la FILA del calendario (fecha y hora que la cadena le puso); la frase «aprobar antes de…» de la ficha del brief solo si no hay fila.
+ * `fila` viene de `encargo.sala_ref.fila` (la puerta lo copia del sobre). Una fecha o una hora que no existen no se usan (no se corrigen solas).
+ */
+export function cuandoSePublica(salaRef: Record<string, unknown> | null | undefined, frase: { fecha: string; hora: string | null } | null): { fecha: string; hora: string | null; de: 'fila' | 'ficha' } | null {
+  const f = salaRef && typeof salaRef.fila === 'object' && salaRef.fila && !Array.isArray(salaRef.fila) ? (salaRef.fila as Record<string, unknown>) : null
+  const fecha = f && typeof f.fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f.fecha) && esFechaReal(f.fecha) ? f.fecha : null
+  if (fecha) {
+    const h = typeof f!.hora === 'string' && /^\d{2}:\d{2}/.test(f!.hora) && esHoraReal(f!.hora.slice(0, 5)) ? f!.hora.slice(0, 5) : null
+    return { fecha, hora: h, de: 'fila' }
+  }
+  return frase ? { fecha: frase.fecha, hora: frase.hora, de: 'ficha' } : null
+}
+
 /** el texto EXACTO para pegar: pie de foto, línea en blanco y los hashtags (con # una sola vez) */
 export function textoParaCopiar(p: { pie_de_foto: string; hashtags: string[] }): string {
   const tags = p.hashtags.map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ')

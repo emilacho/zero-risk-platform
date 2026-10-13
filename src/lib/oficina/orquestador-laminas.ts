@@ -6,7 +6,7 @@
  */
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { elementosDelKit, esCarrusel, planDeOrigen, esKitDeHistorias, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
-import { aUtc, chequeosDeEntrega, leerMedidas, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega, type FilaDeFormato } from './entrega'
+import { aUtc, chequeosDeEntrega, cuandoSePublica, leerMedidas, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega, type FilaDeFormato } from './entrega'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import {
   armarLaminasDeCarrusel, armarLaminasDeKit, chequeosDeLaminas, problemasDeContrato, problemasDeHistoria, problemasDeKit, refsInvalidos, textoFueraDelAutor,
@@ -348,15 +348,15 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoL> {
 
   if (!kit) {
     const copia = datos(e, 'copy_carrusel') as unknown as { pie_de_foto: string; hashtags: string[] }
-    const limite = fechaLimiteDelBrief(b.brief.aprueba)
-    expires = limite ? aUtc(limite.fecha, limite.hora, zona) : null
-    png.forEach((a, i) => { a.nombre = nombreDeArchivo({ fecha: null, hora: null, red: redBrief, formato: 'carrusel', brief_id: b.brief.id, n: i + 1, de: N, ext: leerMedidas(a.bytes)?.tipo === 'jpeg' ? 'jpg' : 'png' }); nombresPng.push(a.nombre) })
+    const cuando = cuandoSePublica(enc.sala_ref, fechaLimiteDelBrief(b.brief.aprueba))
+    expires = cuando ? aUtc(cuando.fecha, cuando.hora, zona) : null
+    png.forEach((a, i) => { a.nombre = nombreDeArchivo({ fecha: cuando?.de === 'fila' ? cuando.fecha : null, hora: cuando?.de === 'fila' ? cuando.hora : null, red: redBrief, formato: 'carrusel', brief_id: b.brief.id, n: i + 1, de: N, ext: leerMedidas(a.bytes)?.tipo === 'jpeg' ? 'jpg' : 'png' }); nombresPng.push(a.nombre) })
     const fila = await P.almacen.leerFormato(redBrief, 'carrusel')
     const man = manifiesto(png, { encargo_id: enc.id, brief_id: b.brief.id, aprobada_version: e.artefactos['copy_carrusel']?.version ?? 1, expires_at: expires, imagen_generada: enc.imagen_generada })
     fichasTodas.push(...chequeosDeEntrega(png, fila ?? null, { pie_de_foto: copia.pie_de_foto, hashtags: copia.hashtags }, man))
     textoCopiable = textoParaCopiar({ pie_de_foto: copia.pie_de_foto, hashtags: copia.hashtags })
-    const base = nombreDeArchivo({ fecha: null, hora: null, red: redBrief, formato: 'carrusel', brief_id: b.brief.id, n: 1, de: N, ext: 'txt' }).replace(/_\d+-de-\d+\.txt$/, '')
-    hojaTexto = `# Publicar a mano · ${b.brief.id}\nRed: ${b.brief.red} · carrusel de ${N} láminas, en el orden de los nombres de archivo\nHora de publicación: ${limite ? `(aprobar antes de ${limite.fecha})` : 'sin fecha en el brief: se decide al aprobar'}\n${enc.imagen_generada ? '⚠️ Alguna imagen es GENERADA, no una foto real del cliente.\n' : ''}${txt((copia as unknown as Record<string, unknown>).nota_para_quien_publica) ? `Nota: ${txt((copia as unknown as Record<string, unknown>).nota_para_quien_publica)}\n` : ''}\n## Pasos\n${(fila?.pasos_publicacion ?? ['(sin especificación de formato)']).map((x, i) => `${i + 1}. ${x}`).join('\n')}\n`
+    const base = nombreDeArchivo({ fecha: cuando?.de === 'fila' ? cuando.fecha : null, hora: cuando?.de === 'fila' ? cuando.hora : null, red: redBrief, formato: 'carrusel', brief_id: b.brief.id, n: 1, de: N, ext: 'txt' }).replace(/_\d+-de-\d+\.txt$/, '')
+    hojaTexto = `# Publicar a mano · ${b.brief.id}\nRed: ${b.brief.red} · carrusel de ${N} láminas, en el orden de los nombres de archivo\nHora de publicación: ${cuando ? (cuando.de === 'fila' ? `${cuando.fecha}${cuando.hora ? ' ' + cuando.hora : ''}${zona ? ' (' + zona + ')' : ' (zona del cliente sin registrar)'}` : `(aprobar antes de ${cuando.fecha})`) : 'sin fecha: se decide al aprobar'}\n${enc.imagen_generada ? '⚠️ Alguna imagen es GENERADA, no una foto real del cliente.\n' : ''}${txt((copia as unknown as Record<string, unknown>).nota_para_quien_publica) ? `Nota: ${txt((copia as unknown as Record<string, unknown>).nota_para_quien_publica)}\n` : ''}\n## Pasos\n${(fila?.pasos_publicacion ?? ['(sin especificación de formato)']).map((x, i) => `${i + 1}. ${x}`).join('\n')}\n`
     extras.push({ nombre: `${base}_texto.txt`, bytes: Buffer.from(textoCopiable, 'utf8'), tipo: 'text/plain' }, { nombre: `${base}_publicar.md`, bytes: Buffer.from(hojaTexto, 'utf8'), tipo: 'text/markdown' })
     return finalizarEntrega(P, enc, png, extras, man, fichasTodas, expires, textoCopiable, nombresPng, [])
   }
@@ -367,20 +367,22 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoL> {
   const filas = new Map<string, FilaDeFormato | null>()
   const lineas: string[] = []
   const expiraciones: string[] = []
+  const delaFila = cuandoSePublica(enc.sala_ref, null)
   for (let i = 0; i < png.length; i++) {
     const el = b.elementos.find((x) => x.ref === refs[i])
     const destino = el?.destino ?? 'historia'
     const red = destino === 'estado' ? 'whatsapp' : redBrief
-    png[i].nombre = nombreDeArchivo({ fecha: el?.fecha ?? null, hora: el?.hora ?? null, red, formato: destino, brief_id: b.brief.id, n: i + 1, de: N, ext: leerMedidas(png[i].bytes)?.tipo === 'jpeg' ? 'jpg' : 'png' })
+    png[i].nombre = nombreDeArchivo({ fecha: el?.fecha ?? delaFila?.fecha ?? null, hora: el?.fecha ? (el.hora ?? null) : (delaFila?.hora ?? null), red, formato: destino, brief_id: b.brief.id, n: i + 1, de: N, ext: leerMedidas(png[i].bytes)?.tipo === 'jpeg' ? 'jpg' : 'png' })
     nombresPng.push(png[i].nombre)
     const clave = `${red}/${destino}`
     if (!filas.has(clave)) filas.set(clave, await P.almacen.leerFormato(red, destino))
     const c = copia.find((x) => x.ref === refs[i])
     const t = textoParaCopiar({ pie_de_foto: c?.acompanamiento ?? '', hashtags: c?.hashtags ?? [] })
     extras.push({ nombre: png[i].nombre.replace(/\.[a-z]+$/, '_texto.txt'), bytes: Buffer.from(t, 'utf8'), tipo: 'text/plain' })
-    const cuando = el?.fecha ? aUtc(el.fecha, el.hora, zona) : null
+    const dia = el?.fecha ?? delaFila?.fecha ?? null, hr = el?.fecha ? (el.hora ?? null) : (delaFila?.hora ?? null)
+    const cuando = dia ? aUtc(dia, hr, zona) : null
     if (cuando) expiraciones.push(cuando)
-    lineas.push(`- ${png[i].nombre} → ${destino}${el?.fecha ? ` · ${el.fecha}${el.hora ? ' ' + el.hora : ''}${zona ? ` (${zona})` : ' (sin zona del cliente)'}` : ' · sin fecha'} · texto: ${png[i].nombre.replace(/\.[a-z]+$/, '_texto.txt')}`)
+    lineas.push(`- ${png[i].nombre} → ${destino}${dia ? ` · ${dia}${hr ? ' ' + hr : ''}${zona ? ` (${zona})` : ' (sin zona del cliente)'}` : ' · sin fecha'} · texto: ${png[i].nombre.replace(/\.[a-z]+$/, '_texto.txt')}`)
   }
   expires = expiraciones.length ? expiraciones.sort()[0] : null
   const man = manifiesto(png, { encargo_id: enc.id, brief_id: b.brief.id, aprobada_version: e.artefactos['copy_kit']?.version ?? 1, expires_at: expires, imagen_generada: enc.imagen_generada, elementos: png.length })

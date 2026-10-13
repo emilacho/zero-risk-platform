@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { abrirEncargo, avanzar, recibirResultado } from '../orquestador'
-import { TARGET_STEP_PRODUCIR } from '../sobre'
-import { BUENOS_PROMPTS, CLIENTE, PARTE, PARTE_OTRO_PRODUCTO, PARTE_REAL, PIEZA_OK, FICHAS_VACIAS, crearMemoria, correr, direccionGenerada, direccionReal, observacion, REGLAS_CEVICHE, type Guion, type Memoria } from './memoria'
+import { TARGET_STEP_PRODUCIR, validarSobre } from '../sobre'
+import { codificarPng } from '../encaje'
+import { BUENOS_PROMPTS, CLIENTE, PARTE, PARTE_OTRO_PRODUCTO, PARTE_REAL, PIEZA_OK, FICHAS_VACIAS, FORMATO_1X1, crearMemoria, correr, direccionGenerada, direccionReal, observacion, REGLAS_CEVICHE, type Guion, type Memoria } from './memoria'
 
 const sobre = (o: Record<string, unknown> = {}) => ({ parte_id: PARTE, brief_id: 'BRF-0003', dry_run: true, familia: 'post_img', ...o })
 const abrir = (M: Memoria, cuerpo: unknown = sobre(), extra: Record<string, unknown> = {}) => abrirEncargo(M.P, { cuerpo, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR, ...extra })
@@ -556,6 +557,39 @@ describe('salida real (dry_run = false): pieza draft + bandeja con output_id y v
     expect(M.llamadas.archivos.sort()).toEqual([
       'manifest.json', 'sin-fecha_sin-hora_instagram_foto_BRF-0003_01-de-01.png', 'sin-fecha_sin-hora_instagram_foto_BRF-0003_01-de-01_publicar.md', 'sin-fecha_sin-hora_instagram_foto_BRF-0003_01-de-01_texto.txt',
     ].sort())
+  })
+  it('r79 · D5 · con la fila del calendario, la fecha y la hora salen de LA FILA (nombres, hoja y vencimiento); la frase de la ficha ya no manda', async () => {
+    const M = crearMemoria()
+    const id = await abierto(M, sobre({ dry_run: false, fila_id: 'S01-D2-A', fecha: '2026-10-20', hora: '10:30' }))
+    await correr(M, id, guionGenerada())
+    expect(M.llamadas.archivos.sort()).toEqual([
+      '2026-10-20_1030_instagram_foto_BRF-0003_01-de-01.png', '2026-10-20_1030_instagram_foto_BRF-0003_01-de-01_publicar.md', '2026-10-20_1030_instagram_foto_BRF-0003_01-de-01_texto.txt', 'manifest.json',
+    ].sort())
+    expect(M.llamadas.archivos.some((n) => n.includes('sin-fecha'))).toBe(false)
+    expect((M.llamadas.bandeja[0] as { expires_at: string }).expires_at).toBe('2026-10-20T15:30:00.000Z') // 10:30 de Guayaquil (UTC−5), no el «14 de octubre» de la ficha
+  })
+  it('r79 · D6 · la imagen generada 1024×1024 contra un formato 4:5: el acabado la encaja por código y la entrega sale SIN la ficha de proporción', async () => {
+    const parte = PARTE_REAL.replace('Proporción cuadrada (1:1) o vertical (4:5) para feed de Instagram.', 'Proporción vertical (4:5) para feed de Instagram.')
+    expect(parte).not.toBe(PARTE_REAL)
+    const M = crearMemoria({ parte })
+    const cuadrada = codificarPng({ ancho: 1024, alto: 1024, datos: (() => { const d = new Uint8Array(1024 * 1024 * 4).fill(255); for (let y = 400; y < 600; y++) for (let x = 300; x < 700; x++) { const i = (y * 1024 + x) * 4; d[i] = d[i + 1] = d[i + 2] = 0 } return d })() })
+    M.P.descargar = async () => cuadrada
+    const original = M.P.almacen.leerFormato
+    M.P.almacen.leerFormato = async (red, formato) => (formato === 'foto_4x5' ? { ...FORMATO_1X1, formato: 'foto_4x5', ancho: 1080, alto: 1350 } : original(red, formato))
+    const id = await abierto(M, sobre({ dry_run: false }))
+    const { ultima } = await correr(M, id, guionGenerada())
+    expect(ultima.cuerpo.estado).toBe('cerrado')
+    const fichas = M.encargos.get(id)!.estado_del_motor.fichas
+    expect(fichas.filter((f) => /proporción/.test(f.que ?? '') && f.gravedad === 'bloquea')).toHaveLength(0)
+    expect(fichas.some((f) => /se ajustó por código/.test(f.que ?? ''))).toBe(true)
+  })
+  it('r79 · D5 · fecha sin hora: el nombre lleva la fecha y «sin-hora»; una fecha inventada (31 de febrero) no entra y la sala rechaza el sobre', async () => {
+    const M = crearMemoria()
+    const id = await abierto(M, sobre({ dry_run: false, fila_id: 'S01-D2-A', fecha: '2026-10-20' }))
+    await correr(M, id, guionGenerada())
+    expect(M.llamadas.archivos.some((n) => n.startsWith('2026-10-20_sin-hora_instagram_foto_'))).toBe(true)
+    expect(validarSobre({ parte_id: '11111111-1111-4111-8111-111111111111', brief_id: 'B1', dry_run: true, fecha: '2026-02-31' }).ok).toBe(false)
+    expect(validarSobre({ parte_id: '11111111-1111-4111-8111-111111111111', brief_id: 'B1', dry_run: true, fecha: '2026-10-20', hora: '25:00' }).ok).toBe(false)
   })
   it('sin zona del cliente la pieza NO vence y se declara (expires_at nulo), nunca se inventa', async () => {
     const M = crearMemoria({ fuentes: { zona: null } })

@@ -40,6 +40,8 @@ export interface OrchestratorInput extends ConsumerTickInput {
    *  window · default 200 · the FILTER then keeps only un-processed
    *  intake events bounded by batch_size. */
   readonly scan_window?: number
+  /** r79 · D2 · con `only_event_id`: el hilo del sobre; si viene, la lectura es solo de ese hilo (no depende de la ventana del cliente). */
+  readonly only_stream_id?: string
   /**
    * Canon canonical · cap-wire (SPEC lazo agentico 2026-06-05) ·
    * forwarded to `dispatchOneIntake` so the §150 cap call-site can query
@@ -95,11 +97,16 @@ export async function consumeIntakeTick(
     }
   }
   const scan_window = Math.max(1, Math.min(input.scan_window ?? 200, 1000))
+  // r79 · D2 · `sequence_desc` ordena PRIMERO por stream_id (texto) y luego por secuencia: la «ventana de los últimos N» era en realidad los N primeros hilos por orden alfabético, y un sobre nuevo
+  // (secuencia 1, hilo con id al azar) caía fuera en cuanto el cliente pasaba de N eventos (4 de 12 sobres lentos en el ensayo del 12-oct; todos con posición > 50). Ahora:
+  //  · con el hilo conocido (despacho inmediato) se lee SOLO ese hilo: el sobre, sus reclamos y sus marcas (todo lo que decide si sale);
+  //  · sin hilo (el reloj) se leen los N eventos MÁS RECIENTES.
   const filters: ReadFilters = {
     tenant_id: input.tenant_id,
     event_type: 'step_completed',
     limit: scan_window,
-    order: 'sequence_desc',
+    order: 'occurred_at_desc',
+    ...(input.only_event_id !== undefined && input.only_stream_id ? { stream_id: input.only_stream_id } : {}),
   }
   const events = await input.storage.select(filters)
 

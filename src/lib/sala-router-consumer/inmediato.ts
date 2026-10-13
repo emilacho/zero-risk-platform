@@ -31,6 +31,8 @@ export interface ResultadoInmediato {
 export interface EntradaInmediato extends Pick<OrchestratorInput, 'storage' | 'cap_spend_query' | 'cap_usd_query' | 'cap_alerter' | 'cap_enforce_override' | 'enabled' | 'n8n_base_url' | 'fetcher' | 'now_ms'> {
   readonly tenant_id: string
   readonly event_id: string
+  /** r79 · el hilo del sobre: la lectura del tic se limita a él (sin esto dependía de que el sobre cayera en la ventana del cliente) */
+  readonly stream_id?: string
   /** pruebas: sustituyen a las palancas de entorno */
   readonly palancas?: { inmediato?: boolean; consumidor?: boolean; paquete?: boolean }
   /** tope de tiempo del tic (ms) · por omisión el mismo del reloj */
@@ -56,6 +58,7 @@ export async function despacharAlEntrar(a: EntradaInmediato): Promise<ResultadoI
       batch_size: 1,
       scan_window: 50,
       only_event_id: a.event_id,
+      ...(a.stream_id ? { only_stream_id: a.stream_id } : {}),
       claim_before_fire: true,
       deadline_at_ms: ahora() + tope,
       ...(a.enabled !== undefined ? { enabled: a.enabled } : {}),

@@ -69,10 +69,13 @@ export type ResultadoDePreparar =
  */
 export async function prepararCorrida(
   al: Almacen, campana: Campana, paso: Paso, clave: string, workflowId: string, workflowExecutionId: string, ahora: string, modelo: string, esquemaHash: string | null,
+  /** r79 · D1: una corrida `ok` solo vale como «ya hecha» si el objeto validado EXISTE. Sin esta función (fechas) se confía en la corrida. */
+  existeElObjeto?: () => Promise<boolean>,
 ): Promise<ResultadoDePreparar> {
   const previas = (await al.corridasDeCampana(campana.id)).filter((c) => c.paso === paso && c.clave_idempotencia === clave)
   const ok = previas.find((c) => c.estado === 'ok')
-  if (ok) return { tipo: 'ya_hecha', corrida: ok }
+  // la llamada pudo cerrar `ok` y caerse antes de guardar el objeto: sin objeto, ese `ok` no cuenta y se abre el siguiente intento (el tope de intentos sigue contando todas las previas)
+  if (ok && (!existeElObjeto || await existeElObjeto())) return { tipo: 'ya_hecha', corrida: ok }
   for (const c of previas.filter((x) => x.estado === 'en_curso')) {
     if (c.plazo_en && Date.parse(ahora) > Date.parse(c.plazo_en)) await al.cerrarCorrida(c.id, { estado: 'vencida', error: 'la llamada pasó su plazo sin volver', plazo_en: c.plazo_en })
     else return { tipo: 'en_curso', corrida: c }

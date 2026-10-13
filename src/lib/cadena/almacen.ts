@@ -44,6 +44,14 @@ export interface EstrategiaGuardada {
   seco: boolean
 }
 
+/** lo que la copia por filas HABRÍA escrito en `client_historical_outputs` (la fila del parte), más el lote y cuándo vence el ensayo */
+export interface ParteSecoAGuardar {
+  client_id: string
+  lote: string
+  fila: { title: string; content: string; content_text?: string; producing_agent?: string; provenance_tag: Record<string, unknown> }
+  vence_en: string
+}
+
 export type EstadoCorrida = 'en_curso' | 'ok' | 'fallida' | 'vencida' | 'cerrada_por_tope'
 export interface Corrida {
   id: number
@@ -161,6 +169,13 @@ export interface Almacen {
   // autoproducir (r65) · el parte guardado, el freno de gasto y el buzón de la sala
   /** el parte de trabajo guardado (`campaign_brief_pack`) con la familia por brief que dejó la copia por filas; `null` si no existe o no es un parte */
   parteDe(parteId: string): Promise<ParteGuardada | null>
+  /**
+   * r79 · D3 · el parte de un ensayo en seco, guardado MARCADO como seco (`provenance_tag.seco`) y con otra `lote_key` (`seco:<lote>`) para que NUNCA cuente como «ya hay parte de este plan» de un lote real.
+   * Idempotente por (cliente, lote): repetir el ensayo reutiliza el mismo parte. Devuelve su id (uuid), el que la puerta de la oficina sí encuentra. Vence solo (`limpiarPartesSecos`).
+   */
+  guardarParteSeco(p: ParteSecoAGuardar): Promise<string>
+  /** r79 · D3 · borra los partes de ensayo ya vencidos (solo filas marcadas seco); devuelve cuántos */
+  limpiarPartesSecos(ahora: string): Promise<number>
   /** el freno de gasto §150 (y el tope por cliente de #487) sobre este cliente: `bloqueado` = ya al techo de las 24 h */
   frenoDeGasto(clientId: string): Promise<{ bloqueado: boolean; motivo?: string }>
   /** r74 · F4 · llena las sedes y su horario con lo que el sistema YA guardó del cliente (sitio · Instagram · Mapas), con su fuente · US$ 0 · un fallo se declara, no frena */

@@ -10,7 +10,8 @@ import crypto from 'node:crypto'
 import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, esPostDeImagen, type BriefLeido } from './brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
-import { aUtc, chequeosDeEntrega, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
+import { encajarAProporcion } from './encaje'
+import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoAlRevisor } from './ciego'
 import { armarPedidoL, contextoDeRevisorL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
@@ -53,6 +54,12 @@ const contexto = (e: Estado): ContextoDePedido => {
 const turnoDe = (e: Estado) => e.pasos_ejecutados + 1
 
 // ───────────────────────── abrir
+/** r79 · D5 · la fila del calendario (id, fecha, hora) viaja con el encargo dentro de `sala_ref.fila`; sin esos datos `sala_ref` queda como llegó */
+function salaRefConFila(ref: Record<string, unknown> | null | undefined, s: { fila_id?: string; fecha?: string; hora?: string }): Record<string, unknown> | null {
+  if (!s.fecha && !s.fila_id) return ref ?? null
+  return { ...(ref ?? {}), fila: { ...(s.fila_id ? { id: s.fila_id } : {}), ...(s.fecha ? { fecha: s.fecha } : {}), ...(s.hora ? { hora: s.hora } : {}) } }
+}
+
 export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; client_id: string; target_step_id: string; sala_ref?: Record<string, unknown> | null; prueba?: boolean; permitir_apagada?: boolean }): Promise<Respuesta> {
   const v = validarSobre(entrada.cuerpo)
   if (!v.ok) return r(400, { error: v.codigo, errores: v.errores })
@@ -65,7 +72,7 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia })
   const s: Sobre = v.sobre
   const tope = Math.min(s.tope_usd ?? pl.plantilla.limites.tope_encargo_usd, pl.plantilla.limites.tope_encargo_usd)
-  const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: entrada.sala_ref ?? null, estado_del_motor: estadoInicial() })
+  const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: salaRefConFila(entrada.sala_ref, s), estado_del_motor: estadoInicial() })
   if (!c.ok) return r(500, { error: 'almacen_error', detalle: c.error })
   if (!c.nuevo) return r(200, { accion: 'ya_existia', encargo_id: c.encargo.id, estado: c.encargo.estado })
   const sal = await avanzar(P, c.encargo.id)
@@ -329,24 +336,32 @@ async function empaquetar(P: Puertos, enc: Encargo, pl: Plantilla): Promise<Sali
   const red = b.brief.red.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() || 'red'
   const formatoClave = b.proporcion === '4:5' ? 'foto_4x5' : 'foto_1x1'
   const fila = await P.almacen.leerFormato(red, formatoClave)
-  const limite = fechaLimiteDelBrief(b.brief.aprueba)
-  const expires = limite ? aUtc(limite.fecha, limite.hora, b.F.zona) : null
+  const cuando = cuandoSePublica(enc.sala_ref, fechaLimiteDelBrief(b.brief.aprueba))
+  const expires = cuando ? aUtc(cuando.fecha, cuando.hora, b.F.zona) : null
   const archivos: ArchivoDeEntrega[] = []
   const nombres: string[] = []
+  let ajuste: { modo: string; detalle: string } | null = null
   if (fin.url) {
-    const bytes = await P.descargar(String(fin.url))
+    let bytes = await P.descargar(String(fin.url))
     if (bytes) {
+      // r79 · D6 · el acabado encaja la imagen a la proporción del formato POR CÓDIGO (recorta si lo quitado es casi vacío; si no, la encaja entera con franjas): ya no bloquea la entrega por eso
+      const medOriginal = leerMedidas(bytes)
+      if (fila && medOriginal?.tipo === 'png' && Math.abs(medOriginal.ancho / medOriginal.alto - fila.ancho / fila.alto) > 0.01) {
+        const enc2 = encajarAProporcion(bytes, { ancho: fila.ancho, alto: fila.alto })
+        if (enc2.modo !== 'no_soportada') { bytes = enc2.bytes; ajuste = { modo: enc2.modo, detalle: enc2.detalle } }
+      }
       const med = leerMedidas(bytes)
       const ext = med?.tipo === 'jpeg' ? 'jpg' : 'png'
-      const nombre = nombreDeArchivo({ fecha: null, hora: null, red, formato: 'foto', brief_id: b.brief.id, n: 1, de: 1, ext })
+      const nombre = nombreDeArchivo({ fecha: cuando?.de === 'fila' ? cuando.fecha : null, hora: cuando?.de === 'fila' ? cuando.hora : null, red, formato: 'foto', brief_id: b.brief.id, n: 1, de: 1, ext })
       archivos.push({ nombre, bytes }); nombres.push(nombre)
     }
   }
   const texto = textoParaCopiar({ pie_de_foto: String(pz.pie_de_foto ?? ''), hashtags: (pz.hashtags as string[]) ?? [] })
-  const baseNombre = nombreDeArchivo({ fecha: null, hora: null, red, formato: 'foto', brief_id: b.brief.id, n: 1, de: 1, ext: 'txt' }).replace(/\.txt$/, '')
-  const hoja = `# Publicar a mano · ${b.brief.id}\nRed: ${b.brief.red} · formato: ${b.brief.formato} · proporción ${b.proporcion}\nHora de publicación: ${limite ? `(aprobar antes de ${limite.fecha})` : 'sin fecha en el brief: se decide al aprobar'}\n${(fin.origen === 'generada') ? '⚠️ La imagen es GENERADA, no una foto del producto real.\n' : ''}${fin.nota ? `Nota de la imagen: ${fin.nota}\n` : ''}${pz.nota_para_quien_publica ? `Nota: ${String(pz.nota_para_quien_publica)}\n` : ''}\n## Pasos\n${(fila ? [] : ['(sin especificación de formato)']).join('\n')}\n`
+  const baseNombre = nombreDeArchivo({ fecha: cuando?.de === 'fila' ? cuando.fecha : null, hora: cuando?.de === 'fila' ? cuando.hora : null, red, formato: 'foto', brief_id: b.brief.id, n: 1, de: 1, ext: 'txt' }).replace(/\.txt$/, '')
+  const hoja = `# Publicar a mano · ${b.brief.id}\nRed: ${b.brief.red} · formato: ${b.brief.formato} · proporción ${b.proporcion}\nHora de publicación: ${cuando ? (cuando.de === 'fila' ? `${cuando.fecha}${cuando.hora ? ' ' + cuando.hora : ''}${b.F.zona ? ' (' + b.F.zona + ')' : ' (zona del cliente sin registrar)'}` : `(aprobar antes de ${cuando.fecha})`) : 'sin fecha: se decide al aprobar'}\n${(fin.origen === 'generada') ? '⚠️ La imagen es GENERADA, no una foto del producto real.\n' : ''}${fin.nota ? `Nota de la imagen: ${fin.nota}\n` : ''}${pz.nota_para_quien_publica ? `Nota: ${String(pz.nota_para_quien_publica)}\n` : ''}\n## Pasos\n${(fila ? [] : ['(sin especificación de formato)']).join('\n')}\n`
   const man = manifiesto(archivos, { encargo_id: enc.id, brief_id: b.brief.id, aprobada_version: e.artefactos['pieza_post']?.version ?? 1, expires_at: expires, imagen_generada: fin.origen === 'generada' })
   const fichas = chequeosDeEntrega(archivos, fila ?? null, { pie_de_foto: String(pz.pie_de_foto ?? ''), hashtags: (pz.hashtags as string[]) ?? [] }, man)
+  if (ajuste) fichas.push(fichaNueva('entrega-imagen-encajada', 'chequeo', 'imagen', 'sugerencia', `la imagen se ajustó por código al formato: ${ajuste.detalle}`, 'proporción del formato', 'mirar la imagen ajustada antes de aprobar'))
   const sinImagen = archivos.length === 0
   const todos = [...archivos.map((a) => ({ ...a, tipo: a.nombre.endsWith('.jpg') ? 'image/jpeg' : 'image/png' })),
     { nombre: `${baseNombre}_texto.txt`, bytes: Buffer.from(texto, 'utf8'), tipo: 'text/plain' },

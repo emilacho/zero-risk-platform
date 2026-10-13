@@ -5,12 +5,16 @@
  *  · `client_id`/`tenant_id` DENTRO del payload se ignoran siempre: el cliente lo pone la sala;
  *  · `familia` ausente, o no listada en las activas, o la oficina apagada ⇒ PASARELA a la pieza simple, cuerpo intacto (el comportamiento de hoy).
  */
+import { esFechaReal, esHoraReal } from './texto'
 export const TARGET_STEP_PRODUCIR = 'router.dispatch.brief/parte-listo.producir'
 
-export interface Sobre { parte_id: string; brief_id: string; dry_run: boolean; tope_usd?: number; familia?: string }
+/** r79 · D5 · `fila_id`, `fecha` y `hora` son del calendario (la fila que originó el brief): la entrega los usa para nombrar, fechar y vencer la pieza */
+export interface Sobre { parte_id: string; brief_id: string; dry_run: boolean; tope_usd?: number; familia?: string; fila_id?: string; fecha?: string; hora?: string }
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const RE_BRIEF = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/
 const RE_FAMILIA = /^[a-z][a-z0-9_]{0,39}$/
+const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/
+const RE_HORA = /^\d{2}:\d{2}(:\d{2})?$/
 
 export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorados: string[] } | { ok: false; codigo: 'dry_run_ausente' | 'entrada_invalida'; errores: string[] } {
   if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) return { ok: false, codigo: 'entrada_invalida', errores: ['el cuerpo debe ser un objeto'] }
@@ -21,11 +25,14 @@ export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorad
   if (typeof b.brief_id !== 'string' || !RE_BRIEF.test(b.brief_id)) errores.push('`brief_id` inválido')
   if (b.tope_usd !== undefined && !(typeof b.tope_usd === 'number' && b.tope_usd > 0 && b.tope_usd <= 10)) errores.push('`tope_usd` debe ser un número mayor que 0 y no más de 10')
   if (b.familia !== undefined && !(typeof b.familia === 'string' && RE_FAMILIA.test(b.familia))) errores.push('`familia` inválida')
+  if (b.fila_id !== undefined && !(typeof b.fila_id === 'string' && RE_BRIEF.test(b.fila_id))) errores.push('`fila_id` inválido')
+  if (b.fecha !== undefined && !(typeof b.fecha === 'string' && RE_FECHA.test(b.fecha) && esFechaReal(b.fecha))) errores.push('`fecha` debe ser una fecha real aaaa-mm-dd')
+  if (b.hora !== undefined && !(typeof b.hora === 'string' && RE_HORA.test(b.hora) && esHoraReal(b.hora.slice(0, 5)))) errores.push('`hora` debe ser una hora real hh:mm')
   if (errores.length) return { ok: false, codigo: 'entrada_invalida', errores }
   const ignorados = ['client_id', 'tenant_id'].filter((k) => k in b)
   return {
     ok: true, ignorados,
-    sobre: { parte_id: b.parte_id as string, brief_id: b.brief_id as string, dry_run: b.dry_run, ...(b.tope_usd !== undefined ? { tope_usd: b.tope_usd as number } : {}), ...(b.familia !== undefined ? { familia: b.familia as string } : {}) },
+    sobre: { parte_id: b.parte_id as string, brief_id: b.brief_id as string, dry_run: b.dry_run, ...(b.tope_usd !== undefined ? { tope_usd: b.tope_usd as number } : {}), ...(b.familia !== undefined ? { familia: b.familia as string } : {}), ...(b.fila_id !== undefined ? { fila_id: b.fila_id as string } : {}), ...(b.fecha !== undefined ? { fecha: b.fecha as string } : {}), ...(b.hora !== undefined ? { hora: (b.hora as string).slice(0, 5) } : {}) },
   }
 }
 

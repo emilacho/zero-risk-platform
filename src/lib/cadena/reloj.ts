@@ -23,6 +23,8 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
 
   const lineas: Linea[] = []
   const aplicado: string[] = []
+  // r79 · D3 · los partes de ensayo vencidos se borran solos (mejor esfuerzo: nunca frena el latido)
+  try { const n = await al.limpiarPartesSecos(ahora); if (n > 0) aplicado.push(`${n} parte(s) de ensayo vencido(s) borrado(s)`) } catch { /* se barre en la siguiente vuelta */ }
   const previo = await al.leerConfig('ultimo_latido')
   const latidoMax = typeof (await al.leerConfig('latido_max_horas')) === 'number' ? ((await al.leerConfig('latido_max_horas')) as number) : 18
 
