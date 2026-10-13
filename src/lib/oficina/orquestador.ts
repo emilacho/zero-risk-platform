@@ -412,7 +412,7 @@ async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, _paso: P
   void _paso
   const e = enc.estado_del_motor
   const pedido = armarPedidoAlRevisor(familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : contextoDelRevisor(contexto(e)))
-  const rev = await P.revisor({ texto: pedido.texto, imagenes_urls: pedido.imagenes, dry_run: enc.dry_run })
+  const rev = await P.revisor({ texto: pedido.texto, imagenes_urls: pedido.imagenes, dry_run: enc.dry_run, client_id: enc.client_id, ref_id: enc.id, n: e.pasos_ejecutados })
   if (!rev.ok) {
     // firma de Emilio: tras los 3 reintentos (los hace el adaptador) la pieza sigue a la bandeja marcada «sin segunda mirada» y se avisa en el hilo de #oficina-creativa; nunca bloquea
     const intentos = rev.intentos ?? []

@@ -9,6 +9,7 @@
 import { checkInternalKey } from '../internal-auth'
 import { checkLlaveDeLaSala } from '../oficina/ruta'
 import { llamarRevisorGpt } from '../revisor-gpt'
+import { llamarRevisorGptConLibro, type ContextoDelLibro } from '../revisor-gpt-libro'
 import { guardarBorrador, type OpinionDeGpt } from './borrador'
 import { armarPedidoDelManual } from './pedido-gpt'
 import { ordenarMateria } from './materia'
@@ -25,6 +26,8 @@ export interface EntornoDeRutas {
   esperar?: (ms: number) => Promise<void>
   /** tope por llamada al revisor externo, en US$ (alcanza para ≈ 60.000 tokens de material) */
   topePorLlamadaUsd?: number
+  /** el cliente de la base donde se anota el gasto de GPT en `agent_invocations` (condición 5, 13-oct); sin él se llama y se informa como siempre */
+  libro?: ContextoDelLibro['supabase']
 }
 export const TOPE_POR_LLAMADA_AL_REVISOR_USD = 0.25
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -99,7 +102,10 @@ export async function rutaOpinion(db: Db, cuerpo: unknown, env: EntornoDeRutas):
   const limpio = renderManualLimpio({ brand_book: manual, client_name: ins.client_name }).texto
   const pedido = armarPedidoDelManual({ manualEnLimpio: limpio, materia: ordenarMateria(ins.fuentes) })
   if (v.dry_run) return { status: 200, body: { dry_run: true, simulado: true, llamadas: 0, costo_usd: 0, caracteres_del_pedido: pedido.texto.length } }
-  const r = await llamarRevisorGpt({ f: env.f ?? fetch, apiKey: env.openaiKey, modelo: env.modelo, precioEntrada: env.precioEntrada, precioSalida: env.precioSalida, texto: pedido.texto, imagenes_urls: pedido.imagenes, esperar: env.esperar })
+  const opciones = { f: env.f ?? fetch, apiKey: env.openaiKey, modelo: env.modelo, precioEntrada: env.precioEntrada, precioSalida: env.precioSalida, texto: pedido.texto, imagenes_urls: pedido.imagenes, esperar: env.esperar }
+  const r = env.libro
+    ? await llamarRevisorGptConLibro(opciones, { supabase: env.libro, origen: 'manual', refId: `${v.client_id}-${Date.now()}`, clientId: v.client_id, workflowId: v.workflow_id || null, workflowExecutionId: v.workflow_execution_id || null })
+    : await llamarRevisorGpt(opciones)
   const tope = env.topePorLlamadaUsd ?? TOPE_POR_LLAMADA_AL_REVISOR_USD
   const costo = r.costo_usd ?? 0
   // el texto es una OPINIÓN: se rotula como tal; el tope se informa (el gasto ya ocurrió: se declara, no se oculta)

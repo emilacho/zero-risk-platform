@@ -15,7 +15,7 @@ export const maxDuration = 300
 
 const entorno = (): EntornoDeRutas => {
   const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : undefined)
-  return { openaiKey: process.env.OPENAI_API_KEY, modelo: process.env.OFICINA_REVISOR_MODEL, precioEntrada: num(process.env.OFICINA_REVISOR_PRECIO_ENTRADA_USD_M), precioSalida: num(process.env.OFICINA_REVISOR_PRECIO_SALIDA_USD_M) }
+  return { openaiKey: process.env.OPENAI_API_KEY, modelo: process.env.OFICINA_REVISOR_MODEL, precioEntrada: num(process.env.OFICINA_REVISOR_PRECIO_ENTRADA_USD_M), precioSalida: num(process.env.OFICINA_REVISOR_PRECIO_SALIDA_USD_M), libro: getSupabaseAdmin() as never }
 }
 
 export async function POST(request: Request) {
