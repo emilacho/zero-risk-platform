@@ -285,3 +285,17 @@ describe('J1 · la foto antes/después (solo lectura) compara lo que debe', () =
     expect(COLUMNAS_DE_JULIO).toHaveLength(13)
   })
 })
+
+describe('J1 · reparos menores de CC#3 (mutaciones que seguían vivas)', () => {
+  it('una REVISIÓN no puede pasar de US$ 10 (firma F7): el CHECK de `tope_usd` de la tabla de revisiones, literal', () => {
+    expect(CUERPO).toMatch(/jefatura_revisiones_tope_valido\s+CHECK \(tope_usd > 0 AND tope_usd <= 10\)/)
+    expect(CUERPO).toMatch(/jefatura_revisiones_gasto_valido\s+CHECK \(gasto_usd >= 0\)/)
+    expect(CUERPO).toMatch(/tope_usd\s+numeric\(10,6\) NOT NULL DEFAULT 10,/)
+  })
+  it('la reversa SE NIEGA con una sola revisión (aunque no haya pasos ni fichas): `IF n_rev > 0` y su excepción, literales', () => {
+    expect(REVERSA).toMatch(/EXECUTE 'SELECT count\(\*\) FROM public\.jefatura_revisiones' INTO n_rev;\s+IF n_rev > 0 THEN RAISE EXCEPTION 'REVERSA RECHAZADA: hay % revisión\(es\) de la jefatura; no se borra historia', n_rev; END IF;/)
+    // y el chequeo corre ANTES de borrar nada
+    expect(REVERSA.indexOf('IF n_rev > 0')).toBeLessThan(REVERSA.indexOf('DROP TABLE'))
+    expect(REVERSA.indexOf('REVERSA RECHAZADA: hay % revisión')).toBeLessThan(REVERSA.indexOf('DROP TABLE'))
+  })
+})
