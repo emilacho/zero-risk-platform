@@ -13,3 +13,6 @@ export type { Artefacto, Condicion, Estado, Ficha, Gravedad, Limites, OrigenDeFi
 export { fichaNueva } from '../oficina/ayudas'
 export { armarPedido as armarPedidoAlRevisor, ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt, PREGUNTA_AL_REVISOR, preguntaAlRevisor } from '../revisor-gpt'
 export type { ContextoDelRevisor, HuecosDeLaPregunta, IntentoDelRevisor, PedidoAlRevisor, ResultadoDelRevisor } from '../revisor-gpt'
+/** la llamada a GPT que además anota su costo en el libro central de invocaciones (condición 5 de CC#3) */
+export { llamarRevisorGptConLibro } from '../revisor-gpt-libro'
+export type { ContextoDelLibro, OrigenDelRevisor } from '../revisor-gpt-libro'

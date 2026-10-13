@@ -12,6 +12,7 @@ import * as comun from '../src/lib/revision-comun'
 import * as motorOficina from '../src/lib/oficina/motor'
 import * as salidaOficina from '../src/lib/oficina/salida'
 import * as revisorOficina from '../src/lib/revisor-gpt'
+import * as libroDelRevisor from '../src/lib/revisor-gpt-libro'
 import { armarPedidoCiego, armarPedidoDeAgente, auditarPedidoDeAgente, CABECERA_SALTAR_EDITOR, CLAVES_PERMITIDAS_EN_EXTRA, documentosDeLaLinea, tareaDeCorreccion, tareaDeDecision, tareaDeRevisionDeFondo, TRES_LINEAS_DEL_PLAN } from '../src/lib/jefatura/revision/pedidos'
 import { atiende, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, duenosDe, esquemaDelDueno, plantillaDePolitica, politicaDeFila, TOPE_MAXIMO_DE_REVISION_USD, topeDelPaso } from '../src/lib/jefatura/revision/politicas'
 import { TIPOS_DE_REVISION } from '../src/lib/jefatura/revision/contrato'
@@ -216,6 +217,7 @@ describe('lo común es una FACHADA: la oficina no se toca y la jefatura importa 
     expect(comun.llamarRevisorGpt).toBe(revisorOficina.llamarRevisorGpt)
     expect(comun.PREGUNTA_AL_REVISOR).toBe(revisorOficina.PREGUNTA_AL_REVISOR)
     expect(comun.ESPERAS_DEL_REVISOR_MS).toBe(revisorOficina.ESPERAS_DEL_REVISOR_MS)
+    expect(comun.llamarRevisorGptConLibro).toBe(libroDelRevisor.llamarRevisorGptConLibro)
   })
   it('los esquemas nuevos de la jefatura NO se añaden a `ESQUEMAS` de la oficina (su comportamiento no cambia)', () => {
     for (const k of ['resolucion_objeto.v1', 'resolucion_parcial.v1', 'plan_texto_y_resolucion.v1', 'bloque_de_resolucion']) expect(k in comun.ESQUEMAS).toBe(false)
