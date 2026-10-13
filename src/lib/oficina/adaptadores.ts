@@ -13,6 +13,7 @@ import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt } from '../revisor-gpt'
 import type { FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
 import type { Registro } from './chequeos'
 import { avisoDeProvisionales } from '../manual/lectura'
+import { codificarPng } from './encaje'
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
@@ -31,6 +32,16 @@ const cuerpoPng = (w: number, h: number): Buffer => {
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2
   const chunk = (t: string, d: Buffer) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); return Buffer.concat([l, Buffer.from(t), d, Buffer.alloc(4)]) }
   return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.alloc(10))), chunk('IEND', Buffer.alloc(0))])
+}
+
+/**
+ * r81 · la imagen GENERADA simulada (dry_run) es un PNG de verdad (1024×1024, fondo liso con un bloque al centro): así el acabado puede ejercer el encaje a la proporción del formato en seco.
+ * Las láminas simuladas siguen siendo solo encabezado (pesan 6 MB cada una y solo se les miden las dimensiones).
+ */
+const pngGeneradoSimulado = (w: number, h: number): Buffer => {
+  const d = new Uint8Array(w * h * 4).fill(235)
+  for (let y = Math.floor(h * 0.35); y < Math.floor(h * 0.65); y++) for (let x = Math.floor(w * 0.3); x < Math.floor(w * 0.7); x++) { const i = (y * w + x) * 4; d[i] = 40; d[i + 1] = 60; d[i + 2] = 90 }
+  return codificarPng({ ancho: w, alto: h, datos: d })
 }
 
 /** tamaños de cada plataforma del brazo de láminas (los mismos que `PLATFORM_SPECS` del motor de carruseles) */
@@ -152,7 +163,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
     },
     async descargar(url) {
-      if (url.startsWith(PREFIJO_DRY)) { const m = /-(\d{2,5})x(\d{2,5})\.png$/.exec(url); return m ? cuerpoPng(Number(m[1]), Number(m[2])) : cuerpoPng(1024, 1024) }
+      if (url.startsWith(PREFIJO_DRY)) { const m = /-(\d{2,5})x(\d{2,5})\.png$/.exec(url); return m ? cuerpoPng(Number(m[1]), Number(m[2])) : pngGeneradoSimulado(1024, 1024) }
       try {
         const r = await f(url)
         return r.ok ? Buffer.from(await r.arrayBuffer()) : null
