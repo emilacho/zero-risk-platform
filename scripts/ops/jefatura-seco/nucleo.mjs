@@ -19,6 +19,8 @@ export const PRECIOS = {
 }
 /** salida típica por paso (tokens), medida en §7 del diseño; la del plan reescrito es el plan entero */
 const SALIDA_DE = { revision_fondo: 1060, correccion: 700, decision: 500, segunda_mirada: 800 }
+/** lo que cada llamada a un agente lee ADEMÁS de la tarea (identidad del agente + trozos del cerebro que `run-sdk` inyecta + herramientas). Calibrado con la mediana medida de `jefe-marketing` (US$ 0,063 con ≈ 1.060 tokens de salida a 3/15 por millón ⇒ ≈ 15,7 k tokens de entrada, de los cuales la tarea de una pieza es ≈ 8–10 k): ≈ 6 k. Se puede cambiar con --sobrecarga */
+export const SOBRECARGA_DE_AGENTE_TOKENS = 6000
 const MODELO_DE = (agente) => (/social-media-strategist/.test(agente ?? '') ? 'opus' : 'sonnet')
 
 export function auditarPedido(p) {
@@ -55,7 +57,7 @@ export function costoEstimado({ pedidos, gpt_chars, gpt_llamado, texto_largo, re
     const base = String(p.paso).split(':')[0]
     const reescribe = !!texto_largo && (reescriben ? reescriben.has(p.paso) : true) // el plan: solo el paso que PRODUJO una versión escribe el plan entero
     const salida = reescribe ? TOKEN(texto_largo.length) : (SALIDA_DE[base] ?? 600)
-    const usd = (p.tokens * pi + salida * po) / 1e6
+    const usd = ((p.tokens + SOBRECARGA_DE_AGENTE_TOKENS) * pi + salida * po) / 1e6
     detalle.push({ paso: p.paso, usd: +usd.toFixed(4) })
     total += usd
   }
