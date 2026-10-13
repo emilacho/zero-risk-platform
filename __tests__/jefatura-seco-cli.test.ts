@@ -23,6 +23,8 @@ const estado = {
   cuentas: {} as Record<string, number>,
   peticiones: [] as string[],
   consultas: [] as string[],
+  filas: { jefatura_revisiones: [] as Array<Record<string, unknown>>, jefatura_pasos: [] as Array<Record<string, unknown>>, jefatura_fichas: [] as Array<Record<string, unknown>> },
+  borrados: [] as string[],
 }
 let server: http.Server, base = '', carpeta = ''
 
@@ -44,6 +46,8 @@ beforeAll(async () => {
       }
       if (url.pathname.startsWith('/rest/v1/')) {
         const tabla = url.pathname.slice('/rest/v1/'.length)
+        if (req.method === 'DELETE') { estado.borrados.push(`${tabla}?${decodeURIComponent(url.search.slice(1))}`); if (tabla in estado.filas) (estado.filas as Record<string, unknown[]>)[tabla] = []; res.writeHead(204); return res.end() }
+        if (tabla in estado.filas) { const f = (estado.filas as Record<string, unknown[]>)[tabla]; return req.headers.prefer === 'count=exact' ? json([], { 'content-range': `0-0/${f.length}` }) : json(f) }
         if (tabla === 'clients') return json([{ id: 'nau-1' }])
         if (tabla === 'client_historical_outputs' && !req.headers.prefer) return json([{ content_text: 'x'.repeat(100) }, { content_text: 'y'.repeat(300) }, { content_text: 'z'.repeat(200) }])
         if (tabla === 'cadena_campanas') return json([{ id: 'c1' }])
@@ -62,7 +66,8 @@ afterAll(() => { server.close(); fs.rmSync(carpeta, { recursive: true, force: tr
 beforeEach(() => {
   Object.assign(estado.config, { estado: 'apagada', tipos_activos: [], clientes_ensayo: [] })
   estado.flujos = [{ id: 'wf-turno', name: construirTurno().name, active: false }, { id: 'wf-vigia', name: construirVigia().name, active: false }]
-  estado.enVuelo = 0; estado.noSeApaga = []; estado.cuentas = { agent_invocations: 100, hitl_queue: 7, hitl_pending_approvals: 0, client_historical_outputs: 12, jefatura_revisiones: 0 }; estado.peticiones = []; estado.consultas = []
+  estado.enVuelo = 0; estado.noSeApaga = []; estado.cuentas = { agent_invocations: 100, hitl_queue: 7, hitl_pending_approvals: 0, client_historical_outputs: 12, jefatura_revisiones: 0 }; estado.peticiones = []; estado.consultas = []; estado.borrados = []
+  estado.filas = { jefatura_revisiones: [{ id: 'rev-1', client_id: 'prueba-jefatura-seco-restaurante' }, { id: 'rev-2', client_id: 'prueba-jefatura-seco-retail' }], jefatura_pasos: [{ id: 1, revision_id: 'rev-1' }], jefatura_fichas: [{ id: 1, revision_id: 'rev-1' }] }
   fs.rmSync(path.join(carpeta, 'previo'), { recursive: true, force: true })
 })
 
@@ -138,11 +143,11 @@ describe('contadores antes / después', () => {
   it('sin cambios: todo igual y código 0; cambian solo las filas de la jefatura', async () => {
     const f = path.join(carpeta, 'antes.json')
     expect((await cli(['contadores', '--guardar', f])).code).toBe(0)
-    estado.cuentas.jefatura_revisiones = 270
+    for (let i = 0; i < 268; i++) estado.filas.jefatura_revisiones.push({ id: `x${i}`, client_id: "c" })
     const r = await cli(['contadores', '--comparar', f])
     expect(r.code, r.out).toBe(0)
     expect(r.out).toMatch(/todo lo que debía seguir igual sigue igual/)
-    expect(r.out).toMatch(/jefatura_revisiones\s+0 → 270/)
+    expect(r.out).toMatch(/jefatura_revisiones\s+2 → 270/)
   })
   it('un seco que gasta o escribe de más se marca en rojo y devuelve 1', async () => {
     const f = path.join(carpeta, 'antes2.json')
@@ -182,6 +187,27 @@ describe('tamaños reales (solo lectura)', () => {
       expect(manualEn(CS[0]).length).toBeGreaterThanOrEqual(9000); expect(manualEn(CS[0]).length).toBeLessThan(10500)
       expect('otra_cosa' in TAMANOS).toBe(false)
     } finally { usarTamanos(antes) }
+  })
+})
+
+describe('limpiar (al final, con respaldo)', () => {
+  it('SIN --aplicar solo cuenta: no borra ni escribe nada', async () => {
+    const r = await cli(['limpiar', '--salida', previo()])
+    expect(r.code, r.out).toBe(0)
+    expect(r.out).toMatch(/1 fichas, 1 pasos y 2 revisiones/)
+    expect(estado.borrados).toEqual([])
+    expect(fs.existsSync(path.join(previo(), 'jefatura-filas-del-seco.json'))).toBe(false)
+  })
+  it('--aplicar: respalda con huella, borra fichas → pasos → revisiones SIEMPRE con filtro de los clientes de práctica y lee de vuelta', async () => {
+    const r = await cli(['limpiar', '--aplicar', '--salida', previo()])
+    expect(r.code, r.out).toBe(0)
+    expect(r.out).toMatch(/sha256/)
+    const resp = JSON.parse(fs.readFileSync(path.join(previo(), 'jefatura-filas-del-seco.json'), 'utf8'))
+    expect(resp.revisiones).toHaveLength(2); expect(resp.pasos).toHaveLength(1); expect(resp.fichas).toHaveLength(1)
+    expect(estado.borrados.map((b) => b.split('?')[0])).toEqual(['jefatura_fichas', 'jefatura_pasos', 'jefatura_revisiones'])
+    for (const b of estado.borrados) expect(b, 'un borrado sin filtro sería catastrófico').toMatch(/\?(revision_id|client_id)=in\.\(/)
+    expect(estado.borrados[2]).toContain('prueba-jefatura-seco-restaurante')
+    expect(r.out).toMatch(/que quedan de los clientes de práctica = 0/)
   })
 })
 

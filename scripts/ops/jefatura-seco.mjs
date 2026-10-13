@@ -9,6 +9,7 @@
  *   node scripts/ops/jefatura-seco.mjs encender [--aplicar]              guarda la foto del estado previo, pone la jefatura en `ensayo` SOLO con los 3 clientes de práctica y activa SOLO el flujo `jefatura · turno`; lee de vuelta
  *   node scripts/ops/jefatura-seco.mjs correr --via ruta|n8n [--tipo T] [--cliente slug] [--registro tuteo|voseo] [--caso C] [--limite N] [--aplicar]
  *   node scripts/ops/jefatura-seco.mjs puerta [--aplicar]                lo que la ruta debe negarse a abrir (400/409) · `puerta --apagada` (DESPUÉS de apagar): que NO abre ni corre ni vigila
+ *   node scripts/ops/jefatura-seco.mjs limpiar [--aplicar]               al FINAL y solo cuando CC#3 ya midió: respalda y borra las filas jefatura_* de los 3 clientes de práctica (ninguna otra)
  *   node scripts/ops/jefatura-seco.mjs apagar [--aplicar]                todo al revés (restaura la foto previa), apagada, flujos inactivos; lee de vuelta
  *
  * Variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, N8N_API_KEY, SALA_DISPATCH_KEY (y, opcionales, N8N_BASE_URL, N8N_WEBHOOK_BASE, APP_URL, SALIDA).
@@ -68,19 +69,18 @@ export async function contadores() {
     agent_invocations_costo_usd_de_los_clientes_de_practica: Array.isArray(costos) ? +costos.reduce((a, r) => a + Number(r.cost_usd || 0), 0).toFixed(6) : costos,
     agent_invocations_workflow_id_nulo: await cuenta('agent_invocations', 'workflow_id=is.null'),
     hitl_queue_total: await cuenta('hitl_queue'),
-    hitl_queue_de_los_clientes_de_practica: await cuenta('hitl_queue', enIds),
     hitl_pending_approvals_editor_escalation: await cuenta('hitl_pending_approvals', 'approval_type=eq.editor_escalation'),
-    client_historical_outputs_de_los_clientes_de_practica: await cuenta('client_historical_outputs', enIds),
     client_historical_outputs_total: await cuenta('client_historical_outputs'),
     jefatura_revisiones: await cuenta('jefatura_revisiones'),
     jefatura_pasos: await cuenta('jefatura_pasos'),
     jefatura_fichas: await cuenta('jefatura_fichas'),
     n8n_en_vuelo: await enVuelo(),
+    // (hitl_queue y client_historical_outputs guardan client_id como UUID: un cliente de práctica de texto no cabe ahí; el total es el que no debe moverse)
     // los mensajes a #alertas NO se pueden contar desde aquí (en seco la jefatura no llama a Slack): se anota el `ts` del último mensaje del canal antes y después con la lectura de Slack (ver el LISTO)
   }
 }
 /** lo que DEBE seguir igual en un seco (diferencias = alarma); las filas jefatura_* sí crecen */
-const DEBE_SEGUIR_IGUAL = ['agent_invocations_total', 'agent_invocations_de_los_clientes_de_practica', 'agent_invocations_costo_usd_de_los_clientes_de_practica', 'agent_invocations_workflow_id_nulo', 'hitl_queue_total', 'hitl_queue_de_los_clientes_de_practica', 'hitl_pending_approvals_editor_escalation', 'client_historical_outputs_de_los_clientes_de_practica', 'client_historical_outputs_total']
+const DEBE_SEGUIR_IGUAL = ['agent_invocations_total', 'agent_invocations_de_los_clientes_de_practica', 'agent_invocations_costo_usd_de_los_clientes_de_practica', 'agent_invocations_workflow_id_nulo', 'hitl_queue_total', 'hitl_pending_approvals_editor_escalation', 'client_historical_outputs_total']
 
 // ───────────────────────── la lista de interruptores
 const INTERRUPTORES = [
@@ -112,6 +112,28 @@ async function main() {
     console.log('flujo vigía     :', f.vigia.map((w) => `${w.id} active=${w.active}`).join(', ') || '(no existe)')
     console.log('contadores      :', JSON.stringify(await contadores(), null, 1))
     return
+  }
+  if (orden === 'limpiar') {
+    // Al final de J5, y SOLO cuando CC#3 ya midió: respalda y borra las filas `jefatura_*` de los 3 clientes de práctica (si quedan revisiones, la REVERSA de J1 se niega). Nada de otros clientes: el filtro es por `client_id`.
+    necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY')
+    const lotes = (xs, n) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n))
+    const revs = await rest('jefatura_revisiones', `select=*&client_id=in.(${IDS.join(',')})`)
+    if (!Array.isArray(revs)) throw new Error('no se pudieron leer las revisiones: ' + JSON.stringify(revs).slice(0, 120))
+    const rid = revs.map((r) => r.id)
+    const leerPorRevision = async (tabla) => { const out = []; for (const l of lotes(rid, 40)) { const f = await rest(tabla, `select=*&revision_id=in.(${l.join(',')})`); if (!Array.isArray(f)) throw new Error(`no se pudo leer ${tabla}`); out.push(...f) } return out }
+    const pasos = await leerPorRevision('jefatura_pasos'), fichas = await leerPorRevision('jefatura_fichas')
+    paso(`respaldar y borrar ${fichas.length} fichas, ${pasos.length} pasos y ${revs.length} revisiones de los clientes de práctica (${IDS.length}); ninguna otra`)
+    if (!aplicar) return
+    const archivo = guardar('jefatura-filas-del-seco.json', { respaldado_en: new Date().toISOString(), clientes: IDS, revisiones: revs, pasos, fichas })
+    const huella = (await import('node:crypto')).createHash('sha256').update(fs.readFileSync(archivo)).digest('hex')
+    console.log(`respaldo ${archivo} sha256 ${huella.slice(0, 16)}…`)
+    const borrar = async (tabla, filtro) => { const r = await fetch(`${U}/rest/v1/${tabla}?${filtro}`, { method: 'DELETE', headers: { ...HS(), prefer: 'return=minimal' } }); if (!r.ok) throw new Error(`borrar ${tabla}: ${r.status}`) }
+    for (const l of lotes(rid, 40)) await borrar('jefatura_fichas', `revision_id=in.(${l.join(',')})`)
+    for (const l of lotes(rid, 40)) await borrar('jefatura_pasos', `revision_id=in.(${l.join(',')})`)
+    await borrar('jefatura_revisiones', `client_id=in.(${IDS.join(',')})`)
+    const quedan = await cuenta('jefatura_revisiones', `client_id=in.(${IDS.join(',')})`)
+    console.log('leído de vuelta: revisiones que quedan de los clientes de práctica =', quedan)
+    process.exitCode = quedan === 0 ? 0 : 1; return
   }
   if (orden === 'tamanos-reales') {
     // SOLO LECTURA. Mide los artefactos REALES que ya existen (plan, parte de briefs, estrategia, calendario) de los clientes que NO son naufrago.ec (se excluyen por nombre ANTES de leer nada) y guarda los tamaños
@@ -244,7 +266,7 @@ async function main() {
     const bien = leido.estado === objetivo.estado && JSON.stringify(leido.tipos_activos) === JSON.stringify(objetivo.tipos_activos) && JSON.stringify(leido.clientes_ensayo) === JSON.stringify(objetivo.clientes_ensayo) && !f2.turno[0].active && !f2.vigia[0].active
     console.log(bien ? '✔ todo apagado y leído de vuelta' : '🔴 la lectura de vuelta NO coincide'); process.exitCode = bien ? 0 : 1; return
   }
-  console.error('orden desconocida. Usa: plan | estado | contadores | encender | correr | puerta | apagar'); process.exit(2)
+  console.error('orden desconocida. Usa: plan | estado | tamanos-reales | contadores | encender | correr | puerta | apagar | limpiar'); process.exit(2)
 }
 
 /** el transporte real: las 3 rutas por fetch con la llave de despacho, el webhook del flujo, el envejecimiento del paso (UPDATE de la fila de PRUEBA) y el reloj */
