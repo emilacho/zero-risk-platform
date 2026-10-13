@@ -22,6 +22,7 @@ const estado = {
   noSeApaga: [] as string[],
   cuentas: {} as Record<string, number>,
   peticiones: [] as string[],
+  consultas: [] as string[],
 }
 let server: http.Server, base = '', carpeta = ''
 
@@ -31,7 +32,7 @@ beforeAll(async () => {
     let cuerpo = ''
     req.on('data', (d) => (cuerpo += d))
     req.on('end', () => {
-      estado.peticiones.push(`${req.method} ${url.pathname}`)
+      estado.peticiones.push(`${req.method} ${url.pathname}`); estado.consultas.push(decodeURIComponent(url.search))
       const json = (o: unknown, h: Record<string, string> = {}) => { res.writeHead(200, { 'content-type': 'application/json', ...h }); res.end(JSON.stringify(o)) }
       if (url.pathname === '/api/v1/workflows' && req.method === 'GET') return json({ data: estado.flujos })
       const m = /^\/api\/v1\/workflows\/([^/]+)\/(activate|deactivate)$/.exec(url.pathname)
@@ -43,6 +44,10 @@ beforeAll(async () => {
       }
       if (url.pathname.startsWith('/rest/v1/')) {
         const tabla = url.pathname.slice('/rest/v1/'.length)
+        if (tabla === 'clients') return json([{ id: 'nau-1' }])
+        if (tabla === 'client_historical_outputs' && !req.headers.prefer) return json([{ content_text: 'x'.repeat(100) }, { content_text: 'y'.repeat(300) }, { content_text: 'z'.repeat(200) }])
+        if (tabla === 'cadena_campanas') return json([{ id: 'c1' }])
+        if (tabla === 'cadena_estrategias') return json([{ texto_md: 'e'.repeat(50) }, { contenido: { a: 1 } }])
         if (req.headers.prefer === 'count=exact') return json([], { 'content-range': `0-0/${estado.cuentas[tabla] ?? 0}` })
         return json([])
       }
@@ -57,7 +62,7 @@ afterAll(() => { server.close(); fs.rmSync(carpeta, { recursive: true, force: tr
 beforeEach(() => {
   Object.assign(estado.config, { estado: 'apagada', tipos_activos: [], clientes_ensayo: [] })
   estado.flujos = [{ id: 'wf-turno', name: construirTurno().name, active: false }, { id: 'wf-vigia', name: construirVigia().name, active: false }]
-  estado.enVuelo = 0; estado.noSeApaga = []; estado.cuentas = { agent_invocations: 100, hitl_queue: 7, hitl_pending_approvals: 0, client_historical_outputs: 12, jefatura_revisiones: 0 }; estado.peticiones = []
+  estado.enVuelo = 0; estado.noSeApaga = []; estado.cuentas = { agent_invocations: 100, hitl_queue: 7, hitl_pending_approvals: 0, client_historical_outputs: 12, jefatura_revisiones: 0 }; estado.peticiones = []; estado.consultas = []
   fs.rmSync(path.join(carpeta, 'previo'), { recursive: true, force: true })
 })
 
@@ -152,6 +157,31 @@ describe('contadores antes / después', () => {
     }
     estado.cuentas.hitl_pending_approvals = 1 // una fila `editor_escalation` nueva: el editor viejo resucitó
     expect((await cli(['contadores', '--comparar', f])).code).toBe(1)
+  })
+})
+
+describe('tamaños reales (solo lectura)', () => {
+  it('excluye a naufrago.ec ANTES de leer nada suyo y guarda las medianas', async () => {
+    const r = await cli(['tamanos-reales', '--salida', previo()])
+    expect(r.code, r.out).toBe(0)
+    // toda lectura de artefactos lleva el filtro que deja fuera al cliente excluido
+    const lecturas = estado.consultas.filter((q) => /output_type=eq\./.test(q))
+    expect(lecturas.length).toBeGreaterThanOrEqual(2)
+    expect(lecturas.every((q) => q.includes('client_id=not.in.(nau-1)')), JSON.stringify(lecturas)).toBe(true)
+    expect(estado.peticiones.every((p) => p.startsWith('GET '))).toBe(true) // solo lectura
+    const g = JSON.parse(fs.readFileSync(path.join(previo(), 'tamanos-reales.json'), 'utf8'))
+    expect(g.plan).toBe(200) // mediana de 100, 200, 300
+    expect(g.briefs).toBe(200)
+  })
+  it('usarTamanos cambia el tamaño de los clientes de práctica (y lo demás no)', async () => {
+    const { usarTamanos, TAMANOS, planDe, manualEn, CLIENTES: CS } = await import('../scripts/ops/jefatura-seco/fixtures.mjs')
+    const antes = { ...TAMANOS }
+    try {
+      usarTamanos({ plan: 40000, manual: 9000, otra_cosa: 5 })
+      expect(planDe(CS[0]).length).toBeGreaterThanOrEqual(40000); expect(planDe(CS[0]).length).toBeLessThan(41500)
+      expect(manualEn(CS[0]).length).toBeGreaterThanOrEqual(9000); expect(manualEn(CS[0]).length).toBeLessThan(10500)
+      expect('otra_cosa' in TAMANOS).toBe(false)
+    } finally { usarTamanos(antes) }
   })
 })
 

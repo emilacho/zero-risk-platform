@@ -9,6 +9,10 @@ const reg = (r, tu, vos) => (r === 'voseo' ? vos : tu)
 
 export const ID_PREFIJO = 'prueba-jefatura-seco-'
 
+/** tamaños objetivo en caracteres (los MEDIDOS del diseño §7); `usarTamanos` los cambia por los reales de `tamanos-reales` antes de armar las celdas */
+export const TAMANOS = { manual: 15000, plan: 25000, briefs: 4900, estrategia: 2600, pedido_del_plan: 7000 }
+export function usarTamanos(o) { for (const [k, v] of Object.entries(o ?? {})) if (k in TAMANOS && Number.isFinite(v) && v > 0) TAMANOS[k] = Math.round(v) }
+
 /** los tres clientes: lo mínimo que cambia entre rubros; todo lo demás se arma con funciones */
 export const CLIENTES = [
   {
@@ -53,7 +57,7 @@ export function manualEn(c, r = c.registro) {
   // relleno determinista hasta ≈ 15 k caracteres: ejemplos aprobados por producto y formato (como los que trae un manual real)
   let i = 0
   const formatos = ['post de foto', 'carrusel', 'historias', 'texto de anuncio']
-  while (secs.join('\n\n').length < 15000) {
+  while (secs.join('\n\n').length < TAMANOS.manual) {
     const [n] = c.productos[i % c.productos.length]
     const f = formatos[Math.floor(i / c.productos.length) % formatos.length]
     secs.push(`### Ejemplo aprobado ${i + 1} · ${n} · ${f}\n${ejemplo(c, r, n, f, i)}`)
@@ -88,7 +92,7 @@ export function planDe(c) {
   ]
   // anexos hasta ≈ 25 k caracteres: guía de respuestas a preguntas frecuentes por producto (como el anexo de un plan real)
   let i = 0
-  while (bloques.join('\n\n').length < 25000) {
+  while (bloques.join('\n\n').length < TAMANOS.plan) {
     const [n, p] = c.productos[i % c.productos.length]
     bloques.push(`### Anexo ${i + 1} · Pregunta frecuente sobre ${n}\nCómo se responde: se explica qué incluye ${n}, cuánto cuesta hoy (${precio(c, p)}, precio de la ficha) y cómo pedirlo por ${c.canal_pedido}. Si la persona pregunta algo que la ficha no dice, se responde que se confirma y se anota para la semana siguiente. (Variante ${i + 1}.)`)
     i++
@@ -97,16 +101,22 @@ export function planDe(c) {
 }
 
 /** el «pedido del plan» que arma Redactor (B4) para pedir una versión nueva sin recolectar de nuevo (≈ datos reunidos + hechos del dueño + registro) */
-export const pedidoDelPlanDe = (c) => `PEDIDO ORIGINAL DEL PLAN · ${c.nombre}\nDatos reunidos: ${c.rubro} en ${c.ciudad}, ${c.pais}; catálogo de ${c.productos.length} líneas; red principal ${c.red_principal}.\nHechos del dueño: el canal de pedido es ${c.canal_pedido}. Registro: ${c.registro}. Referencia del producto: ${c.productos[0][0]}.\n${'Dato reunido de la investigación del negocio y su zona. '.repeat(120)}`
+export const pedidoDelPlanDe = (c) => {
+  const cab = `PEDIDO ORIGINAL DEL PLAN · ${c.nombre}\nDatos reunidos: ${c.rubro} en ${c.ciudad}, ${c.pais}; catálogo de ${c.productos.length} líneas; red principal ${c.red_principal}.\nHechos del dueño: el canal de pedido es ${c.canal_pedido}. Registro: ${c.registro}. Referencia del producto: ${c.productos[0][0]}.\n`
+  const relleno = 'Dato reunido de la investigación del negocio y su zona. '
+  return cab + relleno.repeat(Math.max(1, Math.ceil((TAMANOS.pedido_del_plan - cab.length) / relleno.length)))
+}
 
 // ───────────────────────── estrategia, calendario, parte de briefs
 export function estrategiaDe(c) {
+  const nota = 'Cada pilar tiene su ejemplo concreto y su llamado a la acción. '
+  const base = `Estrategia de contenido para ${c.nombre}: ordena el calendario de 90 días alrededor de ${c.pilares.length} pilares. `
   return {
     pilares: c.pilares.map((p, k) => ({ nombre: p, peso: [0.35, 0.25, 0.2, 0.2][k], objetivo: `generar conversación sobre ${p.toLowerCase()}`, formatos: ['post', 'carrusel', 'historias'], ejemplos: c.productos.slice(k, k + 2).map(([n]) => n) })),
     cadencia: { posts_por_semana: 2, carruseles_cada_semanas: 2, historias_por_semana: 3 },
     tono: reg(c.registro, 'cercano, en tuteo', 'cercano, en voseo'),
     metricas: ['mensajes recibidos', 'guardados', 'compartidos'],
-    notas: `Estrategia de contenido para ${c.nombre}: ordena el calendario de 90 días alrededor de ${c.pilares.length} pilares. ${'Cada pilar tiene su ejemplo concreto y su llamado a la acción. '.repeat(6)}`,
+    notas: base + nota.repeat(Math.max(1, Math.ceil((TAMANOS.estrategia - 1200 - base.length) / nota.length))),
   }
 }
 
@@ -121,7 +131,9 @@ export function calendarioDe(c) {
 
 export function briefsDe(c) {
   const cal = calendarioDe(c).slice(0, 12)
-  return cal.map((f) => `- [${f.fila_id}] ${f.formato} · ${f.fecha} · ${f.tema}\n  Idea: mostrar ${f.tema.split(' · ')[0].toLowerCase()} con un ejemplo concreto, una sola idea, llamado a ${c.canal_pedido}. Registro: ${c.registro}. Producto protagonista: ${f.tema.split(' · ')[0]}.`).join('\n') + '\n' + '(Anexo del parte de briefs: criterios de tono y de imagen compartidos por las doce piezas.) '.repeat(12)
+  const cuerpo = cal.map((f) => `- [${f.fila_id}] ${f.formato} · ${f.fecha} · ${f.tema}\n  Idea: mostrar ${f.tema.split(' · ')[0].toLowerCase()} con un ejemplo concreto, una sola idea, llamado a ${c.canal_pedido}. Registro: ${c.registro}. Producto protagonista: ${f.tema.split(' · ')[0]}.`).join('\n') + '\n'
+  const anexo = '(Anexo del parte de briefs: criterios de tono y de imagen compartidos por las doce piezas.) '
+  return cuerpo + anexo.repeat(Math.max(1, Math.ceil((TAMANOS.briefs - cuerpo.length) / anexo.length)))
 }
 
 // ───────────────────────── piezas (una por familia) y material del «cerebro»

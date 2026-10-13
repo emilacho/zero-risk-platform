@@ -4,6 +4,7 @@
  *
  *   node scripts/ops/jefatura-seco.mjs plan                              la matriz (cuántas celdas por tipo/caso) y la lista de interruptores · sin red
  *   node scripts/ops/jefatura-seco.mjs estado                            lee (solo lectura): jefatura_config, los 2 flujos, n8n en vuelo y los contadores
+ *   node scripts/ops/jefatura-seco.mjs tamanos-reales                    SOLO LECTURA: mide plan / briefs / estrategia / calendario REALES (sin naufrago.ec) y guarda sus tamaños; luego: correr --tamanos <archivo>
  *   node scripts/ops/jefatura-seco.mjs contadores --guardar <archivo>    foto de los contadores ANTES · después: --comparar <archivo> (debe decir lo esperado)
  *   node scripts/ops/jefatura-seco.mjs encender [--aplicar]              guarda la foto del estado previo, pone la jefatura en `ensayo` SOLO con los 3 clientes de práctica y activa SOLO el flujo `jefatura · turno`; lee de vuelta
  *   node scripts/ops/jefatura-seco.mjs correr --via ruta|n8n [--tipo T] [--cliente slug] [--registro tuteo|voseo] [--caso C] [--limite N] [--aplicar]
@@ -15,7 +16,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { CLIENTES, ID_PREFIJO } from './jefatura-seco/fixtures.mjs'
+import { CLIENTES, ID_PREFIJO, TAMANOS, usarTamanos } from './jefatura-seco/fixtures.mjs'
 import { CASOS, CASOS_DE_PUERTA, TIPOS, celdas, resumenDeLaMatriz } from './jefatura-seco/matriz.mjs'
 import { apagadaNoAbre, correrPorN8n, correrPorRuta, costoPorCaso, puerta, resumirMedidas } from './jefatura-seco/nucleo.mjs'
 import { construirTurno, construirVigia } from '../worker-staging/jefatura/construir-jefatura.mjs'
@@ -112,6 +113,38 @@ async function main() {
     console.log('contadores      :', JSON.stringify(await contadores(), null, 1))
     return
   }
+  if (orden === 'tamanos-reales') {
+    // SOLO LECTURA. Mide los artefactos REALES que ya existen (plan, parte de briefs, estrategia, calendario) de los clientes que NO son naufrago.ec (se excluyen por nombre ANTES de leer nada) y guarda los tamaños
+    // medianos para armar los clientes de práctica con el tamaño real (`correr --tamanos <archivo>`). El manual no tiene una tabla única conocida: se queda en el valor medido del diseño (≈ 15 k).
+    necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY')
+    const nau = await rest('clients', `select=id&or=${encodeURIComponent('(name.ilike.*naufrago*,name.ilike.*náufrago*,slug.ilike.*naufrago*)')}`)
+    const fuera = Array.isArray(nau) ? nau.map((c) => c.id) : []
+    const noNau = fuera.length ? `&client_id=not.in.(${fuera.join(',')})` : ''
+    const mediana = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null }
+    const largo = (r) => String(r.content_text ?? r.content ?? '').length
+    const med = {}
+    for (const [clave, tipo] of [['plan', 'campaign_plan_90d'], ['briefs', 'campaign_brief_pack']]) {
+      const filas = await rest('client_historical_outputs', `select=client_id,content_text,content&output_type=eq.${tipo}${noNau}&order=created_at.desc&limit=30`)
+      const ls = Array.isArray(filas) ? filas.map(largo).filter((n) => n > 0) : []
+      med[clave] = { n: ls.length, mediana: mediana(ls), max: ls.length ? Math.max(...ls) : null }
+    }
+    const camp = await rest('cadena_campanas', `select=id${noNau}&limit=60`)
+    const ids = Array.isArray(camp) ? camp.map((c) => c.id) : []
+    if (ids.length) {
+      const es = await rest('cadena_estrategias', `select=texto_md,contenido&campana_id=in.(${ids.join(',')})&limit=30`)
+      const ls = Array.isArray(es) ? es.map((e) => (e.texto_md ? String(e.texto_md).length : JSON.stringify(e.contenido ?? {}).length)) : []
+      med.estrategia = { n: ls.length, mediana: mediana(ls), max: ls.length ? Math.max(...ls) : null }
+      const filas = await cuenta('cadena_calendario_filas', `campana_id=in.(${ids.join(',')})`)
+      med.calendario = { filas_en_total: filas, campanas: ids.length }
+    }
+    console.log('excluidos por nombre (naufrago):', fuera.length, '(no se leyó ningún dato suyo)')
+    console.log(JSON.stringify(med, null, 1))
+    const tam = {}
+    for (const k of ['plan', 'briefs', 'estrategia']) if (med[k]?.mediana) tam[k] = med[k].mediana
+    guardar('tamanos-reales.json', { medido_en: new Date().toISOString(), ...tam, detalle: med })
+    console.log(`guardado ${path.join(SALIDA, 'tamanos-reales.json')} (úsalo con: correr --tamanos <archivo>). Valores por omisión:`, JSON.stringify(TAMANOS))
+    return
+  }
   if (orden === 'contadores') {
     necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'N8N_API_KEY')
     const ahora = await contadores()
@@ -158,6 +191,7 @@ async function main() {
     const via = flag('via') || 'ruta'
     const corrida = flag('corrida') || new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)
     const lim = flag('limite') ? Number(flag('limite')) : Infinity
+    if (flag('tamanos')) usarTamanos(JSON.parse(fs.readFileSync(flag('tamanos'), 'utf8')))
     const filtro = {
       tipos: flag('tipo') ? [flag('tipo')] : TIPOS,
       clientes: flag('cliente') ? CLIENTES.filter((c) => c.slug === flag('cliente') || c.id === flag('cliente')).map((c) => c.id) : IDS,
