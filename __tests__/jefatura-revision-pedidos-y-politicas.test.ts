@@ -152,6 +152,24 @@ describe('la tabla por tipo, hecha política y plantilla', () => {
     ['tope 0', { tope_revision_usd: 0 }],
     ['con re-entrega y sin esquema', { esquema_correccion: null }],
   ])('una fila mal armada no se usa a medias: %s', (_n, cambios) => { expect(politicaDeFila({ ...FILAS_DE_POLITICA.pieza, ...cambios }).ok).toBe(false) })
+  it('el tope máximo es 10 LITERAL: 10 pasa, 10,01 no (no depende de la constante)', () => {
+    expect(TOPE_MAXIMO_DE_REVISION_USD).toBe(10)
+    expect(politicaDeFila({ ...FILAS_DE_POLITICA.pieza, tope_revision_usd: 10 }).ok).toBe(true)
+    expect(politicaDeFila({ ...FILAS_DE_POLITICA.pieza, tope_revision_usd: 10.01 }).ok).toBe(false)
+  })
+  it('la no-circularidad del manual vive en el CÓDIGO: ni con un revisor de fondo declarado se acepta como revisión', () => {
+    const conRevisor = { ...FILAS_DE_POLITICA.manual, revisor_fondo: 'jefe-marketing', reentrega: 'ninguna', destino_cierre: 'siguiente_paso', tope_revision_usd: 1, productores: [] }
+    const r = politicaDeFila(conRevisor)
+    expect(r.ok).toBe(false)
+    expect(r.ok === false && r.error).toMatch(/no-circularidad/)
+  })
+  it('el jefe recibe los documentos del contexto en SU pedido (no solo el artefacto)', () => {
+    const pol = politica('estrategia')
+    const payload = { ...(sobre('estrategia').payload as object), contexto: [{ titulo: 'Plan vigente', texto: 'TEXTO DEL PLAN VIGENTE', funcion: 'la estrategia sale de él' }] } as never
+    const r = tareaDeRevisionDeFondo({ politica: pol, payload, tipo: 'estrategia', texto: 'ARTEFACTO', duenos: duenosDe(pol.productores) })
+    expect(r.task).toContain('### Plan vigente — la estrategia sale de él')
+    expect(r.task).toContain('TEXTO DEL PLAN VIGENTE')
+  })
   it('el manual no tiene revisor (no-circularidad) y brief no necesita esquema ni productores de corrección', () => {
     expect(politicaDeFila({ ...FILAS_DE_POLITICA.manual }).ok).toBe(false)
     expect(politicaDeFila({ ...FILAS_DE_POLITICA.brief }).ok).toBe(true)

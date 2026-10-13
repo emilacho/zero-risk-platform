@@ -114,7 +114,7 @@ export const sobre = (tipo: TipoDeRevision, o: { id?: string; texto?: string; dr
   artifact_type: tipo, artifact_id: o.id ?? `${tipo}-1`, client_id: o.client_id ?? 'cliente-prueba', journey_id: 'journey-1',
   payload: {
     texto: o.texto ?? (tipo === 'plan' ? TEXTO_DEL_PLAN : tipo === 'pieza' ? 'Pie de foto original\n\n#uno #dos' : `texto de ${tipo}`), dry_run: o.dry_run ?? true,
-    devolver_a: { tipo: 'webhook', destino: 'https://n8n.invalid/webhook/jefatura' },
+    devolver_a: { tipo: 'webhook', destino: 'https://zero-risk-platform.vercel.app/api/jefatura/llamador' },
     contexto: [{ titulo: 'Manual de marca vigente', texto: 'Tono cercano. Tuteo.', funcion: 'manda' }],
     ...(tipo === 'plan' ? { pedido_del_plan: 'PEDIDO ORIGINAL DEL PLAN (datos reunidos, hechos del dueño, registro, referencia)' } : {}),
     ...(o.simulacion ? { simulacion: o.simulacion } : {}), ...(o.payload ?? {}),

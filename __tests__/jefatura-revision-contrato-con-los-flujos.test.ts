@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { procesarSalidaDeRevision } from '../src/lib/jefatura/revision/formatos'
 import { correr, puertosDePrueba, sobre } from './_helpers/jefatura-revision'
 
+process.env.N8N_WEBHOOK_BASE = 'https://n8n.invalid/webhook' // el n8n «propio» de estas pruebas (la ruta y los flujos de J4 usan la misma lista de destinos)
 const DIR = resolve(__dirname, '..', 'scripts', 'worker-staging', 'jefatura')
 const codigo = (f: string) => readFileSync(resolve(DIR, f), 'utf8')
 type Json = Record<string, any>
@@ -142,9 +143,16 @@ describe('lo que entrega el orquestador al CERRAR lo lee el nodo ③ de J4 (entr
     const cuerpo = await cierreDe({ tipo: 'ninguno', destino: '' })
     expect(sigue(cuerpo).ruta).toBe('nada')
   })
-  it('un webhook que no es de nuestro n8n ni de nuestro Vercel NO se entrega (el nodo se detiene)', async () => {
-    const cuerpo = await cierreDe({ tipo: 'webhook', destino: 'https://tercero.example/hook' })
-    expect(() => sigue(cuerpo)).toThrow(/DESTINO_NO_PERMITIDO/)
+  it('un webhook que no es de nuestro n8n ni de nuestro Vercel NO se acepta al ABRIR (la ruta lo rechaza antes de guardarlo) y, aunque alguien forjara el cierre, el nodo de J4 se detiene', async () => {
+    const { P, mem } = puertosDePrueba()
+    const s = sobre('brief') as Json
+    s.payload.devolver_a = { tipo: 'webhook', destino: 'https://tercero.example/hook' }
+    const { abrirRevision } = await import('../src/lib/jefatura/revision/orquestador')
+    const r = await abrirRevision(P, s)
+    expect(r.status).toBe(400)
+    expect(String(r.cuerpo.errores)).toMatch(/no es de nuestro n8n ni de nuestro Vercel/)
+    expect(mem.revisiones.size).toBe(0)
+    expect(() => sigue({ accion: 'cerrado', resultado: 'limpia', devolver: { tipo: 'webhook', url: 'https://tercero.example/hook', cuerpo: {} } })).toThrow(/DESTINO_NO_PERMITIDO/)
   })
   it('un paso siguiente (`esperar`) vuelve a despertar el flujo con el turno', async () => {
     const { P } = puertosDePrueba()
@@ -201,5 +209,35 @@ describe('el vigía de J4 lee lo que entrega `vigiar` (nodo ① del vigía)', ()
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ tipo: 'cable' })
     expect(items[0].payload_cable).toMatchObject({ worker_name: 'jefatura', resultado: 'fallido', revision_id: id, _sala_correlation_id: 'corr-7', _journey_id: 'journey-1' })
+  })
+})
+
+describe('UNA sola fuente de moldes (reparo de CC#3): el molde de J4 y el que entrega el orquestador dicen LO MISMO', () => {
+  const armarJ4 = (turno: Json) => correrNodo('turno-n1-armar.js', { entrada: { revision_id: '00000000-0000-4000-8000-000000000001', turno, dry_run: true } })[0].resultado_body as Json
+  /** lo que importa del molde, sin el texto libre: las respuestas por id y qué partes opcionales trae */
+  const forma = (texto: string, esquema: string) => {
+    const r = procesarSalidaDeRevision(texto, esquema, 1, 1)
+    expect(r.ok, `${esquema}: ${texto.slice(0, 100)}`).toBe(true)
+    const v = (r.ok ? r.valor : {}) as Json
+    return {
+      respuestas: (v.respuestas ?? []).map((x: Json) => [x.id, x.estado]),
+      fichas: (v.fichas ?? []).map((x: Json) => x.gravedad),
+      partes: ['pieza', 'objeto', 'filas', 'texto_plan'].filter((k) => k in v),
+    }
+  }
+  it.each([
+    ['plan', { fichas: 'bloquea', toma: 'todo' }], ['plan', { fichas: 'bloquea', toma: 'nada' }], ['plan', { fichas: 'sugerencia', toma: 'todo' }],
+    ['estrategia', { fichas: 'bloquea', toma: 'todo' }], ['estrategia', { fichas: 'bloquea', toma: 'nada' }],
+    ['calendario', { fichas: 'bloquea', toma: 'todo' }], ['calendario', { fichas: 'bloquea', toma: 'nada' }],
+    ['brief', { fichas: 'bloquea' }], ['pieza', { fichas: 'bloquea', toma: 'todo' }], ['pieza', { fichas: 'bloquea', toma: 'nada' }],
+  ] as const)('%s con %j: mismas respuestas, mismas fichas y mismas partes opcionales', async (tipo, sim) => {
+    const { P } = puertosDePrueba()
+    const c = await correr(P, sobre(tipo, { id: `${tipo}-fuente-${JSON.stringify(sim)}`, simulacion: sim as never }))
+    expect(c.turnos.length).toBeGreaterThan(0)
+    for (const t of c.turnos) {
+      const mio = (t.pedido.molde as { texto: string }).texto
+      const suyo = String(armarJ4({ n: t.n, tipo: 'agente', paso: t.paso, dispatch_key: 'x', pedido: t.pedido }).texto)
+      expect(forma(suyo, String(t.pedido.esquema)), `${tipo} ${t.paso}`).toEqual(forma(mio, String(t.pedido.esquema)))
+    }
   })
 })
