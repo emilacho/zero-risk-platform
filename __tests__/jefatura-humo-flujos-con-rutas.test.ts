@@ -151,8 +151,13 @@ describe('lo que se entrega y por qué camino (con las rutas reales)', () => {
     const r = await recorrer(await abrir('pieza', { simulacion: { fichas: 'bloquea', productor: 'formato_roto_siempre' } }))
     expect(r.entrega?.entrega_cuerpo.resultado).toBe('fallida')
   })
-  it('destino fuera de nuestro n8n y nuestro Vercel: el nodo ③ se DETIENE aunque la ruta lo haya aceptado', async () => {
-    await expect(recorrer(await abrir('brief', { simulacion: { fichas: 'ninguna' }, devolver_a: { tipo: 'webhook', destino: 'https://ajeno.example.com/hook' } }))).rejects.toThrow(/JEFATURA_DESTINO_NO_PERMITIDO/)
+  it('destino fuera de nuestro n8n y nuestro Vercel: la ruta lo rechaza al ABRIR (400) y, si alguna vez llegara uno, el nodo ③ lo detiene (probado aparte)', async () => {
+    const s = sobre('brief', { simulacion: { fichas: 'ninguna' } }) as Json
+    s.payload.devolver_a = { tipo: 'webhook', destino: 'https://ajeno.example.com/hook' }
+    const r = await http(REVISIONES, 'revisiones', s)
+    expect(r.statusCode).toBe(400)
+    expect(JSON.stringify(r.body)).toMatch(/no es de nuestro n8n ni de nuestro Vercel/)
+    expect(db().tablas.jefatura_revisiones ?? []).toHaveLength(0) // no quedó guardada ninguna revisión sin entrega posible
   })
 })
 
