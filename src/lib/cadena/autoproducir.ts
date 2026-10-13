@@ -101,7 +101,7 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
       try {
         await al.limpiarPartesSecos(ahora.toISOString())
         idDelParteSeco = await al.guardarParteSeco({
-          client_id: c.client_id, lote: texto(parteSeco.lote) ?? campanaId,
+          client_id: c.client_id, lote: texto(t.lote_key) ?? texto(parteSeco.lote) ?? campanaId, // r81 · la llave del lote de verdad (campaña:semana:versión); dos lotes de una campaña ya no se pisan el parte de ensayo
           fila: { title: texto(filaSeca.title) ?? 'parte', content: contenido, ...(texto(filaSeca.content_text) ? { content_text: texto(filaSeca.content_text)! } : {}), ...(texto(filaSeca.producing_agent) ? { producing_agent: texto(filaSeca.producing_agent)! } : {}), provenance_tag: t },
           vence_en: new Date(ahora.getTime() + HORAS_DE_VIDA_DEL_PARTE_SECO * 3_600_000).toISOString(),
         })

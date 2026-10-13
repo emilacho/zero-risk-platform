@@ -45,6 +45,12 @@ describe('D3 · parte de seco', () => {
     expect(b.cuerpo.parte_id).toBe(a.cuerpo.parte_id)
     expect(b.cuerpo.duplicados).toBe(2)
   })
+  it('r81 · la llave sale del lote de verdad (provenance_tag.lote_key) aunque el flujo mande `lote` vacío: dos lotes de una campaña NO se pisan el parte', async () => {
+    const al = almacen()
+    const con = (lote_key: string) => { const p = parteSeco('x'); return { ...p, lote: '', fila: { ...p.fila, provenance_tag: { ...p.fila.provenance_tag, lote_key } } } }
+    await llamar(al, con('camp-1:2026-W43:1')); await llamar(al, con('camp-1:2026-W44:1')); await llamar(al, con('camp-1:2026-W43:1'))
+    expect(al.partesSecos.map((x) => x.fila.provenance_tag.lote_key).sort()).toEqual(['seco:camp-1:2026-W43:1', 'seco:camp-1:2026-W44:1'])
+  })
   it('vence solo: al pasar su vida, la siguiente llamada de ensayo o el vigía lo barre', async () => {
     const al = almacen(); await llamar(al, parteSeco('L1'))
     al.partesSecos[0].vence_en = new Date(Date.now() - 1000).toISOString()

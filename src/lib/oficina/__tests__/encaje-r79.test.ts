@@ -71,6 +71,21 @@ describe('1024×1024 → 1080×1350 (4:5)', () => {
   })
 })
 
+describe('r81 · la imagen generada simulada del seco es un PNG de verdad', () => {
+  it('descargar(dry) devuelve un 1024×1024 que se decodifica y se encaja a 1080×1350 (así el seco ejerce D6); las láminas simuladas siguen siendo solo encabezado', async () => {
+    const { crearPuertos, PREFIJO_DRY } = await import('../adaptadores')
+    const { DbFalsa } = await import('./dbfalsa')
+    const P = crearPuertos(new DbFalsa(), { baseUrl: 'https://app.test', internalKey: 'k' }, (async () => new Response('', { status: 404 })) as typeof fetch)
+    const gen = (await P.descargar(`${PREFIJO_DRY}dry-abc123.png`))!
+    expect(leerMedidas(gen)).toMatchObject({ ancho: 1024, alto: 1024, tipo: 'png' })
+    expect(decodificarPng(gen)).not.toBeNull()
+    const r = encajarAProporcion(gen, { ancho: 1080, alto: 1350 })
+    expect(['recortada', 'encajada']).toContain(r.modo); expect(leerMedidas(r.bytes)).toMatchObject({ ancho: 1080, alto: 1350 })
+    const lamina = (await P.descargar(`${PREFIJO_DRY}lamina-1-1080x1350.png`))!
+    expect(leerMedidas(lamina)).toMatchObject({ ancho: 1080, alto: 1350 }); expect(decodificarPng(lamina)).toBeNull()
+  })
+})
+
 describe('el chequeo de entrega ya no bloquea por la proporción', () => {
   const fila4x5: FilaDeFormato = { red: 'instagram', formato: 'foto_4x5', ancho: 1080, alto: 1350, tipos_archivo: ['png', 'jpg'], peso_max_mb: 30, n_min: 1, n_max: 1, texto_max: 2200, hashtags_max: 30, verificado: true }
   it('antes: 1024×1024 contra 4:5 → bloquea · después de encajar: sin ficha de proporción', () => {
