@@ -10,6 +10,7 @@ import { datosDeContacto } from './texto'
 import { almacenDeSupabase, type Db } from './almacen-supabase'
 import type { FotoEtiquetada } from './fotos'
 import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt } from '../revisor-gpt'
+import { llamarRevisorGptConLibro } from '../revisor-gpt-libro'
 import type { FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
 import type { Registro } from './chequeos'
 import { avisoDeProvisionales } from '../manual/lectura'
@@ -147,7 +148,10 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       if (p.dry_run) return { ok: true, texto: '', costo_usd: 0, modelo: 'simulado (dry_run)' }
       if (!env.openaiKey) return { ok: false, error: 'OPENAI_API_KEY no configurada', costo_usd: 0, intentos: [] }
       if (!env.revisorModelo) return { ok: false, error: 'OFICINA_REVISOR_MODEL no configurado (el nombre del modelo del revisor no está verificado)', costo_usd: 0, intentos: [] }
-      return llamarRevisorGpt({ f, apiKey: env.openaiKey, modelo: env.revisorModelo, precioEntrada: env.revisorPrecioEntrada, precioSalida: env.revisorPrecioSalida, texto: p.texto, imagenes_urls: p.imagenes_urls, esperasMs: env.esperasRevisorMs, esperar: env.esperar })
+      const o = { f, apiKey: env.openaiKey, modelo: env.revisorModelo, precioEntrada: env.revisorPrecioEntrada, precioSalida: env.revisorPrecioSalida, texto: p.texto, imagenes_urls: p.imagenes_urls, esperasMs: env.esperasRevisorMs, esperar: env.esperar }
+      // condición 5 (jefatura, 13-oct): el gasto de GPT entra también a `agent_invocations` (freno de US$ 8 y vigilante); sin cliente o sin encargo identificado, se llama como siempre
+      if (!p.client_id || !p.ref_id) return llamarRevisorGpt(o)
+      return llamarRevisorGptConLibro(o, { supabase: db as never, origen: 'oficina', refId: p.ref_id, n: p.n, clientId: p.client_id })
     },
     async renderLaminas(p): Promise<ResultadoRender> {
       const medidas = MEDIDAS_DE_PLATAFORMA[p.plataforma]
