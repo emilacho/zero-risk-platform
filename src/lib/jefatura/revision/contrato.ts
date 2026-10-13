@@ -6,6 +6,14 @@
  */
 import type { ContextoDelRevisor, HuecosDeLaPregunta } from '../../revision-comun'
 
+/** a dónde puede entregar un webhook de la jefatura: SOLO nuestro n8n o nuestro Vercel (la misma lista que aplican los flujos de J4 al entregar) */
+export const VERCEL_DE_LA_PLATAFORMA = 'https://zero-risk-platform.vercel.app/'
+export const N8N_POR_OMISION = 'https://n8n-production-72be.up.railway.app/webhook'
+export function destinoDeWebhookPermitido(url: string, env: Record<string, string | undefined> = process.env): boolean {
+  const base = ((env.N8N_WEBHOOK_BASE ?? '').trim() || N8N_POR_OMISION).replace(/\/+$/, '') + '/'
+  return typeof url === 'string' && (url.startsWith(base) || url.startsWith(VERCEL_DE_LA_PLATAFORMA))
+}
+
 export const TIPOS_DE_REVISION = ['plan', 'estrategia', 'calendario', 'brief', 'pieza', 'manual'] as const
 export type TipoDeRevision = (typeof TIPOS_DE_REVISION)[number]
 
@@ -117,6 +125,7 @@ export function validarEntrada(cuerpo: unknown): ResultadoDeValidar {
   if (typeof p.dry_run !== 'boolean') return { ok: false, codigo: 'dry_run_obligatorio', errores: ['`payload.dry_run` es obligatorio y debe ser verdadero o falso (booleano); ausente = 400', ...errores] }
   if (typeof p.texto !== 'string' || p.texto.trim() === '') errores.push('`payload.texto` es obligatorio (el artefacto tal cual salió del productor)')
   if (!esObjeto(p.devolver_a) || !(p.devolver_a.tipo === 'webhook' || p.devolver_a.tipo === 'sala_ref' || p.devolver_a.tipo === 'ninguno') || (p.devolver_a.tipo !== 'ninguno' && !texto(p.devolver_a.destino))) errores.push('`payload.devolver_a` debe ser { tipo: webhook | sala_ref | ninguno, destino }')
+  else if (p.devolver_a.tipo === 'webhook' && !destinoDeWebhookPermitido(String(p.devolver_a.destino))) errores.push('`payload.devolver_a.destino` no es de nuestro n8n ni de nuestro Vercel: no se entrega a un tercero')
   if (p.productores !== undefined) {
     if (!lista(p.productores) || p.productores.length === 0 || !p.productores.every((x) => esObjeto(x) && texto(x.donde) && texto(x.agente))) errores.push('`payload.productores` debe ser una lista de { donde, agente }')
   }

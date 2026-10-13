@@ -126,6 +126,14 @@ describe('pieza · el orden firmado: jefe → corrige el dueño → GPT ciego �
     expect(ciego).toContain('Tono cercano. Tuteo.')
     expect(c.final.cuerpo.resultado).toBe('limpia')
   })
+  it('el jefe recibe los documentos «contra qué» (el manual) del contexto y la línea de contexto de su tipo', async () => {
+    const { P } = puertosDePrueba()
+    const a = await abrirRevision(P, sobre('plan'))
+    const task = String((a.cuerpo.turno as { pedido: { task: string } }).pedido.task)
+    expect(task).toContain('## Documentos')
+    expect(task).toContain('Tono cercano. Tuteo.')
+    expect(task).toContain('Estás revisando el plan de 90 días contra manual de marca vigente')
+  })
   it('el revisor real recibe el contexto para el libro de invocaciones (revisión, número de paso y cliente): así el gasto de GPT se ve en el libro central (condición 5)', async () => {
     const { P, rastro } = puertosDePrueba()
     const c = await correr(P, sobre('pieza', { dry_run: false }), (t) => (t.paso === 'revision_fondo' ? { texto: '{"fichas":[]}' } : { texto: '{"respuestas":[]}' }))
@@ -419,7 +427,10 @@ describe('un siguiente repetido, respuestas repetidas y el vigía', () => {
     const t = a.cuerpo.turno as { n: number; pedido: { molde: { texto: string } } }
     await recibirResultado(P, id, t.n, { texto: t.pedido.molde.texto, costo_usd: 0.1 })
     const gasto = [...mem.revisiones.values()][0].gasto_usd
-    await recibirResultado(P, id, t.n, { texto: t.pedido.molde.texto, costo_usd: 0.1 })
+    const repetida = await recibirResultado(P, id, t.n, { texto: t.pedido.molde.texto, costo_usd: 0.1 })
+    // una respuesta repetida (un reintento legítimo del flujo) NO es un error: avanza de nuevo (200), no devuelve 409
+    expect(repetida.status).toBe(200)
+    expect(['esperar', 'cerrado']).toContain(repetida.cuerpo.accion)
     expect([...mem.revisiones.values()][0].gasto_usd).toBe(gasto)
   })
   it('un turno que no es el esperado = 409', async () => {

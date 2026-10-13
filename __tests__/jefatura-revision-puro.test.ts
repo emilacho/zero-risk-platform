@@ -7,7 +7,8 @@ import { validarEntrada } from '../src/lib/jefatura/revision/contrato'
 import {
   MARCA_DE_FIN_DE_RESOLUCION, MARCA_DE_INICIO_DE_RESOLUCION, MINIMO_DE_CARACTERES_DEL_PLAN, procesarSalidaDeRevision, separarTextoYResolucion, TOPE_DE_CARACTERES_DEL_PLAN,
 } from '../src/lib/jefatura/revision/formatos'
-import { elegirVersion, esProductoDeUnaRevision, etiquetaDeVersion, planDeGuardado, PORCENTAJE_MINIMO_DEL_LARGO, provenanceConReemplazo, provenanceDeVersionNueva, resultadoTrasElegir, type EvaluacionDeVersion } from '../src/lib/jefatura/revision/plan'
+import { destinoDeWebhookPermitido } from '../src/lib/jefatura/revision/contrato'
+import { elegirVersion, esProductoDeUnaRevision, etiquetaDeVersion, MAXIMO_DE_VERSIONES, planDeGuardado, PORCENTAJE_MINIMO_DEL_LARGO, provenanceConReemplazo, provenanceDeVersionNueva, resultadoTrasElegir, type EvaluacionDeVersion } from '../src/lib/jefatura/revision/plan'
 import { resolverCierre, textoDelAviso } from '../src/lib/jefatura/revision/cierre'
 import { estadoInicial, fichaNueva } from '../src/lib/revision-comun'
 import { sobre } from './_helpers/jefatura-revision'
@@ -66,6 +67,10 @@ describe('plan · texto plano + bloque de resolución (condición 1 de CC#3)', (
     const r = separarTextoYResolucion(`${plan(34_000)}\n${bloque(TOMADA)}`, { exigirTexto: true })
     expect(r.ok).toBe(true)
     if (r.ok) { expect(r.texto).toHaveLength(34_000); expect(r.respuestas).toEqual(TOMADA) }
+  })
+  it('el tope es 40.000 CARACTERES literales: 40.000 pasa y 40.001 no (no depende de la constante)', () => {
+    expect(separarTextoYResolucion(`${plan(40_000)}\n${bloque(TOMADA)}`, { exigirTexto: false }).ok).toBe(true)
+    expect(separarTextoYResolucion(`${plan(40_001)}\n${bloque(TOMADA)}`, { exigirTexto: false }).ok).toBe(false)
   })
   it('rechaza un plan que pasa el tope', () => {
     const r = separarTextoYResolucion(`${plan(TOPE_DE_CARACTERES_DEL_PLAN + 1)}\n${bloque(TOMADA)}`, { exigirTexto: false })
@@ -265,42 +270,76 @@ describe('cierre (reglas 2, 3, 4)', () => {
   })
 })
 
-describe('G5 · el provenance_tag se escribe COMPLETO (condición 2 de CC#3)', () => {
-  // CONGELADO: cualquier función que mute el objeto que recibe revienta (en módulo estricto asignar a un objeto congelado lanza)
-  const A = Object.freeze({ type: 'campaign_plan_90d', trust_level: 'trusted', fuente: 'planeacion', caracteres: 24827, workflow_id: 'wf', workflow_execution_id: 'ex-1', estado_del_plan: 'limpio', pendientes: null })
-  it('marcar el reemplazo CONSERVA todas las claves previas de A (no pierde rastro) y añade las dos nuevas', () => {
-    const r = provenanceConReemplazo(A, { por: 'b-id', en: '2026-10-13T12:00:00Z' })
-    expect(r).toEqual({ ...A, reemplazado_por: 'b-id', reemplazado_en: '2026-10-13T12:00:00Z' })
-    for (const k of Object.keys(A)) expect(r[k], k).toEqual((A as Record<string, unknown>)[k])
+describe('G5 · el provenance_tag se escribe ENTERO, con TODAS sus claves (condición 2 de CC#3 · corregida: los planes reales NO llevan type ni trust_level)', () => {
+  // los provenance_tag REALES de los 3 planes de la tabla (medidos por CC#3): ninguno trae type ni trust_level
+  const PLAN_REAL_1 = Object.freeze({ fuente: 'planeacion', caracteres: 24827, workflow_id: 'X9F0zp6LQ2xGEYVS', workflow_execution_id: '48113', guardado_antes_de_drive: true })
+  const PLAN_REAL_CORREGIDO = Object.freeze({ fuente: 'planeacion', caracteres: 24915, correccion: 'dueno', version_de: '52529141-0000-4000-8000-000000000000', workflow_id_origen: 'X9F0zp6LQ2xGEYVS', calentamiento_quitado: true, workflow_execution_id_origen: '48113' })
+  it('con el provenance_tag REAL de un plan: la marca CONSERVA las 5 claves y añade las dos nuevas (antes lanzaba un error con todas las filas reales)', () => {
+    const r = provenanceConReemplazo(PLAN_REAL_1, { por: 'b-id', en: '2026-10-13T12:00:00Z' })
+    expect(r).toEqual({ ...PLAN_REAL_1, reemplazado_por: 'b-id', reemplazado_en: '2026-10-13T12:00:00Z' })
+    expect(Object.keys(r)).toHaveLength(Object.keys(PLAN_REAL_1).length + 2)
+    expect(r).not.toHaveProperty('type')
+    expect(r).not.toHaveProperty('trust_level')
   })
-  it('no muta el objeto que recibe', () => {
-    const copia = JSON.parse(JSON.stringify(A))
-    provenanceConReemplazo(A, { por: 'b-id', en: 'ya' })
-    expect(A).toEqual(copia)
+  it('lo mismo con el plan del 11-oct (el que ya trae version_de): no pierde ninguna de sus 7 claves', () => {
+    const r = provenanceConReemplazo(PLAN_REAL_CORREGIDO, { por: 'b-id', en: 'ya' })
+    for (const [k, v] of Object.entries(PLAN_REAL_CORREGIDO)) expect(r[k], k).toEqual(v)
+    expect(r.reemplazado_por).toBe('b-id')
   })
-  it('se NIEGA a escribir un objeto parcial: sin `type` o sin `trust_level` la base lo rechaza con 23514 (y quedarían dos planes vigentes)', () => {
-    expect(() => provenanceConReemplazo({ fuente: 'x' }, { por: 'b', en: 'e' })).toThrow(/falta «type»[\s\S]*23514/)
-    expect(() => provenanceConReemplazo({ type: 't' }, { por: 'b', en: 'e' })).toThrow(/falta «trust_level»/)
-    expect(() => provenanceConReemplazo({ type: '', trust_level: 'x' }, { por: 'b', en: 'e' })).toThrow(/falta «type»/)
+  it('también sirve si el tag SÍ trae type y trust_level (los conserva, no los exige)', () => {
+    const A = { type: 'campaign_plan_90d', trust_level: 'trusted', fuente: 'planeacion' }
+    expect(provenanceConReemplazo(A, { por: 'b', en: 'e' })).toMatchObject(A)
+  })
+  it('no muta el objeto que recibe (congelado: cualquier mutación revienta)', () => {
+    const copia = JSON.parse(JSON.stringify(PLAN_REAL_1))
+    provenanceConReemplazo(PLAN_REAL_1, { por: 'b-id', en: 'ya' })
+    expect(PLAN_REAL_1).toEqual(copia)
+  })
+  it('se NIEGA solo a lo que no se leyó antes: algo que no es un objeto, o un objeto vacío (se perdería el rastro de la fila)', () => {
+    expect(() => provenanceConReemplazo({}, { por: 'b', en: 'e' })).toThrow(/está vacío: no se escribe un objeto que no se leyó antes/)
     for (const malo of [null, undefined, 'texto', [], 5]) expect(() => provenanceConReemplazo(malo, { por: 'b', en: 'e' })).toThrow(/no es un objeto/)
   })
-  it('pide el id de quien reemplaza', () => { expect(() => provenanceConReemplazo(A, { por: ' ', en: 'e' })).toThrow(/falta el id/) })
-  it('es idempotente con la MISMA versión (conserva la hora) y se niega a que otra la reemplace (G7)', () => {
-    const una = provenanceConReemplazo(A, { por: 'b-id', en: 'hora-1' })
+  it('pide el id de quien reemplaza', () => { expect(() => provenanceConReemplazo(PLAN_REAL_1, { por: ' ', en: 'e' })).toThrow(/falta el id/) })
+  it('es idempotente con la MISMA versión (conserva su hora) y se niega a que otra la reemplace (G7)', () => {
+    const una = provenanceConReemplazo(PLAN_REAL_1, { por: 'b-id', en: 'hora-1' })
     expect(provenanceConReemplazo(una, { por: 'b-id', en: 'hora-2' })).toEqual(una)
     expect(() => provenanceConReemplazo(una, { por: 'c-id', en: 'hora-3' })).toThrow(/ya fue reemplazada por b-id/)
   })
-  it('la versión nueva hereda `type` y `trust_level` de la fila de partida y añade su cadena; no hereda un reemplazo ajeno', () => {
-    const conReemplazo = { ...A, reemplazado_por: 'x', reemplazado_en: 'y' }
+  it('la versión nueva hereda TODAS las claves de la fila de partida (con el tag real de un plan) y añade su cadena; no hereda un reemplazo ajeno', () => {
+    const conReemplazo = { ...PLAN_REAL_1, reemplazado_por: 'x', reemplazado_en: 'y' }
     const b = provenanceDeVersionNueva(conReemplazo, { etiqueta: 'B', version: 2, version_de: 'a-id', jefatura_revision_id: 'rev-1' })
-    expect(b).toMatchObject({ type: 'campaign_plan_90d', trust_level: 'trusted', fuente: 'planeacion', etiqueta: 'B', version: 2, version_de: 'a-id', jefatura_revision_id: 'rev-1', reentrega: 'version_nueva' })
+    expect(b).toMatchObject({ ...PLAN_REAL_1, etiqueta: 'B', version: 2, version_de: 'a-id', jefatura_revision_id: 'rev-1', reentrega: 'version_nueva' })
     expect(b).not.toHaveProperty('reemplazado_por')
     expect(b).not.toHaveProperty('reemplazado_en')
+    expect(b).not.toHaveProperty('type')
   })
-  it('la versión nueva se niega con un tag incompleto, sin padre, sin revisión o pasando de 3 versiones', () => {
-    expect(() => provenanceDeVersionNueva({ fuente: 'x' }, { etiqueta: 'B', version: 2, version_de: 'a', jefatura_revision_id: 'r' })).toThrow(/falta «type»/)
-    expect(() => provenanceDeVersionNueva(A, { etiqueta: 'B', version: 2, version_de: '', jefatura_revision_id: 'r' })).toThrow(/version_de/)
-    expect(() => provenanceDeVersionNueva(A, { etiqueta: 'B', version: 2, version_de: 'a', jefatura_revision_id: '' })).toThrow(/revisión/)
-    expect(() => provenanceDeVersionNueva(A, { etiqueta: 'C', version: 4 as never, version_de: 'b', jefatura_revision_id: 'r' })).toThrow(/3 versiones/)
+  it('la versión nueva se niega con un tag vacío, sin padre, sin revisión o pasando de 3 versiones', () => {
+    expect(() => provenanceDeVersionNueva({}, { etiqueta: 'B', version: 2, version_de: 'a', jefatura_revision_id: 'r' })).toThrow(/está vacío/)
+    expect(() => provenanceDeVersionNueva(PLAN_REAL_1, { etiqueta: 'B', version: 2, version_de: '', jefatura_revision_id: 'r' })).toThrow(/version_de/)
+    expect(() => provenanceDeVersionNueva(PLAN_REAL_1, { etiqueta: 'B', version: 2, version_de: 'a', jefatura_revision_id: '' })).toThrow(/revisión/)
+    expect(() => provenanceDeVersionNueva(PLAN_REAL_1, { etiqueta: 'C', version: 4 as never, version_de: 'b', jefatura_revision_id: 'r' })).toThrow(/3 versiones/)
+  })
+  it('G7 en el código: el máximo es 3 versiones (A, B, C)', () => { expect(MAXIMO_DE_VERSIONES).toBe(3) })
+})
+
+describe('el destino de un webhook: solo nuestro n8n o nuestro Vercel (reparo de CC#3: la ruta lo rechaza ANTES de guardarlo)', () => {
+  it('permitidos: nuestro n8n (por omisión y con N8N_WEBHOOK_BASE) y nuestro Vercel', () => {
+    expect(destinoDeWebhookPermitido('https://n8n-production-72be.up.railway.app/webhook/zero-risk/x', {})).toBe(true)
+    expect(destinoDeWebhookPermitido('https://zero-risk-platform.vercel.app/api/x', {})).toBe(true)
+    expect(destinoDeWebhookPermitido('https://n8n.mio.test/webhook/x', { N8N_WEBHOOK_BASE: 'https://n8n.mio.test/webhook/' })).toBe(true)
+  })
+  it('rechazados: un tercero, un prefijo parecido, http, sin ruta, vacío', () => {
+    for (const malo of ['https://tercero.example/hook', 'https://zero-risk-platform.vercel.app.evil.com/x', 'http://zero-risk-platform.vercel.app/x', 'https://zero-risk-platform.vercel.app', 'https://n8n-production-72be.up.railway.app/webhookx/y', '', 'zero-risk-platform.vercel.app/']) expect(destinoDeWebhookPermitido(malo, {}), malo).toBe(false)
+  })
+  it('validarEntrada: un webhook ajeno = entrada inválida; sala_ref y ninguno no se miran', () => {
+    const s = sobre('pieza') as { payload: Record<string, unknown> }
+    s.payload.devolver_a = { tipo: 'webhook', destino: 'https://tercero.example/hook' }
+    const v = validarEntrada(s)
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.errores.join(' ')).toMatch(/no es de nuestro n8n ni de nuestro Vercel/)
+    s.payload.devolver_a = { tipo: 'sala_ref', destino: 'corr-1' }
+    expect(validarEntrada(s).ok).toBe(true)
+    s.payload.devolver_a = { tipo: 'ninguno', destino: '' }
+    expect(validarEntrada(s).ok).toBe(true)
   })
 })
