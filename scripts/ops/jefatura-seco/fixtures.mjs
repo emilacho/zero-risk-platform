@@ -153,7 +153,7 @@ export const materialDelCerebroDe = (c) => `Material del cerebro de ${c.nombre}:
 /** los documentos de `contra_que` YA LEÍDOS, tal como los entrega el llamador en `payload.contexto` (el revisor ciego los recibe también) */
 export function contextoDe(c, tipo, r = c.registro) {
   const manual = { titulo: 'Manual de marca vigente', funcion: 'manda si dos documentos se contradicen', texto: manualEn(c, r).slice(0, 12000) }
-  const plan = { titulo: 'Plan vigente', funcion: 'el artefacto sale de él', texto: planDe(c).slice(0, 12000) }
+  const plan = { titulo: 'Plan vigente', funcion: 'el artefacto sale de él', texto: planDe(c) }
   const ficha = { titulo: 'Ficha del cliente', funcion: 'hechos del negocio', texto: `${c.nombre} · ${c.rubro} · ${c.ciudad}, ${c.pais} · moneda ${c.moneda} · canal de pedido ${c.canal_pedido} · registro ${r}` }
   const hechos = { titulo: 'Lo que dijo el dueño', funcion: 'correcciones del dueño; mandan sobre la investigación', texto: `El dueño confirma: el canal de pedido es ${c.canal_pedido}; el diferencial es ${c.diferencial}.` }
   const brief = { titulo: 'Brief de la pieza', funcion: 'guía, no regla', texto: briefsDe(c).slice(0, 1200) }
