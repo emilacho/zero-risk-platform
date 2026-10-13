@@ -533,3 +533,14 @@ describe('política inválida y plantilla', () => {
     expect(() => politica('pieza', { productores: [] })).toThrow(/al menos un productor/)
   })
 })
+
+describe('§149 · el paso guarda el id del flujo y de la ejecución que lo hizo', () => {
+  it('workflow_id y workflow_execution_id de la vuelta quedan en el renglón del paso (y la traza)', async () => {
+    const { P, mem } = puertosDePrueba()
+    const a = await abrirRevision(P, sobre('brief'))
+    const t = a.cuerpo.turno as { n: number; pedido: { molde: { texto: string } } }
+    await recibirResultado(P, String(a.cuerpo.revision_id), t.n, { texto: t.pedido.molde.texto, costo_usd: 0.05, workflow_id: 'wf-jefatura-turno', workflow_execution_id: 'ex-77' })
+    const paso = [...mem.pasos.values()][0].find((p) => p.n === t.n)!
+    expect(paso).toMatchObject({ workflow_id: 'wf-jefatura-turno', workflow_execution_id: 'ex-77', estado: 'hecho' })
+  })
+})

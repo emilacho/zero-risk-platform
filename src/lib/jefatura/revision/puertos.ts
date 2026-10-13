@@ -49,6 +49,7 @@ export interface PasoRegistrado {
   agente: string | null
   estado: 'pendiente' | 'corriendo' | 'hecho' | 'fallo' | 'muerto'
   dispatch_key: string | null
+  workflow_id?: string | null
   workflow_execution_id?: string | null
   concepto: 'modelo' | 'revisor_externo' | 'portero'
   base: 'usage' | 'estimado'

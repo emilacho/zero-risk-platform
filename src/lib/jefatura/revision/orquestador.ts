@@ -215,7 +215,7 @@ async function ejecutarExterno(P: Puertos, rev: Revision, pl: Plantilla, indice:
 }
 
 // ───────────────────────── recibir el resultado de un empleado
-export interface ResultadoDeTurno { texto?: string; error?: string; costo_usd?: number; workflow_execution_id?: string | null; tokens_in?: number | null; tokens_out?: number | null }
+export interface ResultadoDeTurno { texto?: string; error?: string; costo_usd?: number; workflow_id?: string | null; workflow_execution_id?: string | null; tokens_in?: number | null; tokens_out?: number | null }
 
 export async function recibirResultado(P: Puertos, revisionId: string, n: number, res: ResultadoDeTurno): Promise<Respuesta> {
   const rev = await P.almacen.leerRevision(revisionId)
@@ -232,7 +232,7 @@ export async function recibirResultado(P: Puertos, revisionId: string, n: number
   const paso = sig.paso
   const costo = Math.max(0, Number(res.costo_usd ?? 0))
   const intento = (e.vueltas[`fmt:${paso.clave}`] ?? 0) + 1
-  const base = { paso: paso.clave, intento, tipo: 'agente' as const, agente: abierto.agente, dispatch_key: abierto.dispatch_key, concepto: 'modelo' as const, base: 'usage' as const, cost_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null, tokens_in: res.tokens_in ?? null, tokens_out: res.tokens_out ?? null, traza: trazaM1(rev, paso) }
+  const base = { paso: paso.clave, intento, tipo: 'agente' as const, agente: abierto.agente, dispatch_key: abierto.dispatch_key, concepto: 'modelo' as const, base: 'usage' as const, cost_usd: costo, workflow_id: res.workflow_id ?? null, workflow_execution_id: res.workflow_execution_id ?? null, tokens_in: res.tokens_in ?? null, tokens_out: res.tokens_out ?? null, traza: trazaM1(rev, paso) }
   if (res.error || typeof res.texto !== 'string') {
     await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), paso: { ...base, n, estado: 'fallo', error: res.error ?? 'respuesta vacía' } })
     return fallar(P, { ...rev, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, `el paso «${paso.clave}» falló: ${res.error ?? 'respuesta vacía'}`)
