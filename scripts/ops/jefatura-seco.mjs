@@ -7,7 +7,7 @@
  *   node scripts/ops/jefatura-seco.mjs contadores --guardar <archivo>    foto de los contadores ANTES · después: --comparar <archivo> (debe decir lo esperado)
  *   node scripts/ops/jefatura-seco.mjs encender [--aplicar]              guarda la foto del estado previo, pone la jefatura en `ensayo` SOLO con los 3 clientes de práctica y activa SOLO el flujo `jefatura · turno`; lee de vuelta
  *   node scripts/ops/jefatura-seco.mjs correr --via ruta|n8n [--tipo T] [--cliente slug] [--registro tuteo|voseo] [--caso C] [--limite N] [--aplicar]
- *   node scripts/ops/jefatura-seco.mjs puerta [--aplicar]                lo que la ruta debe negarse a abrir (400/409) · además, con la llave en `apagada`, que NO abre ni escribe
+ *   node scripts/ops/jefatura-seco.mjs puerta [--aplicar]                lo que la ruta debe negarse a abrir (400/409) · `puerta --apagada` (DESPUÉS de apagar): que NO abre ni corre ni vigila
  *   node scripts/ops/jefatura-seco.mjs apagar [--aplicar]                todo al revés (restaura la foto previa), apagada, flujos inactivos; lee de vuelta
  *
  * Variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, N8N_API_KEY, SALA_DISPATCH_KEY (y, opcionales, N8N_BASE_URL, N8N_WEBHOOK_BASE, APP_URL, SALIDA).
@@ -17,7 +17,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { CLIENTES, ID_PREFIJO } from './jefatura-seco/fixtures.mjs'
 import { CASOS, CASOS_DE_PUERTA, TIPOS, celdas, resumenDeLaMatriz } from './jefatura-seco/matriz.mjs'
-import { correrPorN8n, correrPorRuta, costoPorCaso, puerta, resumirMedidas } from './jefatura-seco/nucleo.mjs'
+import { apagadaNoAbre, correrPorN8n, correrPorRuta, costoPorCaso, puerta, resumirMedidas } from './jefatura-seco/nucleo.mjs'
 import { construirTurno, construirVigia } from '../worker-staging/jefatura/construir-jefatura.mjs'
 
 const A = process.argv.slice(2)
@@ -165,6 +165,14 @@ async function main() {
       casos: flag('caso') ? [flag('caso')] : null, corrida,
     }
     const T = transporteReal()
+    if (orden === 'puerta' && A.includes('--apagada')) {
+      const base = celdas({ ...filtro, tipos: ['pieza'], clientes: [IDS[0]], registros: ['tuteo'], casos: ['sin-fichas-gpt-vacio'] })[0].sobre
+      paso('con la jefatura APAGADA: abrir → 409, turnos → 409, vigía → apagada (corre DESPUÉS de «apagar»; los contadores no deben moverse)')
+      if (!aplicar) return
+      const r = await apagadaNoAbre(base, T)
+      console.log(`${r.ok ? '✔' : '🔴'} ${r.id} ${r.ok ? JSON.stringify(r.observado) : r.fallos.join(' | ')}`)
+      process.exitCode = r.ok ? 0 : 1; return
+    }
     if (orden === 'puerta') {
       const base = celdas({ ...filtro, tipos: ['pieza'], clientes: [IDS[0]], registros: ['tuteo'], casos: ['sin-fichas-gpt-vacio'] })[0].sobre
       paso(`${CASOS_DE_PUERTA.length} casos de la puerta contra ${APP}`)

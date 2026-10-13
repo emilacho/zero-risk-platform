@@ -88,8 +88,11 @@ export function comprobar(esc, obs) {
     const g = obs.plan.plan_de_guardado
     if (esc.adopta === 'A' && g.guardar.length) f.push('plan: adoptando A no se guarda nada y la ruta mandó guardar ' + g.guardar.map((x) => x.etiqueta).join(','))
     if (esc.adopta !== 'A') {
+      // lo que se guarda = las versiones aceptadas hasta la adoptada, B antes que C (cada una cuelga de la anterior aceptada)
       const orden = g.guardar.map((x) => x.etiqueta).join('')
-      if (!['B', 'C', 'BC'].includes(orden)) f.push(`plan: orden de guardado inesperado «${orden}» (B antes que C)`)
+      const aceptadas = (obs.plan.razones ?? []).filter((r) => r.pasa).map((r) => r.etiqueta)
+      const esperado = aceptadas.slice(0, aceptadas.indexOf(esc.adopta) + 1).join('')
+      if (orden !== esperado) f.push(`plan: se guarda «${orden}» y debía guardarse «${esperado}» (B antes que C, hasta la adoptada)`)
       if (g.vigente !== esc.adopta) f.push(`plan: vigente «${g.vigente}» ≠ adoptada «${esc.adopta}»`)
     }
     if (obs.plan.repetida_sin_duplicar === false) f.push('plan: repetir la elección con la hija ya guardada creó otra fila (G4/G7)')
@@ -190,6 +193,18 @@ export async function puerta(caso, base, T) {
   if (r.status !== caso.status) fallos.push(`se esperaba ${caso.status} y salió ${r.status} (${r.body?.error ?? ''})`)
   if (caso.error && r.body?.error !== caso.error) fallos.push(`se esperaba el error «${caso.error}» y salió «${r.body?.error}»`)
   return { id: `puerta/${caso.caso}`, ok: fallos.length === 0, fallos, observado: { status: r.status, error: r.body?.error } }
+}
+
+/** con la jefatura APAGADA: no abre, no corre ningún turno y el vigía no hace nada (409 / 409 / apagada). Quien llama compara los contadores antes y después: no debe cambiar ni una fila */
+export async function apagadaNoAbre(base, T) {
+  const fallos = []
+  const a = await T.llamar('revisiones', base)
+  if (a.status !== 409 || a.body?.error !== 'jefatura_no_abre') fallos.push(`abrir: se esperaba 409 jefatura_no_abre y salió ${a.status} ${a.body?.error ?? ''}`)
+  const t = await T.llamar('turnos', { accion: 'siguiente', revision_id: '00000000-0000-4000-8000-0000000000ff' })
+  if (t.status !== 409) fallos.push(`turnos: se esperaba 409 y salió ${t.status}`)
+  const v = await T.llamar('vigia', {})
+  if (v.status !== 200 || v.body?.accion !== 'apagada') fallos.push(`vigía: se esperaba 200 apagada y salió ${v.status} ${v.body?.accion ?? ''}`)
+  return { id: 'apagada-no-abre', ok: fallos.length === 0, fallos, observado: { abrir: a.status, turnos: t.status, vigia: v.body?.accion } }
 }
 
 /** el recorrido por n8n de verdad: abre, despierta el flujo `jefatura · turno` y espera el cierre mirando `leer` */
