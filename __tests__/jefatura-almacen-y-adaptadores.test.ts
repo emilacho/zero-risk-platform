@@ -2,6 +2,8 @@
  * JEFATURA como oficina propia · J3 · el almacén sobre la base (falso) y los adaptadores reales: falla CERRADO, un error de la base se lanza (no se lee como vacío), el reloj del vigía, el modelo del revisor con
  * caída a las variables de la oficina, Slack que nunca lanza, y las consultas §148 escritas de antemano (solo lectura). US$ 0: sin red.
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { estadoInicial } from '../src/lib/revision-comun'
 import { crearPuertos, entornoDeProceso } from '../src/lib/jefatura/revision/adaptadores'
@@ -82,6 +84,24 @@ describe('almacén · revisiones, pasos y fichas', () => {
     await a.guardar({ revision_id: id, estado_del_motor: e, gasto_usd: 0.07, estado: 'cerrada', resultado: 'con_desacuerdo', marcas: { con_desacuerdo: true, sin_segunda_mirada: false } })
     expect(db.tablas.jefatura_revisiones[0]).toMatchObject({ estado: 'cerrada', resultado: 'con_desacuerdo', marcas: { con_desacuerdo: true, sin_segunda_mirada: false } })
     expect((db.tablas.jefatura_revisiones[0] as Json).cerrado_en).toBeTruthy()
+  })
+  it('un paso externo (GPT, dentro de la ruta) lleva inicio Y fin: el gasto de GPT se agrupa por día; un paso de agente hecho NO pisa su inicio', async () => {
+    const db = new DbFalsaJefatura()
+    const a = almacenDeSupabase(db)
+    const r = await a.crearRevision(nueva())
+    const id = r.ok ? r.revision.id : ''
+    await a.guardar({ revision_id: id, estado_del_motor: estadoInicial(), gasto_usd: 0.04, paso: { n: 2, paso: 'segunda_mirada', intento: 1, tipo: 'externo', agente: 'GPT', estado: 'hecho', dispatch_key: null, concepto: 'revisor_externo', base: 'usage', cost_usd: 0.04 } })
+    const p = db.tablas.jefatura_pasos[0] as Json
+    expect(p.inicio).toBeTruthy()
+    expect(p.fin).toBeTruthy()
+  })
+  it('workflow_id del flujo y de la ejecución quedan en el renglón del paso (§149)', async () => {
+    const db = new DbFalsaJefatura()
+    const a = almacenDeSupabase(db)
+    const r = await a.crearRevision(nueva())
+    const id = r.ok ? r.revision.id : ''
+    await a.guardar({ revision_id: id, estado_del_motor: estadoInicial(), gasto_usd: 0, paso: { n: 1, paso: 'revision_fondo', intento: 1, tipo: 'agente', agente: 'jefe-marketing', estado: 'hecho', dispatch_key: 'k', workflow_id: 'wf-1', workflow_execution_id: 'ex-1', concepto: 'modelo', base: 'usage', cost_usd: 0.06 } })
+    expect(db.tablas.jefatura_pasos[0]).toMatchObject({ workflow_id: 'wf-1', workflow_execution_id: 'ex-1' })
   })
   it('pasosCorriendoAntesDe: solo los «corriendo» que empezaron antes del límite', async () => {
     const db = new DbFalsaJefatura()
@@ -205,6 +225,11 @@ describe('consultas §148 escritas de antemano', () => {
     expect(q).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|GRANT|CREATE)\b/i)
     expect(q.trim().endsWith(';')).toBe(true)
   })
+  it('la alarma pide la llave REAL de hitl_pending_approvals (item_id, no id) y el gasto de GPT agrupa por una fecha que SIEMPRE existe', () => {
+    expect(CONSULTAS_148.alarma_editor_escalation_nueva).toMatch(/SELECT item_id, created_at, status FROM/)
+    expect(CONSULTAS_148.alarma_editor_escalation_nueva).not.toMatch(/SELECT id\b/)
+    expect(CONSULTAS_148.gasto_de_gpt).toMatch(/date_trunc\('day', coalesce\(inicio, fin\)\)/)
+  })
   it('solo nombran tablas de la jefatura y la de pendientes del editor', () => {
     for (const [k, q] of todas) for (const m of q.matchAll(/(?:FROM|JOIN)\s+public\.(\w+)/g)) expect(['jefatura_revisiones', 'jefatura_pasos', 'jefatura_fichas', 'hitl_pending_approvals'], k).toContain(m[1])
   })
@@ -212,5 +237,54 @@ describe('consultas §148 escritas de antemano', () => {
     expect(CONSULTAS_148.alarma_editor_escalation_nueva).toMatch(/approval_type = 'editor_escalation'/)
     expect(CONSULTAS_148.alarma_editor_escalation_nueva).toMatch(/created_at > \$1/)
     expect(CONSULTAS_148.gasto_de_gpt).toMatch(/concepto = 'revisor_externo'/)
+  })
+})
+
+describe('las consultas §148 usan columnas que EXISTEN (reparo de CC#3: la alarma pedía `id` y la llave real es `item_id`)', () => {
+  // columnas REALES de `hitl_pending_approvals` (medidas en producción por la definición de PostgREST, 13-oct); las de `jefatura_*` salen del SQL de J1
+  const HITL = ['item_id', 'approval_type', 'required_approver', 'escalation_path', 'request_id', 'client_id', 'phase', 'priority', 'payload', 'status', 'approved_by', 'approved_at', 'last_notified_at', 'created_at', 'expires_at', 'agent_slug', 'editor_verdict', 'revisions_attempted', 'original_task', 'preview', 'full_content', 'resolved_at', 'resolver']
+  const sql = readFileSync(resolve(__dirname, '..', 'supabase', 'migrations', '202610131000_jefatura_revision_oficina_propia.sql'), 'utf8').split(String.fromCharCode(13, 10)).join(String.fromCharCode(10))
+  const columnasDe = (tabla: string): string[] => {
+    const m = new RegExp(String.raw`CREATE TABLE IF NOT EXISTS public\.${tabla} \(([\s\S]*?)\n\);`).exec(sql)
+    if (!m) throw new Error(`no encontré ${tabla} en el SQL de J1`)
+    return m[1].split('\n').map((l) => /^\s{2}(\w+)\s/.exec(l)?.[1]).filter((c): c is string => !!c && !/^(PRIMARY|CONSTRAINT)$/.test(c))
+  }
+  const ESQUEMA: Record<string, string[]> = { hitl_pending_approvals: HITL, jefatura_revisiones: columnasDe('jefatura_revisiones'), jefatura_pasos: columnasDe('jefatura_pasos'), jefatura_fichas: columnasDe('jefatura_fichas') }
+  /** las columnas que cada consulta nombra, por tabla (escrito a mano: la consulta sin alias no se puede leer sola) */
+  const USO: Record<string, Record<string, string[]>> = {
+    revisiones_por_tipo_cliente_dia: { jefatura_revisiones: ['artifact_type', 'client_id', 'creado_en', 'dry_run', 'gasto_usd'] },
+    porcentaje_sin_segunda_mirada: { jefatura_revisiones: ['artifact_type', 'marcas', 'estado', 'dry_run'] },
+    porcentaje_con_desacuerdo: { jefatura_revisiones: ['artifact_type', 'marcas', 'estado', 'dry_run'] },
+    fichas_tomadas_vs_no_tomadas: { jefatura_fichas: ['origen', 'estado'] },
+    costo_por_revision_contra_tope: { jefatura_revisiones: ['id', 'artifact_type', 'artifact_id', 'gasto_usd', 'tope_usd', 'estado', 'resultado'] },
+    gasto_de_gpt: { jefatura_pasos: ['inicio', 'fin', 'cost_usd', 'concepto'] },
+    pasos_y_minutos_por_revision: { jefatura_revisiones: ['id', 'artifact_type', 'cerrado_en', 'creado_en'], jefatura_pasos: ['revision_id'] },
+    abiertas_hace_mas_de_60_min: { jefatura_revisiones: ['id', 'artifact_type', 'artifact_id', 'estado', 'creado_en'] },
+    alarma_editor_escalation_nueva: { hitl_pending_approvals: ['item_id', 'created_at', 'status', 'approval_type'] },
+  }
+  it('cada consulta está en la lista de uso y cada columna que usa existe en su tabla real', () => {
+    expect(Object.keys(USO).sort()).toEqual(Object.keys(CONSULTAS_148).sort())
+    for (const [clave, tablas] of Object.entries(USO)) for (const [tabla, cols] of Object.entries(tablas)) for (const c of cols) expect(ESQUEMA[tabla], `${clave}: ${tabla}.${c}`).toContain(c)
+  })
+  it('y cada una de esas columnas aparece de verdad en el texto de su consulta (la lista de uso no es de adorno)', () => {
+    for (const [clave, tablas] of Object.entries(USO)) for (const cols of Object.values(tablas)) for (const c of cols) expect(CONSULTAS_148[clave as keyof typeof CONSULTAS_148], `${clave} · ${c}`).toMatch(new RegExp(String.raw`\b${c}\b`))
+  })
+  it('lo que falló: `hitl_pending_approvals` NO tiene columna `id`', () => { expect(HITL).not.toContain('id') })
+})
+
+describe('ningún identificador suelto en las consultas §148 (una columna inventada no puede colarse aunque no esté en la lista de uso)', () => {
+  const HITL = ['item_id', 'approval_type', 'client_id', 'status', 'created_at', 'resolved_at', 'resolver', 'expires_at', 'priority', 'payload']
+  const sql = readFileSync(resolve(__dirname, '..', 'supabase', 'migrations', '202610131000_jefatura_revision_oficina_propia.sql'), 'utf8').split(String.fromCharCode(13, 10)).join(String.fromCharCode(10))
+  const cols = (tabla: string): string[] => (new RegExp(String.raw`CREATE TABLE IF NOT EXISTS public\.${tabla} \(([\s\S]*?)\n\);`).exec(sql)?.[1] ?? '').split('\n').map((l) => /^\s{2}(\w+)\s/.exec(l)?.[1]).filter((c): c is string => !!c)
+  const COLUMNAS = new Set([...cols('jefatura_revisiones'), ...cols('jefatura_pasos'), ...cols('jefatura_fichas'), ...HITL])
+  const PALABRAS = new Set(['select', 'from', 'where', 'group', 'by', 'order', 'desc', 'asc', 'as', 'and', 'or', 'not', 'in', 'is', 'null', 'left', 'join', 'on', 'limit', 'filter', 'nulls', 'last', 'coalesce', 'count', 'sum', 'round', 'nullif', 'date_trunc', 'extract', 'epoch', 'now', 'interval', 'numeric', 'boolean', 'false', 'true', 'public', 'p', 'r'])
+  // alias de salida declarados con AS (o de tabla): se permiten SOLO los que la propia consulta declara
+  it.each(Object.entries(CONSULTAS_148))('%s: todo identificador es una palabra de SQL, un alias que ella declara o una columna real', (_k, q) => {
+    const sinCadenas = q.replace(/'[^']*'/g, "''").replace(/\$\d+/g, '')
+    const tablas = new Set([...sinCadenas.matchAll(/public\.(\w+)/g)].map((m) => m[1]))
+    const aliases = new Set([...sinCadenas.matchAll(/\bAS\s+(\w+)/gi)].map((m) => m[1].toLowerCase()))
+    const sinTablas = sinCadenas.replace(/public\.\w+/g, ' ')
+    const sueltos = [...new Set((sinTablas.match(/[a-z_][a-z0-9_]*/gi) ?? []).map((t) => t.toLowerCase()))].filter((t) => !PALABRAS.has(t) && !aliases.has(t) && !COLUMNAS.has(t) && !tablas.has(t))
+    expect(sueltos).toEqual([])
   })
 })

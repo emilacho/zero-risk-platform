@@ -88,10 +88,10 @@ export function almacenDeSupabase(db: Db): Almacen {
         const t = c.paso
         const ahora = new Date().toISOString()
         const fila: Fila = {
-          revision_id: c.revision_id, n: t.n, paso: t.paso, intento: t.intento, tipo: t.tipo, agente: t.agente, estado: t.estado, dispatch_key: t.dispatch_key, workflow_execution_id: t.workflow_execution_id ?? null,
+          revision_id: c.revision_id, n: t.n, paso: t.paso, intento: t.intento, tipo: t.tipo, agente: t.agente, estado: t.estado, dispatch_key: t.dispatch_key, workflow_id: t.workflow_id ?? null, workflow_execution_id: t.workflow_execution_id ?? null,
           concepto: t.concepto, base: t.base, cost_usd: t.cost_usd, tokens_in: t.tokens_in ?? null, tokens_out: t.tokens_out ?? null, error: t.error ?? null, traza: t.traza ?? {},
           // el reloj del vigía (`inicio`) arranca al ENTREGAR el pedido; un paso que se cierra no pisa su hora de inicio
-          ...(t.estado === 'corriendo' ? { inicio: ahora } : {}), ...(t.estado !== 'corriendo' && t.estado !== 'pendiente' ? { fin: ahora } : {}),
+          ...(t.estado === 'corriendo' || t.tipo !== 'agente' ? { inicio: ahora } : {}), ...(t.estado !== 'corriendo' && t.estado !== 'pendiente' ? { fin: ahora } : {}),
         }
         const r = await db.from('jefatura_pasos').upsert(fila, { onConflict: 'revision_id,n' }).select('id').single()
         if (r.error) throw new Error(`guardar el paso: ${r.error.message}`)

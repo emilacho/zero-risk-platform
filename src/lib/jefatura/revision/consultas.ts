@@ -19,7 +19,7 @@ FROM public.jefatura_revisiones WHERE estado IN ('cerrada', 'cerrada_por_tope', 
   costo_por_revision_contra_tope: `SELECT id, artifact_type, artifact_id, gasto_usd, tope_usd, round((gasto_usd / NULLIF(tope_usd, 0))::numeric, 3) AS fraccion_del_tope, estado, resultado
 FROM public.jefatura_revisiones ORDER BY fraccion_del_tope DESC NULLS LAST LIMIT 100;`,
   /** gasto de GPT (vive en el libro propio, fuera de agent_invocations) */
-  gasto_de_gpt: `SELECT date_trunc('day', inicio) AS dia, count(*) AS llamadas, round(sum(cost_usd)::numeric, 4) AS gasto_usd
+  gasto_de_gpt: `SELECT date_trunc('day', coalesce(inicio, fin)) AS dia, count(*) AS llamadas, round(sum(cost_usd)::numeric, 4) AS gasto_usd
 FROM public.jefatura_pasos WHERE concepto = 'revisor_externo' GROUP BY 1 ORDER BY 1 DESC;`,
   /** pasos y minutos por revisión */
   pasos_y_minutos_por_revision: `SELECT r.id, r.artifact_type, count(p.*) AS pasos, round(extract(epoch FROM (coalesce(r.cerrado_en, now()) - r.creado_en)) / 60.0, 1) AS minutos
@@ -27,7 +27,7 @@ FROM public.jefatura_revisiones r LEFT JOIN public.jefatura_pasos p ON p.revisio
   /** revisiones abiertas hace más de 60 minutos (algo se colgó) */
   abiertas_hace_mas_de_60_min: `SELECT id, artifact_type, artifact_id, estado, creado_en FROM public.jefatura_revisiones WHERE estado IN ('abierta', 'en_paso') AND creado_en < now() - interval '60 minutes' ORDER BY creado_en;`,
   /** 🔴 ALARMA: cualquier fila `editor_escalation` NUEVA significa que alguien resucitó el editor de `run-sdk` sobre un paso que cubre la jefatura (diseño §9) */
-  alarma_editor_escalation_nueva: `SELECT id, created_at, status FROM public.hitl_pending_approvals WHERE approval_type = 'editor_escalation' AND created_at > $1 ORDER BY created_at DESC;`,
+  alarma_editor_escalation_nueva: `SELECT item_id, created_at, status FROM public.hitl_pending_approvals WHERE approval_type = 'editor_escalation' AND created_at > $1 ORDER BY created_at DESC;`,
 } as const
 
 export type ClaveDeConsulta = keyof typeof CONSULTAS_148

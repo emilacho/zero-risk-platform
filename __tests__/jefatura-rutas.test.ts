@@ -173,6 +173,13 @@ describe('el recorrido por HTTP, en seco', () => {
     }
     expect((await llamar(TURNOS, 'turnos', { accion: 'siguiente', revision_id: '00000000-0000-4000-8000-0000000000ff' })).status).toBe(404)
   })
+  it('§149: el flujo manda su workflow_id y su ejecución con el resultado y quedan en el renglón del paso', async () => {
+    const a = await llamar(REVISIONES, 'revisiones', sobre('brief'))
+    const t = a.j.turno as Json
+    const r = await llamar(TURNOS, 'turnos', { accion: 'resultado', revision_id: a.j.revision_id, n: t.n, texto: (t.pedido.molde as Json).texto, costo_usd: 0.05, workflow_id: 'wf-jefatura-turno', workflow_execution_id: 'ex-9' })
+    expect(r.status).toBe(200)
+    expect((db().tablas.jefatura_pasos as Json[]).find((p) => p.n === t.n)).toMatchObject({ workflow_id: 'wf-jefatura-turno', workflow_execution_id: 'ex-9', estado: 'hecho' })
+  })
   it('leer: devuelve el estado y, si ya cerró, la salida completa', async () => {
     const r = await recorrer(sobre('brief') as Json)
     const l = await llamar(REVISIONES, 'revisiones', { accion: 'leer', revision_id: r.id })
@@ -193,15 +200,16 @@ describe('el recorrido por HTTP, en seco', () => {
     // el resultado final quedó guardado
     expect((db().tablas.jefatura_revisiones[0] as Json).resultado).toBe('con_desacuerdo')
   })
-  it('marcar_reemplazo devuelve el provenance_tag ENTERO (puro: no escribe nada en la base); con un tag parcial = 400 y no escribe', async () => {
-    const A = { type: 'campaign_plan_90d', trust_level: 'trusted', fuente: 'planeacion', caracteres: 24827 }
+  it('marcar_reemplazo devuelve el provenance_tag ENTERO de un plan REAL (sin type ni trust_level; puro: no escribe nada en la base); con un tag vacío = 400 y no escribe', async () => {
+    const A = { fuente: 'planeacion', caracteres: 24827, workflow_id: 'X9F0zp6LQ2xGEYVS', workflow_execution_id: '48113', guardado_antes_de_drive: true }
     const ok = await llamar(REVISIONES, 'revisiones', { accion: 'marcar_reemplazo', provenance_tag: A, por: 'b-id', en: '2026-10-13T12:00:00Z' })
     expect(ok.status).toBe(200)
     expect(ok.j.provenance_tag).toEqual({ ...A, reemplazado_por: 'b-id', reemplazado_en: '2026-10-13T12:00:00Z' })
-    const parcial = await llamar(REVISIONES, 'revisiones', { accion: 'marcar_reemplazo', provenance_tag: { fuente: 'x' }, por: 'b-id' })
-    expect(parcial.status).toBe(400)
-    expect(parcial.j).toMatchObject({ error: 'provenance_invalido' })
-    expect(String(parcial.j.detalle)).toMatch(/23514/)
+    const vacio = await llamar(REVISIONES, 'revisiones', { accion: 'marcar_reemplazo', provenance_tag: {}, por: 'b-id' })
+    expect(vacio.status).toBe(400)
+    expect(vacio.j).toMatchObject({ error: 'provenance_invalido' })
+    expect(String(vacio.j.detalle)).toMatch(/está vacío: no se escribe un objeto que no se leyó antes/)
+    expect((await llamar(REVISIONES, 'revisiones', { accion: 'marcar_reemplazo', provenance_tag: 'texto', por: 'b-id' })).j.error).toBe('provenance_invalido')
     const sinPor = await llamar(REVISIONES, 'revisiones', { accion: 'marcar_reemplazo', provenance_tag: A })
     expect(sinPor.status).toBe(400)
     expect(sinPor.j.error).toBe('entrada_invalida')
@@ -214,14 +222,14 @@ describe('el recorrido por HTTP, en seco', () => {
     expect(h.aperturasDeLaBase, 'las acciones puras ni siquiera abren la conexión a la base').toBe(0)
   })
   it('provenance_de_version arma el tag de B o C heredando type y trust_level; valida sus entradas', async () => {
-    const A = { type: 'campaign_plan_90d', trust_level: 'trusted', fuente: 'planeacion', reemplazado_por: 'x' }
+    const A = { fuente: 'planeacion', caracteres: 24827, workflow_id: 'X9F0zp6LQ2xGEYVS', reemplazado_por: 'x' }
     const b = await llamar(REVISIONES, 'revisiones', { accion: 'provenance_de_version', provenance_tag: A, etiqueta: 'B', version: 2, version_de: 'a-id', jefatura_revision_id: 'rev-1' })
     expect(b.status).toBe(200)
-    expect(b.j.provenance_tag).toMatchObject({ type: 'campaign_plan_90d', trust_level: 'trusted', etiqueta: 'B', version: 2, version_de: 'a-id', jefatura_revision_id: 'rev-1', reentrega: 'version_nueva' })
+    expect(b.j.provenance_tag).toMatchObject({ fuente: 'planeacion', caracteres: 24827, workflow_id: 'X9F0zp6LQ2xGEYVS', etiqueta: 'B', version: 2, version_de: 'a-id', jefatura_revision_id: 'rev-1', reentrega: 'version_nueva' })
     expect(b.j.provenance_tag).not.toHaveProperty('reemplazado_por')
     expect((await llamar(REVISIONES, 'revisiones', { accion: 'provenance_de_version', provenance_tag: A, etiqueta: 'A', version: 2, version_de: 'a', jefatura_revision_id: 'r' })).status).toBe(400)
     expect((await llamar(REVISIONES, 'revisiones', { accion: 'provenance_de_version', provenance_tag: A, etiqueta: 'C', version: 4, version_de: 'b', jefatura_revision_id: 'r' })).status).toBe(400)
-    expect((await llamar(REVISIONES, 'revisiones', { accion: 'provenance_de_version', provenance_tag: { fuente: 'x' }, etiqueta: 'B', version: 2, version_de: 'a', jefatura_revision_id: 'r' })).j.error).toBe('provenance_invalido')
+    expect((await llamar(REVISIONES, 'revisiones', { accion: 'provenance_de_version', provenance_tag: {}, etiqueta: 'B', version: 2, version_de: 'a', jefatura_revision_id: 'r' })).j.error).toBe('provenance_invalido')
     expect(db().escrituras).toHaveLength(0)
     expect(h.aperturasDeLaBase).toBe(0)
   })

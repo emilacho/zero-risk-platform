@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       ? await avanzar(P, id)
       : await recibirResultado(P, id, cuerpo.n as number, {
           ...(typeof cuerpo.texto === 'string' ? { texto: cuerpo.texto } : {}), ...(typeof cuerpo.error === 'string' ? { error: cuerpo.error } : {}),
-          costo_usd: numero(cuerpo.costo_usd), workflow_execution_id: typeof cuerpo.workflow_execution_id === 'string' ? cuerpo.workflow_execution_id : null,
+          costo_usd: numero(cuerpo.costo_usd), workflow_id: typeof cuerpo.workflow_id === 'string' ? cuerpo.workflow_id : null, workflow_execution_id: typeof cuerpo.workflow_execution_id === 'string' ? cuerpo.workflow_execution_id : null,
           tokens_in: numero(cuerpo.tokens_in) ?? null, tokens_out: numero(cuerpo.tokens_out) ?? null,
         })
     return NextResponse.json(r.cuerpo, { status: r.status })
