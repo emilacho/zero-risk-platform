@@ -1,0 +1,231 @@
+#!/usr/bin/env node
+/**
+ * SECO DE LA JEFATURA (J5) · guion ejecutable · CC#2 · 13-oct. SIN `--aplicar` cada orden solo IMPRIME lo que haría (y las de lectura leen). US$ 0: todo es `dry_run: true`; ningún agente ni GPT se llama de verdad.
+ *
+ *   node scripts/ops/jefatura-seco.mjs plan                              la matriz (cuántas celdas por tipo/caso) y la lista de interruptores · sin red
+ *   node scripts/ops/jefatura-seco.mjs estado                            lee (solo lectura): jefatura_config, los 2 flujos, n8n en vuelo y los contadores
+ *   node scripts/ops/jefatura-seco.mjs contadores --guardar <archivo>    foto de los contadores ANTES · después: --comparar <archivo> (debe decir lo esperado)
+ *   node scripts/ops/jefatura-seco.mjs encender [--aplicar]              guarda la foto del estado previo, pone la jefatura en `ensayo` SOLO con los 3 clientes de práctica y activa SOLO el flujo `jefatura · turno`; lee de vuelta
+ *   node scripts/ops/jefatura-seco.mjs correr --via ruta|n8n [--tipo T] [--cliente slug] [--registro tuteo|voseo] [--caso C] [--limite N] [--aplicar]
+ *   node scripts/ops/jefatura-seco.mjs puerta [--aplicar]                lo que la ruta debe negarse a abrir (400/409) · además, con la llave en `apagada`, que NO abre ni escribe
+ *   node scripts/ops/jefatura-seco.mjs apagar [--aplicar]                todo al revés (restaura la foto previa), apagada, flujos inactivos; lee de vuelta
+ *
+ * Variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, N8N_API_KEY, SALA_DISPATCH_KEY (y, opcionales, N8N_BASE_URL, N8N_WEBHOOK_BASE, APP_URL, SALIDA).
+ * NUNCA imprime una llave. Los clientes de práctica son archivos (`jefatura-seco/fixtures.mjs`): NO se inserta nada en `clients`; la jefatura guarda `client_id` como texto. Nada de naufrago.ec.
+ */
+import fs from 'node:fs'
+import path from 'node:path'
+import { CLIENTES, ID_PREFIJO } from './jefatura-seco/fixtures.mjs'
+import { CASOS, CASOS_DE_PUERTA, TIPOS, celdas, resumenDeLaMatriz } from './jefatura-seco/matriz.mjs'
+import { correrPorN8n, correrPorRuta, costoPorCaso, puerta, resumirMedidas } from './jefatura-seco/nucleo.mjs'
+import { construirTurno, construirVigia } from '../worker-staging/jefatura/construir-jefatura.mjs'
+
+const A = process.argv.slice(2)
+const orden = A[0]
+const flag = (n) => { const i = A.indexOf('--' + n); return i >= 0 ? A[i + 1] : null }
+const aplicar = A.includes('--aplicar')
+const IDS = CLIENTES.map((c) => c.id)
+const NOMBRE_TURNO = construirTurno().name, NOMBRE_VIGIA = construirVigia().name
+const SALIDA = flag('salida') || process.env.SALIDA || `_jefatura-seco-${new Date().toISOString().slice(0, 10)}`
+
+const U = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, ''), SK = process.env.SUPABASE_SERVICE_ROLE_KEY
+const N8N = (process.env.N8N_BASE_URL || 'https://n8n-production-72be.up.railway.app').replace(/\/$/, ''), NK = process.env.N8N_API_KEY
+const HOOKS = (process.env.N8N_WEBHOOK_BASE || `${N8N}/webhook`).replace(/\/$/, '')
+const APP = (process.env.APP_URL || 'https://zero-risk-platform.vercel.app').replace(/\/$/, '')
+const LLAVE = process.env.SALA_DISPATCH_KEY
+const necesita = (...ks) => { const f = ks.filter((k) => !process.env[k]); if (f.length) { console.error('faltan variables: ' + f.join(', ')); process.exit(2) } }
+
+const HS = () => ({ apikey: SK, authorization: 'Bearer ' + SK, 'content-type': 'application/json' })
+const HN = () => ({ 'X-N8N-API-KEY': NK, 'content-type': 'application/json' })
+const rest = async (tabla, q = '') => { const r = await fetch(`${U}/rest/v1/${tabla}?${q}`, { headers: HS() }); const t = await r.text(); try { return JSON.parse(t) } catch { return t } }
+const cuenta = async (tabla, q = '') => { const r = await fetch(`${U}/rest/v1/${tabla}?${q}&select=*`, { headers: { ...HS(), prefer: 'count=exact', range: '0-0' } }); if (!r.ok) return `error ${r.status}`; return Number((r.headers.get('content-range') || '').split('/')[1]) }
+const patchCfg = async (cuerpo) => { const r = await fetch(`${U}/rest/v1/jefatura_config?id=eq.1`, { method: 'PATCH', headers: { ...HS(), prefer: 'return=representation' }, body: JSON.stringify(cuerpo) }); const t = await r.text(); if (!r.ok) throw new Error(`jefatura_config ${r.status}`); return JSON.parse(t)[0] }
+const paso = (t) => console.log((aplicar ? '▶ ' : '· (solo se imprime) ') + t)
+const guardar = (nombre, obj) => { fs.mkdirSync(SALIDA, { recursive: true }); fs.writeFileSync(path.join(SALIDA, nombre), JSON.stringify(obj, null, 2)); return path.join(SALIDA, nombre) }
+
+async function flujos() {
+  const lista = (await (await fetch(`${N8N}/api/v1/workflows?limit=250`, { headers: HN() })).json()).data || []
+  const por = (n) => lista.filter((w) => w.name === n)
+  return { turno: por(NOMBRE_TURNO), vigia: por(NOMBRE_VIGIA) }
+}
+async function enVuelo() {
+  let n = 0
+  for (const st of ['running', 'waiting']) n += ((await (await fetch(`${N8N}/api/v1/executions?status=${st}&limit=50`, { headers: HN() })).json()).data || []).length
+  return n
+}
+async function activar(id, on) { const r = await fetch(`${N8N}/api/v1/workflows/${id}/${on ? 'activate' : 'deactivate'}`, { method: 'POST', headers: HN() }); if (!r.ok) throw new Error(`flujo ${id}: ${r.status}`) }
+const unico = (lista, quien) => { if (lista.length !== 1) throw new Error(`se esperaba UN flujo «${quien}» y hay ${lista.length} (créalos con construir-jefatura.mjs --crear, inactivos)`); return lista[0] }
+
+// ───────────────────────── contadores (antes/después)
+export async function contadores() {
+  const enIds = `client_id=in.(${IDS.join(',')})`
+  const costos = await rest('agent_invocations', `${enIds}&select=cost_usd`)
+  return {
+    tomado_en: new Date().toISOString(),
+    agent_invocations_total: await cuenta('agent_invocations'),
+    agent_invocations_de_los_clientes_de_practica: Array.isArray(costos) ? costos.length : costos,
+    agent_invocations_costo_usd_de_los_clientes_de_practica: Array.isArray(costos) ? +costos.reduce((a, r) => a + Number(r.cost_usd || 0), 0).toFixed(6) : costos,
+    agent_invocations_workflow_id_nulo: await cuenta('agent_invocations', 'workflow_id=is.null'),
+    hitl_queue_total: await cuenta('hitl_queue'),
+    hitl_queue_de_los_clientes_de_practica: await cuenta('hitl_queue', enIds),
+    hitl_pending_approvals_editor_escalation: await cuenta('hitl_pending_approvals', 'approval_type=eq.editor_escalation'),
+    client_historical_outputs_de_los_clientes_de_practica: await cuenta('client_historical_outputs', enIds),
+    client_historical_outputs_total: await cuenta('client_historical_outputs'),
+    jefatura_revisiones: await cuenta('jefatura_revisiones'),
+    jefatura_pasos: await cuenta('jefatura_pasos'),
+    jefatura_fichas: await cuenta('jefatura_fichas'),
+    n8n_en_vuelo: await enVuelo(),
+    // los mensajes a #alertas NO se pueden contar desde aquí (en seco la jefatura no llama a Slack): se anota el `ts` del último mensaje del canal antes y después con la lectura de Slack (ver el LISTO)
+  }
+}
+/** lo que DEBE seguir igual en un seco (diferencias = alarma); las filas jefatura_* sí crecen */
+const DEBE_SEGUIR_IGUAL = ['agent_invocations_total', 'agent_invocations_de_los_clientes_de_practica', 'agent_invocations_costo_usd_de_los_clientes_de_practica', 'agent_invocations_workflow_id_nulo', 'hitl_queue_total', 'hitl_queue_de_los_clientes_de_practica', 'hitl_pending_approvals_editor_escalation', 'client_historical_outputs_de_los_clientes_de_practica', 'client_historical_outputs_total']
+
+// ───────────────────────── la lista de interruptores
+const INTERRUPTORES = [
+  'Antes: J1 aplicada (tablas `jefatura_*`) · los 2 flujos creados INACTIVOS (`construir-jefatura.mjs --crear`) · n8n 0 corriendo y 0 esperando · foto de contadores (`contadores --guardar`).',
+  '1. `jefatura_config` → `ensayo`, `tipos_activos` = los 5 tipos, `clientes_ensayo` = los 3 clientes de práctica. (Las 6 filas de política siguen `is_active=false`: en ensayo no hace falta.)',
+  '2. Flujo `jefatura · turno` → ACTIVO (el webhook solo existe activo). El vigía queda INACTIVO: se llama a la ruta del vigía a mano; solo se activa para la prueba de reloj (`--con-vigia`), y se apaga después.',
+  '3. Nada más se enciende: ni oficina, ni cadena, ni `autoproducir`, ni planeación, ni variables de entorno.',
+  'Al terminar: `apagar` → flujo turno INACTIVO (y vigía), `jefatura_config` de vuelta a la foto previa (`apagada`, listas vacías), lectura de vuelta, `contadores --comparar` (todo igual salvo las filas `jefatura_*`).',
+]
+
+// ───────────────────────── órdenes
+async function main() {
+  if (!orden || orden === 'plan') {
+    const r = resumenDeLaMatriz()
+    console.log('MATRIZ DEL SECO (§13.3) · 3 rubros × 2 registros × casos')
+    console.log('  clientes de práctica :', CLIENTES.map((c) => `${c.nombre} [${c.rubro} · ${c.pais} · ${c.moneda} · manual en ${c.registro}]`).join(' | '))
+    console.log('  celdas por la ruta   :', r.total, JSON.stringify(r.por_tipo), '| casos por tipo', JSON.stringify(r.casos_por_tipo))
+    console.log('  casos de la puerta   :', r.puerta, '(' + CASOS_DE_PUERTA.map((c) => c.caso).join(', ') + ')')
+    for (const t of TIPOS) console.log(`  ${t.padEnd(10)}:`, CASOS[t].map((c) => c.caso).join(' · '))
+    console.log('\nINTERRUPTORES'); INTERRUPTORES.forEach((l) => console.log('  ' + l))
+    console.log('\nAhora no se ha tocado nada.')
+    return
+  }
+  if (orden === 'estado') {
+    necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'N8N_API_KEY')
+    const f = await flujos()
+    console.log('jefatura_config :', JSON.stringify((await rest('jefatura_config', 'select=*&id=eq.1'))[0]))
+    console.log('flujo turno     :', f.turno.map((w) => `${w.id} active=${w.active}`).join(', ') || '(no existe)')
+    console.log('flujo vigía     :', f.vigia.map((w) => `${w.id} active=${w.active}`).join(', ') || '(no existe)')
+    console.log('contadores      :', JSON.stringify(await contadores(), null, 1))
+    return
+  }
+  if (orden === 'contadores') {
+    necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'N8N_API_KEY')
+    const ahora = await contadores()
+    if (flag('guardar')) { fs.writeFileSync(flag('guardar'), JSON.stringify(ahora, null, 2)); console.log('foto guardada en', flag('guardar')); return }
+    if (flag('comparar')) {
+      const antes = JSON.parse(fs.readFileSync(flag('comparar'), 'utf8'))
+      let mal = 0
+      for (const k of Object.keys(ahora)) {
+        if (k === 'tomado_en') continue
+        const igual = antes[k] === ahora[k]
+        const debe = DEBE_SEGUIR_IGUAL.includes(k)
+        if (debe && !igual) mal++
+        console.log(`${debe ? (igual ? '✔' : '🔴') : '·'} ${k.padEnd(60)} ${antes[k]} → ${ahora[k]}`)
+      }
+      console.log(mal ? `🔴 ${mal} contador(es) que debían seguir iguales cambiaron` : '✔ todo lo que debía seguir igual sigue igual')
+      process.exitCode = mal ? 1 : 0; return
+    }
+    console.log(JSON.stringify(ahora, null, 2)); return
+  }
+  if (orden === 'encender') {
+    necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'N8N_API_KEY')
+    const f = await flujos(), turno = unico(f.turno, NOMBRE_TURNO), vigia = unico(f.vigia, NOMBRE_VIGIA)
+    const cfg = (await rest('jefatura_config', 'select=*&id=eq.1'))[0]
+    const vivas = await enVuelo()
+    console.log('estado previo   :', JSON.stringify({ config: cfg, turno_activo: turno.active, vigia_activo: vigia.active, n8n_en_vuelo: vivas }))
+    if (vivas) { console.error('🔴 hay ejecuciones de n8n en vuelo: no se enciende nada'); process.exitCode = 1; return }
+    if (turno.active || vigia.active || cfg?.estado !== 'apagada') { console.error('🔴 se esperaba todo apagado de partida (config apagada, flujos inactivos)'); process.exitCode = 1; return }
+    paso(`guardar la foto previa en ${SALIDA}/estado-previo.json`)
+    paso(`jefatura_config → ensayo · tipos_activos=${TIPOS.join(',')} · clientes_ensayo=${IDS.join(',')}`)
+    const conVigia = A.includes('--con-vigia')
+    paso(`activar el flujo «${NOMBRE_TURNO}» (${turno.id}); el vigía (${vigia.id}) ${conVigia ? 'TAMBIÉN se activa (prueba de reloj)' : 'sigue inactivo'}`)
+    if (!aplicar) return
+    guardar('estado-previo.json', { config: cfg, turno: { id: turno.id, active: turno.active }, vigia: { id: vigia.id, active: vigia.active } })
+    await patchCfg({ estado: 'ensayo', tipos_activos: TIPOS, clientes_ensayo: IDS })
+    await activar(turno.id, true)
+    if (conVigia) await activar(vigia.id, true)
+    const leido = (await rest('jefatura_config', 'select=*&id=eq.1'))[0], t2 = (await flujos()).turno[0], v2 = (await flujos()).vigia[0]
+    console.log('leído de vuelta :', JSON.stringify({ estado: leido.estado, tipos: leido.tipos_activos, clientes: leido.clientes_ensayo, turno_activo: t2.active, vigia_activo: v2.active }))
+    if (leido.estado !== 'ensayo' || !t2.active || v2.active !== conVigia) { console.error('🔴 la lectura de vuelta no coincide'); process.exitCode = 1; return }
+    return
+  }
+  if (orden === 'correr' || orden === 'puerta') {
+    if (aplicar) necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SALA_DISPATCH_KEY')
+    const via = flag('via') || 'ruta'
+    const corrida = flag('corrida') || new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)
+    const lim = flag('limite') ? Number(flag('limite')) : Infinity
+    const filtro = {
+      tipos: flag('tipo') ? [flag('tipo')] : TIPOS,
+      clientes: flag('cliente') ? CLIENTES.filter((c) => c.slug === flag('cliente') || c.id === flag('cliente')).map((c) => c.id) : IDS,
+      registros: flag('registro') ? [flag('registro')] : ['tuteo', 'voseo'],
+      casos: flag('caso') ? [flag('caso')] : null, corrida,
+    }
+    const T = transporteReal()
+    if (orden === 'puerta') {
+      const base = celdas({ ...filtro, tipos: ['pieza'], clientes: [IDS[0]], registros: ['tuteo'], casos: ['sin-fichas-gpt-vacio'] })[0].sobre
+      paso(`${CASOS_DE_PUERTA.length} casos de la puerta contra ${APP}`)
+      if (!aplicar) return
+      const rs = []
+      for (const c of CASOS_DE_PUERTA) { const r = await puerta(c, base, T); rs.push(r); console.log(`${r.ok ? '✔' : '🔴'} ${r.id} ${r.ok ? '' : r.fallos.join(' | ')}`) }
+      guardar(`puerta-${corrida}.json`, rs); process.exitCode = rs.every((r) => r.ok) ? 0 : 1; return
+    }
+    const todas = celdas(filtro).slice(0, lim)
+    paso(`${todas.length} celdas «${via}» (${[...new Set(todas.map((c) => c.tipo))].join(', ')}) contra ${APP}${via === 'n8n' ? ' + el flujo real en ' + HOOKS : ''}`)
+    if (!aplicar) { for (const c of todas.slice(0, 40)) console.log('   ' + c.id); if (todas.length > 40) console.log(`   … y ${todas.length - 40} más`); return }
+    if (via === 'n8n') necesita('N8N_API_KEY')
+    const rs = []
+    for (const esc of todas) {
+      const r = via === 'n8n' ? await correrPorN8n(esc, T, { limite_min: Number(flag('limite-min') || 20) }) : await correrPorRuta(esc, T)
+      rs.push(r)
+      console.log(`${r.ok ? '✔' : '🔴'} ${esc.id}${r.ok ? '' : '\n     ' + r.fallos.join('\n     ')}${r.observado?.minutos != null && via === 'n8n' ? `  (${r.observado.minutos.toFixed(1)} min)` : ''}`)
+    }
+    const f = guardar(`${via}-${corrida}.json`, { corrida, via, resultados: rs, medidas: resumirMedidas(rs), costo_por_caso: costoPorCaso(rs) })
+    console.log(`\n${rs.filter((r) => r.ok).length}/${rs.length} celdas como el diseño · detalle y medidas en ${f}`)
+    process.exitCode = rs.every((r) => r.ok) ? 0 : 1; return
+  }
+  if (orden === 'apagar') {
+    necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'N8N_API_KEY')
+    const previo = fs.existsSync(path.join(SALIDA, 'estado-previo.json')) ? JSON.parse(fs.readFileSync(path.join(SALIDA, 'estado-previo.json'), 'utf8')) : null
+    const f = await flujos(), turno = unico(f.turno, NOMBRE_TURNO), vigia = unico(f.vigia, NOMBRE_VIGIA)
+    const objetivo = previo?.config ?? { estado: 'apagada', tipos_activos: [], clientes_ensayo: [] }
+    paso(`flujos «${NOMBRE_TURNO}» y «${NOMBRE_VIGIA}» → INACTIVOS`)
+    paso(`jefatura_config → ${JSON.stringify({ estado: objetivo.estado, tipos_activos: objetivo.tipos_activos, clientes_ensayo: objetivo.clientes_ensayo })} (${previo ? 'la foto previa' : 'valores de partida por omisión: no hay foto'})`)
+    if (!aplicar) return
+    await activar(turno.id, false); await activar(vigia.id, false)
+    await patchCfg({ estado: objetivo.estado, tipos_activos: objetivo.tipos_activos, clientes_ensayo: objetivo.clientes_ensayo })
+    const leido = (await rest('jefatura_config', 'select=*&id=eq.1'))[0], f2 = await flujos()
+    console.log('leído de vuelta :', JSON.stringify({ estado: leido.estado, tipos: leido.tipos_activos, clientes: leido.clientes_ensayo, turno_activo: f2.turno[0].active, vigia_activo: f2.vigia[0].active, n8n_en_vuelo: await enVuelo() }))
+    const bien = leido.estado === objetivo.estado && JSON.stringify(leido.tipos_activos) === JSON.stringify(objetivo.tipos_activos) && JSON.stringify(leido.clientes_ensayo) === JSON.stringify(objetivo.clientes_ensayo) && !f2.turno[0].active && !f2.vigia[0].active
+    console.log(bien ? '✔ todo apagado y leído de vuelta' : '🔴 la lectura de vuelta NO coincide'); process.exitCode = bien ? 0 : 1; return
+  }
+  console.error('orden desconocida. Usa: plan | estado | contadores | encender | correr | puerta | apagar'); process.exit(2)
+}
+
+/** el transporte real: las 3 rutas por fetch con la llave de despacho, el webhook del flujo, el envejecimiento del paso (UPDATE de la fila de PRUEBA) y el reloj */
+function transporteReal() {
+  return {
+    async llamar(ruta, cuerpo) {
+      const r = await fetch(`${APP}/api/jefatura/${ruta}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': LLAVE }, body: JSON.stringify(cuerpo) })
+      return { status: r.status, body: await r.json().catch(() => ({})) }
+    },
+    async webhook(cuerpo) {
+      const r = await fetch(`${HOOKS}/zero-risk/jefatura-turno`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': LLAVE }, body: JSON.stringify(cuerpo) })
+      return { status: r.status }
+    },
+    /** pasan 20 min: se retrasa el `inicio` del paso abierto de ESA revisión (fila de la jefatura, de un cliente de práctica) para que el vigía la dé por muerta */
+    async envejecer(revision_id) {
+      const viejo = new Date(Date.now() - 20 * 60000).toISOString()
+      const r = await fetch(`${U}/rest/v1/jefatura_pasos?revision_id=eq.${revision_id}&estado=eq.corriendo`, { method: 'PATCH', headers: { ...HS(), prefer: 'return=minimal' }, body: JSON.stringify({ inicio: viejo }) })
+      if (!r.ok) throw new Error(`envejecer: ${r.status}`)
+    },
+    ahora: () => Date.now(),
+    dormir: (ms) => new Promise((res) => setTimeout(res, ms)),
+  }
+}
+
+if (process.argv[1] && process.argv[1].endsWith('jefatura-seco.mjs')) main().catch((e) => { console.error('🔴', e.message); process.exitCode = 1 })
+export { ID_PREFIJO }
