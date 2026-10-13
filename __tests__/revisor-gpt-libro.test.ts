@@ -1,6 +1,6 @@
 /**
  * Condición 5 (CC#3 · jefatura · 13-oct) · el gasto de GPT entra también a `agent_invocations`, que es lo que ven el freno de US$ 8 por cliente en 24 h y el vigilante de costos.
- * Antes vivía solo en `oficina_gastos`. Una fila por llamada; sin costo no hay fila; un fallo del registro nunca frena la revisión; la misma llamada no suma dos veces.
+ * Antes vivía solo en `oficina_gastos`. Una fila por llamada; sin costo no hay fila; un fallo del registro nunca frena la revisión; el 23505 se reconoce solo por defensa (la tabla no tiene índice único de session_id).
  */
 import { describe, expect, it } from 'vitest'
 import { filaDeInvocacionDelRevisor, registrarRevisorEnElLibro, llamarRevisorGptConLibro, AGENTE_DEL_REVISOR, FLUJO_DEL_REVISOR } from '../src/lib/revisor-gpt-libro'
@@ -60,7 +60,7 @@ describe('registrar', () => {
     expect(await registrarRevisorEnElLibro(b.db, D)).toEqual({ ok: true }); expect(b.filas.map(([t]) => t)).toEqual(['agent_invocations'])
     expect(await registrarRevisorEnElLibro(b.db, { ...D, costUsd: 0 })).toEqual({ ok: true, omitida: true }); expect(b.filas).toHaveLength(1)
   })
-  it('la misma llamada anotada dos veces no suma dos veces (23505 se reconoce)', async () => {
+  it('DEFENSIVO: si la tabla llegara a tener un índice único sobre session_id, el 23505 se reconoce y no es un fallo (hoy la tabla NO lo tiene: cada intento suma)', async () => {
     expect(await registrarRevisorEnElLibro(base({ code: '23505', message: 'duplicate key' }).db, D)).toEqual({ ok: true, repetida: true })
   })
   it('un fallo de la base (error o excepción) se devuelve, no se lanza: nunca frena la revisión', async () => {

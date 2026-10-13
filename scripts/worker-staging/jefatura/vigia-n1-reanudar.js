@@ -7,7 +7,7 @@ const b = e.body && typeof e.body === 'object' ? e.body : {}
 if (status !== 200) throw new Error('JEFATURA_VIGIA_RECHAZADO · /api/jefatura/vigia contestó ' + status + ' · ' + String(b.error || b.detalle || JSON.stringify(b)).slice(0, 200))
 if (b.accion !== 'vigilado') return [] // apagada o dry_run: nada que hacer
 const llave = String($env.SALA_DISPATCH_KEY || '')
-const permitidas = [String($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\/+$/, '') + '/', 'https://zero-risk-platform.vercel.app/']
+const permitidas = [String($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\/+$/, '') + '/', 'https://zero-risk-platform.vercel.app/api/jefatura/']
 const items = []
 for (const id of Array.isArray(b.reanudar) ? b.reanudar : []) items.push({ json: { tipo: 'reanudar', llave, revision_id: String(id) } })
 for (const c of Array.isArray(b.cierres) ? b.cierres : []) {

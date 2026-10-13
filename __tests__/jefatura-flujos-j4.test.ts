@@ -229,17 +229,24 @@ describe('③ ¿Y ahora? · qué sigue y a quién se entrega', () => {
   const c = { revision_id: REV, turno: { n: 3 } }
   const sigue = (respuesta: unknown, env: Record<string, string> = {}) => json(ejecutar('turno-n4-sigue.js', { input: [respuesta], nodos: { '⓪ Entrada · llave': [c] }, env }))[0]
   it('`esperar` despierta el siguiente turno de la MISMA revisión', () => {
-    const r = sigue({ statusCode: 200, body: { accion: 'esperar', turno: { n: 4, tipo: 'agente' } } })
-    expect(r).toEqual({ ruta: 'esperar', turno_body: { revision_id: REV, turno: { n: 4, tipo: 'agente' } } })
+    const r = sigue({ statusCode: 200, body: { accion: 'esperar', turno: { n: 4, tipo: 'agente', pedido: { agent_name: 'a' } } } })
+    expect(r).toEqual({ ruta: 'esperar', turno_body: { revision_id: REV, turno: { n: 4, tipo: 'agente', pedido: { agent_name: 'a' } } } })
+  })
+  it('`esperar` SIN pedido («ya hay un paso esperando») DETIENE el flujo: no manda un turno vacío a otro flujo', () => {
+    expect(() => sigue({ statusCode: 200, body: { accion: 'esperar', turno: { n: 4, paso: 'x' }, nota: 'ya hay un paso esperando respuesta' } })).toThrow(/JEFATURA_ESPERA_SIN_PEDIDO/)
   })
   it('`cerrado` con webhook: entrega a NUESTRO n8n o a NUESTRO Vercel, con el resultado y lo que pida el llamador', () => {
     const r = sigue({ statusCode: 200, body: { accion: 'cerrado', resultado: 'con_desacuerdo', devolver: { tipo: 'webhook', url: 'https://n8n-production-72be.up.railway.app/webhook/resume/abc', cuerpo: { texto_B: 'x' } } } })
     expect(r.ruta).toBe('webhook'); expect(r.entrega_url).toMatch(/^https:\/\/n8n-production-72be/); expect(r.entrega_cuerpo).toEqual({ revision_id: REV, resultado: 'con_desacuerdo', texto_B: 'x' })
-    expect(sigue({ statusCode: 200, body: { accion: 'cerrado', resultado: 'limpia', devolver: { tipo: 'webhook', url: 'https://zero-risk-platform.vercel.app/api/x' } } }).ruta).toBe('webhook')
+    expect(sigue({ statusCode: 200, body: { accion: 'cerrado', resultado: 'limpia', devolver: { tipo: 'webhook', url: 'https://zero-risk-platform.vercel.app/api/jefatura/x' } } }).ruta).toBe('webhook')
     expect(sigue({ statusCode: 200, body: { accion: 'cerrado', resultado: 'limpia', devolver: { tipo: 'webhook', url: 'https://n8n.test/webhook/resume/z' } } }, { N8N_WEBHOOK_BASE: 'https://n8n.test/webhook' }).ruta).toBe('webhook')
   })
-  it('NUNCA entrega a un tercero: una dirección ajena (o con el prefijo parecido) se DETIENE', () => {
-    for (const url of ['https://malo.example.com/hook', 'https://n8n-production-72be.up.railway.app.malo.com/webhook/x', 'http://zero-risk-platform.vercel.app/x', '']) {
+  it('NUNCA entrega a un tercero: una dirección ajena (o con el prefijo parecido, o con el nuestro escondido dentro) se DETIENE', () => {
+    for (const url of ['https://malo.example.com/hook', 'https://n8n-production-72be.up.railway.app.malo.com/webhook/x', 'http://zero-risk-platform.vercel.app/api/jefatura/x', '',
+      // certificación de CC#3 (J4 reparo 1): lo que mata la mutación `startsWith` → `includes`
+      'https://zero-risk-platform.vercel.app.otro.com/api/jefatura/x', 'https://otro.com/?x=https://zero-risk-platform.vercel.app/api/jefatura/', 'https://otro.com/https://n8n-production-72be.up.railway.app/webhook/zero-risk/x',
+      // y el reparo 4: nuestro servidor, pero NO un prefijo de llamador de la jefatura (la llave de despacho viaja en la entrega)
+      'https://zero-risk-platform.vercel.app/api/agents/run-sdk', 'https://zero-risk-platform.vercel.app/x', 'https://n8n-production-72be.up.railway.app/api/x']) {
       expect(() => sigue({ statusCode: 200, body: { accion: 'cerrado', devolver: { tipo: 'webhook', url } } }), url).toThrow(/JEFATURA_DESTINO_NO_PERMITIDO/)
     }
   })
@@ -266,7 +273,7 @@ describe('el vigía', () => {
   })
   it('un ítem por revisión a reanudar y uno por cierre a entregar (webhook propio o cable)', () => {
     const r = vigia({ statusCode: 200, body: { accion: 'vigilado', reanudar: [REV], cierres: [
-      { revision_id: 'r2', resultado: 'fallida', devolver: { tipo: 'webhook', url: 'https://zero-risk-platform.vercel.app/api/x' } },
+      { revision_id: 'r2', resultado: 'fallida', devolver: { tipo: 'webhook', url: 'https://zero-risk-platform.vercel.app/api/jefatura/x' } },
       { revision_id: 'r3', resultado: 'fallida', devolver: { tipo: 'sala_ref' }, sala_ref: { _sala_correlation_id: 'cc' }, client_id: 'c9' },
       { revision_id: 'r4', resultado: 'fallida', devolver: { tipo: 'ninguno' } },
     ] } })
