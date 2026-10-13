@@ -7,7 +7,7 @@ const cuerpo = e.body ? e.body : e
 const fallo = cuerpo.success === false ? String(cuerpo.error || cuerpo.error_kind || 'sin detalle') : null
 const texto = fallo ? '' : String(cuerpo.response || cuerpo.result || cuerpo.output || cuerpo.text || '')
 const costo = typeof cuerpo.cost_usd === 'number' ? cuerpo.cost_usd : (typeof cuerpo.costUsd === 'number' ? cuerpo.costUsd : 0)
-const body = { accion: 'resultado', revision_id: c.revision_id, n: c.turno.n, costo_usd: costo, workflow_execution_id: $execution.id }
+const body = { accion: 'resultado', revision_id: c.revision_id, n: c.turno.n, costo_usd: costo, workflow_execution_id: $execution.id, workflow_id: $workflow.id }
 if (fallo) body.error = 'el agente FALLÓ · ' + fallo + (cuerpo.partial === true ? ' · (había texto parcial: no se usa)' : '')
 else if (texto.trim() === '') body.error = 'la vuelta del agente llegó vacía (o se agotó la espera)'
 else body.texto = texto

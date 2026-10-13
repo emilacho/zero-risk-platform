@@ -212,7 +212,7 @@ describe('lo que el vigía y la vuelta del agente entregan a la ruta', () => {
     const t = abierto.body.turno as Json
     const armado = nodo(turnoJson, '② Armar el pedido', { entrada: { revision_id: abierto.body.revision_id, dry_run: false, turno: t } })[0]
     const [vuelta] = nodo(turnoJson, '② Vuelta', { entrada: { body: { response: '{"fichas":[]}', cost_usd: 0.03 } }, nodos: { '② Armar el pedido': armado } })
-    expect(vuelta.resultado_body).toMatchObject({ accion: 'resultado', n: t.n, workflow_execution_id: 'exec-1', costo_usd: 0.03, texto: '{"fichas":[]}' })
+    expect(vuelta.resultado_body).toMatchObject({ accion: 'resultado', n: t.n, workflow_execution_id: 'exec-1', workflow_id: 'wf-1', costo_usd: 0.03, texto: '{"fichas":[]}' })
     const r = await http(TURNOS, 'turnos', vuelta.resultado_body)
     expect(r.statusCode, JSON.stringify(r.body)).toBe(200)
     const guardado = (db().tablas.jefatura_pasos ?? []).find((p) => p.n === t.n)
