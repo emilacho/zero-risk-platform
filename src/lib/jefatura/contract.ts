@@ -76,12 +76,13 @@ export interface JefaturaOutput {
 // ─── Registry (F0.2 · fila de jefatura_grading_policies) ────────────────────
 export interface JefaturaGradingPolicy {
   readonly artifact_type: string
-  readonly artifact_class: 'cimiento' | 'contenido'
+  /** 'revision' = la jefatura como oficina propia (J1 · migración 202610131000): par jefe-marketing + revisor ciego; NUNCA vota ni fideliza. */
+  readonly artifact_class: 'cimiento' | 'contenido' | 'revision'
   /** Siempre true (ADR-020 §36 · corrección = función base). */
   readonly correction_enabled: boolean
   /** true solo en contenido · false en cimiento (no-circularidad §4). */
   readonly judgment_enabled: boolean
-  readonly canon_grader: 'fidelity' | 'vote_3_of_n'
+  readonly canon_grader: 'fidelity' | 'vote_3_of_n' | 'par_fondo_y_ciego'
   readonly counterweight: 'shadow_scorer' | 'gpt55_non_voting' | null
   /** Loop-cap central · default 1 (ADR-020 §7). */
   readonly max_cycles: number
