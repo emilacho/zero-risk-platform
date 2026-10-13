@@ -198,6 +198,28 @@ describe('la jefatura apagada y el vigía', () => {
   })
 })
 
+describe('lo que el vigía y la vuelta del agente entregan a la ruta', () => {
+  const cierre = (url: string) => nodo(vigiaJson, '① Qué hacer con cada pendiente', { entrada: { statusCode: 200, body: { accion: 'vigilado', reanudar: [], cierres: [{ revision_id: 'r2', resultado: 'fallida', devolver: { tipo: 'webhook', url } }] } } })
+  it('el vigía solo entrega a nuestro n8n o a `/api/jefatura/` de nuestro Vercel (también con el prefijo escondido dentro de la dirección)', () => {
+    expect(cierre(`${ENV.N8N_WEBHOOK_BASE}/zero-risk/x`)).toHaveLength(1)
+    expect(cierre('https://zero-risk-platform.vercel.app/api/jefatura/x')).toHaveLength(1)
+    for (const url of ['https://zero-risk-platform.vercel.app/api/agents/run-sdk', 'https://zero-risk-platform.vercel.app.otro.com/api/jefatura/x', 'https://otro.com/?x=https://zero-risk-platform.vercel.app/api/jefatura/', 'https://otro.com/https://n8n-production-72be.up.railway.app/webhook/x', 'https://ajeno.example.com/x']) {
+      expect(() => cierre(url), url).toThrow(/JEFATURA_DESTINO_NO_PERMITIDO/)
+    }
+  })
+  it('la vuelta del agente real llega a la ruta con `workflow_execution_id` ARRIBA del cuerpo (la ruta lo guarda en el paso; jamás va dentro de `extra`)', async () => {
+    const abierto = await abrir('pieza', { dry_run: false })
+    const t = abierto.body.turno as Json
+    const armado = nodo(turnoJson, '② Armar el pedido', { entrada: { revision_id: abierto.body.revision_id, dry_run: false, turno: t } })[0]
+    const [vuelta] = nodo(turnoJson, '② Vuelta', { entrada: { body: { response: '{"fichas":[]}', cost_usd: 0.03 } }, nodos: { '② Armar el pedido': armado } })
+    expect(vuelta.resultado_body).toMatchObject({ accion: 'resultado', n: t.n, workflow_execution_id: 'exec-1', costo_usd: 0.03, texto: '{"fichas":[]}' })
+    const r = await http(TURNOS, 'turnos', vuelta.resultado_body)
+    expect(r.statusCode, JSON.stringify(r.body)).toBe(200)
+    const guardado = (db().tablas.jefatura_pasos ?? []).find((p) => p.n === t.n)
+    expect(guardado?.workflow_execution_id).toBe('exec-1')
+  })
+})
+
 describe('fuente única de moldes: el nodo ② prefiere el molde de la ruta y el de respaldo del flujo solo entra sin él', () => {
   const REV = '00000000-0000-4000-8000-000000000009'
   const armar = (pedido: Json, dry_run = true) => nodo(turnoJson, '② Armar el pedido', { entrada: { revision_id: REV, dry_run, turno: { n: 3, tipo: 'agente', paso: 'revision_fondo', dispatch_key: `${REV}:3`, pedido: { agent_name: 'jefe-marketing', client_id: 'c', max_budget_usd: 0.2, dry_run, ...pedido } } } })
