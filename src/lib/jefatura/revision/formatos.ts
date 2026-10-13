@@ -29,8 +29,8 @@ const respuestas: Esq = { t: 'arr', max: 12, de: { t: 'obj', req: ['id', 'estado
 export const ESQUEMAS_DE_REVISION: Record<string, Esq> = {
   'resolucion_objeto.v1': { t: 'obj', req: ['respuestas'], props: { respuestas, objeto: { t: 'obj', props: {}, extra: true } } },
   'resolucion_parcial.v1': { t: 'obj', req: ['respuestas'], props: { respuestas, filas: { t: 'arr', max: 200, de: { t: 'obj', req: ['fila_id'], props: { fila_id: str(1, 80) }, extra: true } } } },
-  /** solo el BLOQUE de resolución del plan (el texto va fuera) */
-  'resolucion_del_plan.v1': { t: 'obj', req: ['respuestas'], props: { respuestas } },
+  /** solo el BLOQUE de resolución del plan (el texto va fuera): interno, nunca se le pide a un agente como esquema */
+  'bloque_de_resolucion': { t: 'obj', req: ['respuestas'], props: { respuestas } },
 }
 export const ESQUEMAS_DE_TEXTO = ['plan_texto_y_resolucion.v1'] as const
 
@@ -63,7 +63,7 @@ export function separarTextoYResolucion(salida: string, o: { exigirTexto: boolea
   if (!l.ok) return { ok: false, errores: [`resolución: ${l.error}`] }
   let crudo: unknown
   try { crudo = JSON.parse(l.json) } catch (e) { return { ok: false, errores: [`resolución: json_invalido: ${e instanceof Error ? e.message : String(e)}`] } }
-  const esq = ESQUEMAS_DE_REVISION['resolucion_del_plan.v1']
+  const esq = ESQUEMAS_DE_REVISION['bloque_de_resolucion']
   const errores = validar(esq, descartarIgnorados(esq, crudo))
   if (errores.length) return { ok: false, errores: errores.map((e) => `resolución ${e}`) }
   if (texto === '') {

@@ -29,6 +29,14 @@ describe('regla dura del editor (aviso 5.2 · certificación §4)', () => {
     expect(p.force_restart).toBe(true)
     expect(auditarPedidoDeAgente(p)).toEqual([])
   })
+  it('la simulación y la marca de reintento solo viajan cuando corresponde: en seco la simulación; el pedido REAL nunca la lleva', () => {
+    const sim = { fichas: 'bloquea' as const }
+    expect(armarPedidoDeAgente(datos({ dry_run: true, simulacion: sim })).simulacion).toEqual(sim)
+    expect(armarPedidoDeAgente(datos({ dry_run: false, simulacion: sim })).simulacion).toBeUndefined()
+    expect(armarPedidoDeAgente(datos({ dry_run: true })).simulacion).toBeUndefined()
+    expect(armarPedidoDeAgente(datos({ reintento_formato: true })).reintento_formato).toBe(true)
+    expect(armarPedidoDeAgente(datos()).reintento_formato).toBeUndefined()
+  })
   it('colar `workflow_execution_id` (o cualquier otra clave) en `extra` revienta al armar el pedido', () => {
     expect(() => armarPedidoDeAgente(datos({ extra_ajeno: { workflow_execution_id: 'exec-1' } }))).toThrow(/workflow_execution_id/)
     expect(() => armarPedidoDeAgente(datos({ extra_ajeno: { cualquiera: 1 } }))).toThrow(/cualquiera/)
@@ -94,7 +102,7 @@ describe('los pedidos', () => {
     const c = tareaDeCorreccion({ politica: pol, payload: sobre('plan').payload as never, tipo: 'plan', dueno: d, esquema: 'plan_texto_y_resolucion.v1', texto: 'PLAN A', fichas: [{ id: 'f1', que: 'grave', donde: 's4' }], version_actual: 'A' })
     for (const l of TRES_LINEAS_DEL_PLAN) expect(c.task).toContain(l)
     expect(c.task.indexOf('PEDIDO ORIGINAL')).toBeLessThan(c.task.indexOf('## El plan actual (A)'))
-    expect(c.task).toContain('id «f1»')
+    expect(c.task).toContain('- [f1] (bloquea) en s4: grave')
     const dec = tareaDeDecision({ politica: pol, payload: sobre('plan').payload as never, tipo: 'plan', dueno: d, esquema: 'plan_texto_y_resolucion.v1', texto: 'PLAN B', fichas: [{ id: 'e1', donde: 'general' }], opinion: 'OPINION DE GPT', version_actual: 'B' })
     expect(dec.task).toContain('OPINION DE GPT')
     expect(dec.task).toContain('Si no tomas nada, responde solo la resolución, sin texto del plan.')
@@ -210,7 +218,7 @@ describe('lo común es una FACHADA: la oficina no se toca y la jefatura importa 
     expect(comun.ESPERAS_DEL_REVISOR_MS).toBe(revisorOficina.ESPERAS_DEL_REVISOR_MS)
   })
   it('los esquemas nuevos de la jefatura NO se añaden a `ESQUEMAS` de la oficina (su comportamiento no cambia)', () => {
-    for (const k of ['resolucion_objeto.v1', 'resolucion_parcial.v1', 'plan_texto_y_resolucion.v1', 'resolucion_del_plan.v1']) expect(k in comun.ESQUEMAS).toBe(false)
+    for (const k of ['resolucion_objeto.v1', 'resolucion_parcial.v1', 'plan_texto_y_resolucion.v1', 'bloque_de_resolucion']) expect(k in comun.ESQUEMAS).toBe(false)
     for (const k of ['fichas.v1', 'resolucion.v1', 'resolucion_solo.v1', 'opinion_libre.v1']) expect(k in comun.ESQUEMAS).toBe(true)
   })
   it('ningún archivo de la jefatura (revisión) importa de la oficina directamente: todo va por `revision-comun`', () => {

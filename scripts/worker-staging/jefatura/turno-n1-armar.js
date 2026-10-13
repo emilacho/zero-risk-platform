@@ -43,6 +43,8 @@ const SIMULADOS = {
   'resolucion_parcial.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { filas: [] } : {}) } },
   // 🔴 el FORMATO real del texto largo del plan (bloque delimitado o esquema ≥ 40.000) lo decide la condición 1 de CC#3 (§13.5); este molde es lo único que cambia cuando se decida
   'resolucion_plan.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { texto_completo: textoDePlan() } : {}) } },
+  // 🔴 EL PLAN REAL (condición 1 de CC#3): texto plano + bloque de resolución al final (no un JSON con 25–34 mil caracteres adentro). Si no se tomó nada, solo el bloque.
+  'plan_texto_y_resolucion.v1': (task) => { const rs = respuestasDe(task); const bloque = '<<<RESOLUCION>>>' + String.fromCharCode(10) + JSON.stringify({ respuestas: rs }) + String.fromCharCode(10) + '<<<FIN_RESOLUCION>>>'; return algunaTomada(rs) ? textoDePlan() + String.fromCharCode(10) + bloque : bloque },
   // oficina: pasos de producción que la jefatura NO ejecuta pero cuyos moldes se conservan idénticos para la prueba de igualdad (§13.3)
   'visual_direction.v1': () => ({ resumen: '(simulado) dirección visual', decision: { modo: 'generada', motivo: '(simulado)' }, reglas_de_imagen: { obligatorio: [], prohibido: [] } }),
   'prompts.v1': () => ({ prompts: [{ prompt: '(simulado) un plato visto desde arriba con luz natural lateral, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) cenital' }, { prompt: '(simulado) el mismo plato a nivel de mesa con fondo desenfocado, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) nivel de mesa' }] }),
@@ -66,7 +68,8 @@ if (e.dry_run === true) {
   // productor muerto: no contesta nunca (el vigía lo re-arma a los 12 min); en el seco la ejecución termina sin registrar nada, a propósito
   if (sim.productor === 'muerto') return []
   const roto = sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && p.reintento_formato !== true)
-  const texto = roto ? '{"respuestas": [ {"id": ' : JSON.stringify(molde(p.task))
+  const m = roto ? null : molde(p.task)
+  const texto = roto ? '{"respuestas": [ {"id": ' : (typeof m === 'string' ? m : JSON.stringify(m)) // un molde de TEXTO (el plan) devuelve la cadena tal cual
   return [{ json: { ...e, simulado: true, resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, texto, costo_usd: 0, workflow_execution_id: $execution.id } } }]
 }
 

@@ -32,6 +32,8 @@ export interface ContextoDeMolde {
   objeto?: Record<string, unknown>
   filas?: Array<Record<string, unknown>>
   esDecision: boolean
+  /** `true` si este turno repite un paso por formato roto */
+  reintento: boolean
 }
 
 const bloque = (respuestas: Array<{ id: string; estado: 'tomada' | 'no_tomada'; razon: string }>): string => `${MARCA_DE_INICIO_DE_RESOLUCION}\n${JSON.stringify({ respuestas })}\n${MARCA_DE_FIN_DE_RESOLUCION}`
@@ -40,7 +42,7 @@ const bloque = (respuestas: Array<{ id: string; estado: 'tomada' | 'no_tomada'; 
 export function moldeDelPaso(c: ContextoDeMolde): { texto: string | null; error?: string } {
   const sim = c.sim ?? {}
   if (c.esquema !== 'fichas.v1' && sim.productor === 'muerto') return { texto: null, error: 'el turno murió (simulado): sin vuelta' }
-  if (c.esquema !== 'fichas.v1' && sim.productor === 'formato_roto') return { texto: 'esto no cumple el formato (simulado)' }
+  if (c.esquema !== 'fichas.v1' && (sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && !c.reintento))) return { texto: 'esto no cumple el formato (simulado)' }
   if (c.esquema === 'fichas.v1') {
     const f = sim.fichas ?? 'ninguna'
     if (f === 'ninguna') return { texto: '{"fichas":[]}' }

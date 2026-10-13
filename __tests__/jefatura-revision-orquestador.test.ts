@@ -111,10 +111,10 @@ describe('pieza · el orden firmado: jefe → corrige el dueño → GPT ciego �
     const c = await correr(P, sobre('pieza', { dry_run: false }), (t) => {
       if (t.paso === 'revision_fondo') return { texto: JSON.stringify({ fichas: [{ que: 'el pie promete un descuento que no existe', donde: 'texto', contra_que: 'el brief', gravedad: 'bloquea', propuesta: 'quitar el descuento' }] }) }
       if (t.paso === 'correccion:content-creator') {
-        const id = /id «([^»]+)»/.exec(String(t.pedido.task))![1]
+        const id = /^- \[([^\]\n]+)\]/m.exec(String(t.pedido.task))![1]
         return { texto: JSON.stringify({ respuestas: [{ id, estado: 'tomada', razon: 'ok' }], pieza: { pie_de_foto: 'PIE CORREGIDO SIN DESCUENTO', hashtags: ['#a'] } }), costo_usd: 0.07 }
       }
-      return { texto: JSON.stringify({ respuestas: (String(t.pedido.task).match(/id «([^»]+)»/g) ?? []).map((m) => ({ id: /«([^»]+)»/.exec(m)![1], estado: 'no_tomada', razon: 'no aplica' })) }), costo_usd: 0.07 }
+      return { texto: JSON.stringify({ respuestas: [...String(t.pedido.task).matchAll(/^- \[([^\]\n]+)\]/gm)].map((m) => ({ id: m[1], estado: 'no_tomada', razon: 'no aplica' })) }), costo_usd: 0.07 }
     })
     expect(pasosDe(c)).toEqual(['revision_fondo', 'correccion:content-creator', 'decision:content-creator', 'decision:marketing_instagram_curator'])
     expect(rastro.llamadasAlRevisor).toHaveLength(1)
@@ -288,7 +288,7 @@ describe('plan (F16 + F20): A → B (corrección) → C (decisión), sin otra vu
     const bloque = (estado: string, id: string) => `\n<<<RESOLUCION>>>\n{"respuestas":[{"id":"${id}","estado":"${estado}","razon":"x"}]}\n<<<FIN_RESOLUCION>>>`
     const c = await correr(P, sobre('plan', { simulacion: { fichas: 'bloquea' } }), (t) => {
       if (t.paso !== 'correccion:campaign-brief-agent') return undefined
-      const id = /id «([^»]+)»/.exec(String(t.pedido.task))![1]
+      const id = /^- \[([^\]\n]+)\]/m.exec(String(t.pedido.task))![1]
       return { texto: bloque('tomada', id) } // dice que tomó la ficha pero no entrega el plan (las dos veces)
     })
     expect(c.final.cuerpo.resultado).toBe('fallida')
@@ -299,7 +299,7 @@ describe('plan (F16 + F20): A → B (corrección) → C (decisión), sin otra vu
 
 describe('plan · coherencia entre lo que se toma y lo que se entrega (en la corrección Y en la decisión)', () => {
   const bloque = (estado: 'tomada' | 'no_tomada', id: string) => `<<<RESOLUCION>>>\n{"respuestas":[{"id":"${id}","estado":"${estado}","razon":"x"}]}\n<<<FIN_RESOLUCION>>>`
-  const ids = (t: { pedido: Record<string, unknown> }) => (String(t.pedido.task).match(/id «([^»]+)»/g) ?? []).map((m) => /«([^»]+)»/.exec(m)![1])
+  const ids = (t: { pedido: Record<string, unknown> }) => [...String(t.pedido.task).matchAll(/^- \[([^\]\n]+)\]/gm)].map((m) => m[1])
   const conRespuesta = (paso: string, hacer: (id: string) => string) => async (sim: Record<string, unknown>) => {
     const { P } = puertosDePrueba()
     const c = await correr(P, sobre('plan', { simulacion: sim }), (t) => (t.paso === paso ? { texto: hacer(ids(t)[0]) } : undefined))
@@ -353,12 +353,20 @@ describe('estrategia y calendario: re-entrega completa / parcial, después del v
 describe('regla 5, 6 y topes: formato roto, productor muerto, cierre por tope', () => {
   it('regla 5: formato roto → UN reintento con el error literal → si vuelve a fallar, FALLIDA (nunca relleno) y aviso', async () => {
     const { P, rastro } = puertosDePrueba()
-    const c = await correr(P, sobre('pieza', { simulacion: { fichas: 'bloquea', productor: 'formato_roto' } }))
+    const c = await correr(P, sobre('pieza', { simulacion: { fichas: 'bloquea', productor: 'formato_roto_siempre' } }))
     // el jefe responde bien; el productor responde roto dos veces
     expect(c.final.cuerpo.resultado).toBe('fallida')
     expect(c.turnos.filter((t) => t.paso === 'correccion:content-creator')).toHaveLength(2)
     expect(String(c.turnos[2].pedido.task)).toMatch(/no cumple el formato/)
+    expect(c.turnos[2].pedido.reintento_formato).toBe(true)
+    expect(c.turnos[1].pedido.reintento_formato).toBeUndefined()
     expect(rastro.avisos).toHaveLength(1)
+  })
+  it('`formato_roto` rompe SOLO el primer intento: el reintento sale bien y la revisión sigue (no es fallida)', async () => {
+    const { P } = puertosDePrueba()
+    const c = await correr(P, sobre('pieza', { simulacion: { fichas: 'bloquea', productor: 'formato_roto' } }))
+    expect(c.final.cuerpo.resultado).not.toBe('fallida')
+    expect(c.turnos.filter((t) => t.paso === 'correccion:content-creator')).toHaveLength(2)
   })
   it('regla 6: un productor que murió (error del turno) cierra FALLIDA con aviso', async () => {
     const { P, rastro } = puertosDePrueba()

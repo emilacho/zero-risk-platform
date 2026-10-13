@@ -14,18 +14,24 @@ export type Resultado = (typeof RESULTADOS)[number]
 
 export interface Productor { donde: string; agente: string }
 export interface ChequeosPrevios { pasaron: boolean; necesita_humano: boolean; marcas: string[] }
-export interface DevolverA { tipo: 'webhook' | 'sala_ref'; destino: string }
+/** `webhook` (destino = la dirección), `sala_ref` (destino = el `_sala_correlation_id` de la sala) o `ninguno` (la ruta ya guardó todo; p. ej. las pruebas) */
+export interface DevolverA { tipo: 'webhook' | 'sala_ref' | 'ninguno'; destino: string }
 
 /** ramas que se fuerzan en el seco (§13.3); solo con `dry_run = true` */
 export interface Simulacion {
   fichas?: 'ninguna' | 'sugerencia' | 'bloquea'
   toma?: 'todo' | 'nada' | 'algo'
   gpt?: 'ok' | 'vacio' | 'sin_hallazgos' | 'falla_red' | 'falla_401'
-  productor?: 'ok' | 'formato_roto' | 'muerto'
+  /** `formato_roto` rompe SOLO el primer intento (el reintento sale bien); `formato_roto_siempre` rompe los dos */
+  productor?: 'ok' | 'formato_roto' | 'formato_roto_siempre' | 'muerto'
   tope?: 'normal' | 'exceso'
   reentrega?: 'ninguna'
   version_nueva?: 'mejora' | 'empeora' | 'demasiado_corta'
   jefatura?: 'a_tiempo' | 'tardia'
+  /** a qué `donde` apuntan las fichas simuladas del jefe */
+  donde?: string
+  /** largo del plan A simulado (lo usan los flujos para fabricar B y C) */
+  largo_a?: number
 }
 
 export interface PayloadDeRevision {
@@ -110,7 +116,7 @@ export function validarEntrada(cuerpo: unknown): ResultadoDeValidar {
   // 🔴 `dry_run` OBLIGATORIO y booleano: «ausente = 400» (un valor que parece seco y no lo es pagaría creyendo que no)
   if (typeof p.dry_run !== 'boolean') return { ok: false, codigo: 'dry_run_obligatorio', errores: ['`payload.dry_run` es obligatorio y debe ser verdadero o falso (booleano); ausente = 400', ...errores] }
   if (typeof p.texto !== 'string' || p.texto.trim() === '') errores.push('`payload.texto` es obligatorio (el artefacto tal cual salió del productor)')
-  if (!esObjeto(p.devolver_a) || !(p.devolver_a.tipo === 'webhook' || p.devolver_a.tipo === 'sala_ref') || !texto(p.devolver_a.destino)) errores.push('`payload.devolver_a` debe ser { tipo: webhook | sala_ref, destino }')
+  if (!esObjeto(p.devolver_a) || !(p.devolver_a.tipo === 'webhook' || p.devolver_a.tipo === 'sala_ref' || p.devolver_a.tipo === 'ninguno') || (p.devolver_a.tipo !== 'ninguno' && !texto(p.devolver_a.destino))) errores.push('`payload.devolver_a` debe ser { tipo: webhook | sala_ref | ninguno, destino }')
   if (p.productores !== undefined) {
     if (!lista(p.productores) || p.productores.length === 0 || !p.productores.every((x) => esObjeto(x) && texto(x.donde) && texto(x.agente))) errores.push('`payload.productores` debe ser una lista de { donde, agente }')
   }

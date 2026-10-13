@@ -9,7 +9,7 @@
  */
 import { requiresEditorReview } from '../../editor-routing'
 import { armarPedidoAlRevisor, preguntaAlRevisor, type ContextoDelRevisor, type Estado, type HuecosDeLaPregunta, type PedidoAlRevisor } from '../../revision-comun'
-import type { PayloadDeRevision, TipoDeRevision } from './contrato'
+import type { PayloadDeRevision, Simulacion, TipoDeRevision } from './contrato'
 import { MARCA_DE_FIN_DE_RESOLUCION, MARCA_DE_INICIO_DE_RESOLUCION } from './formatos'
 import type { Dueno, PoliticaDeRevision } from './politicas'
 
@@ -35,6 +35,10 @@ export interface PedidoDeAgente {
   callback_mode: 'runner'
   /** cabeceras que el flujo DEBE poner en la llamada al corredor */
   headers_requeridos: Record<string, string>
+  /** solo con `dry_run = true`: las ramas que fuerza la simulación (los flujos del seco la leen) */
+  simulacion?: Simulacion
+  /** `true` en el pedido que repite un paso por formato roto (el seco lo usa para romper solo el primer intento) */
+  reintento_formato?: true
 }
 
 export interface DatosDelPedido {
@@ -51,6 +55,8 @@ export interface DatosDelPedido {
   client_id: string
   /** lo que un llamador intentara meter en `extra`: se rechaza lo que no esté en la lista */
   extra_ajeno?: Record<string, unknown>
+  simulacion?: Simulacion
+  reintento_formato?: boolean
 }
 
 /** arma el pedido de UN turno; falla si alguien intenta colar algo en `extra` */
@@ -63,6 +69,8 @@ export function armarPedidoDeAgente(a: DatosDelPedido): PedidoDeAgente {
     force_restart: true, callback_mode: 'runner',
     // la cabecera va SIEMPRE: es inocua para un agente fuera de la lista y obligatoria para los de la lista (`content-creator`, `social-media-strategist`)
     headers_requeridos: { [CABECERA_SALTAR_EDITOR]: '1' },
+    ...(a.dry_run && a.simulacion ? { simulacion: a.simulacion } : {}),
+    ...(a.reintento_formato ? { reintento_formato: true as const } : {}),
   }
 }
 
@@ -109,7 +117,8 @@ export function tareaDeRevisionDeFondo(a: { politica: PoliticaDeRevision; payloa
 
 export interface FichaParaElDueno { id: string; que?: string; donde: string; contra_que?: string; propuesta?: string; gravedad?: string; texto_de_la_opinion?: string }
 
-const lineaDeFicha = (f: FichaParaElDueno): string => `- id «${f.id}» · ${f.donde}: ${f.que ?? ''}${f.contra_que ? ` · contra: ${f.contra_que}` : ''}${f.propuesta ? ` · propuesta: ${f.propuesta}` : ''}`
+/** el formato de la oficina: `- [id] (gravedad) en donde: qué` (los flujos de n8n leen los ids con una expresión regular sobre `- [id] (bloquea|sugerencia)`) */
+export const lineaDeFicha = (f: FichaParaElDueno): string => `- [${f.id}] (${f.gravedad ?? 'bloquea'}) en ${f.donde}: ${f.que ?? ''}${f.contra_que ? ` · contra: ${f.contra_que}` : ''}${f.propuesta ? ` · propuesta: ${f.propuesta}` : ''}`
 
 /** las tres líneas del plan (aviso 6 / diseño §5.1 paso 4): pedir la versión nueva sin cambiar lo que no tocan las fichas */
 export const TRES_LINEAS_DEL_PLAN = [
@@ -139,7 +148,7 @@ export function tareaDeCorreccion(a: { politica: PoliticaDeRevision; payload: Pa
 
 /** decisión: el dueño ve la opinión de GPT (que NO vio el hilo) y decide qué toma, con razón */
 export function tareaDeDecision(a: { politica: PoliticaDeRevision; payload: PayloadDeRevision; tipo: TipoDeRevision; dueno: Dueno; esquema: string; texto: string; fichas: FichaParaElDueno[]; opinion: string; version_actual: 'A' | 'B' }): { task: string; indicacion: string; esquema: string } {
-  const ids = `## Tus ítems (uno por parte que hiciste)\n${a.fichas.map((f) => `- id «${f.id}» · ${f.donde}`).join('\n')}`
+  const ids = `## Tus ítems (uno por parte que hiciste)\n${a.fichas.map((f) => `- [${f.id}] (sugerencia) en ${f.donde}`).join('\n')}`
   const opinion = `## La opinión de un revisor externo (leyó ${tituloDeLoRevisado(a.tipo)} sin conocer el hilo de la revisión)\n${a.opinion.trim()}`
   if (a.esquema === 'plan_texto_y_resolucion.v1') {
     const indicacion = 'Decide qué tomas de esta opinión. Si no tomas nada, responde solo la resolución, sin texto del plan. Si tomas algo, escribe UNA versión final completa del plan con eso; es la última, no habrá otra revisión.'

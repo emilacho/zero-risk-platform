@@ -134,7 +134,7 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
   const duenos = duenosDe(rev.productores)
   if (paso.clave === 'revision_fondo') {
     t = tareaDeRevisionDeFondo({ politica: rev.policy, payload: p, tipo, texto, duenos })
-    donde = duenos.flatMap((d) => (d.comodin ? [] : d.dondes))[0] ?? 'general'
+    donde = p.simulacion?.donde ?? duenos.flatMap((d) => (d.comodin ? [] : d.dondes))[0] ?? 'general'
   } else {
     const d = duenoDe(rev, paso)
     const mias = fichasPropias(rev, e, paso, d)
@@ -147,10 +147,10 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
     }
   }
   const task = errorDeFormato ? `${t.task}\n\n${errorDeFormato}` : t.task
-  const pedido = armarPedidoDeAgente({ agente: paso.quien, task, esquema: t.esquema, imagenes: p.imagenes, indicacion: t.indicacion, paso: paso.clave, revision_id: rev.id, dispatch_key, max_budget_usd: paso.tope_usd, dry_run: rev.dry_run, client_id: rev.client_id })
+  const pedido = armarPedidoDeAgente({ agente: paso.quien, task, esquema: t.esquema, imagenes: p.imagenes, indicacion: t.indicacion, paso: paso.clave, revision_id: rev.id, dispatch_key, max_budget_usd: paso.tope_usd, dry_run: rev.dry_run, client_id: rev.client_id, simulacion: p.simulacion, reintento_formato: errorDeFormato !== undefined })
   const malos = auditarPedidoDeAgente(pedido)
   if (malos.length) throw new Error(`pedido inválido (regla dura del editor): ${malos.join(' · ')}`)
-  const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso) }) : undefined
+  const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso), reintento: errorDeFormato !== undefined }) : undefined
   return { agente: paso.quien, pedido: { ...pedido, ...(molde ? { molde } : {}) } as Record<string, unknown>, ...(molde ? { molde } : {}) }
 }
 
@@ -159,7 +159,10 @@ export async function avanzar(P: Puertos, revisionId: string): Promise<Respuesta
   if (!rev) return r(404, { error: 'revision_inexistente' })
   const pl = plantillaDe(rev)
   for (let vuelta = 0; vuelta < MAX_VUELTAS_DEL_BUCLE; vuelta++) {
-    if (esTerminal(rev)) return r(200, { accion: 'cerrado', estado: rev.estado, resultado: rev.resultado, marcas: rev.marcas, simulado: rev.dry_run, salida: armarSalida(rev, resolverCierre(rev.estado_del_motor, { tope: rev.estado === 'cerrada_por_tope', fallida: rev.estado === 'fallida' })) })
+    if (esTerminal(rev)) {
+      const salida = armarSalida(rev, resolverCierre(rev.estado_del_motor, { tope: rev.estado === 'cerrada_por_tope', fallida: rev.estado === 'fallida' }))
+      return r(200, { accion: 'cerrado', estado: rev.estado, resultado: rev.resultado, marcas: rev.marcas, simulado: rev.dry_run, ...entregaDe(rev, salida), salida })
+    }
     const abierto = await P.almacen.pasoAbierto(rev.id)
     const e = rev.estado_del_motor
     if (abierto) {
@@ -326,6 +329,26 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e:
 // ───────────────────────── cierres
 const marcasDe = (c: Cierre): Marcas => c.marcas
 
+/**
+ * LA ENTREGA AL LLAMADOR, en el formato que leen los flujos `jefatura · turno` y `jefatura · vigía` (J4): `devolver` { tipo: webhook | sala_ref | ninguno, url?, cuerpo }, `sala_ref` y el resultado en el idioma de la sala.
+ * El flujo decide cómo entregar (solo a nuestro n8n o a nuestro Vercel); la ruta ya guardó todo.
+ */
+export interface Entrega {
+  devolver: { tipo: 'webhook' | 'sala_ref' | 'ninguno'; url?: string; cuerpo: Record<string, unknown> }
+  sala_ref?: Record<string, unknown>
+  resultado_para_la_sala: string
+}
+const RESULTADO_PARA_LA_SALA: Record<string, string> = { limpia: 'revision_limpia', con_desacuerdo: 'con_desacuerdo', sin_segunda_mirada: 'sin_segunda_mirada', incompleta_por_tope: 'cerrado_por_tope', fallida: 'fallido' }
+export function entregaDe(rev: Revision, salida: SalidaDeRevision): Entrega {
+  const d = rev.devolver_a
+  const tipo = d?.tipo ?? 'ninguno'
+  return {
+    devolver: { tipo, ...(tipo === 'webhook' ? { url: d?.destino } : {}), cuerpo: { marcas: salida.marcas, salida } },
+    ...(tipo === 'sala_ref' ? { sala_ref: { _sala_correlation_id: d?.destino || null, _journey_id: rev.journey_id } } : {}),
+    resultado_para_la_sala: RESULTADO_PARA_LA_SALA[salida.resultado] ?? salida.resultado,
+  }
+}
+
 export function armarSalida(rev: Revision, c: Cierre): SalidaDeRevision {
   const e = rev.estado_del_motor
   const { historial: _historial, ...rd } = (datos(e, 'revision') ?? {}) as Datos
@@ -350,7 +373,8 @@ async function cerrar(P: Puertos, rev: Revision, o: { tope?: boolean; fallida?: 
   await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: rev.gasto_usd > e.gasto_usd ? rev.gasto_usd : e.gasto_usd, estado, resultado: c.resultado, marcas: c.marcas })
   const cerrada: Revision = { ...rev, estado, resultado: c.resultado, marcas: c.marcas }
   if (hayQueAvisar(c)) await P.avisar({ canal: 'alertas', revision_id: rev.id, texto: textoDelAviso(c, { tipo: rev.artifact_type, artifact_id: rev.artifact_id, gasto_usd: e.gasto_usd, simulado: rev.dry_run }) + (o.nota ? ` · ${o.nota}` : ''), dry_run: rev.dry_run })
-  return r(200, { accion: 'cerrado', estado, resultado: c.resultado, marcas: c.marcas, simulado: rev.dry_run, gasto_usd: e.gasto_usd, ...(o.nota ? { nota: o.nota } : {}), salida: armarSalida(cerrada, c) })
+  const salida = armarSalida(cerrada, c)
+  return r(200, { accion: 'cerrado', estado, resultado: c.resultado, marcas: c.marcas, simulado: rev.dry_run, gasto_usd: e.gasto_usd, ...(o.nota ? { nota: o.nota } : {}), ...entregaDe(cerrada, salida), salida })
 }
 
 export async function fallar(P: Puertos, rev: Revision, motivo: string): Promise<Respuesta> {
@@ -358,7 +382,9 @@ export async function fallar(P: Puertos, rev: Revision, motivo: string): Promise
   const c = resolverCierre(e, { tope: false, fallida: true })
   await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: rev.gasto_usd > e.gasto_usd ? rev.gasto_usd : e.gasto_usd, estado: 'fallida', resultado: 'fallida', marcas: c.marcas })
   await P.avisar({ canal: 'alertas', revision_id: rev.id, texto: `${textoDelAviso(c, { tipo: rev.artifact_type, artifact_id: rev.artifact_id, gasto_usd: e.gasto_usd, simulado: rev.dry_run })} · ${motivo}`, dry_run: rev.dry_run })
-  return r(200, { accion: 'cerrado', estado: 'fallida', resultado: 'fallida', marcas: c.marcas, motivo, simulado: rev.dry_run, salida: armarSalida({ ...rev, estado: 'fallida', resultado: 'fallida' }, c) })
+  const caida: Revision = { ...rev, estado: 'fallida', resultado: 'fallida' }
+  const salida = armarSalida(caida, c)
+  return r(200, { accion: 'cerrado', estado: 'fallida', resultado: 'fallida', marcas: c.marcas, motivo, simulado: rev.dry_run, ...entregaDe(caida, salida), salida })
 }
 
 // ───────────────────────── plan: la mejor versión aceptable
@@ -391,11 +417,12 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
 }
 
 // ───────────────────────── el vigía
-export async function vigiar(P: Puertos, ahora: Date): Promise<{ reanudar: string[]; fallidos: string[]; cierres: Array<{ revision_id: string; resultado: string; devolver_a: unknown; client_id: string; artifact_id: string }> }> {
+export interface CierreDelVigia extends Entrega { revision_id: string; resultado: string; client_id: string; artifact_id: string }
+export async function vigiar(P: Puertos, ahora: Date): Promise<{ reanudar: string[]; fallidos: string[]; cierres: CierreDelVigia[] }> {
   const limite = new Date(ahora.getTime() - MINUTOS_PARA_DAR_POR_MUERTO * 60_000).toISOString()
   const vivos = await P.almacen.pasosCorriendoAntesDe(limite)
   const reanudar: string[] = [], fallidos: string[] = []
-  const cierres: Array<{ revision_id: string; resultado: string; devolver_a: unknown; client_id: string; artifact_id: string }> = []
+  const cierres: CierreDelVigia[] = []
   for (const t of vivos) {
     const rev = await P.almacen.leerRevision(t.revision_id)
     if (!rev || esTerminal(rev)) continue
@@ -403,9 +430,9 @@ export async function vigiar(P: Puertos, ahora: Date): Promise<{ reanudar: strin
     const veces = rev.estado_del_motor.vueltas[clave] ?? 0
     await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: rev.estado_del_motor, gasto_usd: rev.gasto_usd, paso: { n: t.n, paso: t.paso, intento: (rev.estado_del_motor.vueltas[`fmt:${t.paso}`] ?? 0) + 1, tipo: 'agente', agente: null, estado: 'muerto', dispatch_key: null, concepto: 'modelo', base: 'usage', cost_usd: 0, error: `sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min` } })
     if (veces >= 1) {
-      await fallar(P, rev, `el paso «${t.paso}» murió dos veces (sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min)`)
+      const f = await fallar(P, rev, `el paso «${t.paso}» murió dos veces (sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min)`)
       fallidos.push(rev.id)
-      cierres.push({ revision_id: rev.id, resultado: 'fallida', devolver_a: rev.devolver_a, client_id: rev.client_id, artifact_id: rev.artifact_id })
+      cierres.push({ revision_id: rev.id, resultado: 'fallida', client_id: rev.client_id, artifact_id: rev.artifact_id, devolver: f.cuerpo.devolver as Entrega['devolver'], ...(f.cuerpo.sala_ref ? { sala_ref: f.cuerpo.sala_ref as Record<string, unknown> } : {}), resultado_para_la_sala: String(f.cuerpo.resultado_para_la_sala) })
       continue
     }
     const estado = { ...rev.estado_del_motor, vueltas: { ...rev.estado_del_motor.vueltas, [clave]: veces + 1 } }

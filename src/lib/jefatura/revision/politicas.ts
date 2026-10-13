@@ -127,7 +127,7 @@ export function plantillaDePolitica(p: PoliticaDeRevision, productores: Producto
       pasos.push({ clave: CLAVE_DE_CORRECCION(d.agente), tipo: 'agente', quien: d.agente, condicion: c, ronda: 1, entrada: ['fichas_jefe', 'revision'], salida_artefacto: 'revision', tope_usd: topeDelPaso(p, 'correccion'), salida: { esquema: esquemaDelDueno(p, d), reintento_formato: 1 } })
     }
   }
-  pasos.push({ clave: 'segunda_mirada', tipo: 'externo', quien: 'GPT', condicion: { tipo: 'siempre' }, ronda: 2, entrada: ['revision'], salida_artefacto: 'fichas_externas', tope_usd: topeDelPaso(p, 'segunda_mirada'), salida: { esquema: 'opinion_libre.v1', reintento_formato: 0 } })
+  pasos.push({ clave: 'segunda_mirada', tipo: 'externo', quien: 'GPT', condicion: { tipo: 'siempre' }, ronda: 2, entrada: ['revision'], salida_artefacto: 'fichas_externas', tope_usd: topeDelPaso(p, 'segunda_mirada') })
   if (conRe) {
     for (const d of duenos) {
       const c: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', ...sinWildcard(d) }
