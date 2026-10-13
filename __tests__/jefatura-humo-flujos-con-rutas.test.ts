@@ -159,6 +159,12 @@ describe('lo que se entrega y por qué camino (con las rutas reales)', () => {
     expect(JSON.stringify(r.body)).toMatch(/no es de nuestro n8n ni de nuestro Vercel/)
     expect(db().tablas.jefatura_revisiones ?? []).toHaveLength(0) // no quedó guardada ninguna revisión sin entrega posible
   })
+  it('defensa en profundidad: aunque al nodo ③ le llegara (respuesta fabricada) un destino ajeno o con el nuestro escondido, se DETIENE', () => {
+    for (const url of ['https://ajeno.example.com/hook', 'https://otro.com/?x=https://zero-risk-platform.vercel.app/api/jefatura/', 'https://zero-risk-platform.vercel.app.otro.com/api/jefatura/x']) {
+      const entrada = { statusCode: 200, body: { accion: 'cerrado', resultado: 'limpia', devolver: { tipo: 'webhook', url } } }
+      expect(() => nodo(turnoJson, '③ ¿Y ahora?', { entrada, nodos: { '⓪ Entrada · llave': { revision_id: 'r1' } } }), url).toThrow(/JEFATURA_DESTINO_NO_PERMITIDO/)
+    }
+  })
 })
 
 describe('la jefatura apagada y el vigía', () => {
