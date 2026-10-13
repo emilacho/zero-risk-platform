@@ -126,6 +126,13 @@ describe('pieza · el orden firmado: jefe → corrige el dueño → GPT ciego �
     expect(ciego).toContain('Tono cercano. Tuteo.')
     expect(c.final.cuerpo.resultado).toBe('limpia')
   })
+  it('el revisor real recibe el contexto para el libro de invocaciones (revisión, número de paso y cliente): así el gasto de GPT se ve en el libro central (condición 5)', async () => {
+    const { P, rastro } = puertosDePrueba()
+    const c = await correr(P, sobre('pieza', { dry_run: false }), (t) => (t.paso === 'revision_fondo' ? { texto: '{"fichas":[]}' } : { texto: '{"respuestas":[]}' }))
+    expect(rastro.llamadasAlRevisor).toHaveLength(1)
+    const id = String(c.aperturas[0].cuerpo.revision_id)
+    expect(rastro.llamadasAlRevisor[0].contexto).toEqual({ revision_id: id, n: 2, client_id: 'cliente-prueba' })
+  })
   it('regla 2: la corrección de fondo NO tomada = con_desacuerdo; sin otra vuelta (un solo turno de corrección) y UN solo aviso', async () => {
     const { P, rastro } = puertosDePrueba()
     const c = await correr(P, sobre('pieza', { simulacion: { fichas: 'bloquea', toma: 'nada' } }))

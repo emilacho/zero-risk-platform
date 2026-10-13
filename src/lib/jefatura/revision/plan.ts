@@ -113,5 +113,40 @@ export function resultadoTrasElegir(actual: { resultado: Resultado; marcas: Marc
   return { resultado, marcas }
 }
 
+/**
+ * CONDICIÓN 2 de CC#3 · el `provenance_tag` de `client_historical_outputs` se escribe COMPLETO. PostgREST reemplaza la columna jsonb entera (no la mezcla) y la tabla exige las claves `type` y `trust_level`:
+ * mandar solo `{reemplazado_por}` pierde el rastro de la fila (y la base lo rechazaría con 23514 dejando dos planes vigentes). Estas funciones reciben el objeto ACTUAL, le añaden lo suyo y devuelven el objeto entero;
+ * se niegan a trabajar con uno incompleto (no se escribe un objeto parcial). No mutan lo que reciben.
+ */
+const esObjetoPlano = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+function exigirTagCompleto(tag: unknown, quien: string): Record<string, unknown> {
+  if (!esObjetoPlano(tag)) throw new Error(`${quien}: el provenance_tag actual no es un objeto: se LEE la fila antes de escribir`)
+  for (const k of ['type', 'trust_level'] as const) if (typeof tag[k] !== 'string' || (tag[k] as string).trim() === '') throw new Error(`${quien}: al provenance_tag le falta «${k}» (sin él la base rechaza la escritura con 23514 y la fila quedaría sin marca): no se escribe un objeto parcial`)
+  return tag
+}
+
+/** marca una versión como reemplazada: `reemplazado_por` + `reemplazado_en` sobre el objeto ENTERO. Una versión no se reemplaza dos veces (G7); repetir la misma marca es idempotente y conserva su hora. */
+export function provenanceConReemplazo(actual: unknown, o: { por: string; en: string }): Record<string, unknown> {
+  const tag = exigirTagCompleto(actual, 'marcar el reemplazo')
+  if (typeof o.por !== 'string' || o.por.trim() === '') throw new Error('marcar el reemplazo: falta el id de la versión que la reemplaza')
+  const previo = tag.reemplazado_por
+  if (typeof previo === 'string' && previo !== '') {
+    if (previo !== o.por) throw new Error(`marcar el reemplazo: esta versión ya fue reemplazada por ${previo}; una versión no se reemplaza dos veces (G7)`)
+    return { ...tag }
+  }
+  return { ...tag, reemplazado_por: o.por, reemplazado_en: o.en }
+}
+
+/** el `provenance_tag` de una versión NUEVA (B o C): hereda lo de la fila de partida (incluidos `type` y `trust_level`, que la base exige) y añade su cadena `version_de` */
+export function provenanceDeVersionNueva(tagDePartida: unknown, o: { etiqueta: 'B' | 'C'; version: 2 | 3; version_de: string; jefatura_revision_id: string }): Record<string, unknown> {
+  const tag = exigirTagCompleto(tagDePartida, 'armar la versión nueva')
+  if (typeof o.version_de !== 'string' || o.version_de.trim() === '') throw new Error('armar la versión nueva: falta version_de (la fila de la que sale)')
+  if (typeof o.jefatura_revision_id !== 'string' || o.jefatura_revision_id.trim() === '') throw new Error('armar la versión nueva: falta la revisión que la produjo')
+  if (o.version > MAXIMO_DE_VERSIONES) throw new Error(`armar la versión nueva: la cadena no pasa de ${MAXIMO_DE_VERSIONES} versiones (G7)`)
+  const { reemplazado_por: _a, reemplazado_en: _b, ...resto } = tag
+  void _a; void _b
+  return { ...resto, etiqueta: o.etiqueta, version: o.version, version_de: o.version_de, jefatura_revision_id: o.jefatura_revision_id, reentrega: 'version_nueva' }
+}
+
 /** G3 · «sin otra vuelta»: una versión producida por la jefatura NUNCA abre otra revisión */
 export const esProductoDeUnaRevision = (generado_por_jefatura: string | null | undefined): boolean => typeof generado_por_jefatura === 'string' && generado_por_jefatura.trim() !== ''

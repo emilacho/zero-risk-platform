@@ -52,7 +52,7 @@ export const politica = (tipo: TipoDeRevision, cambios: Partial<Record<string, u
   return r.politica
 }
 
-export interface Rastro { guardados: CambiosDeRevision[]; avisos: string[]; llamadasAlRevisor: Array<{ texto: string; imagenes_urls: string[]; dry_run: boolean }> }
+export interface Rastro { guardados: CambiosDeRevision[]; avisos: string[]; llamadasAlRevisor: Array<{ texto: string; imagenes_urls: string[]; dry_run: boolean; contexto: { revision_id: string; n: number; client_id: string } }> }
 
 export function almacenEnMemoria(o: { config?: ConfigDeJefatura; filas?: Record<string, Record<string, unknown>>; activas?: string[] } = {}): { almacen: Almacen; revisiones: Map<string, Revision>; pasos: Map<string, PasoRegistrado[]>; config: ConfigDeJefatura } {
   const config: ConfigDeJefatura = o.config ?? { estado: 'ensayo', tipos_activos: ['plan', 'estrategia', 'calendario', 'brief', 'pieza'], clientes_ensayo: ['cliente-prueba'] }
@@ -102,7 +102,7 @@ export function puertosDePrueba(o: { almacen?: ReturnType<typeof almacenEnMemori
   const P: Puertos = {
     almacen: mem.almacen,
     ahora: () => new Date('2026-10-13T12:00:00Z'),
-    async revisor(p) { rastro.llamadasAlRevisor.push({ texto: p.texto, imagenes_urls: p.imagenes_urls, dry_run: p.dry_run }); return o.revisor ? o.revisor(p) : { ok: true, texto: 'opinión real simulada por la prueba', costo_usd: 0.04, modelo: 'gpt-prueba' } },
+    async revisor(p) { rastro.llamadasAlRevisor.push({ texto: p.texto, imagenes_urls: p.imagenes_urls, dry_run: p.dry_run, contexto: p.contexto }); return o.revisor ? o.revisor(p) : { ok: true, texto: 'opinión real simulada por la prueba', costo_usd: 0.04, modelo: 'gpt-prueba' } },
     async avisar(p) { rastro.avisos.push(p.texto) },
   }
   return { P, mem, rastro }

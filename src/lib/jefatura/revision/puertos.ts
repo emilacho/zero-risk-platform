@@ -90,7 +90,7 @@ export interface Puertos {
   almacen: Almacen
   ahora(): Date
   /** el revisor ciego (otro proveedor); en `dry_run` el orquestador NO lo llama (usa la simulación) */
-  revisor(p: { texto: string; imagenes_urls: string[]; dry_run: boolean }): Promise<ResultadoDelRevisor>
+  revisor(p: { texto: string; imagenes_urls: string[]; dry_run: boolean; contexto: { revision_id: string; n: number; client_id: string } }): Promise<ResultadoDelRevisor>
   /** UN aviso agregado a #alertas por revisión; NUNCA lanza (un fallo de Slack no frena una revisión) */
   avisar(p: { canal: 'alertas'; revision_id: string; texto: string; dry_run: boolean }): Promise<void>
 }

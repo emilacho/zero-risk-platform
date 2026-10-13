@@ -199,7 +199,7 @@ async function ejecutarExterno(P: Puertos, rev: Revision, pl: Plantilla, indice:
   const rd = datos(e, 'revision') ?? {}
   const pedido = armarPedidoCiego({ tipo: rev.artifact_type, texto: String(rd.texto ?? ''), imagenes: (rd.imagenes as string[] | undefined) ?? rev.entrada.imagenes, contexto: rev.entrada.contexto ?? [], huecos: rev.entrada.huecos, huecos_de_la_politica: rev.policy.huecos_pregunta })
   // en seco NUNCA se llama al proveedor: se usa la simulación (US$ 0)
-  const rv = rev.dry_run ? simulacionDelRevisor(rev.entrada.simulacion) : await P.revisor({ texto: pedido.texto, imagenes_urls: pedido.imagenes, dry_run: false })
+  const rv = rev.dry_run ? simulacionDelRevisor(rev.entrada.simulacion) : await P.revisor({ texto: pedido.texto, imagenes_urls: pedido.imagenes, dry_run: false, contexto: { revision_id: rev.id, n: turnoDe(e), client_id: rev.client_id } })
   const base: Omit<PasoRegistrado, 'n' | 'estado' | 'intento'> = { paso: paso.clave, tipo: 'externo', agente: paso.quien, dispatch_key: null, concepto: 'revisor_externo', base: 'usage', cost_usd: 0 }
   if (!rv.ok) {
     // F5: tras los reintentos (los hace el adaptador) sigue «sin segunda mirada» + aviso (al cerrar); nunca bloquea

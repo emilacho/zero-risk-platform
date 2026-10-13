@@ -7,7 +7,7 @@ import { validarEntrada } from '../src/lib/jefatura/revision/contrato'
 import {
   MARCA_DE_FIN_DE_RESOLUCION, MARCA_DE_INICIO_DE_RESOLUCION, MINIMO_DE_CARACTERES_DEL_PLAN, procesarSalidaDeRevision, separarTextoYResolucion, TOPE_DE_CARACTERES_DEL_PLAN,
 } from '../src/lib/jefatura/revision/formatos'
-import { elegirVersion, esProductoDeUnaRevision, etiquetaDeVersion, planDeGuardado, PORCENTAJE_MINIMO_DEL_LARGO, resultadoTrasElegir, type EvaluacionDeVersion } from '../src/lib/jefatura/revision/plan'
+import { elegirVersion, esProductoDeUnaRevision, etiquetaDeVersion, planDeGuardado, PORCENTAJE_MINIMO_DEL_LARGO, provenanceConReemplazo, provenanceDeVersionNueva, resultadoTrasElegir, type EvaluacionDeVersion } from '../src/lib/jefatura/revision/plan'
 import { resolverCierre, textoDelAviso } from '../src/lib/jefatura/revision/cierre'
 import { estadoInicial, fichaNueva } from '../src/lib/revision-comun'
 import { sobre } from './_helpers/jefatura-revision'
@@ -262,5 +262,45 @@ describe('cierre (reglas 2, 3, 4)', () => {
     const t = textoDelAviso(c, { tipo: 'plan', artifact_id: 'p1', gasto_usd: 0, simulado: true })
     expect(t).toMatch(/\(seco\)/)
     expect(t).toMatch(/\+1 más/)
+  })
+})
+
+describe('G5 · el provenance_tag se escribe COMPLETO (condición 2 de CC#3)', () => {
+  // CONGELADO: cualquier función que mute el objeto que recibe revienta (en módulo estricto asignar a un objeto congelado lanza)
+  const A = Object.freeze({ type: 'campaign_plan_90d', trust_level: 'trusted', fuente: 'planeacion', caracteres: 24827, workflow_id: 'wf', workflow_execution_id: 'ex-1', estado_del_plan: 'limpio', pendientes: null })
+  it('marcar el reemplazo CONSERVA todas las claves previas de A (no pierde rastro) y añade las dos nuevas', () => {
+    const r = provenanceConReemplazo(A, { por: 'b-id', en: '2026-10-13T12:00:00Z' })
+    expect(r).toEqual({ ...A, reemplazado_por: 'b-id', reemplazado_en: '2026-10-13T12:00:00Z' })
+    for (const k of Object.keys(A)) expect(r[k], k).toEqual((A as Record<string, unknown>)[k])
+  })
+  it('no muta el objeto que recibe', () => {
+    const copia = JSON.parse(JSON.stringify(A))
+    provenanceConReemplazo(A, { por: 'b-id', en: 'ya' })
+    expect(A).toEqual(copia)
+  })
+  it('se NIEGA a escribir un objeto parcial: sin `type` o sin `trust_level` la base lo rechaza con 23514 (y quedarían dos planes vigentes)', () => {
+    expect(() => provenanceConReemplazo({ fuente: 'x' }, { por: 'b', en: 'e' })).toThrow(/falta «type»[\s\S]*23514/)
+    expect(() => provenanceConReemplazo({ type: 't' }, { por: 'b', en: 'e' })).toThrow(/falta «trust_level»/)
+    expect(() => provenanceConReemplazo({ type: '', trust_level: 'x' }, { por: 'b', en: 'e' })).toThrow(/falta «type»/)
+    for (const malo of [null, undefined, 'texto', [], 5]) expect(() => provenanceConReemplazo(malo, { por: 'b', en: 'e' })).toThrow(/no es un objeto/)
+  })
+  it('pide el id de quien reemplaza', () => { expect(() => provenanceConReemplazo(A, { por: ' ', en: 'e' })).toThrow(/falta el id/) })
+  it('es idempotente con la MISMA versión (conserva la hora) y se niega a que otra la reemplace (G7)', () => {
+    const una = provenanceConReemplazo(A, { por: 'b-id', en: 'hora-1' })
+    expect(provenanceConReemplazo(una, { por: 'b-id', en: 'hora-2' })).toEqual(una)
+    expect(() => provenanceConReemplazo(una, { por: 'c-id', en: 'hora-3' })).toThrow(/ya fue reemplazada por b-id/)
+  })
+  it('la versión nueva hereda `type` y `trust_level` de la fila de partida y añade su cadena; no hereda un reemplazo ajeno', () => {
+    const conReemplazo = { ...A, reemplazado_por: 'x', reemplazado_en: 'y' }
+    const b = provenanceDeVersionNueva(conReemplazo, { etiqueta: 'B', version: 2, version_de: 'a-id', jefatura_revision_id: 'rev-1' })
+    expect(b).toMatchObject({ type: 'campaign_plan_90d', trust_level: 'trusted', fuente: 'planeacion', etiqueta: 'B', version: 2, version_de: 'a-id', jefatura_revision_id: 'rev-1', reentrega: 'version_nueva' })
+    expect(b).not.toHaveProperty('reemplazado_por')
+    expect(b).not.toHaveProperty('reemplazado_en')
+  })
+  it('la versión nueva se niega con un tag incompleto, sin padre, sin revisión o pasando de 3 versiones', () => {
+    expect(() => provenanceDeVersionNueva({ fuente: 'x' }, { etiqueta: 'B', version: 2, version_de: 'a', jefatura_revision_id: 'r' })).toThrow(/falta «type»/)
+    expect(() => provenanceDeVersionNueva(A, { etiqueta: 'B', version: 2, version_de: '', jefatura_revision_id: 'r' })).toThrow(/version_de/)
+    expect(() => provenanceDeVersionNueva(A, { etiqueta: 'B', version: 2, version_de: 'a', jefatura_revision_id: '' })).toThrow(/revisión/)
+    expect(() => provenanceDeVersionNueva(A, { etiqueta: 'C', version: 4 as never, version_de: 'b', jefatura_revision_id: 'r' })).toThrow(/3 versiones/)
   })
 })
