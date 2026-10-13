@@ -97,7 +97,7 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
   const esquema = validarEsquemaDeSalida(ESQUEMA_ESTRATEGIA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema de la estrategia no es válido')
   const modelo = await modeloDeLaCadena(al)
-  const prep = await prepararCorrida(al, campana, 'estrategia', `v${version}:c${fichas ? 1 : 0}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash)
+  const prep = await prepararCorrida(al, campana, 'estrategia', `v${version}:c${fichas ? 1 : 0}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash, async () => (await al.ultimaEstrategia(campana.id))?.estado === 'validada')
   const corto = respuestaDePreparar(prep)
   if (corto) return corto
   if (prep.tipo === 'intentos_agotados' || prep.tipo === 'presupuesto_agotado') {
@@ -198,7 +198,8 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   const esquema = validarEsquemaDeSalida(ESQUEMA_CALENDARIO_TANDA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema del calendario no es válido')
   const modelo = await modeloDeLaCadena(al)
-  const prep = await prepararCorrida(al, campana, 'calendario', `t${tanda}:v${version}:c${correccion ? 1 : 0}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash)
+  const prep = await prepararCorrida(al, campana, 'calendario', `t${tanda}:v${version}:c${correccion ? 1 : 0}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash,
+    async () => (await al.filas(campana.id, version)).some((f) => f.tanda === tanda && f.estado !== 'esquema'))
   const corto = respuestaDePreparar(prep)
   if (corto) return corto
   if (prep.tipo === 'intentos_agotados' || prep.tipo === 'presupuesto_agotado') {

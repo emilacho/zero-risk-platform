@@ -2,7 +2,7 @@
  * Almacén EN MEMORIA de la cadena · para las pruebas de los manejadores (sin base, sin red, US$ 0).
  * Imita las garantías de la base que importan: únicos, idempotencia de corridas/esperas, una campaña viva por cliente.
  */
-import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from '../almacen'
+import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, ParteSecoAGuardar } from '../almacen'
 import type { PlazoCfg } from '../esperas'
 import type { Fila, FormatosPorRed, Hallazgo } from '../tipos'
 import type { FechaEspecialVerificada } from '../validador-calendario'
@@ -158,7 +158,27 @@ export class AlmacenMemoria implements Almacen {
     else this.coberturas.push(c)
   }
   async fechasEspeciales(_pais: string, tipos: string[]) { return this.fechas.filter((f) => !tipos.length || tipos.includes(f.tipo)) }
-  async parteDe(parteId: string): Promise<ParteGuardada | null> { return this.semilla.partes?.find((p) => p.id === parteId) ?? null }
+  async parteDe(parteId: string): Promise<ParteGuardada | null> {
+    const seco = this.partesSecos.find((p) => p.id === parteId)
+    if (seco) { const t = seco.fila.provenance_tag; return { id: seco.id, client_id: seco.client_id, valido: t.valido === true, briefs: ((t.familias_por_brief as Array<Record<string, string | null>>) ?? []).map((b) => ({ brief_id: b.brief_id ?? null, fila_id: b.fila_id ?? null, familia: b.familia ?? null })) } }
+    return this.semilla.partes?.find((p) => p.id === parteId) ?? null
+  }
+  /** r79 · D3 · los partes de ensayo guardados (marcados seco, con la llave de lote `seco:`) */
+  partesSecos: { id: string; client_id: string; lote_key: string; fila: ParteSecoAGuardar['fila']; vence_en: string }[] = []
+  async guardarParteSeco(p: ParteSecoAGuardar): Promise<string> {
+    const lote_key = `seco:${p.lote}`
+    const previo = this.partesSecos.find((x) => x.client_id === p.client_id && x.lote_key === lote_key)
+    const fila = { ...p.fila, provenance_tag: { ...p.fila.provenance_tag, seco: true, prueba_seco: true, lote_key, vence_en: p.vence_en } }
+    if (previo) { previo.fila = fila; previo.vence_en = p.vence_en; return previo.id }
+    const id = `00000000-0000-4000-8000-${String(this.partesSecos.length + 1).padStart(12, '0')}`
+    this.partesSecos.push({ id, client_id: p.client_id, lote_key, fila, vence_en: p.vence_en })
+    return id
+  }
+  async limpiarPartesSecos(ahora: string): Promise<number> {
+    const antes = this.partesSecos.length
+    this.partesSecos = this.partesSecos.filter((p) => p.vence_en >= ahora)
+    return antes - this.partesSecos.length
+  }
   recolectadas: string[] = []
   async recolectarSedes(clientId: string) { this.recolectadas.push(clientId); return { ok: true, sedes: this.sedesDeLaFicha } }
   sedesDeLaFicha = 0

@@ -536,15 +536,24 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
     expect(cuarta.cuerpo.error).toBe('intentos_agotados')
     expect(al.corridas).toHaveLength(3)
   })
-  it('una llamada ya hecha (misma clave) no se repite ni se cobra otra vez', async () => {
+  it('una llamada ya hecha (misma clave) no se repite ni se cobra otra vez cuando su objeto quedó validado', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(A.estrategia) }, AHORA)
+    const otra = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    expect(otra.cuerpo.ya_hecha).toBe(true)
+    expect(al.corridas).toHaveLength(1)
+  })
+  it('r79 · una llamada que sirvió pero pidió corrección (sin objeto validado) y se reenvía sin ella abre el siguiente intento, no «ya hecha»', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
     const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     const mala = { ...A.estrategia, pilares: [{ clave: 'x', nombre: 'x', pct: 90 }] }
-    await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(mala) }, AHORA) // la llamada sirvió (ok) pero pide corrección
+    await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(mala) }, AHORA)
     const otra = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
-    expect(otra.cuerpo.ya_hecha).toBe(true)
-    expect(al.corridas).toHaveLength(1)
+    expect(otra.cuerpo.ya_hecha).toBeUndefined()
+    expect(otra.cuerpo.intento).toBe(2)
   })
   it('el calendario exige una estrategia VALIDADA aunque la campaña esté en calendario', async () => {
     const al = almacen()

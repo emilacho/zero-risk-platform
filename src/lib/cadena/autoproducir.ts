@@ -16,7 +16,9 @@ import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } fr
 
 export const FUENTE_DEL_SOBRE = 'brief/parte-listo'
 export const INTENCION_DEL_SOBRE = 'producir'
-const RE_FAMILIA = /^[a-z][a-z0-9_]{0,39}$/
+/** cuánto vive el parte de un ensayo en seco antes de borrarse solo (alcanza para que las salas lo lean; lo barre la siguiente llamada de ensayo) */
+export const HORAS_DE_VIDA_DEL_PARTE_SECO = 24
+const RE_FAMILIA =/^[a-z][a-z0-9_]{0,39}$/
 const RE_BRIEF = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/
 
 export interface BriefDeParte { brief_id: string | null; fila_id: string | null; familia: string | null }
@@ -26,7 +28,7 @@ export interface ParteGuardada { id: string; client_id: string; valido: boolean;
 export interface SobreDeProducir {
   source: typeof FUENTE_DEL_SOBRE
   intent: typeof INTENCION_DEL_SOBRE
-  payload: { parte_id: string; brief_id: string; dry_run: boolean; familia?: string; fila_id?: string; desde_worker?: string }
+  payload: { parte_id: string; brief_id: string; dry_run: boolean; familia?: string; fila_id?: string; fecha?: string; hora?: string; desde_worker?: string }
   idempotency_key: string
   logical_period: string
   tenant_id: string
@@ -42,7 +44,7 @@ export interface Omitido { brief_id: string | null; motivo: MotivoDeOmision | st
 export const llaveDeProducir = (parteId: string, briefId: string): string => `${parteId}:${briefId}:producir`
 
 /** un sobre por brief · sin `familia` si la fila no tiene sala o la familia viene mal escrita (nunca se inventa) · dedup por `brief_id` · puro */
-export function sobresDeProducir(parte: ParteGuardada, o: { dry_run: boolean; tenant_id?: string; correlation_id?: string | null; desde_worker?: string }): { sobres: SobreDeProducir[]; omitidos: Omitido[] } {
+export function sobresDeProducir(parte: ParteGuardada, o: { dry_run: boolean; tenant_id?: string; correlation_id?: string | null; desde_worker?: string; /** r79 · D5 · fila_id → fecha y hora del calendario */ cuando?: ReadonlyMap<string, { fecha: string; hora: string | null }> }): { sobres: SobreDeProducir[]; omitidos: Omitido[] } {
   const sobres: SobreDeProducir[] = [], omitidos: Omitido[] = [], vistos = new Set<string>()
   for (const b of parte.briefs) {
     const id = typeof b.brief_id === 'string' ? b.brief_id.trim() : ''
@@ -53,7 +55,7 @@ export function sobresDeProducir(parte: ParteGuardada, o: { dry_run: boolean; te
     const familia = typeof b.familia === 'string' && RE_FAMILIA.test(b.familia.trim()) ? b.familia.trim() : null
     sobres.push({
       source: FUENTE_DEL_SOBRE, intent: INTENCION_DEL_SOBRE,
-      payload: { parte_id: parte.id, brief_id: id, dry_run: o.dry_run, ...(familia ? { familia } : {}), ...(b.fila_id ? { fila_id: b.fila_id } : {}), ...(o.desde_worker ? { desde_worker: o.desde_worker } : {}) },
+      payload: { parte_id: parte.id, brief_id: id, dry_run: o.dry_run, ...(familia ? { familia } : {}), ...(b.fila_id ? { fila_id: b.fila_id } : {}), ...(b.fila_id && o.cuando?.get(b.fila_id) ? { fecha: o.cuando.get(b.fila_id)!.fecha, ...(o.cuando.get(b.fila_id)!.hora ? { hora: o.cuando.get(b.fila_id)!.hora! } : {}) } : {}), ...(o.desde_worker ? { desde_worker: o.desde_worker } : {}) },
       idempotency_key: llaveDeProducir(parte.id, id),
       logical_period: `parte:${parte.id}`,
       tenant_id: o.tenant_id ?? parte.client_id,
@@ -73,6 +75,8 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
   // r74 · F7 · EN SECO el parte no se guarda: el flujo de la parte manda un `parte_seco` con lo que HABRÍA guardado (válido + briefs con su familia) y se ensaya autoproducir sin sembrar nada a mano.
   //   Solo vale con `dry_run: true`; con `dry_run: false` se ignora y se exige un parte guardado de verdad.
   const parteSeco = cuerpo.dry_run === true && cuerpo.parte_seco && typeof cuerpo.parte_seco === 'object' && !Array.isArray(cuerpo.parte_seco) ? (cuerpo.parte_seco as Record<string, unknown>) : null
+  // r79 · D3 · si el ensayo trae la fila que HABRÍA guardado (`parte_seco.fila`), se guarda de verdad marcada como seco y con otra llave de lote: la puerta de la oficina lo encuentra por su uuid, un lote real nunca lo cuenta como repetido y vence solo
+  const filaSeca = parteSeco && parteSeco.fila && typeof parteSeco.fila === 'object' && !Array.isArray(parteSeco.fila) ? (parteSeco.fila as Record<string, unknown>) : null
   const parteId = cadena(cuerpo.parte_id) ?? (parteSeco && campanaId ? `seco:${campanaId}:${cadena(parteSeco.lote) ?? 'lote'}` : null)
   if (!campanaId || !parteId) return err(400, 'E-CAMPOS', 'faltan campana_id o parte_id')
   if (typeof cuerpo.dry_run !== 'boolean' && typeof cuerpo.seco !== 'boolean') return err(400, 'E-SECO-INVALIDO', '`dry_run` es obligatorio y debe ser true o false (ausente o mal escrito = no se emite nada)')
@@ -88,8 +92,24 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
   if (cerrada) return cerrada
   if (c.estado !== 'activa') return err(409, 'E-CAMPANA-NO-ACTIVA', `la campaña está ${c.estado}: solo una campaña activa deja briefs listos`)
   const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
+  let idDelParteSeco: string | null = null
+  if (parteSeco && filaSeca) {
+    const t = filaSeca.provenance_tag && typeof filaSeca.provenance_tag === 'object' && !Array.isArray(filaSeca.provenance_tag) ? (filaSeca.provenance_tag as Record<string, unknown>) : null
+    const contenido = texto(filaSeca.content)
+    if (t && contenido && parteSeco.valido === true) {
+      const ahora = new Date()
+      try {
+        await al.limpiarPartesSecos(ahora.toISOString())
+        idDelParteSeco = await al.guardarParteSeco({
+          client_id: c.client_id, lote: texto(parteSeco.lote) ?? campanaId,
+          fila: { title: texto(filaSeca.title) ?? 'parte', content: contenido, ...(texto(filaSeca.content_text) ? { content_text: texto(filaSeca.content_text)! } : {}), ...(texto(filaSeca.producing_agent) ? { producing_agent: texto(filaSeca.producing_agent)! } : {}), provenance_tag: t },
+          vence_en: new Date(ahora.getTime() + HORAS_DE_VIDA_DEL_PARTE_SECO * 3_600_000).toISOString(),
+        })
+      } catch { idDelParteSeco = null } // si no se pudo guardar, el ensayo sigue como antes (id `seco:…`)
+    }
+  }
   const parte: ParteGuardada | null = parteSeco
-    ? { id: parteId, client_id: c.client_id, valido: parteSeco.valido === true, briefs: (Array.isArray(parteSeco.briefs) ? (parteSeco.briefs as Array<Record<string, unknown>>) : []).map((b) => ({ brief_id: texto(b?.brief_id), fila_id: texto(b?.fila_id), familia: texto(b?.familia) })) }
+    ? { id: idDelParteSeco ?? parteId, client_id: c.client_id, valido: parteSeco.valido === true, briefs: (Array.isArray(parteSeco.briefs) ? (parteSeco.briefs as Array<Record<string, unknown>>) : []).map((b) => ({ brief_id: texto(b?.brief_id), fila_id: texto(b?.fila_id), familia: texto(b?.familia) })) }
     : await al.parteDe(parteId)
   if (!parte) return err(404, 'E-PARTE', 'el parte no existe (o no es un parte de trabajo)')
   if (parte.client_id !== c.client_id) return err(403, 'E-PARTE-AJENO', 'el parte no es del cliente de esta campaña')
@@ -100,7 +120,10 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
     if (freno.bloqueado) return { status: 200, cuerpo: { accion: 'autoproducir', emite: false, motivo: 'freno_de_gasto', detalle: freno.motivo ?? null, emitidos: 0, duplicados: 0, rechazados: 0, omitidos: [], sobres: [] } }
   }
   const corr = cadena(cuerpo._sala_correlation_id)
-  const { sobres, omitidos } = sobresDeProducir(parte, { dry_run: s.seco, correlation_id: corr, desde_worker: cadena(cuerpo.workflow_id) ?? undefined })
+  // r79 · D5 · la fecha y la hora de cada pieza salen de SU fila del calendario (la última versión de la campaña); si la fila no se halla, el sobre va sin fecha y la ficha del brief decide
+  const cuando = new Map<string, { fecha: string; hora: string | null }>()
+  try { for (const f of await al.filas(c.id, Math.max(1, await al.ultimaVersionDeCalendario(c.id)))) if (f.fecha) cuando.set(f.id, { fecha: f.fecha, hora: f.hora ?? null }) } catch { /* sin filas legibles: los sobres salen sin fecha */ }
+  const { sobres, omitidos } = sobresDeProducir(parte, { dry_run: s.seco, correlation_id: corr, desde_worker: cadena(cuerpo.workflow_id) ?? undefined, cuando })
   let emitidos = 0, duplicados = 0, rechazados = 0
   const detalle: Array<{ brief_id: string; familia: string | null; resultado: ResultadoDeEmision['resultado']; motivo?: string }> = []
   for (const sobre of sobres) {

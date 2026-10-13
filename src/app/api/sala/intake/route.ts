@@ -43,9 +43,8 @@
  *     observability · cero retry pressure from external sources)
  */
 import { NextResponse } from 'next/server'
-import { waitUntil } from '@vercel/functions'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { despacharAlEntrar, isInmediatoEnabled, wireCapSpendQuerySupabase, wireCapUsdQuerySupabase } from '@/lib/sala-router-consumer'
+import { programarDespachoInmediato } from '@/lib/sala-router-consumer/inmediato-supabase'
 import {
   SupabaseEventLogStorage,
   type EventLogStorage,
@@ -139,24 +138,9 @@ export async function POST(request: Request) {
   // ─── 7 · DESPACHO INMEDIATO (palanca SALA_ROUTER_INMEDIATO_ENABLED · nace APAGADA) ───
   // El sobre sale en cuanto entra; el reloj de 15 min queda de respaldo. Nunca doble despacho: el tic inmediato RECLAMA el sobre antes de disparar (ver `inmediato.ts`).
   // Corre en segundo plano (waitUntil): la respuesta de la entrada no espera al despacho ni se rompe si falla.
-  let despacho_inmediato: 'programado' | 'apagado' = 'apagado'
-  if (result.inserted && isInmediatoEnabled()) {
-    try {
-      const supabase = getSupabaseAdmin()
-      waitUntil(
-        despacharAlEntrar({
-          storage,
-          tenant_id: envelope.tenant_id,
-          event_id: result.event_id,
-          cap_spend_query: wireCapSpendQuerySupabase(supabase, { strategy: 'tenant_window' }),
-          cap_usd_query: wireCapUsdQuerySupabase(supabase),
-        }).catch(() => undefined),
-      )
-      despacho_inmediato = 'programado'
-    } catch {
-      despacho_inmediato = 'apagado'
-    }
-  }
+  const despacho_inmediato = result.inserted
+    ? programarDespachoInmediato({ supabase: getSupabaseAdmin(), storage, tenant_id: envelope.tenant_id, event_id: result.event_id, stream_id: result.stream_id, origen: 'sala/intake' })
+    : 'apagado'
   return ok({
     kind: 'accepted',
     event_id: result.event_id,

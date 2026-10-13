@@ -7,6 +7,7 @@ import { almacenDeSupabase as almacenDeRecados } from '@/lib/sala-recados/almace
 import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
 import { isIntakeEnabled, orchestrateIngress, SupabaseIngressTables, type IngressEnvelope } from '@/lib/sala-ingress'
 import { SupabaseEventLogStorage } from '@/lib/sala-event-log'
+import { programarDespachoInmediato } from '@/lib/sala-router-consumer/inmediato-supabase'
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
 import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
 import { horarioDeNorm } from './horario'
@@ -176,6 +177,25 @@ export function almacenDeSupabase(): Almacen {
       const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
       return { id: String(f.id), client_id: String(f.client_id), valido: t.valido === true, briefs: lista.map((b) => ({ brief_id: texto(b?.brief_id), fila_id: texto(b?.fila_id), familia: texto(b?.familia) })) }
     },
+    async guardarParteSeco(p) {
+      const loteSeco = `seco:${p.lote}`
+      // `prueba_seco: true` es la marca que el cerebro ya respeta (`prueba_*`): el parte de ensayo no existe para el expediente del cliente
+      // el MISMO ensayo repetido reutiliza el mismo parte (y le renueva el contenido y el vencimiento)
+      const tag = { ...p.fila.provenance_tag, seco: true, prueba_seco: true, lote_key: loteSeco, vence_en: p.vence_en }
+      const previa = await uno<{ id: string }>(db.from('client_historical_outputs').select('id').eq('client_id', p.client_id).eq('output_type', 'campaign_brief_pack').eq('provenance_tag->>seco', 'true').eq('provenance_tag->>lote_key', loteSeco).limit(1).maybeSingle())
+      const cuerpo = { title: `[ENSAYO EN SECO] ${p.fila.title}`.slice(0, 300), content: p.fila.content, content_text: p.fila.content_text ?? p.fila.content, producing_agent: p.fila.producing_agent ?? 'brief · ensayo en seco', status: 'draft', provenance_tag: tag }
+      if (previa) { const { error } = await db.from('client_historical_outputs').update(cuerpo).eq('id', previa.id); if (error) fallo(error); return previa.id }
+      const ins = await uno<{ id: string }>(db.from('client_historical_outputs').insert({ client_id: p.client_id, output_type: 'campaign_brief_pack', ...cuerpo }).select('id').single())
+      if (!ins) throw new Error('no se pudo guardar el parte de ensayo')
+      return ins.id
+    },
+    async limpiarPartesSecos(ahora) {
+      const venc = await lista<{ id: string }>(db.from('client_historical_outputs').select('id').eq('output_type', 'campaign_brief_pack').eq('provenance_tag->>seco', 'true').lt('provenance_tag->>vence_en', ahora).limit(200))
+      if (!venc.length) return 0
+      const { error } = await db.from('client_historical_outputs').delete().in('id', venc.map((v) => v.id)).eq('provenance_tag->>seco', 'true')
+      if (error) fallo(error)
+      return venc.length
+    },
     async recolectarSedes(clientId) {
       try {
         const { recolectarSedes } = await import('@/lib/sedes/recolectar')
@@ -197,7 +217,11 @@ export function almacenDeSupabase(): Almacen {
         tables: new SupabaseIngressTables(db),
         storage: new SupabaseEventLogStorage(db),
       })
-      if (r.kind === 'accepted') return { resultado: 'aceptado', event_id: r.event_id }
+      // r79 · D2 · el sobre de autoproducir también sale al entrar (antes esperaba siempre al reloj de 15 min); el reloj queda de respaldo
+      if (r.kind === 'accepted') {
+        if (r.inserted) programarDespachoInmediato({ supabase: db, storage: new SupabaseEventLogStorage(db), tenant_id: sobre.tenant_id, event_id: r.event_id, stream_id: r.stream_id, origen: 'cadena/autoproducir' })
+        return { resultado: 'aceptado', event_id: r.event_id }
+      }
       if (r.kind === 'duplicate') return { resultado: 'duplicado', event_id: r.event_id }
       return { resultado: 'rechazado', detalle: `${r.code} · ${r.detail}` }
     },
