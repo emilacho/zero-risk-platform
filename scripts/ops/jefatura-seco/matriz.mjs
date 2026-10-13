@@ -34,7 +34,8 @@ const CASOS = {
   brief: [
     { caso: 'sin-fichas', sim: { fichas: 'ninguna', gpt: 'vacio' }, ...R('limpia'), sin: ['correccion', 'decision'], saltos: [1, 1] },
     { caso: 'sin-fichas-gpt-ok', sim: { fichas: 'ninguna', gpt: 'ok' }, sin: ['correccion', 'decision'], saltos: [1, 1] },
-    { caso: 'bloquea-solo-marca', sim: { fichas: 'bloquea', gpt: 'ok' }, sin: ['correccion', 'decision'], saltos: [1, 1] },
+    // brief «solo marca» (F17): su ficha que bloquea no tiene camino de corrección ⇒ `con_desacuerdo` (así lo dice `cierre.ts`) y NO hay correccion ni decision
+    { caso: 'bloquea-solo-marca', sim: { fichas: 'bloquea', gpt: 'ok' }, ...R('con_desacuerdo', { con_desacuerdo: true }), sin: ['correccion', 'decision'], saltos: [1, 1] },
     { caso: 'gpt-falla-red', sim: { fichas: 'ninguna', gpt: 'falla_red' }, ...R('sin_segunda_mirada', { sin_segunda_mirada: true }), sin: ['correccion', 'decision'], saltos: [1, 1] },
   ],
   calendario: [
