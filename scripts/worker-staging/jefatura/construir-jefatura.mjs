@@ -12,7 +12,10 @@
 //    el modo seco no llama a ningún proveedor · el nodo «Agente» manda SIEMPRE `x-skip-editor-middleware: 1` (diseño v4 §9) · la llave de despacho es la de siempre (SALA_DISPATCH_KEY), jamás en el JSON ·
 //    NO se toca la oficina, el cimiento, `Lazo A`, ni nada de naufrago.ec. Nada se engancha a ningún productor (eso es J7, otra firma).
 //
-// CONTRATO que este constructor ASUME de las rutas de CC#1 (J3) — si difieren, se ajusta aquí y en los .js (una sola fuente):
+// CONTRATO con las rutas de CC#1 (J3) — CONFIRMADO contra #530 (eae6831) el 13-oct (CC#2 · integración): igual en todo lo de abajo; lo que cambió es de este lado y está en `__tests__/jefatura-humo-flujos-con-rutas.test.ts`
+//   (los nodos GENERADOS por este constructor corren contra las rutas reales, un recorrido por tipo). Diferencias reales: (1) el esquema del plan es `plan_texto_y_resolucion.v1` (texto + bloque), no `resolucion_plan.v1`;
+//   (2) el seco contesta `pedido.molde` de la RUTA (fuente única; el molde propio del flujo es solo respaldo y lo dice con `molde_de`); (3) `esperar` sin pedido detiene el flujo; (4) la entrega solo a `/api/jefatura/` de Vercel.
+//   Contrato (una sola fuente):
 //   POST /api/jefatura/turnos  { accion:'resultado', revision_id, n, texto|error, costo_usd, workflow_execution_id, tokens_in?, tokens_out? }  |  { accion:'siguiente', revision_id }
 //        → 200 { accion:'esperar', turno:{ n, tipo:'agente', paso, dispatch_key, pedido:{ agent_name, task, client_id, esquema, max_budget_usd, thinking_mode?, extra?, images?, dry_run:boolean, simulacion?, reintento_formato? } } }
 //        → 200 { accion:'cerrado', resultado, marcas:{con_desacuerdo,sin_segunda_mirada}, devolver:{ tipo:'webhook'|'sala_ref'|'ninguno', url?, cuerpo? }, sala_ref?, simulado? }

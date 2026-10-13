@@ -3,7 +3,7 @@
  * (concepto `revisor_externo`): el freno de US$ 8 por cliente en 24 h (`run-sdk-spend-gate`, que suma `agent_invocations.cost_usd`) y el vigilante de costos (que lee
  * el rollup de esa misma tabla) no lo veían. Ahora cada llamada a GPT que cuesta algo deja UNA fila en `agent_invocations`, igual que ya hace cada imagen (`image-ledger.ts`).
  *
- * Una fila por llamada (con sus reintentos dentro): `session_id = gpt-<origen>-<ref>-<n>`; si la misma llamada se registra dos veces, la segunda se reconoce (23505) y no suma de nuevo.
+ * Una fila por llamada (con sus reintentos dentro): `session_id = gpt-<origen>-<ref>-<n>`. OJO (certificación de CC#3, J4 reparo 2): `agent_invocations` NO tiene índice único sobre `session_id` (solo la llave `id` y un índice normal), así que hoy el 23505 NUNCA ocurre y cada intento de anotar SUMA. Es lo correcto en la práctica (cada llamada real a GPT cuesta de verdad); la rama del 23505 es defensiva, solo actúa si algún día se decide ese índice único (migración aparte).
  * Contabilidad: el libro propio de la oficina (su tabla de gastos) (o la traza de la jefatura) es el DETALLE por encargo; `agent_invocations` es el TOTAL de la cuenta. Quien sume las dos cuenta dos veces.
  * Puro salvo `registrarRevisorEnElLibro`, que escribe; NUNCA lanza ni frena la revisión (la llamada ya ocurrió): un fallo queda en el registro del servidor con la fila a la vista.
  */
@@ -74,7 +74,7 @@ export async function registrarRevisorEnElLibro(supabase: SupabaseLike, d: Datos
   try {
     const { error } = await supabase.from('agent_invocations').insert(fila)
     if (error) {
-      // la misma llamada ya estaba anotada: no se suma dos veces
+      // defensivo: solo ocurre si la tabla llega a tener un índice único sobre `session_id` (hoy no lo tiene: ver la nota de arriba)
       if (error.code === '23505') return { ok: true, repetida: true }
       console.error(`[revisor-gpt] el costo de la llamada ${String(fila.session_id)} NO entró a agent_invocations · ${error.code ?? '-'} · ${error.message} · fila=${JSON.stringify(fila).slice(0, 300)}`)
       return { ok: false, error: error.message }

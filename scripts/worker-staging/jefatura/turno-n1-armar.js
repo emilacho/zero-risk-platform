@@ -62,6 +62,16 @@ const SIMULADOS = {
 const ERROR = (msg) => ({ ...e, simulado: true, resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, error: msg, costo_usd: 0, workflow_execution_id: $execution.id } })
 
 if (e.dry_run === true) {
+  // FUENTE ÚNICA DE MOLDES (certificación de CC#3 · J2/J3 reparo 2): si la ruta entregó su `pedido.molde`, el seco contesta ESO (lo que la ruta sabe leer); los moldes de abajo son solo el respaldo cuando la ruta no trae molde (`molde_de: 'flujo'`)
+  const deLaRuta = p.molde && typeof p.molde === 'object' && !Array.isArray(p.molde) ? p.molde : null
+  if (deLaRuta) {
+    if (typeof deLaRuta.texto !== 'string') {
+      // el productor murió en la simulación de la ruta: no contesta (el vigía lo re-arma); cualquier otro motivo es un error visible, nunca «corriendo»
+      if (sim.productor === 'muerto') return []
+      return [{ json: { ...ERROR('JEFATURA_MOLDE_DE_LA_RUTA_SIN_TEXTO · ' + String(deLaRuta.error || 'la ruta no entregó texto para este paso')), molde_de: 'ruta' } }]
+    }
+    return [{ json: { ...e, simulado: true, molde_de: 'ruta', resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, texto: deLaRuta.texto, costo_usd: 0, workflow_execution_id: $execution.id } } }]
+  }
   const molde = SIMULADOS[p.esquema]
   // un esquema sin molde NO mata la ejecución (la revisión se quedaría «corriendo» en silencio): el motor recibe el error y la revisión falla visible
   if (!molde) return [{ json: ERROR('JEFATURA_SIN_MOLDE_SIMULADO · no hay respuesta simulada para el esquema ' + JSON.stringify(p.esquema)) }]
@@ -70,7 +80,7 @@ if (e.dry_run === true) {
   const roto = sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && p.reintento_formato !== true)
   const m = roto ? null : molde(p.task)
   const texto = roto ? '{"respuestas": [ {"id": ' : (typeof m === 'string' ? m : JSON.stringify(m)) // un molde de TEXTO (el plan) devuelve la cadena tal cual
-  return [{ json: { ...e, simulado: true, resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, texto, costo_usd: 0, workflow_execution_id: $execution.id } } }]
+  return [{ json: { ...e, simulado: true, molde_de: 'flujo', resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, texto, costo_usd: 0, workflow_execution_id: $execution.id } } }]
 }
 
 // ── real: el pedido a run-sdk. Sin tope de gasto del paso NO se paga (el SDK acota el costo con max_budget_usd)
