@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { baseDelSeco, LLAVE_LOCAL, transporteLocal } from './_helpers/transporte-local-jefatura'
 import { CLIENTES } from '../scripts/ops/jefatura-seco/fixtures.mjs'
 import { CASOS_DE_PUERTA, celdas, resumenDeLaMatriz } from '../scripts/ops/jefatura-seco/matriz.mjs'
-import { correrPorRuta, puerta, resumirMedidas } from '../scripts/ops/jefatura-seco/nucleo.mjs'
+import { correrPorRuta, costoPorCaso, puerta, resumirMedidas } from '../scripts/ops/jefatura-seco/nucleo.mjs'
 
 const h = vi.hoisted(() => ({ db: null as unknown }))
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => h.db }))
@@ -45,7 +45,7 @@ describe('la matriz de §13.3 completa, por la ruta, contra las rutas reales de 
       if (!r.ok) malas.push(`${esc.id}\n     ${r.fallos.join('\n     ')}`)
     }
     // eslint-disable-next-line no-console
-    console.log("MEDIDAS", JSON.stringify(resumirMedidas(resultados)))
+    console.log("MEDIDAS", JSON.stringify(resumirMedidas(resultados))); console.log("COSTOS", JSON.stringify(costoPorCaso(resultados)))
     expect(malas, `\n${malas.join('\n')}`).toEqual([])
   }, 300000)
 })
