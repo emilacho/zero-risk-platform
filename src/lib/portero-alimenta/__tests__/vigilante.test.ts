@@ -101,6 +101,13 @@ describe('cada condición apaga el flujo y avisa', () => {
     expect(r.body.ok).toBe(true)
     expect(m.apagados).toEqual([])
   })
+  it('una unidad vista otra vez queda `repetida` y apunta a la ficha viva que la representa: eso es lo NORMAL y no dispara nada (122 de 169 en el cliente de prueba)', async () => {
+    const t = sana()
+    t.cerebro_unidades_vistas.push({ client_id: C, ficha_id: 'a', veredicto: 'repetida' }, { client_id: C, ficha_id: 'b', veredicto: 'repetida' })
+    const m = montar(t)
+    expect((await rutaVigilar(m.deps(), { ...REAL, cierre: CIERRE_BUENO })).body.ok).toBe(true)
+    expect(m.apagados).toEqual([])
+  })
   it('una ficha de AYER de una unidad ajena no es de esta corrida: no dispara (solo se miran las nacidas hoy)', async () => {
     const t = sana()
     t.cerebro_fichas.push(ficha('v', { creado_en: '2026-10-13T09:00:00Z' }))
@@ -120,8 +127,8 @@ describe('cada condición apaga el flujo y avisa', () => {
     await rutaVigilar(m.deps(), { ...REAL, cierre: { fin: 'hecho', clientes: [] } })
     expect(m.avisos[0]).toMatch(/el cierre no trae a este cliente/)
   })
-  it('los veredictos que no entregan son exactamente los cuatro', () => {
-    expect([...VEREDICTOS_QUE_NO_ENTREGAN].sort()).toEqual(['ajeno', 'repetida', 'ruido', 'sin_confirmar'])
+  it('los veredictos que no entregan son exactamente los tres', () => {
+    expect([...VEREDICTOS_QUE_NO_ENTREGAN].sort()).toEqual(['ajeno', 'ruido', 'sin_confirmar'])
   })
 })
 
