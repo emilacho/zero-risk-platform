@@ -28,7 +28,7 @@ export function conCabeceraDelEditor(flujo) {
 }
 
 /** quién referencia un flujo (por su id) dentro de los demás: nodos que ejecutan un sub-flujo o llaman a su webhook. Un voto «huérfano» es el que devuelve lista vacía. */
-export function referenciasA(flujos, id, { excepto = [] } = {}) {
+export function referenciasA(flujos, id, { excepto = /** @type {string[]} */ ([]) } = {}) {
   const out = []
   for (const f of flujos) {
     if (f.id === id || excepto.includes(f.id)) continue
