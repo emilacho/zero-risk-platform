@@ -13,7 +13,7 @@ import { almacenDeConversa } from '@/lib/finanzas/conversa/almacen-supabase'
 import { modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
 import { abrirConversacion, avanzar } from '@/lib/finanzas/conversa/orquestador'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
-import { checkLlaveInterna } from '@/lib/finanzas/ruta'
+import { checkInternalKey } from '@/lib/finanzas/ruta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,7 +25,7 @@ const slackNoConfigurado: SlackPuerto = {
 }
 
 export async function POST(request: Request) {
-  const auth = checkLlaveInterna(request)
+  const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   let cuerpo: unknown
   try { cuerpo = await request.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }

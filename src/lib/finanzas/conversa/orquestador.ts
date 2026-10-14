@@ -284,16 +284,24 @@ async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts): Prom
   const topada = bloque.confianza?.manda_sin_base === true && salida !== 'sale_con_alerta'
   if (topada) salida = 'sale_con_alerta'
   const decision = decidirFirma({ hallazgos: hallazgos.map((h) => ({ severidad: h.severidad, que: h.que })), correcciones_hechas: huboRonda2 ? 1 : 0 })
-  const sinAcuerdo = !acuerdo || acuerdo.sin_supuestos_del_agente === true || decision.estado !== 'firmado'
-  const estado: 'firmado' | 'sin_firma' = decision.estado === 'firmado' && !sinAcuerdo ? 'firmado' : 'sin_firma'
+  let sinAcuerdo = !acuerdo || acuerdo.sin_supuestos_del_agente === true || decision.estado !== 'firmado'
+  let estado: 'firmado' | 'sin_firma' = decision.estado === 'firmado' && !sinAcuerdo ? 'firmado' : 'sin_firma'
   let finanzas_id: string | null = null
+  // la invocación que firma es la de este encargo y este paso (el adaptador del modelo la nombra `${encargo}:${paso}`); debe EXISTIR en el libro
+  const invocacion_id = `${e.id}:${a.acuerdo_2 ? 'cierre_2' : 'cierre'}`
+  let invocacion_verificada: boolean | null = null
   if (!e.dry_run) {
+    if (estado === 'firmado') {
+      invocacion_verificada = await P.tableros.invocacionDelJefe({ invocacion_id, client_id: e.client_id }).catch(() => false)
+      // sin una invocación real del jefe en el libro no se firma: queda «sin firma» y el plan sigue
+      if (!invocacion_verificada) { estado = 'sin_firma'; sinAcuerdo = true }
+    }
     const g = await P.tableros.guardarTablero({ client_id: e.client_id, entrada: bloqueArt.entrada, bloque, huella: bloqueArt.huella, numeros: numerosDelBloque(bloque), workflow_execution_id: `conversa:${e.id}` })
     finanzas_id = g.id
-    await P.tableros.actualizarTablero(g.id, { estado, firmado_por: `chief-financial-officer:${e.id}:${salida}`, firmado_en: P.ahora().toISOString() })
+    await P.tableros.actualizarTablero(g.id, { estado, firmado_por: `chief-financial-officer:${invocacion_id}:${salida}`, firmado_en: P.ahora().toISOString() })
   }
   return {
-    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, escribio: !e.dry_run },
+    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, escribio: !e.dry_run },
     tablero_id: finanzas_id, sin_acuerdo: sinAcuerdo,
   }
 }

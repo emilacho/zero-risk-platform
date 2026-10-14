@@ -23,11 +23,11 @@ const MEDI = { agente: 'tracking-specialist', resumen: 'qué cuenta como resulta
 const ACUERDO_OK = { salida: 'sale', hallazgos: [], conflictos_resueltos: [], preguntas_a_emilio: [] }
 
 type Guion = Record<string, unknown[] | ((p: PedidoAlModelo, n: number) => unknown)>
-function mundo(opts: { conversa?: ConfigDeFinanzas['conversa']; estado?: ConfigDeFinanzas['estado']; guion?: Guion; slackCaido?: boolean; costoPorLlamada?: number } = {}) {
+function mundo(opts: { conversa?: ConfigDeFinanzas['conversa']; estado?: ConfigDeFinanzas['estado']; guion?: Guion; slackCaido?: boolean; costoPorLlamada?: number; invocacionEnElLibro?: boolean } = {}) {
   const encargos = new Map<string, EncargoDeConversa>()
   const turnos: TurnoDeConversa[] = []
   const arts: Record<string, Record<string, unknown>> = {}
-  const c = { llamadas: [] as PedidoAlModelo[], publicados: [] as string[], lecturas: 0, tableros: 0, firmas: 0 }
+  const c = { llamadas: [] as PedidoAlModelo[], publicados: [] as string[], lecturas: 0, tableros: 0, firmas: 0, invocaciones: [] as string[] }
   const guion: Guion = { 'campaign-brief-agent': [PLANTEO, PLANTEO], 'finance-fpa-analyst': [FPA, FPA], paid_media_paid_social_strategist: [REDES, REDES], 'paid_media_ppc_strategist': [BUSQ], 'tracking-specialist': [MEDI, MEDI], 'chief-financial-officer': [ACUERDO_OK, ACUERDO_OK], ...(opts.guion ?? {}) }
   const cuenta: Record<string, number> = {}
   let seq = 0
@@ -69,6 +69,7 @@ function mundo(opts: { conversa?: ConfigDeFinanzas['conversa']; estado?: ConfigD
     tableros: {
       async guardarTablero() { c.tableros++; return { id: `tab-${c.tableros}`, version: c.tableros } },
       async actualizarTablero() { c.firmas++ },
+      async invocacionDelJefe(p) { c.invocaciones.push(p.invocacion_id); return opts.invocacionEnElLibro !== false },
     },
     async config() { return { estado: opts.estado ?? 'encendida', clientes_ensayo: [], preguntas_slack: 'apagado', conversa: opts.conversa ?? 'enciende' } },
     ahora: () => new Date('2026-10-14T12:00:00Z'),
@@ -267,6 +268,23 @@ describe('F8 · tope, rondas y formato', () => {
     expect(m.arts.bloque.hay_bloque).toBe(false)
     expect(m.arts.bloque.motivo).toBe('sin_base')
     expect(m.c.tableros).toBe(0)
+  })
+  it('la firma exige una invocación REAL del jefe en el libro: sin ella, «sin firma» y el plan sigue', async () => {
+    const m = mundo({ invocacionEnElLibro: false })
+    const id = String((await abrir(m)).cuerpo.encargo_id)
+    const { r } = await correrTodo(m, id)
+    expect(m.c.invocaciones).toEqual([id + ':cierre'])
+    expect(m.arts.cierre.estado).toBe('sin_firma')
+    expect(m.arts.cierre.invocacion_verificada).toBe(false)
+    expect(r.cuerpo.estado).toBe('sin_acuerdo')
+  })
+  it('con la invocación en el libro firma y deja el id del turno del jefe', async () => {
+    const m = mundo()
+    const id = String((await abrir(m)).cuerpo.encargo_id)
+    await correrTodo(m, id)
+    expect(m.c.invocaciones).toEqual([id + ':cierre'])
+    expect(m.arts.cierre.invocacion_verificada).toBe(true)
+    expect(m.arts.cierre.estado).toBe('firmado')
   })
   it('el modelo caído (sin guion) no tumba la conversación', async () => {
     const m = mundo({ guion: { 'campaign-brief-agent': [] } })

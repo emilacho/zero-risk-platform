@@ -106,7 +106,7 @@ export interface PuertosDeConversa {
   almacen: AlmacenDeConversa
   modelo: ModeloPuerto
   slack: SlackPuerto
-  tableros: Pick<PuertosDeTablero, 'guardarTablero' | 'actualizarTablero'>
+  tableros: Pick<PuertosDeTablero, 'guardarTablero' | 'actualizarTablero' | 'invocacionDelJefe'>
   config(): Promise<ConfigDeFinanzas>
   ahora(): Date
   /** canal privado de la oficina (id): nunca se crea desde aquí */

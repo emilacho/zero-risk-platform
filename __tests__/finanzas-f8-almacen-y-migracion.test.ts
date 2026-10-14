@@ -154,7 +154,7 @@ describe('F8 · migración y reversa', () => {
 describe('F8 · la ruta', () => {
   const ruta = leer('src/app/api/finanzas/conversa/route.ts')
   it('usa la llave interna y nunca la de la sala', () => {
-    expect(ruta).toMatch(/checkLlaveInterna\(request\)/)
+    expect(ruta).toMatch(/checkInternalKey\(request\)/)
     expect(ruta).not.toMatch(/SALA_DISPATCH_KEY/)
   })
   it('no trae adaptador real de Slack (no publica ni lee en esta rama)', () => {
