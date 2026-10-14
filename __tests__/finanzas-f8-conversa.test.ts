@@ -23,7 +23,7 @@ const MEDI = { agente: 'tracking-specialist', resumen: 'qué cuenta como resulta
 const ACUERDO_OK = { salida: 'sale', hallazgos: [], conflictos_resueltos: [], preguntas_a_emilio: [] }
 
 type Guion = Record<string, unknown[] | ((p: PedidoAlModelo, n: number) => unknown)>
-function mundo(opts: { conversa?: ConfigDeFinanzas['conversa']; estado?: ConfigDeFinanzas['estado']; guion?: Guion; slackCaido?: boolean; costoPorLlamada?: number; invocacionEnElLibro?: boolean } = {}) {
+function mundo(opts: { conversa?: ConfigDeFinanzas['conversa']; estado?: ConfigDeFinanzas['estado']; guion?: Guion; slackCaido?: boolean; costoPorLlamada?: number; invocacionEnElLibro?: boolean; canal?: string } = {}) {
   const encargos = new Map<string, EncargoDeConversa>()
   const turnos: TurnoDeConversa[] = []
   const arts: Record<string, Record<string, unknown>> = {}
@@ -73,7 +73,7 @@ function mundo(opts: { conversa?: ConfigDeFinanzas['conversa']; estado?: ConfigD
     },
     async config() { return { estado: opts.estado ?? 'encendida', clientes_ensayo: [], preguntas_slack: 'apagado', conversa: opts.conversa ?? 'enciende' } },
     ahora: () => new Date('2026-10-14T12:00:00Z'),
-    canalDelHilo: 'C-PRIVADO',
+    canalDelHilo: opts.canal ?? 'C-PRIVADO',
     emilio_id: 'U-EMILIO',
   }
   return { P, c, encargos, turnos, arts }
@@ -320,6 +320,38 @@ describe('F8 · Slack', () => {
     const conNota = m.c.llamadas.find((l) => l.tarea.includes('nota del dueño: no es un dato confirmado'))
     expect(conNota).toBeTruthy()
     expect(m.encargos.get(id)!.leido_hasta).toBe('1700000001.000200')
+  })
+})
+
+describe('ronda 3 de CC#3 · menores de F8', () => {
+  it('el tope del turno viaja al corredor (max_budget_usd) y respeta el rango de run-sdk', () => {
+    const base = { agente: 'a', tarea: 't', encargo_id: 'e', client_id: 'c', paso: 'p', dry_run: true }
+    expect(armarPedidoRunSdk({ ...base, tope_usd: 0.25 }).max_budget_usd).toBe(0.25)
+    expect(armarPedidoRunSdk({ ...base, tope_usd: 0 }).max_budget_usd).toBeUndefined()
+    expect(armarPedidoRunSdk({ ...base, tope_usd: 99 }).max_budget_usd).toBeUndefined()
+  })
+  it('con el canal del hilo vacío NO publica nada (ni la raíz ni los turnos)', async () => {
+    const m = mundo({ canal: '' })
+    const id = String((await abrir(m)).cuerpo.encargo_id)
+    const { r } = await correrTodo(m, id)
+    expect(m.c.publicados).toHaveLength(0)
+    expect(r.cuerpo.estado).toBe('cerrado')
+  })
+  it('«dado por verificado» no se comprueba: alerta, la confianza no sube y la salida solo es «con alerta»', async () => {
+    const m = mundo({ guion: { 'campaign-brief-agent': [{ ...PLANTEO, dado_por_verificado: ['ficha del mapa', 'Instagram'] }] } })
+    const id = String((await abrir(m)).cuerpo.encargo_id)
+    await correrTodo(m, id)
+    expect(m.arts.acuerdo.salida).toBe('sale')
+    expect(m.arts.cierre.salida).toBe('sale_con_alerta')
+    expect(m.arts.cierre.tope_aplicado).toBe(true)
+    expect(String(m.arts.cierre.alerta_verificado)).toContain('ficha del mapa')
+    expect((m.arts.bloque.alertas_de_entrada as string[]).join(' ')).toContain('dio por verificado')
+  })
+  it('sin «dado por verificado» no hay alerta de verificación', async () => {
+    const m = mundo()
+    const id = String((await abrir(m)).cuerpo.encargo_id)
+    await correrTodo(m, id)
+    expect(m.arts.cierre.alerta_verificado).toBeNull()
   })
 })
 

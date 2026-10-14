@@ -106,7 +106,7 @@ function calcularBloque(e: EncargoDeConversa, a: Arts, ronda: 1 | 2): ResultadoD
   const r = calcular(ent.entrada)
   if (!r.ok) return sinBloque('entrada_invalida', r.errores)
   const huella = huellaDe(r)
-  return { costo_usd: 0, artefacto: { hay_bloque: true, bloque: r as unknown as Record<string, unknown>, entrada: ent.entrada as unknown as Record<string, unknown>, alertas_de_entrada: ent.alertas, huella, cambio: ronda === 2 ? huella !== previo?.huella : false } }
+  return { costo_usd: 0, artefacto: { hay_bloque: true, bloque: r as unknown as Record<string, unknown>, entrada: ent.entrada as unknown as Record<string, unknown>, alertas_de_entrada: [...ent.alertas, ...(Array.isArray((planteo as { dado_por_verificado?: unknown }).dado_por_verificado) && ((planteo as { dado_por_verificado: unknown[] }).dado_por_verificado).length ? ['el plan dio por verificado algo que el código no comprueba: la confianza no sube y la salida solo puede ser «con alerta»'] : [])], huella, cambio: ronda === 2 ? huella !== previo?.huella : false } }
 }
 
 // ───────────────────────────────────────────────────────── el hilo
@@ -125,8 +125,9 @@ function textoDelTurno(paso: Paso, n: number, salida: Record<string, unknown> | 
   }
 }
 async function publicar(P: PuertosDeConversa, e: EncargoDeConversa, texto: string): Promise<Partial<Pick<EncargoDeConversa, 'slack_canal' | 'slack_ts'>>> {
-  // en seco NO se publica nada (como el puerto `avisar` de la oficina creativa)
+  // en seco NO se publica nada (como el puerto `avisar` de la oficina creativa); con el canal sin configurar tampoco
   if (e.dry_run) return {}
+  if (!(e.slack_canal ?? P.canalDelHilo)?.trim()) return {}
   try {
     let ts = e.slack_ts
     let nuevo: Partial<Pick<EncargoDeConversa, 'slack_canal' | 'slack_ts'>> = {}
@@ -283,6 +284,11 @@ async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts): Prom
   // tope (R14): con una cifra que manda «sin base» solo se admite «sale con alerta»
   const topada = bloque.confianza?.manda_sin_base === true && salida !== 'sale_con_alerta'
   if (topada) salida = 'sale_con_alerta'
+  // lo que el plan «dio por verificado» no lo comprueba el código: la salida solo puede ser «con alerta» y la confianza no sube (el hilo enseñó que es el defecto de fondo)
+  const planteoVigente = (a.planteo_fijado_2 ?? a.planteo_fijado ?? a.planteo) as { dado_por_verificado?: unknown } | undefined
+  const dadoPorVerificado = Array.isArray(planteoVigente?.dado_por_verificado) ? (planteoVigente!.dado_por_verificado as unknown[]).filter((x) => typeof x === 'string' && x.trim()).map(String) : []
+  const verificadoSinComprobar = dadoPorVerificado.length > 0
+  if (verificadoSinComprobar && salida !== 'sale_con_alerta') salida = 'sale_con_alerta'
   const decision = decidirFirma({ hallazgos: hallazgos.map((h) => ({ severidad: h.severidad, que: h.que })), correcciones_hechas: huboRonda2 ? 1 : 0 })
   let sinAcuerdo = !acuerdo || acuerdo.sin_supuestos_del_agente === true || decision.estado !== 'firmado'
   let estado: 'firmado' | 'sin_firma' = decision.estado === 'firmado' && !sinAcuerdo ? 'firmado' : 'sin_firma'
@@ -301,7 +307,7 @@ async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts): Prom
     await P.tableros.actualizarTablero(g.id, { estado, firmado_por: `chief-financial-officer:${invocacion_id}:${salida}`, firmado_en: P.ahora().toISOString() })
   }
   return {
-    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, escribio: !e.dry_run },
+    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${dadoPorVerificado.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, escribio: !e.dry_run },
     tablero_id: finanzas_id, sin_acuerdo: sinAcuerdo,
   }
 }

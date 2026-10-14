@@ -15,6 +15,8 @@ export interface PedidoRunSdk {
   workflow_execution_id: string
   dry_run: boolean
   force_restart: boolean
+  /** tope de gasto de ESTE turno: el corredor corta solo (run-sdk lo acepta entre 0 y 50) */
+  max_budget_usd?: number
 }
 
 /** arma el cuerpo; función pura (se prueba sin red). Un turno = una ejecución con id propio, así el libro (agent_invocations) correlaciona por execution id */
@@ -28,6 +30,7 @@ export function armarPedidoRunSdk(p: PedidoAlModelo): PedidoRunSdk {
     dry_run: p.dry_run,
     // una vuelta repetida del mismo turno NO debe devolver la respuesta vieja guardada (lección del flujo de prueba)
     force_restart: true,
+    ...(p.tope_usd > 0 && p.tope_usd <= 50 ? { max_budget_usd: p.tope_usd } : {}),
   }
 }
 
