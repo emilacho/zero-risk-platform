@@ -133,3 +133,50 @@ describe('el almacén real (con una base simulada)', () => {
     expect(s.log).not.toContain('insert finanzas_tableros')
   })
 })
+
+describe('ronda 3 de CC#3 · invocacionDelJefe filtra por agente Y por cliente (base falsa que registra los filtros)', () => {
+  function baseQueRegistra(filas: Array<Record<string, unknown>>) {
+    const filtros: Record<string, unknown>[] = []
+    const db = {
+      from(tabla: string) {
+        const f: Record<string, unknown> = { tabla }
+        const q: any = {
+          select: () => q,
+          eq: (k: string, v: unknown) => { f[k] = v; return q },
+          limit: async () => {
+            filtros.push({ ...f })
+            const r = filas.filter((x) => Object.entries(f).every(([k, v]) => k === 'tabla' || x[k] === v))
+            return { data: r, error: null }
+          },
+        }
+        return q
+      },
+    }
+    return { db: db as any, filtros }
+  }
+  const FILA = { id: 'i-1', workflow_execution_id: 'enc-1:cierre', agent_name: 'chief-financial-officer', client_id: 'c1' }
+  it('la del jefe y del mismo cliente existe (por id o por ejecución) y la consulta lleva AGENTE y CLIENTE', async () => {
+    const b = baseQueRegistra([FILA])
+    const P = almacenDeFinanzas(b.db)
+    expect(await P.invocacionDelJefe({ invocacion_id: 'enc-1:cierre', client_id: 'c1' })).toBe(true)
+    expect(await P.invocacionDelJefe({ invocacion_id: 'i-1', client_id: 'c1' })).toBe(true)
+    expect(b.filtros.length).toBeGreaterThan(0)
+    for (const f of b.filtros) {
+      expect(f.tabla).toBe('agent_invocations')
+      expect(f.agent_name).toBe('chief-financial-officer')
+      expect(f.client_id).toBe('c1')
+    }
+  })
+  it('una invocación de OTRO agente no firma', async () => {
+    const b = baseQueRegistra([{ ...FILA, agent_name: 'finance-fpa-analyst' }])
+    expect(await almacenDeFinanzas(b.db).invocacionDelJefe({ invocacion_id: 'enc-1:cierre', client_id: 'c1' })).toBe(false)
+  })
+  it('una invocación de OTRO cliente no firma', async () => {
+    const b = baseQueRegistra([{ ...FILA, client_id: 'otro' }])
+    expect(await almacenDeFinanzas(b.db).invocacionDelJefe({ invocacion_id: 'enc-1:cierre', client_id: 'c1' })).toBe(false)
+  })
+  it('un identificador que no existe no firma', async () => {
+    const b = baseQueRegistra([FILA])
+    expect(await almacenDeFinanzas(b.db).invocacionDelJefe({ invocacion_id: 'esto-no-existe', client_id: 'c1' })).toBe(false)
+  })
+})
