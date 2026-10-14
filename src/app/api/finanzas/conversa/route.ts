@@ -5,6 +5,7 @@
  *  · `{ accion: 'leer', encargo_id }` → estado, gasto y turnos.
  * Llave: `x-api-key` = `INTERNAL_API_KEY` (nunca la llave de la sala). Slack: sin adaptador real en esta rama (puerto «no configurado»: no publica ni lee).
  * Modelo: solo si hay `FINANZAS_RUN_SDK_BASE` (nunca en la rama apagada).
+ * SECO (CC#2 · 14-oct): `{ accion: 'avanzar', encargo_id, simulacion }` → los agentes contestan el guion (SOLO con un encargo `dry_run = true`; con uno real, 409): el seco a US$ 0, sin modelo.
  */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
@@ -12,6 +13,7 @@ import { almacenDeFinanzas, type Db } from '@/lib/finanzas/almacen-supabase'
 import { almacenDeConversa } from '@/lib/finanzas/conversa/almacen-supabase'
 import { modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
 import { abrirConversacion, avanzar } from '@/lib/finanzas/conversa/orquestador'
+import { avanzarConSimulacion } from '@/lib/finanzas/conversa/simulado'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
 import { checkInternalKey } from '@/lib/finanzas/ruta'
 
@@ -44,7 +46,7 @@ export async function POST(request: Request) {
   const c = (typeof cuerpo === 'object' && cuerpo !== null ? cuerpo : {}) as Record<string, unknown>
   let r: { status: number; cuerpo: Record<string, unknown> }
   if (c.accion === 'abrir') r = await abrirConversacion(P, c)
-  else if (c.accion === 'avanzar' && typeof c.encargo_id === 'string') r = await avanzar(P, c.encargo_id)
+  else if (c.accion === 'avanzar' && typeof c.encargo_id === 'string') r = c.simulacion !== undefined ? await avanzarConSimulacion(P, c.encargo_id, c.simulacion) : await avanzar(P, c.encargo_id)
   else if (c.accion === 'leer' && typeof c.encargo_id === 'string') {
     const cfg = await P.config().catch(() => null)
     if (!cfg || cfg.estado === 'apagada' || cfg.conversa === 'apagado') r = { status: 409, cuerpo: { error: 'conversa_apagada' } }
