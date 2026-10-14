@@ -7,7 +7,7 @@
  *  1. la corrida no terminó `hecho` / algún cliente trae errores, plan fallido o el puente falló;
  *  2. el rastro de hoy no existe o no está `hecha`;
  *  3. gasto real del día > US$ 1,00 (el tope del código es 1,50: esto avisa ANTES);
- *  4. nació una ficha VIVA de una unidad que el filtro no confirmó (ajena / sin confirmar / ruido / repetida);
+ *  4. nació una ficha VIVA de una unidad que el filtro no confirmó (ajena / sin confirmar / ruido);
  *  5. el puente deja `quedan > 0`, hay fichas vivas repetidas o fichas vivas sin trozo en el índice;
  *  6. el propio vigilante no pudo comprobar algo (falla de lectura) ⇒ se trata como problema: ante la duda, apagado (el gasto recurrente no puede quedar sin ojos).
  * No llama a Apify ni a ningún modelo.
@@ -18,7 +18,8 @@ import { gastoDeHoy, reconciliarYEnviar, type DepsDeRutas, type Respuesta } from
 export const LIMITE_DEL_VIGILANTE_USD = 1.0
 export const CANAL_DE_ALERTAS = 'C0B7XUUEBHA'
 /** veredictos de una unidad que NO debe haber dado una ficha viva */
-export const VEREDICTOS_QUE_NO_ENTREGAN = ['ajeno', 'sin_confirmar', 'ruido', 'repetida'] as const
+/** («repetida» NO está: una unidad vista otra vez queda `repetida` y apunta a la ficha viva que la representa; es lo normal) */
+export const VEREDICTOS_QUE_NO_ENTREGAN = ['ajeno', 'sin_confirmar', 'ruido'] as const
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 type Fila = Record<string, unknown>
