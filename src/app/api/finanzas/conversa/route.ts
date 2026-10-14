@@ -19,6 +19,8 @@ import { checkInternalKey } from '@/lib/finanzas/ruta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+// un turno de agente puede tardar minutos (la llamada al corredor va dentro de esta función)
+export const maxDuration = 300
 
 /** sin adaptador real: ni publica ni lee (la conversación sigue con supuestos). El adaptador de envío es una decisión de Emilio, no de esta rama. */
 const slackNoConfigurado: SlackPuerto = {

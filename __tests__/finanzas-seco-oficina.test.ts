@@ -179,6 +179,32 @@ describe('la puerta de la simulación', () => {
   })
 })
 
+describe('la ruta SIN simulación (menor 1 de CC#3)', () => {
+  const SEM = { evento: 'mensaje', dias_activos_por_semana: 5 }
+  it('avanzar sin `simulacion` NO usa el guion: llama al modelo real (aquí sin configurar) y no devuelve `simulado`', async () => {
+    const a = await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true, semilla: SEM })
+    const id = a.json.encargo_id
+    const abrir = await llamar({ accion: 'avanzar', encargo_id: id })
+    expect(abrir.status).toBe(200)
+    expect(abrir.json.paso).toBe('abrir')
+    const planteo = await llamar({ accion: 'avanzar', encargo_id: id })
+    expect(planteo.status).toBe(200)
+    expect(planteo.json.paso).toBe('planteo')
+    expect(planteo.json.simulado).toBeUndefined()
+    expect(planteo.json.degradado).toBe(true)
+    const l = await llamar({ accion: 'leer', encargo_id: id })
+    expect(l.json.turnos.find((t: { paso: string }) => t.paso === 'planteo').error).toMatch(/modelo_no_configurado/)
+  })
+  it('con `simulacion` sí devuelve `simulado` y el turno sale hecho', async () => {
+    const a = await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true, semilla: SEM })
+    const sim = { guion: { planteo: { meta_por_semana: 5, zonas: [], dias_y_horarios: { dias_activos_por_semana: 5 }, evento: 'mensaje', canales: [], no_se: [] } } }
+    await llamar({ accion: 'avanzar', encargo_id: a.json.encargo_id, simulacion: sim })
+    const r = await llamar({ accion: 'avanzar', encargo_id: a.json.encargo_id, simulacion: sim })
+    expect(r.json.simulado.llamadas).toHaveLength(1)
+    expect(r.json.degradado).toBe(false)
+  })
+})
+
 describe('el modelo simulado', () => {
   it('una lista son intentos sucesivos del mismo turno; null no contesta; un paso sin guion falla sin gastar de más', async () => {
     const m = modeloSimulado({ guion: { planteo: ['roto', { ok: 1 }], cierre: null }, costo_por_llamada_usd: 0.2 })
