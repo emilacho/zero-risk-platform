@@ -22,7 +22,7 @@ describe('el flujo ARREGLADO', () => {
     expect(body).not.toMatch(/"active"\s*:\s*true/)
   })
   it('reutiliza sin tocar los nodos de hoy (mismo código y mismos parámetros)', () => {
-    for (const n of ['Webhook · a mano (con llave)', 'Horario diario 08:30 (hora de n8n)', '⓪ Entrada', '① Plan de la ampliación', '① Un elemento por cliente', '② Ampliar (Servicio de Apify)', '③ Pedido a correr', '③ Correr (comparar · limpiar · preparar)']) {
+    for (const n of ['Webhook · a mano (con llave)', 'Horario diario 08:30 (hora de n8n)', '⓪ Entrada', '① Un elemento por cliente', '② Ampliar (Servicio de Apify)']) {
       const a = ANTES.nodes.find((x) => x.name === n)!
       const d = DESPUES.nodes.find((x) => x.name === n)!
       expect(d, n).toBeDefined()
@@ -35,11 +35,11 @@ describe('el flujo ARREGLADO', () => {
     const orden: string[] = []
     let actual = '⓪ Entrada'
     while (actual && orden.length < 30) { orden.push(actual); actual = DESPUES.connections[actual]?.main[0]?.[0]?.node as string }
-    expect(orden).toEqual(['⓪ Entrada', '① Plan de la ampliación', '① Un elemento por cliente', '① Descubrir (el portero que alimenta)', '① Plan unificado', '② Ampliar (Servicio de Apify)', '② bis Artículos (qué leer)', '② bis Leer artículos (Servicio de Apify)', '② ter Reseñas y videos (qué pedir)', '② ter Leer reseñas y videos (Servicio de Apify)', '③ Pedido a correr', '③ Correr (comparar · limpiar · preparar)', '④ Alimentar (filtrar · razonar · archivar)', '⑤ Cierre'])
+    expect(orden).toEqual(['⓪ Entrada', '① Clientes activos', '① Un elemento por cliente', '① Descubrir (el portero que alimenta)', '① Plan unificado', '② Ampliar (Servicio de Apify)', '② bis Artículos (qué leer)', '② bis Leer artículos (Servicio de Apify)', '② ter Reseñas y videos (qué pedir)', '② ter Leer reseñas y videos (Servicio de Apify)', '④ Alimentar (filtrar · razonar · archivar)', '④ bis Puente (repetir hasta terminar)', '⑤ Cierre'])
   })
   it('los nodos nuevos entran por Vercel con la llave interna y nunca piden la llave de despacho', () => {
     const nuevos = DESPUES.nodes.filter((n) => /alimentar\/(descubrir|procesar)/.test(String(n.parameters.url ?? '')))
-    expect(nuevos).toHaveLength(4)
+    expect(nuevos).toHaveLength(5)
     for (const n of nuevos) expect(JSON.stringify(n.parameters)).toContain('$env.INTERNAL_API_KEY')
     const nuevoCodigo = DESPUES.nodes.filter((n) => /Plan unificado|Leer artículos|Cierre/.test(n.name)).map((n) => String(n.parameters.jsCode)).join('\n')
     expect(nuevoCodigo).not.toMatch(/SALA_DISPATCH_KEY/)
@@ -49,6 +49,20 @@ describe('el flujo ARREGLADO', () => {
     expect(leer).toMatch(/e\.dry_run === true/)
     expect(leer).toContain("'#articulo'")
     for (const n of DESPUES.nodes) if (typeof n.parameters.jsCode === 'string') expect(() => new Function('$input', '$', '$env', '$workflow', '$execution', `return (async () => {${n.parameters.jsCode}})`), n.name).not.toThrow()
+  })
+  it('lo viejo sin lector está RETIRADO del flujo: ni ③ Pedido/③ Correr ni ninguna llamada a /api/brain/diario/*', () => {
+    const nombres = DESPUES.nodes.map((n) => n.name)
+    expect(nombres.some((n) => /③ (Pedido a correr|Correr)/.test(n))).toBe(false)
+    expect(JSON.stringify(DESPUES.nodes)).not.toMatch(/brain\/diario|cerebro_oportunidades|cerebro_vigilancia|cerebro_avisos/)
+  })
+  it('el puente se repite por pasadas hasta que no quede nada (tope de vueltas) y nunca llama a Apify ni al modelo', () => {
+    const n = DESPUES.nodes.find((x) => /Puente/.test(x.name))!
+    const js = String(n.parameters.jsCode)
+    expect(js).toContain('/api/brain/alimentar/puente')
+    expect(js).toMatch(/v < 12/)
+    expect(js).toMatch(/p\.quedan > 0/)
+    expect(js).toMatch(/e\.dry_run !== true/)
+    expect(js).not.toMatch(/apify-service|run-sdk/)
   })
   it('el nombre del flujo cabe en n8n (≤ 128 caracteres)', () => { expect(DESPUES.name.length).toBeLessThanOrEqual(128) })
   it('lo que va a la ruta lleva dry_run y los ids del flujo (guardarraíl 6)', () => {

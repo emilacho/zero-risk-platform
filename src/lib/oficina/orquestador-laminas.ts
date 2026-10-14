@@ -537,6 +537,20 @@ function mirar(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, e
   return { res: { costo_usd: 0, artefacto: { observaciones: filtradas, aceptadas, preferencia: v.preferencia, veredicto: { pasan: ver.pasan, porImagen: ver.porImagen, regenerar, refs_sin_imagen: refsSin } }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' } } }
 }
 
+/**
+ * UNA re-imagen por opinión, solo de imágenes generadas, y solo si al encargo le queda margen del tope de regeneraciones (el control ③ comparte ese tope).
+ * La usan «decide_imagen» (la plantilla de julio) y el paso `jefatura` (J8a: la jefatura devuelve «imagen por rehacer» y la oficina decide si cabe).
+ */
+export function decisionDeReImagenL(e: Estado, pl: Plantilla, tomada: { razon: string } | null, rehacer: string[] = []): Record<string, unknown> {
+  const gen = refsGeneradas(e)
+  const pedidas = rehacer.filter((r) => gen.includes(r))
+  const refs = (pedidas.length ? pedidas : gen).slice(0, Number(pl.limites.imagenes_generadas_max ?? 2))
+  const tope = Number(pl.pasos.find((p) => p.clave === 'mirar')?.vuelve_a?.max ?? 0)
+  const motivo = !tomada ? null : !refs.length ? 'no hay imágenes generadas que rehacer (son fotos reales o no hay): no se puede re-imaginar' : (e.vueltas['mirar'] ?? 0) >= tope ? 'el encargo ya usó su tope de regeneraciones de imagen' : null
+  const si = !!tomada && motivo === null
+  return { re_imagen: si, refs: si ? refs : [], por_rehacer_humano: !!tomada && !si, motivo, razon: tomada?.razon ?? null }
+}
+
 function resolver(paso: Paso, v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, retry: (p: string[]) => ProcesoL | null): ProcesoL {
   const mias = fichasQueTocanL(e, paso)
   const respuestas = arr<{ id: string; estado: 'tomada' | 'no_tomada'; razon: string }>(v.respuestas)
@@ -569,15 +583,8 @@ function resolver(paso: Paso, v: Record<string, unknown>, b: BaseL, e: Estado, p
       break
     }
     case 'decide_imagen': {
-      // UNA re-imagen por opinión, solo de imágenes generadas, y solo si al encargo le queda margen del tope de regeneraciones (el control ③ comparte ese tope)
       const tomada = validas.find((x) => x.estado === 'tomada')
-      const gen = refsGeneradas(e)
-      const pedidas = arr<string>(v.rehacer).filter((r) => gen.includes(r))
-      const refs = (pedidas.length ? pedidas : gen).slice(0, Number(pl.limites.imagenes_generadas_max ?? 2))
-      const tope = Number(pl.pasos.find((p) => p.clave === 'mirar')?.vuelve_a?.max ?? 0)
-      const motivo = !tomada ? null : !refs.length ? 'no hay imágenes generadas que rehacer (son fotos reales o no hay): no se puede re-imaginar' : (e.vueltas['mirar'] ?? 0) >= tope ? 'el encargo ya usó su tope de regeneraciones de imagen' : null
-      const si = !!tomada && motivo === null
-      artefacto = { re_imagen: si, refs: si ? refs : [], por_rehacer_humano: !!tomada && !si, motivo, razon: tomada?.razon ?? null }
+      artefacto = decisionDeReImagenL(e, pl, tomada ? { razon: tomada.razon } : null, arr<string>(v.rehacer))
       break
     }
     case 'corrige_estructura': case 'decide_estructura': {
