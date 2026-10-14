@@ -27,15 +27,52 @@ export function conCabeceraDelEditor(flujo) {
   return nuevo
 }
 
-/** quién referencia un flujo (por su id) dentro de los demás: nodos que ejecutan un sub-flujo o llaman a su webhook. Un voto «huérfano» es el que devuelve lista vacía. */
-export function referenciasA(flujos, id, { excepto = /** @type {string[]} */ ([]) } = {}) {
+/** las direcciones de webhook que un flujo expone (el `path` de cada nodo webhook): quien llama a un flujo por HTTP lo hace por ahí, sin nombrar su id */
+export function direccionesDe(flujo) {
+  return (flujo.nodes ?? []).filter((n) => n.type === 'n8n-nodes-base.webhook' && typeof n.parameters?.path === 'string' && n.parameters.path.trim()).map((n) => n.parameters.path.trim())
+}
+
+/** quién referencia un flujo dentro de los demás: por su ID (nodos que ejecutan un sub-flujo) o por su DIRECCIÓN de webhook (llamadas HTTP). «0 llamadores vivos» = lista vacía. `propio` = el flujo mismo (de él salen las direcciones). */
+export function referenciasA(flujos, id, { excepto = /** @type {string[]} */ ([]), propio = /** @type {any} */ (null) } = {}) {
+  const claves = [id, ...(propio ? direccionesDe(propio) : [])]
   const out = []
   for (const f of flujos) {
     if (f.id === id || excepto.includes(f.id)) continue
-    for (const n of f.nodes ?? []) if (JSON.stringify(n.parameters ?? {}).includes(id)) out.push({ flujo: f.id, nombre: f.name, nodo: n.name })
+    for (const n of f.nodes ?? []) {
+      const texto = JSON.stringify(n.parameters ?? {})
+      const hit = claves.find((c) => texto.includes(c))
+      if (hit) out.push({ flujo: f.id, nombre: f.name, nodo: n.name, por: hit === id ? 'id' : 'direccion' })
+    }
   }
   return out
 }
+
+/**
+ * ¿corrió el flujo hace poco? Devuelve las ejecuciones de la ventana (`dias`) que NO reconoció una persona (`vistas` = ids que quien aplica declara haber mirado: p. ej. los errores de una
+ * prueba sin llave). Un voto sin llamadores pero con ejecuciones sin mirar NO se desactiva: alguien lo está llamando.
+ */
+export function ejecucionesRecientes(ejecuciones, { ahora, dias = 7, vistas = /** @type {string[]} */ ([]) }) {
+  const desde = new Date(ahora).getTime() - dias * 86_400_000
+  return (ejecuciones ?? []).filter((e) => { const t = new Date(e.startedAt ?? e.stoppedAt ?? 0).getTime(); return t >= desde && !vistas.includes(String(e.id)) }).map((e) => ({ id: String(e.id), status: e.status ?? null, startedAt: e.startedAt ?? null }))
+}
+
+/** ③ «¿Y ahora?» de la oficina: cuando el encargo queda esperando a la jefatura (`esperar_jefatura`) la ejecución TERMINA sin error y sin llamar a nadie (la jefatura lo reanuda por su ruta); cualquier otra respuesta sigue igual que hoy */
+export const NODO_Y_AHORA = '③ ¿Y ahora?'
+const LINEA_ESPERAR = "if (status === 200 && b.accion === 'esperar' && b.turno) return [{ json: { ruta: 'esperar', turno_body: { encargo_id: c.encargo_id, turno: b.turno } } }]"
+const LINEA_JEFATURA = "// 200 `esperar_jefatura` → el encargo espera a la jefatura: la ejecución termina SIN error y sin ítems (nada se despierta; la jefatura reanuda por /api/jefatura/oficina-vuelta)\nif (status === 200 && b.accion === 'esperar_jefatura') return []"
+export function conEsperaDeLaJefatura(flujo) {
+  const nodos = (flujo.nodes ?? []).filter((n) => n.name === NODO_Y_AHORA)
+  if (nodos.length !== 1) throw new Error(`se esperaba UN nodo «${NODO_Y_AHORA}» y hay ${nodos.length}: el flujo cambió, se revisa`)
+  const nuevo = copia(flujo)
+  const n = nuevo.nodes.find((x) => x.name === NODO_Y_AHORA)
+  const js = String(n.parameters.jsCode ?? '').split('\r\n').join('\n')
+  if (js.includes('esperar_jefatura')) throw new Error(`«${NODO_Y_AHORA}» ya conoce esperar_jefatura`)
+  if (js.split(LINEA_ESPERAR).length !== 2) throw new Error(`«${NODO_Y_AHORA}»: la línea de esperar no aparece una sola vez: el nodo cambió, se revisa`)
+  n.parameters.jsCode = js.replace(LINEA_ESPERAR, () => LINEA_ESPERAR + '\n' + LINEA_JEFATURA)
+  return nuevo
+}
+/** el flujo de la oficina para J8b: la cabecera del editor Y la rama «esperar_jefatura» (los dos cambios van juntos en UN solo respaldo/ARREGLADO) */
+export const paraLaOficina = (flujo) => conEsperaDeLaJefatura(conCabeceraDelEditor(flujo))
 
 /** la actualización de las filas de contenido: exactamente las 4, de clase contenido y activas hoy. Nunca el cimiento. */
 export function planDeFilasDeContenido(filas) {

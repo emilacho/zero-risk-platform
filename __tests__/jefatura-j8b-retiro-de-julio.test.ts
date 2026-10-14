@@ -5,7 +5,7 @@
 import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { CABECERA, conCabeceraDelEditor, dentroDeLaBoveda, ESTADOS_PENDIENTES, FLUJO_OFICINA, FLUJO_VOTO, NODO_AGENTE, pasosDeJ8b, planDeFilasDeContenido, planDePendientes, referenciasA, TIPOS_DE_CONTENIDO } from '../scripts/ops/jefatura-j8b/nucleo.mjs'
+import { CABECERA, conCabeceraDelEditor, dentroDeLaBoveda, paraLaOficina, ESTADOS_PENDIENTES, FLUJO_OFICINA, FLUJO_VOTO, NODO_AGENTE, pasosDeJ8b, planDeFilasDeContenido, planDePendientes, referenciasA, TIPOS_DE_CONTENIDO } from '../scripts/ops/jefatura-j8b/nucleo.mjs'
 import { construirTurno } from '../scripts/worker-staging/jefatura/construir-jefatura.mjs'
 
 type Json = Record<string, any>
@@ -51,9 +51,9 @@ describe('J8b · cabecera `x-skip-editor-middleware` en «② Agente (run-sdk)»
     // y hoy, ANTES de J8b, la oficina NO la fija (por eso J8b existe)
     expect(JSON.stringify(nodo(antes, NODO_AGENTE).parameters.headerParameters)).not.toMatch(/x-skip-editor-middleware/)
   })
-  it('el flujo ARREGLADO que se deja en el repositorio es exactamente el resultado de esta función sobre el ANTES respaldado', () => {
+  it('el flujo ARREGLADO que se deja en el repositorio es exactamente el resultado de esta función sobre el ANTES respaldado (cabecera + rama «esperar_jefatura»)', () => {
     const f = JSON.parse(fs.readFileSync(`scripts/worker-staging/${FLUJO_OFICINA}/oficina-turno-ARREGLADO-j8b-2026-10-14.json`, 'utf8').split('\r\n').join('\n'))
-    expect(f).toEqual(despues)
+    expect(f).toEqual(paraLaOficina(antes))
   })
 })
 
@@ -63,7 +63,7 @@ describe('J8b · el voto de julio (`hi5nwPCGUWHkGnT7`) solo se desactiva si NADI
     expect(referenciasA([voto, otros[0]], FLUJO_VOTO)).toEqual([])
     // un flujo que se nombra a sí mismo en un nodo (su propio id) NO cuenta como referencia ajena
     expect(referenciasA([{ id: FLUJO_VOTO, name: 'voto', nodes: [{ name: 'yo', parameters: { x: FLUJO_VOTO } }] }], FLUJO_VOTO)).toEqual([])
-    expect(referenciasA([voto, ...otros], FLUJO_VOTO)).toEqual([{ flujo: 'B', nombre: 'usa el voto', nodo: 'Ejecutar voto' }])
+    expect(referenciasA([voto, ...otros], FLUJO_VOTO)).toEqual([{ flujo: 'B', nombre: 'usa el voto', nodo: 'Ejecutar voto', por: 'id' }])
     expect(referenciasA([...otros], FLUJO_VOTO, { excepto: ['B'] })).toEqual([])
   })
   it('el voto vivo respaldado está activo y trae su propio id (el respaldo es del flujo correcto)', () => { expect(voto.id).toBe(FLUJO_VOTO); expect(voto.active).toBe(true) })
@@ -136,7 +136,7 @@ describe('J8b · el guion', () => {
     expect(sinCarpeta.status).toBe(2); expect(sinCarpeta.stderr).toContain('--carpeta')
   })
   it('no escribe llaves, no nombra naufrago.ec en el código, y solo toca esas dos tablas y esos dos flujos', () => {
-    const s = fs.readFileSync('scripts/ops/jefatura-j8b.mjs', 'utf8') + fs.readFileSync('scripts/ops/jefatura-j8b/nucleo.mjs', 'utf8')
+    const s = fs.readFileSync('scripts/ops/jefatura-j8b.mjs', 'utf8') + fs.readFileSync('scripts/ops/jefatura-j8b/nucleo.mjs', 'utf8') + fs.readFileSync('scripts/ops/jefatura-j8b/guion.mjs', 'utf8')
     expect(s.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')).not.toMatch(/naufrago/i)
     expect(s).not.toMatch(/[0-9a-f]{64}/); expect(s).not.toMatch(/eyJ[A-Za-z0-9_-]{20,}/)
     expect([...new Set([...s.matchAll(/rest\('(\w+)'/g)].map((m) => m[1]))].sort()).toEqual(['hitl_pending_approvals', 'jefatura_grading_policies'])
