@@ -129,3 +129,17 @@ describe('R1 · el guion entero (con una base simulada): la confirmación se EJE
     expect(src).not.toContain('merge-duplicates')
   })
 })
+
+describe('nota de CC#3 · «la fecha existe en el calendario» con un reloj de diciembre', () => {
+  // en JavaScript `2026-11-31` se corre a `2026-12-01`: con el reloj en octubre lo rechaza «es futura», pero desde diciembre pasaría las otras dos reglas si faltara esta
+  const DICIEMBRE = new Date('2026-12-15T12:00:00Z')
+  it('2026-11-31 y 2026-12-32 NO existen: se rechazan por el calendario, no por «futura» ni por «anterior»', () => {
+    for (const f of ['2026-11-31', '2026-12-32']) {
+      const r = leerFechaConfirmada(f, DICIEMBRE) as { error?: string }
+      expect(r.error, f).toContain('no existe en el calendario')
+    }
+  })
+  it('una fecha real de noviembre sí pasa con el reloj de diciembre', () => {
+    expect(leerFechaConfirmada('2026-11-30', DICIEMBRE)).toEqual({ valor: '2026-11-30' })
+  })
+})
