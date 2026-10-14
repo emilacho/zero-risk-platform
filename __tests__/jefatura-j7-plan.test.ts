@@ -459,3 +459,61 @@ describe('R4 · la espera del plan: el máximo del diseño, por un camino que no
     expect(cuerpos(dCon)).toEqual(cuerpos(dSin))
   })
 })
+
+// ═════════════════════════════════════════════════════════════ reparos menores de CC#3 (J7 · recertificación 2) · (a) cota de sondeos · (b) la marca sin id o sin rastro
+describe('reparo menor (a) · la cota de sondeos cierra la espera aunque `plazo_fin` falte o no sea un número', () => {
+  const BRIEF = 'BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)'
+  const sinCierre = () => { const w = mundo({ versiones: [] }); w.http[N.abrir] = () => resp(200, { accion: 'esperar', revision_id: UUID, turno: { n: 1, tipo: 'agente', paso: 'revision_fondo', pedido: {} } }); w.http[N.despertar] = () => resp(200, {}); w.http[N.leer] = () => resp(200, { revision_id: UUID, estado: 'en_paso' }); return w }
+  const SIN_RELOJ = 'plazo_fin: Date.now() + CFG.plazo_s * 1000'
+  const conPlazoFin = (valor: string) => {
+    const f = JSON.parse(JSON.stringify(despues)) as Json
+    const n = (f.nodes as Json[]).find((x) => x.name === N.armar) as Json
+    expect(String(n.parameters.jsCode).split(SIN_RELOJ)).toHaveLength(2)
+    n.parameters.jsCode = String(n.parameters.jsCode).replace(SIN_RELOJ, () => 'plazo_fin: ' + valor)
+    return f
+  }
+  const COTA = Math.ceil(PLAZO_DEL_PLAN_S / 120) + 2
+  for (const [caso, valor] of [['ausente', 'undefined'], ['texto no numérico', "'pronto'"], ['NaN', 'NaN']] as const) {
+    it(`\`plazo_fin\` ${caso} y una revisión que nunca cierra: termina en «plazo» por la cota de ${COTA} sondeos, el plan sigue con A y queda marcado`, async () => {
+      const w = sinCierre(); const d = await correr(conPlazoFin(valor), { mundo: w })
+      expect(d.visitas.filter((v: Json) => v.nodo === N.leer).length).toBe(COTA)
+      expect(llamada(d, BRIEF)).toHaveLength(1); expect(llamada(d, BRIEF)[0].cuerpo.payload.plan_id).toBe(idDeA)
+      expect(llamada(d, 'Plan → Drive (PDF)')).toHaveLength(1); expect(w.m.insertadas).toEqual([])
+      expect(w.m.marcas).toHaveLength(1); expect(w.m.marcas[0].provenance_tag.jefatura_marcas).toMatchObject({ resultado: 'incompleta_por_plazo', revision_id: UUID })
+    })
+  }
+})
+
+describe('reparo menor (b) · «Plan vigente» sin id o sin rastro: la rama de la marca no devuelve ítems y no hace ningún PATCH', () => {
+  const sinCierre = () => { const w = mundo({ versiones: [] }); w.http[N.abrir] = () => resp(200, { accion: 'esperar', revision_id: UUID, turno: { n: 1, tipo: 'agente', paso: 'revision_fondo', pedido: {} } }); w.http[N.despertar] = () => resp(200, {}); w.http[N.leer] = () => resp(200, { revision_id: UUID, estado: 'en_paso' }); return w }
+  // la revisión SÍ abre con el plan A (necesita su id); lo que se estropea es lo que «Plan vigente» entrega a la rama lateral de la marca
+  const conVigenteRoto = (cambio: string) => {
+    const f = JSON.parse(JSON.stringify(despues)) as Json
+    const n = (f.nodes as Json[]).find((x) => x.name === P.vigente) as Json
+    n.parameters.jsCode = ['// reparo (b): se estropea lo que entrega «Plan vigente»', 'const __o = (() => {', String(n.parameters.jsCode), '})()', 'return __o.map((i) => ({ json: { ...i.json, ' + cambio + ' } }))'].join(String.fromCharCode(10))
+    return f
+  }
+  const casos: Array<[string, string]> = [
+    ['sin id', 'id: undefined'], ['id vacío', "id: ''"], ['id que no es texto', 'id: 42'],
+    ['rastro vacío ({})', 'provenance_tag: {}'], ['rastro nulo', 'provenance_tag: null'], ['rastro ausente', 'provenance_tag: undefined'], ['rastro en lista', "provenance_tag: ['x']"], ['rastro en texto', "provenance_tag: 'x'"],
+  ]
+  for (const [caso, cambio] of casos) {
+    it(`${caso}: ningún PATCH ni aviso de la marca; el plan sigue su camino`, async () => {
+      const w = sinCierre(); const d = await correr(conVigenteRoto(cambio), { mundo: w })
+      expect(llamada(d, P.marcaPatch)).toEqual([]); expect(w.m.marcas).toEqual([]); expect(w.m.avisos).toEqual([])
+      expect(llamada(d, 'Plan → Drive (PDF)')).toHaveLength(1)
+    })
+  }
+  it('con id y rastro válidos sí marca (control: la prueba distingue la guarda de la ausencia de marca)', async () => {
+    const w = sinCierre(); await correr(conVigenteRoto('cualquier_otro: 1'), { mundo: w })
+    expect(w.m.marcas).toHaveLength(1)
+  })
+})
+
+describe('reparo menor (c) · el aviso no promete lo que el flujo no impone', () => {
+  it('dice «marcado para revisión» y no que una persona lo mira antes de enviarlo', async () => {
+    const w = mundo({ versiones: [] }); w.http[N.abrir] = () => resp(200, { accion: 'esperar', revision_id: UUID, turno: { n: 1, tipo: 'agente', paso: 'revision_fondo', pedido: {} } }); w.http[N.despertar] = () => resp(200, {}); w.http[N.leer] = () => resp(200, { revision_id: UUID, estado: 'en_paso' })
+    await correr(despues, { mundo: w })
+    expect(w.m.avisos).toHaveLength(1); expect(w.m.avisos[0]).toContain('marcado para revisión'); expect(w.m.avisos[0]).not.toContain('una persona'); expect(w.m.avisos[0]).not.toContain('antes de enviarlo')
+  })
+})

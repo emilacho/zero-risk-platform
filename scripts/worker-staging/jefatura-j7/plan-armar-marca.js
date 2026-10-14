@@ -20,5 +20,5 @@ if (tag.jefatura_marcas && tag.jefatura_marcas.resultado === resultado && tag.je
 let cliente = null
 try { cliente = $('¿Llegó la vuelta?').first().json.client_name } catch (x) { cliente = null }
 const jefatura_marcas = { resultado, revision_id: jef.revision_id || null, motivo, marcado_en: new Date().toISOString() }
-const texto = ':warning: *Plan con revisión incompleta* — ' + String(cliente || 'el cliente') + '\n• la revisión de calidad terminó: `' + resultado + '`' + (motivo ? ' (' + motivo + ')' : '') + '\n• el plan SIGUE su camino (PDF y brief) marcado en su `provenance_tag.jefatura_marcas`; una persona lo mira antes de enviarlo al cliente'
+const texto = ':warning: *Plan con revisión incompleta* — ' + String(cliente || 'el cliente') + '\n• la revisión de calidad terminó: `' + resultado + '`' + (motivo ? ' (' + motivo + ')' : '') + '\n• el plan SIGUE su camino (PDF y brief) marcado en su `provenance_tag.jefatura_marcas`; queda marcado para revisión'
 return [{ json: { id: pv.id, cuerpo: { provenance_tag: Object.assign({}, tag, { jefatura_marcas }) }, texto, resultado } }]
