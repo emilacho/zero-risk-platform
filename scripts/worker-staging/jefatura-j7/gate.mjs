@@ -112,7 +112,8 @@ export function engancharPuerta(flujo, { desde, salida = 0, armar, aplicar, cfg,
     copia.nodes.push(...continuacion.nodes)
     for (const [de, a, i] of continuacion.links) enlace(de, a, i ?? 0)
     enlace(fin, continuacion.entrada)
-    copia.connections[continuacion.salida] = { main: [destinos] }
+    // lo que ya colgaba de la salida de la continuación (ramas laterales) se CONSERVA; se suman los destinos de siempre
+    copia.connections[continuacion.salida] = { main: [[...(copia.connections[continuacion.salida]?.main?.[0] ?? []), ...destinos]] }
   } else copia.connections[fin] = { main: [destinos] }
   return copia
 }

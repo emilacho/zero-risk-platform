@@ -53,6 +53,8 @@ const VUELTA = "$('¿Llegó la vuelta?').first().json"
 const VUELTA_O_VIGENTE = "($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json)"
 const GUARDADO = "$('Guardar el plan')"
 const VIGENTE = "$('Plan vigente')"
+/** R4 (cerrado por diseño, sin medir): el MÁXIMO que el diseño permite — 3 turnos del redactor de hasta 15 min cada uno + los 200 s de GPT ≈ 48 min, redondeado a 50 min; la espera es una cadena de *Wait* guardados en base (cada reanudación corre segundos) y el plazo vive en un DATO (`plazo_fin`), no en el tope de ejecución de n8n */
+export const PLAZO_DEL_PLAN_S = 3000
 export const RETOQUES_DEL_PLAN = [
   { nodo: 'Plan → Drive (PDF)', de: VUELTA, a: VUELTA_O_VIGENTE, veces: 4 },
   { nodo: 'Aviso · plan con pendientes', de: VUELTA, a: VUELTA_O_VIGENTE, veces: 1 },
@@ -66,7 +68,7 @@ export function enganchaPlan(antes) {
   const destinos = (antes.connections['Guardar el plan']?.main?.[0] ?? []).map((d) => d.node).sort()
   if (JSON.stringify(destinos) !== JSON.stringify(['Aviso · plan con pendientes', 'Plan → Drive (PDF)'])) throw new Error('«Guardar el plan» ya no va a «Plan → Drive (PDF)» y «Aviso · plan con pendientes»: el flujo cambió, se revisa el enganche (las 2 ramas se reencauzan)')
   const nuevo = engancharPuerta(antes, {
-    desde: 'Guardar el plan', salida: 0, armar: leerJs('armar-plan.js'), aplicar: leerJs('aplicar-plan.js'), cfg: { tipo: 'plan', plazo_s: 2700, cada_s: 120 },
+    desde: 'Guardar el plan', salida: 0, armar: leerJs('armar-plan.js'), aplicar: leerJs('aplicar-plan.js'), cfg: { tipo: 'plan', plazo_s: PLAZO_DEL_PLAN_S, cada_s: 120 },
     continuacion: cadenaDeVersiones({ jsDeLaVuelta: vuelta.parameters.jsCode, origen: [guardar.position[0] + 240, guardar.position[1] + 700] }),
   })
   // reencauzar las 2 ramas: lo que leían de «¿Llegó la vuelta?» y de «Guardar el plan» lo leen del plan vigente (con A vigente es lo mismo de hoy)
@@ -94,7 +96,7 @@ export function construirPruebaDePieza() {
     connections: { 'Webhook · prueba de pieza': { main: [[{ node: '⓪ Entrada · llave', type: 'main', index: 0 }]] }, '⓪ Entrada · llave': { main: [[{ node: 'Fin · prueba de pieza', type: 'main', index: 0 }]] } },
     settings: { executionOrder: 'v1' },
   }
-  return engancharPuerta(base, { desde: '⓪ Entrada · llave', salida: 0, armar: leerJs('armar-prueba-pieza.js'), aplicar: leerJs('aplicar-prueba-pieza.js'), cfg: { tipo: 'pieza', plazo_s: 1200, cada_s: 60 } })
+  return engancharPuerta(base, { desde: '⓪ Entrada · llave', salida: 0, armar: leerJs('armar-prueba-pieza.js'), aplicar: leerJs('aplicar-prueba-pieza.js'), cfg: { tipo: 'pieza', plazo_s: 1200, cada_s: 90 } })
 }
 
 export const CONSTRUCTORES = {

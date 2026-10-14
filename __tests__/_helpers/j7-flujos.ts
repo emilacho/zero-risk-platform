@@ -55,7 +55,7 @@ export const igualesSinPuerta = (antes: Json, despues: Json, retocados: string[]
 }
 
 /** la estructura que TODO enganche cumple */
-export function estructura(nombre: string, antes: Json, despues: Json, o: { desde: string; salida: number; retocados?: string[]; nodosNuevosExtra?: string[]; /** si la puerta sigue con una continuación: el primero y el último nodo de ella */ continuacion?: { entrada: string; salida: string } }) {
+export function estructura(nombre: string, antes: Json, despues: Json, o: { desde: string; salida: number; retocados?: string[]; nodosNuevosExtra?: string[]; /** si la puerta sigue con una continuación: el primero y el último nodo de ella */ continuacion?: { entrada: string; salida: string; /** ramas laterales que cuelgan de la salida además de los destinos de siempre */ laterales?: string[] }; /** nodos HTTP nuevos que no piden respuesta completa (p. ej. un aviso a Slack) */ sinRespuestaCompleta?: string[] }) {
   const nuevosDeLaPuerta = [...NOMBRES_DE_LA_PUERTA, ...(o.nodosNuevosExtra ?? [])]
   describe(`estructura · ${nombre}`, () => {
     it('los nodos que ya existían NO cambian ni una coma (solo se suman los de la puerta' + ((o.retocados ?? []).length ? ` y se retoca solo: ${(o.retocados ?? []).join(', ')}` : '') + ')', () => {
@@ -71,7 +71,10 @@ export function estructura(nombre: string, antes: Json, despues: Json, o: { desd
       expect(despues.connections[o.desde].main[o.salida]).toEqual([{ node: N.armar, type: 'main', index: 0 }])
       if (o.continuacion) {
         expect(despues.connections[N.aplicar].main[0]).toEqual([{ node: o.continuacion.entrada, type: 'main', index: 0 }])
-        expect(despues.connections[o.continuacion.salida].main[0]).toEqual(destinosAntes)
+        const laterales = o.continuacion.laterales ?? []
+        const deSalida = despues.connections[o.continuacion.salida].main[0] as Json[]
+        expect(deSalida.filter((d) => !laterales.includes(d.node))).toEqual(destinosAntes)
+        for (const l of laterales) expect(deSalida.some((d) => d.node === l)).toBe(true)
       } else expect(despues.connections[N.aplicar].main[0]).toEqual(destinosAntes)
     })
     it('los demás enlaces originales quedan iguales', () => {
@@ -92,7 +95,7 @@ export function estructura(nombre: string, antes: Json, despues: Json, o: { desd
         if (n.type === 'n8n-nodes-base.httpRequest') {
           expect(n.onError).toBe('continueRegularOutput')
           expect(n.parameters.options.response.response.neverError).toBe(true)
-          expect(n.parameters.options.response.response.fullResponse).toBe(true)
+          if (!(o.sinRespuestaCompleta ?? []).includes(n.name)) expect(n.parameters.options.response.response.fullResponse).toBe(true)
         }
       }
     })
@@ -114,7 +117,7 @@ export function estructura(nombre: string, antes: Json, despues: Json, o: { desd
       expect(urls.length).toBe(3)
       for (const u of urls) expect(u).toMatch(/\/api\/jefatura\/revisiones|\/zero-risk\/jefatura-turno/)
       // la continuación (solo el plan) además lee y escribe client_historical_outputs: ninguna otra tabla, ninguna otra ruta
-      for (const n of (despues.nodes as Json[]).filter((x) => (o.nodosNuevosExtra ?? []).includes(x.name) && x.parameters.url)) expect(String(n.parameters.url)).toMatch(/\/api\/jefatura\/revisiones|\/rest\/v1\/client_historical_outputs/)
+      for (const n of (despues.nodes as Json[]).filter((x) => (o.nodosNuevosExtra ?? []).includes(x.name) && x.parameters.url)) expect(String(n.parameters.url)).toMatch(/\/api\/jefatura\/revisiones|\/rest\/v1\/client_historical_outputs|SLACK_WEBHOOK_URL_EQUIPO/)
     })
   })
 }

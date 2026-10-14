@@ -1184,7 +1184,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// JEF · armar · PLAN · J7 · CC#1 · 2026-10-14 · después de «Guardar el plan» (A SIEMPRE se guarda primero y nunca se pierde) y ANTES del PDF a Drive y del «BRIEF · sobre».\n// El plan A ya pasó los chequeos por código de hoy (P1–P7, con o sin marcas). NO lanza: si algo no cuadra, `abrir = false` y todo sigue como hoy (A vigente).\n// Una versión que produce la jefatura (B, C) NUNCA abre otra revisión: la puerta de la ruta lo impide (409 sin_otra_vuelta) y aquí A es la única que se manda (generado_por_jefatura = null).\nconst CFG = {\"max_sondeos\":25,\"tipo\":\"plan\",\"plazo_s\":2700,\"cada_s\":120}\nconst jef = { fase: 'no_abre', motivo: '', plazo_fin: Date.now() + CFG.plazo_s * 1000 }\nconst no = (m) => [{ json: { jef: { ...jef, motivo: m } } }]\nlet v = null, fila = null, body = {}\ntry { v = $('¿Llegó la vuelta?').first().json } catch (x) { return no('no hay salida de «¿Llegó la vuelta?»') }\ntry { const g = $('Guardar el plan').first().json; const gb = g && g.body ? g.body : g; fila = Array.isArray(gb) ? gb[0] : gb } catch (x) { fila = null }\ntry { body = $('Webhook · planeacion').first().json.body || {} } catch (x) { body = {} }\nif (!v || v.llego_la_vuelta !== true || !String(v.texto || '').trim()) return no('el redactor no entregó plan: no hay nada que revisar')\nif (!fila || typeof fila.id !== 'string' || !fila.id) return no('el plan A no quedó guardado: sin A no se abre (A se guarda siempre primero)')\nif (!fila.provenance_tag || typeof fila.provenance_tag !== 'object' || Array.isArray(fila.provenance_tag) || !Object.keys(fila.provenance_tag).length) return no('la fila de A no devolvió su provenance_tag: no se puede reescribir el rastro completo')\nif (!/^[0-9a-fA-F-]{36}$/.test(String(v.client_id || ''))) return no('client_id no es un uuid')\nconst txt = (f) => { try { const j = f(); return typeof j === 'string' ? j : '' } catch (x) { return '' } }\nconst manual = txt(() => { const m = $('① Cargar el manual de marca').all().map((i) => i.json).filter((r) => r && r.id)[0]; return m ? m.content_text : '' })\nconst ficha = txt(() => JSON.stringify($('Ficha del cliente').first().json))\nconst hechos = txt(() => { const h = $('Unir lo del dueño al paquete').first().json.hechos_del_dueno; return Array.isArray(h) && h.length ? JSON.stringify(h) : '' })\nconst pedido = txt(() => $('Redactor (B4)').first().json.pedido)\nconst contexto = []\nif (manual.trim()) contexto.push({ titulo: 'Manual de marca vigente', texto: manual, funcion: 'manda si dos documentos se contradicen' })\nif (ficha.trim()) contexto.push({ titulo: 'Ficha del cliente', texto: ficha, funcion: 'hechos del negocio' })\nif (hechos.trim()) contexto.push({ titulo: 'Lo que dijo el dueño', texto: hechos, funcion: 'correcciones del dueño; mandan sobre la investigación' })\nconst marcas = (v.chequeo_del_plan && Array.isArray(v.chequeo_del_plan.marcas) ? v.chequeo_del_plan.marcas : []).slice(0, 20).map((m) => String((m && m.que) || m || ''))\nconst sobre = {\n  artifact_type: 'plan',\n  artifact_id: fila.id,\n  client_id: String(v.client_id),\n  journey_id: typeof body._journey_id === 'string' && body._journey_id ? body._journey_id : null,\n  payload: {\n    texto: String(v.texto),\n    version: 1,\n    dry_run: body.dry_run === true,\n    devolver_a: { tipo: 'ninguno', destino: '' },\n    chequeos_previos: { pasaron: v.con_pendientes !== true, necesita_humano: false, marcas },\n    contexto,\n    ...(pedido.trim() ? { pedido_del_plan: pedido } : {}),\n    generado_por_jefatura: null,\n  },\n}\nreturn [{ json: { jef: { ...jef, fase: 'abrir', motivo: '', id_de_a: fila.id, client_id: String(v.client_id) }, abrir: true, sobre } }]\n"
+        "jsCode": "// JEF · armar · PLAN · J7 · CC#1 · 2026-10-14 · después de «Guardar el plan» (A SIEMPRE se guarda primero y nunca se pierde) y ANTES del PDF a Drive y del «BRIEF · sobre».\n// El plan A ya pasó los chequeos por código de hoy (P1–P7, con o sin marcas). NO lanza: si algo no cuadra, `abrir = false` y todo sigue como hoy (A vigente).\n// Una versión que produce la jefatura (B, C) NUNCA abre otra revisión: la puerta de la ruta lo impide (409 sin_otra_vuelta) y aquí A es la única que se manda (generado_por_jefatura = null).\nconst CFG = {\"max_sondeos\":27,\"tipo\":\"plan\",\"plazo_s\":3000,\"cada_s\":120}\nconst jef = { fase: 'no_abre', motivo: '', plazo_fin: Date.now() + CFG.plazo_s * 1000 }\nconst no = (m) => [{ json: { jef: { ...jef, motivo: m } } }]\nlet v = null, fila = null, body = {}\ntry { v = $('¿Llegó la vuelta?').first().json } catch (x) { return no('no hay salida de «¿Llegó la vuelta?»') }\ntry { const g = $('Guardar el plan').first().json; const gb = g && g.body ? g.body : g; fila = Array.isArray(gb) ? gb[0] : gb } catch (x) { fila = null }\ntry { body = $('Webhook · planeacion').first().json.body || {} } catch (x) { body = {} }\nif (!v || v.llego_la_vuelta !== true || !String(v.texto || '').trim()) return no('el redactor no entregó plan: no hay nada que revisar')\nif (!fila || typeof fila.id !== 'string' || !fila.id) return no('el plan A no quedó guardado: sin A no se abre (A se guarda siempre primero)')\nif (!fila.provenance_tag || typeof fila.provenance_tag !== 'object' || Array.isArray(fila.provenance_tag) || !Object.keys(fila.provenance_tag).length) return no('la fila de A no devolvió su provenance_tag: no se puede reescribir el rastro completo')\nif (!/^[0-9a-fA-F-]{36}$/.test(String(v.client_id || ''))) return no('client_id no es un uuid')\nconst txt = (f) => { try { const j = f(); return typeof j === 'string' ? j : '' } catch (x) { return '' } }\nconst manual = txt(() => { const m = $('① Cargar el manual de marca').all().map((i) => i.json).filter((r) => r && r.id)[0]; return m ? m.content_text : '' })\nconst ficha = txt(() => JSON.stringify($('Ficha del cliente').first().json))\nconst hechos = txt(() => { const h = $('Unir lo del dueño al paquete').first().json.hechos_del_dueno; return Array.isArray(h) && h.length ? JSON.stringify(h) : '' })\nconst pedido = txt(() => $('Redactor (B4)').first().json.pedido)\nconst contexto = []\nif (manual.trim()) contexto.push({ titulo: 'Manual de marca vigente', texto: manual, funcion: 'manda si dos documentos se contradicen' })\nif (ficha.trim()) contexto.push({ titulo: 'Ficha del cliente', texto: ficha, funcion: 'hechos del negocio' })\nif (hechos.trim()) contexto.push({ titulo: 'Lo que dijo el dueño', texto: hechos, funcion: 'correcciones del dueño; mandan sobre la investigación' })\nconst marcas = (v.chequeo_del_plan && Array.isArray(v.chequeo_del_plan.marcas) ? v.chequeo_del_plan.marcas : []).slice(0, 20).map((m) => String((m && m.que) || m || ''))\nconst sobre = {\n  artifact_type: 'plan',\n  artifact_id: fila.id,\n  client_id: String(v.client_id),\n  journey_id: typeof body._journey_id === 'string' && body._journey_id ? body._journey_id : null,\n  payload: {\n    texto: String(v.texto),\n    version: 1,\n    dry_run: body.dry_run === true,\n    devolver_a: { tipo: 'ninguno', destino: '' },\n    chequeos_previos: { pasaron: v.con_pendientes !== true, necesita_humano: false, marcas },\n    contexto,\n    ...(pedido.trim() ? { pedido_del_plan: pedido } : {}),\n    generado_por_jefatura: null,\n  },\n}\nreturn [{ json: { jef: { ...jef, fase: 'abrir', motivo: '', id_de_a: fila.id, client_id: String(v.client_id) }, abrir: true, sobre } }]\n"
       },
       "name": "JEF · armar",
       "type": "n8n-nodes-base.code",
@@ -1266,7 +1266,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// JEF · ¿cómo abrió? · J7 · CC#1 · 2026-10-14 · lo que contestó `POST /api/jefatura/revisiones` (abrir). NUNCA lanza: cualquier cosa rara queda como fase `error` y el productor sigue como hoy.\n// Fases: cerrada (la ruta ya cerró) · esperar (hay un turno de agente por despertar) · espera_sin_turno (la revisión ya existía y sigue abierta o cerró: se lee) · no_abre (409: apagada, tipo no activo, fuera del ensayo, sin otra vuelta…) · error.\nconst CFG = {\"max_sondeos\":25,\"tipo\":\"plan\",\"plazo_s\":2700,\"cada_s\":120}\nconst s = $('JEF · armar').first().json\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : {}\nconst jef = { ...s.jef }\nif (status === 200 && b.accion === 'cerrado' && b.revision_id) {\n  Object.assign(jef, { fase: 'cerrada', revision_id: String(b.revision_id), salida: b.salida && typeof b.salida === 'object' ? b.salida : null, resultado: b.resultado || null })\n} else if (status === 200 && b.accion === 'esperar' && b.revision_id && b.turno && typeof b.turno === 'object') {\n  Object.assign(jef, { fase: 'esperar', revision_id: String(b.revision_id), turno: b.turno })\n} else if (status === 200 && b.accion === 'ya_existia' && b.revision_id) {\n  Object.assign(jef, { fase: 'espera_sin_turno', revision_id: String(b.revision_id), estado_previo: b.estado || null })\n} else if (status === 409) {\n  Object.assign(jef, { fase: 'no_abre', motivo: String(b.motivo || b.error || '409') })\n} else {\n  const corte = r.error && typeof r.error === 'object' ? String(r.error.message || r.error.name || 'la llamada se cortó') : null\n  Object.assign(jef, { fase: 'error', http: Number.isFinite(status) ? status : null, motivo: String(b.error || b.detalle || corte || ('HTTP ' + String(r.statusCode))).slice(0, 300) })\n}\nreturn [{ json: { jef } }]\n"
+        "jsCode": "// JEF · ¿cómo abrió? · J7 · CC#1 · 2026-10-14 · lo que contestó `POST /api/jefatura/revisiones` (abrir). NUNCA lanza: cualquier cosa rara queda como fase `error` y el productor sigue como hoy.\n// Fases: cerrada (la ruta ya cerró) · esperar (hay un turno de agente por despertar) · espera_sin_turno (la revisión ya existía y sigue abierta o cerró: se lee) · no_abre (409: apagada, tipo no activo, fuera del ensayo, sin otra vuelta…) · error.\nconst CFG = {\"max_sondeos\":27,\"tipo\":\"plan\",\"plazo_s\":3000,\"cada_s\":120}\nconst s = $('JEF · armar').first().json\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : {}\nconst jef = { ...s.jef }\nif (status === 200 && b.accion === 'cerrado' && b.revision_id) {\n  Object.assign(jef, { fase: 'cerrada', revision_id: String(b.revision_id), salida: b.salida && typeof b.salida === 'object' ? b.salida : null, resultado: b.resultado || null })\n} else if (status === 200 && b.accion === 'esperar' && b.revision_id && b.turno && typeof b.turno === 'object') {\n  Object.assign(jef, { fase: 'esperar', revision_id: String(b.revision_id), turno: b.turno })\n} else if (status === 200 && b.accion === 'ya_existia' && b.revision_id) {\n  Object.assign(jef, { fase: 'espera_sin_turno', revision_id: String(b.revision_id), estado_previo: b.estado || null })\n} else if (status === 409) {\n  Object.assign(jef, { fase: 'no_abre', motivo: String(b.motivo || b.error || '409') })\n} else {\n  const corte = r.error && typeof r.error === 'object' ? String(r.error.message || r.error.name || 'la llamada se cortó') : null\n  Object.assign(jef, { fase: 'error', http: Number.isFinite(status) ? status : null, motivo: String(b.error || b.detalle || corte || ('HTTP ' + String(r.statusCode))).slice(0, 300) })\n}\nreturn [{ json: { jef } }]\n"
       },
       "name": "JEF · ¿cómo abrió?",
       "type": "n8n-nodes-base.code",
@@ -1433,7 +1433,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// JEF · ¿cerró? · J7 · CC#1 · 2026-10-14 · lo que contestó `POST /api/jefatura/revisiones` (leer). NUNCA lanza.\n// cerrada = estado terminal con su salida · seguir = todavía abierta y queda plazo · plazo = se acabó el tiempo (lo que llegue tarde NO se guarda) · error = cerró sin salida.\n// Un fallo pasajero de la lectura (5xx, red) no corta la espera: se sigue sondeando hasta el plazo o el tope de sondeos.\nconst CFG = {\"max_sondeos\":25,\"tipo\":\"plan\",\"plazo_s\":2700,\"cada_s\":120}\nconst base = $('JEF · ¿cómo abrió?').first().json.jef\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : {}\nconst TERMINALES = ['cerrada', 'cerrada_por_tope', 'fallida']\nconst sondeos = Number($runIndex) + 1\nconst jef = { ...base, sondeos }\nif (status === 200 && TERMINALES.indexOf(b.estado) !== -1) {\n  if (b.salida && typeof b.salida === 'object') Object.assign(jef, { fase: 'cerrada', salida: b.salida, resultado: b.resultado || null })\n  else Object.assign(jef, { fase: 'error', motivo: 'la revisión cerró (' + String(b.estado) + ') pero la lectura no trajo su salida' })\n} else if (Date.now() > Number(base.plazo_fin) || sondeos >= CFG.max_sondeos) {\n  Object.assign(jef, { fase: 'plazo', motivo: 'se acabó la espera (' + String(CFG.plazo_s) + ' s) sin que la revisión cerrara: lo que llegue tarde no se guarda' })\n} else {\n  Object.assign(jef, { fase: 'seguir' })\n}\nreturn [{ json: { jef } }]\n"
+        "jsCode": "// JEF · ¿cerró? · J7 · CC#1 · 2026-10-14 · lo que contestó `POST /api/jefatura/revisiones` (leer). NUNCA lanza.\n// cerrada = estado terminal con su salida · seguir = todavía abierta y queda plazo · plazo = se acabó el tiempo (lo que llegue tarde NO se guarda) · error = cerró sin salida.\n// Un fallo pasajero de la lectura (5xx, red) no corta la espera: se sigue sondeando hasta el plazo o el tope de sondeos.\nconst CFG = {\"max_sondeos\":27,\"tipo\":\"plan\",\"plazo_s\":3000,\"cada_s\":120}\nconst base = $('JEF · ¿cómo abrió?').first().json.jef\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : {}\nconst TERMINALES = ['cerrada', 'cerrada_por_tope', 'fallida']\nconst sondeos = Number($runIndex) + 1\nconst jef = { ...base, sondeos }\nif (status === 200 && TERMINALES.indexOf(b.estado) !== -1) {\n  if (b.salida && typeof b.salida === 'object') Object.assign(jef, { fase: 'cerrada', salida: b.salida, resultado: b.resultado || null })\n  else Object.assign(jef, { fase: 'error', motivo: 'la revisión cerró (' + String(b.estado) + ') pero la lectura no trajo su salida' })\n} else if (Date.now() > Number(base.plazo_fin) || sondeos >= CFG.max_sondeos) {\n  Object.assign(jef, { fase: 'plazo', motivo: 'se acabó la espera (' + String(CFG.plazo_s) + ' s) sin que la revisión cerrara: lo que llegue tarde no se guarda' })\n} else {\n  Object.assign(jef, { fase: 'seguir' })\n}\nreturn [{ json: { jef } }]\n"
       },
       "name": "JEF · ¿cerró?",
       "type": "n8n-nodes-base.code",
@@ -1476,7 +1476,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// JEF · aplicar · PLAN · J7 · CC#1 · 2026-10-14 · la puerta termina aquí y entrega a la cadena de versiones (evaluar → elegir → guardar → plan vigente) lo que pasó con la revisión.\n// Sin revisión cerrada, la cadena no hace nada y «Plan vigente» devuelve EXACTAMENTE la salida de «Guardar el plan»: idéntico a hoy.\nconst CFG = {\"max_sondeos\":25,\"tipo\":\"plan\",\"plazo_s\":2700,\"cada_s\":120}\nconst entrada = $input.first().json || {}\nreturn [{ json: { jef: entrada.jef && typeof entrada.jef === 'object' ? entrada.jef : { fase: 'no_abre', motivo: 'sin estado de la puerta' } } }]\n"
+        "jsCode": "// JEF · aplicar · PLAN · J7 · CC#1 · 2026-10-14 · la puerta termina aquí y entrega a la cadena de versiones (evaluar → elegir → guardar → plan vigente) lo que pasó con la revisión.\n// Sin revisión cerrada, la cadena no hace nada y «Plan vigente» devuelve EXACTAMENTE la salida de «Guardar el plan»: idéntico a hoy.\nconst CFG = {\"max_sondeos\":27,\"tipo\":\"plan\",\"plazo_s\":3000,\"cada_s\":120}\nconst entrada = $input.first().json || {}\nreturn [{ json: { jef: entrada.jef && typeof entrada.jef === 'object' ? entrada.jef : { fase: 'no_abre', motivo: 'sin estado de la puerta' } } }]\n"
       },
       "name": "JEF · aplicar",
       "type": "n8n-nodes-base.code",
@@ -1717,6 +1717,90 @@
         6450,
         1080
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// JEF · plan · armar la marca · J7 · CC#1 · 2026-10-14 · R4 cerrado POR DISEÑO (firma A): si la revisión del plan NO terminó bien (se pasó el plazo, o cerró con desacuerdo / sin segunda mirada / por tope / fallida)\n// el plan sigue su camino con su marca «revisión incompleta» — nunca se pierde y nunca se hace pasar por revisado. Cuelga de «Plan vigente» como una rama lateral: no cambia lo que reciben el PDF, el aviso ni el brief.\n// Sin marca que poner (jefatura apagada, 409, error, revisión limpia) no devuelve ítems y la rama termina aquí: idéntico a hoy. La marca se escribe en el `provenance_tag` COMPLETO de la fila vigente (G5), nunca parcial.\nconst CFG = {\"tipo\":\"plan\"}\nconst pv = $input.first().json || {}\nlet jef = {}\ntry { jef = $('JEF · aplicar').first().json.jef || {} } catch (x) { jef = {} }\nlet resultado = null, motivo = null\nif (jef.fase === 'plazo') { resultado = 'incompleta_por_plazo'; motivo = String(jef.motivo || 'se acabó el plazo de la revisión') }\nelse if (jef.fase === 'cerrada' && jef.salida && typeof jef.salida === 'object') {\n  let r = String(jef.salida.resultado || '')\n  // si hubo versiones nuevas, el resultado final (con_desacuerdo cuando no se adoptó la última) lo dijo `elegir_version`\n  try { const est = $('JEF · plan · el plan de guardado').first().json; if (est && est.resultado) r = String(est.resultado) } catch (x) { /* no hubo elección */ }\n  if (r && r !== 'limpia') resultado = r\n}\nif (!resultado) return []\nconst tag = pv.provenance_tag\nif (typeof pv.id !== 'string' || !pv.id || !tag || typeof tag !== 'object' || Array.isArray(tag) || !Object.keys(tag).length) return []\nif (tag.jefatura_marcas && tag.jefatura_marcas.resultado === resultado && tag.jefatura_marcas.revision_id === (jef.revision_id || null)) return []\nlet cliente = null\ntry { cliente = $('¿Llegó la vuelta?').first().json.client_name } catch (x) { cliente = null }\nconst jefatura_marcas = { resultado, revision_id: jef.revision_id || null, motivo, marcado_en: new Date().toISOString() }\nconst texto = ':warning: *Plan con revisión incompleta* — ' + String(cliente || 'el cliente') + '\\n• la revisión de calidad terminó: `' + resultado + '`' + (motivo ? ' (' + motivo + ')' : '') + '\\n• el plan SIGUE su camino (PDF y brief) marcado en su `provenance_tag.jefatura_marcas`; una persona lo mira antes de enviarlo al cliente'\nreturn [{ json: { id: pv.id, cuerpo: { provenance_tag: Object.assign({}, tag, { jefatura_marcas }) }, texto, resultado } }]\n"
+      },
+      "name": "JEF · plan · armar la marca",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6690,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) + '/rest/v1/client_historical_outputs?id=eq.' + $json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "JEF · plan · marcar la revisión incompleta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6930,
+        1520
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL_EQUIPO }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $('JEF · plan · armar la marca').first().json.texto }) }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "JEF · plan · avisar la revisión incompleta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7170,
+        1520
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -3080,6 +3164,49 @@
         ]
       ]
     },
+    "Plan vigente": {
+      "main": [
+        [
+          {
+            "node": "JEF · plan · armar la marca",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Plan → Drive (PDF)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Aviso · plan con pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · plan · armar la marca": {
+      "main": [
+        [
+          {
+            "node": "JEF · plan · marcar la revisión incompleta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · plan · marcar la revisión incompleta": {
+      "main": [
+        [
+          {
+            "node": "JEF · plan · avisar la revisión incompleta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "JEF · plan · ¿hay versión nueva?": {
       "main": [
         [
@@ -3495,22 +3622,6 @@
         [
           {
             "node": "JEF · plan · ¿hay versión nueva?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Plan vigente": {
-      "main": [
-        [
-          {
-            "node": "Plan → Drive (PDF)",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Aviso · plan con pendientes",
             "type": "main",
             "index": 0
           }

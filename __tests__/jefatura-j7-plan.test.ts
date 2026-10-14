@@ -42,9 +42,9 @@ const previos = (texto = planMalo(), o: Json = {}): Record<string, Json> => ({
 })
 
 // ── la ruta y la base, simuladas con las MISMAS funciones puras de la ruta
-interface Mundo { filas: Json[]; llamadas: Array<{ nodo: string; cuerpo: any }>; insertadas: Json[]; parches: Json[]; versiones: Array<{ etiqueta: string; paso: string; texto: string; largo: number }> }
+interface Mundo { marcas: Json[]; avisos: string[]; filas: Json[]; llamadas: Array<{ nodo: string; cuerpo: any }>; insertadas: Json[]; parches: Json[]; versiones: Array<{ etiqueta: string; paso: string; texto: string; largo: number }> }
 function mundo(o: { versiones: Mundo['versiones']; existentes?: Json[]; fallos?: Record<string, number | 'corte'>; sinSalida?: boolean; cierra?: Json }): { http: Record<string, (c: any) => any>; m: Mundo } {
-  const m: Mundo = { filas: [filaA(), ...(o.existentes ?? [])], llamadas: [], insertadas: [], parches: [], versiones: o.versiones }
+  const m: Mundo = { marcas: [], avisos: [], filas: [filaA(), ...(o.existentes ?? [])], llamadas: [], insertadas: [], parches: [], versiones: o.versiones }
   const falla = (nodo: string) => (o.fallos && nodo in o.fallos ? (o.fallos[nodo] === 'corte' ? { error: { message: 'timeout' } } : resp(o.fallos[nodo] as number, { error: 'fallo de prueba' })) : null)
   const reg = (nodo: string, cuerpo: any) => m.llamadas.push({ nodo, cuerpo })
   const salida = { revision_id: UUID, artifact_type: 'plan', artifact_id: idDeA, resultado: 'limpia', marcas: { con_desacuerdo: false, sin_segunda_mirada: false }, versiones: m.versiones, respuestas: [], desacuerdos: [], costo_usd: 1.2, simulado: false, ...(o.cierra ?? {}) }
@@ -66,6 +66,8 @@ function mundo(o: { versiones: Mundo['versiones']; existentes?: Json[]; fallos?:
     http[e.reemplazo] = (c) => { reg(e.reemplazo, c); const f = falla(e.reemplazo); if (f) return f; try { return resp(200, { provenance_tag: provenanceConReemplazo(c.provenance_tag, { por: c.por, en: '2026-10-14T20:00:01Z' }) }) } catch (x) { return resp(400, { error: 'provenance_invalido', detalle: String(x) }) } }
     http[e.marcar] = (c) => { reg(e.marcar, c); const f = falla(e.marcar); if (f) return f; m.parches.push(c); return resp(200, [{ ok: true }]) }
   }
+  http[P.marcaPatch] = (c) => { reg(P.marcaPatch, c); const f = falla(P.marcaPatch); if (f) return f; m.marcas.push(c); return resp(200, [{ ok: true }]) }
+  http[P.marcaAvisar] = (c) => { reg(P.marcaAvisar, c); m.avisos.push(c.text); return { ok: true } }
   http['Plan → Drive (PDF)'] = (c) => { reg('Plan → Drive (PDF)', c); return { ok: true, file_id: 'f1', url: 'https://drive/f1', folder_id: 'fo1' } }
   http['BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)'] = (c) => { reg('BRIEF', c); return { ok: true } }
   http['Bandeja · plan con pendientes'] = (c) => { reg('Bandeja', c); return { ok: true, id: 'h1' } }
@@ -78,7 +80,7 @@ const sinGate = (r: Json) => r.llamadasHttp.filter((l: Json) => !l.nodo.startsWi
 const llamada = (r: Json, nodo: string) => r.llamadasHttp.filter((l: Json) => l.nodo === nodo)
 
 describe('J7 · plan (X9F0zp6LQ2xGEYVS) · después de «Guardar el plan»', () => {
-  estructura('plan', antes, despues, { desde: 'Guardar el plan', salida: 0, retocados: [...new Set<string>(RETOQUES_DEL_PLAN.map((r: Json) => r.nodo))], nodosNuevosExtra: NOMBRES_DE_LA_CADENA, continuacion: { entrada: P.hay, salida: P.vigente } })
+  estructura('plan', antes, despues, { desde: 'Guardar el plan', salida: 0, retocados: [...new Set<string>(RETOQUES_DEL_PLAN.map((r: Json) => r.nodo))], nodosNuevosExtra: NOMBRES_DE_LA_CADENA, continuacion: { entrada: P.hay, salida: P.vigente, laterales: [P.marcaArmar] }, sinRespuestaCompleta: [P.marcaAvisar] })
 
   it('el enganche se detiene si el flujo cambió debajo (las 2 ramas, o un nodo a retocar)', () => {
     const roto = JSON.parse(JSON.stringify(antes)); roto.connections['Guardar el plan'].main[0] = roto.connections['Guardar el plan'].main[0].slice(0, 1)
@@ -156,15 +158,15 @@ describe('J7 · plan (X9F0zp6LQ2xGEYVS) · después de «Guardar el plan»', () 
       expect(llamada(d, P.elegir)).toHaveLength(0)
       expect(llamada(d, P.filas)).toHaveLength(0)
     })
-    it('si la revisión no cierra a tiempo (plazo de 45 min) el plan sigue idéntico a hoy y nada se guarda', async () => {
+    it('si la revisión no cierra a tiempo (plazo de 50 min) el plan sigue como hoy (PDF y brief con A) y NO se guarda ninguna versión (la marca se prueba en R4)', async () => {
       const a = await enHoy({ mundo: mundo({ versiones: [] }) })
       const w = mundo({ versiones: [] })
       w.http[N.abrir] = () => resp(200, { accion: 'esperar', revision_id: UUID, turno: { n: 1, tipo: 'agente', paso: 'revision_fondo', pedido: {} } })
       w.http[N.despertar] = () => resp(200, {}); w.http[N.leer] = () => resp(200, { revision_id: UUID, estado: 'en_paso' })
       const d = await correr(despues, { mundo: w })
       expect(sinGate(d).map((l: Json) => [l.nodo, l.url, l.cuerpo])).toEqual(sinGate(a).map((l: Json) => [l.nodo, l.url, l.cuerpo]))
-      expect(w.m.insertadas).toEqual([])
-      expect(d.reloj - 1_700_000_000_000).toBeGreaterThanOrEqual(2700 * 1000 - 120_000)
+      expect(w.m.insertadas).toEqual([]); expect(w.m.parches).toEqual([])
+      expect(d.reloj - 1_700_000_000_000).toBeGreaterThanOrEqual(3000 * 1000 - 120_000)
     })
   })
 
@@ -369,5 +371,91 @@ describe('J7 · plan (X9F0zp6LQ2xGEYVS) · después de «Guardar el plan»', () 
   it('el archivo del plan ARREGLADO se puede serializar sin perder nada (ida y vuelta por JSON)', () => {
     expect(JSON.parse(JSON.stringify(despues))).toEqual(despues)
     void fs
+  })
+})
+
+// ═════════════════════════════════════════════════════════════ R4 · la espera del plan, cerrada POR DISEÑO (sin medir)
+import { PLAZO_DEL_PLAN_S } from '../scripts/worker-staging/jefatura-j7/construir-enganches.mjs'
+describe('R4 · la espera del plan: el máximo del diseño, por un camino que no depende del tope de ejecución de n8n, y con marca «revisión incompleta» si se pasa', () => {
+  const nodoGate = (f: Json, n: string) => (f.nodes as Json[]).find((x) => x.name === n) as Json
+  const A = { etiqueta: 'A', paso: 'redactor', texto: planMalo(), largo: planMalo().length }
+  const BRIEF = 'BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)'
+  const sinCierre = () => { const w = mundo({ versiones: [] }); w.http[N.abrir] = () => resp(200, { accion: 'esperar', revision_id: UUID, turno: { n: 1, tipo: 'agente', paso: 'revision_fondo', pedido: {} } }); w.http[N.despertar] = () => resp(200, {}); w.http[N.leer] = () => resp(200, { revision_id: UUID, estado: 'en_paso' }); return w }
+
+  it('el plazo es el MÁXIMO del diseño: 3 turnos de 15 min + 200 s de GPT ≈ 48 min, redondeado a 50 min (3.000 s)', () => {
+    expect(PLAZO_DEL_PLAN_S).toBe(3000); expect(PLAZO_DEL_PLAN_S).toBeGreaterThanOrEqual(3 * 15 * 60 + 200)
+    expect(String(nodoGate(despues, N.armar).parameters.jsCode)).toContain('"plazo_s":3000')
+  })
+  it('no depende del tope de ejecución de n8n: la espera es una cadena de «Wait» guardados en base (cada uno > 65 s, que es lo que n8n guarda) y ninguna tajada de trabajo pasa de 60 s', () => {
+    const w = nodoGate(despues, N.esperar)
+    expect(w.type).toBe('n8n-nodes-base.wait'); expect(w.parameters.resume).toBe('timeInterval'); expect(w.parameters.unit).toBe('seconds')
+    expect(w.parameters.amount).toBeGreaterThan(65); expect(w.parameters.amount).toBeLessThanOrEqual(300)
+    for (const n of despues.nodes as Json[]) if (n.type === 'n8n-nodes-base.httpRequest' && (n.name.startsWith('JEF · ') || NOMBRES_DE_LA_CADENA.includes(n.name))) expect(n.parameters.options.timeout).toBeLessThanOrEqual(60000)
+  })
+  it('el plazo vive en un DATO del ítem (`plazo_fin`, calculado una vez) y se mira contra el reloj en cada lectura: una reanudación tardía no lo estira', async () => {
+    const d = await correr(despues, { mundo: sinCierre() })
+    const armar = d.visitas.find((v: Json) => v.nodo === N.armar).salida[0]
+    expect(typeof armar.jef.plazo_fin).toBe('number'); expect(armar.jef.plazo_fin - 1_700_000_000_000).toBe(3000 * 1000)
+    const lecturas = d.visitas.filter((v: Json) => v.nodo === N.leer).length
+    expect(lecturas).toBeLessThanOrEqual(Math.ceil(3000 / 120) + 2); expect(lecturas).toBeGreaterThan(20)
+    expect(d.reloj - 1_700_000_000_000).toBeGreaterThanOrEqual(3000 * 1000 - 120_000); expect(d.reloj - 1_700_000_000_000).toBeLessThanOrEqual(3000 * 1000 + 120_000)
+  })
+  it('si se pasa el plazo: el plan sigue (PDF y brief con A) y A queda marcado «revisión incompleta» en su rastro COMPLETO, con aviso; la versión que llegue tarde no se guarda (G6)', async () => {
+    const w = sinCierre(); const d = await correr(despues, { mundo: w })
+    expect(llamada(d, BRIEF)[0].cuerpo.payload.plan_id).toBe(idDeA)
+    expect(llamada(d, 'Plan → Drive (PDF)')).toHaveLength(1); expect(w.m.insertadas).toEqual([])
+    expect(w.m.marcas).toHaveLength(1)
+    expect(llamada(d, P.marcaPatch)[0].url.endsWith('client_historical_outputs?id=eq.' + idDeA)).toBe(true)
+    const tag = w.m.marcas[0].provenance_tag
+    for (const [k, v] of Object.entries(tagA)) expect(tag[k]).toEqual(v)
+    expect(tag.jefatura_marcas).toMatchObject({ resultado: 'incompleta_por_plazo', revision_id: UUID }); expect(tag.jefatura_marcas.motivo).toContain('se acabó la espera')
+    expect(w.m.avisos).toHaveLength(1); expect(w.m.avisos[0]).toContain('revisión incompleta'); expect(w.m.avisos[0]).toContain('Café de práctica')
+  })
+  for (const resultado of ['con_desacuerdo', 'sin_segunda_mirada', 'incompleta_por_tope', 'fallida']) {
+    it(`la revisión cerró «${resultado}» sin versión nueva: A sigue y queda marcado con ese resultado`, async () => {
+      const w = mundo({ versiones: [A], cierra: { resultado } }); const d = await correr(despues, { mundo: w })
+      expect(w.m.insertadas).toEqual([]); expect(w.m.marcas).toHaveLength(1); expect(w.m.marcas[0].provenance_tag.jefatura_marcas.resultado).toBe(resultado)
+      expect(llamada(d, BRIEF)[0].cuerpo.payload.plan_id).toBe(idDeA)
+    })
+  }
+  it('una revisión LIMPIA no deja marca ni aviso (y el plan sigue idéntico a hoy)', async () => {
+    const w = mundo({ versiones: [A], cierra: { resultado: 'limpia' } }); await correr(despues, { mundo: w })
+    expect(w.m.marcas).toEqual([]); expect(w.m.avisos).toEqual([])
+  })
+  for (const [caso, h] of [['apagada (409)', () => resp(409, { error: 'jefatura_no_abre', motivo: 'apagada' })], ['500', () => resp(500, { error: 'x' })], ['corte de red', () => ({ error: { message: 'timeout' } })]] as Array<[string, () => Json]>) {
+    it(`${caso}: NO hay marca ni aviso (no hubo revisión: idéntico a hoy)`, async () => {
+      const w = mundo({ versiones: [] }); w.http[N.abrir] = h; await correr(despues, { mundo: w })
+      expect(w.m.marcas).toEqual([]); expect(w.m.avisos).toEqual([])
+    })
+  }
+  it('con versión nueva adoptada y limpia (la última): no hay marca; con B adoptada y C que empeora (con_desacuerdo): la marca va en la fila de B (la vigente) con SU rastro completo', async () => {
+    const B = { etiqueta: 'B', paso: 'correccion', texto: planBueno('B'), largo: planBueno('B').length }, C = { etiqueta: 'C', paso: 'decision', texto: planMalo('C'), largo: planMalo('C').length }
+    const limpia = mundo({ versiones: [A, B] }); await correr(despues, { mundo: limpia })
+    expect(limpia.m.marcas).toEqual([])
+    const w = mundo({ versiones: [A, B, C] }); const d = await correr(despues, { mundo: w })
+    expect(w.m.marcas).toHaveLength(1)
+    expect(llamada(d, P.marcaPatch)[0].url.endsWith('client_historical_outputs?id=eq.' + w.m.insertadas[0].id)).toBe(true)
+    expect(w.m.marcas[0].provenance_tag).toMatchObject({ etiqueta: 'B', version: 2, version_de: idDeA, jefatura_marcas: { resultado: 'con_desacuerdo' } })
+  })
+  it('si A queda adoptada aunque se produjeron versiones que empeoran: A se marca con_desacuerdo', async () => {
+    const bueno = vuelta(planBueno('A'), { con_pendientes: false, pendientes: null, estado_del_plan: 'sin_marcas', chequeo_del_plan: { ok: true, marcas: [] } })
+    const w = mundo({ versiones: [{ ...A, texto: planBueno('A') }, { etiqueta: 'B', paso: 'c', texto: planMalo('B'), largo: planMalo('B').length }] }); await correr(despues, { mundo: w, texto: planBueno('A'), vuelta: bueno })
+    expect(w.m.insertadas).toEqual([]); expect(w.m.marcas[0].provenance_tag.jefatura_marcas.resultado).toBe('con_desacuerdo')
+  })
+  it('repetir la ejecución no vuelve a marcar ni a avisar (idempotente): una fila que ya trae esa marca de esa revisión se deja', async () => {
+    const yaMarcada = filaA({ provenance_tag: { ...tagA, jefatura_marcas: { resultado: 'incompleta_por_plazo', revision_id: UUID } } })
+    const w = sinCierre(); await correr(despues, { mundo: w, fila: yaMarcada })
+    expect(w.m.marcas).toEqual([]); expect(w.m.avisos).toEqual([])
+  })
+  it('si no se puede escribir la marca (500), el plan IGUAL sigue su camino (la marca nunca frena la cadena)', async () => {
+    const w = sinCierre(); const falla = w.http[P.marcaPatch]; w.http[P.marcaPatch] = () => resp(500, { error: 'x' }); void falla
+    const d = await correr(despues, { mundo: w })
+    expect(llamada(d, 'Plan → Drive (PDF)')).toHaveLength(1); expect(llamada(d, BRIEF)).toHaveLength(1)
+  })
+  it('lo que reciben el PDF y el brief es lo mismo con o sin marca (la rama es lateral y no cambia sus entradas)', async () => {
+    const dCon = await correr(despues, { mundo: sinCierre() })
+    const sin = mundo({ versiones: [] }); sin.http[N.abrir] = () => resp(409, { error: 'jefatura_no_abre', motivo: 'apagada' }); const dSin = await correr(despues, { mundo: sin })
+    const cuerpos = (d: Json) => sinGate(d).filter((l: Json) => ['Plan → Drive (PDF)', BRIEF].includes(l.nodo)).map((l: Json) => l.cuerpo)
+    expect(cuerpos(dCon)).toEqual(cuerpos(dSin))
   })
 })
