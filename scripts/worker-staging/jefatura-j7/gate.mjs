@@ -62,7 +62,8 @@ export function nodosDeLaPuerta({ armar, aplicar, cfg, origen, comoAbrio = leerJ
   const nodes = [
     code(N.armar, conCfg(armar, c), p(1)),
     si(N.seAbre, '={{ $json.abrir === true }}', p(2)),
-    http(N.abrir, `={{ ${VERCEL} + '/api/jefatura/revisiones' }}`, '={{ JSON.stringify($json.sobre) }}', p(3), 310000),
+    // 60 s: abrir vuelve en segundos (la primera tarea es del jefe, un turno de n8n; el GPT corre después, dentro de `/turnos`); si la ruta no contesta, el productor sigue como hoy sin esperar minutos
+    http(N.abrir, `={{ ${VERCEL} + '/api/jefatura/revisiones' }}`, '={{ JSON.stringify($json.sobre) }}', p(3), 60000),
     code(N.comoAbrio, conCfg(comoAbrio, c), p(4)),
     si(N.despertarSi, "={{ $json.jef.fase === 'esperar' }}", p(5)),
     http(N.despertar, "={{ ($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\\/+$/, '') + '/zero-risk/jefatura-turno' }}", '={{ JSON.stringify({ revision_id: $json.jef.revision_id, turno: $json.jef.turno }) }}', p(6), 20000),

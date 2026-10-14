@@ -9,10 +9,11 @@ import { N } from '../scripts/worker-staging/jefatura-j7/gate.mjs'
 import { antesDe, enganchaSubflujo, FLUJOS } from '../scripts/worker-staging/jefatura-j7/construir-enganches.mjs'
 import { ejecutar, estructura, resp, UUID, type Json } from './_helpers/j7-flujos'
 
+const nodoArmar = (f: Json) => (f.nodes as Json[]).find((n) => n.name === N.armar)!.parameters.jsCode
 for (const tipo of ['estrategia', 'calendario'] as const) {
   describe(`J7 · ${tipo} (${FLUJOS[tipo].id}) · dentro del sub-flujo, entre «④ ¿Termina?» y «⑤ Salida»`, () => {
     const antes = antesDe(FLUJOS[tipo].id) as Json
-    const despues = enganchaSubflujo(antes, tipo) as Json
+    const despues = enganchaSubflujo(antes, tipo, { correccion_aplicable: true }) as Json // el comportamiento de la puerta (con `guardar_revisada` ya construido)
     estructura(tipo, antes, despues, { desde: '④ ¿Termina?', salida: 0, retocados: ['⑤ Salida'] })
 
     const run = { client_id: UUID, task: 'TAREA · manual + plan + reglas del ' + tipo }
@@ -90,6 +91,23 @@ for (const tipo of ['estrategia', 'calendario'] as const) {
       })
       expect(salidaDe(d)).toEqual(salidaDe(a))
       expect(d.reloj - 1_700_000_000_000).toBeGreaterThanOrEqual((tipo === 'estrategia' ? 1200 : 1500) * 1000 - 90_000)
+    })
+    describe('mientras no exista `guardar_revisada` (la construcción por omisión): en REAL no abre, en seco sí', () => {
+      const porOmision = enganchaSubflujo(antes, tipo) as Json
+      it('con la jefatura ACTIVA para el tipo y un paso real terminado bien, NO llama a la ruta y la salida es idéntica a hoy', async () => {
+        const a = await correr(antes, base())
+        const d = await correr(porOmision, base(), { [N.abrir]: () => { throw new Error('NO debía llamarse') } })
+        expect(d.llamadasHttp).toHaveLength(0); expect(salidaDe(d)).toEqual(salidaDe(a))
+      })
+      it('en seco (seco: true) SÍ abre, con dry_run true (US$ 0): así el seco puede probar la espera dentro del sub-flujo', async () => {
+        const d = await correr(porOmision, base({ seco: true }), noAbre)
+        const l = d.llamadasHttp.find((x: Json) => x.nodo === N.abrir)
+        expect(l.cuerpo.payload.dry_run).toBe(true); expect(validarEntrada(l.cuerpo).ok).toBe(true)
+      })
+      it('la bandera es parte del archivo: false por omisión, y solo con true abre en real', () => {
+        expect(String(nodoArmar(porOmision))).toContain('"correccion_aplicable":false')
+        expect(String(nodoArmar(despues))).toContain('"correccion_aplicable":true')
+      })
     })
     it('la entrada «① ¿Termina?» (nada nuevo que revisar) NO pasa por la puerta', () => {
       expect(despues.connections['① ¿Termina?']).toEqual(antes.connections['① ¿Termina?'])

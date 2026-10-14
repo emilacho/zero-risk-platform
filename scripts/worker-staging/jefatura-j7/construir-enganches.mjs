@@ -32,13 +32,14 @@ export function enganchaBrief(antes) {
 // ───────────────────────────────────────────────────────── ESTRATEGIA y CALENDARIO · dentro del sub-flujo, entre «④ ¿Termina?» y «⑤ Salida» (condición 4 de CC#3: el sub-flujo no termina hasta que la revisión cierre)
 const SALIDA_ANTES = 'return [{ json: { paso: s.paso, campana_id: s.campana_id, tanda: s.tanda ?? null, resultado: s.resultado, alerta: s.alerta || null, fichas: s.fichas || [], fechas_pedidas: d.fechas_pedidas || [], detalle: d } }]'
 const SALIDA_DESPUES = 'return [{ json: { paso: s.paso, campana_id: s.campana_id, tanda: s.tanda ?? null, resultado: s.resultado, alerta: s.alerta || null, fichas: s.fichas || [], fechas_pedidas: d.fechas_pedidas || [], detalle: d, ...(s.jefatura ? { jefatura: s.jefatura } : {}) } }]'
-export function enganchaSubflujo(antes, tipo) {
+/** `correccion_aplicable` = ya existe `guardar_revisada` en la ruta de la cadena para este tipo; mientras sea falso el enganche NO abre revisiones reales (el orden «guardar_revisada antes de activar el tipo» queda impuesto por construcción) */
+export function enganchaSubflujo(antes, tipo, { correccion_aplicable = false } = {}) {
   if (tipo !== 'estrategia' && tipo !== 'calendario') throw new Error('tipo ' + tipo)
   for (const n of ['③ Armar guardar', '① ¿Qué dijo?', '④ ¿Termina?', '⑤ Salida']) uno(antes, n)
   const salidas = antes.connections['④ ¿Termina?']?.main?.[0] ?? []
   if (salidas.length !== 1 || salidas[0].node !== '⑤ Salida') throw new Error('«④ ¿Termina?» ya no va directo a «⑤ Salida»: el flujo cambió, se revisa el enganche')
   const plazo_s = tipo === 'estrategia' ? 1200 : 1500
-  const nuevo = engancharPuerta(antes, { desde: '④ ¿Termina?', salida: 0, armar: leerJs('armar-subflujo.js'), aplicar: leerJs('aplicar-subflujo.js'), cfg: { tipo, plazo_s, cada_s: 90, titulo_del_pedido: tipo === 'estrategia' ? 'Pedido de la estrategia (trae manual, plan y reglas)' : 'Pedido del calendario (trae manual, plan, estrategia y fechas)' } })
+  const nuevo = engancharPuerta(antes, { desde: '④ ¿Termina?', salida: 0, armar: leerJs('armar-subflujo.js'), aplicar: leerJs('aplicar-subflujo.js'), cfg: { tipo, plazo_s, cada_s: 90, correccion_aplicable, titulo_del_pedido: tipo === 'estrategia' ? 'Pedido de la estrategia (trae manual, plan y reglas)' : 'Pedido del calendario (trae manual, plan, estrategia y fechas)' } })
   const sal = uno(nuevo, '⑤ Salida')
   const js = lf(sal.parameters.jsCode)
   if (js.split(SALIDA_ANTES).length !== 2) throw new Error('«⑤ Salida» cambió: el texto a retocar no aparece una sola vez')

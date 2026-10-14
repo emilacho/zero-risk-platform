@@ -9,6 +9,8 @@ const jef = { fase: 'no_abre', motivo: '', plazo_fin: Date.now() + CFG.plazo_s *
 const no = (m) => [{ json: { jef: { ...jef, motivo: m }, orig: s } }]
 if (s.resultado !== 'ok') return no('el paso no terminó bien (' + String(s.resultado) + '): no hay nada nuevo que revisar')
 if (typeof s.seco !== 'boolean') return no('seco no es booleano: no se abre')
+// 🔴 Hasta que exista `guardar_revisada` la corrección de la jefatura NO se aplica (se pagaría y no se usaría): en REAL este tipo no abre aunque esté en `tipos_activos`; el seco sí (US$ 0: sirve para probar la espera).
+if (CFG.correccion_aplicable !== true && s.seco !== true) return no('la corrección de la jefatura todavía no se puede aplicar (falta `guardar_revisada`): en real no se abre; el seco sí')
 let salida = null, run = null
 try { salida = $('③ Armar guardar').last().json.guardar.resultado.structured_output } catch (x) { return no('no hay salida de «③ Armar guardar»') }
 try { run = $('① ¿Qué dijo?').last().json.run_sdk } catch (x) { return no('no hay pedido de «① ¿Qué dijo?»') }

@@ -96,6 +96,10 @@ export function estructura(nombre: string, antes: Json, despues: Json, o: { desd
         }
       }
     })
+    it('«JEF · abrir» espera como máximo 60 s (abrir vuelve en segundos; si la ruta no contesta el productor sigue como hoy sin demorarse minutos)', () => {
+      const abrir = (despues.nodes as Json[]).find((n) => n.name === N.abrir) as Json
+      expect(abrir.parameters.options.timeout).toBeLessThanOrEqual(60000); expect(abrir.parameters.options.timeout).toBeGreaterThan(0)
+    })
     it('ninguna llave pegada: la de despacho se lee del entorno', () => {
       const s = JSON.stringify(despues)
       expect(s).not.toMatch(/[0-9a-f]{64}/)
