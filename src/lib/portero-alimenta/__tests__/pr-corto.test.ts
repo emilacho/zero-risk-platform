@@ -158,6 +158,34 @@ describe('tanda 2 · reseñas con la ficha confirmada y videos solo si hay publi
     const r = await correr(base({ mapas: [homonimo, ficha] }))
     expect((accion(r, 'resenas_google_maps')!.params.startUrls as Array<{ url: string }>)[0].url).toBe(ficha.url)
   })
+  it('la ficha REAL no trae sitio ni teléfono: se confirma por título exacto + sede declarada', async () => {
+    const real = { title: 'Naufrago', address: '663R+25G, Olon, Ecuador', city: 'Olon', url: 'https://www.google.com/maps/search/?api=1&query=Naufrago&query_place_id=ChIJreal', placeId: 'ChIJreal' }
+    const r = await correr(base({ mapas: [homonimo, { ...homonimo, title: 'Naufrago Market', address: 'Guayaquil, Ecuador', city: 'Guayaquil', placeId: 'otro' }, real] }))
+    expect((accion(r, 'resenas_google_maps')!.params.startUrls as Array<{ url: string }>)[0].url).toBe(real.url)
+  })
+  it('una sola ficha en una sede, pero con otro título («Naufrago Market»), NO es la del cliente', async () => {
+    const r = await correr(base({ mapas: [{ title: 'Naufrago Market', address: 'Olon, Ecuador', city: 'Olon', url: 'https://www.google.com/maps/place/m', placeId: 'm' }] }))
+    expect(accion(r, 'resenas_google_maps')).toBeUndefined()
+    expect(JSON.stringify(r.body.fichas_de_mapas_descartadas)).toMatch(/Naufrago Market/)
+  })
+  it('título exacto pero FUERA de las sedes del cliente ⇒ no es la ficha', async () => {
+    const r = await correr(base({ mapas: [{ title: 'Naufrago', address: 'Medellín, Colombia', city: 'Medellín', url: 'https://www.google.com/maps/place/x', placeId: 'x' }] }))
+    expect(accion(r, 'resenas_google_maps')).toBeUndefined()
+  })
+  it('dos fichas distintas con el título exacto en sedes declaradas ⇒ ambiguo: no se piden reseñas', async () => {
+    const dos = [
+      { title: 'Naufrago', address: 'Olon, Ecuador', city: 'Olon', url: 'https://www.google.com/maps/place/a', placeId: 'a' },
+      { title: 'Naufrago', address: 'Olon, Ecuador, frente al muelle', city: 'Olon', url: 'https://www.google.com/maps/place/b', placeId: 'b' },
+    ]
+    const r = await correr(base({ mapas: dos }))
+    expect(accion(r, 'resenas_google_maps')).toBeUndefined()
+    expect(JSON.stringify(r.body.omitidas)).toMatch(/ambiguo/)
+  })
+  it('la misma ficha repetida en varias corridas cuenta como UNA', async () => {
+    const real = { title: 'Naufrago', address: 'Olon, Ecuador', city: 'Olon', url: 'https://www.google.com/maps/place/a', placeId: 'a' }
+    const r = await correr(base({ mapas: [real, real] }))
+    expect(accion(r, 'resenas_google_maps')).toBeDefined()
+  })
   it('ya se pidieron hoy ⇒ no se repiten', async () => {
     const r = await correr(base({ mapas: [ficha], resenasHoy: true }))
     expect(accion(r, 'resenas_google_maps')).toBeUndefined()
