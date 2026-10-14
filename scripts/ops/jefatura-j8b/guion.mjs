@@ -7,6 +7,27 @@ import { dentroDeLaBoveda, direccionesDe, ejecucionesRecientes, FLUJO_OFICINA, F
 
 export const CABECERA_DEL_EDITOR = 'x-skip-editor-middleware'
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
+export const PRIMER_DIA_DE_J8 = '2026-10-14'
+export const DIAS_MINIMOS = 7
+/** --dias: solo un entero ≥ 7 escrito en cifras (nada de «7.5», «1e1», «-3», «siete» ni vacío); devuelve el número o el motivo */
+export function leerDias(crudo) {
+  if (crudo === null || crudo === undefined) return { valor: DIAS_MINIMOS }
+  const t = String(crudo)
+  if (!/^\d+$/.test(t)) return { error: `--dias debe ser un número entero de ${DIAS_MINIMOS} o más (recibí «${t}»)` }
+  const n = Number(t)
+  if (!Number.isSafeInteger(n) || n < DIAS_MINIMOS) return { error: `--dias debe ser un número entero de ${DIAS_MINIMOS} o más (recibí «${t}»): una ventana más corta deja pasar a un llamador que aún no se ha visto` }
+  return { valor: n }
+}
+/** --confirmo-j8a-probada: una fecha ISO real (AAAA-MM-DD), no futura y no anterior al 14-oct-2026; `ahora` es un ISO completo */
+export function leerFechaConfirmada(crudo, ahora) {
+  const t = String(crudo ?? '')
+  if (!FECHA.test(t)) return { error: 'falta `--confirmo-j8a-probada AAAA-MM-DD` (la fecha en que CC#3 certificó J8a probada en piezas). Sin eso no se pone la cabecera.' }
+  const d = new Date(t + 'T00:00:00Z')
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== t) return { error: `--confirmo-j8a-probada no es una fecha real (recibí «${t}»)` }
+  if (t < PRIMER_DIA_DE_J8) return { error: `--confirmo-j8a-probada no puede ser anterior a ${PRIMER_DIA_DE_J8} (recibí «${t}»): J8a no estaba certificada` }
+  if (t > new Date(ahora).toISOString().slice(0, 10)) return { error: `--confirmo-j8a-probada no puede ser una fecha futura (recibí «${t}»)` }
+  return { valor: t }
+}
 const cimiento = (xs) => JSON.stringify(xs.filter((f) => ['brand_book', 'icp', 'competitive'].includes(f.artifact_type)))
 /** ¿la oficina viva ya lleva la cabecera en su nodo del agente? */
 export const tieneLaCabecera = (flujo) => (flujo.nodes ?? []).find((n) => n.name === NODO_AGENTE)?.parameters?.headerParameters?.parameters?.some((h) => String(h.name).toLowerCase() === CABECERA_DEL_EDITOR) === true
@@ -73,7 +94,7 @@ export async function ejecutar(args, T) {
     if (cual === 'cabecera') {
       if (tieneLaCabecera(await T.flujo(FLUJO_OFICINA))) return fin(3, `se detiene: la oficina viva ya lleva la cabecera ${CABECERA_DEL_EDITOR} (no se pone dos veces)`)
       // el orden firmado se HACE cumplir: poner la cabecera exige declarar que la jefatura ya se probó en piezas (como el «dale» de J6)
-      if (aplicar && !FECHA.test(String(flag('confirmo-j8a-probada') ?? ''))) return fin(3, 'se detiene: falta `--confirmo-j8a-probada AAAA-MM-DD` (la fecha en que CC#3 certificó J8a probada en piezas). Sin eso no se pone la cabecera.')
+      if (aplicar) { const c = leerFechaConfirmada(flag('confirmo-j8a-probada'), T.ahora()); if (c.error) return fin(3, 'se detiene: ' + c.error) }
       const dif = await iguales(FLUJO_OFICINA, F_OFICINA()); if (dif) return dif
       const resp = JSON.parse(T.fs.leer(F_OFICINA()))
       const nuevo = paraLaOficina(resp)
@@ -86,6 +107,8 @@ export async function ejecutar(args, T) {
     }
 
     if (cual === 'voto') {
+      const d = leerDias(args.includes('--dias') ? (flag('dias') ?? '') : null); if (d.error) return fin(2, 'se detiene: ' + d.error)
+      const dias = d.valor
       const sinCab = await cabeceraPuesta(); if (sinCab) return sinCab
       const dif = await iguales(FLUJO_VOTO, F_VOTO()); if (dif) return dif
       const propio = await T.flujo(FLUJO_VOTO)
@@ -94,7 +117,6 @@ export async function ejecutar(args, T) {
       const refs = referenciasA(todos, FLUJO_VOTO, { propio })
       if (refs.length) return fin(6, 'se detiene: el voto TIENE llamadores (por id o por dirección ' + JSON.stringify(direccionesDe(propio)) + '): ' + JSON.stringify(refs))
       const vistas = String(flag('ejecuciones-vistas') ?? '').split(',').map((x) => x.trim()).filter(Boolean)
-      const dias = Number(flag('dias') ?? 7)
       const recientes = ejecucionesRecientes(await T.ejecuciones(FLUJO_VOTO), { ahora: T.ahora(), dias, vistas })
       if (recientes.length) return fin(6, `se detiene: el voto tiene ${recientes.length} ejecución(es) en los últimos ${dias} días que nadie reconoció (${recientes.map((e) => `${e.id}:${e.status}`).join(', ')}). Si las miraste y no son de un llamador, repite con --ejecuciones-vistas ${recientes.map((e) => e.id).join(',')}`)
       paso(`desactivar ${FLUJO_VOTO} (sin llamadores por id ni dirección en ${todos.length} flujos y sin ejecuciones sin reconocer en ${dias} días; no se borra)`)

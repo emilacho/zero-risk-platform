@@ -7,7 +7,7 @@ import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import { conEsperaDeLaJefatura, direccionesDe, ejecucionesRecientes, FLUJO_OFICINA, FLUJO_VOTO, NODO_AGENTE, NODO_Y_AHORA, paraLaOficina, referenciasA } from '../scripts/ops/jefatura-j8b/nucleo.mjs'
-import { ejecutar, tieneLaCabecera } from '../scripts/ops/jefatura-j8b/guion.mjs'
+import { ejecutar, leerDias, leerFechaConfirmada, tieneLaCabecera } from '../scripts/ops/jefatura-j8b/guion.mjs'
 
 type Json = Record<string, any>
 const leerFlujo = (f: string) => JSON.parse(fs.readFileSync(f, 'utf8').split('\r\n').join('\n')) as Json
@@ -137,7 +137,7 @@ const ya = (T: ReturnType<typeof mundo>) => { // el respaldo ya hecho (como tras
 }
 const conCabecera = (T: ReturnType<typeof mundo>) => { T.vivos[FLUJO_OFICINA] = paraLaOficina(T.vivos[FLUJO_OFICINA]) as Json; T.archivos[`${CARPETA}/respaldo-flujo-${FLUJO_OFICINA}.json`] = JSON.stringify(T.vivos[FLUJO_OFICINA]); return T }
 const sinEscribir = (T: ReturnType<typeof mundo>) => expect(T.escrituras).toEqual([])
-const CONF = ['--confirmo-j8a-probada', '2026-10-20']
+const CONF = ['--confirmo-j8a-probada', '2026-10-14']
 
 describe('R2 · el guion SIN --aplicar no escribe NADA (ni en n8n, ni en la base, ni en disco)', () => {
   for (const orden of [['paso', 'cabecera'], ['paso', 'voto'], ['paso', 'contenido'], ['paso', 'pendientes']]) {
@@ -260,5 +260,61 @@ describe('R2 · la CLI real', () => {
     expect(s.status).toBe(2); expect(s.stderr).toContain('--carpeta')
     const sinVars = spawnSync(process.execPath, ['scripts/ops/jefatura-j8b.mjs', 'comprobar', '--carpeta', 'C:/x'], { encoding: 'utf8', env: { PATH: process.env.PATH ?? '' } as never })
     expect(sinVars.status).toBe(2); expect(sinVars.stderr).toContain('faltan variables')
+  })
+})
+
+// ═════════════════════════════════════════════ reparos menores de CC#3 (14-oct) · entradas de la orden, estrictas
+describe('reparo menor 1 · `--dias` solo un entero ≥ 7', () => {
+  it('leerDias: sin valor = 7; acepta 7, 8, 30; rechaza todo lo demás con un mensaje que dice qué se esperaba', () => {
+    expect(leerDias(null)).toEqual({ valor: 7 }); expect(leerDias(undefined)).toEqual({ valor: 7 })
+    for (const ok of ['7', '8', '30', '007']) expect(leerDias(ok)).toEqual({ valor: Number(ok) })
+    for (const mal of ['6', '0', '-3', '7.5', '1e1', 'siete', '', ' 7', '7 ', 'NaN', 'Infinity', '99999999999999999999', '+8', '0x10']) {
+      const r: Json = leerDias(mal); expect(r.valor, mal).toBeUndefined(); expect(r.error, mal).toContain('entero de 7 o más')
+    }
+  })
+  for (const mal of ['6', '0', '-3', '7.5', 'abc', '', '1e1']) {
+    it(`paso voto con --dias «${mal}»: se rechaza con código 2, sin leer ni escribir nada del mundo`, async () => {
+      const T = conCabecera(ya(mundo())); T.escrituras.length = 0
+      const r = await ejecutar(['paso', 'voto', '--carpeta', CARPETA, '--aplicar', '--dias', mal], T)
+      expect(r.codigo).toBe(2); expect(r.lineas.join(' ')).toContain('--dias'); expect(T.escrituras).toEqual([]); expect(T.vivos[FLUJO_VOTO].active).toBe(true)
+    })
+  }
+  it('`--dias` sin valor al final de la línea también se rechaza (no cae en el 7 por omisión)', async () => {
+    const T = conCabecera(ya(mundo())); T.escrituras.length = 0
+    const r = await ejecutar(['paso', 'voto', '--carpeta', CARPETA, '--aplicar', '--dias'], T)
+    expect(r.codigo).toBe(2); expect(T.escrituras).toEqual([])
+  })
+  it('con --dias 14 el paso corre y la ventana de 14 días es la que se usa (una ejecución de hace 10 días se ve)', async () => {
+    const T = conCabecera(ya(mundo({ ejecuciones: [{ id: '801', status: 'success', startedAt: '2026-10-04T20:00:00Z' }] }))); T.escrituras.length = 0
+    const corto = await ejecutar(['paso', 'voto', '--carpeta', CARPETA, '--aplicar', '--dias', '7'], T)
+    expect(corto.codigo).toBe(0); expect(T.escrituras).toEqual([{ que: 'desactivar', a: FLUJO_VOTO }])
+    const T2 = conCabecera(ya(mundo({ ejecuciones: [{ id: '801', status: 'success', startedAt: '2026-10-04T20:00:00Z' }] }))); T2.escrituras.length = 0
+    const largo = await ejecutar(['paso', 'voto', '--carpeta', CARPETA, '--aplicar', '--dias', '14'], T2)
+    expect(largo.codigo).toBe(6); expect(T2.escrituras).toEqual([])
+  })
+})
+
+describe('reparo menor 2 · `--confirmo-j8a-probada` exige fecha real, no futura y no anterior al 2026-10-14', () => {
+  const AHORA = '2026-10-14T20:00:00Z'
+  it('leerFechaConfirmada: acepta hoy; rechaza ausente, mal formada, imposible, anterior y futura', () => {
+    expect(leerFechaConfirmada('2026-10-14', AHORA)).toEqual({ valor: '2026-10-14' })
+    expect(leerFechaConfirmada('2026-10-15', '2026-10-15T01:00:00Z')).toEqual({ valor: '2026-10-15' })
+    for (const mal of [undefined, null, '', 'ayer', '2026-10-1', '14-10-2026', '2026-13-01', '2026-02-30', '2026-10-32', '2026-00-10', '2026-10-14T00:00:00Z']) {
+      const r: Json = leerFechaConfirmada(mal, AHORA); expect(r.valor, String(mal)).toBeUndefined(); expect(r.error, String(mal)).toContain('--confirmo-j8a-probada')
+    }
+    expect((leerFechaConfirmada('2026-10-13', AHORA) as Json).error).toContain('anterior')
+    expect((leerFechaConfirmada('2025-01-01', AHORA) as Json).error).toContain('anterior')
+    expect((leerFechaConfirmada('2026-10-15', AHORA) as Json).error).toContain('futura')
+    expect((leerFechaConfirmada('2099-01-01', AHORA) as Json).error).toContain('futura')
+  })
+  for (const [que, fecha, palabra] of [['anterior (13-oct)', '2026-10-13', 'anterior'], ['de otro año', '2025-10-14', 'anterior'], ['futura (15-oct)', '2026-10-15', 'futura'], ['imposible (30-feb)', '2026-02-30', 'fecha real'], ['mes 13', '2026-13-01', 'fecha real']]) {
+    it(`la cabecera con --aplicar y una fecha ${que}: se detiene (código 3), no escribe y dice por qué`, async () => {
+      const T = ya(mundo()); const r = await ejecutar(['paso', 'cabecera', '--carpeta', CARPETA, '--aplicar', '--confirmo-j8a-probada', fecha], T)
+      expect(r.codigo).toBe(3); expect(r.lineas.join(' ')).toContain(palabra); sinEscribir(T)
+    })
+  }
+  it('sin --aplicar (solo imprime) no pide la fecha: el ensayo no escribe', async () => {
+    const T = ya(mundo()); const r = await ejecutar(['paso', 'cabecera', '--carpeta', CARPETA], T)
+    expect(r.codigo).toBe(0); sinEscribir(T)
   })
 })
