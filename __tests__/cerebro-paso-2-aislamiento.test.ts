@@ -56,7 +56,7 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/app\/api\/brain\/alimentar\//,
   /^supabase\/migrations\/202610141500_cerebro_portero_alimenta\.sql$/,
   /^supabase\/reversas\/202610141500_cerebro_portero_alimenta_REVERSA\.sql$/,
-  /^scripts\/ops\/portero-alimenta-seco\.ts$/,
+  /^scripts\/ops\/portero-(alimenta-seco|limpiar-repetidas)\.ts$/,
   /^scripts\/worker-staging\/ogfq56oIEoHufFPM\//,
   // el puente: `ingest-source` acepta `cerebro_fichas` como origen de trozos (única puerta de escritura de evidencia al índice)
   /^src\/app\/api\/brain\/ingest-source\/route\.ts$/,
