@@ -170,6 +170,28 @@ describe('despertar: la ruta llama al flujo con SU llave de despacho', () => {
     expect((await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno }, interna)).status).toBe(409)
     expect(llamadas).toHaveLength(0)
   })
+  it('REPARO CC#3: el turno debe traer el dry_run de la revisión y el paso abierto; si no, 409 y cero fetch', async () => {
+    const { id, turno } = await abierta()
+    falso()
+    const pedido = turno.pedido as Json
+    expect(pedido.dry_run).toBe(true)
+    // revisión seca + turno con dry_run:false (a propósito o por error) → 409
+    const a = await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno: { ...turno, pedido: { ...pedido, dry_run: false } } }, interna)
+    expect(a.status).toBe(409)
+    expect(a.j.error).toBe('dry_run_no_coincide')
+    // sin dry_run en el pedido tampoco pasa (no se asume)
+    const { dry_run: _d, ...sinDry } = pedido
+    void _d
+    expect((await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno: { ...turno, pedido: sinDry } }, interna)).status).toBe(409)
+    // paso que no es el abierto → 409
+    const b = await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno: { ...turno, n: (turno.n as number) + 1 } }, interna)
+    expect(b.status).toBe(409)
+    expect(b.j.error).toBe('turno_no_es_el_abierto')
+    // revisión REAL + turno seco → 409
+    ;(db().tablas.jefatura_revisiones[0] as Json).dry_run = false
+    expect((await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno }, interna)).status).toBe(409)
+    expect(llamadas).toHaveLength(0)
+  })
   it('sin llave 401 y el webhook no sale; si n8n contesta 500 o no responde, 502 con despertado:false', async () => {
     const { id, turno } = await abierta()
     falso(500)

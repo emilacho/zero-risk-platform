@@ -40,7 +40,13 @@ export async function POST(request: Request) {
       // la ruta despierta a `jefatura · turno` con SU llave de despacho (la de su propio entorno): quien llama solo necesita la llave interna y nunca ve la de despacho
       const despacho = (process.env.SALA_DISPATCH_KEY ?? '').trim()
       if (!despacho) return NextResponse.json({ error: 'sala_dispatch_key_not_configured', detalle: 'sin SALA_DISPATCH_KEY en este entorno no se puede despertar el flujo' }, { status: 503 })
-      if (!(await P.almacen.leerRevision(id))) return NextResponse.json({ error: 'revision_inexistente' }, { status: 404 })
+      const rev = await P.almacen.leerRevision(id)
+      if (!rev) return NextResponse.json({ error: 'revision_inexistente' }, { status: 404 })
+      // el turno que trae el llamador NO se reenvía a ciegas: el flujo toma `dry_run` del pedido, así que debe ser el de la revisión, y `n` el paso abierto de ESA revisión
+      const t = cuerpo.turno as Record<string, unknown>, pedido = esObjeto(t.pedido) ? t.pedido : {}
+      if (pedido.dry_run !== rev.dry_run) return NextResponse.json({ error: 'dry_run_no_coincide', detalle: 'el `dry_run` del turno no es el de la revisión: no se despierta al flujo' }, { status: 409 })
+      const abierto = await P.almacen.pasoAbierto(id)
+      if (!abierto || t.n !== abierto.n) return NextResponse.json({ error: 'turno_no_es_el_abierto', detalle: 'el `n` del turno no es el paso abierto de la revisión: no se despierta al flujo' }, { status: 409 })
       try {
         const w = await fetch(webhookDelTurno(), { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': despacho }, body: JSON.stringify({ revision_id: id, turno: cuerpo.turno }), signal: AbortSignal.timeout(30000) })
         return NextResponse.json({ despertado: w.ok, webhook_status: w.status }, { status: w.ok ? 200 : 502 })
