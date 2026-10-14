@@ -40,6 +40,15 @@ export async function gastoDeHoy(db: Db, clientId: string, ahora: Date) {
   return { ok: true as const, gasto: gastoDelDia({ clientId, ahora, libro: lista(c.data) as unknown as FilaDelLibro[], invocacionesUsd: lista(inv.data).map((f) => Number(f.cost_usd) || 0) }) }
 }
 
+/** las redes propias que el alta declaró (`config.apify.own_handles`: usuario o dirección por red) */
+function redesPropias(cfg: Record<string, unknown>): Record<string, string> {
+  const ap = esObjeto(cfg.apify) ? cfg.apify : {}
+  const own = esObjeto(ap.own_handles) ? ap.own_handles : {}
+  const out: Record<string, string> = {}
+  for (const red of ['instagram', 'facebook', 'tiktok', 'youtube']) if (typeof own[red] === 'string' && (own[red] as string).trim()) out[red] = (own[red] as string).trim()
+  return out
+}
+
 export interface DepsDeRutas {
   db: Db
   interruptores: Interruptores
@@ -73,7 +82,7 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
   const publicaciones = [...new Set(lista(vg.data).flatMap((f) => lista(f.respuesta)).filter((p) => usuariosPropios.has(String(p.username ?? '').toLowerCase())).flatMap((p) => lista(p.latestPosts)).map((p) => String(p.shortCode ?? p.id ?? '')).filter(Boolean))]
   const ciudad = ctx.ubicacion[0] ?? ''
   const rubro = typeof cliente.industry === 'string' ? cliente.industry : null
-  const base = { cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades: ctx.ubicacion, publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores }
+  const base = { cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades: ctx.ubicacion, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores }
 
   // las búsquedas propias: el modelo PROPONE, el código decide
   let propuestas: ResultadoDePropuestas = { aceptadas: [], rechazadas: [] }
