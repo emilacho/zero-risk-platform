@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { almacenDeFinanzas } from '../src/lib/finanzas/almacen-supabase'
 import { canonico, decidirFirma, huellaDe, numerosDelBloque } from '../src/lib/finanzas/firma'
 import { calcular } from '../src/lib/finanzas/calculadora'
-import { checkLlaveInterna, manejarBloque, type ConfigDeFinanzas, type PuertosDeFinanzas } from '../src/lib/finanzas/ruta'
+import { checkInternalKey, manejarBloque, type ConfigDeFinanzas, type PuertosDeFinanzas } from '../src/lib/finanzas/ruta'
 import type { Bloque, Entrada } from '../src/lib/finanzas/tipos'
 
 const ENTRADA: Entrada = { meta_por_semana: 15, pasos: [{ tasa: 0.3 }], ticket: 10, margen: 0.55, costo_entrega: 2, referencia: { min: 0.4, max: 1.2, tipo: 'supuesto', fuente: 'referencia de prueba' }, dias_activos_por_semana: 5, produccion: { fraccion: 0.25, origen: 'plan' } }
@@ -104,14 +104,14 @@ describe('seco y real', () => {
 describe('la llave interna (nunca SALA_DISPATCH_KEY)', () => {
   const req = (h: Record<string, string>) => new Request('http://x', { headers: h })
   it('sin la variable: 503; sin cabecera o equivocada: 401; correcta: ok', () => {
-    expect(checkLlaveInterna(req({ 'x-api-key': 'a' }), {})).toMatchObject({ ok: false, status: 503 })
-    expect(checkLlaveInterna(req({}), { INTERNAL_API_KEY: 'secreto' })).toMatchObject({ ok: false, status: 401 })
-    expect(checkLlaveInterna(req({ 'x-api-key': 'otro' }), { INTERNAL_API_KEY: 'secreto' })).toMatchObject({ ok: false, status: 401 })
-    expect(checkLlaveInterna(req({ 'x-api-key': 'secreto' }), { INTERNAL_API_KEY: 'secreto' })).toEqual({ ok: true })
+    expect(checkInternalKey(req({ 'x-api-key': 'a' }), {})).toMatchObject({ ok: false, status: 503 })
+    expect(checkInternalKey(req({}), { INTERNAL_API_KEY: 'secreto' })).toMatchObject({ ok: false, status: 401 })
+    expect(checkInternalKey(req({ 'x-api-key': 'otro' }), { INTERNAL_API_KEY: 'secreto' })).toMatchObject({ ok: false, status: 401 })
+    expect(checkInternalKey(req({ 'x-api-key': 'secreto' }), { INTERNAL_API_KEY: 'secreto' })).toEqual({ ok: true })
   })
   it('la llave de despacho de la sala NO abre esta puerta', () => {
-    expect(checkLlaveInterna(req({ 'x-sala-dispatch-key': 'despacho' }), { INTERNAL_API_KEY: 'secreto', SALA_DISPATCH_KEY: 'despacho' })).toMatchObject({ ok: false, status: 401 })
-    expect(checkLlaveInterna(req({ 'x-api-key': 'despacho' }), { INTERNAL_API_KEY: 'secreto', SALA_DISPATCH_KEY: 'despacho' })).toMatchObject({ ok: false, status: 401 })
+    expect(checkInternalKey(req({ 'x-sala-dispatch-key': 'despacho' }), { INTERNAL_API_KEY: 'secreto', SALA_DISPATCH_KEY: 'despacho' })).toMatchObject({ ok: false, status: 401 })
+    expect(checkInternalKey(req({ 'x-api-key': 'despacho' }), { INTERNAL_API_KEY: 'secreto', SALA_DISPATCH_KEY: 'despacho' })).toMatchObject({ ok: false, status: 401 })
   })
 })
 

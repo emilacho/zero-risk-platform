@@ -7,13 +7,13 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeFinanzas, type Db } from '@/lib/finanzas/almacen-supabase'
-import { checkLlaveInterna, manejarBloque } from '@/lib/finanzas/ruta'
+import { checkInternalKey, manejarBloque } from '@/lib/finanzas/ruta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  const auth = checkLlaveInterna(request)
+  const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   let cuerpo: unknown
   try { cuerpo = await request.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }

@@ -2,7 +2,7 @@
  * OFICINA FINANCIERA · F2 · reparo R1 de CC#3: el piso de aprendizaje en el BORDE de la coma flotante (50 resultados «justo» no puede salir 49,999… ni 0 conjuntos).
  */
 import { describe, expect, it } from 'vitest'
-import { calcular } from '../src/lib/finanzas/calculadora'
+import { calcular, veredictoDe } from '../src/lib/finanzas/calculadora'
 import type { Bloque, Entrada } from '../src/lib/finanzas/tipos'
 
 const base = (meta: number, tasa: number, n = 5): Entrada => ({ meta_por_semana: meta, pasos: [{ tasa }], ticket: 10, margen: 0.5, referencia: { min: 0.4, max: 1.2, tipo: 'supuesto', fuente: 'prueba' }, dias_activos_por_semana: n })
@@ -34,5 +34,28 @@ describe('el borde del piso: resultados por semana EXACTAMENTE 50', () => {
     const b = ok(base(7, 0.14, 7))
     expect(b.aprendizaje.conjuntos).toBe(1)
     expect(b.aprendizaje.limitado).toBe(false)
+  })
+})
+
+describe('ronda 2 de CC#3 · los bordes exactos del veredicto y el tope de la producción fija', () => {
+  it('«sigo» en el borde con coma flotante: 0,1 + 0,2 contra un techo de 0,3 es «sigo» (no «ajusto»)', () => {
+    expect(0.1 + 0.2 > 0.3).toBe(true)
+    expect(veredictoDe(0.1 + 0.2, 0.3)).toBe('sigo')
+    expect(veredictoDe(0.30001, 0.3)).toBe('ajusto')
+  })
+  it('«ajusto» y «paro» también en el borde: 1,4× y 2× del techo valen por igual aunque la multiplicación se corra', () => {
+    expect(veredictoDe(4.2, 3)).toBe('ajusto')
+    expect(veredictoDe(0.6000000000000001, 0.3)).toBe('ajusto_recorte')
+    expect(veredictoDe(0.6001, 0.3)).toBe('paro')
+  })
+  it('la producción como MONTO FIJO mayor al 40 % del total se topa al 40 % y Meta+IG queda en 60 %', () => {
+    const b = ok({ ...base(15, 0.3), produccion: { monto: 100000, origen: 'plan' } })
+    expect(b.reparto.produccion.fraccion).toBeCloseTo(0.4, 3)
+    expect(b.alertas.join(' ')).toContain('el monto fijo excede el 40 % del total')
+    expect(b.reparto.parte_meta_ig).toBeGreaterThanOrEqual(0.6 - 1e-3)
+  })
+  it('un monto fijo MENOR al 40 % se respeta tal cual', () => {
+    const b = ok({ ...base(15, 0.3), produccion: { monto: 10, origen: 'plan' } })
+    expect(b.reparto.produccion.monto).toBe(10)
   })
 })

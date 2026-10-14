@@ -37,7 +37,7 @@ export function igualesEnTiempoConstante(a: string, b: string): boolean {
   return mismoLargo && comparado
 }
 
-export function checkLlaveInterna(request: Request, env: Record<string, string | undefined> = process.env): { ok: true } | { ok: false; status: 401 | 503; error: string } {
+export function checkInternalKey(request: Request, env: Record<string, string | undefined> = process.env): { ok: true } | { ok: false; status: 401 | 503; error: string } {
   const interna = (env.INTERNAL_API_KEY ?? '').trim()
   if (!interna) return { ok: false, status: 503, error: 'internal_api_key_not_configured' }
   if (!igualesEnTiempoConstante((request.headers.get('x-api-key') ?? '').trim(), interna)) return { ok: false, status: 401, error: 'unauthorized' }
@@ -87,6 +87,8 @@ export interface PuertosDeTablero extends PuertosDeFinanzas {
   leerTablero(id: string): Promise<FilaDeTablero | null>
   leerNumeros(tablero_id: string): Promise<FilaDeNumero[]>
   actualizarTablero(id: string, patch: { estado: 'firmado' | 'sin_firma'; firmado_por: string; firmado_en: string }): Promise<void>
+  /** ¿existe en el libro (agent_invocations) una invocación del jefe de finanzas, de ESTE cliente, con ese identificador? El código exige que sea cierta, no solo que venga el campo */
+  invocacionDelJefe(p: { invocacion_id: string; client_id: string }): Promise<boolean>
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -98,7 +100,8 @@ export function numerosCoinciden(guardados: FilaDeNumero[], bloque: Bloque): boo
   const igual = (a: number | null, b: number | null) => (a === null || b === null ? a === b : Math.abs(a - b) < 1e-4)
   return esperados.every((e) => {
     const g = por.get(e.clave)
-    return !!g && igual(g.valor, e.valor) && igual(g.minimo, e.minimo) && igual(g.maximo, e.maximo) && g.tipo === e.tipo
+    const mismo = (a: string | null | undefined, b: string | null | undefined) => (a ?? null) === (b ?? null)
+    return !!g && igual(g.valor, e.valor) && igual(g.minimo, e.minimo) && igual(g.maximo, e.maximo) && g.tipo === e.tipo && mismo(g.fuente, e.fuente) && mismo(g.formula, e.formula) && mismo(g.fecha, e.fecha) && mismo(g.unidad, e.unidad) && mismo(g.motivo, e.motivo)
   })
 }
 
@@ -123,6 +126,8 @@ export async function manejarTablero(cuerpo: unknown, P: PuertosDeTablero, ahora
   if (accion === 'leer') {
     let guardados: FilaDeNumero[]
     try { guardados = await P.leerNumeros(t.id) } catch (e) { return { status: 500, cuerpo: { error: 'no_se_pudo_leer', detalle: e instanceof Error ? e.message : String(e) } } }
+    // la huella cubre el bloque y las filas se recomputan: editar el bloque Y sus filas a la vez cambia la huella y no pasa
+    if (huellaDe(t.bloque) !== t.huella) return { status: 409, cuerpo: { error: 'huella_no_coincide', sin_bloque: true } }
     if (!numerosCoinciden(guardados, t.bloque)) return { status: 409, cuerpo: { error: 'numeros_alterados', sin_bloque: true } }
     const numeros = numerosDelBloque(t.bloque)
     const r = resumenDelBloque(t.bloque, { dias_activos_por_semana: t.entrada?.dias_activos_por_semana })
@@ -135,6 +140,10 @@ export async function manejarTablero(cuerpo: unknown, P: PuertosDeTablero, ahora
   // la SALIDA del jefe es obligatoria (una lista de hallazgos vacía no prueba que alguien revisó) y su invocación queda como quien firma
   if (typeof cuerpo.salida !== 'string' || !(SALIDAS_DEL_JEFE as readonly string[]).includes(cuerpo.salida)) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`salida` debe ser sale, sale_ajustada o sale_con_alerta (la emite el jefe)'] } }
   if (typeof cuerpo.invocacion_id !== 'string' || !cuerpo.invocacion_id.trim() || cuerpo.invocacion_id.length > MAX_LARGO_DE_EJECUCION) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`invocacion_id` (la invocación del jefe) es obligatoria'] } }
+  // la invocación debe EXISTIR en el libro, ser del jefe y ser de este cliente (una `invocacion_id` inventada no firma)
+  let existe = false
+  try { existe = await P.invocacionDelJefe({ invocacion_id: cuerpo.invocacion_id.trim(), client_id: t.client_id }) } catch (e) { return { status: 503, cuerpo: { error: 'libro_ilegible', detalle: e instanceof Error ? e.message : String(e) } } }
+  if (!existe) return { status: 409, cuerpo: { error: 'invocacion_no_encontrada' } }
   // si una cifra que manda no tiene base, el jefe solo puede emitir «sale con alerta»
   if (t.bloque.confianza?.manda_sin_base && cuerpo.salida !== 'sale_con_alerta') return { status: 409, cuerpo: { error: 'salida_no_permitida', detalle: 'una cifra que manda está «sin base»: solo se admite «sale_con_alerta»' } }
   const hallazgos = Array.isArray(cuerpo.hallazgos) ? (cuerpo.hallazgos as Hallazgo[]).filter((h) => h && typeof h.que === 'string' && ['critico', 'alto', 'medio', 'bajo'].includes(h.severidad)) : []

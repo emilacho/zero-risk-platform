@@ -41,6 +41,7 @@ function mundo(estado: ConfigDeFinanzas['estado']) {
     async leerTablero() { return guardado },
     async leerNumeros() { return guardado ? numerosDelBloque(guardado.bloque) : [] },
     async actualizarTablero(_i, p) { c.escrituras++; if (guardado) guardado = { ...guardado, estado: p.estado } },
+    async invocacionDelJefe() { return true },
   }
   return { P, c, tablero: () => guardado }
 }

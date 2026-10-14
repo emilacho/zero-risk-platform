@@ -58,5 +58,15 @@ export function almacenDeFinanzas(db: Db): PuertosDeTablero {
     async actualizarTablero(id, patch) {
       ok(await db.from('finanzas_tableros').update(patch).eq('id', id), 'firmar el tablero')
     },
+    async invocacionDelJefe({ invocacion_id, client_id }) {
+      // el identificador puede ser el id de la fila o el `workflow_execution_id` de la corrida; siempre del jefe y del mismo cliente
+      for (const columna of ['id', 'workflow_execution_id']) {
+        const r = await db.from('agent_invocations').select('id').eq(columna, invocacion_id).eq('agent_name', 'chief-financial-officer').eq('client_id', client_id).limit(1)
+        // un identificador que no es uuid hace fallar la comparación con `id`: se prueba la otra columna
+        if (r.error) continue
+        if (Array.isArray(r.data) && r.data.length > 0) return true
+      }
+      return false
+    },
   }
 }

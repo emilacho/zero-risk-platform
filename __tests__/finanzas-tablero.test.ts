@@ -15,7 +15,7 @@ const BLOQUE = calcular(ENTRADA) as Bloque
 const ID = '3f2b8c1e-9d4a-4b7e-8a61-0c5d2e7f9a10'
 const cfg = (o: Partial<ConfigDeFinanzas> = {}): ConfigDeFinanzas => ({ estado: 'encendida', clientes_ensayo: [], preguntas_slack: 'apagado', conversa: 'apagado', ...o })
 
-function puertos(o: { cfg?: ConfigDeFinanzas; tablero?: Partial<FilaDeTablero> | null; numeros?: FilaDeNumero[] } = {}) {
+function puertos(o: { cfg?: ConfigDeFinanzas; tablero?: Partial<FilaDeTablero> | null; numeros?: FilaDeNumero[]; invocacion?: boolean | 'cae' } = {}) {
   const log = { actualizaciones: [] as Array<Record<string, unknown>> }
   const t: FilaDeTablero | null = o.tablero === null ? null : { id: ID, client_id: 'c1', version: 1, vigente: true, estado: 'borrador', entrada: ENTRADA, bloque: BLOQUE, huella: huellaDe(BLOQUE), ...(o.tablero ?? {}) }
   const P: PuertosDeTablero = {
@@ -24,6 +24,7 @@ function puertos(o: { cfg?: ConfigDeFinanzas; tablero?: Partial<FilaDeTablero> |
     async leerTablero(id) { return t && t.id === id ? t : null },
     async leerNumeros() { return o.numeros ?? numerosDelBloque((t?.bloque ?? BLOQUE) as Bloque) },
     async actualizarTablero(_id, patch) { log.actualizaciones.push(patch) },
+    async invocacionDelJefe() { if (o.invocacion === 'cae') throw new Error('libro caído'); return o.invocacion !== false },
   }
   return { P, log }
 }
@@ -172,5 +173,44 @@ describe('el resumen para el redactor', () => {
   it('sin valor monetario: dice que el techo es la referencia de mercado', () => {
     const b = calcular({ ...ENTRADA, ticket: null, margen: null }) as Bloque
     expect(resumenDelBloque(b).lineas.join(' ')).toContain('referencia de mercado')
+  })
+})
+
+describe('ronda 2 de CC#3 · leer comprueba la huella y las filas completas; firmar exige una invocación REAL del jefe', () => {
+  const firmar = (o: Record<string, unknown>, p = puertos()) => manejarTablero({ accion: 'firmar', finanzas_id: ID, client_id: 'c1', dry_run: false, salida: 'sale', invocacion_id: 'inv-real', hallazgos: [], correcciones_hechas: 0, ...o }, p.P)
+  it('editar el bloque Y sus filas a la vez (la huella ya no coincide) NO se entrega: 409', async () => {
+    const editado = { ...BLOQUE, cifras: { ...BLOQUE.cifras } } as Bloque
+    const k = Object.keys(editado.cifras)[0] as keyof typeof editado.cifras
+    editado.cifras[k] = { ...(editado.cifras[k] as object), valor: 999999 } as never
+    const r = await leer({}, puertos({ tablero: { bloque: editado } }))
+    expect(r.status).toBe(409)
+    expect(r.cuerpo.error).toBe('huella_no_coincide')
+  })
+  it('editar la fuente, la fórmula o la fecha de una fila (sin tocar el valor) NO pasa', async () => {
+    for (const campo of ['fuente', 'formula', 'fecha'] as const) {
+      const filas = numerosDelBloque(BLOQUE).map((n, i) => (i === 0 ? { ...n, [campo]: 'editada a mano' } : n))
+      const r = await leer({}, puertos({ numeros: filas }))
+      expect(r.status, campo).toBe(409)
+      expect(r.cuerpo.error, campo).toBe('numeros_alterados')
+    }
+  })
+  it('una invocación que NO existe en el libro (o es de otro agente o cliente) no firma y no escribe', async () => {
+    const p = puertos({ invocacion: false })
+    const r = await firmar({ invocacion_id: 'esto-no-existe' }, p)
+    expect(r.status).toBe(409)
+    expect(r.cuerpo.error).toBe('invocacion_no_encontrada')
+    expect(p.log.actualizaciones).toHaveLength(0)
+  })
+  it('si el libro no se puede leer, 503 y no firma', async () => {
+    const p = puertos({ invocacion: 'cae' })
+    const r = await firmar({}, p)
+    expect(r.status).toBe(503)
+    expect(p.log.actualizaciones).toHaveLength(0)
+  })
+  it('con la invocación real firma y deja quién firmó', async () => {
+    const p = puertos()
+    const r = await firmar({}, p)
+    expect(r.status).toBe(200)
+    expect(p.log.actualizaciones[0].firmado_por).toBe('chief-financial-officer:inv-real:sale')
   })
 })

@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { almacenDeFinanzas } from '../src/lib/finanzas/almacen-supabase'
-import { checkLlaveInterna, igualesEnTiempoConstante, manejarBloque, MAX_BYTES_DE_ENTRADA, MAX_LARGO_DE_EJECUCION, type ConfigDeFinanzas, type PuertosDeFinanzas } from '../src/lib/finanzas/ruta'
+import { checkInternalKey, igualesEnTiempoConstante, manejarBloque, MAX_BYTES_DE_ENTRADA, MAX_LARGO_DE_EJECUCION, type ConfigDeFinanzas, type PuertosDeFinanzas } from '../src/lib/finanzas/ruta'
 import type { Entrada } from '../src/lib/finanzas/tipos'
 
 const ENTRADA: Entrada = { meta_por_semana: 15, pasos: [{ tasa: 0.3 }], ticket: 10, margen: 0.55, costo_entrega: 2, referencia: { min: 0.4, max: 1.2, tipo: 'supuesto', fuente: 'prueba' }, dias_activos_por_semana: 5 }
@@ -13,10 +13,10 @@ const cfg = (): ConfigDeFinanzas => ({ estado: 'encendida', clientes_ensayo: [],
 describe('la llave: una equivocada DEL MISMO LARGO tampoco entra (R2 de CC#3)', () => {
   const req = (h: Record<string, string>) => new Request('http://x', { headers: h })
   it('mismo largo y distinta: 401; más larga o más corta: 401; la correcta: ok', () => {
-    expect(checkLlaveInterna(req({ 'x-api-key': 'secretX' }), { INTERNAL_API_KEY: 'secreto' })).toMatchObject({ ok: false, status: 401 })
-    expect(checkLlaveInterna(req({ 'x-api-key': 'secreto-largo' }), { INTERNAL_API_KEY: 'secreto' })).toMatchObject({ ok: false, status: 401 })
-    expect(checkLlaveInterna(req({ 'x-api-key': 'secre' }), { INTERNAL_API_KEY: 'secreto' })).toMatchObject({ ok: false, status: 401 })
-    expect(checkLlaveInterna(req({ 'x-api-key': 'secreto' }), { INTERNAL_API_KEY: 'secreto' })).toEqual({ ok: true })
+    expect(checkInternalKey(req({ 'x-api-key': 'secretX' }), { INTERNAL_API_KEY: 'secreto' })).toMatchObject({ ok: false, status: 401 })
+    expect(checkInternalKey(req({ 'x-api-key': 'secreto-largo' }), { INTERNAL_API_KEY: 'secreto' })).toMatchObject({ ok: false, status: 401 })
+    expect(checkInternalKey(req({ 'x-api-key': 'secre' }), { INTERNAL_API_KEY: 'secreto' })).toMatchObject({ ok: false, status: 401 })
+    expect(checkInternalKey(req({ 'x-api-key': 'secreto' }), { INTERNAL_API_KEY: 'secreto' })).toEqual({ ok: true })
   })
   it('la comparación en tiempo constante distingue en cada posición', () => {
     expect(igualesEnTiempoConstante('abc', 'abd')).toBe(false)
