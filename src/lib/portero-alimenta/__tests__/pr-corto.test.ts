@@ -230,3 +230,45 @@ describe('tanda 2 · reseñas con la ficha confirmada y videos solo si hay publi
     expect((await rutaTanda2({ db: b.db, interruptores: ON }, { client_id: C })).status).toBe(400)
   })
 })
+
+describe('Mapas: nunca se archiva «la primera ficha» (contaminación medida el 14-oct)', () => {
+  const C2 = '88888888-8888-4888-8888-888888888888'
+  const ctxN = ctx({ nombre: 'Náufrago', ubicacion: ['Olón', 'Guayaquil'], rubro: palabrasDelRubro('restaurante de mariscos costero') })
+  const homonimo = { title: 'Puerto del Naufrago', address: 'V443+X23 Comisariato, 090509 Guayaquil, Ecuador', city: 'Guayaquil', phone: '+593 99 272 0675', placeId: 'h' }
+  const propia = { title: 'Naufrago', address: '663R+25G, Olon, Ecuador', city: 'Olon', placeId: 'p' }
+  const fila = (items: unknown[]) => ({ id: 'm1', apify_function: 'own_google_maps_profile', ensayo: false, created_at: '2026-10-16T08:00:00Z', respuesta: items })
+  it('con selector: las unidades salen de la ficha del cliente aunque el homónimo venga primero', async () => {
+    const { fichaPropiaDeMapas } = await import('../mapas-propia')
+    const { unidadesDeRaspados } = await import('../unidades')
+    const us = unidadesDeRaspados([fila([homonimo, propia])], { propios: { handles: [] }, fichaDeMapas: (items) => fichaPropiaDeMapas(items, ctxN).ficha })
+    const txt = us.map((u) => u.texto).join(' | ')
+    expect(txt).toContain('olon')
+    expect(txt).not.toMatch(/puerto del naufrago|0675|comisariato/)
+  })
+  it('sin selector NO se leen unidades de Mapas (antes tomaba «la primera»)', async () => {
+    const { unidadesDeRaspados } = await import('../unidades')
+    expect(unidadesDeRaspados([fila([homonimo, propia])], { propios: { handles: [] } })).toEqual([])
+  })
+  it('solo homónimos o ambigua ⇒ ninguna unidad', async () => {
+    const { fichaPropiaDeMapas } = await import('../mapas-propia')
+    expect(fichaPropiaDeMapas([homonimo], ctxN).ficha).toBeNull()
+    const dos = fichaPropiaDeMapas([propia, { ...propia, placeId: 'q', address: 'Olon, frente al muelle' }], ctxN)
+    expect(dos.ambigua).toBe(true)
+    expect(dos.candidatas).toBe(2)
+  })
+  it('de punta a punta: el homónimo primero NO deja su teléfono ni su dirección en las fichas', async () => {
+    const { alimentarCliente } = await import('../alimentar')
+    const base = crearBaseFalsa({
+      clients: [{ id: C2, name: 'Náufrago', website_url: 'https://www.naufrago.ec', industry: 'restaurante de mariscos costero', config: {} }],
+      client_sedes: [{ client_id: C2, ciudad: 'Olón', clave: 'olon' }, { client_id: C2, ciudad: 'Guayaquil', clave: 'guayaquil' }],
+      apify_raw: [{ ...fila([homonimo, propia]), client_id: C2 }],
+      cerebro_unidades_vistas: [], cerebro_fichas: [], cerebro_ingresos: [], cerebro_portero_corridas: [],
+    } as never)
+    const r = await alimentarCliente({ db: base.db, client_id: C2, dry_run: false, interruptores: { alimentar: true, proponer_busquedas: false, menciones: false, puente_al_indice: false }, ahora: new Date('2026-10-16T12:00:00Z'), workflow_id: 'wf', workflow_execution_id: 'ex' })
+    expect(r.estado).toBe('hecha')
+    const fichas = (base.tablas.cerebro_fichas as Array<{ contenido: string; atributo: string }>)
+    expect(fichas.length).toBeGreaterThan(0)
+    expect(fichas.map((f) => f.contenido).join(' | ')).not.toMatch(/puerto del naufrago|0675|comisariato/)
+    expect(fichas.some((f) => f.atributo === 'mapas:direccion' && /olon/.test(f.contenido))).toBe(true)
+  })
+})

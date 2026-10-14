@@ -56,7 +56,13 @@ export function claveDeAtributo(lineaNormalizada: string, clase: ClaseDeLinea): 
   return nucleo ? `${clase}:${nucleo}` : null
 }
 
-export interface OpcionesDeUnidades { propios: { sitio?: string | null; handles: string[] }; hostsDeReparto?: string[]; transitorios?: RegExp[] }
+export interface OpcionesDeUnidades {
+  propios: { sitio?: string | null; handles: string[] }
+  hostsDeReparto?: string[]
+  transitorios?: RegExp[]
+  /** elige, entre las fichas que trajo UNA corrida de Mapas, la que es del cliente (o `null`). Sin selector NO se leen unidades de Mapas: «la primera» suele ser un homónimo */
+  fichaDeMapas?: (items: Array<Record<string, unknown>>) => Record<string, unknown> | null
+}
 const hostDe = (u: string): string => { try { return new URL(u.includes('://') ? u : `https://${u}`).host.replace(/^www\./, '').toLowerCase() } catch { return '' } }
 
 /** la fila más NUEVA de cada (función, objetivo) manda; los ensayos jamás */
@@ -93,7 +99,7 @@ export function unidadesDeRaspados(filas: FilaCruda[], o: OpcionesDeUnidades): U
         }
       }
     } else if (f.apify_function === 'own_google_maps_profile') {
-      const it = arr(f.respuesta)[0]
+      const it = o.fichaDeMapas ? o.fichaDeMapas(arr(f.respuesta)) : null
       if (!it) continue
       for (const [campo, valor] of Object.entries(contenidoDeMapas(it as FichaDeMapas).campos)) {
         poner({ ...base(f), fuente: 'mapas', ref: 'mapas', unidad_ref: campo, texto: `${campo} ${valor}`, clase_dato: 'atributo', atributo: `mapas:${campo}`, autoria: 'propia', huella: huellaDeTexto(valor), fecha_fuente: null })
