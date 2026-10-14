@@ -10,10 +10,12 @@
 import type { Db } from './almacen-supabase'
 import { filasQueVencen, NOTA_DE_VENCIMIENTO } from './entrega'
 import type { Puertos } from './puertos'
-import { fallar } from './orquestador'
+import { fallar, jefaturaSinRespuesta } from './orquestador'
 
 type Fila = Record<string, unknown>
 export const MINUTOS_PARA_DAR_POR_MUERTO = 12
+/** J8a · el paso `jefatura` espera a una revisión que corre en n8n (≈ 5–15 min por salto, hasta ≈ 50 min en el peor caso): no es un paso muerto a los 12 min. Pasado este tiempo la pieza sigue «sin revisar» */
+export const MINUTOS_PARA_ESPERAR_A_LA_JEFATURA = 90
 
 export async function vencerBandeja(db: Db, ahora: Date): Promise<{ vencidas: string[] }> {
   const r = (await db.from('hitl_queue').select('id,status,expires_at,metadata').eq('status', 'pending').lt('expires_at', ahora.toISOString())) as { data: Fila[] | null; error: { message: string } | null }
@@ -31,13 +33,21 @@ export async function vencerBandeja(db: Db, ahora: Date): Promise<{ vencidas: st
 
 export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Promise<{ reanudar: string[]; fallidos: string[]; cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> }> {
   const limite = new Date(ahora.getTime() - MINUTOS_PARA_DAR_POR_MUERTO * 60_000).toISOString()
-  const r = (await db.from('oficina_turnos').select('encargo_id,n,paso,inicio').eq('estado', 'corriendo').lt('inicio', limite)) as { data: Fila[] | null; error: { message: string } | null }
+  const limiteJefatura = new Date(ahora.getTime() - MINUTOS_PARA_ESPERAR_A_LA_JEFATURA * 60_000).toISOString()
+  const r = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,inicio').eq('estado', 'corriendo').lt('inicio', limite)) as { data: Fila[] | null; error: { message: string } | null }
   if (r.error) throw new Error(`vigía · leer los pasos vivos: ${r.error.message}`)
   const reanudar: string[] = [], fallidos: string[] = []
   const cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> = []
   for (const t of r.data ?? []) {
     const enc = await P.almacen.leerEncargo(String(t.encargo_id))
     if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido'].includes(enc.estado)) continue
+    if (t.tipo === 'jefatura') {
+      // J8a · la revisión de la jefatura tiene su propio plazo y su propio vigía: aquí solo se da por perdida pasado el plazo largo, y la pieza sigue marcada (nunca se pierde)
+      if (String(t.inicio) >= limiteJefatura) continue
+      await jefaturaSinRespuesta(P, enc.id, `la revisión de la jefatura no entregó en ${MINUTOS_PARA_ESPERAR_A_LA_JEFATURA} min`)
+      reanudar.push(enc.id)
+      continue
+    }
     const clave = `muerto:${String(t.paso)}`
     const veces = enc.estado_del_motor.vueltas[clave] ?? 0
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: enc.estado_del_motor, gasto_usd: enc.gasto_usd, turno: { n: Number(t.n), paso: String(t.paso), tipo: 'agente', agente: null, estado: 'muerto', dispatch_key: null, cost_usd: 0, error: `sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min` } })

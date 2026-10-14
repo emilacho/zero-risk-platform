@@ -13,7 +13,9 @@ import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoAlRevisor } from './ciego'
-import { armarPedidoL, contextoDeRevisorL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
+import type { SalidaDeRevision } from '../jefatura/revision/contrato'
+import { aplicarSalidaDeJefatura, aplicarSinRevisar, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
+import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
 import { construirTarea, contextoDelRevisor, type ContextoDePedido } from './pedidos'
@@ -131,6 +133,22 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
         if (paso.funcion === 'cierre') return cerrar(P, enc, pl, false)
         continue
       }
+      if (paso.tipo === 'jefatura') {
+        // J8a · la pieza ya pasó los chequeos duros: se abre UNA revisión en la jefatura y se espera su cierre
+        const material = familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : contextoDelRevisor(contexto(e))
+        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: material.contexto })
+        const ap = P.jefatura ? await P.jefatura(sobre) : ({ estado: 'error', motivo: 'el puerto de la jefatura no está configurado' } as const)
+        if (ap.estado === 'esperando') {
+          const n = turnoDe(e)
+          const dispatch_key = `${enc.id}:${n}`
+          await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: e.gasto_usd, estado: 'en_paso', turno: { n, paso: paso.clave, tipo: 'jefatura', agente: null, estado: 'corriendo', dispatch_key, cost_usd: 0 } })
+          return r(200, { accion: 'esperar_jefatura', turno: { n, paso: paso.clave, tipo: 'jefatura', dispatch_key }, revision_id: ap.revision_id })
+        }
+        if (ap.estado !== 'cerrada') await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ La jefatura no revisó la pieza · ${enc.brief_id}: ${ap.motivo}; sigue a la bandeja marcada «sin revisar»`, dry_run: enc.dry_run })
+        const res = ap.estado === 'cerrada' ? aplicarSalidaDeJefatura(pl, e, ap.salida, { reImagen: reImagenDe(pl, e) }) : aplicarSinRevisar(ap.motivo)
+        enc = await aplicar(P, enc, pl, sig.indice, res, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'jefatura', agente: null, dispatch_key: null, cost_usd: 0 } })
+        continue
+      }
       if (paso.tipo === 'externo') {
         const out = await ejecutarExterno(P, enc, pl, paso)
         enc = await aplicar(P, enc, pl, sig.indice, out.res, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'externo', agente: paso.quien, dispatch_key: null, cost_usd: out.res.costo_usd }, gastos: out.gastos })
@@ -150,6 +168,45 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
   }
   return fallar(P, enc, 'el orquestador dio más de 80 vueltas (no debería pasar)')
 }
+/** la re-imagen que ya existía, según la familia: la jefatura devuelve «imagen por rehacer» y la oficina decide si cabe */
+const reImagenDe = (pl: Plantilla, e: Estado) => (tomada: { razon: string } | null): Record<string, unknown> => {
+  if (familiaDeLaminas(pl)) return decisionDeReImagenL(e, pl, tomada)
+  const re = decidirReImagen(e, pl, !!tomada)
+  return { re_imagen: re.si, por_rehacer_humano: !!tomada && !re.si, motivo: re.motivo, razon: tomada?.razon ?? null }
+}
+
+/**
+ * J8a · la revisión de la jefatura cerró y entregó (webhook a `/api/jefatura/oficina-vuelta`): se aplica al encargo y sigue. IDEMPOTENTE: si el paso ya se aplicó (entrega repetida), solo avanza.
+ */
+export async function recibirJefatura(P: Puertos, encargoId: string, salida: SalidaDeRevision): Promise<Respuesta> {
+  const enc = await P.almacen.leerEncargo(encargoId)
+  if (!enc) return r(404, { error: 'encargo_inexistente' })
+  if (salida.artifact_id !== enc.id) return r(409, { error: 'salida_de_otro_encargo' })
+  const pl = await plantillaDe(P, enc)
+  const abierto = await P.almacen.turnoAbierto(enc.id)
+  if (!abierto || abierto.tipo !== 'jefatura') return avanzar(P, enc.id)
+  const sig = siguientePaso(enc.estado_del_motor, pl)
+  if (sig.accion !== 'ejecutar' || sig.paso.tipo !== 'jefatura') return r(409, { error: 'sin_paso_pendiente' })
+  const e = enc.estado_del_motor
+  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: 0 } })
+  return avanzar(P, enc.id)
+}
+
+/** J8a · la revisión nunca contestó (el vigía de la oficina esperó de más): la pieza sigue marcada «sin revisar»; nunca se pierde */
+export async function jefaturaSinRespuesta(P: Puertos, encargoId: string, motivo: string): Promise<Respuesta> {
+  const enc = await P.almacen.leerEncargo(encargoId)
+  if (!enc) return r(404, { error: 'encargo_inexistente' })
+  const pl = await plantillaDe(P, enc)
+  const abierto = await P.almacen.turnoAbierto(enc.id)
+  if (!abierto || abierto.tipo !== 'jefatura') return avanzar(P, enc.id)
+  const sig = siguientePaso(enc.estado_del_motor, pl)
+  if (sig.accion !== 'ejecutar' || sig.paso.tipo !== 'jefatura') return r(409, { error: 'sin_paso_pendiente' })
+  await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: enc.estado_del_motor, gasto_usd: enc.gasto_usd, turno: { n: abierto.n, paso: sig.paso.clave, tipo: 'jefatura', agente: null, estado: 'muerto', dispatch_key: abierto.dispatch_key, cost_usd: 0, error: motivo } })
+  await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ La jefatura no contestó · ${enc.brief_id}: ${motivo}; sigue a la bandeja marcada «sin revisar»`, dry_run: enc.dry_run })
+  await aplicar(P, enc, pl, sig.indice, aplicarSinRevisar(motivo), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: null, cost_usd: 0 } })
+  return avanzar(P, enc.id)
+}
+
 const contexto2 = (e: Estado): ContextoDePedido | null => (datos(e, 'encargo') ? contexto(e) : null)
 
 /** el agente y el pedido de un paso de agente o de portero (puro: sale del estado, así se puede volver a entregar) */
@@ -602,7 +659,8 @@ async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean,
   // salas 2 y 3: el resumen de lo que va a la salida y a la bandeja sale de las láminas (null para el post de la sala 1)
   const lam = resumenDeCierreL(enc, e, pl)
   const abiertasQueBloquean = e.fichas.filter((f) => f.gravedad === 'bloquea' && (f.estado === 'abierta' || f.estado === 'no_tomada'))
-  const conDesacuerdo = abiertasQueBloquean.length > 0 || parcial
+  // J8a · una revisión incompleta (fallida o cortada por tope) o que no pudo abrirse NO se pierde: la pieza va a la bandeja marcada y una persona la mira antes de aprobarla
+  const conDesacuerdo = abiertasQueBloquean.length > 0 || parcial || revisionIncompleta(e)
   const estadoFinal: Encargo['estado'] = parcial ? 'cerrado_por_tope' : 'cerrado'
   const pz = datos(e, 'pieza_post')
   const fin = datos(e, 'imagen_final')
@@ -610,17 +668,17 @@ async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean,
   const b = datos(e, 'encargo') ? base(e) : null
   const generada = lam ? lam.generada : fin?.origen === 'generada'
   let output_id: string | null = null, hitl_id: string | null = null
-  const desacuerdos = abiertasQueBloquean.map((f) => `${f.donde}: ${f.que ?? ''}`)
+  const desacuerdos = [...abiertasQueBloquean.map((f) => `${f.donde}: ${f.que ?? ''}`), ...(revisionIncompleta(e) ? [datosDeLaJefatura(e)?.sin_revisar ? 'revisión: sin revisar (la jefatura no abrió o no contestó)' : `revisión: incompleta (${datosDeLaJefatura(e)?.resultado})`] : [])]
   if (!enc.dry_run && (pz || lam) && b) {
     // la opinión libre del revisor externo viaja con la pieza, rotulada como OPINIÓN (y lo que el autor decidió con ella)
     const opinion = opinionExterna(e)
     const sinSegunda = datos(e, 'fichas_externas')?.sin_revision === true
     const contenido = { ...(lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }), ...(opinion ? { opinion_externa: opinion } : {}) }
-    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}) }
+    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}), ...metadataDeLaJefatura(e) }
     const s = await P.salida({ client_id: enc.client_id, titulo: lam ? lam.titulo : `Pieza ${enc.brief_id} · ${b.brief.red}`, contenido, metadata })
     if (s.ok) {
       output_id = s.output_id
-      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: (sinSegunda ? '⚠️ SIN SEGUNDA MIRADA · ' : '') + (imagenPorRehacer(e) ? '🖼️ IMAGEN POR REHACER (decide una persona) · ' : '') + (lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`), vista_previa: lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
+      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: prefijoDeLaBandeja(e) + (sinSegunda ? '⚠️ SIN SEGUNDA MIRADA · ' : '') + (imagenPorRehacer(e) ? '🖼️ IMAGEN POR REHACER (decide una persona) · ' : '') + (lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`), vista_previa: lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
       if (q.ok) hitl_id = q.id
     }
   }
