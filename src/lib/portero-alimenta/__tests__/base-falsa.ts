@@ -17,6 +17,7 @@ export function crearBaseFalsa(tablas: Record<string, Fila[]>, opciones: { falla
         if (t === 'eq') return x === v
         if (t === 'is') return v === null ? x === null || x === undefined : x === v
         if (t === 'gte') return String(x) >= String(v)
+        if (t === 'in') return Array.isArray(v) && v.includes(x)
         if (t === 'like') return String(x).startsWith(String(v).replace(/%$/, '').replace(/\*$/, ''))
         return true
       }))
@@ -29,7 +30,7 @@ export function crearBaseFalsa(tablas: Record<string, Fila[]>, opciones: { falla
       }
       const chain = (t: string) => (c: string, v: unknown) => { filtros.push([c, t, v]); return q }
       q.select = () => q
-      q.eq = chain('eq'); q.is = chain('is'); q.gte = chain('gte'); q.like = chain('like')
+      q.eq = chain('eq'); q.is = chain('is'); q.gte = chain('gte'); q.like = chain('like'); q.in = chain('in')
       q.order = () => q
       q.limit = (n: number) => { tope = n; return q }
       q.insert = (f: Fila) => { op = 'insert'; payload = f; return q }
