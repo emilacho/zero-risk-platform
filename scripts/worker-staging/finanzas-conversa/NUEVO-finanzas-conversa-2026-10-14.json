@@ -1,0 +1,171 @@
+{
+  "name": "Zero Risk — finanzas · conversa (oficina financiera · F8 · INACTIVO)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/finanzas-conversa",
+        "responseMode": "lastNode"
+      },
+      "name": "Webhook · finanzas conversa",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "finanzas-conversa-0001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// F8 · valida el sobre ANTES de llamar a la ruta. `dry_run` OBLIGATORIO y booleano. Nunca lanza.\n// la llave interna se exige ANTES de mirar nada (cabecera `x-api-key` = la variable del propio n8n); sin ella, equivocada o sin variable: no se llama a la ruta.\nconst entrada = $input.first().json || {}\nconst cab = entrada.headers && typeof entrada.headers === 'object' ? entrada.headers : {}\nconst dada = String(cab['x-api-key'] || '')\nconst esperada = String($env.INTERNAL_API_KEY || '')\nlet autorizado = esperada.length > 0 && dada.length === esperada.length\nif (autorizado) { let d = 0; for (let i = 0; i < esperada.length; i++) d |= dada.charCodeAt(i) ^ esperada.charCodeAt(i); autorizado = d === 0 }\nif (!autorizado) return [{ json: { llamar: false, no_autorizado: true, errores: [] } }]\nconst b = entrada.body || entrada\nconst errores = []\nconst acciones = ['abrir', 'avanzar', 'leer']\nif (acciones.indexOf(b.accion) < 0) errores.push('`accion` debe ser abrir, avanzar o leer')\nif (typeof b.dry_run !== 'boolean') errores.push('`dry_run` es obligatorio y debe ser booleano')\nif (b.accion === 'abrir' && (typeof b.client_id !== 'string' || !b.client_id.trim())) errores.push('`client_id` es obligatorio para abrir')\nif (b.accion === 'abrir' && (!b.semilla || typeof b.semilla !== 'object' || Array.isArray(b.semilla))) errores.push('`semilla` es obligatoria para abrir y debe ser un objeto')\nif ((b.accion === 'avanzar' || b.accion === 'leer') && (typeof b.encargo_id !== 'string' || !b.encargo_id.trim())) errores.push('`encargo_id` es obligatorio para avanzar y leer')\nif (errores.length) return [{ json: { llamar: false, errores } }]\nconst cuerpo = { accion: b.accion, dry_run: b.dry_run, workflow_id: String($workflow.id), workflow_execution_id: typeof b.workflow_execution_id === 'string' && b.workflow_execution_id ? b.workflow_execution_id : String($execution.id) }\nif (b.accion === 'abrir') { cuerpo.client_id = b.client_id.trim(); cuerpo.semilla = b.semilla } else { cuerpo.encargo_id = b.encargo_id.trim() }\nreturn [{ json: { llamar: true, accion: b.accion, cuerpo } }]"
+      },
+      "name": "FIN · validar el sobre",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.llamar === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "FIN · ¿se llama a la ruta?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/finanzas/conversa' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.cuerpo || {}) }}",
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "FIN · un paso de la conversación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// F8 · normaliza lo que contestó la ruta. NUNCA lanza: cualquier cosa que no sea una respuesta válida devuelve `ok:false` con el motivo; quien llama decide (el plan sigue como hoy).\nlet v = null\ntry { v = $('FIN · validar el sobre').first().json } catch (x) { v = null }\nif (v && v.no_autorizado === true) return [{ json: { ok: false, motivo: 'no_autorizado' } }]\nif (!v || v.llamar !== true) return [{ json: { ok: false, motivo: 'sobre_invalido', errores: (v && v.errores) || [] } }]\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : {}\nif (status === 409) return [{ json: { ok: false, accion: v.accion, motivo: b.error || 'conversa_apagada' } }]\nif (status === 200) return [{ json: { ok: true, accion: v.accion, respuesta: b } }]\nreturn [{ json: { ok: false, accion: v.accion, motivo: b.error || ('http_' + (isFinite(status) ? status : 'sin_respuesta')), errores: b.errores || [] } }]"
+      },
+      "name": "FIN · resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook · finanzas conversa": {
+      "main": [
+        [
+          {
+            "node": "FIN · validar el sobre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FIN · validar el sobre": {
+      "main": [
+        [
+          {
+            "node": "FIN · ¿se llama a la ruta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FIN · ¿se llama a la ruta?": {
+      "main": [
+        [
+          {
+            "node": "FIN · un paso de la conversación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FIN · resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FIN · un paso de la conversación": {
+      "main": [
+        [
+          {
+            "node": "FIN · resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

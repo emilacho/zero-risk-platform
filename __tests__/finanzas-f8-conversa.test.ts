@@ -3,9 +3,11 @@
  * Caso de oro (hilo de la prueba): planteo → especialistas → ajuste → cálculo → jefe → firma. Más: omisión por canal (R11), tope US$ 1,50, 2 rondas máximo,
  * Slack caído, formato roto (reintento y degradado), apagado = 409, una conversación abierta por cliente, procedencia de ensayo, el contrato del pedido corto.
  */
+import fs from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { estadoInicial } from '../src/lib/oficina/tipos'
-import { armarPedidoRunSdk, modeloRunSdk, WORKFLOW_ID_CONVERSA } from '../src/lib/finanzas/conversa/modelo-run-sdk'
+import { armarPedidoRunSdk, esWorkflowIdValido, modeloRunSdk } from '../src/lib/finanzas/conversa/modelo-run-sdk'
 import { abrirConversacion, avanzar, pedidoDelAgente } from '../src/lib/finanzas/conversa/orquestador'
 import { especialistasQueHablan } from '../src/lib/finanzas/conversa/omision'
 import { AGENTES, PLANTILLA_FINANCIERA, validarPlantillaFinanciera } from '../src/lib/finanzas/conversa/plantilla'
@@ -326,9 +328,9 @@ describe('F8 · Slack', () => {
 describe('ronda 3 de CC#3 · menores de F8', () => {
   it('el tope del turno viaja al corredor (max_budget_usd) y respeta el rango de run-sdk', () => {
     const base = { agente: 'a', tarea: 't', encargo_id: 'e', client_id: 'c', paso: 'p', dry_run: true }
-    expect(armarPedidoRunSdk({ ...base, tope_usd: 0.25 }).max_budget_usd).toBe(0.25)
-    expect(armarPedidoRunSdk({ ...base, tope_usd: 0 }).max_budget_usd).toBeUndefined()
-    expect(armarPedidoRunSdk({ ...base, tope_usd: 99 }).max_budget_usd).toBeUndefined()
+    expect(armarPedidoRunSdk({ ...base, tope_usd: 0.25 }, 'wf-real').max_budget_usd).toBe(0.25)
+    expect(armarPedidoRunSdk({ ...base, tope_usd: 0 }, 'wf-real').max_budget_usd).toBeUndefined()
+    expect(armarPedidoRunSdk({ ...base, tope_usd: 99 }, 'wf-real').max_budget_usd).toBeUndefined()
   })
   it('con el canal del hilo vacío NO publica nada (ni la raíz ni los turnos)', async () => {
     const m = mundo({ canal: '' })
@@ -366,16 +368,16 @@ describe('F8 · el pedido corto y la procedencia', () => {
     expect(t).toMatch(/NO fijes montos de pauta/)
   })
   it('cabe en el contrato de run-sdk y viaja con workflow_id y ejecución propios', () => {
-    const p = armarPedidoRunSdk({ agente: AGENTES.proponente, tarea: 'x'.repeat(130_000), encargo_id: 'enc-1', client_id: CLIENTE, paso: 'planteo', tope_usd: 0.15, dry_run: true })
+    const p = armarPedidoRunSdk({ agente: AGENTES.proponente, tarea: 'x'.repeat(130_000), encargo_id: 'enc-1', client_id: CLIENTE, paso: 'planteo', tope_usd: 0.15, dry_run: true }, 'AbC123xyz')
     expect(p.task.length).toBeLessThanOrEqual(120_000)
-    expect(p.workflow_id).toBe(WORKFLOW_ID_CONVERSA)
+    expect(p.workflow_id).toBe('AbC123xyz')
     expect(p.workflow_execution_id).toBe('enc-1:planteo')
     expect(p.dry_run).toBe(true)
     expect(p.force_restart).toBe(true)
   })
   it('SIMULADO: la identidad de campaign-brief-agent admite la tarea corta (JSON) porque el pedido la declara explícitamente', async () => {
     const vistos: any[] = []
-    const modelo = modeloRunSdk({ base: 'https://simulado.invalid', llave: 'k', fetch: (async (_u: string, init: any) => { vistos.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({ output: JSON.stringify(PLANTEO), cost_usd: 0.07 }) } }) as any })
+    const modelo = modeloRunSdk({ base: 'https://simulado.invalid', llave: 'k', workflow_id: 'AbC123xyz', fetch: (async (_u: string, init: any) => { vistos.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({ output: JSON.stringify(PLANTEO), cost_usd: 0.07 }) } }) as any })
     const r = await modelo.invocar({ agente: AGENTES.proponente, tarea: pedidoDelAgente(paso, {}), encargo_id: 'enc-1', client_id: CLIENTE, paso: 'planteo', tope_usd: 0.15, dry_run: true })
     expect(r.ok).toBe(true)
     expect(vistos[0].agent).toBe('campaign-brief-agent')
@@ -385,9 +387,23 @@ describe('F8 · el pedido corto y la procedencia', () => {
   it('sin base o sin llave, el adaptador NO llama a la red', async () => {
     let llamado = false
     const f = (async () => { llamado = true; return {} }) as any
-    expect((await modeloRunSdk({ base: undefined, llave: 'k', fetch: f }).invocar({ agente: 'a', tarea: 't', encargo_id: 'e', client_id: 'c', paso: 'p', tope_usd: 1, dry_run: true })).ok).toBe(false)
-    expect((await modeloRunSdk({ base: 'https://x.invalid', llave: undefined, fetch: f }).invocar({ agente: 'a', tarea: 't', encargo_id: 'e', client_id: 'c', paso: 'p', tope_usd: 1, dry_run: true })).ok).toBe(false)
+    expect((await modeloRunSdk({ base: undefined, llave: 'k', fetch: f, workflow_id: 'wf' }).invocar({ agente: 'a', tarea: 't', encargo_id: 'e', client_id: 'c', paso: 'p', tope_usd: 1, dry_run: true })).ok).toBe(false)
+    expect((await modeloRunSdk({ base: 'https://x.invalid', llave: undefined, fetch: f, workflow_id: 'wf' }).invocar({ agente: 'a', tarea: 't', encargo_id: 'e', client_id: 'c', paso: 'p', tope_usd: 1, dry_run: true })).ok).toBe(false)
     expect(llamado).toBe(false)
+  })
+  it('sin workflow_id real (o con uno mal formado) el adaptador NO llama a la red y lo dice; el literal «finanzas-conversa» ya no existe', async () => {
+    let llamado = false
+    const f = (async () => { llamado = true; return {} }) as any
+    const pedido = { agente: 'a', tarea: 't', encargo_id: 'e', client_id: 'c', paso: 'p', tope_usd: 1, dry_run: true }
+    for (const w of [undefined, '', 'con espacio', 'x'.repeat(101), 'a/b', '<script>']) {
+      const r = await modeloRunSdk({ base: 'https://x.invalid', llave: 'k', fetch: f, workflow_id: w as any }).invocar(pedido)
+      expect(r.ok, String(w)).toBe(false)
+      expect((r as any).error).toBe('sin_workflow_id')
+    }
+    expect(llamado).toBe(false)
+    expect(esWorkflowIdValido('AbC_123-xyz')).toBe(true)
+    expect(esWorkflowIdValido(42)).toBe(false)
+    expect(fs.readFileSync(path.join(__dirname, '..', 'src/lib/finanzas/conversa/modelo-run-sdk.ts'), 'utf8')).not.toMatch(/['"]finanzas-conversa['"]/)
   })
   it('un dato de ensayo nunca entra como medido', () => {
     const d = [{ clave: 'a', valor: 1, procedencia: 'de_ensayo' as const, fuente: 'f' }, { clave: 'b', valor: 2, procedencia: 'medido' as const, fuente: 'g' }]

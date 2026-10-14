@@ -4,8 +4,10 @@
  */
 import type { ModeloPuerto, PedidoAlModelo, RespuestaDeModelo } from './puertos'
 
-export const WORKFLOW_ID_CONVERSA = 'finanzas-conversa'
 export const MAX_TAREA_RUN_SDK = 120_000
+
+/** el `workflow_id` es el REAL del flujo de n8n que llama (lo manda el flujo en el cuerpo); un literal inventado no pasa la puerta de run-sdk y ensucia el libro */
+export const esWorkflowIdValido = (x: unknown): x is string => typeof x === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(x)
 
 export interface PedidoRunSdk {
   agent: string
@@ -20,12 +22,12 @@ export interface PedidoRunSdk {
 }
 
 /** arma el cuerpo; función pura (se prueba sin red). Un turno = una ejecución con id propio, así el libro (agent_invocations) correlaciona por execution id */
-export function armarPedidoRunSdk(p: PedidoAlModelo): PedidoRunSdk {
+export function armarPedidoRunSdk(p: PedidoAlModelo, workflow_id: string): PedidoRunSdk {
   return {
     agent: p.agente,
     task: p.tarea.length > MAX_TAREA_RUN_SDK ? p.tarea.slice(0, MAX_TAREA_RUN_SDK) : p.tarea,
     client_id: p.client_id,
-    workflow_id: WORKFLOW_ID_CONVERSA,
+    workflow_id,
     workflow_execution_id: `${p.encargo_id}:${p.paso}`,
     dry_run: p.dry_run,
     // una vuelta repetida del mismo turno NO debe devolver la respuesta vieja guardada (lección del flujo de prueba)
@@ -38,6 +40,8 @@ export interface AjustesDelModelo {
   base: string | undefined
   llave: string | undefined
   fetch: typeof fetch | undefined
+  /** id real del flujo que llama; sin él NO se llama al modelo (run-sdk rechaza lo que no viene de un flujo) */
+  workflow_id: string | undefined
 }
 
 /** extrae el texto de la respuesta de run-sdk sin asumir su forma exacta */
@@ -59,11 +63,12 @@ export function modeloRunSdk(a: AjustesDelModelo): ModeloPuerto {
   return {
     async invocar(p: PedidoAlModelo): Promise<RespuestaDeModelo> {
       if (!a.base || !a.llave || !a.fetch) return { ok: false, error: 'modelo_no_configurado', costo_usd: 0 }
+      if (!esWorkflowIdValido(a.workflow_id)) return { ok: false, error: 'sin_workflow_id', costo_usd: 0 }
       try {
         const r = await a.fetch(`${a.base.replace(/\/+$/, '')}/api/agents/run-sdk`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': a.llave },
-          body: JSON.stringify(armarPedidoRunSdk(p)),
+          body: JSON.stringify(armarPedidoRunSdk(p, a.workflow_id)),
         })
         const j: unknown = await r.json().catch(() => null)
         if (!r.ok) return { ok: false, error: `run_sdk_${r.status}`, costo_usd: costoDe(j) }
