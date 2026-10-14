@@ -4,7 +4,7 @@
  */
 import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DbFalsaJefatura } from './_helpers/dbfalsa-jefatura'
 import { FILAS_DE_POLITICA, sobre, TEXTO_DEL_PLAN } from './_helpers/jefatura-revision'
 
@@ -35,16 +35,37 @@ beforeEach(() => { h.db = baseConJefatura(); h.aperturasDeLaBase = 0 })
 const db = () => h.db as DbFalsaJefatura
 
 describe('la llave de la sala', () => {
-  it.each([['revisiones', REVISIONES], ['turnos', TURNOS], ['vigia', VIGIA]] as const)('%s: sin llave 401 · llave equivocada 401 · la llave interna no vale · sin la variable 503', async (url, ruta) => {
-    expect((await llamar(ruta, url, {}, {})).status).toBe(401)
-    expect((await llamar(ruta, url, {}, { 'x-sala-dispatch-key': 'otra' })).status).toBe(401)
-    expect((await llamar(ruta, url, {}, { 'x-api-key': 'la-interna', 'x-internal-api-key': 'la-interna' })).status).toBe(401)
-    // aunque en OTRA cabecera viaje el MISMO valor de la llave de despacho, no vale: solo `x-sala-dispatch-key`
-    expect((await llamar(ruta, url, {}, { 'x-api-key': LLAVE, 'x-internal-api-key': LLAVE })).status).toBe(401)
-    const guardada = process.env.SALA_DISPATCH_KEY
-    delete process.env.SALA_DISPATCH_KEY
-    try { expect((await llamar(ruta, url, {}, { 'x-sala-dispatch-key': 'x' })).status).toBe(503) } finally { process.env.SALA_DISPATCH_KEY = guardada }
+  const INTERNA = 'la-llave-interna-de-prueba'
+  const conInterna = async <T,>(f: () => Promise<T>): Promise<T> => { const g = process.env.INTERNAL_API_KEY; process.env.INTERNAL_API_KEY = INTERNA; try { return await f() } finally { if (g === undefined) delete process.env.INTERNAL_API_KEY; else process.env.INTERNAL_API_KEY = g } }
+  it.each([['revisiones', REVISIONES], ['turnos', TURNOS], ['vigia', VIGIA]] as const)('%s: sin llave 401 · llave equivocada 401 (de despacho y interna) · ninguna vale en la cabecera de la otra · sin ninguna variable 503', async (url, ruta) => {
+    await conInterna(async () => {
+      expect((await llamar(ruta, url, {}, {})).status).toBe(401)
+      expect((await llamar(ruta, url, {}, { 'x-sala-dispatch-key': 'otra' })).status).toBe(401)
+      expect((await llamar(ruta, url, {}, { 'x-api-key': 'otra' })).status).toBe(401)
+      // el valor de una llave en la cabecera de la otra no abre
+      expect((await llamar(ruta, url, {}, { 'x-api-key': LLAVE })).status).toBe(401)
+      expect((await llamar(ruta, url, {}, { 'x-sala-dispatch-key': INTERNA })).status).toBe(401)
+      expect((await llamar(ruta, url, {}, { 'x-internal-api-key': INTERNA })).status).toBe(401)
+    })
+    const g1 = process.env.SALA_DISPATCH_KEY, g2 = process.env.INTERNAL_API_KEY
+    delete process.env.SALA_DISPATCH_KEY; delete process.env.INTERNAL_API_KEY
+    try { expect((await llamar(ruta, url, {}, { 'x-sala-dispatch-key': 'x', 'x-api-key': 'x' })).status).toBe(503) } finally { process.env.SALA_DISPATCH_KEY = g1; if (g2 !== undefined) process.env.INTERNAL_API_KEY = g2 }
     expect(db().escrituras).toHaveLength(0)
+  })
+  it.each([['revisiones', REVISIONES], ['turnos', TURNOS], ['vigia', VIGIA]] as const)('%s: con la llave INTERNA pasa la puerta (el cuerpo vacío ya es otro error, no 401/503) y con la de despacho también', async (url, ruta) => {
+    await conInterna(async () => {
+      const a = (await llamar(ruta, url, url === 'vigia' ? { dry_run: true } : {}, { 'x-api-key': INTERNA })).status
+      const b = (await llamar(ruta, url, url === 'vigia' ? { dry_run: true } : {}, { 'x-sala-dispatch-key': LLAVE })).status
+      expect([a, b].every((s) => s !== 401 && s !== 503)).toBe(true)
+    })
+  })
+  it('sin INTERNAL_API_KEY pero con la de despacho la puerta sigue abierta para los flujos (y la interna ajena no abre)', async () => {
+    const g = process.env.INTERNAL_API_KEY
+    delete process.env.INTERNAL_API_KEY
+    try {
+      expect((await llamar(VIGIA, 'vigia', { dry_run: true }, { 'x-sala-dispatch-key': LLAVE })).status).toBe(200)
+      expect((await llamar(VIGIA, 'vigia', { dry_run: true }, { 'x-api-key': '' })).status).toBe(401)
+    } finally { if (g !== undefined) process.env.INTERNAL_API_KEY = g }
   })
   it('un cuerpo que no es JSON o no es objeto = 400', async () => {
     const r = await REVISIONES(new Request('http://app.test/api/jefatura/revisiones', { method: 'POST', headers: { 'x-sala-dispatch-key': LLAVE }, body: 'no es json' }))
@@ -105,6 +126,85 @@ describe('dry_run es obligatorio', () => {
   })
   it('el vigía valida su dry_run (booleano o ausente)', async () => {
     expect((await llamar(VIGIA, 'vigia', { dry_run: 'si' })).status).toBe(400)
+  })
+})
+
+describe('despertar: la ruta llama al flujo con SU llave de despacho', () => {
+  const INTERNA = 'la-llave-interna-de-prueba'
+  const llamadas: Array<{ url: string; cab: Record<string, string>; cuerpo: Json }> = []
+  const falso = (status = 200) => vi.spyOn(globalThis, 'fetch').mockImplementation((async (u: string, init: RequestInit) => { llamadas.push({ url: String(u), cab: init.headers as Record<string, string>, cuerpo: JSON.parse(String(init.body)) }); return new Response('{}', { status }) }) as typeof fetch)
+  beforeEach(() => { llamadas.length = 0; process.env.INTERNAL_API_KEY = INTERNA })
+  afterEach(() => { vi.restoreAllMocks(); delete process.env.INTERNAL_API_KEY; delete process.env.N8N_WEBHOOK_BASE })
+  const interna = { 'x-api-key': INTERNA }
+  async function abierta() { const a = await llamar(REVISIONES, 'revisiones', sobre('pieza'), interna); return { id: String(a.j.revision_id), turno: a.j.turno as Json } }
+  it('con la llave interna: el webhook sale con la llave de DESPACHO del servidor y el cuerpo { revision_id, turno }; la respuesta no repite ninguna llave', async () => {
+    const { id, turno } = await abierta()
+    const f = falso(200)
+    const r = await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno }, interna)
+    expect(r.status).toBe(200)
+    expect(r.j).toEqual({ despertado: true, webhook_status: 200 })
+    expect(llamadas).toHaveLength(1)
+    expect(llamadas[0].url).toBe('https://n8n-production-72be.up.railway.app/webhook/zero-risk/jefatura-turno')
+    expect(llamadas[0].cab['x-sala-dispatch-key']).toBe(LLAVE)
+    expect(llamadas[0].cab['x-api-key']).toBeUndefined()
+    expect(llamadas[0].cuerpo).toEqual({ revision_id: id, turno })
+    expect(JSON.stringify(r.j)).not.toContain(LLAVE)
+    f.mockRestore()
+  })
+  it('el destino sale de N8N_WEBHOOK_BASE, nunca del cuerpo', async () => {
+    process.env.N8N_WEBHOOK_BASE = 'https://n8n.nuestro.test/webhook/'
+    const { id, turno } = await abierta()
+    falso()
+    await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno, url: 'https://tercero.test/x' }, interna)
+    expect(llamadas[0].url).toBe('https://n8n.nuestro.test/webhook/zero-risk/jefatura-turno')
+  })
+  it('sin turno 400 · revisión inexistente 404 · sin SALA_DISPATCH_KEY 503 · apagada 409; en ninguno sale una llamada', async () => {
+    const { id, turno } = await abierta()
+    falso()
+    expect((await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id }, interna)).status).toBe(400)
+    expect((await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: '00000000-0000-4000-8000-0000000000aa', turno }, interna)).status).toBe(404)
+    const g = process.env.SALA_DISPATCH_KEY
+    delete process.env.SALA_DISPATCH_KEY
+    try { expect((await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno }, interna)).status).toBe(503) } finally { process.env.SALA_DISPATCH_KEY = g }
+    db().tablas.jefatura_config[0].estado = 'apagada'
+    expect((await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno }, interna)).status).toBe(409)
+    expect(llamadas).toHaveLength(0)
+  })
+  it('REPARO CC#3: el turno debe traer el dry_run de la revisión y el paso abierto; si no, 409 y cero fetch', async () => {
+    const { id, turno } = await abierta()
+    falso()
+    const pedido = turno.pedido as Json
+    expect(pedido.dry_run).toBe(true)
+    // revisión seca + turno con dry_run:false (a propósito o por error) → 409
+    const a = await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno: { ...turno, pedido: { ...pedido, dry_run: false } } }, interna)
+    expect(a.status).toBe(409)
+    expect(a.j.error).toBe('dry_run_no_coincide')
+    // sin dry_run en el pedido tampoco pasa (no se asume)
+    const { dry_run: _d, ...sinDry } = pedido
+    void _d
+    expect((await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno: { ...turno, pedido: sinDry } }, interna)).status).toBe(409)
+    // paso que no es el abierto → 409
+    const b = await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno: { ...turno, n: (turno.n as number) + 1 } }, interna)
+    expect(b.status).toBe(409)
+    expect(b.j.error).toBe('turno_no_es_el_abierto')
+    // revisión REAL + turno seco → 409
+    ;(db().tablas.jefatura_revisiones[0] as Json).dry_run = false
+    expect((await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno }, interna)).status).toBe(409)
+    expect(llamadas).toHaveLength(0)
+  })
+  it('sin llave 401 y el webhook no sale; si n8n contesta 500 o no responde, 502 con despertado:false', async () => {
+    const { id, turno } = await abierta()
+    falso(500)
+    expect((await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno }, {})).status).toBe(401)
+    expect(llamadas).toHaveLength(0)
+    const m = await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno }, interna)
+    expect(m.status).toBe(502)
+    expect(m.j).toMatchObject({ despertado: false, webhook_status: 500 })
+    vi.restoreAllMocks()
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'))
+    const c = await llamar(TURNOS, 'turnos', { accion: 'despertar', revision_id: id, turno }, interna)
+    expect(c.status).toBe(502)
+    expect(c.j).toMatchObject({ despertado: false, error: 'webhook_inalcanzable' })
   })
 })
 
