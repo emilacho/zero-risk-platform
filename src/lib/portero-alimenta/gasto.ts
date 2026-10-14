@@ -26,7 +26,7 @@ export const COSTO_MAXIMO_POR_FUNCION: Record<string, { usd: number; medido: boo
   trustpilot_scraper: { usd: 0.05, medido: false },
   software_review_scraper: { usd: 0.05, medido: false },
   publicaciones_facebook: { usd: 0.05, medido: false },
-  menciones_en_redes: { usd: 0.1, medido: false },
+  menciones_en_redes: { usd: 0.14, medido: true }, // 23 publicaciones = 0,048 (14-oct); US$ 0,0027 por publicación; techo de 50 = 0,135
 }
 /** videos de Instagram con transcripción: costo medido por video (10 videos = 0,557) */
 export const VIDEO_DE_INSTAGRAM_USD = 0.056
