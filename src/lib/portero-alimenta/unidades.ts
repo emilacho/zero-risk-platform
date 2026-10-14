@@ -68,7 +68,8 @@ const hostDe = (u: string): string => { try { return new URL(u.includes('://') ?
 /** la fila más NUEVA de cada (función, objetivo) manda; los ensayos jamás */
 export function unidadesDeRaspados(filas: FilaCruda[], o: OpcionesDeUnidades): Unidad[] {
   const out = new Map<string, Unidad>()
-  const poner = (u: Unidad) => { const k = `${u.fuente}|${u.ref}|${u.unidad_ref}`; if (!out.has(k)) out.set(k, u) }
+  // el sitio repite la misma línea (menú, horario, pie) en varias páginas: es UNA unidad (la de la página más nueva); el resto de las fuentes se distingue por su `ref`
+  const poner = (u: Unidad) => { const k = u.fuente === 'sitio' || u.fuente === 'reparto' ? `${u.fuente}|${u.unidad_ref}` : `${u.fuente}|${u.ref}|${u.unidad_ref}`; if (!out.has(k)) out.set(k, u) }
   const orden = [...filas].filter((f) => f.ensayo !== true).sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
   const reparto = new Set((o.hostsDeReparto ?? []).map((h) => h.toLowerCase()))
   const base = (f: FilaCruda) => ({ apify_raw_id: String(f.id), observado_en: f.created_at })

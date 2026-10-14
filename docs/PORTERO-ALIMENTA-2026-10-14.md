@@ -30,3 +30,11 @@ Firma de Emilio 14-oct: «el portero es una máquina de alimentar información»
 
 ## Reversa
 Apagar interruptores → desactivar el flujo → restaurar `ANTES` → reversa SQL (aborta si hay filas: exportar primero).
+
+
+## Actualización 14-oct (PR de duplicados)
+- **Repetidas:** la misma línea en varias páginas del sitio es UNA unidad (clave `fuente|línea`, sin la página). El puente deja UNA ficha por (fuente, huella) —la más antigua— y las demás no van al índice (y si ya estaban, salen).
+- **Puente por pasadas:** `POST /api/brain/alimentar/puente` envía ≤ 40 trozos y saca ≤ 200 por llamada y responde `quedan`; el flujo (nodo «④ bis Puente») repite hasta 0 (tope 12 vueltas). Sin 504.
+- **Limpieza (una vez):** `scripts/ops/portero-limpiar-repetidas.ts <client_id> [--ejecutar]` retira las fichas repetidas con motivo y `reemplazada_por` (respaldo previo; nada se borra); después una pasada del puente saca sus trozos.
+- **Clientes:** la lista sale de `…/alimentar/descubrir` con `fase:'clientes'`.
+- **RETIRADO, no se enciende nunca:** `/api/brain/diario/{plan,correr}` (responden 410), el nodo «③ Correr» y las tablas `cerebro_vigilancia`, `cerebro_oportunidades`, `cerebro_avisos` (sin lector; quedan vacías, sin borrar). Razón: las oficinas buscan al cerebro; el portero no empuja «oportunidades».
