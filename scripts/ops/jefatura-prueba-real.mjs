@@ -12,7 +12,7 @@
  *   node scripts/ops/jefatura-prueba-real.mjs apagar [--aplicar]             restaura jefatura_config a apagada con listas vacías y deja inactivo el flujo `jefatura · turno`
  *   node scripts/ops/jefatura-prueba-real.mjs limpiar [--aplicar]            al FINAL y solo cuando CC#3 ya midió: respalda y borra las filas jefatura_* de los 2 clientes de esta prueba (ninguna otra)
  *
- * Variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, N8N_API_KEY, SALA_DISPATCH_KEY (y, opcionales, N8N_BASE_URL, N8N_WEBHOOK_BASE, APP_URL).
+ * Variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, N8N_API_KEY, INTERNAL_API_KEY (la llave interna: entra por las rutas de Vercel; NUNCA se usa ni se pide `SALA_DISPATCH_KEY`: la ruta despierta al flujo con la suya) (y, opcionales, N8N_BASE_URL, APP_URL).
  * Los clientes de la prueba son archivos (`prueba-jefatura-real-*`): NO se inserta nada en `clients`. Nada de naufrago.ec. No toca el guion del seco (J5) ni sus rutas: solo LEE sus fixtures.
  */
 import fs from 'node:fs'
@@ -30,9 +30,8 @@ const SALIDA = flag('salida') || `_jefatura-prueba-real-${new Date().toISOString
 
 const U = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, ''), SK = process.env.SUPABASE_SERVICE_ROLE_KEY
 const N8N = (process.env.N8N_BASE_URL || 'https://n8n-production-72be.up.railway.app').replace(/\/$/, ''), NK = process.env.N8N_API_KEY
-const HOOKS = (process.env.N8N_WEBHOOK_BASE || `${N8N}/webhook`).replace(/\/$/, '')
 const APP = (process.env.APP_URL || 'https://zero-risk-platform.vercel.app').replace(/\/$/, '')
-const LLAVE = process.env.SALA_DISPATCH_KEY
+const LLAVE = process.env.INTERNAL_API_KEY
 const necesita = (...ks) => { const f = ks.filter((k) => !process.env[k]); if (f.length) { console.error('faltan variables: ' + f.join(', ')); process.exit(2) } }
 const HS = () => ({ apikey: SK, authorization: 'Bearer ' + SK, 'content-type': 'application/json' })
 const HN = () => ({ 'X-N8N-API-KEY': NK, 'content-type': 'application/json' })
@@ -77,15 +76,15 @@ async function contadores() {
   }
 }
 
-/** el transporte REAL: las rutas por fetch con la llave de despacho, el webhook del flujo, las lecturas de evidencia (solo lectura) */
+/** el transporte REAL: las rutas por fetch con la llave interna (`x-api-key`) y la acción `despertar` de la ruta de turnos, las lecturas de evidencia (solo lectura) */
 function transporteReal() {
   return {
     enVuelo, contadores,
     leerConfig: async () => { const c = (await rest('jefatura_config', 'select=*&id=eq.1'))[0]; return c ? { estado: c.estado, tipos_activos: c.tipos_activos ?? [], clientes_ensayo: c.clientes_ensayo ?? [] } : null },
     ponerConfig: async (c) => { await patchCfg(c) },
     flujos, activar,
-    async llamar(ruta, cuerpo) { const r = await fetch(`${APP}/api/jefatura/${ruta}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': LLAVE }, body: JSON.stringify(cuerpo) }); const t = await r.text(); let body; try { body = JSON.parse(t) } catch { body = { texto: t.slice(0, 300) } } return { status: r.status, body } },
-    async webhook(cuerpo) { const r = await fetch(`${HOOKS}/zero-risk/jefatura-turno`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': LLAVE }, body: JSON.stringify(cuerpo) }); return { status: r.status } },
+    async llamar(ruta, cuerpo) { const r = await fetch(`${APP}/api/jefatura/${ruta}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': LLAVE }, body: JSON.stringify(cuerpo) }); const t = await r.text(); let body; try { body = JSON.parse(t) } catch { body = { texto: t.slice(0, 300) } } return { status: r.status, body } },
+    async despertar(cuerpo) { const r = await fetch(`${APP}/api/jefatura/turnos`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': LLAVE }, body: JSON.stringify({ accion: 'despertar', ...cuerpo }) }); return { status: r.status } },
     async evidencia(revision_id) {
       const rev = (await rest('jefatura_revisiones', `select=*&id=eq.${revision_id}`))[0]
       const pasos = await rest('jefatura_pasos', `select=*&revision_id=eq.${revision_id}&order=n.asc`)
@@ -155,7 +154,7 @@ async function main() {
     return
   }
   if (orden === 'correr') {
-    necesita('SALA_DISPATCH_KEY')
+    necesita('INTERNAL_API_KEY')
     const fecha = flag('dale-de-emilio')
     const confirmacion = !!fecha && /^\d{4}-\d{2}-\d{2}$/.test(fecha)
     if (aplicar && !confirmacion) { console.error('J6 se niega: falta `--dale-de-emilio AAAA-MM-DD` (la fecha del «dale»). Sin ese «dale» no se corre nada real.'); console.error('\n' + avisoParaEmilio()); process.exit(3) }

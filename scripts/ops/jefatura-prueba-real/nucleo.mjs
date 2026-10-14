@@ -120,13 +120,18 @@ export function compararContadores(antes, despues, { gasto_esperado_usd }) {
   return { ok: fallos.length === 0, fallos, filas_nuevas_en_el_libro: dAgent, costo_nuevo_en_el_libro_usd: dCosto }
 }
 
+/** ¿la prueba cumplió TODO? Cada condición cuenta por separado: alguna revisión, todas con evidencia completa, contadores en orden, ninguna parada y el gasto total dentro del tope */
+export function esExitosa(r, topes = TOPES) {
+  return Array.isArray(r.revisiones) && r.revisiones.length > 0 && r.revisiones.every((x) => x.ok === true) && r.contadores?.ok === true && !r.parada && r.apagado === true && Number(r.gasto_total_usd) <= topes.total + 1e-6
+}
+
 const dormir = (T, ms) => (T.dormir ? T.dormir(ms) : new Promise((r) => setTimeout(r, ms)))
 const ahora = (T) => (T.ahora ?? Date.now)()
 
 /**
  * LA PRUEBA. Sin `aplicar` no llama a nada que escriba (solo devuelve lo que haría). Con `aplicar` EXIGE la confirmación del «dale» de Emilio.
  * Pase lo que pase (error, corte, tope), el `finally` APAGA: restaura `jefatura_config` y desactiva el flujo `jefatura · turno`.
- * T = { enVuelo(), leerConfig(), ponerConfig(c), flujos() → { turno:{id,active}|null, vigia:{id,active}|null }, activar(id,on), llamar(ruta, cuerpo) → {status, body}, webhook(cuerpo) → {status}, evidencia(revision_id) → {rev,pasos,fichas,invocaciones}, contadores(), ahora?, dormir? }
+ * T = { enVuelo(), leerConfig(), ponerConfig(c), flujos() → { turno:{id,active}|null, vigia:{id,active}|null }, activar(id,on), llamar(ruta, cuerpo) → {status, body}, despertar({ revision_id, turno }) → {status} (la acción `despertar` de la ruta de turnos: ella despierta al flujo con su propia llave), evidencia(revision_id) → {rev,pasos,fichas,invocaciones}, contadores(), ahora?, dormir? }
  */
 /** @param {{ T: any, aplicar?: boolean, confirmacion?: any, topes?: any, clientes?: any[], corrida?: string, imagen?: string | null }} o
  * @returns {Promise<any>} */
@@ -161,8 +166,8 @@ export async function correrLaPruebaReal({ T, aplicar = false, confirmacion = fa
       if (abre.status !== 200) { resultado.revisiones.push({ cliente: c.id, ok: false, error: `la ruta contestó ${abre.status}: ${JSON.stringify(abre.body).slice(0, 240)}` }); dicho(`revisión ${i + 1}: la ruta contestó ${abre.status}`); continue }
       const revision_id = abre.body.revision_id
       if (abre.body.accion === 'esperar') {
-        const w = await T.webhook({ revision_id, turno: abre.body.turno })
-        if (!(w.status >= 200 && w.status < 300)) { resultado.revisiones.push({ cliente: c.id, revision_id, ok: false, error: `el flujo contestó ${w.status} al despertarlo` }); dicho(`revisión ${i + 1}: el flujo no despertó (${w.status})`); break }
+        const w = await T.despertar({ revision_id, turno: abre.body.turno })
+        if (!(w.status >= 200 && w.status < 300)) { resultado.revisiones.push({ cliente: c.id, revision_id, ok: false, error: `la ruta no pudo despertar al flujo (${w.status})` }); dicho(`revisión ${i + 1}: el flujo no despertó (${w.status})`); break }
       }
       let lectura = null
       const limite = topes.limite_min * 60000
@@ -197,7 +202,7 @@ export async function correrLaPruebaReal({ T, aplicar = false, confirmacion = fa
   resultado.despues = await T.contadores()
   resultado.gasto_total_usd = +gastado.toFixed(6)
   resultado.contadores = compararContadores(antes, resultado.despues, { gasto_esperado_usd: resultado.gasto_total_usd })
-  resultado.ok = resultado.revisiones.length > 0 && resultado.revisiones.every((r) => r.ok) && resultado.contadores.ok && !resultado.parada && resultado.gasto_total_usd <= topes.total + 1e-6
+  resultado.ok = esExitosa(resultado, topes)
   return resultado
 }
 

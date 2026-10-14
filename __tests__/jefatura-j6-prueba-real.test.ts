@@ -3,10 +3,11 @@
  * Se prueba lo que protege el dinero y el orden: sin «dale» no corre, sin `--aplicar` no escribe nada, el tope de cada revisión y el total (corte duro), que APAGA siempre al final (también si algo revienta),
  * que se niega a empezar si algo no está como se espera, y que el sobre que manda es una entrada VÁLIDA de la ruta real.
  */
+import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import { validarEntrada } from '@/lib/jefatura/revision/contrato'
-import { avisoParaEmilio, CLIENTES_REALES, compararContadores, correrLaPruebaReal, debeParar, evidenciaDeUnaRevision, pasosDeLaPrueba, sobreReal, TOPES, topeDeLaSiguiente } from '../scripts/ops/jefatura-prueba-real/nucleo.mjs'
+import { avisoParaEmilio, CLIENTES_REALES, compararContadores, correrLaPruebaReal, esExitosa, debeParar, evidenciaDeUnaRevision, pasosDeLaPrueba, sobreReal, TOPES, topeDeLaSiguiente } from '../scripts/ops/jefatura-prueba-real/nucleo.mjs'
 
 type Json = Record<string, any>
 const UUID = '3f2b8c1e-9d4a-4b7e-8a61-0c5d2e7f9a10'
@@ -21,7 +22,7 @@ const evidenciaOk = (revision_id: string, o: Json = {}) => ({
   pasos: o.pasos ?? pasosOk(), fichas: o.fichas ?? [], invocaciones: o.invocaciones ?? [{ agent_name: 'jefe-marketing', cost_usd: 0.06, workflow_id: 'wf', origen: 'jefatura' }, { agent_name: 'gpt', cost_usd: 0.05, workflow_id: 'wf', origen: 'jefatura' }],
 })
 
-interface Opc { enVuelo?: number; cfg?: Json | null; turno?: Json | null; vigia?: Json | null; lecturas?: Json[][]; evidencia?: (id: string) => Json; ponerConfigFalla?: boolean; activarFalla?: boolean; aperturas?: Json[]; contadoresDespues?: Json }
+interface Opc { despertarStatus?: number; enVuelo?: number; cfg?: Json | null; turno?: Json | null; vigia?: Json | null; lecturas?: Json[][]; evidencia?: (id: string) => Json; ponerConfigFalla?: boolean; activarFalla?: boolean; aperturas?: Json[]; contadoresDespues?: Json }
 function transporte(o: Opc = {}) {
   const llamadas: Array<{ t: string; a?: any }> = []
   let reloj = 1_700_000_000_000
@@ -41,7 +42,7 @@ function transporte(o: Opc = {}) {
       if (cuerpo.accion === 'leer') { const id = cuerpo.revision_id; const i = id.startsWith('1') ? 0 : 1; const j = lecIdx[id] ?? 0; lecIdx[id] = j + 1; const l = lecturas[i] ?? lecturas[0]; return { status: 200, body: { revision_id: id, ...l[Math.min(j, l.length - 1)] } } }
       return aperturas[k++] ?? { status: 500, body: {} }
     },
-    webhook: async (c: Json) => (llamadas.push({ t: 'webhook', a: c }), { status: 200 }),
+    despertar: async (c: Json) => (llamadas.push({ t: 'despertar', a: c }), { status: o.despertarStatus ?? 200 }),
     evidencia: async (id: string) => (llamadas.push({ t: 'evidencia', a: id }), (o.evidencia ?? evidenciaOk)(id)),
     contadores: async () => (llamadas.push({ t: 'contadores' }), llamadas.filter((x) => x.t === 'contadores').length === 1 ? cont() : cont({ agent_invocations_total: 104, agent_invocations_de_los_clientes_de_practica: 4, agent_invocations_costo_usd_de_los_clientes_de_practica: 0.23, ...(o.contadoresDespues ?? {}) })),
     ahora: () => reloj,
@@ -49,7 +50,7 @@ function transporte(o: Opc = {}) {
   }
   return T
 }
-const escribe = (t: string) => ['ponerConfig', 'activar', 'webhook'].includes(t) || t.startsWith('llamar:')
+const escribe = (t: string) => ['ponerConfig', 'activar', 'despertar'].includes(t) || t.startsWith('llamar:')
 const base = { corrida: 'c1', confirmacion: true, aplicar: true }
 
 describe('J6 · sin «dale» y sin --aplicar no se mueve nada', () => {
@@ -72,7 +73,7 @@ describe('J6 · sin «dale» y sin --aplicar no se mueve nada', () => {
     })
   }
   it('el guion por la línea de comandos: `plan` y `aviso` se imprimen sin red; `correr --aplicar` sin la fecha del «dale» sale con error 3 y NO toca nada', () => {
-    const env = { ...process.env, NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SERVICE_ROLE_KEY: 'x', N8N_API_KEY: 'x', SALA_DISPATCH_KEY: 'x', N8N_BASE_URL: 'http://127.0.0.1:9', APP_URL: 'http://127.0.0.1:9' }
+    const env = { ...process.env, NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SERVICE_ROLE_KEY: 'x', N8N_API_KEY: 'x', INTERNAL_API_KEY: 'x', N8N_BASE_URL: 'http://127.0.0.1:9', APP_URL: 'http://127.0.0.1:9' }
     const plan = spawnSync(process.execPath, ['scripts/ops/jefatura-prueba-real.mjs', 'plan'], { encoding: 'utf8', env })
     expect(plan.status).toBe(0); expect(plan.stdout).toContain('Ahora no se ha tocado nada')
     const aviso = spawnSync(process.execPath, ['scripts/ops/jefatura-prueba-real.mjs', 'aviso'], { encoding: 'utf8', env })
@@ -146,11 +147,11 @@ describe('J6 · la corrida buena', () => {
   it('despierta el flujo con la revisión y el turno que dijo la ruta (y solo cuando la ruta pidió esperar)', async () => {
     const T = transporte()
     await correrLaPruebaReal({ T, ...base })
-    const w = T.llamadas.filter((x) => x.t === 'webhook')
+    const w = T.llamadas.filter((x) => x.t === 'despertar')
     expect(w).toHaveLength(2); expect(w[0].a.revision_id).toBe('11111111-1111-4111-8111-111111111111'); expect(w[0].a.turno.paso).toBe('revision_fondo')
     const T2 = transporte({ aperturas: [{ status: 200, body: { accion: 'cerrado', revision_id: '11111111-1111-4111-8111-111111111111', resultado: 'limpia' } }, { status: 200, body: { accion: 'cerrado', revision_id: '22222222-2222-4222-8222-222222222222', resultado: 'limpia' } }] })
     await correrLaPruebaReal({ T: T2, ...base })
-    expect(T2.llamadas.filter((x) => x.t === 'webhook')).toHaveLength(0)
+    expect(T2.llamadas.filter((x) => x.t === 'despertar')).toHaveLength(0)
   })
   it('mira el cierre cada 5 s y se corta a los 20 min (corte duro por tiempo): apaga y deja el motivo', async () => {
     const T = transporte({ lecturas: [[{ estado: 'en_paso', gasto_usd: 0.01 }]] })
@@ -233,7 +234,7 @@ describe('J6 · APAGA SIEMPRE', () => {
   it('si la ruta rechaza abrir (409, 400…) no se despierta nada, se anota y se apaga', async () => {
     const T = transporte({ aperturas: [{ status: 409, body: { error: 'jefatura_no_abre', motivo: 'tipo_no_activo' } }, { status: 409, body: { error: 'jefatura_no_abre' } }] })
     const r = await correrLaPruebaReal({ T, ...base })
-    expect(T.llamadas.filter((x) => x.t === 'webhook')).toHaveLength(0)
+    expect(T.llamadas.filter((x) => x.t === 'despertar')).toHaveLength(0)
     expect(r.revisiones.every((x: Json) => x.ok === false)).toBe(true); expect(r.ok).toBe(false); expect(r.apagado).toBe(true)
   })
 })
@@ -268,6 +269,52 @@ describe('J6 · la evidencia por tramo', () => {
   })
   it('una llamada de agente sin workflow_id rompe la regla de oro y se marca', () => {
     expect(tramo(ev({ invocaciones: [{ agent_name: 'jefe-marketing', cost_usd: 0.06, workflow_id: null }] }), 'toda llamada de agente con workflow_id').ok).toBe(false)
+  })
+})
+
+describe('J6 · la llave interna y la acción despertar (condición §10.1: nadie toca la llave de despacho)', () => {
+  const src = (f: string) => fs.readFileSync(f, 'utf8')
+  const codigo = (s: string) => s.split(String.fromCharCode(10)).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join(String.fromCharCode(10))
+  it('el guion y el núcleo NO leen ni mandan la llave de despacho ni llaman al webhook de n8n: usan x-api-key y la acción «despertar» de la ruta de turnos', () => {
+    for (const f of ['scripts/ops/jefatura-prueba-real.mjs', 'scripts/ops/jefatura-prueba-real/nucleo.mjs']) {
+      const c = codigo(src(f))
+      expect(c).not.toMatch(/SALA_DISPATCH_KEY|x-sala-dispatch-key|N8N_WEBHOOK_BASE|zero-risk\/jefatura-turno/)
+    }
+    const cli = codigo(src('scripts/ops/jefatura-prueba-real.mjs'))
+    expect(cli).toContain("process.env.INTERNAL_API_KEY"); expect(cli).toContain("'x-api-key': LLAVE"); expect(cli).toContain("accion: 'despertar'")
+  })
+  it('sin INTERNAL_API_KEY el guion se niega (error 2) aunque exista SALA_DISPATCH_KEY y aunque traiga el «dale»', () => {
+    const env = { ...process.env, NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SERVICE_ROLE_KEY: 'x', N8N_API_KEY: 'x', SALA_DISPATCH_KEY: 'x', N8N_BASE_URL: 'http://127.0.0.1:9', APP_URL: 'http://127.0.0.1:9', INTERNAL_API_KEY: '' }
+    const r = spawnSync(process.execPath, ['scripts/ops/jefatura-prueba-real.mjs', 'correr', '--aplicar', '--dale-de-emilio', '2026-10-15'], { encoding: 'utf8', env })
+    expect(r.status).toBe(2); expect(r.stderr).toContain('INTERNAL_API_KEY')
+  })
+  it('si la ruta no puede despertar al flujo (409, 502…) se anota, no se sigue esperando en vano y se APAGA', async () => {
+    const T = transporte({ despertarStatus: 409 })
+    const r = await correrLaPruebaReal({ T, ...base })
+    expect(r.revisiones[0].ok).toBe(false); expect(r.revisiones[0].error).toMatch(/no pudo despertar al flujo \(409\)/)
+    expect(r.apagado).toBe(true); expect(r.ok).toBe(false)
+    expect(T.llamadas.filter((x) => x.t === 'llamar:revisiones' && x.a.accion === 'leer')).toHaveLength(0)
+  })
+})
+
+describe('J6 · el éxito exige TODO, cada condición por separado (R2 de CC#3)', () => {
+  const bueno = () => ({ revisiones: [{ ok: true }, { ok: true }], contadores: { ok: true }, parada: null, apagado: true, gasto_total_usd: 0.5 })
+  it('la prueba buena es exitosa', () => { expect(esExitosa(bueno())).toBe(true) })
+  for (const [caso, cambia] of [
+    ['sin ninguna revisión', (r: Json) => { r.revisiones = [] }],
+    ['una revisión con evidencia incompleta', (r: Json) => { r.revisiones[1].ok = false }],
+    ['contadores fuera de orden', (r: Json) => { r.contadores.ok = false }],
+    ['la prueba se cortó (parada) aunque todo lo demás esté bien', (r: Json) => { r.parada = 'se cortó' }],
+    ['no quedó apagado', (r: Json) => { r.apagado = false }],
+    ['el gasto total pasó de US$ 0,70', (r: Json) => { r.gasto_total_usd = 0.71 }],
+  ] as Array<[string, (r: Json) => void]>) {
+    it(`${caso} → NO es exitosa`, () => { const r = bueno(); cambia(r); expect(esExitosa(r)).toBe(false) })
+  }
+  it('el gasto justo en el tope (0,70) sí vale; un valor que no es número no vale', () => { const r = bueno(); r.gasto_total_usd = 0.7; expect(esExitosa(r)).toBe(true); r.gasto_total_usd = NaN; expect(esExitosa(r)).toBe(false) })
+  it('la corrida real usa esa regla: con la parada puesta y TODO lo demás bien, ok es falso', async () => {
+    const T = transporte({ lecturas: [[{ estado: 'en_paso', gasto_usd: 0.9 }]], evidencia: (id) => evidenciaOk(id), contadoresDespues: { agent_invocations_costo_usd_de_los_clientes_de_practica: 0.11 } })
+    const r = await correrLaPruebaReal({ T, ...base })
+    expect(r.parada).toBeTruthy(); expect(r.revisiones[0].ok).toBe(true); expect(r.contadores.ok).toBe(true); expect(r.apagado).toBe(true); expect(r.ok).toBe(false)
   })
 })
 
