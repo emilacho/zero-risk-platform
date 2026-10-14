@@ -250,7 +250,7 @@ describe('lo común es una FACHADA: la oficina no se toca y la jefatura importa 
       expect(s, f).not.toMatch(/from ['"][^'"]*revisor-gpt['"]/)
     }
   })
-  it('y nadie la llama todavía: nada fuera de su carpeta (y de las rutas /api/jefatura/{revisiones,turnos,vigia}, que son J3) importa la revisión de la jefatura', () => {
+  it('y nadie la llama todavía: nada fuera de su carpeta (y de las rutas /api/jefatura/{revisiones,turnos,vigia}, que son J3) importa la revisión de la jefatura, salvo el paso `jefatura` de la oficina (J8a: tipos, puerto y adaptador)', () => {
     const buscar = (dir: string, acc: string[] = []): string[] => {
       for (const e of readdirSync(dir, { withFileTypes: true })) {
         const p = resolve(dir, e.name)
@@ -259,8 +259,9 @@ describe('lo común es una FACHADA: la oficina no se toca y la jefatura importa 
       return acc
     }
     const raiz = resolve(__dirname, '..', 'src')
-    const permitido = /\/lib\/jefatura\/revision\/|\/app\/api\/jefatura\/(revisiones|turnos|vigia)\//
+    const permitido = /\/lib\/jefatura\/revision\/|\/app\/api\/jefatura\/(revisiones|turnos|vigia)\/|\/__tests__\//
     const importadores = buscar(raiz).filter((f) => !permitido.test(f.split(String.fromCharCode(92)).join('/')) && /from ['"][^'"]*jefatura\/revision/.test(readFileSync(f, 'utf8')))
-    expect(importadores.map((f) => f.replace(/\\/g, '/').split('/src/')[1])).toEqual([])
+    // J8a · la ÚNICA puerta de la oficina hacia la jefatura: el paso `jefatura` (su módulo puro, su tipo de puerto, su orquestador y su adaptador). Cualquier otro importador sigue siendo un error.
+    expect(importadores.map((f) => f.replace(/\\/g, '/').split('/src/')[1]).sort()).toEqual(['lib/oficina/adaptadores.ts', 'lib/oficina/orquestador.ts', 'lib/oficina/paso-jefatura.ts', 'lib/oficina/puertos.ts'])
   }, 60_000)
 })

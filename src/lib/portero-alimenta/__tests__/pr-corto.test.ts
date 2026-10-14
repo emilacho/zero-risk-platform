@@ -104,7 +104,7 @@ describe('costos declarados = lo medido el 14-oct', () => {
     const medidas = { website_content_scraper: 0.0536, instagram_scraper: 0.0025, own_google_maps_profile: 0.007, instagram_post_comments_scraper: 0.07, google_serp_scraper: 0.003, resenas_google_maps: 0.002, videos_instagram: 0.56 }
     for (const [f, usd] of Object.entries(medidas)) expect(COSTO_MAXIMO_POR_FUNCION[f], f).toEqual({ usd, medido: true })
     expect(VIDEO_DE_INSTAGRAM_USD).toBeCloseTo(0.056, 6)
-    expect(COSTO_MAXIMO_POR_FUNCION.menciones_en_redes.medido).toBe(false)
+    expect(COSTO_MAXIMO_POR_FUNCION.menciones_en_redes.medido).toBe(true)
   })
   it('el plan diario NO trae los videos de Instagram ni las reseñas de Mapas; los videos de otras redes van de 3 en 3 con su costo proporcional', () => {
     const p = descubrir({

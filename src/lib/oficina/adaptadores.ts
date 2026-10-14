@@ -15,10 +15,15 @@ import type { FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, Resul
 import type { Registro } from './chequeos'
 import { avisoDeProvisionales } from '../manual/lectura'
 import { codificarPng } from './encaje'
+import { abrirRevision, armarSalida } from '../jefatura/revision/orquestador'
+import { crearPuertos as crearPuertosDeLaJefatura, entornoDeProceso as entornoDeLaJefatura } from '../jefatura/revision/adaptadores'
+import { resolverCierre } from '../jefatura/revision/cierre'
+import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA, type SalidaDeRevision } from '../jefatura/revision/contrato'
+import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void> }
+export interface Entorno { baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string }
 
 /** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
 export { ESPERAS_DEL_REVISOR_MS }
@@ -143,6 +148,37 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         if (!r.ok || !j.image_url) return { ok: false, error: String(j.error ?? j.detail ?? `HTTP ${r.status}`) }
         return { ok: true, url: String(j.image_url), generation_id: String(j.generation_id ?? ''), costo_usd: Number(j.cost_usd ?? 0) }
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+    },
+    /**
+     * J8a · abre UNA revisión de la pieza en la jefatura (la MISMA función que la ruta `/api/jefatura/revisiones`, sin pasar por la red) con `devolver_a` = la ruta de vuelta de la oficina.
+     * Si la revisión necesita turnos de agente, despierta el flujo `jefatura · turno` (como hace quien llama a la ruta); si ese aviso no llega, la revisión queda abierta y el vigía de la jefatura la re-arma.
+     * Nunca lanza: cualquier fallo vuelve como `error` y el paso deja la pieza «sin revisar».
+     */
+    async jefatura(sobre) {
+      try {
+        const PJ = crearPuertosDeLaJefatura(db as never, entornoDeLaJefatura(), f)
+        const cuerpo = { ...sobre, payload: { ...sobre.payload, devolver_a: { tipo: 'webhook', destino: `${VERCEL_DE_LA_PLATAFORMA}api/jefatura/oficina-vuelta` } } }
+        const r = await abrirRevision(PJ, cuerpo)
+        if (r.status === 409) return { estado: 'no_abre', motivo: String(r.cuerpo.motivo ?? r.cuerpo.error ?? 'la jefatura no abre') }
+        if (r.status !== 200) return { estado: 'error', motivo: `la jefatura contestó ${r.status}: ${JSON.stringify(r.cuerpo).slice(0, 200)}` }
+        if (r.cuerpo.accion === 'cerrado' && r.cuerpo.salida) return { estado: 'cerrada', salida: r.cuerpo.salida as SalidaDeRevision }
+        const id = String(r.cuerpo.revision_id ?? '')
+        if (r.cuerpo.accion === 'ya_existia') {
+          // se reejecutó el encargo: si la revisión ya cerró, se entrega su salida; si sigue abierta, se espera la misma
+          const rev = await PJ.almacen.leerRevision(id)
+          if (rev && (ESTADOS_TERMINALES as readonly string[]).includes(rev.estado)) return { estado: 'cerrada', salida: armarSalida(rev, resolverCierre(rev.estado_del_motor, { tope: rev.estado === 'cerrada_por_tope', fallida: rev.estado === 'fallida' })) }
+          return { estado: 'esperando', revision_id: id }
+        }
+        if (r.cuerpo.accion === 'esperar' && r.cuerpo.turno && env.dispatchKey) {
+          const base = ((env.n8nWebhookBase ?? '').trim() || N8N_POR_OMISION).replace(/\/+$/, '')
+          try {
+            const w = await f(`${base}/zero-risk/jefatura-turno`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': env.dispatchKey }, body: JSON.stringify({ revision_id: id, turno: r.cuerpo.turno }) })
+            if (!w.ok) await this.avisar({ canal: 'alertas', encargo_id: sobre.artifact_id, texto: `⚠️ No se pudo despertar el turno de la jefatura (HTTP ${w.status}) · revisión ${id}: la re-arma el vigía de la jefatura`, dry_run: sobre.payload.dry_run })
+          } catch (e) { await this.avisar({ canal: 'alertas', encargo_id: sobre.artifact_id, texto: `⚠️ No se pudo despertar el turno de la jefatura (${e instanceof Error ? e.message : String(e)}) · revisión ${id}: la re-arma el vigía de la jefatura`, dry_run: sobre.payload.dry_run }) }
+        }
+        if (r.cuerpo.accion === 'esperar' && id) return { estado: 'esperando', revision_id: id }
+        return { estado: 'error', motivo: `respuesta de la jefatura que no se entiende: ${JSON.stringify(r.cuerpo).slice(0, 200)}` }
+      } catch (e) { return { estado: 'error', motivo: e instanceof Error ? e.message : String(e) } }
     },
     async revisor(p): Promise<ResultadoRevisor> {
       if (p.dry_run) return { ok: true, texto: '', costo_usd: 0, modelo: 'simulado (dry_run)' }

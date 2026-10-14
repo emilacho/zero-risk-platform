@@ -1,4 +1,8 @@
 /**
+ * RETIRADO (14-oct) · no se enciende nunca: lo que escribe (`cerebro_vigilancia`, `cerebro_oportunidades`) no tiene lector y empujar «oportunidades» contradice «cada oficina va al cerebro».
+ * Lo reemplaza `src/lib/portero-alimenta/`. Queda solo como referencia probada; las rutas `/api/brain/diario/*` responden 410.
+ */
+/**
  * CORRER EL DIARIO PARA UN CLIENTE (pasos 2, 3 y 5) · TODO CÓDIGO, ningún modelo, US$ 0. Recibe la base por parámetro (se prueba con una base falsa).
  *  · `dry_run` OBLIGATORIO: con true se calcula todo y NO se escribe NADA (ni siquiera el rastro de la corrida);
  *  · una corrida por cliente y día (la fila de `cerebro_diario_corridas` es el candado); `forzar` la repite;

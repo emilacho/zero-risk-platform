@@ -13,7 +13,8 @@ import { COSTO_MAXIMO_POR_FUNCION, gastoDelDia, VIDEO_DE_INSTAGRAM_USD, type Fil
 import { TOPE_DEL_PORTERO_USD, type Interruptores } from './datos'
 import type { RespuestaDeLlamada } from './juez'
 import type { PuenteDeIndice } from './archivar'
-import { reconciliarPuente, type FichaParaPuente } from './puente'
+import { clientesActivos } from './clientes'
+import { MAX_TROZOS_A_ESCRIBIR_POR_PASADA, MAX_TROZOS_A_SACAR_POR_PASADA, reconciliarPuente, type FichaParaPuente } from './puente'
 
 export interface Respuesta { status: number; body: Record<string, unknown> }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -247,6 +248,49 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
   return { status: 200, body: { dry_run: v.dry_run, acciones, omitidas, revision_de_publicaciones: revision, fichas_de_mapas_descartadas: descartadas, gasto_de_hoy: g.gasto, modelos_llamados: 0 } }
 }
 
+/**
+ * EL PUENTE POR PASADAS · lee las fichas y los trozos del cliente, reconcilia (idempotente) y envía a lo más `MAX_TROZOS_A_ESCRIBIR_POR_PASADA` trozos y saca a lo más
+ * `MAX_TROZOS_A_SACAR_POR_PASADA`; `quedan` dice cuánto falta (el flujo repite hasta 0). En seco solo cuenta. Una falla de lectura se DICE.
+ */
+export async function reconciliarYEnviar(deps: DepsDeRutas, clientId: string, dryRun: boolean): Promise<{ puente: Record<string, unknown>; errores: string[] }> {
+  const fi = await deps.db.from('cerebro_fichas').select('id, client_id, ref, clase, titulo, contenido, fecha_fuente, observado_en, creado_en, propiedad, origen, descartada, retirada_en, prueba, huella').eq('client_id', clientId).limit(5000)
+  const ch = await deps.db.from('client_brain_chunks').select('source_id').eq('client_id', clientId).eq('source_table', 'cerebro_fichas').limit(5000)
+  if (fi.error || ch.error) return { puente: { lectura_fallida: true }, errores: [`puente: lectura fallida (${(fi.error ?? ch.error)!.message})`] }
+  const rec = reconciliarPuente(lista(fi.data) as unknown as FichaParaPuente[], lista(ch.data).map((x) => String(x.source_id)))
+  const lote = { escribir: rec.escribir.slice(0, MAX_TROZOS_A_ESCRIBIR_POR_PASADA), sacar: rec.sacar.slice(0, MAX_TROZOS_A_SACAR_POR_PASADA) }
+  let puente: Record<string, unknown> = { pendientes: rec.escribir.length, a_sacar: rec.sacar.length, ya_buscables: rec.ya_buscables, repetidas: rec.duplicadas, esta_pasada: { escribir: lote.escribir.length, sacar: lote.sacar.length } }
+  const errores: string[] = []
+  let quedan = rec.escribir.length + rec.sacar.length
+  if (!dryRun && deps.puente && (lote.escribir.length || lote.sacar.length)) {
+    const p = await deps.puente({ escribir: lote.escribir, sacar: lote.sacar, client_id: clientId })
+    puente = { ...puente, ...p }
+    quedan = Math.max(0, rec.escribir.length - p.escritos) + Math.max(0, rec.sacar.length - p.sacados)
+    if (p.errores.length) errores.push(...p.errores.map((m) => `puente: ${m}`))
+  }
+  return { puente: { ...puente, quedan }, errores }
+}
+
+// ───────────────────────── /puente · solo la reconciliación (el flujo la repite hasta terminar)
+export async function rutaPuente(deps: DepsDeRutas, cuerpo: unknown): Promise<Respuesta> {
+  const v = validar(cuerpo); if (esRespuesta(v)) return v
+  if (!deps.interruptores.alimentar || !deps.interruptores.puente_al_indice) return { status: 200, body: { apagado: true, detalle: 'el puente al índice está apagado: no se leyó ni se escribió nada', modelos_llamados: 0 } }
+  const x = await reconciliarYEnviar(deps, v.client_id, v.dry_run)
+  const mal = x.errores.length > 0 || x.puente.lectura_fallida === true
+  return { status: mal ? 502 : 200, body: { ok: !mal, dry_run: v.dry_run, puente: x.puente, errores: x.errores, modelos_llamados: 0 } }
+}
+
+// ───────────────────────── /clientes · a quién atiende el portero hoy (solo lectura)
+export async function rutaClientes(deps: DepsDeRutas, cuerpo: unknown): Promise<Respuesta> {
+  if (!esObjeto(cuerpo)) return err(400, 'entrada_invalida', 'el cuerpo debe ser un objeto')
+  if (typeof cuerpo.dry_run !== 'boolean') return err(400, 'dry_run_obligatorio', '`dry_run` es obligatorio y debe ser true o false')
+  if (!deps.interruptores.alimentar) return { status: 200, body: { apagado: true, detalle: 'PORTERO_ALIMENTAR está apagado: no se leyó ni se escribió nada', clientes: [], excluidos: [], modelos_llamados: 0 } }
+  const r = await clientesActivos(deps.db)
+  if (!r.ok) return err(502, 'lectura_fallida', r.detalle)
+  const solo = typeof cuerpo.client_id === 'string' && UUID.test(cuerpo.client_id) ? cuerpo.client_id : null
+  const datos = solo ? { clientes: r.datos.clientes.filter((c) => c.client_id === solo), excluidos: r.datos.excluidos.filter((c) => c.client_id === solo) } : r.datos
+  return { status: 200, body: { dry_run: cuerpo.dry_run, ...datos, modelos_llamados: 0 } }
+}
+
 // ───────────────────────── /alimentar · filtrar → razonar → archivar con lo que ya se trajo
 export async function rutaAlimentar(deps: DepsDeRutas, cuerpo: unknown): Promise<Respuesta> {
   const v = validar(cuerpo); if (esRespuesta(v)) return v
@@ -259,24 +303,12 @@ export async function rutaAlimentar(deps: DepsDeRutas, cuerpo: unknown): Promise
     gasto_de_hoy_usd: g.gasto.total_usd, workflow_id: v.workflow_id || undefined, workflow_execution_id: v.workflow_execution_id || undefined,
   })
   const status = r.estado === 'cliente_inexistente' ? 404 : r.estado === 'lectura_fallida' ? 502 : 200
-  // H1 · el puente se RECONCILIA en cada pasada (idempotente): fichas entregables sin trozo ⇒ se reenvían; trozos de fichas retiradas/descartadas ⇒ salen.
-  // Una falla de ayer se repara hoy sin duplicar nada. En seco solo se CUENTA (lectura).
+  // H1 · el puente se RECONCILIA en cada pasada (idempotente, con tope por pasada): ver `reconciliarYEnviar`
   let puente: Record<string, unknown> | null = null
   if (deps.interruptores.puente_al_indice && r.ok) {
-    const fi = await deps.db.from('cerebro_fichas').select('id, client_id, ref, clase, titulo, contenido, fecha_fuente, observado_en, creado_en, propiedad, origen, descartada, retirada_en, prueba').eq('client_id', v.client_id).limit(5000)
-    const ch = await deps.db.from('client_brain_chunks').select('source_id').eq('client_id', v.client_id).eq('source_table', 'cerebro_fichas').limit(5000)
-    if (fi.error || ch.error) {
-      r.errores.push(`puente: lectura fallida (${(fi.error ?? ch.error)!.message})`)
-      puente = { lectura_fallida: true }
-    } else {
-      const rec = reconciliarPuente(lista(fi.data) as unknown as FichaParaPuente[], lista(ch.data).map((x) => String(x.source_id)))
-      puente = { pendientes: rec.escribir.length, a_sacar: rec.sacar.length, ya_buscables: rec.ya_buscables }
-      if (!v.dry_run && deps.puente && (rec.escribir.length || rec.sacar.length)) {
-        const p = await deps.puente({ escribir: rec.escribir, sacar: rec.sacar, client_id: v.client_id })
-        puente = { ...puente, ...p }
-        if (p.errores.length) r.errores.push(...p.errores.map((m) => `puente: ${m}`))
-      }
-    }
+    const x = await reconciliarYEnviar(deps, v.client_id, v.dry_run)
+    puente = x.puente
+    r.errores.push(...x.errores)
   }
   // una falla del puente se DICE en el estado (no queda «hecha» con errores escondidos)
   if (r.errores.length && r.estado === 'hecha') { r.estado = 'con_errores'; r.ok = false }

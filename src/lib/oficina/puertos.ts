@@ -8,6 +8,8 @@ import type { PropiosDelCliente } from './reglas-de-imagen'
 import type { ConfigDeOficina } from './sobre'
 import type { Estado, Ficha, Plantilla } from './tipos'
 import type { FilaDeFormato } from './entrega'
+import type { SalidaDeRevision } from '../jefatura/revision/contrato'
+import type { SobreDeRevisionDePieza } from './paso-jefatura'
 
 /** lo que el cliente tiene (manual, fotos, datos propios), leído UNA vez al abrir y guardado en el encargo */
 export interface FuentesCompletas {
@@ -105,6 +107,16 @@ export interface PedidoDeRender {
   dry_run: boolean
 }
 
+/** J8a · lo que pasó al abrir la revisión de la pieza en la jefatura */
+export type AperturaDeJefatura =
+  /** la revisión cerró dentro de la propia llamada (p. ej. en seco, o ya existía y ya estaba cerrada) */
+  | { estado: 'cerrada'; salida: SalidaDeRevision }
+  /** abierta: los turnos de agente los corre el flujo `jefatura · turno`; al cerrar, la jefatura entrega a `/api/jefatura/oficina-vuelta` y el encargo sigue */
+  | { estado: 'esperando'; revision_id: string }
+  /** la jefatura no abre (apagada, tipo no activo, fuera del ensayo, sin presupuesto…): 409 de su puerta */
+  | { estado: 'no_abre'; motivo: string }
+  | { estado: 'error'; motivo: string }
+
 export interface Puertos {
   almacen: Almacen
   ahora(): Date
@@ -114,6 +126,8 @@ export interface Puertos {
   plan(planId: string, clientId: string): Promise<string | null>
   /** genera UNA imagen (1024×1024, calidad explícita); en dry_run NO llama al proveedor */
   imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean }): Promise<ResultadoImagen>
+  /** J8a · abre UNA revisión de la pieza en la jefatura (misma función que la ruta `/api/jefatura/revisiones`, con `devolver_a` = la ruta de vuelta de la oficina). Opcional: sin él, el paso `jefatura` deja la pieza «sin revisar» */
+  jefatura?(sobre: SobreDeRevisionDePieza): Promise<AperturaDeJefatura>
   /** el revisor ciego (otro proveedor); en dry_run NO llama al proveedor */
   revisor(p: { texto: string; imagenes_urls: string[]; dry_run: boolean; /** para anotar el gasto en el libro de invocaciones (condición 5): sin ellos no se anota */ client_id?: string; ref_id?: string; n?: number }): Promise<ResultadoRevisor>
   /** el brazo que dibuja láminas (PNG); en dry_run NO llama al brazo ni escribe en el bucket */

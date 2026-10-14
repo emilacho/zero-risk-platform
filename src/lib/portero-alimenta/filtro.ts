@@ -43,8 +43,13 @@ export function senalesDe(texto: string, ctx: ContextoDelCliente): Senales {
   for (const h of ctx.handles) {
     const hh = h.toLowerCase().replace(/^@/, '')
     if (hh && new RegExp('(^|[^a-z0-9._])@?' + hh.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9_])').test(crudo)) { s.identidad.push(`cuenta @${h}`); break }
+    // texto YA normalizado (sin puntos): la cuenta «naufrago.ec» queda «naufrago ec». Solo cuenta si la cuenta tiene separador (si no, es una sola palabra y se confundiría con el nombre)
+    const hn = normalizar(hh)
+    if (hn.includes(' ') && ` ${n.replace(/@/g, ' ').replace(/\s+/g, ' ')} `.includes(` ${hn} `)) { s.identidad.push(`cuenta @${h}`); break }
   }
-  for (const d of ctx.dominios) if (d && n.replace(/ /g, '').includes(normalizar(d).replace(/ /g, ''))) { s.identidad.push(`dominio ${d}`); break }
+  // el dominio se busca como SECUENCIA DE PALABRAS enteras («naufrago ec»): «naufrago.ecuador» ya no lo confirma por contener «naufragoec»
+  const palabras = ` ${n.replace(/@/g, ' ').replace(/\s+/g, ' ').trim()} `
+  for (const d of ctx.dominios) { const dn = normalizar(d); if (dn && palabras.includes(` ${dn} `)) { s.identidad.push(`dominio ${d}`); break } }
   const dg = digitos(texto)
   for (const t of ctx.telefonos) { const td = digitos(t); if (td.length >= 7 && dg.includes(td.slice(-8))) { s.identidad.push('teléfono propio'); break } }
   for (const r of new Set(ctx.rubro ?? [])) if (r && coincidePorPalabra(n, r)) s.rubro.push(r)

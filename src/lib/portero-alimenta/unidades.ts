@@ -68,7 +68,8 @@ const hostDe = (u: string): string => { try { return new URL(u.includes('://') ?
 /** la fila más NUEVA de cada (función, objetivo) manda; los ensayos jamás */
 export function unidadesDeRaspados(filas: FilaCruda[], o: OpcionesDeUnidades): Unidad[] {
   const out = new Map<string, Unidad>()
-  const poner = (u: Unidad) => { const k = `${u.fuente}|${u.ref}|${u.unidad_ref}`; if (!out.has(k)) out.set(k, u) }
+  // el sitio repite la misma línea (menú, horario, pie) en varias páginas: es UNA unidad (la de la página más nueva); el resto de las fuentes se distingue por su `ref`
+  const poner = (u: Unidad) => { const k = u.fuente === 'sitio' || u.fuente === 'reparto' ? `${u.fuente}|${u.unidad_ref}` : `${u.fuente}|${u.ref}|${u.unidad_ref}`; if (!out.has(k)) out.set(k, u) }
   const orden = [...filas].filter((f) => f.ensayo !== true).sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
   const reparto = new Set((o.hostsDeReparto ?? []).map((h) => h.toLowerCase()))
   const base = (f: FilaCruda) => ({ apify_raw_id: String(f.id), observado_en: f.created_at })
@@ -142,7 +143,11 @@ export function unidadesDeRaspados(filas: FilaCruda[], o: OpcionesDeUnidades): U
       }
     } else if (f.apify_function === 'menciones_en_redes') {
       for (const it of arr(f.respuesta)) {
-        const t = normalizar(txt(it.caption) || txt(it.text)).slice(0, 1500)
+        // la publicación que ETIQUETA o MENCIONA al negocio: el pie y las cuentas etiquetadas/mencionadas (sin «@»: «naufrago.ec» queda «naufrago ec» y cuenta como identidad)
+        const cuentas = [...(Array.isArray(it.taggedUsers) ? it.taggedUsers : []), ...(Array.isArray(it.mentions) ? it.mentions : [])]
+          .map((x) => (typeof x === 'string' ? x : x && typeof x === 'object' ? txt((x as Record<string, unknown>).username) : '')).map((x) => x.replace(/^@/, '').trim()).filter(Boolean)
+        const pie = txt(it.caption) || txt(it.text)
+        const t = normalizar(`${pie}${cuentas.length ? ` etiquetado: ${[...new Set(cuentas)].join(' ')}` : ''}`).slice(0, 1500)
         if (t.length >= 9) poner({ ...base(f), fuente: 'mencion', ref: 'redes', unidad_ref: txt(it.id) || txt(it.shortCode) || huellaDeTexto(t), texto: t, clase_dato: 'acumula', atributo: null, autoria: 'tercero', huella: huellaDeTexto(t), fecha_fuente: txt(it.timestamp) || null, url: txt(it.url) || null })
       }
     }
