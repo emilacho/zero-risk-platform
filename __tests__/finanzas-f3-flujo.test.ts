@@ -9,6 +9,13 @@ import { construirFlujo, N, RUTA_WEBHOOK } from '../scripts/worker-staging/finan
 import { correr } from '../scripts/worker-staging/finanzas-f4/n8n-mini.mjs'
 
 type Json = Record<string, any>
+/** la salida del ÚLTIMO nodo que corrió (falla con claridad si el flujo no visitó ninguno: el tipo ya no es «posiblemente undefined») */
+const salidaFinal = (r: { visitas: Array<{ salida: any[] }> }): any => {
+  const v = r.visitas[r.visitas.length - 1]
+  if (!v) throw new Error('el flujo no visitó ningún nodo')
+  return v.salida[0]
+}
+
 const flujo = construirFlujo() as Json
 const archivo = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'scripts/worker-staging/finanzas-f3/NUEVO-finanzas-bloque-2026-10-14.json'), 'utf8')) as Json
 const ENV = { ZERO_RISK_API_URL: 'https://api.ejemplo.invalid', INTERNAL_API_KEY: 'llave-de-prueba' }
@@ -32,17 +39,17 @@ describe('R-F3 de CC#3 · el webhook EXIGE la llave interna antes de mirar nada'
     it(`${nombre}: «no_autorizado», NO se llama a la ruta y no se dice por qué`, async () => {
       const r = await correrCon(body, NO, headers, env)
       expect(r.llamadasHttp).toEqual([])
-      expect(r.visitas.at(-1).salida[0]).toEqual({ ok: false, sin_bloque: true, motivo: 'no_autorizado' })
+      expect(salidaFinal(r)).toEqual({ ok: false, sin_bloque: true, motivo: 'no_autorizado' })
     })
   }
   it('con la llave correcta sigue el comportamiento normal (una sola llamada)', async () => {
     const r = await correrCon(body, () => ({ statusCode: 200, body: { dry_run: true, huella: 'h', escribio: false } }))
     expect(r.llamadasHttp).toHaveLength(1)
-    expect(r.visitas.at(-1).salida[0]).toMatchObject({ ok: true })
+    expect(salidaFinal(r)).toMatchObject({ ok: true })
   })
   it('la comprobación va ANTES de validar el sobre: un sobre roto sin llave dice «no_autorizado», no «sobre_invalido»', async () => {
     const r = await correrCon({}, NO, {})
-    expect(r.visitas.at(-1).salida[0].motivo).toBe('no_autorizado')
+    expect(salidaFinal(r).motivo).toBe('no_autorizado')
   })
 })
 
@@ -77,12 +84,12 @@ describe('el comportamiento', () => {
     expect(l.url).toBe('https://api.ejemplo.invalid/api/finanzas/bloque')
     expect(l.cabeceras['x-api-key']).toBe('llave-de-prueba')
     expect(l.cuerpo).toEqual({ client_id: 'c1', dry_run: true, entrada: ENTRADA, workflow_execution_id: 'EX_PRUEBA' })
-    const sal = r.visitas.at(-1).salida[0]
+    const sal = salidaFinal(r)
     expect(sal).toMatchObject({ ok: true, sin_bloque: false, huella: 'h', escribio: false })
   })
   it('real y guardado: devuelve el id del tablero en `borrador` (la firma es de la revisión)', async () => {
     const r = await correrCon({ client_id: 'c1', dry_run: false, entrada: ENTRADA }, () => ({ statusCode: 200, body: { dry_run: false, finanzas_id: 'uuid-1', version: 2, huella: 'h', escribio: true } }))
-    expect(r.visitas.at(-1).salida[0]).toMatchObject({ ok: true, finanzas_id: 'uuid-1', version: 2, estado: 'borrador', escribio: true })
+    expect(salidaFinal(r)).toMatchObject({ ok: true, finanzas_id: 'uuid-1', version: 2, estado: 'borrador', escribio: true })
   })
   for (const [nombre, body] of [
     ['sin dry_run', { client_id: 'c1', entrada: ENTRADA }],
@@ -94,20 +101,20 @@ describe('el comportamiento', () => {
     it(`${nombre}: NO se llama a la ruta y sale «sin_bloque» con los errores`, async () => {
       const r = await correrCon(body, () => { throw new Error('no debe llamarse') })
       expect(r.llamadasHttp).toEqual([])
-      expect(r.visitas.at(-1).salida[0]).toMatchObject({ ok: false, sin_bloque: true, motivo: 'sobre_invalido' })
-      expect(r.visitas.at(-1).salida[0].errores.length).toBeGreaterThan(0)
+      expect(salidaFinal(r)).toMatchObject({ ok: false, sin_bloque: true, motivo: 'sobre_invalido' })
+      expect(salidaFinal(r).errores.length).toBeGreaterThan(0)
     })
   }
   it('la oficina apagada (409), una entrada inválida (422) o un fallo (500) NUNCA lanzan: `sin_bloque` con su motivo', async () => {
     for (const [status, body, motivo] of [[409, { error: 'finanzas_apagada' }, 'finanzas_apagada'], [422, { error: 'entrada_invalida', errores: ['x'] }, 'entrada_invalida'], [500, { error: 'no_se_pudo_guardar' }, 'no_se_pudo_guardar'], [503, {}, 'http_503']] as Array<[number, Json, string]>) {
       const r = await correrCon({ client_id: 'c1', dry_run: false, entrada: ENTRADA }, () => ({ statusCode: status, body }))
-      expect(r.visitas.at(-1).salida[0], String(status)).toMatchObject({ ok: false, sin_bloque: true, motivo })
+      expect(salidaFinal(r), String(status)).toMatchObject({ ok: false, sin_bloque: true, motivo })
     }
   })
   it('una respuesta que no es JSON ni objeto tampoco lanza', async () => {
     for (const resp of [{ statusCode: 200, body: 'no es json' }, { statusCode: 200, body: null }, {}, { statusCode: 'x', body: [] }]) {
       const r = await correrCon({ client_id: 'c1', dry_run: true, entrada: ENTRADA }, () => resp)
-      expect(r.visitas.at(-1).salida[0]).toMatchObject({ ok: false, sin_bloque: true })
+      expect(salidaFinal(r)).toMatchObject({ ok: false, sin_bloque: true })
     }
   })
 })
