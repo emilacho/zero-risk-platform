@@ -23,6 +23,8 @@ export function purezaDe(archivo: string, texto: string): string[] {
   const esHilo = archivo.endsWith('hilo-slack.ts')
   for (const r of PROHIBIDO_EN_LO_PURO) {
     // la lectura del hilo es la ÚNICA que puede llamar a Slack (recibe `fetch` y la llave por parámetro)
+    // el adaptador del modelo (F8) es el ÚNICO otro lugar con `fetch`: lo recibe por parámetro y nada en esta rama lo llama de verdad
+    if (archivo.endsWith('conversa/modelo-run-sdk.ts') && r.source === '\\bfetch\\s*\\(') continue
     if (esHilo && (r.source === '\\bfetch\\s*\\(' || r.source.startsWith('\\bconversations') || r.source.startsWith('slack'))) continue
     if (r.test(cuerpo)) malos.push(r.source)
   }
@@ -57,7 +59,7 @@ export function barrer(texto: string, archivo: string): string[] {
 const DE_CARPETA = [...archivosDe('src/lib/finanzas'), ...archivosDe('src/app/api/finanzas')].filter((x) => /\.(ts|tsx|js|mjs)$/.test(x))
 const CANDIDATOS = [ ...DE_CARPETA,
   'src/lib/finanzas/calculadora.ts', 'src/lib/finanzas/tipos.ts', 'src/lib/finanzas/repartir.ts', 'src/lib/finanzas/firma.ts', 'src/lib/finanzas/ruta.ts', 'src/lib/finanzas/resumen.ts',
-  'src/lib/finanzas/preguntas.ts', 'src/lib/finanzas/hilo-slack.ts', 'src/lib/finanzas/almacen-supabase.ts',
+  'src/lib/finanzas/preguntas.ts', 'src/lib/finanzas/hilo-slack.ts', 'src/lib/finanzas/almacen-supabase.ts', 'src/lib/finanzas/conversa/esquemas.ts', 'src/lib/finanzas/conversa/omision.ts', 'src/lib/finanzas/conversa/entrada.ts', 'src/lib/finanzas/conversa/plantilla.ts', 'src/lib/finanzas/conversa/puertos.ts', 'src/lib/finanzas/conversa/orquestador.ts', 'src/lib/finanzas/conversa/util.ts', 'src/lib/finanzas/conversa/modelo-run-sdk.ts', 'src/lib/finanzas/conversa/almacen-supabase.ts', 'src/app/api/finanzas/conversa/route.ts', 'supabase/migrations/202610141900_finanzas_conversa_apagada.sql',
   'src/app/api/finanzas/bloque/route.ts', 'src/app/api/finanzas/tablero/route.ts',
   'scripts/worker-staging/finanzas-f3/construir-f3.mjs', 'scripts/worker-staging/finanzas-f4/chequeos-finanzas.js', 'scripts/worker-staging/finanzas-f4/construir-f4.mjs',
   'supabase/migrations/202610141800_finanzas_oficina_apagada.sql', 'scripts/ops/instalar-identidades-finanzas.mjs',
@@ -114,6 +116,11 @@ describe('el barrido y la pureza DETECTAN de verdad (insertan la palabra en una 
     // la lectura del hilo SÍ usa fetch (recibido por parámetro) pero no llaves de entorno
     expect(purezaDe('src/lib/finanzas/hilo-slack.ts', "const f = p.fetch ?? fetch\nawait f(url.toString())")).toEqual([])
     expect(purezaDe('src/lib/finanzas/hilo-slack.ts', 'const k = process.env.SLACK_BOT_TOKEN').length).toBeGreaterThan(0)
+    // F8: el adaptador del modelo SÍ usa fetch (recibido por parámetro); el orquestador y el resto NO
+    expect(purezaDe('src/lib/finanzas/conversa/modelo-run-sdk.ts', 'await a.fetch(url)')).toEqual([])
+    expect(purezaDe('src/lib/finanzas/conversa/modelo-run-sdk.ts', 'const k = process.env.X').length).toBeGreaterThan(0)
+    expect(purezaDe('src/lib/finanzas/conversa/modelo-run-sdk.ts', "await fetch('https://api.anthropic.com/v1')").length).toBeGreaterThan(0)
+    expect(purezaDe('src/lib/finanzas/conversa/orquestador.ts', 'await a.fetch(url)').length).toBeGreaterThan(0)
   })
 })
 
