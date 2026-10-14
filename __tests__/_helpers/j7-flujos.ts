@@ -30,7 +30,7 @@ export interface Opciones {
 }
 
 /** corre desde `inicio` (su salida = `items`): los nodos originales devuelven un eco `{ _nodo, _recibio }`; los de la puerta corren de verdad */
-export async function ejecutar(flujo: Json, o: Opciones) {
+export async function ejecutar(flujo: Json, o: Opciones): Promise<any> {
   const stubs: Record<string, any> = {}
   for (const n of flujo.nodes as Json[]) {
     if (esDeLaPuerta(n.name) || (o.reales ?? []).includes(n.name) || (o.http && n.name in o.http)) continue
