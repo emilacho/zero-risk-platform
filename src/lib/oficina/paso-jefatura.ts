@@ -136,7 +136,9 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia'>, e: Estad
   }
   if (salida.marcas?.sin_segunda_mirada) otros['fichas_externas'] = { sin_revision: true, motivo: 'el revisor externo no respondió tras los reintentos' }
   else if (opinion?.texto) otros['fichas_externas'] = { opinion: opinion.texto, modelo: opinion.modelo ?? null }
-  return { costo_usd: 0, artefacto: { ...reimagen, jefatura }, ...(fichas.length ? { fichas } : {}), ...(Object.keys(otros).length ? { otros_artefactos: otros } : {}) }
+  // 💰 el gasto de la revisión SUMA al del encargo (R1 de CC#3): la oficina le pasó `tope − gasto` a la jefatura y los pasos que siguen (la re-imagen) deben ver lo que queda de verdad.
+  // Solo suma al estado del encargo: NO se escribe otra fila en el libro (`oficina_gastos` no la lleva; el libro central `agent_invocations` ya la tiene).
+  return { costo_usd: jefatura.costo_usd, artefacto: { ...reimagen, jefatura }, ...(fichas.length ? { fichas } : {}), ...(Object.keys(otros).length ? { otros_artefactos: otros } : {}) }
 }
 
 /** la revisión no pudo abrirse o nunca contestó: la pieza sigue, sin fichas nuevas, marcada «sin revisar» (nunca se pierde y nunca se hace pasar por revisada) */

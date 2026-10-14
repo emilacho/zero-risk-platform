@@ -10,6 +10,7 @@ import type { SalidaDeRevision } from '../../jefatura/revision/contrato'
 import { almacenEnMemoria, correr as correrJefatura, puertosDePrueba } from '../../../../__tests__/_helpers/jefatura-revision'
 import { abrirEncargo, jefaturaSinRespuesta, recibirJefatura } from '../orquestador'
 import { aplicarSalidaDeJefatura, productoresDeLaPieza, sobreDeLaRevision } from '../paso-jefatura'
+import { registrarPaso, siguientePaso } from '../motor'
 import { validarPlantilla } from '../plantilla'
 import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
 import { CARRUSEL_IG_CON_JEFATURA, KIT_HISTORIAS_CON_JEFATURA, PASOS_QUE_SE_VAN, POST_IMG_CON_JEFATURA } from '../plantillas/con-jefatura'
@@ -109,7 +110,8 @@ describe('lo que el paso manda a la jefatura', () => {
     expect(r.fichas!.filter((f) => f.origen === 'externa')).toMatchObject([{ gravedad: 'sugerencia', estado: 'no_tomada', razon: 'no aplica', que: 'me gustó' }])
     expect(r.otros_artefactos!['pieza_post']).toEqual({ pie_de_foto: 'Nuevo pie', hashtags: ['#a'] })
     expect(r.otros_artefactos!['fichas_externas']).toEqual({ opinion: 'me gustó', modelo: 'm' })
-    expect(r.costo_usd).toBe(0)
+    // 💰 R1 de CC#3: el gasto de la revisión SUMA al del encargo (antes se registraba en 0 y los pasos siguientes veían todo el tope otra vez)
+    expect(r.costo_usd).toBe(0.3)
   })
 })
 
@@ -388,7 +390,7 @@ describe('el encargo espera a la jefatura y se reanuda cuando entrega', () => {
     M.P.jefatura = async () => { aperturas++; return { estado: 'esperando', revision_id: 'rev-2' } }
     const { avanzar } = await import('../orquestador')
     const r = await avanzar(M.P, id)
-    expect(aperturas).toBe(0); expect(r.cuerpo.accion).toBe('esperar'); expect([...M.turnos.get(id)!.values()].filter((x) => x.estado === 'corriendo')).toHaveLength(1)
+    expect(aperturas).toBe(0); expect(r.cuerpo.accion).toBe('esperar_jefatura'); expect([...M.turnos.get(id)!.values()].filter((x) => x.estado === 'corriendo')).toHaveLength(1)
   })
   it('cuando la jefatura entrega, el encargo aplica la salida, termina y llega a la bandeja', async () => {
     const { M, id } = await esperando()
@@ -448,11 +450,25 @@ describe('lo que NO se tocó', () => {
     expect(turnos.indexOf('chequeos_2')).toBeGreaterThan(turnos.indexOf('jefatura'))
     expect(turnos).not.toContain('revision_jefe'); expect(turnos).not.toContain('revisor_externo')
   })
-  it('el gasto del encargo ya no incluye al jefe, a quien corrige ni a GPT (el de la revisión lo lleva la jefatura con su propio tope)', async () => {
+  it('el gasto de la revisión SUMA al del encargo (lo que ve el tope), sin escribir otra fila en el libro de gastos de la oficina', async () => {
     const f = FAMILIAS[0]
-    const v = await abrir(f, f.vieja); v.M.revisorTexto = () => ({ ok: true, texto: '', costo_usd: 0.1, modelo: 'r' }); await correr(v.M, v.id, guionViejo(f, ESCENARIOS[0]))
     const n = await abrir(f, f.nueva); conLaJefatura(n.M, { responder: responderJefatura(f, ESCENARIOS[0]) }); await correr(n.M, n.id, f.guionBase)
     expect(n.M.gastos.filter((g) => g.concepto === 'revisor_externo')).toHaveLength(0)
-    expect(n.M.encargos.get(n.id)!.gasto_usd).toBeLessThan(v.M.encargos.get(v.id)!.gasto_usd)
+    const turnos = [...n.M.turnos.get(n.id)!.values()]
+    const deLaJefatura = turnos.find((t) => t.paso === 'jefatura')!
+    expect(deLaJefatura.cost_usd).toBeGreaterThan(0)
+    // el gasto del encargo = lo que costaron TODOS sus turnos, incluido el de la jefatura
+    expect(n.M.encargos.get(n.id)!.gasto_usd).toBeCloseTo(turnos.reduce((a, t) => a + Number(t.cost_usd ?? 0), 0), 6)
+  })
+  it('con el encargo casi en su tope, el gasto de la revisión lo CIERRA POR TOPE: la re-imagen ya no ve «todo el tope otra vez»', () => {
+    const pl = POST_IMG_CON_JEFATURA
+    const idx = pl.pasos.findIndex((p) => p.clave === 'jefatura')
+    const e0 = { ultimo: idx - 1, pasos_ejecutados: 5, gasto_usd: pl.limites.tope_encargo_usd - 0.1, vueltas: {}, artefactos: { pieza_post: { version: 1, version_consumida: 1, datos: {} }, visual_direction: { version: 1, version_consumida: 1, datos: { decision: { modo: 'generada' } } } }, fichas: [] }
+    const res = aplicarSalidaDeJefatura(pl, e0, salidaSintetica('limpia', { costo_usd: 0.4 }), { reImagen: () => ({}) })
+    const e1 = registrarPaso(e0, pl, idx, res)
+    expect(e1.gasto_usd).toBeCloseTo(pl.limites.tope_encargo_usd + 0.3, 6)
+    expect(siguientePaso(e1, pl)).toMatchObject({ accion: 'cierre_por_tope', razon: 'tope_de_gasto' })
+    // y una revisión que no costó nada no mueve el gasto
+    expect(registrarPaso(e0, pl, idx, aplicarSalidaDeJefatura(pl, e0, salidaSintetica('limpia', { costo_usd: 0 }), { reImagen: () => ({}) })).gasto_usd).toBeCloseTo(e0.gasto_usd, 6)
   })
 })

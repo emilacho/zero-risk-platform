@@ -118,6 +118,8 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
         const a = armarPedido(enc, pl, sg.paso, enc.estado_del_motor)
         return r(200, { accion: 'esperar', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: abierto.tipo, agente: abierto.agente, dispatch_key: abierto.dispatch_key, pedido: a.pedido } })
       }
+      // el turno abierto es el de la JEFATURA: se contesta con la MISMA acción que al abrirlo (el flujo `oficina · turno` la conoce y termina sin error); nunca «esperar» sin pedido
+      if (abierto.tipo === 'jefatura') return r(200, { accion: 'esperar_jefatura', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: 'jefatura', dispatch_key: abierto.dispatch_key } })
       return r(200, { accion: 'esperar', turno: { n: abierto.n, paso: abierto.paso, agente: abierto.agente, dispatch_key: abierto.dispatch_key }, nota: 'ya hay un paso esperando respuesta' })
     }
     const sig = siguientePaso(enc.estado_del_motor, pl)
@@ -146,7 +148,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
         }
         if (ap.estado !== 'cerrada') await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ La jefatura no revisó la pieza · ${enc.brief_id}: ${ap.motivo}; sigue a la bandeja marcada «sin revisar»`, dry_run: enc.dry_run })
         const res = ap.estado === 'cerrada' ? aplicarSalidaDeJefatura(pl, e, ap.salida, { reImagen: reImagenDe(pl, e) }) : aplicarSinRevisar(ap.motivo)
-        enc = await aplicar(P, enc, pl, sig.indice, res, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'jefatura', agente: null, dispatch_key: null, cost_usd: 0 } })
+        enc = await aplicar(P, enc, pl, sig.indice, res, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'jefatura', agente: null, dispatch_key: null, cost_usd: res.costo_usd } })
         continue
       }
       if (paso.tipo === 'externo') {
@@ -188,7 +190,7 @@ export async function recibirJefatura(P: Puertos, encargoId: string, salida: Sal
   const sig = siguientePaso(enc.estado_del_motor, pl)
   if (sig.accion !== 'ejecutar' || sig.paso.tipo !== 'jefatura') return r(409, { error: 'sin_paso_pendiente' })
   const e = enc.estado_del_motor
-  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: 0 } })
+  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: typeof salida.costo_usd === 'number' ? salida.costo_usd : 0 } })
   return avanzar(P, enc.id)
 }
 

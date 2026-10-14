@@ -6,6 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { recibirJefatura } from '@/lib/oficina/orquestador'
+import { despertarAlFlujoDeLaOficina } from '@/lib/oficina/despertar'
 import { checkLlaveDeLaSala, esObjeto, puertosReales } from '@/lib/oficina/ruta'
 
 export const dynamic = 'force-dynamic'
@@ -34,6 +35,11 @@ export async function POST(request: Request) {
     const { P } = puertosReales(request)
     const s = salida as unknown as Parameters<typeof recibirJefatura>[2]
     const r = await recibirJefatura(P, String(s.artifact_id), s)
+    // R3 · si lo que sigue es un paso de EMPLEADO (la re-imagen), la ruta despierta al flujo `oficina · turno` con la llave de SU entorno (nadie más lo despertaría)
+    if (r.status === 200 && r.cuerpo.accion === 'esperar' && esObjeto(r.cuerpo.turno)) {
+      const d = await despertarAlFlujoDeLaOficina(fetch, { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, String(s.artifact_id), r.cuerpo.turno)
+      return NextResponse.json({ ...r.cuerpo, despertado: d.despertado, ...(d.despertado ? {} : { motivo_sin_despertar: d.motivo }) }, { status: r.status })
+    }
     return NextResponse.json(r.cuerpo, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'oficina_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
