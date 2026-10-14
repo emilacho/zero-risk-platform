@@ -84,7 +84,10 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
   if (e.mapas?.url || e.mapas?.placeId) candidatas.push(accion('mapas', 'own_google_maps_profile', e.mapas.url ? { startUrls: [{ url: e.mapas.url }], maxReviews: 100, reviewsSort: 'newest', scrapeReviewsPersonalData: false } : { placeIds: [e.mapas.placeId], maxReviews: 100, reviewsSort: 'newest', scrapeReviewsPersonalData: false }, e.mapas.url ?? e.mapas.placeId ?? ''))
   else if (nombre && ciudad) {
     const ciudades = [...new Set([ciudad, ...(e.ciudades ?? [])].map((c) => c.trim()).filter(Boolean))].slice(0, 3)
-    candidatas.push(accion('mapas', 'own_google_maps_profile', { searchStringsArray: ciudades.map((c) => `${nombre} ${c}`), maxCrawledPlacesPerSearch: 1, language: 'es', maxReviews: 100, reviewsSort: 'newest', scrapeReviewsPersonalData: false }, ciudades.map((c) => `${nombre} · ${c}`).join(' | ')))
+    const m = accion('mapas', 'own_google_maps_profile', { searchStringsArray: ciudades.map((c) => `${nombre} ${c}`), maxCrawledPlacesPerSearch: 1, language: 'es', maxReviews: 100, reviewsSort: 'newest', scrapeReviewsPersonalData: false }, ciudades.map((c) => `${nombre} · ${c}`).join(' | '))
+    // H3 · el máximo declarado es POR BÚSQUEDA (una por sede, cada una con hasta 100 reseñas): el costo de la corrida es n_sedes × ese máximo
+    m.usd_max = Math.round(m.usd_max * ciudades.length * 1e6) / 1e6
+    candidatas.push(m)
   }
   else noCubiertas.push({ fuente: 'mapas', por_que: 'sin ciudad ni ficha de Mapas conocida: buscar solo por nombre arriesga un homónimo' })
 

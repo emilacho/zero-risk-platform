@@ -8,10 +8,11 @@ import { alimentarCliente, contextoDelCliente, type Db, type ResultadoDeAlimenta
 import { coincidePorPalabra } from '../texto/coincidencia'
 import { articulosParaLeer, descubrir, type AccionDelPortero, type PlanDelPortero } from './plan'
 import { armarMensajeDePropuestas, INSTRUCCION_DE_PROPUESTAS, validarBusquedas, type ResultadoDePropuestas } from './propuestas'
-import { gastoDelDia, type FilaDelLibro } from './gasto'
+import { COSTO_MAXIMO_POR_FUNCION, gastoDelDia, type FilaDelLibro } from './gasto'
 import { TOPE_DEL_PORTERO_USD, type Interruptores } from './datos'
 import type { RespuestaDeLlamada } from './juez'
 import type { PuenteDeIndice } from './archivar'
+import { reconciliarPuente, type FichaParaPuente } from './puente'
 
 export interface Respuesta { status: number; body: Record<string, unknown> }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -37,7 +38,13 @@ export async function gastoDeHoy(db: Db, clientId: string, ahora: Date) {
   if (c.error) return { ok: false as const, detalle: `costs: ${c.error.message}` }
   const inv = await db.from('agent_invocations').select('cost_usd, created_at').eq('client_id', clientId).gte('created_at', dia0.toISOString()).limit(1000)
   if (inv.error) return { ok: false as const, detalle: `agent_invocations: ${inv.error.message}` }
-  return { ok: true as const, gasto: gastoDelDia({ clientId, ahora, libro: lista(c.data) as unknown as FilaDelLibro[], invocacionesUsd: lista(inv.data).map((f) => Number(f.cost_usd) || 0) }) }
+  // H3 · una corrida de Mapas = una búsqueda por sede: sin importe en el libro vale (búsquedas de hoy ÷ corridas de hoy) × el máximo por búsqueda
+  const mp = await db.from('apify_raw').select('params').eq('client_id', clientId).eq('ensayo', false).eq('apify_function', 'own_google_maps_profile').gte('created_at', dia0.toISOString()).limit(50)
+  if (mp.error) return { ok: false as const, detalle: `apify_raw: ${mp.error.message}` }
+  const filasMapas = lista(mp.data)
+  const busquedas = filasMapas.reduce((s, f) => s + Math.max(1, Array.isArray((f.params as { searchStringsArray?: unknown } | null)?.searchStringsArray) ? ((f.params as { searchStringsArray: unknown[] }).searchStringsArray.length) : 1), 0)
+  const maximoPorLlamada = filasMapas.length ? { own_google_maps_profile: Math.round(COSTO_MAXIMO_POR_FUNCION.own_google_maps_profile.usd * (busquedas / filasMapas.length) * 1e6) / 1e6 } : undefined
+  return { ok: true as const, gasto: gastoDelDia({ clientId, ahora, libro: lista(c.data) as unknown as FilaDelLibro[], invocacionesUsd: lista(inv.data).map((f) => Number(f.cost_usd) || 0), maximoPorLlamada }) }
 }
 
 /** las redes propias que el alta declaró (`config.apify.own_handles`: usuario o dirección por red) */
@@ -100,18 +107,38 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
   return { status: 200, body: { dry_run: v.dry_run, tope_por_cliente_usd: TOPE_DEL_PORTERO_USD, plan, gasto_de_hoy: g.gasto, propuestas, modelos_llamados: costoPropuestas > 0 || propuestas.aceptadas.length ? 1 : 0, costo_modelo_usd: costoPropuestas } }
 }
 
-/** de las filas de búsqueda de HOY a los resultados (url, título, resumen): acepta la forma `organicResults` de la búsqueda de Google y la forma plana */
-export function resultadosDeBusqueda(filas: Array<Record<string, unknown>>): Array<{ url?: unknown; title?: unknown; description?: unknown }> {
-  const out: Array<{ url?: unknown; title?: unknown; description?: unknown }> = []
-  for (const f of filas) {
-    for (const it of lista(f.respuesta)) {
-      const org = lista(it.organicResults)
-      if (org.length) for (const r of org) out.push({ url: r.url, title: r.title, description: r.description })
-      else if (typeof it.url === 'string') out.push({ url: it.url, title: it.title, description: it.description })
+/**
+ * H4 · LECTOR DEL BUSCADOR, TOLERANTE y marcado «VERIFICAR CON SALIDA REAL»: la forma de salida de `google_serp_scraper` se ASUMIÓ (no hay una salida real grabada;
+ * la grabación real es aparte, con «dale»). Acepta, en cualquier mezcla: una lista de páginas de resultados con `organicResults` / `results` / `searchResults` / `items` / `organic`,
+ * o resultados planos; y por resultado `url` | `link` | `href` y `title` | `name` y `description` | `snippet` | `text`. Lo que no entiende NO se inventa: se cuenta en `ilegibles`.
+ */
+export const LECTOR_DE_BUSQUEDA = { verificado_con_salida_real: false, nota: 'forma asumida (organicResults o plana); verificar con una salida real grabada antes de encender prensa' } as const
+const CLAVES_DE_LISTA = ['organicResults', 'results', 'searchResults', 'organic', 'items']
+const primero = (o: Record<string, unknown>, claves: string[]): string | undefined => { for (const k of claves) if (typeof o[k] === 'string' && (o[k] as string).trim()) return (o[k] as string).trim(); return undefined }
+export interface ResultadoDeBusqueda { url?: unknown; title?: unknown; description?: unknown }
+export function leerBusqueda(filas: Array<Record<string, unknown>>): { resultados: ResultadoDeBusqueda[]; ilegibles: number } {
+  const out: ResultadoDeBusqueda[] = []
+  let ilegibles = 0
+  const poner = (r: Record<string, unknown>) => {
+    const url = primero(r, ['url', 'link', 'href'])
+    if (!url || !/^https?:\/\//i.test(url)) { ilegibles++; return }
+    out.push({ url, title: primero(r, ['title', 'name']), description: primero(r, ['description', 'snippet', 'text']) })
+  }
+  const recorrer = (nodo: unknown, prof = 0): void => {
+    if (prof > 3) return
+    for (const it of lista(nodo)) {
+      const anidada = CLAVES_DE_LISTA.find((k) => Array.isArray((it as Record<string, unknown>)[k]))
+      if (anidada) recorrer((it as Record<string, unknown>)[anidada], prof + 1)
+      else poner(it)
     }
   }
-  return out
+  for (const f of filas) {
+    const r = f.respuesta
+    if (esObjeto(r)) { const k = CLAVES_DE_LISTA.find((c) => Array.isArray(r[c])); if (k) recorrer(r[k], 1); else poner(r) } else recorrer(r)
+  }
+  return { resultados: out, ilegibles }
 }
+export const resultadosDeBusqueda = (filas: Array<Record<string, unknown>>): ResultadoDeBusqueda[] => leerBusqueda(filas).resultados
 
 /**
  * SEGUNDA TANDA (`fase: 'articulos'`) · de lo que trajo la búsqueda de hoy, las ≤ 3 páginas que vale leer (nunca el sitio propio, ni redes, ni lo ya leído, y solo si nombran al cliente).
@@ -135,7 +162,7 @@ export async function rutaArticulos(deps: DepsDeRutas, cuerpo: unknown): Promise
   const g = await gastoDeHoy(deps.db, v.client_id, ahora)
   if (!g.ok) return err(502, 'lectura_fallida', g.detalle)
   const nombre = String(cliente.name ?? '').trim()
-  const urls = nombre ? articulosParaLeer(resultadosDeBusqueda(lista(busq.data)), { sitioPropio: cliente.website_url as string | null, yaVistas, nombreCoincide: (t) => coincidePorPalabra(t, nombre) }) : []
+  const urls = nombre ? articulosParaLeer(leerBusqueda(lista(busq.data)).resultados, { sitioPropio: cliente.website_url as string | null, yaVistas, nombreCoincide: (t) => coincidePorPalabra(t, nombre) }) : []
   const acciones: AccionDelPortero[] = []
   let acumulado = g.gasto.total_usd
   const omitidas: Array<{ url: string; por_que: string }> = []
@@ -145,7 +172,8 @@ export async function rutaArticulos(deps: DepsDeRutas, cuerpo: unknown): Promise
     acumulado += usd
     acciones.push({ fuente: 'prensa', funcion: 'website_content_scraper', params: { startUrls: [{ url }], maxCrawlPages: 1, maxCrawlDepth: 0 }, metadata: { target_kind: 'third_party', llamado_por: 'portero-articulo' }, usd_max: usd, medido: true, objetivo: url })
   }
-  return { status: 200, body: { dry_run: v.dry_run, acciones, omitidas, resultados_de_busqueda: resultadosDeBusqueda(lista(busq.data)).length, modelos_llamados: 0 } }
+  const leidos = leerBusqueda(lista(busq.data))
+  return { status: 200, body: { dry_run: v.dry_run, acciones, omitidas, resultados_de_busqueda: leidos.resultados.length, resultados_ilegibles: leidos.ilegibles, filas_de_busqueda: lista(busq.data).length, lector_de_busqueda: LECTOR_DE_BUSQUEDA, modelos_llamados: 0 } }
 }
 
 // ───────────────────────── /alimentar · filtrar → razonar → archivar con lo que ya se trajo
@@ -160,11 +188,26 @@ export async function rutaAlimentar(deps: DepsDeRutas, cuerpo: unknown): Promise
     gasto_de_hoy_usd: g.gasto.total_usd, workflow_id: v.workflow_id || undefined, workflow_execution_id: v.workflow_execution_id || undefined,
   })
   const status = r.estado === 'cliente_inexistente' ? 404 : r.estado === 'lectura_fallida' ? 502 : 200
+  // H1 · el puente se RECONCILIA en cada pasada (idempotente): fichas entregables sin trozo ⇒ se reenvían; trozos de fichas retiradas/descartadas ⇒ salen.
+  // Una falla de ayer se repara hoy sin duplicar nada. En seco solo se CUENTA (lectura).
   let puente: Record<string, unknown> | null = null
-  if (!v.dry_run && r.ok && r.plan && deps.interruptores.puente_al_indice && deps.puente) {
-    const p = await deps.puente({ escribir: r.plan.puente, sacar: r.plan.sacar_del_indice, client_id: v.client_id })
-    puente = p
-    if (p.errores.length) r.errores.push(...p.errores.map((m) => `puente: ${m}`))
+  if (deps.interruptores.puente_al_indice && r.ok) {
+    const fi = await deps.db.from('cerebro_fichas').select('id, client_id, ref, clase, titulo, contenido, fecha_fuente, observado_en, creado_en, propiedad, origen, descartada, retirada_en, prueba').eq('client_id', v.client_id).limit(5000)
+    const ch = await deps.db.from('client_brain_chunks').select('source_id').eq('client_id', v.client_id).eq('source_table', 'cerebro_fichas').limit(5000)
+    if (fi.error || ch.error) {
+      r.errores.push(`puente: lectura fallida (${(fi.error ?? ch.error)!.message})`)
+      puente = { lectura_fallida: true }
+    } else {
+      const rec = reconciliarPuente(lista(fi.data) as unknown as FichaParaPuente[], lista(ch.data).map((x) => String(x.source_id)))
+      puente = { pendientes: rec.escribir.length, a_sacar: rec.sacar.length, ya_buscables: rec.ya_buscables }
+      if (!v.dry_run && deps.puente && (rec.escribir.length || rec.sacar.length)) {
+        const p = await deps.puente({ escribir: rec.escribir, sacar: rec.sacar, client_id: v.client_id })
+        puente = { ...puente, ...p }
+        if (p.errores.length) r.errores.push(...p.errores.map((m) => `puente: ${m}`))
+      }
+    }
   }
+  // una falla del puente se DICE en el estado (no queda «hecha» con errores escondidos)
+  if (r.errores.length && r.estado === 'hecha') { r.estado = 'con_errores'; r.ok = false }
   return { status, body: { ...r, puente, gasto_de_hoy: g.gasto, modelos_llamados: r.juez.llamadas } }
 }

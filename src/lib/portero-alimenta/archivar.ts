@@ -8,6 +8,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { PLAZOS_EN_DIAS } from '../cerebro/plazos'
+import { puenteDeFicha } from './puente'
 import type { Unidad } from './unidades'
 import type { DecisionDelJuez, ItemParaJuzgar } from './juez'
 import type { EstadoDeFiltro } from './filtro'
@@ -119,13 +120,8 @@ export function planDeArchivo(e: EntradaDeArchivo): PlanDeArchivo {
       plan.sacar_del_indice.push(d.reemplaza_ficha)
     }
     if (e.puente_al_indice && entregable) {
-      // NO es un empuje a nadie: es la misma biblioteca de consulta (el índice) al día; las oficinas BUSCAN cuando lo necesitan.
-      // lo PROPIO y confirmado queda buscable; la voz de un TERCERO se marca como raspado de terceros (el corredor no la inyecta sin sello: regla estrecha de CC#1 02-oct)
-      plan.puente.push({
-        source_table: 'cerebro_fichas', source_id: nueva, client_id: e.client_id, source: 'portero_diario',
-        sections: [{ section_label: ficha.clase, text: `${ficha.titulo} — ${ficha.contenido}${ficha.fecha_fuente ? ` (fecha ${ficha.fecha_fuente.slice(0, 10)})` : ` (visto ${ficha.observado_en.slice(0, 10)})`}`.slice(0, 7000) }],
-        metadata: { portero_diario: true, fuente: u.fuente, propiedad: ficha.propiedad, origen: ficha.origen, ficha_id: nueva, ...(u.autoria === 'tercero' ? { apify_function: 'portero_diario_tercero' } : {}) },
-      })
+      // NO es un empuje a nadie: es la misma biblioteca de consulta (el índice) al día; las oficinas BUSCAN cuando lo necesitan (constructor compartido con la reconciliación).
+      plan.puente.push(puenteDeFicha({ ...ficha, descartada: false, retirada_en: null }))
     }
     void item
   })

@@ -43,7 +43,7 @@ const esDetalle = (f: FilaDelLibro): boolean => { try { return (JSON.parse(f.des
  * `libro` = filas de `costs` (service `apify:<funcion>`) de HOY; `invocaciones` = `agent_invocations` de hoy del cliente (cost_usd).
  * Solo se cuentan las filas de LLAMADA (`detalle_de_llamada`); la fila `reconciliacion_del_dia` ya las resume y no se suma otra vez.
  */
-export function gastoDelDia(o: { clientId: string; ahora: Date; libro: FilaDelLibro[]; invocacionesUsd: number[] }): GastoDelDia {
+export function gastoDelDia(o: { clientId: string; ahora: Date; libro: FilaDelLibro[]; invocacionesUsd: number[]; /** máximo por llamada que reemplaza al declarado (p. ej. Mapas = búsquedas por sede × máximo) */ maximoPorLlamada?: Record<string, number> }): GastoDelDia {
   const hoy = dia(o.ahora.toISOString())
   let apify = 0, sinImporte = 0, porMaximo = 0
   for (const f of o.libro) {
@@ -51,7 +51,8 @@ export function gastoDelDia(o: { clientId: string; ahora: Date; libro: FilaDelLi
     const importe = Number(f.amount_usd)
     if (Number.isFinite(importe) && importe > 0) { apify += importe; continue }
     sinImporte++
-    const max = (COSTO_MAXIMO_POR_FUNCION[f.service.slice('apify:'.length)]?.usd) ?? COSTO_MAXIMO_POR_OMISION_USD
+    const fn = f.service.slice('apify:'.length)
+    const max = o.maximoPorLlamada?.[fn] ?? COSTO_MAXIMO_POR_FUNCION[fn]?.usd ?? COSTO_MAXIMO_POR_OMISION_USD
     apify += max; porMaximo += max
   }
   const modelo = o.invocacionesUsd.reduce((s, x) => s + (Number.isFinite(x) ? x : 0), 0)

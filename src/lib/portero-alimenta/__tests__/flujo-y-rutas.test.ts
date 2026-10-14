@@ -6,7 +6,7 @@ import path from 'node:path'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { POST as descubrirPOST } from '../../../app/api/brain/alimentar/descubrir/route'
 import { POST as alimentarPOST } from '../../../app/api/brain/alimentar/procesar/route'
-import { rutaArticulos, resultadosDeBusqueda } from '../rutas'
+import { rutaArticulos, resultadosDeBusqueda, leerBusqueda, LECTOR_DE_BUSQUEDA } from '../rutas'
 import { crearBaseFalsa } from './base-falsa'
 
 const DIR = path.resolve(__dirname, '../../../../scripts/worker-staging/ogfq56oIEoHufFPM')
@@ -133,7 +133,25 @@ describe('la segunda tanda (artículos)', () => {
     expect(r.body.apagado).toBe(true)
     expect(base.lecturas).toEqual([])
   })
-  it('resultadosDeBusqueda acepta la forma organicResults y la plana', () => {
-    expect(resultadosDeBusqueda([{ respuesta: [{ organicResults: [{ url: 'a' }] }, { url: 'b', title: 't' }] }]).map((x) => x.url)).toEqual(['a', 'b'])
+  it('H4 · el lector del buscador es tolerante: varias formas, varios nombres de campo, y lo que no entiende se CUENTA (no se inventa)', () => {
+    const { resultados, ilegibles } = leerBusqueda([
+      { respuesta: [{ organicResults: [{ url: 'https://a.example/1', title: 'A', description: 'da' }] }, { url: 'https://b.example/2', title: 'B' }] },
+      { respuesta: { results: [{ link: 'https://c.example/3', name: 'C', snippet: 'sc' }, { href: 'https://d.example/4' }] } },
+      { respuesta: [{ searchResults: [{ items: [{ url: 'https://e.example/5' }] }] }] },
+      { respuesta: [{ url: 'no es una direccion' }, { title: 'sin direccion' }] },
+      { respuesta: null },
+    ])
+    expect(resultados.map((r) => r.url)).toEqual(['https://a.example/1', 'https://b.example/2', 'https://c.example/3', 'https://d.example/4', 'https://e.example/5'])
+    expect(resultados[2]).toMatchObject({ title: 'C', description: 'sc' })
+    expect(ilegibles).toBe(2)
+    expect(resultadosDeBusqueda([{ respuesta: [{ url: 'https://z.example' }] }]).map((x) => x.url)).toEqual(['https://z.example'])
+    expect(LECTOR_DE_BUSQUEDA.verificado_con_salida_real).toBe(false)
+  })
+  it('H4 · la segunda tanda dice cuántas filas y cuántos resultados ilegibles vio, y que el lector NO está verificado', async () => {
+    const t = tablas()
+    ;(t.apify_raw as Array<Record<string, unknown>>).push({ id: 's2', client_id: C, apify_function: 'google_serp_scraper', ensayo: false, created_at: '2026-10-16T08:05:00Z', respuesta: [{ rareza: 'forma desconocida' }] })
+    const base = crearBaseFalsa(t as never)
+    const r = await rutaArticulos({ db: base.db, interruptores: ON, ahora: new Date('2026-10-16T10:00:00Z') }, { client_id: C, dry_run: true })
+    expect(r.body).toMatchObject({ filas_de_busqueda: 2, resultados_ilegibles: 1, lector_de_busqueda: { verificado_con_salida_real: false } })
   })
 })

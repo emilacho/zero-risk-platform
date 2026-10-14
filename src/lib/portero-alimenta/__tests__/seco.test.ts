@@ -181,7 +181,7 @@ describe('interruptores y guardas de las rutas', () => {
     const base = crearBaseFalsa(tablasDelCaso(c, 2) as never, { fallaEn: 'apify_raw' })
     const r = await rutaAlimentar({ db: base.db, interruptores: ON }, { client_id: c.id, dry_run: true })
     expect(r.status).toBe(502)
-    expect(r.body.estado).toBe('lectura_fallida')
+    expect(r.body.error ?? r.body.estado).toBe('lectura_fallida')
     expect(base.escrituras).toEqual([])
   })
   it('una corrida real escribe fichas, retira lo reemplazado, anota lo visto y el rastro; una segunda el mismo día no repite', async () => {
