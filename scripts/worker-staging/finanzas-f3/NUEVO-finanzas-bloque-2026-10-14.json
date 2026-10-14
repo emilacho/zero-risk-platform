@@ -1,0 +1,171 @@
+{
+  "name": "Zero Risk — finanzas · bloque (oficina financiera · F3 · INACTIVO)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/finanzas-bloque",
+        "responseMode": "lastNode"
+      },
+      "name": "Webhook · finanzas bloque",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "finanzas-bloque-0001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// F3 · valida el sobre ANTES de llamar a la ruta. `dry_run` OBLIGATORIO y booleano (ausente o no booleano = no se llama, como la sala). Nunca lanza.\n// R-F3 de CC#3 · el webhook EXIGE la llave interna (cabecera `x-api-key` = la variable del propio n8n) ANTES de mirar nada; sin ella, o equivocada, o sin variable: no se llama a la ruta.\nconst entrada = $input.first().json || {}\nconst cab = entrada.headers && typeof entrada.headers === 'object' ? entrada.headers : {}\nconst dada = String(cab['x-api-key'] || '')\nconst esperada = String($env.INTERNAL_API_KEY || '')\nlet autorizado = esperada.length > 0 && dada.length === esperada.length\nif (autorizado) { let d = 0; for (let i = 0; i < esperada.length; i++) d |= dada.charCodeAt(i) ^ esperada.charCodeAt(i); autorizado = d === 0 }\nif (!autorizado) return [{ json: { llamar: false, no_autorizado: true, errores: [] } }]\nconst b = entrada.body || entrada\nconst errores = []\nif (typeof b.dry_run !== 'boolean') errores.push('`dry_run` es obligatorio y debe ser booleano')\nif (typeof b.client_id !== 'string' || !b.client_id.trim()) errores.push('`client_id` es obligatorio')\nif (!b.entrada || typeof b.entrada !== 'object' || Array.isArray(b.entrada)) errores.push('`entrada` es obligatoria y debe ser un objeto')\nif (errores.length) return [{ json: { llamar: false, errores } }]\nreturn [{ json: { llamar: true, cuerpo: { client_id: b.client_id.trim(), dry_run: b.dry_run, entrada: b.entrada, workflow_execution_id: typeof b.workflow_execution_id === 'string' ? b.workflow_execution_id : $execution.id } } }]"
+      },
+      "name": "FIN · validar el sobre",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.llamar === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "FIN · ¿se llama a la ruta?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/finanzas/bloque' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.cuerpo || {}) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "FIN · calcular el bloque",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// F3 · normaliza lo que contestó la ruta. NUNCA lanza: cualquier cosa que no sea un bloque devuelve `sin_bloque` con el motivo y el plan sigue como hoy.\nlet v = null\ntry { v = $('FIN · validar el sobre').first().json } catch (x) { v = null }\nif (v && v.no_autorizado === true) return [{ json: { ok: false, sin_bloque: true, motivo: 'no_autorizado' } }]\nif (!v || v.llamar !== true) return [{ json: { ok: false, sin_bloque: true, motivo: 'sobre_invalido', errores: (v && v.errores) || [] } }]\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : {}\nif (status === 409) return [{ json: { ok: false, sin_bloque: true, motivo: b.error || 'oficina_apagada' } }]\nif (status === 200 && b.huella) return [{ json: { ok: true, sin_bloque: false, dry_run: b.dry_run === true, finanzas_id: b.finanzas_id || null, version: b.version || null, estado: b.finanzas_id ? 'borrador' : null, huella: b.huella, escribio: b.escribio === true } }]\nreturn [{ json: { ok: false, sin_bloque: true, motivo: b.error || ('http_' + (isFinite(status) ? status : 'sin_respuesta')), errores: b.errores || [] } }]"
+      },
+      "name": "FIN · resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook · finanzas bloque": {
+      "main": [
+        [
+          {
+            "node": "FIN · validar el sobre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FIN · validar el sobre": {
+      "main": [
+        [
+          {
+            "node": "FIN · ¿se llama a la ruta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FIN · ¿se llama a la ruta?": {
+      "main": [
+        [
+          {
+            "node": "FIN · calcular el bloque",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FIN · resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FIN · calcular el bloque": {
+      "main": [
+        [
+          {
+            "node": "FIN · resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
