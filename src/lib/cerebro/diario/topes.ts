@@ -20,13 +20,13 @@ export function decidirGasto(gastadoHoyUsd: number, costoMaximo: number, tope = 
 }
 
 /** deja pasar las acciones en orden mientras quepan; las que no caben se devuelven con su motivo (nunca se recortan en silencio) */
-export function recortarAlTope<T extends { usd_max: number }>(acciones: T[], gastadoHoyUsd: number, tope = TOPE_DIARIO_POR_CLIENTE_USD): { hacer: T[]; omitidas: Array<{ accion: T; por_que: string }> } {
+export function recortarAlTope<T extends { usd_max: number }>(acciones: T[], gastadoHoyUsd: number, tope = TOPE_DIARIO_POR_CLIENTE_USD, maxAcciones = MAX_CORRIDAS_DE_AMPLIACION_POR_DIA): { hacer: T[]; omitidas: Array<{ accion: T; por_que: string }> } {
   const hacer: T[] = []
   const omitidas: Array<{ accion: T; por_que: string }> = []
   let acumulado = gastadoHoyUsd
   for (const a of acciones) {
     const d = decidirGasto(acumulado, a.usd_max, tope)
-    if (d.permitido && hacer.length < MAX_CORRIDAS_DE_AMPLIACION_POR_DIA) { hacer.push(a); acumulado = r6(acumulado + a.usd_max) } else omitidas.push({ accion: a, por_que: d.permitido ? `tope de ${MAX_CORRIDAS_DE_AMPLIACION_POR_DIA} corridas de ampliación por día` : String(d.motivo) })
+    if (d.permitido && hacer.length < maxAcciones) { hacer.push(a); acumulado = r6(acumulado + a.usd_max) } else omitidas.push({ accion: a, por_que: d.permitido ? `tope de ${maxAcciones} corridas de ampliación por día` : String(d.motivo) })
   }
   return { hacer, omitidas }
 }

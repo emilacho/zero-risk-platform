@@ -6,12 +6,14 @@
  *  · nada se escribe sin la línea que lo respalda.
  * Clases de cambio detectadas por código: precio · horario · texto. (Producto, frase propia y queja repetida: ver `resenas.ts` y el diseño.)
  */
+import { MONEDAS } from '../../portero-alimenta/datos'
 import { esTransitoria, TRANSITORIOS_ES } from './huella'
 
 export type ClaseDeLinea = 'transitorio' | 'precio' | 'horario' | 'texto'
 export interface LineaClasificada { linea: string; clase: ClaseDeLinea }
 
-const RE_PRECIO = /\$\s?\d|\b(precio|costo|dolares|usd)\b|\bdesde \d/
+/** precio = «$ 12», una palabra de precio o una moneda con su código (ARS, UYU, EUR…: el dato vive en `portero-alimenta/datos.ts`) */
+const RE_PRECIO = new RegExp(`\\$\\s?\\d|\\b(precio|costo|valor|tarifa|dolares|${MONEDAS.join('|')})\\b|\\bdesde \\d`)
 const RE_HORARIO = /\b\d{1,2} ?(am|pm|h|hrs)\b|\b(horario|horarios|atencion|abrimos|abierto)\b|\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b.*\d/
 
 /** clasifica una línea YA NORMALIZADA */

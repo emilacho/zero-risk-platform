@@ -20,7 +20,7 @@ export interface Observacion {
   observado_en: string
   senales?: SenalesDeResenas | SenalesDeComentarios
 }
-export interface ContextoDeObservacion { propios: Propios; hostsDeReparto?: string[]; publicacionesPropias?: string[] }
+export interface ContextoDeObservacion { propios: Propios; hostsDeReparto?: string[]; publicacionesPropias?: string[]; /** transitorios de la variante del cliente (tuteo por defecto) */ transitorios?: RegExp[] }
 
 const arr = (x: unknown): Array<Record<string, unknown>> => (Array.isArray(x) ? (x.filter((v) => v && typeof v === 'object') as Array<Record<string, unknown>>) : [])
 const hostDe = (u: string): string => { try { return new URL(u.includes('://') ? u : `https://${u}`).host.replace(/^www\./, '').toLowerCase() } catch { return '' } }
@@ -39,7 +39,7 @@ export function observar(filas: FilaCruda[], ctx: ContextoDeObservacion): Observ
         const host = hostDe(url)
         const fuente: Fuente | null = ctx.propios.sitio && host === hostDe(ctx.propios.sitio) ? 'sitio' : reparto.has(host) ? 'reparto' : null
         if (!fuente || !url) continue
-        const c = contenidoDeSitio([{ url, text: p.text }])
+        const c = contenidoDeSitio([{ url, text: p.text }], ctx.transitorios, p.metadata)
         poner({ ...base, fuente, ref: url, huella: huellaDeLineas(c.lineas), contenido: { lineas: c.lineas, transitorias: c.transitorias }, lineas: c.lineas })
       }
     } else if (f.apify_function === 'instagram_scraper' && esFilaPropia(f, ctx.propios)) {

@@ -55,6 +55,9 @@ const ALLOWED_SOURCE_TABLES = new Set([
   // límite como CHECK (migración 202609060300). Cambiar sólo ésta hace que la puerta
   // acepte y la base rechace al escribir · fallo tardío y silencioso.
   "client_web_pages",
+  // 2026-10-14 · el PUENTE del portero que alimenta: lo que archiva (fichas con fecha y fuente) llega también a quien lee el cerebro.
+  // Es la OTRA mitad de la puerta: la base lo acepta solo tras la migración 202610141500 (CHECK ensanchado). Sin ella, el POST falla al escribir y lo dice.
+  "cerebro_fichas",
 ]);
 
 /**

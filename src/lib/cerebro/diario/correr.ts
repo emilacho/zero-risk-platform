@@ -8,6 +8,7 @@
  *  · un error de lectura se DICE; nunca se lee como «no hay nada».
  */
 import { propiosDeFicha } from '../../manual/cliente'
+import { transitoriosDe, varianteDelCliente } from '../../portero-alimenta/datos'
 import { decidir, resumirDiferencia, type Decision } from './comparar'
 import { codigosDePublicaciones, observar, type FilaCruda, type Observacion } from './observar'
 import { planDeLimpieza, type FichaFila, type PlanDeLimpieza } from './ordenar'
@@ -86,7 +87,10 @@ export async function correrDiario(e: EntradaDeCorrida): Promise<ResultadoDeCorr
   const config = (cliente.config ?? {}) as { apify?: { url_reparto?: unknown } }
   const repartoUrls = Array.isArray(config.apify?.url_reparto) ? (config.apify!.url_reparto as unknown[]).filter((u): u is string => typeof u === 'string') : []
   const publicacionesPropias = codigosDePublicaciones(vigentes.filter((v) => v.fuente === 'instagram').map((v) => ({ contenido: v.contenido })))
-  const obs: Observacion[] = observar(lista(rr.data) as unknown as FilaCruda[], { propios: propiosDeFicha(cliente as never), hostsDeReparto: repartoUrls.map(hostDe).filter(Boolean), publicacionesPropias })
+  // el registro del cliente (voseo/tuteo) sale de su ficha o su país; sin dato, tuteo
+  const cfg = (cliente.config ?? {}) as { registro?: string; idioma?: { registro?: string } }
+  const transitorios = transitoriosDe(varianteDelCliente({ registro: cfg.registro ?? cfg.idioma?.registro, pais: (cliente.country ?? cliente.pais) as string | null }))
+  const obs: Observacion[] = observar(lista(rr.data) as unknown as FilaCruda[], { propios: propiosDeFicha(cliente as never), hostsDeReparto: repartoUrls.map(hostDe).filter(Boolean), publicacionesPropias, transitorios })
 
   // ───── paso 2 · comparar
   const previaDe = (o: Observacion) => vigentes.find((v) => v.fuente === o.fuente && v.ref === o.ref)
@@ -96,7 +100,7 @@ export async function correrDiario(e: EntradaDeCorrida): Promise<ResultadoDeCorr
   const db = e.db
   for (const o of obs) {
     const prev = previaDe(o)
-    const d = decidir(prev ? { id: String(prev.id), huella: String(prev.huella), lineas: lineasDe(prev.contenido) } : null, { huella: o.huella, lineas: o.lineas })
+    const d = decidir(prev ? { id: String(prev.id), huella: String(prev.huella), lineas: lineasDe(prev.contenido) } : null, { huella: o.huella, lineas: o.lineas }, transitorios)
     const vista: FuenteVista = { fuente: o.fuente, ref: o.ref, accion: d.accion, raw_id: o.raw_id }
     const fila = { client_id: e.client_id, fuente: o.fuente, ref: o.ref, huella: o.huella, contenido: o.contenido, observado_en: o.observado_en, reconfirmado_en: o.observado_en, apify_raw_id: o.raw_id, propiedad: 'propia' }
     if (d.accion === 'nuevo') {
