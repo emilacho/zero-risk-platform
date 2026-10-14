@@ -57,13 +57,15 @@ export async function leerHilo(p: {
   }
   const desde = p.desde_ts ?? '0'
   // `ts` de Slack es «segundos.micro»: se compara como número, no como texto
+  // un `ts` que no sea «segundos.micro» se ignora (con NaN toda comparación da falso y el cursor quedaría clavado)
+  const esTs = (t: unknown): t is string => typeof t === 'string' && /^\d+(?:\.\d+)?$/.test(t)
   const mayor = (a: string, b: string) => Number(a) > Number(b)
-  const nuevos = todos.filter((m) => m.ts && m.ts !== p.thread_ts && mayor(m.ts, desde))
+  const nuevos = todos.filter((m) => esTs(m.ts) && m.ts !== p.thread_ts && mayor(m.ts, desde))
   const mensajes = nuevos
     // un subtipo descarta el mensaje (ediciones, uniones al canal…) SALVO «thread_broadcast»: es la respuesta con «Enviar también al canal» marcada, y SÍ cuenta (R8)
     .filter((m) => m.user === p.emilio_id && !m.bot_id && (!m.subtype || m.subtype === 'thread_broadcast') && typeof m.text === 'string' && m.text.trim())
     .sort((a, b) => Number(a.ts) - Number(b.ts))
     .map((m) => ({ ts: m.ts, texto: String(m.text).trim() }))
-  const leido = todos.reduce<string | null>((acc, m) => (m.ts && (acc === null || mayor(m.ts, acc)) ? m.ts : acc), p.desde_ts ?? null)
+  const leido = todos.reduce<string | null>((acc, m) => (esTs(m.ts) && (acc === null || mayor(m.ts, acc)) ? m.ts : acc), p.desde_ts ?? null)
   return { ok: true, mensajes, leido_hasta: leido }
 }

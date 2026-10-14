@@ -127,3 +127,43 @@ describe('el envío NO depende de que la pregunta sea «necesaria» (nota de CC#
     expect(puedeEnviarAhora('envia', { si: false })).toBe(false)
   })
 })
+
+describe('ronda 2 de CC#3 · el espacio no es un separador de cifras', () => {
+  const una = ['k']
+  const tres = ['a', 'b', 'c']
+  const tipo = (t: string, c = una) => leerRespuesta(t, c)[0]
+  it('«10 20», «12 1», «2 12», «12 12», «5 5», «1 2 3», «40 50» NO se juntan: no entendida (nunca un dato falso)', () => {
+    for (const t of ['10 20', '12 1', '2 12', '12 12', '5 5', '1 2 3', '40 50']) {
+      const r = tipo(t)
+      expect(r.tipo, t).not.toBe('respuesta')
+    }
+  })
+  it('«12 000» y «1 234,50» son miles con grupos de 3; «1 500» y «1 000» con la pregunta 1 válida son ambiguos (no se adivina)', () => {
+    expect(leerCifra('12 000')).toEqual({ ok: true, cifra: 12000 })
+    expect(leerCifra('1 234,50')).toEqual({ ok: true, cifra: 1234.5 })
+    expect(leerCifra('10 20').ok).toBe(false)
+    expect(tipo('12 000').tipo).toBe('respuesta')
+    expect(tipo('1 500').tipo).toBe('no_entendida')
+    expect(tipo('1 000').tipo).toBe('no_entendida')
+    expect(tipo('1 000', tres).tipo).toBe('no_entendida')
+  })
+  it('la cifra tiene cota (1e20 no es una respuesta) y «USD 25» lee igual que «25 usd»', () => {
+    expect(leerCifra('99999999999999999999').ok).toBe(false)
+    expect(leerCifra('USD 25')).toEqual({ ok: true, cifra: 25 })
+    expect(leerCifra('25 usd')).toEqual({ ok: true, cifra: 25 })
+    expect(leerCifra('US$ 25')).toEqual({ ok: true, cifra: 25 })
+  })
+  it('un `ts` no numérico se ignora y no clava el cursor de lectura', async () => {
+    const f = (async () => new Response(JSON.stringify({ ok: true, messages: [{ ts: 'abc', user: 'U_E', text: 'basura' }, { ts: '1760000000.000200', user: 'U_E', text: '1 sí' }] }), { status: 200 })) as unknown as typeof fetch
+    const r = await leerHilo({ canal: 'C', thread_ts: '1760000000.000100', emilio_id: 'U_E', token: 't', fetch: f })
+    expect(r.mensajes).toEqual([{ ts: '1760000000.000200', texto: '1 sí' }])
+    expect(r.leido_hasta).toBe('1760000000.000200')
+  })
+  it('el voseo que la barredora de la casa conoce, este detector también (y el tuteo no se marca)', async () => {
+    for (const v of ['escuchá', 'agregá', 'contestá', 'entendés', 'mandame', 'acordate', 'considerá', 'verificá', 'sentate', 'podes']) expect(voseoEn(`por favor ${v} esto`).length, v).toBeGreaterThan(0)
+    for (const t of ['más', 'además', 'estás', 'está', 'allá', 'acá', 'será', 'pagará', 'tendrás', 'país']) expect(voseoEn(`por favor ${t} esto`), t).toEqual([])
+    const { TABLA } = await import('../scripts/ops/barrer-voseo.mjs')
+    const faltan = Object.keys(TABLA).filter((k) => k !== 'dale' && voseoEn(k).length === 0)
+    expect(faltan).toEqual([])
+  })
+})

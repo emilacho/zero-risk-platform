@@ -89,17 +89,40 @@ const VOSEO_EXPLICITO = [
   'enviá', 'revisá', 'probá', 'usá', 'esperá', 'mandá', 'cargá', 'buscá', 'dejá', 'tomá', 'llamá', 'ayudá', 'aclará', 'aprobá', 'rechazá', 'seleccioná', 'completá', 'cambiá',
   'corregí', 'corré', 'comprá', 'vendé', 'pagá', 'cobrá', 'escribí', 'decidí', 'firmá', 'cerrá', 'abrí', 'subí', 'bajá', 'pedí', 'mostrame', 'dame', 'dale',
 ]
+// formas que la barredora de la casa (`scripts/ops/barrer-voseo.mjs`, TABLA) conoce y esta lista no tenía (la prueba las compara una a una)
+const VOSEO_DE_LA_CASA = [
+  'creés', 'leés', 'conocés', 'entendés', 'usás', 'agregá', 'declará', 'priorizá', 'tratá', 'comprobá', 'diagnosticá', 'verificá',
+  'explicá', 'calculá', 'marcá', 'ignorá', 'aplicá', 'ejecutá', 'publicá', 'activá', 'apagá', 'guardá', 'sacá', 'quitá',
+  'generá', 'creá', 'armá', 'cuidá', 'evitá', 'contá', 'empezá', 'pensá', 'ubicá', 'separá', 'juntá', 'compará',
+  'limitá', 'respetá', 'citá', 'copiá', 'pegá', 'nombrá', 'listá', 'anotá', 'registrá', 'clasificá', 'identificá', 'determiná',
+  'estimá', 'validá', 'contrastá', 'cotejá', 'adjuntá', 'incorporá', 'agrupá', 'filtrá', 'asigná', 'reservá', 'cancelá', 'continuá',
+  'terminá', 'finalizá', 'entregá', 'preguntá', 'trabajá', 'utilizá', 'informá', 'recomendá', 'sugerí', 'hablá', 'fijá', 'asegurá',
+  'acordá', 'devolvé', 'mantené', 'leé', 'volvé', 'resolvé', 'rehacé', 'rehacelo', 'sumá', 'dividí', 'ofrecé', 'conocé',
+  'comprendé', 'prometé', 'emití', 'construí', 'describí', 'definí', 'incluí', 'seguí', 'descubrí', 'resumí', 'medí', 'repetí',
+  'recibí', 'dirigí', 'invitá', 'distinguí', 'cumplí', 'sumate', 'elegilo', 'hacelo', 'asegurate', 'acordate', 'olvidate', 'andate',
+  'quedate', 'cuidate', 'ponete', 'animate', 'apurate', 'calmate', 'mirate', 'sentate', 'enterate', 'avisate', 'pedilo', 'pedila',
+  'decila', 'decíles', 'usalo', 'usala', 'usalas', 'usalos', 'mandalo', 'escribinos', 'dejalo', 'tomalo', 'mandame', 'escribilo',
+  'buscalo', 'seás', 'corrés', 'rompés', 'completés', 'metés', 'parate', 'apoyate', 'estructurá', 'procurá', 'ahorrá', 'enumerá',
+  'orientá', 'imaginá', 'marcalo', 'marcala', 'consultalo', 'repetilo', 'perdé', 'entendé', 'seguinos', 'contanos', 'llamanos', 'etiquetanos',
+  'perdés', 'tirás', 'tirala', 'tirame', 'dependés', 'recordá', 'mostrale', 'dejalos', 'dejala', 'dejalas', 'hacelos', 'ponelo',
+  'ponela', 'generás', 'declarás', 'mantenés', 'integrá', 'reescribí', 'mejorá', 'elaborá', 'explorá', 'borrá', 'ilustrá', 'demostrá',
+  'mostrá', 'considerá', 'prepará', 'analizá', 'evaluá', 'reevaluá', 'enfocá', 'ordená', 'ponderá', 'apoyá', 'basá', 'fundá',
+  'corregilo', 'podes', 'tenes', 'queres', 'decis',
+]
+const NO_IMPERATIVO_A = new Set(['está', 'allá', 'acá', 'papá', 'mamá', 'sofá', 'ojalá', 'maná', 'quizá', 'alá', 'ahá'])
 const EXCEPCIONES_DE_TUTEO = new Set(['más', 'además', 'detrás', 'atrás', 'jamás', 'demás', 'quizás', 'estás', 'país', 'anís', 'maíz', 'raíz', 'baúl', 'luís', 'compás', 'sagitás', 'adiós', 'dale'])
 const FUTURO_TUTEO = /(?:[aei]rás|tendrás|vendrás|pondrás|saldrás|habrás|podrás|querrás|sabrás|cabrás|valdrás|harás|dirás)$/
 const PALABRA = new RegExp(`(?<![${LETRA}])[${LETRA}]+(?![${LETRA}])`, 'g')
 export function voseoEn(texto: string): string[] {
   const hallados = new Set<string>()
-  const lista = new Set(VOSEO_EXPLICITO)
+  const lista = new Set([...VOSEO_EXPLICITO, ...VOSEO_DE_LA_CASA])
   for (const m of texto.toLowerCase().match(PALABRA) ?? []) {
     if (EXCEPCIONES_DE_TUTEO.has(m)) continue
     if (lista.has(m) && m !== 'dale') hallados.add(m)
     else if (m.length >= 5 && /ás$/.test(m) && !FUTURO_TUTEO.test(m)) hallados.add(m)
     else if (m.length >= 5 && /ís$/.test(m)) hallados.add(m)
+    // imperativo voseante de los verbos en -ar (regular): «escuchá», «contestá»; el futuro («-rá») y las palabras que no son verbos quedan fuera
+    else if (m.length >= 4 && m.endsWith('á') && !m.endsWith('rá') && !NO_IMPERATIVO_A.has(m)) hallados.add(m)
   }
   return [...hallados]
 }
@@ -164,10 +187,17 @@ export type LecturaDeRespuesta =
  * `1.234,50` y `1,234.50` (el último separador es el decimal) valen 1234,5. Un grupo de EXACTAMENTE tres dígitos tras un solo separador (`1.500`) es AMBIGUO (¿1,5 o 1500?): no se adivina.
  */
 export function leerCifra(texto: string): { ok: true; cifra: number } | { ok: false; motivo: string } {
-  const t = texto.trim().toLowerCase().replace(/\s+/g, '')
-  const m = /^(?:us\$|\$)?(\d[\d.,]*)(?:usd|us\$|dólares?|dolares?)?$/.exec(t)
+  // el espacio NO es un separador cualquiera: solo separa la moneda de la cifra o los MILES en grupos de exactamente 3 («12 000»); «10 20» o «1 2 3» no son una cifra
+  const t = texto.trim().toLowerCase()
+  const m = /^(?:(?:us\$|usd|\$)\s*)?(\d[\d., ]*?)(?:\s*(?:usd|us\$|\$|dólares?|dolares?))?$/.exec(t)
   if (!m) return { ok: false, motivo: 'no es una cifra' }
-  const n = m[1]
+  let n = m[1]
+  if (n.includes(' ')) {
+    if (!/^\d{1,3}(?: \d{3})+(?:[.,]\d{1,2})?$/.test(n)) return { ok: false, motivo: 'no es una cifra (los espacios solo separan miles en grupos de 3)' }
+    n = n.replace(/ /g, '')
+  }
+  if (/^0\d/.test(n)) return { ok: false, motivo: 'no es una cifra (ceros a la izquierda)' }
+  if (n.replace(/\D/g, '').length > 9) return { ok: false, motivo: 'cifra fuera de rango' }
   const puntos = (n.match(/\./g) ?? []).length, comas = (n.match(/,/g) ?? []).length
   if (puntos === 0 && comas === 0) return { ok: true, cifra: Number(n) }
   if (puntos + comas === 1) {
@@ -215,6 +245,8 @@ export function leerRespuesta(texto: string, claves: string[]): LecturaDeRespues
     const m = /^(\d{1,2})(?:\s*[):\-]\s*|\.\s+|\s+)(.+)$/.exec(l)
     if (m) {
       const idx = Number(m[1]) - 1
+      // «1 500»: ¿pregunta 1 con 500, o mil quinientos? No se adivina (si el primer número no puede ser una pregunta, es una cifra con miles: «12 000»)
+      if (idx >= 0 && idx < claves.length && /^\d{1,3}(?: \d{3})+(?:,\d{1,2})?$/.test(l)) { out.push({ tipo: 'no_entendida', literal: l, motivo: `«${l}» es ambiguo (¿pregunta ${m[1]} o una cifra con miles?)` }); continue }
       const v = leerValor(m[2])
       if (idx >= 0 && idx < claves.length && v.ok) { out.push({ tipo: 'respuesta', clave: claves[idx], valor: v.valor, literal: l }); continue }
       // «1 12» con una sola pregunta (1 = la pregunta) ya entró arriba; si el número no es una pregunta, sigue como valor entero
