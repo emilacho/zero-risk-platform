@@ -5,8 +5,9 @@
  * `descubrir` solo LEE (y, con su interruptor, pide al modelo hasta 3 búsquedas). `alimentar` escribe SOLO sin `dry_run`.
  */
 import { alimentarCliente, contextoDelCliente, type Db, type ResultadoDeAlimentar } from './alimentar'
-import { esSobreElCliente } from './filtro'
 import { coincidePorPalabra } from '../texto/coincidencia'
+import { normalizar } from '../manual/texto'
+import { esSobreElCliente } from './filtro'
 import { articulosParaLeer, descubrir, MAX_RESENAS_POR_CORRIDA, type AccionDelPortero, type PlanDelPortero } from './plan'
 import { armarMensajeDePropuestas, INSTRUCCION_DE_PROPUESTAS, validarBusquedas, type ResultadoDePropuestas } from './propuestas'
 import { COSTO_MAXIMO_POR_FUNCION, gastoDelDia, VIDEO_DE_INSTAGRAM_USD, type FilaDelLibro } from './gasto'
@@ -214,16 +215,25 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
   if (ya.error) return err(502, 'lectura_fallida', `apify_raw: ${ya.error.message}`)
   const fichas = lista(mp.data).flatMap((f) => lista(f.respuesta))
   const descartadas: Array<{ titulo: string; motivo: string }> = []
-  let ficha: Record<string, unknown> | null = null
+  // una ficha de Mapas es DEL CLIENTE si (a) por sí sola lo confirma `esSobreElCliente` (nombre + identidad, o ciudad + rubro) o (b) su título es EXACTAMENTE el nombre del cliente y
+  // está en una de sus sedes declaradas (una ficha de Mapas casi nunca trae sitio ni teléfono propios: el caso real del 14-oct). Si hay MÁS de una candidata distinta, es ambiguo: ninguna.
+  const nombreN = normalizar(ctx.nombre)
+  const candidatas = new Map<string, Record<string, unknown>>()
   for (const it of fichas) {
     const texto = [it.title, it.address, it.city, it.website, it.phone, it.phoneUnformatted].filter((x) => typeof x === 'string').join(' ')
     const ver = esSobreElCliente(texto, ctx)
-    if (ver.estado === 'propio') { ficha = it; break }
-    descartadas.push({ titulo: String(it.title ?? '').slice(0, 80), motivo: ver.motivo })
+    const ubic = [it.address, it.city].filter((x) => typeof x === 'string').join(' ')
+    const exactaEnSede = !!nombreN && normalizar(it.title) === nombreN && ctx.ubicacion.some((u) => u && coincidePorPalabra(ubic, u))
+    if (ver.estado === 'propio' || exactaEnSede) candidatas.set(String(it.placeId ?? it.cid ?? it.url ?? candidatas.size), it)
+    else descartadas.push({ titulo: String(it.title ?? '').slice(0, 80), motivo: ver.estado === 'ajeno' ? ver.motivo : `${ver.motivo} · y su título no es exactamente el nombre del cliente en una de sus sedes` })
   }
+  // con más de una candidata `ambigua` manda antes de usar la ficha (ver más abajo)
+  const ficha: Record<string, unknown> | null = [...candidatas.values()][0] ?? null
+  const ambigua = candidatas.size > 1
   const url = ficha ? String(ficha.url ?? '').trim() : ''
   if (lista(ya.data).length) omitidas.push({ fuente: 'resenas', por_que: 'ya se pidieron hoy' })
   else if (!fichas.length) omitidas.push({ fuente: 'resenas', por_que: 'la corrida de Mapas no dejó una ficha' })
+  else if (ambigua) omitidas.push({ fuente: 'resenas', por_que: `hay ${candidatas.size} fichas de Mapas que podrían ser del cliente: es ambiguo y no se piden reseñas (posible homónimo)` })
   else if (!ficha || !/^https?:\/\//i.test(url)) omitidas.push({ fuente: 'resenas', por_que: 'la ficha de Mapas no se pudo confirmar como del cliente (posible homónimo): no se piden reseñas ajenas' })
   else poner({ fuente: 'resenas', funcion: 'resenas_google_maps', params: { startUrls: [{ url }], maxReviews: MAX_RESENAS_POR_CORRIDA }, metadata: { target_kind: 'own', llamado_por: 'portero-alimentar' }, usd_max: COSTO_MAXIMO_POR_FUNCION.resenas_google_maps.usd, medido: true, objetivo: url })
 
