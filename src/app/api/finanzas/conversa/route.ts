@@ -2,10 +2,10 @@
  * POST /api/finanzas/conversa · la oficina financiera conversa (F8 · CC#1 · 14-oct). NACE APAGADA: `finanzas_config.conversa = 'apagado'` → 409 antes de leer, llamar al modelo o escribir.
  *  · `{ accion: 'abrir', client_id, dry_run (booleano), semilla }` → abre (o devuelve) la conversación del cliente.
  *  · `{ accion: 'avanzar', encargo_id }` → ejecuta UN paso (un turno de agente o una función de código) y lo guarda.
- *    `{ accion: 'avanzar', encargo_id, simulacion }` → igual, pero los agentes contestan el guion (SOLO con un encargo `dry_run = true`; con uno real, 409): el seco a US$ 0.
  *  · `{ accion: 'leer', encargo_id }` → estado, gasto y turnos.
  * Llave: `x-api-key` = `INTERNAL_API_KEY` (nunca la llave de la sala). Slack: sin adaptador real en esta rama (puerto «no configurado»: no publica ni lee).
  * Modelo: solo si hay `FINANZAS_RUN_SDK_BASE` (nunca en la rama apagada).
+ * SECO (CC#2 · 14-oct): `{ accion: 'avanzar', encargo_id, simulacion }` → los agentes contestan el guion (SOLO con un encargo `dry_run = true`; con uno real, 409): el seco a US$ 0, sin modelo.
  */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
