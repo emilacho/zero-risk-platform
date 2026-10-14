@@ -77,7 +77,37 @@ describe('R-F4-2 · el cliente es obligatorio también en el nodo', () => {
   it('con los dos: lee, y el cuerpo lleva el client_id tal cual (sin «|| null»)', async () => {
     const r = await ejecutar({ finanzas_id: 'a', client_id: 'cli-1' })
     expect(r.nombres.slice(0, 2)).toEqual([FIN.si, FIN.leer])
-    expect(r.llamadasHttp.find((l: any) => l.nodo === FIN.leer).cuerpo).toEqual({ accion: 'leer', finanzas_id: 'a', client_id: 'cli-1' })
-    expect(JSON.stringify(despues.nodes.find((n: Json) => n.name === FIN.leer).parameters)).not.toContain('|| null')
+    expect(r.llamadasHttp.find((l: any) => l.nodo === FIN.leer)!.cuerpo).toEqual({ accion: 'leer', finanzas_id: 'a', client_id: 'cli-1' })
+    expect(JSON.stringify(despues.nodes.find((n: Json) => n.name === FIN.leer)!.parameters)).not.toContain('|| null')
+  })
+})
+
+describe('ronda 2 de CC#3 · P8 con puntuación final, P9 con un decimal y con miles con espacio, y la suma de tres partes', () => {
+  const firmado = (valores: Array<[string, number, string?]>) => ({ numeros: valores.map(([clave, valor, tipo]) => ({ clave, valor, minimo: null, maximo: null, tipo: tipo ?? 'dato' })), semanas: 12 })
+  it('P8 · un monto firmado al final de una frase («US$ 375,56.», «$375,56, …») NO se lee como 37.556', () => {
+    const f = firmado([['total_mes', 375.56]])
+    for (const frase of ['Inversión: US$ 375,56.', 'El total es de $375,56. Es una estimación.', 'Son $375,56, estimación nuestra.']) {
+      expect(codigos(M.revisarCifrasFinanzas(plan(frase), f)), frase).not.toContain('P8')
+    }
+  })
+  it('P8 sigue marcando una cifra que NO es la firmada, también con punto final', () => {
+    const f = firmado([['total_mes', 375.56]])
+    expect(codigos(M.revisarCifrasFinanzas(plan('Inversión: US$ 999,99.'), f))).toContain('P8')
+  })
+  it('P8 · un monto igual a la suma de TRES cifras firmadas se acepta', () => {
+    const f = firmado([['meta_ig_mes', 100], ['produccion_mes', 50], ['otros', 25.5]])
+    expect(codigos(M.revisarCifrasFinanzas(plan('Entre todo: US$ 175,50 al mes.'), f))).not.toContain('P8')
+    expect(codigos(M.revisarCifrasFinanzas(plan('Entre todo: US$ 176,50 al mes.'), f))).toContain('P8')
+  })
+  it('P9 · ve «1,5», «1.5», «12.345,6», «12,345.6» y «1 234,50» (supuesto sin declarar)', () => {
+    for (const [valor, textos] of [[1.5, ['1,5', '1.5']], [12345.6, ['12.345,6', '12,345.6']], [1234.5, ['1 234,50']]] as Array<[number, string[]]>) {
+      for (const t of textos) {
+        expect(codigos(M.revisarCifrasFinanzas(plan(`Cada día se invierten exactamente ${t} USD.`), fin('pauta_diaria', valor))), t).toContain('P9')
+        expect(codigos(M.revisarCifrasFinanzas(plan(`Cada día se invierten, como estimado, ${t} USD.`), fin('pauta_diaria', valor))), t + ' declarado').not.toContain('P9')
+      }
+    }
+  })
+  it('P9 · «1,5» dentro de «11,5» o de «1,50» no se confunde', () => {
+    expect(codigos(M.revisarCifrasFinanzas(plan('Se invierten 11,5 USD.'), fin('pauta_diaria', 1.5)))).not.toContain('P9')
   })
 })

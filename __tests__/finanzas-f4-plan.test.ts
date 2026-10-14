@@ -11,7 +11,7 @@ import { antesDeF4, cambiarB4, cambiarVuelta, enganchaFinanzas, FIN, moduloConFi
 import { MODULO_R81 } from '../scripts/worker-staging/X9F0zp6LQ2xGEYVS/construir-r81.mjs'
 import { correr } from '../scripts/worker-staging/finanzas-f4/n8n-mini.mjs'
 
-type Nodo = { name: string; type: string; parameters: Record<string, any> }
+type Nodo = { name: string; type: string; parameters: Record<string, any>; onError?: string }
 type Flujo = { nodes: Nodo[]; connections: Record<string, { main: Array<Array<{ node: string }>> }> }
 const antes = antesDeF4() as Flujo
 const despues = enganchaFinanzas(antes) as Flujo
@@ -230,11 +230,11 @@ describe('el flujo completo del enganche (con el n8n en miniatura)', () => {
       http: { [FIN.leer]: () => FIRMADO },
     })
     expect(r.nombres.slice(0, 4)).toEqual([FIN.si, FIN.leer, FIN.devolver, NODOS.b4])
-    const l = r.llamadasHttp.find((x: any) => x.nodo === FIN.leer)
+    const l = r.llamadasHttp.find((x: any) => x.nodo === FIN.leer)!
     expect(l.url).toBe('https://api.ejemplo.invalid/api/finanzas/tablero')
     expect(l.cuerpo).toEqual({ accion: 'leer', finanzas_id: '3f2b8c1e-9d4a-4b7e-8a61-0c5d2e7f9a10', client_id: 'x-1' })
     expect(l.cabeceras['x-api-key']).toBe('llave-de-prueba')
-    const entradaB4 = r.visitas.find((v: any) => v.nodo === NODOS.b4).entrada[0]
+    const entradaB4 = r.visitas.find((v: any) => v.nodo === NODOS.b4)!.entrada[0]
     expect(entradaB4).toEqual(unir[0].json)
   })
 })

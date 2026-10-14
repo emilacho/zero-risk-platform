@@ -7,6 +7,8 @@ var _FIN_DECLARA = /(?:^|[^a-záéíóúñ])(?:supuest|estim|aproxim|rango|alred
 
 function _finNumeroDe(texto) {
   var s = String(texto).replace(/[^\d.,]/g, '')
+  // la puntuación que cierra la frase no es parte del número («US$ 375,56.» es 375,56, no 37.556)
+  while (s.length && (s.charAt(s.length - 1) === '.' || s.charAt(s.length - 1) === ',')) s = s.slice(0, -1)
   if (!s) return null
   var uc = Math.max(s.lastIndexOf('.'), s.lastIndexOf(','))
   var n
@@ -76,14 +78,18 @@ function _finAgrupar(entero, sep) {
 
 function _finFormas(v) {
   var f = []
-  ;[2, 0].forEach(function (d) {
+  // 2 decimales, 1 decimal (solo si el valor lo tiene: «1,5», «12.345,6») y entero (solo si lo es)
+  ;[2, 1, 0].forEach(function (d) {
     if (d === 0 && Math.abs(v - Math.round(v)) >= 0.005) return
-    var s = (d === 0 ? Math.round(v) : Math.round(v * 100) / 100).toFixed(d)
+    if (d === 1 && (Math.abs(v * 10 - Math.round(v * 10)) >= 0.005 || Math.abs(v - Math.round(v)) < 0.005)) return
+    var s = (d === 0 ? Math.round(v) : d === 1 ? Math.round(v * 10) / 10 : Math.round(v * 100) / 100).toFixed(d)
     var p = s.split('.')
     f.push(s, s.replace('.', ','))
-    // miles con punto («1.234,50») y con coma («1,234.50»): se agrupa a mano, sin expresiones regulares (un desescape de herramientas ya se comió las barras una vez)
+    // miles con punto («1.234,50»), con coma («1,234.50») y con ESPACIO («1 234,50»): se agrupa a mano, sin expresiones regulares (un desescape de herramientas ya se comió las barras una vez)
     f.push(_finAgrupar(p[0], '.') + (p[1] ? ',' + p[1] : ''))
     f.push(_finAgrupar(p[0], ',') + (p[1] ? '.' + p[1] : ''))
+    f.push(_finAgrupar(p[0], ' ') + (p[1] ? ',' + p[1] : ''))
+    f.push(_finAgrupar(p[0], ' ') + (p[1] ? '.' + p[1] : ''))
   })
   return f.filter(function (x, k) { return x && f.indexOf(x) === k })
 }
