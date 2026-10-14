@@ -55,13 +55,13 @@ function tablasDelCaso(c: Caso, dia: 1 | 2) {
   const ig = (posts: Array<{ id: string; texto: string }>) => [{ username: c.ig, biography: `Somos ${c.nombre}`, latestPosts: posts.map((p) => ({ shortCode: p.id, caption: p.texto, ownerUsername: c.ig })) }]
   const filas: Array<Record<string, unknown>> = [
     { id: `${c.id}-w1`, client_id: c.id, apify_function: 'website_content_scraper', ensayo: false, created_at: t('2026-10-15T08:00:00Z'), metadata: { llamado_por: 'portero-alimentar' }, respuesta: [{ url: `https://${c.web}/`, text: c.paginaDia1 }] },
-    { id: `${c.id}-m1`, client_id: c.id, apify_function: 'own_google_maps_profile', ensayo: false, created_at: t('2026-10-15T08:01:00Z'), respuesta: [{ title: c.nombre, address: 'Av. Principal 123', openingHours: c.horarioDia1 }] },
+    { id: `${c.id}-m1`, client_id: c.id, apify_function: 'own_google_maps_profile', ensayo: false, created_at: t('2026-10-15T08:01:00Z'), respuesta: [{ title: c.nombre, address: `Av. Principal 123, ${c.ciudad}`, openingHours: c.horarioDia1 }] },
     { id: `${c.id}-i1`, client_id: c.id, apify_function: 'instagram_scraper', ensayo: false, created_at: t('2026-10-15T08:02:00Z'), respuesta: ig([{ id: 'P1', texto: 'Bienvenidos a la semana con muchas novedades para todos' }]) },
   ]
   if (dia === 2) {
     filas.push(
       { id: `${c.id}-w2`, client_id: c.id, apify_function: 'website_content_scraper', ensayo: false, created_at: t('2026-10-16T08:00:00Z'), metadata: { llamado_por: 'portero-alimentar' }, respuesta: [{ url: `https://${c.web}/`, text: c.paginaDia2 }] },
-      { id: `${c.id}-m2`, client_id: c.id, apify_function: 'own_google_maps_profile', ensayo: false, created_at: t('2026-10-16T08:01:00Z'), respuesta: [{ title: c.nombre, address: 'Av. Principal 123', openingHours: c.horarioDia2, reviews: [{ reviewId: 'RV1', text: c.resenaDia2, publishedAtDate: '2026-10-16T01:00:00Z' }] }] },
+      { id: `${c.id}-m2`, client_id: c.id, apify_function: 'own_google_maps_profile', ensayo: false, created_at: t('2026-10-16T08:01:00Z'), respuesta: [{ title: c.nombre, address: `Av. Principal 123, ${c.ciudad}`, openingHours: c.horarioDia2, reviews: [{ reviewId: 'RV1', text: c.resenaDia2, publishedAtDate: '2026-10-16T01:00:00Z' }] }] },
       { id: `${c.id}-i2`, client_id: c.id, apify_function: 'instagram_scraper', ensayo: false, created_at: t('2026-10-16T08:02:00Z'), respuesta: ig([{ id: 'P1', texto: 'Bienvenidos a la semana con muchas novedades para todos' }, c.postDia2]) },
       { id: `${c.id}-a1`, client_id: c.id, apify_function: 'website_content_scraper', ensayo: false, created_at: t('2026-10-16T08:03:00Z'), metadata: { llamado_por: 'ogfq56oIEoHufFPM#articulo' }, respuesta: [{ url: 'https://noticias.example/homonimo', text: `${c.homonimoDia2}. ${'Texto de relleno de la nota para que tenga largo suficiente. '.repeat(4)}` }] },
     )

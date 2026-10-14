@@ -10,6 +10,7 @@ import { propiosDeFicha } from '../manual/cliente'
 import { TRANSITORIOS_COMUNES, transitoriosDe, varianteDelCliente, type Interruptores } from './datos'
 import { MAX_LLAMADAS_DEL_JUEZ_POR_DIA, TOPE_DE_GASTO_DEL_JUEZ_POR_LLAMADA_USD, TOPE_DEL_PORTERO_USD } from './datos'
 import { filtrar, type ContextoDelCliente } from './filtro'
+import { fichaPropiaDeMapas } from './mapas-propia'
 import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlamada } from './juez'
 import { planDeArchivo, type PlanDeArchivo } from './archivar'
 import { unidadesDeRaspados, type FilaCruda, type Unidad } from './unidades'
@@ -109,7 +110,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   const propios = propiosDeFicha(cliente as never)
   const ctx = contextoDelCliente(cliente, lista(sd.data))
 
-  const unidades = unidadesDeRaspados(lista(rr.data) as unknown as FilaCruda[], { propios, hostsDeReparto: reparto.map(hostDe).filter(Boolean), transitorios: patrones })
+  const unidades = unidadesDeRaspados(lista(rr.data) as unknown as FilaCruda[], { propios, hostsDeReparto: reparto.map(hostDe).filter(Boolean), transitorios: patrones, fichaDeMapas: (items) => fichaPropiaDeMapas(items, ctx).ficha })
   r.unidades = unidades.length
   const vistas = new Set(lista(vv.data).map((v) => `${v.fuente}|${v.unidad_ref}|${v.huella}`))
   const f = filtrar(unidades, ctx, vistas, patrones)

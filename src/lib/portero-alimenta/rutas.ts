@@ -6,8 +6,7 @@
  */
 import { alimentarCliente, contextoDelCliente, type Db, type ResultadoDeAlimentar } from './alimentar'
 import { coincidePorPalabra } from '../texto/coincidencia'
-import { normalizar } from '../manual/texto'
-import { esSobreElCliente } from './filtro'
+import { fichaPropiaDeMapas } from './mapas-propia'
 import { articulosParaLeer, descubrir, MAX_RESENAS_POR_CORRIDA, type AccionDelPortero, type PlanDelPortero } from './plan'
 import { armarMensajeDePropuestas, INSTRUCCION_DE_PROPUESTAS, validarBusquedas, type ResultadoDePropuestas } from './propuestas'
 import { COSTO_MAXIMO_POR_FUNCION, gastoDelDia, VIDEO_DE_INSTAGRAM_USD, type FilaDelLibro } from './gasto'
@@ -214,22 +213,11 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
   const ya = await deps.db.from('apify_raw').select('params, created_at').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'resenas_google_maps').gte('created_at', dia0.toISOString()).limit(5)
   if (ya.error) return err(502, 'lectura_fallida', `apify_raw: ${ya.error.message}`)
   const fichas = lista(mp.data).flatMap((f) => lista(f.respuesta))
-  const descartadas: Array<{ titulo: string; motivo: string }> = []
-  // una ficha de Mapas es DEL CLIENTE si (a) por sí sola lo confirma `esSobreElCliente` (nombre + identidad, o ciudad + rubro) o (b) su título es EXACTAMENTE el nombre del cliente y
-  // está en una de sus sedes declaradas (una ficha de Mapas casi nunca trae sitio ni teléfono propios: el caso real del 14-oct). Si hay MÁS de una candidata distinta, es ambiguo: ninguna.
-  const nombreN = normalizar(ctx.nombre)
-  const candidatas = new Map<string, Record<string, unknown>>()
-  for (const it of fichas) {
-    const texto = [it.title, it.address, it.city, it.website, it.phone, it.phoneUnformatted].filter((x) => typeof x === 'string').join(' ')
-    const ver = esSobreElCliente(texto, ctx)
-    const ubic = [it.address, it.city].filter((x) => typeof x === 'string').join(' ')
-    const exactaEnSede = !!nombreN && normalizar(it.title) === nombreN && ctx.ubicacion.some((u) => u && coincidePorPalabra(ubic, u))
-    if (ver.estado === 'propio' || exactaEnSede) candidatas.set(String(it.placeId ?? it.cid ?? it.url ?? candidatas.size), it)
-    else descartadas.push({ titulo: String(it.title ?? '').slice(0, 80), motivo: ver.estado === 'ajeno' ? ver.motivo : `${ver.motivo} · y su título no es exactamente el nombre del cliente en una de sus sedes` })
-  }
-  // con más de una candidata `ambigua` manda antes de usar la ficha (ver más abajo)
-  const ficha: Record<string, unknown> | null = [...candidatas.values()][0] ?? null
-  const ambigua = candidatas.size > 1
+  const sel = fichaPropiaDeMapas(fichas, ctx)
+  const descartadas = sel.descartadas
+  const ficha: Record<string, unknown> | null = sel.ficha
+  const ambigua = sel.ambigua
+  const candidatas = { size: sel.candidatas }
   const url = ficha ? String(ficha.url ?? '').trim() : ''
   if (lista(ya.data).length) omitidas.push({ fuente: 'resenas', por_que: 'ya se pidieron hoy' })
   else if (!fichas.length) omitidas.push({ fuente: 'resenas', por_que: 'la corrida de Mapas no dejó una ficha' })
