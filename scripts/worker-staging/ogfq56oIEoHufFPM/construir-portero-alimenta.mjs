@@ -68,6 +68,35 @@ for (let k = 0; k < previos.length; k++) {
 }
 return salidas`)
 
+
+// ───────── ② ter · tanda 2: reseñas de la ficha de Mapas (≤ 100) y videos de Instagram SOLO si hay publicaciones nuevas (se revisa todos los días)
+const tanda2 = http('② ter Reseñas y videos (qué pedir)', '6f0a1c10-0006-4a00-8000-00000000d006', [2080, 0], '/api/brain/alimentar/descubrir', cuerpo(", fase: 'tanda2'"))
+const leerTanda2 = code('② ter Leer reseñas y videos (Servicio de Apify)', '6f0a1c10-0007-4a00-8000-00000000d007', [2340, 0], `// ② ter · pide al Servicio lo que la tanda 1 hizo posible: las reseñas de la ficha CONFIRMADA de Mapas y los videos de Instagram solo si hubo publicaciones nuevas.
+// Misma regla que ②: con dry_run NO llama a nadie; una llamada por acción, SIN reintento. Sufijo «#tanda2» en calling_workflow_id.
+const N8N = 'https://n8n-production-72be.up.railway.app'
+const http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o })
+const previos = $('② bis Leer artículos (Servicio de Apify)').all().map((i) => i.json)
+const resp = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })
+const salidas = []
+for (let k = 0; k < previos.length; k++) {
+  const e = previos[k]
+  const r = resp[k] || {}
+  const salida = { ...e, tanda2: { hecho: false, llamadas: [], gasto_usd: 0, omitidas: r.omitidas || [], revision: r.revision_de_publicaciones || null } }
+  if (e.falla || !e.cliente || e.dry_run === true || r.apagado || !Array.isArray(r.acciones)) { salida.tanda2.nota = e.dry_run === true ? 'dry_run: no se llamó a ningún proveedor' : 'sin nada que pedir'; salidas.push({ json: salida }); continue }
+  for (const a of r.acciones) {
+    const t0 = Date.now()
+    const x = await http({ url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id + '#tanda2' } } })
+    const b = x.body && typeof x.body === 'object' ? x.body : {}
+    salida.tanda2.llamadas.push({ funcion: a.funcion, objetivo: a.objetivo, hecho: x.statusCode === 200 && b.ok === true, http: x.statusCode, ms: Date.now() - t0, usd_max: a.usd_max })
+    salida.tanda2.gasto_usd = Number((salida.tanda2.gasto_usd + (typeof a.usd_max === 'number' ? a.usd_max : 0)).toFixed(6))
+  }
+  salida.tanda2.hecho = salida.tanda2.llamadas.length > 0 && salida.tanda2.llamadas.every((l) => l.hecho)
+  salida.ampliacion = { ...(e.ampliacion || {}), gasto_usd: Number((((e.ampliacion && e.ampliacion.gasto_usd) || 0) + salida.tanda2.gasto_usd).toFixed(6)) }
+  salidas.push({ json: salida })
+}
+return salidas`)
+
 // ───────── ④ Alimentar + ⑤ Cierre
 const alimentar = http('④ Alimentar (filtrar · razonar · archivar)', '6f0a1c10-0005-4a00-8000-00000000d005', [2340, 0], '/api/brain/alimentar/procesar', `={{ JSON.stringify($('③ Pedido a correr').item.json.correr_body ? { dry_run: $('③ Pedido a correr').item.json.dry_run, client_id: $('③ Pedido a correr').item.json.cliente, workflow_id: $('③ Pedido a correr').item.json.workflow_id, workflow_execution_id: $('③ Pedido a correr').item.json.workflow_execution_id } : { dry_run: true, client_id: '${NADIE}' }) }}`, 280000)
 const cierre = por('④ Cierre')
@@ -89,6 +118,7 @@ const clientes = pedidos.map((p, k) => {
     portero: p.portero || null,
     ampliacion: p.ampliacion ? { hecho: p.ampliacion.hecho, gasto_usd: p.ampliacion.gasto_usd, parado: p.ampliacion.parado, llamadas: (p.ampliacion.llamadas || []).length } : null,
     articulos: p.articulos ? { hecho: p.articulos.hecho, llamadas: (p.articulos.llamadas || []).length, gasto_usd: p.articulos.gasto_usd } : null,
+    tanda2: p.tanda2 ? { hecho: p.tanda2.hecho, llamadas: (p.tanda2.llamadas || []).map((l) => l.funcion), gasto_usd: p.tanda2.gasto_usd, revision: p.tanda2.revision, omitidas: (p.tanda2.omitidas || []).map((o) => o.fuente + ': ' + o.por_que) } : null,
     diario: saltado ? 'saltado' : c.estado || 'sin_respuesta',
     alimentar: saltado ? 'saltado' : a.apagado ? 'apagado' : a.estado || 'sin_respuesta',
     suma: res.suma || 0, reemplaza: res.reemplaza || 0, nada: res.nada || 0, duda: res.duda || 0, sin_confirmar: res.sin_confirmar || 0,
@@ -102,13 +132,15 @@ const malo = clientes.some((c) => c.plan_fallo || c.errores.length > 0 || ['con_
 return [{ json: { fin: malo ? 'con_errores' : 'hecho', via: e.via, dry_run: e.dry_run, clientes } }]`
 
 // ───────── montaje
-w.nodes.push(descubrir, unificado, articulos, leer, alimentar)
+w.nodes.push(descubrir, unificado, articulos, leer, tanda2, leerTanda2, alimentar)
 // recolocar para que el lienzo se lea de izquierda a derecha
-const pos = { '① Plan de la ampliación': [520, 0], '① Un elemento por cliente': [780, 0], '② Ampliar (Servicio de Apify)': [2080, 0], '③ Pedido a correr': [2340, 120], '③ Correr (comparar · limpiar · preparar)': [2600, 120] }
+const pos = { '① Plan de la ampliación': [520, 0], '① Un elemento por cliente': [780, 0], '② Ampliar (Servicio de Apify)': [1560, 0], '③ Pedido a correr': [2600, 120], '③ Correr (comparar · limpiar · preparar)': [2860, 120] }
 for (const [n, p] of Object.entries(pos)) por(n).position = p
-alimentar.position = [2860, 120]
-cierre.position = [3120, 120]
-w.name = 'Zero Risk — Cerebro · mantenimiento diario del portero (que ALIMENTA: descubrir → traer → filtrar → razonar → archivar) · CC-CEREBRO'
+tanda2.position = [2080, 0]
+leerTanda2.position = [2340, 0]
+alimentar.position = [3120, 120]
+cierre.position = [3380, 120]
+w.name = 'Zero Risk — Cerebro · mantenimiento diario del portero (que ALIMENTA) · CC-CEREBRO' // n8n rechaza nombres de más de 128 caracteres
 w.active = false
 const c = w.connections
 const sig = (de, a) => { c[de] = { main: [[{ node: a, type: 'main', index: 0 }]] } }
@@ -117,7 +149,9 @@ sig(descubrir.name, unificado.name)
 sig(unificado.name, '② Ampliar (Servicio de Apify)')
 sig('② Ampliar (Servicio de Apify)', articulos.name)
 sig(articulos.name, leer.name)
-sig(leer.name, '③ Pedido a correr')
+sig(leer.name, tanda2.name)
+sig(tanda2.name, leerTanda2.name)
+sig(leerTanda2.name, '③ Pedido a correr')
 sig('③ Pedido a correr', '③ Correr (comparar · limpiar · preparar)')
 sig('③ Correr (comparar · limpiar · preparar)', alimentar.name)
 sig(alimentar.name, cierre.name)

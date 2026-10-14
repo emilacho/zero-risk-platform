@@ -158,20 +158,20 @@ describe('H3 · el costo máximo de Mapas es n_sedes × el máximo por búsqueda
   const cliente = (n: number) => ({ id: 'C', name: 'Estudio Brisa', website_url: 'https://brisa.example', config: { apify: { own_handles: {} } }, _n: n })
   const plan = (ciudades: string[]) => descubrir({ cliente: cliente(ciudades.length), rubro: 'estudio de masajes', ciudad: ciudades[0], ciudades, publicaciones_propias: [], gastado_hoy_usd: 0, interruptores: { alimentar: true, proponer_busquedas: false, menciones: false, puente_al_indice: false } })
   const mapas = (p: ReturnType<typeof descubrir>) => p.hacer.find((a) => a.fuente === 'mapas')!
-  it('1 sede = 0,10 · 2 sedes = 0,20 · 3 sedes = 0,30 · 5 sedes se cortan en 3 (nunca más búsquedas que las pagadas)', () => {
-    expect(mapas(plan(['Cuenca'])).usd_max).toBeCloseTo(0.1, 6)
-    expect(mapas(plan(['Cuenca', 'Loja'])).usd_max).toBeCloseTo(0.2, 6)
+  it('1 sede = 0,007 · 2 sedes = 0,014 · 3 sedes = 0,021 · 5 sedes se cortan en 3 (costo MEDIDO el 14-oct por búsqueda)', () => {
+    expect(mapas(plan(['Cuenca'])).usd_max).toBeCloseTo(0.007, 6)
+    expect(mapas(plan(['Cuenca', 'Loja'])).usd_max).toBeCloseTo(0.014, 6)
     const tres = mapas(plan(['Cuenca', 'Loja', 'Quito']))
-    expect(tres.usd_max).toBeCloseTo(0.3, 6)
+    expect(tres.usd_max).toBeCloseTo(0.021, 6)
     const cinco = mapas(plan(['Cuenca', 'Loja', 'Quito', 'Ambato', 'Machala']))
     expect((cinco.params.searchStringsArray as string[]).length).toBe(3)
-    expect(cinco.usd_max).toBeCloseTo(0.3, 6)
+    expect(cinco.usd_max).toBeCloseTo(0.021, 6)
   })
-  it('una ficha de Mapas ya conocida es UNA corrida (0,10), no por sede', () => {
+  it('una ficha de Mapas ya conocida es UNA corrida (0,007), no por sede', () => {
     const p = descubrir({ cliente: cliente(2), rubro: 'x', ciudad: 'Cuenca', ciudades: ['Cuenca', 'Loja'], mapas: { url: 'https://maps.example/p' }, publicaciones_propias: [], gastado_hoy_usd: 0, interruptores: { alimentar: true, proponer_busquedas: false, menciones: false, puente_al_indice: false } })
-    expect(mapas(p).usd_max).toBeCloseTo(0.1, 6)
+    expect(mapas(p).usd_max).toBeCloseTo(0.007, 6)
   })
-  it('el libro sin importe cuenta el máximo POR BÚSQUEDA de lo que se hizo hoy (2 sedes ⇒ 0,20)', async () => {
+  it('el libro sin importe cuenta el máximo POR BÚSQUEDA de lo que se hizo hoy (2 sedes ⇒ 0,014)', async () => {
     const t = {
       costs: [{ service: 'apify:own_google_maps_profile', amount_usd: null, created_at: '2026-10-16T09:00:00Z', description: JSON.stringify({ es: 'detalle_de_llamada', client_id: C }) }],
       agent_invocations: [],
@@ -180,11 +180,11 @@ describe('H3 · el costo máximo de Mapas es n_sedes × el máximo por búsqueda
     const base = crearBaseFalsa(t as never)
     const g = await gastoDeHoy(base.db, C, new Date('2026-10-16T12:00:00Z'))
     expect(g.ok).toBe(true)
-    if (g.ok) { expect(g.gasto.apify_usd).toBeCloseTo(0.2, 6); expect(g.gasto.filas_sin_importe).toBe(1) }
+    if (g.ok) { expect(g.gasto.apify_usd).toBeCloseTo(0.014, 6); expect(g.gasto.filas_sin_importe).toBe(1) }
   })
   it('gastoDelDia respeta el máximo por llamada que se le pasa y no el declarado por omisión', () => {
     const libro = [{ service: 'apify:own_google_maps_profile', amount_usd: 0, created_at: '2026-10-16T09:00:00Z', description: JSON.stringify({ es: 'detalle_de_llamada', client_id: C }) }]
-    expect(gastoDelDia({ clientId: C, ahora: D1, libro, invocacionesUsd: [] }).apify_usd).toBeCloseTo(0.1, 6)
+    expect(gastoDelDia({ clientId: C, ahora: D1, libro, invocacionesUsd: [] }).apify_usd).toBeCloseTo(0.007, 6)
     expect(gastoDelDia({ clientId: C, ahora: D1, libro, invocacionesUsd: [], maximoPorLlamada: { own_google_maps_profile: 0.3 } }).apify_usd).toBeCloseTo(0.3, 6)
   })
 })

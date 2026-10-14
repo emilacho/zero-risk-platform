@@ -5,10 +5,11 @@
  * `descubrir` solo LEE (y, con su interruptor, pide al modelo hasta 3 búsquedas). `alimentar` escribe SOLO sin `dry_run`.
  */
 import { alimentarCliente, contextoDelCliente, type Db, type ResultadoDeAlimentar } from './alimentar'
+import { esSobreElCliente } from './filtro'
 import { coincidePorPalabra } from '../texto/coincidencia'
-import { articulosParaLeer, descubrir, type AccionDelPortero, type PlanDelPortero } from './plan'
+import { articulosParaLeer, descubrir, MAX_RESENAS_POR_CORRIDA, type AccionDelPortero, type PlanDelPortero } from './plan'
 import { armarMensajeDePropuestas, INSTRUCCION_DE_PROPUESTAS, validarBusquedas, type ResultadoDePropuestas } from './propuestas'
-import { COSTO_MAXIMO_POR_FUNCION, gastoDelDia, type FilaDelLibro } from './gasto'
+import { COSTO_MAXIMO_POR_FUNCION, gastoDelDia, VIDEO_DE_INSTAGRAM_USD, type FilaDelLibro } from './gasto'
 import { TOPE_DEL_PORTERO_USD, type Interruptores } from './datos'
 import type { RespuestaDeLlamada } from './juez'
 import type { PuenteDeIndice } from './archivar'
@@ -112,7 +113,7 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
  * la grabación real es aparte, con «dale»). Acepta, en cualquier mezcla: una lista de páginas de resultados con `organicResults` / `results` / `searchResults` / `items` / `organic`,
  * o resultados planos; y por resultado `url` | `link` | `href` y `title` | `name` y `description` | `snippet` | `text`. Lo que no entiende NO se inventa: se cuenta en `ilegibles`.
  */
-export const LECTOR_DE_BUSQUEDA = { verificado_con_salida_real: false, nota: 'forma asumida (organicResults o plana); verificar con una salida real grabada antes de encender prensa' } as const
+export const LECTOR_DE_BUSQUEDA = { verificado_con_salida_real: true, nota: 'verificado el 14-oct con una salida real grabada: respuesta = [ {organicResults:[{url,type,title,position,description,…}], paidResults, peopleAlsoAsk, relatedQueries, …} ]; `queries` como texto o como lista da lo mismo' } as const
 const CLAVES_DE_LISTA = ['organicResults', 'results', 'searchResults', 'organic', 'items']
 const primero = (o: Record<string, unknown>, claves: string[]): string | undefined => { for (const k of claves) if (typeof o[k] === 'string' && (o[k] as string).trim()) return (o[k] as string).trim(); return undefined }
 export interface ResultadoDeBusqueda { url?: unknown; title?: unknown; description?: unknown }
@@ -174,6 +175,78 @@ export async function rutaArticulos(deps: DepsDeRutas, cuerpo: unknown): Promise
   }
   const leidos = leerBusqueda(lista(busq.data))
   return { status: 200, body: { dry_run: v.dry_run, acciones, omitidas, resultados_de_busqueda: leidos.resultados.length, resultados_ilegibles: leidos.ilegibles, filas_de_busqueda: lista(busq.data).length, lector_de_busqueda: LECTOR_DE_BUSQUEDA, modelos_llamados: 0 } }
+}
+
+/**
+ * TANDA 2 (`fase: 'tanda2'`) · lo que necesita algo que la tanda 1 trajo. Solo LEE; devuelve acciones con la forma de `plan.hacer`.
+ *  · RESEÑAS: con la dirección de la ficha de Mapas que trajo la tanda 1 (≤ 100 reseñas). Solo se usa una ficha que SEA del cliente (`esSobreElCliente` sobre título, dirección,
+ *    sitio y teléfono de la propia ficha): un homónimo de Mapas no abre reseñas ajenas. Una vez por día.
+ *  · VIDEOS DE INSTAGRAM: se REVISA todos los días, pero solo se bajan si hay publicaciones NUEVAS (no vistas) que sean videos; se piden tantos como videos nuevos (≤ 10).
+ */
+const CODIGO_DE_PUBLICACION = (p: Record<string, unknown>): string => String(p.shortCode ?? p.id ?? '')
+const esVideo = (p: Record<string, unknown>): boolean => /video|clip|reel/i.test(String(p.type ?? p.productType ?? '')) || typeof p.videoUrl === 'string'
+export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Respuesta> {
+  const v = validar(cuerpo); if (esRespuesta(v)) return v
+  if (!deps.interruptores.alimentar) return { status: 200, body: { apagado: true, detalle: 'PORTERO_ALIMENTAR está apagado: no se leyó ni se escribió nada', acciones: [], modelos_llamados: 0 } }
+  const ahora = deps.ahora ?? new Date()
+  const cl = await deps.db.from('clients').select('*').eq('id', v.client_id).limit(1)
+  if (cl.error) return err(502, 'lectura_fallida', `clients: ${cl.error.message}`)
+  const cliente = lista(cl.data)[0]
+  if (!cliente) return err(404, 'cliente_inexistente', 'no existe la ficha del cliente')
+  const sd = await deps.db.from('client_sedes').select('ciudad, clave').eq('client_id', v.client_id)
+  if (sd.error) return err(502, 'lectura_fallida', `client_sedes: ${sd.error.message}`)
+  const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)
+  const ctx = contextoDelCliente(cliente, lista(sd.data))
+  const g = await gastoDeHoy(deps.db, v.client_id, ahora)
+  if (!g.ok) return err(502, 'lectura_fallida', g.detalle)
+  let acumulado = g.gasto.total_usd
+  const acciones: AccionDelPortero[] = []
+  const omitidas: Array<{ fuente: string; por_que: string }> = []
+  const poner = (a: AccionDelPortero) => {
+    if (acumulado + a.usd_max > TOPE_DEL_PORTERO_USD) { omitidas.push({ fuente: a.fuente, por_que: `no cabe en el tope del día (US$ ${acumulado.toFixed(4)} + ${a.usd_max} > ${TOPE_DEL_PORTERO_USD.toFixed(2)})` }); return }
+    acumulado += a.usd_max; acciones.push(a)
+  }
+
+  // ── reseñas de la ficha de Mapas
+  const mp = await deps.db.from('apify_raw').select('respuesta, created_at').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'own_google_maps_profile').order('created_at', { ascending: false }).limit(3)
+  if (mp.error) return err(502, 'lectura_fallida', `apify_raw: ${mp.error.message}`)
+  const ya = await deps.db.from('apify_raw').select('params, created_at').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'resenas_google_maps').gte('created_at', dia0.toISOString()).limit(5)
+  if (ya.error) return err(502, 'lectura_fallida', `apify_raw: ${ya.error.message}`)
+  const fichas = lista(mp.data).flatMap((f) => lista(f.respuesta))
+  const descartadas: Array<{ titulo: string; motivo: string }> = []
+  let ficha: Record<string, unknown> | null = null
+  for (const it of fichas) {
+    const texto = [it.title, it.address, it.city, it.website, it.phone, it.phoneUnformatted].filter((x) => typeof x === 'string').join(' ')
+    const ver = esSobreElCliente(texto, ctx)
+    if (ver.estado === 'propio') { ficha = it; break }
+    descartadas.push({ titulo: String(it.title ?? '').slice(0, 80), motivo: ver.motivo })
+  }
+  const url = ficha ? String(ficha.url ?? '').trim() : ''
+  if (lista(ya.data).length) omitidas.push({ fuente: 'resenas', por_que: 'ya se pidieron hoy' })
+  else if (!fichas.length) omitidas.push({ fuente: 'resenas', por_que: 'la corrida de Mapas no dejó una ficha' })
+  else if (!ficha || !/^https?:\/\//i.test(url)) omitidas.push({ fuente: 'resenas', por_que: 'la ficha de Mapas no se pudo confirmar como del cliente (posible homónimo): no se piden reseñas ajenas' })
+  else poner({ fuente: 'resenas', funcion: 'resenas_google_maps', params: { startUrls: [{ url }], maxReviews: MAX_RESENAS_POR_CORRIDA }, metadata: { target_kind: 'own', llamado_por: 'portero-alimentar' }, usd_max: COSTO_MAXIMO_POR_FUNCION.resenas_google_maps.usd, medido: true, objetivo: url })
+
+  // ── videos de Instagram solo si hay publicaciones nuevas
+  const handles = new Set(ctx.handles.map((h) => h.toLowerCase()))
+  const ig = await deps.db.from('apify_raw').select('respuesta, created_at').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'instagram_scraper').order('created_at', { ascending: false }).limit(1)
+  if (ig.error) return err(502, 'lectura_fallida', `apify_raw: ${ig.error.message}`)
+  const vi = await deps.db.from('cerebro_unidades_vistas').select('unidad_ref').eq('client_id', v.client_id).eq('fuente', 'instagram').limit(2000)
+  if (vi.error) return err(502, 'lectura_fallida', `cerebro_unidades_vistas: ${vi.error.message}`)
+  const vistas = new Set(lista(vi.data).map((x) => String(x.unidad_ref)))
+  const perfiles = lista(lista(ig.data)[0]?.respuesta).filter((p) => handles.has(String(p.username ?? '').toLowerCase()))
+  const posts = perfiles.flatMap((p) => lista(p.latestPosts))
+  const nuevas = posts.filter((p) => CODIGO_DE_PUBLICACION(p) && !vistas.has(CODIGO_DE_PUBLICACION(p)))
+  const nuevasVideo = nuevas.filter(esVideo)
+  const handle = [...handles][0] ?? ''
+  const revision = { publicaciones_leidas: posts.length, publicaciones_nuevas: nuevas.length, videos_nuevos: nuevasVideo.length }
+  if (!handle) omitidas.push({ fuente: 'videos', por_que: 'el alta no trae la cuenta propia de Instagram' })
+  else if (!nuevasVideo.length) omitidas.push({ fuente: 'videos', por_que: 'sin publicaciones nuevas que sean videos: no se bajan' })
+  else {
+    const n = Math.min(10, nuevasVideo.length)
+    poner({ fuente: 'videos', funcion: 'videos_instagram', params: { username: [handle], resultsLimit: n, includeTranscript: true }, metadata: { target_kind: 'own', llamado_por: 'portero-alimentar' }, usd_max: Math.round(VIDEO_DE_INSTAGRAM_USD * n * 1e6) / 1e6, medido: true, objetivo: `@${handle} · ${n} video(s) nuevo(s)` })
+  }
+  return { status: 200, body: { dry_run: v.dry_run, acciones, omitidas, revision_de_publicaciones: revision, fichas_de_mapas_descartadas: descartadas, gasto_de_hoy: g.gasto, modelos_llamados: 0 } }
 }
 
 // ───────────────────────── /alimentar · filtrar → razonar → archivar con lo que ya se trajo

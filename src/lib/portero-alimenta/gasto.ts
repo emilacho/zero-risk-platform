@@ -7,12 +7,18 @@
 
 /** máximo por corrida de cada función cuando el libro no trae importe · medido ✔ o declarado * (se corrige con el primer ensayo real) */
 export const COSTO_MAXIMO_POR_FUNCION: Record<string, { usd: number; medido: boolean }> = {
-  website_content_scraper: { usd: 0.0536, medido: true },
-  instagram_scraper: { usd: 0.005, medido: false },
-  own_google_maps_profile: { usd: 0.1, medido: false },
-  instagram_post_comments_scraper: { usd: 0.05, medido: false },
-  youtube_comments_scraper: { usd: 0.05, medido: false },
-  resenas_google_maps: { usd: 0.1, medido: false },
+  // MEDIDOS el 14-oct con la API de Apify (usageTotalUsd por corrida; el Servicio no devuelve `apify_run_id`, por eso el libro quedaba ciego)
+  website_content_scraper: { usd: 0.0536, medido: true }, // medido 0,004–0,029 por página; 0,0536 = techo de 243 corridas del 10-oct
+  instagram_scraper: { usd: 0.0025, medido: true }, // 0,0023–0,0026 (12 publicaciones)
+  own_google_maps_profile: { usd: 0.007, medido: true }, // POR BÚSQUEDA (una por sede): 0,0032 (1) · 0,0212 (3)
+  instagram_post_comments_scraper: { usd: 0.07, medido: true }, // 50 comentarios, 3 publicaciones: 0,069
+  google_serp_scraper: { usd: 0.003, medido: true }, // 0,00255 por búsqueda
+  resenas_google_maps: { usd: 0.002, medido: true }, // 26 reseñas = 0,00005; 100 ≈ 0,0002; 0,002 es holgura declarada
+  videos_instagram: { usd: 0.56, medido: true }, // 10 videos con transcripción = 0,557 (≈ 0,056 por video; el plan lo multiplica por los videos pedidos)
+  videos_youtube: { usd: 0.09, medido: true }, // 10 videos (12-oct)
+  videos_tiktok: { usd: 0.05, medido: true }, // 10 videos (12-oct)
+  // SIN MEDIR: estimaciones declaradas
+  youtube_comments_scraper: { usd: 0.07, medido: false },
   resenas_facebook: { usd: 0.08, medido: false },
   resenas_tripadvisor: { usd: 0.08, medido: false },
   resenas_booking: { usd: 0.08, medido: false },
@@ -20,12 +26,10 @@ export const COSTO_MAXIMO_POR_FUNCION: Record<string, { usd: number; medido: boo
   trustpilot_scraper: { usd: 0.05, medido: false },
   software_review_scraper: { usd: 0.05, medido: false },
   publicaciones_facebook: { usd: 0.05, medido: false },
-  videos_instagram: { usd: 0.17, medido: true },
-  videos_youtube: { usd: 0.09, medido: true },
-  videos_tiktok: { usd: 0.05, medido: true },
-  google_serp_scraper: { usd: 0.02, medido: false },
   menciones_en_redes: { usd: 0.1, medido: false },
 }
+/** videos de Instagram con transcripción: costo medido por video (10 videos = 0,557) */
+export const VIDEO_DE_INSTAGRAM_USD = 0.056
 export const COSTO_MAXIMO_POR_OMISION_USD = 0.0536
 
 export interface FilaDelLibro { service: string; amount_usd: number | string | null; created_at: string; description?: string | null }

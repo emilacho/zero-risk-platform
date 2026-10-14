@@ -56,6 +56,13 @@ const vacio = (dry_run: boolean): ResultadoDeAlimentar => ({
 })
 
 /** el contexto del cliente para reconocerlo: nombre entero, ubicación, cuentas, dominios y teléfonos de SU ficha */
+const SIN_VALOR = new Set(['para', 'con', 'del', 'las', 'los', 'una', 'uno', 'por', 'sus', 'que', 'sin', 'desde', 'entre', 'sobre', 'cerca', 'bien'])
+/** las palabras con sentido del rubro de la ficha (≥ 4 letras, sin conectores): contexto para confirmar un nombre común, nunca identidad */
+export function palabrasDelRubro(industria: unknown): string[] {
+  const t = typeof industria === 'string' ? industria : ''
+  return [...new Set(t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !SIN_VALOR.has(w)))]
+}
+
 export function contextoDelCliente(c: Fila, sedes: Fila[]): ContextoDelCliente {
   const cfg = (c.config && typeof c.config === 'object' ? c.config : {}) as Record<string, unknown>
   const ap = (cfg.apify && typeof cfg.apify === 'object' ? cfg.apify : {}) as Record<string, unknown>
@@ -66,7 +73,7 @@ export function contextoDelCliente(c: Fila, sedes: Fila[]): ContextoDelCliente {
   for (const k of ['city', 'ciudad', 'location']) if (typeof c[k] === 'string' && (c[k] as string).trim()) ubic.add(String(c[k]).trim())
   const dominios = [typeof c.website_url === 'string' ? hostDe(c.website_url) : ''].filter(Boolean)
   const tel = [cfg.phone, cfg.telefono, c.phone].filter((v): v is string => typeof v === 'string')
-  return { nombre: String(c.name ?? '').trim(), ubicacion: [...ubic], handles, dominios, telefonos: tel }
+  return { nombre: String(c.name ?? '').trim(), ubicacion: [...ubic], handles, dominios, telefonos: tel, rubro: palabrasDelRubro(c.industry ?? c.rubro) }
 }
 
 export async function alimentarCliente(e: EntradaDeAlimentar): Promise<ResultadoDeAlimentar> {
