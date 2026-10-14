@@ -17,6 +17,7 @@ export const RESULTADOS_VALIDOS = ['limpia', 'con_desacuerdo', 'sin_segunda_mira
 export const CLIENTES_REALES = [CLIENTES[0], CLIENTES[1]].map((c) => ({ ...c, id: ID_PREFIJO + c.rubro.split(' ')[0] }))
 
 /** el sobre de una revisión real: la pieza ya producida, sus documentos «contra qué» y el tope de ESTA revisión */
+/** @param {any} cliente @param {{ corrida: string, tope_usd: number, imagen?: string | null }} o */
 export function sobreReal(cliente, { corrida, tope_usd, imagen = null }) {
   const imagenes = imagen ? [imagen] : []
   return {
@@ -127,6 +128,8 @@ const ahora = (T) => (T.ahora ?? Date.now)()
  * Pase lo que pase (error, corte, tope), el `finally` APAGA: restaura `jefatura_config` y desactiva el flujo `jefatura · turno`.
  * T = { enVuelo(), leerConfig(), ponerConfig(c), flujos() → { turno:{id,active}|null, vigia:{id,active}|null }, activar(id,on), llamar(ruta, cuerpo) → {status, body}, webhook(cuerpo) → {status}, evidencia(revision_id) → {rev,pasos,fichas,invocaciones}, contadores(), ahora?, dormir? }
  */
+/** @param {{ T: any, aplicar?: boolean, confirmacion?: any, topes?: any, clientes?: any[], corrida?: string, imagen?: string | null }} o
+ * @returns {Promise<any>} */
 export async function correrLaPruebaReal({ T, aplicar = false, confirmacion = false, topes = TOPES, clientes = CLIENTES_REALES, corrida, imagen = null }) {
   if (!aplicar) return { impreso: true, pasos: pasosDeLaPrueba({ topes, clientes }), escrituras: 0 }
   if (confirmacion !== true) throw new Error('J6 se niega: falta la confirmación del «dale» de Emilio (--dale-de-emilio <fecha>). Sin ese «dale» no se corre nada real.')
@@ -199,6 +202,7 @@ export async function correrLaPruebaReal({ T, aplicar = false, confirmacion = fa
 }
 
 /** El aviso para Emilio (método de Lenovo: qué corre, cuánto cuesta, cuánto tarda, qué prueba, qué riesgo; luego el «dale»). Lenguaje de administrador, tuteo. `medidas` = lo medido en el seco (si existe). */
+/** @param {{ topes?: any, medidas?: any, clientes?: any[] }} [o] */
 export function avisoParaEmilio({ topes = TOPES, medidas = null, clientes = CLIENTES_REALES } = {}) {
   const costo = medidas?.costo_por_revision_usd
   const rango = costo ? `≈ ${usd(costo * 2)} (medido en el ensayo: ≈ ${usd(costo)} por revisión)` : '≈ US$ 0,45–0,55 (cálculo del diseño; lo reemplazamos por lo medido en el ensayo antes de pedirte el «dale»)'
