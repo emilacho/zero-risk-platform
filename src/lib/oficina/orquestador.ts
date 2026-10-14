@@ -14,7 +14,7 @@ import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoAlRevisor } from './ciego'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
-import { aplicarSalidaDeJefatura, aplicarSinRevisar, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
+import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
@@ -190,7 +190,7 @@ export async function recibirJefatura(P: Puertos, encargoId: string, salida: Sal
   const sig = siguientePaso(enc.estado_del_motor, pl)
   if (sig.accion !== 'ejecutar' || sig.paso.tipo !== 'jefatura') return r(409, { error: 'sin_paso_pendiente' })
   const e = enc.estado_del_motor
-  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: typeof salida.costo_usd === 'number' ? salida.costo_usd : 0 } })
+  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: costoDeLaJefatura(salida.costo_usd) } })
   return avanzar(P, enc.id)
 }
 

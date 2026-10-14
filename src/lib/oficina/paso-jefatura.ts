@@ -75,6 +75,11 @@ export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'famil
 }
 
 // ───────────────────────── lo que se hace con lo que vuelve
+/** el costo que dice la jefatura entra al libro solo si es un número finito ≥ 0; NaN, Infinity, negativos, texto o ausente → 0 (nunca se propaga un valor que envenene la suma de la pieza) */
+export const costoDeLaJefatura = (c: unknown): number => (typeof c === 'number' && Number.isFinite(c) && c >= 0 ? c : 0)
+/** ¿vino un costo y no sirve? (para declararlo en vez de callarlo) */
+export const costoInvalido = (c: unknown): boolean => c !== undefined && c !== null && costoDeLaJefatura(c) === 0 && !(typeof c === 'number' && c === 0)
+
 export interface DatosDeLaJefatura {
   revision_id: string | null
   resultado: string
@@ -88,6 +93,8 @@ export interface DatosDeLaJefatura {
   /** la revisión no pudo abrirse (apagada, tipo no activo, sin presupuesto, error): la pieza sigue a la bandeja marcada «sin revisar» */
   sin_revisar: boolean
   motivo?: string
+  /** la jefatura mandó un costo que no es un número finito ≥ 0: se contó 0 y queda dicho aquí */
+  costo_invalido?: true
 }
 
 export const datosDeLaJefatura = (e: Estado): DatosDeLaJefatura | null => (datos(e, ARTEFACTO_DE_LA_JEFATURA)?.jefatura as DatosDeLaJefatura | undefined) ?? null
@@ -121,7 +128,8 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia'>, e: Estad
   const reimagen = rehacer ? o.reImagen({ razon: tomadaImagen?.razon ?? 'quien dirige la imagen tomó la opinión' }) : { re_imagen: false, por_rehacer_humano: false, motivo: null, razon: null }
   const jefatura: DatosDeLaJefatura = {
     revision_id: salida.revision_id ?? null, resultado: salida.resultado, marcas: salida.marcas ?? { con_desacuerdo: false, sin_segunda_mirada: false }, desacuerdos: salida.desacuerdos ?? [], respuestas,
-    costo_usd: typeof salida.costo_usd === 'number' ? salida.costo_usd : 0, simulado: salida.simulado === true, incompleta, sin_revisar: false,
+    costo_usd: costoDeLaJefatura(salida.costo_usd), simulado: salida.simulado === true, incompleta, sin_revisar: false,
+    ...(costoInvalido(salida.costo_usd) ? { costo_invalido: true as const } : {}),
   }
   const otros: Record<string, Record<string, unknown>> = {}
   // el texto corregido (solo si la revisión no falló): la oficina lo recibe como una versión nueva de la pieza y vuelve a chequear por código (chequeos_2/3)

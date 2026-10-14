@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SalidaDeRevision } from '../../jefatura/revision/contrato'
 import { abrirEncargo, avanzar, jefaturaSinRespuesta, recibirJefatura } from '../orquestador'
-import { aplicarSalidaDeJefatura } from '../paso-jefatura'
+import { aplicarSalidaDeJefatura, costoDeLaJefatura, costoInvalido } from '../paso-jefatura'
 import { POST_IMG_CON_JEFATURA } from '../plantillas/con-jefatura'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import type { Estado } from '../tipos'
@@ -157,4 +157,39 @@ describe('hueco 8 · jefaturaSinRespuesta no reaplica nada si ya no hay un turno
     const r = await jefaturaSinRespuesta(M.P, '00000000-0000-4000-8000-0000000000aa', 'x')
     expect(r.status).toBe(404); expect(M.llamadas.avisos).toHaveLength(0)
   })
+})
+
+describe('reparo menor 3 (CC#3) · el costo de la jefatura es un número finito ≥ 0: NaN, Infinity, negativos o texto no entran al libro', () => {
+  const malos: Array<[string, unknown]> = [['NaN', NaN], ['Infinity', Infinity], ['-Infinity', -Infinity], ['negativo', -0.5], ['texto', '0.3'], ['nulo', null], ['ausente', undefined], ['objeto', {}]]
+  it('costoDeLaJefatura: acepta 0 y positivos finitos; todo lo demás es 0', () => {
+    for (const ok of [0, 0.2, 3, 1e-9]) expect(costoDeLaJefatura(ok)).toBe(ok)
+    for (const [n, v] of malos) expect(costoDeLaJefatura(v), n).toBe(0)
+  })
+  it('costoInvalido: dice «inválido» para lo que vino y no sirve; 0 y ausente no son inválidos', () => {
+    expect(costoInvalido(0)).toBe(false); expect(costoInvalido(0.2)).toBe(false); expect(costoInvalido(undefined)).toBe(false); expect(costoInvalido(null)).toBe(false)
+    for (const v of [NaN, Infinity, -1, '0.3', {}]) expect(costoInvalido(v), String(v)).toBe(true)
+  })
+  for (const [n, v] of malos) {
+    it(`aplicarSalidaDeJefatura con costo ${n}: el costo del paso queda en 0 (finito), y solo lo que vino mal lo declara`, () => {
+      const r: Json = aplicarSalidaDeJefatura({ familia: 'post_img' }, estado(), salida('limpia', { costo_usd: v as never }), { reImagen: () => ({ re_imagen: false }) })
+      expect(r.costo_usd).toBe(0); expect(Number.isFinite(r.costo_usd)).toBe(true); expect(r.artefacto.jefatura.costo_usd).toBe(0)
+      const dicho = r.artefacto.jefatura.costo_invalido === true
+      expect(dicho).toBe(n !== 'nulo' && n !== 'ausente')
+    })
+  }
+  it('con un costo bueno no cambia nada: el paso lleva 0.2 y no hay marca de costo inválido', () => {
+    const r: Json = aplicarSalidaDeJefatura({ familia: 'post_img' }, estado(), salida('limpia', { costo_usd: 0.2 }), { reImagen: () => ({ re_imagen: false }) })
+    expect(r.costo_usd).toBe(0.2); expect(r.artefacto.jefatura.costo_usd).toBe(0.2); expect(r.artefacto.jefatura.costo_invalido).toBeUndefined()
+  })
+  for (const [n, v] of malos.slice(0, 4)) {
+    it(`recibirJefatura con costo ${n}: el turno y el gasto del encargo quedan finitos y no se mueven por ese valor`, async () => {
+      const { M, id } = await encargo(async () => ({ estado: 'esperando', revision_id: 'rev-1' }))
+      const antes = M.encargos.get(id)!.gasto_usd
+      await recibirJefatura(M.P, id, salida('limpia', { artifact_id: id, costo_usd: v as never }))
+      const turno = [...M.turnos.get(id)!.values()].find((t) => t.paso === 'jefatura')!
+      expect(turno.cost_usd).toBe(0)
+      const despues = M.encargos.get(id)!.gasto_usd
+      expect(Number.isFinite(despues)).toBe(true); expect(despues).toBeCloseTo(antes, 6)
+    })
+  }
 })
