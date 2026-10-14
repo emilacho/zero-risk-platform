@@ -15,7 +15,7 @@ const leer = (r: string) => fs.readFileSync(path.join(RAIZ, r), 'utf8').replace(
 const archivosDe = (d: string): string[] => (!existe(d) ? [] : fs.readdirSync(path.join(RAIZ, d), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? archivosDe(path.join(d, e.name)) : [path.join(d, e.name).replace(/\\/g, '/')])))
 
 // ───────────────────────────────────────────────────────── PUREZA
-const PROHIBIDO_EN_LO_PURO = [/\bfetch\s*\(/, /\bXMLHttpRequest\b/, /\baxios\b/, /node-fetch/, /@anthropic-ai/, /\bopenai\b/i, /from 'node:(https?|net|child_process|dgram)'/, /\bchat\.postMessage\b/, /\bconversations\.(open|replies)\b/, /api\.anthropic\.com/, /slack\.com\/api/]
+const PROHIBIDO_EN_LO_PURO = [/\bfetch\s*\(/, /\bXMLHttpRequest\b/, /\baxios\b/, /node-fetch/, /@anthropic-ai/, /\bopenai\b/i, /from 'node:(https?|net|child_process|dgram)'/, /\bchat\.postMessage\b/, /\bconversations\.(open|replies)\b/, /api\.anthropic\.com/, /\bWebSocket\b/, /\bundici\b/, /from 'got'|require\('got'\)/, /@supabase\/supabase-js/, /\bsendBeacon\b/, /globalThis\s*\[/, /\bglobal\s*\[/, /process\s*\[/, /\bimport\s*\(/, /\brequire\s*\(\s*['"`]node:(https?|net|child_process|dgram)/, /from 'node:(https?|net|child_process|dgram|tls|http2)'/, /slack\.com\/api/]
 /** `process.env` solo donde se lee la llave interna (la ruta); y `fetch` solo en la lectura del hilo (F7), que lo recibe por parámetro */
 export function purezaDe(archivo: string, texto: string): string[] {
   const cuerpo = quitarComentarios(texto, archivo)
@@ -33,12 +33,12 @@ export function purezaDe(archivo: string, texto: string): string[] {
 // ───────────────────────────────────────────────────────── BARRIDO
 const NOMBRES_CONCRETOS = [
   'naufrago', 'náufrago', 'peniche', 'seguridad industrial', 'olón', 'olon ', 'guayaquil', 'quito', 'bogotá', 'bogota', 'medellín', 'medellin', 'cuenca', 'manabí', 'manabi', 'santa elena', 'manta ',
-  'ecuador', 'colombia', 'méxico', 'mexico', 'españa', 'perú', 'argentina', 'chile', 'lima ', 'madrid', 'barcelona',
+  'loja ', 'ambato', 'machala', 'monterrey', 'cartagena', 'valencia', 'salinas', 'montañita', 'montanita', 'ibarra', 'panamá', 'panama', 'uruguay', 'ecuador', 'colombia', 'méxico', 'mexico', 'españa', 'perú', 'argentina', 'chile', 'lima ', 'madrid', 'barcelona',
 ]
 const PALABRAS_DE_NEGOCIO = [
   'restaurante', 'encebollado', 'ceviche', 'sopa', 'pizzer', 'cafeter', 'gimnasio', 'dentista', 'abogado', 'hotel', 'peluquer', 'barber',
   'whatsapp', 'delivery', 'tienda', 'envío', 'jueves a lunes', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo',
-  'pedidos rastreables', 'pedido mínimo', 'mixto', 'bebida', '15/75',
+  'farmacia', 'panader', 'ferreter', 'clínica', 'clinica', 'inmobiliaria', 'restaurant', 'pedidos rastreables', 'pedido mínimo', 'mixto', 'bebida', '15/75',
 ]
 export function quitarComentarios(texto: string, archivo: string): string {
   if (archivo.endsWith('.sql')) return texto.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n')
@@ -54,7 +54,8 @@ export function barrer(texto: string, archivo: string): string[] {
   return [...NOMBRES_CONCRETOS.filter((p) => completo.includes(p)), ...PALABRAS_DE_NEGOCIO.filter((p) => codigo.includes(p))]
 }
 
-const CANDIDATOS = [
+const DE_CARPETA = [...archivosDe('src/lib/finanzas'), ...archivosDe('src/app/api/finanzas')].filter((x) => /\.(ts|tsx|js|mjs)$/.test(x))
+const CANDIDATOS = [ ...DE_CARPETA,
   'src/lib/finanzas/calculadora.ts', 'src/lib/finanzas/tipos.ts', 'src/lib/finanzas/repartir.ts', 'src/lib/finanzas/firma.ts', 'src/lib/finanzas/ruta.ts', 'src/lib/finanzas/resumen.ts',
   'src/lib/finanzas/preguntas.ts', 'src/lib/finanzas/hilo-slack.ts', 'src/lib/finanzas/almacen-supabase.ts',
   'src/app/api/finanzas/bloque/route.ts', 'src/app/api/finanzas/tablero/route.ts',
@@ -113,5 +114,23 @@ describe('el barrido y la pureza DETECTAN de verdad (insertan la palabra en una 
     // la lectura del hilo SÍ usa fetch (recibido por parámetro) pero no llaves de entorno
     expect(purezaDe('src/lib/finanzas/hilo-slack.ts', "const f = p.fetch ?? fetch\nawait f(url.toString())")).toEqual([])
     expect(purezaDe('src/lib/finanzas/hilo-slack.ts', 'const k = process.env.SLACK_BOT_TOKEN').length).toBeGreaterThan(0)
+  })
+})
+
+describe('ronda 2 de CC#3 · listas más largas y el barrido sale de la carpeta', () => {
+  it('ciudades y rubros que no estaban en la lista se detectan', () => {
+    for (const p of ['Loja ', 'Ambato', 'Machala', 'Monterrey', 'Cartagena', 'Valencia', 'Salinas', 'Montañita', 'Ibarra', 'Panamá', 'Uruguay', 'farmacia', 'panadería', 'ferretería', 'clínica', 'inmobiliaria', 'restaurant']) {
+      expect(barrer(`const x = 1 // ${p}\nconst y = '${p}'`, 'src/lib/finanzas/calculadora.ts').length, p).toBeGreaterThan(0)
+    }
+  })
+  it('la pureza ve WebSocket, undici, got, supabase-js, sendBeacon, globalThis[...], process[...] e import() dinámico', () => {
+    for (const mal of ["new WebSocket('wss://x')", "import { fetch } from 'undici'", "import got from 'got'", "import { createClient } from '@supabase/supabase-js'", 'navigator.sendBeacon(u)', "globalThis['fetch'](u)", "process['env'].X", "await import('node:https')", "import https from 'node:https'", "import tls from 'node:tls'"]) {
+      expect(purezaDe('src/lib/finanzas/calculadora.ts', mal).length, mal).toBeGreaterThan(0)
+    }
+  })
+  it('un archivo NUEVO en src/lib/finanzas entra solo en la lista de candidatos (sale de la carpeta)', () => {
+    const lib = archivosDe('src/lib/finanzas').filter((f) => f.endsWith('.ts'))
+    expect(lib.length).toBeGreaterThan(0)
+    for (const f of lib) expect(CANDIDATOS, f).toContain(f)
   })
 })
