@@ -1,7 +1,7 @@
 /**
  * POST /api/finanzas/conversa · la oficina financiera conversa (F8 · CC#1 · 14-oct). NACE APAGADA: `finanzas_config.conversa = 'apagado'` → 409 antes de leer, llamar al modelo o escribir.
  *  · `{ accion: 'abrir', client_id, dry_run (booleano), semilla }` → abre (o devuelve) la conversación del cliente.
- *  · `{ accion: 'avanzar', encargo_id }` → ejecuta UN paso (un turno de agente o una función de código) y lo guarda.
+ *  · `{ accion: 'avanzar', encargo_id, workflow_id }` → ejecuta UN paso (`workflow_id` = el id REAL del flujo de n8n que llama; sin él el turno de agente no se llama) (un turno de agente o una función de código) y lo guarda.
  *  · `{ accion: 'leer', encargo_id }` → estado, gasto y turnos.
  * Llave: `x-api-key` = `INTERNAL_API_KEY` (nunca la llave de la sala). Slack: sin adaptador real en esta rama (puerto «no configurado»: no publica ni lee).
  * Modelo: solo si hay `FINANZAS_RUN_SDK_BASE` (nunca en la rama apagada).
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   const tableros = almacenDeFinanzas(db)
   const P: PuertosDeConversa = {
     almacen: almacenDeConversa(db),
-    modelo: modeloRunSdk({ base: process.env.FINANZAS_RUN_SDK_BASE, llave: process.env.INTERNAL_API_KEY, fetch }),
+    modelo: modeloRunSdk({ base: process.env.FINANZAS_RUN_SDK_BASE, llave: process.env.INTERNAL_API_KEY, fetch, workflow_id: typeof cuerpo === 'object' && cuerpo !== null ? ((cuerpo as Record<string, unknown>).workflow_id as string | undefined) : undefined }),
     slack: slackNoConfigurado,
     tableros,
     config: () => tableros.leerConfig(),
