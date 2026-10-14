@@ -9,7 +9,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { modeloRegistrado } from '@/lib/portero-alimenta/entorno'
-import { rutaArticulos, rutaDescubrir, rutaTanda2 } from '@/lib/portero-alimenta/rutas'
+import { rutaArticulos, rutaClientes, rutaDescubrir, rutaTanda2 } from '@/lib/portero-alimenta/rutas'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       llamarModelo: conModelo ? modeloRegistrado({ origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '', workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, comando: 'portero.proponer_busquedas' }) : undefined,
     }
     // `fase: 'articulos'` = la segunda tanda (qué páginas de la búsqueda de hoy vale leer); sin fase, el plan del día
-    const r = b.fase === 'articulos' ? await rutaArticulos(deps, cuerpo) : b.fase === 'tanda2' ? await rutaTanda2(deps, cuerpo) : await rutaDescubrir(deps, cuerpo)
+    const r = b.fase === 'articulos' ? await rutaArticulos(deps, cuerpo) : b.fase === 'tanda2' ? await rutaTanda2(deps, cuerpo) : b.fase === 'clientes' ? await rutaClientes(deps, cuerpo) : await rutaDescubrir(deps, cuerpo)
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'portero_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

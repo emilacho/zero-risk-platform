@@ -4,7 +4,8 @@
  */
 
 /** vocabulario CERRADO de pasos (lo único que el código conoce) */
-export const TIPOS_DE_PASO = ['portero', 'agente', 'codigo', 'externo', 'brazo'] as const
+/** `jefatura` (J8a): abre UNA revisión en la jefatura (oficina propia de revisión) y espera su cierre; reemplaza al jefe, a las correcciones, al revisor externo y a las decisiones de la plantilla */
+export const TIPOS_DE_PASO = ['portero', 'agente', 'codigo', 'externo', 'brazo', 'jefatura'] as const
 export type TipoDePaso = (typeof TIPOS_DE_PASO)[number]
 
 export const TIPOS_DE_CONDICION = ['siempre', 'si_artefacto', 'si_fichas_abiertas', 'si_cambio', 'cualquiera'] as const
