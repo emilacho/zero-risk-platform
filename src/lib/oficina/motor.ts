@@ -65,6 +65,8 @@ export interface ResultadoDePaso {
   fichas?: Ficha[]
   /** cierra (marca `tomada` con razón) las fichas abiertas de ese origen/donde antes de sumar las nuevas (p. ej. una observación nueva reemplaza la anterior) */
   reemplazar_fichas?: { origen: Ficha['origen']; donde?: string | string[] }
+  /** J8a · artefactos que el paso deja ADEMÁS del suyo (p. ej. el paso `jefatura` entrega la pieza corregida): cada uno sube de versión (así `si_cambio` los ve) sin que el paso los consuma */
+  otros_artefactos?: Record<string, Record<string, unknown>>
   /** el paso se ejecutó como vuelta de `vuelta` (lo devolvió `siguientePaso`) */
   vuelta?: string
   /** resolución de fichas existentes por id */
@@ -80,6 +82,10 @@ export function registrarPaso(e: Estado, p: Plantilla, indice: number, r: Result
   if (r.artefacto) {
     const antes = artefactos[paso.salida_artefacto]
     artefactos[paso.salida_artefacto] = { version: (antes?.version ?? 0) + 1, version_consumida: antes?.version_consumida ?? 0, datos: r.artefacto }
+  }
+  for (const [nombre, datosNuevos] of Object.entries(r.otros_artefactos ?? {})) {
+    const antes = artefactos[nombre]
+    artefactos[nombre] = { version: (antes?.version ?? 0) + 1, version_consumida: antes?.version_consumida ?? 0, datos: datosNuevos }
   }
   let fichas = e.fichas.map((f) => ({ ...f }))
   if (r.reemplazar_fichas) {

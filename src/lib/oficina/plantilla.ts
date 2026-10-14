@@ -76,6 +76,11 @@ export function validarPlantilla(p: Plantilla): string[] {
       if (s.tope_usd !== 0 && !en(FUNCIONES_CON_GASTO, s.funcion ?? '')) e.push(`${d}: un paso de código no tiene modelo, su tope debe ser 0`)
     } else if (s.funcion) e.push(`${d}: solo los pasos de código llevan función`)
     if (s.tipo === 'brazo') e.push(`${d}: el tipo «brazo» está reservado y esta plantilla no lo usa`)
+    // J8a · el paso `jefatura` no tiene modelo propio (su gasto lo lleva la revisión, con su tope), ni contrato de salida del oficio, ni función de código
+    if (s.tipo === 'jefatura') {
+      if (s.quien !== 'jefatura') e.push(`${d}: el paso de la jefatura se llama «jefatura» en \`quien\``)
+      if (s.tope_usd !== 0) e.push(`${d}: el paso de la jefatura no gasta por su cuenta, su tope debe ser 0 (el tope de la revisión lo pone la jefatura)`)
+    }
     e.push(...erroresDeCondicion(s.condicion, d, artefactos))
     if (s.salida) {
       if (s.tipo !== 'agente' && s.tipo !== 'externo') e.push(`${d}: solo agentes y revisor externo llevan contrato de salida`)
