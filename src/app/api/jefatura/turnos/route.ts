@@ -2,12 +2,13 @@
  * POST /api/jefatura/turnos · el motor de la jefatura, un paso por llamada. J3 · NADIE la llama todavía.
  *  { accion: 'siguiente', revision_id }  → ejecuta en línea lo que no es de un agente (GPT ciego, cierre) y devuelve el PEDIDO del siguiente empleado (o el cierre);
  *  { accion: 'resultado', revision_id, n, texto | error, costo_usd?, workflow_execution_id?, tokens_in?, tokens_out? } → aplica el contrato de formato, registra y sigue.
- * Llave: `x-sala-dispatch-key` (sin `SALA_DISPATCH_KEY`, 503). El `dry_run` lo trae la revisión desde que se abrió (no se puede cambiar aquí).
+ *  { accion: 'despertar', revision_id, turno } → la ruta llama al webhook `jefatura · turno` con la `SALA_DISPATCH_KEY` de SU entorno (quien llama no la conoce).
+ * Llave: `x-api-key` (interna) o `x-sala-dispatch-key` (flujos de n8n); sin ninguna variable, 503. El `dry_run` lo trae la revisión desde que se abrió (no se puede cambiar aquí).
  * 🔴 APAGADA = 409: «apagar» frena también las revisiones a medio camino (no gastan); se reanudan al encender.
  */
 import { NextResponse } from 'next/server'
 import { avanzar, recibirResultado } from '@/lib/jefatura/revision/orquestador'
-import { checkLlaveDeLaSala, esObjeto, numero, puertosReales, UUID } from '@/lib/jefatura/revision/ruta'
+import { checkLlaveDeLaSala, esObjeto, numero, puertosReales, UUID, webhookDelTurno } from '@/lib/jefatura/revision/ruta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -21,7 +22,8 @@ export async function POST(request: Request) {
   if (!esObjeto(cuerpo)) return NextResponse.json({ error: 'entrada_invalida', errores: ['el cuerpo debe ser un objeto'] }, { status: 400 })
   const errores: string[] = []
   if (typeof cuerpo.revision_id !== 'string' || !UUID.test(cuerpo.revision_id)) errores.push('`revision_id` debe ser un uuid')
-  if (cuerpo.accion !== 'siguiente' && cuerpo.accion !== 'resultado') errores.push('`accion` debe ser siguiente o resultado')
+  if (cuerpo.accion !== 'siguiente' && cuerpo.accion !== 'resultado' && cuerpo.accion !== 'despertar') errores.push('`accion` debe ser siguiente, resultado o despertar')
+  if (cuerpo.accion === 'despertar' && !esObjeto(cuerpo.turno)) errores.push('`turno` debe ser el objeto que devolvió la puerta al abrir')
   if (cuerpo.accion === 'resultado') {
     if (!Number.isInteger(cuerpo.n) || (cuerpo.n as number) < 1) errores.push('`n` debe ser el número del paso (entero ≥ 1)')
     if (cuerpo.texto !== undefined && typeof cuerpo.texto !== 'string') errores.push('`texto` debe ser texto')
@@ -34,6 +36,18 @@ export async function POST(request: Request) {
     const config = await P.almacen.leerConfig()
     if (config.estado === 'apagada') return NextResponse.json({ error: 'jefatura_no_abre', motivo: 'apagada', detalle: 'la jefatura está apagada: ningún turno corre ni gasta' }, { status: 409 })
     const id = cuerpo.revision_id as string
+    if (cuerpo.accion === 'despertar') {
+      // la ruta despierta a `jefatura · turno` con SU llave de despacho (la de su propio entorno): quien llama solo necesita la llave interna y nunca ve la de despacho
+      const despacho = (process.env.SALA_DISPATCH_KEY ?? '').trim()
+      if (!despacho) return NextResponse.json({ error: 'sala_dispatch_key_not_configured', detalle: 'sin SALA_DISPATCH_KEY en este entorno no se puede despertar el flujo' }, { status: 503 })
+      if (!(await P.almacen.leerRevision(id))) return NextResponse.json({ error: 'revision_inexistente' }, { status: 404 })
+      try {
+        const w = await fetch(webhookDelTurno(), { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': despacho }, body: JSON.stringify({ revision_id: id, turno: cuerpo.turno }), signal: AbortSignal.timeout(30000) })
+        return NextResponse.json({ despertado: w.ok, webhook_status: w.status }, { status: w.ok ? 200 : 502 })
+      } catch (e) {
+        return NextResponse.json({ despertado: false, error: 'webhook_inalcanzable', detalle: e instanceof Error ? e.message : String(e) }, { status: 502 })
+      }
+    }
     const r = cuerpo.accion === 'siguiente'
       ? await avanzar(P, id)
       : await recibirResultado(P, id, cuerpo.n as number, {

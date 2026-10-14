@@ -12,7 +12,7 @@
  *   node scripts/ops/jefatura-seco.mjs limpiar [--aplicar]               al FINAL y solo cuando CC#3 ya midió: respalda y borra las filas jefatura_* de los 3 clientes de práctica (ninguna otra)
  *   node scripts/ops/jefatura-seco.mjs apagar [--aplicar]                todo al revés (restaura la foto previa), apagada, flujos inactivos; lee de vuelta
  *
- * Variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, N8N_API_KEY, SALA_DISPATCH_KEY (y, opcionales, N8N_BASE_URL, N8N_WEBHOOK_BASE, APP_URL, SALIDA).
+ * Variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, N8N_API_KEY, INTERNAL_API_KEY (la llave interna: entra por las rutas de Vercel; NUNCA se usa ni se pide `SALA_DISPATCH_KEY`: la ruta despierta a n8n con la suya) (y, opcionales, N8N_BASE_URL, N8N_WEBHOOK_BASE, APP_URL, SALIDA).
  * NUNCA imprime una llave. Los clientes de práctica son archivos (`jefatura-seco/fixtures.mjs`): NO se inserta nada en `clients`; la jefatura guarda `client_id` como texto. Nada de naufrago.ec.
  */
 import fs from 'node:fs'
@@ -34,7 +34,7 @@ const U = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, ''), SK = 
 const N8N = (process.env.N8N_BASE_URL || 'https://n8n-production-72be.up.railway.app').replace(/\/$/, ''), NK = process.env.N8N_API_KEY
 const HOOKS = (process.env.N8N_WEBHOOK_BASE || `${N8N}/webhook`).replace(/\/$/, '')
 const APP = (process.env.APP_URL || 'https://zero-risk-platform.vercel.app').replace(/\/$/, '')
-const LLAVE = process.env.SALA_DISPATCH_KEY
+const LLAVE = process.env.INTERNAL_API_KEY
 const necesita = (...ks) => { const f = ks.filter((k) => !process.env[k]); if (f.length) { console.error('faltan variables: ' + f.join(', ')); process.exit(2) } }
 
 const HS = () => ({ apikey: SK, authorization: 'Bearer ' + SK, 'content-type': 'application/json' })
@@ -209,7 +209,7 @@ async function main() {
     return
   }
   if (orden === 'correr' || orden === 'puerta') {
-    if (aplicar) necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SALA_DISPATCH_KEY')
+    if (aplicar) necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'INTERNAL_API_KEY')
     const via = flag('via') || 'ruta'
     const corrida = flag('corrida') || new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)
     const lim = flag('limite') ? Number(flag('limite')) : Infinity
@@ -273,11 +273,12 @@ async function main() {
 function transporteReal() {
   return {
     async llamar(ruta, cuerpo) {
-      const r = await fetch(`${APP}/api/jefatura/${ruta}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': LLAVE }, body: JSON.stringify(cuerpo) })
+      const r = await fetch(`${APP}/api/jefatura/${ruta}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': LLAVE }, body: JSON.stringify(cuerpo) })
       return { status: r.status, body: await r.json().catch(() => ({})) }
     },
-    async webhook(cuerpo) {
-      const r = await fetch(`${HOOKS}/zero-risk/jefatura-turno`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': LLAVE }, body: JSON.stringify(cuerpo) })
+    /** despierta a `jefatura · turno` PIDIÉNDOSELO a la ruta: ella llama al webhook con la llave de despacho de su propio entorno; este conductor nunca la ve */
+    async webhook({ revision_id, turno }) {
+      const r = await fetch(`${APP}/api/jefatura/turnos`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': LLAVE }, body: JSON.stringify({ accion: 'despertar', revision_id, turno }) })
       return { status: r.status }
     },
     /** pasan 20 min: se retrasa el `inicio` del paso abierto de ESA revisión (fila de la jefatura, de un cliente de práctica) para que el vigía la dé por muerta */

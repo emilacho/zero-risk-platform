@@ -74,7 +74,7 @@ beforeEach(() => {
 function cli(args: string[], extra: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   return new Promise((resolve) => {
     const p = spawn(process.execPath, [SCRIPT, ...args], {
-      env: { PATH: process.env.PATH ?? '', NEXT_PUBLIC_SUPABASE_URL: base, SUPABASE_SERVICE_ROLE_KEY: 'sk-falsa', N8N_API_KEY: 'nk-falsa', N8N_BASE_URL: base, SALA_DISPATCH_KEY: LLAVE_SECRETA, ...extra } as unknown as NodeJS.ProcessEnv,
+      env: { PATH: process.env.PATH ?? '', NEXT_PUBLIC_SUPABASE_URL: base, SUPABASE_SERVICE_ROLE_KEY: 'sk-falsa', N8N_API_KEY: 'nk-falsa', N8N_BASE_URL: base, INTERNAL_API_KEY: LLAVE_SECRETA, ...extra } as unknown as NodeJS.ProcessEnv,
     })
     let out = ''
     p.stdout.on('data', (d) => (out += d)); p.stderr.on('data', (d) => (out += d))
@@ -212,6 +212,13 @@ describe('limpiar (al final, con respaldo)', () => {
 })
 
 describe('seguridad de la herramienta', () => {
+  it('el kit entra con la llave INTERNA: no lee ni pide SALA_DISPATCH_KEY, y despierta al flujo por la ruta (acción despertar), no por el webhook', () => {
+    const fuente = ['scripts/ops/jefatura-seco.mjs', 'scripts/ops/jefatura-seco/nucleo.mjs', 'scripts/ops/jefatura-seco/matriz.mjs'].map((f) => fs.readFileSync(path.resolve(f), 'utf8').replace(/^\s*\*.*$/gm, '')).join('\n')
+    expect(fuente).not.toMatch(/process\.env\.SALA_DISPATCH_KEY|necesita\([^)]*SALA_DISPATCH_KEY/)
+    expect(fuente).not.toMatch(/headers:[^}]*x-sala-dispatch-key/)
+    expect(fuente).toMatch(/accion: 'despertar'/)
+    expect(fuente).not.toMatch(/fetch\(`\$\{HOOKS\}\/zero-risk\/jefatura-turno`/)
+  })
   it('la llave de despacho NUNCA aparece en lo que imprime, en ninguna orden', async () => {
     for (const args of [['plan'], ['estado'], ['encender', '--aplicar', '--salida', previo()], ['apagar', '--aplicar', '--salida', previo()], ['contadores']]) {
       const r = await cli(args)
