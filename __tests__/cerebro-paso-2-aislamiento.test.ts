@@ -50,6 +50,16 @@ export const PUEDEN_NOMBRARLAS = [
   /^scripts\/audit\/cerebro-paso-2-verifica-base\.mjs$/,
   /^src\/lib\/cerebro\//,
   /^src\/app\/api\/brain\/portero\//,
+  // 14-oct · EL PORTERO QUE ALIMENTA (firma de Emilio 14-oct): el MISMO portero del cerebro, en su propia carpeta (fuera de `src/lib/cerebro/` porque la vigilancia de la condición 1 prohíbe
+  // partir textos del PEDIDO en esa carpeta; aquí se filtra material raspado, no el pedido). Escribe `cerebro_fichas`/`cerebro_ingresos` y las 2 tablas nuevas de su migración (SIN APLICAR).
+  /^src\/lib\/portero-alimenta\//,
+  /^src\/app\/api\/brain\/alimentar\//,
+  /^supabase\/migrations\/202610141500_cerebro_portero_alimenta\.sql$/,
+  /^supabase\/reversas\/202610141500_cerebro_portero_alimenta_REVERSA\.sql$/,
+  /^scripts\/ops\/portero-alimenta-seco\.ts$/,
+  /^scripts\/worker-staging\/ogfq56oIEoHufFPM\//,
+  // el puente: `ingest-source` acepta `cerebro_fichas` como origen de trozos (única puerta de escritura de evidencia al índice)
+  /^src\/app\/api\/brain\/ingest-source\/route\.ts$/,
   /^__tests__\/cerebro-paso-2-(aislamiento|migracion)\.test\.ts$/,
   /^__tests__\/cerebro-fotos-2-columnas\.test\.ts$/,
   // oficina de creativos (sala 1) · LECTURA de las etiquetas de las fotos para descartar las que no sirven: los ÚNICOS que las nombran son el lector `fotos.ts` y el adaptador que las SELECCIONA (`adaptadores.ts`); no escriben nada

@@ -9,16 +9,12 @@
  */
 import crypto from 'node:crypto'
 import { normalizar } from '../../manual/texto'
+import { SIMBOLOS_DE_MONEDA, TRANSITORIOS_COMUNES } from '../../portero-alimenta/datos'
+import { horarioCanonico } from '../../portero-alimenta/horario'
+import { lineasDeMetadata } from '../../portero-alimenta/sitio-metadata'
 
 /** líneas de estado que cambian solas (sobre texto NORMALIZADO: minúsculas, sin tildes) */
-export const TRANSITORIOS_ES: RegExp[] = [
-  /^(abierto|cerrado)\b/,
-  /\bvuelve (hoy|manana|pasado manana|el \w+)\b/,
-  /\b(abre|abrimos|cierra|cerramos) (hoy|manana|ahora|a las)\b/,
-  /\b(abierto|cerrado) (ahora|hoy)\b/,
-  /\bultima actualizacion\b/,
-  /\bproximo (turno|horario)\b/,
-]
+export const TRANSITORIOS_ES: RegExp[] = TRANSITORIOS_COMUNES
 const MIN_LARGO_DE_LINEA = 9
 
 export type Fuente = 'sitio' | 'instagram' | 'mapas' | 'reparto' | 'resenas' | 'comentarios'
@@ -31,7 +27,7 @@ export function lineasDeTexto(texto: string, patrones: RegExp[] = TRANSITORIOS_E
   const vistas = new Set<string>()
   const out: LineasDePagina = { duraderas: [], transitorias: [] }
   for (const cruda of String(texto ?? '').split(/\r?\n/)) {
-    const n = normalizar(cruda)
+    const n = normalizar(SIMBOLOS_DE_MONEDA.reduce((t, [re, por]) => t.replace(re, por), cruda))
     if (n.length < MIN_LARGO_DE_LINEA || vistas.has(n)) continue
     vistas.add(n)
     ;(esTransitoria(n, patrones) ? out.transitorias : out.duraderas).push(n)
@@ -47,9 +43,11 @@ export const huellaDeLineas = (duraderas: string[]): string => sha([...new Set(d
 // ───────────────────────── sitio
 export interface PaginaRaspada { url: string; text?: unknown }
 export interface ContenidoDeSitio { lineas: string[]; transitorias: string[] }
-export function contenidoDeSitio(paginas: PaginaRaspada[], patrones: RegExp[] = TRANSITORIOS_ES): ContenidoDeSitio {
+export function contenidoDeSitio(paginas: PaginaRaspada[], patrones: RegExp[] = TRANSITORIOS_ES, metadata?: unknown): ContenidoDeSitio {
   const l = lineasDeTexto(paginas.map((p) => String(p.text ?? '')).join('\n'), patrones)
-  return { lineas: l.duraderas, transitorias: l.transitorias }
+  // la carta, los precios y el horario del sitio hecho con JavaScript viven en `metadata` (JSON-LD): se leen como líneas comparables
+  const m = metadata === undefined ? [] : lineasDeMetadata(metadata).filter((x) => !l.duraderas.includes(x) && !esTransitoria(x, patrones))
+  return { lineas: [...l.duraderas, ...m], transitorias: l.transitorias }
 }
 
 // ───────────────────────── Instagram (solo texto)
@@ -78,7 +76,10 @@ export function contenidoDeMapas(item: FichaDeMapas): ContenidoDeMapas {
   const campos: Record<string, string> = {}
   const poner = (k: string, v: unknown) => { const t = typeof v === 'string' ? v : v == null ? '' : JSON.stringify(v); const n = normalizar(t); if (n) campos[k] = n }
   poner('nombre', item.title); poner('categoria', item.categoryName); poner('direccion', item.address); poner('ciudad', item.city); poner('telefono', item.phone); poner('sitio', item.website)
-  poner('horario', item.openingHours)
+  // el orden de los días no es un cambio: horario canónico (días en orden fijo)
+  const h = horarioCanonico(item.openingHours)
+  if (h) campos.horario = h
+  else poner('horario', item.openingHours)
   return { campos }
 }
 export const huellaDeMapas = (c: ContenidoDeMapas): string => sha(JSON.stringify(Object.entries(c.campos).sort(([a], [b]) => (a < b ? -1 : 1))))
