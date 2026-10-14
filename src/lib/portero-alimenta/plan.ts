@@ -7,12 +7,15 @@
  */
 import { planDeFuentesPublicas, type EntradaDelPlan as EntradaDeFuentes, type LlamadaDeFuente } from '../fuentes-publicas/plan'
 import { recortarAlTope } from '../cerebro/diario/topes'
+import { normalizar } from '../manual/texto'
 import { COSTO_MAXIMO_POR_FUNCION, COSTO_MAXIMO_POR_OMISION_USD } from './gasto'
 import { MAX_ARTICULOS_POR_DIA, MAX_BUSQUEDAS_PROPUESTAS_POR_DIA, TOPE_DEL_PORTERO_USD, type Interruptores } from './datos'
 
 /** el actor nuevo de menciones de terceros: PREPARADO detrás del interruptor `PORTERO_MENCIONES` (apagado). Aún NO existe en el Servicio vivo: encender exige aplicar su nodo con respaldo ANTES. */
 export const ACTOR_DE_MENCIONES = { funcion: 'menciones_en_redes', actor: 'apify~instagram-tagged-scraper', descripcion: 'publicaciones de OTRAS cuentas que etiquetan o mencionan al negocio' } as const
 export const MAX_CORRIDAS_DEL_PORTERO_POR_DIA = 16
+/** mínimo del gasto de la tanda 2: lo que se declara por reseña pedida (hasta 100) */
+export const MAX_RESENAS_POR_CORRIDA = 100
 /** directorios por familia de rubro: DATO (se amplía sin tocar la lógica); una consulta de búsqueda por entrada */
 export const DIRECTORIOS_POR_FAMILIA: Record<string, string[]> = {
   comida: ['tripadvisor', 'restaurantguru'], alojamiento: ['tripadvisor', 'booking'], salud: ['doctoralia'], servicios_profesionales: ['paginas amarillas'], software: ['g2', 'capterra'],
@@ -81,11 +84,16 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
   else noCubiertas.push({ fuente: 'instagram', por_que: 'el alta no trae la cuenta propia de Instagram' })
 
   // Mapas propio (+ reseñas del propio mapa): por nombre ENTERO y CIUDAD; sin ciudad ni ficha conocida no se paga a ciegas (precedente: el homónimo de Gualaceo)
-  if (e.mapas?.url || e.mapas?.placeId) candidatas.push(accion('mapas', 'own_google_maps_profile', e.mapas.url ? { startUrls: [{ url: e.mapas.url }], maxReviews: 100, reviewsSort: 'newest', scrapeReviewsPersonalData: false } : { placeIds: [e.mapas.placeId], maxReviews: 100, reviewsSort: 'newest', scrapeReviewsPersonalData: false }, e.mapas.url ?? e.mapas.placeId ?? ''))
+  if (e.mapas?.url || e.mapas?.placeId) candidatas.push(accion('mapas', 'own_google_maps_profile', e.mapas.url ? { startUrls: [{ url: e.mapas.url }], language: 'es' } : { placeIds: [e.mapas.placeId], language: 'es' }, e.mapas.url ?? e.mapas.placeId ?? ''))
   else if (nombre && ciudad) {
-    const ciudades = [...new Set([ciudad, ...(e.ciudades ?? [])].map((c) => c.trim()).filter(Boolean))].slice(0, 3)
-    const m = accion('mapas', 'own_google_maps_profile', { searchStringsArray: ciudades.map((c) => `${nombre} ${c}`), maxCrawledPlacesPerSearch: 1, language: 'es', maxReviews: 100, reviewsSort: 'newest', scrapeReviewsPersonalData: false }, ciudades.map((c) => `${nombre} · ${c}`).join(' | '))
-    // H3 · el máximo declarado es POR BÚSQUEDA (una por sede, cada una con hasta 100 reseñas): el costo de la corrida es n_sedes × ese máximo
+    // dedupe por la forma NORMALIZADA (sin mayúsculas ni tildes): «Olón», «olon» y «OLÓN» son la misma sede; se conserva la primera escritura
+    const vistas = new Set<string>()
+    const ciudades: string[] = []
+    for (const c of [ciudad, ...(e.ciudades ?? [])].map((x) => x.trim()).filter(Boolean)) { const k = normalizar(c); if (!vistas.has(k)) { vistas.add(k); ciudades.push(c) } }
+    ciudades.splice(3)
+    // las reseñas NO vienen en la corrida de Mapas (medido 14-oct: aunque se pida `maxReviews`): van en una tanda aparte (`fase: 'tanda2'`) con la dirección de la ficha
+    const m = accion('mapas', 'own_google_maps_profile', { searchStringsArray: ciudades.map((c) => `${nombre} ${c}`), maxCrawledPlacesPerSearch: 1, language: 'es' }, ciudades.map((c) => `${nombre} · ${c}`).join(' | '))
+    // el máximo declarado es POR BÚSQUEDA (una por sede): el costo de la corrida es n_sedes × ese máximo
     m.usd_max = Math.round(m.usd_max * ciudades.length * 1e6) / 1e6
     candidatas.push(m)
   }
@@ -102,11 +110,15 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
   else noCubiertas.push({ fuente: 'reparto', por_que: 'el alta no trae `url_reparto` (campo opcional): no hay página de reparto que leer' })
 
   // reseñas, textos de redes y videos según el rubro (catálogo de familias · plan de fuentes públicas)
-  const fp = planDeFuentesPublicas({ rubro: e.rubro, nombre, pais: e.pais, enlaces: e.enlaces, redes: e.redes, mapas: e.mapas ?? null })
+  // los videos de otras redes se piden en poca cantidad (3) cada día; los de Instagram solo si hay publicaciones nuevas (`fase: 'tanda2'`)
+  const LIMITE_DE_VIDEOS = 3
+  const fp = planDeFuentesPublicas({ rubro: e.rubro, nombre, pais: e.pais, enlaces: e.enlaces, redes: e.redes, mapas: e.mapas ?? null, limites: { videos: LIMITE_DE_VIDEOS } })
   for (const l of fp.llamadas as LlamadaDeFuente[]) {
-    // las reseñas de Google Maps ya salen en la corrida de Mapas propio (mismo parámetro `maxReviews`): no se piden dos veces
-    if (l.funcion === 'resenas_google_maps' && candidatas.some((c) => c.fuente === 'mapas')) continue
-    candidatas.push(accion(l.tipo === 'resenas' ? 'resenas' : l.tipo === 'publicaciones' ? 'publicaciones' : 'videos', l.funcion, l.params, l.objetivo))
+    // las reseñas de Google Maps salen en la tanda 2 (necesitan la ficha que trae la corrida de Mapas); los videos de Instagram, también
+    if (l.funcion === 'resenas_google_maps' || l.funcion === 'videos_instagram') continue
+    const a = accion(l.tipo === 'resenas' ? 'resenas' : l.tipo === 'publicaciones' ? 'publicaciones' : 'videos', l.funcion, l.params, l.objetivo)
+    if (l.tipo === 'videos') a.usd_max = Math.round(COSTO_MAXIMO_POR_FUNCION[l.funcion].usd * (LIMITE_DE_VIDEOS / 10) * 1e6) / 1e6
+    candidatas.push(a)
   }
 
   // prensa, artículos y directorios: UNA búsqueda por consulta (nombre exacto + ciudad); los resultados se leen en una segunda tanda (≤ 3 páginas)

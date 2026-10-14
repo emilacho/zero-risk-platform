@@ -1,5 +1,5 @@
 {
-  "name": "Zero Risk — Cerebro · mantenimiento diario del portero (que ALIMENTA: descubrir → traer → filtrar → razonar → archivar) · CC-CEREBRO",
+  "name": "Zero Risk — Cerebro · mantenimiento diario del portero (que ALIMENTA) · CC-CEREBRO",
   "nodes": [
     {
       "id": "a19cfbf4-fa9e-4c1d-93b0-1229c4cfca9e",
@@ -109,7 +109,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2080,
+        1560,
         0
       ],
       "parameters": {
@@ -122,7 +122,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2340,
+        2600,
         120
       ],
       "parameters": {
@@ -136,7 +136,7 @@
       "typeVersion": 4.2,
       "onError": "continueRegularOutput",
       "position": [
-        2600,
+        2860,
         120
       ],
       "parameters": {
@@ -174,11 +174,11 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3120,
+        3380,
         120
       ],
       "parameters": {
-        "jsCode": "// ⑤ CIERRE · una línea por cliente: qué pidió el portero, qué leyó, qué archivó (suma / reemplaza / nada / duda) y qué costó. Un error del plan o de una ruta se DICE.\n// Los elementos de ③ Correr y ④ Alimentar van EN EL MISMO ORDEN (el flujo es lineal). Un elemento sin pedido real («saltado») se ignora.\nconst alimentadas = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst correr = $('③ Correr (comparar · limpiar · preparar)').all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst pedidos = $('③ Pedido a correr').all().map((i) => i.json)\nconst clientes = pedidos.map((p, k) => {\n  const saltado = p.correr_body === null\n  const c = correr[k] || {}\n  const a = alimentadas[k] || {}\n  const res = (a.plan && a.plan.resumen) || {}\n  return {\n    cliente: p.cliente || null,\n    plan_fallo: p.falla || null,\n    portero: p.portero || null,\n    ampliacion: p.ampliacion ? { hecho: p.ampliacion.hecho, gasto_usd: p.ampliacion.gasto_usd, parado: p.ampliacion.parado, llamadas: (p.ampliacion.llamadas || []).length } : null,\n    articulos: p.articulos ? { hecho: p.articulos.hecho, llamadas: (p.articulos.llamadas || []).length, gasto_usd: p.articulos.gasto_usd } : null,\n    diario: saltado ? 'saltado' : c.estado || 'sin_respuesta',\n    alimentar: saltado ? 'saltado' : a.apagado ? 'apagado' : a.estado || 'sin_respuesta',\n    suma: res.suma || 0, reemplaza: res.reemplaza || 0, nada: res.nada || 0, duda: res.duda || 0, sin_confirmar: res.sin_confirmar || 0,\n    modelo_usd: (a.gasto && a.gasto.modelo_usd) || 0,\n    errores: [].concat(!saltado && Array.isArray(c.errores) ? c.errores : [], !saltado && Array.isArray(a.errores) ? a.errores : []),\n    detalle: saltado ? null : a.detalle || a.error || c.detalle || c.error || null,\n  }\n})\nconst e = $('⓪ Entrada').first().json\nconst malo = clientes.some((c) => c.plan_fallo || c.errores.length > 0 || ['con_errores', 'lectura_fallida', 'sin_respuesta'].includes(c.alimentar))\nreturn [{ json: { fin: malo ? 'con_errores' : 'hecho', via: e.via, dry_run: e.dry_run, clientes } }]"
+        "jsCode": "// ⑤ CIERRE · una línea por cliente: qué pidió el portero, qué leyó, qué archivó (suma / reemplaza / nada / duda) y qué costó. Un error del plan o de una ruta se DICE.\n// Los elementos de ③ Correr y ④ Alimentar van EN EL MISMO ORDEN (el flujo es lineal). Un elemento sin pedido real («saltado») se ignora.\nconst alimentadas = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst correr = $('③ Correr (comparar · limpiar · preparar)').all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst pedidos = $('③ Pedido a correr').all().map((i) => i.json)\nconst clientes = pedidos.map((p, k) => {\n  const saltado = p.correr_body === null\n  const c = correr[k] || {}\n  const a = alimentadas[k] || {}\n  const res = (a.plan && a.plan.resumen) || {}\n  return {\n    cliente: p.cliente || null,\n    plan_fallo: p.falla || null,\n    portero: p.portero || null,\n    ampliacion: p.ampliacion ? { hecho: p.ampliacion.hecho, gasto_usd: p.ampliacion.gasto_usd, parado: p.ampliacion.parado, llamadas: (p.ampliacion.llamadas || []).length } : null,\n    articulos: p.articulos ? { hecho: p.articulos.hecho, llamadas: (p.articulos.llamadas || []).length, gasto_usd: p.articulos.gasto_usd } : null,\n    tanda2: p.tanda2 ? { hecho: p.tanda2.hecho, llamadas: (p.tanda2.llamadas || []).map((l) => l.funcion), gasto_usd: p.tanda2.gasto_usd, revision: p.tanda2.revision, omitidas: (p.tanda2.omitidas || []).map((o) => o.fuente + ': ' + o.por_que) } : null,\n    diario: saltado ? 'saltado' : c.estado || 'sin_respuesta',\n    alimentar: saltado ? 'saltado' : a.apagado ? 'apagado' : a.estado || 'sin_respuesta',\n    suma: res.suma || 0, reemplaza: res.reemplaza || 0, nada: res.nada || 0, duda: res.duda || 0, sin_confirmar: res.sin_confirmar || 0,\n    modelo_usd: (a.gasto && a.gasto.modelo_usd) || 0,\n    errores: [].concat(!saltado && Array.isArray(c.errores) ? c.errores : [], !saltado && Array.isArray(a.errores) ? a.errores : []),\n    detalle: saltado ? null : a.detalle || a.error || c.detalle || c.error || null,\n  }\n})\nconst e = $('⓪ Entrada').first().json\nconst malo = clientes.some((c) => c.plan_fallo || c.errores.length > 0 || ['con_errores', 'lectura_fallida', 'sin_respuesta'].includes(c.alimentar))\nreturn [{ json: { fin: malo ? 'con_errores' : 'hecho', via: e.via, dry_run: e.dry_run, clientes } }]"
       }
     },
     {
@@ -288,6 +288,58 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/descubrir",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, client_id: $json.cliente || '00000000-0000-4000-8000-000000000000', workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, fase: 'tanda2' }) }}",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "6f0a1c10-0006-4a00-8000-00000000d006",
+      "name": "② ter Reseñas y videos (qué pedir)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ② ter · pide al Servicio lo que la tanda 1 hizo posible: las reseñas de la ficha CONFIRMADA de Mapas y los videos de Instagram solo si hubo publicaciones nuevas.\n// Misma regla que ②: con dry_run NO llama a nadie; una llamada por acción, SIN reintento. Sufijo «#tanda2» en calling_workflow_id.\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o })\nconst previos = $('② bis Leer artículos (Servicio de Apify)').all().map((i) => i.json)\nconst resp = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst salidas = []\nfor (let k = 0; k < previos.length; k++) {\n  const e = previos[k]\n  const r = resp[k] || {}\n  const salida = { ...e, tanda2: { hecho: false, llamadas: [], gasto_usd: 0, omitidas: r.omitidas || [], revision: r.revision_de_publicaciones || null } }\n  if (e.falla || !e.cliente || e.dry_run === true || r.apagado || !Array.isArray(r.acciones)) { salida.tanda2.nota = e.dry_run === true ? 'dry_run: no se llamó a ningún proveedor' : 'sin nada que pedir'; salidas.push({ json: salida }); continue }\n  for (const a of r.acciones) {\n    const t0 = Date.now()\n    const x = await http({ url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id + '#tanda2' } } })\n    const b = x.body && typeof x.body === 'object' ? x.body : {}\n    salida.tanda2.llamadas.push({ funcion: a.funcion, objetivo: a.objetivo, hecho: x.statusCode === 200 && b.ok === true, http: x.statusCode, ms: Date.now() - t0, usd_max: a.usd_max })\n    salida.tanda2.gasto_usd = Number((salida.tanda2.gasto_usd + (typeof a.usd_max === 'number' ? a.usd_max : 0)).toFixed(6))\n  }\n  salida.tanda2.hecho = salida.tanda2.llamadas.length > 0 && salida.tanda2.llamadas.every((l) => l.hecho)\n  salida.ampliacion = { ...(e.ampliacion || {}), gasto_usd: Number((((e.ampliacion && e.ampliacion.gasto_usd) || 0) + salida.tanda2.gasto_usd).toFixed(6)) }\n  salidas.push({ json: salida })\n}\nreturn salidas"
+      },
+      "id": "6f0a1c10-0007-4a00-8000-00000000d007",
+      "name": "② ter Leer reseñas y videos (Servicio de Apify)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/procesar",
         "sendHeaders": true,
         "headerParameters": {
@@ -319,7 +371,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2860,
+        3120,
         120
       ],
       "onError": "continueRegularOutput"
@@ -448,6 +500,28 @@
       ]
     },
     "② bis Leer artículos (Servicio de Apify)": {
+      "main": [
+        [
+          {
+            "node": "② ter Reseñas y videos (qué pedir)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② ter Reseñas y videos (qué pedir)": {
+      "main": [
+        [
+          {
+            "node": "② ter Leer reseñas y videos (Servicio de Apify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② ter Leer reseñas y videos (Servicio de Apify)": {
       "main": [
         [
           {

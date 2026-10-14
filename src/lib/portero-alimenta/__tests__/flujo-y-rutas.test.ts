@@ -35,11 +35,11 @@ describe('el flujo ARREGLADO', () => {
     const orden: string[] = []
     let actual = '⓪ Entrada'
     while (actual && orden.length < 30) { orden.push(actual); actual = DESPUES.connections[actual]?.main[0]?.[0]?.node as string }
-    expect(orden).toEqual(['⓪ Entrada', '① Plan de la ampliación', '① Un elemento por cliente', '① Descubrir (el portero que alimenta)', '① Plan unificado', '② Ampliar (Servicio de Apify)', '② bis Artículos (qué leer)', '② bis Leer artículos (Servicio de Apify)', '③ Pedido a correr', '③ Correr (comparar · limpiar · preparar)', '④ Alimentar (filtrar · razonar · archivar)', '⑤ Cierre'])
+    expect(orden).toEqual(['⓪ Entrada', '① Plan de la ampliación', '① Un elemento por cliente', '① Descubrir (el portero que alimenta)', '① Plan unificado', '② Ampliar (Servicio de Apify)', '② bis Artículos (qué leer)', '② bis Leer artículos (Servicio de Apify)', '② ter Reseñas y videos (qué pedir)', '② ter Leer reseñas y videos (Servicio de Apify)', '③ Pedido a correr', '③ Correr (comparar · limpiar · preparar)', '④ Alimentar (filtrar · razonar · archivar)', '⑤ Cierre'])
   })
   it('los nodos nuevos entran por Vercel con la llave interna y nunca piden la llave de despacho', () => {
     const nuevos = DESPUES.nodes.filter((n) => /alimentar\/(descubrir|procesar)/.test(String(n.parameters.url ?? '')))
-    expect(nuevos).toHaveLength(3)
+    expect(nuevos).toHaveLength(4)
     for (const n of nuevos) expect(JSON.stringify(n.parameters)).toContain('$env.INTERNAL_API_KEY')
     const nuevoCodigo = DESPUES.nodes.filter((n) => /Plan unificado|Leer artículos|Cierre/.test(n.name)).map((n) => String(n.parameters.jsCode)).join('\n')
     expect(nuevoCodigo).not.toMatch(/SALA_DISPATCH_KEY/)
@@ -50,6 +50,7 @@ describe('el flujo ARREGLADO', () => {
     expect(leer).toContain("'#articulo'")
     for (const n of DESPUES.nodes) if (typeof n.parameters.jsCode === 'string') expect(() => new Function('$input', '$', '$env', '$workflow', '$execution', `return (async () => {${n.parameters.jsCode}})`), n.name).not.toThrow()
   })
+  it('el nombre del flujo cabe en n8n (≤ 128 caracteres)', () => { expect(DESPUES.name.length).toBeLessThanOrEqual(128) })
   it('lo que va a la ruta lleva dry_run y los ids del flujo (guardarraíl 6)', () => {
     for (const n of DESPUES.nodes.filter((x) => /alimentar\/(descubrir|procesar)/.test(String(x.parameters.url ?? '')))) {
       const b = String(n.parameters.jsonBody)
@@ -145,13 +146,13 @@ describe('la segunda tanda (artículos)', () => {
     expect(resultados[2]).toMatchObject({ title: 'C', description: 'sc' })
     expect(ilegibles).toBe(2)
     expect(resultadosDeBusqueda([{ respuesta: [{ url: 'https://z.example' }] }]).map((x) => x.url)).toEqual(['https://z.example'])
-    expect(LECTOR_DE_BUSQUEDA.verificado_con_salida_real).toBe(false)
+    expect(LECTOR_DE_BUSQUEDA.verificado_con_salida_real).toBe(true)
   })
-  it('H4 · la segunda tanda dice cuántas filas y cuántos resultados ilegibles vio, y que el lector NO está verificado', async () => {
+  it('H4 · la segunda tanda dice cuántas filas y cuántos resultados ilegibles vio, y que el lector está verificado con una salida real', async () => {
     const t = tablas()
     ;(t.apify_raw as Array<Record<string, unknown>>).push({ id: 's2', client_id: C, apify_function: 'google_serp_scraper', ensayo: false, created_at: '2026-10-16T08:05:00Z', respuesta: [{ rareza: 'forma desconocida' }] })
     const base = crearBaseFalsa(t as never)
     const r = await rutaArticulos({ db: base.db, interruptores: ON, ahora: new Date('2026-10-16T10:00:00Z') }, { client_id: C, dry_run: true })
-    expect(r.body).toMatchObject({ filas_de_busqueda: 2, resultados_ilegibles: 1, lector_de_busqueda: { verificado_con_salida_real: false } })
+    expect(r.body).toMatchObject({ filas_de_busqueda: 2, resultados_ilegibles: 1, lector_de_busqueda: { verificado_con_salida_real: true } })
   })
 })
