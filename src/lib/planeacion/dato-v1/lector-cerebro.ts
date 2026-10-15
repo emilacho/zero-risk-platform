@@ -46,6 +46,9 @@ export function tipoDe(snap: CatalogoSnapshot, p: { atributo?: string | null; cl
     if (exacto) return exacto
     const prefijo = tipos.find((t) => typeof t.atributo_cerebro === 'string' && t.atributo_cerebro.endsWith(':*') && a.startsWith(t.atributo_cerebro.slice(0, -1)))
     if (prefijo) return prefijo
+    // comodín en medio (`metrica:*:ingreso:*`): el TIPO es «ventas del punto de venta», no un proveedor; `*` = un segmento (sin «:»), y un `:*` final = el resto
+    const glob = tipos.find((t) => typeof t.atributo_cerebro === 'string' && t.atributo_cerebro.slice(0, -2).includes('*') && coincideConComodin(t.atributo_cerebro, a))
+    if (glob) return glob
   }
   const c = texto(p.clase)
   if (c) return tipos.find((t) => t.atributo_cerebro === `clase:${c}`) ?? null
@@ -53,6 +56,14 @@ export function tipoDe(snap: CatalogoSnapshot, p: { atributo?: string | null; cl
 }
 
 const esNumerico = (t: FilaDeTipo) => t.unidad !== 'texto'
+
+/** `metrica:*:ingreso:*` ↔ `metrica:<proveedor>:ingreso:<lo que sea>`: cada `*` interior es UN segmento; un `:*` final admite el resto */
+export function coincideConComodin(patron: string, atributo: string): boolean {
+  const final = patron.endsWith(':*')
+  const cuerpo = final ? patron.slice(0, -2) : patron
+  const re = cuerpo.split('*').map((x) => x.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^:]+')
+  return new RegExp(`^${re}${final ? '(?::.+)?' : ''}$`).test(atributo)
+}
 
 /**
  * De un texto del cerebro saca UNA cifra con el parser único; con 0 o varios números, nada (no se adivina).

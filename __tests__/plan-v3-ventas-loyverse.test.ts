@@ -17,7 +17,7 @@ import { fichasAEntradas } from '../src/lib/planeacion/dato-v1/lector-cerebro'
 import { sanearProcedencia, validarProcedencia } from '../src/lib/finanzas/conversa/esquemas'
 
 type Json = Record<string, any>
-const DIR = path.join(__dirname, '..', 'scripts', 'ops', 'catalogo-agregar', 'altas-ventas-loyverse')
+const DIR = path.join(__dirname, '..', 'scripts', 'ops', 'catalogo-agregar', 'altas-ventas-punto-de-venta')
 const ALTAS = ['ventas_mes', 'tickets_mes', 'ticket_promedio'].map((n) => JSON.parse(fs.readFileSync(path.join(DIR, `${n}.json`), 'utf8')) as Json)
 const FICHAS = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'ventas-loyverse', 'fichas-reales-2026-10-15.json'), 'utf8')) as Json[]
 const AHORA = new Date('2026-10-16T03:00:00Z')
@@ -44,7 +44,9 @@ describe('las filas de catálogo (vía oficial `catalogo-agregar`)', () => {
     }
   })
   it('lo que el diseño pide: prefijo `:*`, unidad y moneda, rango ≥ 0, frescura 1080 h, período requerido', () => {
-    expect(ALTAS.map((a) => a.atributo_cerebro)).toEqual(['metrica:loyverse:ingreso:*', 'metrica:loyverse:tickets:*', 'metrica:loyverse:ticket_promedio:*'])
+    // AGNÓSTICO (regla de Emilio 16-oct): el tipo es «ventas del punto de venta»; el proveedor es un comodín
+    expect(ALTAS.map((a) => a.atributo_cerebro)).toEqual(['metrica:*:ingreso:*', 'metrica:*:tickets:*', 'metrica:*:ticket_promedio:*'])
+    expect(JSON.stringify(ALTAS).toLowerCase()).not.toContain('loyverse')
     for (const a of ALTAS) { expect(a.frescura_limite_h).toBe(1080); expect(a.periodo_requerido).toBe(true); expect(a.rango).toEqual({ min: 0 }) }
     expect(ALTAS.filter((a) => a.moneda_requerida).map((a) => a.tipo_id).sort()).toEqual(['ticket_promedio', 'ventas_mes'])
     // no chocan con ninguna fila del catálogo de hoy
@@ -170,5 +172,58 @@ describe('la semilla de la oficina financiera y la red de seguridad', () => {
     expect(t).toContain('ventas_mes')
     expect(t).toMatch(/^D\d+ \| ventas_mes/m)
     expect(t).toContain('2649.75')
+  })
+})
+
+describe('regla de Emilio (16-oct): agnóstico, sin lectura directa y un cliente SIN punto de venta sale igual que hoy', () => {
+  const snap = crearSnapshot({ ...FILAS, tipos: conAltas() as unknown as FilaDeTipo[] })
+  const fichaDe = (proveedor: string, metrica: string, periodo: string, valor: number, id: string): Json => {
+    const base = FICHAS.find((f) => f.atributo === 'metrica:loyverse:ingreso:2026-10')!
+    return { ...base, id, huella: `h-${id}`, atributo: `metrica:${proveedor}:${metrica}:${periodo}`, provenance_tag: { ...base.provenance_tag, metrica: { ...base.provenance_tag.metrica, valor } } }
+  }
+  it('el MISMO tipo sirve para otro punto de venta (mañana puede ser otro proveedor)', () => {
+    const r = fichasAEntradas([fichaDe('otropos', 'ingreso', '2026-10', 123, 'x1'), fichaDe('tercerpos', 'tickets', '2026-10', 9, 'x2'), fichaDe('otropos', 'ticket_promedio', 'ultimos_30_dias', 13.67, 'x3')], snap)
+    expect(r.entradas.map((e) => e.tipo_id).sort()).toEqual(['ticket_promedio', 'tickets_mes', 'ventas_mes'])
+  })
+  it('el comodín NO se come otras métricas ni otros prefijos (mapas, posthog, atributos propios)', () => {
+    for (const a of ['metrica:mapas:puntaje', 'metrica:posthog:visitas:2026-10', 'metrica:otropos:margen:2026-10', 'metrica:ingreso:2026-10', 'ventas:ingreso:2026-10']) {
+      const f = { ...fichaDe('x', 'ingreso', '2026-10', 1, 'y'), atributo: a }
+      expect(fichasAEntradas([f], snap).entradas.filter((e) => ['ventas_mes', 'tickets_mes', 'ticket_promedio'].includes(e.tipo_id)), a).toEqual([])
+    }
+    // y las vías de antes siguen mandando: un atributo exacto/prefijo no lo toma el comodín
+    expect(fichasAEntradas([{ ...fichaDe('x', 'ingreso', '2026-10', 1, 'z'), atributo: 'precio:agua' }], snap).entradas.map((e) => e.tipo_id)).toEqual(['precio'])
+  })
+  it('un cliente SIN fichas de ventas sale IDÉNTICO a hoy, con o sin las filas del catálogo (ni error, ni hueco inventado, ni falta nueva)', async () => {
+    const sinVentas = FICHAS.filter((f) => !String(f.atributo).startsWith('metrica:loyverse:'))
+    const hoy = await armarDatoV1(baseEnMemoria({ fichas: sinVentas }) as never, { client_id: ID }, AHORA)
+    const con = await armarDatoV1(baseEnMemoria({ fichas: sinVentas, tipos: conAltas() }) as never, { client_id: ID }, AHORA)
+    if (!hoy.ok || !con.ok) throw new Error('lectura')
+    // lo único que puede diferir es la identidad del catálogo (versión/huella: es otro catálogo)
+    const sinCatalogo = (r: typeof hoy) => JSON.stringify({ ...r, catalogo_version: undefined, catalogo_huella: undefined })
+    expect(sinCatalogo(con)).toBe(sinCatalogo(hoy))
+    expect(con.datos.some((d) => ['ventas_mes', 'tickets_mes', 'ticket_promedio'].includes(d.tipo_id))).toBe(false)
+    expect(con.resumen.faltantes.filter((t) => ['ventas_mes', 'tickets_mes', 'ticket_promedio'].includes(t))).toEqual([])
+    // y el pedido v3 es el de hoy salvo la huella del catálogo
+    const js = cargarJs()
+    const ped = (r: typeof hoy) => js.pedidoV3Lineas({ plan_version: 'v3', datos: r.datos, catalogo_version: 'v', catalogo_huella: 'h', criticos: r.criticos }).lineas.join('\n')
+    expect(ped(con)).toBe(ped(hoy))
+  })
+  it('un cliente sin ficha de cliente ni lecturas no cae en error por las ventas (sigue el camino de hoy)', async () => {
+    const r = await armarDatoV1(baseEnMemoria({ fichas: [], tipos: conAltas() }) as never, { client_id: ID }, AHORA)
+    expect(r.ok).toBe(true)
+  })
+  it('NUNCA llaman al punto de venta directo: ni código ni dirección del proveedor en lo que arma el plan y la oficina', () => {
+    const raiz = path.join(__dirname, '..', 'src')
+    const carpetas = ['lib/planeacion', 'lib/finanzas', 'app/api/planeacion', 'app/api/finanzas']
+    const malos: string[] = []
+    const recorrer = (d: string) => {
+      for (const n of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, n.name)
+        if (n.isDirectory()) recorrer(p)
+        else if (/\.(ts|tsx|js|mjs|json)$/.test(n.name) && /loyverse|api\.loyverse|punto-de-venta-client|PORTERO_LOYVERSE/i.test(fs.readFileSync(p, 'utf8'))) malos.push(path.relative(raiz, p))
+      }
+    }
+    for (const c of carpetas) recorrer(path.join(raiz, c))
+    expect(malos).toEqual([])
   })
 })

@@ -1,13 +1,13 @@
 {
-  "tipo_id": "ticket_promedio",
-  "atributo_cerebro": "metrica:loyverse:ticket_promedio:*",
+  "tipo_id": "tickets_mes",
+  "atributo_cerebro": "metrica:*:tickets:*",
   "clase_dato": "atributo",
-  "unidad": "dinero",
-  "moneda_requerida": true,
+  "unidad": "tickets",
+  "moneda_requerida": false,
   "rango": { "min": 0 },
   "frescura_limite_h": 1080,
   "critico": false,
-  "tolerancia_redondeo": 0.01,
+  "tolerancia_redondeo": 0,
   "n_minimo": 0,
   "periodo_requerido": true,
   "via_preferida": "cerebro"

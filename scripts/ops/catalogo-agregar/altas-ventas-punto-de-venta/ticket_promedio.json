@@ -1,6 +1,6 @@
 {
-  "tipo_id": "ventas_mes",
-  "atributo_cerebro": "metrica:loyverse:ingreso:*",
+  "tipo_id": "ticket_promedio",
+  "atributo_cerebro": "metrica:*:ticket_promedio:*",
   "clase_dato": "atributo",
   "unidad": "dinero",
   "moneda_requerida": true,
