@@ -2,7 +2,7 @@
 // un despertar que falla NUNCA propaga ni tumba al portero.
 
 import { describe, it, expect } from 'vitest';
-import { planSpawn, planWakeLenovo, execSpawn, encargoTieneDoc, LINEA_PROTOCOLO } from '../lib/spawner.js';
+import { planSpawn, planWakeLenovo, execSpawn, encargoTieneDoc, clasificarSalida, LINEA_PROTOCOLO } from '../lib/spawner.js';
 
 const CONFIG = {
   claude_cmd: 'claude',
@@ -119,5 +119,63 @@ describe('execSpawn · FALLO-SEGURO (el crítico)', () => {
       { dryRun: false, spawnFn: () => fakeChild(), onError: (m) => { err = m; }, logger: () => {} });
     expect(r.spawned).toBe(false);
     expect(err).toMatch(/plan inválido/);
+  });
+});
+
+// ── SPAWN INVISIBLE (§144 · 2026-07-24 · el despertar no abre consola) ─────────
+describe('SPAWN INVISIBLE · el spawn nunca abre ventana visible', () => {
+  it('spawnFn se llama con detached:false + windowsHide:true (la consola venía de detached)', () => {
+    let opts = null;
+    execSpawn(planSpawn('CC#3', ENCARGO, CONFIG), {
+      dryRun: false, logger: () => {},
+      spawnFn: (_cmd, _args, o) => { opts = o; return fakeChild(); },
+    });
+    expect(opts).not.toBeNull();
+    expect(opts.detached).toBe(false);   // ← lo clave: NO crea consola nueva en Windows
+    expect(opts.windowsHide).toBe(true); // ← CREATE_NO_WINDOW ahora sí surte efecto
+  });
+});
+
+// ── PILAR B · veredicto mecánico de salida (gritar, no morir callado) ──────────
+describe('PILAR B · clasificarSalida (veredicto puro)', () => {
+  const conReporte = '...trabajo...\n[FROM-CC3] listo';
+  it('exit≠0 → 🔴 muerto', () => {
+    expect(clasificarSalida({ code: 1, ms: 60000 }).nivel).toBe('🔴');
+  });
+  it('terminado por señal → 🔴 muerto', () => {
+    expect(clasificarSalida({ code: null, signal: 'SIGKILL', ms: 60000 }).estado).toBe('muerto');
+  });
+  it('exit=0 pero murió < umbral → 🔴 muerte-rápida (síntoma sin-saldo)', () => {
+    const v = clasificarSalida({ code: 0, ms: 3000, umbralSeg: 45 });
+    expect(v.nivel).toBe('🔴');
+    expect(v.estado).toBe('muerte-rapida');
+  });
+  it('exit=0 · duró · SIN [FROM-CC] → ⚠️ mudo', () => {
+    const v = clasificarSalida({ code: 0, ms: 120000, salida: 'trabajé pero no reporté', umbralSeg: 45 });
+    expect(v.nivel).toBe('⚠️');
+    expect(v.estado).toBe('mudo');
+  });
+  it('exit=0 · duró · CON [FROM-CC] → ✅ aterrizó', () => {
+    const v = clasificarSalida({ code: 0, ms: 120000, salida: conReporte, umbralSeg: 45 });
+    expect(v.nivel).toBe('✅');
+    expect(v.reporto).toBe(true);
+  });
+});
+
+describe("PILAR B · execSpawn cablea child.on('exit') → onExit(veredicto)", () => {
+  it("una sesión que muere emite veredicto 🔴 a onExit (ya no muere muda)", () => {
+    let veredicto = null;
+    const child = fakeChild(555);
+    let t = 1000;
+    const r = execSpawn(planSpawn('CC#3', ENCARGO, CONFIG), {
+      dryRun: false, spawnFn: () => child, logger: () => {},
+      onExit: (v) => { veredicto = v; }, nowMs: () => t,
+    });
+    expect(r.spawned).toBe(true);
+    t = 1000 + 5000;            // 5s de vida
+    child._emit('exit', 1, null); // exit code 1
+    expect(veredicto).not.toBeNull();
+    expect(veredicto.nivel).toBe('🔴');
+    expect(veredicto.cc).toBe('CC#3');
   });
 });
