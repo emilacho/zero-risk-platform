@@ -53,7 +53,15 @@ export async function gastoDeHoy(db: Db, clientId: string, ahora: Date) {
   if (mp.error) return { ok: false as const, detalle: `apify_raw: ${mp.error.message}` }
   const filasMapas = lista(mp.data)
   const busquedas = filasMapas.reduce((s, f) => s + Math.max(1, Array.isArray((f.params as { searchStringsArray?: unknown } | null)?.searchStringsArray) ? ((f.params as { searchStringsArray: unknown[] }).searchStringsArray.length) : 1), 0)
-  const maximoPorLlamada = filasMapas.length ? { own_google_maps_profile: Math.round(COSTO_MAXIMO_POR_FUNCION.own_google_maps_profile.usd * (busquedas / filasMapas.length) * 1e6) / 1e6 } : undefined
+  // la corrida de videos vale POR VIDEO pedido (`resultsLimit`), no el máximo de 10 (medido 15-oct: 1 video pedido contó US$ 0,56 y no 0,056)
+  const vi = await db.from('apify_raw').select('params').eq('client_id', clientId).eq('ensayo', false).eq('apify_function', 'videos_instagram').gte('created_at', dia0.toISOString()).limit(50)
+  if (vi.error) return { ok: false as const, detalle: `apify_raw: ${vi.error.message}` }
+  const filasVideos = lista(vi.data)
+  const videosPedidos = filasVideos.reduce((s, f) => { const n = Number((f.params as { resultsLimit?: unknown } | null)?.resultsLimit); return s + (Number.isFinite(n) && n > 0 ? n : 10) }, 0)
+  const maximoPorLlamada: Record<string, number> | undefined = filasMapas.length || filasVideos.length ? {
+    ...(filasMapas.length ? { own_google_maps_profile: Math.round(COSTO_MAXIMO_POR_FUNCION.own_google_maps_profile.usd * (busquedas / filasMapas.length) * 1e6) / 1e6 } : {}),
+    ...(filasVideos.length ? { videos_instagram: Math.round(VIDEO_DE_INSTAGRAM_USD * (videosPedidos / filasVideos.length) * 1e6) / 1e6 } : {}),
+  } : undefined
   const modeloDelPortero = lista(inv.data).filter((f) => invocacionDelPortero(f, flujo))
   const fueraUsd = gastoDelDia({ clientId, ahora, libro: origen.fuera_del_portero, invocacionesUsd: lista(inv.data).filter((f) => !invocacionDelPortero(f, flujo)).map((f) => Number(f.cost_usd) || 0), maximoPorLlamada }).total_usd
   return { ok: true as const, gasto: gastoDelDia({ clientId, ahora, libro: origen.libro, invocacionesUsd: modeloDelPortero.map((f) => Number(f.cost_usd) || 0), maximoPorLlamada }), fuera_del_portero_usd: fueraUsd, llamadas_sin_origen: origen.sin_origen }
