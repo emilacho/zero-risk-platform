@@ -101,7 +101,7 @@ const CODIGO_ARMAR = [
 ].join('\n')
 
 const CODIGO_DECIDIR = [
-  '// F4 v2.1 · a dónde sigue la conversación de la oficina. FALLA HACIA «sin números»: nada de lo que se entienda mal bloquea ni se lee como «firmado». Nunca lanza.',
+  '// F4 v2.1 · a dónde sigue la conversación de la oficina. FALLA HACIA «sin números»: nada de lo que se interprete mal bloquea ni se lee como «firmado». Nunca lanza.',
   `const PLAZO_MS = ${PLAZO_OFICINA_MS}`,
   `const MAX_PASOS = ${MAX_PASOS_OFICINA}`,
   'const r = $input.first().json || {}',
