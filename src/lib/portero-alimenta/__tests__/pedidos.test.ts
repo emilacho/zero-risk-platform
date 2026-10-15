@@ -231,6 +231,29 @@ describe('pedido · la web (fuera del catálogo)', () => {
     await rutaPedido(deps(t2, { razonar: m2.razonar, buscar: w2.buscar, leerPagina: w2.leerPagina }), pedido())
     expect(t2.cerebro_fichas.find((x) => x.clase === 'dato_de_pedido')).toMatchObject({ alcance: 'mercado' })
   })
+  it('lee a lo más 3 páginas por hueco y nunca las redes que exigen cuenta ni los buscadores', async () => {
+    const t = tablas()
+    const paginas: Record<string, string> = {}
+    for (const u of ['https://a.example/1', 'https://www.instagram.com/x', 'https://www.google.com/s', 'https://b.example/2', 'https://c.example/3', 'https://d.example/4', 'https://e.example/5']) paginas[u] = `Página de ${u} con texto suficiente para que se pueda leer completa y tenga largo de sobra para el filtro.`
+    const w = web(paginas)
+    const leidas: string[] = []
+    let extrajo = ''
+    const m = modelo([{ decision: 'web', consultas: ['una consulta cualquiera'] }, (msg) => { extrajo = msg; return { hallazgos: [], nada: true } }])
+    await rutaPedido(deps(t, { razonar: m.razonar, buscar: w.buscar, leerPagina: async (u) => { leidas.push(u); return w.leerPagina(u) } }), pedido())
+    expect(leidas).toEqual(['https://a.example/1', 'https://b.example/2', 'https://c.example/3'])
+    expect(extrajo.match(/^\d+\. https?:\/\//gm)).toHaveLength(3)
+  })
+  it('una ficha descartada no cuenta como «ya está»; y si todo ya estaba, no se dispara la cadena', async () => {
+    const t = tablas({ fichas: [ficha({ id: 'd1', atributo: 'metrica:loyverse:ingreso:2026-09', descartada: true })] })
+    const r = await rutaPedido(deps(t), pedido({ huecos: [{ tipo: 'metrica:loyverse:ingreso' }] }))
+    expect((r.body.huecos as Array<{ estado: string }>)[0].estado).not.toBe('ya_esta')
+    const t2 = tablas({ fichas: [ficha({ id: 'v1', atributo: 'metrica:loyverse:ingreso:2026-09' })] })
+    let disparos = 0
+    const r2 = await rutaPedido(deps(t2, { dispararCadena: async () => { disparos++; return { ok: true, detalle: 'ok' } } }), pedido({ huecos: [{ tipo: 'metrica:loyverse:ingreso' }] }))
+    expect(r2.body.estado).toBe('resuelto')
+    expect(disparos).toBe(0)
+    expect(r2.body.cadena).toBeUndefined()
+  })
   it('no sirven de fuente las redes que exigen cuenta ni los buscadores', () => {
     expect(esLeible('https://eventos.example/feria')).toBe(true)
     expect(esLeible('https://www.instagram.com/naufrago.ec')).toBe(false)
