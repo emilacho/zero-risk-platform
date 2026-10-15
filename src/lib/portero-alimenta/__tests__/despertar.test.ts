@@ -11,64 +11,8 @@ import { rutaDespertar, type DepsDeDespertar } from '../despertar'
 import { rutaDescubrir, rutaTanda2 } from '../rutas'
 import { accionCubierta, COBERTURA_DEL_ALTA_HORAS, objetivosDeParams, sinLoYaRaspado } from '../cobertura'
 import type { Interruptores } from '../datos'
-import { crearBaseFalsa } from './base-falsa'
+import { ALTA, AHORA, CASOS, ON, PORTERO, REAL, fichasVivas, montar, tablas } from './fixtures-despertar'
 import { POST } from '../../../app/api/brain/alimentar/despertar/route'
-
-const ON: Interruptores = { alimentar: true, proponer_busquedas: false, menciones: false, puente_al_indice: true }
-const ALTA = new Date('2026-10-15T14:00:00Z')
-const AHORA = new Date('2026-10-15T15:00:00Z')
-const REAL = { dry_run: false, workflow_id: 'LyVoKcrypS5uLyuu', workflow_execution_id: 'ex-alta-1' }
-const PORTERO = 'ogfq56oIEoHufFPM'
-
-interface Caso { id: string; nombre: string; rubro: string; pais: string; ciudad: string; voz: 'tuteo' | 'voseo'; web: string | null; ig: string; pagina: string; bio: string; homonimo: string }
-const CASOS: Caso[] = [
-  { id: '11111111-1111-4111-8111-111111111111', nombre: 'Clínica Sonrisa Norte', rubro: 'clínica dental y ortodoncia', pais: 'Ecuador', ciudad: 'Quito', voz: 'tuteo', web: 'https://sonrisanorte.example', ig: 'sonrisanorte',
-    pagina: 'Limpieza dental $35\nOrtodoncia desde $900\nAtendemos con cita previa por WhatsApp', bio: 'Somos la Clínica Sonrisa Norte, cuida tu sonrisa', homonimo: 'Clínica Sonrisa Norte de Guayaquil' },
-  { id: '22222222-2222-4222-8222-222222222222', nombre: 'Taller Mecánico El Pistón', rubro: 'taller mecánico y lubricadora', pais: 'Argentina', ciudad: 'Rosario', voz: 'voseo', web: 'https://elpiston.example', ig: 'elpiston.ok',
-    pagina: 'Cambio de aceite ARS 45.000\nAlineación y balanceo ARS 30.000\nPedí tu turno por WhatsApp', bio: 'Taller Mecánico El Pistón, pedí tu turno', homonimo: 'Taller Mecánico El Pistón de Córdoba' },
-  { id: '33333333-3333-4333-8333-333333333333', nombre: 'Flujo CRM', rubro: 'software CRM para pymes', pais: 'México', ciudad: 'Ciudad de México', voz: 'tuteo', web: 'https://flujocrm.example', ig: 'flujocrm',
-    pagina: 'Plan Starter US$ 19 por mes\nPlan Pro US$ 49 por mes\nSoporte por chat de lunes a viernes', bio: 'Flujo CRM, ordena tu seguimiento de clientes', homonimo: 'Flujo CRM de Lima' },
-]
-
-function tablas(c: Caso, o: { sinWeb?: boolean; edad?: number; conEnsayo?: boolean; sinRaspado?: boolean; homonimoEnMapas?: boolean } = {}) {
-  const t0 = new Date(ALTA.getTime() - (o.edad ?? 0) * 3_600_000).toISOString()
-  const web = o.sinWeb ? null : c.web
-  const filas: Array<Record<string, unknown>> = o.sinRaspado ? [] : [
-    ...(web ? [{ id: `${c.id}-w`, client_id: c.id, apify_function: 'website_content_scraper', ensayo: false, created_at: t0, params: { startUrls: [{ url: web }], maxCrawlPages: 6 }, metadata: { llamado_por: 'LyVoKcrypS5uLyuu' }, respuesta: [{ url: `${web}/`, text: c.pagina }] }] : []),
-    { id: `${c.id}-m`, client_id: c.id, apify_function: 'own_google_maps_profile', ensayo: false, created_at: t0, params: { searchStringsArray: [`${c.nombre} ${c.ciudad}`] }, respuesta: [{ title: o.homonimoEnMapas ? c.homonimo : c.nombre, url: `https://www.google.com/maps/place/${c.ig}`, address: `Av. Principal 123, ${o.homonimoEnMapas ? 'Otra Ciudad' : c.ciudad}`, openingHours: [{ day: 'lunes', hours: '8 AM to 6 PM' }] }] },
-    { id: `${c.id}-i`, client_id: c.id, apify_function: 'instagram_scraper', ensayo: false, created_at: t0, params: { usernames: [c.ig], resultsLimit: 12 }, respuesta: [{ username: c.ig, biography: c.bio, latestPosts: [{ shortCode: 'P1', caption: 'Bienvenidos a la semana con muchas novedades para todos', ownerUsername: c.ig, type: 'Video' }] }] },
-  ]
-  if (o.conEnsayo) filas.push({ id: `${c.id}-e`, client_id: c.id, apify_function: 'website_content_scraper', ensayo: true, created_at: t0, params: {}, respuesta: [{ url: `${c.web}/`, text: 'TEXTO-DE-ENSAYO-QUE-NUNCA-DEBE-ENTRAR precio sintético $1 por todo' }] })
-  return {
-    clients: [{ id: c.id, name: c.nombre, website_url: web, industry: c.rubro, country: c.pais, config: { registro: c.voz, apify: { own_handles: { instagram: c.ig } } } }],
-    client_sedes: [{ client_id: c.id, ciudad: c.ciudad, clave: c.ciudad.toLowerCase() }],
-    client_brand_books: [{ id: 'mb', client_id: c.id }],
-    client_historical_outputs: [{ id: 'pl', client_id: c.id, output_type: 'campaign_plan_90d', provenance_tag: {} }],
-    apify_raw: filas, cerebro_unidades_vistas: [], cerebro_fichas: [], cerebro_ingresos: [], cerebro_portero_corridas: [], costs: [], agent_invocations: [], client_brain_chunks: [],
-  } as Record<string, Array<Record<string, unknown>>>
-}
-
-function montar(t: Record<string, Array<Record<string, unknown>>>, o: { apagarOk?: boolean; avisarOk?: boolean; puenteFalla?: boolean; ahora?: Date; fallaEn?: string; fallaVeces?: number; saltar?: number } = {}) {
-  const base = crearBaseFalsa(t as never, { fallaEn: o.fallaEn, fallaVeces: o.fallaVeces, saltar: o.saltar, reloj: () => (o.ahora ?? AHORA).toISOString() })
-  const apagados: string[] = [], avisos: string[] = [], pasadas: number[] = [], esperas: number[] = []
-  const deps: DepsDeDespertar = {
-    db: base.db, interruptores: ON, ahora: o.ahora ?? AHORA,
-    // el puente simulado escribe los trozos de las fichas que recibe (en lotes de 5) para que la reconciliación converja
-    puente: async (p) => {
-      if (o.puenteFalla) return { escritos: 0, sacados: 0, errores: ['ingest-source respondió 502'] }
-      const lote = p.escribir.slice(0, 5)
-      pasadas.push(lote.length)
-      for (const x of lote) (t.client_brain_chunks ??= []).push({ client_id: p.client_id, source_table: 'cerebro_fichas', source_id: x.source_id })
-      return { escritos: lote.length, sacados: 0, errores: [] }
-    },
-    apagar: async (w) => { apagados.push(w); return { ok: o.apagarOk !== false, detalle: 'flujo desactivado' } },
-    avisar: async (x) => { avisos.push(x); return { ok: o.avisarOk !== false, detalle: 'entregado' } },
-    esperar: async (ms) => { esperas.push(ms) },
-    workflowIdPortero: PORTERO,
-  }
-  return { base, deps, apagados, avisos, pasadas, esperas }
-}
-const fichasVivas = (t: Record<string, Array<Record<string, unknown>>>) => (t.cerebro_fichas ?? []).filter((f) => !f.descartada && !f.retirada_en)
 
 describe('despierta con el raspado del alta · 3 rubros (tuteo y voseo)', () => {
   for (const c of CASOS) {
@@ -77,7 +21,7 @@ describe('despierta con el raspado del alta · 3 rubros (tuteo y voseo)', () => 
       const m = montar(t)
       const r = await rutaDespertar(m.deps, { client_id: c.id, ...REAL })
       expect(r.status).toBe(200)
-      expect(r.body).toMatchObject({ ok: true, estado: 'hecha', cerebro_listo: true, apify_llamado: false, modelos_llamados: 0 })
+      expect(r.body).toMatchObject({ ok: true, estado: 'hecha', cerebro_listo: false, pedir_ahora: true, apify_llamado: false, modelos_llamados: 0 })
       const vivas = fichasVivas(t)
       expect(vivas.length).toBeGreaterThan(3)
       expect(vivas.every((f) => f.observado_en && f.decision === 'suma')).toBe(true)
@@ -123,7 +67,7 @@ describe('lo que el alta trajo no se vuelve a pedir; lo que no, sí', () => {
     const t = tablas(c, { edad: COBERTURA_DEL_ALTA_HORAS + 12 })
     const m = montar(t)
     const r = await rutaDespertar(m.deps, { client_id: c.id, ...REAL })
-    expect(r.body.cerebro_listo).toBe(true)
+    expect(r.body.cerebro_listo).toBe(false) // el despertar solo archivó lo del alta: lo que falta lo pide la cadena a continuación
     expect(fichasVivas(t).length).toBeGreaterThan(3)
     const d = await rutaDescubrir({ db: m.base.db, interruptores: ON, ahora: AHORA }, { client_id: c.id, dry_run: true })
     expect((d.body.cubierto_por_el_alta as { cubiertas: unknown[] }).cubiertas).toEqual([])
@@ -171,7 +115,7 @@ describe('casos de borde del alta', () => {
     const t = tablas(c, { sinWeb: true })
     const m = montar(t)
     const r = await rutaDespertar(m.deps, { client_id: c.id, ...REAL })
-    expect(r.body).toMatchObject({ ok: true, cerebro_listo: true })
+    expect(r.body).toMatchObject({ ok: true, cerebro_listo: false, pedir_ahora: true })
     expect(fichasVivas(t).length).toBeGreaterThan(0)
     expect(JSON.stringify(t.cerebro_fichas)).not.toContain('website_content_scraper')
   })
@@ -255,7 +199,7 @@ describe('el vigilante se aplica igual', () => {
     t.costs.push({ service: 'apify:website', amount_usd: 4.2, created_at: '2026-10-15T13:00:00Z', description: JSON.stringify({ es: 'detalle_de_llamada', client_id: c.id }) })
     const m = montar(t)
     const r = await rutaDespertar(m.deps, { client_id: c.id, ...REAL })
-    expect(r.body.cerebro_listo).toBe(true)
+    expect(r.body.cerebro_listo).toBe(false) // aún espera la cadena; el vigilante no apagó nada
     expect(m.apagados).toEqual([]); expect(m.avisos).toEqual([])
   })
   it('el puente falla ⇒ apaga el portero diario, avisa (una línea que dice «al despertar con el alta») y el cerebro NO queda listo', async () => {
@@ -290,17 +234,17 @@ describe('el vigilante se aplica igual', () => {
 describe('reintento del vigilante en el despertar y mirada «a esa hora»', () => {
   it('una lectura que falla UNA vez al vigilar ⇒ espera y repite; si pasa, silencio (no apaga, no avisa)', async () => {
     const c = CASOS[0]
-    // lecturas de la tabla del rastro: alimentar (1), plan de lo que falta (2), el rastro de hoy (3), el vigilante (4 ← falla una vez) y su reintento (5)
-    const m = montar(tablas(c), { fallaEn: 'cerebro_portero_corridas', saltar: 3, fallaVeces: 1 })
+    // lecturas de la tabla del rastro: la lectura previa del despertar (1), alimentar (2), plan de lo que falta (3), el rastro de hoy (4), el vigilante (5 ← falla una vez) y su reintento (6)
+    const m = montar(tablas(c), { fallaEn: 'cerebro_portero_corridas', saltar: 4, fallaVeces: 1 })
     const r = await rutaDespertar(m.deps, { client_id: c.id, ...REAL })
     expect(m.esperas).toHaveLength(1)
-    expect(r.body).toMatchObject({ ok: true, cerebro_listo: true })
+    expect(r.body).toMatchObject({ ok: true, cerebro_listo: false, pedir_ahora: true })
     expect((r.body.vigilante as { intentos: number }).intentos).toBe(2)
     expect(m.apagados).toEqual([]); expect(m.avisos).toEqual([])
   })
   it('si la lectura falla las dos veces ⇒ apaga y avisa («falló 2 veces»)', async () => {
     const c = CASOS[1]
-    const m = montar(tablas(c), { fallaEn: 'cerebro_portero_corridas', saltar: 3 })
+    const m = montar(tablas(c), { fallaEn: 'cerebro_portero_corridas', saltar: 4 })
     const r = await rutaDespertar(m.deps, { client_id: c.id, ...REAL })
     expect(m.esperas).toHaveLength(1)
     expect(r.body.cerebro_listo).toBe(false)

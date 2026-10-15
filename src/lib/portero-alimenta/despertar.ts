@@ -5,9 +5,12 @@
  *     en `cerebro_unidades_vistas` (la corrida diaria no las repite);
  *  2. deja una fila en `cerebro_portero_corridas` con `resumen.tipo = 'despertar'` (NO bloquea la corrida diaria del mismo día: esa la reemplaza);
  *  3. el puente lleva las fichas al índice (en pasadas, hasta `quedan = 0`);
- *  4. dice qué FALTA (lo que el plan diario pediría y el alta no trajo) y cuánto se ahorra; eso lo pide la corrida diaria con su tope de siempre, NO esta ruta;
+ *  4. dice qué FALTA (lo que el plan diario pediría y el alta no trajo) y cuánto se ahorra. Esta ruta NO llama a Apify (vive en Vercel; Apify se pide desde n8n): deja el rastro
+ *     «completando» y responde `pedir_ahora: true`; el alta encadena a continuación la MISMA cadena del portero (descubrir → ampliar → artículos → reseñas y videos → alimentar → puente → vigilar)
+ *     con el mismo planificador, filtro, archivar, cobertura y tope. Esa cadena reemplaza la fila del despertar (la corrida diaria) y `cerebro_listo` pasa a true (ver `listo.ts`: espera máxima
+ *     y huecos declarados);
  *  5. el vigilante se aplica igual: si algo falla apaga el portero y avisa a #alertas; si todo va bien, silencio.
- * Señal «cerebro listo» = corrida hecha + `quedan = 0` + vigilante sin problemas. `dry_run` obligatorio; con false exige workflow_id + workflow_execution_id (el alta).
+ * Señal «cerebro listo» = la cadena que pide lo que falta TERMINÓ (o se venció la espera y se declaran huecos) + `quedan = 0` + vigilante sin problemas; aquí siempre sale false con `completando`. `dry_run` obligatorio; con false exige workflow_id + workflow_execution_id (el alta).
  */
 import { alimentarCliente, type Db } from './alimentar'
 import { FLUJO_DEL_PORTERO_POR_OMISION } from './no-corrio'
@@ -37,6 +40,12 @@ export async function rutaDespertar(deps: DepsDeDespertar, cuerpo: unknown): Pro
 
   const g = await gastoDeHoy(deps.db, v.client_id, ahora)
   if (!g.ok) return { status: 502, body: { error: 'lectura_fallida', detalle: g.detalle } }
+  // si ya había un despertar de hoy esperando la cadena, la espera NO se reinicia (el reloj absoluto vive en la base: despertar dos veces no estira la espera ni vuelve a pedir)
+  const previa = await deps.db.from('cerebro_portero_corridas').select('resumen').eq('client_id', v.client_id).eq('dia', dia).limit(1)
+  if (previa.error) return { status: 502, body: { error: 'lectura_fallida', detalle: `cerebro_portero_corridas: ${previa.error.message}` } }
+  const rp = lista(previa.data)[0]?.resumen
+  const dp = esObjeto(rp) && esObjeto(rp.despertar) ? rp.despertar : null
+  const completandoPrevio = dp && esObjeto(dp.completando) && typeof dp.completando.desde === 'string' ? dp.completando.desde : null
   const r = await alimentarCliente({
     db: deps.db, client_id: v.client_id, dry_run: v.dry_run, interruptores: deps.interruptores, llamarModelo: deps.llamarModelo, ahora, despertar: true,
     gasto_de_hoy_usd: g.gasto.total_usd, workflow_id: v.workflow_id || undefined, workflow_execution_id: v.workflow_execution_id || undefined,
@@ -71,6 +80,7 @@ export async function rutaDespertar(deps: DepsDeDespertar, cuerpo: unknown): Pro
     unidades: r.unidades, filtro: r.filtro, fichas_nuevas: r.plan?.fichas.length ?? 0, ya_existian: r.filtro.repetidas,
     ya_cubierto: cub ? lista(cub.cubiertas).length : null, ahorro_usd: cub ? Number(cub.ahorro_usd) || 0 : null, falta: falta.length, falta_usd_max: Math.round(falta.reduce((s, a) => s + (Number(a.usd_max) || 0), 0) * 1e6) / 1e6,
   }
+  const completando = { desde: completandoPrevio ?? ahora.toISOString(), falta: falta.map((a) => ({ fuente: a.fuente, funcion: a.funcion, objetivo: a.objetivo })) }
   const body: Record<string, unknown> = {
     ok: r.ok && !conErrores, dry_run: v.dry_run, estado: conErrores && r.estado === 'hecha' ? 'con_errores' : r.estado, ...resumenDelDespertar,
     cubiertas: cub ? cub.cubiertas : [], por_pedir_en_la_corrida_diaria: falta, ...(lectura ? { aviso_de_lectura: lectura } : {}),
@@ -102,7 +112,7 @@ export async function rutaDespertar(deps: DepsDeDespertar, cuerpo: unknown): Pro
     const resumen = esObjeto(filaDeHoy.resumen) ? filaDeHoy.resumen : {}
     const u = await deps.db.from('cerebro_portero_corridas').update({
       ...(conErrores ? { estado: 'con_errores' } : {}),
-      resumen: { ...resumen, despertar: resumenDelDespertar, vigilante: { ok: !hayProblemas, problemas: res.problemas, revisado_en: ahora.toISOString(), workflow_execution_id: v.workflow_execution_id, intentos } },
+      resumen: { ...resumen, despertar: { ...resumenDelDespertar, completando }, vigilante: { ok: !hayProblemas, problemas: res.problemas, revisado_en: ahora.toISOString(), workflow_execution_id: v.workflow_execution_id, intentos } },
     }).eq('id', String(filaDeHoy.id))
     if (u.error) erroresDeRastro.push(`rastro: ${u.error.message}`)
   }
@@ -110,8 +120,11 @@ export async function rutaDespertar(deps: DepsDeDespertar, cuerpo: unknown): Pro
 
   // «cerebro listo» = corrida hecha + quedan 0 + vigilante en paz; y el alta tiene que haber dejado ALGO (si no raspó nada, el cerebro sigue vacío: la corrida diaria raspa todo, como hoy)
   const sinRaspado = r.unidades === 0
-  const listo = !conErrores && quedan === 0 && !hayProblemas && r.estado === 'hecha' && !sinRaspado
-  body.cerebro_listo = listo
+  // el despertar solo archivó lo que el alta trajo: el cerebro NO está listo hasta que la cadena que pide lo que falta termine (o venza la espera y se declaren huecos)
+  const archivadoBien = !conErrores && quedan === 0 && !hayProblemas && r.estado === 'hecha'
+  body.cerebro_listo = false
+  if (archivadoBien) { body.pedir_ahora = true; body.completando = completando; body.motivo_no_listo = 'falta lo que el alta no trajo: la cadena del portero lo pide a continuación' }
+  else body.pedir_ahora = false
   if (sinRaspado) body.sin_raspado_del_alta = true
   body.vigilante = { ok: !hayProblemas, problemas: res.problemas, intentos }
   if (hayProblemas) {
