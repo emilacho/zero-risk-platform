@@ -33,7 +33,7 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
   for (const f of o.fichas) porCliente.set(f.client_id, [...(porCliente.get(f.client_id) ?? []), f])
 
   for (const [cid, fichas] of porCliente) {
-    const leidas = await o.db.from('cerebro_fichas').select('id, ref, atributo, huella, retirada_en').eq('client_id', cid).is('retirada_en', null).limit(5000)
+    const leidas = await o.db.from('cerebro_fichas').select('id, ref, atributo, huella, retirada_en, vigente_hasta').eq('client_id', cid).is('retirada_en', null).limit(5000)
     if (leidas.error) { r.errores.push(`lectura de las fichas vigentes de ${cid}: ${leidas.error.message}`); continue }
     const vigentes = (Array.isArray(leidas.data) ? (leidas.data as Fila[]) : []).filter((x) => typeof x.ref === 'string' && (x.ref as string).startsWith('brazo:'))
     const porRef = new Map(vigentes.map((x) => [String(x.ref), x]))
@@ -44,7 +44,17 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
       const huella = huellaDeFicha(f.contenido)
       const mismaRef = porRef.get(f.ref)
       const vigente = porAtributo.get(f.atributo)
-      if (mismaRef || (vigente && vigente.huella === huella)) { r.iguales++; r.plan.push({ ref: f.ref, accion: 'igual', alcance: f.alcance }); continue }
+      const igual = mismaRef ?? (vigente && vigente.huella === huella ? vigente : null)
+      if (igual) {
+        r.iguales++; r.plan.push({ ref: f.ref, accion: 'igual', alcance: f.alcance })
+        // una cifra que sigue igual y sigue viva: se corre su vigencia (solo hacia adelante); el contenido no se toca
+        if (f.renueva_vigencia && f.vigente_hasta && !o.dry_run && String(igual.vigente_hasta ?? '') < f.vigente_hasta) {
+          const u = await o.db.from('cerebro_fichas').update({ vigente_hasta: f.vigente_hasta }).eq('id', String(igual.id)).eq('client_id', cid)
+          if (u.error) r.errores.push(`vigencia de ${String(igual.id)}: ${u.error.message}`)
+          else igual.vigente_hasta = f.vigente_hasta
+        }
+        continue
+      }
       const reemplaza = f.decision === 'reemplaza' && !!vigente
       r.plan.push({ ref: f.ref, accion: reemplaza ? 'reemplaza' : 'nueva', alcance: f.alcance })
       if (o.dry_run) continue
@@ -63,7 +73,7 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
         fecha_fuente: f.fecha_fuente, reconfirmado_en: f.observado_en, plazo: null, vigente_hasta: f.vigente_hasta, version_de: reemplaza ? String(vigente!.id) : null, huella,
         // lo de un competidor, del mercado o de la zona es SOBRE terceros (los lectores lo marcan); lo del cliente es suyo
         propiedad: f.alcance === 'cliente' ? 'propia' : 'ajena', porque: `brazo ${f.brazo}: dato por código, sin modelo`, juzgado_por: 'regla',
-        provenance_tag: { type: 'evidence', source: `brazo_${f.brazo}`, trust_level: 'untrusted', alcance: f.alcance, ingress_route: '/api/brain/alimentar/procesar', ...(f.datos ? { datos: f.datos } : {}) },
+        provenance_tag: { type: 'evidence', source: `brazo_${f.brazo}`, trust_level: 'untrusted', alcance: f.alcance, ingress_route: '/api/brain/alimentar/procesar', ...(f.datos ? { datos: f.datos } : {}), ...(f.metrica ? { metrica: f.metrica } : {}) },
         fuente_url: f.fuente_url, observado_en: f.observado_en, atributo: f.atributo, decision: f.decision, razon_de_decision: reemplaza ? 'la lectura nueva reemplaza a la vigente del mismo atributo' : 'dato nuevo',
         alcance: f.alcance, descartada: false,
       })

@@ -6,6 +6,7 @@
  * Apagado por `PORTERO_RESUMEN_VIVO` (sin él no se escribe nada).
  */
 import { normalizar } from '../manual/texto'
+import { PREFIJO_DE_VENTAS } from './brazos/propios'
 import type { FichaDeBrazo } from './brazos/tipos'
 
 type Fila = Record<string, unknown>
@@ -29,7 +30,13 @@ export const TEXTO_LEGAL: RegExp[] = [/\b(privacidad|privacy|cookies?|terminos y
 const esTextoLegal = (t: string) => TEXTO_LEGAL.some((r) => r.test(normalizar(t)))
 /** una cifra es una MEDIDA que cambia (puntaje, reseñas, seguidores…); el nombre, la dirección o el teléfono de una ficha de Mapas son perfil, no cifras */
 export const ATRIBUTOS_DE_CIFRA = /(puntaje|resenas|seguidores|publicaciones|rating|followers|score|likes|visitas|suscriptores)/
-const esCifra = (f: FichaParaResumen) => f.clase === 'metrica' || ATRIBUTOS_DE_CIFRA.test(normalizar(f.atributo ?? ''))
+/** las ventas del punto de venta tienen SU sección (una ficha por mes: en «Cifras» serían 60 líneas) */
+const esDeVentas = (f: FichaParaResumen) => (f.atributo ?? '').startsWith(PREFIJO_DE_VENTAS)
+const esCifra = (f: FichaParaResumen) => !esDeVentas(f) && (f.clase === 'metrica' || ATRIBUTOS_DE_CIFRA.test(normalizar(f.atributo ?? '')))
+const coma = (n: number) => (Math.round(n * 100) / 100).toFixed(2).replace('.', ',')
+const datosDe = (f: FichaParaResumen): Fila => (esObjeto(f.provenance_tag) && esObjeto((f.provenance_tag as Fila).datos) ? ((f.provenance_tag as Fila).datos as Fila) : {})
+const numero = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null)
+const pct = (a: number, b: number) => `${a >= b ? 'sube' : 'baja'} ${Math.abs(Math.round(((a - b) / b) * 100))} %`
 /** un fragmento de página (menos de 5 palabras o empieza por número: «1 qué datos capturamos») no presenta a nadie */
 const esFragmento = (t: string) => { const w = normalizar(t).split(' ').filter(Boolean); return w.length < 5 || /^\d/.test(w[0]) }
 const primeraCifra = (s: string): number | null => { const m = s.replace(/(\d)\.(\d{3})(?!\d)/g, '$1$2').match(/\d+(?:[.,]\d+)?/); return m ? Number(m[0].replace(',', '.')) : null }
@@ -40,6 +47,57 @@ export function temasConConteo(textos: string[], max = 6): Array<{ tema: string;
   const c = new Map<string, number>()
   for (const t of textos) for (const w of new Set(normalizar(t).split(' '))) if (w.length >= 5 && !PALABRAS_VACIAS.has(w) && !/^\d+$/.test(w)) c.set(w, (c.get(w) ?? 0) + 1)
   return [...c.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, max).map(([tema, veces]) => ({ tema, veces }))
+}
+
+/** las líneas de la sección de ventas (puro) */
+export function lineasDeVentas(vivas: FichaParaResumen[], ahora: Date): string[] {
+  const deVentas = vivas.filter((f) => f.clase === 'metrica' && esDeVentas(f))
+  const porMetrica = (metrica: string, sufijoDeTienda = false) => deVentas.filter((f) => new RegExp(`^${PREFIJO_DE_VENTAS}${metrica}:\\d{4}-\\d{2}${sufijoDeTienda ? ':tienda-[a-z0-9-]+' : ''}$`).test(f.atributo ?? ''))
+  const periodoDe = (f: FichaParaResumen) => (/(\d{4}-\d{2})/.exec(f.atributo ?? '') ?? [])[1] ?? ''
+  const ingresos = new Map<string, FichaParaResumen>()
+  for (const f of porMetrica('ingreso')) { const k = periodoDe(f); const x = ingresos.get(k); if (!x || (f.observado_en ?? '') > (x.observado_en ?? '')) ingresos.set(k, f) }
+  const mesActual = new Date(ahora.getTime() - 5 * 3_600_000).toISOString().slice(0, 7)
+  const cerrados = [...ingresos.entries()].filter(([k, f]) => k < mesActual && datosDe(f).en_curso === false && numero(datosDe(f).ingreso) !== null).sort((a, b) => (a[0] < b[0] ? -1 : 1))
+  // la serie arranca en el primer mes con ventas (los meses de antes de abrir no son «ventas cero»)
+  const i0 = cerrados.findIndex(([, f]) => (numero(datosDe(f).tickets) ?? 0) > 0)
+  const serie = i0 < 0 ? [] : cerrados.slice(i0)
+  const out: string[] = []
+  const actual = ingresos.get(mesActual)
+  // la ventana móvil de 30 días: lo que cubre «el mes pasado» mientras el plan del punto de venta no deja leer más atrás
+  const ventana = deVentas.filter((f) => f.atributo === `${PREFIJO_DE_VENTAS}ingreso:ultimos_30_dias`).sort((a, b) => ((b.observado_en ?? '') < (a.observado_en ?? '') ? -1 : 1))[0]
+  if (!serie.length && !(actual && datosDe(actual).en_curso === true) && !ventana) return out
+  if (serie.length) {
+    const [p, f] = serie[serie.length - 1]
+    const d = datosDe(f)
+    const prev = serie.length > 1 ? serie[serie.length - 2] : null
+    const pv = prev ? numero(datosDe(prev[1]).ingreso) : null
+    const vs = prev && pv && pv > 0 ? `; frente a ${prev[0]} ${pct(numero(d.ingreso) as number, pv)}` : ''
+    const aprox = typeof d.aproximado_hasta === 'string' ? `; las listas de días, horas e ítems llegan hasta el ${d.aproximado_hasta}` : ''
+    out.push(`- Último mes cerrado, ${p}: ${coma(numero(d.ingreso) as number)} en ${numero(d.tickets) ?? 0} tickets (ticket promedio ${coma(numero(d.ticket_promedio) ?? 0)})${vs}${aprox} ${cita(f)}`)
+  }
+  if (actual && datosDe(actual).en_curso === true) {
+    const d = datosDe(actual)
+    out.push(`- Mes en curso, ${mesActual} (parcial, no comparable con un mes cerrado): ${coma(numero(d.ingreso) ?? 0)} en ${numero(d.tickets) ?? 0} tickets ${cita(actual)}`)
+  }
+  if (ventana && datosDe(ventana).ventana_hasta) {
+    const d = datosDe(ventana)
+    out.push(`- Últimos 30 días (hasta el ${String(d.ventana_hasta)}): ${coma(numero(d.ingreso) ?? 0)} en ${numero(d.tickets) ?? 0} tickets (ticket promedio ${coma(numero(d.ticket_promedio) ?? 0)}) ${cita(ventana)}`)
+  }
+  if (serie.length >= 2) {
+    const dir = serie.length >= 6
+      ? (() => { const v = serie.map(([, g]) => numero(datosDe(g).ingreso) ?? 0); const u = v.slice(-3).reduce((a, b) => a + b, 0), a = v.slice(-6, -3).reduce((x, y) => x + y, 0); return a > 0 ? ` · los últimos 3 meses ${pct(u, a)} frente a los 3 anteriores` : '' })()
+      : ''
+    out.push(`- Tendencia de ${serie.length} meses cerrados (ingreso por mes)${dir}: ${serie.map(([k, g]) => `${k} ${coma(numero(datosDe(g).ingreso) as number)} ${cita(g)}`).join(' · ')}`)
+  }
+  const ultimo = serie.length ? serie[serie.length - 1][0] : mesActual
+  const deMes = (metrica: string, sufijo = false) => porMetrica(metrica, sufijo).filter((f) => periodoDe(f) === ultimo).sort((a, b) => ((b.observado_en ?? '') < (a.observado_en ?? '') ? -1 : 1))
+  const dh = deMes('dias_y_horas')[0]
+  if (dh) out.push(linea(dh, 220))
+  const it = deMes('items')[0]
+  if (it) out.push(linea(it, 260))
+  const tiendas = deMes('ingreso', true)
+  if (tiendas.length) out.push(`- Por tienda en ${ultimo}: ${tiendas.map((f) => `${corto(String(datosDe(f).tienda ?? f.titulo), 40)} ${coma(numero(datosDe(f).ingreso) ?? 0)} ${cita(f)}`).join(' · ')}`)
+  return out
 }
 
 export interface EntradaDelResumen {
@@ -97,6 +155,11 @@ export function armarResumen(e: EntradaDelResumen, opciones: { candidatos?: bool
     cifras.push(`- ${corto(actual.contenido, 160)}${tendencia} ${cita(actual)}`)
   }
   sec('cifras', 'Cifras y su tendencia', cifras, 'no hay cifras de Mapas, redes ni punto de venta')
+
+  // ventas del punto de venta: el último mes cerrado y la tendencia de los meses (todo por código desde las fichas `metrica:loyverse:*`; solo ingresos)
+  // solo aparece si el cliente tiene punto de venta conectado: sin él no es un hueco de todos los rubros
+  const ventas = lineasDeVentas(vivas, e.ahora)
+  if (ventas.length) sec('ventas', 'Ventas del punto de venta (solo ingresos)', ventas, '', 14)
 
   // qué dicen los clientes: temas con conteo de reseñas y comentarios
   const opiniones = por('resenas', 'comentarios', 'mencion')
