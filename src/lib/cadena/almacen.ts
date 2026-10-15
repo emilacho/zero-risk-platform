@@ -113,6 +113,11 @@ export interface ContextoDelCliente {
 export interface FechaCobertura { pais: string; tipo: string; ambito_clave: string; anio: number; estado: 'verificada' | 'sin_fuente' | 'en_curso'; intentos: number }
 
 export interface Almacen {
+  /**
+   * J7 · ¿la jefatura abriría una revisión de este tipo para este cliente? (el punto de espera «antes de pasar»). OPCIONAL: un almacén sin ella, o que falla, NO retiene (= hoy).
+   * La implementa el almacén real leyendo la config y la política de la jefatura; la lógica de decidir es pura (`revision-jefatura.ts`).
+   */
+  retencionDeJefatura?(tipo: 'estrategia' | 'calendario', clientId: string): Promise<{ retener: boolean; motivo: string }>
   // configuración y datos de ajuste
   leerConfig(clave: string): Promise<unknown>
   escribirConfig(clave: string, valor: unknown): Promise<void>

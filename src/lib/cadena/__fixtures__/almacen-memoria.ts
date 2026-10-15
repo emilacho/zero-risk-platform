@@ -18,9 +18,11 @@ const RAIZ = join(__dirname, '..', '..', '..', '..')
 /** los plazos salen de la SIEMBRA REAL de la migración */
 export function plazosDeLaMigracion(): PlazoCfg[] {
   const sql = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610090200_cadena_tablas.sql'), 'utf8')
-  const bloque = sql.slice(sql.indexOf('INSERT INTO public.cadena_plazos'), sql.indexOf('ON CONFLICT (tipo)'))
   const out: PlazoCfg[] = []
-  for (const m of bloque.matchAll(/\('([a-z_]+)',\s*(NULL|\d+),\s*(NULL|\d+),\s*(NULL|\d+),\s*(NULL|'[a-z_0-9]+'),\s*'([a-z_]+)'/g)) {
+  // la siembra base + la de J7 (`revision_jefatura`), cada una con su propio INSERT
+  const bloques = [sql.slice(sql.indexOf('INSERT INTO public.cadena_plazos'), sql.indexOf('ON CONFLICT (tipo)'))]
+  try { const j7 = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610151700_cadena_plazo_revision_jefatura.sql'), 'utf8'); bloques.push(j7.slice(j7.indexOf('INSERT INTO public.cadena_plazos'), j7.indexOf('ON CONFLICT (tipo)'))) } catch { /* sin la de J7: la base sola */ }
+  for (const bloque of bloques) for (const m of bloque.matchAll(/\('([a-z_]+)',\s*(NULL|\d+),\s*(NULL|\d+),\s*(NULL|\d+),\s*(NULL|'[a-z_0-9]+'),\s*'([a-z_]+)'/g)) {
     const n = (x: string) => (x === 'NULL' ? null : Number(x))
     out.push({ tipo: m[1], recordatorio_horas: n(m[2]), alerta_horas: n(m[3]), vence_horas: n(m[4]), vence_regla: m[5] === 'NULL' ? null : m[5].replace(/'/g, ''), accion_al_vencer: m[6] })
   }
@@ -68,6 +70,9 @@ export class AlmacenMemoria implements Almacen {
   }
   async leerConfig(k: string) { return this.config.get(k) }
   async escribirConfig(k: string, v: unknown) { this.config.set(k, v) }
+  /** J7 · lo que la jefatura decidiría; por omisión NO retiene (= la cadena de siempre). La prueba lo fija. */
+  retencion: ((tipo: 'estrategia' | 'calendario', clientId: string) => Promise<{ retener: boolean; motivo: string }>) | null = null
+  async retencionDeJefatura(tipo: 'estrategia' | 'calendario', clientId: string) { return this.retencion ? this.retencion(tipo, clientId) : { retener: false, motivo: 'jefatura_apagada' } }
   async plazos() { return plazosDeLaMigracion() }
   async formatos(): Promise<FormatosPorRed> { return formatosDeLaMigracion() }
   async cargarContexto(clientId: string) { return this.semilla.contextos?.[clientId] ?? null }

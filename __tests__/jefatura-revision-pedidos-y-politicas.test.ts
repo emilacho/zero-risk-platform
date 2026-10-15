@@ -262,6 +262,6 @@ describe('lo común es una FACHADA: la oficina no se toca y la jefatura importa 
     const permitido = /\/lib\/jefatura\/revision\/|\/app\/api\/jefatura\/(revisiones|turnos|vigia)\/|\/__tests__\//
     const importadores = buscar(raiz).filter((f) => !permitido.test(f.split(String.fromCharCode(92)).join('/')) && /from ['"][^'"]*jefatura\/revision/.test(readFileSync(f, 'utf8')))
     // J8a · la ÚNICA puerta de la oficina hacia la jefatura: el paso `jefatura` (su módulo puro, su tipo de puerto, su orquestador y su adaptador). Cualquier otro importador sigue siendo un error.
-    expect(importadores.map((f) => f.replace(/\\/g, '/').split('/src/')[1]).sort()).toEqual(['lib/oficina/adaptadores.ts', 'lib/oficina/orquestador.ts', 'lib/oficina/paso-jefatura.ts', 'lib/oficina/puertos.ts'])
+    expect(importadores.map((f) => f.replace(/\\/g, '/').split('/src/')[1]).sort()).toEqual(['lib/cadena/almacen-supabase.ts', 'lib/oficina/adaptadores.ts', 'lib/oficina/orquestador.ts', 'lib/oficina/paso-jefatura.ts', 'lib/oficina/puertos.ts']) // J7: la cadena lee la config y la política de la jefatura por SU almacén (punto de espera «antes de pasar»); no nombra tablas `jefatura_*` ni abre revisiones
   }, 60_000)
 })

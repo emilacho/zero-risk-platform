@@ -9,6 +9,8 @@ import { isIntakeEnabled, orchestrateIngress, SupabaseIngressTables, type Ingres
 import { SupabaseEventLogStorage } from '@/lib/sala-event-log'
 import { programarDespachoInmediato } from '@/lib/sala-router-consumer/inmediato-supabase'
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
+import { almacenDeSupabase as almacenDeJefatura } from '@/lib/jefatura/revision/almacen-supabase'
+import { decidirRetencion } from './revision-jefatura'
 import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
 import { horarioDeNorm } from './horario'
 import { registroDelCliente } from './registro'
@@ -28,6 +30,15 @@ export function almacenDeSupabase(): Almacen {
   const lista = async <T>(q: PromiseLike<{ data: unknown; error: { message?: string } | null }>): Promise<T[]> => { const { data, error } = await q; if (error) fallo(error); return (data as T[] | null) ?? [] }
 
   const almacen: Almacen = {
+    // J7 · la jefatura se lee por SU almacén (config + política del tipo); cualquier fallo = no retiene (la cadena sigue como hoy)
+    async retencionDeJefatura(tipo, clientId) {
+      try {
+        const j = almacenDeJefatura(db as never)
+        const config = await j.leerConfig()
+        const pol = await j.leerPolitica(tipo)
+        return decidirRetencion({ config, politica: pol.ok ? { activa: pol.activa } : null, tipo, client_id: clientId })
+      } catch { return { retener: false, motivo: 'jefatura_ilegible' } }
+    },
     async leerConfig(k) { return (await uno<{ valor: unknown }>(db.from('cadena_config').select('valor').eq('clave', k).maybeSingle()))?.valor },
     async escribirConfig(k, v) { const { error } = await db.from('cadena_config').upsert({ clave: k, valor: v, actualizado_en: new Date().toISOString() }); if (error) fallo(error) },
     async plazos() { return lista<PlazoCfg>(db.from('cadena_plazos').select('*').limit(100)) },
