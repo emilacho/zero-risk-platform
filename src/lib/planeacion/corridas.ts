@@ -12,8 +12,8 @@ export const ESTADOS_VIVOS = ['esperando', 'corriendo'] as const
 export const ESTADOS_TERMINALES = ['hecha', 'vencida', 'fallida'] as const
 export type EstadoDeCorrida = (typeof ESTADOS_VIVOS)[number] | (typeof ESTADOS_TERMINALES)[number]
 
-/** espera máxima del «cerebro listo» (§16: 30 min; 7 lecturas cada 5 min). Fila del catálogo cuando exista (V1); este valor es el de omisión. */
-export const ESPERA_MAXIMA_MIN = 30
+/** espera máxima del «cerebro listo»: 45 min (AVISO-LENOVO 15-oct: el despertar completo tarda más que los 30 del §16; 10 lecturas cada 5 min). Reanudable; vencida ⇒ corre con lo del alta y lo declara, nunca Apify en su lugar. Fila del catálogo cuando exista (V1); este valor es el de omisión. */
+export const ESPERA_MAXIMA_MIN = 45
 /** techo de una corrida en marcha: el plan mide ≈ 80 min en el peor caso (§10.3) + holgura; pasado esto el barrido la da por fallida y libera al cliente */
 export const TECHO_DE_CORRIDA_MIN = 100
 export const CADA_REINTENTO_S = 300
