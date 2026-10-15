@@ -15,7 +15,7 @@ import { normalizar } from '../../manual/texto'
 import { difiereMasDe, leerNumero } from './cifras'
 import type { CatalogoSnapshot, FilaDeFuente, FilaDeTipo } from './catalogo'
 import type {
-  Alcance, Confianza, ContradiccionDeDato, DatoV1, EntradaCruda, EntradaDeIdentidad, EstadoDeDato, FrescuraDeDato, IdentidadDeDato, Origen, PaqueteDeDatos, PeriodoDeDato, ValorDeDato,
+  Alcance, Confianza, ContradiccionDeDato, DatoV1, EntradaCruda, EntradaDeIdentidad, EstadoDeDato, FrescuraDeDato, IdentidadDeDato, Origen, PaqueteDeDatos, PeriodoDeDato, ValorDeDato, Via,
 } from './tipos'
 
 export interface ContextoDeNormalizacion {
@@ -45,15 +45,22 @@ export function identidadDeVeredicto(v: Veredicto): ResultadoDeIdentidad {
   return { estado, senales: [], por_que: v.motivo, identidad_por: 'portero' }
 }
 
-export function resolverIdentidad(e: EntradaDeIdentidad | null | undefined, fuente: FilaDeFuente | undefined, ctx: ContextoDeNormalizacion): ResultadoDeIdentidad {
+export function resolverIdentidad(e: EntradaDeIdentidad | null | undefined, fuente: FilaDeFuente | undefined, ctx: ContextoDeNormalizacion, snap?: CatalogoSnapshot, via?: Via): ResultadoDeIdentidad {
+  // FALLA CERRADO (R1 de CC#3): sin entrada de identidad, el `coincide` por omisión es SOLO para una fuente que por diseño no trae campos de identidad,
+  // no tiene regla de identidad en el catálogo y no es el cerebro (una ficha del cerebro debe declarar `via: 'portero'`, no se presume).
   if (!e) {
-    // una fuente que por diseño no trae campos de identidad (manual, analítica por dominio, cerebro ya filtrado) es del cliente por su clave; las demás: sin comprobar (I6)
-    return fuente && (fuente.identidad_campos?.length ?? 0) === 0
-      ? { estado: 'coincide', senales: [], por_que: 'fuente sin campos de identidad por diseño: pertenece al cliente por su clave', identidad_por: 'fuente' }
-      : { estado: 'no_comprobable', senales: [], por_que: 'la fuente no trajo campos con los que comprobar que es de este negocio', identidad_por: 'normalizador' }
+    const tieneRegla = !!fuente && !!snap && snap.reglas('identidad', { fuente: fuente.fuente_id }).length > 0
+    const porDiseno = !!fuente && (fuente.identidad_campos?.length ?? 0) === 0 && !tieneRegla && fuente.proveedor !== 'cerebro'
+    return porDiseno
+      ? { estado: 'coincide', senales: [], por_que: 'fuente sin campos ni regla de identidad por diseño: pertenece al cliente por su clave', identidad_por: 'fuente' }
+      : { estado: 'no_comprobable', senales: [], por_que: 'la fuente no trajo con qué comprobar que es de este negocio', identidad_por: 'normalizador' }
   }
   switch (e.via) {
-    case 'portero': return { estado: 'coincide', senales: [], por_que: 'ficha viva: ya pasó el filtro del portero', identidad_por: 'portero' }
+    case 'portero':
+      // O1 de CC#3: `via: 'portero'` es SOLO para una ficha viva del cerebro (ya pasó su filtro); lo que viene del crudo o del relleno NO lo trae
+      return via === 'cerebro'
+        ? { estado: 'coincide', senales: [], por_que: 'ficha viva: ya pasó el filtro del portero', identidad_por: 'portero' }
+        : { estado: 'no_comprobable', senales: [], por_que: '«ficha viva del portero» solo vale para lo que viene del cerebro; el crudo y el relleno pasan por la compuerta', identidad_por: 'normalizador' }
     case 'consulta_propia': return { estado: 'coincide', senales: [], por_que: 'la consulta se hizo con una clave propia del cliente (declarada en su ficha)', identidad_por: 'fuente' }
     case 'ninguna': return { estado: 'no_comprobable', senales: [], por_que: 'la fuente no trae campos de identidad', identidad_por: 'normalizador' }
     case 'texto': {
@@ -266,7 +273,7 @@ export function normalizarDatos(entradas: EntradaCruda[], ctx: ContextoDeNormali
       continue
     }
     const r = op.resolverEstadoYValor(e, fuente, tipo, ctx, snap)
-    const ident = op.resolverIdentidad(e.identidad, fuente, ctx)
+    const ident = op.resolverIdentidad(e.identidad, fuente, ctx, snap, e.via)
     if ('ruido' in ident) { ruido++; n--; continue }
     const frescura = op.resolverFrescura(e.medido_en, e.vigente_hasta, tipo.frescura_limite_h, ctx.ahora)
     // un dato del cerebro sin `observado_en` no es un dato fechable (§14.1): hueco con motivo `sin_fecha`
