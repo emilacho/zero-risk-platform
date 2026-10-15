@@ -1,6 +1,6 @@
 /**
  * PLAN v3 · V9 · los nodos del pre-vuelo y la espera en el flujo de planeación (CC#2 · 15-oct). US$ 0, sin red, sin modelo.
- * Se prueba con el código REAL de los nodos y el n8n en miniatura de F4, sobre el ARREGLADO de F4 (53 nodos):
+ * Se prueba con el código REAL de los nodos y el n8n en miniatura de F4, sobre el ARREGLADO de F4 v2.1 (63 nodos):
  *  · APAGADO = IDÉNTICO A HOY: sin `plan_v3` el sobre va de «⓪ Llave» a «① Cargar el manual» sin tocar el pre-vuelo; ningún nodo existente cambia;
  *  · correr / correr_con_lo_del_alta siguen; esperar vuelve a preguntar con la MISMA corrida cada 5 min; lo demás NO corre y lo dice;
  *  · FALLA CERRADO: una respuesta ilegible, un 5xx o un 409 con «correr» NUNCA es seguir; la espera tiene tope de vueltas;
@@ -49,7 +49,7 @@ describe('estructura', () => {
   it('ningún nodo que ya existía cambia; se suman exactamente 17 (15 del pre-vuelo + 2 del permiso de relleno) con nombres únicos', () => {
     const a = new Map(antes.nodes.map((n) => [n.name, JSON.stringify(n)]))
     expect(despues.nodes.filter((n) => a.has(n.name) && a.get(n.name) !== JSON.stringify(n))).toEqual([])
-    expect(antes.nodes.length).toBe(53)
+    expect(antes.nodes.length).toBe(63)
     expect(despues.nodes.length).toBe(antes.nodes.length + NOMBRES_NUEVOS.length)
     expect(NOMBRES_NUEVOS.length).toBe(17)
     expect(new Set(despues.nodes.map((n) => n.name)).size).toBe(despues.nodes.length)

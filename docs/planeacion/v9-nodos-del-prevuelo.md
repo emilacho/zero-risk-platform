@@ -1,10 +1,10 @@
 # Plan v3 · V9 · los nodos del pre-vuelo y la espera (CC#2 · 15-oct)
 
 **Estado:** construido, **apagado** y **sin aplicar**. Lo aplica CC#3 en la tanda 2, después de certificar.
-**Base:** `scripts/worker-staging/finanzas-f4/plan-F4-finanzas-v2-ARREGLADO-2026-10-15.json` (F4 v2 de CC#1, #588, 53 nodos). **Resultado:** `scripts/worker-staging/planeacion-v3-v9/plan-V9-prevuelo-ARREGLADO-2026-10-15.json` (70 nodos, +17 = 15 del pre-vuelo + 2 del permiso de relleno; ningún nodo existente cambia).
+**Base:** `scripts/worker-staging/finanzas-f4/plan-F4-finanzas-v2-ARREGLADO-2026-10-15.json` (F4 v2.1 de CC#1, #591 sobre #588, 63 nodos). **Resultado:** `scripts/worker-staging/planeacion-v3-v9/plan-V9-prevuelo-ARREGLADO-2026-10-15.json` (80 nodos, +17 = 15 del pre-vuelo + 2 del permiso de relleno; ningún nodo existente cambia).
 
 ## Orden
-F4 v2 (#588, sobre #547) → enganche J7 (#584: código de la cadena, no cambia este flujo) → **V9**. Antes de aplicar: «vivo = respaldo» contra la base de arriba; si el vivo no es igual, NO se aplica.
+F4 v2.1 (#591, sobre #588 y #547) → enganche J7 (#584: código de la cadena, no cambia este flujo) → **V9**. Antes de aplicar: «vivo = respaldo» contra la base de arriba; si el vivo no es igual, NO se aplica.
 Depende de V8 (#582, `POST /api/planeacion/prevuelo`) y de V13 (`POST /api/planeacion/corrida`, ya en `main`) **publicadas**, y de las migraciones V1/V13 **aplicadas** (sin ellas el pre-vuelo contesta 503 y el flujo PARA con aviso).
 
 ## Qué hace
