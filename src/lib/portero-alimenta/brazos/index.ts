@@ -7,11 +7,11 @@
 import type { Db } from '../alimentar'
 import { paisIsoDe } from '../../cerebro/zona'
 import { archivarFichasDeBrazos, type ResultadoDeArchivo, type RetiroDeBrazo } from './archivo'
-import { accionesDeCompetencia, competidoresConfirmados, competidoresVigilados, fichasDeCompetencia, type Competidor } from './competencia'
+import { accionesDeCompetencia, competidoresConfirmados, competidoresVigilados, fichasDeCompetencia } from './competencia'
 import { fichasDeContexto } from './contexto'
 import { accionDeDemanda, accionesDeDemandaPorSede, fichasDeDemanda, terminosDeDemanda, type FilaCrudaDeBrazo } from './demanda'
 import { familiasDelRubro } from '../../fuentes-publicas/plan'
-import { porAbrir, radioDe, type SedeConPunto } from './sedes'
+import { radioDe } from './sedes'
 import { cargarContextoDeBrazos, descubrirYJuzgar, type ContextoDeBrazos, type ResultadoDeSistematica } from './sistematica'
 import type { RespuestaDeLlamada } from '../juez'
 import { brazoDePropios, leerSnapshot, mesLocalDe, PREFIJO_DE_VENTAS, type Fetch, type SnapshotDeVentas } from './propios'
@@ -20,13 +20,6 @@ import { hayBrazoActivo, type AccionDeBrazo, type BrazosActivos, type FichaDeBra
 export * from './tipos'
 const obj = (x: unknown): Record<string, unknown> => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Record<string, unknown>) : {})
 const txt = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
-
-/** los competidores que SOLO compiten por sedes por abrir no se vigilan (los de varias sedes o sin sede siguen) */
-export function sinLosDeSedesPorAbrir(c: Competidor[], sedes: SedeConPunto[]): Competidor[] {
-  const cerradas = new Set(sedes.filter(porAbrir).map((s) => s.clave))
-  if (!cerradas.size) return c
-  return c.filter((x) => !(x.sedes.length > 0 && x.sedes.every((k) => cerradas.has(k))))
-}
 
 /** país ISO-2 (minúscula) de la ficha: acepta el código o el nombre; sin dato no se adivina */
 export const paisDeLaFicha = (cliente: Record<string, unknown>): string | null => paisIsoDe(cliente.country ?? cliente.pais, cliente.market)
@@ -55,11 +48,8 @@ export function accionesDeBrazos(e: EntradaDeAccionesDeBrazos): { acciones: Acci
   const no_cubiertas: Array<{ fuente: string; por_que: string }> = []
   const mercado = txt(e.cliente.market)
   const familias = e.familias ?? familiasDelRubro(e.rubro ?? e.cliente.industry)
-  const todasLasSedes = e.ctx?.sedes ?? []
-  // una sede por abrir no se vigila (ni demanda ni competencia por sede); si TODAS están por abrir no se cae a mirar «por ciudad»
-  const sedes = todasLasSedes.filter((s) => !porAbrir(s))
-  const soloPorAbrir = todasLasSedes.length > 0 && sedes.length === 0
-  if (e.brazos.demanda && !soloPorAbrir) {
+  const sedes = e.ctx?.sedes ?? []
+  if (e.brazos.demanda) {
     const t = terminosDeDemanda({ rubro: e.rubro ?? e.cliente.industry, config: e.cliente.config, familias })
     if (sedes.length) {
       const d = accionesDeDemandaPorSede({ ahora: e.ahora, terminos: t, sedes, familias, ubicadasEnLosUltimos7Dias: e.ctx?.ubicadasRecientemente })
@@ -72,9 +62,8 @@ export function accionesDeBrazos(e: EntradaDeAccionesDeBrazos): { acciones: Acci
     }
   }
   if (e.brazos.competencia) {
-    const c = competidoresVigilados({ config: e.cliente.config, delSistema: sinLosDeSedesPorAbrir(e.ctx?.delSistema ?? [], todasLasSedes) })
-    if (soloPorAbrir && !c.vigilados.length) no_cubiertas.push({ fuente: 'competencia', por_que: 'todas las sedes están por abrir: no se vigila competencia por sede' })
-    else if (c.motivo) no_cubiertas.push({ fuente: 'competencia', por_que: c.motivo })
+    const c = competidoresVigilados({ config: e.cliente.config, delSistema: e.ctx?.delSistema ?? [] })
+    if (c.motivo) no_cubiertas.push({ fuente: 'competencia', por_que: c.motivo })
     else {
       const porSede = Object.fromEntries(sedes.map((s) => [s.clave, { lat: s.lat, lng: s.lng, ciudad: s.ciudad }]))
       const radios = sedes.map((s) => radioDe(familias, s.tipo)).filter((r): r is number => r !== null)
@@ -148,15 +137,11 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
   }
   if (e.brazos.demanda) {
     const conocidos = [nombre, ...(Array.isArray(obj(obj(cfg).apify).competitor_list) ? (obj(obj(cfg).apify).competitor_list as unknown[]).map((c) => txt(obj(c).name)) : [])]
-    const porAbrirYa = (ctx?.sedes ?? []).filter(porAbrir)
-    const conSede = (ctx?.sedes ?? []).filter((s) => !porAbrir(s) && radioDe(familias, s.tipo) !== null)
+    const conSede = (ctx?.sedes ?? []).filter((s) => radioDe(familias, s.tipo) !== null)
     if (conSede.length) {
       const partes = conSede.map((s) => fichasDeDemanda({ client_id: e.client_id, nombreDelCliente: nombre, filas, ahora: e.ahora, yaConocidos: conocidos, ciudad: s.ciudad, sede: s.clave }))
       const todas = partes.flatMap((p) => p.fichas)
-      poner({ brazo: 'demanda', estado: todas.length ? 'listo' : 'sin_material', fichas: todas, declarado: [...new Set(partes.flatMap((p) => p.declarado)), ...porAbrirYa.map((s) => `sede ${s.clave}: por abrir, no se mira todavía`), ...conSede.filter((s) => s.lat === null).map((s) => `sede ${s.clave}: sin punto, se miró por el nombre de la ciudad`)], ...(todas.length ? {} : { detalle: 'todavía no hay corrida de posición por sede' }) })
-    } else if (ctx?.sedes.length && porAbrirYa.length === ctx.sedes.length) {
-      // todas las sedes aún no abren: no se mira nada por sede (y tampoco «por ciudad»)
-      poner({ brazo: 'demanda', estado: 'sin_material', fichas: [], declarado: porAbrirYa.map((s) => `sede ${s.clave}: por abrir, no se mira todavía`), detalle: 'todas las sedes están por abrir' })
+      poner({ brazo: 'demanda', estado: todas.length ? 'listo' : 'sin_material', fichas: todas, declarado: [...new Set(partes.flatMap((p) => p.declarado)), ...conSede.filter((s) => s.lat === null).map((s) => `sede ${s.clave}: sin punto, se miró por el nombre de la ciudad`)], ...(todas.length ? {} : { detalle: 'todavía no hay corrida de posición por sede' }) })
     } else if (ctx?.sedes.length) {
       // tiene sedes pero el rubro no compite por cercanía en ninguna: no aplica por sede (y no se cae a mirar «por ciudad»)
       poner({ brazo: 'demanda', estado: 'sin_material', fichas: [], declarado: ['demanda: el rubro no compite por cercanía en ninguna sede: no aplica por sede'], detalle: 'no aplica por sede' })
@@ -167,7 +152,7 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
       ? await descubrirYJuzgar({ ctx, client_id: e.client_id, nombreDelCliente: nombre, rubro: txt(e.cliente.industry) || null, config: cfg, ahora: e.ahora, llamarModelo: e.llamarModelo, presupuestoUsd: e.presupuestoUsd ?? 0.16, forzar: e.forzarEvaluacion })
       : null
     if (sis) { salida.por_sede = sis.por_sede; salida.costo_modelo_usd = sis.costo_usd; retiros.push(...sis.retiros) }
-    const c = competidoresVigilados({ config: cfg, delSistema: sinLosDeSedesPorAbrir([...(ctx?.delSistema ?? [])], ctx?.sedes ?? []) })
+    const c = competidoresVigilados({ config: cfg, delSistema: [...(ctx?.delSistema ?? [])] })
     // los recién juzgados se vigilan desde la próxima corrida de su día de la semana (sus fichas aparecen cuando llegan sus datos de Mapas)
     const propias = c.motivo ? { brazo: 'competencia' as const, estado: 'sin_material' as const, fichas: [] as FichaDeBrazo[], declarado: [] as string[], detalle: c.motivo } : fichasDeCompetencia({ client_id: e.client_id, vigilados: c.vigilados, filas })
     const delJuicio = sis?.fichas ?? []

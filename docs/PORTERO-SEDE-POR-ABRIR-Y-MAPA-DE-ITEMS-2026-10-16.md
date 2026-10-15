@@ -2,18 +2,12 @@
 
 Encargo: `raw/tasks/2026-10-16-ENCARGO-LENOVO-CC-CEREBRO-loyverse-historial-csv.md` (puntos 2 y 3). Firma de Emilio: «Guayaquil aún no abre al público» · «los nombres de la caja y de la carta web deberían coincidir; si alguno es diferente es un sinónimo».
 
-## 1 · Sede por abrir
+## 1 · Sede por abrir (el estado es un dato; la vigilancia sigue COMPLETA)
 - **Dato:** fila de `client_sede_datos` con `campo = 'estado_de_la_sede'` y `valor_texto = 'por abrir'` (fuente `dueno`, con la firma en `fuente_ref`). Migración `202610161000_sede_estado_de_la_sede.sql` (solo amplía la lista cerrada de campos; reversa en `supabase/reversas/`).
-- **Qué hace el portero** (`brazos/sedes.ts` → `estadoDeLaSede`, `porAbrir`):
-  - la demanda no mira la posición de esa sede ni pide ubicarla por dirección;
-  - la competencia sistemática la marca `no_aplica` («sede por abrir»), no llama al modelo y no guarda ni retira nada;
-  - un competidor que **solo** compite por sedes por abrir no se vigila; el de varias sedes o sin sede, sí (`sinLosDeSedesPorAbrir`);
-  - el radio de competencia lo da solo la sede abierta;
-  - si TODAS las sedes están por abrir no se cae a mirar «por ciudad».
-  - **Nada de esto es un hueco ni un error**: la sede aparece en `por_sede` como `no_aplica` y en `declarado` de la demanda como «sede X: por abrir, no se mira todavía».
-- **Cuando abra:** el dueño (o un empleado con su firma) agrega una fila más nueva con `valor_texto = 'abierta'`; vale la fila más reciente por `observado_en`. Desde la corrida siguiente entra sola (se evalúa su competencia y se mira su posición).
-- **Tienda sin recibos en Loyverse:** el brazo de propios solo arma grupos por tienda con recibos; una tienda sin ventas (la de Guayaquil) no se reporta ni como problema ni como hueco.
-- Valores reconocidos como «por abrir»: «por abrir», «aún/todavía no abre», «no ha abierto», «próxima apertura», «pre-apertura», «sin abrir». Cualquier otro valor, o ninguno, es sede abierta.
+- **Corrección de la tanda nocturna (Emilio 16-oct):** primero se había construido «por abrir = no se vigila»; la firma final es **«por abrir con vigilancia completa»**: competencia, posición y contexto de esa sede se vigilan igual (así hay línea base el día que abra). Por eso el estado **no cambia ninguna acción ni ficha**; es un dato legible (`SedeConPunto.estado`, `estadoDeLaSede`, `porAbrir`) para que quien reporte no trate la falta de ventas como problema.
+- **«Sin ventas» no es problema:** el brazo de propios solo arma grupos por tienda con recibos; una tienda sin ventas (la de Guayaquil en Loyverse) no se reporta ni como problema ni como hueco.
+- **Cuando abra:** agregar una fila más nueva con `valor_texto = 'abierta'`; vale la fila más reciente por `observado_en`.
+- Valores reconocidos como «por abrir»: «por abrir», «aún/todavía no abre», «no ha abierto», «próxima apertura», «pre-apertura», «sin abrir».
 
 ## 2 · Mapa de ítems por sinónimo (`brazos/mapa-de-items.ts`)
 Une los nombres de la caja con los de la carta web sin esperar al dueño. Capas, de más a menos segura:
@@ -33,4 +27,4 @@ Une los nombres de la caja con los de la carta web sin esperar al dueño. Capas,
 - Agnóstico: probado con restaurante, clínica y taller; las abreviaturas y palabras de presentación son datos (`SINONIMOS_DE_ESCRITURA`, `PALABRAS_DE_PRESENTACION`).
 
 ## Pruebas
-`sede-por-abrir-y-mapa-de-items.test.ts` (27) + las de siempre. Mutación `mutar-sede-mapa.cjs`: 33 mutantes, 32 muertos, 1 equivalente declarado (`dudosa`/`sin_equivalente` siempre tienen `web = null`, así que el filtro extra del mapa no cambia el resultado).
+`sede-por-abrir-y-mapa-de-items.test.ts` (22) + las de siempre. Mutación `mutar-sede-mapa.cjs`: 33 mutantes, 32 muertos, 1 equivalente declarado (`dudosa`/`sin_equivalente` siempre tienen `web = null`, así que el filtro extra del mapa no cambia el resultado).

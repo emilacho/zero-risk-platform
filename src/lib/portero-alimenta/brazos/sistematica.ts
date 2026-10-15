@@ -129,7 +129,6 @@ export async function descubrirYJuzgar(e: EntradaDeSistematica): Promise<Resulta
   let gastado = 0
   if (!e.ctx.sedes.length) out.declarado.push('el cliente no tiene sedes: la competencia por sede no aplica')
   for (const sede of e.ctx.sedes) {
-    if (sede.estado === 'por_abrir') { out.por_sede[sede.clave] = { estado: 'no_aplica', candidatos: 0, competidores: 0, costo_usd: 0, detalle: 'sede por abrir: no se evalúa competencia hasta que el dueño la marque abierta' }; continue }
     const radio = radioDe(familias, sede.tipo)
     if (radio === null) { out.por_sede[sede.clave] = { estado: 'no_aplica', candidatos: 0, competidores: 0, costo_usd: 0, detalle: 'el rubro no compite por cercanía en esta sede' }; continue }
     if (!debeEvaluarse(e.ctx.vigentes, sede.clave, e.ahora, e.forzar)) { out.por_sede[sede.clave] = { estado: 'al_dia', candidatos: 0, competidores: 0, costo_usd: 0, detalle: `evaluada hace menos de ${DIAS_ENTRE_EVALUACIONES} días` }; continue }

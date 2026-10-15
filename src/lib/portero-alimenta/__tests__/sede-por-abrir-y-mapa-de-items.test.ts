@@ -1,10 +1,10 @@
 /**
  * 16-oct · dos cosas del encargo «historial de Loyverse + mapa de ítems + Guayaquil»: US$ 0, sin red.
- *   · SEDE POR ABRIR: dato de la ficha de la sede (`estado_de_la_sede`); no se vigila competencia ni posición por sede, no se reporta como problema, y entra sola al marcarla abierta.
+ *   · SEDE POR ABRIR: dato de la ficha de la sede (`estado_de_la_sede`); la vigilancia (competencia, posición, contexto) sigue COMPLETA (firma de Emilio 16-oct); solo «sin ventas» no es un problema.
  *   · MAPA DE ÍTEMS POR SINÓNIMO: caja ↔ carta web sin esperar al dueño; lo dudoso se marca dudoso, nunca se inventa.
  */
 import { describe, expect, it } from 'vitest'
-import { BRAZOS_APAGADOS, accionesDeBrazos, correrBrazos, sinLosDeSedesPorAbrir } from '../brazos'
+import { BRAZOS_APAGADOS, accionesDeBrazos, correrBrazos } from '../brazos'
 import type { Competidor } from '../brazos/competencia'
 import { accionesDeDemandaPorSede } from '../brazos/demanda'
 import { armarMapaDeItems, itemsDeLaCarta, metaDelMapa } from '../brazos/mapa-de-items'
@@ -45,121 +45,59 @@ describe('sede por abrir · el dato de la ficha de la sede', () => {
   })
 })
 
-describe('sede por abrir · no se vigila ni se reporta como problema', () => {
-  it('la demanda por sede la salta por completo: ni corrida, ni ubicar por dirección, ni «hueco»; la otra sede sigue igual', () => {
-    const sinPunto: SedeConPunto = { ...sedeGye, lat: null, lng: null, origen_del_punto: null }
-    const r = accionesDeDemandaPorSede({ ahora: AHORA, terminos: ['ceviche'], sedes: [sedeOlon, sinPunto], familias: ['comida'] })
-    expect(r.acciones.map((a) => a.params._brazo)).toEqual(['demanda:olon'])
-    expect(r.no_cubiertas).toEqual([])
-  })
-  it('al marcarla abierta entra sola (misma función, otro estado)', () => {
-    const abierta: SedeConPunto = { ...sedeGye, estado: 'abierta' }
-    const r = accionesDeDemandaPorSede({ ahora: AHORA, terminos: ['ceviche'], sedes: [sedeOlon, abierta], familias: ['comida'] })
-    expect(r.acciones.map((a) => a.params._brazo).sort()).toEqual(['demanda:guayaquil', 'demanda:olon'])
-  })
+describe('sede por abrir · el estado es un DATO: la vigilancia sigue completa (competencia, posición, contexto)', () => {
   const cliente = { id: CL, name: 'Náufrago', industry: 'restaurante de mariscos', country: 'EC', config: {} }
   const ctx = (sedes: SedeConPunto[], delSistema: Competidor[] = []) => ({ sedes, delSistema, ubicadasRecientemente: new Set<string>() })
-  it('un competidor que solo compite por la sede por abrir no se vigila; el de otra sede, o de varias, sí', () => {
-    const lunes = new Date('2026-10-12T12:00:00Z')
-    const todos = [comp('Solo Gye', ['guayaquil']), comp('Solo Olon', ['olon']), comp('De Ambas', ['olon', 'guayaquil']), comp('Sin Sede', [])]
-    const r = accionesDeBrazos({ brazos: { ...BRAZOS_APAGADOS, competencia: true }, cliente, ahora: lunes, ctx: ctx([sedeOlon, sedeGye], todos), topeDiarioUsd: 5 })
-    const nombres = new Set(r.acciones.map((a) => String(a.objetivo).split(' · ')[0]))
-    expect(nombres.has('Solo Gye')).toBe(false)
-    expect(sinLosDeSedesPorAbrir(todos, [sedeOlon, sedeGye]).map((c) => c.nombre).sort()).toEqual(['De Ambas', 'Sin Sede', 'Solo Olon'])
-    expect(sinLosDeSedesPorAbrir(todos, [sedeOlon])).toHaveLength(4) // sin sedes por abrir no cambia nada
+  it('la demanda por sede pide lo mismo con la sede por abrir que abierta (Guayaquil se vigila igual)', () => {
+    const porAbrirS = accionesDeDemandaPorSede({ ahora: AHORA, terminos: ['ceviche'], sedes: [sedeOlon, sedeGye], familias: ['comida'] })
+    const abierta = accionesDeDemandaPorSede({ ahora: AHORA, terminos: ['ceviche'], sedes: [sedeOlon, { ...sedeGye, estado: 'abierta' }], familias: ['comida'] })
+    expect(porAbrirS.acciones.map((a) => a.params._brazo).sort()).toEqual(['demanda:guayaquil', 'demanda:olon'])
+    expect(porAbrirS).toEqual(abierta)
   })
-  it('si TODAS las sedes están por abrir no se cae a mirar «por ciudad»: no pide demanda ni competencia del sistema, y no es un hueco de demanda', () => {
-    const r = accionesDeBrazos({ brazos: { ...BRAZOS_APAGADOS, demanda: true, competencia: true }, cliente, ahora: AHORA, ctx: ctx([sedeGye], [comp('Solo Gye', ['guayaquil'])]), ciudad: 'Guayaquil', topeDiarioUsd: 5 })
-    expect(r.acciones).toEqual([])
-    expect(r.no_cubiertas.some((n) => n.fuente === 'demanda')).toBe(false)
+  it('la competencia del sistema y de la sede por abrir se vigila igual', () => {
+    const dias = [12, 13, 14, 15, 16].map((d) => new Date(`2026-10-${d}T12:00:00Z`))
+    const c = [comp('Solo Gye', ['guayaquil']), comp('Solo Olon', ['olon'])]
+    const nombres = (sedes: SedeConPunto[]) => new Set(dias.flatMap((ahora) => accionesDeBrazos({ brazos: { ...BRAZOS_APAGADOS, competencia: true }, cliente, ahora, ctx: ctx(sedes, c), topeDiarioUsd: 5 }).acciones.map((a) => String(a.objetivo).split(' · ')[0])))
+    expect(nombres([sedeOlon, sedeGye])).toEqual(new Set(['Solo Gye', 'Solo Olon']))
+    expect(nombres([sedeOlon, { ...sedeGye, estado: 'abierta' }])).toEqual(nombres([sedeOlon, sedeGye]))
   })
-  it('la competencia sistemática la marca «no aplica · por abrir», no llama al modelo y no guarda ni retira nada', async () => {
+  it('la competencia sistemática evalúa la sede por abrir (llama al modelo y guarda)', async () => {
     let llamadas = 0
-    const c: ContextoDeBrazos = { sedes: [sedeGye], filas: [], vigentes: [], delSistema: [], ubicadasRecientemente: new Set(), errores: [] }
-    const r = await descubrirYJuzgar({ ctx: c, client_id: CL, nombreDelCliente: 'Náufrago', rubro: 'restaurante de mariscos', config: {}, ahora: AHORA, presupuestoUsd: 0.16, llamarModelo: async () => { llamadas++; return { texto: '{}', costo_usd: 0, tokens_entrada: 0, tokens_salida: 0 } } })
-    expect(llamadas).toBe(0)
-    expect(r.por_sede.guayaquil).toMatchObject({ estado: 'no_aplica', candidatos: 0, competidores: 0, costo_usd: 0 })
-    expect(r.por_sede.guayaquil.detalle).toMatch(/por abrir/)
-    expect(r.fichas).toEqual([])
-    expect(r.retiros).toEqual([])
-    expect(r.declarado).toEqual([])
+    const c: ContextoDeBrazos = { sedes: [sedeGye], filas: [{ apify_function: 'google_maps_scraper', ensayo: false, created_at: '2026-10-14T12:30:00.000Z', params: { _brazo: 'demanda:guayaquil' }, respuesta: [{ title: 'Cevichería Puerto', categoryName: 'Marisquería', totalScore: 4.5, reviewsCount: 40, location: { lat: -2.161, lng: -79.901 }, address: 'Guayaquil', placeId: 'p1', rank: 1, searchString: 'ceviche' }] }], vigentes: [], delSistema: [], ubicadasRecientemente: new Set(), errores: [] }
+    const llamarModelo = async (_i: string, m: string) => { llamadas++; const n = (m.match(/^\d+\. «/gm) ?? []).length; return { texto: JSON.stringify({ decisiones: Array.from({ length: n }, (_x, k) => ({ n: k + 1, veredicto: 'competidor', cita: 'categoría Marisquería', razon: 'compite' })) }), costo_usd: 0.01, tokens_entrada: 1, tokens_salida: 1 } }
+    const r = await descubrirYJuzgar({ ctx: c, client_id: CL, nombreDelCliente: 'Náufrago', rubro: 'restaurante de mariscos', config: {}, ahora: AHORA, presupuestoUsd: 0.16, llamarModelo })
+    expect(llamadas).toBe(1)
+    expect(r.por_sede.guayaquil).toMatchObject({ estado: 'evaluada', competidores: 1 })
   })
-})
-
-describe('sede por abrir · integración con la base falsa (lo que hace la corrida diaria)', () => {
-  const OLON = { lat: -1.7974316, lng: -80.7595412 }
-  const lugar = (title: string, loc: { lat: number; lng: number }) => ({ title, categoryName: 'Marisquería', totalScore: 4.5, reviewsCount: 40, location: loc, address: 'x', placeId: `p-${title}`, rank: 1, searchString: 'ceviche' })
-  const fila = (sede: string, id: string, items: unknown[]) => ({ id, client_id: CL, apify_function: 'google_maps_scraper', ensayo: false, created_at: '2026-10-14T12:30:00.000Z', params: { _brazo: `demanda:${sede}` }, respuesta: items })
-  const tablas = (estado: Array<Record<string, unknown>>) => ({
-    client_sedes: [{ id: 's-olon', client_id: CL, clave: 'olon', ciudad: 'Olon' }, { id: 's-gye', client_id: CL, clave: 'guayaquil', ciudad: 'Guayaquil' }],
-    client_sede_datos: [
-      { sede_id: 's-olon', client_id: CL, campo: 'tipo_de_atencion', valor_texto: 'restaurante (local) y domicilio' }, { sede_id: 's-gye', client_id: CL, campo: 'tipo_de_atencion', valor_texto: 'solo domicilio (sin local)' },
-      { sede_id: 's-gye', client_id: CL, campo: 'direccion', valor_texto: 'Avenida 8 NO, Guayaquil' }, ...estado,
-    ],
-    apify_raw: [
-      { id: 'own', client_id: CL, apify_function: 'own_google_maps_profile', ensayo: false, created_at: '2026-10-14T10:00:00Z', params: {}, respuesta: [{ title: 'Naufrago', city: 'Olon', location: OLON }] },
-      fila('olon', 'd1', [lugar('Don Villón', { lat: OLON.lat + 0.01, lng: OLON.lng + 0.01 }), lugar('Marisquería Sol', { lat: OLON.lat + 0.01, lng: OLON.lng })]),
-      fila('guayaquil', 'd2', [lugar('Cevichería Puerto', { lat: -2.16, lng: -79.9 })]),
-    ],
-    cerebro_fichas: [] as Array<Record<string, unknown>>, cerebro_ingresos: [] as Array<Record<string, unknown>>,
-  })
-  const cliente = { id: CL, name: 'Náufrago', slug: 'naufrago', industry: 'restaurante de mariscos', country: 'Ecuador', config: { apify: {} } }
-  const modelo = async (_i: string, m: string) => ({ texto: JSON.stringify({ decisiones: (m.match(/^\d+\. «/gm) ?? []).map((_x, k) => ({ n: k + 1, veredicto: 'competidor', cita: 'categoría Marisquería', razon: 'compite' })) }), costo_usd: 0.012, tokens_entrada: 1, tokens_salida: 1 })
-  const POR_ABRIR = { sede_id: 's-gye', client_id: CL, campo: 'estado_de_la_sede', valor_texto: 'por abrir', observado_en: '2026-10-16T10:00:00Z' }
-  const correr = (t: ReturnType<typeof tablas>, ahora = AHORA) => correrBrazos({ db: crearBaseFalsa(t as never).db, brazos: { ...BRAZOS_APAGADOS, demanda: true, competencia: true }, cliente, client_id: CL, filas: [], ahora, dry_run: false, llamarModelo: modelo })
-  const deGye = (t: ReturnType<typeof tablas>) => t.cerebro_fichas.filter((f) => JSON.stringify(f.provenance_tag ?? {}).includes('guayaquil') || String(f.atributo).includes('guayaquil'))
-
-  it('con Guayaquil por abrir: no se mira su posición, no se evalúa su competencia, no se escribe nada de la sede y no queda como error ni «hueco»', async () => {
-    const t = tablas([POR_ABRIR])
-    const r = await correr(t)
-    expect(r.errores).toEqual([])
-    expect(r.por_sede?.guayaquil).toMatchObject({ estado: 'no_aplica', competidores: 0, costo_usd: 0 })
-    expect(r.por_sede?.olon).toMatchObject({ estado: 'evaluada', competidores: 2 })
-    expect(r.costo_modelo_usd).toBeCloseTo(0.012, 6) // un lote (Olón), no dos
-    expect(deGye(t)).toEqual([])
-    expect(t.cerebro_fichas.filter((f) => f.clase === 'mercado_posicion').map((f) => f.atributo)).toEqual(['mercado:posicion:olon:ceviche'])
-    expect(JSON.stringify(r.por_brazo.demanda?.declarado ?? [])).toMatch(/guayaquil: por abrir/)
-  })
-  it('sin el dato, lo mismo que antes (Guayaquil se evalúa); al marcarla abierta con una fila más nueva, entra sola', async () => {
-    const t0 = tablas([])
-    const r0 = await correr(t0)
-    expect(r0.por_sede?.guayaquil).toMatchObject({ estado: 'evaluada', competidores: 1 })
-    const t1 = tablas([POR_ABRIR, { ...POR_ABRIR, valor_texto: 'abierta', observado_en: '2026-12-01T10:00:00Z' }])
-    const r1 = await correr(t1)
+  it('el estado se lee de la ficha de la sede en la corrida (cargarContextoDeBrazos) y NO cambia lo que se archiva', async () => {
+    const OLON = { lat: -1.7974316, lng: -80.7595412 }
+    const lugar = (title: string, loc: { lat: number; lng: number }) => ({ title, categoryName: 'Marisquería', totalScore: 4.5, reviewsCount: 40, location: loc, address: 'x', placeId: `p-${title}`, rank: 1, searchString: 'ceviche' })
+    const fila = (sede: string, id: string, items: unknown[]) => ({ id, client_id: CL, apify_function: 'google_maps_scraper', ensayo: false, created_at: '2026-10-14T12:30:00.000Z', params: { _brazo: `demanda:${sede}` }, respuesta: items })
+    const tablas = (estado: Array<Record<string, unknown>>) => ({
+      client_sedes: [{ id: 's-olon', client_id: CL, clave: 'olon', ciudad: 'Olon' }, { id: 's-gye', client_id: CL, clave: 'guayaquil', ciudad: 'Guayaquil' }],
+      client_sede_datos: [{ sede_id: 's-olon', client_id: CL, campo: 'tipo_de_atencion', valor_texto: 'restaurante (local) y domicilio' }, { sede_id: 's-gye', client_id: CL, campo: 'tipo_de_atencion', valor_texto: 'solo domicilio (sin local)' }, ...estado],
+      apify_raw: [
+        { id: 'own', client_id: CL, apify_function: 'own_google_maps_profile', ensayo: false, created_at: '2026-10-14T10:00:00Z', params: {}, respuesta: [{ title: 'Naufrago', city: 'Olon', location: OLON }] },
+        fila('olon', 'd1', [lugar('Don Villón', { lat: OLON.lat + 0.01, lng: OLON.lng + 0.01 })]), fila('guayaquil', 'd2', [lugar('Cevichería Puerto', { lat: -2.16, lng: -79.9 })]),
+      ],
+      cerebro_fichas: [] as Array<Record<string, unknown>>, cerebro_ingresos: [] as Array<Record<string, unknown>>,
+    })
+    const cli = { id: CL, name: 'Náufrago', slug: 'naufrago', industry: 'restaurante de mariscos', country: 'Ecuador', config: { apify: {} } }
+    const modelo = async (_i: string, m: string) => ({ texto: JSON.stringify({ decisiones: (m.match(/^\d+\. «/gm) ?? []).map((_x, k) => ({ n: k + 1, veredicto: 'competidor', cita: 'categoría Marisquería', razon: 'compite' })) }), costo_usd: 0.012, tokens_entrada: 1, tokens_salida: 1 })
+    const POR_ABRIR = { sede_id: 's-gye', client_id: CL, campo: 'estado_de_la_sede', valor_texto: 'por abrir', observado_en: '2026-10-16T10:00:00Z' }
+    const corre = async (t: ReturnType<typeof tablas>) => correrBrazos({ db: crearBaseFalsa(t as never).db, brazos: { ...BRAZOS_APAGADOS, demanda: true, competencia: true }, cliente: cli, client_id: CL, filas: [], ahora: AHORA, dry_run: false, llamarModelo: modelo })
+    const t0 = tablas([]), t1 = tablas([POR_ABRIR])
+    const r0 = await corre(t0), r1 = await corre(t1)
+    expect(r1.errores).toEqual([])
     expect(r1.por_sede?.guayaquil).toMatchObject({ estado: 'evaluada', competidores: 1 })
-    expect(t1.cerebro_fichas.filter((f) => f.clase === 'mercado_posicion')).toHaveLength(2)
-  })
-  it('lo que ya vigilaba de Guayaquil no se sigue vigilando mientras esté por abrir (competidor que solo compite ahí)', async () => {
-    const t = tablas([])
-    await correr(t) // la prueba de competencia la dejó vigilada
-    const antes = t.cerebro_fichas.filter((f) => f.clase === 'competidor_vigilado' && JSON.stringify(f.provenance_tag).includes('guayaquil'))
-    expect(antes.length).toBeGreaterThan(0)
-    const t2 = { ...t, client_sede_datos: [...t.client_sede_datos, POR_ABRIR] }
-    const ctx = await cargarContextoDeBrazos(crearBaseFalsa(t2 as never).db, CL, cliente as never, AHORA)
-    expect(ctx.sedes.find((s) => s.clave === 'guayaquil')?.estado).toBe('por_abrir')
-    expect(ctx.sedes.find((s) => s.clave === 'olon')?.estado).toBe('abierta')
-    expect(ctx.delSistema.map((c) => c.nombre)).toContain('Cevichería Puerto') // sigue guardado (con su motivo se retira aparte)
-    const dias = [12, 13, 14, 15, 16].map((d) => accionesDeBrazos({ brazos: { ...BRAZOS_APAGADOS, competencia: true }, cliente, ahora: new Date(`2026-10-${d}T12:00:00Z`), ctx }).acciones)
-    const objetivos = dias.flat().map((a) => String(a.objetivo))
-    expect(objetivos.some((o) => /Cevichería Puerto/.test(o))).toBe(false)
-    expect(objetivos.some((o) => /Don Villón|Marisquería Sol/.test(o))).toBe(true)
-    // y el archivado de competencia de la corrida diaria tampoco escribe sus fichas: llega una lectura nueva de Mapas del competidor de la sede por abrir (y otra del de Olón, de control)
-    const mapas = (slug: string, titulo: string, dia: string) => ({ id: `m-${slug}-${dia}`, client_id: CL, apify_function: 'google_maps_scraper', ensayo: false, created_at: `${dia}T13:00:00Z`, params: { _brazo: `competencia:${slug}:mapas` }, respuesta: [{ title: titulo, totalScore: 4.6, reviewsCount: 30, categoryName: 'Marisquería', address: 'x' }] })
-    t2.apify_raw.push(mapas('cevicheria-puerto', 'Cevichería Puerto', '2026-10-19'), mapas('don-villon', 'Don Villón', '2026-10-19'))
-    const r = await correrBrazos({ db: crearBaseFalsa(t2 as never).db, brazos: { ...BRAZOS_APAGADOS, competencia: true }, cliente, client_id: CL, filas: [], ahora: new Date('2026-10-20T12:00:00Z'), dry_run: false, llamarModelo: modelo })
-    expect(r.errores).toEqual([])
-    const mapasNuevas = t2.cerebro_fichas.filter((f) => f.clase === 'competidor_mapas' && String(f.ref).endsWith('2026-10-19'))
-    expect(mapasNuevas.map((f) => f.atributo)).toEqual(['competidor:don-villon:mapas']) // el de Olón sí; el de la sede por abrir, no
-  })
-  it('el radio de competencia lo da solo la sede abierta (la sede por abrir a domicilio no lo agranda)', () => {
-    const cli = { id: CL, name: 'Náufrago', industry: 'restaurante de mariscos', country: 'EC', config: {} }
-    const c = comp('Don Villón', ['olon'])
-    const r = (sedes: SedeConPunto[]) => accionesDeBrazos({ brazos: { ...BRAZOS_APAGADOS, competencia: true }, cliente: cli, ahora: new Date('2026-10-12T12:00:00Z'), ctx: { sedes, delSistema: [c], ubicadasRecientemente: new Set() }, topeDiarioUsd: 5 })
-    const geo = (x: ReturnType<typeof r>) => x.acciones.map((a) => (a.params.customGeolocation as { radiusKm: number } | undefined)?.radiusKm).find((v) => v !== undefined)
-    expect(geo(r([sedeOlon, sedeGye]))).toBe(3) // local de comida: 3 km (a domicilio sería 6)
-    expect(geo(r([sedeOlon, { ...sedeGye, estado: 'abierta' }]))).toBe(6)
+    expect(r1.por_sede).toEqual(r0.por_sede)
+    expect(t1.cerebro_fichas.map((f) => f.atributo).sort()).toEqual(t0.cerebro_fichas.map((f) => f.atributo).sort())
+    const ctx1 = await cargarContextoDeBrazos(crearBaseFalsa(t1 as never).db, CL, cli as never, AHORA)
+    expect(ctx1.sedes.find((s) => s.clave === 'guayaquil')?.estado).toBe('por_abrir')
+    expect(ctx1.sedes.find((s) => s.clave === 'olon')?.estado).toBe('abierta')
   })
 })
+
 
 describe('mapa de ítems por sinónimo', () => {
   it('dos ítems de la carta con las mismas palabras distintivas: dudosa con los dos, no toma el primero', () => {
