@@ -2,7 +2,7 @@
  * OFICINA FINANCIERA · F4 · reparos de CC#3 (R-F4-1: P9 y los miles; R-F4-2: cliente obligatorio) y las tres mutaciones que sobrevivían (CC#1 · 14-oct).
  */
 import { describe, expect, it } from 'vitest'
-import { antesDeF4, enganchaFinanzas, FIN, moduloConFinanzas, NODOS } from '../scripts/worker-staging/finanzas-f4/construir-f4.mjs'
+import { antesDeF4, enganchaFinanzas, FIN, NOMBRES_NUEVOS, OF, moduloConFinanzas, NODOS } from '../scripts/worker-staging/finanzas-f4/construir-f4.mjs'
 import { correr } from '../scripts/worker-staging/finanzas-f4/n8n-mini.mjs'
 
 type Json = Record<string, any>
@@ -64,19 +64,19 @@ describe('las tres mutaciones que sobrevivían', () => {
 })
 
 describe('R-F4-2 · el cliente es obligatorio también en el nodo', () => {
-  const stubs = Object.fromEntries(despues.nodes.filter((n: Json) => n.name !== FIN.si && n.name !== FIN.leer && n.name !== FIN.devolver && (n.type === 'n8n-nodes-base.code' || n.type === 'n8n-nodes-base.httpRequest')).map((n: Json) => [n.name, (items: any[]) => [{ json: { _nodo: n.name, _recibio: items.map((i) => i.json) } }]]))
+  const stubs = Object.fromEntries(despues.nodes.filter((n: Json) => !NOMBRES_NUEVOS.includes(n.name) && (n.type === 'n8n-nodes-base.code' || n.type === 'n8n-nodes-base.httpRequest')).map((n: Json) => [n.name, (items: any[]) => [{ json: { _nodo: n.name, _recibio: items.map((i) => i.json) } }]]))
   const unir = [{ json: { paquete: 'x' } }]
   const ejecutar = (body: Json) => correr(despues, { inicio: NODOS.unir, itemsDeInicio: unir, previos: { 'Webhook · planeacion': { body: { dry_run: true, ...body } } }, stubs, http: { [FIN.leer]: () => ({ statusCode: 200, body: {} }) }, env: { ZERO_RISK_API_URL: 'https://api.ejemplo.invalid', INTERNAL_API_KEY: 'k' } })
   it('con finanzas_id pero SIN client_id (o vacío o no texto): va DIRECTO al redactor y no se llama a la ruta', async () => {
     for (const body of [{ finanzas_id: 'a' }, { finanzas_id: 'a', client_id: '' }, { finanzas_id: 'a', client_id: 5 }]) {
       const r = await ejecutar(body)
-      expect(r.nombres.slice(0, 2), JSON.stringify(body)).toEqual([FIN.si, NODOS.b4])
+      expect(r.nombres.filter((n: string) => !Object.values(OF).includes(n)).slice(0, 2), JSON.stringify(body)).toEqual([FIN.si, NODOS.b4])
       expect(r.llamadasHttp.filter((l: any) => String(l.url).includes('finanzas'))).toEqual([])
     }
   })
   it('con los dos: lee, y el cuerpo lleva el client_id tal cual (sin «|| null»)', async () => {
     const r = await ejecutar({ finanzas_id: 'a', client_id: 'cli-1' })
-    expect(r.nombres.slice(0, 2)).toEqual([FIN.si, FIN.leer])
+    expect(r.nombres.filter((n: string) => !Object.values(OF).includes(n)).slice(0, 2)).toEqual([FIN.si, FIN.leer])
     expect(r.llamadasHttp.find((l: any) => l.nodo === FIN.leer)!.cuerpo).toEqual({ accion: 'leer', finanzas_id: 'a', client_id: 'cli-1' })
     expect(JSON.stringify(despues.nodes.find((n: Json) => n.name === FIN.leer)!.parameters)).not.toContain('|| null')
   })

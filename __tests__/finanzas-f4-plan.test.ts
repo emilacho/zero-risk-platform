@@ -7,7 +7,7 @@
  *  · P1–P7 no cambian; el plan NUNCA se bloquea (solo marcas).
  */
 import { describe, expect, it } from 'vitest'
-import { antesDeF4, cambiarB4, cambiarVuelta, enganchaFinanzas, FIN, moduloConFinanzas, NODOS, NOMBRES_NUEVOS } from '../scripts/worker-staging/finanzas-f4/construir-f4.mjs'
+import { antesDeF4, cambiarB4, cambiarVuelta, enganchaFinanzas, FIN, moduloConFinanzas, NODOS, NOMBRES_NUEVOS, OF } from '../scripts/worker-staging/finanzas-f4/construir-f4.mjs'
 import { MODULO_R81 } from '../scripts/worker-staging/X9F0zp6LQ2xGEYVS/construir-r81.mjs'
 import { correr } from '../scripts/worker-staging/finanzas-f4/n8n-mini.mjs'
 
@@ -60,14 +60,15 @@ describe('estructura', () => {
     expect(cambiados).toEqual([NODOS.b4, NODOS.vuelta].sort())
     expect(despues.nodes.filter((n) => !a.has(n.name)).map((n) => n.name).sort()).toEqual([...NOMBRES_NUEVOS].sort())
     expect(new Set(despues.nodes.map((n) => n.name)).size).toBe(despues.nodes.length)
-    expect(despues.nodes.length).toBe(antes.nodes.length + 3)
+    expect(despues.nodes.length).toBe(antes.nodes.length + NOMBRES_NUEVOS.length)
   })
   it('los enlaces cambian SOLO en «Unir lo del dueño al paquete» y en los nodos nuevos', () => {
     for (const [de, v] of Object.entries(antes.connections)) {
       if (de === NODOS.unir) continue
       expect(JSON.stringify(despues.connections[de])).toBe(JSON.stringify(v))
     }
-    expect(despues.connections[NODOS.unir].main[0]).toEqual([{ node: FIN.si, type: 'main', index: 0 }])
+    expect(despues.connections[NODOS.unir].main[0]).toEqual([{ node: OF.abre, type: 'main', index: 0 }])
+    expect(despues.connections[OF.sobre].main[0]).toEqual([{ node: FIN.si, type: 'main', index: 0 }])
     expect(despues.connections[FIN.si].main[0].map((x) => x.node)).toEqual([FIN.leer])
     expect(despues.connections[FIN.si].main[1].map((x) => x.node)).toEqual([NODOS.b4])
     expect(despues.connections[FIN.leer].main[0].map((x) => x.node)).toEqual([FIN.devolver])
@@ -217,12 +218,12 @@ describe('P8 · cifras_firmadas y P9 · supuestos_declarados (módulo común)', 
 })
 
 describe('el flujo completo del enganche (con el n8n en miniatura)', () => {
-  const stubsOriginales = (f: Flujo) => Object.fromEntries(f.nodes.filter((n) => n.name !== FIN.si && n.name !== FIN.leer && n.name !== FIN.devolver && (n.type === 'n8n-nodes-base.code' || n.type === 'n8n-nodes-base.httpRequest')).map((n) => [n.name, (items: any[]) => [{ json: { _nodo: n.name, _recibio: items.map((i) => i.json) } }]]))
+  const stubsOriginales = (f: Flujo) => Object.fromEntries(f.nodes.filter((n) => !NOMBRES_NUEVOS.includes(n.name) && (n.type === 'n8n-nodes-base.code' || n.type === 'n8n-nodes-base.httpRequest')).map((n) => [n.name, (items: any[]) => [{ json: { _nodo: n.name, _recibio: items.map((i) => i.json) } }]]))
   const unir = [{ json: { paquete: 'x', ficha: { id: 'x-1' } } }]
   const previos = { 'Webhook · planeacion': { body: { client_id: 'x-1', dry_run: true } } }
   it('sin finanzas_id: va DIRECTO a B4 (la rama falso) y no se llama a ninguna ruta de finanzas', async () => {
     const r = await correr(despues, { inicio: NODOS.unir, itemsDeInicio: unir, previos, stubs: stubsOriginales(despues), http: {}, env: { ZERO_RISK_API_URL: 'https://api.ejemplo.invalid' } })
-    expect(r.nombres.slice(0, 2)).toEqual([FIN.si, NODOS.b4])
+    expect(r.nombres.filter((n: string) => !Object.values(OF).includes(n)).slice(0, 2)).toEqual([FIN.si, NODOS.b4])
     expect(r.llamadasHttp.filter((l: any) => String(l.url).includes('finanzas'))).toEqual([])
   })
   it('con finanzas_id: lee el bloque con la llave interna, devuelve el paquete ORIGINAL a B4', async () => {
@@ -231,7 +232,7 @@ describe('el flujo completo del enganche (con el n8n en miniatura)', () => {
       inicio: NODOS.unir, itemsDeInicio: unir, previos: p, stubs: stubsOriginales(despues), env: { ZERO_RISK_API_URL: 'https://api.ejemplo.invalid', INTERNAL_API_KEY: 'llave-de-prueba' },
       http: { [FIN.leer]: () => FIRMADO },
     })
-    expect(r.nombres.slice(0, 4)).toEqual([FIN.si, FIN.leer, FIN.devolver, NODOS.b4])
+    expect(r.nombres.filter((n: string) => !Object.values(OF).includes(n)).slice(0, 4)).toEqual([FIN.si, FIN.leer, FIN.devolver, NODOS.b4])
     const l = r.llamadasHttp.find((x: any) => x.nodo === FIN.leer)!
     expect(l.url).toBe('https://api.ejemplo.invalid/api/finanzas/tablero')
     expect(l.cuerpo).toEqual({ accion: 'leer', finanzas_id: '3f2b8c1e-9d4a-4b7e-8a61-0c5d2e7f9a10', client_id: 'x-1' })
