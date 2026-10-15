@@ -1,7 +1,9 @@
 /**
  * EL VIGILANTE DENTRO DEL SISTEMA (14-oct · firma de Emilio: «no puede permanecer siempre abierto el CC»). Al cierre de cada corrida del flujo del portero, UNA llamada a esta
  * ruta revisa las condiciones de salud; si alguna falla, el horario SE APAGA SOLO (se desactiva el flujo; reversible: se vuelve a activar) y se AVISA a #alertas con el motivo en
- * una línea. Si todo va bien: SILENCIO (solo queda el rastro en `cerebro_portero_corridas.resumen.vigilante`). Los lunes, UN resumen de la semana (US$ 0).
+ * una línea. Si todo va bien: SILENCIO (solo queda el rastro en `cerebro_portero_corridas.resumen.vigilante`). Sin mensajes de rutina de ningún tipo (15-oct: el resumen semanal se quitó).
+ * Reintento (15-oct): si la ÚNICA causa es «no pude comprobar» (una lectura que falló), espera y repite UNA vez; si la segunda pasa → silencio; si vuelve a fallar → apaga y avisa («falló 2 veces»).
+ * Los problemas reales (1-5) apagan al primer fallo, sin reintento.
  *
  * Condiciones (las mismas del vigilante de la primera corrida, ahora sin nombres propios de ningún cliente):
  *  1. la corrida no terminó `hecho` / algún cliente trae errores, plan fallido o el puente falló;
@@ -33,6 +35,17 @@ export interface DepsDelVigilante extends DepsDeRutas {
   apagar?: (workflowId: string) => Promise<{ ok: boolean; detalle: string }>
   /** manda UNA línea a #alertas; ok solo si el canal confirmó; en pruebas es un registro */
   avisar?: (texto: string) => Promise<{ ok: boolean; detalle: string }>
+  /** espera antes del reintento de «no pude comprobar»; en pruebas es un registro sin espera */
+  esperar?: (ms: number) => Promise<void>
+}
+
+/** cuánto se espera antes de repetir la comprobación fallida (dentro de la misma ejecución) */
+export const ESPERA_DEL_REINTENTO_MS = 100_000
+const PREFIJO_NO_PUDE = 'no pude comprobar'
+/** problemas que son solo «no pude comprobar» (condición 6): los únicos que se reintentan */
+export const esSoloNoPudeComprobar = (res: ResultadoDeCliente[]) => {
+  const todos = res.flatMap((r) => r.problemas)
+  return todos.length > 0 && todos.every((p) => p.startsWith(PREFIJO_NO_PUDE))
 }
 
 export interface ResultadoDeCliente { client_id: string; nombre: string | null; problemas: string[]; gasto_usd: number | null }
@@ -56,7 +69,7 @@ export function problemasDelCierre(cierre: unknown, clientId: string): string[] 
 
 async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: string; nombre: string | null }, cierre: unknown, ahora: Date, dia: string): Promise<{ r: ResultadoDeCliente; rastro: Fila | null }> {
   const r: ResultadoDeCliente = { client_id: c.client_id, nombre: c.nombre, problemas: problemasDelCierre(cierre, c.client_id), gasto_usd: null }
-  const falla = (que: string, m: string) => r.problemas.push(`no pude comprobar ${que}: ${m}`.slice(0, 200))
+  const falla = (que: string, m: string) => r.problemas.push(`${PREFIJO_NO_PUDE} ${que}: ${m}`.slice(0, 200))
 
   const ras = await deps.db.from('cerebro_portero_corridas').select('id, estado, resumen').eq('client_id', c.client_id).eq('dia', dia).limit(1)
   let rastro: Fila | null = null
@@ -98,30 +111,11 @@ async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: string; no
 }
 
 /** el texto de UNA línea para #alertas */
-export function lineaDeAlerta(res: ResultadoDeCliente[], apagado: boolean, workflowId: string): string {
+export function lineaDeAlerta(res: ResultadoDeCliente[], apagado: boolean, workflowId: string, intentos = 1): string {
   const todos = res.flatMap((x) => x.problemas.map((p) => `${x.nombre ?? x.client_id.slice(0, 8)}: ${p}`))
   const primero = todos[0] ?? 'sin detalle'
-  const mas = todos.length > 1 ? ` (+${todos.length - 1} más)` : ''
+  const mas = (todos.length > 1 ? ` (+${todos.length - 1} más)` : '') + (intentos > 1 ? ` · falló ${intentos} veces` : '')
   return `🔴 Portero del cerebro ${apagado ? 'APAGADO' : 'CON PROBLEMAS (no se pudo apagar: apágalo a mano)'} · ${primero}${mas} · revisar y volver a activar el flujo ${workflowId} en n8n`
-}
-
-export async function resumenSemanal(deps: DepsDelVigilante, clientIds: string[], ahora: Date): Promise<{ texto: string; filas: number } | { error: string }> {
-  const desde = new Date(ahora); desde.setUTCDate(desde.getUTCDate() - 7)
-  const q = await deps.db.from('cerebro_portero_corridas').select('client_id, dia, estado, resumen, gasto_modelo_usd').in('client_id', clientIds).gte('dia', desde.toISOString().slice(0, 10)).limit(500)
-  if (q.error) return { error: q.error.message }
-  const f = lista(q.data)
-  const hechas = f.filter((x) => x.estado === 'hecha').length
-  const conErrores = f.filter((x) => x.estado === 'con_errores').length
-  let fichas = 0, gasto = 0, problemas = 0
-  for (const x of f) {
-    const res = esObjeto(x.resumen) ? x.resumen : {}
-    const esc = esObjeto(res.escrituras) ? res.escrituras : {}
-    fichas += Number(esc.fichas) || 0
-    const v = esObjeto(res.vigilante) ? res.vigilante : {}
-    gasto += Number(v.gasto_usd) || 0
-    problemas += Array.isArray(v.problemas) ? v.problemas.length : 0
-  }
-  return { filas: f.length, texto: `📊 Portero del cerebro · últimos 7 días · ${f.length} corrida(s) (${hechas} hecha(s), ${conErrores} con errores) · ${fichas} ficha(s) nuevas · gasto medido US$ ${gasto.toFixed(2)} · ${problemas} problema(s)` }
 }
 
 export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Promise<Respuesta> {
@@ -134,23 +128,34 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
   const ahora = deps.ahora ?? new Date()
   const dia = ahora.toISOString().slice(0, 10)
 
-  let objetivos: Array<{ client_id: string; nombre: string | null }>
   const solo = typeof cuerpo.client_id === 'string' && UUID.test(cuerpo.client_id) ? cuerpo.client_id : null
-  const act = await clientesActivos(deps.db)
-  const globales: string[] = []
-  if (!act.ok) { objetivos = solo ? [{ client_id: solo, nombre: null }] : []; globales.push(`no pude comprobar la lista de clientes: ${act.detalle}`.slice(0, 200)) }
-  else objetivos = solo ? act.datos.clientes.filter((c) => c.client_id === solo) : act.datos.clientes
-  if (act.ok && !objetivos.length) globales.push('no hay clientes activos que revisar')
-
-  const resultados: ResultadoDeCliente[] = []
-  const rastros = new Map<string, Fila | null>()
-  for (const o of objetivos) {
-    const { r, rastro } = await evaluarCliente(deps, o, cuerpo.cierre, ahora, dia)
-    resultados.push(r); rastros.set(o.client_id, rastro)
+  const pasada = async () => {
+    let objetivos: Array<{ client_id: string; nombre: string | null }>
+    const act = await clientesActivos(deps.db)
+    const globales: string[] = []
+    if (!act.ok) { objetivos = solo ? [{ client_id: solo, nombre: null }] : []; globales.push(`${PREFIJO_NO_PUDE} la lista de clientes: ${act.detalle}`.slice(0, 200)) }
+    else objetivos = solo ? act.datos.clientes.filter((c) => c.client_id === solo) : act.datos.clientes
+    if (act.ok && !objetivos.length) globales.push('no hay clientes activos que revisar')
+    const resultados: ResultadoDeCliente[] = []
+    const rastros = new Map<string, Fila | null>()
+    for (const o of objetivos) {
+      const { r, rastro } = await evaluarCliente(deps, o, cuerpo.cierre, ahora, dia)
+      resultados.push(r); rastros.set(o.client_id, rastro)
+    }
+    if (globales.length) resultados.push({ client_id: solo ?? 'general', nombre: null, problemas: globales, gasto_usd: null })
+    return { resultados, rastros }
   }
-  if (globales.length) resultados.push({ client_id: solo ?? 'general', nombre: null, problemas: globales, gasto_usd: null })
+
+  let { resultados, rastros } = await pasada()
+  let intentos = 1
+  // reintento SOLO si la única causa es una lectura que falló (condición 6); los problemas reales no se reintentan
+  if (!cuerpo.dry_run && esSoloNoPudeComprobar(resultados)) {
+    await (deps.esperar ?? ((ms: number) => new Promise<void>((ok) => setTimeout(ok, ms))))(ESPERA_DEL_REINTENTO_MS)
+    ;({ resultados, rastros } = await pasada())
+    intentos = 2
+  }
   const hayProblemas = resultados.some((r) => r.problemas.length > 0)
-  const body: Record<string, unknown> = { ok: !hayProblemas, dry_run: cuerpo.dry_run, dia, clientes: resultados, modelos_llamados: 0 }
+  const body: Record<string, unknown> = { ok: !hayProblemas, dry_run: cuerpo.dry_run, dia, clientes: resultados, intentos, modelos_llamados: 0 }
   if (cuerpo.dry_run) return { status: 200, body: { ...body, nota: 'dry_run: no se escribió, no se apagó nada y no se avisó' } }
 
   // el rastro: una nota por cliente en la fila de hoy (nunca pisa lo demás de `resumen`)
@@ -159,38 +164,18 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
     const fila = rastros.get(r.client_id)
     if (!fila) continue
     const resumen = esObjeto(fila.resumen) ? fila.resumen : {}
-    const u = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ok: r.problemas.length === 0, problemas: r.problemas, gasto_usd: r.gasto_usd, revisado_en: ahora.toISOString(), workflow_execution_id: ex } } }).eq('id', String(fila.id))
+    const u = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ok: r.problemas.length === 0, problemas: r.problemas, gasto_usd: r.gasto_usd, revisado_en: ahora.toISOString(), workflow_execution_id: ex, intentos } } }).eq('id', String(fila.id))
     if (u.error) erroresDeRastro.push(`rastro ${r.client_id.slice(0, 8)}: ${u.error.message}`)
   }
   if (erroresDeRastro.length) body.errores_de_rastro = erroresDeRastro
 
   if (hayProblemas) {
     const ap = deps.apagar ? await deps.apagar(wf).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin forma de apagar el flujo' }
-    const texto = lineaDeAlerta(resultados, ap.ok, wf)
+    const texto = lineaDeAlerta(resultados, ap.ok, wf, intentos)
     const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
     body.apagado = ap; body.aviso = { ...av, texto }
     return { status: ap.ok && av.ok ? 200 : 502, body: { ...body, ok: false } }
   }
-
-  // todo bien = silencio; el lunes, UN resumen de la semana (una sola vez por día)
-  if (ahora.getUTCDay() === 1 && objetivos.length) {
-    const ya = [...rastros.values()].some((f) => f && esObjeto(f.resumen) && esObjeto(f.resumen.vigilante) && (f.resumen.vigilante as Fila).semanal_enviado === dia)
-    if (!ya) {
-      const s = await resumenSemanal(deps, objetivos.map((o) => o.client_id), ahora)
-      if ('error' in s) body.semanal = { enviado: false, detalle: s.error }
-      else {
-        const av = deps.avisar ? await deps.avisar(s.texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
-        body.semanal = { enviado: av.ok, texto: s.texto, detalle: av.detalle }
-        if (av.ok) {
-          for (const o of objetivos) {
-            const fila = rastros.get(o.client_id); if (!fila) continue
-            const resumen = esObjeto(fila.resumen) ? fila.resumen : {}
-            const vig = esObjeto(resumen.vigilante) ? resumen.vigilante : {}
-            await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ...vig, semanal_enviado: dia } } }).eq('id', String(fila.id))
-          }
-        }
-      }
-    }
-  }
+  // todo bien = silencio (sin resumen de rutina de ningún tipo)
   return { status: 200, body }
 }

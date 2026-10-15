@@ -369,7 +369,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ dry_run: $('⓪ Entrada').first().json.dry_run !== false, workflow_id: $('⓪ Entrada').first().json.workflow_id, workflow_execution_id: $('⓪ Entrada').first().json.workflow_execution_id, cierre: $json }) }}",
         "options": {
-          "timeout": 120000
+          "timeout": 300000
         }
       },
       "id": "vigilante-6",

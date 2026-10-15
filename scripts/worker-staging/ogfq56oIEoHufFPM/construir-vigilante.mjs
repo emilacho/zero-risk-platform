@@ -20,7 +20,7 @@ export function conVigilante(antes) {
       sendHeaders: true, headerParameters: { parameters: [{ name: 'Content-Type', value: 'application/json' }, { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' }] },
       sendBody: true, specifyBody: 'json',
       jsonBody: "={{ JSON.stringify({ dry_run: $('⓪ Entrada').first().json.dry_run !== false, workflow_id: $('⓪ Entrada').first().json.workflow_id, workflow_execution_id: $('⓪ Entrada').first().json.workflow_execution_id, cierre: $json }) }}",
-      options: { timeout: 120000 },
+      options: { timeout: 300000 },
     },
     id: 'vigilante-6', name: NODO, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [(cierre.position?.[0] ?? 3120) + 260, cierre.position?.[1] ?? 0],
   })
