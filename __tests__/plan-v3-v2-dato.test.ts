@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { crearSnapshot, type FilasDelCatalogo } from '../src/lib/planeacion/dato-v1/catalogo'
-import { OPERADORES, derivar, normalizarDatos, tieneImperativos, type ContextoDeNormalizacion, type Operadores } from '../src/lib/planeacion/dato-v1/normalizador'
+import { OPERADORES, derivar, normalizarDatos, resolverIdentidad, tieneImperativos, type ContextoDeNormalizacion, type Operadores } from '../src/lib/planeacion/dato-v1/normalizador'
 import { leerNumero } from '../src/lib/planeacion/dato-v1/cifras'
 import type { DatoV1, EntradaCruda } from '../src/lib/planeacion/dato-v1/tipos'
 import { filtrarUnidad } from '../src/lib/portero-alimenta/filtro'
@@ -112,6 +112,14 @@ describe('V2 · identidad: el criterio es el del `portero` (paridad)', () => {
       expect(d.origen).toBe('hueco')
     }
     expect(una({ fuente_id: 'cerebro_vivo', tipo_id: 'seguidores', contenido: 5, via: 'cerebro', identidad: { via: 'portero' } }).identidad.estado).toBe('coincide')
+  })
+  it('(observación de CC#3) `resolverIdentidad` exige el snapshot: sin él ya no compila, y con él la regla del catálogo decide', () => {
+    const fuente = snap.fuente('menciones_redes')
+    const c = ctx()
+    // @ts-expect-error · `snap` es OBLIGATORIO: una fuente con regla de identidad no puede resolverse «por omisión» sin saberlo
+    void (() => resolverIdentidad(null, fuente, c))
+    expect((resolverIdentidad(null, fuente, c, snap) as { estado: string }).estado).toBe('no_comprobable')
+    expect((resolverIdentidad(null, snap.fuente('manual_vigente'), c, snap) as { estado: string }).estado).toBe('coincide')
   })
   it('Mapas: título exacto + sede ⇒ coincide; más de una candidata ⇒ ambigua ⇒ ninguna (no_comprobable); ninguna ⇒ no_coincide', () => {
     const propia = { title: 'Taller Los Arrayanes', address: 'Calle 1, Riobamba', placeId: 'p1' }

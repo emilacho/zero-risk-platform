@@ -12,7 +12,7 @@ type Marca = { codigo: string; severidad: 'alta' | 'leve'; que: string; ejemplos
 interface Api {
   p10Revisar(texto: string, datos: unknown[], op?: unknown): Marca[]
   p10RellenarSlots(texto: string, slots: Record<string, string>): { texto: string; rellenados: string[]; sin_slot: string[]; residuales: string[] }
-  p10Calibrar(casos: Array<{ id: string; texto: string; datos: unknown[]; op?: unknown }>): { casos: Array<{ id: string; por_codigo: Record<string, number>; altas: number; leves: number; ruido: boolean }>; total_altas: number }
+  p10Calibrar(casos: Array<{ id: string; texto: string; datos: unknown[]; op?: unknown }>): { casos: Array<{ id: string; modo: 'sin_citas' | 'con_citas'; por_codigo: Record<string, number>; altas: number; leves: number; codigos_altos: string[]; tipos: number; criterio_ok: boolean; ruido: boolean }>; total_altas: number }
 }
 const RUTA = join(__dirname, '..', 'scripts', 'worker-staging', 'planeacion-v3', 'chequeos-p10.js')
 const FUENTE = readFileSync(RUTA, 'utf8').replace(/\r\n/g, '\n')
@@ -101,6 +101,27 @@ describe('V5 · P10a–m · cada falla del catálogo tiene su caso trampa y su c
     // y lo que SÍ es un hecho sigue marcando
     expect(codigos('Tiene 2.500 seguidores en Instagram.')).toContain('P10f')
   })
+  it('CALIBRACIÓN 2 (muestra del plan v2 real): códigos pegados a letras, umbrales y metas del plan, rangos declarados, horarios «de 8 a 16» e índices de fila NO son cifras de hecho', () => {
+    for (const t of [
+      'Restaurante físico, dirección 663R+25G.',
+      'Porción pequeña de 45g de pescado.',
+      '| Tasa de conversión | Mayor al 2% | Entre 1% y 2% | Menor al 1% |',
+      '| Calificación | 4.8 o más | Entre 4.5 y 4.7 | Por debajo de 4.5 |',
+      '| Con menos de 50 clientes en lista no conviene | Cuando la lista supera 200 |',
+      'Persona de entre 25 y 50 años que vive en la ciudad.',
+      'Atiende de jueves a lunes de 8 a 16.',
+      '| 10 | 16-22 dic | Contenido navideño | Piezas para el 24-25 de diciembre |',
+      'Las semanas 9 a 12 de este plan son el tramo de más inversión.',
+    ]) expect(codigos(t), t).not.toContain('P10f')
+    // lo que SÍ es un hecho del cliente sigue marcando
+    for (const t of ['Seguidores en Instagram: 1,234 · Posts publicados: 19', 'Reseñas en el mapa: 26 · Calificación: 4.8 de 5', 'El Encebollado cuesta $4.00.']) expect(codigos(t), t).toContain('P10f')
+  })
+  it('CALIBRACIÓN 2 · «sin dato verificado», «una vez verificado», «huecos confirmados» DECLARAN lo que falta (fila `verificacion_excluye`); «verificada el 12 de octubre» sí marca', () => {
+    const op = { ...OP, lexico: { ...OP.lexico, verificacion_excluye: ['sin dato verificado', 'una vez verificado', 'huecos confirmados', 'no estan medid'] } }
+    for (const t of ['Sin dato verificado de la propia operación.', 'Una vez verificado, agregar el número.', 'HUECOS CONFIRMADOS (no se pudo obtener el dato)', 'El restaurante y los pedidos no están medidos aquí.']) expect(codigos(t, D, op), t).not.toContain('P10b')
+    expect(codigos('La ficha fue verificada el 12 de octubre.', D, op)).toContain('P10b')
+    expect(codigos('Sin dato verificado de la propia operación.', D, OP)).toContain('P10b') // sin la fila, marca (es FILA, no código)
+  })
   it('CALIBRACIÓN · «no hay que instalar» y «se buscó y no hay» no afirman una ausencia (fila `ausencia_excluye`); «no hay mecanismo» sí', () => {
     const op = { ...OP, lexico: { ...OP.lexico, ausencia_excluye: ['no hay que', 'no hay duda', 'se busco y no hay'] } }
     expect(codigos('No hay que instalar nada nuevo.', D, op)).not.toContain('P10d')
@@ -187,10 +208,27 @@ describe('V5 · un plan v3 con citas pasa limpio; el plan «v2» marca lo real',
     expect(Object.keys(v2.por_codigo)).toEqual(expect.arrayContaining(['P10b', 'P10d', 'P10f', 'P10l']))
     expect(v3.altas).toBeLessThanOrEqual(3)
   })
-  it('un P10 que marca ≥ 15 altas es RUIDO y el harness lo dice (se calibra en filas, no en código)', () => {
-    const texto = Array.from({ length: 20 }, (_, i) => `En la zona hay ${1000 + i * 7} locales abiertos.`).join(' ')
+  it('un plan que CITA y marca ≥ 15 altas es RUIDO (por EJEMPLOS) y el harness lo dice (se calibra en filas, no en código)', () => {
+    const texto = Array.from({ length: 20 }, (_, i) => `En la zona hay ${1000 + i * 7} locales abiertos [D1].`).join(' ')
     const cal = P10.p10Calibrar([{ id: 'ruidoso', texto, datos: D, op: OP }])
-    expect(cal.casos[0].ruido).toBe(true)
+    expect(cal.casos[0]).toMatchObject({ modo: 'con_citas', ruido: true, criterio_ok: false })
+  })
+  it('un plan SIN citas (v2) se mide por TIPOS de marca alta: 2–6 es lo esperado, aunque dé cientos de ejemplos', () => {
+    const v2 = ['El negocio no tiene anuncios pagados activos (verificada el 12 de octubre).', 'Se espera cerrar 1.200 pedidos al mes.', ...Array.from({ length: 40 }, (_, i) => `Ítem ${i}: ${2000 + i * 13} unidades (Fuente: la ficha).`)].join('\n')
+    const c = P10.p10Calibrar([{ id: 'v2', texto: v2, datos: D, op: OP }]).casos[0]
+    expect(c.modo).toBe('sin_citas')
+    expect(c.altas).toBeGreaterThan(40)
+    expect(c.tipos).toBe(3)
+    expect(c.codigos_altos).toEqual(['P10b', 'P10d', 'P10f'])
+    expect(c.criterio_ok).toBe(true)
+    expect(c.ruido).toBe(false)
+  })
+  it('un plan sin citas con UN solo tipo de marca no cumple 2–6 (pero tampoco es ruido); la muestra de ejemplos es configurable', () => {
+    const c = P10.p10Calibrar([{ id: 'x', texto: 'Se cierran 1.200 pedidos al mes.', datos: D, op: OP }]).casos[0]
+    expect(c).toMatchObject({ tipos: 1, criterio_ok: false, ruido: false })
+    const muchos = Array.from({ length: 50 }, (_, i) => `Hay ${3000 + i * 11} clientes.`).join(' ')
+    expect(P10.p10Revisar(muchos, D, OP)[0].ejemplos).toHaveLength(4)
+    expect(P10.p10Revisar(muchos, D, { ...OP, ejemplos_max: 30 })[0].ejemplos).toHaveLength(30)
   })
 })
 

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { crearBaseFalsa } from '../src/lib/portero-alimenta/__tests__/base-falsa'
 import { ALTA, CASOS, tablas } from '../src/lib/portero-alimenta/__tests__/fixtures-despertar'
 import { crearSnapshot, type FilasDelCatalogo } from '../src/lib/planeacion/dato-v1/catalogo'
-import { COLUMNAS_DE_FICHA, crudoAEntradas, faltantesDeLasVias, fichasAEntradas, leerCrudo, leerFichasVivas, tipoDe } from '../src/lib/planeacion/dato-v1/lector-cerebro'
+import { COLUMNAS_DE_CLIENTE, COLUMNAS_DE_FICHA, crudoAEntradas, faltantesDeLasVias, fichasAEntradas, leerCrudo, leerFichasVivas, tipoDe } from '../src/lib/planeacion/dato-v1/lector-cerebro'
 import { normalizarDatos } from '../src/lib/planeacion/dato-v1/normalizador'
 import { planificarRelleno } from '../src/lib/planeacion/dato-v1/relleno'
 import type { EntradaCruda } from '../src/lib/planeacion/dato-v1/tipos'
@@ -232,6 +232,17 @@ describe('V14 · el crudo pasa por la MISMA compuerta (3 rubros)', () => {
     // y `crudo_filtrado` con otra vía tampoco vale
     const otra = r.entradas.map((e) => ({ ...e, via: 'cerebro' as const }))
     expect(normalizarDatos(otra, { ahora: ALTA, cliente: {} as never }, snap).datos.every((d) => d.identidad.estado === 'no_comprobable')).toBe(true)
+  })
+  it('(observación de CC#3) `clients` se lee con COLUMNAS NOMBRADAS, nunca `select *`, y solo las que existen', async () => {
+    const pedidos: Array<{ tabla: string; cols: string }> = []
+    const db = { from: (tabla: string) => ({ select: (cols: string) => { pedidos.push({ tabla, cols }); const q: Record<string, unknown> = {}; const f = () => q; Object.assign(q, { eq: f, limit: async () => ({ data: [{ id: 'c', name: 'X', config: {} }], error: null }), order: f }); return q } }) }
+    await leerCrudo(db as never, 'c').catch(() => null)
+    const cl = pedidos.find((p) => p.tabla === 'clients')
+    expect(cl?.cols).toBe(COLUMNAS_DE_CLIENTE)
+    expect(cl?.cols).not.toContain('*')
+    // solo columnas que EXISTEN en `clients` (la tabla no tiene city/phone/pais/rubro)
+    const reales = new Set(['id', 'name', 'slug', 'website_url', 'industry', 'market', 'status', 'preferred_language', 'created_at', 'updated_at', 'domain', 'country', 'language', 'brand_voice', 'config', 'logo_url', 'brand_colors', 'brand_fonts', 'archived_at', 'archived_reason', 'report_url', 'canonical_client_id'])
+    for (const col of COLUMNAS_DE_CLIENTE.split(',')) expect(reales.has(col), col).toBe(true)
   })
   it('un fallo de lectura del crudo se dice (no es «sin raspado»)', async () => {
     const db = { from: () => ({ select: () => ({ eq: () => ({ limit: async () => ({ data: null, error: { message: 'boom' } }) }) }) }) }

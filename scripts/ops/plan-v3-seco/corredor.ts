@@ -34,7 +34,7 @@ function cargarJs(): Js {
 export const AHORA = new Date('2026-10-15T15:00:00Z')
 const hace = (h: number) => new Date(AHORA.getTime() - h * 3_600_000).toISOString()
 export const FILAS = semilla as unknown as FilasDelCatalogo
-const lexicoDe = (filas: FilasDelCatalogo) => Object.fromEntries(['verificacion', 'ausencia', 'ausencia_excluye', 'supuesto', 'dominio', 'periodo'].map((g) => [g, filas.lexico.filter((l) => l.grupo === g).flatMap((l) => l.terminos)]))
+const lexicoDe = (filas: FilasDelCatalogo) => Object.fromEntries(['verificacion', 'verificacion_excluye', 'ausencia', 'ausencia_excluye', 'supuesto', 'dominio', 'periodo'].map((g) => [g, filas.lexico.filter((l) => l.grupo === g).flatMap((l) => l.terminos)]))
 const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[^a-z]/g, '')
 
 // ───────────────────────────────────────────────────────── lo que cada negocio «tiene» en su cerebro y en su crudo
