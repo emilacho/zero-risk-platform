@@ -8,6 +8,7 @@
  */
 import type { Estado, Ficha } from '../../revision-comun'
 import type { Marcas, RespuestaDeFicha, Resultado } from './contrato'
+import { atiende, type Dueno } from './politicas'
 
 export interface Cierre {
   resultado: Resultado
@@ -22,14 +23,19 @@ const datos = (e: Estado, n: string): Record<string, unknown> | undefined => e.a
 /** las fichas de FONDO (origen jefe, gravedad bloquea) que siguen abiertas o no tomadas */
 export const desacuerdosDe = (fichas: Ficha[]): Ficha[] => fichas.filter((f) => f.origen === 'jefe' && f.gravedad === 'bloquea' && (f.estado === 'abierta' || f.estado === 'no_tomada'))
 
-export function resolverCierre(e: Estado, o: { tope: boolean; fallida: boolean }): Cierre {
+/** una ficha de FONDO que bloquea, sigue abierta y NINGÚN dueño atiende su `donde`: nadie puede corregirla (J6 cuarto: nunca en silencio) */
+export const fichasSinDueno = (fichas: Ficha[], duenos: Dueno[]): Ficha[] =>
+  desacuerdosDe(fichas).filter((f) => f.estado === 'abierta' && !duenos.some((d) => atiende(d, f.donde)))
+
+export function resolverCierre(e: Estado, o: { tope: boolean; fallida: boolean; duenos?: Dueno[] }): Cierre {
   const dd = desacuerdosDe(e.fichas)
+  const sinDueno = o.duenos ? new Set(fichasSinDueno(e.fichas, o.duenos).map((f) => f.id)) : new Set<string>()
   const sin_segunda_mirada = datos(e, 'fichas_externas')?.sin_revision === true
-  const marcas: Marcas = { con_desacuerdo: dd.length > 0, sin_segunda_mirada }
+  const marcas: Marcas = { con_desacuerdo: dd.length > 0, sin_segunda_mirada, ...(sinDueno.size > 0 ? { ficha_sin_dueno: true } : {}) }
   const resultado: Resultado = o.fallida ? 'fallida' : o.tope ? 'incompleta_por_tope' : marcas.con_desacuerdo ? 'con_desacuerdo' : marcas.sin_segunda_mirada ? 'sin_segunda_mirada' : 'limpia'
   return {
     resultado, marcas,
-    desacuerdos: dd.map((f) => `${f.donde}: ${f.que ?? ''}${f.estado === 'no_tomada' && f.razon ? ` (no tomada: ${f.razon})` : f.estado === 'abierta' ? ' (sin dueño o sin camino de corrección)' : ''}`.trim()),
+    desacuerdos: dd.map((f) => `${f.donde}: ${f.que ?? ''}${f.estado === 'no_tomada' && f.razon ? ` (no tomada: ${f.razon})` : f.estado === 'abierta' ? (sinDueno.has(f.id) ? ` (sin dueño: ningún empleado atiende «${f.donde}»)` : ' (sin dueño o sin camino de corrección)') : ''}`.trim()),
     respuestas: e.fichas.map((f) => ({ ficha_id: f.id, origen: f.origen, donde: f.donde, estado: f.estado, razon: f.razon ?? null })),
   }
 }
@@ -43,7 +49,7 @@ export function textoDelAviso(c: Cierre, o: { tipo: string; artifact_id: string;
   switch (c.resultado) {
     case 'fallida': return `${cab}🛑 Revisión fallida · ${quien}: no se pudo completar; el artefacto sigue con la marca «sin revisar»`
     case 'incompleta_por_tope': return `${cab}🛑 Revisión incompleta por tope · ${quien} · gastó US$ ${o.gasto_usd.toFixed(3)}: sigue con la marca «revisión incompleta»`
-    case 'con_desacuerdo': return `${cab}⚠️ Revisión con desacuerdo · ${quien}${c.marcas.sin_segunda_mirada ? ' · y sin segunda mirada' : ''}: ${c.desacuerdos.slice(0, 3).join(' | ')}${c.desacuerdos.length > 3 ? ` (+${c.desacuerdos.length - 3} más)` : ''}`
+    case 'con_desacuerdo': return `${cab}⚠️ Revisión con desacuerdo · ${quien}${c.marcas.sin_segunda_mirada ? ' · y sin segunda mirada' : ''}${c.marcas.ficha_sin_dueno ? ' · ficha sin dueño' : ''}: ${c.desacuerdos.slice(0, 3).join(' | ')}${c.desacuerdos.length > 3 ? ` (+${c.desacuerdos.length - 3} más)` : ''}`
     case 'sin_segunda_mirada': return `${cab}⚠️ Sin segunda mirada · ${quien}: el revisor externo no respondió tras los reintentos; sigue sin su opinión`
     default: return ''
   }

@@ -100,6 +100,41 @@ export const dondeDeLaOpinion = (d: Dueno): string[] => (d.comodin ? ['general']
 /** ¿el dueño atiende esa ficha? (comodín: cualquier `donde`) */
 export const atiende = (d: Dueno, donde: string): boolean => d.comodin || d.dondes.includes(donde)
 
+/** pliega para comparar: minúsculas, sin tildes, espacios recortados */
+const plegarTexto = (x: string): string => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+const escaparRe = (x: string): string => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+export interface DondeNormalizado { donde: string; original: string | null; ambiguo: boolean }
+/**
+ * J6 cuarto · el jefe escribe `donde` LIBRE («texto — etiquetas», «Imagen: composición», «texto, primera línea») y `atiende()` compara EXACTO: la ficha se quedaba sin dueño y sin corrección.
+ * Se toma el prefijo antes de « — », «:», «,», «;» o «(» y, si coincide (pliegue de mayúsculas y tildes) con EXACTAMENTE un `donde` de algún dueño, ese es el `donde`; el texto original se
+ * conserva (`original`). Si el texto nombra más de un `donde` conocido («texto e imagen») es AMBIGUO: no se adivina y se declara. Con un dueño comodín no hace falta (atiende todo).
+ */
+export function normalizarDonde(donde: string, duenos: Dueno[]): DondeNormalizado {
+  const igual: DondeNormalizado = { donde, original: null, ambiguo: false }
+  if (duenos.some((d) => d.comodin)) return igual
+  const conocidos = [...new Set(duenos.flatMap((d) => d.dondes))]
+  if (conocidos.includes(donde)) return igual
+  const f = plegarTexto(donde)
+  const cabeza = f.split(/\s+[—–-]\s+|\s*[:;,(]\s*/)[0].trim()
+  // lo que dice la cabeza: si nombra MÁS de un `donde` conocido («texto e imagen») es ambiguo y no se adivina
+  const nombrados = conocidos.filter((k) => new RegExp(`(^|[^a-z0-9])${escaparRe(plegarTexto(k))}([^a-z0-9]|$)`).test(cabeza))
+  if (nombrados.length > 1) return { donde, original: null, ambiguo: true }
+  const porCabeza = conocidos.filter((k) => plegarTexto(k) === cabeza)
+  if (porCabeza.length === 1) return { donde: porCabeza[0], original: donde, ambiguo: false }
+  const porInicio = conocidos.filter((k) => cabeza.startsWith(plegarTexto(k) + ' '))
+  if (porInicio.length === 1) return { donde: porInicio[0], original: donde, ambiguo: false }
+  return { donde, original: null, ambiguo: false }
+}
+
+/** el `id` que el modelo devuelve para una ficha puede venir con corchetes, comillas, comillas invertidas, punto final o en otras mayúsculas: se casa solo si coincide con EXACTAMENTE un id real */
+export function casarId(idDelModelo: string, idsReales: string[]): string | null {
+  if (idsReales.includes(idDelModelo)) return idDelModelo
+  const limpiar = (x: string): string => x.normalize('NFC').toLowerCase().replace(/^[\s`'"“”‘’«»[(]+|[\s`'"“”‘’«»\])\.,;:]+$/g, '')
+  const m = idsReales.filter((r) => limpiar(r) === limpiar(idDelModelo))
+  return m.length === 1 ? m[0] : null
+}
+
 /** el esquema en que responde cada dueño: en la pieza, solo el texto entrega pieza corregida; quien dirige la imagen únicamente responde a la opinión */
 export function esquemaDelDueno(p: PoliticaDeRevision, d: Dueno): string {
   const base = p.esquema_correccion ?? 'resolucion_solo.v1'

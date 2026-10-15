@@ -110,7 +110,7 @@ const FORMATO_DE_FICHAS = 'Devuelve solo el JSON {"fichas":[{"que":"…","donde"
 export function tareaDeRevisionDeFondo(a: { politica: PoliticaDeRevision; payload: PayloadDeRevision; tipo: TipoDeRevision; texto: string; duenos: Dueno[] }): { task: string; indicacion: string; esquema: string } {
   const linea = (a.politica.indicacion_fondo ?? `Estás revisando ${tituloDeLoRevisado(a.tipo)} contra {documentos}.`).replace('{documentos}', documentosDeLaLinea(a.politica))
   const dondes = a.duenos.flatMap((d) => (d.comodin ? [] : d.dondes))
-  const donde = dondes.length ? `En «donde» pon la parte a la que se refiere: ${unir(dondes.map((d) => `«${d}»`))}.` : 'En «donde» pon la sección o el pasaje al que se refiere.'
+  const donde = dondes.length ? `En «donde» pon SOLO una de estas palabras, tal cual: ${unir(dondes.map((d) => `«${d}»`))}. El detalle (qué línea, qué etiqueta) va en «que», nunca en «donde». Ejemplo válido: {"que":"las etiquetas son 2 y el manual pide 3","donde":"${dondes[0]}","contra_que":"…","gravedad":"bloquea","propuesta":"…"}.` : 'En «donde» pon la sección o el pasaje al que se refiere.'
   const partes = [linea, `## Lo que revisas (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`, bloqueDeContexto(a.payload.contexto ?? []), `${FORMATO_DE_FICHAS} ${donde}`]
   return { task: partes.filter(Boolean).join('\n\n'), indicacion: linea, esquema: 'fichas.v1' }
 }
