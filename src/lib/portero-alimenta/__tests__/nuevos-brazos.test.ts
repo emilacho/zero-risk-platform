@@ -13,7 +13,7 @@ import { archivarFichasDeBrazos, huellaDeFicha } from '../brazos/archivo'
 import { CATALOGO_DE_CONTEXTO, fichasDeContexto, feriadosDe, pascua } from '../brazos/contexto'
 import { accionDeDemanda, DIA_DE_DEMANDA, fichasDeDemanda, terminosDeDemanda } from '../brazos/demanda'
 import { accionesDeCompetencia, competidoresConfirmados, competidoresDelDia, diaDeCompetidor, fichasDeCompetencia } from '../brazos/competencia'
-import { brazoDePropios, credencialesDe, fichasDeVentas, leerMeta, leerVentasDeLoyverse, resumirVentas, type Fetch } from '../brazos/propios'
+import { brazoDePropios, credencialesDe, leerMeta, leerVentasDeLoyverse, mesesCerradosHasta, resumirVentas, type Fetch } from '../brazos/propios'
 import { crearBaseFalsa } from './base-falsa'
 import { ALTA, CASOS, ON, REAL, tablas } from './fixtures-despertar'
 import { idDeZona, paisIsoDe } from '../../cerebro/zona'
@@ -281,12 +281,13 @@ describe('BRAZO · datos propios (llave del cliente)', () => {
     expect(urls).toHaveLength(2)
     expect(urls.every((u) => !u.includes(TOKEN))).toBe(true)
     expect(cabeceras.every((h) => h?.Authorization === `Bearer ${TOKEN}`)).toBe(true)
-    expect(urls[0]).toMatch(/created_at_min=2026-10-01T05%3A00%3A00.000Z/) // el mes empieza a las 00:00 locales (UTC−5)
+    expect(urls[0]).toMatch(/created_at_min=2026-09-15T15%3A00%3A00.000Z/) // el plan de Loyverse deja leer 31 días: la ventana móvil de 30 días (cubre el mes en curso)
     expect(r.estado).toBe('listo')
     expect(JSON.stringify(r)).not.toContain(TOKEN)
-    const resumen = r.fichas.find((x) => x.atributo === 'propios:loyverse:resumen:2026-10')!
-    expect(resumen.contenido).toMatch(/no es margen/)
-    expect(r.fichas.find((x) => x.atributo.includes(':items:'))!.contenido).toMatch(/Ceviche mixto \(carta web\)/)
+    const ingreso = r.fichas.find((x) => x.atributo === 'metrica:loyverse:ingreso:2026-10')!
+    expect(ingreso.contenido).toMatch(/no es margen/)
+    expect(ingreso.metrica).toMatchObject({ valor: 26 })
+    expect(r.fichas.find((x) => x.atributo.startsWith('metrica:loyverse:items:'))!.contenido).toMatch(/Ceviche mixto \(carta web\)/)
     for (const x of r.fichas) { expect(x.alcance).toBe('cliente'); expect(x.decision).toBe('reemplaza'); expect(x.origen).toBe('plataforma') }
   })
   it('un error de la llave (401) se DICE con su código; no se lee como «sin ventas»', async () => {
@@ -295,12 +296,14 @@ describe('BRAZO · datos propios (llave del cliente)', () => {
     const caido = await leerVentasDeLoyverse({ token: TOKEN, ahora: JUEVES, fetch: async () => { throw new Error(`fallo con ${TOKEN} adentro`) } })
     expect(JSON.stringify(caido)).not.toContain(TOKEN)
   })
-  it('si hay más de 5.000 recibos la lectura se declara RECORTADA en la ficha', async () => {
+  it('si hay más de 5.000 recibos el mes en curso se declara incompleto y no se archiva', async () => {
     const fetch: Fetch = async () => respuesta({ receipts: [recibo(1, 1, '2026-10-03T17:10:00Z', [])], cursor: 'sigue' })
     const v = await leerVentasDeLoyverse({ token: TOKEN, ahora: JUEVES, fetch })
-    expect(v.ok && v.resumen.recortado).toBe(true)
-    const fichas = fichasDeVentas({ client_id: CL, resumen: (v as { ok: true; resumen: ReturnType<typeof resumirVentas> }).resumen, ahora: JUEVES })
-    expect(fichas[0].contenido).toMatch(/LECTURA RECORTADA/)
+    expect(v.ok && v.recortado).toBe(true)
+    // el único mes leído quedó a medias: NO se archiva como si fuera completo
+    const r = await brazoDePropios({ client_id: CL, slug: 'naufrago', ahora: JUEVES, env: { CLIENTE_NAUFRAGO_LOYVERSE_TOKEN: TOKEN }, fetch, mesesCerrados: new Set(mesesCerradosHasta(JUEVES)) })
+    expect(r.fichas).toEqual([])
+    expect(r.declarado.join(' ')).toMatch(/incompleto/)
   })
   it('Meta: token en cabecera; un error se dice sin la llave; sin gasto no inventa cifras', async () => {
     const urls: string[] = []

@@ -14,7 +14,7 @@ import { familiasDelRubro } from '../../fuentes-publicas/plan'
 import { radioDe } from './sedes'
 import { cargarContextoDeBrazos, descubrirYJuzgar, type ContextoDeBrazos, type ResultadoDeSistematica } from './sistematica'
 import type { RespuestaDeLlamada } from '../juez'
-import { brazoDePropios, type Fetch } from './propios'
+import { brazoDePropios, leerSnapshot, mesLocalDe, PREFIJO_DE_VENTAS, type Fetch, type SnapshotDeVentas } from './propios'
 import { hayBrazoActivo, type AccionDeBrazo, type BrazosActivos, type FichaDeBrazo, type NombreDeBrazo, type ResultadoDeUnBrazo } from './tipos'
 
 export * from './tipos'
@@ -160,7 +160,21 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
   }
   if (e.brazos.propios) {
     try {
-      poner(await brazoDePropios({ client_id: e.client_id, slug: txt(e.cliente.slug) || nombre, config: cfg, ahora: e.ahora, env: e.env ?? process.env, fetch: e.fetch ?? (globalThis.fetch as unknown as Fetch) }))
+      // los meses cerrados ya archivados no se vuelven a pedir (el relleno de 12 meses corre una vez; en régimen solo el mes en curso)
+      const q = await e.db.from('cerebro_fichas').select('atributo, provenance_tag').eq('client_id', e.client_id).is('retirada_en', null).like('atributo', `${PREFIJO_DE_VENTAS}ingreso:%`).limit(200)
+      if (q.error) throw new Error(`lectura de los meses ya archivados: ${String(q.error.message).slice(0, 100)}`)
+      const cerrados = new Set<string>()
+      const parciales = new Map<string, SnapshotDeVentas>()
+      const enCurso = mesLocalDe(e.ahora)
+      for (const f of Array.isArray(q.data) ? (q.data as Array<Record<string, unknown>>) : []) {
+        const m = /^metrica:loyverse:ingreso:(\d{4}-\d{2})$/.exec(String(f.atributo ?? ''))
+        // solo cuenta como cerrado el mes que se archivó YA cerrado (la parcial del mes que acaba de terminar se reemplaza por la final)
+        const datos = obj(obj(f.provenance_tag).datos)
+        if (m && m[1] !== enCurso && datos.en_curso === false) cerrados.add(m[1])
+        // un mes que ya terminó y solo tiene su lectura parcial: con ella se puede cerrar aunque su comienzo ya no se pueda leer
+        else if (m && m[1] < enCurso && datos.en_curso === true) { const sn = leerSnapshot(datos.snapshot); if (sn) parciales.set(m[1], sn) }
+      }
+      poner(await brazoDePropios({ client_id: e.client_id, slug: txt(e.cliente.slug) || nombre, config: cfg, ahora: e.ahora, env: e.env ?? process.env, fetch: e.fetch ?? (globalThis.fetch as unknown as Fetch), mesesCerrados: cerrados, parciales }))
     } catch (x) {
       poner({ brazo: 'propios', estado: 'fallo', detalle: String((x as Error).message).slice(0, 160), fichas: [], declarado: [] })
     }

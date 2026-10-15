@@ -47,6 +47,10 @@ export interface FichaDeBrazo {
   sobre?: string
   /** datos estructurados que otro paso necesita leer de vuelta (van en `provenance_tag.datos`): sede, cuenta de Instagram, web… nunca llaves */
   datos?: Record<string, unknown>
+  /** si el dato no cambió, la ficha vigente NO se reescribe pero su `vigente_hasta` se corre al de esta lectura (una cifra viva que sigue vigente mientras el brazo corre) */
+  renueva_vigencia?: boolean
+  /** una CIFRA con nombre, valor y unidad (va en `provenance_tag.metrica`, que es donde la lee el lector del plan) */
+  metrica?: { nombre: string; valor: number; unidad: string }
 }
 
 /** lo que `data` de un brazo devuelve a quien lo llamó */
