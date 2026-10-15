@@ -35,13 +35,24 @@ export function moduloConFinanzas(modulo = lf(MODULO_R81)) {
 }
 
 const LEER_FIN = [
-  '// F4 · el bloque firmado de la oficina financiera (si el sobre trajo `finanzas_id` y la ruta lo entregó firmado). Sin él: null y el pedido queda IDÉNTICO a hoy.',
+  '// F4 v2 · lo que la oficina financiera entrega al plan, FIRMADO O NO (hallazgo 3 · 15-oct): el bloque (si el sobre trajo `finanzas_id` y la ruta lo entregó) y/o el motivo por el que no hay firma',
+  '// (`finanzas_motivo` del sobre). Sin ninguno de los dos: null y el pedido queda IDÉNTICO a hoy, byte por byte.',
   'const FIN = (function () {',
   '  try {',
-  "    const r = $('" + FIN.leer + "').first().json || {}",
-  "    const b = r.body && typeof r.body === 'object' ? r.body : {}",
-  "    if (Number(r.statusCode) !== 200 || b.estado !== 'firmado' || !b.finanzas_id || !Array.isArray(b.numeros) || !b.numeros.length || !b.resumen) return null",
-  "    return { finanzas_id: String(b.finanzas_id), estado: 'firmado', huella: b.huella || null, numeros: b.numeros, semanas: Number(b.semanas) || 12, resumen: b.resumen }",
+  "    let cuerpoHook = {}",
+  "    try { cuerpoHook = ($('Webhook · planeacion').first().json.body || {}) } catch (x) { cuerpoHook = {} }",
+  "    const MOTIVOS = ['sin_acuerdo', 'sin_firma', 'vencido', 'sin_bloque', 'sin_referencia', 'sin_pauta']",
+  '    const motivoPedido = MOTIVOS.indexOf(cuerpoHook.finanzas_motivo) >= 0 ? cuerpoHook.finanzas_motivo : null',
+  '    let r = null',
+  "    try { r = $('" + FIN.leer + "').first().json || {} } catch (x) { r = null }",
+  '    const b = r && r.body && typeof r.body === "object" ? r.body : {}',
+  '    const leido = !!r && Number(r.statusCode) === 200 && !!b.finanzas_id && Array.isArray(b.numeros) && b.numeros.length > 0 && !!b.resumen',
+  '    if (leido) {',
+  "      const firmado = b.estado === 'firmado'",
+  "      return { finanzas_id: String(b.finanzas_id), estado: firmado ? 'firmado' : 'sin_firma', motivo: firmado ? null : (motivoPedido || 'sin_firma'), huella: b.huella || null, numeros: b.numeros, semanas: Number(b.semanas) || 12, resumen: b.resumen, declaradas: Array.isArray(b.montos_declarados) ? b.montos_declarados.filter(function (x) { return typeof x === 'number' && isFinite(x) }) : [] }",
+  '    }',
+  "    if (motivoPedido) return { finanzas_id: null, estado: 'sin_bloque', motivo: motivoPedido, huella: null, numeros: [], semanas: 12, resumen: null, declaradas: [] }",
+  '    return null',
   '  } catch (x) { return null }',
   '})()',
   '',
@@ -52,7 +63,7 @@ export function cambiarB4(codigo) {
   s = unaVez(s, lf(MODULO_R81), moduloConFinanzas(), 'módulo r81 en B4')
   s = unaVez(s, 'const ctxPN = ', LEER_FIN + 'const ctxPN = ', 'ctxPN')
   s = unaVez(s, "'══════ FIN DEL DOCUMENTO DE REFERENCIA ══════',", "...lineasDeFinanzas(FIN),\n'══════ FIN DEL DOCUMENTO DE REFERENCIA ══════',", 'fin del documento')
-  s = unaVez(s, "contexto_chequeo: Object.assign({}, ctxPN, { personas: PROTEGIDAS, nombre_cliente: ficha.name || null }),", "contexto_chequeo: Object.assign({}, ctxPN, { personas: PROTEGIDAS, nombre_cliente: ficha.name || null }, FIN ? { finanzas: { numeros: FIN.numeros, semanas: FIN.semanas } } : {}),\n    ...(FIN ? { finanzas_id_usado: FIN.finanzas_id } : {}),", 'contexto_chequeo')
+  s = unaVez(s, "contexto_chequeo: Object.assign({}, ctxPN, { personas: PROTEGIDAS, nombre_cliente: ficha.name || null }),", "contexto_chequeo: Object.assign({}, ctxPN, { personas: PROTEGIDAS, nombre_cliente: ficha.name || null }, FIN ? { finanzas: { numeros: FIN.numeros, semanas: FIN.semanas, estado: FIN.estado, motivo: FIN.motivo, declaradas: FIN.declaradas } } : {}),\n    ...(FIN ? { finanzas_id_usado: FIN.finanzas_id, finanzas_estado_usado: FIN.estado, finanzas_motivo_usado: FIN.motivo } : {}),", 'contexto_chequeo')
   return s
 }
 export function cambiarVuelta(codigo) {
@@ -73,7 +84,7 @@ export function enganchaFinanzas(antes) {
   vuelta.parameters.jsCode = cambiarVuelta(vuelta.parameters.jsCode)
   const [x, y] = unir.position
   copia.nodes.push(
-    { parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' }, combinator: 'and', conditions: [{ leftValue: `={{ typeof ${WEBHOOK_BODY}.finanzas_id === 'string' && ${WEBHOOK_BODY}.finanzas_id.length > 0 && typeof ${WEBHOOK_BODY}.client_id === 'string' && ${WEBHOOK_BODY}.client_id.length > 0 }}`, rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }] }, options: {} }, name: FIN.si, type: 'n8n-nodes-base.if', typeVersion: 2, position: [x + 240, y + 260] },
+    { parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' }, combinator: 'and', conditions: [{ leftValue: `={{ ((typeof ${WEBHOOK_BODY}.finanzas_id === 'string' && ${WEBHOOK_BODY}.finanzas_id.length > 0) || (typeof ${WEBHOOK_BODY}.finanzas_motivo === 'string' && ${WEBHOOK_BODY}.finanzas_motivo.length > 0)) && typeof ${WEBHOOK_BODY}.client_id === 'string' && ${WEBHOOK_BODY}.client_id.length > 0 }}`, rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }] }, options: {} }, name: FIN.si, type: 'n8n-nodes-base.if', typeVersion: 2, position: [x + 240, y + 260] },
     {
       parameters: {
         method: 'POST', url: `={{ ${VERCEL} + '/api/finanzas/tablero' }}`, sendHeaders: true,
@@ -99,7 +110,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const arg = process.argv.find((a) => a.startsWith('--salida='))
   const salida = arg ? arg.slice('--salida='.length) : aqui
   const despues = enganchaFinanzas(antesDeF4())
-  const ruta = join(salida, 'plan-F4-finanzas-ARREGLADO-2026-10-14.json')
+  const ruta = join(salida, 'plan-F4-finanzas-v2-ARREGLADO-2026-10-15.json')
   fs.writeFileSync(ruta, JSON.stringify(despues, null, 2))
   console.log(`plan · ${despues.nodes.length} nodos (+${NOMBRES_NUEVOS.length}) → ${ruta}`)
 }

@@ -35,3 +35,24 @@ export function resumenDelBloque(b: Bloque, o: { dias_activos_por_semana?: numbe
   L.push(`Pauta de rendimiento por semana: ${sem}.`)
   return { lineas: L, alertas: b.alertas }
 }
+
+/**
+ * Los montos que el bloque DECLARA de forma explícita y que no son una fila de `cifras` (hallazgo 1 de CC#1 · 15-oct): la pauta por semana, la prueba inicial, el piso por conjunto,
+ * el reparto por canal y el evento alterno. El chequeo P8 del plan solo deja pasar una cifra que sea una firmada o uno de estos montos; una suma «que casualmente cuadra» ya no pasa.
+ */
+export function montosDeclarados(b: Bloque): number[] {
+  const v: Array<number | null | undefined> = [
+    ...b.calendario.por_semana,
+    b.calendario.rendimiento_total, b.calendario.meta_ig_total, b.calendario.produccion_total, b.calendario.total,
+    b.calendario.prueba.diez, b.calendario.prueba.quince, b.calendario.prueba.veinte,
+    b.reparto.total_mes, b.reparto.meta_ig, b.reparto.marca, b.reparto.rendimiento, b.reparto.produccion.monto, b.reparto.sumado_a_meta_ig,
+    ...b.reparto.otros.map((x) => x.monto),
+    b.costos.cota_baja, b.costos.base, b.costos.cota_alta, b.costo_por_venta,
+    b.techo.por_resultado, b.techo.ajusto_hasta, b.techo.recorte_desde, b.techo.paro_desde,
+    b.aprendizaje.diario, b.aprendizaje.minimo_por_conjunto,
+    ...(b.alterno ? [b.alterno.costo, b.alterno.minimo_por_conjunto] : []),
+  ]
+  const out: number[] = []
+  for (const x of v) if (typeof x === 'number' && Number.isFinite(x) && x > 0 && !out.some((y) => Math.abs(y - x) < 1e-9)) out.push(Math.round(x * 100) / 100)
+  return out
+}

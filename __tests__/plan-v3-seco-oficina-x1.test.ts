@@ -21,7 +21,7 @@ const h = vi.hoisted(() => ({ db: null as unknown }))
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => h.db }))
 import { POST } from '../src/app/api/finanzas/conversa/route'
 import { numerosDelBloque, huellaDe } from '../src/lib/finanzas/firma'
-import { resumenDelBloque } from '../src/lib/finanzas/resumen'
+import { montosDeclarados, resumenDelBloque } from '../src/lib/finanzas/resumen'
 
 const LLAVE = 'llave-interna-de-prueba-x1'
 const IDS = [...CLIENTES.map((c: { id: string }) => c.id), 'prueba-finanzas-seco-naufrago-tal-cual']
@@ -78,8 +78,12 @@ const entradaDe = (n: (typeof NEGOCIOS)[number]) => ({
   ficha: { id: 'x-1', name: n.fin.nombre, country: n.fin.pais, industry: n.fin.rubro, config: { spend_cap_usd: 9 } }, manual: MANUAL, material: [], descartados: [], referencia: 'DOCUMENTO', casa: {}, plata: {},
   hechos_del_dueno: ['Atiende por cita previa.'],
 })
-async function b4(flujo: Flujo, ent: Record<string, unknown>, nodoFin?: Record<string, unknown>) {
-  const dolar = (nombre: string) => { if (nombre === FIN.leer && nodoFin) return { first: () => ({ json: nodoFin }) }; throw new Error(`Node '${nombre}' hasn't been executed`) }
+async function b4(flujo: Flujo, ent: Record<string, unknown>, nodoFin?: Record<string, unknown>, hook: Record<string, unknown> = {}) {
+  const dolar = (nombre: string) => {
+    if (nombre === FIN.leer && nodoFin) return { first: () => ({ json: nodoFin }) }
+    if (nombre === 'Webhook · planeacion') return { first: () => ({ json: { body: hook } }) }
+    throw new Error(`Node '${nombre}' hasn't been executed`)
+  }
   const f = new AsyncFunction('$input', '$', String(flujo.nodes.find((x) => x.name === NODOS.b4)!.parameters.jsCode))
   return (await f({ first: () => ({ json: ent }) }, dolar))[0].json as Record<string, any>
 }
@@ -87,9 +91,11 @@ async function b4(flujo: Flujo, ent: Record<string, unknown>, nodoFin?: Record<s
 function respuestaDeLaRuta(obs: { turnos: Array<{ paso: string; salida: Record<string, any> }> }, moneda: string | undefined) {
   const calculo = obs.turnos.find((t) => t.paso === 'calculo')?.salida
   const firma = obs.turnos.find((t) => t.paso === 'firma')?.salida
-  if (!calculo?.hay_bloque || firma?.estado !== 'firmado') return { statusCode: 404, body: { error: 'tablero_inexistente' } }
+  if (!calculo?.hay_bloque) return { statusCode: 404, body: { error: 'tablero_inexistente' } }
   const bloque = calculo.bloque
-  return { statusCode: 200, body: { finanzas_id: '3f2b8c1e-9d4a-4b7e-8a61-0c5d2e7f9a10', estado: 'firmado', huella: huellaDe(bloque), numeros: numerosDelBloque(bloque), semanas: 12, resumen: resumenDelBloque(bloque, { moneda }) } }
+  // en real, un bloque calculado se guarda aunque no se firme: estado «firmado» o «sin_firma» (la ruta del tablero lo lee igual)
+  const estado = firma?.estado === 'firmado' ? 'firmado' : 'sin_firma'
+  return { statusCode: 200, body: { finanzas_id: '3f2b8c1e-9d4a-4b7e-8a61-0c5d2e7f9a10', estado, huella: huellaDe(bloque), numeros: numerosDelBloque(bloque), semanas: 12, resumen: resumenDelBloque(bloque, { moneda }), montos_declarados: montosDeclarados(bloque) } }
 }
 const sinRotular = /\$\s?\d|US\$|USD/
 /** un plan simulado cuya sección de presupuesto usa SOLO las cifras firmadas, rotuladas como estimación */
@@ -97,6 +103,12 @@ function planQueCita(numeros: Array<{ clave: string; valor: number | null; tipo:
   const v = (k: string) => numeros.find((x) => x.clave === k)?.valor
   const f = (x: number | null | undefined) => (x == null ? '' : x.toFixed(2).replace('.', ','))
   return `# Plan\n\n## Presupuesto\nPauta de rendimiento: US$ ${f(v('pauta_rendimiento_mes'))} al mes (estimación, supuesto declarado). Producción de contenido: US$ ${f(v('produccion_mes'))} al mes (estimación). Total del mes: US$ ${f(v('total_mes'))} (estimación).\n\n## Cómo medimos\nSe mide por semana.\n`
+}
+/** ¿el monto es una cifra firmada (valor/min/max) o un monto declarado por el bloque? (con la tolerancia del chequeo) */
+function permitida(ctx: { finanzas: { numeros: Array<{ valor: number | null; minimo: number | null; maximo: number | null }>; declaradas: number[] } }, v: number) {
+  const todos = [...ctx.finanzas.numeros.flatMap((x) => [x.valor, x.minimo, x.maximo]), ...ctx.finanzas.declaradas].filter((y): y is number => typeof y === 'number' && y > 0)
+  const tol = Math.max(v * 0.002, 0.011)
+  return todos.some((y) => Math.abs(y - v) <= tol)
 }
 /** una cifra que NO puede ser ninguna firmada ni suma de 2–3 firmadas (P8 admite sumas): mayor que 3 veces la suma de todo lo firmado */
 function planConCifraInventada(numeros: Array<{ valor: number | null; minimo: number | null; maximo: number | null }>) {
@@ -139,7 +151,7 @@ describe('X1 · datos del plan v3 + oficina financiera (por negocio)', () => {
     expect(malo.ok).toBe(false) // «con_pendientes»: se marca, NO se bloquea
   })
 
-  it.each(NEGOCIOS.map((n) => [n.id, n] as const))('%s · SIN ACUERDO / SIN FIRMA / VENCIDO: el bloque NO entra, el pedido queda idéntico a hoy y el plan sale (con sus supuestos rotulados)', async (_id, n) => {
+  it.each(NEGOCIOS.map((n) => [n.id, n] as const))('%s · SIN ACUERDO / SIN FIRMA / VENCIDO (v2): el plan RECIBE los rangos supuestos y el motivo, lo dice y sale; nunca bloquea', async (_id, n) => {
     for (const caso of ['sin_acuerdo', 'sin_firma', 'vencido'] as const) {
       const o = await correrOficina(n, caso)
       const c = CASOS_OFICINA[caso]
@@ -150,18 +162,52 @@ describe('X1 · datos del plan v3 + oficina financiera (por negocio)', () => {
         expect(o.obs.gasto_usd).toBeGreaterThanOrEqual(1.5)
         expect(o.obs.gasto_usd).toBeLessThanOrEqual(1.5 + 0.6 + 1e-9)
       } else expect(o.obs.gasto_usd, caso).toBeLessThanOrEqual(1.5)
-      // la ruta del tablero diría «no hay tablero firmado»: el flujo sigue como hoy
+      // lo que la ruta del tablero diría (con bloque, aunque sin firma; sin bloque, 404) y el motivo que el sobre trae
       const resp = respuestaDeLaRuta(o.obs, undefined)
-      expect(resp.statusCode, caso).toBe(404)
+      const hayBloque = resp.statusCode === 200
+      const hook = { finanzas_motivo: caso, client_id: 'x-1', ...(hayBloque ? { finanzas_id: (resp.body as any).finanzas_id } : {}) }
       const hoy = await b4(antes, entradaDe(n))
-      const con = await b4(despues, entradaDe(n), resp as Record<string, unknown>)
-      expect(JSON.stringify(con), caso).toBe(JSON.stringify(hoy))
-      expect(con.contexto_chequeo.finanzas, caso).toBeUndefined()
-      // el plan sale: ni P8 ni P9 corren (no hay firmado); un plan que rotula sus montos como estimación pasa limpio
-      const texto = '# Plan\n\n## Presupuesto\nPauta orientativa de US$ 200 al mes (estimación, supuesto declarado: sin acuerdo de la oficina financiera).\n'
-      const r = M.revisarPlan(texto, con.contexto_chequeo)
-      expect(r.marcas.filter((m) => m.codigo === 'P8' || m.codigo === 'P9'), caso).toEqual([])
+      const con = await b4(despues, entradaDe(n), resp as Record<string, unknown>, hook)
+      // el plan RECIBE algo: el bloque rotulado «sin firma» (si lo hay) o el aviso «sin números firmados» (si no)
+      expect(con.pedido, caso).not.toBe(hoy.pedido)
+      expect(con.pedido, caso).toContain(hayBloque ? 'SIN FIRMA' : 'SIN NÚMEROS FIRMADOS')
+      expect(con.contexto_chequeo.finanzas.estado, caso).toBe(hayBloque ? 'sin_firma' : 'sin_bloque')
+      expect(con.contexto_chequeo.finanzas.motivo, caso).toBe(caso)
+      // sin el bloque agregado, el pedido es el de hoy
+      expect(con.pedido.replace(/══════ (?:NÚMEROS DE LA OFICINA FINANCIERA|OFICINA FINANCIERA: SIN NÚMEROS)[\s\S]*?\n\n/, ''), caso).toBe(hoy.pedido)
+      // el plan que NO lo dice se marca (P9) y el que lo dice y rotula sus montos sale limpio; en ningún caso se bloquea
+      const callado = '# Plan\n\n## Presupuesto\nPauta de US$ 200 al mes.\n'
+      const mudo = M.revisarPlan(callado, con.contexto_chequeo)
+      expect(mudo.marcas.some((m) => m.codigo === 'P9'), caso).toBe(true)
+      const dicho = hayBloque
+        ? planQueCita((resp.body as any).numeros).replace('## Presupuesto\n', '## Presupuesto\nLos números de la oficina financiera quedaron sin firma (sin acuerdo): son una estimación.\n')
+        : '# Plan\n\n## Presupuesto\nLa oficina financiera no firmó los números (sin acuerdo): pauta orientativa de US$ 200 al mes (estimación, rango supuesto).\n'
+      const limpio = M.revisarPlan(dicho, con.contexto_chequeo)
+      expect(limpio.marcas.filter((m) => m.codigo === 'P8' || m.codigo === 'P9'), caso).toEqual([])
     }
+  })
+
+  it.each(NEGOCIOS.map((n) => [n.id, n] as const))('%s · hallazgo 1: US$ 777,77 y mutaciones de cada firmada se marcan; las firmadas pasan', async (_id, n) => {
+    const o = await correrOficina(n, 'firmado')
+    const resp = respuestaDeLaRuta(o.obs, undefined)
+    const con = await b4(despues, entradaDe(n), resp as Record<string, unknown>, { finanzas_id: (resp.body as any).finanzas_id, client_id: 'x-1' })
+    const ctx = con.contexto_chequeo
+    const p8 = (monto: string) => M.revisarPlan(`# Plan\n\n## Presupuesto\nPauta: US$ ${monto} al mes (estimación).\n`, ctx).marcas.some((m) => m.codigo === 'P8')
+    const coma = (x: number) => x.toFixed(2).replace('.', ',')
+    // la cifra inventada del hallazgo (antes coincidía con una suma en T y P)
+    if (!permitida(ctx, 777.77)) expect(p8('777,77')).toBe(true)
+    // cada cifra firmada pasa tal cual y marca al moverla +1 % y +1 unidad (mutación)
+    const dineros = (resp.body as any).numeros.filter((x: any) => typeof x.valor === 'number' && x.valor >= 1)
+    expect(dineros.length).toBeGreaterThan(2)
+    for (const x of dineros) {
+      expect(p8(coma(x.valor)), `${x.clave} exacta`).toBe(false)
+      const movida = x.valor * 1.01 + 1
+      if (!permitida(ctx, movida)) expect(p8(coma(movida)), `${x.clave} +1 %`).toBe(true)
+    }
+    // una suma de dos firmadas ya NO pasa por su cuenta, salvo que el bloque la declare
+    const [a, b] = dineros
+    const suma = Math.round((a.valor + b.valor) * 100) / 100
+    if (!permitida(ctx, suma)) expect(p8(coma(suma)), 'suma de 2').toBe(true)
   })
 
   it.each(NEGOCIOS.map((n) => [n.id, n] as const))('%s · APAGADA: la oficina contesta 409 sin escribir y el plan sale idéntico a hoy', async (_id, n) => {
