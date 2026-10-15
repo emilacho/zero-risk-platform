@@ -23,7 +23,7 @@ describe('validarAlta · válidas', () => {
   it('un tipo, una fuente, una regla con operador del catálogo y un léxico', () => {
     expect(validarAlta('tipos', tipoOk).ok).toBe(true)
     expect(validarAlta('fuentes', fuenteOk).ok).toBe(true)
-    expect(validarAlta('reglas', { regla_id: 'tel', clase: 'identidad', operador: 'coincide_telefono', parametros: { digitos: 9 }, aplica_a: { fuente: 'google_maps_propia' }, severidad: 'bloquea' }, () => true).ok).toBe(true)
+    expect(validarAlta('reglas', { regla_id: 'tel', clase: 'identidad', operador: 'delegada_en_portero', parametros: { modulo: 'portero-alimenta' }, aplica_a: { fuente: 'google_maps_propia' }, severidad: 'bloquea' }, () => true).ok).toBe(true)
     expect(validarAlta('lexico', { lexico_id: 'ausencia_es', idioma: 'es', grupo: 'ausencia', terminos: ['sin pauta', 'no cuenta con'] }).ok).toBe(true)
     expect(validarAlta('topes', { tope_id: 'recoleccion', tramo: 'recoleccion', usd: 0.5, contador: 'plan' }).ok).toBe(true)
   })

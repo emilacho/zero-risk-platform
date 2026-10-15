@@ -1,0 +1,66 @@
+{
+  "_nota": "Semilla del catálogo del plan v3 (V1). AGNÓSTICA: ningún rubro, ciudad ni cliente. Una fila nueva = una versión nueva (V12), nunca se edita en sitio. Diseño: DISENO-CC1-plan-v3 §4, §14.7, §17.3, §13.3 bis (G3/G4/G5/G7) y AVISO 15-oct (espera 45 min).",
+  "fuentes": [
+    { "fuente_id": "cerebro_vivo", "proveedor": "cerebro", "funcion": "fichas_vivas", "via": "cerebro", "criticidad": "normal", "reintentos": 0, "plazo_s": 30, "tope_usd": 0, "forma": ["clase", "contenido", "observado_en"], "identidad_campos": [], "da_ausencia_con": "lista vacía con lectura ok" },
+    { "fuente_id": "mapas_ficha", "proveedor": "apify", "funcion": "own_google_maps_profile", "via": "crudo", "alcance": "cliente", "criticidad": "normal", "reintentos": 0, "plazo_s": 120, "tope_usd": 0.1, "forma": ["title", "totalScore", "reviewsCount"], "identidad_campos": ["title", "address", "phone", "website"], "da_ausencia_con": "items_count=0" },
+    { "fuente_id": "resenas_mapas", "proveedor": "apify", "funcion": "resenas_google_maps", "via": "crudo", "alcance": "cliente", "criticidad": "normal", "reintentos": 0, "plazo_s": 180, "tope_usd": 0.1, "forma": ["text"], "identidad_campos": ["placeId"], "da_ausencia_con": "items_count=0" },
+    { "fuente_id": "instagram_perfil", "proveedor": "apify", "funcion": "instagram_scraper", "via": "crudo", "alcance": "cliente", "criticidad": "normal", "reintentos": 0, "plazo_s": 120, "tope_usd": 0.08, "forma": ["username", "followersCount"], "identidad_campos": ["username", "biography", "externalUrl"], "da_ausencia_con": "items_count=0" },
+    { "fuente_id": "menciones_redes", "proveedor": "apify", "funcion": "menciones_en_redes", "via": "crudo", "alcance": "tercero", "criticidad": "baja", "reintentos": 0, "plazo_s": 180, "tope_usd": 0.05, "forma": ["text"], "identidad_campos": [], "da_ausencia_con": "items_count=0" },
+    { "fuente_id": "sitio_web", "proveedor": "apify", "funcion": "website_content_scraper", "via": "crudo", "alcance": "cliente", "criticidad": "normal", "reintentos": 0, "plazo_s": 180, "tope_usd": 0.1, "forma": ["url", "text"], "identidad_campos": ["url"], "da_ausencia_con": "items_count=0" },
+    { "fuente_id": "biblioteca_anuncios", "proveedor": "apify", "funcion": "facebook_ads_library_scraper", "via": "relleno", "alcance": "cliente", "criticidad": "baja", "reintentos": 0, "plazo_s": 180, "tope_usd": 0.1, "forma": ["adArchiveID"], "identidad_campos": ["pageName"], "da_ausencia_con": "items_count=0" },
+    { "fuente_id": "competidores_mapas", "proveedor": "apify", "funcion": "google_maps_scraper", "via": "relleno", "alcance": "tercero", "criticidad": "baja", "reintentos": 0, "plazo_s": 240, "tope_usd": 0.15, "forma": ["title"], "identidad_campos": ["title", "address", "phone", "website"], "da_ausencia_con": "items_count=0" },
+    { "fuente_id": "analitica_dominio", "proveedor": "posthog", "funcion": "visitas_por_dominio", "via": "relleno", "alcance": "dominio", "criticidad": "normal", "reintentos": 0, "plazo_s": 60, "tope_usd": 0, "forma": ["visitas", "desde", "hasta"], "identidad_campos": ["dominio"], "da_ausencia_con": "visitas=0 declarado" },
+    { "fuente_id": "manual_vigente", "proveedor": "manual", "funcion": "manual_vigente", "via": "cerebro", "criticidad": "normal", "reintentos": 0, "plazo_s": 30, "tope_usd": 0, "forma": ["version"], "identidad_campos": [], "da_ausencia_con": "sin manual vigente" }
+  ],
+  "tipos": [
+    { "tipo_id": "puntaje_resenas", "atributo_cerebro": "metrica:mapas:puntaje", "clase_dato": "atributo", "unidad": "puntos", "rango": { "min": 0, "max": 5 }, "frescura_limite_h": 168, "critico": false, "tolerancia_redondeo": 0.05, "n_minimo": 0, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "resenas_total", "atributo_cerebro": "metrica:mapas:resenas", "clase_dato": "atributo", "unidad": "reseñas", "rango": { "min": 0 }, "frescura_limite_h": 720, "critico": false, "tolerancia_redondeo": 0, "n_minimo": 0, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "seguidores", "atributo_cerebro": "metrica:instagram:seguidores", "clase_dato": "atributo", "unidad": "seguidores", "rango": { "min": 0 }, "frescura_limite_h": 168, "critico": false, "tolerancia_redondeo": 0, "n_minimo": 0, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "publicaciones_n", "atributo_cerebro": "metrica:instagram:publicaciones", "clase_dato": "atributo", "unidad": "publicaciones", "rango": { "min": 0 }, "frescura_limite_h": 168, "critico": false, "tolerancia_redondeo": 0, "n_minimo": 0, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "comentarios_n", "clase_dato": "acumula", "unidad": "comentarios", "rango": { "min": 0 }, "frescura_limite_h": 168, "critico": false, "tolerancia_redondeo": 0, "n_minimo": 1, "comparable_con": [], "via_preferida": "crudo" },
+    { "tipo_id": "horario", "atributo_cerebro": "mapas:horario", "clase_dato": "atributo", "unidad": "texto", "frescura_limite_h": 2160, "critico": false, "n_minimo": 0, "comparable_con": ["horario_sitio"], "via_preferida": "cerebro" },
+    { "tipo_id": "horario_sitio", "atributo_cerebro": "horario:*", "clase_dato": "atributo", "unidad": "texto", "frescura_limite_h": 2160, "critico": false, "n_minimo": 0, "comparable_con": ["horario"], "via_preferida": "cerebro" },
+    { "tipo_id": "direccion", "atributo_cerebro": "mapas:direccion", "clase_dato": "atributo", "unidad": "texto", "frescura_limite_h": 4320, "critico": false, "n_minimo": 0, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "telefono", "atributo_cerebro": "mapas:telefono", "clase_dato": "atributo", "unidad": "texto", "frescura_limite_h": 4320, "critico": false, "n_minimo": 0, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "bio_red", "atributo_cerebro": "instagram:bio", "clase_dato": "atributo", "unidad": "texto", "frescura_limite_h": 720, "critico": false, "n_minimo": 0, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "precio", "atributo_cerebro": "precio:*", "clase_dato": "atributo", "unidad": "dinero", "moneda_requerida": true, "rango": { "min": 0 }, "frescura_limite_h": 2160, "critico": true, "tolerancia_redondeo": 0, "n_minimo": 0, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "texto_sitio", "clase_dato": "acumula", "unidad": "texto", "frescura_limite_h": 2160, "critico": false, "n_minimo": 1, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "menciones", "clase_dato": "acumula", "unidad": "texto", "frescura_limite_h": 720, "critico": false, "n_minimo": 1, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "resenas_texto", "clase_dato": "acumula", "unidad": "texto", "frescura_limite_h": 720, "critico": false, "n_minimo": 1, "comparable_con": [], "via_preferida": "cerebro" },
+    { "tipo_id": "visitas_periodo", "clase_dato": "atributo", "unidad": "visitas", "rango": { "min": 0 }, "frescura_limite_h": 48, "critico": false, "tolerancia_redondeo": 0, "n_minimo": 0, "periodo_requerido": true, "comparable_con": [], "via_preferida": "relleno" },
+    { "tipo_id": "anuncios_activos", "clase_dato": "atributo", "unidad": "anuncios", "rango": { "min": 0 }, "frescura_limite_h": 168, "critico": false, "n_minimo": 0, "comparable_con": [], "via_preferida": "relleno" }
+  ],
+  "reglas": [
+    { "regla_id": "identidad_mapas_ficha", "clase": "identidad", "operador": "delegada_en_portero", "parametros": { "modulo": "portero-alimenta", "criterio": ["filtro.esSobreElCliente", "mapas-propia.fichaPropiaDeMapas", "alimentar.contextoDelCliente"] }, "aplica_a": { "fuente": "mapas_ficha" }, "severidad": "bloquea" },
+    { "regla_id": "identidad_resenas_mapas", "clase": "identidad", "operador": "delegada_en_portero", "parametros": { "modulo": "portero-alimenta", "criterio": ["filtro.filtrarUnidad"] }, "aplica_a": { "fuente": "resenas_mapas" }, "severidad": "bloquea" },
+    { "regla_id": "identidad_instagram_perfil", "clase": "identidad", "operador": "delegada_en_portero", "parametros": { "modulo": "portero-alimenta", "criterio": ["filtro.filtrarUnidad"] }, "aplica_a": { "fuente": "instagram_perfil" }, "severidad": "bloquea" },
+    { "regla_id": "identidad_menciones_redes", "clase": "identidad", "operador": "delegada_en_portero", "parametros": { "modulo": "portero-alimenta", "criterio": ["filtro.filtrarUnidad"] }, "aplica_a": { "fuente": "menciones_redes" }, "severidad": "bloquea" },
+    { "regla_id": "identidad_sitio_web", "clase": "identidad", "operador": "delegada_en_portero", "parametros": { "modulo": "portero-alimenta", "criterio": ["filtro.filtrarUnidad"] }, "aplica_a": { "fuente": "sitio_web" }, "severidad": "bloquea" },
+    { "regla_id": "param_listo_dias_rastro", "clase": "parametro", "operador": "n_minimo", "parametros": { "dias": 2 }, "aplica_a": { "fuente": "cerebro_vivo" }, "severidad": "avisa" },
+    { "regla_id": "param_espera_listo_min", "clase": "parametro", "operador": "n_minimo", "parametros": { "minutos": 45, "cada_s": 300 }, "aplica_a": { "fuente": "cerebro_vivo" }, "severidad": "avisa" },
+    { "regla_id": "param_lee_crudo_del_alta", "clase": "parametro", "operador": "n_minimo", "parametros": { "valor": true, "max_filas": 400 }, "aplica_a": { "fuente": "cerebro_vivo" }, "severidad": "avisa" },
+    { "regla_id": "param_ventana_corrida_h", "clase": "parametro", "operador": "edad_max_h", "parametros": { "horas": 48 }, "aplica_a": { "fuente": "cerebro_vivo" }, "severidad": "avisa" },
+    { "regla_id": "moneda_pais_ec", "clase": "moneda_pais", "operador": "igual_unidad", "parametros": { "moneda": "USD", "rotulo": "USD por omisión del país: nadie la declaró" }, "aplica_a": { "tipo": "precio" }, "pais": "EC", "severidad": "avisa" },
+    { "regla_id": "precedencia_horario", "clase": "precedencia", "operador": "precede", "parametros": { "orden": ["dueno", "medido_mas_reciente", "manual", "supuesto"], "empate": "cerebro" }, "aplica_a": { "tipo": "horario" }, "severidad": "avisa" },
+    { "regla_id": "precedencia_precio", "clase": "precedencia", "operador": "precede", "parametros": { "orden": ["dueno", "medido_mas_reciente", "manual", "supuesto"], "empate": "cerebro" }, "aplica_a": { "tipo": "precio" }, "severidad": "avisa" },
+    { "regla_id": "contradice_horario", "clase": "contradiccion", "operador": "difiere_mas_de", "parametros": { "modo": "igualdad_normalizada" }, "aplica_a": { "tipo": "horario" }, "severidad": "bloquea" },
+    { "regla_id": "contradice_puntaje", "clase": "contradiccion", "operador": "difiere_mas_de", "parametros": { "abs": 0.3 }, "aplica_a": { "tipo": "puntaje_resenas" }, "severidad": "avisa" },
+    { "regla_id": "cambio_material_seguidores", "clase": "cambio_material", "operador": "difiere_mas_de", "parametros": { "rel": 0.05 }, "aplica_a": { "tipo": "seguidores" }, "severidad": "avisa" },
+    { "regla_id": "cambio_material_resenas", "clase": "cambio_material", "operador": "difiere_mas_de", "parametros": { "abs": 1 }, "aplica_a": { "tipo": "resenas_total" }, "severidad": "avisa" },
+    { "regla_id": "cambio_material_puntaje", "clase": "cambio_material", "operador": "difiere_mas_de", "parametros": { "abs": 0.1 }, "aplica_a": { "tipo": "puntaje_resenas" }, "severidad": "avisa" }
+  ],
+  "lexico": [
+    { "lexico_id": "es_verificacion", "idioma": "es", "grupo": "verificacion", "pais": "EC", "terminos": ["verificad", "verificamos", "comprobad", "comprobamos", "confirmad", "confirmamos", "constatad", "constatamos", "medid", "validad", "corroborad", "certificad", "(fuente:"] },
+    { "lexico_id": "es_ausencia", "idioma": "es", "grupo": "ausencia", "pais": "EC", "terminos": ["no tiene", "no cuenta con", "sin pauta", "no posee", "no existe", "no hay", "carece de", "no utiliza", "no invierte", "no pauta", "ninguno", "ninguna"] },
+    { "lexico_id": "es_supuesto", "idioma": "es", "grupo": "supuesto", "pais": "EC", "terminos": ["supuesto", "asumimos", "se asume", "estimamos", "estimad", "aproximad", "por omision", "tentativ", "hipotesis"] },
+    { "lexico_id": "es_dominio", "idioma": "es", "grupo": "dominio", "pais": "EC", "terminos": ["en el sitio", "en el dominio", "del sitio web", "en la web", "en nuestro sitio"] },
+    { "lexico_id": "es_periodo", "idioma": "es", "grupo": "periodo", "pais": "EC", "terminos": ["ultimo mes", "ultimos 30 dias", "ultimos 7 dias", "esta semana", "semana pasada", "este mes", "mes pasado", "hace dias", "hace semanas", "ayer", "hoy"] }
+  ],
+  "topes": [
+    { "tope_id": "tope_recoleccion", "tramo": "recoleccion", "usd": 0.4, "contador": "plan_recoleccion" },
+    { "tope_id": "tope_oficina", "tramo": "oficina", "usd": 1.5, "contador": "plantilla_f8" },
+    { "tope_id": "tope_redaccion", "tramo": "redaccion", "usd": 0.8, "contador": "redactor_max_budget" },
+    { "tope_id": "tope_jefatura", "tramo": "jefatura", "usd": 0.7, "contador": "jefatura_j7" },
+    { "tope_id": "tope_cupo_ficha", "tramo": "cupo_ficha", "usd": 4, "contador": "spend_cap_usd_ficha" }
+  ]
+}

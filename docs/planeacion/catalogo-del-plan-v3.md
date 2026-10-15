@@ -17,7 +17,7 @@ Todas llevan `version`, `vigente`, `desde` y `pais` (null = global); **esas cuat
 
 ## Qué es fila y qué es código
 - **Es fila:** fuentes, tipos, frescura, identidad (con los operadores existentes), léxico, topes, una regla nueva que use un operador existente.
-- **Es código (no se da de alta aquí):** un **operador** nuevo (los once cerrados: `coincide_texto`, `coincide_dominio`, `coincide_telefono`, `coincide_zona`, `rango`, `edad_max_h`, `igual_unidad`, `difiere_mas_de`, `precede`, `contiene_termino`, `n_minimo`), un nodo de n8n para una fuente que no habla por el Servicio, y la calculadora. Un operador desconocido se rechaza con «uno de …».
+- **Es código (no se da de alta aquí):** un **operador** nuevo (los ocho cerrados — rev. 3 §14.2: la identidad la decide el criterio del `portero`, salen los `coincide_*`: `delegada_en_portero`, `rango`, `edad_max_h`, `igual_unidad`, `difiere_mas_de`, `precede`, `contiene_termino`, `n_minimo`), un nodo de n8n para una fuente que no habla por el Servicio, y la calculadora. Un operador desconocido se rechaza con «uno de …».
 
 ## Cómo se da de alta
 ```
