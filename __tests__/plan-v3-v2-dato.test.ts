@@ -18,7 +18,7 @@ const hace = (h: number) => new Date(AHORA.getTime() - h * 3_600_000).toISOStrin
 const cliente = { nombre: 'Taller Los Arrayanes', ubicacion: ['Riobamba'], handles: ['tallerarrayanes'], dominios: ['tallerarrayanes.test'], telefonos: ['0991234567'], rubro: ['carpinteria', 'muebles', 'madera'] }
 const ctx = (o: Partial<ContextoDeNormalizacion> = {}): ContextoDeNormalizacion => ({ ahora: AHORA, cliente, pais: null, ...o })
 const una = (e: Partial<EntradaCruda> & Pick<EntradaCruda, 'fuente_id' | 'tipo_id'>, c = ctx(), op: Operadores = OPERADORES): DatoV1 =>
-  normalizarDatos([{ estado: 'trajo', medido_en: hace(1), identidad: { via: 'portero' }, ...e } as EntradaCruda], c, snap, op).datos[0]
+  normalizarDatos([{ estado: 'trajo', medido_en: hace(1), via: e.fuente_id === 'cerebro_vivo' ? 'cerebro' : 'crudo', identidad: e.fuente_id === 'cerebro_vivo' ? { via: 'portero' } : { via: 'consulta_propia' }, ...e } as EntradaCruda], c, snap, op).datos[0]
 
 describe('V2 · vacío vs «no tiene» (V1/V2 del §3)', () => {
   it('V1 · 0 elementos DECLARADO por la fuente ⇒ vacio_declarado, valor 0, citable («se miró y no hay»)', () => {
@@ -91,6 +91,28 @@ describe('V2 · identidad: el criterio es el del `portero` (paridad)', () => {
     expect(d.identidad.estado).toBe('parcial')
     expect(d.confianza).toBe('media')
   })
+  it('R1 (CC#3) · FALLA CERRADO: con `identidad: null` solo es `coincide` la fuente SIN campos ni regla de identidad (y que no es el cerebro); las demás, no_comprobable', () => {
+    const fuentes = (semilla as unknown as FilasDelCatalogo).fuentes
+    const sinIdentidad = new Set(['manual_vigente'])
+    for (const f of fuentes) {
+      const tipo = f.provee?.[0] ?? 'texto_sitio'
+      const p = normalizarDatos([{ fuente_id: f.fuente_id, tipo_id: tipo, estado: 'trajo', contenido: tipo === 'texto_sitio' || tipo === 'horario' ? 'algo' : 5, campos: Object.fromEntries((f.forma ?? []).map((k) => [k, 1])), medido_en: hace(1), identidad: null, via: f.via } as EntradaCruda], ctx(), snap)
+      expect(p.datos[0].identidad.estado, `${f.fuente_id} con identidad null`).toBe(sinIdentidad.has(f.fuente_id) ? 'coincide' : 'no_comprobable')
+    }
+  })
+  it('R1 · la fuente de los homónimos (menciones_redes: tercero, con regla que bloquea) sin identidad NUNCA entra como medido', () => {
+    const d = una({ fuente_id: 'menciones_redes', tipo_id: 'menciones', contenido: 'un texto cualquiera de un tercero', campos: { text: 'x' }, identidad: null })
+    expect(d).toMatchObject({ origen: 'hueco', citable: false })
+    expect(d.identidad.estado).toBe('no_comprobable')
+  })
+  it('O1 (CC#3) · `via: portero` es SOLO para una ficha viva del cerebro: con crudo o relleno no vale', () => {
+    for (const via of ['crudo', 'relleno'] as const) {
+      const d = una({ fuente_id: 'mapas_ficha', tipo_id: 'puntaje_resenas', contenido: 4.8, campos: { title: 'a', totalScore: 4.8, reviewsCount: 1 }, via, identidad: { via: 'portero' } })
+      expect(d.identidad.estado, via).toBe('no_comprobable')
+      expect(d.origen).toBe('hueco')
+    }
+    expect(una({ fuente_id: 'cerebro_vivo', tipo_id: 'seguidores', contenido: 5, via: 'cerebro', identidad: { via: 'portero' } }).identidad.estado).toBe('coincide')
+  })
   it('Mapas: título exacto + sede ⇒ coincide; más de una candidata ⇒ ambigua ⇒ ninguna (no_comprobable); ninguna ⇒ no_coincide', () => {
     const propia = { title: 'Taller Los Arrayanes', address: 'Calle 1, Riobamba', placeId: 'p1' }
     const otra = { title: 'Taller Los Arrayanes', address: 'Av. 9, Riobamba', placeId: 'p2' }
@@ -159,7 +181,7 @@ describe('V2 · frescura, ensayo, moneda, duplicados, contradicción', () => {
     expect(una({ fuente_id: 'cerebro_vivo', tipo_id: 'menciones', contenido: 'x', via: 'cerebro', origen_ficha: 'tercero' }).alcance).toBe('tercero')
   })
   it('D1 · duplicados de la misma fuente: una por (fuente, huella), se deja la más antigua y se cuentan', () => {
-    const e = (medido_en: string, texto: string) => ({ fuente_id: 'sitio_web', tipo_id: 'texto_sitio', estado: 'trajo', contenido: texto, campos: { url: 'u', text: texto }, medido_en, huella: 'H1', identidad: { via: 'portero' } }) as EntradaCruda
+    const e = (medido_en: string, texto: string) => ({ fuente_id: 'sitio_web', tipo_id: 'texto_sitio', estado: 'trajo', contenido: texto, campos: { url: 'u', text: texto }, medido_en, huella: 'H1', identidad: { via: 'consulta_propia' } }) as EntradaCruda
     const p = normalizarDatos([e(hace(2), 'segunda'), e(hace(5), 'primera'), e(hace(1), 'tercera')], ctx(), snap)
     expect(p.repetidas).toBe(2)
     expect(p.datos).toHaveLength(1)
@@ -176,7 +198,7 @@ describe('V2 · frescura, ensayo, moneda, duplicados, contradicción', () => {
     expect(a.marcas).toContain('contradice')
     const eq = normalizarDatos([
       { fuente_id: 'cerebro_vivo', tipo_id: 'horario', contenido: '9 a 17', estado: 'trajo', medido_en: hace(2), via: 'cerebro', identidad: { via: 'portero' } },
-      { fuente_id: 'sitio_web', tipo_id: 'horario_sitio', contenido: '10 a 18', estado: 'trajo', campos: { url: 'u', text: 'x' }, medido_en: hace(2), via: 'crudo', identidad: { via: 'portero' } },
+      { fuente_id: 'sitio_web', tipo_id: 'horario_sitio', contenido: '10 a 18', estado: 'trajo', campos: { url: 'u', text: 'x' }, medido_en: hace(2), via: 'crudo', identidad: { via: 'consulta_propia' } },
     ] as EntradaCruda[], ctx(), snap)
     expect(eq.datos[0].contradice?.gana).toBe(eq.datos[0].id)
   })
@@ -190,7 +212,7 @@ describe('V2 · frescura, ensayo, moneda, duplicados, contradicción', () => {
   it('X5 · un tipo sin regla de precedencia ⇒ ambos conservados, confianza baja y aviso «completar fila»', () => {
     const p = normalizarDatos([
       { fuente_id: 'cerebro_vivo', tipo_id: 'puntaje_resenas', contenido: 4.8, estado: 'trajo', medido_en: hace(2), via: 'cerebro', identidad: { via: 'portero' } },
-      { fuente_id: 'mapas_ficha', tipo_id: 'puntaje_resenas', contenido: 3.9, estado: 'trajo', campos: { title: 't', totalScore: 3.9, reviewsCount: 4 }, medido_en: hace(1), via: 'crudo', identidad: { via: 'portero' } },
+      { fuente_id: 'mapas_ficha', tipo_id: 'puntaje_resenas', contenido: 3.9, estado: 'trajo', campos: { title: 't', totalScore: 3.9, reviewsCount: 4 }, medido_en: hace(1), via: 'crudo', identidad: { via: 'consulta_propia' } },
     ] as EntradaCruda[], ctx(), snap)
     expect(p.datos.map((d) => d.contradice?.motivo)).toEqual(['sin_regla_de_precedencia', 'sin_regla_de_precedencia'])
     expect(p.datos.every((d) => d.confianza === 'baja' && d.contradice?.gana === null)).toBe(true)
