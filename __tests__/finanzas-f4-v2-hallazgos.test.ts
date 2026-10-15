@@ -37,11 +37,11 @@ const calc = calcular(ENT)
 const bloque = (calc as any).ok ? (calc as any) : null
 
 describe('estructura', () => {
-  it('53 nodos (los de antes + 3), ningún nodo nuevo respecto de F4 v1', () => {
+  it('63 nodos (los de antes + 3 de F4 + 10 de la oficina conducida por el plan)', () => {
     expect(antes.nodes.length).toBe(50)
-    expect(despues.nodes.length).toBe(53)
+    expect(despues.nodes.length).toBe(63)
     const v2 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'scripts', 'worker-staging', 'finanzas-f4', 'plan-F4-finanzas-v2-ARREGLADO-2026-10-15.json'), 'utf8')) as Flujo
-    expect(v2.nodes.length).toBe(53)
+    expect(v2.nodes.length).toBe(63)
     expect(JSON.stringify(v2)).toBe(JSON.stringify(despues))
   })
   it('la puerta «FIN · ¿trae finanzas_id?» entra también con un motivo (y siempre exige client_id)', () => {

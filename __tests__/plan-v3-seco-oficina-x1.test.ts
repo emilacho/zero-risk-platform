@@ -14,7 +14,8 @@ import { CLIENTES, NEGOCIOS as NEGOCIOS_FIN, guionBase, redes, semilla } from '.
 import { correrCelda as correrCeldaOficina } from '../scripts/ops/finanzas-seco/nucleo.mjs'
 import { celdas as celdasDelPlan } from '../scripts/ops/plan-v3-seco/matriz.mjs'
 import { correrCelda as correrCeldaDelPlan, type Celda } from '../scripts/ops/plan-v3-seco/corredor'
-import { antesDeF4, enganchaFinanzas, FIN, moduloConFinanzas, NODOS } from '../scripts/worker-staging/finanzas-f4/construir-f4.mjs'
+import { antesDeF4, enganchaFinanzas, FIN, moduloConFinanzas, NODOS, NOMBRES_NUEVOS, OF } from '../scripts/worker-staging/finanzas-f4/construir-f4.mjs'
+import { correr } from '../scripts/worker-staging/finanzas-f4/n8n-mini.mjs'
 import { baseFalsa } from './_helpers/base-falsa-finanzas'
 
 const h = vi.hoisted(() => ({ db: null as unknown }))
@@ -235,5 +236,37 @@ describe('X1 · contadores: la oficina en seco solo toca sus tablas de práctica
     const con = await b4(despues, entradaDe(n), respuestaDeLaRuta(o.obs, undefined) as Record<string, unknown>)
     expect(con.pedido).not.toContain('OFICINA FINANCIERA')
     expect(sinRotular.test('')).toBe(false)
+  })
+})
+
+describe('X1 · de punta a punta POR EL FLUJO (F4 v2.1): el plan conduce la oficina por la ruta real y el motivo llega a B4', () => {
+  const flujo = enganchaFinanzas(antes) as Flujo & { connections: Record<string, any> }
+  const stubsFlujo = () => Object.fromEntries((flujo.nodes as Nodo[])
+    .filter((n) => n.name !== NODOS.b4 && !NOMBRES_NUEVOS.includes(n.name) && n.name !== 'Webhook · planeacion')
+    .map((n) => [n.name, (items: unknown[]) => items]))
+  const motivos: Record<CasoOficina, string> = { firmado: 'sin_firma', sin_acuerdo: 'sin_referencia', sin_firma: 'sin_firma', vencido: 'vencido' }
+  it.each(NEGOCIOS.map((n) => [n.id, n] as const))('%s · firmado / sin acuerdo / sin firma / vencido: el flujo abre, avanza hasta cerrar y B4 recibe el motivo', async (_id, n) => {
+    for (const caso of Object.keys(CASOS_OFICINA) as CasoOficina[]) {
+      const c = CASOS_OFICINA[caso]
+      const sem = semilla(n.fin, 'tuteo', c.semilla)
+      const guion = (c.guion ?? guionBase)(n.fin)
+      // el flujo pide SU semilla (resumida) del paquete; en el seco la oficina responde con el guion simulado por la ruta real
+      const http = {
+        [OF.abrir]: async (cuerpo: any) => { const r = await llamar({ ...cuerpo, client_id: idCliente(n.fin), dry_run: true, semilla: { ...cuerpo.semilla, ...sem } }); return { statusCode: r.status, body: r.json } },
+        [OF.avanzar]: async (cuerpo: any) => { const r = await llamar({ ...cuerpo, simulacion: { guion, ...(c.costo ? { costo_por_llamada_usd: c.costo } : {}) } }); return { statusCode: r.status, body: r.json } },
+        [OF.leer]: async (cuerpo: any) => { const r = await llamar(cuerpo); return { statusCode: r.status, body: r.json } },
+        [FIN.leer]: async () => ({ statusCode: 404, body: { error: 'tablero_inexistente' } }),
+      }
+      const hoy = await b4(antes, entradaDe(n))
+      const r = await correr(flujo, {
+        inicio: NODOS.unir, itemsDeInicio: [{ json: entradaDe(n) }], previos: { 'Webhook · planeacion': { body: { plan_v3: true, client_id: 'x-1', dry_run: true } } },
+        stubs: stubsFlujo(), http, env: { ZERO_RISK_API_URL: 'https://api.ejemplo.invalid', INTERNAL_API_KEY: LLAVE }, maxPasos: 800,
+      })
+      const salida = r.visitas.find((v: any) => v.nodo === NODOS.b4)!.salida[0]
+      expect(salida.finanzas_motivo_usado, caso).toBe(motivos[caso])
+      expect(salida.pedido, caso).not.toBe(hoy.pedido)
+      expect(salida.pedido, caso).toContain('SIN NÚMEROS FIRMADOS')
+      expect(r.llamadasHttp.filter((l: any) => l.nodo === OF.avanzar).length, caso).toBeGreaterThan(0)
+    }
   })
 })
