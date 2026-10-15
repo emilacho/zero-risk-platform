@@ -59,6 +59,8 @@ if (orden === 'respaldar') {
     if (!args.includes('--ejecutar')) { console.log('(sin --ejecutar: no se cambió nada)'); await salir(0) }
     const { name, nodes, connections, settings } = resp
     await api('PUT', `/workflows/${id}`, { name, nodes, connections, settings })
+    // una edición por API de un flujo ACTIVO puede dejar su horario sin re-registrar: se desactiva y se activa de nuevo (15-oct · el portero no corrió)
+    if (vivo.active) { await api('POST', `/workflows/${id}/deactivate`); await api('POST', `/workflows/${id}/activate`); console.log('horario re-registrado (desactivar → activar)') }
     const despues = await api('GET', `/workflows/${id}`)
     const f = diferencia(resp, despues)
     console.log('tras restaurar:', JSON.stringify(f), '· activo =', despues.active, '(no se toca)')

@@ -82,7 +82,7 @@ export async function rutaNoCorrio(deps: DepsDeNoCorrio, cuerpo: { dry_run?: boo
       const sin = ultimo ? diasEntre(dia, String(ultimo.dia).slice(0, 10)) : null
       if (sin !== null && !(DIAS_EN_QUE_SE_AVISA as readonly number[]).includes(sin)) { veredictos.push({ client_id: c.client_id, nombre: c.nombre, veredicto: 'sin_corrida_en_racha', dias_sin_corrida: sin }); continue }
       const f = await estadoFlujo()
-      const estado = f.ok ? (f.activo ? 'el flujo está activo pero no disparó' : 'el flujo está INACTIVO') : `no pude leer el estado del flujo (${f.detalle.slice(0, 80)})`
+      const estado = f.ok ? (f.activo ? 'el flujo está activo pero no dejó rastro: no disparó o murió a medias' : 'el flujo está INACTIVO') : `no pude leer el estado del flujo (${f.detalle.slice(0, 80)})`
       const racha = sin === null ? 'nunca ha corrido' : `${sin} día(s) sin corrida`
       const l = lineaDeNoCorrio(c.nombre, `hoy no hay corrida (${racha}; ${estado})`, wf)
       veredictos.push({ client_id: c.client_id, nombre: c.nombre, veredicto: 'no_corrio', linea: l, dias_sin_corrida: sin ?? undefined }); lineas.push(l)

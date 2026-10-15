@@ -45,7 +45,7 @@ describe('no corrió ⇒ UNA línea a #alertas', () => {
     const r = await rutaNoCorrio(m.deps, REAL)
     expect(r.status).toBe(200); expect(r.body.ok).toBe(false)
     expect(m.avisos).toHaveLength(1)
-    expect(m.avisos[0]).toMatch(/Cliente Zeta: hoy no hay corrida \(1 día\(s\) sin corrida; el flujo está activo pero no disparó\)/)
+    expect(m.avisos[0]).toMatch(/Cliente Zeta: hoy no hay corrida \(1 día\(s\) sin corrida; el flujo está activo pero no dejó rastro: no disparó o murió a medias\)/)
     expect(m.avisos[0]).toContain(WF)
   })
   it('el flujo está inactivo por otra razón (nadie lo apagó el vigilante) ⇒ avisa y lo dice', async () => {
