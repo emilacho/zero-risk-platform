@@ -60,6 +60,8 @@ export const PUEDEN_NOMBRARLAS = [
   /^supabase\/migrations\/202610151500_cerebro_alcance_de_la_ficha\.sql$/,
   /^supabase\/reversas\/202610151500_cerebro_alcance_de_la_ficha_REVERSA\.sql$/,
   /^scripts\/ops\/portero-(alimenta-seco|limpiar-repetidas)\.ts$/,
+  // 15-oct · el seco de la auditoría diaria: solo LEE fichas y crudos reales para medir falsos errores antes de que pueda apagar nada
+  /^scripts\/ops\/auditoria-seco\.ts$/,
   /^scripts\/worker-staging\/ogfq56oIEoHufFPM\//,
   // el puente: `ingest-source` acepta `cerebro_fichas` como origen de trozos (única puerta de escritura de evidencia al índice)
   /^src\/app\/api\/brain\/ingest-source\/route\.ts$/,

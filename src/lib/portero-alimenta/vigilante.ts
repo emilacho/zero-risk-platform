@@ -11,10 +11,12 @@
  *  3. gasto real del día > US$ 1,00 (el tope del código es 1,50: esto avisa ANTES);
  *  4. nació una ficha VIVA de una unidad que el filtro no confirmó (ajena / sin confirmar / ruido);
  *  5. el puente deja `quedan > 0`, hay fichas vivas repetidas o fichas vivas sin trozo en el índice;
- *  6. el propio vigilante no pudo comprobar algo (falla de lectura) ⇒ se trata como problema: ante la duda, apagado (el gasto recurrente no puede quedar sin ojos).
+ *  6. el propio vigilante no pudo comprobar algo (falla de lectura) ⇒ se trata como problema: ante la duda, apagado (el gasto recurrente no puede quedar sin ojos);
+ *  7. auditoría de calidad (15-oct): una muestra de las fichas de HOY no verifica contra su fuente cruda (tasa de error sobre el umbral de `auditoria.ts`). Silenciosa si todo está bien.
  * No llama a Apify ni a ningún modelo.
  */
 import { clientesActivos } from './clientes'
+import { auditarCliente, type ResultadoDeAuditoria } from './auditoria'
 import { gastoDeHoy, reconciliarYEnviar, type DepsDeRutas, type Respuesta } from './rutas'
 
 export const LIMITE_DEL_VIGILANTE_USD = 1.0
@@ -48,7 +50,7 @@ export const esSoloNoPudeComprobar = (res: ResultadoDeCliente[]) => {
   return todos.length > 0 && todos.every((p) => p.startsWith(PREFIJO_NO_PUDE))
 }
 
-export interface ResultadoDeCliente { client_id: string; nombre: string | null; problemas: string[]; gasto_usd: number | null }
+export interface ResultadoDeCliente { client_id: string; nombre: string | null; problemas: string[]; gasto_usd: number | null; auditoria?: ResultadoDeAuditoria | null }
 
 /** las condiciones que salen del CIERRE del flujo (sin leer la base) */
 export function problemasDelCierre(cierre: unknown, clientId: string): string[] {
@@ -102,6 +104,11 @@ export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: str
     }
     if (malas > 0) r.problemas.push(`${malas} ficha(s) viva(s) nacieron de una unidad que el filtro no confirmó como propia`)
   }
+
+  // 7 · auditoría diaria de calidad (solo código, US$ 0): una lectura que falla se DICE, nunca se lee como «todo bien»
+  const au = await auditarCliente(deps.db, c.client_id, ahora)
+  if (!au.ok) falla('la auditoría de calidad', au.detalle)
+  else { r.auditoria = au.resultado; if (au.resultado.problema) r.problemas.push(au.resultado.problema) }
 
   const p = await reconciliarYEnviar(deps, c.client_id, true)
   if (p.errores.length || p.puente.lectura_fallida === true) falla('el puente', p.errores[0] ?? 'lectura fallida')
@@ -166,7 +173,7 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
     const fila = rastros.get(r.client_id)
     if (!fila) continue
     const resumen = esObjeto(fila.resumen) ? fila.resumen : {}
-    const u = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ok: r.problemas.length === 0, problemas: r.problemas, gasto_usd: r.gasto_usd, revisado_en: ahora.toISOString(), workflow_execution_id: ex, intentos } } }).eq('id', String(fila.id))
+    const u = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ok: r.problemas.length === 0, problemas: r.problemas, gasto_usd: r.gasto_usd, auditoria: r.auditoria ? { elegidas: r.auditoria.elegidas, verificables: r.auditoria.verificables, errores: r.auditoria.errores, sin_verificar: r.auditoria.sin_verificar, tasa_de_error: r.auditoria.tasa_de_error } : null, revisado_en: ahora.toISOString(), workflow_execution_id: ex, intentos } } }).eq('id', String(fila.id))
     if (u.error) erroresDeRastro.push(`rastro ${r.client_id.slice(0, 8)}: ${u.error.message}`)
   }
   if (erroresDeRastro.length) body.errores_de_rastro = erroresDeRastro

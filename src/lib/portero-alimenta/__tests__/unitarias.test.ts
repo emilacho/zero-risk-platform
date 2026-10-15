@@ -67,7 +67,8 @@ describe('los cuatro defectos medidos el 14-oct', () => {
 describe('datos', () => {
   it('el tope del portero es US$ 1,50 (firma 14-oct) y todos los interruptores nacen apagados', () => {
     expect(TOPE_DEL_PORTERO_USD).toBe(1.5)
-    expect(interruptoresDelEntorno({})).toEqual(TODO_APAGADO)
+    expect(interruptoresDelEntorno({})).toEqual({ ...TODO_APAGADO, resumen_vivo: false })
+    expect(interruptoresDelEntorno({ PORTERO_RESUMEN_VIVO: 'on' }).resumen_vivo).toBe(true)
     expect(interruptoresDelEntorno({ PORTERO_ALIMENTAR: 'on' }).alimentar).toBe(true)
     expect(interruptoresDelEntorno({ PORTERO_ALIMENTAR: 'true' }).alimentar).toBe(false)
   })

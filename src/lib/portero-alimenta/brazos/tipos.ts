@@ -12,7 +12,7 @@
  *   · NADA se borra: lo nuevo reemplaza a lo vigente por CÓDIGO (sin modelo) y lo viejo queda retirado con su fecha;
  *   · nada de datos personales de terceros: ni autores de reseñas ni usuarios de publicaciones ajenas.
  */
-export type NombreDeBrazo = 'contexto' | 'demanda' | 'competencia' | 'propios'
+export type NombreDeBrazo = 'contexto' | 'demanda' | 'competencia' | 'propios' | 'resumen'
 export type Alcance = 'cliente' | 'competidor' | 'mercado' | 'zona'
 /** el `client_id` de las fichas de zona: texto reservado, nunca un uuid de cliente (la tabla guarda `client_id` como texto) */
 export { PREFIJO_DE_ZONA } from '../../cerebro/zona'
