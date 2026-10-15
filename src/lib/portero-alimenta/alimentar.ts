@@ -15,6 +15,12 @@ import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlam
 import { planDeArchivo, type PlanDeArchivo } from './archivar'
 import { unidadesDeRaspados, type FilaCruda, type Unidad } from './unidades'
 import { correrBrazos, hayBrazoActivo, type BrazosActivos, type ResultadoDeBrazos } from './brazos'
+import { archivarFichasDeBrazos } from './brazos/archivo'
+import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
+import { idDeZona, paisIsoDe } from '../cerebro/zona'
+
+/** las fichas de zona (`zona:ec`) que le tocan al cliente por su país */
+const zonasDelCliente = (c: Record<string, unknown>): string[] => { const iso = paisIsoDe(c.country ?? c.pais, c.market); return iso ? [idDeZona(iso)] : [] }
 
 export type Db = { from(tabla: string): any }
 type Fila = Record<string, unknown>
@@ -60,6 +66,8 @@ export interface ResultadoDeAlimentar {
   errores: string[]
   /** lo que hicieron los nuevos brazos (ausente = ninguno encendido) */
   brazos?: ResultadoDeBrazos
+  /** el resumen vivo (ausente = apagado) */
+  resumen_vivo?: { secciones: Record<string, number>; huecos: string[]; escritas: number; iguales: number; retiradas: number }
 }
 
 const vacio = (dry_run: boolean): ResultadoDeAlimentar => ({
@@ -183,6 +191,20 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     r.errores.push(...r.brazos.errores.map((m) => `brazos: ${m}`))
     // el modelo de los brazos (el juez de competencia por sede) cuenta en el gasto del portero
     if (r.brazos.costo_modelo_usd) r.gasto = { ...r.gasto, modelo_usd: Math.round((r.gasto.modelo_usd + r.brazos.costo_modelo_usd) * 1e6) / 1e6 }
+  }
+
+  // ───── el resumen vivo (apagado por omisión): se reescribe por CÓDIGO desde las fichas vivas, sin modelo; sus errores se DICEN
+  if (e.interruptores.resumen_vivo) {
+    try {
+      const ent = await cargarEntradaDelResumen(e.db, { client_id: e.client_id, nombre: (cliente.name as string | null) ?? null, rubro: (cliente.industry as string | null) ?? null, ahora, zonas: zonasDelCliente(cliente), sedes: lista(sd.data).map((s) => ({ clave: String(s.clave ?? ''), ciudad: (s.ciudad as string | null) ?? null })).filter((s) => s.clave) })
+      if (!ent.ok) r.errores.push(`resumen vivo: ${ent.detalle}`)
+      else {
+        const sal = fichasDeResumen(ent.entrada)
+        const ar = await archivarFichasDeBrazos({ db: e.db, fichas: [sal.cliente, ...sal.sedes], ahora, dry_run: e.dry_run, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id, nuevoId: e.nuevoId })
+        r.resumen_vivo = { secciones: sal.secciones, huecos: sal.huecos, escritas: ar.escritas, iguales: ar.iguales, retiradas: ar.retiradas }
+        r.errores.push(...ar.errores.map((m) => `resumen vivo: ${m}`))
+      }
+    } catch (err) { r.errores.push(`resumen vivo: ${err instanceof Error ? err.message.slice(0, 120) : 'falló'}`) }
   }
 
   if (e.dry_run) return { ...r, ok: true, estado: 'hecha' }

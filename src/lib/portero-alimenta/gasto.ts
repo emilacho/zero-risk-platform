@@ -57,7 +57,7 @@ const r6 = (n: number) => Math.round(n * 1e6) / 1e6
  * tiene pareja dentro de la ventana; si ese crudo lo llamó el portero, cuenta; si lo llamó otro (plan, alta, a mano), NO.
  * SIN pareja (no hay crudo que la explique, o filas viejas) o con pareja SIN `llamado_por`: CUENTA como del portero: no se subestima su gasto. Las filas de otros clientes pasan sin tocar (se filtran después).
  */
-export function soloLoDelPortero(libro: FilaDelLibro[], crudo: FilaDeRaspadoDeOrigen[], clientId: string, flujo: string = FLUJO_DEL_PORTERO): { libro: FilaDelLibro[]; fuera_del_portero: FilaDelLibro[]; sin_origen: number } {
+export function soloLoDelPortero(libro: FilaDelLibro[], crudo: FilaDeRaspadoDeOrigen[], clientId: string, flujo: string = FLUJO_DEL_PORTERO): { libro: FilaDelLibro[]; fuera_del_portero: FilaDelLibro[]; sin_origen: number; por_origen: number; ensayos: number } {
   const usado = new Set<number>()
   const porFuncion = new Map<string, Array<{ i: number; t: number; llamadoPor: unknown }>>()
   crudo.forEach((r, i) => {
@@ -68,8 +68,14 @@ export function soloLoDelPortero(libro: FilaDelLibro[], crudo: FilaDeRaspadoDeOr
   for (const v of porFuncion.values()) v.sort((a, b) => a.t - b.t)
   const propias = libro.filter((f) => f.service.startsWith('apify:') && deEsteCliente(f, clientId) && esDetalle(f)).sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
   const fuera = new Set<FilaDelLibro>()
-  let sinOrigen = 0
+  let sinOrigen = 0, porOrigen = 0, ensayos = 0
   for (const f of propias) {
+    // 1 · un ENSAYO (dry_run) nunca es gasto del portero: su fila no trae importe y valdría su máximo (medido 15-oct: ensayos de otros inflaban el día a US$ 1,16)
+    const d = descripcionDe(f)
+    if (d.ensayo === true) { fuera.add(f); ensayos++; continue }
+    // 2 · la fila DICE quién la pidió (`origen`, plan v3 V8): manda sobre el emparejamiento; `sin_origen` o ausente = filas viejas ⇒ se empareja como antes
+    const o = typeof d.origen === 'string' ? d.origen.trim() : ''
+    if (o && o !== 'sin_origen') { porOrigen++; if (!origenDelPortero(o)) fuera.add(f); continue }
     const fn = f.service.slice('apify:'.length)
     const t = Date.parse(f.created_at)
     const par = (porFuncion.get(fn) ?? []).find((c) => !usado.has(c.i) && c.t <= t + HOLGURA_ADELANTE_MS && c.t >= t - HOLGURA_ATRAS_MS)
@@ -78,8 +84,11 @@ export function soloLoDelPortero(libro: FilaDelLibro[], crudo: FilaDeRaspadoDeOr
     // solo es «de otro» si el crudo DICE quién llamó y no fue el portero; un crudo sin `llamado_por` no explica nada: cuenta (no se subestima)
     if (typeof par.llamadoPor === 'string' && par.llamadoPor.trim() && !llamadaDelPortero(par.llamadoPor, flujo)) fuera.add(f)
   }
-  return { libro: libro.filter((f) => !fuera.has(f)), fuera_del_portero: [...fuera], sin_origen: sinOrigen }
+  return { libro: libro.filter((f) => !fuera.has(f)), fuera_del_portero: [...fuera], sin_origen: sinOrigen, por_origen: porOrigen, ensayos }
 }
+/** `origen` que cuenta como del portero (la diaria, el despertar, el repaso y sus tandas) */
+export const origenDelPortero = (o: string): boolean => o === 'portero' || o.startsWith('portero-') || o.startsWith('portero:')
+const descripcionDe = (f: FilaDelLibro): { ensayo?: unknown; origen?: unknown } => { try { const d = JSON.parse(f.description ?? '{}'); return d && typeof d === 'object' ? d : {} } catch { return {} } }
 const dia = (iso: string) => iso.slice(0, 10)
 const deEsteCliente = (f: FilaDelLibro, clientId: string): boolean => {
   if (!f.description) return false
@@ -96,6 +105,7 @@ export function gastoDelDia(o: { clientId: string; ahora: Date; libro: FilaDelLi
   let apify = 0, sinImporte = 0, porMaximo = 0
   for (const f of o.libro) {
     if (!f.service.startsWith('apify:') || dia(f.created_at) !== hoy || !deEsteCliente(f, o.clientId) || !esDetalle(f)) continue
+    if (descripcionDe(f).ensayo === true) continue // un ensayo no es gasto: no vale su máximo
     const importe = Number(f.amount_usd)
     if (Number.isFinite(importe) && importe > 0) { apify += importe; continue }
     sinImporte++

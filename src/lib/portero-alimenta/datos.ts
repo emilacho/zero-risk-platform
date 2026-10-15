@@ -72,8 +72,8 @@ export function varianteDelCliente(c: { registro?: string | null; pais?: string 
 }
 
 /** interruptores (todos APAGADOS por omisión: sin ellos el sistema queda idéntico a hoy) */
-export interface Interruptores { alimentar: boolean; proponer_busquedas: boolean; menciones: boolean; puente_al_indice: boolean }
+export interface Interruptores { alimentar: boolean; proponer_busquedas: boolean; menciones: boolean; puente_al_indice: boolean; /** el resumen vivo del cliente (15-oct): apagado por omisión */ resumen_vivo?: boolean }
 export function interruptoresDelEntorno(env: Record<string, string | undefined> = process.env): Interruptores {
   const on = (k: string) => String(env[k] ?? '').trim().toLowerCase() === 'on'
-  return { alimentar: on('PORTERO_ALIMENTAR'), proponer_busquedas: on('PORTERO_PROPONER_BUSQUEDAS'), menciones: on('PORTERO_MENCIONES'), puente_al_indice: on('PORTERO_PUENTE_AL_INDICE') }
+  return { alimentar: on('PORTERO_ALIMENTAR'), proponer_busquedas: on('PORTERO_PROPONER_BUSQUEDAS'), menciones: on('PORTERO_MENCIONES'), puente_al_indice: on('PORTERO_PUENTE_AL_INDICE'), resumen_vivo: on('PORTERO_RESUMEN_VIVO') }
 }
