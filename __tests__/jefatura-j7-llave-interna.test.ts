@@ -16,7 +16,7 @@ const ARREGLADO = leer('ARREGLADO-EVMrQ4Tqw98L1L0D-llave-interna-2026-10-15.json
 const DESPACHO = 'despacho-de-prueba-0123456789'
 const INTERNA = 'interna-de-prueba-9876543210'
 const CUERPO = { dry_run: true, client_id: 'cliente-prueba', texto: 'Pie de foto de prueba', artifact_id: 'pieza:1' }
-const correr = async (codigo: string, headers: Record<string, string>, env: Record<string, string | undefined>, body: Record<string, unknown> = CUERPO) => {
+const correr = async (codigo: string, headers: Record<string, string | undefined>, env: Record<string, string | undefined>, body: Record<string, unknown> = CUERPO) => {
   const f = new AsyncFunction('$input', '$env', codigo)
   return f({ first: () => ({ json: { headers, body } }) }, env)
 }
