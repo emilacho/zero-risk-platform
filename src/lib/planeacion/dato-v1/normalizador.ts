@@ -45,11 +45,11 @@ export function identidadDeVeredicto(v: Veredicto): ResultadoDeIdentidad {
   return { estado, senales: [], por_que: v.motivo, identidad_por: 'portero' }
 }
 
-export function resolverIdentidad(e: EntradaDeIdentidad | null | undefined, fuente: FilaDeFuente | undefined, ctx: ContextoDeNormalizacion, snap?: CatalogoSnapshot, via?: Via): ResultadoDeIdentidad {
+export function resolverIdentidad(e: EntradaDeIdentidad | null | undefined, fuente: FilaDeFuente | undefined, ctx: ContextoDeNormalizacion, snap: CatalogoSnapshot, via?: Via): ResultadoDeIdentidad {
   // FALLA CERRADO (R1 de CC#3): sin entrada de identidad, el `coincide` por omisión es SOLO para una fuente que por diseño no trae campos de identidad,
   // no tiene regla de identidad en el catálogo y no es el cerebro (una ficha del cerebro debe declarar `via: 'portero'`, no se presume).
   if (!e) {
-    const tieneRegla = !!fuente && !!snap && snap.reglas('identidad', { fuente: fuente.fuente_id }).length > 0
+    const tieneRegla = !!fuente && snap.reglas('identidad', { fuente: fuente.fuente_id }).length > 0
     const porDiseno = !!fuente && (fuente.identidad_campos?.length ?? 0) === 0 && !tieneRegla && fuente.proveedor !== 'cerebro'
     return porDiseno
       ? { estado: 'coincide', senales: [], por_que: 'fuente sin campos ni regla de identidad por diseño: pertenece al cliente por su clave', identidad_por: 'fuente' }

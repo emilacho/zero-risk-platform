@@ -11,6 +11,8 @@ import { articulosParaLeer, descubrir, MAX_RESENAS_POR_CORRIDA, type AccionDelPo
 import { armarMensajeDePropuestas, INSTRUCCION_DE_PROPUESTAS, validarBusquedas, type ResultadoDePropuestas } from './propuestas'
 import { COSTO_MAXIMO_POR_FUNCION, FLUJO_DEL_PORTERO, gastoDelDia, invocacionDelPortero, soloLoDelPortero, VIDEO_DE_INSTAGRAM_USD, type FilaDeRaspadoDeOrigen, type FilaDelLibro } from './gasto'
 import { TOPE_DEL_PORTERO_USD, type Interruptores } from './datos'
+import type { BrazosActivos } from './brazos'
+import { cargarContextoDeBrazos } from './brazos/sistematica'
 import type { RespuestaDeLlamada } from './juez'
 import type { PuenteDeIndice } from './archivar'
 import { clientesActivos } from './clientes'
@@ -86,6 +88,8 @@ export interface DepsDeRutas {
   /** escribe los trozos del índice (puente) y saca los de las fichas reemplazadas; en pruebas es un registro */
   puente?: (p: { escribir: PuenteDeIndice[]; sacar: string[]; client_id: string }) => Promise<{ escritos: number; sacados: number; errores: string[] }>
   ahora?: Date
+  /** los nuevos brazos (15-oct): todos APAGADOS si falta; las rutas los leen del entorno */
+  brazos?: BrazosActivos
 }
 
 // ───────────────────────── /descubrir · qué pide hoy el portero (solo lectura; el modelo solo para proponer búsquedas)
@@ -111,7 +115,14 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
   const publicaciones = [...new Set(lista(vg.data).flatMap((f) => lista(f.respuesta)).filter((p) => usuariosPropios.has(String(p.username ?? '').toLowerCase())).flatMap((p) => lista(p.latestPosts)).map((p) => String(p.shortCode ?? p.id ?? '')).filter(Boolean))]
   const ciudad = ctx.ubicacion[0] ?? ''
   const rubro = typeof cliente.industry === 'string' ? cliente.industry : null
-  const base = { cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades: ctx.ubicacion, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores }
+  // los nuevos brazos de demanda y competencia miran POR SEDE: sus puntos, los competidores ya juzgados y las ubicaciones ya pedidas (una lectura; un error se DICE y se cae a lo de siempre)
+  let brazosCtx: Awaited<ReturnType<typeof cargarContextoDeBrazos>> | undefined
+  let brazosCtxError: string | null = null
+  if (deps.brazos && (deps.brazos.demanda || deps.brazos.competencia)) {
+    brazosCtx = await cargarContextoDeBrazos(deps.db, v.client_id, cliente, ahora)
+    if (brazosCtx.errores.length) { brazosCtxError = brazosCtx.errores.join(' · '); brazosCtx = undefined }
+  }
+  const base = { cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades: ctx.ubicacion, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx }
 
   // las búsquedas propias: el modelo PROPONE, el código decide
   let propuestas: ResultadoDePropuestas = { aceptadas: [], rechazadas: [] }
@@ -137,7 +148,7 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
     cubierto_por_el_alta = sinLoYaRaspado(plan, lista(raw.data) as unknown as FilaDeRaspadoParaCubrir[], ahora)
     plan = { ...plan, hacer: cubierto_por_el_alta.hacer, costo_maximo_del_plan_usd: Math.round(cubierto_por_el_alta.hacer.reduce((x, a) => x + a.usd_max, 0) * 1e6) / 1e6 }
   }
-  return { status: 200, body: { dry_run: v.dry_run, tope_por_cliente_usd: TOPE_DEL_PORTERO_USD, plan, cubierto_por_el_alta, gasto_de_hoy: g.gasto, propuestas, modelos_llamados: costoPropuestas > 0 || propuestas.aceptadas.length ? 1 : 0, costo_modelo_usd: costoPropuestas } }
+  return { status: 200, body: { dry_run: v.dry_run, tope_por_cliente_usd: TOPE_DEL_PORTERO_USD, plan, cubierto_por_el_alta, gasto_de_hoy: g.gasto, propuestas, modelos_llamados: costoPropuestas > 0 || propuestas.aceptadas.length ? 1 : 0, costo_modelo_usd: costoPropuestas, ...(brazosCtxError ? { brazos_lectura_fallida: brazosCtxError } : {}) } }
 }
 
 /**
@@ -338,7 +349,7 @@ export async function rutaAlimentar(deps: DepsDeRutas, cuerpo: unknown): Promise
   const g = await gastoDeHoy(deps.db, v.client_id, ahora)
   if (!g.ok) return err(502, 'lectura_fallida', g.detalle)
   const r: ResultadoDeAlimentar = await alimentarCliente({
-    db: deps.db, client_id: v.client_id, dry_run: v.dry_run, interruptores: deps.interruptores, llamarModelo: deps.llamarModelo, ahora, forzar: v.cuerpo.forzar === true,
+    db: deps.db, client_id: v.client_id, dry_run: v.dry_run, interruptores: deps.interruptores, brazos: deps.brazos, llamarModelo: deps.llamarModelo, ahora, forzar: v.cuerpo.forzar === true,
     gasto_de_hoy_usd: g.gasto.total_usd, workflow_id: v.workflow_id || undefined, workflow_execution_id: v.workflow_execution_id || undefined,
   })
   const status = r.estado === 'cliente_inexistente' ? 404 : r.estado === 'lectura_fallida' ? 502 : 200

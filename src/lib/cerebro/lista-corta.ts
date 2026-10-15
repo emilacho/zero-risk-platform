@@ -13,6 +13,7 @@ import {
 } from './lectores'
 import { PLAZOS_EN_DIAS, type Plazos } from './plazos'
 import { type EstadoDeFuente, type Ficha, type ListaCorta, NOMBRES_DE_FUENTE, type NombreDeFuente } from './tipos'
+import { idDeZona, paisIsoDe } from './zona'
 
 export interface OpcionesListaCorta { ahora?: Date; plazos?: Partial<Plazos> }
 
@@ -72,6 +73,8 @@ export async function construirListaCorta(consulta: Consulta, clienteId: string,
   }
   if (!ficha.existe) return { ...base, estado: 'cliente_inexistente', fuentes: todasEn(vacia('cliente_inexistente')), lineas: [] }
 
+  // las fichas «de zona» que le tocan al cliente salen de su país (sin país no hay zona: no se adivina)
+  { const iso = paisIsoDe((ficha as { pais?: string | null }).pais, (ficha as { mercado?: string | null }).mercado); if (iso) ctx.zonas = [idDeZona(iso)] }
   const salidas: Salida[] = deLasPruebas ? [await leerFichas(ctx)] : [ficha.salida, ...(await Promise.all([
     leerManual(ctx), leerPerfilDeClienteIdeal(ctx), leerCompetencia(ctx), leerSitio(ctx), leerSedes(ctx), leerFotos(ctx),
     leerTrabajosHechos(ctx), leerDecisionesDeLaCola(ctx), leerTrozosSinLector(ctx), leerFichas(ctx),

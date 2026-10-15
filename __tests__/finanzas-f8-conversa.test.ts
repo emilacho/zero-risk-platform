@@ -447,13 +447,24 @@ describe('F8 · plan v3 V7 · el ajuste debe responder el equilibrio cuando la m
     expect(tareasDelAjuste(m)[1].tarea).toMatch(/falta equilibrio_respuesta/)
     expect((m.arts.planteo_fijado as any).equilibrio_respuesta?.decision).toBe('subo_la_meta')
   })
-  it('si nunca la trae, el paso se degrada («sin supuestos del agente») y la conversación SIGUE: nunca bloquea', async () => {
+  it('si nunca la trae, el planteo (válido) se CONSERVA con `equilibrio_sin_respuesta` y la alerta; la conversación SIGUE: nunca bloquea ni tira el trabajo del paso', async () => {
     const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, SIN_RESPUESTA, SIN_RESPUESTA] } })
     const r = await abrir(m)
     const fin = await correrTodo(m, (r.cuerpo as any).encargo_id)
     expect(fin.r.status).toBe(200)
-    expect((m.arts.planteo_fijado as any).sin_supuestos_del_agente).toBe(true)
+    const fijado = m.arts.planteo_fijado as any
+    expect(fijado.sin_supuestos_del_agente).toBeUndefined()
+    expect(fijado.equilibrio_sin_respuesta).toBe(true)
+    expect(fijado.meta_por_semana).toBe(1) // lo que decidió el paso se conserva
+    expect(fijado.canales).toEqual(BAJO.canales)
+    expect((m.arts.bloque as any).alertas_de_entrada.join(' ')).toMatch(/equilibrio_sin_respuesta/)
     expect(fin.r.cuerpo.terminado).toBe(true)
+  })
+  it('control · si SÍ responde, no queda la marca', async () => {
+    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, CON_RESPUESTA] } })
+    const r = await abrir(m)
+    await correrTodo(m, (r.cuerpo as any).encargo_id)
+    expect((m.arts.planteo_fijado as any).equilibrio_sin_respuesta).toBeUndefined()
   })
   it('control · con una meta que SÍ cubre el equilibrio no se exige nada', async () => {
     const m = mundo({ guion: { 'campaign-brief-agent': [{ ...BAJO, meta_por_semana: 500 }, { ...BAJO, meta_por_semana: 500 }] } })

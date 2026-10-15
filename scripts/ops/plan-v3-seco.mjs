@@ -6,7 +6,10 @@
  *   node scripts/ops/plan-v3-seco.mjs estado                                 lee: ¿existen las tablas de V1/V13?, ¿está activo el flujo de planeación?, n8n en vuelo
  *   node scripts/ops/plan-v3-seco.mjs condiciones [--cliente <id>]           lee: qué condiciones de CC#3 se cumplen y cuáles NO se pueden comprobar por lectura
  *   node scripts/ops/plan-v3-seco.mjs contadores --clientes a,b --guardar f  foto ANTES · después: --comparar f (debe decir «sin cambios» salvo lo declarado)
- *   node scripts/ops/plan-v3-seco.mjs marcas-v2 --plan <plan-v2-texto.txt> [--datos <dato-v1.json>]   P10 en seco sobre el plan v2 real (conteo por código, criterio de ruido)
+ *   node scripts/ops/plan-v3-seco.mjs marcas-v2 --plan <plan-v2-texto.txt> [--datos <dato-v1.json>]   P10 en seco sobre el plan v2 real (conteo por código; ruido por TIPOS si no cita, por EJEMPLOS si cita)
+ *   node scripts/ops/plan-v3-seco.mjs muestra-v2 --plan <plan-v2-texto.txt> [--n 30] [--semilla N]   N ejemplos AL AZAR por código (semilla fija) para contar falsos positivos
+ *   node scripts/ops/plan-v3-seco.mjs oficina                                el tramo de la oficina financiera: casos y cómo se corre en seco (US$ 0)
+ *   node scripts/ops/plan-v3-seco.mjs guion                                  la secuencia del seco VIVO (X1 / C6 / C7) para cuando CC#3 avise tanda 1 + tanda 2
  *   node scripts/ops/plan-v3-seco.mjs encender|correr|apagar|limpiar         SE NIEGAN hasta que existan V8/V9 y las migraciones estén aplicadas (lo dice y sale con 3)
  *
  * El seco LOCAL (el camino de datos completo con las piezas reales, reloj y redactor simulados) corre en las pruebas: `npx vitest run __tests__/plan-v3-v11-seco.test.ts`.
@@ -15,7 +18,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CASOS, CONDICIONES, CONTADORES, NEGOCIOS, celdas, resumenDeLaMatriz } from './plan-v3-seco/matriz.mjs'
+import { CASOS, CONDICIONES, CONTADORES, GUION_VIVO, NEGOCIOS, OFICINA_CASOS, celdas, resumenDeLaMatriz } from './plan-v3-seco/matriz.mjs'
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url))
 const RAIZ = path.join(AQUI, '..', '..')
@@ -64,19 +67,46 @@ const ORO_RECONSTRUIDO = [
   { id: 'D5', tipo_id: 'pedidos_enviados', valor: { numero: 3 }, origen: 'medido', estado: 'trajo', alcance: 'dominio', periodo: { tipo: 'ventana' } },
   { id: 'D6', tipo_id: 'anuncios_activos', valor: {}, origen: 'hueco', estado: 'registro_sin_campos', alcance: 'cliente' },
 ]
-function marcasDelPlan(textoPlan, datos) {
+function moduloP10() {
   const js = fs.readFileSync(path.join(RAIZ, 'scripts', 'worker-staging', 'planeacion-v3', 'chequeos-p10.js'), 'utf8').split('\r\n').join('\n')
-  const { p10Calibrar } = new Function(`${js}\nreturn { p10Calibrar: p10Calibrar }`)()
+  return new Function(`${js}\nreturn { p10Calibrar: p10Calibrar, p10Revisar: p10Revisar }`)()
+}
+function contextoP10(datos, extra = {}) {
   const sem = JSON.parse(fs.readFileSync(path.join(RAIZ, 'src', 'lib', 'planeacion', 'catalogo', 'semilla.json'), 'utf8'))
-  const lexico = Object.fromEntries(['verificacion', 'ausencia', 'ausencia_excluye', 'supuesto', 'dominio', 'periodo'].map((g) => [g, sem.lexico.filter((l) => l.grupo === g).flatMap((l) => l.terminos)]))
+  const lexico = Object.fromEntries(['verificacion', 'verificacion_excluye', 'ausencia', 'ausencia_excluye', 'supuesto', 'dominio', 'periodo'].map((g) => [g, sem.lexico.filter((l) => l.grupo === g).flatMap((l) => l.terminos)]))
   const base = { identidad: { estado: 'coincide' }, frescura: { estado: 'fresco' }, periodo: { tipo: 'instante' }, derivado: { si: false, de: [] }, contradice: null, marcas: [], medido_en: '2026-10-12' }
-  const ds = datos.map((d) => ({ ...base, ...d }))
-  return p10Calibrar([{ id: 'plan', texto: textoPlan, datos: ds, op: { lexico, cifras_de_slots: [], tolerancias: { puntaje_resenas: 0.05 } } }])
+  return { datos: datos.map((d) => ({ ...base, ...d })), op: { lexico, cifras_de_slots: [], tolerancias: { puntaje_resenas: 0.05 }, ...extra } }
+}
+function marcasDelPlan(textoPlan, datos) {
+  const { p10Calibrar } = moduloP10()
+  const { datos: ds, op } = contextoP10(datos)
+  return p10Calibrar([{ id: 'plan', texto: textoPlan, datos: ds, op }])
+}
+/** `n` ejemplos al azar (semilla fija ⇒ reproducible) por cada código de marca: la muestra que lee CC#3 para contar falsos positivos */
+function muestraDelPlan(textoPlan, datos, n, semilla) {
+  const { p10Revisar } = moduloP10()
+  const { datos: ds, op } = contextoP10(datos, { ejemplos_max: 100000 })
+  let x = semilla >>> 0 || 1
+  const rnd = () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296 }
+  const sal = {}
+  for (const m of p10Revisar(textoPlan, ds, op)) {
+    const todos = m.ejemplos.slice()
+    for (let i = todos.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [todos[i], todos[j]] = [todos[j], todos[i]] }
+    sal[m.codigo] = { total_de_ejemplos: todos.length, muestra: todos.slice(0, n) }
+  }
+  return sal
 }
 
 async function main() {
   switch (orden) {
     case 'plan': console.log(textoDeLaMatriz()); return
+    case 'oficina': {
+      console.log('OFICINA FINANCIERA dentro del plan v3 (seco local · ruta real · agentes simulados · US$ 0):')
+      for (const c of OFICINA_CASOS) console.log(`  ${c.id.padEnd(16)} ${c.que}`)
+      console.log('\ncorrer: npx vitest run __tests__/plan-v3-seco-oficina-x1.test.ts')
+      return
+    }
+    case 'guion': console.log(GUION_VIVO.join('\n')); return
     case 'estado': {
       necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY')
       const tablas = ['plan_catalogo_fuentes', 'plan_catalogo_tipos', 'plan_catalogo_reglas', 'plan_catalogo_lexico', 'plan_catalogo_topes', 'plan_corridas']
@@ -142,14 +172,20 @@ async function main() {
       const datos = flag('datos') ? JSON.parse(fs.readFileSync(flag('datos'), 'utf8')) : ORO_RECONSTRUIDO
       const r = marcasDelPlan(texto, datos)
       const c = r.casos[0]
-      const tipos = c.codigos_altos.length
       console.log(JSON.stringify({
         plan: path.basename(p), caracteres: texto.length, datos: datos.length,
         tabla: flag('datos') ? 'la del archivo' : 'oro RECONSTRUIDO de los hechos del §1 (no la tabla de V3/V9)',
-        por_codigo: c.por_codigo, tipos_de_marca_altas: c.codigos_altos, n_tipos: tipos, ejemplos_altos: c.altas, leves: c.leves,
-        criterio_v2_2_a_6_tipos: tipos >= 2 && tipos <= 6,
-        lectura: 'el plan v2 NO cita nada: cada «(Fuente: …)», cada «verificada» y cada cifra sin [D#] es una marca real por regla; el diseño cuenta TIPOS (2–6). El criterio de ruido (≥ 15 altas) se mide sobre un plan que CITA (v3 ≤ 3), no sobre v2.',
+        modo: c.modo, por_codigo: c.por_codigo, tipos_de_marca_altas: c.codigos_altos, n_tipos: c.tipos, ejemplos_altos: c.altas, leves: c.leves,
+        criterio_ok: c.criterio_ok, ruido: c.ruido,
+        criterio: c.modo === 'sin_citas' ? 'plan SIN citas: se mide por TIPOS (esperado 2–6; más de 6 = ruido)' : 'plan que CITA: se mide por EJEMPLOS (esperado ≤ 3; ≥ 15 = ruido)',
       }, null, 2))
+      return
+    }
+    case 'muestra-v2': {
+      const p = flag('plan')
+      if (!p) { console.error('pasa --plan <archivo.txt> [--n 30] [--semilla 20261015]'); process.exit(2) }
+      const datos = flag('datos') ? JSON.parse(fs.readFileSync(flag('datos'), 'utf8')) : ORO_RECONSTRUIDO
+      console.log(JSON.stringify(muestraDelPlan(fs.readFileSync(p, 'utf8'), datos, Number(flag('n') || 30), Number(flag('semilla') || 20261015)), null, 2))
       return
     }
     case 'encender': case 'correr': case 'apagar': case 'limpiar': {
@@ -160,7 +196,7 @@ async function main() {
       process.exit(3)
     }
     default:
-      console.error('órdenes: plan · estado · condiciones · contadores · marcas-v2 · encender|correr|apagar|limpiar (se niegan)')
+      console.error('órdenes: plan · oficina · guion · estado · condiciones · contadores · marcas-v2 · encender|correr|apagar|limpiar (se niegan)')
       process.exit(2)
   }
 }

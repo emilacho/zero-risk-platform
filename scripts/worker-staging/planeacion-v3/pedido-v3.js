@@ -75,8 +75,10 @@ function pedidoV3Lineas(paquete, opciones) {
   var entran = paquete.datos.filter(_v3Entra)
   var descartados = paquete.datos.length - entran.length
   // los huecos y los datos sin comprobar viajan SIN valor y en su propia sección
-  var huecos = entran.filter(function (d) { return d.origen === 'hueco' })
-  var citables = entran.filter(function (d) { return d.origen !== 'hueco' })
+  // observación de CC#3: un dato sin identidad comprobada NO puede viajar como medido ni con valor, aunque llegue mal marcado (defensa en profundidad)
+  var sinComprobar = function (d) { return !!(d.identidad && d.identidad.estado === 'no_comprobable') }
+  var huecos = entran.filter(function (d) { return d.origen === 'hueco' || sinComprobar(d) })
+  var citables = entran.filter(function (d) { return d.origen !== 'hueco' && !sinComprobar(d) })
 
   var cabecera = []
   cabecera.push('══════ TABLA DE DATOS dato.v1 · catálogo ' + (paquete.catalogo_version || '?') + ' · huella ' + (paquete.catalogo_huella || '?') + (paquete.dry_run === true ? ' · BORRADOR DE ENSAYO' : '') + ' ══════')
@@ -88,7 +90,7 @@ function pedidoV3Lineas(paquete, opciones) {
   if (huecos.length) {
     seccionHuecos.push('══════ LO QUE NO SE PUDO MIRAR (hueco: se declara, no se rellena) ══════')
     huecos.slice().sort(function (a, b) { return _v3N(a.id) - _v3N(b.id) }).forEach(function (d) {
-      seccionHuecos.push('- ' + d.id + ' · ' + d.tipo_id + ' · ' + (d.motivo || d.estado) + ' · lo aclara la agencia (no inventes el valor)')
+      seccionHuecos.push('- ' + d.id + ' · ' + d.tipo_id + ' · ' + (d.motivo || (sinComprobar(d) ? 'sin comprobar que sea de este negocio' : d.estado)) + ' · lo aclara la agencia (no inventes el valor)')
     })
   }
 
@@ -108,7 +110,7 @@ function pedidoV3Lineas(paquete, opciones) {
   // el contenido de las fuentes: CITADO y DELIMITADO; con imperativos NO se reproduce
   var porId = {}
   entran.forEach(function (d) { porId[d.id] = d })
-  var contenidos = (paquete.contenidos || []).filter(function (c) { return c && porId[c.id] && porId[c.id].origen !== 'hueco' }).map(function (c) {
+  var contenidos = (paquete.contenidos || []).filter(function (c) { return c && porId[c.id] && porId[c.id].origen !== 'hueco' && !sinComprobar(porId[c.id]) }).map(function (c) {
     var texto = String(c.texto || '').replace(/\s+/g, ' ').trim()
     if (_V3_RE_IMPERATIVO.test(_v3Norm(texto))) return { id: c.id, lineas: ['<<<FUENTE ' + c.id + '>>>', '(el texto de esta fuente trae instrucciones: no se reproduce; el dato queda en la tabla)', '<<<FIN>>>'] }
     // el delimitador no puede aparecer dentro del contenido

@@ -97,7 +97,8 @@ export function planificarRefresco(
     const buenos = ds.filter(medidoYCitable)
     if (!buenos.length) return { ok: false, motivo: 'hueco' }
     const tipoFila = snap.tipo(tipo)
-    const fresco = buenos.some((d) => resolverFrescura(d.medido_en, null, tipoFila?.frescura_limite_h ?? 0, e.ahora).estado === 'fresco')
+    // `frescura.vence_en` ya trae el menor entre el límite del tipo y `vigente_hasta` de la ficha: una ficha vencida por su propia fecha NO es vigente aunque el tipo diga «fresco»
+    const fresco = buenos.some((d) => (d.frescura?.vence_en ? e.ahora.getTime() <= Date.parse(d.frescura.vence_en) : resolverFrescura(d.medido_en, null, tipoFila?.frescura_limite_h ?? 0, e.ahora).estado === 'fresco'))
     return fresco ? { ok: true, motivo: 'vencido' } : { ok: false, motivo: 'vencido' }
   }
   const porFuente = new Map<string, { tipos: string[]; motivo: 'vencido' | 'hueco' | 'ausente' }>()

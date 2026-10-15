@@ -61,7 +61,7 @@ export const ESQUEMA = {
     clave: 'lexico_id', semilla: 'lexico',
     columnas: [
       ['lexico_id', 'text NOT NULL', 'texto'], ['idioma', 'text NOT NULL', 'texto'],
-      ['grupo', "text NOT NULL CHECK (grupo IN ('verificacion', 'ausencia', 'ausencia_excluye', 'supuesto', 'dominio', 'periodo'))", 'texto'],
+      ['grupo', "text NOT NULL CHECK (grupo IN ('verificacion', 'verificacion_excluye', 'ausencia', 'ausencia_excluye', 'supuesto', 'dominio', 'periodo'))", 'texto'],
       ['terminos', 'text[] NOT NULL CHECK (cardinality(terminos) >= 1)', 'lista'],
     ],
   },

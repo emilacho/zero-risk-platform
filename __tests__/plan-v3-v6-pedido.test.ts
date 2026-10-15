@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { crearSnapshot, type FilasDelCatalogo } from '../src/lib/planeacion/dato-v1/catalogo'
 import { normalizarDatos } from '../src/lib/planeacion/dato-v1/normalizador'
 import type { DatoV1, EntradaCruda } from '../src/lib/planeacion/dato-v1/tipos'
+import { aProcedencia } from '../src/lib/planeacion/dato-v1/semilla-compacta'
 import semilla from '../src/lib/planeacion/catalogo/semilla.json'
 
 interface Salida { lineas: string[]; datos_omitidos: string[]; recortado: boolean; huecos: string[]; descartados: number; midio: number }
@@ -180,7 +181,7 @@ describe('V6 · mutaciones del módulo (cada una MUERE)', () => {
     expect(t).toContain('somos los mejores')
   })
   it('poner valor a un hueco', () => {
-    const m = mutar("seccionHuecos.push('- ' + d.id + ' · ' + d.tipo_id + ' · ' + (d.motivo || d.estado)", "seccionHuecos.push('- ' + d.id + ' · ' + d.tipo_id + ' = ' + _v3Valor(d) + ' · ' + (d.motivo || d.estado)")
+    const m = mutar("seccionHuecos.push('- ' + d.id + ' · ' + d.tipo_id + ' · ' + (d.motivo ||", "seccionHuecos.push('- ' + d.id + ' · ' + d.tipo_id + ' = ' + _v3Valor(d) + ' · ' + (d.motivo ||")
     expect(texto(m.pedidoV3Lineas(paquete(datos())))).toMatch(/- D3 · anuncios_activos = /)
   })
 })
@@ -196,6 +197,34 @@ describe('V6 · el circuito V2 → V6 → V5 cierra', () => {
     const mal = 'La ficha de Mapas muestra casi 5 puntos y la cuenta tiene 1.300 seguidores. El negocio no tiene anuncios pagados activos.'
     expect(P10.p10Revisar(bien, d, { lexico, cifras_de_slots: [], tolerancias: { puntaje_resenas: 0.05 } })).toEqual([])
     expect(P10.p10Revisar(mal, d, { lexico, cifras_de_slots: [], tolerancias: { puntaje_resenas: 0.05 } }).map((m) => m.codigo)).toEqual(expect.arrayContaining(['P10d', 'P10f']))
+  })
+})
+
+describe('V6 · (observación de CC#3) un dato `no_comprobable` NUNCA llega como medido', () => {
+  const sinConfirmar = 'Taller Los Arrayanes recibe nuevos pedidos para esta temporada según lo que comentan los vecinos del sector'
+  it('de punta a punta: la mención sin confirmar sale hueco de V2, no entra a la tabla ni con valor', () => {
+    const d = datos([E({ fuente_id: 'menciones_redes', tipo_id: 'menciones', contenido: sinConfirmar, campos: { text: sinConfirmar }, identidad: { via: 'texto', texto: sinConfirmar, autoria: 'tercero' } })])
+    const mencion = d[d.length - 1]
+    expect(mencion.identidad.estado).toBe('no_comprobable')
+    expect(mencion.origen).not.toBe('medido')
+    const t = texto(V6.pedidoV3Lineas(paquete(d)))
+    expect(t).not.toMatch(new RegExp(`^${mencion.id} \\| menciones .*\\| medido`, 'm'))
+  })
+  it('defensa en profundidad: aunque llegue MAL marcado (`medido` + no_comprobable) el pedido lo manda a «no se pudo mirar» sin valor y sin su contenido', () => {
+    const d = datos()
+    const feo = { ...d[0], id: 'D99', origen: 'medido', citable: true, identidad: { estado: 'no_comprobable', senales: [], por_que: 'x' }, valor: { numero: 777, unidad: 'puntos' } } as unknown as DatoV1
+    const s = V6.pedidoV3Lineas(paquete([...d, feo], { contenidos: [{ id: 'D99', texto: 'texto de la fuente dudosa' }] }))
+    const t = texto(s)
+    expect(t).not.toMatch(/^D99 \| /m)
+    expect(t).not.toContain('777')
+    expect(t).not.toContain('texto de la fuente dudosa')
+    expect(t).toMatch(/- D99 · .* · sin comprobar que sea de este negocio/)
+    expect(s.huecos).toContain('D99')
+  })
+  it('y la semilla compacta tampoco lo emite como medido ni con valor', () => {
+    const d = datos([E({ fuente_id: 'menciones_redes', tipo_id: 'menciones', contenido: sinConfirmar, campos: { text: sinConfirmar }, identidad: { via: 'texto', texto: sinConfirmar, autoria: 'tercero' } })])
+    const mencion = d[d.length - 1]
+    expect(aProcedencia(mencion)).toMatchObject({ procedencia: 'hueco', valor: null })
   })
 })
 

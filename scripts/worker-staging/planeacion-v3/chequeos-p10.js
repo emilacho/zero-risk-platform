@@ -88,7 +88,7 @@ function _p10Candidatos(tok) {
 function _p10Cifras(frase) {
   // las fechas («2026-10-12», «12 de octubre») no son cifras de hecho: las cubre P10b/P10h
   // calibración 15-oct (plan v2 real): las HORAS («8:00 a 16:00») y los TELÉFONOS («+593 997744288») no son cifras de hecho
-  var t = String(frase).replace(/\[D\d+\]/g, ' ').replace(/\b\d{1,2}:\d{2}\b/g, ' ').replace(/\+\d{1,3}[ -]?\d{6,}/g, ' ').replace(/\b\d{7,}\b/g, ' ').replace(/\d{4}-\d{2}-\d{2}/g, ' ').replace(new RegExp('\\d{1,2}(?:\\s?[-–]\\s?\\d{1,2})?(?:\\s+y\\s+(?:el\\s+)?\\d{1,2})? de (?:' + _P10_MESES.join('|') + ')', 'gi'), ' ').replace(/#[0-9a-fA-F]{3,8}\b/g, ' ').replace(/\d{1,2}(?:\s?[-–]\s?\d{1,2})?\s+(?:de\s+)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)[a-z]*/gi, ' ')
+  var t = String(frase).replace(/\[D\d+\]/g, ' ').replace(/\b\d{1,2}:\d{2}\b/g, ' ').replace(/\+\d{1,3}[ -]?\d{6,}/g, ' ').replace(/\b\d{7,}\b/g, ' ').replace(/\d{4}-\d{2}-\d{2}/g, ' ').replace(new RegExp('\\d{1,2}(?:\\s?[-–]\\s?\\d{1,2})?(?:(?:\\s*,\\s*|\\s+y\\s+)(?:el\\s+)?\\d{1,2})* de (?:' + _P10_MESES.join('|') + ')', 'gi'), ' ').replace(/#[0-9a-fA-F]{3,8}\b/g, ' ').replace(/semanas?\s+\d{1,2}(?:\s*(?:a|y|-|–)\s*\d{1,2})?/gi, ' ').replace(/^\s*\|\s*\d{1,2}\s*\|/, '|').replace(/\b(?:el|del|los)\s+\d{1,2}\s*[-–]\s*\d{1,2}\b/gi, ' ').replace(/\b(?:de|desde)\s+\d{1,2}(?::\d{2})?\s*(?:a|-|–)\s*\d{1,2}(?::\d{2})?\s*(?:h|hs|horas)?\b/gi, ' ').replace(/\d{1,2}(?:\s?[-–]\s?\d{1,2})?\s+(?:de\s+)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)[a-z]*/gi, ' ')
   var re = /\d{1,3}(?:[  ]\d{3})+(?:[.,]\d{1,2})?|\d[\d.,]*\d|\d/g
   var out = [], m
   while ((m = re.exec(t)) !== null) {
@@ -100,6 +100,14 @@ function _p10Cifras(frase) {
     var esAnio = /^(19|20)\d\d$/.test(tok)
     var siguiente = _p10Norm(t.slice(m.index + tok.length, m.index + tok.length + 14)).replace(/[^a-z ]/g, ' ').trim().split(/\s+/)[0]
     var esOrden = _P10_NO_CIFRA_DETRAS.indexOf(previa) >= 0 || _P10_NO_CIFRA_DESPUES.indexOf(siguiente) >= 0
+    // calibración (muestra de 30 por código del plan v2 real): lo pegado a letras es un CÓDIGO («663R+25G», «45g»), no una cifra de hecho
+    var antesCar = t.charAt(m.index - 1), despuesCar = t.charAt(m.index + tok.length)
+    if (/[A-Za-zÁÉÍÓÚáéíóúñ]/.test(antesCar) || /[A-Za-zÁÉÍÓÚáéíóúñ]/.test(despuesCar) || antesCar === '+') esOrden = true
+    // un UMBRAL o una META del plan («mayor al 2%», «por debajo de 4,5», «4,8 o más», «menos de 50») no es un hecho del cliente; tampoco un rango declarado («entre 25 y 50»)
+    var ctxAntes = _p10Norm(t.slice(Math.max(0, m.index - 22), m.index))
+    var ctxDespues = _p10Norm(t.slice(m.index + tok.length, m.index + tok.length + 12))
+    if (/(mayor|menor|inferior|superior)\s+(al?|del?)\s*$|(mas|menos)\s+(de|del)\s*$|por (debajo|encima) (de|del)\s*$|(al menos|como minimo|como maximo|hasta|supera|supere|superan|exceda|excede|llegue a|alcance|pase de)\s*$|\bentre\s*$/.test(ctxAntes) || /^\s*(%\s*)?o (mas|menos)\b/.test(ctxDespues)) esOrden = true
+    if (/\bentre\s+[\d.,$% ]+\s+y\s*$/.test(ctxAntes)) esOrden = true
     // un rango de duración («15-20 minutos»): el primer extremo tampoco es un hecho
     var rango = /^\s*(?:-|a|–)\s*\d+\s+([a-z]+)/.exec(_p10Norm(t.slice(m.index + tok.length, m.index + tok.length + 24)))
     if (rango && _P10_NO_CIFRA_DESPUES.indexOf(rango[1]) >= 0) esOrden = true
@@ -131,8 +139,8 @@ function _p10FechasDe(frase) {
 
 function _p10Ficha(d) { return d && typeof d === 'object' ? d : null }
 
-function _p10Marca(codigo, que, ejemplos) {
-  return { codigo: codigo, severidad: _P10_SEVERIDAD[codigo], que: que, cuenta: (ejemplos || []).length, ejemplos: (ejemplos || []).slice(0, 4).map(function (e) { return String(e).slice(0, 140) }) }
+function _p10Marca(codigo, que, ejemplos, max) {
+  return { codigo: codigo, severidad: _P10_SEVERIDAD[codigo], que: que, cuenta: (ejemplos || []).length, ejemplos: (ejemplos || []).slice(0, max || 4).map(function (e) { return String(e).slice(0, max ? 400 : 140) }) }
 }
 
 /**
@@ -175,7 +183,10 @@ function p10Revisar(texto, datos, op) {
     })
 
     // P10b · «verificado/medido/confirmado/(Fuente: …)» sin [D#] en la frase, o con una fecha distinta a la del dato
-    var verif = _p10Tiene(n, lex.verificacion)
+    // calibración: «sin dato verificado», «una vez verificado», «huecos confirmados» DECLARAN lo que falta; no afirman nada (fila `verificacion_excluye`)
+    var nVer = n
+    ;(lex.verificacion_excluye || []).forEach(function (t) { var tn = _p10Norm(t).trim(); if (tn) nVer = nVer.split(tn).join(' ') })
+    var verif = _p10Tiene(nVer, lex.verificacion)
     if (verif) {
       if (!citas.length) acc.P10b.push(corta + ' → «' + verif + '» sin [D#]')
       else {
@@ -280,7 +291,7 @@ function p10Revisar(texto, datos, op) {
     P10m: 'reproduce texto de una fuente que traía instrucciones',
   }
   var salida = []
-  Object.keys(acc).forEach(function (c) { if (acc[c].length) salida.push(_p10Marca(c, QUE[c], acc[c])) })
+  Object.keys(acc).forEach(function (c) { if (acc[c].length) salida.push(_p10Marca(c, QUE[c], acc[c], op.ejemplos_max)) })
   return salida
 }
 
@@ -309,8 +320,10 @@ function p10RellenarSlots(texto, slots) {
 
 var _P10_UMBRAL_RUIDO_ALTAS = 15
 /**
- * Harness de calibración (§7.3): corre P10 sobre casos { id, texto, datos, op } y cuenta por código. Un caso con ≥ 15 altas es RUIDO (se calibra en filas del catálogo, no en código).
- * Devuelve { casos: [{ id, por_codigo, altas, leves, ruido }], total_altas }.
+ * Harness de calibración (§7.3 + respuesta de CC#3 15-oct): corre P10 sobre casos { id, texto, datos, op } y mide con la vara que le toca a cada plan:
+ *   · plan SIN citas (v2): se mide por TIPOS de marca alta — esperado 2–6; más de 6 tipos es RUIDO. (Por ejemplos, v2 siempre da cientos: no cita nada y cada cifra es una marca real por regla.)
+ *   · plan que CITA (v3): se mide por EJEMPLOS — esperado ≤ 3 altas; ≥ 15 es RUIDO.
+ * Devuelve { casos: [{ id, modo, por_codigo, altas, leves, codigos_altos, tipos, criterio_ok, ruido }], total_altas }.
  */
 function p10Calibrar(casos) {
   var salida = [], total = 0
@@ -322,9 +335,15 @@ function p10Calibrar(casos) {
       por[m.codigo] = n
       if (m.severidad === 'alta') altas += n; else leves += n
     })
-    total += altas
     var codigosAltos = marcas.filter(function (m) { return m.severidad === 'alta' }).map(function (m) { return m.codigo })
-    salida.push({ id: c.id, por_codigo: por, altas: altas, leves: leves, codigos_altos: codigosAltos, ruido: altas >= _P10_UMBRAL_RUIDO_ALTAS })
+    var cita = /\[D\d+\]/.test(String(c.texto || ''))
+    var tipos = codigosAltos.length
+    total += altas
+    salida.push({
+      id: c.id, modo: cita ? 'con_citas' : 'sin_citas', por_codigo: por, altas: altas, leves: leves, codigos_altos: codigosAltos, tipos: tipos,
+      criterio_ok: cita ? altas <= 3 : tipos >= 2 && tipos <= 6,
+      ruido: cita ? altas >= _P10_UMBRAL_RUIDO_ALTAS : tipos > 6,
+    })
   })
   return { casos: salida, total_altas: total }
 }

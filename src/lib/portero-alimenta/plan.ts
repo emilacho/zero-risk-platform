@@ -7,6 +7,7 @@
  */
 import { planDeFuentesPublicas, type EntradaDelPlan as EntradaDeFuentes, type LlamadaDeFuente } from '../fuentes-publicas/plan'
 import { recortarAlTope } from '../cerebro/diario/topes'
+import { accionesDeBrazos, hayBrazoActivo, type BrazosActivos } from './brazos'
 import { normalizar } from '../manual/texto'
 import { COSTO_MAXIMO_POR_FUNCION, COSTO_MAXIMO_POR_OMISION_USD } from './gasto'
 import { MAX_ARTICULOS_POR_DIA, MAX_BUSQUEDAS_PROPUESTAS_POR_DIA, TOPE_DEL_PORTERO_USD, type Interruptores } from './datos'
@@ -22,7 +23,7 @@ export const DIRECTORIOS_POR_FAMILIA: Record<string, string[]> = {
 }
 const MAX_CONSULTAS_DE_PRENSA = 2
 
-export type FuenteDelPortero = 'sitio' | 'instagram' | 'mapas' | 'comentarios' | 'reparto' | 'resenas' | 'publicaciones' | 'videos' | 'prensa' | 'busqueda_propuesta' | 'menciones'
+export type FuenteDelPortero = 'sitio' | 'instagram' | 'mapas' | 'comentarios' | 'reparto' | 'resenas' | 'publicaciones' | 'videos' | 'prensa' | 'busqueda_propuesta' | 'menciones' | 'demanda' | 'competencia'
 export interface AccionDelPortero {
   fuente: FuenteDelPortero
   funcion: string
@@ -49,6 +50,11 @@ export interface EntradaDeDescubrir {
   /** búsquedas ya validadas por `validarBusquedas` (≤ 3) */
   busquedas_propuestas?: string[]
   tope_usd?: number
+  /** los nuevos brazos (15-oct): todos APAGADOS por omisión; ausente = el plan de siempre */
+  brazos?: BrazosActivos
+  ahora?: Date
+  /** sedes con punto, competidores del sistema y ubicaciones ya pedidas (la ruta lo carga cuando hay un brazo de demanda o competencia encendido) */
+  brazosCtx?: Parameters<typeof accionesDeBrazos>[0]['ctx']
 }
 export interface PlanDelPortero {
   hacer: AccionDelPortero[]
@@ -136,6 +142,13 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
   if (e.interruptores.menciones) {
     if (handle) candidatas.push(accion('menciones', ACTOR_DE_MENCIONES.funcion, { username: [handle], resultsLimit: 30 }, `@${handle}`, 'third_party'))
     else noCubiertas.push({ fuente: 'menciones', por_que: 'sin cuenta propia no hay etiquetas que buscar' })
+  }
+
+  // los nuevos brazos (demanda y competencia piden a Apify; contexto y propios no piden nada): detrás de su interruptor, al final: si el tope o las 16 corridas aprietan, caen PRIMERO
+  if (e.brazos && hayBrazoActivo(e.brazos)) {
+    const b = accionesDeBrazos({ brazos: e.brazos, cliente: { id: e.cliente.id, name: e.cliente.name, config: e.cliente.config, industry: e.rubro, country: e.pais, market: ciudad }, rubro: e.rubro, ciudad, familias: fp.familias, ahora: e.ahora ?? new Date(), ctx: e.brazosCtx })
+    candidatas.push(...(b.acciones as AccionDelPortero[]))
+    noCubiertas.push(...b.no_cubiertas)
   }
 
   const tope = e.tope_usd ?? TOPE_DEL_PORTERO_USD

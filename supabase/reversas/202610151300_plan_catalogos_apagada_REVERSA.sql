@@ -23,7 +23,7 @@ BEGIN
   END IF;
   IF to_regclass('public.plan_catalogo_lexico') IS NOT NULL THEN
     EXECUTE 'SELECT count(*) FROM public.plan_catalogo_lexico' INTO n;
-    IF n > 6 THEN extras := extras || format('plan_catalogo_lexico=%s ', n); END IF;
+    IF n > 7 THEN extras := extras || format('plan_catalogo_lexico=%s ', n); END IF;
   END IF;
   IF to_regclass('public.plan_catalogo_topes') IS NOT NULL THEN
     EXECUTE 'SELECT count(*) FROM public.plan_catalogo_topes' INTO n;

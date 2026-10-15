@@ -7,6 +7,7 @@ import type { Almacen, EsperaFila } from './almacen'
 import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import { escalonQueToca, invarianteDeReloj, type Violacion } from './esperas'
 import { abrirEsperaDe, resolverEsperas } from './nucleo'
+import { pasarSinRevision } from './revision-jefatura'
 import type { Fila } from './tipos'
 
 type Linea = { campana_id: string; texto: string }
@@ -112,6 +113,12 @@ async function alVencer(al: Almacen, e: EsperaFila, ahora: string, lineas: Linea
         lineas.push({ campana_id: c.id, texto: 'la campaña pasó a pausada tras 7 días esperando a Emilio' })
       }
       return `campaña ${e.campana_id} pausada`
+    }
+    case 'pasar_sin_revision': {
+      // J7: la revisión de la jefatura no cerró a tiempo: la cadena SIGUE (nunca queda de rehén) y se avisa
+      const que = await pasarSinRevision(al, e)
+      lineas.push({ campana_id: e.campana_id, texto: `la revisión de la jefatura no cerró a tiempo (${e.objeto_id}): la cadena siguió sin ella · ${que}` })
+      return que
     }
     case 'resumen_semanal': {
       const c = await al.campana(e.campana_id)

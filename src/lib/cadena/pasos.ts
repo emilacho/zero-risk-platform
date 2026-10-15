@@ -18,6 +18,7 @@ import { type LexicoAfirmaciones } from './afirmaciones'
 import { lexicoDelCliente } from './lexico-por-rubro'
 import { problemasDeEsquema, validarEstrategia } from './validador-estrategia'
 import { validarTodo, type FechaEspecialVerificada, type InsumosCalendario } from './validador-calendario'
+import { fechasPedidasDe, retencionDe, retenerParaRevision } from './revision-jefatura'
 
 const TOTAL_SEMANAS = Math.ceil(DIAS_DE_CAMPANA / 7)
 export const semanasDeTanda = (tanda: number): number[] => {
@@ -143,10 +144,16 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
     return { status: 200, cuerpo: { necesita_humano: true, fichas: plan.fichas, alerta: r.alerta } }
   }
   await al.insertarEstrategia({ campana_id: campana.id, version, estado: 'validada', contenido: objeto as Estrategia, agente: AGENTE_POR_PASO.estrategia, modelo: corrida.modelo, costo_usd: leerResultado(cuerpo.resultado).cost_usd ?? null, workflow_execution_id: corrida.workflow_execution_id, seco: campana.seco })
+  // J7 · el punto de espera «antes de pasar»: si la jefatura abriría una revisión de la estrategia, se guarda todo igual pero la campaña NO pasa a `calendario` hasta que la revisión cierre
+  // (o venza la espera). Con la jefatura apagada `retener` es false y esto es BYTE A BYTE lo de siempre.
+  const retencion = await retencionDe(al, 'estrategia', campana.client_id)
+  if (retencion.retener) {
+    const espera = await retenerParaRevision(al, campana, 'estrategia', version, ahora)
+    return { status: 200, cuerpo: { ok: true, version, retenida_para_revision: { tipo: 'estrategia', version, objeto_id: espera.objeto_id, vence_en: espera.vence_en }, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que) } }
+  }
   await al.actualizarCampana(campana.id, { estado: 'calendario' })
   // los tipos de fechas que ESTE cliente declaró (puede ser ninguno: lo normal) y los años de la campaña: el flujo investiga solo eso
-  const anios = [...new Set([campana.fecha_inicio.slice(0, 4), campana.fecha_fin.slice(0, 4)].map(Number))]
-  const fechasPedidas = ctx.pais ? (objeto as Estrategia).fechas_que_importan.flatMap((f) => anios.map((anio) => ({ pais: ctx.pais, tipo: f.tipo, ambito: f.ambito, anio }))) : []
+  const fechasPedidas = fechasPedidasDe(campana, ctx.pais, objeto as Estrategia)
   return { status: 200, cuerpo: { ok: true, version, fechas_pedidas: fechasPedidas, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que) } }
 }
 
@@ -293,9 +300,17 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
       await abrirEsperaDe(al, campana, 'espera_video', f.id, 'espera al brazo de video', ahora, { fechaPieza: f.fecha, leadDiasVideo: lead })
     } else if (f.estado === 'en_investigacion') await abrirEsperaDe(al, campana, 'dato_en_investigacion', f.id, 'un dato de la fila se investiga con fuente', ahora)
   }
-  if (campana.estado === 'calendario') await al.actualizarCampana(campana.id, { estado: 'activa' })
+  // J7 · lo mismo para el calendario: la PRIMERA tanda es la que mueve la campaña a `activa`; con la jefatura abriendo, se retiene hasta que cierre su revisión
+  let retenida: { tipo: 'calendario'; tanda: number; objeto_id: string; vence_en: string } | null = null
+  if (campana.estado === 'calendario') {
+    const retencion = await retencionDe(al, 'calendario', campana.client_id)
+    if (retencion.retener) {
+      const espera = await retenerParaRevision(al, campana, 'calendario', tanda, ahora)
+      retenida = { tipo: 'calendario', tanda, objeto_id: espera.objeto_id, vence_en: espera.vence_en }
+    } else await al.actualizarCampana(campana.id, { estado: 'activa' })
+  }
   const cuenta = (e: Fila['estado']) => finales.filter((f) => f.estado === e).length
-  return { status: 200, cuerpo: { ok: true, tanda, filas: finales.length, validadas: cuenta('validada'), en_investigacion: cuenta('en_investigacion'), espera_video: cuenta('espera_video'), salieron_sin_fuente: salen, panorama_semanas: todas12.length ? SEMANAS_DE_PANORAMA : 0, avisos: hs.filter((h) => h.severidad === 'aviso').length } }
+  return { status: 200, cuerpo: { ok: true, tanda, filas: finales.length, validadas: cuenta('validada'), en_investigacion: cuenta('en_investigacion'), espera_video: cuenta('espera_video'), salieron_sin_fuente: salen, panorama_semanas: todas12.length ? SEMANAS_DE_PANORAMA : 0, avisos: hs.filter((h) => h.severidad === 'aviso').length, ...(retenida ? { retenida_para_revision: retenida } : {}) } }
 }
 
 // ─────────────────────────────────────────────────────────────── VALIDAR (sin escribir nada)
