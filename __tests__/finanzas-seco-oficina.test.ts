@@ -181,7 +181,7 @@ describe('la puerta de la simulación', () => {
 
 describe('la ruta SIN simulación (menor 1 de CC#3)', () => {
   const SEM = { evento: 'mensaje', dias_activos_por_semana: 5 }
-  it('avanzar sin `simulacion` NO usa el guion: llama al modelo real (aquí sin configurar) y no devuelve `simulado`', async () => {
+  it('avanzar sin `simulacion` NO usa el guion: llama al modelo real (aquí sin workflow_id) y no devuelve `simulado`', async () => {
     const a = await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true, semilla: SEM })
     const id = a.json.encargo_id
     const abrir = await llamar({ accion: 'avanzar', encargo_id: id })
@@ -193,7 +193,8 @@ describe('la ruta SIN simulación (menor 1 de CC#3)', () => {
     expect(planteo.json.simulado).toBeUndefined()
     expect(planteo.json.degradado).toBe(true)
     const l = await llamar({ accion: 'leer', encargo_id: id })
-    expect(l.json.turnos.find((t: { paso: string }) => t.paso === 'planteo').error).toMatch(/modelo_no_configurado/)
+    // la base de run-sdk ya tiene respaldo (ver finanzas-run-sdk-base.test.ts): sin workflow_id real el turno no sale a la red
+    expect(l.json.turnos.find((t: { paso: string }) => t.paso === 'planteo').error).toMatch(/sin_workflow_id/)
   })
   it('con `simulacion` sí devuelve `simulado` y el turno sale hecho', async () => {
     const a = await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true, semilla: SEM })
