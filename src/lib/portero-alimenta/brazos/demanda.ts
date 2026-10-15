@@ -101,7 +101,7 @@ export function fichasDeDemanda(e: EntradaDeFichasDeDemanda): ResultadoDeUnBrazo
     const ordenados = [...its].sort((a, b) => (num(a.rank) ?? 999) - (num(b.rank) ?? 999))
     const idx = ordenados.findIndex((x) => { const t = txt(x.title); return !!t && !!nuestro && (normalizar(t) === nuestro || coincidePorPalabra(t, e.nombreDelCliente)) })
     const primeros = ordenados.filter((_, i) => i !== idx).slice(0, 3).map((x) => `«${txt(x.title)}» (${num(x.totalScore) !== null ? coma(num(x.totalScore) as number) : 's/p'} · ${num(x.reviewsCount) ?? 0} reseñas)`)
-    const lugar = idx >= 0 ? `${e.nombreDelCliente} aparece en el puesto ${num(ordenados[idx].rank) ?? idx + 1} de ${ordenados.length} resultados` : `${e.nombreDelCliente} NO aparece entre los ${ordenados.length} primeros resultados`
+    const lugar = idx >= 0 ? `${e.nombreDelCliente} aparece en el puesto ${num(ordenados[idx].rank) ?? idx + 1} según Maps (se leyeron ${ordenados.length} resultados)` : `${e.nombreDelCliente} NO aparece entre los ${ordenados.length} resultados leídos`
     const primero = ordenados[0] && idx !== 0 ? `; primero: «${txt(ordenados[0].title)}»` : ''
     const contenido = `Posición en Google Maps para la búsqueda «${termino}» (sin marca) desde ${donde}: ${lugar}${primero}. Otros que salen arriba: ${primeros.length ? primeros.join(', ') : 'ninguno'}. `
       + `El ranking depende del punto desde el que Maps resuelve la ciudad; no es el barrio del cliente. Observado ${iso.slice(0, 10)}.`

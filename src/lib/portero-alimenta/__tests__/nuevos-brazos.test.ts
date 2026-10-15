@@ -144,7 +144,7 @@ describe('BRAZO · demanda y posición', () => {
   it('dice en qué puesto sale el cliente, quién va primero, y sugiere a los demás como competidores SIN vigilarlos', () => {
     const r = fichasDeDemanda({ client_id: CL, nombreDelCliente: 'Náufrago', ahora: JUEVES, ciudad: 'Olón', yaConocidos: ['Náufrago', 'Rasimar Restaurante'], filas: [fila([lug(1, 'Ceviches Don Villón', 4.8, 10), lug(2, 'Rasimar Restaurante', 4.5, 80), lug(3, 'Maximo 21-8', 5, 19), lug(4, 'Naufrago', 4.8, 26)])] })
     const pos = r.fichas.find((f) => f.clase === 'mercado_posicion')!
-    expect(pos.contenido).toMatch(/Náufrago aparece en el puesto 4 de 4/)
+    expect(pos.contenido).toMatch(/Náufrago aparece en el puesto 4 según Maps \(se leyeron 4 resultados\)/)
     expect(pos.contenido).toMatch(/primero: «Ceviches Don Villón»/)
     expect(pos.alcance).toBe('mercado')
     const sug = r.fichas.filter((f) => f.clase === 'competidor_sugerido')
@@ -153,7 +153,7 @@ describe('BRAZO · demanda y posición', () => {
   })
   it('si no aparece lo dice (no lo lee como puesto cero) y los ensayos y las filas sin marca no cuentan', () => {
     const sinNosotros = fichasDeDemanda({ client_id: CL, nombreDelCliente: 'Náufrago', ahora: JUEVES, filas: [fila([lug(1, 'Otro', 4, 3)])] })
-    expect(sinNosotros.fichas.find((f) => f.clase === 'mercado_posicion')!.contenido).toMatch(/NO aparece entre los 1 primeros/)
+    expect(sinNosotros.fichas.find((f) => f.clase === 'mercado_posicion')!.contenido).toMatch(/NO aparece entre los 1 resultados leídos/)
     expect(fichasDeDemanda({ client_id: CL, nombreDelCliente: 'N', ahora: JUEVES, filas: [fila([lug(1, 'X', 4, 3)], { ensayo: true })] }).estado).toBe('sin_material')
     expect(fichasDeDemanda({ client_id: CL, nombreDelCliente: 'N', ahora: JUEVES, filas: [fila([lug(1, 'X', 4, 3)], { params: { searchStringsArray: ['x'] } })] }).estado).toBe('sin_material')
     expect(fichasDeDemanda({ client_id: CL, nombreDelCliente: 'N', ahora: JUEVES, filas: [fila([lug(1, 'X', 4, 3)], { params: { _brazo: 'otra:cosa' } })] }).estado).toBe('sin_material')
