@@ -11,7 +11,7 @@
 import { coincidePorPalabra } from '../../texto/coincidencia'
 import { normalizar } from '../../manual/texto'
 import { DIA_EN_MS, MARCA_DE_BRAZO, slugDe, type AccionDeBrazo, type FichaDeBrazo, type ResultadoDeUnBrazo } from './tipos'
-import { marcaDeUbicar, radioDe, type SedeConPunto } from './sedes'
+import { marcaDeUbicar, porAbrir, radioDe, type SedeConPunto } from './sedes'
 
 export const DIA_DE_DEMANDA = 3 // miércoles (0 = domingo, UTC)
 export const MAX_TERMINOS_DE_DEMANDA = 3
@@ -76,6 +76,8 @@ export function accionesDeDemandaPorSede(e: EntradaDeDemandaPorSede): { acciones
   if (!terminos.length) return { acciones, no_cubiertas: [{ fuente: 'demanda', por_que: 'no hay términos de búsqueda (ni declarados ni del rubro)' }] }
   const meta = { target_kind: 'third_party' as const, llamado_por: 'portero-alimentar' }
   for (const s of e.sedes) {
+    // una sede por abrir no se mira (ni se pide su ubicación): no hay quien compita por ella todavía
+    if (porAbrir(s)) continue
     const radio = radioDe(e.familias, s.tipo)
     if (radio === null) { no_cubiertas.push({ fuente: `demanda · ${s.clave}`, por_que: 'el rubro no compite por cercanía en esta sede: no aplica por sede' }); continue }
     if (s.lat === null || s.lng === null) {

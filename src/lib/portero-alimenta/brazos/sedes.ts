@@ -20,6 +20,8 @@ export interface SedeConPunto {
   origen_del_punto: 'config' | 'ficha_de_mapas' | 'direccion_aproximada' | null
   tipo: 'local' | 'solo_domicilio' | 'desconocido'
   direccion: string | null
+  /** `por_abrir`: la sede aún no atiende al público (dato de su ficha, `estado_de_la_sede`): no se vigila competencia ni posición por sede hasta que el dueño la marque abierta */
+  estado?: 'abierta' | 'por_abrir'
 }
 const obj = (x: unknown): Record<string, unknown> => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Record<string, unknown>) : {})
 const txt = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
@@ -38,6 +40,9 @@ export function distanciaKm(a: { lat: number; lng: number }, b: { lat: number; l
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
 }
+
+/** ¿la sede aún no atiende al público? (sin dato = abierta) */
+export const porAbrir = (s: Pick<SedeConPunto, 'estado'>): boolean => s.estado === 'por_abrir'
 
 /** radio de competencia por familia de rubro (km; DATO): `null` = el rubro no compite por cercanía (no aplica por sede) */
 export const RADIO_POR_FAMILIA_KM: Record<string, { local: number | null; domicilio: number | null }> = {
@@ -58,11 +63,20 @@ export interface EntradaDeSedes {
   nombreDelCliente: string
   sedes: Array<{ id?: string; clave: string; ciudad: string }>
   /** `client_sede_datos`: campo y valor por sede (`tipo_de_atencion`, `direccion`…) */
-  datos: Array<{ sede_id?: string | null; campo: string; valor_texto: string | null }>
+  datos: Array<{ sede_id?: string | null; campo: string; valor_texto: string | null; observado_en?: string | null }>
   config: unknown
   filas: FilaDeMapas[]
 }
 
+/** el campo de la ficha de la sede que dice si ya atiende al público */
+export const CAMPO_ESTADO_DE_LA_SEDE = 'estado_de_la_sede'
+/** «por abrir» / «aún no abre» / «próxima apertura»… → por_abrir; cualquier otro valor (o ninguno) → abierta. Si hay varias filas, vale la más reciente. */
+export function estadoDeLaSede(datos: Array<{ campo: string; valor_texto: string | null; observado_en?: string | null }>): 'abierta' | 'por_abrir' {
+  const filas = datos.filter((d) => d.campo === CAMPO_ESTADO_DE_LA_SEDE)
+  if (!filas.length) return 'abierta'
+  const ultima = [...filas].sort((a, b) => (txt(b.observado_en) < txt(a.observado_en) ? -1 : txt(b.observado_en) > txt(a.observado_en) ? 1 : 0))[0]
+  return /por abrir|aun no abre|todavia no abre|no ha abierto|proxima apertura|pre ?apertura|sin abrir/.test(normalizar(txt(ultima.valor_texto))) ? 'por_abrir' : 'abierta'
+}
 export const marcaDeUbicar = (clave: string): string => `sede:${slugDe(clave)}:ubicar`
 
 export function sedesConPunto(e: EntradaDeSedes): SedeConPunto[] {
@@ -75,7 +89,7 @@ export function sedesConPunto(e: EntradaDeSedes): SedeConPunto[] {
     const dato = (c: string) => txt(datos.find((d) => d.campo === c)?.valor_texto)
     const tipoT = normalizar(dato('tipo_de_atencion'))
     const tipo: SedeConPunto['tipo'] = /solo domicilio|sin local/.test(tipoT) ? 'solo_domicilio' : /local|restaurante|tienda|oficina|consultorio/.test(tipoT) ? 'local' : 'desconocido'
-    const base = { clave: s.clave, ciudad: s.ciudad, tipo, direccion: dato('direccion') || null }
+    const base = { clave: s.clave, ciudad: s.ciudad, tipo, direccion: dato('direccion') || null, estado: estadoDeLaSede(datos) }
     const c = punto(cfg[s.clave])
     if (c) return { ...base, ...c, origen_del_punto: 'config' }
     // la ficha PROPIA: título = el nombre del cliente y ciudad = la de la sede (un homónimo de otra ciudad no vale)
