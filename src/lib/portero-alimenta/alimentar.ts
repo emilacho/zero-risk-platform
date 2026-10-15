@@ -18,6 +18,7 @@ import { unidadesDeRaspados, type FilaCruda, type Unidad } from './unidades'
 export type Db = { from(tabla: string): any }
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
+const esObjeto = (v: unknown): v is Fila => typeof v === 'object' && v !== null && !Array.isArray(v)
 const MAX_FILAS_DE_RASPADO = 400
 const hostDe = (u: string): string => { try { return new URL(u.includes('://') ? u : `https://${u}`).host.replace(/^www\./, '').toLowerCase() } catch { return '' } }
 
@@ -197,7 +198,10 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     if (ok) r.escrituras.vistas++
   }
   const estado = r.errores.length ? 'con_errores' : 'hecha'
-  const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores }, gasto_apify_usd: 0, gasto_modelo_usd: r.juez.costo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
+  // la corrida que reemplaza al despertar CIERRA lo que el despertar dejó pendiente (qué pidió y desde cuándo) para que `listo` pueda declarar los huecos
+  const previo = corridaDeHoy && esObjeto(corridaDeHoy.resumen) ? (corridaDeHoy.resumen as Fila).despertar : null
+  const arrastreDelDespertar = !e.despertar && esObjeto(previo) ? { despertar: { ...previo, completado_en: ahora.toISOString() } } : {}
+  const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), ...arrastreDelDespertar, unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores }, gasto_apify_usd: 0, gasto_modelo_usd: r.juez.costo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
   const log = corridaDeHoy ? await e.db.from('cerebro_portero_corridas').update(rastro).eq('id', String(corridaDeHoy.id)) : await e.db.from('cerebro_portero_corridas').insert(rastro)
   if (log.error) r.errores.push(`rastro: ${log.error.message}`); else r.escrituras.corrida = 1
   return { ...r, ok: r.errores.length === 0, estado: r.errores.length ? 'con_errores' : 'hecha' }
