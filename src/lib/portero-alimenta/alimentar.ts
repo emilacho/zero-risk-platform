@@ -118,7 +118,8 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
 
   const unidades = unidadesDeRaspados(lista(rr.data) as unknown as FilaCruda[], { propios, hostsDeReparto: reparto.map(hostDe).filter(Boolean), transitorios: patrones, fichaDeMapas: (items) => fichaPropiaDeMapas(items, ctx).ficha })
   r.unidades = unidades.length
-  const vistas = new Set(lista(vv.data).map((v) => `${v.fuente}|${v.unidad_ref}|${v.huella}`))
+  // las cifras (fuente «metrica») NO se descartan por «ya vista»: si el valor vuelve a uno anterior (26 → 50 → 26) tiene que reemplazar al vigente; lo que no cambió lo ve «mismo dato» más abajo
+  const vistas = new Set(lista(vv.data).filter((v) => v.fuente !== 'metrica').map((v) => `${v.fuente}|${v.unidad_ref}|${v.huella}`))
   const f = filtrar(unidades, ctx, vistas, patrones)
   r.filtro = { propias: f.propias.length, sin_confirmar: f.sin_confirmar.length, ajenas: f.descartadas.filter((d) => d.estado === 'ajeno').length, ruido: f.descartadas.filter((d) => d.estado === 'ruido').length, repetidas: f.descartadas.filter((d) => d.estado === 'repetida').length }
 
@@ -134,8 +135,8 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     const item: ItemParaJuzgar = { n: i + 1, unidad_clave: `${u.fuente}|${u.unidad_ref}`, fuente: u.fuente, autoria: u.autoria, clase_dato: u.clase_dato, atributo: u.atributo, texto: u.texto, fecha: u.fecha_fuente ?? u.observado_en, vigente: u.atributo ? vigentePorAtributo.get(u.atributo) ?? null : null }
     // mismo dato que lo vigente ⇒ no hay cambio: se renueva, no se juzga
     if (item.vigente && item.vigente.texto === u.texto) return
-    // algo vigente con qué reemplazarse ⇒ el modelo razona; si no hay nada que reemplazar ⇒ se SUMA por código
-    ;(item.vigente && u.clase_dato === 'atributo' ? aJuzgar : porCodigo).push({ unidad: u, item })
+    // algo vigente con qué reemplazarse ⇒ el modelo razona; si no hay nada que reemplazar ⇒ se SUMA por código; las CIFRAS (puntaje, seguidores…) se reemplazan por código, sin modelo
+    ;(item.vigente && u.clase_dato === 'atributo' && u.fuente !== 'metrica' ? aJuzgar : porCodigo).push({ unidad: u, item })
   })
 
   const gastoAntes = Math.max(0, e.gasto_de_hoy_usd ?? 0)
@@ -154,7 +155,8 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   const items = [...aJuzgar, ...porCodigo]
   const decisiones: DecisionDelJuez[] = [
     ...decisionesDelJuez,
-    ...porCodigo.map(({ item }): DecisionDelJuez => ({ n: item.n, decision: 'suma', reemplaza_ficha: null, razon: item.vigente ? 'sin cambio de atributo' : 'dato nuevo: no hay nada vigente que reemplazar', cita: null, decidido_por: 'sistema' })),
+    // una cifra con valor nuevo REEMPLAZA a la vigente por código (la vieja queda archivada con su fecha: sirve para la tendencia)
+    ...porCodigo.map(({ item }): DecisionDelJuez => item.fuente === 'metrica' && item.vigente ? { n: item.n, decision: 'reemplaza', reemplaza_ficha: item.vigente.ficha_id, razon: 'cifra: el valor nuevo reemplaza al anterior', cita: null, decidido_por: 'sistema' } : { n: item.n, decision: 'suma', reemplaza_ficha: null, razon: item.vigente ? 'sin cambio de atributo' : 'dato nuevo: no hay nada vigente que reemplazar', cita: null, decidido_por: 'sistema' }),
   ]
   const plan = planDeArchivo({ client_id: e.client_id, items, decisiones, descartadas: f.descartadas, sin_confirmar: f.sin_confirmar, ahora, puente_al_indice: e.interruptores.puente_al_indice, nuevoId: e.nuevoId })
   r.plan = plan

@@ -15,7 +15,7 @@ import { contenidoDeInstagram, contenidoDeMapas, contenidoDeSitio, esTransitoria
 import { clasificarLinea, type ClaseDeLinea } from '../cerebro/diario/comparar'
 import { textosDeResenas } from '../manual/materia'
 
-export type FuenteDeUnidad = 'sitio' | 'reparto' | 'instagram' | 'mapas' | 'resenas' | 'comentarios' | 'articulo' | 'mencion' | 'publicaciones_facebook' | 'videos'
+export type FuenteDeUnidad = 'sitio' | 'reparto' | 'instagram' | 'mapas' | 'resenas' | 'comentarios' | 'articulo' | 'mencion' | 'publicaciones_facebook' | 'videos' | 'metrica'
 export type ClaseDeDato = 'atributo' | 'acumula'
 /** de quién es lo que se leyó: propio (su sitio, su cuenta, su ficha) o de un tercero (reseñas, comentarios, artículos, menciones) */
 export type Autoria = 'propia' | 'tercero'
@@ -39,6 +39,8 @@ export interface Unidad {
   url?: string | null
   /** la unidad sale de la ficha, la cuenta o la publicación PROPIA del cliente (reseñas de su ficha de Mapas, comentarios de sus publicaciones): es de un tercero, pero es SOBRE el cliente por construcción */
   de_ficha_propia?: boolean
+  /** una CIFRA de la cuenta o la ficha propia (puntaje, reseñas, seguidores, publicaciones): se archiva como ficha con atributo `metrica:<red>:<nombre>`; la nueva REEMPLAZA a la anterior por código (sin modelo) y la vieja queda archivada con su fecha */
+  metrica?: { nombre: string; valor: number; unidad: string }
 }
 
 export interface FilaCruda { id: string; apify_function: string; params?: unknown; respuesta?: unknown; ensayo?: boolean | null; created_at: string; metadata?: unknown }
@@ -47,6 +49,10 @@ export const huellaDeTexto = (t: string): string => createHash('sha256').update(
 const arr = (x: unknown): Array<Record<string, unknown>> => (Array.isArray(x) ? (x.filter((v) => v && typeof v === 'object') as Array<Record<string, unknown>>) : [])
 const txt = (x: unknown): string => (typeof x === 'string' ? x : x == null ? '' : String(x))
 const MONEDAS_SET = new Set(MONEDAS)
+const numeroDe = (x: unknown): number | null => { const n = typeof x === 'number' ? x : typeof x === 'string' && /^\d+([.,]\d+)?$/.test(x.trim()) ? Number(x.trim().replace(',', '.')) : NaN; return Number.isFinite(n) && n >= 0 ? n : null }
+/** las cifras que el catálogo conoce, por red: [clave del campo crudo, nombre estable, etiqueta, unidad] */
+const METRICAS_DE_MAPAS: Array<[string, string, string, string]> = [['totalScore', 'puntaje', 'puntaje en Mapas', 'puntos'], ['reviewsCount', 'resenas', 'reseñas en Mapas', 'reseñas']]
+const METRICAS_DE_INSTAGRAM: Array<[string, string, string, string]> = [['followersCount', 'seguidores', 'seguidores en Instagram', 'seguidores'], ['postsCount', 'publicaciones', 'publicaciones en Instagram', 'publicaciones']]
 
 /** la clave de atributo de una línea normalizada: sus palabras que NO son cifras ni monedas ni «precio» (el producto o el concepto) */
 export function claveDeAtributo(lineaNormalizada: string, clase: ClaseDeLinea): string | null {
@@ -105,6 +111,12 @@ export function unidadesDeRaspados(filas: FilaCruda[], o: OpcionesDeUnidades): U
       for (const [campo, valor] of Object.entries(contenidoDeMapas(it as FichaDeMapas).campos)) {
         poner({ ...base(f), fuente: 'mapas', ref: 'mapas', unidad_ref: campo, texto: `${campo} ${valor}`, clase_dato: 'atributo', atributo: `mapas:${campo}`, autoria: 'propia', huella: huellaDeTexto(valor), fecha_fuente: null })
       }
+      // las cifras de la ficha propia (puntaje y nº de reseñas): ficha con atributo; la nueva reemplaza a la anterior
+      for (const [campo, nombre, etiqueta, unidad] of METRICAS_DE_MAPAS) {
+        const v = numeroDe(it[campo])
+        if (v === null) continue
+        poner({ ...base(f), fuente: 'metrica', ref: 'mapas', unidad_ref: `metrica:mapas:${nombre}`, texto: `${etiqueta}: ${v}`, clase_dato: 'atributo', atributo: `metrica:mapas:${nombre}`, autoria: 'propia', huella: huellaDeTexto(String(v)), fecha_fuente: null, url: txt(it.url) || null, metrica: { nombre: `mapas:${nombre}`, valor: v, unidad } })
+      }
       // reseñas que trae la misma ficha (D-2: sin datos personales)
       for (const r of arr(it.reviews)) {
         for (const t of textosDeResenas(r)) {
@@ -116,6 +128,11 @@ export function unidadesDeRaspados(filas: FilaCruda[], o: OpcionesDeUnidades): U
       for (const it of arr(f.respuesta)) {
         const c = contenidoDeInstagram(it as PerfilRaspado)
         if (!c.usuario || !misHandles.has(c.usuario)) continue
+        for (const [campo, nombre, etiqueta, unidad] of METRICAS_DE_INSTAGRAM) {
+          const v = numeroDe((it as Record<string, unknown>)[campo])
+          if (v === null) continue
+          poner({ ...base(f), fuente: 'metrica', ref: `@${c.usuario}`, unidad_ref: `metrica:instagram:${nombre}`, texto: `${etiqueta}: ${v}`, clase_dato: 'atributo', atributo: `metrica:instagram:${nombre}`, autoria: 'propia', huella: huellaDeTexto(String(v)), fecha_fuente: null, url: `https://www.instagram.com/${c.usuario}/`, metrica: { nombre: `instagram:${nombre}`, valor: v, unidad } })
+        }
         if (c.biografia) poner({ ...base(f), fuente: 'instagram', ref: `@${c.usuario}`, unidad_ref: 'bio', texto: c.biografia, clase_dato: 'atributo', atributo: 'instagram:bio', autoria: 'propia', huella: huellaDeTexto(c.biografia), fecha_fuente: null })
         for (const p of c.publicaciones) poner({ ...base(f), fuente: 'instagram', ref: `@${c.usuario}`, unidad_ref: p.id, texto: p.texto, clase_dato: 'acumula', atributo: null, autoria: 'propia', huella: huellaDeTexto(p.texto), fecha_fuente: null, url: `https://www.instagram.com/p/${p.id}/` })
       }

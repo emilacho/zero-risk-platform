@@ -9,7 +9,7 @@ import { coincidePorPalabra } from '../texto/coincidencia'
 import { fichaPropiaDeMapas } from './mapas-propia'
 import { articulosParaLeer, descubrir, MAX_RESENAS_POR_CORRIDA, type AccionDelPortero, type PlanDelPortero } from './plan'
 import { armarMensajeDePropuestas, INSTRUCCION_DE_PROPUESTAS, validarBusquedas, type ResultadoDePropuestas } from './propuestas'
-import { COSTO_MAXIMO_POR_FUNCION, gastoDelDia, VIDEO_DE_INSTAGRAM_USD, type FilaDelLibro } from './gasto'
+import { COSTO_MAXIMO_POR_FUNCION, FLUJO_DEL_PORTERO, gastoDelDia, invocacionDelPortero, soloLoDelPortero, VIDEO_DE_INSTAGRAM_USD, type FilaDeRaspadoDeOrigen, type FilaDelLibro } from './gasto'
 import { TOPE_DEL_PORTERO_USD, type Interruptores } from './datos'
 import type { RespuestaDeLlamada } from './juez'
 import type { PuenteDeIndice } from './archivar'
@@ -39,15 +39,22 @@ export async function gastoDeHoy(db: Db, clientId: string, ahora: Date) {
   const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)
   const c = await db.from('costs').select('service, amount_usd, created_at, description').like('service', 'apify:%').gte('created_at', dia0.toISOString()).limit(1000)
   if (c.error) return { ok: false as const, detalle: `costs: ${c.error.message}` }
-  const inv = await db.from('agent_invocations').select('cost_usd, created_at').eq('client_id', clientId).gte('created_at', dia0.toISOString()).limit(1000)
+  const inv = await db.from('agent_invocations').select('cost_usd, created_at, agent_name, workflow_id').eq('client_id', clientId).gte('created_at', dia0.toISOString()).limit(1000)
   if (inv.error) return { ok: false as const, detalle: `agent_invocations: ${inv.error.message}` }
+  // SOLO lo del portero (prerrequisito del plan v3): el crudo dice quién llamó; el libro no. Un plan, el alta o una corrida a mano del mismo día no apagan ni frenan al portero
+  const flujo = process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO
+  const cr = await db.from('apify_raw').select('apify_function, created_at, metadata').eq('client_id', clientId).eq('ensayo', false).gte('created_at', new Date(dia0.getTime() - 600_000).toISOString()).limit(1000)
+  if (cr.error) return { ok: false as const, detalle: `apify_raw: ${cr.error.message}` }
+  const origen = soloLoDelPortero(lista(c.data) as unknown as FilaDelLibro[], lista(cr.data) as unknown as FilaDeRaspadoDeOrigen[], clientId, flujo)
   // H3 · una corrida de Mapas = una búsqueda por sede: sin importe en el libro vale (búsquedas de hoy ÷ corridas de hoy) × el máximo por búsqueda
   const mp = await db.from('apify_raw').select('params').eq('client_id', clientId).eq('ensayo', false).eq('apify_function', 'own_google_maps_profile').gte('created_at', dia0.toISOString()).limit(50)
   if (mp.error) return { ok: false as const, detalle: `apify_raw: ${mp.error.message}` }
   const filasMapas = lista(mp.data)
   const busquedas = filasMapas.reduce((s, f) => s + Math.max(1, Array.isArray((f.params as { searchStringsArray?: unknown } | null)?.searchStringsArray) ? ((f.params as { searchStringsArray: unknown[] }).searchStringsArray.length) : 1), 0)
   const maximoPorLlamada = filasMapas.length ? { own_google_maps_profile: Math.round(COSTO_MAXIMO_POR_FUNCION.own_google_maps_profile.usd * (busquedas / filasMapas.length) * 1e6) / 1e6 } : undefined
-  return { ok: true as const, gasto: gastoDelDia({ clientId, ahora, libro: lista(c.data) as unknown as FilaDelLibro[], invocacionesUsd: lista(inv.data).map((f) => Number(f.cost_usd) || 0), maximoPorLlamada }) }
+  const modeloDelPortero = lista(inv.data).filter((f) => invocacionDelPortero(f, flujo))
+  const fueraUsd = gastoDelDia({ clientId, ahora, libro: origen.fuera_del_portero, invocacionesUsd: lista(inv.data).filter((f) => !invocacionDelPortero(f, flujo)).map((f) => Number(f.cost_usd) || 0), maximoPorLlamada }).total_usd
+  return { ok: true as const, gasto: gastoDelDia({ clientId, ahora, libro: origen.libro, invocacionesUsd: modeloDelPortero.map((f) => Number(f.cost_usd) || 0), maximoPorLlamada }), fuera_del_portero_usd: fueraUsd, llamadas_sin_origen: origen.sin_origen }
 }
 
 /**

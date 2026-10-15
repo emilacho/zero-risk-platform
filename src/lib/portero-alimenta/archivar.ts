@@ -64,6 +64,7 @@ function origenDe(u: Unidad): Origen {
   return u.fuente === 'reparto' ? 'plataforma' : 'su_fuente'
 }
 function plazoDe(u: Unidad): string | null {
+  if (u.fuente === 'metrica') return u.atributo?.startsWith('metrica:mapas') ? 'ficha_mapas_propia' : 'perfil_propio'
   if (u.fuente === 'mapas') return u.atributo === 'mapas:horario' ? 'precio_oferta_horario' : 'ficha_mapas_propia'
   if (u.fuente === 'instagram') return u.clase_dato === 'atributo' ? 'perfil_propio' : 'publicacion_propia'
   if (u.fuente === 'publicaciones_facebook') return 'publicacion_propia'
@@ -109,7 +110,7 @@ export function planDeArchivo(e: EntradaDeArchivo): PlanDeArchivo {
       porque: d.razon || (d.degradada_por ?? ''), juzgado_por: d.decidido_por === 'modelo' ? 'modelo' : 'sistema',
       fuente_url: u.url ?? (u.ref.startsWith('http') ? u.ref : null), atributo: u.atributo, decision: d.decision === 'duda' ? 'duda' : d.decision === 'reemplaza' ? 'reemplaza' : 'suma',
       razon_de_decision: d.cita, huella: u.huella,
-      provenance_tag: { type: 'evidence', source: 'apify_scrape', trust_level: 'untrusted', ingress_route: '/api/brain/alimentar/procesar', respaldo_en: { tabla: 'apify_raw', id: u.apify_raw_id }, ...(d.degradada_por ? { degradada_por: d.degradada_por } : {}) },
+      provenance_tag: { type: 'evidence', source: 'apify_scrape', trust_level: 'untrusted', ingress_route: '/api/brain/alimentar/procesar', respaldo_en: { tabla: 'apify_raw', id: u.apify_raw_id }, ...(u.metrica ? { metrica: u.metrica } : {}), ...(d.degradada_por ? { degradada_por: d.degradada_por } : {}) },
       entregable,
     }
     plan.fichas.push(ficha)
