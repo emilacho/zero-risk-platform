@@ -3,9 +3,10 @@
 // (3) con respaldo previo (lo hace el guion); (4) un operador NUEVO es código, no fila (§4.4): se rechaza.
 // ⚠️ SUPUESTO DECLARADO: los nombres de columnas son los del diseño §4.1; V1 (CC#1) crea las tablas. Si V1 cambia un nombre, se cambia SOLO `TABLAS` aquí.
 
-export const OPERADORES = ['coincide_texto', 'coincide_dominio', 'coincide_telefono', 'coincide_zona', 'rango', 'edad_max_h', 'igual_unidad', 'difiere_mas_de', 'precede', 'contiene_termino', 'n_minimo']
+// rev. 3 §14.2: la identidad la decide el criterio del `portero` (UN solo juicio): salen los `coincide_*`; entra `delegada_en_portero`
+export const OPERADORES = ['delegada_en_portero', 'rango', 'edad_max_h', 'igual_unidad', 'difiere_mas_de', 'precede', 'contiene_termino', 'n_minimo']
 export const CRITICIDADES = ['critica', 'normal', 'baja']
-export const CLASES_DE_REGLA = ['identidad', 'contradiccion', 'precedencia', 'cambio_material']
+export const CLASES_DE_REGLA = ['identidad', 'contradiccion', 'precedencia', 'cambio_material', 'moneda_pais', 'parametro']
 export const VIAS = ['cerebro', 'crudo', 'relleno']
 export const GRUPOS_DE_LEXICO = ['verificacion', 'ausencia', 'supuesto', 'dominio', 'periodo']
 
@@ -24,12 +25,12 @@ export const TABLAS = {
   fuentes: {
     tabla: 'plan_catalogo_fuentes', clave: 'fuente_id',
     req: ['fuente_id', 'proveedor', 'funcion', 'criticidad', 'plazo_s', 'tope_usd'],
-    campos: { fuente_id: t.str(1, 80), proveedor: t.str(1, 80), funcion: t.str(1, 80), alcance: t.str(1, 80), aplica_si: t.obj(), criticidad: t.enu(CRITICIDADES), reintentos: t.int(0, 3), plazo_s: t.int(1, 900), tope_usd: t.num(0, 5), forma: t.arrStr(0, 80), moldes_de_ensayo: t.arrStr(0, 20), identidad_campos: t.arrStr(0, 40), da_ausencia_con: t.str(1, 200) },
+    campos: { fuente_id: t.str(1, 80), proveedor: t.str(1, 80), funcion: t.str(1, 80), via: t.enu(VIAS), alcance: t.str(1, 80), aplica_si: t.obj(), criticidad: t.enu(CRITICIDADES), reintentos: t.int(0, 3), plazo_s: t.int(1, 900), tope_usd: t.num(0, 5), forma: t.arrStr(0, 80), moldes_de_ensayo: t.arrStr(0, 20), identidad_campos: t.arrStr(0, 40), da_ausencia_con: t.str(1, 200) },
   },
   tipos: {
     tabla: 'plan_catalogo_tipos', clave: 'tipo_id',
     req: ['tipo_id', 'unidad', 'frescura_limite_h', 'critico'],
-    campos: { tipo_id: t.str(1, 80), unidad: t.str(1, 40), moneda_requerida: t.bool(), rango: t.obj(), frescura_limite_h: t.num(0.1, 24 * 365), critico: t.bool(), tolerancia_redondeo: t.num(0, 1), n_minimo: t.int(0, 1000), periodo_requerido: t.bool(), comparable_con: t.arrStr(0, 40), via_preferida: t.enu(VIAS) },
+    campos: { tipo_id: t.str(1, 80), atributo_cerebro: t.str(1, 80), clase_dato: t.enu(['atributo', 'acumula']), unidad: t.str(1, 40), moneda_requerida: t.bool(), rango: t.obj(), frescura_limite_h: t.num(0.1, 24 * 365), critico: t.bool(), tolerancia_redondeo: t.num(0, 1), n_minimo: t.int(0, 1000), periodo_requerido: t.bool(), comparable_con: t.arrStr(0, 40), via_preferida: t.enu(VIAS) },
   },
   reglas: {
     tabla: 'plan_catalogo_reglas', clave: 'regla_id',
