@@ -39,6 +39,7 @@
     { "regla_id": "param_listo_dias_rastro", "clase": "parametro", "operador": "n_minimo", "parametros": { "dias": 2 }, "aplica_a": { "fuente": "cerebro_vivo" }, "severidad": "avisa" },
     { "regla_id": "param_espera_listo_min", "clase": "parametro", "operador": "n_minimo", "parametros": { "minutos": 45, "cada_s": 300 }, "aplica_a": { "fuente": "cerebro_vivo" }, "severidad": "avisa" },
     { "regla_id": "param_lee_crudo_del_alta", "clase": "parametro", "operador": "n_minimo", "parametros": { "valor": true, "max_filas": 400 }, "aplica_a": { "fuente": "cerebro_vivo" }, "severidad": "avisa" },
+    { "regla_id": "param_limite_entrega_h", "clase": "parametro", "operador": "edad_max_h", "parametros": { "horas": 6 }, "aplica_a": { "fuente": "cerebro_vivo" }, "severidad": "avisa" },
     { "regla_id": "param_ventana_corrida_h", "clase": "parametro", "operador": "edad_max_h", "parametros": { "horas": 48 }, "aplica_a": { "fuente": "cerebro_vivo" }, "severidad": "avisa" },
     { "regla_id": "moneda_pais_ec", "clase": "moneda_pais", "operador": "igual_unidad", "parametros": { "moneda": "USD", "rotulo": "USD por omisión del país: nadie la declaró" }, "aplica_a": { "tipo": "precio" }, "pais": "EC", "severidad": "avisa" },
     { "regla_id": "precedencia_horario", "clase": "precedencia", "operador": "precede", "parametros": { "orden": ["dueno", "medido_mas_reciente", "manual", "supuesto"], "empate": "cerebro" }, "aplica_a": { "tipo": "horario" }, "severidad": "avisa" },

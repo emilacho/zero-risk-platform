@@ -19,7 +19,7 @@ BEGIN
   END IF;
   IF to_regclass('public.plan_catalogo_reglas') IS NOT NULL THEN
     EXECUTE 'SELECT count(*) FROM public.plan_catalogo_reglas' INTO n;
-    IF n > 17 THEN extras := extras || format('plan_catalogo_reglas=%s ', n); END IF;
+    IF n > 18 THEN extras := extras || format('plan_catalogo_reglas=%s ', n); END IF;
   END IF;
   IF to_regclass('public.plan_catalogo_lexico') IS NOT NULL THEN
     EXECUTE 'SELECT count(*) FROM public.plan_catalogo_lexico' INTO n;
