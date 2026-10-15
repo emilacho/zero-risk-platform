@@ -6,6 +6,7 @@
  * Despertar completo (15-oct): tras el despertar, el cerebro NO está listo hasta que la cadena que pide lo que el alta no trajo termine (esa cadena reemplaza la fila del despertar). Si no termina
  * en `ESPERA_MAXIMA_DEL_DESPERTAR_MIN`, se da por listo CON HUECOS declarados (lo que se debía pedir y no llegó): no bloquea para siempre. Una fuente que falló también sale en `huecos`.
  */
+import { rutaLeerPedido } from './pedidos'
 import { reconciliarYEnviar, type DepsDeRutas, type Respuesta } from './rutas'
 
 export const FRESCURA_DEL_LISTO_HORAS = 36
@@ -35,7 +36,20 @@ export interface SenalDeListo {
   huecos: Array<{ fuente: string; funcion: string; objetivo: string }>
 }
 
+/**
+ * La señal de listo + (si viene `pedido_id`) el resultado de ese pedido libre al portero (16-oct): quién pidió, huecos, estado, costo, fichas y lo que no se pudo llenar.
+ * El pedido se lee aparte: un pedido inexistente se DICE (`pedido: { error }`) y nunca cambia la señal de listo.
+ */
 export async function rutaListo(deps: DepsDeRutas, cuerpo: unknown): Promise<Respuesta> {
+  const r = await rutaListoBase(deps, cuerpo)
+  const pid = esObjeto(cuerpo) && typeof cuerpo.pedido_id === 'string' ? cuerpo.pedido_id.trim() : ''
+  if (!pid) return r
+  const p = await rutaLeerPedido({ db: deps.db, ahora: deps.ahora }, pid)
+  const mismoCliente = p.status === 200 && esObjeto(cuerpo) && String(p.body.client_id) === String(cuerpo.client_id)
+  return { status: r.status, body: { ...r.body, pedido: p.status === 200 && mismoCliente ? p.body : { error: p.status === 200 ? 'el pedido es de otro cliente' : p.body.error, detalle: p.status === 200 ? '' : p.body.detalle } } }
+}
+
+async function rutaListoBase(deps: DepsDeRutas, cuerpo: unknown): Promise<Respuesta> {
   const clientId = esObjeto(cuerpo) && typeof cuerpo.client_id === 'string' ? cuerpo.client_id.trim() : ''
   if (!UUID.test(clientId)) return { status: 400, body: { error: 'entrada_invalida', detalle: '`client_id` debe ser un uuid' } }
   const ahora = deps.ahora ?? new Date()
