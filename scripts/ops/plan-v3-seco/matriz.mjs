@@ -76,3 +76,24 @@ export const CONTADORES = [
   { tabla: 'hitl_queue', por: 'client_id', nota: 'las marcas altas escriben aviso: en seco no' },
   { tabla: 'client_historical_outputs', por: 'client_id', nota: 'el seco no guarda un plan real' },
 ]
+
+/** el tramo de la oficina financiera dentro del plan (15-oct): corre en seco con la ruta real y agentes simulados (`__tests__/plan-v3-seco-oficina-x1.test.ts`) · negocios N T S P  + el caso de oro (la ficha del piloto tal cual) */
+export const OFICINA_CASOS = [
+  { id: 'OF-firmado', que: 'proponente → hilo → acuerdo del jefe → bloque → firma: el bloque firmado entra al plan; P8/P9 sin marcas; una cifra inventada SÍ se marca' },
+  { id: 'OF-sin_acuerdo', que: 'sin referencia de costo: sin bloque; el plan sale con sus supuestos rotulados y el pedido idéntico a hoy' },
+  { id: 'OF-sin_firma', que: 'el jefe no contesta: sin firma; el bloque NO entra; el plan sale' },
+  { id: 'OF-vencido', que: 'cierre por tope (US$ 1,50 + una llamada): sin firma; el plan sale' },
+  { id: 'OF-apagada', que: 'oficina apagada: 409 sin escribir; el plan sale idéntico a hoy' },
+]
+
+/** el guion VIVO de X1 / C6 / C7 (solo cuando CC#3 avise que la tanda 1 y la tanda 2 están en vivo) */
+export const GUION_VIVO = [
+  '0. `plan-v3-seco.mjs condiciones --cliente <id>` (P1–P4 y P9) y `estado` (n8n 0/0, flujo de planeación)',
+  '1. `plan-v3-seco.mjs contadores --clientes <ids> --guardar antes.json`',
+  '2. el seco en este orden, uno por negocio de práctica y luego el caso de oro (la ficha del piloto tal cual), SIEMPRE con `dry_run:true` explícito:',
+  '   · C6: el `portero` ya corrió hoy → el plan corre y el gasto del portero no lo apaga',
+  '   · C7: el plan corre ANTES del `portero` → el vigilante no lo apaga y su juez conserva el tope',
+  '   · X1: webhook → pre-vuelo → espera por re-disparo (≤ 45 min) → recolección → oficina financiera → redactor → P10 → guardar',
+  '   · oficina: firmado · sin acuerdo · sin firma · vencido (`OFICINA_CASOS`)',
+  '3. `plan-v3-seco.mjs contadores --clientes <ids> --comparar antes.json` → 0 diferencias fuera de las tablas de ensayo',
+]

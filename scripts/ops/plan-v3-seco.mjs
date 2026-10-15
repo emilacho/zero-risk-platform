@@ -7,6 +7,8 @@
  *   node scripts/ops/plan-v3-seco.mjs condiciones [--cliente <id>]           lee: qué condiciones de CC#3 se cumplen y cuáles NO se pueden comprobar por lectura
  *   node scripts/ops/plan-v3-seco.mjs contadores --clientes a,b --guardar f  foto ANTES · después: --comparar f (debe decir «sin cambios» salvo lo declarado)
  *   node scripts/ops/plan-v3-seco.mjs marcas-v2 --plan <plan-v2-texto.txt> [--datos <dato-v1.json>]   P10 en seco sobre el plan v2 real (conteo por código, criterio de ruido)
+ *   node scripts/ops/plan-v3-seco.mjs oficina                                el tramo de la oficina financiera: casos y cómo se corre en seco (US$ 0)
+ *   node scripts/ops/plan-v3-seco.mjs guion                                  la secuencia del seco VIVO (X1 / C6 / C7) para cuando CC#3 avise tanda 1 + tanda 2
  *   node scripts/ops/plan-v3-seco.mjs encender|correr|apagar|limpiar         SE NIEGAN hasta que existan V8/V9 y las migraciones estén aplicadas (lo dice y sale con 3)
  *
  * El seco LOCAL (el camino de datos completo con las piezas reales, reloj y redactor simulados) corre en las pruebas: `npx vitest run __tests__/plan-v3-v11-seco.test.ts`.
@@ -15,7 +17,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CASOS, CONDICIONES, CONTADORES, NEGOCIOS, celdas, resumenDeLaMatriz } from './plan-v3-seco/matriz.mjs'
+import { CASOS, CONDICIONES, CONTADORES, GUION_VIVO, NEGOCIOS, OFICINA_CASOS, celdas, resumenDeLaMatriz } from './plan-v3-seco/matriz.mjs'
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url))
 const RAIZ = path.join(AQUI, '..', '..')
@@ -77,6 +79,13 @@ function marcasDelPlan(textoPlan, datos) {
 async function main() {
   switch (orden) {
     case 'plan': console.log(textoDeLaMatriz()); return
+    case 'oficina': {
+      console.log('OFICINA FINANCIERA dentro del plan v3 (seco local · ruta real · agentes simulados · US$ 0):')
+      for (const c of OFICINA_CASOS) console.log(`  ${c.id.padEnd(16)} ${c.que}`)
+      console.log('\ncorrer: npx vitest run __tests__/plan-v3-seco-oficina-x1.test.ts')
+      return
+    }
+    case 'guion': console.log(GUION_VIVO.join('\n')); return
     case 'estado': {
       necesita('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY')
       const tablas = ['plan_catalogo_fuentes', 'plan_catalogo_tipos', 'plan_catalogo_reglas', 'plan_catalogo_lexico', 'plan_catalogo_topes', 'plan_corridas']
@@ -160,7 +169,7 @@ async function main() {
       process.exit(3)
     }
     default:
-      console.error('órdenes: plan · estado · condiciones · contadores · marcas-v2 · encender|correr|apagar|limpiar (se niegan)')
+      console.error('órdenes: plan · oficina · guion · estado · condiciones · contadores · marcas-v2 · encender|correr|apagar|limpiar (se niegan)')
       process.exit(2)
   }
 }
