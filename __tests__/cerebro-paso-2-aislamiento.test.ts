@@ -60,6 +60,9 @@ export const PUEDEN_NOMBRARLAS = [
   /^scripts\/worker-staging\/ogfq56oIEoHufFPM\//,
   // el puente: `ingest-source` acepta `cerebro_fichas` como origen de trozos (única puerta de escritura de evidencia al índice)
   /^src\/app\/api\/brain\/ingest-source\/route\.ts$/,
+  // plan v3 · V14 (15-oct): el LECTOR del plan lee `cerebro_fichas` (y el crudo por la misma compuerta del portero) para armar el brazo primario. Solo SELECT: no escribe nada.
+  /^src\/lib\/planeacion\/dato-v1\/lector-cerebro\.ts$/,
+  /^__tests__\/plan-v3-v14-lector-cerebro\.test\.ts$/,
   /^__tests__\/cerebro-paso-2-(aislamiento|migracion)\.test\.ts$/,
   /^__tests__\/cerebro-fotos-2-columnas\.test\.ts$/,
   // oficina de creativos (sala 1) · LECTURA de las etiquetas de las fotos para descartar las que no sirven: los ÚNICOS que las nombran son el lector `fotos.ts` y el adaptador que las SELECCIONA (`adaptadores.ts`); no escriben nada
