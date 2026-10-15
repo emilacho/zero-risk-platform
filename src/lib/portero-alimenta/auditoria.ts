@@ -98,7 +98,7 @@ export function juzgarAuditoria(dia: string, fichas: ResultadoDeFicha[]): Result
   return { dia, elegidas: fichas.length, verificables: verificables.length, errores, sin_verificar: fichas.length - verificables.length, tasa_de_error: tasa === null ? null : Math.round(tasa * 100) / 100, problema, fichas }
 }
 
-interface Db { from: (t: string) => any } // eslint-disable-line @typescript-eslint/no-explicit-any
+interface Db { from: (t: string) => any }
 /** lee las fichas nacidas hoy, toma la muestra y las verifica; una falla de lectura se DICE (no se lee como «todo bien») */
 export async function auditarCliente(db: Db, clientId: string, ahora: Date, n = TAMANO_DE_MUESTRA): Promise<{ ok: true; resultado: ResultadoDeAuditoria } | { ok: false; detalle: string }> {
   const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)

@@ -121,7 +121,7 @@ export function fichasDeResumen(e: EntradaDelResumen): SalidaDelResumen {
   return { cliente, sedes, huecos: base.huecos, secciones: base.secciones }
 }
 
-interface Db { from: (t: string) => any } // eslint-disable-line @typescript-eslint/no-explicit-any
+interface Db { from: (t: string) => any }
 /** lee las fichas del cliente y las de zona; una lectura fallida se DICE y no se escribe un resumen a medias */
 export async function cargarEntradaDelResumen(db: Db, o: { client_id: string; nombre: string | null; rubro: string | null; ahora: Date; zonas: string[]; sedes: Array<{ clave: string; ciudad: string | null }> }): Promise<{ ok: true; entrada: EntradaDelResumen } | { ok: false; detalle: string }> {
   const desde = new Date(o.ahora.getTime() - DIAS_PARA_TENDENCIA * DIA).toISOString()
