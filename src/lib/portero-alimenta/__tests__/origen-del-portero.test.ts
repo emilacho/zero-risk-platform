@@ -40,7 +40,7 @@ async function correr(f: Flujo, nombre: string): Promise<Visto[]> {
 afterEach(() => vi.restoreAllMocks())
 
 describe('el flujo manda su origen en cada llamada al Servicio', () => {
-  it.each(NODOS as Array<[string, string]>)('«%s» manda origen «%s»', async (nombre, origen) => {
+  it.each(NODOS as string[][])('«%s» manda origen «%s»', async (nombre, origen) => {
     const v = await correr(DESPUES, nombre)
     expect(v.length).toBeGreaterThan(0)
     for (const x of v) {
@@ -62,7 +62,7 @@ describe('el flujo manda su origen en cada llamada al Servicio', () => {
   })
   it('estructura: TODO nodo del flujo que llama al Servicio manda origen (si alguien añade una llamada, esta prueba la caza)', () => {
     const llaman = DESPUES.nodes.filter((n) => /apify-service-workflow/.test(JSON.stringify(n.parameters)))
-    expect(llaman.map((n) => n.name).sort()).toEqual(NODOS.map(([n]: [string, string]) => n).sort())
+    expect(llaman.map((n) => n.name).sort()).toEqual(NODOS.map(([n]: string[]) => n).sort())
     for (const n of llaman) expect(n.parameters.jsCode).toMatch(/dry_run: false, origen: 'portero(_[a-z0-9]+)?', metadata:/)
   })
 })
@@ -75,7 +75,7 @@ describe('el cambio es aditivo y mínimo', () => {
     expect(DESPUES.nodes.length).toBe(ANTES_F.nodes.length)
     expect(DESPUES.connections).toEqual(ANTES_F.connections)
     const cambiados = DESPUES.nodes.filter((n, i) => JSON.stringify(n) !== JSON.stringify(ANTES_F.nodes[i])).map((n) => n.name).sort()
-    expect(cambiados).toEqual(NODOS.map(([n]: [string, string]) => n).sort())
+    expect(cambiados).toEqual(NODOS.map(([n]: string[]) => n).sort())
     for (const n of DESPUES.nodes) {
       const a = ANTES_F.nodes.find((x) => x.name === n.name)!
       if (n.parameters.jsCode === a.parameters.jsCode) continue
