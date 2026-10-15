@@ -94,7 +94,7 @@ export interface DepsDeRutas {
   /** llama al modelo (instrucción, mensaje) y devuelve texto + costo; en pruebas es un molde simulado */
   llamarModelo?: (instruccion: string, mensaje: string) => Promise<RespuestaDeLlamada>
   /** el agente del roster que pule el resumen vivo (15-oct); ausente = por código */
-  pulirResumen?: (tarea: string) => Promise<{ texto: string; costo_usd: number }>
+  pulirResumen?: (tarea: string, opciones?: { topeUsd?: number }) => Promise<{ texto: string; costo_usd: number }>
   /** escribe los trozos del índice (puente) y saca los de las fichas reemplazadas; en pruebas es un registro */
   puente?: (p: { escribir: PuenteDeIndice[]; sacar: string[]; client_id: string }) => Promise<{ escritos: number; sacados: number; errores: string[] }>
   ahora?: Date

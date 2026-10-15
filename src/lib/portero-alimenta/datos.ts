@@ -21,6 +21,9 @@ export function umbralesDeGastoDelEntorno(env: Record<string, string | undefined
 }
 /** lo máximo que puede costar UN pulido del resumen (≈ US$ 0,02 por día y cliente: una llamada) */
 export const TOPE_DEL_PULIDO_USD = 0.03
+/** firma 15-oct: el tope sube a US$ 0,05 SOLO si el costo real medido pasó de `TOPE_DEL_PULIDO_USD` en este número de días seguidos */
+export const TOPE_ALTO_DEL_PULIDO_USD = 0.05
+export const DIAS_PARA_SUBIR_EL_TOPE_DEL_PULIDO = 3
 /** búsquedas propias que el portero puede proponer por día (firma 14-oct) */
 export const MAX_BUSQUEDAS_PROPUESTAS_POR_DIA = 3
 /** páginas de artículos que se leen por día (cada una es una corrida del lector del sitio) */
