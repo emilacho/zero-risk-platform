@@ -56,6 +56,9 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/app\/api\/brain\/alimentar\//,
   /^supabase\/migrations\/202610141500_cerebro_portero_alimenta\.sql$/,
   /^supabase\/reversas\/202610141500_cerebro_portero_alimenta_REVERSA\.sql$/,
+  // 15-oct · el alcance de la ficha (nuevos brazos): una columna anulable en `cerebro_fichas`
+  /^supabase\/migrations\/202610151500_cerebro_alcance_de_la_ficha\.sql$/,
+  /^supabase\/reversas\/202610151500_cerebro_alcance_de_la_ficha_REVERSA\.sql$/,
   /^scripts\/ops\/portero-(alimenta-seco|limpiar-repetidas)\.ts$/,
   /^scripts\/worker-staging\/ogfq56oIEoHufFPM\//,
   // el puente: `ingest-source` acepta `cerebro_fichas` como origen de trozos (única puerta de escritura de evidencia al índice)

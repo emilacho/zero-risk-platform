@@ -8,6 +8,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
+import { brazosDelEntorno } from '@/lib/portero-alimenta/brazos'
 import { modeloRegistrado, puenteAlIndice } from '@/lib/portero-alimenta/entorno'
 import { rutaAlimentar } from '@/lib/portero-alimenta/rutas'
 
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
     const origen = new URL(request.url).origin
     const llave = process.env.INTERNAL_API_KEY ?? ''
     const r = await rutaAlimentar({
-      db, interruptores: interruptoresDelEntorno(),
+      db, interruptores: interruptoresDelEntorno(), brazos: brazosDelEntorno(),
       // en seco NO se llama a ningún modelo (US$ 0) ni se escribe el índice
       llamarModelo: real ? modeloRegistrado({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, comando: 'portero.juzgar' }) : undefined,
       puente: real ? puenteAlIndice({ origen, llaveInterna: llave, db }) : undefined,

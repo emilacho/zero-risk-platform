@@ -8,6 +8,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
+import { brazosDelEntorno } from '@/lib/portero-alimenta/brazos'
 import { modeloRegistrado } from '@/lib/portero-alimenta/entorno'
 import { rutaArticulos, rutaClientes, rutaDescubrir, rutaTanda2 } from '@/lib/portero-alimenta/rutas'
 
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
     const deps = {
       db: getSupabaseAdmin() as unknown as Db,
       interruptores: interruptoresDelEntorno(),
+      brazos: brazosDelEntorno(),
       // en seco NO se llama a ningún modelo (US$ 0)
       llamarModelo: conModelo ? modeloRegistrado({ origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '', workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, comando: 'portero.proponer_busquedas' }) : undefined,
     }

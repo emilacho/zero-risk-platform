@@ -11,6 +11,7 @@ import { articulosParaLeer, descubrir, MAX_RESENAS_POR_CORRIDA, type AccionDelPo
 import { armarMensajeDePropuestas, INSTRUCCION_DE_PROPUESTAS, validarBusquedas, type ResultadoDePropuestas } from './propuestas'
 import { COSTO_MAXIMO_POR_FUNCION, FLUJO_DEL_PORTERO, gastoDelDia, invocacionDelPortero, soloLoDelPortero, VIDEO_DE_INSTAGRAM_USD, type FilaDeRaspadoDeOrigen, type FilaDelLibro } from './gasto'
 import { TOPE_DEL_PORTERO_USD, type Interruptores } from './datos'
+import type { BrazosActivos } from './brazos'
 import type { RespuestaDeLlamada } from './juez'
 import type { PuenteDeIndice } from './archivar'
 import { clientesActivos } from './clientes'
@@ -86,6 +87,8 @@ export interface DepsDeRutas {
   /** escribe los trozos del índice (puente) y saca los de las fichas reemplazadas; en pruebas es un registro */
   puente?: (p: { escribir: PuenteDeIndice[]; sacar: string[]; client_id: string }) => Promise<{ escritos: number; sacados: number; errores: string[] }>
   ahora?: Date
+  /** los nuevos brazos (15-oct): todos APAGADOS si falta; las rutas los leen del entorno */
+  brazos?: BrazosActivos
 }
 
 // ───────────────────────── /descubrir · qué pide hoy el portero (solo lectura; el modelo solo para proponer búsquedas)
@@ -111,7 +114,7 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
   const publicaciones = [...new Set(lista(vg.data).flatMap((f) => lista(f.respuesta)).filter((p) => usuariosPropios.has(String(p.username ?? '').toLowerCase())).flatMap((p) => lista(p.latestPosts)).map((p) => String(p.shortCode ?? p.id ?? '')).filter(Boolean))]
   const ciudad = ctx.ubicacion[0] ?? ''
   const rubro = typeof cliente.industry === 'string' ? cliente.industry : null
-  const base = { cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades: ctx.ubicacion, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores }
+  const base = { cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades: ctx.ubicacion, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora }
 
   // las búsquedas propias: el modelo PROPONE, el código decide
   let propuestas: ResultadoDePropuestas = { aceptadas: [], rechazadas: [] }
@@ -338,7 +341,7 @@ export async function rutaAlimentar(deps: DepsDeRutas, cuerpo: unknown): Promise
   const g = await gastoDeHoy(deps.db, v.client_id, ahora)
   if (!g.ok) return err(502, 'lectura_fallida', g.detalle)
   const r: ResultadoDeAlimentar = await alimentarCliente({
-    db: deps.db, client_id: v.client_id, dry_run: v.dry_run, interruptores: deps.interruptores, llamarModelo: deps.llamarModelo, ahora, forzar: v.cuerpo.forzar === true,
+    db: deps.db, client_id: v.client_id, dry_run: v.dry_run, interruptores: deps.interruptores, brazos: deps.brazos, llamarModelo: deps.llamarModelo, ahora, forzar: v.cuerpo.forzar === true,
     gasto_de_hoy_usd: g.gasto.total_usd, workflow_id: v.workflow_id || undefined, workflow_execution_id: v.workflow_execution_id || undefined,
   })
   const status = r.estado === 'cliente_inexistente' ? 404 : r.estado === 'lectura_fallida' ? 502 : 200
