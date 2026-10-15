@@ -111,7 +111,9 @@ function entradaDelMomento(a: Arts, ronda: 1 | 2): EntradaDelMomento {
   if (quien.sin_pauta) return { ok: false, motivo: 'sin_pauta', errores: [] }
   const ent = entradaDesdeLaConversa({ planteo: planteo as unknown as PlanteoV1, consultas, expediente: { referencias: (exp.referencias as never) ?? [], evento_alterno: (exp.evento_alterno as never) ?? {}, pisos: (exp.pisos as never) ?? {}, fecha: (exp.fecha as string) ?? undefined } })
   if (!ent.ok) return { ok: false, motivo: 'sin_base', errores: ent.errores }
-  return { ok: true, entrada: ent.entrada, alertas: ent.alertas, planteo: planteo as unknown as PlanteoV1 }
+  // el planteo se conservó sin responder al equilibrio: el bloque lo DICE (alerta), no lo oculta
+  const sinResp = (planteo as { equilibrio_sin_respuesta?: unknown }).equilibrio_sin_respuesta === true
+  return { ok: true, entrada: ent.entrada, alertas: sinResp ? [...ent.alertas, 'equilibrio_sin_respuesta: la meta no cubre el equilibrio y el ajuste no lo respondió; el planteo se conservó sin esa decisión'] : ent.alertas, planteo: planteo as unknown as PlanteoV1 }
 }
 
 function calcularBloque(e: EncargoDeConversa, a: Arts, ronda: 1 | 2): ResultadoDePaso {
@@ -144,7 +146,7 @@ function textoDelTurno(paso: Paso, n: number, salida: Record<string, unknown> | 
   if (!salida) return `${cab}\n(sin contenido)`
   const s = salida as Record<string, any>
   switch (paso.clave.replace(/_2$/, '')) {
-    case 'planteo': case 'ajuste': return `${cab}\nMeta ${s.meta_por_semana}/sem · evento ${s.evento} · ${s.zonas?.length ?? 0} zona(s) · ${s.canales?.length ?? 0} canal(es). No sé: ${(s.no_se ?? []).join('; ') || '—'}`
+    case 'planteo': case 'ajuste': return `${cab}\nMeta ${s.meta_por_semana}/sem · evento ${s.evento} · ${s.zonas?.length ?? 0} zona(s) · ${s.canales?.length ?? 0} canal(es). No sé: ${(s.no_se ?? []).join('; ') || '—'}${s.equilibrio_sin_respuesta ? ' ⚠️ no respondió al equilibrio: el planteo se conserva y el plan lo dice' : ''}`
     case 'calculo': return `${cab}\n${s.hay_bloque ? `Bloque calculado (huella ${String(s.huella).slice(0, 8)}…).` : `Sin bloque: ${s.motivo}.`}`
     case 'cierre': return `${cab}\nSalida: ${s.salida} · ${(s.hallazgos ?? []).length} hallazgo(s).${s.dato_que_no_bloquea ? ' ' + s.dato_que_no_bloquea : ''}`
     case 'firma': return `${cab}\nTablero ${s.estado}${s.sin_acuerdo ? ' (sin acuerdo: sale con supuesto y marca)' : ''}.`
@@ -245,6 +247,8 @@ export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise
     const intentos = 1 + (paso.salida?.reintento_formato ?? 0)
     let valor: Record<string, unknown> | null = null
     let ultimoError = ''
+    // plan v3 · V7 (observación de CC#3): el último planteo VÁLIDO al que solo le faltó responder el equilibrio
+    let sinRespuestaAlEquilibrio: Record<string, unknown> | null = null
     for (let i = 0; i < intentos && !valor; i++) {
       const r = await P.modelo.invocar({ agente: paso.quien, tarea: i === 0 ? tarea : `${tarea}\n\nTu respuesta anterior no cumplió el formato (${ultimoError}). Devuelve SOLO el objeto JSON.`, encargo_id: e.id, client_id: e.client_id, paso: paso.clave, tope_usd: paso.tope_usd, dry_run: e.dry_run })
       costo += r.costo_usd
@@ -252,10 +256,12 @@ export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise
       const j = extraerJson(r.salida)
       if (!j.ok) { ultimoError = j.error; continue }
       const v = validar(paso, j.valor)
-      if (v.ok && exigeEquilibrio && !respuestaDeEquilibrioValida(v.valor)) ultimoError = 'la meta no cubre el equilibrio: falta equilibrio_respuesta { decision, motivo }'
+      if (v.ok && exigeEquilibrio && !respuestaDeEquilibrioValida(v.valor)) { ultimoError = 'la meta no cubre el equilibrio: falta equilibrio_respuesta { decision, motivo }'; sinRespuestaAlEquilibrio = v.valor }
       else if (v.ok) valor = v.valor
       else ultimoError = v.errores.join('; ')
     }
+    // agotado el reintento SIN responder el equilibrio: se CONSERVA el planteo (válido) y se marca; descartarlo tiraría el trabajo del paso (la meta, los canales, el reparto)
+    if (!valor && sinRespuestaAlEquilibrio) { valor = { ...sinRespuestaAlEquilibrio, equilibrio_sin_respuesta: true }; error = null }
     if (valor) resultado = { costo_usd: costo, artefacto: derivar(paso, valor) }
     else {
       degradado = ultimoError || 'sin respuesta'

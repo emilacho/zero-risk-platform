@@ -31,6 +31,8 @@ const texto = (x: unknown): string | null => (typeof x === 'string' && x.trim() 
 
 /** las columnas que se leen (nunca `select *`) */
 export const COLUMNAS_DE_FICHA = 'id,clase,atributo,titulo,que_es,contenido,origen,observado_en,fecha_fuente,vigente_hasta,retirada_en,reemplazada_por,descartada,prueba,fuente_url,juzgado_por,propiedad,sede,huella,provenance_tag,creado_en'
+/** las columnas de `clients` que usan `contextoDelCliente`, `propiosDeFicha` y `varianteDelCliente` y que EXISTEN (la tabla no tiene city/phone/pais: la ciudad sale de `client_sedes` y el teléfono de `config`) */
+export const COLUMNAS_DE_CLIENTE = 'id,name,website_url,industry,country,config,canonical_client_id'
 export const FILAS_MAXIMAS_DEL_CRUDO = 400
 
 // ───────────────────────────────────────────────────────── el tipo de una ficha o unidad (fila del catálogo, no código)
@@ -173,7 +175,7 @@ export function crudoAEntradas(filas: FilaCruda[], cliente: Fila, sedes: Fila[],
 
 export async function leerCrudo(db: Db, client_id: string, max = FILAS_MAXIMAS_DEL_CRUDO): Promise<{ ok: true; filas: FilaCruda[]; cliente: Fila; sedes: Fila[] } | { ok: false; error: string }> {
   try {
-    const c = (await db.from('clients').select('*').eq('id', client_id).limit(1)) as Res
+    const c = (await db.from('clients').select(COLUMNAS_DE_CLIENTE).eq('id', client_id).limit(1)) as Res
     if (c.error) return { ok: false, error: `clients: ${c.error.message}` }
     const cliente = lista(c.data)[0]
     if (!cliente) return { ok: false, error: 'clients: no existe la ficha del cliente' }
