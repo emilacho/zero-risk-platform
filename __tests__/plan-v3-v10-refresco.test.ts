@@ -78,6 +78,20 @@ describe('V10 · 2 · refresco IDEMPOTENTE por fuente', () => {
   })
 })
 
+describe('V10 · (observación de CC#3) `vigente()` respeta `vigente_hasta` de la ficha', () => {
+  it('una ficha fresca por su TIPO pero vencida por su propio `vigente_hasta` se vuelve a pedir; sin esa fecha, no', () => {
+    const f = (vigente_hasta: string | null) => norm([{ fuente_id: 'cerebro_vivo', tipo_id: 'seguidores', estado: 'trajo', via: 'cerebro', contenido: 900, medido_en: hace(T0, 2), vigente_hasta, identidad: { via: 'portero' } } as EntradaCruda])
+    const req = ['seguidores']
+    const vencida = planificarRefresco({ snapshot: snap, ahora: T0, previos: f(hace(T0, 1)), nuevos: [], rondas_de_oficina_usadas: 0, tipos_requeridos: req })
+    expect(vencida.repedir.map((r) => r.fuente_id)).toContain('instagram_perfil')
+    expect(vencida.repedir.find((r) => r.fuente_id === 'instagram_perfil')?.motivo).toBe('vencido')
+    const vigente = planificarRefresco({ snapshot: snap, ahora: T0, previos: f(new Date(T0.getTime() + 24 * 3_600_000).toISOString()), nuevos: [], rondas_de_oficina_usadas: 0, tipos_requeridos: req })
+    expect(vigente.repedir).toEqual([])
+    const sinFecha = planificarRefresco({ snapshot: snap, ahora: T0, previos: f(null), nuevos: [], rondas_de_oficina_usadas: 0, tipos_requeridos: req })
+    expect(sinFecha.repedir).toEqual([])
+  })
+})
+
 describe('V10 · 3 · cambio material: nueva ronda o bloque conservado', () => {
   const previos = norm([crudo('seguidores', 1000, 30, 'instagram_perfil'), crudo('puntaje_resenas', 4.8, 30)])
   it('un cambio que la fila del tipo llama material ⇒ nueva ronda de la oficina', () => {

@@ -160,7 +160,7 @@ async function main() {
     if (aplicar && !confirmacion) { console.error('J6 se niega: falta `--dale-de-emilio AAAA-MM-DD` (la fecha del «dale»). Sin ese «dale» no se corre nada real.'); console.error('\n' + avisoParaEmilio()); process.exit(3) }
     const corrida = `c${new Date().toISOString().replace(/\D/g, '').slice(0, 12)}`
     let r
-    try { r = await correrLaPruebaReal({ T: transporteReal(), aplicar, confirmacion, corrida, imagen: flag('imagen') }) } catch (e) { r = e.resultado_parcial ?? null; console.error('ERROR:', e instanceof Error ? e.message : String(e)); if (r) console.log('resultado parcial en', guardar(`resultado-parcial-${corrida}.json`, r)); process.exit(1) }
+    try { r = await correrLaPruebaReal({ T: transporteReal(), aplicar, confirmacion, corrida, imagen: flag('imagen'), fallaSembrada: A.includes('--falla-sembrada') }) } catch (e) { r = e.resultado_parcial ?? null; console.error('ERROR:', e instanceof Error ? e.message : String(e)); if (r) console.log('resultado parcial en', guardar(`resultado-parcial-${corrida}.json`, r)); process.exit(1) }
     if (r.impreso) { r.pasos.forEach((p, i) => console.log(`  ${i + 1}. ${p}`)); console.log('\n(sin --aplicar: no se escribió ni se llamó a nada)'); return }
     console.log(r.log.join('\n'))
     console.log('evidencia en', guardar(`evidencia-${corrida}.json`, r))

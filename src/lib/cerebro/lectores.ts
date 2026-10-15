@@ -14,7 +14,14 @@ import { type DecisionAtada, type DecisionDelDueno, type Estado, type EstadoDeFu
 import { derivarVersiones } from './versiones'
 import { avisoDeProvisionales } from '../manual/lectura'
 
-export interface Contexto { consulta: Consulta; cliente: string; ahora: Date; plazos: Plazos }
+export interface Contexto {
+  consulta: Consulta
+  cliente: string
+  ahora: Date
+  plazos: Plazos
+  /** ids de las fichas «de zona» que le tocan al cliente (`zona:ec`): feriados y temporada, sin cliente. Ausente = ninguna. */
+  zonas?: string[]
+}
 export interface Salida {
   fuentes: Partial<Record<NombreDeFuente, EstadoDeFuente>>
   lineas: Ficha[]
@@ -65,8 +72,8 @@ const porRol = (rol: unknown): { origen: Origen; estado: Estado; propio: boolean
 const estadoDeTrabajo = (status: unknown): Estado => (status === 'approved' || status === 'published' ? 'aprobado' : status === 'rejected' ? 'rechazado' : 'borrador sin aprobar')
 
 // ── ficha del cliente (+ lo que dedujo el descubrimiento) ─────────────────────────────
-export async function leerFichaDelCliente(ctx: Contexto): Promise<{ salida: Salida; existe: boolean }> {
-  const r = await leer(ctx, { tabla: 'clients', columnas: ['id', 'name', 'website_url', 'status', 'config', 'created_at'], donde: { id: ctx.cliente }, limite: 1 })
+export async function leerFichaDelCliente(ctx: Contexto): Promise<{ salida: Salida; existe: boolean; pais?: string | null; mercado?: string | null }> {
+  const r = await leer(ctx, { tabla: 'clients', columnas: ['id', 'name', 'website_url', 'status', 'config', 'created_at', 'country', 'market'], donde: { id: ctx.cliente }, limite: 1 })
   if (r.error) return { salida: fallo(['ficha_del_cliente'], r.error), existe: false }
   const c = r.filas[0]
   if (!c) return { salida: exito({ ficha_del_cliente: { estado: 'sin_material', n: 0, detalle: 'cliente_inexistente' } }, []), existe: false }
@@ -85,7 +92,7 @@ export async function leerFichaDelCliente(ctx: Contexto): Promise<{ salida: Sali
       origen: 'producido', estado: 'inferido', fecha: iso(c.created_at), plazo: 'sin_plazo',
     }))
   }
-  return { salida: exito({ ficha_del_cliente: estadoDeFuente(lineas.length) }, lineas), existe: true }
+  return { salida: exito({ ficha_del_cliente: estadoDeFuente(lineas.length) }, lineas), existe: true, pais: texto(c.country), mercado: texto(c.market) }
 }
 
 // ── manual de marca: todas las versiones, vigente = la de mayor número ─────────────────
@@ -475,15 +482,19 @@ const DIA_EN_MS = 86_400_000
 const TOPE_DE_FILAS_DE_LA_BASE = 1000
 
 export async function leerFichas(ctx: Contexto): Promise<Salida> {
-  const r = await leer(ctx, {
-    tabla: 'cerebro_fichas',
-    columnas: ['id', 'clase', 'titulo', 'que_es', 'contenido', 'archivo_nombre', 'archivo_tipo', 'archivo_enlace', 'archivo_bytes', 'origen', 'fecha_fuente', 'reconfirmado_en', 'plazo', 'vigente_hasta', 'version_de', 'retirada_en', 'motivo_retirada', 'producto', 'sede', 'propiedad', 'residual', 'creado_en', 'prueba', 'descartada'],
-    donde: { client_id: ctx.cliente },
-  })
+  const COLUMNAS_DE_FICHAS = ['id', 'clase', 'titulo', 'que_es', 'contenido', 'archivo_nombre', 'archivo_tipo', 'archivo_enlace', 'archivo_bytes', 'origen', 'fecha_fuente', 'reconfirmado_en', 'plazo', 'vigente_hasta', 'version_de', 'retirada_en', 'motivo_retirada', 'producto', 'sede', 'propiedad', 'residual', 'creado_en', 'prueba', 'descartada']
+  const r = await leer(ctx, { tabla: 'cerebro_fichas', columnas: COLUMNAS_DE_FICHAS, donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['fichas'], r.error)
+  // las fichas de ZONA (feriados, temporada) no llevan cliente: se leen aparte por el id de zona que le toca al cliente; una falla de esa lectura se DICE (no se lee como «sin contexto»)
+  const deZona: typeof r.filas = []
+  for (const z of ctx.zonas ?? []) {
+    const rz = await leer(ctx, { tabla: 'cerebro_fichas', columnas: COLUMNAS_DE_FICHAS, donde: { client_id: z } })
+    if (rz.error) return fallo(['fichas'], rz.error)
+    deZona.push(...rz.filas)
+  }
   // lo de PRUEBA solo lo lee su cliente de prueba (y un cliente de prueba solo lee lo de prueba); un cliente real jamás lo ve
   const deCliente = esClienteDePrueba(ctx.cliente)
-  const filas = r.filas.filter((f) => (f.prueba === true) === deCliente && f.descartada !== true).sort((a, b) => (String(iso(a.creado_en)) < String(iso(b.creado_en)) ? -1 : 1))
+  const filas = [...r.filas, ...deZona].filter((f) => (f.prueba === true) === deCliente && f.descartada !== true).sort((a, b) => (String(iso(a.creado_en)) < String(iso(b.creado_en)) ? -1 : 1))
   const porId = new Map(filas.map((f) => [String(f.id), f]))
   const hijoDe = new Map<string, string>()
   for (const f of filas) if (f.version_de !== null && f.version_de !== undefined && porId.has(String(f.version_de))) hijoDe.set(String(f.version_de), String(f.id))

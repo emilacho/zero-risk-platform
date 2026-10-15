@@ -46,6 +46,8 @@ export interface PlanteoV1 {
   dado_por_verificado?: string[]
   /** plan v3 · V7: la respuesta del proponente cuando la meta NO cubre el equilibrio (obligatoria en el ajuste en ese caso) */
   equilibrio_respuesta?: { decision: (typeof DECISIONES_DE_EQUILIBRIO)[number]; motivo: string }
+  /** lo pone el CÓDIGO (nunca el agente) cuando el ajuste no respondió el equilibrio tras el reintento */
+  equilibrio_sin_respuesta?: boolean
 }
 export const DECISIONES_DE_EQUILIBRIO = ['subo_la_meta', 'mantengo_la_meta', 'no_aplica'] as const
 /** ¿trae una respuesta válida al equilibrio? (la exige el paso `ajuste` solo cuando la meta no lo cubre) */

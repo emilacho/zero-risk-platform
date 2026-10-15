@@ -27,6 +27,10 @@ export const COSTO_MAXIMO_POR_FUNCION: Record<string, { usd: number; medido: boo
   software_review_scraper: { usd: 0.05, medido: false },
   publicaciones_facebook: { usd: 0.05, medido: false },
   menciones_en_redes: { usd: 0.14, medido: true }, // 23 publicaciones = 0,048 (14-oct); US$ 0,0027 por publicación; techo de 50 = 0,135
+  // NUEVOS BRAZOS (ensayo real del 15-oct, directo a la API de Apify)
+  google_maps_scraper: { usd: 0.15, medido: true }, // 45 lugares (3 búsquedas × 15) = 0,135 → US$ 0,003 por lugar; 1 lugar con 20 reseñas = 0,015
+  facebook_ads_library_scraper: { usd: 0.15, medido: false }, // `easyapi~…`: evento de arranque FIJO de 0,09 medido (0 filas); + ~0,003 por anuncio × 20 = 0,15 (el por-anuncio no está medido)
+  competitor_website_scraper: { usd: 0.0536, medido: true }, // el mismo lector del sitio que `website_content_scraper`
 }
 /** videos de Instagram con transcripción: costo medido por video (10 videos = 0,557) */
 export const VIDEO_DE_INSTAGRAM_USD = 0.056

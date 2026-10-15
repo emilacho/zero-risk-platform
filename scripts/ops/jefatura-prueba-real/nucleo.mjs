@@ -3,12 +3,12 @@
 // y el «apagar SIEMPRE al final» sin gastar un centavo.
 //
 // Qué es: 2 revisiones REALES (`dry_run=false`) de una `pieza` post ya producida, en 2 rubros distintos, con clientes de práctica; la jefatura en `ensayo` SOLO para esos 2 clientes y SOLO el tipo `pieza`.
-// Topes: US$ 0,40 por revisión (se manda como `payload.tope_restante_usd`: la ruta lo respeta y cierra por tope) y US$ 0,70 en total (lo que queda de presupuesto se calcula entre una revisión y la otra).
+// Topes: US$ 0,50 por revisión (J6 ter/cuarto; con las reservas de la política `pieza` 0,10/0,10) (se manda como `payload.tope_restante_usd`: la ruta lo respeta y cierra por tope) y US$ 0,70 en total (lo que queda de presupuesto se calcula entre una revisión y la otra).
 // Nada se publica al cliente, nada se produce, nada toca naufrago.ec. Los clientes de práctica son archivos: la jefatura guarda `client_id` como texto.
 import { CLIENTES, contextoDe, piezaDe } from '../jefatura-seco/fixtures.mjs'
 
 export const ID_PREFIJO = 'prueba-jefatura-real-'
-export const TOPES = { revision: 0.4, total: 0.7, limite_min: 20, cada_ms: 5000, minimo_para_abrir: 0.1 }
+export const TOPES = { revision: 0.5, total: 0.7, limite_min: 20, cada_ms: 5000, minimo_para_abrir: 0.1 }
 /** estados terminales de una revisión (los de la ruta) */
 export const TERMINALES = ['cerrada', 'cerrada_por_tope', 'fallida']
 export const RESULTADOS_VALIDOS = ['limpia', 'con_desacuerdo', 'sin_segunda_mirada', 'incompleta_por_tope', 'fallida']
@@ -135,7 +135,20 @@ const ahora = (T) => (T.ahora ?? Date.now)()
  */
 /** @param {{ T: any, aplicar?: boolean, confirmacion?: any, topes?: any, clientes?: any[], corrida?: string, imagen?: string | null }} o
  * @returns {Promise<any>} */
-export async function correrLaPruebaReal({ T, aplicar = false, confirmacion = false, topes = TOPES, clientes = CLIENTES_REALES, corrida, imagen = null }) {
+/**
+ * J6 cuarto · UNA pieza con una falla BLOQUEANTE sembrada a propósito (la del segundo cliente): se le agrega una frase con palabras que SU manual prohíbe («Lo que nunca decimos»).
+ * Sirve para que el camino de corrección se ejerza de verdad. Devuelve el texto sembrado y lo sembrado (para documentarlo en la evidencia). No toca nada más de la pieza.
+ */
+export function sembrarFalla(cliente, texto) {
+  const p = cliente.prohibidas ?? []
+  if (p.length < 2) throw new Error(`el cliente ${cliente.id} no tiene palabras prohibidas para sembrar`)
+  const frase = `${p[2] ? p[2][0].toUpperCase() + p[2].slice(1) : 'Garantizado'} que ${p[1]} ${p[0]}.`
+  const i = texto.indexOf('\n\n')
+  const sembrado = i >= 0 ? `${texto.slice(0, i)} ${frase}${texto.slice(i)}` : `${texto} ${frase}`
+  return { texto: sembrado, frase, palabras_prohibidas: p.filter((w) => sembrado.toLowerCase().includes(w.toLowerCase())) }
+}
+
+export async function correrLaPruebaReal({ T, aplicar = false, confirmacion = false, topes = TOPES, clientes = CLIENTES_REALES, corrida, imagen = null, fallaSembrada = false }) {
   if (!aplicar) return { impreso: true, pasos: pasosDeLaPrueba({ topes, clientes }), escrituras: 0 }
   if (confirmacion !== true) throw new Error('J6 se niega: falta la confirmación del «dale» de Emilio (--dale-de-emilio <fecha>). Sin ese «dale» no se corre nada real.')
   if (!corrida) throw new Error('J6 se niega: falta el identificador de la corrida (cada corrida abre revisiones nuevas)')
@@ -150,6 +163,7 @@ export async function correrLaPruebaReal({ T, aplicar = false, confirmacion = fa
   if (!fl.turno || fl.turno.active) throw new Error('J6 se niega: el flujo «jefatura · turno» no existe o ya está activo')
   if (fl.vigia?.active) throw new Error('J6 se niega: el flujo «jefatura · el vigía» está activo (debe estar inactivo)')
   const antes = await T.contadores()
+  /** @type {any} */
   const resultado = { corrida, antes, revisiones: [], saltadas: [], parada: null, apagado: false, log }
   let gastado = 0
   let fallo = null
@@ -161,6 +175,13 @@ export async function correrLaPruebaReal({ T, aplicar = false, confirmacion = fa
       const dec = topeDeLaSiguiente(gastado, topes)
       if (!dec.abrir) { resultado.saltadas.push({ cliente: c.id, motivo: dec.motivo }); dicho(`no se abre la revisión ${i + 1}: ${dec.motivo}`); continue }
       const sobre = sobreReal(c, { corrida, tope_usd: dec.tope_usd, imagen })
+      // solo UNA pieza (la segunda) lleva la falla sembrada; la otra queda como en J6/J6 ter
+      if (fallaSembrada && i === 1) {
+        const sem = sembrarFalla(c, sobre.payload.texto)
+        resultado.falla_sembrada = { cliente: c.id, artifact_id: sobre.artifact_id, frase: sem.frase, palabras_prohibidas: sem.palabras_prohibidas, texto_original: sobre.payload.texto, texto_sembrado: sem.texto }
+        sobre.payload.texto = sem.texto
+        dicho(`falla sembrada en la revisión ${i + 1}: «${sem.frase}» (prohibidas: ${sem.palabras_prohibidas.join(', ')})`)
+      }
       const t0 = ahora(T)
       const abre = await T.llamar('revisiones', sobre)
       if (abre.status !== 200) { resultado.revisiones.push({ cliente: c.id, ok: false, error: `la ruta contestó ${abre.status}: ${JSON.stringify(abre.body).slice(0, 240)}` }); dicho(`revisión ${i + 1}: la ruta contestó ${abre.status}`); continue }
