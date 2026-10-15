@@ -1,0 +1,22 @@
+{
+ "179243": {
+  "agente": "content-creator",
+  "salida": "```json\n{\"respuestas\":[{\"item\":\"ext-2-texto\",\"decision\":\"tomar_parcial\",\"razon\":\"El revisor tiene razón en que 'cuéntanos qué necesitas' es demasiado genérico y no orienta la acción. Acepto ese ajuste. No tomo la eliminación de 'te respondemos hoy' porque está en los ejemplos aprobados del manual y la decisión operativa no es mía. No tomo agregar detalles del plato porque no tengo datos verificables del cliente sobre ingredientes o preparación.\"}]}\n```\n\n**Parte corregida — texto:**\n\nCazuela de mariscos · $48.000 COP. Escríbenos por WhatsApp para pedirla.\n\n#fogondelpuerto #cartagena #restaurante",
+  "largo": 601
+ },
+ "179244": {
+  "agente": "content-creator",
+  "salida": "```json\n{\"respuestas\":[{\"id\":\"ext-2-texto\",\"estado\":\"tomado\",\"razon\":\"El revisor tiene razón en que 'cuéntanos qué necesitas' es demasiado genérico y 'te respondemos hoy' es una promesa no acreditada. Adopto el ajuste mínimo propuesto: eliminar ambas frases y usar un llamado directo al pedido.\"}]}\n```\n\n**Texto corregido:**\n\nCazuela de mariscos · $48.000 COP.\nEscríbenos por WhatsApp para pedirla.\n\n#fogondelpuerto #cartagena #restaurante",
+  "largo": 439
+ },
+ "179246": {
+  "agente": "content-creator",
+  "salida": "```json\n{\"respuestas\":[{\"item\":\"ext-2-texto\",\"decision\":\"tomar\",\"razon\":\"El revisor tiene razón en el punto más importante: el texto no muestra el diferencial de Altamira ni desarrolla una situación concreta. Incorporo la situación reconocible y sustituyo 'te respondemos hoy' por el diferencial real (explicación clara + avisos previos). El resto de sus sugerencias (alcance del precio, horarios) requieren confirmación del cliente antes de publicar, así que no las incorporo ahora.\"}]}\n```\n\n---\n\n**Parte corregida — ext-2-texto**\n\n¿Tienes una pyme y no sabes qué obligación fiscal toca este mes?\n\nTe explicamos qué debes cumplir en palabras claras y te avisamos antes de cada fecha límite.\n\nContabilidad mensual para pymes: $1,800 MXN. Escríbenos para agendar una llamada de diagnóstico.\n\n#AltamiraContadores #Monterrey #ContabilidadParaPymes",
+  "largo": 844
+ },
+ "179247": {
+  "agente": "content-creator",
+  "salida": "```json\n{\"respuestas\":[{\"id\":\"ext-2-texto\",\"estado\":\"tomado\",\"razon\":\"La situación concreta reemplaza la promesa de respuesta inmediata, que carece de respaldo operativo verificable, y activa el diferencial declarado (explicación clara + avisos previos). El resto del texto conserva servicio, precio y CTA.\"}]}\n```\n\n---\n\n**Texto corregido:**\n\n¿Tienes una pyme y no sabes qué obligación fiscal toca este mes?\n\nTe explicamos qué debes cumplir en palabras claras y te avisamos antes de cada fecha límite.\n\nContabilidad mensual para pymes: $1,800 MXN. Escríbenos para agendar una llamada de diagnóstico.\n\n#AltamiraContadores #Monterrey #ContabilidadParaPymes",
+  "largo": 654
+ }
+}

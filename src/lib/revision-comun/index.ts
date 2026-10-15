@@ -6,7 +6,7 @@
  */
 export { evaluar, registrarPaso, siguientePaso } from '../oficina/motor'
 export type { ResultadoDePaso } from '../oficina/motor'
-export { descartarIgnorados, ESQUEMAS, limpiarSalida, procesarSalida, validar } from '../oficina/salida'
+export { descartarIgnorados, ESQUEMAS, limpiarSalida, normalizarEnumerados, procesarSalida, validar } from '../oficina/salida'
 export type { Esq, ResultadoDeSalida } from '../oficina/salida'
 export { estadoInicial } from '../oficina/tipos'
 export type { Artefacto, Condicion, Estado, Ficha, Gravedad, Limites, OrigenDeFicha, Paso, Plantilla, Siguiente } from '../oficina/tipos'

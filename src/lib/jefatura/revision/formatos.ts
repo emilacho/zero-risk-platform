@@ -13,7 +13,7 @@
  * En la CORRECCIÓN y en la DECISIÓN el plan va completo SOLO si se tomó algo; si no se tomó nada, solo el bloque (el orquestador exige la coherencia: «tomada» ⇒ texto; texto ⇒ algo tomado). El tope de caracteres es 40.000 (≥ 34.000, el plan más largo medido).
  * Lo que este módulo NO puede probar: que el modelo real respete el formato con un plan real. Eso exige UNA llamada real (≈ US$ 1) que queda «con aviso y dale de Emilio» y NO se corre en la construcción.
  */
-import { descartarIgnorados, ESQUEMAS, limpiarSalida, procesarSalida, validar, type Esq, type ResultadoDeSalida } from '../../revision-comun'
+import { descartarIgnorados, ESQUEMAS, limpiarSalida, normalizarEnumerados, procesarSalida, validar, type Esq, type ResultadoDeSalida } from '../../revision-comun'
 
 export const MARCA_DE_INICIO_DE_RESOLUCION = '<<<RESOLUCION>>>'
 export const MARCA_DE_FIN_DE_RESOLUCION = '<<<FIN_RESOLUCION>>>'
@@ -39,7 +39,7 @@ export const esquemaConocido = (id: string): boolean => id in ESQUEMAS || id in 
 export type RespuestaDeFichaDeCorreccion = { id: string; estado: 'tomada' | 'no_tomada'; razon: string }
 
 export type TextoYResolucion =
-  | { ok: true; texto: string | null; respuestas: RespuestaDeFichaDeCorreccion[]; envoltorio_limpiado: boolean }
+  | { ok: true; texto: string | null; respuestas: RespuestaDeFichaDeCorreccion[]; envoltorio_limpiado: boolean; normalizados: string[] }
   | { ok: false; errores: string[] }
 
 /**
@@ -64,15 +64,17 @@ export function separarTextoYResolucion(salida: string, o: { exigirTexto: boolea
   let crudo: unknown
   try { crudo = JSON.parse(l.json) } catch (e) { return { ok: false, errores: [`resolución: json_invalido: ${e instanceof Error ? e.message : String(e)}`] } }
   const esq = ESQUEMAS_DE_REVISION['bloque_de_resolucion']
-  const errores = validar(esq, descartarIgnorados(esq, crudo))
+  const normalizados: string[] = []
+  crudo = normalizarEnumerados(esq, descartarIgnorados(esq, crudo), '$', normalizados)
+  const errores = validar(esq, crudo)
   if (errores.length) return { ok: false, errores: errores.map((e) => `resolución ${e}`) }
   if (texto === '') {
     if (o.exigirTexto) return { ok: false, errores: ['falta el plan: la corrección entrega el plan completo antes del bloque de resolución'] }
-    return { ok: true, texto: null, respuestas: (crudo as { respuestas: RespuestaDeFichaDeCorreccion[] }).respuestas, envoltorio_limpiado: envoltorio }
+    return { ok: true, texto: null, respuestas: (crudo as { respuestas: RespuestaDeFichaDeCorreccion[] }).respuestas, envoltorio_limpiado: envoltorio, normalizados }
   }
   if (texto.length < MINIMO_DE_CARACTERES_DEL_PLAN) return { ok: false, errores: [`el texto del plan es demasiado corto (${texto.length} caracteres; mínimo ${MINIMO_DE_CARACTERES_DEL_PLAN}): se entrega el plan COMPLETO, no un resumen`] }
   if (texto.length > TOPE_DE_CARACTERES_DEL_PLAN) return { ok: false, errores: [`el texto del plan pasa el tope (${texto.length} > ${TOPE_DE_CARACTERES_DEL_PLAN} caracteres)`] }
-  return { ok: true, texto, respuestas: (crudo as { respuestas: RespuestaDeFichaDeCorreccion[] }).respuestas, envoltorio_limpiado: envoltorio }
+  return { ok: true, texto, respuestas: (crudo as { respuestas: RespuestaDeFichaDeCorreccion[] }).respuestas, envoltorio_limpiado: envoltorio, normalizados }
 }
 
 /**
@@ -88,17 +90,18 @@ export function procesarSalidaDeRevision(texto: string, esquemaId: string, inten
   if (esquemaId === 'plan_texto_y_resolucion.v1') {
     const r = separarTextoYResolucion(texto, { exigirTexto: false })
     if (!r.ok) return fallo(r.errores)
-    return { ok: true, valor: { respuestas: r.respuestas, ...(r.texto !== null ? { texto_plan: r.texto } : {}) }, descartados: [], envoltorio_limpiado: r.envoltorio_limpiado }
+    return { ok: true, valor: { respuestas: r.respuestas, ...(r.texto !== null ? { texto_plan: r.texto } : {}) }, descartados: [], envoltorio_limpiado: r.envoltorio_limpiado, ...(r.normalizados.length ? { normalizados: r.normalizados } : {}) }
   }
   const propio = ESQUEMAS_DE_REVISION[esquemaId]
-  if (!propio) return procesarSalida(texto, esquemaId, intento, reintento_formato)
+  if (!propio) return procesarSalida(texto, esquemaId, intento, reintento_formato, { normalizar: true })
   const l = limpiarSalida(texto)
   if (!l.ok) return fallo([l.error])
   let crudo: unknown
   try { crudo = JSON.parse(l.json) } catch (e) { return fallo([`json_invalido: ${e instanceof Error ? e.message : String(e)}`]) }
   const descartados: string[] = []
-  const limpio = descartarIgnorados(propio, crudo, '$', descartados)
+  const normalizados: string[] = []
+  const limpio = normalizarEnumerados(propio, descartarIgnorados(propio, crudo, '$', descartados), '$', normalizados)
   const errores = validar(propio, limpio)
   if (errores.length) return fallo(errores)
-  return { ok: true, valor: limpio as Record<string, unknown>, descartados, envoltorio_limpiado: l.envoltorio }
+  return { ok: true, valor: limpio as Record<string, unknown>, descartados, envoltorio_limpiado: l.envoltorio, ...(normalizados.length ? { normalizados } : {}) }
 }

@@ -194,13 +194,45 @@ export function descartarIgnorados(esq: Esq, v: unknown, ruta = '$', quitados: s
   return v
 }
 
+/**
+ * NORMALIZAR ENUMERADOS (J6 ter · 15-oct) · el modelo contesta «tomado», «No tomada», «no tomada», «TOMADA»: variantes INEQUÍVOCAS de un valor permitido.
+ * Se pliega (minúsculas, sin tildes, espacios/guiones → «_») y se compara; además se prueba el género (o↔a, os↔as, por palabra). Si EXACTAMENTE un valor permitido
+ * coincide, se sustituye y se anota; si ninguno o más de uno coincide, el valor queda tal cual y la validación lo rechaza (lo ambiguo sigue fallando).
+ * Solo toca valores de campos `enum` declarados en el esquema; nunca inventa valores ni mira otros campos. Puro.
+ */
+export function plegarEnumerado(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[\s-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+}
+/** dos palabras iguales salvo el género final (o↔a, os↔as) */
+const mismaPalabra = (x: string, y: string): boolean => x === y || (x.length > 2 && y.length === x.length && x.slice(0, -1) === y.slice(0, -1) && /^[oa]$/.test(x.slice(-1)) && /^[oa]$/.test(y.slice(-1)))
+  || (x.length > 3 && y.length === x.length && x.slice(0, -2) === y.slice(0, -2) && /^(os|as)$/.test(x.slice(-2)) && /^(os|as)$/.test(y.slice(-2)))
+/** mismas palabras en el mismo orden, cada una igual o con el género cambiado (nunca «no»↔«na»: las palabras de 2 letras no cambian) */
+const mismaFrase = (x: string, y: string): boolean => { const a = x.split('_'), b = y.split('_'); return a.length === b.length && a.every((w, i) => mismaPalabra(w, b[i])) }
+export function normalizarEnumerados(esq: Esq, v: unknown, ruta = '$', anotados: string[] = []): unknown {
+  if (esq.t === 'enum') {
+    if (typeof v !== 'string' || esq.v.includes(v)) return v
+    const f = plegarEnumerado(v)
+    const coincide = esq.v.filter((c) => (typeof c === 'string' ? mismaFrase(plegarEnumerado(c), f) : String(c) === f))
+    if (coincide.length !== 1) return v
+    anotados.push(`${ruta}: «${v}» → «${String(coincide[0])}»`)
+    return coincide[0]
+  }
+  if (esq.t === 'arr' && Array.isArray(v)) return v.map((x, i) => normalizarEnumerados(esq.de, x, `${ruta}[${i}]`, anotados))
+  if (esq.t === 'obj' && v && typeof v === 'object' && !Array.isArray(v)) {
+    const sale: Record<string, unknown> = {}
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) sale[k] = esq.props[k] ? normalizarEnumerados(esq.props[k], x, `${ruta}.${k}`, anotados) : x
+    return sale
+  }
+  return v
+}
+
 export type ResultadoDeSalida =
-  | { ok: true; valor: Record<string, unknown>; descartados: string[]; envoltorio_limpiado: boolean }
+  | { ok: true; valor: Record<string, unknown>; descartados: string[]; envoltorio_limpiado: boolean; /** variantes de enumerados normalizadas (solo si el que llama lo pidió) */ normalizados?: string[] }
   | { ok: false; accion: 'reintentar'; mensaje_de_error: string }
   | { ok: false; accion: 'falla_visible'; errores: string[]; ficha: Pick<Ficha, 'origen' | 'donde' | 'gravedad' | 'que'> }
 
 /** `intento` = cuántos intentos de formato ya se hicieron (0 en el primero). Un reintento como máximo cuando `reintento_formato` = 1. */
-export function procesarSalida(texto: string, esquemaId: string, intento: number, reintento_formato: number): ResultadoDeSalida {
+export function procesarSalida(texto: string, esquemaId: string, intento: number, reintento_formato: number, o: { normalizar?: boolean } = {}): ResultadoDeSalida {
   const esq = ESQUEMAS[esquemaId]
   if (!esq) return { ok: false, accion: 'falla_visible', errores: [`esquema «${esquemaId}» no registrado`], ficha: { origen: 'chequeo', donde: 'formato', gravedad: 'bloquea', que: `esquema «${esquemaId}» no registrado` } }
   const fallo = (errores: string[]): ResultadoDeSalida =>
@@ -212,8 +244,10 @@ export function procesarSalida(texto: string, esquemaId: string, intento: number
   let crudo: unknown
   try { crudo = JSON.parse(l.json) } catch (e) { return fallo([`json_invalido: ${e instanceof Error ? e.message : String(e)}`]) }
   const descartados: string[] = []
-  const limpio = descartarIgnorados(esq, crudo, '$', descartados)
+  const normalizados: string[] = []
+  const descartado = descartarIgnorados(esq, crudo, '$', descartados)
+  const limpio = o.normalizar ? normalizarEnumerados(esq, descartado, '$', normalizados) : descartado
   const errores = validar(esq, limpio)
   if (errores.length) return fallo(errores)
-  return { ok: true, valor: limpio as Record<string, unknown>, descartados, envoltorio_limpiado: l.envoltorio }
+  return { ok: true, valor: limpio as Record<string, unknown>, descartados, envoltorio_limpiado: l.envoltorio, ...(normalizados.length ? { normalizados } : {}) }
 }
