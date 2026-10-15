@@ -53,6 +53,8 @@ export interface EntradaDeDescubrir {
   /** los nuevos brazos (15-oct): todos APAGADOS por omisión; ausente = el plan de siempre */
   brazos?: BrazosActivos
   ahora?: Date
+  /** sedes con punto, competidores del sistema y ubicaciones ya pedidas (la ruta lo carga cuando hay un brazo de demanda o competencia encendido) */
+  brazosCtx?: Parameters<typeof accionesDeBrazos>[0]['ctx']
 }
 export interface PlanDelPortero {
   hacer: AccionDelPortero[]
@@ -144,7 +146,7 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
 
   // los nuevos brazos (demanda y competencia piden a Apify; contexto y propios no piden nada): detrás de su interruptor, al final: si el tope o las 16 corridas aprietan, caen PRIMERO
   if (e.brazos && hayBrazoActivo(e.brazos)) {
-    const b = accionesDeBrazos({ brazos: e.brazos, cliente: { id: e.cliente.id, name: e.cliente.name, config: e.cliente.config, industry: e.rubro, country: e.pais, market: ciudad }, rubro: e.rubro, ciudad, familias: fp.familias, ahora: e.ahora ?? new Date() })
+    const b = accionesDeBrazos({ brazos: e.brazos, cliente: { id: e.cliente.id, name: e.cliente.name, config: e.cliente.config, industry: e.rubro, country: e.pais, market: ciudad }, rubro: e.rubro, ciudad, familias: fp.familias, ahora: e.ahora ?? new Date(), ctx: e.brazosCtx })
     candidatas.push(...(b.acciones as AccionDelPortero[]))
     noCubiertas.push(...b.no_cubiertas)
   }

@@ -178,8 +178,11 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     r.brazos = await correrBrazos({
       db: e.db, brazos: e.brazos as BrazosActivos, cliente, client_id: e.client_id, filas: lista(rr.data) as never, ahora, dry_run: e.dry_run, env: e.env, fetch: e.fetch,
       ciudad: (lista(sd.data)[0]?.ciudad as string | undefined) ?? null, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id, nuevoId: e.nuevoId,
+      llamarModelo: e.llamarModelo, presupuestoUsd: Math.max(0, Math.min(0.16, TOPE_DEL_PORTERO_USD - gastoAntes - r.juez.costo_usd)),
     })
     r.errores.push(...r.brazos.errores.map((m) => `brazos: ${m}`))
+    // el modelo de los brazos (el juez de competencia por sede) cuenta en el gasto del portero
+    if (r.brazos.costo_modelo_usd) r.gasto = { ...r.gasto, modelo_usd: Math.round((r.gasto.modelo_usd + r.brazos.costo_modelo_usd) * 1e6) / 1e6 }
   }
 
   if (e.dry_run) return { ...r, ok: true, estado: 'hecha' }
@@ -219,7 +222,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   // la corrida que reemplaza al despertar CIERRA lo que el despertar dejó pendiente (qué pidió y desde cuándo) para que `listo` pueda declarar los huecos
   const previo = corridaDeHoy && esObjeto(corridaDeHoy.resumen) ? (corridaDeHoy.resumen as Fila).despertar : null
   const arrastreDelDespertar = !e.despertar && esObjeto(previo) ? { despertar: { ...previo, completado_en: ahora.toISOString() } } : {}
-  const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), ...arrastreDelDespertar, unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores, ...(r.brazos ? { brazos: { activos: r.brazos.activos, por_brazo: r.brazos.por_brazo, archivo: r.brazos.archivo ? { escritas: r.brazos.archivo.escritas, iguales: r.brazos.archivo.iguales, retiradas: r.brazos.archivo.retiradas } : null } } : {}) }, gasto_apify_usd: 0, gasto_modelo_usd: r.juez.costo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
+  const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), ...arrastreDelDespertar, unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores, ...(r.brazos ? { brazos: { activos: r.brazos.activos, por_brazo: r.brazos.por_brazo, archivo: r.brazos.archivo ? { escritas: r.brazos.archivo.escritas, iguales: r.brazos.archivo.iguales, retiradas: r.brazos.archivo.retiradas } : null } } : {}) }, gasto_apify_usd: 0, gasto_modelo_usd: r.gasto.modelo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
   const log = corridaDeHoy ? await e.db.from('cerebro_portero_corridas').update(rastro).eq('id', String(corridaDeHoy.id)) : await e.db.from('cerebro_portero_corridas').insert(rastro)
   if (log.error) r.errores.push(`rastro: ${log.error.message}`); else r.escrituras.corrida = 1
   return { ...r, ok: r.errores.length === 0, estado: r.errores.length ? 'con_errores' : 'hecha' }
