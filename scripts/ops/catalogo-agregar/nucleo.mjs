@@ -8,7 +8,7 @@ export const OPERADORES = ['delegada_en_portero', 'rango', 'edad_max_h', 'igual_
 export const CRITICIDADES = ['critica', 'normal', 'baja']
 export const CLASES_DE_REGLA = ['identidad', 'contradiccion', 'precedencia', 'cambio_material', 'moneda_pais', 'parametro']
 export const VIAS = ['cerebro', 'crudo', 'relleno']
-export const GRUPOS_DE_LEXICO = ['verificacion', 'ausencia', 'supuesto', 'dominio', 'periodo']
+export const GRUPOS_DE_LEXICO = ['verificacion', 'ausencia', 'ausencia_excluye', 'supuesto', 'dominio', 'periodo']
 
 const t = {
   str: (min = 1, max = 400) => ({ k: 'str', min, max }),
