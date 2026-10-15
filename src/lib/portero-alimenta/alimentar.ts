@@ -8,7 +8,7 @@
  */
 import { propiosDeFicha } from '../manual/cliente'
 import { TRANSITORIOS_COMUNES, transitoriosDe, varianteDelCliente, type Interruptores } from './datos'
-import { MAX_LLAMADAS_DEL_JUEZ_POR_DIA, TOPE_DE_GASTO_DEL_JUEZ_POR_LLAMADA_USD, TOPE_DEL_PORTERO_USD, TOPE_DEL_PULIDO_USD } from './datos'
+import { MAX_LLAMADAS_DEL_JUEZ_POR_DIA, TOPE_DE_GASTO_DEL_JUEZ_POR_LLAMADA_USD, TOPE_DEL_PORTERO_USD } from './datos'
 import { filtrar, type ContextoDelCliente } from './filtro'
 import { fichaPropiaDeMapas } from './mapas-propia'
 import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlamada } from './juez'
@@ -17,7 +17,7 @@ import { unidadesDeRaspados, type FilaCruda, type Unidad } from './unidades'
 import { correrBrazos, hayBrazoActivo, type BrazosActivos, type ResultadoDeBrazos } from './brazos'
 import { archivarFichasDeBrazos } from './brazos/archivo'
 import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
-import { pulirResumen } from './resumen-pulido'
+import { pulirResumen, topeDelPulido } from './resumen-pulido'
 import { idDeZona, paisIsoDe } from '../cerebro/zona'
 
 /** las fichas de zona (`zona:ec`) que le tocan al cliente por su país */
@@ -38,7 +38,7 @@ export interface EntradaDeAlimentar {
   /** (instrucción, mensaje) → respuesta del modelo con su costo; se inyecta (simulado en pruebas) */
   llamarModelo?: (instruccion: string, mensaje: string) => Promise<RespuestaDeLlamada>
   /** el agente del roster que pule el resumen vivo (15-oct): (tarea) → texto + costo; ausente = el resumen queda por código */
-  pulirResumen?: (tarea: string) => Promise<{ texto: string; costo_usd: number }>
+  pulirResumen?: (tarea: string, opciones?: { topeUsd?: number }) => Promise<{ texto: string; costo_usd: number }>
   ahora?: Date
   forzar?: boolean
   /** el despertar con el raspado del alta (15-oct): procesa lo que ya hay en `apify_raw` hasta `ahora`, deja el rastro como tipo «despertar» y NO bloquea la corrida diaria del mismo día */
@@ -70,7 +70,7 @@ export interface ResultadoDeAlimentar {
   /** lo que hicieron los nuevos brazos (ausente = ninguno encendido) */
   brazos?: ResultadoDeBrazos
   /** el resumen vivo (ausente = apagado) */
-  resumen_vivo?: { secciones: Record<string, number>; huecos: string[]; escritas: number; iguales: number; retiradas: number; pulido?: { usado: boolean; motivo: string; agente: string; costo_usd: number; lineas_originales: number; lineas_conservadas: number; descartadas: number; citas_originales: number; citas_conservadas: number } }
+  resumen_vivo?: { secciones: Record<string, number>; huecos: string[]; escritas: number; iguales: number; retiradas: number; pulido?: { usado: boolean; motivo: string; agente: string; costo_usd: number; lineas_originales: number; lineas_conservadas: number; descartadas: number; citas_originales: number; citas_conservadas: number; tope_usd: number; tope_subido: boolean; paso_del_tope_base: boolean } }
 }
 
 const vacio = (dry_run: boolean): ResultadoDeAlimentar => ({
@@ -206,8 +206,10 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
         // el pulido (apagado por omisión): DESPUÉS del armado, sin agregar hechos; cualquier falla deja el armado por código
         let pulido: NonNullable<ResultadoDeAlimentar['resumen_vivo']>['pulido']
         if (e.interruptores.resumen_pulido && e.pulirResumen && !e.dry_run) {
-          const pr = await pulirResumen(sal.cliente.contenido, { llamarAgente: e.pulirResumen, topeUsd: TOPE_DEL_PULIDO_USD })
-          pulido = { usado: pr.usado, motivo: pr.motivo, agente: pr.agente, costo_usd: pr.costo_usd, lineas_originales: pr.lineas_originales, lineas_conservadas: pr.lineas_conservadas, descartadas: pr.descartadas.length, citas_originales: pr.citas_originales, citas_conservadas: pr.citas_conservadas }
+          const tope = await topeDelPulido(e.db, e.client_id, ahora)
+          // el agente ve los CANDIDATOS de «Quién es»; si no sirve, queda el armado por código (el respaldo)
+          const pr = await pulirResumen(sal.texto_para_el_agente, { llamarAgente: e.pulirResumen, topeUsd: tope.tope_usd }, sal.cliente.contenido)
+          pulido = { usado: pr.usado, motivo: pr.motivo, agente: pr.agente, costo_usd: pr.costo_usd, lineas_originales: pr.lineas_originales, lineas_conservadas: pr.lineas_conservadas, descartadas: pr.descartadas.length, citas_originales: pr.citas_originales, citas_conservadas: pr.citas_conservadas, tope_usd: tope.tope_usd, tope_subido: tope.subido, paso_del_tope_base: pr.paso_del_tope_base === true }
           if (pr.usado) { sal.cliente.contenido = pr.texto; sal.cliente.datos = { ...(sal.cliente.datos ?? {}), pulido_por: pr.agente } }
           if (pr.costo_usd) r.gasto = { ...r.gasto, modelo_usd: Math.round((r.gasto.modelo_usd + pr.costo_usd) * 1e6) / 1e6 }
         }

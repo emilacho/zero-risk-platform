@@ -36,10 +36,10 @@ export function modeloRegistrado(o: { origen: string; llaveInterna: string; work
  */
 export function agenteDelRoster(o: { origen: string; llaveInterna: string; workflowId: string; ejecucionId: string; clientId: string; agente: string; topeUsd: number; fetchImpl?: (u: string, i?: RequestInit) => Promise<Response> }) {
   const traer = o.fetchImpl ?? ((u: string, i?: RequestInit) => fetch(u, i))
-  return async (tarea: string): Promise<{ texto: string; costo_usd: number }> => {
+  return async (tarea: string, opciones?: { topeUsd?: number }): Promise<{ texto: string; costo_usd: number }> => {
     const r = await traer(`${o.origen.replace(/\/$/, '')}/api/agents/run-sdk`, {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': o.llaveInterna, 'x-skip-editor-middleware': '1' },
-      body: JSON.stringify({ agent: o.agente, task: tarea, client_id: o.clientId, workflow_id: o.workflowId, workflow_execution_id: `${o.ejecucionId}:resumen-pulido`, step_name: 'resumen-pulido', dry_run: false, force_restart: true, max_budget_usd: o.topeUsd }),
+      body: JSON.stringify({ agent: o.agente, task: tarea, client_id: o.clientId, workflow_id: o.workflowId, workflow_execution_id: `${o.ejecucionId}:resumen-pulido`, step_name: 'resumen-pulido', dry_run: false, force_restart: true, max_budget_usd: opciones?.topeUsd ?? o.topeUsd }),
     })
     const j = (await r.json().catch(() => null)) as Record<string, unknown> | null
     if (!r.ok || !j) throw new Error(`run-sdk respondió ${r.status}`)

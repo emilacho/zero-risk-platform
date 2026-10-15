@@ -15,6 +15,8 @@ export const CLASE_DEL_RESUMEN = 'resumen_vivo'
 export const ATRIBUTO_DEL_RESUMEN = 'resumen:cliente'
 export const atributoDeSede = (clave: string) => `resumen:sede:${clave}`
 const MAX_POR_SECCION = 8
+/** candidatos de «Quién es» que ve el agente del pulido (él elige cuáles describen al negocio) */
+export const CANDIDATOS_DE_QUIEN_ES = 10
 const DIAS_PARA_TENDENCIA = 60
 const DIA = 86_400_000
 
@@ -51,28 +53,30 @@ export interface EntradaDelResumen {
   zona: FichaParaResumen[]
   sedes: Array<{ clave: string; ciudad: string | null }>
 }
-export interface SalidaDelResumen { cliente: FichaDeBrazo; sedes: FichaDeBrazo[]; huecos: string[]; secciones: Record<string, number> }
+export interface SalidaDelResumen { cliente: FichaDeBrazo; sedes: FichaDeBrazo[]; huecos: string[]; secciones: Record<string, number>; /** el mismo resumen con los CANDIDATOS de «Quién es» (lo que recibe el agente del pulido) */ texto_para_el_agente: string }
 
 function linea(f: FichaParaResumen, largo = 160): string { return `- ${corto(f.contenido, largo)} ${cita(f)}` }
 
 /** arma el texto del resumen (puro) */
-export function armarResumen(e: EntradaDelResumen): { texto: string; huecos: string[]; secciones: Record<string, number> } {
+export function armarResumen(e: EntradaDelResumen, opciones: { candidatos?: boolean } = {}): { texto: string; huecos: string[]; secciones: Record<string, number> } {
   const vivas = e.fichas.filter((f) => vigente(f, e.ahora))
   const por = (...clases: string[]) => vivas.filter((f) => clases.includes(f.clase)).sort((a, b) => ((b.observado_en ?? '') < (a.observado_en ?? '') ? -1 : 1))
   const huecos: string[] = []
   const secciones: Record<string, number> = {}
   const partes: string[] = []
-  const sec = (clave: string, titulo: string, lineas: string[], hueco: string) => {
+  const sec = (clave: string, titulo: string, lineas: string[], hueco: string, max = MAX_POR_SECCION) => {
     secciones[clave] = lineas.length
     if (!lineas.length) { huecos.push(hueco); partes.push(`## ${titulo}\n- (sin datos: ${hueco})`); return }
-    partes.push(`## ${titulo}\n${lineas.slice(0, MAX_POR_SECCION).join('\n')}`)
+    partes.push(`## ${titulo}\n${lineas.slice(0, max).join('\n')}`)
   }
 
   // quién es · lo que el cliente dice de sí mismo (su sitio)
-  const sitio = e.fichas.filter((f) => f.clase === 'sitio' && !f.retirada_en && !esTextoLegal(f.contenido) && !esFragmento(f.contenido)).sort((a, b) => ((a.creado_en ?? a.observado_en ?? '') < (b.creado_en ?? b.observado_en ?? '') ? -1 : 1)).slice(0, 3)
+  const sitio = e.fichas.filter((f) => f.clase === 'sitio' && !f.retirada_en && !esTextoLegal(f.contenido) && !esFragmento(f.contenido)).sort((a, b) => ((a.creado_en ?? a.observado_en ?? '') < (b.creado_en ?? b.observado_en ?? '') ? -1 : 1))
+  // con `candidatos` (el texto que ve el agente): hasta 10 fichas del sitio con largo de descripción (ni cortísimas ni páginas enteras); sin él (el armado por código): las 3 primeras de siempre
+  const sitioElegido = opciones.candidatos ? sitio.filter((f) => { const n = normalizar(f.contenido).split(' ').filter(Boolean).length; return n >= 6 && n <= 45 }).slice(0, CANDIDATOS_DE_QUIEN_ES) : sitio.slice(0, 3)
   // y lo que dicen su ficha de Mapas y su bio (nombre, categoría, dirección, horario, teléfono): perfil, no cifras
   const perfil = por('mapas', 'instagram').filter((f) => !esCifra(f) && !esTextoLegal(f.contenido)).slice(0, 5)
-  sec('quien_es', `Quién es${e.nombre ? ` · ${e.nombre}` : ''}${e.rubro ? ` (${e.rubro})` : ''}`, [...sitio.map((f) => linea(f, 200)), ...perfil.map((f) => linea(f, 140))], 'no hay fichas de su sitio ni de su ficha de Mapas')
+  sec('quien_es', `Quién es${e.nombre ? ` · ${e.nombre}` : ''}${e.rubro ? ` (${e.rubro})` : ''}`, [...sitioElegido.map((f) => linea(f, 200)), ...perfil.map((f) => linea(f, 140))], 'no hay fichas de su sitio ni de su ficha de Mapas', opciones.candidatos ? CANDIDATOS_DE_QUIEN_ES + 5 : MAX_POR_SECCION)
 
   // qué vende y a qué precio vigente
   sec('precios', 'Qué vende y a qué precio (vigente)', por('precio', 'horario').map((f) => linea(f, 140)), 'no hay precios ni horarios vigentes')
@@ -128,7 +132,7 @@ export function fichasDeResumen(e: EntradaDelResumen): SalidaDelResumen {
       sedes.push({ ...comun, ref: `brazo:resumen:sede:${s.clave}:${dia}`, atributo: atributoDeSede(s.clave), titulo: `Resumen vivo · sede ${s.clave}`, contenido: texto, datos: { sede: s.clave } })
     }
   }
-  return { cliente, sedes, huecos: base.huecos, secciones: base.secciones }
+  return { cliente, sedes, huecos: base.huecos, secciones: base.secciones, texto_para_el_agente: armarResumen(e, { candidatos: true }).texto }
 }
 
 interface Db { from: (t: string) => any }
