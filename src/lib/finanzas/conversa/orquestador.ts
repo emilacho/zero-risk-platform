@@ -11,7 +11,7 @@ import { decidirFirma, huellaDe, numerosDelBloque } from '../firma'
 import { leerRespuesta } from '../preguntas'
 import type { Bloque } from '../tipos'
 import { entradaDesdeLaConversa } from './entrada'
-import { extraerJson, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
+import { extraerJson, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, validarProcedencia, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
 import { especialistasQueHablan } from './omision'
 import { AGENTES, PLANTILLA_FINANCIERA } from './plantilla'
 import { ESTADOS_TERMINALES, type EncargoDeConversa, type PuertosDeConversa, type Semilla } from './puertos'
@@ -33,6 +33,12 @@ export async function abrirConversacion(P: PuertosDeConversa, cuerpo: unknown): 
   if ((cfg.estado === 'ensayo' || cfg.conversa === 'ensayo') && !cfg.clientes_ensayo.includes(c.client_id)) return { status: 409, cuerpo: { error: 'cliente_fuera_de_ensayo' } }
   if (typeof c.semilla !== 'object' || c.semilla === null || Array.isArray(c.semilla)) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`semilla` es obligatoria y debe ser un objeto'] } }
   if (JSON.stringify(c.semilla).length > 40_000) return { status: 413, cuerpo: { error: 'semilla_demasiado_grande', maximo: 40_000 } }
+  // plan v3 · V4: `semilla.datos` se VALIDA (antes pasaba cualquier cosa): forma inválida ⇒ 400 con la lista de errores
+  const datosCrudos = (c.semilla as Record<string, unknown>).datos
+  if (datosCrudos !== undefined) {
+    const v = validarProcedencia(datosCrudos)
+    if (!v.ok) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: v.errores } }
+  }
   const r = await P.almacen.crearEncargo({ client_id: c.client_id.trim(), dry_run: c.dry_run, semilla: c.semilla as Semilla })
   if (!r.ok) return { status: 500, cuerpo: { error: 'no_se_pudo_abrir', sin_bloque: true, detalle: r.error } }
   return { status: 200, cuerpo: { encargo_id: r.encargo.id, nuevo: r.nuevo, estado: r.encargo.estado, pasos_ejecutados: r.encargo.estado_del_motor.pasos_ejecutados } }
