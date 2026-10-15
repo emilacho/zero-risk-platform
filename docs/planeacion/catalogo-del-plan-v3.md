@@ -39,3 +39,8 @@ node --env-file=.env.local scripts/ops/catalogo-agregar.mjs revertir --tabla tip
 { "tipo_id": "resenas_total", "unidad": "conteo", "frescura_limite_h": 720, "critico": false, "n_minimo": 1, "via_preferida": "crudo" }
 ```
 Inválidas típicas: `operador` fuera de la lista, `aplica_a` que nombra una fuente que no existe, `version`/`vigente` puestos a mano, columna que no existe, `tope_usd` > 5.
+
+## Límite conocido · el alta no es atómica
+El alta hace tres escrituras seguidas (insertar la versión nueva como no vigente → marcar la anterior no vigente → marcar la nueva vigente). Entre la segunda y la tercera el catálogo puede quedar, por unos milisegundos, **sin fila vigente** para esa clave; y si la tercera falla, queda sin vigente hasta correr `revertir` (el guion lo dice y no toca nada más).
+- **Regla:** dar de alta **solo con 0 corridas del plan en vuelo** (el plan lee el catálogo una vez por corrida; una corrida en curso no cambia, pero una que arranque justo en ese intervalo vería la clave sin vigente).
+- **Pendiente propio:** cuando V1 exista, hacer el cambio de `vigente` en una función SQL (RPC) transaccional y que el guion la llame; hasta entonces, la regla de arriba.
