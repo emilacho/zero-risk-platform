@@ -43,26 +43,21 @@ function _finMontosDe(seccion) {
   return out
 }
 
+// v2 (hallazgo 1 de CC#1 · 15-oct): una cifra del presupuesto solo pasa si es una FIRMADA (valor, mínimo o máximo de una fila) o un monto que el bloque DECLARA de forma explícita
+// (`fin.declaradas`: pauta por semana, prueba inicial, reparto por canal… lo calcula la ruta del tablero). Ya NO se admiten sumas de 2–3 cifras ni «total ÷ semanas» por su cuenta:
+// una cifra inventada que casualmente cuadraba con una suma pasaba sin marca.
 function _finValoresFirmados(fin) {
-  var base = []
+  var perm = []
   ;(fin.numeros || []).forEach(function (n) {
-    ;[n.valor, n.minimo, n.maximo].forEach(function (x) { if (typeof x === 'number' && isFinite(x) && x > 0) base.push(x) })
+    ;[n.valor, n.minimo, n.maximo].forEach(function (x) { if (typeof x === 'number' && isFinite(x) && x > 0) perm.push(x) })
   })
-  var sem = fin.semanas > 0 ? fin.semanas : 12
-  var u = base.filter(function (x, i) { return base.indexOf(x) === i }).slice(0, 60)
-  var perm = u.slice()
-  for (var i = 0; i < u.length; i++) {
-    perm.push(u[i] / sem)
-    for (var j = i + 1; j < u.length; j++) {
-      perm.push(u[i] + u[j])
-      for (var k = j + 1; k < u.length && u.length <= 24; k++) perm.push(u[i] + u[j] + u[k])
-    }
-  }
+  ;(fin.declaradas || []).forEach(function (x) { if (typeof x === 'number' && isFinite(x) && x > 0) perm.push(x) })
   return perm
 }
 
+// tolerancia: el redondeo a centavos (y a medio punto por ciento en cifras grandes); antes era 0,50 absoluto, que dejaba pasar 1,50 por 1,04
 function _finCoincide(v, permitidos) {
-  var tol = Math.max(v * 0.005, 0.5)
+  var tol = Math.max(v * 0.002, 0.011)
   for (var i = 0; i < permitidos.length; i++) if (Math.abs(permitidos[i] - v) <= tol) return true
   return false
 }
@@ -95,10 +90,31 @@ function _finFormas(v) {
 }
 
 /** P8 + P9 · devuelve [{ codigo, que, ejemplos }]; con `fin` ausente o sin números no marca nada */
+var _FIN_DICE_SIN_FIRMA = /sin\s+firma|sin\s+firmar|no\s+(?:est[aá]n?\s+|fue(?:ron)?\s+|ha(?:n)?\s+sido\s+)?firm|no\s+(?:est[aá]n?|fue(?:ron)?|ha(?:n)?\s+sido)\s+(?:aprobad|acordad)|sin\s+acuerdo|pendiente\s+de\s+(?:firma|acuerdo|aprobaci)|sin\s+(?:la\s+)?aprobaci|no\s+(?:alcanz|hubo)\w*\s+(?:a\s+)?(?:un\s+)?acuerdo|a[uú]n\s+no\s+(?:firm|aprob)|vencid/i
+
 function revisarCifrasFinanzas(texto, fin) {
   var marcas = []
-  if (!fin || !Array.isArray(fin.numeros) || !fin.numeros.length) return marcas
+  if (!fin) return marcas
   var t = String(texto || '')
+  var sinFirma = fin.estado && fin.estado !== 'firmado'
+  var sinBloque = !Array.isArray(fin.numeros) || !fin.numeros.length
+  // forma antigua (sin estado ni motivo) y sin números: no hay nada que revisar (como en F4 v1)
+  if (sinBloque && !fin.estado && !fin.motivo) return marcas
+  // v2 (hallazgo 3): si la oficina NO firmó (o no entregó bloque), el plan lo DICE; los montos del presupuesto son estimaciones y se rotulan. Nunca bloquea: marca.
+  if (sinFirma || sinBloque) {
+    if (!_FIN_DICE_SIN_FIRMA.test(t)) marcas.push({ codigo: 'P9', que: 'la oficina financiera no firmó los números' + (fin.motivo ? ' (' + fin.motivo + ')' : '') + ' y el plan no lo dice: tiene que declararlo y presentar los montos como estimación o rango', ejemplos: [] })
+  }
+  if (sinBloque) {
+    var sec0 = _finSeccionDePresupuesto(t)
+    if (sec0) {
+      var sinRotular = _finMontosDe(sec0).filter(function (m) {
+        var i = sec0.indexOf(m.texto)
+        return !_FIN_DECLARA.test(sec0.slice(Math.max(0, i - 120), Math.min(sec0.length, i + m.texto.length + 120)))
+      })
+      if (sinRotular.length) marcas.push({ codigo: 'P9', que: 'sin números firmados, el presupuesto del plan presenta como dato montos que son estimación: ' + sinRotular.slice(0, 4).map(function (s) { return s.texto }).join(', '), ejemplos: sinRotular.slice(0, 6).map(function (s) { return s.texto }) })
+    }
+    return marcas
+  }
   var seccion = _finSeccionDePresupuesto(t)
   if (seccion) {
     var permitidos = _finValoresFirmados(fin)
@@ -126,11 +142,25 @@ function revisarCifrasFinanzas(texto, fin) {
 }
 
 /** las líneas que se suman al pedido del redactor (vacío sin bloque: el pedido queda idéntico). `fin.resumen` lo arma el nodo «FIN · el bloque» con lo que devolvió la ruta. */
+var _FIN_MOTIVOS = { sin_acuerdo: 'la oficina no llegó a un acuerdo', sin_firma: 'el jefe de finanzas no firmó', vencido: 'la oficina no terminó a tiempo', sin_bloque: 'la oficina no pudo calcular un bloque', sin_referencia: 'no hay referencia de costo por resultado', sin_pauta: 'el plan no paga medios' }
+
 function lineasDeFinanzas(fin) {
-  if (!fin || !fin.resumen) return []
+  if (!fin) return []
+  var motivo = fin.motivo ? (_FIN_MOTIVOS[fin.motivo] || fin.motivo) : null
+  // v2 (hallazgo 3): sin bloque el plan igual recibe el AVISO: rangos supuestos, nada inventado, y lo dice en el plan
+  if (!fin.resumen) {
+    if (!motivo) return []
+    return [
+      '══════ OFICINA FINANCIERA: SIN NÚMEROS FIRMADOS (' + fin.motivo + ') ══════',
+      'La oficina no entregó números firmados (' + motivo + '). No inventes cifras exactas: el presupuesto va como RANGO SUPUESTO, cada monto rotulado como estimación, y el plan DICE de forma visible que los números no están firmados por la oficina financiera.',
+      '',
+    ]
+  }
   var r = fin.resumen, L = []
-  L.push('══════ NÚMEROS DE LA OFICINA FINANCIERA (' + (fin.estado === 'firmado' ? 'firmados' : 'sin firma') + ') ══════')
-  L.push('Úsalos TAL CUAL: no los recalcules ni los reemplaces. Todo número marcado «supuesto» se escribe como estimación o rango. La meta, el costo por resultado, el techo y el reparto del plan salen de aquí.')
+  var firmado = fin.estado === 'firmado'
+  L.push('══════ NÚMEROS DE LA OFICINA FINANCIERA (' + (firmado ? 'firmados' : 'SIN FIRMA' + (fin.motivo ? ' · ' + fin.motivo : '')) + ') ══════')
+  if (firmado) L.push('Úsalos TAL CUAL: no los recalcules ni los reemplaces. Todo número marcado «supuesto» se escribe como estimación o rango. La meta, el costo por resultado, el techo y el reparto del plan salen de aquí.')
+  else L.push('Estos números NO están firmados' + (motivo ? ' (' + motivo + ')' : '') + ': úsalos TAL CUAL pero como RANGO SUPUESTO, cada monto rotulado como estimación, y el plan DICE de forma visible que no están firmados por la oficina financiera.')
   ;(r.lineas || []).forEach(function (l) { L.push('- ' + l) })
   if (r.alertas && r.alertas.length) { L.push('Avisos de la oficina (no bloquean; el plan los dice):'); r.alertas.forEach(function (a) { L.push('- ' + a) }) }
   L.push('')

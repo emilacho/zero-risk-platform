@@ -9,7 +9,7 @@
 import crypto from 'node:crypto'
 import { calcular } from './calculadora'
 import { decidirFirma, huellaDe, numerosDelBloque, type FilaDeNumero, type Hallazgo } from './firma'
-import { resumenDelBloque } from './resumen'
+import { montosDeclarados, resumenDelBloque } from './resumen'
 import type { Bloque, Entrada } from './tipos'
 
 export type EstadoDeLaOficina = 'apagada' | 'ensayo' | 'encendida'
@@ -131,7 +131,7 @@ export async function manejarTablero(cuerpo: unknown, P: PuertosDeTablero, ahora
     if (!numerosCoinciden(guardados, t.bloque)) return { status: 409, cuerpo: { error: 'numeros_alterados', sin_bloque: true } }
     const numeros = numerosDelBloque(t.bloque)
     const r = resumenDelBloque(t.bloque, { dias_activos_por_semana: t.entrada?.dias_activos_por_semana })
-    return { status: 200, cuerpo: { finanzas_id: t.id, client_id: t.client_id, version: t.version, vigente: t.vigente, estado: t.estado, huella: t.huella, numeros: numeros.map((x) => ({ clave: x.clave, valor: x.valor, minimo: x.minimo, maximo: x.maximo, tipo: x.tipo })), semanas: t.bloque.calendario.por_semana.length, confianza: t.bloque.confianza ?? null, resumen: r } }
+    return { status: 200, cuerpo: { finanzas_id: t.id, client_id: t.client_id, version: t.version, vigente: t.vigente, estado: t.estado, huella: t.huella, numeros: numeros.map((x) => ({ clave: x.clave, valor: x.valor, minimo: x.minimo, maximo: x.maximo, tipo: x.tipo })), semanas: t.bloque.calendario.por_semana.length, confianza: t.bloque.confianza ?? null, resumen: r, montos_declarados: montosDeclarados(t.bloque) } }
   }
   // firmar
   if (typeof cuerpo.dry_run !== 'boolean') return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`dry_run` es obligatorio y debe ser booleano'] } }

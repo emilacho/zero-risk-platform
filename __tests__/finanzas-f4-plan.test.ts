@@ -109,7 +109,6 @@ describe('APAGADO = IDÉNTICO A HOY (B4 con el código real)', () => {
   it.each([
     ['la ruta contestó 409 (apagada)', { statusCode: 409, body: { error: 'finanzas_apagada' } }],
     ['la ruta contestó 404', { statusCode: 404, body: { error: 'tablero_inexistente' } }],
-    ['el tablero no está firmado', { statusCode: 200, body: { ...FIRMADO.body, estado: 'borrador' } }],
     ['sin números', { statusCode: 200, body: { ...FIRMADO.body, numeros: [] } }],
     ['sin resumen', { statusCode: 200, body: { ...FIRMADO.body, resumen: undefined } }],
     ['cuerpo ilegible', { statusCode: 200, body: 'no es json' }],
@@ -131,7 +130,8 @@ describe('con un bloque FIRMADO', () => {
     expect(d.pedido).toContain('dilución: con 10,4 diarios no se llega al mínimo')
     expect(d.pedido).toContain('Todo número marcado «supuesto» se escribe como estimación o rango')
     expect(d.finanzas_id_usado).toBe(FIRMADO.body.finanzas_id)
-    expect(d.contexto_chequeo.finanzas).toEqual({ numeros: NUMEROS, semanas: 12 })
+    expect(d.contexto_chequeo.finanzas).toEqual({ numeros: NUMEROS, semanas: 12, estado: 'firmado', motivo: null, declaradas: [] })
+    expect(d.finanzas_estado_usado).toBe('firmado')
     // el resto del pedido es el mismo: quitando el bloque, queda lo de hoy
     const sinBloque = d.pedido.replace(/══════ NÚMEROS DE LA OFICINA FINANCIERA[\s\S]*?\n\n/, '')
     expect(sinBloque).toBe(a.pedido)
@@ -157,16 +157,18 @@ describe('P8 · cifras_firmadas y P9 · supuestos_declarados (módulo común)', 
     const r = M.revisarCifrasFinanzas(PLAN_BIEN, FIN_CTX)
     expect(r).toEqual([])
   })
-  it('una derivada permitida: total ÷ semanas y suma de partes no marcan', () => {
+  it('v2 · total ÷ semanas y suma de partes YA NO pasan por su cuenta; pasan si el bloque las declara', () => {
     const t = '# Plan\n## Presupuesto\nPor semana: 31,3 USD (el total del mes entre 12 semanas, estimado). Producción más pauta: 319,22 USD (estimado).'
     // 375,56 ÷ 12 = 31,30 · 225,33 + 93,89 = 319,22
-    expect(M.revisarCifrasFinanzas(t, FIN_CTX).map((m: any) => m.codigo)).not.toContain('P8')
+    expect(M.revisarCifrasFinanzas(t, FIN_CTX).map((m: any) => m.codigo)).toContain('P8')
+    expect(M.revisarCifrasFinanzas(t, { ...FIN_CTX, declaradas: [31.3, 319.22] }).map((m: any) => m.codigo)).not.toContain('P8')
   })
-  it('derivada permitida con SOLO dos números firmados: la suma de las partes no marca y una suma equivocada sí', () => {
+  it('v2 · con SOLO dos números firmados: la suma de las partes marca si el bloque no la declara y pasa si la declara; una suma equivocada marca siempre', () => {
     const dos = { numeros: [{ clave: 'pauta_rendimiento_mes', valor: 100, minimo: null, maximo: null, tipo: 'dato' }, { clave: 'produccion_mes', valor: 40, minimo: null, maximo: null, tipo: 'dato' }], semanas: 12 }
     const bien = ['# Plan', '## Presupuesto', 'Pauta 100 USD, producción 40 USD, total 140 USD.'].join('\n')
-    expect(M.revisarCifrasFinanzas(bien, dos)).toEqual([])
-    expect(M.revisarCifrasFinanzas(bien.replace('140 USD', '171 USD'), dos).map((m: any) => m.codigo)).toContain('P8')
+    expect(M.revisarCifrasFinanzas(bien, dos).map((m: any) => m.codigo)).toContain('P8')
+    expect(M.revisarCifrasFinanzas(bien, { ...dos, declaradas: [140] })).toEqual([])
+    expect(M.revisarCifrasFinanzas(bien.replace('140 USD', '171 USD'), { ...dos, declaradas: [140] }).map((m: any) => m.codigo)).toContain('P8')
   })
   it('P8: una cifra del presupuesto que NO es la firmada marca, con el ejemplo', () => {
     const t = PLAN_BIEN.replace('225,33 USD', '980 USD')
@@ -206,7 +208,7 @@ describe('P8 · cifras_firmadas y P9 · supuestos_declarados (módulo común)', 
   })
   it('lineasDeFinanzas: sin bloque, vacío; con bloque, encabezado + líneas + avisos', () => {
     expect(M.lineasDeFinanzas(null)).toEqual([])
-    expect(M.lineasDeFinanzas({ estado: 'borrador', numeros: NUMEROS, resumen: FIRMADO.body.resumen })[0]).toContain('sin firma')
+    expect(M.lineasDeFinanzas({ estado: 'borrador', numeros: NUMEROS, resumen: FIRMADO.body.resumen })[0]).toContain('SIN FIRMA')
     expect(M.lineasDeFinanzas({ numeros: NUMEROS })).toEqual([])
     const l = M.lineasDeFinanzas({ estado: 'firmado', numeros: NUMEROS, resumen: FIRMADO.body.resumen })
     expect(l[0]).toContain('firmados')

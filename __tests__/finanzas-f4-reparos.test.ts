@@ -94,10 +94,11 @@ describe('ronda 2 de CC#3 · P8 con puntuación final, P9 con un decimal y con m
     const f = firmado([['total_mes', 375.56]])
     expect(codigos(M.revisarCifrasFinanzas(plan('Inversión: US$ 999,99.'), f))).toContain('P8')
   })
-  it('P8 · un monto igual a la suma de TRES cifras firmadas se acepta', () => {
+  it('v2 · un monto igual a la suma de TRES cifras firmadas solo pasa si el bloque lo declara', () => {
     const f = firmado([['meta_ig_mes', 100], ['produccion_mes', 50], ['otros', 25.5]])
-    expect(codigos(M.revisarCifrasFinanzas(plan('Entre todo: US$ 175,50 al mes.'), f))).not.toContain('P8')
-    expect(codigos(M.revisarCifrasFinanzas(plan('Entre todo: US$ 176,50 al mes.'), f))).toContain('P8')
+    expect(codigos(M.revisarCifrasFinanzas(plan('Entre todo: US$ 175,50 al mes.'), f))).toContain('P8')
+    expect(codigos(M.revisarCifrasFinanzas(plan('Entre todo: US$ 175,50 al mes.'), { ...f, declaradas: [175.5] }))).not.toContain('P8')
+    expect(codigos(M.revisarCifrasFinanzas(plan('Entre todo: US$ 176,50 al mes.'), { ...f, declaradas: [175.5] }))).toContain('P8')
   })
   it('P9 · ve «1,5», «1.5», «12.345,6», «12,345.6» y «1 234,50» (supuesto sin declarar)', () => {
     for (const [valor, textos] of [[1.5, ['1,5', '1.5']], [12345.6, ['12.345,6', '12,345.6']], [1234.5, ['1 234,50']]] as Array<[number, string[]]>) {
