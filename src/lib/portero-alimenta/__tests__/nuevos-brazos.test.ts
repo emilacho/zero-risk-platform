@@ -17,6 +17,7 @@ import { brazoDePropios, credencialesDe, fichasDeVentas, leerMeta, leerVentasDeL
 import { crearBaseFalsa } from './base-falsa'
 import { ALTA, CASOS, ON, REAL, tablas } from './fixtures-despertar'
 import { idDeZona, paisIsoDe } from '../../cerebro/zona'
+import { confirmarCompetidores, guardarCompetidoresConfirmados } from '../brazos/confirmar'
 
 const MIERCOLES = new Date('2026-10-14T12:00:00Z')
 const JUEVES = new Date('2026-10-15T15:00:00Z')
@@ -474,5 +475,47 @@ describe('correrBrazos · apagados no leen ni escriben', () => {
     expect(r.por_brazo.propios?.estado).toBe('sin_material')
     expect(r.por_brazo.propios?.declarado.join(' ')).toMatch(/CLIENTE_NAUFRAGO_LOYVERSE_TOKEN/)
     expect(r.por_brazo.contexto?.estado).toBe('listo')
+  })
+})
+
+describe('confirmar a los competidores (una vez)', () => {
+  const cfg = { negocio: { x: 1 }, apify: { own_handles: { instagram: 'n' }, competitor_list: [{ name: "Cabaña D'Jerry" }, { name: 'Rasimar Restaurante' }, { name: 'Pigro' }] } }
+  const AHORA = new Date('2026-10-15T10:00:00Z')
+  it('solo confirma nombres que ya están en la lista de la ficha (sin tildes ni mayúsculas) y dice los que rechaza', () => {
+    const r = confirmarCompetidores(cfg, ['rasimar restaurante', 'CABAÑA D JERRY', 'Inventado', '', 42], { ahora: AHORA, por: 'emilio' })
+    expect(r.confirmados).toEqual(['Rasimar Restaurante', "Cabaña D'Jerry"])
+    expect(r.rechazados.map((x) => x.por_que)).toEqual(['no está en la lista de competidores de la ficha (competitor_list)', 'no es un nombre', 'no es un nombre'])
+    expect(r.config).toMatchObject({ negocio: { x: 1 }, apify: { own_handles: { instagram: 'n' }, competidores_confirmados: { en: '2026-10-15T10:00:00.000Z', por: 'emilio', nombres: ['Rasimar Restaurante', "Cabaña D'Jerry"] } } })
+    expect(competidoresConfirmados(r.config).vigilados.map((c) => c.nombre)).toEqual(["Cabaña D'Jerry", 'Rasimar Restaurante'])
+  })
+  it('máximo 5; vaciar la lista deja de vigilar; no repite', () => {
+    const muchos = { apify: { competitor_list: Array.from({ length: 7 }, (_, i) => ({ name: `Comp ${i}` })) } }
+    const r = confirmarCompetidores(muchos, Array.from({ length: 7 }, (_, i) => `Comp ${i}`).concat('Comp 1'), { ahora: AHORA, por: 'x' })
+    expect(r.confirmados).toHaveLength(5)
+    expect(r.rechazados.some((x) => /máximo es 5/.test(x.por_que))).toBe(true)
+    const doble = confirmarCompetidores(cfg, ['Pigro', 'pigro', 'PIGRO'], { ahora: AHORA, por: 'x' })
+    expect([doble.confirmados, doble.rechazados]).toEqual([['Pigro'], []])
+    expect(confirmarCompetidores(cfg, [], { ahora: AHORA, por: 'x' }).confirmados).toEqual([])
+    expect(competidoresConfirmados(confirmarCompetidores(cfg, [], { ahora: AHORA, por: 'x' }).config).vigilados).toEqual([])
+  })
+  it('con la base: en seco no escribe; real escribe UNA vez y solo la config; cliente inexistente → 404; lectura fallida → 502', async () => {
+    const t = { clients: [{ id: CL, config: cfg }] as Array<Record<string, unknown>> }
+    const base = crearBaseFalsa(t)
+    const seco = await guardarCompetidoresConfirmados(base.db, CL, ['Pigro'], { ahora: AHORA, por: 'emilio', dry_run: true })
+    expect(seco.body.confirmados).toEqual(['Pigro'])
+    expect(base.escrituras).toEqual([])
+    const real = await guardarCompetidoresConfirmados(base.db, CL, ['Pigro'], { ahora: AHORA, por: 'emilio', dry_run: false })
+    expect(real.ok).toBe(true)
+    expect(base.escrituras).toHaveLength(1)
+    expect((t.clients[0].config as { apify: { competidores_confirmados: { nombres: string[] } } }).apify.competidores_confirmados.nombres).toEqual(['Pigro'])
+    expect((await guardarCompetidoresConfirmados(base.db, 'no-existe', [], { ahora: AHORA, por: 'x', dry_run: false })).estado).toBe(404)
+    expect((await guardarCompetidoresConfirmados(crearBaseFalsa(t, { fallaEn: 'clients' }).db, CL, [], { ahora: AHORA, por: 'x', dry_run: false })).estado).toBe(502)
+  })
+  it('la ruta exige llave interna, dry_run booleano, client_id uuid y nombres en lista', () => {
+    const ruta = fs.readFileSync(path.resolve(__dirname, '../../../app/api/brain/alimentar/competidores/route.ts'), 'utf8')
+    expect(ruta).toMatch(/checkInternalKey/)
+    expect(ruta).toMatch(/dry_run_obligatorio/)
+    expect(ruta).toMatch(/client_id_invalido/)
+    expect(ruta).toMatch(/nombres_invalidos/)
   })
 })
