@@ -45,6 +45,8 @@ export interface FichaDeBrazo {
   decision: 'suma' | 'reemplaza'
   /** a quién se refiere (competidor, zona…) · solo para mostrar y probar */
   sobre?: string
+  /** datos estructurados que otro paso necesita leer de vuelta (van en `provenance_tag.datos`): sede, cuenta de Instagram, web… nunca llaves */
+  datos?: Record<string, unknown>
 }
 
 /** lo que `data` de un brazo devuelve a quien lo llamó */

@@ -16,12 +16,15 @@ export interface ResultadoDeArchivo {
   iguales: number
   retiradas: number
   errores: string[]
-  plan: Array<{ ref: string; accion: 'nueva' | 'reemplaza' | 'igual'; alcance: string }>
+  plan: Array<{ ref: string; accion: 'nueva' | 'reemplaza' | 'igual' | 'retira'; alcance: string }>
 }
 /** la huella del CONTENIDO sin las fechas (el texto lleva «observado 2026-10-15»: cambiar el día no es cambiar el dato) */
 export const huellaDeFicha = (contenido: string): string => createHash('sha256').update(contenido.replace(/\d{4}-\d{2}-\d{2}/g, '').replace(/\s+/g, ' ').trim().toLowerCase()).digest('hex').slice(0, 24)
 
-export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]; ahora: Date; dry_run: boolean; workflow_id?: string; workflow_execution_id?: string; nuevoId?: () => string }): Promise<ResultadoDeArchivo> {
+/** retirar sin reemplazo (un competidor que cerró, bajó o dejó de competir): la ficha queda con su motivo; nada se borra */
+export interface RetiroDeBrazo { client_id: string; atributo: string; motivo: string }
+
+export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]; ahora: Date; dry_run: boolean; workflow_id?: string; workflow_execution_id?: string; nuevoId?: () => string; retiros?: RetiroDeBrazo[] }): Promise<ResultadoDeArchivo> {
   const r: ResultadoDeArchivo = { escritas: 0, iguales: 0, retiradas: 0, errores: [], plan: [] }
   const id = o.nuevoId ?? randomUUID
   const iso = o.ahora.toISOString()
@@ -60,7 +63,7 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
         fecha_fuente: f.fecha_fuente, reconfirmado_en: f.observado_en, plazo: null, vigente_hasta: f.vigente_hasta, version_de: reemplaza ? String(vigente!.id) : null, huella,
         // lo de un competidor, del mercado o de la zona es SOBRE terceros (los lectores lo marcan); lo del cliente es suyo
         propiedad: f.alcance === 'cliente' ? 'propia' : 'ajena', porque: `brazo ${f.brazo}: dato por código, sin modelo`, juzgado_por: 'regla',
-        provenance_tag: { type: 'evidence', source: `brazo_${f.brazo}`, trust_level: 'untrusted', alcance: f.alcance, ingress_route: '/api/brain/alimentar/procesar' },
+        provenance_tag: { type: 'evidence', source: `brazo_${f.brazo}`, trust_level: 'untrusted', alcance: f.alcance, ingress_route: '/api/brain/alimentar/procesar', ...(f.datos ? { datos: f.datos } : {}) },
         fuente_url: f.fuente_url, observado_en: f.observado_en, atributo: f.atributo, decision: f.decision, razon_de_decision: reemplaza ? 'la lectura nueva reemplaza a la vigente del mismo atributo' : 'dato nuevo',
         alcance: f.alcance, descartada: false,
       })
@@ -73,6 +76,19 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
         else r.retiradas++
       }
       porAtributo.set(f.atributo, { id: nueva, ref: f.ref, atributo: f.atributo, huella })
+    }
+  }
+  // retiros sin reemplazo: solo fichas vigentes de los brazos (`brazo:`), por atributo; en seco solo se cuentan
+  for (const t of o.retiros ?? []) {
+    const l = await o.db.from('cerebro_fichas').select('id, ref, atributo, retirada_en').eq('client_id', t.client_id).eq('atributo', t.atributo).is('retirada_en', null).limit(50)
+    if (l.error) { r.errores.push(`lectura para retirar ${t.atributo}: ${l.error.message}`); continue }
+    const quedan = (Array.isArray(l.data) ? (l.data as Fila[]) : []).filter((x) => typeof x.ref === 'string' && (x.ref as string).startsWith('brazo:'))
+    for (const x of quedan) {
+      r.plan.push({ ref: String(x.ref), accion: 'retira', alcance: 'competidor' })
+      if (o.dry_run) continue
+      const u = await o.db.from('cerebro_fichas').update({ retirada_en: iso, motivo_retirada: t.motivo.slice(0, 300) }).eq('id', String(x.id)).eq('client_id', t.client_id)
+      if (u.error) r.errores.push(`retiro de ${String(x.id)}: ${u.error.message}`)
+      else r.retiradas++
     }
   }
   return r

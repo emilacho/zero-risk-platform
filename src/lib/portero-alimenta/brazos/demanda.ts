@@ -11,6 +11,7 @@
 import { coincidePorPalabra } from '../../texto/coincidencia'
 import { normalizar } from '../../manual/texto'
 import { DIA_EN_MS, MARCA_DE_BRAZO, slugDe, type AccionDeBrazo, type FichaDeBrazo, type ResultadoDeUnBrazo } from './tipos'
+import { marcaDeUbicar, radioDe, type SedeConPunto } from './sedes'
 
 export const DIA_DE_DEMANDA = 3 // miércoles (0 = domingo, UTC)
 export const MAX_TERMINOS_DE_DEMANDA = 3
@@ -61,6 +62,40 @@ export function accionDeDemanda(e: EntradaDeAccionDeDemanda): { accion: AccionDe
   }
 }
 
+/** por SEDE: una corrida semanal alrededor del punto de cada sede (con coordenadas, o por ciudad DECLARANDO el sesgo) + la ubicación aproximada por dirección cuando falta el punto */
+export const TERMINOS_POR_SEDE = 2
+export const LUGARES_POR_BUSQUEDA_Y_SEDE = 10
+export const USD_POR_LUGAR = 0.003
+export const USD_DE_UBICAR = 0.01
+export interface EntradaDeDemandaPorSede { ahora: Date; terminos: string[]; sedes: SedeConPunto[]; familias: string[]; forzar?: boolean; ubicadasEnLosUltimos7Dias?: ReadonlySet<string> }
+export function accionesDeDemandaPorSede(e: EntradaDeDemandaPorSede): { acciones: AccionDeBrazo[]; no_cubiertas: Array<{ fuente: string; por_que: string }> } {
+  const acciones: AccionDeBrazo[] = []
+  const no_cubiertas: Array<{ fuente: string; por_que: string }> = []
+  if (!e.sedes.length) return { acciones, no_cubiertas: [{ fuente: 'demanda', por_que: 'el cliente no tiene sedes declaradas: la posición por sede no aplica' }] }
+  const terminos = e.terminos.slice(0, TERMINOS_POR_SEDE)
+  if (!terminos.length) return { acciones, no_cubiertas: [{ fuente: 'demanda', por_que: 'no hay términos de búsqueda (ni declarados ni del rubro)' }] }
+  const meta = { target_kind: 'third_party' as const, llamado_por: 'portero-alimentar' }
+  for (const s of e.sedes) {
+    const radio = radioDe(e.familias, s.tipo)
+    if (radio === null) { no_cubiertas.push({ fuente: `demanda · ${s.clave}`, por_que: 'el rubro no compite por cercanía en esta sede: no aplica por sede' }); continue }
+    if (s.lat === null || s.lng === null) {
+      if (s.direccion && !e.ubicadasEnLosUltimos7Dias?.has(s.clave)) {
+        acciones.push({ fuente: 'demanda', funcion: 'google_maps_scraper', params: { searchStringsArray: [`${s.direccion}, ${s.ciudad}`], locationQuery: s.ciudad, resultsLimit: 1, language: 'es', [MARCA_DE_BRAZO]: marcaDeUbicar(s.clave) },
+          metadata: meta, usd_max: USD_DE_UBICAR, medido: false, objetivo: `ubicar la sede ${s.clave} · ${s.direccion}` })
+      }
+      no_cubiertas.push({ fuente: `demanda · ${s.clave}`, por_que: 'la sede no tiene punto (ni ficha de Mapas ni coordenadas): se mira por el nombre de la ciudad, con el sesgo conocido' })
+    }
+    if (!e.forzar && e.ahora.getUTCDay() !== DIA_DE_DEMANDA) continue
+    const geo = s.lat !== null && s.lng !== null ? { customGeolocation: { type: 'Point', coordinates: [s.lng, s.lat], radiusKm: radio } } : {}
+    acciones.push({
+      fuente: 'demanda', funcion: 'google_maps_scraper',
+      params: { searchStringsArray: terminos, locationQuery: s.ciudad, ...geo, resultsLimit: LUGARES_POR_BUSQUEDA_Y_SEDE, language: 'es', [MARCA_DE_BRAZO]: `demanda:${s.clave}` },
+      metadata: meta, usd_max: Math.round(terminos.length * LUGARES_POR_BUSQUEDA_Y_SEDE * USD_POR_LUGAR * 1e6) / 1e6, medido: true, objetivo: `${terminos.join(' | ')} · sede ${s.clave}${geo.customGeolocation ? ` · radio ${radio} km` : ' · por ciudad'}`,
+    })
+  }
+  return { acciones, no_cubiertas }
+}
+
 export interface FilaCrudaDeBrazo { id: string; apify_function: string; params?: unknown; respuesta?: unknown; ensayo?: boolean | null; created_at: string }
 const lista = (x: unknown): Array<Record<string, unknown>> => (Array.isArray(x) ? (x.filter((v) => v && typeof v === 'object') as Array<Record<string, unknown>>) : [])
 const txt = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
@@ -76,11 +111,13 @@ export interface EntradaDeFichasDeDemanda {
   /** nombres que ya están en la lista vigilada o ya son del cliente: no se sugieren */
   yaConocidos?: string[]
   ciudad?: string | null
+  /** la clave de la sede: mira solo la corrida `demanda:<clave>`, rotula con ella y NO sugiere competidores (los descubre y juzga el módulo de competencia por sede) */
+  sede?: string
 }
 
 /** de la corrida más nueva de la demanda: una ficha de posición por búsqueda y hasta 5 competidores sugeridos */
 export function fichasDeDemanda(e: EntradaDeFichasDeDemanda): ResultadoDeUnBrazo {
-  const filas = e.filas.filter((f) => f.apify_function === 'google_maps_scraper' && esFilaDeBrazo(f, 'demanda')).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+  const filas = e.filas.filter((f) => f.apify_function === 'google_maps_scraper' && (e.sede ? obj(f.params)[MARCA_DE_BRAZO] === `demanda:${e.sede}` && f.ensayo !== true : esFilaDeBrazo(f, 'demanda'))).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
   const f = filas[0]
   if (!f) return { brazo: 'demanda', estado: 'sin_material', detalle: 'todavía no hay una corrida de demanda', fichas: [], declarado: [] }
   const items = lista(f.respuesta)
@@ -97,6 +134,7 @@ export function fichasDeDemanda(e: EntradaDeFichasDeDemanda): ResultadoDeUnBrazo
   const fichas: FichaDeBrazo[] = []
   const sugeridos = new Map<string, { nombre: string; mejor: number; termino: string; puntaje: number | null; resenas: number | null; url: string | null }>()
   const donde = txt(e.ciudad) || 'la ciudad'
+  const sedeSlug = e.sede ? `${slugDe(e.sede)}:` : ''
   for (const [termino, its] of porTermino) {
     const ordenados = [...its].sort((a, b) => (num(a.rank) ?? 999) - (num(b.rank) ?? 999))
     const idx = ordenados.findIndex((x) => { const t = txt(x.title); return !!t && !!nuestro && (normalizar(t) === nuestro || coincidePorPalabra(t, e.nombreDelCliente)) })
@@ -106,8 +144,8 @@ export function fichasDeDemanda(e: EntradaDeFichasDeDemanda): ResultadoDeUnBrazo
     const contenido = `Posición en Google Maps para la búsqueda «${termino}» (sin marca) desde ${donde}: ${lugar}${primero}. Otros que salen arriba: ${primeros.length ? primeros.join(', ') : 'ninguno'}. `
       + `El ranking depende del punto desde el que Maps resuelve la ciudad; no es el barrio del cliente. Observado ${iso.slice(0, 10)}.`
     fichas.push({
-      brazo: 'demanda', alcance: 'mercado', client_id: e.client_id, ref: `brazo:demanda:posicion:${slugDe(termino)}:${iso.slice(0, 10)}`, atributo: `mercado:posicion:${slugDe(termino)}`, clase: 'mercado_posicion',
-      titulo: `Posición en Mapas · «${termino}»`, contenido, origen: 'tercero', fuente_url: null, fecha_fuente: iso.slice(0, 10), observado_en: iso, vigente_hasta: hasta, decision: 'reemplaza', sobre: termino,
+      brazo: 'demanda', alcance: 'mercado', client_id: e.client_id, ref: `brazo:demanda:posicion:${sedeSlug}${slugDe(termino)}:${iso.slice(0, 10)}`, atributo: `mercado:posicion:${sedeSlug}${slugDe(termino)}`, clase: 'mercado_posicion',
+      titulo: `Posición en Mapas · «${termino}»${e.sede ? ` · sede ${e.sede}` : ''}`, contenido, origen: 'tercero', fuente_url: null, fecha_fuente: iso.slice(0, 10), observado_en: iso, vigente_hasta: hasta, decision: 'reemplaza', sobre: termino,
     })
     for (const x of ordenados.slice(0, 5)) {
       const t = txt(x.title)
@@ -118,7 +156,7 @@ export function fichasDeDemanda(e: EntradaDeFichasDeDemanda): ResultadoDeUnBrazo
       if (!previo || rank < previo.mejor) sugeridos.set(k, { nombre: t, mejor: rank, termino, puntaje: num(x.totalScore), resenas: num(x.reviewsCount), url: txt(x.url) || null })
     }
   }
-  const dichos = [...sugeridos.values()].sort((a, b) => a.mejor - b.mejor).slice(0, MAX_SUGERIDOS)
+  const dichos = e.sede ? [] : [...sugeridos.values()].sort((a, b) => a.mejor - b.mejor).slice(0, MAX_SUGERIDOS)
   for (const s of dichos) {
     fichas.push({
       brazo: 'demanda', alcance: 'competidor', client_id: e.client_id, ref: `brazo:demanda:sugerido:${slugDe(s.nombre)}:${iso.slice(0, 10)}`, atributo: `competidor:${slugDe(s.nombre)}:sugerido`, clase: 'competidor_sugerido',

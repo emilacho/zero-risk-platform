@@ -39,7 +39,13 @@ describe('interruptores · todo apagado por omisión', () => {
   })
   it('ningún módulo de los brazos llama a un modelo (US$ 0 de modelo)', () => {
     const dir = path.resolve(__dirname, '../brazos')
-    for (const f of fs.readdirSync(dir)) expect(fs.readFileSync(path.join(dir, f), 'utf8'), f).not.toMatch(/llamarModelo|anthropic|openai/i)
+    // el modelo SOLO entra por la función inyectada, y solo el juez de competencia y quien lo orquesta la nombran
+    const PUEDEN_NOMBRAR_EL_MODELO = new Set(['juez-competencia.ts', 'sistematica.ts', 'index.ts'])
+    for (const f of fs.readdirSync(dir)) {
+      const t = fs.readFileSync(path.join(dir, f), 'utf8')
+      expect(t, f).not.toMatch(/anthropic|openai|api\.openai|claude-/i)
+      if (!PUEDEN_NOMBRAR_EL_MODELO.has(f)) expect(t, f).not.toMatch(/llamarModelo|llamar\(/)
+    }
   })
   it('con los brazos apagados el PLAN es idéntico al de siempre (3 rubros)', () => {
     for (const c of CASOS) {
@@ -66,7 +72,7 @@ describe('el plan con los brazos encendidos', () => {
     expect(plan.hacer.filter((x) => x.fuente === 'competencia').map((x) => x.funcion)).toEqual(['google_maps_scraper', 'facebook_ads_library_scraper'])
     const sin = descubrir({ ...entrada, cliente: { ...entrada.cliente, config: { apify: { own_handles: { instagram: c.ig }, competitor_list: [{ name: 'Rival Uno' }] } } }, brazos: { ...BRAZOS_APAGADOS, competencia: true }, ahora: lunes })
     expect(sin.hacer.some((x) => x.fuente === 'competencia')).toBe(false)
-    expect(sin.no_cubiertas.some((n) => n.fuente === 'competencia' && /dueño todavía no confirmó/.test(n.por_que))).toBe(true)
+    expect(sin.no_cubiertas.some((n) => n.fuente === 'competencia' && /todavía no hay competidores vigilados/.test(n.por_que))).toBe(true)
   })
 })
 
@@ -178,7 +184,7 @@ describe('BRAZO · competencia vigilada', () => {
   it('sin confirmación del dueño NO hay competidores vigilados (y se dice)', () => {
     const r = competidoresConfirmados(lista())
     expect(r.vigilados).toEqual([])
-    expect(r.motivo).toMatch(/dueño todavía no confirmó/)
+    expect(r.motivo).toMatch(/dueño todavía no confirmó/) // la lista del dueño sola: sin confirmación no hay vigilados
     expect(r.sin_confirmar).toHaveLength(4)
     expect(accionesDeBrazos({ brazos: { ...BRAZOS_APAGADOS, competencia: true }, cliente: { id: CL, config: lista(), market: 'Olón, Ecuador' }, ciudad: 'Olón', ahora: MIERCOLES }).acciones).toEqual([])
   })
