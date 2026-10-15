@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/finanzas/ruta'
-import { barrer } from '@/lib/planeacion/corridas'
+import { barrer, vencibles } from '@/lib/planeacion/corridas'
 import { almacenDeCorridas, type Db } from '@/lib/planeacion/corridas-supabase'
 
 export const dynamic = 'force-dynamic'
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   if (dry !== undefined && dry !== false && dry !== true) return NextResponse.json({ error: 'entrada_invalida', errores: ['`dry_run` debe ser verdadero o falso'] }, { status: 400 })
   try {
     const P = almacenDeCorridas(getSupabaseAdmin() as unknown as Db)
-    if (dry === true) { const v = await P.vivasVencidas(P.ahora().toISOString()); return NextResponse.json({ accion: 'dry_run', vencibles: v.map((f) => ({ id: f.id, estado: f.estado })), escribio: false }, { status: 200 }) }
+    if (dry === true) { const v = await vencibles(P); return NextResponse.json({ accion: 'dry_run', vencibles: v.map((f) => ({ id: f.id, estado: f.estado })), escribio: false }, { status: 200 }) }
     return NextResponse.json({ accion: 'barrido', ...(await barrer(P)) }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'plan_corridas_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
