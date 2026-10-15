@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { abrir, barrer, cerrar, correr, ESPERA_MAXIMA_MIN, reintentar, TECHO_DE_CORRIDA_MIN, type FilaDeCorrida, type PuertoDeCorridas } from '../src/lib/planeacion/corridas'
+import { abrir, barrer, cerrar, correr, ESPERA_MAXIMA_MIN, GRACIA_DEL_BARRIDO_MIN, reintentar, TECHO_DE_CORRIDA_MIN, vencibles, type FilaDeCorrida, type PuertoDeCorridas } from '../src/lib/planeacion/corridas'
 import { almacenDeCorridas } from '../src/lib/planeacion/corridas-supabase'
 
 const MIN = 60_000
@@ -41,7 +41,7 @@ function mundo(o: { sinIndiceParcial?: boolean; sinCompareAndSet?: boolean; sinI
 const E = { client_id: 'cliente-a', corrida: 'c-1', dry_run: true }
 
 describe('abrir · el primer pre-vuelo crea la fila y fija el reloj', () => {
-  it('crea en «esperando» con espera_desde ahora y vence_en +30 min', async () => {
+  it('crea en «esperando» con espera_desde ahora y vence_en +45 min', async () => {
     const w = mundo()
     const r = await abrir(w.P, E)
     expect(r.status).toBe(200)
@@ -66,7 +66,7 @@ describe('abrir · el primer pre-vuelo crea la fila y fija el reloj', () => {
     if (r.status !== 200 || r.accion !== 'continua') return
     expect(r.fila.espera_desde).toBe(new Date(Date.parse(w.hora()) - 12 * MIN).toISOString())
     expect(r.vencida).toBe(false)
-    w.avanzar(18) // 30 min desde el PRIMER pre-vuelo (no desde el reinicio)
+    w.avanzar(ESPERA_MAXIMA_MIN - 12) // la espera completa desde el PRIMER pre-vuelo (no desde el reinicio)
     const r2 = await abrir(w.P, E)
     expect(r2.status === 200 && r2.accion === 'continua' && r2.vencida).toBe(true)
   })
@@ -78,6 +78,109 @@ describe('abrir · el primer pre-vuelo crea la fila y fija el reloj', () => {
     const primera = w.filas[0].espera_desde
     await w.P.insertarUnaVez({ client_id: E.client_id, corrida: E.corrida, estado: 'esperando', espera_desde: w.hora(), vence_en: w.hora(), intentos: 0, motivo: null, dry_run: true })
     expect(w.filas[0].espera_desde).not.toBe(primera)
+  })
+})
+
+describe('la espera es de 45 min (AVISO-LENOVO 15-oct)', () => {
+  it('la constante vale 45 y vence_en = espera_desde + 45', async () => {
+    expect(ESPERA_MAXIMA_MIN).toBe(45)
+    const w = mundo()
+    const r = await abrir(w.P, E)
+    if (r.status !== 200 || r.accion !== 'abierta') throw new Error('no abrió')
+    expect(Date.parse(r.fila.vence_en) - Date.parse(r.fila.espera_desde)).toBe(45 * MIN)
+  })
+  it('a los 44 min NO está vencida (sigue esperando: «completando» a los 44); a los 45 sí', async () => {
+    const w = mundo()
+    await abrir(w.P, E)
+    w.avanzar(44)
+    const a = await abrir(w.P, E)
+    expect(a.status === 200 && a.accion === 'continua' && a.vencida).toBe(false)
+    w.avanzar(1)
+    const b = await abrir(w.P, E)
+    expect(b.status === 200 && b.accion === 'continua' && b.vencida).toBe(true)
+  })
+  it('el barrido no toca una espera de 31–44 min (con 30 la habría vencido) y sí la que pasó su vencimiento + gracia', async () => {
+    const w = mundo()
+    await abrir(w.P, E)
+    w.avanzar(40)
+    expect((await barrer(w.P)).vencidas).toHaveLength(0)
+    w.avanzar(ESPERA_MAXIMA_MIN + GRACIA_DEL_BARRIDO_MIN - 40 + 1) // pasada la gracia
+    expect((await barrer(w.P)).vencidas).toHaveLength(1)
+  })
+  it('10 lecturas cada 5 min caben en la espera (minutos 0, 5, …, 45)', () => {
+    expect(ESPERA_MAXIMA_MIN / (300 / 60) + 1).toBe(10)
+  })
+})
+
+describe('corrección 1 de CC#3 · el barrido no mata la última lectura (gracia)', () => {
+  it('el barrido a 45:01 NO toca la espera: la lectura 10 llega, está vencida y corre «con lo del alta»', async () => {
+    const w = mundo()
+    await abrir(w.P, E)
+    w.avanzar(ESPERA_MAXIMA_MIN) // 45:00 · vence_en
+    w.avanzar(1 / 60) // 45:01
+    expect(await barrer(w.P)).toEqual({ vencidas: [], falladas: [], saltadas: [] })
+    expect(w.filas[0].estado).toBe('esperando')
+    const r = await abrir(w.P, E) // el re-disparo de la última lectura
+    expect(r.status === 200 && r.accion === 'continua' && r.vencida).toBe(true)
+    expect(await correr(w.P, { ...E, motivo: 'espera vencida: corre con lo del alta y lo declara' })).toMatchObject({ status: 200, accion: 'avanzada' })
+    expect(w.filas[0].estado).toBe('corriendo')
+  })
+  it('sin ningún re-disparo, el barrido la libera pasada la gracia (no queda atrapado el cliente)', async () => {
+    const w = mundo()
+    await abrir(w.P, E)
+    w.avanzar(ESPERA_MAXIMA_MIN + GRACIA_DEL_BARRIDO_MIN - 1)
+    expect((await barrer(w.P)).vencidas).toHaveLength(0)
+    w.avanzar(2)
+    expect((await barrer(w.P)).vencidas).toHaveLength(1)
+    expect(w.filas[0].estado).toBe('vencida')
+  })
+  it('la gracia es de al menos 2 re-disparos y NO aplica a `corriendo` (su techo ya es el plazo)', async () => {
+    expect(GRACIA_DEL_BARRIDO_MIN * 60).toBeGreaterThanOrEqual(2 * 300)
+    const w = mundo()
+    await abrir(w.P, E)
+    await correr(w.P, E)
+    w.avanzar(TECHO_DE_CORRIDA_MIN + 1)
+    expect((await barrer(w.P)).falladas).toHaveLength(1)
+  })
+  it('el dry_run del barrido usa la MISMA regla (vencibles)', async () => {
+    const w = mundo()
+    await abrir(w.P, E)
+    w.avanzar(ESPERA_MAXIMA_MIN + 1)
+    expect(await vencibles(w.P)).toHaveLength(0)
+    w.avanzar(GRACIA_DEL_BARRIDO_MIN)
+    expect(await vencibles(w.P)).toHaveLength(1)
+  })
+  it('mutación: sin gracia (barrido a vence_en) la 7.ª/última lectura encuentra la fila ya vencida', async () => {
+    const w = mundo()
+    await abrir(w.P, E)
+    w.avanzar(ESPERA_MAXIMA_MIN + 1)
+    // lo que haría el barrido SIN gracia: pasar a `vencida` todo lo que superó vence_en
+    const sinGracia = await w.P.vivasVencidas(w.hora())
+    for (const f of sinGracia) await w.P.avanzarSi(f.client_id, f.corrida, f.intentos, { estado: 'vencida' })
+    expect(await abrir(w.P, E)).toMatchObject({ status: 200, accion: 'terminada' })
+  })
+})
+
+describe('corrección 2 de CC#3 · un re-disparo con otro dry_run no continúa la corrida', () => {
+  it('real sobre una corrida creada en seco ⇒ 409 dry_run_distinto, la fila no cambia', async () => {
+    const w = mundo()
+    await abrir(w.P, { ...E, dry_run: true })
+    const antes = JSON.stringify(w.filas[0])
+    const r = await abrir(w.P, { ...E, dry_run: false })
+    expect(r).toMatchObject({ status: 409, error: 'dry_run_distinto', dry_run_de_la_corrida: true, dry_run_pedido: false })
+    expect(JSON.stringify(w.filas[0])).toBe(antes)
+  })
+  it('seco sobre una corrida creada real ⇒ 409 (el otro sentido)', async () => {
+    const w = mundo()
+    await abrir(w.P, { ...E, dry_run: false })
+    expect(await abrir(w.P, { ...E, dry_run: true })).toMatchObject({ status: 409, error: 'dry_run_distinto', dry_run_de_la_corrida: false, dry_run_pedido: true })
+  })
+  it('el mismo dry_run sigue continuando; y una corrida terminada con otro dry_run también avisa (no «terminada» engañosa)', async () => {
+    const w = mundo()
+    await abrir(w.P, { ...E, dry_run: true })
+    expect(await abrir(w.P, { ...E, dry_run: true })).toMatchObject({ status: 200, accion: 'continua' })
+    await cerrar(w.P, { ...E, estado: 'hecha' })
+    expect(await abrir(w.P, { ...E, dry_run: false })).toMatchObject({ status: 409, error: 'dry_run_distinto' })
   })
 })
 
@@ -180,7 +283,7 @@ describe('barrido · vence_en pasa a vencida/fallida y libera al cliente', () =>
     await abrir(w.P, { client_id: 'b', corrida: 'cb', dry_run: true })
     await correr(w.P, { client_id: 'b', corrida: 'cb' })
     await abrir(w.P, { client_id: 'c', corrida: 'cc', dry_run: true })
-    w.avanzar(31)
+    w.avanzar(ESPERA_MAXIMA_MIN + GRACIA_DEL_BARRIDO_MIN + 1)
     await abrir(w.P, { client_id: 'd', corrida: 'cd', dry_run: true }) // fresca
     const r1 = await barrer(w.P)
     expect(r1.vencidas).toHaveLength(2) // a y c (esperando)
@@ -195,7 +298,7 @@ describe('barrido · vence_en pasa a vencida/fallida y libera al cliente', () =>
   it('es idempotente y libera el cupo del cliente', async () => {
     const w = mundo()
     await abrir(w.P, E)
-    w.avanzar(31)
+    w.avanzar(ESPERA_MAXIMA_MIN + GRACIA_DEL_BARRIDO_MIN + 1)
     await barrer(w.P)
     expect(await barrer(w.P)).toEqual({ vencidas: [], falladas: [], saltadas: [] })
     expect((await abrir(w.P, { ...E, corrida: 'c-2' })).status).toBe(200)
@@ -203,7 +306,7 @@ describe('barrido · vence_en pasa a vencida/fallida y libera al cliente', () =>
   it('un avance justo antes del barrido no se pisa (compare-and-set): queda «saltada»', async () => {
     const w = mundo()
     await abrir(w.P, E)
-    w.avanzar(31)
+    w.avanzar(ESPERA_MAXIMA_MIN + GRACIA_DEL_BARRIDO_MIN + 1)
     const P2: PuertoDeCorridas = { ...w.P, async vivasVencidas(iso) { const v = await w.P.vivasVencidas(iso); await reintentar(w.P, { ...E, intentos_esperado: 0 }); return v } }
     const r = await barrer(P2)
     expect(r.saltadas).toHaveLength(1)
