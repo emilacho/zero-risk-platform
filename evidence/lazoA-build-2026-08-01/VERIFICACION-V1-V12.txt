@@ -1,0 +1,22 @@
+════ VERIFICACIÓN V1-V12 · contra el VIVO ════
+
+V1  Lazo A nodos          : 11 (esperado 11) ✅
+V2  ssLtw nodos           : 22 (esperado 22) ✅
+V3  LyVoK nodos/conexiones: 73/58 (73/58 · sin cambios) ✅
+V4  huella NO editados    : Lazo A ✅ idéntica · ssLtw ✅ idéntica
+       Lazo A: c872395fd1ac53f6d060c7ae0d91f23306eb2e8cadbb0874a8781289ebf91781
+       ssLtw : b88a1bf32652b4173c39c28b1a51f135387b201529de4e11cdb243abcd00a741
+V5  aristas colgando      : LazoA 0 · ssLtw 0 · LyVoK 0 ✅
+V6  arista vieja out#1→Consolidador ELIMINADA: ✅
+V7  Judge prep · Consolidador · 3 lentes · Promote prep/canon SIN TOCAR: ✅
+V8  umbral del IF         : ✅ >= 2
+V9  MAX_FIDELITY_CYCLES   : ✅ 2
+V10 active (los tres)     : LazoA false · ssLtw false · LyVoK false ✅ pausados
+V11 camino del manual     : LyVoK ✅ (alcanzables 49) · ssLtw ciclo alcanzable ✅ (19/22)
+V12 sintaxis de TODOS los nodos Code de los 2 workflows: ✅ compilan
+
+════ CICLO COMPLETO (vivo) ════
+  [BB] IF · ciclos agotados main#0 → Return scores a parent (grade-cimiento gate)
+  [BB] IF · ciclos agotados main#1 → [BB] Lazo A prep
+  [BB] Lazo A prep main#0 → [BB] Execute Lazo A corrección
+  [BB] Execute Lazo A corrección main#0 → [BB] Judge prep
