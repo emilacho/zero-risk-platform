@@ -1,0 +1,14 @@
+{
+  "tipo_id": "ventas_mes",
+  "atributo_cerebro": "metrica:loyverse:ingreso:*",
+  "clase_dato": "atributo",
+  "unidad": "dinero",
+  "moneda_requerida": true,
+  "rango": { "min": 0 },
+  "frescura_limite_h": 1080,
+  "critico": false,
+  "tolerancia_redondeo": 0.01,
+  "n_minimo": 0,
+  "periodo_requerido": true,
+  "via_preferida": "cerebro"
+}

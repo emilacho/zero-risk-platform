@@ -72,6 +72,9 @@ export const PUEDEN_NOMBRARLAS = [
   /^__tests__\/plan-v3-v14-lector-cerebro\.test\.ts$/,
   // plan v3 · conexión (15-oct): la prueba arma una base EN MEMORIA con `cerebro_fichas` para ejercer el lector; no toca la base real
   /^__tests__\/plan-v3-conexion\.test\.ts$/,
+  // plan v3 · ventas del punto de venta como dato (16-oct): la prueba lee las 10 fichas reales de un archivo y arma una base EN MEMORIA; no toca la base real
+  /^__tests__\/plan-v3-ventas-loyverse\.test\.ts$/,
+  /^__tests__\/fixtures\/ventas-loyverse\//,
   /^__tests__\/cerebro-paso-2-(aislamiento|migracion)\.test\.ts$/,
   /^__tests__\/cerebro-fotos-2-columnas\.test\.ts$/,
   // oficina de creativos (sala 1) · LECTURA de las etiquetas de las fotos para descartar las que no sirven: los ÚNICOS que las nombran son el lector `fotos.ts` y el adaptador que las SELECCIONA (`adaptadores.ts`); no escriben nada

@@ -18,7 +18,9 @@ import { fichaPropiaDeMapas } from '../../portero-alimenta/mapas-propia'
 import { unidadesDeRaspados, type FilaCruda, type Unidad } from '../../portero-alimenta/unidades'
 import { leerNumero } from './cifras'
 import type { CatalogoSnapshot, FilaDeTipo } from './catalogo'
-import type { EntradaCruda } from './tipos'
+import type { EntradaCruda, PeriodoDeDato } from './tipos'
+
+const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/
 import type { Faltante } from './relleno'
 import { resolverFrescura } from './normalizador'
 
@@ -117,6 +119,9 @@ export function fichasAEntradas(fichas: Fila[], snap: CatalogoSnapshot): { entra
     let contenido: unknown
     if (esNumerico(tipo)) contenido = typeof metrica?.valor === 'number' ? metrica.valor : cifraDeContenido(texto(f.contenido))
     else contenido = (texto(f.que_es) ?? texto(f.titulo))?.slice(0, 200)
+    // ventas del punto de venta (y cualquier cifra que declare su ventana): `provenance_tag.datos.desde/hasta` → `periodo` (un tipo con `periodo_requerido` sin él saldría «desconocido»)
+    const dd = (f.provenance_tag as { datos?: { desde?: unknown; hasta?: unknown } } | null)?.datos
+    const periodo: PeriodoDeDato | undefined = dd && typeof dd.desde === 'string' && typeof dd.hasta === 'string' && FECHA_ISO.test(dd.desde) && FECHA_ISO.test(dd.hasta) ? { tipo: 'ventana', desde: dd.desde, hasta: dd.hasta } : undefined
     const origen = f.origen as EntradaCruda['origen_ficha']
     const propiedad = f.propiedad === 'ajena' ? 'tercero' : f.propiedad === 'propia' || f.propiedad === 'incierta' ? (f.propiedad as 'propia' | 'incierta') : null
     entradas.push({
@@ -124,7 +129,7 @@ export function fichasAEntradas(fichas: Fila[], snap: CatalogoSnapshot): { entra
       // la fecha de la OBSERVACIÓN, no `fecha_fuente` (que es la del contenido): sin ella el dato es un hueco `sin_fecha`
       medido_en: texto(f.observado_en), vigente_hasta: texto(f.vigente_hasta), identidad: { via: 'portero' },
       origen_ficha: origen ?? null, juzgado_por: (f.juzgado_por as EntradaCruda['juzgado_por']) ?? null, propiedad,
-      huella: texto(f.huella), fuente_url: texto(f.fuente_url), ejecucion: id,
+      huella: texto(f.huella), fuente_url: texto(f.fuente_url), ejecucion: id, ...(periodo ? { periodo } : {}),
     })
   }
   return { entradas, resumen }
