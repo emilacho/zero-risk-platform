@@ -1,6 +1,6 @@
 /**
  * POST /api/brain/alimentar/vigilar · el VIGILANTE dentro del sistema: el flujo del portero lo llama al cerebro de cada corrida (después de ⑤ Cierre). Revisa las condiciones de salud;
- * si alguna falla DESACTIVA el flujo (reversible) y AVISA a #alertas con el motivo en una línea; si todo va bien, silencio (solo rastro). Los lunes, un resumen de la semana.
+ * si alguna falla DESACTIVA el flujo (reversible) y AVISA a #alertas con el motivo en una línea; si todo va bien, silencio (solo rastro).
  * `dry_run` obligatorio (true = solo evalúa, no escribe, no apaga, no avisa). Con false exige workflow_id + workflow_execution_id. US$ 0 (ni Apify ni modelo). Llave interna.
  * Solo apaga flujos cuyo nombre contenga «portero» (no es una puerta para apagar cualquier flujo).
  */
@@ -14,7 +14,7 @@ import { rutaVigilar } from '@/lib/portero-alimenta/vigilante'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 120
+export const maxDuration = 300
 
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)

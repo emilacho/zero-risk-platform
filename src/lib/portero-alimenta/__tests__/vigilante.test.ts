@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { apagarFlujoDelPortero, avisarAAlertas } from '../avisos'
-import { lineaDeAlerta, problemasDelCierre, rutaVigilar, VEREDICTOS_QUE_NO_ENTREGAN, type DepsDelVigilante } from '../vigilante'
+import { ESPERA_DEL_REINTENTO_MS, esSoloNoPudeComprobar, lineaDeAlerta, problemasDelCierre, rutaVigilar, VEREDICTOS_QUE_NO_ENTREGAN, type DepsDelVigilante } from '../vigilante'
 import { crearBaseFalsa } from './base-falsa'
 import { POST } from '../../../app/api/brain/alimentar/vigilar/route'
 
@@ -33,7 +33,7 @@ function montar(tablas: Record<string, unknown[]>, o: { apagarOk?: boolean; avis
   const base = crearBaseFalsa(tablas as never, { fallaEn: o.fallaEn })
   const apagados: string[] = [], avisos: string[] = []
   const deps = (ahora = MIERCOLES): DepsDelVigilante => ({
-    db: base.db, interruptores: ON, ahora,
+    db: base.db, interruptores: ON, ahora, esperar: async () => {},
     apagar: async (w) => { apagados.push(w); return { ok: o.apagarOk !== false, detalle: o.apagarOk === false ? 'n8n no respondió' : 'flujo desactivado' } },
     avisar: async (t) => { avisos.push(t); return { ok: o.avisarOk !== false, detalle: o.avisarOk === false ? 'Slack rechazó' : 'entregado' } },
   })
@@ -153,45 +153,98 @@ describe('si el aviso o el apagado fallan, se DICE (502) y no se da por hecho', 
   })
 })
 
-describe('resumen semanal (lunes, una vez, solo si todo va bien)', () => {
-  it('lunes: UN mensaje con corridas, fichas, gasto y problemas; y deja la marca', async () => {
-    const t = sana({ cerebro_portero_corridas: [
-      { id: 'r1', client_id: C, dia: '2026-10-19', estado: 'hecha', resumen: { escrituras: { fichas: 4 }, vigilante: { gasto_usd: 0.3, problemas: [] } } },
-      { id: 'r0', client_id: C, dia: '2026-10-18', estado: 'hecha', resumen: { escrituras: { fichas: 6 }, vigilante: { gasto_usd: 0.2, problemas: [] } } },
-    ] })
+describe('sin resumen semanal: ningún mensaje de rutina, ni siquiera el lunes', () => {
+  it('lunes con todo bien = silencio total (0 avisos) y sin marca de resumen', async () => {
+    const t = sana({ cerebro_portero_corridas: [{ id: 'r1', client_id: C, dia: '2026-10-19', estado: 'hecha', resumen: { escrituras: { fichas: 4 } } }] })
     t.cerebro_fichas = [ficha('a', { creado_en: '2026-10-19T09:00:00Z' }), ficha('b', { creado_en: '2026-10-19T09:00:00Z' })]
     const m = montar(t)
     const r = await rutaVigilar(m.deps(LUNES), { ...REAL, cierre: CIERRE_BUENO })
-    expect(r.body.ok).toBe(true)
-    expect(m.avisos).toHaveLength(1)
-    expect(m.avisos[0]).toMatch(/últimos 7 días · 2 corrida\(s\) \(2 hecha\(s\), 0 con errores\) · 10 ficha\(s\) nuevas · gasto medido US\$ 0\.50 · 0 problema/)
-    expect(JSON.stringify(rastroEscrito(m.base).map((e) => e.fila))).toContain('"semanal_enviado":"2026-10-19"')
+    expect(r.status).toBe(200); expect(r.body.ok).toBe(true)
+    expect(m.avisos).toEqual([]); expect(m.apagados).toEqual([])
+    expect(r.body.semanal).toBeUndefined()
+    expect(JSON.stringify(rastroEscrito(m.base).map((e) => e.fila))).not.toContain('semanal')
   })
-  it('si Slack rechaza el resumen, NO se marca como enviado (se reintenta el próximo día) y no se apaga nada', async () => {
-    const t = sana({ cerebro_portero_corridas: [{ id: 'r1', client_id: C, dia: '2026-10-19', estado: 'hecha', resumen: {} }] })
-    t.cerebro_fichas = [ficha('a', { creado_en: '2026-10-19T09:00:00Z' }), ficha('b', { creado_en: '2026-10-19T09:00:00Z' })]
-    const m = montar(t, { avisarOk: false })
-    const r = await rutaVigilar(m.deps(LUNES), { ...REAL, cierre: CIERRE_BUENO })
-    expect(r.status).toBe(200)
-    expect(r.body.semanal).toMatchObject({ enviado: false })
-    expect(m.apagados).toEqual([])
-    expect(JSON.stringify(rastroEscrito(m.base).map((e) => e.fila))).not.toContain('semanal_enviado')
-  })
-  it('no el miércoles; y si ya se envió hoy, no se repite', async () => {
-    const mie = montar(sana())
-    await rutaVigilar(mie.deps(MIERCOLES), { ...REAL, cierre: CIERRE_BUENO })
-    expect(mie.avisos).toEqual([])
-    const t = sana({ cerebro_portero_corridas: [{ id: 'r1', client_id: C, dia: '2026-10-19', estado: 'hecha', resumen: { vigilante: { semanal_enviado: '2026-10-19' } } }] })
-    const lun = montar(t)
-    await rutaVigilar(lun.deps(LUNES), { ...REAL, cierre: CIERRE_BUENO })
-    expect(lun.avisos).toEqual([])
-  })
-  it('un lunes con problemas manda la alerta y NO el resumen', async () => {
+  it('un lunes con problemas manda la alerta (y solo esa)', async () => {
     const t = sana({ cerebro_portero_corridas: [{ id: 'r1', client_id: C, dia: '2026-10-19', estado: 'con_errores', resumen: {} }] })
     const m = montar(t)
     await rutaVigilar(m.deps(LUNES), { ...REAL, cierre: CIERRE_BUENO })
     expect(m.avisos).toHaveLength(1)
     expect(m.avisos[0]).toMatch(/APAGADO/)
+  })
+  it('el código ya no exporta el resumen ni lo menciona', () => {
+    const src = readFileSync(new URL('../vigilante.ts', import.meta.url), 'utf8')
+    expect(src).not.toMatch(/resumenSemanal|semanal_enviado/)
+  })
+})
+
+describe('reintento: SOLO ante «no pude comprobar»', () => {
+  const montarR = (tablas: Record<string, unknown[]>, o: { fallaEn?: string; fallaVeces?: number; apagarOk?: boolean; avisarOk?: boolean } = {}) => {
+    const base = crearBaseFalsa(tablas as never, { fallaEn: o.fallaEn, fallaVeces: o.fallaVeces })
+    const apagados: string[] = [], avisos: string[] = [], esperas: number[] = []
+    const deps: DepsDelVigilante = {
+      db: base.db, interruptores: ON, ahora: MIERCOLES,
+      apagar: async (w) => { apagados.push(w); return { ok: o.apagarOk !== false, detalle: 'flujo desactivado' } },
+      avisar: async (t) => { avisos.push(t); return { ok: o.avisarOk !== false, detalle: 'entregado' } },
+      esperar: async (ms) => { esperas.push(ms) },
+    }
+    return { base, apagados, avisos, esperas, deps }
+  }
+  it('la lectura falla una vez y la segunda pasa ⇒ SILENCIO (no apaga, no avisa), con la espera hecha y el rastro con intentos:2', async () => {
+    const m = montarR(sana(), { fallaEn: 'costs', fallaVeces: 1 })
+    const r = await rutaVigilar(m.deps, { ...REAL, cierre: CIERRE_BUENO })
+    expect(r.status).toBe(200); expect(r.body.ok).toBe(true); expect(r.body.intentos).toBe(2)
+    expect(m.esperas).toEqual([ESPERA_DEL_REINTENTO_MS])
+    expect(m.apagados).toEqual([]); expect(m.avisos).toEqual([])
+    expect(JSON.stringify(rastroEscrito(m.base).map((e) => e.fila))).toContain('"intentos":2')
+  })
+  it('la lectura falla las dos veces ⇒ apaga y avisa, y la línea dice «falló 2 veces»', async () => {
+    const m = montarR(sana(), { fallaEn: 'costs' })
+    const r = await rutaVigilar(m.deps, { ...REAL, cierre: CIERRE_BUENO })
+    expect(r.status).toBe(200); expect(r.body.ok).toBe(false); expect(r.body.intentos).toBe(2)
+    expect(m.esperas).toHaveLength(1)
+    expect(m.apagados).toEqual([WF])
+    expect(m.avisos).toHaveLength(1)
+    expect(m.avisos[0]).toMatch(/falló 2 veces/)
+    expect(m.avisos[0]).toMatch(/no pude comprobar/)
+  })
+  it('la lista de clientes falla una vez y luego responde ⇒ silencio', async () => {
+    const m = montarR(sana(), { fallaEn: 'clients', fallaVeces: 1 })
+    const r = await rutaVigilar(m.deps, { ...REAL, client_id: C, cierre: CIERRE_BUENO })
+    expect(r.body.ok).toBe(true); expect(m.avisos).toEqual([]); expect(m.apagados).toEqual([])
+  })
+  it('un problema REAL (condiciones 1-5) NO se reintenta: apaga y avisa al primer fallo, sin espera', async () => {
+    const casos: Array<[string, Record<string, unknown[]>, unknown]> = [
+      ['cierre con errores', sana(), { ...CIERRE_BUENO, clientes: [{ ...CIERRE_BUENO.clientes[0], errores: ['boom'] }] }],
+      ['sin rastro de hoy', sana({ cerebro_portero_corridas: [] }), CIERRE_BUENO],
+      ['ficha ajena viva', sana({ cerebro_unidades_vistas: [{ client_id: C, ficha_id: 'a', veredicto: 'ajeno' }, { client_id: C, ficha_id: 'b', veredicto: 'suma' }] }), CIERRE_BUENO],
+      ['puente con pendientes', sana(), { ...CIERRE_BUENO, clientes: [{ ...CIERRE_BUENO.clientes[0], puente: { quedan: 3, vueltas: 1, falla: null } }] }],
+    ]
+    for (const [nombre, tablas, cierre] of casos) {
+      const m = montarR(tablas)
+      const r = await rutaVigilar(m.deps, { ...REAL, cierre })
+      expect(r.body.intentos, nombre).toBe(1)
+      expect(m.esperas, nombre).toEqual([])
+      expect(m.apagados, nombre).toEqual([WF])
+      expect(m.avisos, nombre).toHaveLength(1)
+      expect(m.avisos[0], nombre).not.toMatch(/falló 2 veces/)
+    }
+  })
+  it('un problema real MEZCLADO con una lectura fallida tampoco se reintenta (solo se reintenta lo puramente «no pude comprobar»)', async () => {
+    const m = montarR(sana({ cerebro_portero_corridas: [] }), { fallaEn: 'costs' })
+    const r = await rutaVigilar(m.deps, { ...REAL, cierre: CIERRE_BUENO })
+    expect(r.body.intentos).toBe(1); expect(m.esperas).toEqual([]); expect(m.apagados).toEqual([WF])
+  })
+  it('dry_run no espera ni reintenta', async () => {
+    const m = montarR(sana(), { fallaEn: 'costs' })
+    const r = await rutaVigilar(m.deps, { dry_run: true, cierre: CIERRE_BUENO })
+    expect(m.esperas).toEqual([]); expect(r.body.intentos).toBe(1)
+  })
+  it('esSoloNoPudeComprobar: vacío no cuenta; mezcla no cuenta; solo «no pude comprobar» sí', () => {
+    const r = (problemas: string[]) => ({ client_id: 'x', nombre: null, problemas, gasto_usd: null })
+    expect(esSoloNoPudeComprobar([])).toBe(false)
+    expect(esSoloNoPudeComprobar([r([])])).toBe(false)
+    expect(esSoloNoPudeComprobar([r(['no pude comprobar el gasto del día: x'])])).toBe(true)
+    expect(esSoloNoPudeComprobar([r(['no pude comprobar el gasto: x', 'gasto del día US$ 2.00 > 1.00'])])).toBe(false)
   })
 })
 

@@ -5,6 +5,10 @@
     {
       "path": "/api/cost-monitor/cron",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/brain/alimentar/no-corrio",
+      "schedule": "0 14 * * *"
     }
   ]
 }

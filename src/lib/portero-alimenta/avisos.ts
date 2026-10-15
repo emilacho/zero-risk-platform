@@ -40,3 +40,18 @@ export function apagarFlujoDelPortero(o: { base?: string; llave?: string; fetchI
     return r.active === false ? { ok: true, detalle: 'flujo desactivado' } : { ok: false, detalle: 'n8n no confirmó el flujo inactivo' }
   }
 }
+
+/** Solo LEE si el flujo está activo en n8n (para la alarma de «no corrió»); no cambia nada. */
+export function estadoDelFlujoDelPortero(o: { base?: string; llave?: string; fetchImpl?: Traer } = {}) {
+  const traer = o.fetchImpl ?? ((u: string, i?: RequestInit) => fetch(u, i))
+  return async (workflowId: string): Promise<{ ok: true; activo: boolean } | { ok: false; detalle: string }> => {
+    const base = (o.base ?? process.env.N8N_BASE_URL ?? '').replace(/\/$/, '')
+    const llave = o.llave ?? process.env.N8N_API_KEY
+    if (!base || !llave) return { ok: false, detalle: 'sin N8N_BASE_URL / N8N_API_KEY' }
+    if (!/^[A-Za-z0-9]{8,32}$/.test(workflowId)) return { ok: false, detalle: 'workflow_id inválido' }
+    const g = await traer(`${base}/api/v1/workflows/${workflowId}`, { headers: { 'X-N8N-API-KEY': llave } })
+    if (!g.ok) return { ok: false, detalle: `n8n respondió ${g.status}` }
+    const fl = (await g.json().catch(() => ({}))) as { active?: boolean }
+    return typeof fl.active === 'boolean' ? { ok: true, activo: fl.active } : { ok: false, detalle: 'n8n no dijo si está activo' }
+  }
+}

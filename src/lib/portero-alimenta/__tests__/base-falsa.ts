@@ -2,7 +2,8 @@
 type Fila = Record<string, unknown>
 export interface Escritura { tabla: string; op: 'insert' | 'update' | 'delete'; fila?: Fila; filtros?: Array<[string, unknown]> }
 
-export function crearBaseFalsa(tablas: Record<string, Fila[]>, opciones: { fallaEn?: string } = {}) {
+export function crearBaseFalsa(tablas: Record<string, Fila[]>, opciones: { fallaEn?: string; fallaVeces?: number } = {}) {
+  let falladas = 0 // fallaVeces: la tabla falla solo las primeras N lecturas (una falla pasajera)
   const escrituras: Escritura[] = []
   const lecturas: string[] = []
   const db = {
@@ -22,7 +23,7 @@ export function crearBaseFalsa(tablas: Record<string, Fila[]>, opciones: { falla
         return true
       }))
       const ejecutar = () => {
-        if (opciones.fallaEn === tabla) return { data: null, error: { message: `falla simulada en ${tabla}` } }
+        if (opciones.fallaEn === tabla && (opciones.fallaVeces === undefined || falladas++ < opciones.fallaVeces)) return { data: null, error: { message: `falla simulada en ${tabla}` } }
         if (op === 'select') { lecturas.push(tabla); return { data: filas().slice(0, tope), error: null } }
         escrituras.push({ tabla, op, fila: payload, filtros: filtros.map(([c, , v]) => [c, v]) })
         if (op === 'insert' && payload) (tablas[tabla] ??= []).push({ ...payload })
