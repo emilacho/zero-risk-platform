@@ -10,10 +10,11 @@
  * Se avisa el PRIMER día sin corrida (distancia 1) y UN recordatorio al 4.º día (distancia 4); entre medias, silencio. US$ 0 · no llama a Apify ni a modelo · solo lee.
  */
 import { CANAL_DE_ALERTAS } from './vigilante'
+import { FLUJO_DEL_PORTERO } from './gasto'
 import { clientesActivos } from './clientes'
 import type { DepsDeRutas, Respuesta } from './rutas'
 
-export const FLUJO_DEL_PORTERO_POR_OMISION = 'ogfq56oIEoHufFPM'
+export const FLUJO_DEL_PORTERO_POR_OMISION = FLUJO_DEL_PORTERO
 /** días sin corrida en que se avisa: el primero y un solo recordatorio */
 export const DIAS_EN_QUE_SE_AVISA = [1, 4] as const
 
