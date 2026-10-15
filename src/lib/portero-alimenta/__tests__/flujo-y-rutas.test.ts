@@ -136,7 +136,7 @@ describe('la segunda tanda (artículos)', () => {
   })
   it('sin lugar en el tope no pide nada y dice por qué', async () => {
     const t = tablas()
-    ;(t.costs as unknown[]).push({ service: 'apify:own_google_maps_profile', amount_usd: 1.49, created_at: '2026-10-16T09:00:00Z', description: JSON.stringify({ es: 'detalle_de_llamada', client_id: C }) })
+    ;(t.costs as unknown[]).push({ service: 'apify:own_google_maps_profile', amount_usd: 2.99, created_at: '2026-10-16T09:00:00Z', description: JSON.stringify({ es: 'detalle_de_llamada', client_id: C }) })
     const base = crearBaseFalsa(t as never)
     const r = await rutaArticulos({ db: base.db, interruptores: ON, ahora: new Date('2026-10-16T10:00:00Z') }, { client_id: C, dry_run: true })
     expect(r.body.acciones).toEqual([])

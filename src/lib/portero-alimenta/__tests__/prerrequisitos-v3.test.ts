@@ -66,13 +66,13 @@ describe('1 · el vigilante y el tope cuentan SOLO lo del portero', () => {
       expect(g, orden).toBeCloseTo(0.4, 4)
     }
   })
-  it('portero de 1,2 (con o sin plan al lado, en los dos órdenes) ⇒ apaga y avisa', async () => {
-    for (const ls of [[...PLAN(4), ...PORTERO(1.2)], [...PORTERO(1.2, '2026-10-15T07:00:00Z'), ...PLAN(4)], PORTERO(1.2)]) {
+  it('portero de 3,2 (con o sin plan al lado, en los dos órdenes) ⇒ apaga y avisa', async () => {
+    for (const ls of [[...PLAN(4), ...PORTERO(3.2)], [...PORTERO(3.2, '2026-10-15T07:00:00Z'), ...PLAN(4)], PORTERO(3.2)]) {
       const v = vigilar(mundo(ls))
       const r = await rutaVigilar(v.deps, { ...REAL, cierre: CIERRE })
       expect(r.body.ok).toBe(false)
       expect(v.apagados).toEqual([WF])
-      expect(v.avisos[0]).toMatch(/gasto del día US\$ 1\.20 > 1\.00/)
+      expect(v.avisos[0]).toMatch(/gasto del día US\$ 3\.20 > 3\.00/)
     }
   })
   it('gastoDeHoy dice cuánto fue de OTROS (plan) y cuántas llamadas no tenían origen', async () => {
@@ -83,15 +83,15 @@ describe('1 · el vigilante y el tope cuentan SOLO lo del portero', () => {
   })
   it('SIN pareja en el crudo (filas viejas o sin crudo) CUENTA como del portero: no se subestima', async () => {
     const t = mundo([...PORTERO(0.4)])
-    t.costs.push({ service: 'apify:instagram_scraper', amount_usd: 0.9, created_at: '2026-10-15T10:00:00Z', description: JSON.stringify({ es: 'detalle_de_llamada', client_id: C, funcion: 'instagram_scraper', ensayo: false }) })
+    t.costs.push({ service: 'apify:instagram_scraper', amount_usd: 2.8, created_at: '2026-10-15T10:00:00Z', description: JSON.stringify({ es: 'detalle_de_llamada', client_id: C, funcion: 'instagram_scraper', ensayo: false }) })
     const base = crearBaseFalsa(t as never)
     const g = await gastoDeHoy(base.db, C, AHORA)
-    if (g.ok) { expect(g.gasto.apify_usd).toBeCloseTo(1.3, 4); expect(g.llamadas_sin_origen).toBe(1) }
+    if (g.ok) { expect(g.gasto.apify_usd).toBeCloseTo(3.2, 4); expect(g.llamadas_sin_origen).toBe(1) }
     const v = vigilar(t)
     expect((await rutaVigilar(v.deps, { ...REAL, cierre: CIERRE })).body.ok).toBe(false)
   })
   it('un crudo SIN `llamado_por` no explica nada: cuenta como del portero', async () => {
-    const v = vigilar(mundo([llamada('own_google_maps_profile', '2026-10-15T12:30:00Z', 1.3, undefined)]))
+    const v = vigilar(mundo([llamada('own_google_maps_profile', '2026-10-15T12:30:00Z', 3.1, undefined)]))
     expect((await rutaVigilar(v.deps, { ...REAL, cierre: CIERRE })).body.ok).toBe(false)
   })
   it('las llamadas del portero se reconocen por su flujo, sus tandas, artículos y mediciones; las de otros no', () => {
