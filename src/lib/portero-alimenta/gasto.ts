@@ -87,7 +87,8 @@ export function soloLoDelPortero(libro: FilaDelLibro[], crudo: FilaDeRaspadoDeOr
   return { libro: libro.filter((f) => !fuera.has(f)), fuera_del_portero: [...fuera], sin_origen: sinOrigen, por_origen: porOrigen, ensayos }
 }
 /** `origen` que cuenta como del portero (la diaria, el despertar, el repaso y sus tandas) */
-export const origenDelPortero = (o: string): boolean => o === 'portero' || o.startsWith('portero-') || o.startsWith('portero:')
+/** el Servicio solo acepta `^[a-z][a-z0-9_]{0,31}$`: el portero firma `portero`, `portero_articulo` y `portero_tanda2` (los guiones y los dos puntos se aceptan por si algún día se escribe así) */
+export const origenDelPortero = (o: string): boolean => o === 'portero' || /^portero[-_:]/.test(o)
 const descripcionDe = (f: FilaDelLibro): { ensayo?: unknown; origen?: unknown } => { try { const d = JSON.parse(f.description ?? '{}'); return d && typeof d === 'object' ? d : {} } catch { return {} } }
 const dia = (iso: string) => iso.slice(0, 10)
 const deEsteCliente = (f: FilaDelLibro, clientId: string): boolean => {
