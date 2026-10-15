@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   const tableros = almacenDeFinanzas(db)
   const P: PuertosDeConversa = {
     almacen: almacenDeConversa(db),
-    modelo: modeloRunSdk({ base: baseDeRunSdk(), llave: process.env.INTERNAL_API_KEY, fetch, workflow_id: typeof cuerpo === 'object' && cuerpo !== null ? ((cuerpo as Record<string, unknown>).workflow_id as string | undefined) : undefined }),
+    modelo: modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch, workflow_id: typeof cuerpo === 'object' && cuerpo !== null ? ((cuerpo as Record<string, unknown>).workflow_id as string | undefined) : undefined }),
     slack: slackNoConfigurado,
     tableros,
     config: () => tableros.leerConfig(),

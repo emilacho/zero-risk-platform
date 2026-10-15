@@ -13,7 +13,7 @@ export const esWorkflowIdValido = (x: unknown): x is string => typeof x === 'str
  * La base de `/api/agents/run-sdk`: `FINANZAS_RUN_SDK_BASE` si existe; si no, la de la propia plataforma (`ZERO_RISK_API_URL`); si no, la de producción.
  * (Sin este respaldo el intento 1 de la oficina midió una variable ausente — `modelo_no_configurado` — y no calidad.) El adaptador sigue exigiendo llave y `fetch`.
  */
-export function baseDeRunSdk(env: Record<string, string | undefined> = process.env): string {
+export function baseDeRunSdk(env: Record<string, string | undefined>): string {
   const limpio = (x: string | undefined) => (typeof x === 'string' ? x.trim() : '')
   return limpio(env.FINANZAS_RUN_SDK_BASE) || limpio(env.ZERO_RISK_API_URL) || 'https://zero-risk-platform.vercel.app'
 }
