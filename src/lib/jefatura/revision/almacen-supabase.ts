@@ -18,7 +18,8 @@ function ok<T>(r: { data: T; error: { message: string; code?: string } | null },
 
 const marcasDe = (v: unknown): Marcas => {
   const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
-  return { con_desacuerdo: o.con_desacuerdo === true, sin_segunda_mirada: o.sin_segunda_mirada === true }
+  // `ficha_sin_dueno` solo existe (en true) cuando ocurrió: se conserva al releer (J6 cuarto) y no aparece en las revisiones de siempre
+  return { con_desacuerdo: o.con_desacuerdo === true, sin_segunda_mirada: o.sin_segunda_mirada === true, ...(o.ficha_sin_dueno === true ? { ficha_sin_dueno: true } : {}) }
 }
 
 function aRevision(f: Fila): Revision {
