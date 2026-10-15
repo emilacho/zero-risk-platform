@@ -148,6 +148,9 @@ async function correr(p: PedidoPuerta, corrida: Corrida, firma: { workflow_id: s
             ? { destination: DESTINO_CON_VUELTA, callback_url: p.callback_url }
             : { destination: DESTINO_SIN_VUELTA }),
           dry_run: p.dry_run,
+          // plan v3 · V3 · aditivos: solo viajan si vienen BIEN formados; ausentes ⇒ el cuerpo es el de hoy
+          ...(typeof p.origen === 'string' && /^[a-z0-9_]{1,24}$/.test(p.origen) ? { origen: p.origen } : {}),
+          ...(typeof p.tope_usd === 'number' && p.tope_usd > 0 && p.tope_usd <= 5 ? { tope_usd: p.tope_usd } : {}),
           params: corrida.params,
           metadata: {
             scope: 'planeacion',

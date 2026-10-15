@@ -61,6 +61,11 @@ export interface PedidoPuerta {
   // ── lo que el Servicio de Apify exige que se DECIDA, no que se herede ──
   readonly dry_run?: boolean
   readonly callback_url?: string
+  // ── plan v3 · V3 · ADITIVOS y opcionales: ausentes ⇒ el cuerpo al Servicio es BYTE a BYTE el de hoy ──
+  /** de dónde vino el pedido (el Servicio lo guarda en el libro: distingue plan / portero / alta); texto corto `[a-z0-9_]` */
+  readonly origen?: string
+  /** tope de costo POR LLAMADA (el Servicio lo manda a Apify como maxTotalChargeUsd); 0 < x ≤ 5 */
+  readonly tope_usd?: number
 }
 
 /** Canon canonical · un pedido leído: o sirve, o dice por qué no. Los que no
@@ -82,6 +87,7 @@ const HEREDABLES = [
   'workflow_execution_id',
   'dry_run',
   'callback_url',
+  'origen',
 ] as const
 
 /**

@@ -25,7 +25,7 @@ export const TABLAS = {
   fuentes: {
     tabla: 'plan_catalogo_fuentes', clave: 'fuente_id',
     req: ['fuente_id', 'proveedor', 'funcion', 'criticidad', 'plazo_s', 'tope_usd'],
-    campos: { fuente_id: t.str(1, 80), proveedor: t.str(1, 80), funcion: t.str(1, 80), via: t.enu(VIAS), alcance: t.str(1, 80), aplica_si: t.obj(), criticidad: t.enu(CRITICIDADES), reintentos: t.int(0, 3), plazo_s: t.int(1, 900), tope_usd: t.num(0, 5), forma: t.arrStr(0, 80), moldes_de_ensayo: t.arrStr(0, 20), identidad_campos: t.arrStr(0, 40), da_ausencia_con: t.str(1, 200) },
+    campos: { fuente_id: t.str(1, 80), proveedor: t.str(1, 80), funcion: t.str(1, 80), via: t.enu(VIAS), provee: t.arrStr(0, 40), alcance: t.str(1, 80), aplica_si: t.obj(), criticidad: t.enu(CRITICIDADES), reintentos: t.int(0, 3), plazo_s: t.int(1, 900), tope_usd: t.num(0, 5), forma: t.arrStr(0, 80), moldes_de_ensayo: t.arrStr(0, 20), identidad_campos: t.arrStr(0, 40), da_ausencia_con: t.str(1, 200) },
   },
   tipos: {
     tabla: 'plan_catalogo_tipos', clave: 'tipo_id',
@@ -95,6 +95,9 @@ export function validarAlta(tipoDeTabla, fila, existe = () => true) {
     if (!a.fuente && !a.tipo) errores.push('«aplica_a» debe nombrar una `fuente` o un `tipo`')
     if (a.fuente && !existe('fuentes', 'fuente_id', a.fuente)) errores.push(`la fuente «${a.fuente}» no existe en el catálogo`)
     if (a.tipo && !existe('tipos', 'tipo_id', a.tipo)) errores.push(`el tipo «${a.tipo}» no existe en el catálogo`)
+  }
+  if (tipoDeTabla === 'fuentes' && Array.isArray(limpia.provee)) {
+    for (const t of limpia.provee) if (!existe('tipos', 'tipo_id', t)) errores.push(`«provee»: el tipo «${t}» no existe`)
   }
   if (tipoDeTabla === 'topes' && limpia.fuente_id && !existe('fuentes', 'fuente_id', limpia.fuente_id)) errores.push(`la fuente «${limpia.fuente_id}» no existe en el catálogo`)
   if (tipoDeTabla === 'tipos' && Array.isArray(limpia.comparable_con)) {

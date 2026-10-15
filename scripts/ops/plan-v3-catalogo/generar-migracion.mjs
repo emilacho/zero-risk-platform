@@ -25,7 +25,7 @@ export const ESQUEMA = {
     clave: 'fuente_id', semilla: 'fuentes',
     columnas: [
       ['fuente_id', 'text NOT NULL', 'texto'], ['proveedor', 'text NOT NULL', 'texto'], ['funcion', 'text NOT NULL', 'texto'],
-      ['via', `text NOT NULL DEFAULT 'relleno' CHECK (via IN ${VIAS})`, 'texto'], ['alcance', 'text', 'texto'], ['aplica_si', 'jsonb', 'json'],
+      ['via', `text NOT NULL DEFAULT 'relleno' CHECK (via IN ${VIAS})`, 'texto'], ['provee', "text[] NOT NULL DEFAULT '{}'", 'lista'], ['alcance', 'text', 'texto'], ['aplica_si', 'jsonb', 'json'],
       ['criticidad', "text NOT NULL CHECK (criticidad IN ('critica', 'normal', 'baja'))", 'texto'],
       ['reintentos', 'integer NOT NULL DEFAULT 0 CHECK (reintentos BETWEEN 0 AND 3)', 'num'],
       ['plazo_s', 'integer NOT NULL CHECK (plazo_s BETWEEN 1 AND 900)', 'num'],

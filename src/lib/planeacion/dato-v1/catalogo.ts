@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto'
 import type { Via } from './tipos'
 
-export interface FilaDeFuente { fuente_id: string; proveedor: string; funcion: string; via: Via; alcance?: string | null; criticidad: 'critica' | 'normal' | 'baja'; reintentos?: number; plazo_s: number; tope_usd: number; forma?: string[]; moldes_de_ensayo?: string[]; identidad_campos?: string[]; da_ausencia_con?: string | null; version?: number }
+export interface FilaDeFuente { fuente_id: string; proveedor: string; funcion: string; via: Via; provee?: string[]; alcance?: string | null; criticidad: 'critica' | 'normal' | 'baja'; reintentos?: number; plazo_s: number; tope_usd: number; forma?: string[]; moldes_de_ensayo?: string[]; identidad_campos?: string[]; da_ausencia_con?: string | null; version?: number }
 export interface FilaDeTipo { tipo_id: string; atributo_cerebro?: string | null; clase_dato?: 'atributo' | 'acumula'; unidad: string; moneda_requerida?: boolean; rango?: { min?: number; max?: number } | null; frescura_limite_h: number; critico?: boolean; tolerancia_redondeo?: number; n_minimo?: number; periodo_requerido?: boolean; comparable_con?: string[]; via_preferida?: Via; version?: number }
 export interface FilaDeRegla { regla_id: string; clase: string; operador: string; parametros: Record<string, unknown>; aplica_a: { fuente?: string; tipo?: string }; severidad: 'bloquea' | 'avisa'; pais?: string | null; version?: number }
 export interface FilaDeLexico { lexico_id: string; idioma: string; grupo: string; terminos: string[]; pais?: string | null; version?: number }
