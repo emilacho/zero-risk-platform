@@ -1,0 +1,588 @@
+{
+  "id": "EVMrQ4Tqw98L1L0D",
+  "name": "Zero Risk — Jefatura · prueba de pieza (J7 · CC#1)",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-10-14T21:53:08.491Z",
+  "updatedAt": "2026-10-14T21:53:08.491Z",
+  "isArchived": false,
+  "versionId": "10f997fc-2a39-40b7-95ed-e83aa1886867",
+  "versionCounter": 1,
+  "sourceWorkflowId": null,
+  "triggerCount": 0,
+  "nodes": [
+    {
+      "name": "Webhook · prueba de pieza",
+      "webhookId": "jefatura-prueba-pieza-0001",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/jefatura-prueba-pieza",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "7ba93c51-8f60-439a-a4bb-6727b064b995"
+    },
+    {
+      "name": "⓪ Entrada · llave",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ⓪ ENTRADA · LLAVE · PRUEBA DE PIEZA · J7(pieza) · CC#1 · 2026-10-14 · flujo `zero-risk/jefatura-prueba-pieza` (INACTIVO). Revisa una pieza YA PRODUCIDA con la puerta de la jefatura; no produce nada.\n// Solo valida: la llave de despacho, `dry_run` booleano (ausente NO se lee como real ni como seco) y lo mínimo de la pieza. Nada de aquí paga.\nconst w = $input.first().json || {}\nconst body = w.body && typeof w.body === 'object' && !Array.isArray(w.body) ? w.body : {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) throw new Error('PRUEBA_PIEZA_CERRADA · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) · el flujo queda cerrado · E67.')\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) throw new Error('PRUEBA_PIEZA_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · E67.')\nif (typeof body.dry_run !== 'boolean') throw new Error('PRUEBA_PIEZA_SIN_DRY_RUN · dry_run debe ser booleano (true o false) · se DETIENE antes de abrir nada')\nif (typeof body.client_id !== 'string' || !/^[A-Za-z0-9_-]{3,80}$/.test(body.client_id)) throw new Error('PRUEBA_PIEZA_CLIENTE_INVALIDO · client_id debe ser texto simple (letras, números, guion) · se DETIENE')\nif (typeof body.texto !== 'string' || !body.texto.trim()) throw new Error('PRUEBA_PIEZA_SIN_TEXTO · falta el texto de la pieza · se DETIENE')\nif (typeof body.artifact_id !== 'string' || !/^[A-Za-z0-9_.:-]{3,120}$/.test(body.artifact_id)) throw new Error('PRUEBA_PIEZA_ARTEFACTO_INVALIDO · artifact_id debe ser texto simple y único por pieza · se DETIENE')\nconst lista = (v) => (Array.isArray(v) ? v : [])\nreturn [{ json: {\n  client_id: body.client_id,\n  artifact_id: body.artifact_id,\n  journey_id: typeof body.journey_id === 'string' && body.journey_id ? body.journey_id : null,\n  dry_run: body.dry_run,\n  texto: body.texto,\n  familia: typeof body.familia === 'string' && body.familia ? body.familia : 'post_img',\n  imagenes: lista(body.imagenes).filter((u) => typeof u === 'string'),\n  contexto: lista(body.contexto).filter((c) => c && typeof c.titulo === 'string' && typeof c.texto === 'string'),\n  productores: lista(body.productores).filter((p) => p && typeof p.donde === 'string' && typeof p.agente === 'string'),\n  marcas_heredadas: lista(body.marcas_heredadas).filter((m) => typeof m === 'string'),\n  tope_restante_usd: typeof body.tope_restante_usd === 'number' && Number.isFinite(body.tope_restante_usd) && body.tope_restante_usd >= 0 ? body.tope_restante_usd : null,\n  simulacion: body.dry_run === true && body.simulacion && typeof body.simulacion === 'object' ? body.simulacion : null,\n} }]\n"
+      },
+      "id": "1c14dbf8-02e7-413c-b8b5-2c4f5a3b05e6"
+    },
+    {
+      "name": "Fin · prueba de pieza",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return $input.all()"
+      },
+      "id": "a48d192a-e422-42ee-acd0-7f12b1062d58"
+    },
+    {
+      "name": "JEF · armar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// JEF · armar · PRUEBA DE PIEZA · J7(pieza) · CC#1 · 2026-10-14 · arma la entrada de la ruta con la pieza que llegó por el webhook. NO lanza: si algo no cuadra, `abrir = false`.\n// `devolver_a = ninguno`: el resultado queda en `jefatura_revisiones` (la bandeja de la pieza la escribe la oficina en J8a, no este flujo). Con `dry_run = true` puede traer `simulacion`.\nconst CFG = {\"max_sondeos\":16,\"tipo\":\"pieza\",\"plazo_s\":1200,\"cada_s\":90}\nconst jef = { fase: 'no_abre', motivo: '', plazo_fin: Date.now() + CFG.plazo_s * 1000 }\nconst e = $('⓪ Entrada · llave').first().json\nconst sobre = {\n  artifact_type: 'pieza',\n  artifact_id: e.artifact_id,\n  client_id: e.client_id,\n  journey_id: e.journey_id,\n  payload: {\n    texto: e.texto,\n    familia: e.familia,\n    dry_run: e.dry_run,\n    devolver_a: { tipo: 'ninguno', destino: '' },\n    chequeos_previos: { pasaron: true, necesita_humano: false, marcas: [] },\n    ...(e.contexto.length ? { contexto: e.contexto } : {}),\n    ...(e.imagenes.length ? { imagenes: e.imagenes } : {}),\n    ...(e.productores.length ? { productores: e.productores } : {}),\n    ...(e.marcas_heredadas.length ? { marcas_heredadas: e.marcas_heredadas } : {}),\n    ...(e.tope_restante_usd !== null ? { tope_restante_usd: e.tope_restante_usd } : {}),\n    ...(e.simulacion ? { simulacion: e.simulacion } : {}),\n  },\n}\nreturn [{ json: { jef: { ...jef, fase: 'abrir', motivo: '' }, abrir: true, sobre } }]\n"
+      },
+      "id": "bb2bc233-814b-47b6-bfb6-d7640252ff3b"
+    },
+    {
+      "name": "JEF · ¿se abre?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.abrir === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c89d4d2a-bf93-4d4f-a006-ac7218dccffc"
+    },
+    {
+      "name": "JEF · abrir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1200,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/jefatura/revisiones' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-sala-dispatch-key",
+              "value": "={{ $env.SALA_DISPATCH_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.sobre) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "2f4d3e49-6841-43fb-82bd-31d2becce737"
+    },
+    {
+      "name": "JEF · ¿cómo abrió?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// JEF · ¿cómo abrió? · J7 · CC#1 · 2026-10-14 · lo que contestó `POST /api/jefatura/revisiones` (abrir). NUNCA lanza: cualquier cosa rara queda como fase `error` y el productor sigue como hoy.\n// Fases: cerrada (la ruta ya cerró) · esperar (hay un turno de agente por despertar) · espera_sin_turno (la revisión ya existía y sigue abierta o cerró: se lee) · no_abre (409: apagada, tipo no activo, fuera del ensayo, sin otra vuelta…) · error.\nconst CFG = {\"max_sondeos\":16,\"tipo\":\"pieza\",\"plazo_s\":1200,\"cada_s\":90}\nconst s = $('JEF · armar').first().json\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : {}\nconst jef = { ...s.jef }\nif (status === 200 && b.accion === 'cerrado' && b.revision_id) {\n  Object.assign(jef, { fase: 'cerrada', revision_id: String(b.revision_id), salida: b.salida && typeof b.salida === 'object' ? b.salida : null, resultado: b.resultado || null })\n} else if (status === 200 && b.accion === 'esperar' && b.revision_id && b.turno && typeof b.turno === 'object') {\n  Object.assign(jef, { fase: 'esperar', revision_id: String(b.revision_id), turno: b.turno })\n} else if (status === 200 && b.accion === 'ya_existia' && b.revision_id) {\n  Object.assign(jef, { fase: 'espera_sin_turno', revision_id: String(b.revision_id), estado_previo: b.estado || null })\n} else if (status === 409) {\n  Object.assign(jef, { fase: 'no_abre', motivo: String(b.motivo || b.error || '409') })\n} else {\n  const corte = r.error && typeof r.error === 'object' ? String(r.error.message || r.error.name || 'la llamada se cortó') : null\n  Object.assign(jef, { fase: 'error', http: Number.isFinite(status) ? status : null, motivo: String(b.error || b.detalle || corte || ('HTTP ' + String(r.statusCode))).slice(0, 300) })\n}\nreturn [{ json: { jef } }]\n"
+      },
+      "id": "eed3b748-de6a-4eb7-9d52-889085e401c9"
+    },
+    {
+      "name": "JEF · ¿hay que despertar el turno?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.jef.fase === 'esperar' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "72207087-0679-4a56-94ab-f4e9a31a16f2"
+    },
+    {
+      "name": "JEF · despertar el turno",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1920,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\\/+$/, '') + '/zero-risk/jefatura-turno' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-sala-dispatch-key",
+              "value": "={{ $env.SALA_DISPATCH_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ revision_id: $json.jef.revision_id, turno: $json.jef.turno }) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "746656fa-5bb6-4cd8-bdc7-57ad2efa24b6"
+    },
+    {
+      "name": "JEF · ¿espera sin turno?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        620
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.jef.fase === 'espera_sin_turno' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6d311d06-8b6b-4fce-9b46-cc298f458e97"
+    },
+    {
+      "name": "JEF · esperar",
+      "webhookId": "jef-espera-pieza-0001",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2160,
+        400
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 90,
+        "unit": "seconds"
+      },
+      "id": "eb5b492e-13f3-47a1-adb4-050e063116d3"
+    },
+    {
+      "name": "JEF · leer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2400,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/jefatura/revisiones' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-sala-dispatch-key",
+              "value": "={{ $env.SALA_DISPATCH_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ accion: 'leer', revision_id: $('JEF · ¿cómo abrió?').first().json.jef.revision_id }) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "c13773a8-9fe3-4251-8fdc-6b19204fae2d"
+    },
+    {
+      "name": "JEF · ¿cerró?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// JEF · ¿cerró? · J7 · CC#1 · 2026-10-14 · lo que contestó `POST /api/jefatura/revisiones` (leer). NUNCA lanza.\n// cerrada = estado terminal con su salida · seguir = todavía abierta y queda plazo · plazo = se acabó el tiempo (lo que llegue tarde NO se guarda) · error = cerró sin salida.\n// Un fallo pasajero de la lectura (5xx, red) no corta la espera: se sigue sondeando hasta el plazo o el tope de sondeos.\nconst CFG = {\"max_sondeos\":16,\"tipo\":\"pieza\",\"plazo_s\":1200,\"cada_s\":90}\nconst base = $('JEF · ¿cómo abrió?').first().json.jef\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : {}\nconst TERMINALES = ['cerrada', 'cerrada_por_tope', 'fallida']\nconst sondeos = Number($runIndex) + 1\nconst jef = { ...base, sondeos }\nif (status === 200 && TERMINALES.indexOf(b.estado) !== -1) {\n  if (b.salida && typeof b.salida === 'object') Object.assign(jef, { fase: 'cerrada', salida: b.salida, resultado: b.resultado || null })\n  else Object.assign(jef, { fase: 'error', motivo: 'la revisión cerró (' + String(b.estado) + ') pero la lectura no trajo su salida' })\n} else if (Date.now() > Number(base.plazo_fin) || sondeos >= CFG.max_sondeos) {\n  Object.assign(jef, { fase: 'plazo', motivo: 'se acabó la espera (' + String(CFG.plazo_s) + ' s) sin que la revisión cerrara: lo que llegue tarde no se guarda' })\n} else {\n  Object.assign(jef, { fase: 'seguir' })\n}\nreturn [{ json: { jef } }]\n"
+      },
+      "id": "f4be827f-cf1e-473e-92f8-2dedd8e195c6"
+    },
+    {
+      "name": "JEF · ¿seguir esperando?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.jef.fase === 'seguir' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d69acda2-9785-4af2-baa3-413bc526985d"
+    },
+    {
+      "name": "JEF · aplicar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        620
+      ],
+      "parameters": {
+        "jsCode": "// JEF · aplicar · PRUEBA DE PIEZA · J7(pieza) · CC#1 · 2026-10-14 · el resumen de lo que pasó (el flujo no entrega a nadie: se lee en la ejecución y en `jefatura_revisiones`).\nconst CFG = {\"max_sondeos\":16,\"tipo\":\"pieza\",\"plazo_s\":1200,\"cada_s\":90}\nconst entrada = $input.first().json || {}\nconst jef = entrada.jef && typeof entrada.jef === 'object' ? entrada.jef : {}\nconst sal = jef.salida && typeof jef.salida === 'object' ? jef.salida : null\nreturn [{ json: {\n  fase: jef.fase || 'no_abre',\n  motivo: jef.motivo || null,\n  revision_id: jef.revision_id || null,\n  resultado: sal ? String(sal.resultado || '') : null,\n  marcas: sal && sal.marcas ? sal.marcas : null,\n  desacuerdos: sal && Array.isArray(sal.desacuerdos) ? sal.desacuerdos : [],\n  costo_usd: sal && typeof sal.costo_usd === 'number' ? sal.costo_usd : null,\n  simulado: sal ? sal.simulado === true : null,\n} }]\n"
+      },
+      "id": "597d1220-f545-4f3f-91e9-2187d5a16be2"
+    }
+  ],
+  "connections": {
+    "Webhook · prueba de pieza": {
+      "main": [
+        [
+          {
+            "node": "⓪ Entrada · llave",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⓪ Entrada · llave": {
+      "main": [
+        [
+          {
+            "node": "JEF · armar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · armar": {
+      "main": [
+        [
+          {
+            "node": "JEF · ¿se abre?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · ¿se abre?": {
+      "main": [
+        [
+          {
+            "node": "JEF · abrir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "JEF · aplicar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · abrir": {
+      "main": [
+        [
+          {
+            "node": "JEF · ¿cómo abrió?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · ¿cómo abrió?": {
+      "main": [
+        [
+          {
+            "node": "JEF · ¿hay que despertar el turno?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · ¿hay que despertar el turno?": {
+      "main": [
+        [
+          {
+            "node": "JEF · despertar el turno",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "JEF · ¿espera sin turno?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · despertar el turno": {
+      "main": [
+        [
+          {
+            "node": "JEF · esperar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · ¿espera sin turno?": {
+      "main": [
+        [
+          {
+            "node": "JEF · esperar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "JEF · aplicar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · esperar": {
+      "main": [
+        [
+          {
+            "node": "JEF · leer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · leer": {
+      "main": [
+        [
+          {
+            "node": "JEF · ¿cerró?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · ¿cerró?": {
+      "main": [
+        [
+          {
+            "node": "JEF · ¿seguir esperando?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · ¿seguir esperando?": {
+      "main": [
+        [
+          {
+            "node": "JEF · esperar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "JEF · aplicar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JEF · aplicar": {
+      "main": [
+        [
+          {
+            "node": "Fin · prueba de pieza",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "EVMrQ4Tqw98L1L0D",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "updatedAt": "2026-04-18T13:51:26.012Z"
+      },
+      "createdAt": "2026-10-14T21:53:08.491Z",
+      "updatedAt": "2026-10-14T21:53:08.491Z"
+    }
+  ],
+  "activeVersion": null
+}
