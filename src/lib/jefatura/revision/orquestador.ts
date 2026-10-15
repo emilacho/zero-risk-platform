@@ -266,7 +266,10 @@ export async function recibirResultado(P: Puertos, revisionId: string, n: number
   // el contador de reintento de formato es del PASE: al aceptar la salida se reinicia
   const { [`fmt:${paso.clave}`]: _f, ...sinFormato } = e.vueltas
   void _f
-  await aplicar(P, { ...rev, estado_del_motor: { ...e, vueltas: sinFormato } }, pl, sig.indice, { ...proc.res, costo_usd: costo }, { paso: { ...base, n, estado: 'hecho' } })
+  // J6 ter: si el validador normalizó variantes inequívocas («tomado» → «tomada»), queda anotado en la traza M1 del paso
+  const normalizados = p.normalizados ?? []
+  const traza = normalizados.length ? trazaM1(rev, paso, { formato_normalizado: normalizados }) : base.traza
+  await aplicar(P, { ...rev, estado_del_motor: { ...e, vueltas: sinFormato } }, pl, sig.indice, { ...proc.res, costo_usd: costo }, { paso: { ...base, traza, n, estado: 'hecho' } })
   return avanzar(P, rev.id)
 }
 

@@ -127,8 +127,11 @@ export const TRES_LINEAS_DEL_PLAN = [
   'No inventes cifras: lo que no tenga fuente se declara como hueco.',
 ] as const
 
+/** el literal EXACTO del estado y un ejemplo válido (J6 ter: el modelo contestó «tomado»; el contrato exige «tomada» | «no_tomada» aunque quien responda sea masculino) */
+export const REGLA_DEL_ESTADO = 'El campo "estado" vale EXACTAMENTE "tomada" o "no_tomada": minúsculas, con guion bajo, SIEMPRE en femenino (se refiere a la ficha), aunque tú seas masculino; no uses "tomado", "no tomada", "aceptada" ni otra forma. Ejemplo válido: {"respuestas":[{"id":"<id de una ficha>","estado":"tomada","razon":"…"},{"id":"<id de otra ficha>","estado":"no_tomada","razon":"…"}]}'
+
 const FORMATO_DEL_PLAN = (decision: boolean): string =>
-  `Formato: el plan completo en texto plano${decision ? ' (solo si tomas algo; si no tomas nada, no escribas el plan)' : ' (solo si tomas alguna ficha; si no tomas ninguna, no escribas el plan)'} y, AL FINAL, el bloque de resolución exacto:\n${MARCA_DE_INICIO_DE_RESOLUCION}\n{"respuestas":[{"id":"…","estado":"tomada|no_tomada","razon":"…"}]}\n${MARCA_DE_FIN_DE_RESOLUCION}`
+  `Formato: el plan completo en texto plano${decision ? ' (solo si tomas algo; si no tomas nada, no escribas el plan)' : ' (solo si tomas alguna ficha; si no tomas ninguna, no escribas el plan)'} y, AL FINAL, el bloque de resolución exacto:\n${MARCA_DE_INICIO_DE_RESOLUCION}\n{"respuestas":[{"id":"…","estado":"tomada|no_tomada","razon":"…"}]}\n${MARCA_DE_FIN_DE_RESOLUCION}\n${REGLA_DEL_ESTADO}`
 
 /** corrección: el dueño recibe SUS fichas que bloquean; en el plan, además, el pedido original y el plan actual */
 export function tareaDeCorreccion(a: { politica: PoliticaDeRevision; payload: PayloadDeRevision; tipo: TipoDeRevision; dueno: Dueno; esquema: string; texto: string; objeto?: unknown; fichas: FichaParaElDueno[]; version_actual: 'A' | 'B' }): { task: string; indicacion: string; esquema: string } {
@@ -143,7 +146,7 @@ export function tareaDeCorreccion(a: { politica: PoliticaDeRevision; payload: Pa
     : a.esquema === 'resolucion_parcial.v1' ? 'Devuelve solo el JSON {"respuestas":[…],"filas":[{"fila_id":"…", …solo las filas que cambias…}]}.'
     : a.esquema === 'resolucion_solo.v1' ? 'Devuelve solo el JSON {"respuestas":[{"id","estado":"tomada|no_tomada","razon"}]}. No entregas la pieza.'
     : 'Devuelve solo el JSON {"respuestas":[{"id","estado":"tomada|no_tomada","razon"}],"pieza":{"pie_de_foto":"…","hashtags":[…]}} (la pieza solo si tomaste algo).'
-  return { task: [objeto, fichas, formato].join('\n\n'), indicacion, esquema: a.esquema }
+  return { task: [objeto, fichas, formato, REGLA_DEL_ESTADO].join('\n\n'), indicacion, esquema: a.esquema }
 }
 
 /** decisión: el dueño ve la opinión de GPT (que NO vio el hilo) y decide qué toma, con razón */
@@ -157,7 +160,7 @@ export function tareaDeDecision(a: { politica: PoliticaDeRevision; payload: Payl
   }
   const indicacion = 'Decide qué tomas de la opinión, ítem por ítem, con la razón. Una corrección como máximo en este paso.'
   const formato = a.esquema === 'resolucion_solo.v1' ? 'Devuelve solo el JSON {"respuestas":[{"id","estado":"tomada|no_tomada","razon"}]}.' : 'Devuelve solo el JSON {"respuestas":[…]} y, solo si tomaste algo, la parte corregida según el contrato de tu paso.'
-  return { task: [`## Lo vigente (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`, opinion, ids, indicacion, formato].join('\n\n'), indicacion, esquema: a.esquema }
+  return { task: [`## Lo vigente (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`, opinion, ids, indicacion, formato, REGLA_DEL_ESTADO].join('\n\n'), indicacion, esquema: a.esquema }
 }
 
 /** el pedido del revisor ciego: la pregunta (D3) → lo revisado completo → el contexto. NADA del hilo ni de las fichas puede entrar (no hay por dónde). */
