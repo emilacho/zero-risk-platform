@@ -14,6 +14,7 @@ import { TOPE_DEL_PORTERO_USD, type Interruptores } from './datos'
 import type { RespuestaDeLlamada } from './juez'
 import type { PuenteDeIndice } from './archivar'
 import { clientesActivos } from './clientes'
+import { COBERTURA_DEL_ALTA_HORAS, sinLoYaRaspado, type FilaDeRaspadoParaCubrir } from './cobertura'
 import { MAX_TROZOS_A_ESCRIBIR_POR_PASADA, MAX_TROZOS_A_SACAR_POR_PASADA, reconciliarPuente, type FichaParaPuente } from './puente'
 
 export interface Respuesta { status: number; body: Record<string, unknown> }
@@ -47,6 +48,18 @@ export async function gastoDeHoy(db: Db, clientId: string, ahora: Date) {
   const busquedas = filasMapas.reduce((s, f) => s + Math.max(1, Array.isArray((f.params as { searchStringsArray?: unknown } | null)?.searchStringsArray) ? ((f.params as { searchStringsArray: unknown[] }).searchStringsArray.length) : 1), 0)
   const maximoPorLlamada = filasMapas.length ? { own_google_maps_profile: Math.round(COSTO_MAXIMO_POR_FUNCION.own_google_maps_profile.usd * (busquedas / filasMapas.length) * 1e6) / 1e6 } : undefined
   return { ok: true as const, gasto: gastoDelDia({ clientId, ahora, libro: lista(c.data) as unknown as FilaDelLibro[], invocacionesUsd: lista(inv.data).map((f) => Number(f.cost_usd) || 0), maximoPorLlamada }) }
+}
+
+/**
+ * ¿El cliente DESPERTÓ con el raspado del alta hace poco? (una fila de `cerebro_portero_corridas` con `resumen.tipo = 'despertar'`, creada dentro de la ventana de cobertura).
+ * Solo mientras dure esa ventana, lo que el alta ya raspó (y es fresco) no se vuelve a pedir. Una falla de lectura se DICE.
+ */
+export async function despertoHace(db: Db, clientId: string, ahora: Date): Promise<{ ok: true; activo: boolean; desde: Date } | { ok: false; detalle: string }> {
+  const desde = new Date(ahora.getTime() - COBERTURA_DEL_ALTA_HORAS * 3_600_000)
+  const q = await db.from('cerebro_portero_corridas').select('dia, resumen, creado_en').eq('client_id', clientId).gte('creado_en', desde.toISOString()).limit(10)
+  if (q.error) return { ok: false, detalle: `cerebro_portero_corridas: ${q.error.message}` }
+  const activo = lista(q.data).some((f) => esObjeto(f.resumen) && f.resumen.tipo === 'despertar')
+  return { ok: true, activo, desde }
 }
 
 /** las redes propias que el alta declaró (`config.apify.own_handles`: usuario o dirección por red) */
@@ -105,8 +118,19 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
       propuestas = validarBusquedas(r.texto, { nombre: String(cliente.name), ciudad, ya_buscadas: yaBuscadas })
     } catch { /* una falla del modelo no frena el plan: sin propuestas */ }
   }
-  const plan: PlanDelPortero = descubrir({ ...base, gastado_hoy_usd: g.gasto.total_usd + costoPropuestas, busquedas_propuestas: propuestas.aceptadas.map((p) => p.texto) })
-  return { status: 200, body: { dry_run: v.dry_run, tope_por_cliente_usd: TOPE_DEL_PORTERO_USD, plan, gasto_de_hoy: g.gasto, propuestas, modelos_llamados: costoPropuestas > 0 || propuestas.aceptadas.length ? 1 : 0, costo_modelo_usd: costoPropuestas } }
+  let plan: PlanDelPortero = descubrir({ ...base, gastado_hoy_usd: g.gasto.total_usd + costoPropuestas, busquedas_propuestas: propuestas.aceptadas.map((p) => p.texto) })
+  // lo que el ALTA ya raspó (y es fresco) no se vuelve a pedir; solo mientras dure la ventana del despertar
+  let cubierto_por_el_alta: ReturnType<typeof sinLoYaRaspado> | null = null
+  const dsp = await despertoHace(deps.db, v.client_id, ahora)
+  if (!dsp.ok) return err(502, 'lectura_fallida', dsp.detalle)
+  // `cubrir_con_el_alta: true` lo pide el despertar (en seco todavía no hay fila de despertar): calcula lo que falta como si ya hubiera despertado
+  if (dsp.activo || v.cuerpo.cubrir_con_el_alta === true) {
+    const raw = await deps.db.from('apify_raw').select('apify_function, params, created_at').eq('client_id', v.client_id).eq('ensayo', false).gte('created_at', dsp.desde.toISOString()).limit(400)
+    if (raw.error) return err(502, 'lectura_fallida', `apify_raw: ${raw.error.message}`)
+    cubierto_por_el_alta = sinLoYaRaspado(plan, lista(raw.data) as unknown as FilaDeRaspadoParaCubrir[], ahora)
+    plan = { ...plan, hacer: cubierto_por_el_alta.hacer, costo_maximo_del_plan_usd: Math.round(cubierto_por_el_alta.hacer.reduce((x, a) => x + a.usd_max, 0) * 1e6) / 1e6 }
+  }
+  return { status: 200, body: { dry_run: v.dry_run, tope_por_cliente_usd: TOPE_DEL_PORTERO_USD, plan, cubierto_por_el_alta, gasto_de_hoy: g.gasto, propuestas, modelos_llamados: costoPropuestas > 0 || propuestas.aceptadas.length ? 1 : 0, costo_modelo_usd: costoPropuestas } }
 }
 
 /**
@@ -211,7 +235,10 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
   // ── reseñas de la ficha de Mapas
   const mp = await deps.db.from('apify_raw').select('respuesta, created_at').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'own_google_maps_profile').order('created_at', { ascending: false }).limit(3)
   if (mp.error) return err(502, 'lectura_fallida', `apify_raw: ${mp.error.message}`)
-  const ya = await deps.db.from('apify_raw').select('params, created_at').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'resenas_google_maps').gte('created_at', dia0.toISOString()).limit(5)
+  const dsp = await despertoHace(deps.db, v.client_id, ahora)
+  if (!dsp.ok) return err(502, 'lectura_fallida', dsp.detalle)
+  const desdeYa = dsp.activo ? dsp.desde : dia0
+  const ya = await deps.db.from('apify_raw').select('params, created_at').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'resenas_google_maps').gte('created_at', desdeYa.toISOString()).limit(5)
   if (ya.error) return err(502, 'lectura_fallida', `apify_raw: ${ya.error.message}`)
   const fichas = lista(mp.data).flatMap((f) => lista(f.respuesta))
   const sel = fichaPropiaDeMapas(fichas, ctx)
@@ -220,7 +247,7 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
   const ambigua = sel.ambigua
   const candidatas = { size: sel.candidatas }
   const url = ficha ? String(ficha.url ?? '').trim() : ''
-  if (lista(ya.data).length) omitidas.push({ fuente: 'resenas', por_que: 'ya se pidieron hoy' })
+  if (lista(ya.data).length) omitidas.push({ fuente: 'resenas', por_que: dsp.activo ? 'ya se pidieron con el raspado del alta (despertar reciente)' : 'ya se pidieron hoy' })
   else if (!fichas.length) omitidas.push({ fuente: 'resenas', por_que: 'la corrida de Mapas no dejó una ficha' })
   else if (ambigua) omitidas.push({ fuente: 'resenas', por_que: `hay ${candidatas.size} fichas de Mapas que podrían ser del cliente: es ambiguo y no se piden reseñas (posible homónimo)` })
   else if (!ficha || !/^https?:\/\//i.test(url)) omitidas.push({ fuente: 'resenas', por_que: 'la ficha de Mapas no se pudo confirmar como del cliente (posible homónimo): no se piden reseñas ajenas' })
@@ -230,13 +257,18 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
   const handles = new Set(ctx.handles.map((h) => h.toLowerCase()))
   const ig = await deps.db.from('apify_raw').select('respuesta, created_at').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'instagram_scraper').order('created_at', { ascending: false }).limit(1)
   if (ig.error) return err(502, 'lectura_fallida', `apify_raw: ${ig.error.message}`)
+  // los videos que YA se bajaron (por id o código): una publicación vista por el despertar no es un video descargado
+  const vd = await deps.db.from('apify_raw').select('respuesta').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'videos_instagram').limit(50)
+  if (vd.error) return err(502, 'lectura_fallida', `apify_raw: ${vd.error.message}`)
+  const conVideoYa = new Set(lista(vd.data).flatMap((f) => lista(f.respuesta)).flatMap((it) => [String(it.shortCode ?? ''), String(it.id ?? '')]).filter(Boolean))
   const vi = await deps.db.from('cerebro_unidades_vistas').select('unidad_ref').eq('client_id', v.client_id).eq('fuente', 'instagram').limit(2000)
   if (vi.error) return err(502, 'lectura_fallida', `cerebro_unidades_vistas: ${vi.error.message}`)
   const vistas = new Set(lista(vi.data).map((x) => String(x.unidad_ref)))
   const perfiles = lista(lista(ig.data)[0]?.respuesta).filter((p) => handles.has(String(p.username ?? '').toLowerCase()))
   const posts = perfiles.flatMap((p) => lista(p.latestPosts))
   const nuevas = posts.filter((p) => CODIGO_DE_PUBLICACION(p) && !vistas.has(CODIGO_DE_PUBLICACION(p)))
-  const nuevasVideo = nuevas.filter(esVideo)
+  // dentro de la ventana del despertar, «vista» no basta: el despertar vio las publicaciones del alta pero nunca bajó sus videos (ni su transcripción)
+  const nuevasVideo = posts.filter((p) => CODIGO_DE_PUBLICACION(p) && esVideo(p) && !conVideoYa.has(CODIGO_DE_PUBLICACION(p)) && (dsp.activo || !vistas.has(CODIGO_DE_PUBLICACION(p))))
   const handle = [...handles][0] ?? ''
   const revision = { publicaciones_leidas: posts.length, publicaciones_nuevas: nuevas.length, videos_nuevos: nuevasVideo.length }
   if (!handle) omitidas.push({ fuente: 'videos', por_que: 'el alta no trae la cuenta propia de Instagram' })

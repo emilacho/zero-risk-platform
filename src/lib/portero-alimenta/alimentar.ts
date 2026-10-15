@@ -30,6 +30,8 @@ export interface EntradaDeAlimentar {
   llamarModelo?: (instruccion: string, mensaje: string) => Promise<RespuestaDeLlamada>
   ahora?: Date
   forzar?: boolean
+  /** el despertar con el raspado del alta (15-oct): procesa lo que ya hay en `apify_raw` hasta `ahora`, deja el rastro como tipo «despertar» y NO bloquea la corrida diaria del mismo día */
+  despertar?: boolean
   gasto_de_hoy_usd?: number
   workflow_id?: string
   workflow_execution_id?: string
@@ -89,12 +91,16 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   const cliente = lista(cl.data)[0]
   if (!cliente) return { ...r, estado: 'cliente_inexistente', detalle: 'no existe la ficha del cliente' }
 
-  const ya = await e.db.from('cerebro_portero_corridas').select('id').eq('client_id', e.client_id).eq('dia', dia).limit(1)
+  const ya = await e.db.from('cerebro_portero_corridas').select('id, resumen').eq('client_id', e.client_id).eq('dia', dia).limit(1)
   if (ya.error) return falla('cerebro_portero_corridas', ya.error.message)
   const corridaDeHoy = lista(ya.data)[0]
-  if (corridaDeHoy && !e.forzar) return { ...r, ok: true, estado: 'ya_corrio_hoy', detalle: 'ya hay una corrida de hoy para este cliente (forzar la repite)' }
+  // una fila de hoy que es solo el DESPERTAR no cuenta como la corrida diaria: esa sigue pudiendo correr y la reemplaza
+  const esDelDespertar = !!corridaDeHoy && !!corridaDeHoy.resumen && typeof corridaDeHoy.resumen === 'object' && (corridaDeHoy.resumen as Fila).tipo === 'despertar'
+  if (corridaDeHoy && !e.forzar && !esDelDespertar) return { ...r, ok: true, estado: 'ya_corrio_hoy', detalle: 'ya hay una corrida de hoy para este cliente (forzar la repite)' }
 
-  const rr = await e.db.from('apify_raw').select('id, apify_function, params, respuesta, ensayo, metadata, created_at').eq('client_id', e.client_id).eq('ensayo', false).order('created_at', { ascending: false }).limit(MAX_FILAS_DE_RASPADO)
+  let consultaRaspado = e.db.from('apify_raw').select('id, apify_function, params, respuesta, ensayo, metadata, created_at').eq('client_id', e.client_id).eq('ensayo', false)
+  if (e.despertar) consultaRaspado = consultaRaspado.lte('created_at', ahora.toISOString()) // el despertar mira el raspado que YA existe a esa hora
+  const rr = await consultaRaspado.order('created_at', { ascending: false }).limit(MAX_FILAS_DE_RASPADO)
   if (rr.error) return falla('apify_raw', rr.error.message)
   const sd = await e.db.from('client_sedes').select('ciudad, clave').eq('client_id', e.client_id)
   if (sd.error) return falla('client_sedes', sd.error.message)
@@ -189,7 +195,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     if (ok) r.escrituras.vistas++
   }
   const estado = r.errores.length ? 'con_errores' : 'hecha'
-  const rastro = { client_id: e.client_id, dia, estado, resumen: { unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores }, gasto_apify_usd: 0, gasto_modelo_usd: r.juez.costo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
+  const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores }, gasto_apify_usd: 0, gasto_modelo_usd: r.juez.costo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
   const log = corridaDeHoy ? await e.db.from('cerebro_portero_corridas').update(rastro).eq('id', String(corridaDeHoy.id)) : await e.db.from('cerebro_portero_corridas').insert(rastro)
   if (log.error) r.errores.push(`rastro: ${log.error.message}`); else r.escrituras.corrida = 1
   return { ...r, ok: r.errores.length === 0, estado: r.errores.length ? 'con_errores' : 'hecha' }
