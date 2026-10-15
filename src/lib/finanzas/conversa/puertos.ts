@@ -26,6 +26,8 @@ export interface Semilla {
   derivado?: unknown
   /** datos con su procedencia: un dato de ensayo NUNCA entra como medido */
   datos?: DatoConProcedencia[]
+  /** plan v3 · V4: cuántos datos no cupieron en la semilla compacta (los críticos y medidos entran primero); la oficina lo ve en `brazos_resumen` */
+  datos_omitidos?: number
   referencias?: Array<{ canal: string; evento: string; min: number; max: number; base?: number; tipo: 'dato' | 'supuesto'; fuente: string; fecha?: string }>
   evento_alterno?: Record<string, string | null>
   pisos?: Record<string, number | null | undefined>

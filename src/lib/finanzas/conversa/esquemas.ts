@@ -140,23 +140,67 @@ export function validarAcuerdo(v: unknown): Resultado<AcuerdoV1> {
   return { ok: true, valor: v as unknown as AcuerdoV1 }
 }
 
-// ───────────────────────────────────────────────────────── procedencia.v1
-export type Procedencia = 'medido' | 'de_ensayo' | 'supuesto' | 'dueno'
-export interface DatoConProcedencia { clave: string; valor: unknown; procedencia: Procedencia; fuente: string; fecha?: string }
+// ───────────────────────────────────────────────────────── procedencia.v1.1 (plan v3 · V4 · diseño §6)
+// v1 era {medido, de_ensayo, supuesto, dueno}. v1.1 SUMA `cerebro` y `hueco` y campos opcionales del `dato.v1` del plan; un dato v1 sigue siendo válido tal cual.
+export const PROCEDENCIAS = ['medido', 'de_ensayo', 'supuesto', 'dueno', 'cerebro', 'hueco'] as const
+export type Procedencia = (typeof PROCEDENCIAS)[number]
+export const ESTADOS_DE_DATO = ['trajo', 'vacio_declarado', 'registro_sin_campos', 'sin_respuesta', 'error', 'agotado', 'rechazado', 'no_aplica', 'no_declarado', 'omitido', 'viejo_reciclado'] as const
+export const IDENTIDADES = ['coincide', 'parcial', 'no_coincide', 'no_comprobable'] as const
+export const ALCANCES = ['cliente', 'dominio', 'rubro', 'pais', 'tercero'] as const
+export const CONFIANZAS = ['alta', 'media', 'baja'] as const
+export const MAX_RESUMEN = 160
+export interface DatoConProcedencia {
+  clave: string
+  valor: unknown
+  procedencia: Procedencia
+  fuente: string
+  fecha?: string
+  // ── v1.1 · todos OPCIONALES ──
+  id?: string
+  tipo_id?: string
+  medido_en?: string
+  /** una línea (≤ 160): el contenido completo de la ficha NO viaja a la oficina */
+  resumen?: string
+  estado?: (typeof ESTADOS_DE_DATO)[number]
+  identidad?: (typeof IDENTIDADES)[number]
+  frescura_h?: number
+  periodo?: { tipo?: string; desde?: string; hasta?: string }
+  alcance?: (typeof ALCANCES)[number]
+  confianza?: (typeof CONFIANZAS)[number]
+}
 export function validarProcedencia(v: unknown): Resultado<DatoConProcedencia[]> {
   if (!Array.isArray(v)) return { ok: false, errores: ['procedencia: debe ser una lista'] }
   const e: string[] = []
+  const enEnum = (x: unknown, lista: readonly string[]) => typeof x === 'string' && lista.includes(x)
   v.forEach((d, i) => {
-    if (!objeto(d) || !texto(d.clave, 80) || !texto(d.fuente, 200)) e.push(`procedencia[${i}]: clave y fuente son obligatorias`)
-    else if (!['medido', 'de_ensayo', 'supuesto', 'dueno'].includes(String(d.procedencia))) e.push(`procedencia[${i}]: procedencia inválida`)
+    if (!objeto(d) || !texto(d.clave, 80) || !texto(d.fuente, 200)) { e.push(`procedencia[${i}]: clave y fuente son obligatorias`); return }
+    if (!enEnum(d.procedencia, PROCEDENCIAS)) e.push(`procedencia[${i}]: procedencia inválida (una de ${PROCEDENCIAS.join(', ')})`)
+    if (d.estado !== undefined && !enEnum(d.estado, ESTADOS_DE_DATO)) e.push(`procedencia[${i}]: estado inválido`)
+    if (d.identidad !== undefined && !enEnum(d.identidad, IDENTIDADES)) e.push(`procedencia[${i}]: identidad inválida`)
+    if (d.alcance !== undefined && !enEnum(d.alcance, ALCANCES)) e.push(`procedencia[${i}]: alcance inválido`)
+    if (d.confianza !== undefined && !enEnum(d.confianza, CONFIANZAS)) e.push(`procedencia[${i}]: confianza inválida`)
+    if (d.resumen !== undefined && (typeof d.resumen !== 'string' || d.resumen.length > MAX_RESUMEN)) e.push(`procedencia[${i}]: resumen de texto, máximo ${MAX_RESUMEN} caracteres`)
+    if (d.frescura_h !== undefined && (typeof d.frescura_h !== 'number' || !Number.isFinite(d.frescura_h) || d.frescura_h < 0)) e.push(`procedencia[${i}]: frescura_h debe ser un número ≥ 0`)
+    for (const k of ['id', 'tipo_id', 'medido_en', 'fecha'] as const) if (d[k] !== undefined && typeof d[k] !== 'string') e.push(`procedencia[${i}]: ${k} debe ser texto`)
+    if (d.periodo !== undefined && !objeto(d.periodo)) e.push(`procedencia[${i}]: periodo debe ser un objeto`)
   })
   return e.length ? { ok: false, errores: e } : { ok: true, valor: v as DatoConProcedencia[] }
 }
-/** un dato de ensayo NUNCA entra como medido: se rebaja a «supuesto» y se dice */
+/**
+ * La red de seguridad (queda aunque V4 valide): un dato de ensayo NUNCA entra como medido (se rebaja a «supuesto» y se dice); un dato que dice «medido»
+ * o «cerebro» pero es de OTRO negocio o no se pudo comprobar, o cuyo estado no es una lectura, es un `hueco`; un `hueco` no lleva valor (no puede ser base de cálculo).
+ */
 export function sanearProcedencia(datos: DatoConProcedencia[], corridaEsDeEnsayo: boolean): DatoConProcedencia[] {
   return datos.map((d) => {
+    if (d.procedencia === 'hueco') return { ...d, valor: null }
     if (d.procedencia === 'de_ensayo') return { ...d, procedencia: 'supuesto', fuente: `${d.fuente} · era de ensayo: no es un dato medido` }
-    if (corridaEsDeEnsayo && d.procedencia === 'medido') return { ...d, procedencia: 'supuesto', fuente: `${d.fuente} · la corrida es de ensayo: no es un dato medido` }
+    if ((d.procedencia === 'medido' || d.procedencia === 'cerebro') && (d.identidad === 'no_coincide' || d.identidad === 'no_comprobable')) {
+      return { ...d, procedencia: 'hueco', valor: null, fuente: `${d.fuente} · identidad ${d.identidad}: no es de este negocio comprobado` }
+    }
+    if ((d.procedencia === 'medido' || d.procedencia === 'cerebro') && d.estado !== undefined && d.estado !== 'trajo' && d.estado !== 'vacio_declarado') {
+      return { ...d, procedencia: 'hueco', valor: null, fuente: `${d.fuente} · estado ${d.estado}: no es una lectura` }
+    }
+    if (corridaEsDeEnsayo && (d.procedencia === 'medido' || d.procedencia === 'cerebro')) return { ...d, procedencia: 'supuesto', fuente: `${d.fuente} · la corrida es de ensayo: no es un dato medido` }
     return d
   })
 }
