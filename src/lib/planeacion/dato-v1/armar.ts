@@ -68,7 +68,10 @@ export async function armarDatoV1(db: Db & DbCatalogo, e: EntradaDelDato, ahora:
   const delCrudo: EntradaCruda[] = crudoAEntradas(crudo.filas, crudo.cliente, crudo.sedes, snap).entradas
 
   // qué falta por vías (cerebro → crudo → relleno). El relleno solo es INFORMACIÓN aquí.
-  const requeridos = snap.filas.tipos.map((t) => t.tipo_id)
+  // «requerido» = lo que alguna fuente del catálogo puede ir a buscar, o es crítico. Lo OPCIONAL del cerebro (las ventas del punto de venta) no es una falta en un cliente que no lo tiene:
+  // ese cliente sale IGUAL que hoy (sin error, sin bloqueo y sin dato inventado).
+  const provistos = new Set(snap.filas.fuentes.flatMap((f) => f.provee ?? []))
+  const requeridos = snap.filas.tipos.filter((t) => provistos.has(t.tipo_id) || t.critico === true).map((t) => t.tipo_id)
   const v = faltantesDeLasVias({ snapshot: snap, ahora, requeridos, del_cerebro: delCerebro, del_crudo: delCrudo })
   const huecos = Array.isArray(e.huecos_tipos) ? (e.huecos_tipos as unknown[]).filter((x): x is string => typeof x === 'string') : null
   const faltantes = huecos && huecos.length ? v.faltantes.filter((f) => f.motivo === 'vencida' || huecos.includes(f.tipo_id)) : v.faltantes
