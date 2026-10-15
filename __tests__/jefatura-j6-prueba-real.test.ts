@@ -133,8 +133,8 @@ describe('J6 · la corrida buena', () => {
     expect(new Set(aperturas.map((s) => s.client_id)).size).toBe(2)
     expect(aperturas[0].artifact_id).not.toBe(aperturas[1].artifact_id)
     expect(aperturas[0].artifact_id).toContain('c1')
-    expect(aperturas[0].payload.tope_restante_usd).toBe(0.4)
-    expect(aperturas[1].payload.tope_restante_usd).toBeCloseTo(0.4, 6)
+    expect(aperturas[0].payload.tope_restante_usd).toBe(0.5)
+    expect(aperturas[1].payload.tope_restante_usd).toBeCloseTo(0.5, 6)
     // sin imagen: solo el dueño del texto
     expect(aperturas[0].payload.productores).toEqual([{ donde: 'texto', agente: 'content-creator' }])
     expect(aperturas[0].payload.imagenes).toBeUndefined()
@@ -165,16 +165,16 @@ describe('J6 · la corrida buena', () => {
 })
 
 describe('J6 · corte duro por costo', () => {
-  it('el tope de la siguiente revisión es el menor entre 0,40 y lo que queda del total de 0,70; si queda menos de 0,10 NO se abre', () => {
-    expect(topeDeLaSiguiente(0)).toEqual({ abrir: true, tope_usd: 0.4 })
-    expect(topeDeLaSiguiente(0.25)).toEqual({ abrir: true, tope_usd: 0.4 })
+  it('el tope de la siguiente revisión es el menor entre 0,50 y lo que queda del total de 0,70; si queda menos de 0,10 NO se abre', () => {
+    expect(topeDeLaSiguiente(0)).toEqual({ abrir: true, tope_usd: 0.5 })
+    expect(topeDeLaSiguiente(0.25)).toEqual({ abrir: true, tope_usd: 0.45 })
     expect(topeDeLaSiguiente(0.4)).toEqual({ abrir: true, tope_usd: 0.3 })
     expect(topeDeLaSiguiente(0.6)).toMatchObject({ abrir: true, tope_usd: 0.1 })
     expect(topeDeLaSiguiente(0.61)).toMatchObject({ abrir: false })
     expect(topeDeLaSiguiente(0.7)).toMatchObject({ abrir: false })
     expect(topeDeLaSiguiente(0.95)).toMatchObject({ abrir: false })
   })
-  it('si la primera revisión se come casi todo el total, la segunda se abre con LO QUE QUEDA (no con 0,40) o no se abre', async () => {
+  it('si la primera revisión se come casi todo el total, la segunda se abre con LO QUE QUEDA (no con 0,50) o no se abre', async () => {
     const T = transporte({ lecturas: [[{ estado: 'cerrada', resultado: 'limpia', gasto_usd: 0.4 }], [{ estado: 'cerrada', resultado: 'limpia', gasto_usd: 0.2 }]], evidencia: (id) => evidenciaOk(id, { rev: { gasto_usd: id.startsWith('1') ? 0.4 : 0.2 }, pasos: pasosOk({ fondo: id.startsWith('1') ? 0.35 : 0.15, gpt: 0.05 }) }) })
     await correrLaPruebaReal({ T, ...base })
     const aperturas = T.llamadas.filter((x) => x.t === 'llamar:revisiones' && x.a.accion === undefined).map((x) => x.a)
@@ -338,7 +338,7 @@ describe('J6 · el aviso para Emilio', () => {
     for (const k of ['Qué corre', 'Cuánto cuesta', 'Cuánto tarda', 'Qué prueba', 'Riesgo', '«dale»']) expect(a).toContain(k)
   })
   it('dinero con coma, tuteo, sin voseo y sin jerga de código en el texto principal (los identificadores van en la nota técnica)', () => {
-    expect(a).toMatch(/US\$ 0,40/); expect(a).toMatch(/US\$ 0,70/); expect(a).not.toMatch(/US\$ \d+\.\d/)
+    expect(a).toMatch(/US\$ 0,50/); expect(a).toMatch(/US\$ 0,70/); expect(a).not.toMatch(/US\$ \d+\.\d/)
     const principal = a.split('*(técnico')[0]
     expect(principal).not.toMatch(/\b(vos|tenés|sabés|decime|querés)\b/i)
     for (const t of ['dry_run', 'endpoint', 'workflow', 'n8n', 'PR ', 'merge', 'commit', 'tipos_activos', 'env var']) expect(principal).not.toContain(t)
