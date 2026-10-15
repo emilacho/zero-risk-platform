@@ -79,7 +79,8 @@ describe('la entrada nueva del portero (se ejecuta el código real del nodo «�
     }
   })
   it('sin llave, con llave equivocada o con la llave de despacho: SE DETIENE', () => {
-    for (const h of [{}, { 'x-api-key': 'otra' }, { 'x-sala-dispatch-key': 'k-sala' }]) {
+    const cabeceras: Array<Record<string, string>> = [{}, { 'x-api-key': 'otra' }, { 'x-sala-dispatch-key': 'k-sala' }]
+    for (const h of cabeceras) {
       expect(() => correr({ despertar: hook(h, { client_id: CL, pedir_ahora: true }) })).toThrow(/DESPERTAR_SIN_LLAVE/)
     }
     expect(() => correr({ despertar: hook({ 'x-api-key': 'k' }, { client_id: CL, pedir_ahora: true }), env: { INTERNAL_API_KEY: '' } })).toThrow(/DESPERTAR_SIN_LLAVE/)
