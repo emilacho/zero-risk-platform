@@ -1,10 +1,10 @@
 # Plan v3 · V9 · los nodos del pre-vuelo y la espera (CC#2 · 15-oct)
 
 **Estado:** construido, **apagado** y **sin aplicar**. Lo aplica CC#3 en la tanda 2, después de certificar.
-**Base:** `scripts/worker-staging/finanzas-f4/plan-F4-finanzas-ARREGLADO-2026-10-14.json` (F4, 53 nodos). **Resultado:** `scripts/worker-staging/planeacion-v3-v9/plan-V9-prevuelo-ARREGLADO-2026-10-15.json` (68 nodos, +15, ninguno existente cambia).
+**Base:** `scripts/worker-staging/finanzas-f4/plan-F4-finanzas-v2-ARREGLADO-2026-10-15.json` (F4 v2 de CC#1, #588, 53 nodos). **Resultado:** `scripts/worker-staging/planeacion-v3-v9/plan-V9-prevuelo-ARREGLADO-2026-10-15.json` (70 nodos, +17 = 15 del pre-vuelo + 2 del permiso de relleno; ningún nodo existente cambia).
 
 ## Orden
-F4 (#547) → enganche J7 (#584: código de la cadena, no cambia este flujo) → **V9**. Antes de aplicar: «vivo = respaldo» contra la base de arriba; si el vivo no es igual, NO se aplica.
+F4 v2 (#588, sobre #547) → enganche J7 (#584: código de la cadena, no cambia este flujo) → **V9**. Antes de aplicar: «vivo = respaldo» contra la base de arriba; si el vivo no es igual, NO se aplica.
 Depende de V8 (#582, `POST /api/planeacion/prevuelo`) y de V13 (`POST /api/planeacion/corrida`, ya en `main`) **publicadas**, y de las migraciones V1/V13 **aplicadas** (sin ellas el pre-vuelo contesta 503 y el flujo PARA con aviso).
 
 ## Qué hace
@@ -17,8 +17,10 @@ Depende de V8 (#582, `POST /api/planeacion/prevuelo`) y de V13 (`POST /api/plane
 | `V9 · no corrió` → aviso → cable | A #alertas con «qué hacer» (salvo `ya_en_marcha`/`terminada`, que son benignos) y al cable de vuelta de la sala con `resultado: no_corrio_prevuelo`. El cable mudo falla ruidoso si la sala lo despachó. |
 | `V9 · armar el cierre` → `cerrar` | Cuelga de los dos finales («plan entregado» → `hecha`; «repetida» → `fallida`). Sin `plan_v3` no hace nada. |
 
+| `V9 · ¿relleno permitido para Apify?` + `V9 · Apify sin relleno` | Entre «elegir brazos» y «Brazo · Apify». Sin `plan_v3` deja pasar (= hoy). Con `plan_v3`: solo si el pre-vuelo dijo `relleno_permitido === true`; si no (o la decisión no se lee) NO se llama a Apify y la rama sale como pasamanos con cada objetivo de Apify en `descartados` («sin_relleno…», con `huecos_tipos`), que la junta ya sabe declarar. Cero llamadas, cero gasto. |
+
 ## Lo que NO hace (declarado)
-- **No usa lo decidido todavía.** `relleno_permitido`, `huecos_tipos` y `declara[]` quedan en la salida de `V9 · decidir` (se leen por nombre); consumirlos (elegir brazos, pedido v3, «Lo que no se pudo mirar») es V6/V14 y su enganche. V9 solo decide si corre, espera o para.
+- **`huecos_tipos` no filtra pedidos.** Los pedidos de «elegir brazos» hablan en objetivos del plan y `huecos_tipos` en tipos del catálogo; no hay traducción en el flujo (es V6/V14). Hoy `huecos_tipos` y `declara[]` solo se escriben en la declaración de la rama apagada y quedan en la salida de `V9 · decidir`. Con relleno permitido, Apify corre con TODOS sus pedidos, como hoy.
 - **Un fallo a mitad del plan** (después de `correr`) no cierra la corrida en el flujo: la libera el barrido de V13 (`/api/planeacion/barrer`, techo de 100 min).
 - **Re-disparo:** §16.2 pedía re-disparar por webhook; aquí es un `Wait` por intervalo (no copia ninguna llave, sobrevive a un reinicio). Si se prefiere el webhook, cambia solo `V9 · esperar`.
 - **Orden entre ramas:** las ramas nuevas están en una fila propia (abajo) para correr al final; n8n no se puede probar aquí en el orden exacto entre ramas paralelas. Se verifica al aplicar con el seco (`dry_run: true`).

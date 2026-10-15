@@ -1,7 +1,7 @@
 // PLAN v3 · V9 · los nodos de n8n del pre-vuelo y la espera (CC#2 · 2026-10-15) · diseño §10.3 / §16.2 / §17.1 · NO SE APLICA (lo aplica CC#3 en la tanda 2, con respaldo, n8n 0/0, fuera de 12:00–14:00 UTC).
 //   node construir-v9.mjs [--salida=<carpeta>]   → escribe el ARREGLADO · NO toca n8n
-// ORDEN DECLARADO: F4 (#547, 53 nodos) → enganche J7 (#584 de CC#1, código de la cadena; no cambia este flujo) → V9. La base de este constructor es el ARREGLADO de F4
-//   (`plan-F4-finanzas-ARREGLADO-2026-10-14.json`). Si el vivo no es igual a esa base, NO se aplica (regla «vivo = respaldo»).
+// ORDEN DECLARADO: F4 v2 (#588 de CC#1, 53 nodos; sobre #547) → enganche J7 (#584 de CC#1, código de la cadena; no cambia este flujo) → V9. La base de este constructor es el ARREGLADO de F4
+//   (`plan-F4-finanzas-v2-ARREGLADO-2026-10-15.json`). Si el vivo no es igual a esa base, NO se aplica (regla «vivo = respaldo»).
 // 🔴 APAGADO = IDÉNTICO A HOY: V9 solo actúa si el sobre trae `plan_v3: true` Y una `corrida` Y un `client_id`. Sin eso, «⓪ Llave» → «① Cargar el manual de marca» como siempre.
 // 🔴 Nada de Apify, ni modelo: el pre-vuelo (`/api/planeacion/prevuelo`, V8 #582) solo lee la base; este flujo solo decide a dónde sigue la ejecución.
 // ESPERA: el pre-vuelo contesta `esperar` y el flujo hace «Wait» de 5 min y vuelve a preguntarlo con la MISMA `corrida` (el reloj vive en la base: `plan_corridas.espera_desde`).
@@ -13,9 +13,10 @@ import { fileURLToPath } from 'node:url'
 
 const aqui = dirname(fileURLToPath(import.meta.url))
 const lf = (s) => String(s).split('\r\n').join('\n')
-export const BASE = join(aqui, '..', 'finanzas-f4', 'plan-F4-finanzas-ARREGLADO-2026-10-14.json')
+export const BASE = join(aqui, '..', 'finanzas-f4', 'plan-F4-finanzas-v2-ARREGLADO-2026-10-15.json')
 export const antesDeV9 = () => JSON.parse(lf(fs.readFileSync(BASE, 'utf8')).replace(/^﻿/, ''))
 
+export const RAMA_APIFY = { elegir: 'elegir brazos', brazo: 'Brazo · Apify', firma: 'firma de la rama · apify' }
 export const NODOS = { llave: '⓪ Llave · Webhook · planeacion', manual: '① Cargar el manual de marca', hook: 'Webhook · planeacion', cableRepetida: 'Cable · ¿volvió? · repetida', cablePlan: 'Cable · ¿volvió? · plan' }
 export const V9 = {
   pide: 'V9 · ¿pide el pre-vuelo?',
@@ -33,6 +34,8 @@ export const V9 = {
   armarCierre: 'V9 · armar el cierre',
   cerrarSi: 'V9 · ¿cerrar la corrida?',
   cerrar: 'V9 · cerrar la corrida',
+  rellenoSi: 'V9 · ¿relleno permitido para Apify?',
+  sinRelleno: 'V9 · Apify sin relleno (declarado)',
 }
 export const NOMBRES_NUEVOS = Object.values(V9)
 /** 5 min entre lecturas (= `CADA_REINTENTO_S` de V13) y tope de vueltas: 45 min / 5 = 9 lecturas + margen. Pasado el tope el flujo PARA y lo dice (nunca queda en bucle). */
@@ -139,6 +142,18 @@ export const CODIGO_ARMAR_CIERRE = [
   '',
 ].join('\n')
 
+export const CODIGO_SIN_RELLENO = [
+  '// V9 · el pre-vuelo NO autorizó el relleno (sin «cerebro listo» leído en ESTA corrida): la rama de Apify NO llama a nada. Sale como una rama APAGADA (pasamanos): la junta la declara.',
+  "let d = {}",
+  "try { d = $('" + V9.decidir + "').first().json || {} } catch (e) { d = {} }",
+  'const elegidos = $input.first().json || {}',
+  'const pedidos = Array.isArray(elegidos.pedidos) ? elegidos.pedidos : []',
+  'const huecos = Array.isArray(d.huecos_tipos) ? d.huecos_tipos : []',
+  'const motivo = "sin_relleno: el pre-vuelo no autorizó el relleno (no hubo «cerebro listo» en esta corrida) · el Servicio de Apify NO se llamó" + (huecos.length ? " · tipos que el cerebro declaró sin: " + huecos.join(", ") : "")',
+  "return [{ json: { pedidos: [], descartados: pedidos.filter((p) => p && p.brazo === 'apify').map((p) => ({ objetivo: p.objetivo, motivo: motivo })) } }]",
+  '',
+].join('\n')
+
 const IF_BOOL = (expr) => ({ conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' }, combinator: 'and', conditions: [{ leftValue: `={{ ${expr} }}`, rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }] }, options: {} })
 const unaVezNodo = (copia, nombre) => { const x = copia.nodes.filter((n) => n.name === nombre); if (x.length !== 1) throw new Error(`${x.length} nodos «${nombre}»: el flujo cambió, se revisa el enganche`); return x[0] }
 
@@ -192,6 +207,9 @@ export function enganchaV9(antes) {
     { parameters: { jsCode: CODIGO_VOLVIO }, name: V9.volvio, type: 'n8n-nodes-base.code', typeVersion: 2, position: pos(9, 2) },
     { parameters: { jsCode: CODIGO_ARMAR_CIERRE }, name: V9.armarCierre, type: 'n8n-nodes-base.code', typeVersion: 2, position: [2700, Y + 440] },
     { parameters: IF_BOOL('$json.aplica === true'), name: V9.cerrarSi, type: 'n8n-nodes-base.if', typeVersion: 2, position: [2940, Y + 440] },
+    // 🔴 el relleno de Apify SOLO con el permiso del pre-vuelo: sin «cerebro listo» leído en esta corrida, cero llamadas. Sin plan_v3 el IF deja pasar (= hoy). Si V9 actuó y su decisión no se lee: NO.
+    { parameters: IF_BOOL(`(function () { const b = ${HOOK}; if (!(b.plan_v3 === true && typeof b.corrida === 'string' && b.corrida.length > 0 && typeof b.client_id === 'string' && b.client_id.length > 0)) return true; try { return $('${V9.decidir}').first().json.relleno_permitido === true } catch (e) { return false } })()`), name: V9.rellenoSi, type: 'n8n-nodes-base.if', typeVersion: 2, position: [1560, Y + 660] },
+    { parameters: { jsCode: CODIGO_SIN_RELLENO }, name: V9.sinRelleno, type: 'n8n-nodes-base.code', typeVersion: 2, position: [1800, Y + 660] },
     http(V9.cerrar, [3180, Y + 440], {
       parameters: {
         method: 'POST', url: `={{ ${VERCEL} + '/api/planeacion/corrida' }}`, sendHeaders: true,
@@ -222,6 +240,14 @@ export function enganchaV9(antes) {
   // el cierre de la corrida cuelga de los dos finales que ya existen (plan entregado · repetida), como ÚLTIMA salida de cada uno
   enlace(NODOS.cablePlan, V9.armarCierre)
   enlace(NODOS.cableRepetida, V9.armarCierre)
+  // la rama de Apify pasa por el permiso: «elegir brazos» → ¿relleno? → «Brazo · Apify» (sí) | pasamanos → «firma de la rama · apify» (no)
+  unaVezNodo(copia, RAMA_APIFY.elegir); unaVezNodo(copia, RAMA_APIFY.brazo); unaVezNodo(copia, RAMA_APIFY.firma)
+  const sale = copia.connections[RAMA_APIFY.elegir]?.main?.[0] ?? []
+  if (sale.filter((s) => s.node === RAMA_APIFY.brazo).length !== 1) throw new Error('«elegir brazos» ya no va a «Brazo · Apify»: el flujo cambió, se revisa el enganche')
+  copia.connections[RAMA_APIFY.elegir].main[0] = sale.map((s) => (s.node === RAMA_APIFY.brazo ? { node: V9.rellenoSi, type: 'main', index: 0 } : s))
+  enlace(V9.rellenoSi, RAMA_APIFY.brazo, 0)
+  enlace(V9.rellenoSi, V9.sinRelleno, 1)
+  enlace(V9.sinRelleno, RAMA_APIFY.firma)
   enlace(V9.armarCierre, V9.cerrarSi)
   enlace(V9.cerrarSi, V9.cerrar, 0)
   return copia

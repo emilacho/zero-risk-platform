@@ -7,7 +7,7 @@
  *  · el cierre de la corrida cuelga de los dos finales (plan entregado → hecha · repetida → fallida) y no hace nada si V9 no actuó.
  */
 import { describe, expect, it } from 'vitest'
-import { antesDeV9, CANAL_ALERTAS, ESPERA_S, MAX_VUELTAS, enganchaV9, NODOS, NOMBRES_NUEVOS, V9 } from '../scripts/worker-staging/planeacion-v3-v9/construir-v9.mjs'
+import { antesDeV9, CANAL_ALERTAS, ESPERA_S, MAX_VUELTAS, RAMA_APIFY, enganchaV9, NODOS, NOMBRES_NUEVOS, V9 } from '../scripts/worker-staging/planeacion-v3-v9/construir-v9.mjs'
 import { correr } from '../scripts/worker-staging/finanzas-f4/n8n-mini.mjs'
 
 type Nodo = { name: string; type: string; parameters: Record<string, any> }
@@ -46,20 +46,25 @@ const llamadas = (r: { llamadasHttp: Array<{ nodo: string; cuerpo: any; cabecera
 const resp = (decision: string, extra: Record<string, unknown> = {}, statusCode = 200) => ({ statusCode, body: { decision, motivo: decision, relleno_permitido: false, huecos_tipos: [], declara: [], corrida: 'plan-v3-2026-10-15-a', ...extra } })
 
 describe('estructura', () => {
-  it('ningún nodo que ya existía cambia; se suman exactamente 15 con nombres únicos', () => {
+  it('ningún nodo que ya existía cambia; se suman exactamente 17 (15 del pre-vuelo + 2 del permiso de relleno) con nombres únicos', () => {
     const a = new Map(antes.nodes.map((n) => [n.name, JSON.stringify(n)]))
     expect(despues.nodes.filter((n) => a.has(n.name) && a.get(n.name) !== JSON.stringify(n))).toEqual([])
+    expect(antes.nodes.length).toBe(53)
     expect(despues.nodes.length).toBe(antes.nodes.length + NOMBRES_NUEVOS.length)
-    expect(NOMBRES_NUEVOS.length).toBe(15)
+    expect(NOMBRES_NUEVOS.length).toBe(17)
     expect(new Set(despues.nodes.map((n) => n.name)).size).toBe(despues.nodes.length)
   })
-  it('los enlaces que cambian son solo «⓪ Llave» (ahora a «¿pide?») y una salida más en los dos cables finales', () => {
+  it('los enlaces que cambian son solo «⓪ Llave» (ahora a «¿pide?»), «elegir brazos» (Apify pasa por el permiso) y una salida más en los dos cables finales', () => {
     const cambios: string[] = []
     for (const [de, v] of Object.entries(despues.connections)) {
       const antesV = JSON.stringify(antes.connections[de] ?? null)
       if (antesV !== JSON.stringify(v) && !NOMBRES_NUEVOS.includes(de)) cambios.push(de)
     }
-    expect(cambios.sort()).toEqual([NODOS.cablePlan, NODOS.cableRepetida, NODOS.llave].sort())
+    expect(cambios.sort()).toEqual([NODOS.cablePlan, NODOS.cableRepetida, NODOS.llave, RAMA_APIFY.elegir].sort())
+    const salenDeElegir = despues.connections[RAMA_APIFY.elegir].main[0].map((x) => x.node)
+    expect(salenDeElegir).toContain(V9.rellenoSi)
+    expect(salenDeElegir).not.toContain(RAMA_APIFY.brazo)
+    expect(salenDeElegir).toEqual(antes.connections[RAMA_APIFY.elegir].main[0].map((x) => (x.node === RAMA_APIFY.brazo ? V9.rellenoSi : x.node)))
     expect(despues.connections[NODOS.llave].main[0].map((x) => x.node)).toEqual([V9.pide])
     for (const c of [NODOS.cablePlan, NODOS.cableRepetida]) {
       const viejo = (antes.connections[c]?.main?.[0] ?? []).map((x) => x.node)
@@ -75,9 +80,15 @@ describe('estructura', () => {
     expect(todo).toContain('INTERNAL_API_KEY')
     expect(todo).not.toContain('SALA_DISPATCH_KEY')
   })
-  it('el flujo no gasta: ninguno de los 15 nodos llama a Apify ni a un modelo', () => {
-    const todo = JSON.stringify(NOMBRES_NUEVOS.map((n) => despues.nodes.find((x) => x.name === n)!.parameters)).toLowerCase()
+  it('el flujo no gasta: ninguno de los nodos nuevos llama a Apify ni a un modelo (los dos del permiso solo CIERRAN la rama, no tienen URL)', () => {
+    const permiso = [V9.rellenoSi, V9.sinRelleno]
+    const todo = JSON.stringify(NOMBRES_NUEVOS.filter((n) => !permiso.includes(n)).map((n) => despues.nodes.find((x) => x.name === n)!.parameters)).toLowerCase()
     for (const p of ['apify', 'run-sdk', '/api/agents', 'anthropic', 'openai']) expect(todo).not.toContain(p)
+    for (const n of permiso) {
+      const par = despues.nodes.find((x) => x.name === n)!
+      expect(par.type).not.toBe('n8n-nodes-base.httpRequest')
+      expect(JSON.stringify(par.parameters).toLowerCase()).not.toMatch(/https?:|\/api\//)
+    }
   })
 })
 
@@ -237,5 +248,56 @@ describe('el cierre de la corrida', () => {
     const r = await cerrarDesde(NODOS.cablePlan, { client_id: CLIENTE, corrida: 'c1' })
     expect(llamadas(r, V9.cerrar)).toHaveLength(0)
     expect(r.nombres).toEqual([V9.armarCierre, V9.cerrarSi])
+  })
+})
+
+describe('el relleno de Apify solo con el permiso del pre-vuelo', () => {
+  const PEDIDOS = { pedidos: [{ brazo: 'apify', objetivo: 'sitio_propio', orden: 1 }, { brazo: 'posthog', objetivo: 'trafico', orden: 2 }, { brazo: 'apify', objetivo: 'redes_sociales', orden: 3 }], descartados: [] }
+  /** desde «elegir brazos» hasta la firma de la rama de Apify (lo de después es el plan de siempre) */
+  const rama = async (body: Record<string, unknown>, decidir?: Record<string, unknown>) => {
+    const g = JSON.parse(JSON.stringify(despues)) as Flujo
+    g.connections[RAMA_APIFY.elegir].main[0] = g.connections[RAMA_APIFY.elegir].main[0].filter((x) => x.node === V9.rellenoSi)
+    g.connections[RAMA_APIFY.firma] = { main: [[]] }
+    g.connections[RAMA_APIFY.brazo] = { main: [[{ node: RAMA_APIFY.firma }]] }
+    const previos: Record<string, unknown> = { [NODOS.hook]: { body } }
+    if (decidir) previos[V9.decidir] = decidir
+    return correr(g, {
+      inicio: RAMA_APIFY.elegir, itemsDeInicio: [{ json: PEDIDOS }], previos: previos as never,
+      http: { [RAMA_APIFY.brazo]: async () => ({ statusCode: 200, body: { respuestas: [] } }) },
+      stubs: { [RAMA_APIFY.firma]: async (items: unknown[]) => items as never } as never,
+      env: {},
+    })
+  }
+  const llamo = (r: { nombres: string[] }) => r.nombres.includes(RAMA_APIFY.brazo)
+  it('sin plan_v3 el IF deja pasar: «Brazo · Apify» se llama igual que hoy', async () => {
+    const r = await rama({ client_id: CLIENTE, corrida: 'c1' })
+    expect(llamo(r)).toBe(true)
+    expect(r.nombres).not.toContain(V9.sinRelleno)
+  })
+  it('plan_v3 con relleno_permitido=true: «Brazo · Apify» se llama', async () => {
+    const r = await rama(sobre().body, { ruta: 'seguir', relleno_permitido: true })
+    expect(llamo(r)).toBe(true)
+  })
+  for (const [que, dec] of [['relleno_permitido=false', { ruta: 'seguir', relleno_permitido: false }], ['relleno_permitido ausente', { ruta: 'seguir' }], ['como texto «true»', { ruta: 'seguir', relleno_permitido: 'true' }]] as const) {
+    it(`plan_v3 con ${que}: NO se llama a Apify y la rama sale como pasamanos declarado`, async () => {
+      const r = await rama(sobre().body, { ...dec, huecos_tipos: ['precio_competencia'] })
+      expect(llamo(r)).toBe(false)
+      expect(r.llamadasHttp).toHaveLength(0)
+      const sal = r.visitas.find((v) => v.nodo === V9.sinRelleno)!.salida[0] as { pedidos: unknown[]; descartados: Array<{ objetivo: string; motivo: string }> }
+      expect(sal.pedidos).toEqual([])
+      expect(sal.descartados.map((d) => d.objetivo)).toEqual(['sitio_propio', 'redes_sociales'])
+      expect(sal.descartados[0].motivo).toContain('sin_relleno')
+      expect(sal.descartados[0].motivo).toContain('precio_competencia')
+    })
+  }
+  it('plan_v3 y la decisión de V9 no se puede leer: falla cerrado (no se llama a Apify)', async () => {
+    const r = await rama(sobre().body)
+    expect(llamo(r)).toBe(false)
+  })
+  it('el pasamanos es de verdad lo que la rama reconoce como «apagada» (sin estado, con pedidos/descartados)', async () => {
+    const r = await rama(sobre().body, { relleno_permitido: false })
+    const sal = r.visitas.find((v) => v.nodo === V9.sinRelleno)!.salida[0] as Record<string, unknown>
+    expect(Object.keys(sal).sort()).toEqual(['descartados', 'pedidos'])
+    expect('estado' in sal).toBe(false)
   })
 })
