@@ -41,7 +41,7 @@ function mundo(o: { sinIndiceParcial?: boolean; sinCompareAndSet?: boolean; sinI
 const E = { client_id: 'cliente-a', corrida: 'c-1', dry_run: true }
 
 describe('abrir · el primer pre-vuelo crea la fila y fija el reloj', () => {
-  it('crea en «esperando» con espera_desde ahora y vence_en +30 min', async () => {
+  it('crea en «esperando» con espera_desde ahora y vence_en +45 min', async () => {
     const w = mundo()
     const r = await abrir(w.P, E)
     expect(r.status).toBe(200)
@@ -66,7 +66,7 @@ describe('abrir · el primer pre-vuelo crea la fila y fija el reloj', () => {
     if (r.status !== 200 || r.accion !== 'continua') return
     expect(r.fila.espera_desde).toBe(new Date(Date.parse(w.hora()) - 12 * MIN).toISOString())
     expect(r.vencida).toBe(false)
-    w.avanzar(18) // 30 min desde el PRIMER pre-vuelo (no desde el reinicio)
+    w.avanzar(ESPERA_MAXIMA_MIN - 12) // la espera completa desde el PRIMER pre-vuelo (no desde el reinicio)
     const r2 = await abrir(w.P, E)
     expect(r2.status === 200 && r2.accion === 'continua' && r2.vencida).toBe(true)
   })
@@ -78,6 +78,37 @@ describe('abrir · el primer pre-vuelo crea la fila y fija el reloj', () => {
     const primera = w.filas[0].espera_desde
     await w.P.insertarUnaVez({ client_id: E.client_id, corrida: E.corrida, estado: 'esperando', espera_desde: w.hora(), vence_en: w.hora(), intentos: 0, motivo: null, dry_run: true })
     expect(w.filas[0].espera_desde).not.toBe(primera)
+  })
+})
+
+describe('la espera es de 45 min (AVISO-LENOVO 15-oct)', () => {
+  it('la constante vale 45 y vence_en = espera_desde + 45', async () => {
+    expect(ESPERA_MAXIMA_MIN).toBe(45)
+    const w = mundo()
+    const r = await abrir(w.P, E)
+    if (r.status !== 200 || r.accion !== 'abierta') throw new Error('no abrió')
+    expect(Date.parse(r.fila.vence_en) - Date.parse(r.fila.espera_desde)).toBe(45 * MIN)
+  })
+  it('a los 44 min NO está vencida (sigue esperando: «completando» a los 44); a los 45 sí', async () => {
+    const w = mundo()
+    await abrir(w.P, E)
+    w.avanzar(44)
+    const a = await abrir(w.P, E)
+    expect(a.status === 200 && a.accion === 'continua' && a.vencida).toBe(false)
+    w.avanzar(1)
+    const b = await abrir(w.P, E)
+    expect(b.status === 200 && b.accion === 'continua' && b.vencida).toBe(true)
+  })
+  it('el barrido no toca una espera de 31–44 min (con 30 la habría vencido) y sí la de 46', async () => {
+    const w = mundo()
+    await abrir(w.P, E)
+    w.avanzar(40)
+    expect((await barrer(w.P)).vencidas).toHaveLength(0)
+    w.avanzar(6)
+    expect((await barrer(w.P)).vencidas).toHaveLength(1)
+  })
+  it('10 lecturas cada 5 min caben en la espera (minutos 0, 5, …, 45)', () => {
+    expect(ESPERA_MAXIMA_MIN / (300 / 60) + 1).toBe(10)
   })
 })
 
@@ -180,7 +211,7 @@ describe('barrido · vence_en pasa a vencida/fallida y libera al cliente', () =>
     await abrir(w.P, { client_id: 'b', corrida: 'cb', dry_run: true })
     await correr(w.P, { client_id: 'b', corrida: 'cb' })
     await abrir(w.P, { client_id: 'c', corrida: 'cc', dry_run: true })
-    w.avanzar(31)
+    w.avanzar(ESPERA_MAXIMA_MIN + 1)
     await abrir(w.P, { client_id: 'd', corrida: 'cd', dry_run: true }) // fresca
     const r1 = await barrer(w.P)
     expect(r1.vencidas).toHaveLength(2) // a y c (esperando)
@@ -195,7 +226,7 @@ describe('barrido · vence_en pasa a vencida/fallida y libera al cliente', () =>
   it('es idempotente y libera el cupo del cliente', async () => {
     const w = mundo()
     await abrir(w.P, E)
-    w.avanzar(31)
+    w.avanzar(ESPERA_MAXIMA_MIN + 1)
     await barrer(w.P)
     expect(await barrer(w.P)).toEqual({ vencidas: [], falladas: [], saltadas: [] })
     expect((await abrir(w.P, { ...E, corrida: 'c-2' })).status).toBe(200)
@@ -203,7 +234,7 @@ describe('barrido · vence_en pasa a vencida/fallida y libera al cliente', () =>
   it('un avance justo antes del barrido no se pisa (compare-and-set): queda «saltada»', async () => {
     const w = mundo()
     await abrir(w.P, E)
-    w.avanzar(31)
+    w.avanzar(ESPERA_MAXIMA_MIN + 1)
     const P2: PuertoDeCorridas = { ...w.P, async vivasVencidas(iso) { const v = await w.P.vivasVencidas(iso); await reintentar(w.P, { ...E, intentos_esperado: 0 }); return v } }
     const r = await barrer(P2)
     expect(r.saltadas).toHaveLength(1)
