@@ -62,6 +62,8 @@ export const PUEDEN_NOMBRARLAS = [
   /^scripts\/ops\/portero-(alimenta-seco|limpiar-repetidas)\.ts$/,
   // 15-oct · el seco de la auditoría diaria: solo LEE fichas y crudos reales para medir falsos errores antes de que pueda apagar nada
   /^scripts\/ops\/auditoria-seco\.ts$/,
+  // 16-oct · el importador de las exportaciones CSV de Loyverse escribe por la MISMA función del portero (`archivarFichasDeBrazos`) y lee lo ya archivado; la lista de pedidos no resueltos solo LEE `cerebro_pedidos`
+  /^scripts\/ops\/(importar-ventas-loyverse-csv|escribir-pedidos-no-resueltos)\.ts$/,
   /^scripts\/worker-staging\/ogfq56oIEoHufFPM\//,
   // el puente: `ingest-source` acepta `cerebro_fichas` como origen de trozos (única puerta de escritura de evidencia al índice)
   /^src\/app\/api\/brain\/ingest-source\/route\.ts$/,
