@@ -215,8 +215,8 @@ describe('tanda 2 · reseñas con la ficha confirmada y videos solo si hay publi
     expect(accion(r, 'videos_instagram')).toBeUndefined()
     expect(r.body.revision_de_publicaciones).toMatchObject({ publicaciones_leidas: 0 })
   })
-  it('el tope corta la tanda con motivo (lo gastado hoy + lo que pide > 1,50)', async () => {
-    const costs = [{ service: 'apify:videos_instagram', amount_usd: 1.49, created_at: '2026-10-16T09:00:00Z', description: JSON.stringify({ es: 'detalle_de_llamada', client_id: C }) }]
+  it('el tope corta la tanda con motivo (lo gastado hoy + lo que pide > 3)', async () => {
+    const costs = [{ service: 'apify:videos_instagram', amount_usd: 2.99, created_at: '2026-10-16T09:00:00Z', description: JSON.stringify({ es: 'detalle_de_llamada', client_id: C }) }]
     const r = await correr(base({ mapas: [ficha], ig: [{ username: 'naufrago.ec', latestPosts: [post('N', 'Video'), post('M', 'Video')] }], costs }))
     // las reseñas (0,002) caben en lo que queda; los videos (0,112) no
     expect((r.body.acciones as Array<{ funcion: string }>).map((x) => x.funcion)).toEqual(['resenas_google_maps'])

@@ -8,7 +8,7 @@
  */
 import { propiosDeFicha } from '../manual/cliente'
 import { TRANSITORIOS_COMUNES, transitoriosDe, varianteDelCliente, type Interruptores } from './datos'
-import { MAX_LLAMADAS_DEL_JUEZ_POR_DIA, TOPE_DE_GASTO_DEL_JUEZ_POR_LLAMADA_USD, TOPE_DEL_PORTERO_USD } from './datos'
+import { MAX_LLAMADAS_DEL_JUEZ_POR_DIA, TOPE_DE_GASTO_DEL_JUEZ_POR_LLAMADA_USD, TOPE_DEL_PORTERO_USD, TOPE_DEL_PULIDO_USD } from './datos'
 import { filtrar, type ContextoDelCliente } from './filtro'
 import { fichaPropiaDeMapas } from './mapas-propia'
 import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlamada } from './juez'
@@ -17,6 +17,7 @@ import { unidadesDeRaspados, type FilaCruda, type Unidad } from './unidades'
 import { correrBrazos, hayBrazoActivo, type BrazosActivos, type ResultadoDeBrazos } from './brazos'
 import { archivarFichasDeBrazos } from './brazos/archivo'
 import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
+import { pulirResumen } from './resumen-pulido'
 import { idDeZona, paisIsoDe } from '../cerebro/zona'
 
 /** las fichas de zona (`zona:ec`) que le tocan al cliente por su país */
@@ -36,6 +37,8 @@ export interface EntradaDeAlimentar {
   interruptores: Interruptores
   /** (instrucción, mensaje) → respuesta del modelo con su costo; se inyecta (simulado en pruebas) */
   llamarModelo?: (instruccion: string, mensaje: string) => Promise<RespuestaDeLlamada>
+  /** el agente del roster que pule el resumen vivo (15-oct): (tarea) → texto + costo; ausente = el resumen queda por código */
+  pulirResumen?: (tarea: string) => Promise<{ texto: string; costo_usd: number }>
   ahora?: Date
   forzar?: boolean
   /** el despertar con el raspado del alta (15-oct): procesa lo que ya hay en `apify_raw` hasta `ahora`, deja el rastro como tipo «despertar» y NO bloquea la corrida diaria del mismo día */
@@ -67,7 +70,7 @@ export interface ResultadoDeAlimentar {
   /** lo que hicieron los nuevos brazos (ausente = ninguno encendido) */
   brazos?: ResultadoDeBrazos
   /** el resumen vivo (ausente = apagado) */
-  resumen_vivo?: { secciones: Record<string, number>; huecos: string[]; escritas: number; iguales: number; retiradas: number }
+  resumen_vivo?: { secciones: Record<string, number>; huecos: string[]; escritas: number; iguales: number; retiradas: number; pulido?: { usado: boolean; motivo: string; agente: string; costo_usd: number; lineas_originales: number; lineas_conservadas: number; descartadas: number; citas_originales: number; citas_conservadas: number } }
 }
 
 const vacio = (dry_run: boolean): ResultadoDeAlimentar => ({
@@ -200,8 +203,16 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
       if (!ent.ok) r.errores.push(`resumen vivo: ${ent.detalle}`)
       else {
         const sal = fichasDeResumen(ent.entrada)
+        // el pulido (apagado por omisión): DESPUÉS del armado, sin agregar hechos; cualquier falla deja el armado por código
+        let pulido: NonNullable<ResultadoDeAlimentar['resumen_vivo']>['pulido']
+        if (e.interruptores.resumen_pulido && e.pulirResumen && !e.dry_run) {
+          const pr = await pulirResumen(sal.cliente.contenido, { llamarAgente: e.pulirResumen, topeUsd: TOPE_DEL_PULIDO_USD })
+          pulido = { usado: pr.usado, motivo: pr.motivo, agente: pr.agente, costo_usd: pr.costo_usd, lineas_originales: pr.lineas_originales, lineas_conservadas: pr.lineas_conservadas, descartadas: pr.descartadas.length, citas_originales: pr.citas_originales, citas_conservadas: pr.citas_conservadas }
+          if (pr.usado) { sal.cliente.contenido = pr.texto; sal.cliente.datos = { ...(sal.cliente.datos ?? {}), pulido_por: pr.agente } }
+          if (pr.costo_usd) r.gasto = { ...r.gasto, modelo_usd: Math.round((r.gasto.modelo_usd + pr.costo_usd) * 1e6) / 1e6 }
+        }
         const ar = await archivarFichasDeBrazos({ db: e.db, fichas: [sal.cliente, ...sal.sedes], ahora, dry_run: e.dry_run, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id, nuevoId: e.nuevoId })
-        r.resumen_vivo = { secciones: sal.secciones, huecos: sal.huecos, escritas: ar.escritas, iguales: ar.iguales, retiradas: ar.retiradas }
+        r.resumen_vivo = { secciones: sal.secciones, huecos: sal.huecos, escritas: ar.escritas, iguales: ar.iguales, retiradas: ar.retiradas, ...(pulido ? { pulido } : {}) }
         r.errores.push(...ar.errores.map((m) => `resumen vivo: ${m}`))
       }
     } catch (err) { r.errores.push(`resumen vivo: ${err instanceof Error ? err.message.slice(0, 120) : 'falló'}`) }
@@ -244,7 +255,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   // la corrida que reemplaza al despertar CIERRA lo que el despertar dejó pendiente (qué pidió y desde cuándo) para que `listo` pueda declarar los huecos
   const previo = corridaDeHoy && esObjeto(corridaDeHoy.resumen) ? (corridaDeHoy.resumen as Fila).despertar : null
   const arrastreDelDespertar = !e.despertar && esObjeto(previo) ? { despertar: { ...previo, completado_en: ahora.toISOString() } } : {}
-  const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), ...arrastreDelDespertar, unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores, ...(r.brazos ? { brazos: { activos: r.brazos.activos, por_brazo: r.brazos.por_brazo, archivo: r.brazos.archivo ? { escritas: r.brazos.archivo.escritas, iguales: r.brazos.archivo.iguales, retiradas: r.brazos.archivo.retiradas } : null } } : {}) }, gasto_apify_usd: 0, gasto_modelo_usd: r.gasto.modelo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
+  const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), ...arrastreDelDespertar, unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores, ...(r.resumen_vivo ? { resumen_vivo: r.resumen_vivo } : {}), ...(r.brazos ? { brazos: { activos: r.brazos.activos, por_brazo: r.brazos.por_brazo, archivo: r.brazos.archivo ? { escritas: r.brazos.archivo.escritas, iguales: r.brazos.archivo.iguales, retiradas: r.brazos.archivo.retiradas } : null } } : {}) }, gasto_apify_usd: 0, gasto_modelo_usd: r.gasto.modelo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
   const log = corridaDeHoy ? await e.db.from('cerebro_portero_corridas').update(rastro).eq('id', String(corridaDeHoy.id)) : await e.db.from('cerebro_portero_corridas').insert(rastro)
   if (log.error) r.errores.push(`rastro: ${log.error.message}`); else r.escrituras.corrida = 1
   return { ...r, ok: r.errores.length === 0, estado: r.errores.length ? 'con_errores' : 'hecha' }

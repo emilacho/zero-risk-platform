@@ -29,6 +29,26 @@ export function modeloRegistrado(o: { origen: string; llaveInterna: string; work
   }
 }
 
+/**
+ * El pulido del resumen (15-oct): UN agente del roster por `/api/agents/run-sdk` (llave interna, SIN SALA_DISPATCH_KEY), con el workflow del portero en el cuerpo.
+ * `x-skip-editor-middleware: 1`: es un resumen interno, no una pieza para el cliente; sin él, el agente de reportes dispararía su revisión de editor (más llamadas y una fila de bandeja).
+ * Devuelve solo `texto` y `costo_usd`; lanza si la puerta responde mal (quien llama deja el resumen por código).
+ */
+export function agenteDelRoster(o: { origen: string; llaveInterna: string; workflowId: string; ejecucionId: string; clientId: string; agente: string; topeUsd: number; fetchImpl?: (u: string, i?: RequestInit) => Promise<Response> }) {
+  const traer = o.fetchImpl ?? ((u: string, i?: RequestInit) => fetch(u, i))
+  return async (tarea: string): Promise<{ texto: string; costo_usd: number }> => {
+    const r = await traer(`${o.origen.replace(/\/$/, '')}/api/agents/run-sdk`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': o.llaveInterna, 'x-skip-editor-middleware': '1' },
+      body: JSON.stringify({ agent: o.agente, task: tarea, client_id: o.clientId, workflow_id: o.workflowId, workflow_execution_id: `${o.ejecucionId}:resumen-pulido`, step_name: 'resumen-pulido', dry_run: false, force_restart: true, max_budget_usd: o.topeUsd }),
+    })
+    const j = (await r.json().catch(() => null)) as Record<string, unknown> | null
+    if (!r.ok || !j) throw new Error(`run-sdk respondió ${r.status}`)
+    const texto = typeof j.response === 'string' ? j.response : typeof j.output === 'string' ? j.output : ''
+    const costo = typeof j.cost_usd === 'number' && Number.isFinite(j.cost_usd) && j.cost_usd >= 0 ? j.cost_usd : 0
+    return { texto, costo_usd: costo }
+  }
+}
+
 export function puenteAlIndice(o: { origen: string; llaveInterna: string; db: Db; fetchImpl?: (u: string, i?: RequestInit) => Promise<Response> }) {
   const traer = o.fetchImpl ?? ((u: string, i?: RequestInit) => fetch(u, i))
   return async (p: { escribir: PuenteDeIndice[]; sacar: string[]; client_id: string }) => {

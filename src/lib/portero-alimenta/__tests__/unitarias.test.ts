@@ -65,9 +65,10 @@ describe('los cuatro defectos medidos el 14-oct', () => {
 })
 
 describe('datos', () => {
-  it('el tope del portero es US$ 1,50 (firma 14-oct) y todos los interruptores nacen apagados', () => {
-    expect(TOPE_DEL_PORTERO_USD).toBe(1.5)
-    expect(interruptoresDelEntorno({})).toEqual({ ...TODO_APAGADO, resumen_vivo: false })
+  it('el tope del portero es US$ 3 (firma 15-oct) y todos los interruptores nacen apagados', () => {
+    expect(TOPE_DEL_PORTERO_USD).toBe(3)
+    expect(interruptoresDelEntorno({})).toEqual({ ...TODO_APAGADO, resumen_vivo: false, resumen_pulido: false })
+    expect(interruptoresDelEntorno({ PORTERO_RESUMEN_PULIDO: 'on' }).resumen_pulido).toBe(true)
     expect(interruptoresDelEntorno({ PORTERO_RESUMEN_VIVO: 'on' }).resumen_vivo).toBe(true)
     expect(interruptoresDelEntorno({ PORTERO_ALIMENTAR: 'on' }).alimentar).toBe(true)
     expect(interruptoresDelEntorno({ PORTERO_ALIMENTAR: 'true' }).alimentar).toBe(false)
@@ -220,8 +221,8 @@ describe('descubrir · qué pide hoy el portero', () => {
     expect(p.hacer.some((a) => a.funcion === 'videos_instagram')).toBe(false)
     expect(p.hacer.some((a) => a.funcion === 'menciones_en_redes')).toBe(false)
     expect(p.hacer.some((a) => a.fuente === 'busqueda_propuesta')).toBe(false)
-    expect(p.tope_usd).toBe(1.5)
-    expect(p.costo_maximo_del_plan_usd).toBeLessThanOrEqual(1.5)
+    expect(p.tope_usd).toBe(3)
+    expect(p.costo_maximo_del_plan_usd).toBeLessThanOrEqual(3)
     // las reseñas de Mapas salen de la misma corrida de Mapas: no se piden dos veces
     expect(p.hacer.filter((a) => a.funcion === 'resenas_google_maps')).toHaveLength(0)
   })
@@ -231,12 +232,12 @@ describe('descubrir · qué pide hoy el portero', () => {
     expect(p.hacer.some((a) => a.fuente === 'prensa')).toBe(false)
     expect(p.no_cubiertas.map((n) => n.fuente)).toEqual(expect.arrayContaining(['mapas', 'prensa']))
   })
-  it('el tope de US$ 1,50 y el de corridas CORTAN con motivo', () => {
-    const casiLleno = descubrir({ ...base, gastado_hoy_usd: 1.45 })
+  it('el tope de US$ 3 y el de corridas CORTAN con motivo', () => {
+    const casiLleno = descubrir({ ...base, gastado_hoy_usd: 2.95 })
     expect(casiLleno.omitidas.length).toBeGreaterThan(0)
     expect(casiLleno.omitidas.every((o) => /tope/.test(o.por_que))).toBe(true)
-    expect(casiLleno.costo_maximo_del_plan_usd + 1.45).toBeLessThanOrEqual(1.5 + 1e-9)
-    const lleno = descubrir({ ...base, gastado_hoy_usd: 1.5 })
+    expect(casiLleno.costo_maximo_del_plan_usd + 2.95).toBeLessThanOrEqual(3 + 1e-9)
+    const lleno = descubrir({ ...base, gastado_hoy_usd: 3 })
     expect(lleno.hacer).toHaveLength(0)
   })
   it('las búsquedas propuestas y las menciones solo entran con su interruptor; máximo 3', () => {

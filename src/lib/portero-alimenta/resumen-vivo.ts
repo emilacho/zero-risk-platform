@@ -22,6 +22,14 @@ const esObjeto = (v: unknown): v is Fila => typeof v === 'object' && v !== null 
 const corto = (s: string, n: number) => { const t = s.replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t }
 const cita = (f: FichaParaResumen) => `[ficha:${f.id.slice(0, 8)} · ${(f.fecha_fuente ?? f.observado_en ?? '').slice(0, 10) || 'sin fecha'}]`
 const vigente = (f: FichaParaResumen, ahora: Date) => !f.retirada_en && (!f.vigente_hasta || Date.parse(f.vigente_hasta) >= ahora.getTime())
+/** texto legal que casi todo sitio trae y que NO dice quién es el negocio (política de privacidad, términos, cookies…): datos del idioma, se amplían sin tocar la lógica */
+export const TEXTO_LEGAL: RegExp[] = [/\b(privacidad|privacy|cookies?|terminos y condiciones|terms of|aviso legal|proteccion de datos|data protection|gdpr|lopdp|habeas data)\b/]
+const esTextoLegal = (t: string) => TEXTO_LEGAL.some((r) => r.test(normalizar(t)))
+/** una cifra es una MEDIDA que cambia (puntaje, reseñas, seguidores…); el nombre, la dirección o el teléfono de una ficha de Mapas son perfil, no cifras */
+export const ATRIBUTOS_DE_CIFRA = /(puntaje|resenas|seguidores|publicaciones|rating|followers|score|likes|visitas|suscriptores)/
+const esCifra = (f: FichaParaResumen) => f.clase === 'metrica' || ATRIBUTOS_DE_CIFRA.test(normalizar(f.atributo ?? ''))
+/** un fragmento de página (menos de 5 palabras o empieza por número: «1 qué datos capturamos») no presenta a nadie */
+const esFragmento = (t: string) => { const w = normalizar(t).split(' ').filter(Boolean); return w.length < 5 || /^\d/.test(w[0]) }
 const primeraCifra = (s: string): number | null => { const m = s.replace(/(\d)\.(\d{3})(?!\d)/g, '$1$2').match(/\d+(?:[.,]\d+)?/); return m ? Number(m[0].replace(',', '.')) : null }
 
 const PALABRAS_VACIAS = new Set(['para', 'pero', 'como', 'esta', 'este', 'esto', 'estos', 'estas', 'muy', 'mas', 'mucho', 'todo', 'todos', 'solo', 'sobre', 'entre', 'desde', 'hasta', 'porque', 'cuando', 'donde', 'tiene', 'tienen', 'tengo', 'fue', 'son', 'ser', 'hay', 'una', 'unos', 'unas', 'con', 'sin', 'por', 'del', 'los', 'las', 'que', 'nos', 'les', 'sus', 'mis', 'the', 'and', 'for', 'with', 'very', 'that', 'this', 'was', 'had', 'but', 'you', 'our', 'are'])
@@ -61,15 +69,17 @@ export function armarResumen(e: EntradaDelResumen): { texto: string; huecos: str
   }
 
   // quién es · lo que el cliente dice de sí mismo (su sitio)
-  const sitio = e.fichas.filter((f) => f.clase === 'sitio' && !f.retirada_en).sort((a, b) => ((a.creado_en ?? a.observado_en ?? '') < (b.creado_en ?? b.observado_en ?? '') ? -1 : 1)).slice(0, 3)
-  sec('quien_es', `Quién es${e.nombre ? ` · ${e.nombre}` : ''}${e.rubro ? ` (${e.rubro})` : ''}`, sitio.map((f) => linea(f, 200)), 'no hay fichas de su sitio')
+  const sitio = e.fichas.filter((f) => f.clase === 'sitio' && !f.retirada_en && !esTextoLegal(f.contenido) && !esFragmento(f.contenido)).sort((a, b) => ((a.creado_en ?? a.observado_en ?? '') < (b.creado_en ?? b.observado_en ?? '') ? -1 : 1)).slice(0, 3)
+  // y lo que dicen su ficha de Mapas y su bio (nombre, categoría, dirección, horario, teléfono): perfil, no cifras
+  const perfil = por('mapas', 'instagram').filter((f) => !esCifra(f) && !esTextoLegal(f.contenido)).slice(0, 5)
+  sec('quien_es', `Quién es${e.nombre ? ` · ${e.nombre}` : ''}${e.rubro ? ` (${e.rubro})` : ''}`, [...sitio.map((f) => linea(f, 200)), ...perfil.map((f) => linea(f, 140))], 'no hay fichas de su sitio ni de su ficha de Mapas')
 
   // qué vende y a qué precio vigente
   sec('precios', 'Qué vende y a qué precio (vigente)', por('precio', 'horario').map((f) => linea(f, 140)), 'no hay precios ni horarios vigentes')
 
   // cifras con tendencia: la última de cada atributo y, si hay una versión retirada de los últimos 60 días, la dirección
   const cifras: string[] = []
-  const claves = new Set(por('mapas', 'metrica', 'instagram').map((f) => f.atributo ?? f.id))
+  const claves = new Set(por('mapas', 'metrica', 'instagram').filter(esCifra).map((f) => f.atributo ?? f.id))
   for (const k of claves) {
     const dela = e.fichas.filter((f) => (f.atributo ?? f.id) === k && ['mapas', 'metrica', 'instagram'].includes(f.clase)).sort((a, b) => ((b.observado_en ?? '') < (a.observado_en ?? '') ? -1 : 1))
     const actual = dela.find((f) => vigente(f, e.ahora))

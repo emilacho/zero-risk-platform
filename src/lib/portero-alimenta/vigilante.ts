@@ -8,18 +8,20 @@
  * Condiciones (las mismas del vigilante de la primera corrida, ahora sin nombres propios de ningún cliente):
  *  1. la corrida no terminó `hecho` / algún cliente trae errores, plan fallido o el puente falló;
  *  2. el rastro de hoy no existe o no está `hecha`;
- *  3. gasto real del día > US$ 1,00 (el tope del código es 1,50: esto avisa ANTES);
+ *  3. gasto real del día > el umbral de apagado (dato · por omisión US$ 3,00 = el tope del portero; firma 15-oct). Entre el umbral de aviso (US$ 1,50) y el de apagado: UN aviso por día y cliente SIN apagar;
  *  4. nació una ficha VIVA de una unidad que el filtro no confirmó (ajena / sin confirmar / ruido);
  *  5. el puente deja `quedan > 0`, hay fichas vivas repetidas o fichas vivas sin trozo en el índice;
  *  6. el propio vigilante no pudo comprobar algo (falla de lectura) ⇒ se trata como problema: ante la duda, apagado (el gasto recurrente no puede quedar sin ojos);
- *  7. auditoría de calidad (15-oct): una muestra de las fichas de HOY no verifica contra su fuente cruda (tasa de error sobre el umbral de `auditoria.ts`). Silenciosa si todo está bien.
+ *  7. auditoría de calidad (15-oct): una muestra de las fichas de HOY no verifica contra su fuente cruda (tasa de error sobre el umbral de `auditoria.ts`) y las citas del resumen vivo existen. Silenciosa si todo está bien.
  * No llama a Apify ni a ningún modelo.
  */
 import { clientesActivos } from './clientes'
-import { auditarCliente, type ResultadoDeAuditoria } from './auditoria'
+import { auditarCliente, auditarCitasDelResumen, type ResultadoDeAuditoria } from './auditoria'
+import { UMBRALES_DE_GASTO_POR_OMISION, type UmbralesDeGasto } from './datos'
 import { gastoDeHoy, reconciliarYEnviar, type DepsDeRutas, type Respuesta } from './rutas'
 
-export const LIMITE_DEL_VIGILANTE_USD = 1.0
+/** el umbral de APAGADO por omisión (el real es dato: `deps.umbrales`) */
+export const LIMITE_DEL_VIGILANTE_USD = UMBRALES_DE_GASTO_POR_OMISION.apagar_usd
 export const CANAL_DE_ALERTAS = 'C0B7XUUEBHA'
 /** veredictos de una unidad que NO debe haber dado una ficha viva */
 /** («repetida» NO está: una unidad vista otra vez queda `repetida` y apunta a la ficha viva que la representa; es lo normal) */
@@ -39,6 +41,8 @@ export interface DepsDelVigilante extends DepsDeRutas {
   avisar?: (texto: string) => Promise<{ ok: boolean; detalle: string }>
   /** espera antes del reintento de «no pude comprobar»; en pruebas es un registro sin espera */
   esperar?: (ms: number) => Promise<void>
+  /** umbrales de gasto (aviso / apagado); por omisión `UMBRALES_DE_GASTO_POR_OMISION` */
+  umbrales?: UmbralesDeGasto
 }
 
 /** cuánto se espera antes de repetir la comprobación fallida (dentro de la misma ejecución) */
@@ -50,7 +54,7 @@ export const esSoloNoPudeComprobar = (res: ResultadoDeCliente[]) => {
   return todos.length > 0 && todos.every((p) => p.startsWith(PREFIJO_NO_PUDE))
 }
 
-export interface ResultadoDeCliente { client_id: string; nombre: string | null; problemas: string[]; gasto_usd: number | null; auditoria?: ResultadoDeAuditoria | null }
+export interface ResultadoDeCliente { client_id: string; nombre: string | null; problemas: string[]; gasto_usd: number | null; auditoria?: ResultadoDeAuditoria | null; /** avisos que NO apagan (gasto entre el umbral de aviso y el de apagado) */ avisos?: string[] }
 
 /** las condiciones que salen del CIERRE del flujo (sin leer la base) */
 export function problemasDelCierre(cierre: unknown, clientId: string): string[] {
@@ -88,7 +92,9 @@ export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: str
   else if (!g.ok) falla('el gasto del día', g.detalle)
   else {
     r.gasto_usd = redondeo(g.gasto.total_usd)
-    if (g.gasto.total_usd > LIMITE_DEL_VIGILANTE_USD) r.problemas.push(`gasto del día US$ ${r.gasto_usd.toFixed(2)} > ${LIMITE_DEL_VIGILANTE_USD.toFixed(2)}`)
+    const u = deps.umbrales ?? UMBRALES_DE_GASTO_POR_OMISION
+    if (g.gasto.total_usd > u.apagar_usd) r.problemas.push(`gasto del día US$ ${r.gasto_usd.toFixed(2)} > ${u.apagar_usd.toFixed(2)}`)
+    else if (g.gasto.total_usd > u.aviso_usd) r.avisos = [`el gasto del día va en US$ ${r.gasto_usd.toFixed(2)} (aviso desde ${u.aviso_usd.toFixed(2)}; el portero se apaga solo pasando de ${u.apagar_usd.toFixed(2)})`]
   }
 
   const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)
@@ -109,6 +115,9 @@ export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: str
   const au = await auditarCliente(deps.db, c.client_id, ahora)
   if (!au.ok) falla('la auditoría de calidad', au.detalle)
   else { r.auditoria = au.resultado; if (au.resultado.problema) r.problemas.push(au.resultado.problema) }
+  const ci = await auditarCitasDelResumen(deps.db, c.client_id)
+  if (!ci.ok) falla('las citas del resumen vivo', ci.detalle)
+  else if (ci.problema) r.problemas.push(ci.problema)
 
   const p = await reconciliarYEnviar(deps, c.client_id, true)
   if (p.errores.length || p.puente.lectura_fallida === true) falla('el puente', p.errores[0] ?? 'lectura fallida')
@@ -125,6 +134,12 @@ export function lineaDeAlerta(res: ResultadoDeCliente[], apagado: boolean, workf
   const primero = todos[0] ?? 'sin detalle'
   const mas = (todos.length > 1 ? ` (+${todos.length - 1} más)` : '') + (intentos > 1 ? ` · falló ${intentos} veces` : '')
   return `🔴 Portero del cerebro${etapa ? ` (${etapa})` : ''} ${apagado ? 'APAGADO' : 'CON PROBLEMAS (no se pudo apagar: apágalo a mano)'} · ${primero}${mas} · revisar y volver a activar el flujo ${workflowId} en n8n`
+}
+
+/** la línea de UN aviso que no apaga (🟡: informativo; el flujo sigue encendido) */
+export function lineaDeAvisoDeGasto(res: ResultadoDeCliente[]): string {
+  const todos = res.flatMap((x) => (x.avisos ?? []).map((a) => `${x.nombre ?? x.client_id.slice(0, 8)}: ${a}`))
+  return `🟡 Portero del cerebro · ${todos[0] ?? 'sin detalle'}${todos.length > 1 ? ` (+${todos.length - 1} más)` : ''} · el flujo sigue encendido`
 }
 
 export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Promise<Respuesta> {
@@ -167,13 +182,25 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
   const body: Record<string, unknown> = { ok: !hayProblemas, dry_run: cuerpo.dry_run, dia, clientes: resultados, intentos, modelos_llamados: 0 }
   if (cuerpo.dry_run) return { status: 200, body: { ...body, nota: 'dry_run: no se escribió, no se apagó nada y no se avisó' } }
 
+  // avisos que no apagan: UNO por día y cliente (la marca vive en el rastro de hoy); solo si nada apaga (si apaga, ese aviso ya lo cubre)
+  const yaAvisado = (id: string) => { const f = rastros.get(id); const v = f && esObjeto(f.resumen) && esObjeto(f.resumen.vigilante) ? f.resumen.vigilante : null; return !!v && v.aviso_de_gasto_dia === dia }
+  const porAvisar = hayProblemas ? [] : resultados.filter((r) => (r.avisos ?? []).length > 0 && !yaAvisado(r.client_id))
+  const avisadosHoy = new Set<string>()
+  if (porAvisar.length) {
+    const texto = lineaDeAvisoDeGasto(porAvisar)
+    const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+    body.aviso_de_gasto = { ...av, texto, clientes: porAvisar.map((r) => r.client_id) }
+    if (av.ok) for (const r of porAvisar) avisadosHoy.add(r.client_id)
+  }
+
   // el rastro: una nota por cliente en la fila de hoy (nunca pisa lo demás de `resumen`)
   const erroresDeRastro: string[] = []
   for (const r of resultados) {
     const fila = rastros.get(r.client_id)
     if (!fila) continue
     const resumen = esObjeto(fila.resumen) ? fila.resumen : {}
-    const u = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ok: r.problemas.length === 0, problemas: r.problemas, gasto_usd: r.gasto_usd, auditoria: r.auditoria ? { elegidas: r.auditoria.elegidas, verificables: r.auditoria.verificables, errores: r.auditoria.errores, sin_verificar: r.auditoria.sin_verificar, tasa_de_error: r.auditoria.tasa_de_error } : null, revisado_en: ahora.toISOString(), workflow_execution_id: ex, intentos } } }).eq('id', String(fila.id))
+    const marcaDeAviso = avisadosHoy.has(r.client_id) || yaAvisado(r.client_id) ? { aviso_de_gasto_dia: dia } : {}
+    const u = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ok: r.problemas.length === 0, problemas: r.problemas, gasto_usd: r.gasto_usd, auditoria: r.auditoria ? { elegidas: r.auditoria.elegidas, verificables: r.auditoria.verificables, errores: r.auditoria.errores, sin_verificar: r.auditoria.sin_verificar, tasa_de_error: r.auditoria.tasa_de_error } : null, ...(r.avisos?.length ? { avisos: r.avisos } : {}), ...marcaDeAviso, revisado_en: ahora.toISOString(), workflow_execution_id: ex, intentos } } }).eq('id', String(fila.id))
     if (u.error) erroresDeRastro.push(`rastro ${r.client_id.slice(0, 8)}: ${u.error.message}`)
   }
   if (erroresDeRastro.length) body.errores_de_rastro = erroresDeRastro

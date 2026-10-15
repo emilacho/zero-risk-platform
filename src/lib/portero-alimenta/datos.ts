@@ -5,8 +5,22 @@
  *  · los avisos de estado («cerrado, vuelve hoy…») son transitorios: no son cambios.
  */
 
-/** tope del portero (firma 14-oct de Emilio: reemplaza el US$ 1,00 del 10-oct). El código corta con motivo si se pasa. */
-export const TOPE_DEL_PORTERO_USD = 1.5
+/** tope del portero por cliente y día (firma 15-oct de Emilio: «3 al día»; antes 1,50). El código corta con motivo si se pasa. */
+export const TOPE_DEL_PORTERO_USD = 3
+/**
+ * Umbrales de gasto del VIGILANTE (15-oct · firma de Emilio): por encima de `aviso_usd` UN aviso a #alertas por día y cliente SIN apagar; por encima de `apagar_usd` apaga + avisa.
+ * Son DATO: se cambian con `PORTERO_GASTO_AVISO_USD` / `PORTERO_GASTO_APAGAR_USD` sin tocar la lógica (un valor roto o incoherente vuelve a estos).
+ */
+export interface UmbralesDeGasto { aviso_usd: number; apagar_usd: number }
+export const UMBRALES_DE_GASTO_POR_OMISION: UmbralesDeGasto = { aviso_usd: 1.5, apagar_usd: TOPE_DEL_PORTERO_USD }
+export function umbralesDeGastoDelEntorno(env: Record<string, string | undefined> = process.env): UmbralesDeGasto {
+  const num = (k: string) => { const t = String(env[k] ?? '').trim().replace(',', '.'); const n = t === '' ? NaN : Number(t); return Number.isFinite(n) && n > 0 && n <= 50 ? n : null }
+  const aviso = num('PORTERO_GASTO_AVISO_USD'), apagar = num('PORTERO_GASTO_APAGAR_USD')
+  const u = { aviso_usd: aviso ?? UMBRALES_DE_GASTO_POR_OMISION.aviso_usd, apagar_usd: apagar ?? UMBRALES_DE_GASTO_POR_OMISION.apagar_usd }
+  return u.aviso_usd < u.apagar_usd ? u : { ...UMBRALES_DE_GASTO_POR_OMISION }
+}
+/** lo máximo que puede costar UN pulido del resumen (≈ US$ 0,02 por día y cliente: una llamada) */
+export const TOPE_DEL_PULIDO_USD = 0.03
 /** búsquedas propias que el portero puede proponer por día (firma 14-oct) */
 export const MAX_BUSQUEDAS_PROPUESTAS_POR_DIA = 3
 /** páginas de artículos que se leen por día (cada una es una corrida del lector del sitio) */
@@ -72,8 +86,8 @@ export function varianteDelCliente(c: { registro?: string | null; pais?: string 
 }
 
 /** interruptores (todos APAGADOS por omisión: sin ellos el sistema queda idéntico a hoy) */
-export interface Interruptores { alimentar: boolean; proponer_busquedas: boolean; menciones: boolean; puente_al_indice: boolean; /** el resumen vivo del cliente (15-oct): apagado por omisión */ resumen_vivo?: boolean }
+export interface Interruptores { alimentar: boolean; proponer_busquedas: boolean; menciones: boolean; puente_al_indice: boolean; /** el resumen vivo del cliente (15-oct): apagado por omisión */ resumen_vivo?: boolean; /** pulido del resumen con un agente del roster (15-oct): apagado por omisión; solo actúa si el resumen vivo está encendido */ resumen_pulido?: boolean }
 export function interruptoresDelEntorno(env: Record<string, string | undefined> = process.env): Interruptores {
   const on = (k: string) => String(env[k] ?? '').trim().toLowerCase() === 'on'
-  return { alimentar: on('PORTERO_ALIMENTAR'), proponer_busquedas: on('PORTERO_PROPONER_BUSQUEDAS'), menciones: on('PORTERO_MENCIONES'), puente_al_indice: on('PORTERO_PUENTE_AL_INDICE'), resumen_vivo: on('PORTERO_RESUMEN_VIVO') }
+  return { alimentar: on('PORTERO_ALIMENTAR'), proponer_busquedas: on('PORTERO_PROPONER_BUSQUEDAS'), menciones: on('PORTERO_MENCIONES'), puente_al_indice: on('PORTERO_PUENTE_AL_INDICE'), resumen_vivo: on('PORTERO_RESUMEN_VIVO'), resumen_pulido: on('PORTERO_RESUMEN_PULIDO') }
 }

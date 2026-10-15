@@ -119,3 +119,28 @@ export async function auditarCliente(db: Db, clientId: string, ahora: Date, n = 
   const fichas = muestra.map((f, i) => verificarFicha(f, ids[i] ? (porId.get(ids[i]!) as { client_id?: unknown; respuesta?: unknown } | undefined) ?? null : null))
   return { ok: true, resultado: juzgarAuditoria(dia, fichas) }
 }
+
+/** las citas `[ficha:xxxxxxxx · fecha]` de un texto de resumen (puro) */
+export function citasDeUnResumen(texto: string): Array<{ ficha: string; fecha: string }> {
+  const out: Array<{ ficha: string; fecha: string }> = []
+  for (const m of texto.matchAll(/\[ficha:([0-9a-f]{8}) · ([^\]]{0,20})\]/g)) out.push({ ficha: m[1], fecha: m[2].trim() })
+  return out
+}
+
+/**
+ * Condición del vigilante (15-oct · pulido del resumen): toda cita del resumen vivo VIGENTE de hoy apunta a una ficha que EXISTE del mismo cliente (viva o retirada: nada se borra).
+ * Solo código, US$ 0. Sin resumen vigente = nada que revisar (no es un problema). Una cita sin ficha es un error real: el resumen se arma y se pule SOLO con fichas de la lista.
+ */
+export async function auditarCitasDelResumen(db: Db, clientId: string): Promise<{ ok: true; revisadas: number; problema: string | null } | { ok: false; detalle: string }> {
+  const r = await db.from('cerebro_fichas').select('id, contenido, retirada_en, descartada, clase').eq('client_id', clientId).eq('clase', 'resumen_vivo').limit(50)
+  if (r.error) return { ok: false, detalle: `cerebro_fichas: ${String(r.error.message).slice(0, 120)}` }
+  const vivos = lista(r.data).filter((f) => !f.retirada_en && !f.descartada && typeof f.contenido === 'string')
+  if (!vivos.length) return { ok: true, revisadas: 0, problema: null }
+  const citas = vivos.flatMap((f) => citasDeUnResumen(String(f.contenido)))
+  if (!citas.length) return { ok: true, revisadas: 0, problema: null }
+  const q = await db.from('cerebro_fichas').select('id').eq('client_id', clientId).limit(5000)
+  if (q.error) return { ok: false, detalle: `cerebro_fichas: ${String(q.error.message).slice(0, 120)}` }
+  const ids = lista(q.data).map((f) => String(f.id))
+  const faltan = [...new Set(citas.map((c) => c.ficha))].filter((p) => !ids.some((id) => id.startsWith(p)))
+  return { ok: true, revisadas: citas.length, problema: faltan.length ? `el resumen vivo cita ${faltan.length} ficha(s) que no existen (${faltan.slice(0, 3).join(', ')})` : null }
+}

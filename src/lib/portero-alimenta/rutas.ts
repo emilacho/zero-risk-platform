@@ -93,6 +93,8 @@ export interface DepsDeRutas {
   interruptores: Interruptores
   /** llama al modelo (instrucción, mensaje) y devuelve texto + costo; en pruebas es un molde simulado */
   llamarModelo?: (instruccion: string, mensaje: string) => Promise<RespuestaDeLlamada>
+  /** el agente del roster que pule el resumen vivo (15-oct); ausente = por código */
+  pulirResumen?: (tarea: string) => Promise<{ texto: string; costo_usd: number }>
   /** escribe los trozos del índice (puente) y saca los de las fichas reemplazadas; en pruebas es un registro */
   puente?: (p: { escribir: PuenteDeIndice[]; sacar: string[]; client_id: string }) => Promise<{ escritos: number; sacados: number; errores: string[] }>
   ahora?: Date
@@ -357,7 +359,7 @@ export async function rutaAlimentar(deps: DepsDeRutas, cuerpo: unknown): Promise
   const g = await gastoDeHoy(deps.db, v.client_id, ahora)
   if (!g.ok) return err(502, 'lectura_fallida', g.detalle)
   const r: ResultadoDeAlimentar = await alimentarCliente({
-    db: deps.db, client_id: v.client_id, dry_run: v.dry_run, interruptores: deps.interruptores, brazos: deps.brazos, llamarModelo: deps.llamarModelo, ahora, forzar: v.cuerpo.forzar === true,
+    db: deps.db, client_id: v.client_id, dry_run: v.dry_run, interruptores: deps.interruptores, brazos: deps.brazos, llamarModelo: deps.llamarModelo, pulirResumen: deps.pulirResumen, ahora, forzar: v.cuerpo.forzar === true,
     gasto_de_hoy_usd: g.gasto.total_usd, workflow_id: v.workflow_id || undefined, workflow_execution_id: v.workflow_execution_id || undefined,
   })
   const status = r.estado === 'cliente_inexistente' ? 404 : r.estado === 'lectura_fallida' ? 502 : 200
