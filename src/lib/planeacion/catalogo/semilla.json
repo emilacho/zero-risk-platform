@@ -52,7 +52,7 @@
   "lexico": [
     { "lexico_id": "es_verificacion", "idioma": "es", "grupo": "verificacion", "pais": "EC", "terminos": ["verificad", "verificamos", "comprobad", "comprobamos", "confirmad", "confirmamos", "constatad", "constatamos", "medid", "validad", "corroborad", "certificad", "(fuente:"] },
     { "lexico_id": "es_ausencia", "idioma": "es", "grupo": "ausencia", "pais": "EC", "terminos": ["no tiene", "no cuenta con", "sin pauta", "no posee", "no existe", "no hay", "carece de", "no utiliza", "no invierte", "no pauta", "ninguno", "ninguna"] },
-    { "lexico_id": "es_supuesto", "idioma": "es", "grupo": "supuesto", "pais": "EC", "terminos": ["supuesto", "asumimos", "se asume", "estimamos", "estimad", "aproximad", "por omision", "tentativ", "hipotesis"] },
+    { "lexico_id": "es_supuesto", "idioma": "es", "grupo": "supuesto", "pais": "EC", "terminos": ["supuesto", "asumimos", "se asume", "estimamos", "estimad", "aproximad", "por omision", "tentativ", "hipotesis", "no se pudo", "no pudimos", "no sabemos", "no se sabe", "sin base", "lo aclara"] },
     { "lexico_id": "es_dominio", "idioma": "es", "grupo": "dominio", "pais": "EC", "terminos": ["en el sitio", "en el dominio", "del sitio web", "en la web", "en nuestro sitio"] },
     { "lexico_id": "es_periodo", "idioma": "es", "grupo": "periodo", "pais": "EC", "terminos": ["ultimo mes", "ultimos 30 dias", "ultimos 7 dias", "esta semana", "semana pasada", "este mes", "mes pasado", "hace dias", "hace semanas", "ayer", "hoy"] }
   ],
