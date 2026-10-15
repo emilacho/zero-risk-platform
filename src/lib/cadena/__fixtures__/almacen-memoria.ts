@@ -21,7 +21,7 @@ export function plazosDeLaMigracion(): PlazoCfg[] {
   const out: PlazoCfg[] = []
   // la siembra base + la de J7 (`revision_jefatura`), cada una con su propio INSERT
   const bloques = [sql.slice(sql.indexOf('INSERT INTO public.cadena_plazos'), sql.indexOf('ON CONFLICT (tipo)'))]
-  try { const j7 = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610151500_cadena_plazo_revision_jefatura.sql'), 'utf8'); bloques.push(j7.slice(j7.indexOf('INSERT INTO public.cadena_plazos'), j7.indexOf('ON CONFLICT (tipo)'))) } catch { /* sin la de J7: la base sola */ }
+  try { const j7 = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610151700_cadena_plazo_revision_jefatura.sql'), 'utf8'); bloques.push(j7.slice(j7.indexOf('INSERT INTO public.cadena_plazos'), j7.indexOf('ON CONFLICT (tipo)'))) } catch { /* sin la de J7: la base sola */ }
   for (const bloque of bloques) for (const m of bloque.matchAll(/\('([a-z_]+)',\s*(NULL|\d+),\s*(NULL|\d+),\s*(NULL|\d+),\s*(NULL|'[a-z_0-9]+'),\s*'([a-z_]+)'/g)) {
     const n = (x: string) => (x === 'NULL' ? null : Number(x))
     out.push({ tipo: m[1], recordatorio_horas: n(m[2]), alerta_horas: n(m[3]), vence_horas: n(m[4]), vence_regla: m[5] === 'NULL' ? null : m[5].replace(/'/g, ''), accion_al_vencer: m[6] })

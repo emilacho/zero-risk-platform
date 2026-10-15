@@ -1,4 +1,4 @@
--- REVERSA de 202610151500_cadena_plazo_revision_jefatura.sql · CC#1 · 2026-10-15 · NO APLICADA
+-- REVERSA de 202610151700_cadena_plazo_revision_jefatura.sql · CC#1 · 2026-10-15 · NO APLICADA
 -- Se NIEGA a borrar si hay esperas de este tipo (evidencia de uso y la FK a `cadena_plazos(tipo)` las referencia).
 -- 🔴 CUANDO LA GUARDA SALTA, ESTE ARCHIVO DEJA SU TRANSACCIÓN ABIERTA: en una SESIÓN INTERACTIVA hace falta un ROLLBACK a mano.
 BEGIN;
