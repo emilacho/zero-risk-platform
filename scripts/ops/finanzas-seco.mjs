@@ -238,7 +238,12 @@ async function main() {
       const ok = r.status === 409 && r.json?.error === 'simulacion_solo_en_seco' && Array.isArray(l.json?.turnos) && l.json.turnos.length === 0
       bien = bien && ok; rs.push({ n: 'simulación sobre un encargo real', status: r.status, ok, encargo_id: a.json.encargo_id })
       console.log(`${ok ? '✔' : '🔴'} simulación sobre un encargo real → ${r.status} ${r.json?.error ?? ''} · turnos ${l.json?.turnos?.length}`)
-      console.log(`   (queda un encargo REAL abierto de ${IDS[1]} sin turnos: \`limpiar\` lo borra; un encargo abierto bloquea otro del mismo cliente)`)
+      // el caso abre SU PROPIO encargo y lo cierra: un encargo REAL abierto bloquea las celdas de ese cliente (409 simulacion_solo_en_seco · 15-oct: tienda-en-linea 0/20). Se borra SOLO ese id, sin turnos.
+      const del = await fetch(`${U}/rest/v1/finanzas_encargos?id=eq.${a.json.encargo_id}&client_id=eq.${IDS[1]}`, { method: 'DELETE', headers: { ...HS(), prefer: 'return=minimal' } })
+      const quedan = await cuenta('finanzas_encargos', `id=eq.${a.json.encargo_id}`)
+      const cerrado = del.ok && quedan === 0
+      bien = bien && cerrado; rs.push({ n: 'el encargo real de la prueba se cierra', ok: cerrado, encargo_id: a.json.encargo_id })
+      console.log(`${cerrado ? '✔' : '🔴'} el encargo real de la prueba (${a.json.encargo_id}) se borró y se leyó de vuelta: quedan ${quedan}`)
     } else { bien = false; console.log(`🔴 no se pudo abrir el encargo real de la prueba: ${a.status} ${a.json?.error ?? ''}`) }
     guardar(`puerta-${Date.now()}.json`, rs)
     process.exitCode = bien ? 0 : 1; return
