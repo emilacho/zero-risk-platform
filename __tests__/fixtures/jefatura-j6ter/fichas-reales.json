@@ -1,0 +1,96 @@
+{
+ "962842d3-31fb-419e-a73c-923c4d263bb6": [
+  {
+   "ficha_id": "ext-2-texto",
+   "origen": "externa",
+   "donde": "texto",
+   "gravedad": "sugerencia",
+   "que": "## Lectura general\n\n**La pieza informa qué se vende y cuánto cuesta, pero da pocos motivos para elegirlo.** Como aviso comercial básico funciona; como publicación de “Fiscal sin miedo”, se queda corta: no muestra un ejemplo ni hace más comprensible una obligación fiscal.\n\nEvalúo el texto compartido. No veo la imagen, así que no puedo juzgar si aporta el ejemplo que falta.\n\n### Qué funciona\n\n- **La oferta se reconoce enseguida:** “Contabilidad mensual para pymes”. No exige interpretar un eslogan.\n- **El precio es concreto y coincide con el catálogo:** $1,800 MXN. Permite conocer el importe antes de contactar.\n- **Hay una acción identificable:** escribir para una llamada de diagnóstico, que es el canal indicado.\n- **El registro es consistente:** tuteo, lenguaje sencillo y brevedad. Las tres etiquetas cumplen la cantidad del manual.\n\nSon fortalezas de claridad, no evidencia de que vaya a generar consultas.\n\n### Qué puede fallar\n\n**1. La rapidez sustituye al diferencial.**  \n“Cuéntanos qué necesitas y te respondemos hoy” podría pertenecer a casi cualquier servicio. No aparece lo específico de Altamira: explicar las obligaciones con claridad y avisar antes de los vencimientos. La pieza pone en primer plano la velocidad de respuesta, no cómo ayuda con la contabilidad.\n\n**2. “Hoy” es una promesa sin respaldo operativo visible.**  \nEstá en los ejemplos aprobados, pero eso no demuestra que pueda cumplirse. El plan declara que faltan horarios y capacidad en fechas pico. Además, una publicación puede seguir recibiendo mensajes días después. Lo retiraría salvo que exista una operación que lo sostenga y condiciones claras.\n\n**3. Falta el ejemplo que pide el brief.**  \nEl texto nombra el servicio, pero no muestra una situación ni explica algo. No hace falta convertirlo en una clase fiscal: basta una duda concreta que el servicio ayude a resolver. Cumplir la plantilla aprobada no resuelve esta carencia.\n\n**4. El importe está claro; el alcance, no.**  \nNo se explica qué incluyen esos $1,800. **Mi hipótesis**, no un dato sobre este público, es que un lector interesado podría necesitar esa información para decidir si vale la pena llamar. No añadiría prestaciones ni condiciones que no estén confirmadas.\n\n**5. El cierre puede ser más natural y útil.**  \n“Escríbenos por una llamada” se entiende, pero “Escríbenos para agendar una llamada” es más directo. También convendría explicar qué se resolverá en ella, una vez confirmado. `#servicios` aporta poca precisión; cambiarlo es secundario frente a mejorar el mensaje.\n\n## Qué cambiaría\n\nMantendría servicio, precio y llamada. Sustituiría la promesa de rapidez por una situación reconocible y el diferencial documentado:\n\n> ¿Qué obligación fiscal te toca cumplir este mes y cuándo vence?  \n>   \n> Contabilidad mensual para pymes: $1,800 MXN.  \n> Te explicamos tus obligaciones en palabras claras y te avisamos antes de cada fecha límite.  \n>   \n> Escríbenos para agendar una llamada de diagnóstico.  \n>   \n> #AltamiraContadores #Monterrey #ContabilidadParaPymes\n\nEsta versión **plantea una duda concreta, pero todavía no demuestra cómo la resuelve Altamira**. Para cumplir mejor el enfoque educativo, pediría un ejemplo fiscal verificado y breve, sin inventar obligaciones aplicables a todas las pymes.\n\n**Mi recomendación de fondo:** no usaría “servicio + precio + contáctanos” como única estructura del pilar. Sirve para ofrecer; para “Fiscal sin miedo” también hace falta mostrar, aunque sea en una línea, esa claridad que la marca promete.",
+   "contra_que": "opinión libre del revisor externo (sin criterios ni reglas)",
+   "propuesta": "quien hizo la parte «texto» decide qué toma y qué no, con razón",
+   "estado": "tomada"
+  },
+  {
+   "ficha_id": "jefe-0-0",
+   "origen": "jefe",
+   "donde": "texto — primera línea",
+   "gravedad": "sugerencia",
+   "que": "La pieza omite la frase orientadora 'pensado para dueños de pequeñas empresas y profesionistas independientes', presente en todos los ejemplos aprobados del manual",
+   "contra_que": "Manual de marca, Ejemplos aprobados 1 y 25 (formato post de foto, Contabilidad mensual para pymes)",
+   "propuesta": "Añadir la frase: 'Contabilidad mensual para pymes: pensado para dueños de pequeñas empresas y profesionistas independientes.'",
+   "estado": "abierta"
+  },
+  {
+   "ficha_id": "jefe-0-1",
+   "origen": "jefe",
+   "donde": "texto — segunda línea",
+   "gravedad": "sugerencia",
+   "que": "El precio '$1,800 MXN' aparece en el cuerpo del texto, pero ningún ejemplo aprobado del manual incluye el precio dentro del copy del post; el catálogo lo lista como dato de respuesta a preguntas frecuentes, no como elemento de la pieza publicada",
+   "contra_que": "Manual de marca, sección 'Estructura de una pieza' y Ejemplos aprobados 1–29 (ninguno incluye precio en el copy del post)",
+   "propuesta": "Retirar el precio del cuerpo del post; si se quiere informar, reservarlo para la respuesta en comentarios o en la llamada de diagnóstico, tal como indican los Anexos del plan.",
+   "estado": "abierta"
+  },
+  {
+   "ficha_id": "jefe-0-2",
+   "origen": "jefe",
+   "donde": "texto — etiquetas",
+   "gravedad": "bloquea",
+   "que": "Las etiquetas son solo 2 (#altamiracontadores #monterrey #servicios), por debajo del mínimo de 3 que establece el manual",
+   "contra_que": "Manual de marca, sección 'Estructura de una pieza', punto 4: 'Entre 3 y 6 etiquetas'",
+   "propuesta": "Agregar al menos una etiqueta más relacionada con el servicio o el pilar; por ejemplo: #contabilidad o #pymes o #fiscalsinmiedo.",
+   "estado": "abierta"
+  }
+ ],
+ "21b3b404-b149-4ca1-abae-756346076d2d": [
+  {
+   "ficha_id": "ext-2-texto",
+   "origen": "externa",
+   "donde": "texto",
+   "gravedad": "sugerencia",
+   "que": "**La cambiaría: informa qué plato se vende y cuánto cuesta, pero dedica más atención a “te respondemos” que a darle a alguien un motivo concreto para pedirlo.** Cumple buena parte de la forma; eso no basta para que resulte atractiva.\n\nMi lectura es del texto: no se adjunta la imagen, así que no puedo valorar si la foto aporta el apetito y el detalle que aquí faltan.\n\n### Qué funciona\n- **Producto y precio claros.** “Cazuela de mariscos” y “$48.000 COP” coinciden con el catálogo. No hay que escribir para averiguar lo básico.\n- **Acción y canal explícitos.** “Escríbenos por WhatsApp” está alineado con el objetivo de generar conversaciones.\n- **Registro correcto.** Tuteo, brevedad, sin exageraciones y tres etiquetas: respeta las pautas formales del manual.\n\n### Qué puede fallar\n- **“Cuéntanos qué necesitas” es demasiado abierto.** No orienta a pedir la cazuela ni a resolver una duda concreta. Podría aparecer en una publicación de casi cualquier negocio. Le deja al lector el trabajo de decidir cómo iniciar la conversación.\n- **“Te respondemos hoy” es una promesa sin respaldo operativo visible.** Aunque aparece en los ejemplos aprobados, los documentos no acreditan horarios ni capacidad de respuesta. No afirmo que sea falsa; sí que habría que validarla antes de publicarla. Además, *supongo* que para alguien que está decidiendo dónde cenar, “hoy” podría sonar poco inmediato.\n- **El plato se nombra, pero no se desarrolla.** El precio aporta concreción comercial; no explica qué incluye la cazuela ni muestra una particularidad de su preparación. El texto no expresa el diferencial de la marca. Tampoco añadiría “pescado del día” a este plato sin confirmar que corresponde.\n- **El acceso a WhatsApp queda fuera de lo mostrado.** Si hay botón o enlace visible, bien. Si no, el llamado obliga a buscar cómo contactar. No puedo saberlo con esta pieza.\n\n### Sobre el público y el enfoque\nNo hace falta añadir “para familias y parejas”: nombrar al público no vuelve más relevante la propuesta. Para esos grupos, información como porción, acompañamientos o ubicación **podría** ayudar a decidir, pero eso es una hipótesis, no algo demostrado aquí.\n\nTambién cuestionaría que todas las piezas repitan “cuéntanos qué necesitas”. Los ejemplos aprobados muestran consistencia, no evidencia de eficacia. Para conseguir mensajes de interés, conviene dar una razón específica para escribir, no solo pedir que escriban.\n\n### Qué cambiaría\nCon los datos disponibles, haría este ajuste mínimo:\n\n> Cazuela de mariscos · $48.000 COP.  \n> Para pedirla, escríbenos por WhatsApp.\n>\n> #fogondelpuerto #cartagena #cazuelademariscos\n\nEs más directo y elimina la promesa no verificada. **Es una mejora de claridad, no una solución completa de atractivo.** Para eso, pediría un dato real del plato —qué incluye, con qué se sirve o un detalle de preparación— y lo incorporaría junto con una foto propia que lo muestre. No inventaría ese detalle para completar el brief.",
+   "contra_que": "opinión libre del revisor externo (sin criterios ni reglas)",
+   "propuesta": "quien hizo la parte «texto» decide qué toma y qué no, con razón",
+   "estado": "tomada"
+  },
+  {
+   "ficha_id": "jefe-0-0",
+   "origen": "jefe",
+   "donde": "texto — primera oración: «Cazuela de mariscos: cuéntanos qué necesitas y te respondemos hoy.»",
+   "gravedad": "sugerencia",
+   "que": "La primera línea introduce la cazuela con «cuéntanos qué necesitas», lo que suena a que el producto está incompleto o es personalizable, cuando en realidad es un plato de carta con precio fijo. El manual pide que la primera línea «se entienda sola» y que se hable de lo que el cliente consigue, no de lo que la marca pregunta.",
+   "contra_que": "Manual § Estructura de una pieza, punto 1: «Una primera línea que se entienda sola»; § Voz: «Hablamos de lo que el cliente consigue»; Ejemplo aprobado 1: «Cazuela de mariscos: pensado para familias y parejas.»",
+   "propuesta": "Reemplazar la primera oración por algo que diga qué es y para quién, como en el ejemplo aprobado: «Cazuela de mariscos: pensado para familias y parejas.» El llamado a WhatsApp y la frase «cuéntanos» quedan en la línea de acción, no en la apertura.",
+   "estado": "abierta"
+  },
+  {
+   "ficha_id": "jefe-0-1",
+   "origen": "jefe",
+   "donde": "texto — cuerpo completo",
+   "gravedad": "sugerencia",
+   "que": "La pieza tiene solo dos oraciones de cuerpo («Cazuela de mariscos: cuéntanos qué necesitas y te respondemos hoy. $48.000 COP. Escríbenos por WhatsApp.»). La estructura del manual exige: 1) primera línea que se entienda sola, 2) una idea de apoyo, 3) llamado a la acción. Falta la línea de idea (punto 2), por lo que el texto va directo del producto al precio y al CTA sin ningún puente.",
+   "contra_que": "Manual § Estructura de una pieza, puntos 1-3",
+   "propuesta": "Intercalar una línea de idea concreta entre el nombre del plato y el CTA, por ejemplo: «Cazuela de mariscos: pensado para familias y parejas. $48.000 COP. Cuéntanos cuándo quieres venir y te respondemos hoy. Escríbenos por WhatsApp.»",
+   "estado": "abierta"
+  },
+  {
+   "ficha_id": "jefe-0-2",
+   "origen": "jefe",
+   "donde": "texto — «$48.000 COP.»",
+   "gravedad": "sugerencia",
+   "que": "El precio aparece como línea suelta entre la presentación del plato y el CTA («$48.000 COP.»). El manual no establece una posición obligatoria para el precio, pero los ejemplos aprobados no lo incluyen en el cuerpo del post; poner el precio como oración separada rompe el ritmo de «frases cortas, una idea por frase».",
+   "contra_que": "Manual § Voz: «Frases cortas, una idea por frase»; ejemplos aprobados 1-6 (ninguno incluye precio en el cuerpo del post)",
+   "propuesta": "Integrar el precio dentro de una frase si se decide mantenerlo, o retirarlo y dejarlo solo en la imagen. Ejemplo: «Cazuela de mariscos: pensado para familias y parejas. La encuentras por $48.000 COP. Escríbenos por WhatsApp.»",
+   "estado": "abierta"
+  },
+  {
+   "ficha_id": "jefe-0-3",
+   "origen": "jefe",
+   "donde": "texto — línea de hashtags",
+   "gravedad": "sugerencia",
+   "que": "Solo hay 3 etiquetas (#fogondelpuerto #cartagena #restaurante). El manual indica entre 3 y 6 etiquetas; 3 es el mínimo aceptado, pero el plan y los ejemplos aprobados sugieren etiquetas que refuercen el producto y el pilar («La cocina del día»). Las actuales no mencionan el plato ni la cocina caribeña.",
+   "contra_que": "Manual § Estructura de una pieza, punto 4: «Entre 3 y 6 etiquetas»; brief f01: pilar «La cocina del día», producto «Cazuela de mariscos»",
+   "propuesta": "Ampliar a 4-5 etiquetas que incluyan el plato y la identidad del negocio, por ejemplo: #fogondelpuerto #cartagena #restaurante #cazuelaDemariscos #cocinaCaribena",
+   "estado": "abierta"
+  }
+ ]
+}

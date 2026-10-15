@@ -14,7 +14,7 @@ import { validarEntrada, type EntradaDeRevision, type Marcas, type PayloadDeRevi
 import { procesarSalidaDeRevision } from './formatos'
 import { armarPedidoCiego, armarPedidoDeAgente, auditarPedidoDeAgente, tareaDeCorreccion, tareaDeDecision, tareaDeRevisionDeFondo, type FichaParaElDueno } from './pedidos'
 import { elegirVersion as elegirVersionPura, esProductoDeUnaRevision, etiquetaDeVersion, MAXIMO_DE_VERSIONES, planDeGuardado, resultadoTrasElegir, type EvaluacionDeVersion, type Etiqueta, type FilaExistente } from './plan'
-import { atiende, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, dondeDeLaOpinion, duenosDe, plantillaDePolitica, topeDelPaso, type Dueno } from './politicas'
+import { atiende, casarId, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, dondeDeLaOpinion, duenosDe, normalizarDonde, plantillaDePolitica, topeDelPaso, type Dueno } from './politicas'
 import { ESTADOS_TERMINALES, type CambiosDeRevision, type PasoRegistrado, type Puertos, type Revision } from './puertos'
 import { moldeDelPaso, simulacionDelRevisor } from './simulacion'
 
@@ -160,7 +160,7 @@ export async function avanzar(P: Puertos, revisionId: string): Promise<Respuesta
   const pl = plantillaDe(rev)
   for (let vuelta = 0; vuelta < MAX_VUELTAS_DEL_BUCLE; vuelta++) {
     if (esTerminal(rev)) {
-      const salida = armarSalida(rev, resolverCierre(rev.estado_del_motor, { tope: rev.estado === 'cerrada_por_tope', fallida: rev.estado === 'fallida' }))
+      const salida = armarSalida(rev, resolverCierre(rev.estado_del_motor, { tope: rev.estado === 'cerrada_por_tope', fallida: rev.estado === 'fallida', duenos: duenosDe(rev.productores) }))
       return r(200, { accion: 'cerrado', estado: rev.estado, resultado: rev.resultado, marcas: rev.marcas, simulado: rev.dry_run, ...entregaDe(rev, salida), salida })
     }
     const abierto = await P.almacen.pasoAbierto(rev.id)
@@ -277,13 +277,23 @@ interface Procesado { res?: ResultadoDePaso; fallido?: string; reintentar?: stri
 
 function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e: Estado): Procesado {
   if (paso.clave === 'revision_fondo') {
-    const fs = (v.fichas as Array<{ que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string }>).map((f, i) => fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', f.donde, f.gravedad, f.que, f.contra_que, f.propuesta))
-    return { res: { costo_usd: 0, artefacto: { fichas: fs.length }, fichas: fs } }
+    const duenosDeLaRevision = duenosDe(rev.productores)
+    const dondeNormalizados: string[] = [], dondeAmbiguos: string[] = []
+    const fs = (v.fichas as Array<{ que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string }>).map((f, i) => {
+      // J6 cuarto: el `donde` libre del jefe («texto — etiquetas») se lleva al `donde` del dueño; el texto original queda en la ficha; lo ambiguo se declara
+      const n = normalizarDonde(f.donde, duenosDeLaRevision)
+      if (n.original) dondeNormalizados.push(`${n.original} → ${n.donde}`)
+      if (n.ambiguo) dondeAmbiguos.push(f.donde)
+      return fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', n.donde, f.gravedad, n.original ? `[el jefe la situó en «${n.original}»] ${f.que}` : f.que, f.contra_que, f.propuesta)
+    })
+    return { res: { costo_usd: 0, artefacto: { fichas: fs.length, ...(dondeNormalizados.length ? { donde_normalizados: dondeNormalizados } : {}), ...(dondeAmbiguos.length ? { donde_ambiguos: dondeAmbiguos } : {}) }, fichas: fs } }
   }
   const d = duenoDe(rev, paso)
   const mias = fichasPropias(rev, e, paso, d)
   const respuestas = v.respuestas as Array<{ id: string; estado: 'tomada' | 'no_tomada'; razon: string }>
-  const validas = respuestas.filter((x) => mias.some((f) => f.id === x.id))
+  const idsPropios = mias.map((f) => f.id)
+  const casadas = respuestas.map((x) => ({ ...x, id: casarId(x.id, idsPropios) ?? x.id }))
+  const validas = casadas.filter((x) => mias.some((f) => f.id === x.id))
   const huerfanas = mias.filter((f) => !validas.some((x) => x.id === f.id))
   const resoluciones = [...validas.map((x) => ({ id: x.id, estado: x.estado, razon: x.razon })), ...huerfanas.map((f) => ({ id: f.id, estado: 'no_tomada' as const, razon: 'el empleado no respondió este hallazgo' }))]
   const tomoAlgo = validas.some((x) => x.estado === 'tomada')
@@ -371,7 +381,7 @@ export function armarSalida(rev: Revision, c: Cierre): SalidaDeRevision {
 
 async function cerrar(P: Puertos, rev: Revision, o: { tope?: boolean; fallida?: boolean; nota?: string }): Promise<Respuesta> {
   const e = rev.estado_del_motor
-  const c = resolverCierre(e, { tope: !!o.tope, fallida: !!o.fallida })
+  const c = resolverCierre(e, { tope: !!o.tope, fallida: !!o.fallida, duenos: duenosDe(rev.productores) })
   const estado = o.fallida ? 'fallida' : o.tope ? 'cerrada_por_tope' : 'cerrada'
   await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: rev.gasto_usd > e.gasto_usd ? rev.gasto_usd : e.gasto_usd, estado, resultado: c.resultado, marcas: c.marcas })
   const cerrada: Revision = { ...rev, estado, resultado: c.resultado, marcas: c.marcas }
@@ -382,7 +392,7 @@ async function cerrar(P: Puertos, rev: Revision, o: { tope?: boolean; fallida?: 
 
 export async function fallar(P: Puertos, rev: Revision, motivo: string): Promise<Respuesta> {
   const e = rev.estado_del_motor
-  const c = resolverCierre(e, { tope: false, fallida: true })
+  const c = resolverCierre(e, { tope: false, fallida: true, duenos: duenosDe(rev.productores) })
   await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: rev.gasto_usd > e.gasto_usd ? rev.gasto_usd : e.gasto_usd, estado: 'fallida', resultado: 'fallida', marcas: c.marcas })
   await P.avisar({ canal: 'alertas', revision_id: rev.id, texto: `${textoDelAviso(c, { tipo: rev.artifact_type, artifact_id: rev.artifact_id, gasto_usd: e.gasto_usd, simulado: rev.dry_run })} · ${motivo}`, dry_run: rev.dry_run })
   const caida: Revision = { ...rev, estado: 'fallida', resultado: 'fallida' }
