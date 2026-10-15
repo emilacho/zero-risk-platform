@@ -44,6 +44,15 @@ export interface PlanteoV1 {
   /** lo que el proponente dice que NO sabe, y lo que dio por verificado */
   no_se: string[]
   dado_por_verificado?: string[]
+  /** plan v3 · V7: la respuesta del proponente cuando la meta NO cubre el equilibrio (obligatoria en el ajuste en ese caso) */
+  equilibrio_respuesta?: { decision: (typeof DECISIONES_DE_EQUILIBRIO)[number]; motivo: string }
+}
+export const DECISIONES_DE_EQUILIBRIO = ['subo_la_meta', 'mantengo_la_meta', 'no_aplica'] as const
+/** ¿trae una respuesta válida al equilibrio? (la exige el paso `ajuste` solo cuando la meta no lo cubre) */
+export function respuestaDeEquilibrioValida(v: unknown): boolean {
+  if (!objeto(v) || !objeto(v.equilibrio_respuesta)) return false
+  const r = v.equilibrio_respuesta
+  return (DECISIONES_DE_EQUILIBRIO as readonly string[]).includes(String(r.decision)) && texto(r.motivo, 400)
 }
 export function validarPlanteo(v: unknown): Resultado<PlanteoV1> {
   const e: string[] = []
@@ -72,6 +81,7 @@ export function validarPlanteo(v: unknown): Resultado<PlanteoV1> {
   if (v.horizonte_dias !== undefined && (!finito(v.horizonte_dias) || v.horizonte_dias <= 0)) e.push('horizonte_dias > 0')
   if (v.ciclo_dias !== undefined && (!finito(v.ciclo_dias) || v.ciclo_dias < 0)) e.push('ciclo_dias ≥ 0')
   if (!Array.isArray(v.no_se) || !v.no_se.every((x) => typeof x === 'string')) e.push('no_se debe ser una lista de textos (puede ir vacía)')
+  if (v.equilibrio_respuesta !== undefined && !respuestaDeEquilibrioValida(v)) e.push(`equilibrio_respuesta debe ser { decision: ${DECISIONES_DE_EQUILIBRIO.join(' | ')}, motivo }`)
   // el proponente no pone costos ni montos de pauta: eso lo ponen finanzas (y «nunca fijar presupuestos sin aprobación humana»)
   for (const prohibido of ['costo_por_resultado', 'presupuesto', 'pauta_mensual', 'techo']) if (prohibido in v) e.push(`el planteo no lleva «${prohibido}»: lo calcula finanzas`)
   if (e.length) return { ok: false, errores: e }

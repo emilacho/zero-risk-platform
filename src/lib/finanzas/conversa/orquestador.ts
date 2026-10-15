@@ -11,7 +11,7 @@ import { decidirFirma, huellaDe, numerosDelBloque } from '../firma'
 import { leerRespuesta } from '../preguntas'
 import type { Bloque } from '../tipos'
 import { entradaDesdeLaConversa } from './entrada'
-import { extraerJson, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, validarProcedencia, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
+import { extraerJson, respuestaDeEquilibrioValida, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, validarProcedencia, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
 import { especialistasQueHablan } from './omision'
 import { AGENTES, PLANTILLA_FINANCIERA } from './plantilla'
 import { ESTADOS_TERMINALES, type EncargoDeConversa, type PuertosDeConversa, type Semilla } from './puertos'
@@ -57,7 +57,7 @@ const POR_PASO: Record<string, string> = {
   redes: 'Eres el especialista en redes. Da, con rango y como supuesto: costo por resultado del evento (y del evento alterno si el presupuesto no alcanza), el mínimo diario por conjunto, estructura de campañas y aprendizaje. Mismo esquema consulta_financiera.v1.',
   busqueda: 'Eres el especialista en búsqueda. Di si conviene ACTIVAR la búsqueda pagada o diferirla, su mínimo y la señal de activación; recuerda que la búsqueda local gratuita va primero. Mismo esquema consulta_financiera.v1.',
   medicion: 'Eres el especialista en medición. Di qué cuenta como resultado según el evento, cómo se enlaza con la venta sin tocar el destino, la hoja mínima y los umbrales. Mismo esquema consulta_financiera.v1.',
-  ajuste: 'Lee las respuestas de los especialistas, AJUSTA tu planteo (meta, fases, reparto) y contesta lo que te piden. Devuelve el planteo FIJADO con el mismo esquema planteo.v1. No fijes montos de pauta.',
+  ajuste: 'Lee las respuestas de los especialistas, AJUSTA tu planteo (meta, fases, reparto) y contesta lo que te piden. Devuelve el planteo FIJADO con el mismo esquema planteo.v1. No fijes montos de pauta. Si el contexto trae `equilibrio` con `cubre: false`, la meta NO paga el plan: DEBES agregar `equilibrio_respuesta: { decision: "subo_la_meta" | "mantengo_la_meta", motivo }` (si subes la meta, sube `meta_por_semana` y di de dónde sale: es un supuesto; si la mantienes, di por qué). La meta de equilibrio la calculó el código: no la recalcules.',
   cierre: 'Eres el jefe de finanzas. Resuelve los conflictos y emite la SALIDA: sale, sale_ajustada o sale_con_alerta (nunca «no sale»: lo financiero no bloquea). Lista los hallazgos con severidad (critico, alto, medio, bajo) y a quién aluden (fpa, redes, busqueda, medicion, plan). Si una cifra que manda está «sin base», solo puedes emitir sale_con_alerta. Esquema acuerdo.v1: {salida, hallazgos[{severidad, que, alude?}], conflictos_resueltos[], dato_que_no_bloquea?, preguntas_a_emilio[{clave, texto, recomendacion, supuesto_si_no_responde}]}.',
 }
 export function pedidoDelAgente(paso: Paso, contexto: Record<string, unknown>): string {
@@ -95,24 +95,45 @@ function consultaDe(a: Arts, k: string): ConsultaV1 | null {
   return c && !c.sin_supuestos_del_agente ? (c as unknown as ConsultaV1) : null
 }
 
-function calcularBloque(e: EncargoDeConversa, a: Arts, ronda: 1 | 2): ResultadoDePaso {
+type EntradaDelMomento =
+  | { ok: true; entrada: Parameters<typeof calcular>[0]; alertas: string[]; planteo: PlanteoV1 }
+  | { ok: false; motivo: string; errores: string[] }
+/** la entrada de la calculadora con lo que hay en este momento (la MISMA para el cálculo y para el equilibrio que ve el ajuste) */
+function entradaDelMomento(a: Arts, ronda: 1 | 2): EntradaDelMomento {
   const sano = (k: string) => (a[k] && !a[k].sin_supuestos_del_agente ? a[k] : undefined)
   const planteo = ronda === 2 ? (sano('planteo_fijado_2') ?? sano('planteo_fijado') ?? sano('planteo')) : (sano('planteo_fijado') ?? sano('planteo'))
   const exp = a.expediente ?? {}
   const consultas = ronda === 2
     ? { fpa: consultaDe(a, 'consulta_fpa_2') ?? consultaDe(a, 'consulta_fpa'), redes: consultaDe(a, 'consulta_redes_2') ?? consultaDe(a, 'consulta_redes'), busqueda: consultaDe(a, 'consulta_busqueda_2') ?? consultaDe(a, 'consulta_busqueda'), medicion: consultaDe(a, 'consulta_medicion_2') ?? consultaDe(a, 'consulta_medicion') }
     : { fpa: consultaDe(a, 'consulta_fpa'), redes: consultaDe(a, 'consulta_redes'), busqueda: consultaDe(a, 'consulta_busqueda'), medicion: consultaDe(a, 'consulta_medicion') }
+  if (!planteo) return { ok: false, motivo: 'sin_planteo', errores: [] }
+  const quien = especialistasQueHablan((planteo as unknown as PlanteoV1).canales ?? [])
+  if (quien.sin_pauta) return { ok: false, motivo: 'sin_pauta', errores: [] }
+  const ent = entradaDesdeLaConversa({ planteo: planteo as unknown as PlanteoV1, consultas, expediente: { referencias: (exp.referencias as never) ?? [], evento_alterno: (exp.evento_alterno as never) ?? {}, pisos: (exp.pisos as never) ?? {}, fecha: (exp.fecha as string) ?? undefined } })
+  if (!ent.ok) return { ok: false, motivo: 'sin_base', errores: ent.errores }
+  return { ok: true, entrada: ent.entrada, alertas: ent.alertas, planteo: planteo as unknown as PlanteoV1 }
+}
+
+function calcularBloque(e: EncargoDeConversa, a: Arts, ronda: 1 | 2): ResultadoDePaso {
   const previo = (a.bloque ?? null) as { huella?: string } | null
   const sinBloque = (motivo: string, errores: string[] = []): ResultadoDePaso => ({ costo_usd: 0, artefacto: { hay_bloque: false, cambio: ronda === 2 && !!previo?.huella, motivo, errores, huella: null } })
-  if (!planteo) return sinBloque('sin_planteo')
-  const quien = especialistasQueHablan((planteo as unknown as PlanteoV1).canales ?? [])
-  if (quien.sin_pauta) return sinBloque('sin_pauta')
-  const ent = entradaDesdeLaConversa({ planteo: planteo as unknown as PlanteoV1, consultas, expediente: { referencias: (exp.referencias as never) ?? [], evento_alterno: (exp.evento_alterno as never) ?? {}, pisos: (exp.pisos as never) ?? {}, fecha: (exp.fecha as string) ?? undefined } })
-  if (!ent.ok) return sinBloque('sin_base', ent.errores)
-  const r = calcular(ent.entrada)
+  const m = entradaDelMomento(a, ronda)
+  if (!m.ok) return sinBloque(m.motivo, m.errores)
+  const planteo = m.planteo
+  const r = calcular(m.entrada)
   if (!r.ok) return sinBloque('entrada_invalida', r.errores)
   const huella = huellaDe(r)
-  return { costo_usd: 0, artefacto: { hay_bloque: true, bloque: r as unknown as Record<string, unknown>, entrada: ent.entrada as unknown as Record<string, unknown>, alertas_de_entrada: [...ent.alertas, ...(Array.isArray((planteo as { dado_por_verificado?: unknown }).dado_por_verificado) && ((planteo as { dado_por_verificado: unknown[] }).dado_por_verificado).length ? ['el plan dio por verificado algo que el código no comprueba: la confianza no sube y la salida solo puede ser «con alerta»'] : [])], huella, cambio: ronda === 2 ? huella !== previo?.huella : false } }
+  return { costo_usd: 0, artefacto: { hay_bloque: true, bloque: r as unknown as Record<string, unknown>, entrada: m.entrada as unknown as Record<string, unknown>, alertas_de_entrada: [...m.alertas, ...(Array.isArray((planteo as { dado_por_verificado?: unknown }).dado_por_verificado) && ((planteo as { dado_por_verificado: unknown[] }).dado_por_verificado).length ? ['el plan dio por verificado algo que el código no comprueba: la confianza no sube y la salida solo puede ser «con alerta»'] : [])], huella, cambio: ronda === 2 ? huella !== previo?.huella : false } }
+}
+
+/** plan v3 · V7 · lo que el ajuste DEBE ver: la meta de equilibrio calculada por código con los supuestos que ya hay (o null si todavía no hay con qué) */
+export function equilibrioParaElAjuste(a: Arts, ronda: 1 | 2): { cubre: boolean | null; meta_actual: number; meta_de_equilibrio_semana: number | null; meta_sugerida_semana: number | null; es: string; motivo: string | null } | null {
+  const m = entradaDelMomento(a, ronda)
+  if (!m.ok) return null
+  const r = calcular(m.entrada)
+  if (!r.ok) return null
+  const q = r.equilibrio
+  return { cubre: q.cubre, meta_actual: q.meta_actual, meta_de_equilibrio_semana: q.meta_de_equilibrio_semana, meta_sugerida_semana: q.meta_sugerida_semana, es: 'SUPUESTO calculado por código con los supuestos de los especialistas; no es un dato', motivo: q.motivo }
 }
 
 // ───────────────────────────────────────────────────────── el hilo
@@ -214,6 +235,11 @@ export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise
     const contexto: Record<string, unknown> = {}
     for (const nombre of paso.entrada) if (arts[nombre]) contexto[nombre] = arts[nombre]
     if (hilo.notas.length || hilo.respuestas.length) contexto.del_dueno_en_el_hilo = { notas: hilo.notas.map((x) => ({ ...x, marca: 'nota del dueño: no es un dato confirmado' })), respuestas: hilo.respuestas.map((x) => ({ ...x, marca: 'respuesta numerada del dueño, con su fecha' })) }
+    // plan v3 · V7: el ajuste ve la meta de equilibrio (la calcula el código con lo que ya dijeron los especialistas) y, si la meta no la cubre, DEBE responderla
+    const esAjuste = paso.clave.replace(/_2$/, '') === 'ajuste'
+    const equilibrio = esAjuste ? equilibrioParaElAjuste(arts, paso.clave === 'ajuste_2' ? 2 : 1) : null
+    if (equilibrio) contexto.equilibrio = equilibrio
+    const exigeEquilibrio = equilibrio?.cubre === false
     const tarea = pedidoDelAgente(paso, contexto)
     let costo = 0
     const intentos = 1 + (paso.salida?.reintento_formato ?? 0)
@@ -226,7 +252,8 @@ export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise
       const j = extraerJson(r.salida)
       if (!j.ok) { ultimoError = j.error; continue }
       const v = validar(paso, j.valor)
-      if (v.ok) valor = v.valor
+      if (v.ok && exigeEquilibrio && !respuestaDeEquilibrioValida(v.valor)) ultimoError = 'la meta no cubre el equilibrio: falta equilibrio_respuesta { decision, motivo }'
+      else if (v.ok) valor = v.valor
       else ultimoError = v.errores.join('; ')
     }
     if (valor) resultado = { costo_usd: costo, artefacto: derivar(paso, valor) }

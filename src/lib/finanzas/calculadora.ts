@@ -7,7 +7,7 @@
  * AGNÓSTICA: ninguna rama por tipo de cliente; el cliente entra como parámetros opcionales (`Entrada`).
  */
 import { repartirPresupuesto } from './repartir'
-import type { Bloque, Cifra, Confianza, Entrada, FilaDeReparto, Resultado, Veredicto } from './tipos'
+import type { Bloque, Cifra, Confianza, Entrada, Equilibrio, FilaDeReparto, Resultado, Veredicto } from './tipos'
 
 export const SEMANAS_POR_MES = 52 / 12
 export const DIAS_DEL_MES = 30
@@ -156,6 +156,29 @@ export function confianzaDe(cifras: Record<string, Cifra>): Confianza {
   return { datos, supuestos, sin_base, total, nivel, manda_sin_base, texto: `Confianza del tablero: ${datos} dato(s), ${supuestos} supuesto(s), ${sin_base} sin base de ${total}; ${frase}.` }
 }
 
+/**
+ * PLAN v3 · V7 · LA META DE EQUILIBRIO SEMANAL: el menor número de resultados finales por semana para que lo que deja cada venta
+ * (ticket × margen × períodos − costo de entrega) pague el TOTAL mensual del plan que esa meta exige.
+ *   total_mes(W) ÷ (W × 52 ÷ 12)  =  contribución por venta
+ * `total_mes` NO es lineal en W (la producción es un monto fijo con tope del 40 %): el costo por venta baja al crecer la meta, por eso existe un umbral.
+ * Siempre es un SUPUESTO (usa el costo por resultado de arranque y la tasa de resultado a venta); nunca un dato. Sin ticket/margen o sin contribución positiva: `null` con su motivo.
+ * `totalPara(W)` es la MISMA cadena de `calcular` (pauta → Meta+IG necesario → reparto inverso): una sola verdad.
+ */
+export function metaDeEquilibrio(p: { contribucion: number | null; meta: number; totalPara: (meta: number) => number }): Equilibrio {
+  const base: Equilibrio = { meta_de_equilibrio_semana: null, meta_actual: p.meta, cubre: null, meta_sugerida_semana: null, contribucion_por_venta: p.contribucion == null ? null : r2(p.contribucion), motivo: null }
+  if (p.contribucion == null) return { ...base, motivo: 'sin ticket o margen: no hay con qué medir si una venta paga su costo' }
+  if (!(p.contribucion > 0)) return { ...base, motivo: 'la venta no deja contribución positiva: ninguna meta cubre el equilibrio' }
+  const g = (w: number) => p.totalPara(w) / (w * SEMANAS_POR_MES) - p.contribucion!
+  const LO = 0.01, HI = 100000
+  if (g(HI) > TOLERANCIA) return { ...base, motivo: 'ni con una meta enorme la venta paga lo que cuesta venderla: el equilibrio no existe con estos supuestos' }
+  if (g(LO) <= TOLERANCIA) return { ...base, meta_de_equilibrio_semana: 0, cubre: true, motivo: 'cualquier meta cubre el equilibrio con estos supuestos' }
+  let lo = LO, hi = HI
+  for (let i = 0; i < 100; i++) { const mid = (lo + hi) / 2; if (g(mid) > 0) lo = mid; else hi = mid }
+  const w = r2(hi)
+  const cubre = p.meta + TOLERANCIA >= hi
+  return { ...base, meta_de_equilibrio_semana: w, cubre, meta_sugerida_semana: cubre ? null : Math.ceil(hi) }
+}
+
 export function calcular(e: Entrada): Resultado {
   const errores = validarEntrada(e)
   if (errores.length) return { ok: false, errores }
@@ -257,6 +280,18 @@ export function calcular(e: Entrada): Resultado {
       : { valor: null, tipo: 'sin_base', fuente: 'no la trajo el plan', motivo: 'sin base: el plan no declaró producción' },
   }
 
+  const confianza = confianzaDe(cifras)
+
+  // ── plan v3 · V7 · la meta de equilibrio (supuesto; no entra a la confianza ni al techo: es un aviso para el ajuste)
+  const contribucion = conValor ? e.ticket! * e.margen! * periodos - entrega : null
+  const totalPara = (meta: number) => repartoInverso({ metaIgNecesario: ((meta / q) * costo.base * SEMANAS_POR_MES) / (1 - marca), produccion: prod, canales: e.canales ?? [] }).totalMes
+  const equilibrio = metaDeEquilibrio({ contribucion, meta: e.meta_por_semana, totalPara })
+  if (equilibrio.meta_de_equilibrio_semana !== null) {
+    cifras.meta_de_equilibrio_semana = cifra(equilibrio.meta_de_equilibrio_semana, { tipo: 'supuesto', fuente: 'la contribución por venta paga el total mensual del plan', formula: 'total_mes(W) ÷ (W × 52 ÷ 12) = ticket × margen × períodos − entrega' })
+    if (equilibrio.meta_sugerida_semana !== null) cifras.meta_sugerida_semana = cifra(equilibrio.meta_sugerida_semana, { tipo: 'supuesto', fuente: 'primera meta entera que cubre el equilibrio (la decide el dueño)', formula: 'ceil(meta de equilibrio)' })
+  }
+  if (equilibrio.cubre === false) alertas.push(`esta meta no cubre el equilibrio: con ${r2(e.meta_por_semana)} por semana el plan no se paga; el equilibrio está en ${equilibrio.meta_de_equilibrio_semana} por semana (supuesto; una meta mayor, ${equilibrio.meta_sugerida_semana}, sí lo cubriría)`)
+
   return {
     ok: true, cifras, veredictos, costos: { cota_baja: r2(costo.cota_baja), base: r2(costo.base), cota_alta: r2(costo.cota_alta) },
     techo: { por_resultado: r2(T), ajusto_hasta: r2(T * UMBRAL_RECORTE), recorte_desde: r2(T * UMBRAL_RECORTE), paro_desde: r2(T * UMBRAL_PARO), sin_valor_monetario: !conValor },
@@ -268,6 +303,7 @@ export function calcular(e: Entrada): Resultado {
       otros: otros.map((o) => ({ ...o, monto: parte('otros:' + o.canal) })), sumado_a_meta_ig: r2(sumado), parte_meta_ig: totalMes > 0 ? Math.round((parte('meta_ig') / totalMes) * 1000) / 1000 : 0,
     },
     calendario, primera_lectura_dia: primeraLecturaDia(e.horizonte_dias, e.ciclo_dias), costo_por_venta: r2(costoPorVenta), alertas,
-    confianza: confianzaDe(cifras),
+    equilibrio,
+    confianza,
   }
 }

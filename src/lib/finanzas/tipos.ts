@@ -74,8 +74,18 @@ export interface Bloque {
   primera_lectura_dia: number
   costo_por_venta: number
   alertas: string[]
+  /** plan v3 · V7: la meta semanal en que el plan se paga (supuesto) y si la meta actual la cubre */
+  equilibrio: Equilibrio
   /** R14: cuántas cifras son dato, supuesto o «sin base»; «firmado» no significa «verdadero» */
   confianza: Confianza
+}
+export interface Equilibrio {
+  meta_de_equilibrio_semana: number | null
+  meta_actual: number
+  cubre: boolean | null
+  meta_sugerida_semana: number | null
+  contribucion_por_venta: number | null
+  motivo: string | null
 }
 export interface Confianza { datos: number; supuestos: number; sin_base: number; total: number; nivel: 'confirmado' | 'parcial' | 'casi_todo_supuesto' | 'sin_base'; manda_sin_base: boolean; texto: string }
 export interface Rechazo { ok: false; errores: string[] }

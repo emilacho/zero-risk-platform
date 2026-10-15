@@ -423,3 +423,43 @@ describe('F8 · el pedido corto y la procedencia', () => {
     expect(validarConsulta(FPA).ok).toBe(true)
   })
 })
+
+describe('F8 · plan v3 V7 · el ajuste debe responder el equilibrio cuando la meta no lo cubre', () => {
+  // una meta de 1 por semana con producción fija de 600/mes no paga el plan: el equilibrio está bastante arriba
+  const BAJO = { ...PLANTEO, meta_por_semana: 1, produccion: { monto: 600 } }
+  const SIN_RESPUESTA = { ...BAJO }
+  const CON_RESPUESTA = { ...BAJO, meta_por_semana: 60, equilibrio_respuesta: { decision: 'subo_la_meta', motivo: 'la meta sube porque con 1 por semana el plan no se paga' } }
+  const tareasDelAjuste = (m: ReturnType<typeof mundo>) => m.c.llamadas.filter((l) => l.paso === 'ajuste')
+  it('el ajuste ve el equilibrio calculado por código y el pedido declara la obligación', async () => {
+    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, CON_RESPUESTA] } })
+    const r = await abrir(m)
+    await correrTodo(m, (r.cuerpo as any).encargo_id)
+    const aj = tareasDelAjuste(m)
+    expect(aj.length).toBeGreaterThan(0)
+    expect(aj[0].tarea).toMatch(/"equilibrio":\{"cubre":false/)
+    expect(aj[0].tarea).toMatch(/equilibrio_respuesta/)
+  })
+  it('una respuesta SIN equilibrio_respuesta se reintenta y, con ella, se acepta y queda en el planteo fijado', async () => {
+    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, SIN_RESPUESTA, CON_RESPUESTA] } })
+    const r = await abrir(m)
+    await correrTodo(m, (r.cuerpo as any).encargo_id)
+    expect(tareasDelAjuste(m).length).toBe(2)
+    expect(tareasDelAjuste(m)[1].tarea).toMatch(/falta equilibrio_respuesta/)
+    expect((m.arts.planteo_fijado as any).equilibrio_respuesta?.decision).toBe('subo_la_meta')
+  })
+  it('si nunca la trae, el paso se degrada («sin supuestos del agente») y la conversación SIGUE: nunca bloquea', async () => {
+    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, SIN_RESPUESTA, SIN_RESPUESTA] } })
+    const r = await abrir(m)
+    const fin = await correrTodo(m, (r.cuerpo as any).encargo_id)
+    expect(fin.r.status).toBe(200)
+    expect((m.arts.planteo_fijado as any).sin_supuestos_del_agente).toBe(true)
+    expect(fin.r.cuerpo.terminado).toBe(true)
+  })
+  it('control · con una meta que SÍ cubre el equilibrio no se exige nada', async () => {
+    const m = mundo({ guion: { 'campaign-brief-agent': [{ ...BAJO, meta_por_semana: 500 }, { ...BAJO, meta_por_semana: 500 }] } })
+    const r = await abrir(m)
+    await correrTodo(m, (r.cuerpo as any).encargo_id)
+    expect(tareasDelAjuste(m).length).toBe(1)
+    expect((m.arts.planteo_fijado as any).sin_supuestos_del_agente).toBeUndefined()
+  })
+})
