@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeFinanzas, type Db } from '@/lib/finanzas/almacen-supabase'
 import { almacenDeConversa } from '@/lib/finanzas/conversa/almacen-supabase'
-import { modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
+import { baseDeRunSdk, modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
 import { abrirConversacion, avanzar } from '@/lib/finanzas/conversa/orquestador'
 import { avanzarConSimulacion } from '@/lib/finanzas/conversa/simulado'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   const tableros = almacenDeFinanzas(db)
   const P: PuertosDeConversa = {
     almacen: almacenDeConversa(db),
-    modelo: modeloRunSdk({ base: process.env.FINANZAS_RUN_SDK_BASE, llave: process.env.INTERNAL_API_KEY, fetch, workflow_id: typeof cuerpo === 'object' && cuerpo !== null ? ((cuerpo as Record<string, unknown>).workflow_id as string | undefined) : undefined }),
+    modelo: modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch, workflow_id: typeof cuerpo === 'object' && cuerpo !== null ? ((cuerpo as Record<string, unknown>).workflow_id as string | undefined) : undefined }),
     slack: slackNoConfigurado,
     tableros,
     config: () => tableros.leerConfig(),
