@@ -25,7 +25,8 @@ async function responder(request: Request, cuerpo: unknown) {
     return NextResponse.json({ error: 'listo_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 }
-export async function GET(request: Request) { return responder(request, { client_id: new URL(request.url).searchParams.get('client_id') ?? '' }) }
+export async function GET(request: Request) { const q = new URL(request.url).searchParams
+  return responder(request, { client_id: q.get('client_id') ?? '', ...(q.get('pedido_id') ? { pedido_id: q.get('pedido_id') } : {}) }) }
 export async function POST(request: Request) {
   let cuerpo: unknown = {}
   try { cuerpo = await request.json() } catch { /* sin cuerpo */ }
