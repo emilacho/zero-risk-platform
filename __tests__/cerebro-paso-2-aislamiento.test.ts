@@ -62,6 +62,8 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/app\/api\/brain\/ingest-source\/route\.ts$/,
   // plan v3 · V14 (15-oct): el LECTOR del plan lee `cerebro_fichas` (y el crudo por la misma compuerta del portero) para armar el brazo primario. Solo SELECT: no escribe nada.
   /^src\/lib\/planeacion\/dato-v1\/lector-cerebro\.ts$/,
+  // plan v3 · V11: el kit del seco solo CUENTA filas (contadores antes/después); no las lee ni las escribe
+  /^scripts\/ops\/plan-v3-seco\/matriz\.mjs$/,
   /^__tests__\/plan-v3-v14-lector-cerebro\.test\.ts$/,
   /^__tests__\/cerebro-paso-2-(aislamiento|migracion)\.test\.ts$/,
   /^__tests__\/cerebro-fotos-2-columnas\.test\.ts$/,

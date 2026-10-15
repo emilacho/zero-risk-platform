@@ -8,7 +8,7 @@
 var _P10_SEVERIDAD = { P10a: 'alta', P10b: 'alta', P10c: 'alta', P10d: 'alta', P10e: 'leve', P10f: 'alta', P10g: 'alta', P10h: 'leve', P10i: 'alta', P10j: 'leve', P10k: 'leve', P10l: 'alta', P10m: 'leve' }
 var _P10_MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre']
 var _P10_NO_CIFRA_DETRAS = ['semana', 'semanas', 'mes', 'meses', 'fase', 'paso', 'punto', 'dia', 'dias', 'etapa', 'ronda', 'version', 'v', 'd', 's', 'p', 'seccion', 'tabla', 'figura']
-var _P10_NO_CIFRA_DESPUES = ['semana', 'semanas', 'mes', 'meses', 'dia', 'dias', 'fase', 'fases', 'paso', 'pasos', 'etapa', 'etapas', 'ronda', 'rondas']
+var _P10_NO_CIFRA_DESPUES = ['semana', 'semanas', 'mes', 'meses', 'dia', 'dias', 'fase', 'fases', 'paso', 'pasos', 'etapa', 'etapas', 'ronda', 'rondas', 'minuto', 'minutos', 'hora', 'horas', 'segundos']
 var _P10_IMPERATIVOS = /(ignora|ignore|ignorar|olvida|olvidate|forget|disregard|desestima)[^.]{0,40}(instrucciones|instructions|prompt|reglas|todo lo anterior|anterior|previous)|(a partir de ahora|from now on|eres ahora|you are now|system prompt|nuevas instrucciones|new instructions)/
 
 function _p10Norm(s) {
@@ -87,7 +87,8 @@ function _p10Candidatos(tok) {
 /** las cifras de una frase (sin las citas): [{ texto, candidatos[], pct }] */
 function _p10Cifras(frase) {
   // las fechas («2026-10-12», «12 de octubre») no son cifras de hecho: las cubre P10b/P10h
-  var t = String(frase).replace(/\[D\d+\]/g, ' ').replace(/\d{4}-\d{2}-\d{2}/g, ' ').replace(new RegExp('\\d{1,2} de (?:' + _P10_MESES.join('|') + ')', 'gi'), ' ')
+  // calibración 15-oct (plan v2 real): las HORAS («8:00 a 16:00») y los TELÉFONOS («+593 997744288») no son cifras de hecho
+  var t = String(frase).replace(/\[D\d+\]/g, ' ').replace(/\b\d{1,2}:\d{2}\b/g, ' ').replace(/\+\d{1,3}[ -]?\d{6,}/g, ' ').replace(/\b\d{7,}\b/g, ' ').replace(/\d{4}-\d{2}-\d{2}/g, ' ').replace(new RegExp('\\d{1,2}(?:\\s?[-–]\\s?\\d{1,2})?(?:\\s+y\\s+(?:el\\s+)?\\d{1,2})? de (?:' + _P10_MESES.join('|') + ')', 'gi'), ' ').replace(/#[0-9a-fA-F]{3,8}\b/g, ' ').replace(/\d{1,2}(?:\s?[-–]\s?\d{1,2})?\s+(?:de\s+)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)[a-z]*/gi, ' ')
   var re = /\d{1,3}(?:[  ]\d{3})+(?:[.,]\d{1,2})?|\d[\d.,]*\d|\d/g
   var out = [], m
   while ((m = re.exec(t)) !== null) {
@@ -99,6 +100,9 @@ function _p10Cifras(frase) {
     var esAnio = /^(19|20)\d\d$/.test(tok)
     var siguiente = _p10Norm(t.slice(m.index + tok.length, m.index + tok.length + 14)).replace(/[^a-z ]/g, ' ').trim().split(/\s+/)[0]
     var esOrden = _P10_NO_CIFRA_DETRAS.indexOf(previa) >= 0 || _P10_NO_CIFRA_DESPUES.indexOf(siguiente) >= 0
+    // un rango de duración («15-20 minutos»): el primer extremo tampoco es un hecho
+    var rango = /^\s*(?:-|a|–)\s*\d+\s+([a-z]+)/.exec(_p10Norm(t.slice(m.index + tok.length, m.index + tok.length + 24)))
+    if (rango && _P10_NO_CIFRA_DESPUES.indexOf(rango[1]) >= 0) esOrden = true
     var pequena = cands[0] < 10 && tok.indexOf('.') < 0 && tok.indexOf(',') < 0 && !pct
     out.push({ texto: tok + (pct ? '%' : ''), candidatos: pct ? cands.concat(cands.map(function (c) { return c / 100 })) : cands, pct: pct, pequena: pequena, ignorable: esAnio || esOrden || pequena, estructural: esAnio || esOrden })
   }
@@ -184,7 +188,10 @@ function p10Revisar(texto, datos, op) {
     }
 
     // P10d · «no tiene / sin pauta / no hay» + cita a un D# que NO es vacío declarado, o sin cita
-    var aus = _p10Tiene(n, lex.ausencia)
+    // calibración 15-oct: frases que traen un término de ausencia pero NO afirman una ausencia («no hay que instalar», «se buscó y no hay»): son FILA del catálogo (`ausencia_excluye`)
+    var nAus = n
+    ;(lex.ausencia_excluye || []).forEach(function (t) { var tn = _p10Norm(t).trim(); if (tn) nAus = nAus.split(tn).join(' ') })
+    var aus = _p10Tiene(nAus, lex.ausencia)
     if (aus) {
       if (!citas.length) acc.P10d.push(corta + ' → «' + aus + '» sin cita')
       else citas.forEach(function (id) { var d = tabla[id]; if (d && d.estado !== 'vacio_declarado') acc.P10d.push(corta + ' → [' + id + '] es «' + d.estado + '», no vacío declarado') })
@@ -316,7 +323,8 @@ function p10Calibrar(casos) {
       if (m.severidad === 'alta') altas += n; else leves += n
     })
     total += altas
-    salida.push({ id: c.id, por_codigo: por, altas: altas, leves: leves, ruido: altas >= _P10_UMBRAL_RUIDO_ALTAS })
+    var codigosAltos = marcas.filter(function (m) { return m.severidad === 'alta' }).map(function (m) { return m.codigo })
+    salida.push({ id: c.id, por_codigo: por, altas: altas, leves: leves, codigos_altos: codigosAltos, ruido: altas >= _P10_UMBRAL_RUIDO_ALTAS })
   })
   return { casos: salida, total_altas: total }
 }

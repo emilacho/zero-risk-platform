@@ -89,6 +89,25 @@ describe('V5 · P10a–m · cada falla del catálogo tiene su caso trampa y su c
   it('una fecha («12 de octubre», «2026-10-12») no es una cifra de hecho: no marca P10f', () => {
     expect(codigos('El análisis se hizo el 12 de octubre y la corrida del 2026-10-14 quedó guardada.')).not.toContain('P10f')
   })
+  it('CALIBRACIÓN con el plan v2 real (15-oct): horas, teléfonos, rangos de duración, colores y fechas con mes NO son cifras de hecho', () => {
+    for (const t of [
+      'Atiende de jueves a lunes, 8:00 a 16:00.',
+      'Escríbenos al WhatsApp +593 997744288 para pedidos.',
+      'Revisión de 15-20 minutos cada 12 días.',
+      'Fondos principales en #1a0828 y #2d1135.',
+      'Semana 2: 21-27 oct, completar la base.',
+      'Piezas para el 24-25 de diciembre.',
+    ]) expect(codigos(t), t).not.toContain('P10f')
+    // y lo que SÍ es un hecho sigue marcando
+    expect(codigos('Tiene 2.500 seguidores en Instagram.')).toContain('P10f')
+  })
+  it('CALIBRACIÓN · «no hay que instalar» y «se buscó y no hay» no afirman una ausencia (fila `ausencia_excluye`); «no hay mecanismo» sí', () => {
+    const op = { ...OP, lexico: { ...OP.lexico, ausencia_excluye: ['no hay que', 'no hay duda', 'se busco y no hay'] } }
+    expect(codigos('No hay que instalar nada nuevo.', D, op)).not.toContain('P10d')
+    expect(codigos('La diferencia entre "se buscó y no hay" y "no se pudo verificar" se respeta.', D, op)).not.toContain('P10d')
+    expect(codigos('Hoy no hay mecanismo de retención visible.', D, op)).toContain('P10d')
+    expect(codigos('No hay que instalar nada nuevo.', D, OP)).toContain('P10d') // sin la fila, marca (es FILA, no código)
+  })
   it('P10g (R12/I6) · dato de otro negocio o sin comprobar afirmado como hecho', () => {
     expect(codigos('La ficha tiene 4,1 puntos [D6].')).toContain('P10g')
     const sinComprobar = [...D, dato('D21', 'seguidores', { numero: 55 }, { identidad: { estado: 'no_comprobable' } })]
