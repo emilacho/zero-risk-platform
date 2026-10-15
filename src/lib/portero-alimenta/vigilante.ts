@@ -67,7 +67,8 @@ export function problemasDelCierre(cierre: unknown, clientId: string): string[] 
   return out
 }
 
-async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: string; nombre: string | null }, cierre: unknown, ahora: Date, dia: string): Promise<{ r: ResultadoDeCliente; rastro: Fila | null }> {
+/** `sinGasto`: el despertar con el raspado del alta no gasta (US$ 0): el gasto del día es del alta, no suyo, y no debe apagar nada */
+export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: string; nombre: string | null }, cierre: unknown, ahora: Date, dia: string, opciones: { sinGasto?: boolean } = {}): Promise<{ r: ResultadoDeCliente; rastro: Fila | null }> {
   const r: ResultadoDeCliente = { client_id: c.client_id, nombre: c.nombre, problemas: problemasDelCierre(cierre, c.client_id), gasto_usd: null }
   const falla = (que: string, m: string) => r.problemas.push(`${PREFIJO_NO_PUDE} ${que}: ${m}`.slice(0, 200))
 
@@ -80,8 +81,9 @@ async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: string; no
     else if (rastro.estado !== 'hecha') r.problemas.push(`el rastro de hoy dice «${String(rastro.estado)}»`)
   }
 
-  const g = await gastoDeHoy(deps.db, c.client_id, ahora)
-  if (!g.ok) falla('el gasto del día', g.detalle)
+  const g = opciones.sinGasto ? null : await gastoDeHoy(deps.db, c.client_id, ahora)
+  if (g === null) { /* sin condición de gasto */ }
+  else if (!g.ok) falla('el gasto del día', g.detalle)
   else {
     r.gasto_usd = redondeo(g.gasto.total_usd)
     if (g.gasto.total_usd > LIMITE_DEL_VIGILANTE_USD) r.problemas.push(`gasto del día US$ ${r.gasto_usd.toFixed(2)} > ${LIMITE_DEL_VIGILANTE_USD.toFixed(2)}`)
@@ -111,11 +113,11 @@ async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: string; no
 }
 
 /** el texto de UNA línea para #alertas */
-export function lineaDeAlerta(res: ResultadoDeCliente[], apagado: boolean, workflowId: string, intentos = 1): string {
+export function lineaDeAlerta(res: ResultadoDeCliente[], apagado: boolean, workflowId: string, intentos = 1, etapa?: string): string {
   const todos = res.flatMap((x) => x.problemas.map((p) => `${x.nombre ?? x.client_id.slice(0, 8)}: ${p}`))
   const primero = todos[0] ?? 'sin detalle'
   const mas = (todos.length > 1 ? ` (+${todos.length - 1} más)` : '') + (intentos > 1 ? ` · falló ${intentos} veces` : '')
-  return `🔴 Portero del cerebro ${apagado ? 'APAGADO' : 'CON PROBLEMAS (no se pudo apagar: apágalo a mano)'} · ${primero}${mas} · revisar y volver a activar el flujo ${workflowId} en n8n`
+  return `🔴 Portero del cerebro${etapa ? ` (${etapa})` : ''} ${apagado ? 'APAGADO' : 'CON PROBLEMAS (no se pudo apagar: apágalo a mano)'} · ${primero}${mas} · revisar y volver a activar el flujo ${workflowId} en n8n`
 }
 
 export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Promise<Respuesta> {
