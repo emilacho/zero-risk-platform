@@ -21,7 +21,8 @@ const verificar = ver.verificarSemilla as unknown as (s: unknown) => string[]
 const TABLAS = nucleo.TABLAS as unknown as Record<string, { tabla: string; clave: string; req: string[]; campos: Record<string, unknown> }>
 const clonar = (): Semilla => JSON.parse(JSON.stringify(semillaJson))
 const raiz = join(__dirname, '..')
-const leer = (...p: string[]) => readFileSync(join(raiz, ...p), 'utf8')
+// en Windows git puede dejar CRLF en el árbol de trabajo: lo versionado (y lo del CI) es LF
+const leer = (...p: string[]) => readFileSync(join(raiz, ...p), 'utf8').split('\r\n').join('\n')
 
 describe('V1 · la semilla', () => {
   it('es válida: cada fila pasa el alta de V12, las referencias existen y trae las filas críticas', () => {

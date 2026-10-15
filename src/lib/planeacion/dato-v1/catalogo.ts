@@ -53,8 +53,14 @@ export function crearSnapshot(filas: FilasDelCatalogo): CatalogoSnapshot {
     },
     monedaDePais: (pais) => {
       if (!pais) return null
-      const p = pais.trim().toUpperCase()
-      const r = filas.reglas.find((x) => x.clase === 'moneda_pais' && (x.pais ?? '').toUpperCase() === p)
+      const quita = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+      const p = quita(pais)
+      // la ficha del cliente trae el país como NOMBRE («Ecuador») o como código («EC»): la fila lo admite por su código o por sus `nombres`
+      const r = filas.reglas.find((x) => {
+        if (x.clase !== 'moneda_pais') return false
+        const nombres = Array.isArray(x.parametros?.nombres) ? (x.parametros.nombres as unknown[]).filter((n): n is string => typeof n === 'string').map(quita) : []
+        return quita(x.pais ?? '') === p || nombres.includes(p)
+      })
       const m = r?.parametros?.moneda
       return typeof m === 'string' ? { moneda: m, rotulo: typeof r?.parametros?.rotulo === 'string' ? (r.parametros.rotulo as string) : `${m} por omisión del país: nadie la declaró` } : null
     },

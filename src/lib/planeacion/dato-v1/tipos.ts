@@ -113,6 +113,8 @@ export type EntradaDeIdentidad =
   | { via: 'texto'; texto: string; autoria: 'propia' | 'tercero'; de_ficha_propia?: boolean; sede_distinta?: boolean }
   /** varias fichas de Mapas: `fichaPropiaDeMapas` elige la del cliente (más de una candidata ⇒ ninguna) */
   | { via: 'mapas'; items: Array<Record<string, unknown>> }
+  /** lo ya raspado (`apify_raw`) que PASÓ `filtrar` del `portero` en el lector (V14): vale SOLO con `via: 'crudo'`; un homónimo no llega aquí */
+  | { via: 'crudo_filtrado' }
   /** la consulta se hizo con una clave propia del cliente (su página, su usuario, su dominio declarado en la ficha): pertenece al cliente por construcción */
   | { via: 'consulta_propia' }
   /** la fuente no trae campos con los que comprobar */

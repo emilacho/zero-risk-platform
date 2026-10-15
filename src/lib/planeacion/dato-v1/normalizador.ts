@@ -61,6 +61,11 @@ export function resolverIdentidad(e: EntradaDeIdentidad | null | undefined, fuen
       return via === 'cerebro'
         ? { estado: 'coincide', senales: [], por_que: 'ficha viva: ya pasó el filtro del portero', identidad_por: 'portero' }
         : { estado: 'no_comprobable', senales: [], por_que: '«ficha viva del portero» solo vale para lo que viene del cerebro; el crudo y el relleno pasan por la compuerta', identidad_por: 'normalizador' }
+    case 'crudo_filtrado':
+      // V14: el crudo entra SOLO tras la compuerta del portero (`filtrar`), y solo como `via: 'crudo'`; con otra vía no vale
+      return via === 'crudo'
+        ? { estado: 'coincide', senales: [], por_que: 'pasó la compuerta del portero (filtrar) sobre lo ya raspado', identidad_por: 'portero' }
+        : { estado: 'no_comprobable', senales: [], por_que: '«crudo filtrado» solo vale para lo que viene del crudo', identidad_por: 'normalizador' }
     case 'consulta_propia': return { estado: 'coincide', senales: [], por_que: 'la consulta se hizo con una clave propia del cliente (declarada en su ficha)', identidad_por: 'fuente' }
     case 'ninguna': return { estado: 'no_comprobable', senales: [], por_que: 'la fuente no trae campos de identidad', identidad_por: 'normalizador' }
     case 'texto': {
