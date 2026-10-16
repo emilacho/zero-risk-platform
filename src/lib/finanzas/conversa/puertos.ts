@@ -97,6 +97,8 @@ export interface AlmacenDeConversa {
   /** lo REALMENTE cobrado por el encargo: suma de `agent_invocations` de `<encargo>:<paso>` (incluye lo que se cobró y no llegó a guardarse); null si no se pudo leer */
   cobrado?(encargo_id: string): Promise<number | null>
   /** BUZÓN (16-oct): guarda solo lo del buzón (canal/ts del MD, cursor de lectura, respuestas en la semilla, registro) SIN tocar el estado del motor ni el gasto: no pisa un paso en vuelo */
+  /** BUZÓN: MD enviados (un `buzon_respuestas` versión 1 = un MD) por este cliente en las últimas 24 h y entre todos desde las 00:00 UTC; null si no se pudo leer */
+  contarBuzon?(client_id: string, ahora: Date): Promise<{ cliente_24h: number; hoy: number } | null>
   guardarBuzon?(c: { encargo_id: string; slack_canal?: string | null; slack_ts?: string | null; leido_hasta?: string | null; semilla?: Semilla; artefacto?: ArtefactoGuardado }): Promise<void>
 }
 

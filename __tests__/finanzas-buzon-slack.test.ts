@@ -4,7 +4,8 @@
 import { describe, expect, it } from 'vitest'
 import { estadoInicial } from '../src/lib/oficina/tipos'
 import { preguntarAlDueno, recogerRespuestas, type PuertosDelBuzon } from '../src/lib/finanzas/conversa/buzon'
-import { slackMdPuerto } from '../src/lib/finanzas/conversa/buzon-slack'
+import { slackMdPuerto } from '../src/lib/buzon-dueno/slack-md'
+import type { CerebroDelDueno, VeredictoDePregunta } from '../src/lib/buzon-dueno/cerebro-dueno'
 import { respuestasDeLaSemilla } from '../src/lib/finanzas/conversa/orquestador'
 import type { AlmacenDeConversa, EncargoDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 
@@ -37,7 +38,8 @@ function slackFalso(opts: { historial?: Hist; falla?: string; sinRed?: boolean }
   return { f, llamadas, historial }
 }
 
-function mundo(semilla: Semilla = {}, extra: Partial<EncargoDeConversa> = {}) {
+function mundo(semilla: Semilla = {}, extra: Partial<EncargoDeConversa> = {}, conteo?: { cliente_24h: number; hoy: number } | null) {
+  const candado = { tomado: false }
   const e: EncargoDeConversa = { id: 'enc-1', client_id: 'cliente-prueba', estado: 'en_curso', estado_del_motor: estadoInicial(), gasto_usd: 0.4, slack_canal: null, slack_ts: null, leido_hasta: null, tablero_id: null, dry_run: false, semilla, ...extra }
   const arts: Record<string, Record<string, unknown>> = { acuerdo: { preguntas_a_emilio: PREGUNTAS } }
   const guardados: any[] = []
@@ -45,6 +47,9 @@ function mundo(semilla: Semilla = {}, extra: Partial<EncargoDeConversa> = {}) {
     async crearEncargo() { return { ok: true, encargo: e, nuevo: false } },
     async leerEncargo() { return structuredClone(e) },
     async guardar() { throw new Error('el buzón no debe tocar el motor') },
+    async tomarPaso() { if (candado.tomado) return { ok: true as const, tomado: false }; candado.tomado = true; return { ok: true as const, tomado: true } },
+    async soltarPaso() { candado.tomado = false },
+    ...(conteo === undefined ? {} : { async contarBuzon() { return conteo } }),
     async artefactos() { return structuredClone(arts) },
     async turnos() { return [] },
     async guardarBuzon(c) {
@@ -58,8 +63,17 @@ function mundo(semilla: Semilla = {}, extra: Partial<EncargoDeConversa> = {}) {
   }
   return { e, arts, almacen, guardados }
 }
-const puertos = (m: ReturnType<typeof mundo>, s: ReturnType<typeof slackFalso>, modo: PuertosDelBuzon['modo'] = 'envia'): PuertosDelBuzon =>
-  ({ almacen: m.almacen, slack: slackMdPuerto({ token: 'xoxb-falso', dueno_id: DUENO, fetch: s.f }), modo, ahora: () => new Date(1_700_000_000_000) })
+/** el cerebro de mentira: cada pregunta se registra (o se resuelve según `veredictos[tema]`); cada respuesta guardada queda en `respuestas` */
+function cerebroFalso(opts: { veredictos?: Record<string, VeredictoDePregunta>; cae?: boolean; caeAlGuardar?: boolean } = {}) {
+  const preguntas: any[] = [], respuestas: any[] = []
+  const c: CerebroDelDueno = {
+    async registrarPregunta(p) { preguntas.push(p); if (opts.cae) return { ok: false, error: 'http_500' }; return opts.veredictos?.[p.tema] ?? { ok: true, estado: 'registrada', pregunta_id: `pid-${p.tema.replace(/ /g, '-')}` } },
+    async registrarRespuesta(p) { respuestas.push(p); return opts.caeAlGuardar ? { ok: false, error: 'http_500' } : { ok: true } },
+  }
+  return { c, preguntas, respuestas }
+}
+const puertos = (m: ReturnType<typeof mundo>, s: ReturnType<typeof slackFalso>, modo: PuertosDelBuzon['modo'] = 'envia', cerebro: CerebroDelDueno = cerebroFalso().c): PuertosDelBuzon =>
+  ({ almacen: m.almacen, slack: slackMdPuerto({ token: 'xoxb-falso', dueno_id: DUENO, fetch: s.f }), cerebro, modo, ahora: () => new Date(1_700_000_000_000) })
 
 describe('PREGUNTAR · un solo MD al dueño', () => {
   it('envía UN MD con las 3 preguntas, la recomendación y «si no respondes», y guarda canal y ts', async () => {
@@ -110,10 +124,13 @@ describe('PREGUNTAR · un solo MD al dueño', () => {
     expect(s.llamadas.filter((l) => l.metodo === 'chat.postMessage')).toHaveLength(0)
   })
   it('respeta los topes de ritmo (1 por cliente cada 24 h · 3 por día)', async () => {
-    const m = mundo(), s = slackFalso()
-    const P = { ...puertos(m, s), enviados: async () => ({ cliente_24h: 1, hoy: 1 }) }
-    expect((await preguntarAlDueno(P, 'enc-1')).cuerpo).toMatchObject({ enviado: false })
-    expect(s.llamadas).toHaveLength(0)
+    for (const conteo of [{ cliente_24h: 1, hoy: 1 }, { cliente_24h: 0, hoy: 3 }, null]) {
+      const m = mundo({}, {}, conteo), s = slackFalso()
+      expect((await preguntarAlDueno(puertos(m, s), 'enc-1')).cuerpo).toMatchObject({ enviado: false })
+      expect(s.llamadas).toHaveLength(0)
+    }
+    const m = mundo({}, {}, { cliente_24h: 0, hoy: 2 }), s = slackFalso()
+    expect((await preguntarAlDueno(puertos(m, s), 'enc-1')).cuerpo).toMatchObject({ enviado: true })
   })
   it('Slack caído o sin permiso: no lanza, no guarda y el encargo sigue con supuestos', async () => {
     for (const opts of [{ falla: 'missing_scope' }, { falla: 'not_authed' }, { sinRed: true }]) {
@@ -246,5 +263,113 @@ describe('RECOGER · lo que el dueño contesta', () => {
     const { m, s } = await conMdAbierto([{ ts: '1700000100.000100', user: DUENO, text: '1: 200' }])
     await expect(recogerRespuestas(puertos(m, s), 'enc-1')).resolves.toBeDefined() // `guardar` del motor lanzaría si se usara
     expect(m.e.estado).toBe('en_curso')
+  })
+})
+
+describe('R4 · preguntar es atómico', () => {
+  it('dos llamadas simultáneas mandan UN solo MD', async () => {
+    const m = mundo(), s = slackFalso()
+    const [a, b] = await Promise.all([preguntarAlDueno(puertos(m, s), 'enc-1'), preguntarAlDueno(puertos(m, s), 'enc-1')])
+    expect(s.llamadas.filter((l) => l.metodo === 'chat.postMessage')).toHaveLength(1)
+    expect([a.cuerpo.enviado, b.cuerpo.enviado].sort()).toEqual([false, true])
+    expect([a.cuerpo.motivo, b.cuerpo.motivo]).toContain('otro_paso_en_curso')
+  })
+  it('suelta el candado también cuando algo falla', async () => {
+    const m = mundo(), s = slackFalso({ falla: 'missing_scope' })
+    await preguntarAlDueno(puertos(m, s), 'enc-1')
+    const s2 = slackFalso()
+    expect((await preguntarAlDueno(puertos(m, s2), 'enc-1')).cuerpo).toMatchObject({ enviado: true })
+  })
+})
+
+describe('CEREBRO · la puerta del dueño', () => {
+  it('registra CADA pregunta en el cerebro antes de escribirle al dueño', async () => {
+    const m = mundo(), s = slackFalso(), ce = cerebroFalso()
+    await preguntarAlDueno(puertos(m, s, 'envia', ce.c), 'enc-1')
+    expect(ce.preguntas.map((p) => p.tema)).toEqual(['pauta por semana', 'costo plato', 'abre guayaquil'])
+    expect(ce.preguntas.every((p) => p.client_id === 'cliente-prueba')).toBe(true)
+    expect(s.llamadas.filter((l) => l.metodo === 'chat.postMessage')).toHaveLength(1)
+  })
+  it('pregunta ya respondida en el cerebro → NO se pregunta y se usa como dato del dueño', async () => {
+    const m = mundo(), s = slackFalso()
+    const ce = cerebroFalso({ veredictos: { 'costo plato': { ok: true, estado: 'ya_respondida', respuestas: [{ respuesta: '2,10 por plato', canal: 'chat', respondido_en: '2026-10-16' }] } } })
+    const r = await preguntarAlDueno(puertos(m, s, 'envia', ce.c), 'enc-1')
+    expect(r.cuerpo).toMatchObject({ enviado: true, usadas_del_cerebro: ['costo_plato'], claves: ['pauta_por_semana', 'abre_guayaquil'] })
+    const texto: string = s.llamadas[0].cuerpo.text
+    expect(texto).not.toContain(PREGUNTAS[1].texto)
+    expect(m.e.semilla.respuestas_del_dueno).toEqual([{ clave: 'costo_plato', valor: '2,10 por plato', literal: '2,10 por plato' }])
+  })
+  it('todas ya respondidas → 0 MD', async () => {
+    const m = mundo(), s = slackFalso()
+    const v = (r: string): VeredictoDePregunta => ({ ok: true, estado: 'ya_respondida', respuestas: [{ respuesta: r }] })
+    const ce = cerebroFalso({ veredictos: { 'pauta por semana': v('200 por semana'), 'costo plato': v('2,10'), 'abre guayaquil': v('sin abrir') } })
+    const r = await preguntarAlDueno(puertos(m, s, 'envia', ce.c), 'enc-1')
+    expect(r.cuerpo).toMatchObject({ enviado: false, motivo: 'respondidas_en_el_cerebro' })
+    expect(s.llamadas).toHaveLength(0)
+    expect(m.e.semilla.respuestas_del_dueno).toHaveLength(3)
+    expect(m.e.slack_ts).toBeNull()
+  })
+  it('otra oficina ya espera esa respuesta → no se pregunta lo mismo a la vez', async () => {
+    const m = mundo(), s = slackFalso()
+    const ce = cerebroFalso({ veredictos: { 'pauta por semana': { ok: true, estado: 'ya_preguntada' } } })
+    const r = await preguntarAlDueno(puertos(m, s, 'envia', ce.c), 'enc-1')
+    expect(r.cuerpo).toMatchObject({ enviado: true, esperando: ['pauta_por_semana'] })
+    expect(s.llamadas[0].cuerpo.text).not.toContain(PREGUNTAS[0].texto)
+  })
+  it('cerebro caído → no se le escribe al dueño y el encargo sigue con supuestos, avisado', async () => {
+    const m = mundo(), s = slackFalso()
+    const r = await preguntarAlDueno(puertos(m, s, 'envia', cerebroFalso({ cae: true }).c), 'enc-1')
+    expect(r.status).toBe(200)
+    expect(r.cuerpo).toMatchObject({ enviado: false, motivo: 'cerebro_caido', sigue_con_supuestos: true })
+    expect(String(r.cuerpo.aviso)).toContain('supuestos')
+    expect(s.llamadas).toHaveLength(0)
+    expect(m.guardados).toHaveLength(0)
+  })
+  it('una pregunta mal formada no deja preguntas pendientes en el cerebro', async () => {
+    const m = mundo(), s = slackFalso(), ce = cerebroFalso()
+    m.arts.acuerdo = { preguntas_a_emilio: [{ ...PREGUNTAS[0], texto: '¿Cuál es el workflow del dispatch?' }] }
+    await preguntarAlDueno(puertos(m, s, 'envia', ce.c), 'enc-1')
+    expect(ce.preguntas).toHaveLength(0)
+  })
+  it('apagado = 0 llamadas al cerebro', async () => {
+    const m = mundo(), s = slackFalso(), ce = cerebroFalso()
+    await preguntarAlDueno(puertos(m, s, 'apagado', ce.c), 'enc-1')
+    await recogerRespuestas(puertos(m, s, 'apagado', ce.c), 'enc-1')
+    expect(ce.preguntas).toHaveLength(0)
+    expect(ce.respuestas).toHaveLength(0)
+  })
+  it('al recoger, cada respuesta nueva se GUARDA en el cerebro con su cita, canal y hora', async () => {
+    const ce = cerebroFalso(), m = mundo(), s = slackFalso({ historial: [{ ts: '1700000100.000100', user: DUENO, text: ['1: 200', '2: 2,10'].join('\n') }] })
+    await preguntarAlDueno(puertos(m, s, 'envia', ce.c), 'enc-1')
+    const r = await recogerRespuestas(puertos(m, s, 'envia', ce.c), 'enc-1')
+    expect(r.cuerpo).toMatchObject({ recogido: true, aplicadas: ['pauta_por_semana', 'costo_plato'] })
+    expect(ce.respuestas).toHaveLength(2)
+    expect(ce.respuestas[0]).toMatchObject({ client_id: 'cliente-prueba', tema: 'pauta por semana', respuesta: '1: 200', mensaje_ref: `${MD}:1700000100.000100`, respondido_en: new Date(1700000100000).toISOString(), pregunta_id: 'pid-pauta-por-semana' })
+    expect(ce.respuestas[0].pregunta).toBe(PREGUNTAS[0].texto)
+    expect((m.arts.buzon_respuestas as any).evento.en_el_cerebro).toBe(2)
+  })
+  it('una respuesta ambigua o ya aplicada NO se guarda de nuevo en el cerebro', async () => {
+    const ce = cerebroFalso(), m = mundo(), s = slackFalso({ historial: [{ ts: '1700000100.000100', user: DUENO, text: '1 1.500' }] })
+    await preguntarAlDueno(puertos(m, s, 'envia', ce.c), 'enc-1')
+    await recogerRespuestas(puertos(m, s, 'envia', ce.c), 'enc-1')
+    expect(ce.respuestas).toHaveLength(0)
+    s.historial.push({ ts: '1700000200.000100', user: DUENO, text: '1: 200' })
+    await recogerRespuestas(puertos(m, s, 'envia', ce.c), 'enc-1')
+    m.e.leido_hasta = '1700000000.000100'
+    await recogerRespuestas(puertos(m, s, 'envia', ce.c), 'enc-1')
+    expect(ce.respuestas.filter((r) => r.tema === 'pauta por semana')).toHaveLength(1)
+  })
+  it('cerebro caído al guardar: la respuesta queda en la semilla, se avisa y se reintenta en la próxima recogida', async () => {
+    const m = mundo(), s = slackFalso({ historial: [{ ts: '1700000100.000100', user: DUENO, text: '1: 200' }] })
+    await preguntarAlDueno(puertos(m, s), 'enc-1')
+    const r = await recogerRespuestas(puertos(m, s, 'envia', cerebroFalso({ caeAlGuardar: true }).c), 'enc-1')
+    expect(r.cuerpo).toMatchObject({ recogido: true, aplicadas: ['pauta_por_semana'], sin_cerebro: ['pauta_por_semana'] })
+    expect(String(r.cuerpo.aviso)).toContain('cerebro')
+    expect(m.e.semilla.respuestas_del_dueno).toHaveLength(1)
+    const ce = cerebroFalso()
+    const otra = await recogerRespuestas(puertos(m, s, 'envia', ce.c), 'enc-1')
+    expect(otra.cuerpo).toMatchObject({ recogido: false, motivo: 'sin_mensajes_nuevos' })
+    expect(ce.respuestas).toHaveLength(1)
+    expect((m.arts.buzon_respuestas as any).sin_cerebro).toEqual([])
   })
 })

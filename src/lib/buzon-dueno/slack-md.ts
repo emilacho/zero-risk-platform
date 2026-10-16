@@ -5,8 +5,8 @@
  *  · NUNCA lanza: un fallo (sin permiso, red, límite de ritmo) devuelve «sin acceso» con el motivo corto y la conversación sigue con supuestos.
  *  · El `fetch` y la llave entran por parámetro; aquí no hay nada que se llame solo. La llave NUNCA se escribe en papel ni en registros.
  */
-import type { LecturaDeHilo } from '../hilo-slack'
-import type { SlackPuerto } from './puertos'
+import type { LecturaDeHilo } from '../finanzas/hilo-slack'
+import type { SlackPuerto } from '../finanzas/conversa/puertos'
 
 type Fetch = typeof fetch
 type Msg = { ts?: string; user?: string; bot_id?: string; text?: string; subtype?: string }

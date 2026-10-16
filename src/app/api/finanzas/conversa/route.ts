@@ -3,7 +3,7 @@
  *  · `{ accion: 'abrir', client_id, dry_run (booleano), semilla }` → abre (o devuelve) la conversación del cliente.
  *  · `{ accion: 'avanzar', encargo_id, workflow_id }` → ejecuta UN paso (`workflow_id` = el id REAL del flujo de n8n que llama; sin él el turno de agente no se llama) (un turno de agente o una función de código) y lo guarda.
  *  · `{ accion: 'leer', encargo_id }` → estado, gasto y turnos.
- * Llave: `x-api-key` = `INTERNAL_API_KEY` (nunca la llave de la sala). Slack del hilo: sin adaptador real (puerto «no configurado»). BUZÓN (MD al dueño): `{ accion: 'preguntar'|'recoger', encargo_id }`, apagado salvo `preguntas_slack = 'envia'`.
+ * Llave: `x-api-key` = `INTERNAL_API_KEY` (nunca la llave de la sala). Slack del hilo: sin adaptador real (puerto «no configurado»). BUZÓN (MD al dueño): `{ accion: 'preguntar'|'recoger', encargo_id, workflow_id, workflow_execution_id }`, apagado salvo `preguntas_slack = 'envia'`.
  * Modelo: solo si hay `FINANZAS_RUN_SDK_BASE` (nunca en la rama apagada).
  * SECO (CC#2 · 14-oct): `{ accion: 'avanzar', encargo_id, simulacion }` → los agentes contestan el guion (SOLO con un encargo `dry_run = true`; con uno real, 409): el seco a US$ 0, sin modelo.
  */
@@ -16,7 +16,8 @@ import { abrirConversacion, avanzar, leerConversacion } from '@/lib/finanzas/con
 import { avanzarConSimulacion } from '@/lib/finanzas/conversa/simulado'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
 import { preguntarAlDueno, recogerRespuestas } from '@/lib/finanzas/conversa/buzon'
-import { slackMdPuerto } from '@/lib/finanzas/conversa/buzon-slack'
+import { slackMdPuerto } from '@/lib/buzon-dueno/slack-md'
+import { cerebroDelDueno } from '@/lib/buzon-dueno/cerebro-dueno'
 import { checkInternalKey } from '@/lib/finanzas/ruta'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +31,9 @@ const slackNoConfigurado: SlackPuerto = {
   async publicar() { return { ok: false } },
   async leer(p) { return { ok: false, mensajes: [], leido_hasta: p.desde_ts, sin_acceso: 'no_configurado' } },
 }
+
+/** la base de esta misma aplicación (donde vive la puerta del dueño): el mismo orden que el modelo de la oficina */
+const baseDelCerebro = baseDeRunSdk
 
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)
@@ -54,11 +58,22 @@ export async function POST(request: Request) {
   else if (c.accion === 'avanzar' && typeof c.encargo_id === 'string') r = c.simulacion !== undefined ? await avanzarConSimulacion(P, c.encargo_id, c.simulacion) : await avanzar(P, c.encargo_id)
   else if (c.accion === 'leer' && typeof c.encargo_id === 'string') r = await leerConversacion(P, c.encargo_id)
   else if ((c.accion === 'preguntar' || c.accion === 'recoger') && typeof c.encargo_id === 'string') {
-    // BUZÓN por MD: apagado = 0 envíos y 0 lecturas (`preguntas_slack` ≠ 'envia'); el id del dueño y la llave del bot salen del entorno, nunca del cuerpo
-    const cfg = await P.config().catch(() => null)
-    if (!cfg || cfg.conversa === 'apagado') r = { status: 409, cuerpo: { error: 'conversa_apagada' } }
+    // BUZÓN por MD: apagado = 0 envíos y 0 lecturas (`preguntas_slack` ≠ 'envia'); el id del dueño y las llaves salen del entorno, nunca del cuerpo
+    // una configuración que no se pudo leer NO es «apagada» (503), igual que en abrir/avanzar/leer
+    let cfg
+    let fallo: { status: number; cuerpo: Record<string, unknown> } | null = null
+    try { cfg = await P.config() } catch (e) { cfg = null; fallo = { status: 503, cuerpo: { error: 'config_ilegible', detalle: e instanceof Error ? e.message : String(e) } } }
+    if (cfg === null) r = fallo ?? { status: 503, cuerpo: { error: 'config_ilegible' } }
+    else if (cfg.estado === 'apagada' || cfg.conversa === 'apagado') r = { status: 409, cuerpo: { error: 'conversa_apagada' } }
+    else if (typeof c.workflow_id !== 'string' || !c.workflow_id.trim() || typeof c.workflow_execution_id !== 'string' || !c.workflow_execution_id.trim()) r = { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`workflow_id` y `workflow_execution_id` son obligatorios (la puerta del dueño en el cerebro los exige)'] } }
     else {
-      const B = { almacen: P.almacen, slack: slackMdPuerto({ token: process.env.SLACK_BOT_TOKEN ?? '', dueno_id: P.emilio_id }), modo: cfg.preguntas_slack, ahora: P.ahora }
+      const B = {
+        almacen: P.almacen,
+        slack: slackMdPuerto({ token: process.env.SLACK_BOT_TOKEN ?? '', dueno_id: P.emilio_id }),
+        cerebro: cerebroDelDueno({ base: baseDelCerebro(process.env), llave: process.env.INTERNAL_API_KEY ?? '', workflow_id: c.workflow_id, workflow_execution_id: c.workflow_execution_id }),
+        modo: cfg.preguntas_slack,
+        ahora: P.ahora,
+      }
       r = c.accion === 'preguntar' ? await preguntarAlDueno(B, c.encargo_id) : await recogerRespuestas(B, c.encargo_id)
     }
   }

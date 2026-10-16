@@ -88,6 +88,24 @@ export function almacenDeConversa(db: Db): AlmacenDeConversa {
         return Math.round((r.data as Fila[]).reduce((s, f) => s + (Number(f.cost_usd) || 0), 0) * 1e6) / 1e6
       } catch { return null }
     },
+    async contarBuzon(client_id, ahora) {
+      try {
+        const inicioDia = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate())).toISOString()
+        const hace24 = new Date(ahora.getTime() - 24 * 3600 * 1000).toISOString()
+        const desde = hace24 < inicioDia ? hace24 : inicioDia
+        const a = await db.from('finanzas_artefactos').select('encargo_id,creado_en').eq('tipo', 'buzon_respuestas').eq('version', 1).gte('creado_en', desde)
+        if (a.error || !Array.isArray(a.data)) return null
+        const filas = a.data as Fila[]
+        if (!filas.length) return { cliente_24h: 0, hoy: 0 }
+        const enc = await db.from('finanzas_encargos').select('id,client_id').in('id', filas.map((f) => String(f.encargo_id)))
+        if (enc.error || !Array.isArray(enc.data)) return null
+        const cliente = new Map((enc.data as Fila[]).map((f) => [String(f.id), String(f.client_id)]))
+        return {
+          cliente_24h: filas.filter((f) => cliente.get(String(f.encargo_id)) === client_id && String(f.creado_en) >= hace24).length,
+          hoy: filas.filter((f) => String(f.creado_en) >= inicioDia).length,
+        }
+      } catch { return null }
+    },
     async guardarBuzon(c) {
       if (c.artefacto) {
         const a = c.artefacto
