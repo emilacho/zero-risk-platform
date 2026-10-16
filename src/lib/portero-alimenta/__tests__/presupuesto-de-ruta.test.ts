@@ -24,7 +24,7 @@ const TROZO_MS = 50
 const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 /** envuelve la base falsa: cada consulta tarda CONSULTA_MS (como el viaje a la base real, a escala) */
-function conLatencia(db: { from(t: string): any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+function conLatencia(db: { from(t: string): any }) {
   return {
     from(tabla: string) {
       const q = db.from(tabla)
