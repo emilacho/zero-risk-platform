@@ -116,6 +116,16 @@ describe('PREGUNTAR · un solo MD al dueño', () => {
     expect((await preguntarAlDueno(puertos(m, s), 'enc-1')).cuerpo).toMatchObject({ enviado: false, motivo: 'sin_preguntas' })
     expect(s.llamadas).toHaveLength(0)
   })
+  it('con ronda 2 manda el acuerdo_2 (no el de la ronda 1) y sin acuerdo_2 sigue el de la ronda 1', async () => {
+    const m = mundo(), s = slackFalso()
+    m.arts.acuerdo_2 = { preguntas_a_emilio: [{ ...PREGUNTAS[0], clave: 'frecuencia_visita', texto: '¿Cada cuánto vuelve un cliente al local?' }] }
+    expect((await preguntarAlDueno(puertos(m, s), 'enc-1')).cuerpo).toMatchObject({ enviado: true, preguntas: 1 })
+    const texto = s.llamadas.filter((l) => l.metodo === 'chat.postMessage').map((l) => JSON.stringify(l)).join('')
+    expect(texto).toContain('vuelve un cliente')
+    expect(texto).not.toContain(PREGUNTAS[1].texto)
+    const m2 = mundo(), s2 = slackFalso()
+    expect((await preguntarAlDueno(puertos(m2, s2), 'enc-1')).cuerpo).toMatchObject({ enviado: true, preguntas: PREGUNTAS.length })
+  })
   it('una pregunta con jerga o voseo no sale (el dueño no lee jerga)', async () => {
     const m = mundo(), s = slackFalso()
     m.arts.acuerdo = { preguntas_a_emilio: [{ ...PREGUNTAS[0], texto: '¿Cuál es el workflow del dispatch? Decime vos' }] }
