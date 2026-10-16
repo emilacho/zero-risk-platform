@@ -7,6 +7,8 @@
  *    La misma respuesta no se aplica dos veces; una ambigua queda como NOTA con su literal (nunca una cifra inventada); una respuesta nueva a la misma pregunta REEMPLAZA la anterior.
  *    Si el cerebro falla al guardar, la respuesta queda en la semilla y en `sin_cerebro` y se reintenta en la siguiente recogida.
  *  · Cada recogida deja un registro versionado (`buzon_respuestas`, con el bloque `evento`) en `finanzas_artefactos`. Aquí NO se escribe en tablas del cerebro: solo se llama a su puerta.
+ *  · TEXTO LIBRE (16-oct · decisión de Lenovo): con UNA sola pregunta abierta, la respuesta en texto libre del dueño se aplica a esa pregunta (valor = su texto literal). Con varias abiertas sigue exigiendo «n: …» y el texto queda como NOTA
+ *    (la respuesta lo dice: `aclaracion_necesaria`). Una nota libre ANTERIOR (de una recogida pasada) se aplica en la siguiente recogida si hoy hay una sola abierta: así se recupera lo que antes solo quedó como nota.
  *  · Slack caído o sin permiso: el encargo sigue con los supuestos (nunca lanza). Recoger NO dispara la siguiente ronda: el encargo queda listo para ella.
  */
 import { armarMensaje, leerRespuesta, puedeEnviarAhora, TOPE_POR_CLIENTE_24H, TOPE_POR_DIA_TOTAL, type Pregunta } from '../preguntas'
@@ -38,6 +40,19 @@ const objeto = (v: unknown): v is Record<string, unknown> => typeof v === 'objec
 const temaDe = (clave: string) => clave.replace(/_/g, ' ').trim()
 
 type Dada = { clave: string; valor: unknown; literal: string }
+type Nota = { ts: string; literal: string; motivo?: string }
+
+const ACUSES = new Set(['gracias', 'muchas', 'ok', 'okey', 'listo', 'dale', 'perfecto', 'entendido', 'vale', 'bueno', 'claro', 'genial', 'excelente', 'hola', 'saludos', 'buenos', 'buenas', 'dias', 'tardes', 'noches', 'de', 'acuerdo', 'por', 'favor', 'si', 'no', 'ya', 'recibido', 'enterado'])
+const sinAcentos = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+/** ¿es un texto libre que puede ser LA respuesta? (no una pregunta, no un simple acuse, con al menos dos palabras o una cifra). Solo se usa con UNA pregunta abierta. */
+export function esTextoDeRespuesta(texto: string): boolean {
+  const t = String(texto ?? '').trim()
+  if (!t || /[?¿]/.test(t)) return false
+  const palabras = sinAcentos(t).split(/[^a-z0-9]+/).filter(Boolean)
+  if (!palabras.length || palabras.every((p) => ACUSES.has(p))) return false
+  return palabras.length >= 2 || /\d/.test(t)
+}
+const tieneLetras = (s: string) => /[a-záéíóúñ]/i.test(s)
 type Preguntada = { clave: string; texto: string; pregunta_id: string | null }
 type SinCerebro = { clave: string; respuesta: string; ts: string }
 
@@ -174,6 +189,11 @@ export async function recogerRespuestas(P: PuertosDelBuzon, encargo_id: string):
   const pendientesPrevios: SinCerebro[] = Array.isArray(previo.sin_cerebro) ? (previo.sin_cerebro as SinCerebro[]) : []
   const aunSinCerebro = pendientesPrevios.length ? await guardarEnCerebro(pendientesPrevios) : []
 
+  // notas libres de recogidas anteriores: se aplican si hoy hay UNA sola pregunta abierta
+  const respondidasHoy = new Set((Array.isArray(e.semilla?.respuestas_del_dueno) ? e.semilla.respuestas_del_dueno : []).map((x) => x.clave))
+  const abiertasIni = claves.filter((k) => !respondidasHoy.has(k))
+  const notasPrevias: Nota[] = Array.isArray(previo.notas) ? (previo.notas as unknown[]).filter((x): x is Nota => objeto(x) && typeof x.ts === 'string' && typeof x.literal === 'string') : []
+  const previasAplicables = abiertasIni.length === 1 ? notasPrevias.filter((n) => !n.motivo && esTextoDeRespuesta(n.literal)) : []
   const lectura = await P.slack.leer({ canal: e.slack_canal as string, thread_ts: e.slack_ts, desde_ts: e.leido_hasta }).catch(() => ({ ok: false as const, mensajes: [], leido_hasta: e.leido_hasta, sin_acceso: 'red' }))
   const registrarReintento = async () => {
     // solo hay algo que dejar escrito si el reintento cambió la lista de pendientes
@@ -182,24 +202,44 @@ export async function recogerRespuestas(P: PuertosDelBuzon, encargo_id: string):
     const reg = { ...previo, n, sin_cerebro: aunSinCerebro, evento: { tipo: 'reintento_al_cerebro', client_id: e.client_id, encargo_id, pendientes: aunSinCerebro.map((x) => x.clave), en: P.ahora().toISOString() } }
     await P.almacen.guardarBuzon?.({ encargo_id, artefacto: { tipo: 'buzon_respuestas', version: n, contenido: reg, sha256: sha256(reg) } })
   }
-  if (!lectura.ok) { await registrarReintento(); return { status: 200, cuerpo: { recogido: false, motivo: 'sin_acceso', slack: lectura.sin_acceso ?? 'desconocido', sigue_con_supuestos: true } } }
-  if (!lectura.mensajes.length) {
-    if (lectura.leido_hasta && lectura.leido_hasta !== e.leido_hasta) await P.almacen.guardarBuzon?.({ encargo_id, leido_hasta: lectura.leido_hasta })
+  if (!lectura.ok && !previasAplicables.length) { await registrarReintento(); return { status: 200, cuerpo: { recogido: false, motivo: 'sin_acceso', slack: lectura.sin_acceso ?? 'desconocido', sigue_con_supuestos: true } } }
+  const mensajesLeidos = lectura.ok ? lectura.mensajes : []
+  const leidoHasta = lectura.ok ? lectura.leido_hasta : e.leido_hasta
+  if (!mensajesLeidos.length && !previasAplicables.length) {
+    if (leidoHasta && leidoHasta !== e.leido_hasta) await P.almacen.guardarBuzon?.({ encargo_id, leido_hasta: leidoHasta })
     await registrarReintento()
     return { status: 200, cuerpo: { recogido: false, motivo: 'sin_mensajes_nuevos' } }
   }
 
   // varias respuestas en varios mensajes: cada mensaje se interpreta por separado; la última respuesta a una misma pregunta gana
-  const nuevas = new Map<string, Dada & { ts: string }>()
-  const notas: Array<{ ts: string; literal: string; motivo?: string }> = []
-  for (const m of lectura.mensajes) {
-    let alguna = false
-    for (const l of leerRespuesta(m.texto, claves)) {
-      if (l.tipo === 'respuesta') { nuevas.set(l.clave, { clave: l.clave, valor: valorDeSemilla(l.valor), literal: l.literal, ts: m.ts }); alguna = true }
-      else if (l.tipo === 'no_entendida') { notas.push({ ts: m.ts, literal: l.literal, motivo: l.motivo }); alguna = true }
+  const nuevas = new Map<string, Dada & { ts: string; libre?: boolean }>()
+  const notas: Nota[] = []
+  const aplicadasPrevias = new Set<string>()
+  const entradas = [...previasAplicables.map((n) => ({ ts: n.ts, texto: n.literal, previa: true })), ...mensajesLeidos.map((m) => ({ ts: m.ts, texto: m.texto, previa: false }))].sort((a, b) => Number(a.ts) - Number(b.ts))
+  for (const m of entradas) {
+    const lect = leerRespuesta(m.texto, claves)
+    if (lect.some((l) => l.tipo === 'respuesta')) {
+      for (const l of lect) {
+        if (l.tipo === 'respuesta') nuevas.set(l.clave, { clave: l.clave, valor: valorDeSemilla(l.valor), literal: l.literal, ts: m.ts })
+        else if (l.tipo === 'no_entendida') notas.push({ ts: m.ts, literal: l.literal, motivo: l.motivo })
+      }
+      continue
     }
-    if (!alguna) notas.push({ ts: m.ts, literal: m.texto })
+    // sin «n: …»: con UNA sola pregunta abierta, un texto libre que puede ser la respuesta se aplica a ella; una cifra pura ambigua («1 1.500») sigue siendo nota
+    const abiertasAhora = claves.filter((k) => !respondidasHoy.has(k) && !nuevas.has(k))
+    const libre = esTextoDeRespuesta(m.texto) && lect.every((l) => l.tipo === 'nota' || (l.tipo === 'no_entendida' && tieneLetras(l.literal)))
+    if (libre && abiertasAhora.length === 1) {
+      nuevas.set(abiertasAhora[0], { clave: abiertasAhora[0], valor: m.texto.trim(), literal: m.texto.trim(), ts: m.ts, libre: true })
+      if (m.previa) aplicadasPrevias.add(m.ts)
+      continue
+    }
+    const sinEntender = lect.filter((l) => l.tipo === 'no_entendida')
+    for (const l of sinEntender) if (l.tipo === 'no_entendida') notas.push({ ts: m.ts, literal: l.literal, motivo: l.motivo })
+    if (!sinEntender.length && !m.previa) notas.push({ ts: m.ts, literal: m.texto })
   }
+  // las notas libres de antes que no se aplicaron siguen ahí (acumuladas), sin repetir
+  const vistas = new Set(notas.map((x) => `${x.ts}|${x.literal}`))
+  for (const n of notasPrevias) if (!aplicadasPrevias.has(n.ts) && !vistas.has(`${n.ts}|${n.literal}`)) { notas.push(n); vistas.add(`${n.ts}|${n.literal}`) }
 
   const semilla: Semilla = { ...(e.semilla ?? {}) }
   const fus = fusionar(Array.isArray(semilla.respuestas_del_dueno) ? semilla.respuestas_del_dueno : [], [...nuevas.values()].map(({ clave, valor, literal }) => ({ clave, valor, literal })))
@@ -216,14 +256,19 @@ export async function recogerRespuestas(P: PuertosDelBuzon, encargo_id: string):
     n,
     evento: { tipo: 'respuestas_del_dueno_recibidas', client_id: e.client_id, encargo_id, claves_respondidas: fus.aplicadas, claves_pendientes: pendientes, en_el_cerebro: paraCerebro.length - falloAhora.length, en: P.ahora().toISOString() },
     claves, preguntas: preguntadas, sin_cerebro: sinCerebro, canal: e.slack_canal, ts: e.slack_ts,
-    respuestas: [...nuevas.values()].map((x) => ({ clave: x.clave, valor: x.valor, literal: x.literal, ts: x.ts })),
+    respuestas: [...nuevas.values()].map((x) => ({ clave: x.clave, valor: x.valor, literal: x.literal, ts: x.ts, ...(x.libre ? { libre: true } : {}) })),
     notas,
   }
-  await P.almacen.guardarBuzon?.({ encargo_id, leido_hasta: lectura.leido_hasta, ...(fus.aplicadas.length ? { semilla } : {}), artefacto: { tipo: 'buzon_respuestas', version: n, contenido: registro, sha256: sha256(registro) } })
+  await P.almacen.guardarBuzon?.({ encargo_id, leido_hasta: leidoHasta, ...(fus.aplicadas.length ? { semilla } : {}), artefacto: { tipo: 'buzon_respuestas', version: n, contenido: registro, sha256: sha256(registro) } })
+  const libresAplicadas = fus.aplicadas.filter((k) => nuevas.get(k)?.libre)
+  // varias preguntas abiertas y un texto libre que no dice a cuál responde: se pide el número, no se adivina
+  const pideNumero = pendientes.length > 1 && notas.some((x) => !x.motivo && esTextoDeRespuesta(x.literal))
   return {
     status: 200,
     cuerpo: {
       recogido: true, aplicadas: fus.aplicadas, pendientes, notas: notas.length, listo_para_siguiente_ronda: pendientes.length === 0,
+      ...(libresAplicadas.length ? { texto_libre_aplicado_a: libresAplicadas } : {}),
+      ...(pideNumero ? { aclaracion_necesaria: pendientes } : {}),
       ...(sinCerebro.length ? { aviso: `el cerebro no recibió ${sinCerebro.length} respuesta(s): quedan en la semilla y se reintentan en la próxima recogida`, sin_cerebro: sinCerebro.map((x) => x.clave) } : {}),
     },
   }
