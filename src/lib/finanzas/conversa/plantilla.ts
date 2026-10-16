@@ -28,10 +28,11 @@ const codigo = (clave: string, funcion: string, entrada: string[], salida: strin
 // el motor sigue exigiendo gasto + reserva ≤ tope del encargo, y la reserva es también el máximo que esa llamada puede cobrar.
 export const MAXIMO_OBSERVADO_DEL_CIERRE_USD = 0.25
 export const FACTOR_DE_RESERVA_DEL_CIERRE = 1.3
-export const PISO_DE_RESERVA_DEL_CIERRE_USD = 0.25
 export const TECHO_DE_RESERVA_DEL_CIERRE_USD = 0.4
 const redondeaArriba = (x: number) => Math.ceil(x * 100 - 1e-9) / 100
 export const RESERVA_DEL_CIERRE_USD = redondeaArriba(MAXIMO_OBSERVADO_DEL_CIERRE_USD * FACTOR_DE_RESERVA_DEL_CIERRE)
+// el piso es la reserva general: el cierre de la ronda 2 trae más entradas (acuerdo + bloque_2 + planteo fijado 2) y la reserva es también el máximo que esa llamada puede cobrar
+export const PISO_DE_RESERVA_DEL_CIERRE_USD = RESERVA_DEL_CIERRE_USD
 /** la reserva del cierre de la ronda 2 a partir de lo que COSTÓ el cierre de la ronda 1 de este encargo (no se infla ni se achica fuera de [piso, techo]); sin medida, la general */
 export function reservaDelCierre2(costoDelCierre1?: number | null): number {
   if (typeof costoDelCierre1 !== 'number' || !Number.isFinite(costoDelCierre1) || costoDelCierre1 <= 0) return RESERVA_DEL_CIERRE_USD
