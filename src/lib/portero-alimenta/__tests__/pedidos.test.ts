@@ -163,7 +163,7 @@ describe('pedido · catálogo (la misma cadena)', () => {
     const id = String(r.body.pedido_id)
     const antes = await rutaLeerPedido({ db: crearBaseFalsa(t as never).db }, id)
     expect(antes.body.cadena_llego).toMatchObject({ llegaron: [], faltan: ['instagram_scraper'] })
-    t.apify_raw.push({ client_id: CL, apify_function: 'instagram_scraper', ensayo: false, created_at: '2026-10-16T15:10:00Z' })
+    t.apify_raw.push({ client_id: CL, apify_function: 'instagram_scraper', ensayo: false, created_at: new Date(Date.now() + 60_000).toISOString() })
     const despues = await rutaLeerPedido({ db: crearBaseFalsa(t as never).db }, id)
     expect(despues.body.cadena_llego).toMatchObject({ llegaron: ['instagram_scraper'], faltan: [] })
   })
