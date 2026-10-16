@@ -268,6 +268,8 @@ export function nombreDeItem(n: string, mapa: Record<string, string>, meta?: Met
   return n
 }
 export interface EntradaDeFichasDeVentas { client_id: string; meses: VentasDelMes[]; ahora: Date; mapaDeItems?: Record<string, string>; mapaMeta?: MetaDelMapaDeItems | null; /** las cifras vienen de una exportación del Back Office (no de la API): se dice y se fecha con la de la exportación */ exportacion?: { fecha: string }
+  /** horas de UTC de la hora local del cliente (por omisión la de Ecuador continental, UTC−5): el mes, el día y la hora de cada venta se leen en SU hora */
+  desfaseHoras?: number
   /** a qué sede(s) pertenece una tienda del punto de venta (dato `fuentes_por_sede.punto_de_venta`); `null` = todas las sedes. Sin esto, las fichas por tienda quedan sin sede como hasta hoy. */
   sedeDeTienda?: (tienda: string) => string[] | null }
 /** el prefijo único de las cifras del punto de venta: `metrica:loyverse:<métrica>:<AAAA-MM>[:<tienda>]` */
@@ -279,8 +281,9 @@ export const PREFIJO_DE_VENTAS = 'metrica:loyverse:'
  */
 export function fichasDeVentas(e: EntradaDeFichasDeVentas): FichaDeBrazo[] {
   const iso = e.ahora.toISOString()
-  const dia = iso.slice(0, 10)
-  const mesEnCurso = mesLocalDe(e.ahora)
+  const dh = e.desfaseHoras ?? DESFASE_HORARIO_POR_DEFECTO_HORAS
+  const dia = diaLocalDe(e.ahora, dh)
+  const mesEnCurso = mesLocalDe(e.ahora, dh)
   const hasta = new Date(e.ahora.getTime() + VIGENCIA_DIAS * DIA_EN_MS).toISOString()
   const mapa = e.mapaDeItems ?? {}
   const meta = e.mapaMeta ?? null
@@ -294,7 +297,7 @@ export function fichasDeVentas(e: EntradaDeFichasDeVentas): FichaDeBrazo[] {
     const parcial = enCurso || !!m.ventana
     // el período que cubre la cifra (fechas locales): quien la lea como ventana de tiempo no tiene que interpretar el atributo
     const [pa, pm] = m.periodo.split('-').map(Number)
-    const periodoDesde = m.ventana ? diaLocalDe(new Date(e.ahora.getTime() - VENTANA_MOVIL_DIAS * DIA_EN_MS)) : `${m.periodo}-01`
+    const periodoDesde = m.ventana ? diaLocalDe(new Date(e.ahora.getTime() - VENTANA_MOVIL_DIAS * DIA_EN_MS), dh) : `${m.periodo}-01`
     const periodoHasta = m.ventana ? m.ventana : enCurso ? dia : `${m.periodo}-${String(new Date(Date.UTC(pa, pm, 0)).getUTCDate()).padStart(2, '0')}`
     const pTxt = m.ventana ? 'los últimos 30 días' : m.periodo
     const sufijo = m.grupo ? `:${m.grupo}` : ''
@@ -401,6 +404,8 @@ export interface EntradaDelBrazoPropios {
   parciales?: ReadonlyMap<string, SnapshotDeVentas>
   /** las claves de las sedes del cliente (para asignar cada tienda del punto de venta a su sede según `config.apify.fuentes_por_sede`) */
   clavesDeSedes?: string[]
+  /** horas de UTC de la hora local del cliente; sin dato, la de Ecuador continental (UTC−5) */
+  desfaseHoras?: number
 }
 export async function brazoDePropios(o: EntradaDelBrazoPropios): Promise<ResultadoDeUnBrazo> {
   const cred = credencialesDe(o.slug, o.env)
@@ -408,39 +413,40 @@ export async function brazoDePropios(o: EntradaDelBrazoPropios): Promise<Resulta
   const fichas: FichaDeBrazo[] = []
   const mapa = obj(obj(obj(o.config).apify).loyverse_mapa_de_items) as Record<string, string>
   if (cred.loyverse_token) {
-    const enCurso = mesLocalDe(o.ahora)
+    const dh = o.desfaseHoras ?? DESFASE_HORARIO_POR_DEFECTO_HORAS
+    const enCurso = mesLocalDe(o.ahora, dh)
     const dias = Number(o.env.PORTERO_LOYVERSE_HISTORIAL_DIAS)
     const historial = Number.isFinite(dias) && dias > 0 ? dias : HISTORIAL_DE_LOYVERSE_DIAS_POR_OMISION
     // el proveedor rechaza TODO pedido que empiece antes de su límite (402): se pide desde un poco después
     const minDesde = new Date(o.ahora.getTime() - historial * DIA_EN_MS + 3_600_000)
-    const pendientes = mesesCerradosHasta(o.ahora).filter((m) => !o.mesesCerrados?.has(m))
-    const directos = pendientes.filter((m) => inicioDelPeriodo(m) >= minDesde)
+    const pendientes = mesesCerradosHasta(o.ahora, MESES_DE_HISTORIA, dh).filter((m) => !o.mesesCerrados?.has(m))
+    const directos = pendientes.filter((m) => inicioDelPeriodo(m, dh) >= minDesde)
     const parciales = o.parciales ?? new Map<string, SnapshotDeVentas>()
     const porFusion = pendientes.filter((m) => !directos.includes(m) && parciales.has(m))
     const sinRecuperar = pendientes.filter((m) => !directos.includes(m) && !parciales.has(m))
-    const inicios = [inicioDelPeriodo(enCurso), new Date(o.ahora.getTime() - VENTANA_MOVIL_DIAS * DIA_EN_MS), ...directos.map((m) => inicioDelPeriodo(m)), ...porFusion.map((m) => inicioDelDiaLocal(diaLocalDe(new Date(parciales.get(m)!.cubre_hasta))))]
+    const inicios = [inicioDelPeriodo(enCurso, dh), new Date(o.ahora.getTime() - VENTANA_MOVIL_DIAS * DIA_EN_MS), ...directos.map((m) => inicioDelPeriodo(m, dh)), ...porFusion.map((m) => inicioDelDiaLocal(diaLocalDe(new Date(parciales.get(m)!.cubre_hasta), dh), dh))]
     const desde = new Date(Math.max(Math.min(...inicios.map((d) => d.getTime())), minDesde.getTime()))
     const v = await leerVentasDeLoyverse({ token: cred.loyverse_token, ahora: o.ahora, desde, fetch: o.fetch, maxPaginas: directos.length ? MAX_PAGINAS_DEL_RELLENO : MAX_PAGINAS_DE_VENTAS })
     if (v.ok) {
       // si hay más de una tienda, los nombres (una llamada más; sin ellas se rotulan por número)
       const variasTiendas = new Set(v.recibos.map((r) => r.store_id).filter((x) => typeof x === 'string' && x)).size > 1
       const tiendas = variasTiendas ? await leerTiendasDeLoyverse({ token: cred.loyverse_token, fetch: o.fetch }) : undefined
-      const agrupado = ventasPorMes(v.recibos, { recortado: v.recortado, tiendas, asegurar: directos })
+      const agrupado = ventasPorMes(v.recibos, { recortado: v.recortado, tiendas, asegurar: directos, desfaseHoras: dh })
       // solo lo que se leyó ENTERO y no está ya archivado: el mes en curso y los cerrados que caben en la ventana (un mes que la ventana corta a la mitad no se archiva)
       const meses: VentasDelMes[] = agrupado.meses.filter((m) => m.periodo === enCurso || directos.includes(m.periodo))
       if (!v.recortado) {
         for (const p of porFusion) {
           const snap = parciales.get(p)!
           const fresco = agrupado.meses.find((m) => m.periodo === p && m.grupo === '')?.resumen ?? null
-          const f = cerrarPorFusion(snap, fresco, p)
+          const f = cerrarPorFusion(snap, fresco, p, dh)
           meses.push({ periodo: p, grupo: '', rotulo: '', resumen: f, aproximado: f.aproximado })
         }
         // la ventana móvil de los últimos 30 días (lo único que hoy cubre «el mes pasado» mientras el plan no deja leer más atrás)
         const hace30 = new Date(o.ahora.getTime() - VENTANA_MOVIL_DIAS * DIA_EN_MS).toISOString()
         const rv = v.recibos.filter((r) => String(r.created_at ?? '') >= hace30)
-        meses.push({ periodo: 'ultimos_30_dias', grupo: '', rotulo: '', resumen: resumirVentas(rv, { periodo: 'ultimos_30_dias' }), ventana: diaLocalDe(o.ahora) })
+        meses.push({ periodo: 'ultimos_30_dias', grupo: '', rotulo: '', resumen: resumirVentas(rv, { periodo: 'ultimos_30_dias', desfaseHoras: dh }), ventana: diaLocalDe(o.ahora, dh) })
       } else if (porFusion.length) declarado.push(`punto de venta: ${porFusion.join(', ')} no se pudo cerrar (la lectura quedó recortada)`)
-      fichas.push(...fichasDeVentas({ client_id: o.client_id, meses, ahora: o.ahora, mapaDeItems: mapa, mapaMeta: obj(obj(obj(o.config).apify).loyverse_mapa_de_items_meta) as MetaDelMapaDeItems, sedeDeTienda: (t) => sedesDeLaFuente(o.config, 'punto_de_venta', t, o.clavesDeSedes ?? []).sedes }))
+      fichas.push(...fichasDeVentas({ client_id: o.client_id, meses, ahora: o.ahora, mapaDeItems: mapa, mapaMeta: obj(obj(obj(o.config).apify).loyverse_mapa_de_items_meta) as MetaDelMapaDeItems, desfaseHoras: dh, sedeDeTienda: (t) => sedesDeLaFuente(o.config, 'punto_de_venta', t, o.clavesDeSedes ?? []).sedes }))
       if (agrupado.incompletos.length) declarado.push(`punto de venta: ${v.paginas} páginas leídas (tope); ${agrupado.incompletos.join(', ')} quedó incompleto y no se archivó`)
       if (directos.length) declarado.push(`punto de venta: relleno de ${directos.length} mes(es) cerrado(s) en ${v.paginas} llamada(s)`)
       if (porFusion.length && !v.recortado) declarado.push(`punto de venta: ${porFusion.join(', ')} cerrado(s) con lo guardado y lo leído desde la última lectura (las listas de días, horas e ítems llegan hasta esa lectura)`)

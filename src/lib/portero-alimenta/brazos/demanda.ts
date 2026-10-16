@@ -10,6 +10,7 @@
  */
 import { coincidePorPalabra } from '../../texto/coincidencia'
 import { normalizar } from '../../manual/texto'
+import { FAMILIAS } from '../../fuentes-publicas/catalogo'
 import { DIA_EN_MS, MARCA_DE_BRAZO, slugDe, type AccionDeBrazo, type FichaDeBrazo, type ResultadoDeUnBrazo } from './tipos'
 import { marcaDeUbicar, radioDeSede, type SedeConPunto } from './sedes'
 
@@ -26,7 +27,15 @@ export const TERMINO_GENERICO_POR_FAMILIA: Record<string, string> = {
   comida: 'restaurante', alojamiento: 'hotel', turismo: 'tours', software: 'software', comercio: 'tienda', salud: 'clínica', belleza_bienestar: 'peluquería', automotriz: 'taller mecánico',
   inmobiliaria: 'inmobiliaria', educacion: 'academia', servicios_hogar: 'servicio técnico', servicios_profesionales: 'consultoría', finanzas: 'cooperativa',
 }
-const RELLENOS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y', 'e', 'en', 'para', 'con', 'costero', 'costera', 'ecuatoriano', 'ecuatoriana', 'peruano', 'peruana', 'artesanal', 'tradicional', 'local'])
+const RELLENOS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y', 'e', 'en', 'para', 'con', 'costero', 'costera', 'ecuatoriano', 'ecuatoriana', 'peruano', 'peruana', 'colombiano', 'colombiana', 'mexicano', 'mexicana', 'argentino', 'argentina', 'chileno', 'chilena', 'uruguayo', 'uruguaya', 'paraguayo', 'paraguaya', 'boliviano', 'boliviana', 'espanol', 'espanola', 'artesanal', 'tradicional', 'local'])
+
+/** la palabra del rubro (tal como la escribió el cliente) que cae en una clave de la familia; `null` si ninguna */
+function palabraDeLaFamilia(palabras: string[], familia: string): string | null {
+  const claves = (FAMILIAS as Record<string, string[]>)[familia]
+  if (!claves) return null
+  for (const p of palabras) { const w = p.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''); if (w && claves.some((k) => coincidePorPalabra(w, k))) return w }
+  return null
+}
 
 export interface EntradaDeTerminos { rubro?: string | null; config?: unknown; familias?: string[] }
 const obj = (x: unknown): Record<string, unknown> => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Record<string, unknown>) : {})
@@ -34,7 +43,8 @@ const obj = (x: unknown): Record<string, unknown> => (x && typeof x === 'object'
 /** hasta 3 búsquedas sin marca: las que el dueño declaró (`config.apify.terminos_de_demanda`), luego el rubro limpio (≤ 4 palabras) y el genérico de su familia */
 export function terminosDeDemanda(e: EntradaDeTerminos): string[] {
   const salida: string[] = []
-  const poner = (t: unknown) => { const s = typeof t === 'string' ? t.trim() : ''; if (s && s.length <= 60 && !salida.some((x) => normalizar(x) === normalizar(s))) salida.push(s) }
+  // un término que ya está dentro de otro (como palabra entera) no se repite: «abogados» dentro de «estudio abogados»
+  const poner = (t: unknown) => { const s = typeof t === 'string' ? t.trim() : ''; const n = normalizar(s); if (s && s.length <= 60 && !salida.some((x) => normalizar(x) === n || (` ${normalizar(x)} `).includes(` ${n} `))) salida.push(s) }
   const declarados = obj(obj(e.config).apify).terminos_de_demanda
   if (Array.isArray(declarados)) for (const t of declarados) poner(t)
   const palabras = String(e.rubro ?? '').trim().split(/\s+/).filter(Boolean)
@@ -42,7 +52,8 @@ export function terminosDeDemanda(e: EntradaDeTerminos): string[] {
   const crudo = palabras.slice(0, 4).join(' ')
   // «restaurante de mariscos costero ecuatoriano» → «restaurante mariscos» (sin rellenos); si queda una sola palabra se usa el rubro tal cual (hasta 4 palabras)
   poner(limpio.split(' ').length >= 2 ? limpio : crudo)
-  for (const f of e.familias ?? []) poner(TERMINO_GENERICO_POR_FAMILIA[f])
+  // por familia: la PALABRA del rubro del cliente que la define («farmacia», «gimnasio», «abogados»); solo si no hay, el término genérico de la familia (un gimnasio no se busca como «peluquería»)
+  for (const f of e.familias ?? []) poner(palabraDeLaFamilia(palabras, f) ?? TERMINO_GENERICO_POR_FAMILIA[f])
   return salida.slice(0, MAX_TERMINOS_DE_DEMANDA)
 }
 

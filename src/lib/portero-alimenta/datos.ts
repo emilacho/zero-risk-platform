@@ -57,8 +57,10 @@ export const NOMBRE_DE_DIA: Record<string, (typeof DIAS_EN_ORDEN)[number]> = {
 export type VarianteDeIdioma = 'es_tuteo' | 'es_voseo'
 /** transitorios COMUNES a todas las variantes (texto normalizado: minúsculas, sin tildes) */
 export const TRANSITORIOS_COMUNES: RegExp[] = [
-  /^(abierto|cerrado)\b/,
-  /\b(abierto|cerrado) (ahora|hoy)\b/,
+  // «Abierto ahora», «Cerrado hoy», «Ahora mismo cerrado» son el estado de este momento; «Abierto las 24 horas» o «Cerrado los domingos» son un dato permanente y NO se descartan
+  /^(abierto|cerrado)( ahora| hoy| ya| en este momento)?$/,
+  /\b(abierto|cerrado) (ahora|hoy|ya|en este momento)\b/,
+  /\b(ahora mismo|en este momento|por ahora) (abierto|cerrado|abrimos|cerramos)\b/,
   /\bvuelve (hoy|manana|pasado manana|el \w+|a las)\b/,
   /\b(abre|abrimos|cierra|cerramos) (hoy|manana|ahora|a las)\b/,
   /\bultima actualizacion\b/,

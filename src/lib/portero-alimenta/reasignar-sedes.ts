@@ -7,6 +7,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import type { Db } from './alimentar'
+import { leerTodas } from './paginar'
 import { claveDeAlcance, datosDeSede, sedesDeFicha, sedesDeLaFuente, sufijoDeRef, tipoDeFuenteDeUnidad, type TipoDeFuente } from './sedes-fuentes'
 
 type Fila = Record<string, unknown>
@@ -79,7 +80,7 @@ export function versionConSede(vieja: Fila, sedes: string[], o: { id: string; mo
 export interface ResultadoDeReasignar { plan: PlanDeReasignacion; escritas: number; retiradas: number; errores: string[] }
 export async function reasignarFichasASusSedes(o: { db: Db; client_id: string; config: unknown; clavesDeSedes: string[]; ahora: Date; dry_run: boolean; motivo: string; nuevoId?: () => string }): Promise<ResultadoDeReasignar> {
   const r: ResultadoDeReasignar = { plan: { reasignar: [], ya_en_su_sede: 0, no_aplica: 0, sin_asignacion: 0, declarado: [] }, escritas: 0, retiradas: 0, errores: [] }
-  const q = await o.db.from('cerebro_fichas').select('*').eq('client_id', o.client_id).is('retirada_en', null).limit(5000)
+  const q = await leerTodas(() => o.db.from('cerebro_fichas').select('*').eq('client_id', o.client_id).is('retirada_en', null).order('id', { ascending: true }))
   if (q.error) { r.errores.push(`lectura de las fichas vigentes: ${q.error.message}`); return r }
   const fichas = (Array.isArray(q.data) ? q.data : []) as Fila[]
   r.plan = planDeReasignacion(fichas, o.config, o.clavesDeSedes)

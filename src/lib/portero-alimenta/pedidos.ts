@@ -26,6 +26,7 @@ import { COSTO_MAXIMO_POR_FUNCION } from './gasto'
 import { TOPE_DEL_PORTERO_USD } from './datos'
 import type { RespuestaDeLlamada } from './juez'
 import { gastoDeHoy, reconciliarYEnviar, validar, type DepsDeRutas, type Respuesta } from './rutas'
+import { leerTodas } from './paginar'
 
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -215,7 +216,7 @@ async function cargarContexto(deps: DepsDePedido, clientId: string, ahora: Date)
   if (!cliente) return { ok: false, r: err(404, 'cliente_inexistente', 'no existe la ficha del cliente') }
   const sd = await deps.db.from('client_sedes').select('ciudad, clave').eq('client_id', clientId)
   if (sd.error) return { ok: false, r: err(502, 'lectura_fallida', `client_sedes: ${sd.error.message}`) }
-  const fi = await deps.db.from('cerebro_fichas').select('id, ref, clase, atributo, titulo, contenido, observado_en, vigente_hasta, alcance, descartada, retirada_en').eq('client_id', clientId).is('retirada_en', null).limit(2000)
+  const fi = await leerTodas(() => deps.db.from('cerebro_fichas').select('id, ref, clase, atributo, titulo, contenido, observado_en, vigente_hasta, alcance, descartada, retirada_en').eq('client_id', clientId).is('retirada_en', null).order('id', { ascending: true }))
   if (fi.error) return { ok: false, r: err(502, 'lectura_fallida', `cerebro_fichas: ${fi.error.message}`) }
   const ctx = contextoDelCliente(cliente, lista(sd.data))
   const fichas = lista(fi.data).filter((f) => !f.descartada).map((f): FichaCandidata => ({ id: String(f.id), ref: String(f.ref ?? ''), clase: String(f.clase ?? ''), atributo: String(f.atributo ?? ''), titulo: String(f.titulo ?? ''), contenido: String(f.contenido ?? ''), observado_en: f.observado_en ? String(f.observado_en) : null, vigente_hasta: f.vigente_hasta ? String(f.vigente_hasta) : null, alcance: f.alcance ? String(f.alcance) : null }))

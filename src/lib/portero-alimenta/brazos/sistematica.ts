@@ -7,6 +7,7 @@
  *   cada mes · una sede se vuelve a evaluar cuando su última evaluación tiene `DIAS_ENTRE_EVALUACIONES` o más.
  */
 import { familiasDelRubro } from '../../fuentes-publicas/plan'
+import { leerTodas } from '../paginar'
 import type { Db } from '../alimentar'
 import type { RetiroDeBrazo } from './archivo'
 import { type Competidor } from './competencia'
@@ -67,7 +68,7 @@ export async function cargarContextoDeBrazos(db: Db, clientId: string, cliente: 
   if (da.error) errores.push(`client_sede_datos: ${da.error.message}`)
   const rr = await db.from('apify_raw').select('id, apify_function, params, respuesta, ensayo, created_at').eq('client_id', clientId).eq('ensayo', false).in('apify_function', ['own_google_maps_profile', 'google_maps_scraper', 'competitor_website_scraper', 'instagram_scraper', 'facebook_ads_library_scraper']).order('created_at', { ascending: false }).limit(300)
   if (rr.error) errores.push(`apify_raw: ${rr.error.message}`)
-  const fv = await db.from('cerebro_fichas').select('id, ref, clase, atributo, observado_en, creado_en, provenance_tag, retirada_en').eq('client_id', clientId).is('retirada_en', null).limit(5000)
+  const fv = await leerTodas(() => db.from('cerebro_fichas').select('id, ref, clase, atributo, observado_en, creado_en, provenance_tag, retirada_en').eq('client_id', clientId).is('retirada_en', null).order('id', { ascending: true }))
   if (fv.error) errores.push(`cerebro_fichas: ${fv.error.message}`)
   const vigentes = lista(fv.data).filter((f) => typeof f.ref === 'string' && (f.ref as string).startsWith('brazo:'))
   const filas = lista(rr.data) as unknown as ContextoDeBrazos['filas']

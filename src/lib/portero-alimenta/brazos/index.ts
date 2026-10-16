@@ -14,6 +14,7 @@ import { familiasDelRubro } from '../../fuentes-publicas/plan'
 import { radioDeSede } from './sedes'
 import { cargarContextoDeBrazos, descubrirYJuzgar, type ContextoDeBrazos, type ResultadoDeSistematica } from './sistematica'
 import type { RespuestaDeLlamada } from '../juez'
+import { desfaseDelCliente } from '../zona-horaria'
 import { brazoDePropios, leerSnapshot, mesLocalDe, PREFIJO_DE_VENTAS, type Fetch, type SnapshotDeVentas } from './propios'
 import { hayBrazoActivo, type AccionDeBrazo, type BrazosActivos, type FichaDeBrazo, type NombreDeBrazo, type ResultadoDeUnBrazo } from './tipos'
 
@@ -165,7 +166,8 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
       if (q.error) throw new Error(`lectura de los meses ya archivados: ${String(q.error.message).slice(0, 100)}`)
       const cerrados = new Set<string>()
       const parciales = new Map<string, SnapshotDeVentas>()
-      const enCurso = mesLocalDe(e.ahora)
+      const desfaseHoras = desfaseDelCliente(e.cliente as Record<string, unknown>, e.ahora)
+      const enCurso = mesLocalDe(e.ahora, desfaseHoras.horas)
       for (const f of Array.isArray(q.data) ? (q.data as Array<Record<string, unknown>>) : []) {
         const m = /^metrica:loyverse:ingreso:(\d{4}-\d{2})$/.exec(String(f.atributo ?? ''))
         // solo cuenta como cerrado el mes que se archivó YA cerrado (la parcial del mes que acaba de terminar se reemplaza por la final)
@@ -180,7 +182,9 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
         const sq = await e.db.from('client_sedes').select('clave').eq('client_id', e.client_id)
         if (!sq.error) clavesDeSedes = (Array.isArray(sq.data) ? (sq.data as Array<Record<string, unknown>>) : []).map((s) => txt(s.clave)).filter(Boolean)
       }
-      poner(await brazoDePropios({ client_id: e.client_id, slug: txt(e.cliente.slug) || nombre, config: cfg, ahora: e.ahora, env: e.env ?? process.env, fetch: e.fetch ?? (globalThis.fetch as unknown as Fetch), mesesCerrados: cerrados, parciales, clavesDeSedes }))
+      const propios = await brazoDePropios({ client_id: e.client_id, slug: txt(e.cliente.slug) || nombre, config: cfg, ahora: e.ahora, env: e.env ?? process.env, fetch: e.fetch ?? (globalThis.fetch as unknown as Fetch), mesesCerrados: cerrados, parciales, clavesDeSedes, desfaseHoras: desfaseHoras.horas })
+      if (desfaseHoras.origen === 'sin_dato' && propios.fichas.length) propios.declarado.push('punto de venta: la zona horaria del cliente no está declarada (ni su país tiene una sola): el mes, el día y la hora de las ventas se leen en UTC; declárala en config.timezone')
+      poner(propios)
     } catch (x) {
       poner({ brazo: 'propios', estado: 'fallo', detalle: String((x as Error).message).slice(0, 160), fichas: [], declarado: [] })
     }

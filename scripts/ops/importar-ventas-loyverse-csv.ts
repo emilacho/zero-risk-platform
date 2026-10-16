@@ -11,16 +11,18 @@ import path from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 import { archivarFichasDeBrazos } from '../../src/lib/portero-alimenta/brazos/archivo'
 import { fichasDeItemsDeRango, importarExportaciones, leerArchivo, type ArchivoLeido } from '../../src/lib/portero-alimenta/brazos/exportacion-loyverse'
+import { desfaseDelCliente } from '../../src/lib/portero-alimenta/zona-horaria'
 import { fichasDeVentas, leerVentasDeLoyverse, mesLocalDe, resumirVentas, type MetaDelMapaDeItems } from '../../src/lib/portero-alimenta/brazos/propios'
 
 const envTxt = fs.readFileSync('C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform/.env.local', 'utf8')
 const g = (k: string) => (envTxt.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim().replace(/^["']|["']$/g, '')
 const H = { Authorization: 'Bearer ' + g('VERCEL_TOKEN') }
 const api = async (p: string) => (await fetch('https://api.vercel.com' + p, { headers: H })).json() as Promise<any> // eslint-disable-line @typescript-eslint/no-explicit-any
-const CLIENTE = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
 const arg = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3)
+const CLIENTE = arg('cliente') ?? ''
 
 async function main() {
+  if (!/^[0-9a-f-]{36}$/.test(CLIENTE)) throw new Error('falta --cliente=<uuid>')
   const escribir = process.argv.includes('--escribir')
   const dir = arg('dir') ?? 'C:/Users/emili/OneDrive/Documents/zr-vault/raw/entrada/loyverse'
   const ahora = new Date()
@@ -32,8 +34,11 @@ async function main() {
     return leerArchivo({ nombre: n, texto: fs.readFileSync(p, 'utf8'), exportado_en: exportado })
   })
   const db = createClient(g('NEXT_PUBLIC_SUPABASE_URL')!, g('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
-  const c = await db.from('clients').select('id, config').eq('id', CLIENTE).limit(1)
-  const cfg = ((c.data ?? [])[0] as { config?: Record<string, any> } | undefined)?.config ?? {} // eslint-disable-line @typescript-eslint/no-explicit-any
+  const c = await db.from('clients').select('id, country, config').eq('id', CLIENTE).limit(1)
+  const ficha = (c.data ?? [])[0] as { country?: string; config?: Record<string, any> } | undefined // eslint-disable-line @typescript-eslint/no-explicit-any
+  const cfg = ficha?.config ?? {}
+  // la hora local es la del CLIENTE (su zona declarada o la de su país), no la de un país fijo
+  const dh = desfaseDelCliente(ficha as never, ahora).horas
   const mapa = (cfg.apify?.loyverse_mapa_de_items ?? {}) as Record<string, string>
   const meta = (cfg.apify?.loyverse_mapa_de_items_meta ?? null) as MetaDelMapaDeItems | null
   // meses cerrados que ya están archivados (por cualquier vía): no se reescriben
@@ -54,13 +59,13 @@ async function main() {
     const e = lo.find((x: { key: string }) => x.key === 'LOYVERSE_TOKEN')
     const token: string = (await api(`/v1/projects/${O.id}/env/${e.id}${qs}`)).value
     const v = await leerVentasDeLoyverse({ token, ahora, desde: new Date(ahora.getTime() - 30 * 86_400_000), fetch: async (url, init) => { const x = await fetch(url, { headers: init?.headers }); return { ok: x.ok, status: x.status, json: () => x.json() as Promise<unknown> } } })
-    if (v.ok) diasApi = resumirVentas(v.recibos, { periodo: 'validacion' }).por_fecha
+    if (v.ok) diasApi = resumirVentas(v.recibos, { periodo: 'validacion', desfaseHoras: dh }).por_fecha
     else console.error('validación: ' + v.error.split(token).join('***'))
   }
-  const r = importarExportaciones(leidos, { ahora, mesEnCurso: mesLocalDe(ahora), diasApi, mesesYaArchivados: ya })
+  const r = importarExportaciones(leidos, { ahora, mesEnCurso: mesLocalDe(ahora, dh), desfaseHoras: dh, diasApi, mesesYaArchivados: ya })
   const exportado = leidos.map((l) => l.exportado_en).sort().slice(-1)[0]
   const fichas = [
-    ...r.meses.flatMap((m) => fichasDeVentas({ client_id: CLIENTE, meses: [m], ahora, mapaDeItems: mapa, mapaMeta: meta, exportacion: { fecha: leidos.find((l) => m.archivos.includes(l.nombre))?.exportado_en ?? exportado } })),
+    ...r.meses.flatMap((m) => fichasDeVentas({ client_id: CLIENTE, meses: [m], ahora, desfaseHoras: dh, mapaDeItems: mapa, mapaMeta: meta, exportacion: { fecha: leidos.find((l) => m.archivos.includes(l.nombre))?.exportado_en ?? exportado } })),
     ...fichasDeItemsDeRango({ client_id: CLIENTE, rangos: r.items_de_rango, exportado_en: exportado, mapaDeItems: mapa, mapaMeta: meta }),
   ]
   const salida: Record<string, unknown> = {

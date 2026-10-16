@@ -18,6 +18,7 @@ import type { PuenteDeIndice } from './archivar'
 import { clientesActivos } from './clientes'
 import { COBERTURA_DEL_ALTA_HORAS, sinLoYaRaspado, type FilaDeRaspadoParaCubrir } from './cobertura'
 import { MAX_TROZOS_A_ESCRIBIR_POR_PASADA, MAX_TROZOS_A_SACAR_POR_PASADA, reconciliarPuente, type FichaParaPuente } from './puente'
+import { leerTodas } from './paginar'
 
 export interface Respuesta { status: number; body: Record<string, unknown> }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -123,7 +124,10 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
   const cfg = (cliente.config ?? {}) as Record<string, unknown>
   const usuariosPropios = new Set(ctx.handles.map((h) => h.toLowerCase()))
   const publicaciones = [...new Set(lista(vg.data).flatMap((f) => lista(f.respuesta)).filter((p) => usuariosPropios.has(String(p.username ?? '').toLowerCase())).flatMap((p) => lista(p.latestPosts)).map((p) => String(p.shortCode ?? p.id ?? '')).filter(Boolean))]
-  const ciudad = ctx.ubicacion[0] ?? ''
+  // las CIUDADES de las sedes (no sus claves: «norte» o «centro» no son ciudades y gastaban las búsquedas de Mapas); sin sedes, lo que dice la ficha
+  const ciudadesDeSedes = lista(sd.data).map((s) => String(s.ciudad ?? '').trim()).filter(Boolean)
+  const ciudades = ciudadesDeSedes.length ? ciudadesDeSedes : ctx.ubicacion
+  const ciudad = ciudades[0] ?? ''
   const rubro = typeof cliente.industry === 'string' ? cliente.industry : null
   // los nuevos brazos de demanda y competencia miran POR SEDE: sus puntos, los competidores ya juzgados y las ubicaciones ya pedidas (una lectura; un error se DICE y se cae a lo de siempre)
   let brazosCtx: Awaited<ReturnType<typeof cargarContextoDeBrazos>> | undefined
@@ -132,7 +136,7 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
     brazosCtx = await cargarContextoDeBrazos(deps.db, v.client_id, cliente, ahora)
     if (brazosCtx.errores.length) { brazosCtxError = brazosCtx.errores.join(' · '); brazosCtx = undefined }
   }
-  const base = { cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades: ctx.ubicacion, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx }
+  const base = { cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx }
 
   // las búsquedas propias: el modelo PROPONE, el código decide
   let propuestas: ResultadoDePropuestas = { aceptadas: [], rechazadas: [] }
@@ -313,8 +317,8 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
  * `MAX_TROZOS_A_SACAR_POR_PASADA`; `quedan` dice cuánto falta (el flujo repite hasta 0). En seco solo cuenta. Una falla de lectura se DICE.
  */
 export async function reconciliarYEnviar(deps: DepsDeRutas, clientId: string, dryRun: boolean): Promise<{ puente: Record<string, unknown>; errores: string[] }> {
-  const fi = await deps.db.from('cerebro_fichas').select('id, client_id, ref, clase, titulo, contenido, fecha_fuente, observado_en, creado_en, propiedad, origen, descartada, retirada_en, prueba, huella').eq('client_id', clientId).limit(5000)
-  const ch = await deps.db.from('client_brain_chunks').select('source_id').eq('client_id', clientId).eq('source_table', 'cerebro_fichas').limit(5000)
+  const fi = await leerTodas(() => deps.db.from('cerebro_fichas').select('id, client_id, ref, clase, titulo, contenido, fecha_fuente, observado_en, creado_en, propiedad, origen, descartada, retirada_en, prueba, huella').eq('client_id', clientId).order('id', { ascending: true }))
+  const ch = await leerTodas(() => deps.db.from('client_brain_chunks').select('source_id').eq('client_id', clientId).eq('source_table', 'cerebro_fichas').order('id', { ascending: true }))
   if (fi.error || ch.error) return { puente: { lectura_fallida: true }, errores: [`puente: lectura fallida (${(fi.error ?? ch.error)!.message})`] }
   const rec = reconciliarPuente(lista(fi.data) as unknown as FichaParaPuente[], lista(ch.data).map((x) => String(x.source_id)))
   const lote = { escribir: rec.escribir.slice(0, MAX_TROZOS_A_ESCRIBIR_POR_PASADA), sacar: rec.sacar.slice(0, MAX_TROZOS_A_SACAR_POR_PASADA) }
