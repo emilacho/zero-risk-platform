@@ -49,7 +49,7 @@ const REGLAS_COMUNES = [
   'Esta tarea NO es un brief de campaña ni un documento: es una respuesta corta y estructurada dentro de una conversación de oficina.',
   'Responde SOLO con un objeto JSON válido (sin texto antes ni después, sin bloques de código), en español, y tutea.',
   'Todo el contexto necesario va en este mensaje: no consultes el Client Brain, no busques en la web ni uses herramientas.',
-  'No inventes cifras: todo número que no sea un dato del contexto va como supuesto, con rango {min, max, base} y dicho como supuesto.',
+  'No inventes cifras: todo número que no sea un dato del contexto va como supuesto, con rango {min, max, base} y dicho como supuesto (EXCEPTO en el planteo y el ajuste, donde `meta_por_semana` es UN solo número, sin rango: el rango lo ponen los especialistas en sus `supuestos`).',
 ]
 /** lo que cada especialista debe devolver (el esquema ESCRITO, no «el mismo de arriba»: un agente que no lo ve devuelve otra forma y falla el formato) */
 const ESQUEMA_DE_CONSULTA = 'Esquema consulta_financiera.v1 (devuelve EXACTAMENTE estas claves): {"agente": "<tu nombre>", "resumen": "<texto corto>", "supuestos": {"ticket"?: {min,max,base?}, "margen"?: {min,max,base?}, "costo_entrega"?: {...}, "periodos"?: {...}, "tasa_cierre"?: {...}, "costo_por_resultado"?: {...}, "costo_por_resultado_alterno"?: {...}} (puede ir vacío {} pero la clave `supuestos` SIEMPRE va), "minimo_diario_por_conjunto"?: numero, "preguntas_a_otros": [{"a": "fpa|redes|busqueda|medicion|plan", "pregunta": "..."}] (MÁXIMO 3; puede ir []), "alertas": ["..."] (puede ir [])}.'

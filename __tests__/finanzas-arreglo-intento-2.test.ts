@@ -106,3 +106,12 @@ describe('arreglo del intento 3 (16-oct) · la FORMA del planteo: plano, número
     expect(validarPlanteo(ejemplo).ok).toBe(true)
   })
 })
+
+describe('observación de CC#2 (intento 3): la regla común ya no contradice `meta_por_semana`', () => {
+  it('todos los pedidos exceptúan `meta_por_semana` del «con rango {min,max,base}»', () => {
+    for (const clave of ['planteo', 'ajuste']) {
+      const t = pedidoDelAgente(paso(clave), {})
+      expect(t, clave).toMatch(/EXCEPTO en el planteo y el ajuste, donde `meta_por_semana` es UN solo número/)
+    }
+  })
+})
