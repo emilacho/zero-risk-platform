@@ -1,8 +1,9 @@
 // F8 · EL FLUJO `finanzas · conversa` (CC#1 · 2026-10-14) · NACE INACTIVO, NUEVO (no toca ningún flujo vivo) · NO SE IMPORTA NI SE ACTIVA (lo hace CC#3 con respaldo y n8n 0/0).
 //   node construir-conversa.mjs [--salida=<carpeta>]   → escribe NUEVO-finanzas-conversa-2026-10-14.json · NO toca n8n
 // Mismo molde que F3 (`finanzas · bloque`): la llave INTERNA se exige antes de mirar nada, `dry_run` obligatorio y booleano, sin reintentos (cada paso PAGA), nunca lanza.
-// Qué hace: una llamada = UN paso. Recibe `{ accion: 'abrir'|'avanzar'|'leer', client_id?, semilla?, encargo_id?, dry_run (booleano) }`, llama UNA vez a `/api/finanzas/conversa`
+// Qué hace: una llamada = UN paso. Recibe `{ accion: 'abrir'|'avanzar'|'leer'|'preguntar'|'recoger', client_id?, semilla?, encargo_id?, dry_run (booleano) }`, llama UNA vez a `/api/finanzas/conversa`
 // pasando SU `workflow_id` REAL (`$workflow.id`, el del propio flujo) y su `workflow_execution_id` (`$execution.id`): así run-sdk acepta el turno y el libro lo ata a este flujo.
+// `preguntar`/`recoger` = el BUZÓN por MD al dueño (apagado salvo `preguntas_slack = envia`; la ruta y la puerta del dueño del cerebro exigen este `workflow_id` y `workflow_execution_id`).
 // El bucle `avanzar` + espera lo hace quien llame (el plan, con el mismo patrón que J7); este flujo NO itera.
 import fs from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -12,7 +13,7 @@ const aqui = dirname(fileURLToPath(import.meta.url))
 export const NOMBRE = 'Zero Risk — finanzas · conversa (oficina financiera · F8 · INACTIVO)'
 export const N = { webhook: 'Webhook · finanzas conversa', validar: 'FIN · validar el sobre', llamarSi: 'FIN · ¿se llama a la ruta?', llamar: 'FIN · un paso de la conversación', resultado: 'FIN · resultado' }
 export const RUTA_WEBHOOK = 'zero-risk/finanzas-conversa'
-export const ACCIONES = ['abrir', 'avanzar', 'leer']
+export const ACCIONES = ['abrir', 'avanzar', 'leer', 'preguntar', 'recoger']
 // un paso con un turno de agente puede durar minutos; el techo de la espera es el de la función de la plataforma, no el de n8n
 // intento 4: el jefe tarda 115–260 s por llamada; con 300 s el flujo cortaba (502) un paso que la ruta seguía ejecutando y cobrando
 export const TIMEOUT_MS = 600000
@@ -30,12 +31,12 @@ const VALIDAR = [
   'if (!autorizado) return [{ json: { llamar: false, no_autorizado: true, errores: [] } }]',
   'const b = entrada.body || entrada',
   'const errores = []',
-  "const acciones = ['abrir', 'avanzar', 'leer']",
-  "if (acciones.indexOf(b.accion) < 0) errores.push('`accion` debe ser abrir, avanzar o leer')",
+  "const acciones = ['abrir', 'avanzar', 'leer', 'preguntar', 'recoger']",
+  "if (acciones.indexOf(b.accion) < 0) errores.push('`accion` debe ser abrir, avanzar, leer, preguntar o recoger')",
   "if (typeof b.dry_run !== 'boolean') errores.push('`dry_run` es obligatorio y debe ser booleano')",
   "if (b.accion === 'abrir' && (typeof b.client_id !== 'string' || !b.client_id.trim())) errores.push('`client_id` es obligatorio para abrir')",
   "if (b.accion === 'abrir' && (!b.semilla || typeof b.semilla !== 'object' || Array.isArray(b.semilla))) errores.push('`semilla` es obligatoria para abrir y debe ser un objeto')",
-  "if ((b.accion === 'avanzar' || b.accion === 'leer') && (typeof b.encargo_id !== 'string' || !b.encargo_id.trim())) errores.push('`encargo_id` es obligatorio para avanzar y leer')",
+  "if ((b.accion === 'avanzar' || b.accion === 'leer' || b.accion === 'preguntar' || b.accion === 'recoger') && (typeof b.encargo_id !== 'string' || !b.encargo_id.trim())) errores.push('`encargo_id` es obligatorio para avanzar, leer, preguntar y recoger')",
   'if (errores.length) return [{ json: { llamar: false, errores } }]',
   "const cuerpo = { accion: b.accion, dry_run: b.dry_run, workflow_id: String($workflow.id), workflow_execution_id: typeof b.workflow_execution_id === 'string' && b.workflow_execution_id ? b.workflow_execution_id : String($execution.id) }",
   "if (b.accion === 'abrir') { cuerpo.client_id = b.client_id.trim(); cuerpo.semilla = b.semilla } else { cuerpo.encargo_id = b.encargo_id.trim() }",
