@@ -193,6 +193,24 @@ describe('plan del día y brazos: cada cliente pide solo lo que tiene y todo lo 
   }
 })
 
+describe('orden de ejecución del plan: la posición por sede y la competencia no quedan al final (el flujo omite «por tiempo» lo último)', () => {
+  const MIERCOLES = new Date('2026-10-14T15:00:00Z')
+  for (const c of DIEZ_CLIENTES.filter((x) => x.sedes.length && x.compitePorCercania)) {
+    it(`${tuteoYVoseo(c)}`, async () => {
+      const t = tablasDe(c)
+      ;(t.clients[0].config as Record<string, unknown>).apify = { ...(t.clients[0].config as { apify: object }).apify, competitor_list: [{ name: 'Competidor Uno', website: 'https://uno.example', instagram: 'unocompetidor', competitor_type: 'direct' }] }
+      const m = montar(t, { ahora: MIERCOLES })
+      const p = await rutaDescubrir({ ...m.deps, brazos: { ...BRAZOS_APAGADOS, demanda: true, competencia: true } } as never, { client_id: c.id, dry_run: true, ...WF })
+      const fuentes = ((p.body.plan as { hacer: Array<{ fuente: string }> }).hacer).map((a) => a.fuente)
+      const i = (f: string) => fuentes.indexOf(f)
+      expect(i('demanda'), fuentes.join(',')).toBeGreaterThan(-1)
+      for (const ultima of ['prensa', 'resenas', 'videos', 'menciones', 'busqueda_propuesta']) if (i(ultima) >= 0) expect(i('demanda')).toBeLessThan(i(ultima))
+      // y lo propio sigue primero
+      for (const propia of ['sitio', 'instagram', 'mapas']) if (i(propia) >= 0) expect(i(propia)).toBeLessThan(i('demanda'))
+    })
+  }
+})
+
 describe('ventas del punto de venta: el mes, el día y la hora son los del CLIENTE', () => {
   for (const c of DIEZ_CLIENTES) {
     it(`${tuteoYVoseo(c)}: la hora local sale de su zona (declarada o de su país)`, () => {
