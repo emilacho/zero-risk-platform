@@ -12,7 +12,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeFinanzas, type Db } from '@/lib/finanzas/almacen-supabase'
 import { almacenDeConversa } from '@/lib/finanzas/conversa/almacen-supabase'
 import { baseDeRunSdk, modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
-import { abrirConversacion, avanzar } from '@/lib/finanzas/conversa/orquestador'
+import { abrirConversacion, avanzar, leerConversacion } from '@/lib/finanzas/conversa/orquestador'
 import { avanzarConSimulacion } from '@/lib/finanzas/conversa/simulado'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
 import { checkInternalKey } from '@/lib/finanzas/ruta'
@@ -20,7 +20,8 @@ import { checkInternalKey } from '@/lib/finanzas/ruta'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 // un turno de agente puede tardar minutos (la llamada al corredor va dentro de esta función)
-export const maxDuration = 300
+// intento 4: el jefe tarda 115–260 s por llamada y con el reintento de formato pasaba de 300 s (502, turno perdido, cobrado). El límite del reintento (150 s) y este techo lo hacen caber.
+export const maxDuration = 800
 
 /** sin adaptador real: ni publica ni lee (la conversación sigue con supuestos). El adaptador de envío es una decisión de Emilio, no de esta rama. */
 const slackNoConfigurado: SlackPuerto = {
@@ -49,13 +50,7 @@ export async function POST(request: Request) {
   let r: { status: number; cuerpo: Record<string, unknown> }
   if (c.accion === 'abrir') r = await abrirConversacion(P, c)
   else if (c.accion === 'avanzar' && typeof c.encargo_id === 'string') r = c.simulacion !== undefined ? await avanzarConSimulacion(P, c.encargo_id, c.simulacion) : await avanzar(P, c.encargo_id)
-  else if (c.accion === 'leer' && typeof c.encargo_id === 'string') {
-    const cfg = await P.config().catch(() => null)
-    if (!cfg || cfg.estado === 'apagada' || cfg.conversa === 'apagado') r = { status: 409, cuerpo: { error: 'conversa_apagada' } }
-    else {
-      const e = await P.almacen.leerEncargo(c.encargo_id)
-      r = e ? { status: 200, cuerpo: { encargo_id: e.id, estado: e.estado, gasto_usd: e.gasto_usd, turnos: await P.almacen.turnos(e.id) } } : { status: 404, cuerpo: { error: 'encargo_inexistente' } }
-    }
-  } else r = { status: 400, cuerpo: { error: 'accion_invalida', acciones: ['abrir', 'avanzar', 'leer'] } }
+  else if (c.accion === 'leer' && typeof c.encargo_id === 'string') r = await leerConversacion(P, c.encargo_id)
+  else r = { status: 400, cuerpo: { error: 'accion_invalida', acciones: ['abrir', 'avanzar', 'leer'] } }
   return NextResponse.json(r.cuerpo, { status: r.status })
 }

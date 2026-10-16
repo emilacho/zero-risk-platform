@@ -84,6 +84,14 @@ export interface AlmacenDeConversa {
   /** los artefactos vigentes del encargo (por tipo) */
   artefactos(encargo_id: string): Promise<Record<string, Record<string, unknown>>>
   turnos(encargo_id: string): Promise<TurnoDeConversa[]>
+  /**
+   * CANDADO DE «PASO EN VUELO» (arreglo del intento 4): una sola llamada ejecuta un paso del encargo a la vez. Toma el candado si está libre o si el vencimiento ya pasó
+   * (`ttl_s`: el paso que murió no deja el encargo atascado). `sin_columna`: la migración aún no está aplicada → se sigue SIN candado.
+   */
+  tomarPaso?(id: string, ahora: Date, ttl_s: number): Promise<{ ok: true; tomado: boolean } | { ok: false; error: string; sin_columna?: boolean }>
+  soltarPaso?(id: string): Promise<void>
+  /** lo REALMENTE cobrado por el encargo: suma de `agent_invocations` de `<encargo>:<paso>` (incluye lo que se cobró y no llegó a guardarse); null si no se pudo leer */
+  cobrado?(encargo_id: string): Promise<number | null>
 }
 
 export type RespuestaDeModelo = { ok: true; salida: unknown; costo_usd: number } | { ok: false; error: string; costo_usd: number }
