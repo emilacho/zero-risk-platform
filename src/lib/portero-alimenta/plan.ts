@@ -154,8 +154,12 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
 
   const tope = e.tope_usd ?? TOPE_DEL_PORTERO_USD
   const r = recortarAlTope(candidatas, e.gastado_hoy_usd, tope, MAX_CORRIDAS_DEL_PORTERO_POR_DIA)
+  // ORDEN DE EJECUCIÓN (no de recorte): cada nodo del flujo solo empieza llamadas durante sus primeros 60 s y lo que no cabe se omite «por tiempo»; la posición por sede y la competencia
+  // (las que no se pueden repetir en el día) van justo después de lo propio y antes de prensa, reseñas, videos y menciones. El recorte por tope ya se hizo con el orden de siempre.
+  const RANGO_DE_EJECUCION: Record<string, number> = { sitio: 0, instagram: 0, mapas: 0, comentarios: 0, demanda: 1, competencia: 1 }
+  const hacer = r.hacer.map((a, i) => ({ a, i })).sort((x, y) => (RANGO_DE_EJECUCION[x.a.fuente] ?? 2) - (RANGO_DE_EJECUCION[y.a.fuente] ?? 2) || x.i - y.i).map((x) => x.a)
   return {
-    hacer: r.hacer,
+    hacer,
     omitidas: r.omitidas.map((o) => ({ fuente: o.accion.fuente, funcion: o.accion.funcion, por_que: o.por_que })),
     no_cubiertas: [...noCubiertas, ...fp.omitidas.filter((o) => /no se halló|no tiene esa red|no trajo la ficha|sin el nombre/.test(o.motivo)).map((o) => ({ fuente: `${o.plataforma} (${o.tipo})`, por_que: o.motivo }))],
     tope_usd: tope,
