@@ -15,14 +15,23 @@ export function canonico(v: unknown): string {
 export const huellaDe = (v: unknown): string => crypto.createHash('sha256').update(canonico(v)).digest('hex')
 
 export type SalidaDelJefe = 'sale' | 'sale_ajustada' | 'sale_con_alerta'
-export interface Hallazgo { severidad: 'critico' | 'alto' | 'medio' | 'bajo'; que: string }
+/** `estado` lo pone el JEFE (nunca el texto): un hallazgo `resuelto` no cuenta contra la firma; sin estado = abierto */
+export interface Hallazgo { severidad: 'critico' | 'alto' | 'medio' | 'bajo'; que: string; estado?: 'abierto' | 'resuelto' }
+export const estaAbierto = (h: Pick<Hallazgo, 'estado'>) => h.estado !== 'resuelto'
 
-/** firmado = sin hallazgos críticos; con críticos tras la ÚNICA corrección permitida → sin_firma (el plan sigue) */
-export function decidirFirma(h: { hallazgos: Hallazgo[]; correcciones_hechas: number }): { estado: 'firmado' | 'sin_firma' | 'requiere_correccion'; criticos: number } {
-  const criticos = h.hallazgos.filter((x) => x.severidad === 'critico').length
-  if (criticos === 0) return { estado: 'firmado', criticos }
-  if (h.correcciones_hechas < 1) return { estado: 'requiere_correccion', criticos }
-  return { estado: 'sin_firma', criticos }
+/** firmado = sin hallazgos críticos ABIERTOS (un crítico que el jefe marcó `resuelto` no bloquea); con críticos abiertos tras la ÚNICA corrección permitida → sin_firma (el plan sigue) */
+export function decidirFirma(h: { hallazgos: Hallazgo[]; correcciones_hechas: number }): { estado: 'firmado' | 'sin_firma' | 'requiere_correccion'; criticos: number; criticos_resueltos: number } {
+  const criticosTodos = h.hallazgos.filter((x) => x.severidad === 'critico')
+  const criticos = criticosTodos.filter(estaAbierto).length
+  const criticos_resueltos = criticosTodos.length - criticos
+  if (criticos === 0) return { estado: 'firmado', criticos, criticos_resueltos }
+  if (h.correcciones_hechas < 1) return { estado: 'requiere_correccion', criticos, criticos_resueltos }
+  return { estado: 'sin_firma', criticos, criticos_resueltos }
+}
+
+/** un hallazgo cuyo TEXTO dice «resuelto» pero el jefe no le puso `estado`: no se acepta en silencio (cuenta como abierto y se avisa) */
+export function resueltosSinEstado(hallazgos: Array<{ que: string; estado?: string }>): string[] {
+  return hallazgos.filter((h) => h.estado === undefined && /\bresuelt[oa]s?\b/i.test(h.que)).map((h) => h.que.slice(0, 90))
 }
 
 export interface FilaDeNumero {
