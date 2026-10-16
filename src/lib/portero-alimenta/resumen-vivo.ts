@@ -9,6 +9,7 @@ import { normalizar } from '../manual/texto'
 import { PREFIJO_DE_VENTAS } from './brazos/propios'
 import type { FichaDeBrazo } from './brazos/tipos'
 import { claveDeAlcance, sedesDeFicha } from './sedes-fuentes'
+import { leerTodas } from './paginar'
 
 type Fila = Record<string, unknown>
 export interface FichaParaResumen { id: string; clase: string; titulo: string; contenido: string; atributo: string | null; observado_en: string | null; fecha_fuente: string | null; vigente_hasta: string | null; retirada_en: string | null; provenance_tag: unknown; creado_en?: string | null }
@@ -219,9 +220,9 @@ interface Db { from: (t: string) => any }
 export async function cargarEntradaDelResumen(db: Db, o: { client_id: string; nombre: string | null; rubro: string | null; ahora: Date; zonas: string[]; sedes: Array<{ clave: string; ciudad: string | null }> }): Promise<{ ok: true; entrada: EntradaDelResumen } | { ok: false; detalle: string }> {
   const desde = new Date(o.ahora.getTime() - DIAS_PARA_TENDENCIA * DIA).toISOString()
   const campos = 'id, clase, titulo, contenido, atributo, observado_en, fecha_fuente, vigente_hasta, retirada_en, provenance_tag, descartada, creado_en'
-  const q = await db.from('cerebro_fichas').select(campos).eq('client_id', o.client_id).limit(3000)
+  const q = await leerTodas(() => db.from('cerebro_fichas').select(campos).eq('client_id', o.client_id).order('id', { ascending: true }))
   if (q.error) return { ok: false, detalle: `cerebro_fichas: ${String(q.error.message).slice(0, 120)}` }
-  const todas = (Array.isArray(q.data) ? q.data : []) as Array<FichaParaResumen & { descartada?: boolean }>
+  const todas = (Array.isArray(q.data) ? q.data : []) as unknown as Array<FichaParaResumen & { descartada?: boolean }>
   const fichas = todas.filter((f) => !f.descartada && f.clase !== CLASE_DEL_RESUMEN && (!f.retirada_en || (f.observado_en ?? '') >= desde))
   const zona: FichaParaResumen[] = []
   for (const z of o.zonas) {

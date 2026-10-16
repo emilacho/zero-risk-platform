@@ -420,7 +420,9 @@ describe('integración · alimentar con los brazos (3 rubros · tuteo y voseo)',
       const delPortero = (t: typeof conBrazos) => t.cerebro_fichas.filter((f) => !String(f.ref).startsWith('brazo:')).map((f) => f.ref).sort()
       expect(delPortero(conBrazos)).toEqual(delPortero(sinBrazos))
       const deBrazos = conBrazos.cerebro_fichas.filter((f) => String(f.ref).startsWith('brazo:'))
-      expect(deBrazos.some((f) => f.client_id === 'zona:ec' || String(f.client_id).startsWith('zona:'))).toBe(c.pais === 'Ecuador')
+      // el contexto (feriados) existe para todo país del catálogo (16-oct: ya no solo Ecuador); la ficha de zona lleva el país del cliente
+      const iso = ({ Ecuador: 'ec', Argentina: 'ar', 'México': 'mx' } as Record<string, string>)[c.pais]
+      expect(deBrazos.some((f) => f.client_id === `zona:${iso}`)).toBe(true)
       expect(deBrazos.some((f) => f.client_id === c.id && f.alcance === 'cliente')).toBe(true)
       expect(JSON.stringify(deBrazos)).not.toContain('tok-falso')
     })

@@ -96,6 +96,7 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
     const vistas = new Set<string>()
     const ciudades: string[] = []
     for (const c of [ciudad, ...(e.ciudades ?? [])].map((x) => x.trim()).filter(Boolean)) { const k = normalizar(c); if (!vistas.has(k)) { vistas.add(k); ciudades.push(c) } }
+    if (ciudades.length > 3) noCubiertas.push({ fuente: 'mapas', por_que: `el negocio tiene ${ciudades.length} ciudades y la ficha propia de Mapas solo se busca en las 3 primeras (tope de costo); no se buscan: ${ciudades.slice(3).join(', ')}` })
     ciudades.splice(3)
     // las reseñas NO vienen en la corrida de Mapas (medido 14-oct: aunque se pida `maxReviews`): van en una tanda aparte (`fase: 'tanda2'`) con la dirección de la ficha
     const m = accion('mapas', 'own_google_maps_profile', { searchStringsArray: ciudades.map((c) => `${nombre} ${c}`), maxCrawledPlacesPerSearch: 1, language: 'es' }, ciudades.map((c) => `${nombre} · ${c}`).join(' | '))

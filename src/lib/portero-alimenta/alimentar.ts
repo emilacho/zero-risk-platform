@@ -19,6 +19,7 @@ import { archivarFichasDeBrazos } from './brazos/archivo'
 import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
 import { pulirResumen, topeDelPulido } from './resumen-pulido'
 import { idDeZona, paisIsoDe } from '../cerebro/zona'
+import { leerTodas } from './paginar'
 import { claveDeAlcance, sedesDeFicha, sedesDeLaFuente, tipoDeFuenteDeUnidad } from './sedes-fuentes'
 
 /** las fichas de zona (`zona:ec`) que le tocan al cliente por su país */
@@ -128,9 +129,9 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   if (rr.error) return falla('apify_raw', rr.error.message)
   const sd = await e.db.from('client_sedes').select('ciudad, clave').eq('client_id', e.client_id)
   if (sd.error) return falla('client_sedes', sd.error.message)
-  const vv = await e.db.from('cerebro_unidades_vistas').select('fuente, unidad_ref, huella, veredicto').eq('client_id', e.client_id)
+  const vv = await leerTodas(() => e.db.from('cerebro_unidades_vistas').select('fuente, unidad_ref, huella, veredicto').eq('client_id', e.client_id).order('id', { ascending: true }))
   if (vv.error) return falla('cerebro_unidades_vistas', vv.error.message)
-  const fv = await e.db.from('cerebro_fichas').select('id, atributo, contenido, fecha_fuente, observado_en, creado_en, retirada_en, prueba, provenance_tag, sede').eq('client_id', e.client_id).is('retirada_en', null)
+  const fv = await leerTodas(() => e.db.from('cerebro_fichas').select('id, atributo, contenido, fecha_fuente, observado_en, creado_en, retirada_en, prueba, provenance_tag, sede').eq('client_id', e.client_id).is('retirada_en', null).order('id', { ascending: true }))
   if (fv.error) return falla('cerebro_fichas', fv.error.message)
 
   const cfg = (cliente.config ?? {}) as { registro?: string; idioma?: { registro?: string }; apify?: { url_reparto?: unknown } }
