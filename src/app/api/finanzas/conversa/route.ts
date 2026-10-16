@@ -67,10 +67,14 @@ export async function POST(request: Request) {
     else if (cfg.estado === 'apagada' || cfg.conversa === 'apagado') r = { status: 409, cuerpo: { error: 'conversa_apagada' } }
     else if (typeof c.workflow_id !== 'string' || !c.workflow_id.trim() || typeof c.workflow_execution_id !== 'string' || !c.workflow_execution_id.trim()) r = { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`workflow_id` y `workflow_execution_id` son obligatorios (la puerta del dueño en el cerebro los exige)'] } }
     else {
+      const crudo = (process.env.FINANZAS_CANAL_PREGUNTAS ?? '').trim()
+      const canalDelBuzon = /^[CG][A-Z0-9]{8,}$/.test(crudo) ? crudo : undefined
       const B = {
         almacen: P.almacen,
-        slack: slackMdPuerto({ token: process.env.SLACK_BOT_TOKEN ?? '', dueno_id: P.emilio_id }),
-        cerebro: cerebroDelDueno({ base: baseDelCerebro(process.env), llave: process.env.INTERNAL_API_KEY ?? '', workflow_id: c.workflow_id, workflow_execution_id: c.workflow_execution_id }),
+        // CANAL del buzón (opcional): `FINANZAS_CANAL_PREGUNTAS` = id del canal privado (C…/G…); sin él (o mal formado) se usa el MD al dueño
+        canal: canalDelBuzon,
+        slack: slackMdPuerto({ token: process.env.SLACK_BOT_TOKEN ?? '', dueno_id: P.emilio_id, ...(canalDelBuzon ? { canal: canalDelBuzon } : {}) }),
+        cerebro: cerebroDelDueno({ base: baseDelCerebro(process.env), llave: process.env.INTERNAL_API_KEY ?? '', workflow_id: c.workflow_id, workflow_execution_id: c.workflow_execution_id, ...(canalDelBuzon ? { canal_etiqueta: 'canal privado de Slack «buzon-de-preguntas»' } : {}) }),
         modo: cfg.preguntas_slack,
         ahora: P.ahora,
       }

@@ -34,7 +34,8 @@ export interface CerebroDelDueno {
 
 const OFICINA = { oficina: 'financiera', agente: 'chief-financial-officer' }
 
-export function cerebroDelDueno(p: { base: string; llave: string; workflow_id: string; workflow_execution_id: string; fetch?: Fetch }): CerebroDelDueno {
+export function cerebroDelDueno(p: { base: string; llave: string; workflow_id: string; workflow_execution_id: string; canal_etiqueta?: string; fetch?: Fetch }): CerebroDelDueno {
+  const etiqueta = p.canal_etiqueta?.trim() || 'MD de Slack'
   const f = p.fetch ?? fetch
   const sin = !p.base || !p.llave || !p.workflow_id || !p.workflow_execution_id
   const url = `${p.base.replace(/\/+$/, '')}/api/brain/alimentar/dueno`
@@ -52,7 +53,7 @@ export function cerebroDelDueno(p: { base: string; llave: string; workflow_id: s
   }
   return {
     async registrarPregunta(q) {
-      const r = await post({ evento: 'pregunta', client_id: q.client_id, tema: q.tema, pregunta: q.pregunta, canal: 'MD de Slack', ...(q.forzar ? { forzar: true } : {}) })
+      const r = await post({ evento: 'pregunta', client_id: q.client_id, tema: q.tema, pregunta: q.pregunta, canal: etiqueta, ...(q.forzar ? { forzar: true } : {}) })
       if (!r.ok) return r
       const j = r.j
       if (j.registrada === true) return { ok: true, estado: 'registrada', pregunta_id: typeof j.pregunta_id === 'string' ? j.pregunta_id : null }
@@ -67,7 +68,7 @@ export function cerebroDelDueno(p: { base: string; llave: string; workflow_id: s
       return { ok: false, error: 'respuesta_no_entendida' }
     },
     async registrarRespuesta(x) {
-      const r = await post({ evento: 'respuesta', client_id: x.client_id, tema: x.tema, pregunta: x.pregunta, respuesta: x.respuesta, canal: 'MD de Slack', mensaje_ref: x.mensaje_ref, respondido_en: x.respondido_en, ...(x.pregunta_id ? { pregunta_id: x.pregunta_id } : {}) })
+      const r = await post({ evento: 'respuesta', client_id: x.client_id, tema: x.tema, pregunta: x.pregunta, respuesta: x.respuesta, canal: etiqueta, mensaje_ref: x.mensaje_ref, respondido_en: x.respondido_en, ...(x.pregunta_id ? { pregunta_id: x.pregunta_id } : {}) })
       if (!r.ok) return r
       return r.j.guardada === true || r.j.ok === true ? { ok: true } : { ok: false, error: 'no_guardada' }
     },
