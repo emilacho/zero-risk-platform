@@ -1,0 +1,14 @@
+{
+  "tipo_id": "dato_del_dueno",
+  "atributo_cerebro": "dueno:*",
+  "clase_dato": "acumula",
+  "unidad": "texto",
+  "moneda_requerida": false,
+  "rango": null,
+  "frescura_limite_h": 2160,
+  "critico": false,
+  "tolerancia_redondeo": 0,
+  "n_minimo": 0,
+  "periodo_requerido": false,
+  "via_preferida": "cerebro"
+}

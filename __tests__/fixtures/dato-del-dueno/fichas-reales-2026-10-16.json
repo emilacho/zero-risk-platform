@@ -1,0 +1,313 @@
+[
+ {
+  "id": "55fe6d2a-62a5-4b29-879f-673d7aef3109",
+  "clase": "dato_del_dueno",
+  "atributo": "dueno:afluencia-fin-mediodia-semana",
+  "titulo": "Dueño · afluencia al mediodía de fin de semana · sede olon",
+  "que_es": "unos 20 clientes al mediodía de fin de semana",
+  "contenido": "Confirmado por el dueño (chat con Lenovo, 2026-10-16). Pregunta: «¿Cuántos clientes tienes al mediodía de un fin de semana en Olón? (pregunta reconstruida del encargo)». Respuesta del dueño: «unos 20 clientes al mediodía de fin de semana»",
+  "origen": "dueno",
+  "observado_en": "2026-10-16 00:00:00+00",
+  "fecha_fuente": "2026-10-16 00:00:00+00",
+  "vigente_hasta": null,
+  "retirada_en": null,
+  "reemplazada_por": null,
+  "descartada": false,
+  "prueba": false,
+  "fuente_url": null,
+  "juzgado_por": "regla",
+  "propiedad": "propia",
+  "sede": "olon",
+  "huella": "c1499364a13c4d88",
+  "provenance_tag": {
+   "type": "evidence",
+   "canal": "chat con Lenovo",
+   "datos": {
+    "sede": "olon",
+    "tema": "afluencia al mediodía de fin de semana",
+    "canal": "chat con Lenovo",
+    "sedes": [
+     "olon"
+    ],
+    "pregunta": "¿Cuántos clientes tienes al mediodía de un fin de semana en Olón? (pregunta reconstruida del encargo)",
+    "respuesta": "unos 20 clientes al mediodía de fin de semana",
+    "tema_norm": "afluencia-fin-mediodia-semana",
+    "mensaje_ref": "chat con Lenovo 16-oct 11:21 · afluencia olon",
+    "respondido_en": "2026-10-16T00:00:00.000Z",
+    "preguntado_por": {
+     "agente": "lenovo",
+     "oficina": "orquestador"
+    },
+    "sede_asignada_por": "fuente"
+   },
+   "source": "dueno",
+   "trust_level": "untrusted",
+   "ingress_route": "/api/brain/alimentar/dueno",
+   "confirmado_por": "dueno"
+  },
+  "creado_en": "2026-10-16 11:17:33.722965+00"
+ },
+ {
+  "id": "5a749707-a4e5-4d1a-9de8-f1c9f08a393a",
+  "clase": "dato_del_dueno",
+  "atributo": "dueno:cliente-lista-propia",
+  "titulo": "Dueño · lista propia de clientes",
+  "que_es": "no tiene lista propia de clientes",
+  "contenido": "Confirmado por el dueño (chat con Lenovo, 2026-10-16). Pregunta: «¿Tienes una lista propia de tus clientes? (pregunta reconstruida del encargo)». Respuesta del dueño: «no tiene lista propia de clientes»",
+  "origen": "dueno",
+  "observado_en": "2026-10-16 00:00:00+00",
+  "fecha_fuente": "2026-10-16 00:00:00+00",
+  "vigente_hasta": null,
+  "retirada_en": null,
+  "reemplazada_por": null,
+  "descartada": false,
+  "prueba": false,
+  "fuente_url": null,
+  "juzgado_por": "regla",
+  "propiedad": "propia",
+  "sede": null,
+  "huella": "62b5ee6997938134",
+  "provenance_tag": {
+   "type": "evidence",
+   "canal": "chat con Lenovo",
+   "datos": {
+    "tema": "lista propia de clientes",
+    "canal": "chat con Lenovo",
+    "pregunta": "¿Tienes una lista propia de tus clientes? (pregunta reconstruida del encargo)",
+    "respuesta": "no tiene lista propia de clientes",
+    "tema_norm": "cliente-lista-propia",
+    "mensaje_ref": "chat con Lenovo 16-oct 11:21 · lista de clientes",
+    "respondido_en": "2026-10-16T00:00:00.000Z",
+    "preguntado_por": {
+     "agente": "lenovo",
+     "oficina": "orquestador"
+    }
+   },
+   "source": "dueno",
+   "trust_level": "untrusted",
+   "ingress_route": "/api/brain/alimentar/dueno",
+   "confirmado_por": "dueno"
+  },
+  "creado_en": "2026-10-16 11:17:36.120607+00"
+ },
+ {
+  "id": "61194cb8-9657-4046-8320-d090665e1cda",
+  "clase": "dato_del_dueno",
+  "atributo": "dueno:pixel-seguimiento",
+  "titulo": "Dueño · píxel de seguimiento",
+  "que_es": "no tiene píxel",
+  "contenido": "Confirmado por el dueño (chat con Lenovo, 2026-10-16). Pregunta: «¿Tienes un píxel de seguimiento en tu sitio? (pregunta reconstruida del encargo)». Respuesta del dueño: «no tiene píxel»",
+  "origen": "dueno",
+  "observado_en": "2026-10-16 00:00:00+00",
+  "fecha_fuente": "2026-10-16 00:00:00+00",
+  "vigente_hasta": null,
+  "retirada_en": null,
+  "reemplazada_por": null,
+  "descartada": false,
+  "prueba": false,
+  "fuente_url": null,
+  "juzgado_por": "regla",
+  "propiedad": "propia",
+  "sede": null,
+  "huella": "17aa3406b15674a6",
+  "provenance_tag": {
+   "type": "evidence",
+   "canal": "chat con Lenovo",
+   "datos": {
+    "tema": "píxel de seguimiento",
+    "canal": "chat con Lenovo",
+    "pregunta": "¿Tienes un píxel de seguimiento en tu sitio? (pregunta reconstruida del encargo)",
+    "respuesta": "no tiene píxel",
+    "tema_norm": "pixel-seguimiento",
+    "mensaje_ref": "chat con Lenovo 16-oct 11:21 · pixel",
+    "respondido_en": "2026-10-16T00:00:00.000Z",
+    "preguntado_por": {
+     "agente": "lenovo",
+     "oficina": "orquestador"
+    }
+   },
+   "source": "dueno",
+   "trust_level": "untrusted",
+   "ingress_route": "/api/brain/alimentar/dueno",
+   "confirmado_por": "dueno"
+  },
+  "creado_en": "2026-10-16 11:17:34.924915+00"
+ },
+ {
+  "id": "69b1c01e-b484-4f6b-a96c-28ff54a6c6b0",
+  "clase": "dato_del_dueno",
+  "atributo": "dueno:apertura-sede",
+  "titulo": "Dueño · apertura de la sede · sede guayaquil",
+  "que_es": "Guayaquil sin abrir",
+  "contenido": "Confirmado por el dueño (chat con Lenovo, 2026-10-16). Pregunta: «¿Cómo está la sede de Guayaquil? (pregunta reconstruida del encargo)». Respuesta del dueño: «Guayaquil sin abrir»",
+  "origen": "dueno",
+  "observado_en": "2026-10-16 00:00:00+00",
+  "fecha_fuente": "2026-10-16 00:00:00+00",
+  "vigente_hasta": null,
+  "retirada_en": null,
+  "reemplazada_por": null,
+  "descartada": false,
+  "prueba": false,
+  "fuente_url": null,
+  "juzgado_por": "regla",
+  "propiedad": "propia",
+  "sede": "guayaquil",
+  "huella": "f07821487cf7b1c6",
+  "provenance_tag": {
+   "type": "evidence",
+   "canal": "chat con Lenovo",
+   "datos": {
+    "sede": "guayaquil",
+    "tema": "apertura de la sede",
+    "canal": "chat con Lenovo",
+    "sedes": [
+     "guayaquil"
+    ],
+    "pregunta": "¿Cómo está la sede de Guayaquil? (pregunta reconstruida del encargo)",
+    "respuesta": "Guayaquil sin abrir",
+    "tema_norm": "apertura-sede",
+    "mensaje_ref": "chat con Lenovo 16-oct 11:21 · guayaquil",
+    "respondido_en": "2026-10-16T00:00:00.000Z",
+    "preguntado_por": {
+     "agente": "lenovo",
+     "oficina": "orquestador"
+    },
+    "sede_asignada_por": "fuente"
+   },
+   "source": "dueno",
+   "trust_level": "untrusted",
+   "ingress_route": "/api/brain/alimentar/dueno",
+   "confirmado_por": "dueno"
+  },
+  "creado_en": "2026-10-16 11:17:34.291839+00"
+ },
+ {
+  "id": "7e05c87b-d20c-434d-ba39-b61bf9ec652b",
+  "clase": "dato_del_dueno",
+  "atributo": "dueno:business-whatsapp",
+  "titulo": "Dueño · WhatsApp Business",
+  "que_es": "no tiene WhatsApp Business",
+  "contenido": "Confirmado por el dueño (chat con Lenovo, 2026-10-16). Pregunta: «¿Usas WhatsApp Business? (pregunta reconstruida del encargo)». Respuesta del dueño: «no tiene WhatsApp Business»",
+  "origen": "dueno",
+  "observado_en": "2026-10-16 00:00:00+00",
+  "fecha_fuente": "2026-10-16 00:00:00+00",
+  "vigente_hasta": null,
+  "retirada_en": null,
+  "reemplazada_por": null,
+  "descartada": false,
+  "prueba": false,
+  "fuente_url": null,
+  "juzgado_por": "regla",
+  "propiedad": "propia",
+  "sede": null,
+  "huella": "04ee633bb41114a9",
+  "provenance_tag": {
+   "type": "evidence",
+   "canal": "chat con Lenovo",
+   "datos": {
+    "tema": "WhatsApp Business",
+    "canal": "chat con Lenovo",
+    "pregunta": "¿Usas WhatsApp Business? (pregunta reconstruida del encargo)",
+    "respuesta": "no tiene WhatsApp Business",
+    "tema_norm": "business-whatsapp",
+    "mensaje_ref": "chat con Lenovo 16-oct 11:21 · whatsapp",
+    "respondido_en": "2026-10-16T00:00:00.000Z",
+    "preguntado_por": {
+     "agente": "lenovo",
+     "oficina": "orquestador"
+    }
+   },
+   "source": "dueno",
+   "trust_level": "untrusted",
+   "ingress_route": "/api/brain/alimentar/dueno",
+   "confirmado_por": "dueno"
+  },
+  "creado_en": "2026-10-16 11:17:35.487912+00"
+ },
+ {
+  "id": "9ed9d572-48f6-45aa-a1ca-c6d62502b96e",
+  "clase": "dato_del_dueno",
+  "atributo": "dueno:costo-plato",
+  "titulo": "Dueño · costo por plato",
+  "que_es": "2,10 por plato (dato del dueño para la oficina financiera; no es un margen calculado)",
+  "contenido": "Confirmado por el dueño (chat con Lenovo, 2026-10-16). Pregunta: «¿Cuánto te cuesta cada plato? (pregunta reconstruida del encargo)». Respuesta del dueño: «2,10 por plato (dato del dueño para la oficina financiera; no es un margen calculado)»",
+  "origen": "dueno",
+  "observado_en": "2026-10-16 00:00:00+00",
+  "fecha_fuente": "2026-10-16 00:00:00+00",
+  "vigente_hasta": null,
+  "retirada_en": null,
+  "reemplazada_por": null,
+  "descartada": false,
+  "prueba": false,
+  "fuente_url": null,
+  "juzgado_por": "regla",
+  "propiedad": "propia",
+  "sede": null,
+  "huella": "d56c60e373951255",
+  "provenance_tag": {
+   "type": "evidence",
+   "canal": "chat con Lenovo",
+   "datos": {
+    "tema": "costo por plato",
+    "canal": "chat con Lenovo",
+    "pregunta": "¿Cuánto te cuesta cada plato? (pregunta reconstruida del encargo)",
+    "respuesta": "2,10 por plato (dato del dueño para la oficina financiera; no es un margen calculado)",
+    "tema_norm": "costo-plato",
+    "mensaje_ref": "chat con Lenovo 16-oct 11:21 · costo por plato",
+    "respondido_en": "2026-10-16T00:00:00.000Z",
+    "preguntado_por": {
+     "agente": "lenovo",
+     "oficina": "orquestador"
+    }
+   },
+   "source": "dueno",
+   "trust_level": "untrusted",
+   "ingress_route": "/api/brain/alimentar/dueno",
+   "confirmado_por": "dueno"
+  },
+  "creado_en": "2026-10-16 11:17:33.038392+00"
+ },
+ {
+  "id": "a87dbfdb-67e3-4515-b484-d0fed1a55fdf",
+  "clase": "dato_del_dueno",
+  "atributo": "dueno:pauta-presupuesto",
+  "titulo": "Dueño · presupuesto de pauta",
+  "que_es": "200 por semana (moneda de la ficha del cliente)",
+  "contenido": "Confirmado por el dueño (chat con Lenovo, 2026-10-16). Pregunta: «¿Cuánto quieres gastar en pauta por semana? (pregunta reconstruida del encargo)». Respuesta del dueño: «200 por semana (moneda de la ficha del cliente)»",
+  "origen": "dueno",
+  "observado_en": "2026-10-16 00:00:00+00",
+  "fecha_fuente": "2026-10-16 00:00:00+00",
+  "vigente_hasta": null,
+  "retirada_en": null,
+  "reemplazada_por": null,
+  "descartada": false,
+  "prueba": false,
+  "fuente_url": null,
+  "juzgado_por": "regla",
+  "propiedad": "propia",
+  "sede": null,
+  "huella": "cfe306510064c7f9",
+  "provenance_tag": {
+   "type": "evidence",
+   "canal": "chat con Lenovo",
+   "datos": {
+    "tema": "presupuesto de pauta",
+    "canal": "chat con Lenovo",
+    "pregunta": "¿Cuánto quieres gastar en pauta por semana? (pregunta reconstruida del encargo)",
+    "respuesta": "200 por semana (moneda de la ficha del cliente)",
+    "tema_norm": "pauta-presupuesto",
+    "mensaje_ref": "chat con Lenovo 16-oct 11:21 · pauta",
+    "respondido_en": "2026-10-16T00:00:00.000Z",
+    "preguntado_por": {
+     "agente": "lenovo",
+     "oficina": "orquestador"
+    }
+   },
+   "source": "dueno",
+   "trust_level": "untrusted",
+   "ingress_route": "/api/brain/alimentar/dueno",
+   "confirmado_por": "dueno"
+  },
+  "creado_en": "2026-10-16 11:17:32.44466+00"
+ }
+]
