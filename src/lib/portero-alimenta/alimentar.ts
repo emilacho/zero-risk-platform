@@ -19,6 +19,7 @@ import { archivarFichasDeBrazos } from './brazos/archivo'
 import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
 import { pulirResumen, topeDelPulido } from './resumen-pulido'
 import { idDeZona, paisIsoDe } from '../cerebro/zona'
+import { claveDeAlcance, sedesDeFicha, sedesDeLaFuente, tipoDeFuenteDeUnidad } from './sedes-fuentes'
 
 /** las fichas de zona (`zona:ec`) que le tocan al cliente por su país */
 const zonasDelCliente = (c: Record<string, unknown>): string[] => { const iso = paisIsoDe(c.country ?? c.pais, c.market); return iso ? [idDeZona(iso)] : [] }
@@ -69,6 +70,8 @@ export interface ResultadoDeAlimentar {
   errores: string[]
   /** lo que hicieron los nuevos brazos (ausente = ninguno encendido) */
   brazos?: ResultadoDeBrazos
+  /** asignaciones de fuente a sede que no corresponden a ninguna sede del cliente (se dicen; la fuente queda en «todas») */
+  declarado_sedes?: string[]
   /** el resumen vivo (ausente = apagado) */
   resumen_vivo?: { secciones: Record<string, number>; huecos: string[]; escritas: number; iguales: number; retiradas: number; pulido?: { usado: boolean; motivo: string; agente: string; costo_usd: number; lineas_originales: number; lineas_conservadas: number; descartadas: number; citas_originales: number; citas_conservadas: number; tope_usd: number; tope_subido: boolean; paso_del_tope_base: boolean } }
 }
@@ -127,7 +130,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   if (sd.error) return falla('client_sedes', sd.error.message)
   const vv = await e.db.from('cerebro_unidades_vistas').select('fuente, unidad_ref, huella, veredicto').eq('client_id', e.client_id)
   if (vv.error) return falla('cerebro_unidades_vistas', vv.error.message)
-  const fv = await e.db.from('cerebro_fichas').select('id, atributo, contenido, fecha_fuente, observado_en, creado_en, retirada_en, prueba').eq('client_id', e.client_id).is('retirada_en', null)
+  const fv = await e.db.from('cerebro_fichas').select('id, atributo, contenido, fecha_fuente, observado_en, creado_en, retirada_en, prueba, provenance_tag, sede').eq('client_id', e.client_id).is('retirada_en', null)
   if (fv.error) return falla('cerebro_fichas', fv.error.message)
 
   const cfg = (cliente.config ?? {}) as { registro?: string; idioma?: { registro?: string }; apify?: { url_reparto?: unknown } }
@@ -144,16 +147,30 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   const f = filtrar(unidades, ctx, vistas, patrones)
   r.filtro = { propias: f.propias.length, sin_confirmar: f.sin_confirmar.length, ajenas: f.descartadas.filter((d) => d.estado === 'ajeno').length, ruido: f.descartadas.filter((d) => d.estado === 'ruido').length, repetidas: f.descartadas.filter((d) => d.estado === 'repetida').length }
 
-  // lo vigente de cada atributo (la ficha viva más nueva de ese atributo)
+  // la SEDE de cada unidad (dato `config.apify.fuentes_por_sede`): un cliente de una sola sede, o una fuente sin asignación, queda en «todas» y todo funciona como antes
+  const clavesDeSedes = lista(sd.data).map((s) => String(s.clave ?? '')).filter(Boolean)
+  const declaradoSedes = new Set<string>()
+  for (const u of f.propias) {
+    const t = tipoDeFuenteDeUnidad(u)
+    if (!t) continue
+    const a = sedesDeLaFuente(cliente.config, t.tipo, t.detalle, clavesDeSedes)
+    if (a.sedes) u.sedes = a.sedes
+    a.declarado.forEach((d) => declaradoSedes.add(d))
+  }
+  r.declarado_sedes = [...declaradoSedes]
+
+  // lo vigente de cada atributo, DENTRO de su sede (la ficha viva más nueva de ese atributo en esa sede; sin sede = todas las sedes)
   const vigentePorAtributo = new Map<string, { ficha_id: string; texto: string; fecha: string | null; atributo: string | null }>()
   for (const x of lista(fv.data).filter((v) => v.prueba !== true).sort((a, b) => (String(a.creado_en) < String(b.creado_en) ? -1 : 1))) {
-    if (typeof x.atributo === 'string' && x.atributo) vigentePorAtributo.set(x.atributo, { ficha_id: String(x.id), texto: String(x.contenido ?? ''), fecha: (x.fecha_fuente ?? x.observado_en ?? x.creado_en ?? null) as string | null, atributo: x.atributo })
+    if (typeof x.atributo === 'string' && x.atributo) vigentePorAtributo.set(`${claveDeAlcance(sedesDeFicha(x.provenance_tag) ?? (typeof x.sede === 'string' && x.sede ? x.sede.split(',') : null))}|${x.atributo}`, { ficha_id: String(x.id), texto: String(x.contenido ?? ''), fecha: (x.fecha_fuente ?? x.observado_en ?? x.creado_en ?? null) as string | null, atributo: x.atributo })
   }
+  // una ficha de otra sede NUNCA es «lo vigente» de esta; la que no tiene sede (anterior a la asignación) sí la adopta la primera lectura con sede
+  const vigenteDe = (u: Unidad) => (u.atributo ? vigentePorAtributo.get(`${claveDeAlcance(u.sedes)}|${u.atributo}`) ?? (u.sedes?.length ? vigentePorAtributo.get(`|${u.atributo}`) : undefined) ?? null : null)
 
   const aJuzgar: Array<{ unidad: Unidad; item: ItemParaJuzgar }> = []
   const porCodigo: Array<{ unidad: Unidad; item: ItemParaJuzgar }> = []
   f.propias.forEach((u, i) => {
-    const item: ItemParaJuzgar = { n: i + 1, unidad_clave: `${u.fuente}|${u.unidad_ref}`, fuente: u.fuente, autoria: u.autoria, clase_dato: u.clase_dato, atributo: u.atributo, texto: u.texto, fecha: u.fecha_fuente ?? u.observado_en, vigente: u.atributo ? vigentePorAtributo.get(u.atributo) ?? null : null }
+    const item: ItemParaJuzgar = { n: i + 1, unidad_clave: `${u.fuente}|${u.unidad_ref}`, fuente: u.fuente, autoria: u.autoria, clase_dato: u.clase_dato, atributo: u.atributo, texto: u.texto, fecha: u.fecha_fuente ?? u.observado_en, vigente: vigenteDe(u) }
     // mismo dato que lo vigente ⇒ no hay cambio: se renueva, no se juzga
     if (item.vigente && item.vigente.texto === u.texto) return
     // algo vigente con qué reemplazarse ⇒ el modelo razona; si no hay nada que reemplazar ⇒ se SUMA por código; las CIFRAS (puntaje, seguidores…) se reemplazan por código, sin modelo
@@ -237,7 +254,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     const fila = {
       id: x.id, client_id: x.client_id, ingreso_id: ingreso, ref: x.ref, clase: x.clase, titulo: x.titulo, que_es: x.que_es, contenido: x.contenido, origen: x.origen, fecha_fuente: x.fecha_fuente,
       reconfirmado_en: x.reconfirmado_en, plazo: x.plazo, vigente_hasta: x.vigente_hasta, version_de: x.version_de, huella: x.huella, propiedad: x.propiedad, porque: x.porque, juzgado_por: x.juzgado_por,
-      provenance_tag: x.provenance_tag, fuente_url: x.fuente_url, observado_en: x.observado_en, atributo: x.atributo, decision: x.decision, razon_de_decision: x.razon_de_decision,
+      provenance_tag: x.provenance_tag, fuente_url: x.fuente_url, observado_en: x.observado_en, atributo: x.atributo, sede: x.sede, decision: x.decision, razon_de_decision: x.razon_de_decision,
       // lo que no se pudo decidir o confirmar se archiva pero NO se entrega
       descartada: !x.entregable, motivo_descarte: x.entregable ? null : x.porque || 'sin confirmar',
     }
@@ -257,7 +274,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   // la corrida que reemplaza al despertar CIERRA lo que el despertar dejó pendiente (qué pidió y desde cuándo) para que `listo` pueda declarar los huecos
   const previo = corridaDeHoy && esObjeto(corridaDeHoy.resumen) ? (corridaDeHoy.resumen as Fila).despertar : null
   const arrastreDelDespertar = !e.despertar && esObjeto(previo) ? { despertar: { ...previo, completado_en: ahora.toISOString() } } : {}
-  const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), ...arrastreDelDespertar, unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores, ...(r.resumen_vivo ? { resumen_vivo: r.resumen_vivo } : {}), ...(r.brazos ? { brazos: { activos: r.brazos.activos, por_brazo: r.brazos.por_brazo, archivo: r.brazos.archivo ? { escritas: r.brazos.archivo.escritas, iguales: r.brazos.archivo.iguales, retiradas: r.brazos.archivo.retiradas } : null } } : {}) }, gasto_apify_usd: 0, gasto_modelo_usd: r.gasto.modelo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
+  const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), ...arrastreDelDespertar, ...(r.declarado_sedes?.length ? { declarado_sedes: r.declarado_sedes } : {}), unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores, ...(r.resumen_vivo ? { resumen_vivo: r.resumen_vivo } : {}), ...(r.brazos ? { brazos: { activos: r.brazos.activos, por_brazo: r.brazos.por_brazo, archivo: r.brazos.archivo ? { escritas: r.brazos.archivo.escritas, iguales: r.brazos.archivo.iguales, retiradas: r.brazos.archivo.retiradas } : null } } : {}) }, gasto_apify_usd: 0, gasto_modelo_usd: r.gasto.modelo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
   const log = corridaDeHoy ? await e.db.from('cerebro_portero_corridas').update(rastro).eq('id', String(corridaDeHoy.id)) : await e.db.from('cerebro_portero_corridas').insert(rastro)
   if (log.error) r.errores.push(`rastro: ${log.error.message}`); else r.escrituras.corrida = 1
   return { ...r, ok: r.errores.length === 0, estado: r.errores.length ? 'con_errores' : 'hecha' }

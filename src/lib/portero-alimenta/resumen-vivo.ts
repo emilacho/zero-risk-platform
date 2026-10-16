@@ -8,6 +8,7 @@
 import { normalizar } from '../manual/texto'
 import { PREFIJO_DE_VENTAS } from './brazos/propios'
 import type { FichaDeBrazo } from './brazos/tipos'
+import { claveDeAlcance, sedesDeFicha } from './sedes-fuentes'
 
 type Fila = Record<string, unknown>
 export interface FichaParaResumen { id: string; clase: string; titulo: string; contenido: string; atributo: string | null; observado_en: string | null; fecha_fuente: string | null; vigente_hasta: string | null; retirada_en: string | null; provenance_tag: unknown; creado_en?: string | null }
@@ -137,7 +138,22 @@ export function armarResumen(e: EntradaDelResumen, opciones: { candidatos?: bool
   sec('quien_es', `Quién es${e.nombre ? ` · ${e.nombre}` : ''}${e.rubro ? ` (${e.rubro})` : ''}`, [...sitioElegido.map((f) => linea(f, 200)), ...perfil.map((f) => linea(f, 140))], 'no hay fichas de su sitio ni de su ficha de Mapas', opciones.candidatos ? CANDIDATOS_DE_QUIEN_ES + 5 : MAX_POR_SECCION)
 
   // qué vende y a qué precio vigente
-  sec('precios', 'Qué vende y a qué precio (vigente)', por('precio', 'horario').map((f) => linea(f, 140)), 'no hay precios ni horarios vigentes')
+  // si el cliente tiene más de una sede y la fuente de cada precio está asignada a una sede, los precios van POR SEDE (cada línea dice la suya): precios distintos entre sedes no son una contradicción
+  const precios = por('precio', 'horario')
+  const grupos = new Map<string, FichaParaResumen[]>()
+  for (const f of precios) { const k = claveDeAlcance(sedesDeFicha(f.provenance_tag)); grupos.set(k, [...(grupos.get(k) ?? []), f]) }
+  const hayPorSede = [...grupos.keys()].some((k) => k !== '')
+  if (!hayPorSede) sec('precios', 'Qué vende y a qué precio (vigente)', precios.map((f) => linea(f, 140)), 'no hay precios ni horarios vigentes')
+  else {
+    const ciudadDe = new Map(e.sedes.map((s) => [s.clave, s.ciudad]))
+    const orden = [...grupos.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a < b ? -1 : 1))
+    const porGrupo = Math.max(3, Math.ceil(MAX_POR_SECCION / orden.length))
+    const lineas = orden.flatMap((k) => {
+      const rotulo = k === '' ? 'todas las sedes' : k.split(',').map((c) => `sede ${c}${ciudadDe.get(c) ? ` (${ciudadDe.get(c)})` : ''}`).join(' y ')
+      return (grupos.get(k) ?? []).slice(0, porGrupo).map((f) => `- [${rotulo}] ${corto(f.contenido, 140)} ${cita(f)}`)
+    })
+    sec('precios', 'Qué vende y a qué precio (vigente, por sede: pueden diferir entre sedes)', lineas, 'no hay precios ni horarios vigentes', lineas.length)
+  }
 
   // cifras con tendencia: la última de cada atributo y, si hay una versión retirada de los últimos 60 días, la dirección
   const cifras: string[] = []

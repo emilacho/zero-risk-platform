@@ -12,6 +12,7 @@ import { puenteDeFicha } from './puente'
 import type { Unidad } from './unidades'
 import type { DecisionDelJuez, ItemParaJuzgar } from './juez'
 import type { EstadoDeFiltro } from './filtro'
+import { claveDeAlcance, datosDeSede, sufijoDeRef } from './sedes-fuentes'
 
 export type Origen = 'dueno' | 'su_fuente' | 'plataforma' | 'tercero'
 export interface FichaNueva {
@@ -34,6 +35,8 @@ export interface FichaNueva {
   juzgado_por: 'modelo' | 'sistema' | 'regla'
   fuente_url: string | null
   atributo: string | null
+  /** la sede (o sedes, separadas por coma) de la fuente de esta ficha; `null` = todas las sedes. Va a la columna `sede` de la ficha. */
+  sede: string | null
   decision: 'suma' | 'reemplaza' | 'duda'
   razon_de_decision: string | null
   huella: string
@@ -101,16 +104,17 @@ export function planDeArchivo(e: EntradaDeArchivo): PlanDeArchivo {
     const dias = diasDe(plazo)
     const ficha: FichaNueva = {
       id: nueva, client_id: e.client_id,
-      ref: `portero:${u.fuente}:${u.huella.slice(0, 16)}`,
-      clase: u.atributo ? u.atributo.split(':')[0] : u.fuente, titulo: `${u.fuente} · ${u.atributo ?? u.unidad_ref}`.slice(0, 120), que_es: u.texto.slice(0, 200),
+      // una misma línea en dos sedes son dos fichas (cada sede su precio), no una repetida
+      ref: `portero:${u.fuente}:${u.huella.slice(0, 16)}${sufijoDeRef(u.sedes)}`,
+      clase: u.atributo ? u.atributo.split(':')[0] : u.fuente, titulo: `${u.fuente} · ${u.atributo ?? u.unidad_ref}${u.sedes?.length ? ` · sede ${u.sedes.join(', ')}` : ''}`.slice(0, 120), que_es: u.texto.slice(0, 200),
       contenido: u.texto, origen: origenDe(u), fecha_fuente: u.fecha_fuente, observado_en: u.observado_en, reconfirmado_en: u.observado_en,
       plazo, vigente_hasta: dias === null ? null : new Date(new Date(u.observado_en).getTime() + dias * DIA).toISOString(),
       version_de: d.decision === 'reemplaza' ? d.reemplaza_ficha : null,
       propiedad: !entregable ? 'incierta' : u.autoria === 'propia' ? 'propia' : 'ajena',
       porque: d.razon || (d.degradada_por ?? ''), juzgado_por: d.decidido_por === 'modelo' ? 'modelo' : 'sistema',
-      fuente_url: u.url ?? (u.ref.startsWith('http') ? u.ref : null), atributo: u.atributo, decision: d.decision === 'duda' ? 'duda' : d.decision === 'reemplaza' ? 'reemplaza' : 'suma',
+      fuente_url: u.url ?? (u.ref.startsWith('http') ? u.ref : null), atributo: u.atributo, sede: claveDeAlcance(u.sedes) || null, decision: d.decision === 'duda' ? 'duda' : d.decision === 'reemplaza' ? 'reemplaza' : 'suma',
       razon_de_decision: d.cita, huella: u.huella,
-      provenance_tag: { type: 'evidence', source: 'apify_scrape', trust_level: 'untrusted', ingress_route: '/api/brain/alimentar/procesar', respaldo_en: { tabla: 'apify_raw', id: u.apify_raw_id }, ...(u.metrica ? { metrica: u.metrica } : {}), ...(d.degradada_por ? { degradada_por: d.degradada_por } : {}) },
+      provenance_tag: { type: 'evidence', source: 'apify_scrape', trust_level: 'untrusted', ingress_route: '/api/brain/alimentar/procesar', respaldo_en: { tabla: 'apify_raw', id: u.apify_raw_id }, ...(u.sedes?.length ? { datos: datosDeSede(u.sedes) } : {}), ...(u.metrica ? { metrica: u.metrica } : {}), ...(d.degradada_por ? { degradada_por: d.degradada_por } : {}) },
       entregable,
     }
     plan.fichas.push(ficha)
@@ -133,7 +137,7 @@ export function planDeArchivo(e: EntradaDeArchivo): PlanDeArchivo {
     plan.fichas.push({
       id: nueva, client_id: e.client_id, ref: `portero:${u.fuente}:${u.huella.slice(0, 16)}`, clase: u.fuente, titulo: `${u.fuente} · sin confirmar`, que_es: u.texto.slice(0, 200), contenido: u.texto,
       origen: 'tercero', fecha_fuente: u.fecha_fuente, observado_en: u.observado_en, reconfirmado_en: u.observado_en, plazo: null, vigente_hasta: null, version_de: null,
-      propiedad: 'incierta', porque: 'nombra al cliente pero sin una segunda señal propia (posible homónimo)', juzgado_por: 'regla', fuente_url: u.url ?? null, atributo: null, decision: 'duda', razon_de_decision: null,
+      propiedad: 'incierta', porque: 'nombra al cliente pero sin una segunda señal propia (posible homónimo)', juzgado_por: 'regla', fuente_url: u.url ?? null, atributo: null, sede: null, decision: 'duda', razon_de_decision: null,
       huella: u.huella, provenance_tag: { type: 'evidence', source: 'apify_scrape', trust_level: 'untrusted', ingress_route: '/api/brain/alimentar/procesar', respaldo_en: { tabla: 'apify_raw', id: u.apify_raw_id } }, entregable: false,
     })
     vista(u, 'sin_confirmar', nueva)
