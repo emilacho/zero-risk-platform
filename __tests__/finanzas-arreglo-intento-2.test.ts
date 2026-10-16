@@ -76,3 +76,42 @@ describe('mutación: sin los arreglos, las pruebas anteriores morirían', () => 
     expect(validarPlanteo(planteo([{ canal: 'meta_ads', peso: 1 }])).ok).toBe(false)
   })
 })
+
+describe('arreglo del intento 3 (16-oct) · la FORMA del planteo: plano, número, etiqueta corta', () => {
+  it('un planteo envuelto en `{ planteo: {...} }` se desenvuelve y valida', () => {
+    const interno = planteo([{ canal: 'meta_ig', peso: 1 }])
+    expect(validarPlanteo({ planteo: interno }).ok).toBe(true)
+    // el envoltorio no esconde un contenido inválido
+    expect(validarPlanteo({ planteo: { ...interno, meta_por_semana: { min: 1, max: 2 } } }).ok).toBe(false)
+  })
+  it('`meta_por_semana` como objeto y `evento` como descripción larga fallan con un mensaje que dice QUÉ se espera', () => {
+    const r = validarPlanteo({ ...planteo([{ canal: 'meta_ig', peso: 1 }]), meta_por_semana: { min: 1280, max: 1450, base: 1360 }, evento: 'Fin de semana del encebollado — contenido ancla publicado el viernes tarde para capturar la demanda' })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.errores.join(' | ')).toMatch(/meta_por_semana debe ser UN NÚMERO/)
+      expect(r.errores.join(' | ')).toMatch(/evento debe ser un TEXTO corto de hasta 60 caracteres/)
+    }
+  })
+  it('el pedido del planteo y el del ajuste traen la forma obligatoria con un ejemplo literal', () => {
+    for (const clave of ['planteo', 'ajuste']) {
+      const t = pedidoDelAgente(paso(clave), {})
+      expect(t, clave).toContain('FORMA OBLIGATORIA')
+      expect(t, clave).toContain('"meta_por_semana": 20')
+      expect(t, clave).toContain('UN NÚMERO')
+      expect(t, clave).toMatch(/sin envolverlo/)
+    }
+  })
+  it('lo que ya valía sigue valiendo: el ejemplo literal del pedido VALIDA como planteo', () => {
+    const ejemplo = { meta_por_semana: 20, zonas: ['zona_a'], dias_y_horarios: { dias_activos_por_semana: 5, horario: '09:00-17:00' }, evento: 'mensaje', canales: [{ canal: 'meta_ig', peso: 0.6, activo: true }, { canal: 'base_propia', peso: 0.4 }], produccion: { fraccion: 0.2 }, marca: 0.1, no_se: ['lo que no sabes'] }
+    expect(validarPlanteo(ejemplo).ok).toBe(true)
+  })
+})
+
+describe('observación de CC#2 (intento 3): la regla común ya no contradice `meta_por_semana`', () => {
+  it('todos los pedidos exceptúan `meta_por_semana` del «con rango {min,max,base}»', () => {
+    for (const clave of ['planteo', 'ajuste']) {
+      const t = pedidoDelAgente(paso(clave), {})
+      expect(t, clave).toMatch(/EXCEPTO en el planteo y el ajuste, donde `meta_por_semana` es UN solo número/)
+    }
+  })
+})
