@@ -52,6 +52,8 @@ async function main() {
   const c = await db.from('clients').select('id, name, website_url, config').eq('id', CLIENTE).limit(1)
   const cliente = (c.data ?? [])[0] as { id: string; name: string; website_url: string | null; config: Record<string, any> } | undefined // eslint-disable-line @typescript-eslint/no-explicit-any
   if (!cliente) throw new Error('no encuentro la ficha del cliente')
+  const host = hostDe(cliente.website_url ?? '')
+  if (!host) throw new Error('la ficha del cliente no tiene sitio web: no hay carta que leer')
   const w = await db.from('client_web_pages').select('url, content_text').eq('client_id', CLIENTE).eq('owner_role', 'propio').limit(50)
   const carta = new Map<string, ItemConPrecio>()
   for (const p of (w.data ?? []) as Array<{ url: string; content_text: string | null }>) {
