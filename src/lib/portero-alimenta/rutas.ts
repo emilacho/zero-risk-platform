@@ -137,7 +137,8 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
     brazosCtx = await cargarContextoDeBrazos(deps.db, v.client_id, cliente, ahora)
     if (brazosCtx.errores.length) { brazosCtxError = brazosCtx.errores.join(' · '); brazosCtx = undefined }
   }
-  const base = { cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx }
+  const forzarPosicion = v.cuerpo.forzar_posicion === true
+  const base = { forzar_posicion: forzarPosicion, cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx }
 
   // las búsquedas propias: el modelo PROPONE, el código decide
   let propuestas: ResultadoDePropuestas = { aceptadas: [], rechazadas: [] }

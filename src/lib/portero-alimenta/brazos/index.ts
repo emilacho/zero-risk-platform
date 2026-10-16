@@ -42,6 +42,8 @@ export interface EntradaDeAccionesDeBrazos {
   ctx?: Pick<ContextoDeBrazos, 'sedes' | 'delSistema' | 'ubicadasRecientemente'>
   /** tope del pico del día (por omisión `TOPE_DIARIO_DE_BRAZOS_USD`) */
   topeDiarioUsd?: number
+  /** pide la posición por sede AHORA aunque no sea su día (miércoles): una vez, a pedido explícito (`forzar_posicion`) */
+  forzarPosicion?: boolean
 }
 /** lo que los brazos piden hoy · cada acción lleva `_brazo` en `params` para reconocerla al archivar · el total del día no pasa de `TOPE_DIARIO_DE_BRAZOS_USD` */
 export function accionesDeBrazos(e: EntradaDeAccionesDeBrazos): { acciones: AccionDeBrazo[]; no_cubiertas: Array<{ fuente: string; por_que: string }> } {
@@ -53,11 +55,11 @@ export function accionesDeBrazos(e: EntradaDeAccionesDeBrazos): { acciones: Acci
   if (e.brazos.demanda) {
     const t = terminosDeDemanda({ rubro: e.rubro ?? e.cliente.industry, config: e.cliente.config, familias })
     if (sedes.length) {
-      const d = accionesDeDemandaPorSede({ ahora: e.ahora, terminos: t, sedes, familias, ubicadasEnLosUltimos7Dias: e.ctx?.ubicadasRecientemente })
+      const d = accionesDeDemandaPorSede({ ahora: e.ahora, terminos: t, sedes, familias, ubicadasEnLosUltimos7Dias: e.ctx?.ubicadasRecientemente, forzar: e.forzarPosicion === true })
       acciones.push(...d.acciones)
       no_cubiertas.push(...d.no_cubiertas)
     } else {
-      const d = accionDeDemanda({ ahora: e.ahora, terminos: t, ciudad: e.ciudad, mercado })
+      const d = accionDeDemanda({ ahora: e.ahora, terminos: t, ciudad: e.ciudad, mercado, forzar: e.forzarPosicion === true })
       if (d.accion) acciones.push(d.accion)
       else if (d.no_cubierta) no_cubiertas.push({ fuente: 'demanda', por_que: d.no_cubierta })
     }
