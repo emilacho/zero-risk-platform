@@ -14,7 +14,8 @@ export const N = { webhook: 'Webhook · finanzas conversa', validar: 'FIN · val
 export const RUTA_WEBHOOK = 'zero-risk/finanzas-conversa'
 export const ACCIONES = ['abrir', 'avanzar', 'leer']
 // un paso con un turno de agente puede durar minutos; el techo de la espera es el de la función de la plataforma, no el de n8n
-export const TIMEOUT_MS = 300000
+// intento 4: el jefe tarda 115–260 s por llamada; con 300 s el flujo cortaba (502) un paso que la ruta seguía ejecutando y cobrando
+export const TIMEOUT_MS = 600000
 const VERCEL = "($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app')"
 
 const VALIDAR = [

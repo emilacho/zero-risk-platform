@@ -192,6 +192,20 @@ async function recogerDelHilo(P: PuertosDeConversa, e: EncargoDeConversa, claves
 }
 
 // ───────────────────────────────────────────────────────── avanzar UN paso
+/** vencimiento del candado de «paso en vuelo»: pasado esto un paso muerto no deja el encargo atascado */
+export const TTL_DEL_CANDADO_S = 900
+/** margen para reintentar el formato dentro de la misma llamada */
+export const LIMITE_PARA_REINTENTAR_MS = 150_000
+
+/** `leer` un encargo. Una configuración ILEGIBLE es 503 (reintentable), nunca «conversa_apagada» (intento 4: una lectura fallida bajo carga cortó el bucle como si estuviera apagado). */
+export async function leerConversacion(P: PuertosDeConversa, encargo_id: string): Promise<Respuesta> {
+  let cfg
+  try { cfg = await P.config() } catch (e) { return { status: 503, cuerpo: { error: 'config_ilegible', detalle: e instanceof Error ? e.message : String(e) } } }
+  if (!cfg || cfg.estado === 'apagada' || cfg.conversa === 'apagado') return { status: 409, cuerpo: { error: 'conversa_apagada' } }
+  const e = await P.almacen.leerEncargo(encargo_id)
+  return e ? { status: 200, cuerpo: { encargo_id: e.id, estado: e.estado, gasto_usd: e.gasto_usd, turnos: await P.almacen.turnos(e.id) } } : { status: 404, cuerpo: { error: 'encargo_inexistente' } }
+}
+
 export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise<Respuesta> {
   let cfg
   try { cfg = await P.config() } catch (e) { return { status: 503, cuerpo: { error: 'config_ilegible', detalle: e instanceof Error ? e.message : String(e) } } }
@@ -199,6 +213,18 @@ export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise
   const e = await P.almacen.leerEncargo(encargo_id)
   if (!e) return { status: 404, cuerpo: { error: 'encargo_inexistente' } }
   if ((ESTADOS_TERMINALES as readonly string[]).includes(e.estado)) return { status: 200, cuerpo: { encargo_id: e.id, estado: e.estado, terminado: true, gasto_usd: e.gasto_usd } }
+  // CANDADO (arreglo del intento 4): una sola llamada por encargo a la vez; el turno de un agente dura minutos y una repetida pagaba dos veces
+  const candado = P.almacen.tomarPaso ? await P.almacen.tomarPaso(e.id, P.ahora(), TTL_DEL_CANDADO_S) : null
+  if (candado && candado.ok && !candado.tomado) return { status: 409, cuerpo: { error: 'paso_en_vuelo', detalle: 'otra llamada está ejecutando un paso de este encargo: léelo con «leer» antes de repetir' } }
+  // si el candado MISMO no se puede tomar (columna sin migrar, base con error), el paso sigue SIN candado: no peor que antes del arreglo; el tope cobrado y el margen de reintento siguen activos
+  try { return await ejecutarUnPaso(P, e) } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
+}
+
+async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa): Promise<Respuesta> {
+  let e = e0
+  // TOPE SOBRE LO COBRADO (arreglo del intento 4): el gasto del motor solo suma turnos GUARDADOS; lo cobrado y perdido (502, corte) también cuenta
+  const cobrado = P.almacen.cobrado ? await P.almacen.cobrado(e.id).catch(() => null) : null
+  if (cobrado !== null && cobrado > e.estado_del_motor.gasto_usd) e = { ...e, gasto_usd: Math.max(e.gasto_usd, cobrado), estado_del_motor: { ...e.estado_del_motor, gasto_usd: cobrado } }
   const arts = await P.almacen.artefactos(e.id)
   const sig = siguientePaso(e.estado_del_motor, PLANTILLA_FINANCIERA)
 
@@ -254,7 +280,10 @@ export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise
     let ultimoError = ''
     // plan v3 · V7 (observación de CC#3): el último planteo VÁLIDO al que solo le faltó responder el equilibrio
     let sinRespuestaAlEquilibrio: Record<string, unknown> | null = null
+    const inicioDelPaso = P.ahora().getTime()
     for (let i = 0; i < intentos && !valor; i++) {
+      // NO se reintenta el formato si la llamada ya consumió el margen: pasar de ~300 s pierde el turno entero y se cobra dos veces (intento 4)
+      if (i > 0 && P.ahora().getTime() - inicioDelPaso > LIMITE_PARA_REINTENTAR_MS) { ultimoError = `tiempo_agotado_para_reintentar: la primera respuesta tardó más de ${Math.round(LIMITE_PARA_REINTENTAR_MS / 1000)} s; ${ultimoError}`; break }
       const r = await P.modelo.invocar({ agente: paso.quien, tarea: i === 0 ? tarea : `${tarea}\n\nTu respuesta anterior no cumplió el formato (${ultimoError}). Devuelve SOLO el objeto JSON.`, encargo_id: e.id, client_id: e.client_id, paso: paso.clave, tope_usd: paso.tope_usd, dry_run: e.dry_run })
       costo += r.costo_usd
       if (!r.ok) { ultimoError = r.error; error = r.error; break }

@@ -67,6 +67,27 @@ export function almacenDeConversa(db: Db): AlmacenDeConversa {
       for (const f of r ?? []) out[String(f.tipo)] = f.contenido as Record<string, unknown>
       return out
     },
+    async tomarPaso(id, ahora, ttl_s) {
+      try {
+        const vencido = new Date(ahora.getTime() - ttl_s * 1000).toISOString()
+        const r = await db.from('finanzas_encargos').update({ en_vuelo_desde: ahora.toISOString() }).eq('id', id).or(`en_vuelo_desde.is.null,en_vuelo_desde.lt.${vencido}`).select('id')
+        if (r.error) {
+          const sinColumna = r.error.code === '42703' || /en_vuelo_desde/i.test(String(r.error.message))
+          return { ok: false as const, error: r.error.message, ...(sinColumna ? { sin_columna: true } : {}) }
+        }
+        return { ok: true as const, tomado: Array.isArray(r.data) && r.data.length > 0 }
+      } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) } }
+    },
+    async soltarPaso(id) {
+      try { await db.from('finanzas_encargos').update({ en_vuelo_desde: null }).eq('id', id) } catch { /* el vencimiento lo libera */ }
+    },
+    async cobrado(encargo_id) {
+      try {
+        const r = await db.from('agent_invocations').select('cost_usd').like('workflow_execution_id', `${encargo_id}:%`)
+        if (r.error || !Array.isArray(r.data)) return null
+        return Math.round((r.data as Fila[]).reduce((s, f) => s + (Number(f.cost_usd) || 0), 0) * 1e6) / 1e6
+      } catch { return null }
+    },
     async turnos(encargo_id) {
       const r = ok(await db.from('finanzas_turnos').select('n,paso,agente,ronda,estado,costo_usd,salida,error').eq('encargo_id', encargo_id).order('n', { ascending: true }), 'leer los turnos') as Fila[] | null
       return (r ?? []).map((f): TurnoDeConversa => ({ n: Number(f.n), paso: String(f.paso), agente: (f.agente as string | null) ?? null, ronda: Number(f.ronda), estado: f.estado as TurnoDeConversa['estado'], costo_usd: Number(f.costo_usd ?? 0), salida: f.salida, error: (f.error as string | null) ?? null }))
