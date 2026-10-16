@@ -42,7 +42,8 @@ type Preguntada = { clave: string; texto: string; pregunta_id: string | null }
 type SinCerebro = { clave: string; respuesta: string; ts: string }
 
 function preguntasDelAcuerdo(arts: Record<string, Record<string, unknown>>): Pregunta[] {
-  const l = arts.acuerdo?.preguntas_a_emilio
+  // el acuerdo VIGENTE: si hubo ronda 2, manda `acuerdo_2` (sus preguntas son las que quedan sin responder); si no, el de la ronda 1
+  const l = (arts.acuerdo_2 ?? arts.acuerdo)?.preguntas_a_emilio
   if (!Array.isArray(l)) return []
   return l.filter(objeto).map((q) => ({ clave: String(q.clave ?? ''), texto: String(q.texto ?? ''), recomendacion: String(q.recomendacion ?? ''), supuesto_si_no_responde: String(q.supuesto_si_no_responde ?? '') }))
 }
