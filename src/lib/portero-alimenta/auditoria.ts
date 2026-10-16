@@ -139,10 +139,13 @@ export async function auditarCitasDelResumen(db: Db, clientId: string): Promise<
   if (!vivos.length) return { ok: true, revisadas: 0, problema: null }
   const citas = vivos.flatMap((f) => citasDeUnResumen(String(f.contenido)))
   if (!citas.length) return { ok: true, revisadas: 0, problema: null }
-  // TODAS las fichas del cliente, por páginas: la base entrega a lo sumo 1.000 por consulta aunque se pida más (16-oct: con >1.000 fichas, las citas a las demás parecían inexistentes y el vigilante pausó al cliente)
-  const q = await leerTodas(() => db.from('cerebro_fichas').select('id').eq('client_id', clientId).order('id', { ascending: true }))
-  if (q.error) return { ok: false, detalle: `cerebro_fichas: ${String(q.error.message).slice(0, 120)}` }
-  const ids = lista(q.data).map((f) => String(f.id))
+  // El resumen cita fichas del cliente Y fichas de ZONA (feriados y temporadas viven en `zona:<país>`, compartidas por los clientes del país): una cita a la ficha de una zona NO es una cita rota.
+  // Se leen TODAS por páginas: la base entrega a lo sumo 1.000 por consulta aunque se pida más.
+  const propias = await leerTodas(() => db.from('cerebro_fichas').select('id').eq('client_id', clientId).order('id', { ascending: true }))
+  if (propias.error) return { ok: false, detalle: `cerebro_fichas: ${String(propias.error.message).slice(0, 120)}` }
+  const deZona = await leerTodas(() => db.from('cerebro_fichas').select('id').like('client_id', 'zona:%').order('id', { ascending: true }))
+  if (deZona.error) return { ok: false, detalle: `cerebro_fichas (zona): ${String(deZona.error.message).slice(0, 120)}` }
+  const ids = [...lista(propias.data), ...lista(deZona.data)].map((f) => String(f.id))
   const faltan = [...new Set(citas.map((c) => c.ficha))].filter((p) => !ids.some((id) => id.startsWith(p)))
   return { ok: true, revisadas: citas.length, problema: faltan.length ? `el resumen vivo cita ${faltan.length} ficha(s) que no existen (${faltan.slice(0, 3).join(', ')})` : null }
 }
