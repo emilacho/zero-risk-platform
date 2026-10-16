@@ -94,10 +94,24 @@ export function ultimaEvaluacion(vigentes: Fila[], sede: string): Date | null {
   }
   return max ? new Date(max) : null
 }
-export const debeEvaluarse = (vigentes: Fila[], sede: string, ahora: Date, forzar = false): boolean => {
+/**
+ * Una evaluación hecha SIN datos de Mapas (todo «en duda» porque aún no había corrida de posición de esa sede) no cuenta como «al día»: en cuanto llega material nuevo de la sede
+ * (una corrida `demanda:<sede>` posterior a la evaluación) se evalúa de nuevo. Con al menos un veredicto firme, o sin material nuevo, manda el plazo de 30 días de siempre.
+ * (16-oct: la evaluación de las 00:14, sin datos, bloqueó 30 días la primera evaluación con datos.)
+ */
+export const evaluacionSinDatos = (vigentes: Fila[], sede: string, filas: Array<{ apify_function?: string; params?: unknown; created_at?: string; ensayo?: boolean | null }>): boolean => {
+  const evals = vigentes.filter((f) => (f.clase === 'competidor_vigilado' || f.clase === 'competidor_evaluacion') && txt(obj(obj(f.provenance_tag).datos).sede) === sede)
+  if (!evals.length) return false
+  if (!evals.every((f) => txt(obj(obj(f.provenance_tag).datos).veredicto) === 'duda')) return false
+  const u = ultimaEvaluacion(vigentes, sede)
+  if (!u) return false
+  return filas.some((r) => r.ensayo !== true && r.apify_function === 'google_maps_scraper' && txt(obj(r.params)._brazo) === `demanda:${sede}` && Date.parse(String(r.created_at ?? '')) > u.getTime())
+}
+export const debeEvaluarse = (vigentes: Fila[], sede: string, ahora: Date, forzar = false, filas: Array<{ apify_function?: string; params?: unknown; created_at?: string; ensayo?: boolean | null }> = []): boolean => {
   if (forzar) return true
   const u = ultimaEvaluacion(vigentes, sede)
-  return !u || ahora.getTime() - u.getTime() >= DIAS_ENTRE_EVALUACIONES * DIA_EN_MS
+  if (!u || ahora.getTime() - u.getTime() >= DIAS_ENTRE_EVALUACIONES * DIA_EN_MS) return true
+  return evaluacionSinDatos(vigentes, sede, filas)
 }
 
 export interface EntradaDeSistematica {
@@ -132,7 +146,7 @@ export async function descubrirYJuzgar(e: EntradaDeSistematica): Promise<Resulta
   for (const sede of e.ctx.sedes) {
     const radio = radioDeSede(familias, sede)
     if (radio === null) { out.por_sede[sede.clave] = { estado: 'no_aplica', candidatos: 0, competidores: 0, costo_usd: 0, detalle: 'el rubro no compite por cercanía en esta sede' }; continue }
-    if (!debeEvaluarse(e.ctx.vigentes, sede.clave, e.ahora, e.forzar)) { out.por_sede[sede.clave] = { estado: 'al_dia', candidatos: 0, competidores: 0, costo_usd: 0, detalle: `evaluada hace menos de ${DIAS_ENTRE_EVALUACIONES} días` }; continue }
+    if (!debeEvaluarse(e.ctx.vigentes, sede.clave, e.ahora, e.forzar, e.ctx.filas)) { out.por_sede[sede.clave] = { estado: 'al_dia', candidatos: 0, competidores: 0, costo_usd: 0, detalle: `evaluada hace menos de ${DIAS_ENTRE_EVALUACIONES} días` }; continue }
     const c: ResultadoDeCandidatos = candidatosDeSede({ sede, filas: e.ctx.filas, nombreDelCliente: e.nombreDelCliente, familias, radioKm: radio, listaDelAlta })
     if (!c.candidatos.length) { out.por_sede[sede.clave] = { estado: 'sin_candidatos', candidatos: 0, competidores: 0, costo_usd: 0, descartados: c.descartados.length, detalle: c.corrida ? 'la corrida de posición no dejó candidatos' : 'todavía no hay corrida de posición para esta sede' }; continue }
     if (!e.llamarModelo) { out.por_sede[sede.clave] = { estado: 'sin_modelo', candidatos: c.candidatos.length, competidores: 0, costo_usd: 0, descartados: c.descartados.length, detalle: 'en seco no se llama al modelo: se muestran los candidatos que se juzgarían' }; continue }
