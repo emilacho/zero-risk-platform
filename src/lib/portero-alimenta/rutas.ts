@@ -40,13 +40,14 @@ const esRespuesta = (x: unknown): x is Respuesta => esObjeto(x) && typeof (x as 
 /** el gasto de hoy del cliente que el tope TIENE que ver: libro de Apify (con el máximo declarado donde el libro marca 0/nulo) + modelo (libro de invocaciones) */
 export async function gastoDeHoy(db: Db, clientId: string, ahora: Date) {
   const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)
-  const c = await db.from('costs').select('service, amount_usd, created_at, description').like('service', 'apify:%').gte('created_at', dia0.toISOString()).limit(1000)
+  // la base recorta a 1.000 filas por consulta y esta lectura es de TODOS los clientes del día: por páginas (con 50 clientes pasaría de 1.000 y el gasto saldría de menos)
+  const c = await leerTodas(() => db.from('costs').select('service, amount_usd, created_at, description').like('service', 'apify:%').gte('created_at', dia0.toISOString()).order('created_at', { ascending: true }).order('id', { ascending: true }))
   if (c.error) return { ok: false as const, detalle: `costs: ${c.error.message}` }
-  const inv = await db.from('agent_invocations').select('cost_usd, created_at, agent_name, workflow_id').eq('client_id', clientId).gte('created_at', dia0.toISOString()).limit(1000)
+  const inv = await leerTodas(() => db.from('agent_invocations').select('cost_usd, created_at, agent_name, workflow_id').eq('client_id', clientId).gte('created_at', dia0.toISOString()).order('created_at', { ascending: true }).order('id', { ascending: true }))
   if (inv.error) return { ok: false as const, detalle: `agent_invocations: ${inv.error.message}` }
   // SOLO lo del portero (prerrequisito del plan v3): el crudo dice quién llamó; el libro no. Un plan, el alta o una corrida a mano del mismo día no apagan ni frenan al portero
   const flujo = process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO
-  const cr = await db.from('apify_raw').select('apify_function, created_at, metadata').eq('client_id', clientId).eq('ensayo', false).gte('created_at', new Date(dia0.getTime() - 600_000).toISOString()).limit(1000)
+  const cr = await leerTodas(() => db.from('apify_raw').select('apify_function, created_at, metadata').eq('client_id', clientId).eq('ensayo', false).gte('created_at', new Date(dia0.getTime() - 600_000).toISOString()).order('created_at', { ascending: true }).order('id', { ascending: true }))
   if (cr.error) return { ok: false as const, detalle: `apify_raw: ${cr.error.message}` }
   const origen = soloLoDelPortero(lista(c.data) as unknown as FilaDelLibro[], lista(cr.data) as unknown as FilaDeRaspadoDeOrigen[], clientId, flujo)
   // H3 · una corrida de Mapas = una búsqueda por sede: sin importe en el libro vale (búsquedas de hoy ÷ corridas de hoy) × el máximo por búsqueda

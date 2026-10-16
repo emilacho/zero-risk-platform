@@ -212,9 +212,9 @@ describe('BRAZO · competencia vigilada', () => {
     expect(String(rasimar[0].params._brazo)).toBe('competencia:rasimar-restaurante:mapas')
     expect(rasimar[2].params).toMatchObject({ countryCode: 'EC', maxItems: 20 })
     expect(rasimar.reduce((s, a) => s + a.usd_max, 0)).toBeLessThan(0.3)
-    const jerry = accionesDeCompetencia({ vigilados: v, ahora: new Date('2026-10-12T12:00:00Z'), ciudad: 'Olón' }) // lunes · su web es Tripadvisor
+    const jerry = accionesDeCompetencia({ vigilados: v, ahora: new Date('2026-10-12T12:00:00Z'), ciudad: 'Olón', pais: 'ec' }) // lunes · su web es Tripadvisor
     expect(jerry.map((a) => a.funcion)).toEqual(['google_maps_scraper', 'facebook_ads_library_scraper'])
-    const pigro = accionesDeCompetencia({ vigilados: v, ahora: new Date('2026-10-14T12:00:00Z'), ciudad: 'Olón' }) // miércoles · restaurantguru
+    const pigro = accionesDeCompetencia({ vigilados: v, ahora: new Date('2026-10-14T12:00:00Z'), ciudad: 'Olón', pais: 'ec' }) // miércoles · restaurantguru
     expect(pigro.some((a) => a.funcion === 'competitor_website_scraper')).toBe(false)
   })
   const vig = competidoresConfirmados(lista(['Rasimar Restaurante', "Cabaña D'Jerry"])).vigilados

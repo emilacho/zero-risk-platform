@@ -11,10 +11,12 @@ import { accionesDeCompetencia, competidoresConfirmados, competidoresVigilados, 
 import { fichasDeContexto } from './contexto'
 import { accionDeDemanda, accionesDeDemandaPorSede, fichasDeDemanda, terminosDeDemanda, type FilaCrudaDeBrazo } from './demanda'
 import { familiasDelRubro } from '../../fuentes-publicas/plan'
+import { idiomaDeBusqueda } from '../datos'
 import { radioDeSede } from './sedes'
 import { cargarContextoDeBrazos, descubrirYJuzgar, type ContextoDeBrazos, type ResultadoDeSistematica } from './sistematica'
 import type { RespuestaDeLlamada } from '../juez'
 import { desfaseDelCliente } from '../zona-horaria'
+import { credencialesDelCliente } from '../credenciales'
 import { brazoDePropios, leerSnapshot, mesLocalDe, PREFIJO_DE_VENTAS, type Fetch, type SnapshotDeVentas } from './propios'
 import { hayBrazoActivo, type AccionDeBrazo, type BrazosActivos, type FichaDeBrazo, type NombreDeBrazo, type ResultadoDeUnBrazo } from './tipos'
 
@@ -50,14 +52,15 @@ export function accionesDeBrazos(e: EntradaDeAccionesDeBrazos): { acciones: Acci
   const mercado = txt(e.cliente.market)
   const familias = e.familias ?? familiasDelRubro(e.rubro ?? e.cliente.industry)
   const sedes = e.ctx?.sedes ?? []
+  const idioma = idiomaDeBusqueda(e.cliente.country ?? e.cliente.market)
   if (e.brazos.demanda) {
     const t = terminosDeDemanda({ rubro: e.rubro ?? e.cliente.industry, config: e.cliente.config, familias })
     if (sedes.length) {
-      const d = accionesDeDemandaPorSede({ ahora: e.ahora, terminos: t, sedes, familias, ubicadasEnLosUltimos7Dias: e.ctx?.ubicadasRecientemente })
+      const d = accionesDeDemandaPorSede({ idioma, ahora: e.ahora, terminos: t, sedes, familias, ubicadasEnLosUltimos7Dias: e.ctx?.ubicadasRecientemente })
       acciones.push(...d.acciones)
       no_cubiertas.push(...d.no_cubiertas)
     } else {
-      const d = accionDeDemanda({ ahora: e.ahora, terminos: t, ciudad: e.ciudad, mercado })
+      const d = accionDeDemanda({ idioma, ahora: e.ahora, terminos: t, ciudad: e.ciudad, mercado })
       if (d.accion) acciones.push(d.accion)
       else if (d.no_cubierta) no_cubiertas.push({ fuente: 'demanda', por_que: d.no_cubierta })
     }
@@ -68,7 +71,7 @@ export function accionesDeBrazos(e: EntradaDeAccionesDeBrazos): { acciones: Acci
     else {
       const porSede = Object.fromEntries(sedes.map((s) => [s.clave, { lat: s.lat, lng: s.lng, ciudad: s.ciudad }]))
       const radios = sedes.map((s) => radioDeSede(familias, s)).filter((r): r is number => r !== null)
-      acciones.push(...accionesDeCompetencia({ vigilados: c.vigilados, ahora: e.ahora, ciudad: e.ciudad, mercado, pais: paisDeLaFicha(e.cliente as Record<string, unknown>), anunciosCadaSemanas: 2, sedes: porSede, radioKm: radios.length ? Math.max(...radios) : null }))
+      acciones.push(...accionesDeCompetencia({ idioma, vigilados: c.vigilados, ahora: e.ahora, ciudad: e.ciudad, mercado, pais: paisDeLaFicha(e.cliente as Record<string, unknown>), anunciosCadaSemanas: 2, sedes: porSede, radioKm: radios.length ? Math.max(...radios) : null }))
     }
   }
   // el tope del día: lo que no cabe se DECLARA (el plan del portero lo vuelve a recortar contra su tope y las 16 corridas)
@@ -182,7 +185,9 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
         const sq = await e.db.from('client_sedes').select('clave').eq('client_id', e.client_id)
         if (!sq.error) clavesDeSedes = (Array.isArray(sq.data) ? (sq.data as Array<Record<string, unknown>>) : []).map((s) => txt(s.clave)).filter(Boolean)
       }
-      const propios = await brazoDePropios({ client_id: e.client_id, slug: txt(e.cliente.slug) || nombre, config: cfg, ahora: e.ahora, env: e.env ?? process.env, fetch: e.fetch ?? (globalThis.fetch as unknown as Fetch), mesesCerrados: cerrados, parciales, clavesDeSedes, desfaseHoras: desfaseHoras.horas })
+      const credenciales = await credencialesDelCliente(e.db, e.client_id, txt(e.cliente.slug) || nombre, e.env ?? process.env)
+      const propios = await brazoDePropios({ client_id: e.client_id, slug: txt(e.cliente.slug) || nombre, credenciales, config: cfg, ahora: e.ahora, env: e.env ?? process.env, fetch: e.fetch ?? (globalThis.fetch as unknown as Fetch), mesesCerrados: cerrados, parciales, clavesDeSedes, desfaseHoras: desfaseHoras.horas })
+      propios.declarado.push(...credenciales.avisos)
       if (desfaseHoras.origen === 'sin_dato' && propios.fichas.length) propios.declarado.push('punto de venta: la zona horaria del cliente no está declarada (ni su país tiene una sola): el mes, el día y la hora de las ventas se leen en UTC; declárala en config.timezone')
       poner(propios)
     } catch (x) {

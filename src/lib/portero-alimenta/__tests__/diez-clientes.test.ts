@@ -126,7 +126,7 @@ describe('canal y radio por sede, según el rubro', () => {
       const sedes = sedesConPunto({ nombreDelCliente: c.nombre, sedes: c.sedes.map((s) => ({ id: s.clave, clave: s.clave, ciudad: s.ciudad })), datos: c.sedes.filter((s) => s.tipo_de_atencion).map((s) => ({ sede_id: s.clave, campo: 'tipo_de_atencion', valor_texto: s.tipo_de_atencion!, observado_en: null })), config: {}, filas: [], familias })
       expect(sedes).toHaveLength(c.sedes.length)
       for (const s of sedes) {
-        expect(s.canal).toBe('local')
+        expect(s.canal).toBe(c.compitePorCercania ? 'local' : 'sin_local') // sin dato del canal, el rubro lo deduce
         expect(radioDeSede(familias, s) !== null).toBe(c.compitePorCercania)
       }
     })
@@ -205,6 +205,7 @@ describe('ventas del punto de venta: el mes, el día y la hora son los del CLIEN
     const fetch: Fetch = async () => ({ ok: true, status: 200, json: async () => ({ receipts: [recibo] }) })
     const mes = async (c: ClienteSintetico) => {
       const t = tablasDe(c)
+      ;(t.clients[0].config as { apify: Record<string, unknown> }).apify.punto_de_venta = 'loyverse'
       const r = await brazoDePropios({ client_id: c.id, slug: 'x', config: t.clients[0].config, ahora: AHORA, env: { CLIENTE_X_LOYVERSE_TOKEN: 'llave-falsa' }, fetch, desfaseHoras: desfaseDelCliente(t.clients[0], AHORA).horas })
       return String(r.fichas.find((f) => String(f.atributo).startsWith('metrica:loyverse:dias_y_horas:2026-10'))?.contenido)
     }
@@ -218,6 +219,7 @@ describe('ventas del punto de venta: el mes, el día y la hora son los del CLIEN
     const horas = async (c: ClienteSintetico, sinZona = false) => {
       const t = tablasDe(c)
       if (sinZona) (t.clients[0] as Record<string, unknown>).config = { registro: c.voz }
+      else (t.clients[0].config as { apify: Record<string, unknown> }).apify.punto_de_venta = 'loyverse'
       const r = await correrBrazos({ db: crearBaseFalsa(t as never).db, brazos: { ...BRAZOS_APAGADOS, propios: true }, cliente: t.clients[0], client_id: c.id, filas: [], ahora: AHORA, dry_run: false, env: { [`CLIENTE_${String(t.clients[0].slug).toUpperCase().replace(/-/g, '_')}_LOYVERSE_TOKEN`]: 'llave-falsa' }, fetch })
       return { texto: String(t.cerebro_fichas.find((f) => String(f.atributo).startsWith('metrica:loyverse:dias_y_horas:2026-10'))?.contenido), declarado: r.por_brazo.propios?.declarado.join(' ') ?? '' }
     }
@@ -226,6 +228,17 @@ describe('ventas del punto de venta: el mes, el día y la hora son los del CLIEN
     const sinZona = await horas(DIEZ_CLIENTES.find((c) => c.iso === 'es')!, true)
     expect(sinZona.texto).toMatch(/02:00/) // UTC, no la hora de Ecuador
     expect(sinZona.declarado).toMatch(/zona horaria del cliente no está declarada/)
+  })
+  it('P3 · el punto de venta es un dato: «otro» manda al importador de CSV, «ninguno» no pide llave, y sin dato se pide la de Loyverse diciendo cómo declarar otro', async () => {
+    const corre = async (pdv?: string) => (await brazoDePropios({ client_id: DIEZ_CLIENTES[0].id, slug: 'cliente-x', config: { apify: pdv ? { punto_de_venta: pdv } : {} }, ahora: AHORA, env: {}, fetch: async () => { throw new Error('sin red') } })).declarado.join(' | ')
+    expect(await corre('otro')).toMatch(/distinto de Loyverse.*importador de exportaciones \(CSV/)
+    expect(await corre('otro')).not.toMatch(/LOYVERSE_TOKEN/)
+    expect(await corre('ninguno')).toMatch(/el cliente no tiene/)
+    expect(await corre('ninguno')).not.toMatch(/LOYVERSE_TOKEN/)
+    expect(await corre('loyverse')).toMatch(/falta CLIENTE_CLIENTE_X_LOYVERSE_TOKEN \(el cliente usa Loyverse\)/)
+    expect(await corre()).toMatch(/si el cliente no usa Loyverse, dilo en config\.apify\.punto_de_venta/)
+    // y la tienda en línea de la muestra ya lo declara
+    expect(((tablasDe(DIEZ_CLIENTES.find((c) => c.pos === 'otro')!).clients[0].config as { apify: { punto_de_venta?: string } }).apify.punto_de_venta)).toBe('otro')
   })
   it('un cliente sin punto de venta Loyverse (otro sistema o ninguno) no rompe: se DICE y sigue', async () => {
     for (const c of DIEZ_CLIENTES.filter((x) => x.pos !== 'loyverse')) {

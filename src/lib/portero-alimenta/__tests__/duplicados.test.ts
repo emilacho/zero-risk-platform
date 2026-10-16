@@ -122,7 +122,7 @@ describe('los clientes que atiende el portero salen de la ruta nueva', () => {
       { id: '11111111-1111-4111-8111-111111111111', name: 'Con alta', status: 'onboarding', archived_at: null, config: {} },
       { id: '22222222-2222-4222-8222-222222222222', name: 'Sin plan', status: 'onboarding', archived_at: null, config: {} },
       { id: '33333333-3333-4333-8333-333333333333', name: 'Archivado', status: 'churned', archived_at: '2026-10-01T00:00:00Z', config: {} },
-      { id: '44444444-4444-4444-8444-444444444444', name: 'prueba interna', status: 'onboarding', archived_at: null, config: {} },
+      { id: '44444444-4444-4444-8444-444444444444', name: 'cliente de práctica', status: 'onboarding', archived_at: null, config: { es_de_prueba: true } },
     ],
     client_brand_books: [{ client_id: '11111111-1111-4111-8111-111111111111' }, { client_id: '22222222-2222-4222-8222-222222222222' }, { client_id: '33333333-3333-4333-8333-333333333333' }],
     client_historical_outputs: [

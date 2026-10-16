@@ -53,7 +53,7 @@ export const RADIO_POR_FAMILIA_KM: Record<string, { local: number | null; domici
   comida: { local: 3, domicilio: 6 }, alojamiento: { local: 10, domicilio: null }, turismo: { local: 15, domicilio: null }, comercio: { local: 5, domicilio: 8 }, salud: { local: 8, domicilio: null },
   belleza_bienestar: { local: 4, domicilio: null }, automotriz: { local: 6, domicilio: null }, inmobiliaria: { local: 15, domicilio: null }, educacion: { local: 8, domicilio: null },
   servicios_hogar: { local: 10, domicilio: 10 }, servicios_profesionales: { local: 10, domicilio: null }, software: { local: null, domicilio: null }, finanzas: { local: null, domicilio: null },
-  apps_moviles: { local: null, domicilio: null }, general: { local: 5, domicilio: null },
+  apps_moviles: { local: null, domicilio: null }, industria_b2b: { local: null, domicilio: null }, general: { local: 5, domicilio: null },
 }
 export function radioDe(familias: string[], tipo: SedeConPunto['tipo']): number | null {
   const radios = (familias.length ? familias : ['general']).map((f) => RADIO_POR_FAMILIA_KM[f] ?? RADIO_POR_FAMILIA_KM.general)

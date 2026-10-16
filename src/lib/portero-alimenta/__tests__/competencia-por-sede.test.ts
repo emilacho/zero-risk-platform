@@ -303,7 +303,7 @@ describe('los vigilados: dueño + sistema − vetados · reparto por día', () =
   })
   it('los anuncios van cada dos semanas, alternando: dos competidores del mismo día nunca los piden la misma semana', () => {
     const v = [sis('Alfa', 'olon'), sis('Beta', 'olon'), sis('Gamma', 'olon'), sis('Delta', 'olon'), sis('Epsilon', 'olon'), sis('Zeta', 'olon')]
-    const lunes = (d: string) => accionesDeCompetencia({ vigilados: v, ahora: new Date(`${d}T12:00:00Z`), ciudad: 'Olón', anunciosCadaSemanas: 2 }).filter((a) => a.funcion === 'facebook_ads_library_scraper').map((a) => String(a.params._brazo).split(':')[1])
+    const lunes = (d: string) => accionesDeCompetencia({ vigilados: v, ahora: new Date(`${d}T12:00:00Z`), ciudad: 'Olón', pais: 'ec', anunciosCadaSemanas: 2 }).filter((a) => a.funcion === 'facebook_ads_library_scraper').map((a) => String(a.params._brazo).split(':')[1])
     const s1 = lunes('2026-10-12'), s2 = lunes('2026-10-19')
     expect(s1).toHaveLength(1)
     expect(s2).toHaveLength(1)
@@ -367,7 +367,7 @@ describe('el plan de los brazos por sede · tope y declaraciones', () => {
   it('los anuncios van cada dos semanas también en el plan: dos competidores del mismo día no los piden juntos', () => {
     const c = (n: string): Competidor => ({ nombre: n, slug: n.toLowerCase(), tipo: 'direct', web: null, sitio_propio: null, instagram: null, sedes: ['olon'], origen: 'sistema' })
     const v = Array.from({ length: 6 }, (_, i) => c(`Comp${i}`))
-    const lunes = accionesDeBrazos({ brazos: { ...BRAZOS_APAGADOS, competencia: true }, cliente, ahora: new Date('2026-10-12T12:00:00Z'), ctx: { ...ctx, delSistema: v } })
+    const lunes = accionesDeBrazos({ brazos: { ...BRAZOS_APAGADOS, competencia: true }, cliente: { ...cliente, country: 'Ecuador' }, ahora: new Date('2026-10-12T12:00:00Z'), ctx: { ...ctx, delSistema: v } })
     expect(lunes.acciones.filter((a) => a.funcion === 'facebook_ads_library_scraper')).toHaveLength(1)
     expect(lunes.acciones.filter((a) => a.funcion === 'google_maps_scraper')).toHaveLength(2)
   })

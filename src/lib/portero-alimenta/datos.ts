@@ -5,6 +5,8 @@
  *  · los avisos de estado («cerrado, vuelve hoy…») son transitorios: no son cambios.
  */
 
+import { codigoDePais } from '../pais/pais-del-cliente'
+
 /** tope del portero por cliente y día (firma 15-oct de Emilio: «3 al día»; antes 1,50). El código corta con motivo si se pasa. */
 export const TOPE_DEL_PORTERO_USD = 3
 /**
@@ -45,6 +47,16 @@ export const SIMBOLOS_DE_MONEDA: ReadonlyArray<[RegExp, string]> = [
   [/\bUS\$\s?/g, ' usd $'],
   [/\bR\$\s?/g, ' brl $'],
 ]
+
+/**
+ * IDIOMA DE BÚSQUEDA POR PAÍS (P7 · dato): el idioma en que se pide Google Maps y las búsquedas. Español por omisión (la casa trabaja en español); se amplía una línea por país.
+ * El país sale de la ficha del cliente (nombre o código); sin país se usa el español y NO se adivina otro.
+ */
+export const IDIOMA_DE_BUSQUEDA_POR_PAIS: Readonly<Record<string, string>> = { BR: 'pt', PT: 'pt', US: 'en', GB: 'en', CA: 'en', AU: 'en', IE: 'en', NZ: 'en', FR: 'fr', IT: 'it', DE: 'de' }
+export function idiomaDeBusqueda(pais: unknown): string {
+  const iso = codigoDePais(pais)
+  return (iso && IDIOMA_DE_BUSQUEDA_POR_PAIS[iso]) || 'es'
+}
 
 export const DIAS_EN_ORDEN = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'] as const
 /** nombres de día en varios idiomas → el canónico */

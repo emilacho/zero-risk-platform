@@ -255,7 +255,7 @@ describe('la corrida diaria toma al cliente desde el despertar (aunque aún no t
     const conErrores = sinPlan(c)
     conErrores.cerebro_portero_corridas = [{ id: 'r1', client_id: c.id, dia: '2026-10-15', estado: 'con_errores', resumen: { tipo: 'despertar' } }]
     expect((await activos(conErrores)).clientes).toHaveLength(0)
-    const cambios: Array<[string, Record<string, unknown>]> = [['archivado', { archived_at: '2026-10-01' }], ['baja', { status: 'churned' }], ['prueba', { name: 'prueba-x' }]]
+    const cambios: Array<[string, Record<string, unknown>]> = [['archivado', { archived_at: '2026-10-01' }], ['baja', { status: 'churned' }], ['prueba', { config: { es_de_prueba: true } }]]
     for (const [nombre, cambio] of cambios) {
       const t = sinPlan(c)
       t.cerebro_portero_corridas = [{ id: 'r2', client_id: c.id, dia: '2026-10-15', estado: 'hecha', resumen: { tipo: 'despertar' } }]
