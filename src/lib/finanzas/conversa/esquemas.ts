@@ -7,6 +7,7 @@
  *  · procedencia.v1        → de dónde sale cada dato del expediente (medido · de ensayo · supuesto)
  * AGNÓSTICO: ningún rubro, ciudad ni producto; los nombres de los canales son claves de catálogo (datos).
  */
+import { CANALES_VALIDOS } from './omision'
 export type Resultado<T> = { ok: true; valor: T } | { ok: false; errores: string[] }
 
 export const ESPECIALISTAS = ['fpa', 'redes', 'busqueda', 'medicion'] as const
@@ -68,6 +69,8 @@ export function validarPlanteo(v: unknown): Resultado<PlanteoV1> {
   if (!Array.isArray(v.canales)) e.push('canales debe ser una lista')
   else v.canales.forEach((c, i) => {
     if (!objeto(c) || !texto(c.canal, 60)) { e.push(`canales[${i}].canal es obligatorio`); return }
+    // arreglo del intento 2 (16-oct): una clave fuera de la lista cerrada dejaba a `redes` sin hablar en silencio (`meta_ads` ≠ `meta_ig`)
+    if (!CANALES_VALIDOS.includes(String(c.canal))) e.push(`canales[${i}].canal «${String(c.canal).slice(0, 40)}» no es una clave válida: usa EXACTAMENTE una de ${CANALES_VALIDOS.join(', ')}`)
     if (!finito(c.peso) || c.peso < 0 || c.peso > 1) e.push(`canales[${i}].peso entre 0 y 1`)
     if (c.piso_diario !== undefined && (!finito(c.piso_diario) || c.piso_diario < 0)) e.push(`canales[${i}].piso_diario ≥ 0`)
   })
@@ -121,9 +124,11 @@ export function validarConsulta(v: unknown): Resultado<ConsultaV1> {
   }
   if (v.minimo_diario_por_conjunto !== undefined && (!finito(v.minimo_diario_por_conjunto) || v.minimo_diario_por_conjunto < 0)) e.push('minimo_diario_por_conjunto ≥ 0')
   if (!Array.isArray(v.preguntas_a_otros) || !v.preguntas_a_otros.every((p) => objeto(p) && texto(p.a, 40) && texto(p.pregunta, 600))) e.push('preguntas_a_otros debe ser una lista de { a, pregunta }')
-  else if (v.preguntas_a_otros.length > 3) e.push('preguntas_a_otros: máximo 3')
   if (!Array.isArray(v.alertas) || !v.alertas.every((a) => typeof a === 'string')) e.push('alertas debe ser una lista de textos')
   if (e.length) return { ok: false, errores: e }
+  // arreglo del intento 2 (16-oct): más de 3 preguntas NO tira el turno entero (perdía el costo y degradaba al especialista): se recorta a 3 y SE MARCA en `alertas`
+  const pa = v.preguntas_a_otros as Array<{ a: string; pregunta: string }>
+  if (pa.length > 3) return { ok: true, valor: { ...(v as unknown as ConsultaV1), preguntas_a_otros: pa.slice(0, 3), alertas: [...(v.alertas as string[]), `preguntas_a_otros recortado de ${pa.length} a 3 (máximo permitido)`] } }
   return { ok: true, valor: v as unknown as ConsultaV1 }
 }
 

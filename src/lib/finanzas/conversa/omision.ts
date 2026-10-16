@@ -16,6 +16,9 @@ export const ESPECIALISTA_POR_CANAL: Readonly<Record<string, Especialista>> = {
 /** canales sin costo de medios: no justifican por sí solos pedir una ficha de medición pagada */
 export const CANALES_SIN_PAUTA: ReadonlySet<string> = new Set(['base_propia', 'busqueda_local'])
 
+/** la lista CERRADA de claves de `canal` que la conversación reconoce (la UNIÓN del mapa canal → especialista y de los canales sin pauta) */
+export const CANALES_VALIDOS: readonly string[] = [...new Set([...Object.keys(ESPECIALISTA_POR_CANAL), ...CANALES_SIN_PAUTA])]
+
 export interface CanalMinimo { canal: string; activo?: boolean }
 
 export interface QuienHabla { fpa: boolean; redes: boolean; busqueda: boolean; medicion: boolean; sin_pauta: boolean }

@@ -417,8 +417,10 @@ describe('F8 · el pedido corto y la procedencia', () => {
     expect(validarPlantillaFinanciera({ ...PLANTILLA_FINANCIERA, limites: { ...PLANTILLA_FINANCIERA.limites, max_rondas: 3 } }).length).toBeGreaterThan(0)
     expect(validarPlantillaFinanciera({ ...PLANTILLA_FINANCIERA, pasos: PLANTILLA_FINANCIERA.pasos.map((p) => (p.clave === 'fpa' ? { ...p, quien: 'otro-agente' } : p)) }).length).toBeGreaterThan(0)
   })
-  it('la consulta valida rangos y máximo 3 preguntas', () => {
-    expect(validarConsulta({ ...FPA, preguntas_a_otros: [1, 2, 3, 4].map((i) => ({ a: 'redes', pregunta: `p${i}` })) }).ok).toBe(false)
+  it('la consulta valida rangos y recorta a 3 preguntas (arreglo del intento 2: ya no tira el turno)', () => {
+    const r4 = validarConsulta({ ...FPA, preguntas_a_otros: [1, 2, 3, 4].map((i) => ({ a: 'redes', pregunta: `p${i}` })) })
+    expect(r4.ok).toBe(true)
+    if (r4.ok) expect(r4.valor.preguntas_a_otros).toHaveLength(3)
     expect(validarConsulta({ ...FPA, supuestos: { ticket: rango(5, 1) } }).ok).toBe(false)
     expect(validarConsulta(FPA).ok).toBe(true)
   })
