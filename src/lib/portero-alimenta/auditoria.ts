@@ -8,6 +8,7 @@
  */
 import { createHash } from 'node:crypto'
 import { normalizar } from '../manual/texto'
+import { leerTodas } from './paginar'
 
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -138,7 +139,8 @@ export async function auditarCitasDelResumen(db: Db, clientId: string): Promise<
   if (!vivos.length) return { ok: true, revisadas: 0, problema: null }
   const citas = vivos.flatMap((f) => citasDeUnResumen(String(f.contenido)))
   if (!citas.length) return { ok: true, revisadas: 0, problema: null }
-  const q = await db.from('cerebro_fichas').select('id').eq('client_id', clientId).limit(5000)
+  // TODAS las fichas del cliente, por páginas: la base entrega a lo sumo 1.000 por consulta aunque se pida más (16-oct: con >1.000 fichas, las citas a las demás parecían inexistentes y el vigilante pausó al cliente)
+  const q = await leerTodas(() => db.from('cerebro_fichas').select('id').eq('client_id', clientId).order('id', { ascending: true }))
   if (q.error) return { ok: false, detalle: `cerebro_fichas: ${String(q.error.message).slice(0, 120)}` }
   const ids = lista(q.data).map((f) => String(f.id))
   const faltan = [...new Set(citas.map((c) => c.ficha))].filter((p) => !ids.some((id) => id.startsWith(p)))

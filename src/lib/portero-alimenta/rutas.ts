@@ -294,7 +294,7 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
   const vd = await deps.db.from('apify_raw').select('respuesta').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'videos_instagram').limit(50)
   if (vd.error) return err(502, 'lectura_fallida', `apify_raw: ${vd.error.message}`)
   const conVideoYa = new Set(lista(vd.data).flatMap((f) => lista(f.respuesta)).flatMap((it) => [String(it.shortCode ?? ''), String(it.id ?? '')]).filter(Boolean))
-  const vi = await deps.db.from('cerebro_unidades_vistas').select('unidad_ref').eq('client_id', v.client_id).eq('fuente', 'instagram').limit(2000)
+  const vi = await leerTodas(() => deps.db.from('cerebro_unidades_vistas').select('unidad_ref').eq('client_id', v.client_id).eq('fuente', 'instagram').order('id', { ascending: true }))
   if (vi.error) return err(502, 'lectura_fallida', `cerebro_unidades_vistas: ${vi.error.message}`)
   const vistas = new Set(lista(vi.data).map((x) => String(x.unidad_ref)))
   const perfiles = lista(lista(ig.data)[0]?.respuesta).filter((p) => handles.has(String(p.username ?? '').toLowerCase()))

@@ -16,6 +16,7 @@
  * No llama a Apify ni a ningún modelo.
  */
 import { clientesActivos } from './clientes'
+import { leerTodas } from './paginar'
 import { auditarCliente, auditarCitasDelResumen, type ResultadoDeAuditoria } from './auditoria'
 import { UMBRALES_DE_GASTO_POR_OMISION, type UmbralesDeGasto } from './datos'
 import { gastoDeHoy, reconciliarYEnviar, type DepsDeRutas, type Respuesta } from './rutas'
@@ -98,7 +99,7 @@ export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: str
   }
 
   const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)
-  const nuevas = await deps.db.from('cerebro_fichas').select('id, descartada, retirada_en').eq('client_id', c.client_id).gte('creado_en', dia0.toISOString()).limit(2000)
+  const nuevas = await leerTodas(() => deps.db.from('cerebro_fichas').select('id, descartada, retirada_en').eq('client_id', c.client_id).gte('creado_en', dia0.toISOString()).order('id', { ascending: true }))
   if (nuevas.error) falla('las fichas nuevas', nuevas.error.message)
   else {
     const ids = lista(nuevas.data).filter((x) => !x.descartada && !x.retirada_en).map((x) => String(x.id))

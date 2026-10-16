@@ -10,7 +10,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { alimentarCliente } from '../alimentar'
-import { puenteAlIndice } from '../entorno'
+import { agenteDelRoster, puenteAlIndice } from '../entorno'
+import { auditarCitasDelResumen } from '../auditoria'
 import { reconciliarYEnviar } from '../rutas'
 import { enTandas, PRESUPUESTO_DE_RUTA_MS, PRESUPUESTO_DEL_PUENTE_PROPIO_MS } from '../tandas'
 import { crearBaseFalsa } from './base-falsa'
@@ -151,4 +152,26 @@ describe('todas las rutas del portero declaran un tope de la plataforma que cubr
       if (r === 'puente') expect(seg).toBeGreaterThanOrEqual(PRESUPUESTO_DEL_PUENTE_PROPIO_MS / 1000 + 20)
     })
   }
+})
+
+describe('el pulido del resumen no puede comerse el presupuesto de la ruta', () => {
+  it('si el agente no contesta en su plazo, se corta y lanza (el resumen queda armado por código)', async () => {
+    const llamar = agenteDelRoster({
+      origen: 'https://x.example', llaveInterna: 'k', workflowId: 'wf', ejecucionId: 'ex', clientId: 'c', agente: 'reporting_agent', topeUsd: 0.03, plazoMs: 60,
+      fetchImpl: (_u, i) => new Promise<Response>((_res, rej) => { i?.signal?.addEventListener('abort', () => rej(new Error('abortado'))) }),
+    })
+    const t0 = Date.now()
+    await expect(llamar('tarea')).rejects.toThrow()
+    expect(Date.now() - t0).toBeLessThan(2000)
+  })
+})
+
+describe('las citas del resumen se comprueban contra TODAS las fichas (la base entrega 1.000 por consulta)', () => {
+  it('con 1.500 fichas, una cita a la ficha 1.400 existe', async () => {
+    const fichas = Array.from({ length: 1500 }, (_v, i) => ({ id: `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`, client_id: 'c1', clase: 'hecho', contenido: 'x', retirada_en: null, descartada: false }))
+    fichas.push({ id: 'aaaaaaaa-0000-4000-8000-000000000000', client_id: 'c1', clase: 'resumen_vivo', contenido: 'Dato [ficha:00001400 · 2026-10-16] y otro [ficha:00000001 · 2026-10-16]', retirada_en: null, descartada: false })
+    const base = crearBaseFalsa({ cerebro_fichas: fichas } as never, { topeDeFilas: 1000 })
+    const r = await auditarCitasDelResumen(base.db, 'c1')
+    expect(r).toMatchObject({ ok: true, problema: null })
+  })
 })
