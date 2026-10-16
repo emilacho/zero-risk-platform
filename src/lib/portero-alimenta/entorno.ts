@@ -5,6 +5,7 @@
  *    Lo que el portero archiva se escribe también en el índice donde ya buscan (`client_brain_chunks`) POR la única puerta de escritura de evidencia (`/api/brain/ingest-source`),
  *    y el trozo de una ficha reemplazada SALE del índice (la ficha queda con su historia; el índice nunca miente).
  */
+import { enTandas } from './tandas'
 import { llamarAlModelo } from '../cerebro/portero/modelo'
 import { costoDeLaLlamada, MODELO, RAZONAMIENTO, TIEMPO_MAXIMO_MS } from '../cerebro/portero/razonar'
 import { crearRegistrador } from '../cerebro/portero/registro'
@@ -49,12 +50,15 @@ export function agenteDelRoster(o: { origen: string; llaveInterna: string; workf
   }
 }
 
+const TROZOS_A_LA_VEZ = 3
+
 export function puenteAlIndice(o: { origen: string; llaveInterna: string; db: Db; fetchImpl?: (u: string, i?: RequestInit) => Promise<Response> }) {
   const traer = o.fetchImpl ?? ((u: string, i?: RequestInit) => fetch(u, i))
-  return async (p: { escribir: PuenteDeIndice[]; sacar: string[]; client_id: string }) => {
+  return async (p: { escribir: PuenteDeIndice[]; sacar: string[]; client_id: string; hasta?: number }) => {
     const errores: string[] = []
     let escritos = 0, sacados = 0
-    for (const x of p.escribir) {
+    // cada trozo pasa por el modelo de huellas (~1-2 s): pocos a la vez y SIN arrancar otro pasada la hora límite (lo que no cupo queda como `quedan` y sigue la próxima pasada)
+    await enTandas(p.escribir, TROZOS_A_LA_VEZ, async (x) => {
       try {
         const r = await traer(`${o.origen.replace(/\/$/, '')}/api/brain/ingest-source`, {
           method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': o.llaveInterna },
@@ -62,11 +66,11 @@ export function puenteAlIndice(o: { origen: string; llaveInterna: string; db: Db
         })
         if (r.ok) escritos++; else errores.push(`ingest-source respondió ${r.status} para ${x.source_id}`)
       } catch (e) { errores.push(e instanceof Error ? e.message : String(e)) }
-    }
-    for (const id of p.sacar) {
+    }, p.hasta)
+    await enTandas(p.sacar, 10, async (id) => {
       const d = await o.db.from('client_brain_chunks').delete().eq('client_id', p.client_id).eq('source_table', 'cerebro_fichas').eq('source_id', id)
       if (d.error) errores.push(`sacar ${id}: ${d.error.message}`); else sacados++
-    }
+    }, p.hasta)
     return { escritos, sacados, errores }
   }
 }
