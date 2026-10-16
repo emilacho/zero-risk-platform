@@ -103,7 +103,7 @@ interface Db { from: (t: string) => any }
 export async function auditarCliente(db: Db, clientId: string, ahora: Date, n = TAMANO_DE_MUESTRA): Promise<{ ok: true; resultado: ResultadoDeAuditoria } | { ok: false; detalle: string }> {
   const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)
   const dia = dia0.toISOString().slice(0, 10)
-  const q = await db.from('cerebro_fichas').select('id, client_id, contenido, fecha_fuente, observado_en, fuente_url, provenance_tag, descartada, retirada_en, entregable').eq('client_id', clientId).gte('creado_en', dia0.toISOString()).limit(500)
+  const q = await db.from('cerebro_fichas').select('id, client_id, contenido, fecha_fuente, observado_en, fuente_url, provenance_tag, descartada, retirada_en').eq('client_id', clientId).gte('creado_en', dia0.toISOString()).limit(500)
   if (q.error) return { ok: false, detalle: `cerebro_fichas: ${String(q.error.message).slice(0, 120)}` }
   const vivas = lista(q.data).filter((f) => !f.descartada && !f.retirada_en && typeof f.contenido === 'string' && esObjeto(f.provenance_tag)) as unknown as FichaAuditable[]
   const muestra = elegirMuestra(vivas, dia, n)
