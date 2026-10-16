@@ -34,6 +34,10 @@ export interface Semilla {
   /** la corrida que armó el expediente fue de ENSAYO (`dry_run` declarado): ningún dato «medido» de ella vale como medido */
   corrida_es_de_ensayo?: boolean
   fecha?: string
+  /** tope PROPIO de este encargo (US$ cobrados); solo SUBE el de la plantilla (1,50), nunca pasa de TOPE_MAXIMO_POR_ENCARGO_USD y no se acepta si no es un número. Decisión de Emilio, por encargo. */
+  tope_encargo_usd?: number
+  /** respuestas del dueño entregadas como DATO (sin hilo de Slack): entran al contexto de cada paso de agente marcadas como dato confirmado por él */
+  respuestas_del_dueno?: Array<{ clave: string; valor: unknown; literal: string }>
 }
 
 export interface EncargoDeConversa {
