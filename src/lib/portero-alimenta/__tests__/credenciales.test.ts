@@ -162,3 +162,47 @@ describe('los diez clientes: cada uno su llave, ninguno ve la de otro', () => {
     expect(brazoDePropios).toBeDefined()
   })
 })
+
+describe('migrar las variables del servidor a la base (las variables son «sensibles»: solo el servidor las ve)', () => {
+  const slugDe = (nombre: string) => nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').toUpperCase()
+  it('cada uno de los diez migra SOLO sus variables; la base queda cifrada; la respuesta no trae ningún valor; la segunda vez no duplica vigentes', async () => {
+    const t = juntos()
+    const env: Record<string, string> = { ...ENV }
+    DIEZ_CLIENTES.forEach((c, i) => { const slug = String((t.clients.find((x) => x.id === c.id) as { slug?: string }).slug).toUpperCase().replace(/-/g, '_'); env[`CLIENTE_${slug}_LOYVERSE_TOKEN`] = llaveDe(i); env[`CLIENTE_${slug}_META_TOKEN`] = llaveDe(100 + i); env[`CLIENTE_${slug}_META_AD_ACCOUNT_ID`] = `act_${i}${'9'.repeat(8)}` })
+    void slugDe
+    const deps = { db: crearBaseFalsa(t as never).db, env, ahora: AHORA }
+    for (const [i, c] of DIEZ_CLIENTES.entries()) {
+      const r = await rutaGuardarCredencial(deps, { client_id: c.id, migrar_desde_variables: true, dry_run: false, ...WF })
+      expect(r.status).toBe(200)
+      expect(JSON.stringify(r.body)).not.toContain(llaveDe(i)); expect(JSON.stringify(r.body)).not.toContain(llaveDe(100 + i))
+      expect(r.body).toMatchObject({ ok: true, resultado: [{ proveedor: 'loyverse', estado: 'migrada' }, { proveedor: 'meta', estado: 'migrada' }] })
+    }
+    const k = claveMaestra(ENV)!
+    for (const [i, c] of DIEZ_CLIENTES.entries()) {
+      const filas = t.cerebro_credenciales.filter((f) => f.client_id === c.id && !f.retirada_en)
+      expect(filas.length).toBe(3) // loyverse token + meta token + ad account
+      expect(JSON.stringify(filas)).not.toContain('LLAVE-FALSA')
+      expect(descifrar(String(filas.find((f) => f.proveedor === 'loyverse' && f.campo === 'token')!.valor_cifrado), k)).toBe(llaveDe(i))
+    }
+    // una segunda pasada no deja dos vigentes del mismo campo (la anterior queda retirada)
+    await rutaGuardarCredencial(deps, { client_id: DIEZ_CLIENTES[0].id, migrar_desde_variables: true, dry_run: false, ...WF })
+    expect(t.cerebro_credenciales.filter((f) => f.client_id === DIEZ_CLIENTES[0].id && !f.retirada_en)).toHaveLength(3)
+  })
+  it('en seco no escribe; sin variables no inventa; sin clave maestra no guarda nada; cliente inexistente 404', async () => {
+    const t = juntos()
+    const c = DIEZ_CLIENTES[0]
+    const slug = String((t.clients.find((x) => x.id === c.id) as { slug?: string }).slug).toUpperCase().replace(/-/g, '_')
+    const env = { ...ENV, [`CLIENTE_${slug}_LOYVERSE_TOKEN`]: llaveDe(1) }
+    const deps = { db: crearBaseFalsa(t as never).db, env, ahora: AHORA }
+    const seco = await rutaGuardarCredencial(deps, { client_id: c.id, migrar_desde_variables: true, dry_run: true })
+    expect(seco.body).toMatchObject({ ok: true, dry_run: true, resultado: [{ proveedor: 'loyverse', estado: 'migraría' }, { proveedor: 'meta', estado: 'sin_variables' }] })
+    expect(t.cerebro_credenciales).toHaveLength(0)
+    const sinClave = await rutaGuardarCredencial({ ...deps, env: { [`CLIENTE_${slug}_LOYVERSE_TOKEN`]: llaveDe(1) } }, { client_id: c.id, migrar_desde_variables: true, dry_run: false, ...WF })
+    expect(sinClave.status).toBe(503); expect(t.cerebro_credenciales).toHaveLength(0)
+    expect((await rutaGuardarCredencial(deps, { client_id: 'deadbeef-dead-4ead-8ead-deadbeefdead', migrar_desde_variables: true, dry_run: false, ...WF })).status).toBe(404)
+    const otro = DIEZ_CLIENTES[1]
+    const vacio = await rutaGuardarCredencial(deps, { client_id: otro.id, migrar_desde_variables: true, dry_run: false, ...WF })
+    expect(vacio.body).toMatchObject({ resultado: [{ estado: 'sin_variables' }, { estado: 'sin_variables' }] }) // la variable del primero no se le da al segundo
+    expect(t.cerebro_credenciales).toHaveLength(0)
+  })
+})

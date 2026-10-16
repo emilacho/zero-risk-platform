@@ -54,10 +54,40 @@ export const sinLaLlave = (t: string, llaves: string[]): string => llaves.filter
 
 export interface DepsDeCredenciales { db: Db; ahora?: Date; env?: Record<string, string | undefined> }
 
+/**
+ * POST { migrar_desde_variables: true, client_id, … } · pasa a la base cifrada las llaves de UN cliente que hoy son variables del servidor (`CLIENTE_<SLUG>_*`).
+ * Se hace DENTRO del servidor porque esas variables son «sensibles» (ni la API de Vercel las devuelve): los valores nunca salen de memoria; la respuesta solo dice qué campos y su huella.
+ * El cliente se busca por `client_id`; su slug sale de la ficha (`slug` o el nombre). Idempotente: una llave igual a la vigente no se reescribe.
+ */
+async function migrarDesdeVariables(deps: DepsDeCredenciales, v: { cuerpo: Record<string, unknown>; client_id: string; dry_run: boolean; workflow_id: string; workflow_execution_id: string }): Promise<Respuesta> {
+  const cl = await deps.db.from('clients').select('id, name, slug').eq('id', v.client_id).limit(1)
+  if (cl.error) return err(502, 'lectura_fallida', `clients: ${cl.error.message}`)
+  const ficha = lista(cl.data)[0]
+  if (!ficha) return err(404, 'cliente_inexistente', 'no existe la ficha del cliente')
+  const env = deps.env ?? process.env
+  const slug = txt(ficha.slug) || txt(ficha.name)
+  const c = credencialesDe(slug, env)
+  const e = (k: string) => { const x = txt(env[c.prefijo + k]); return x || null }
+  const porProveedor: Record<Proveedor, Record<string, string>> = {
+    loyverse: Object.fromEntries(Object.entries({ token: c.loyverse_token, store_id: e('LOYVERSE_STORE_ID') }).filter(([, x]) => !!x) as Array<[string, string]>),
+    meta: Object.fromEntries(Object.entries({ token: c.meta_token, ad_account_id: c.meta_ad_account_id, ig_user_id: c.meta_ig_user_id }).filter(([, x]) => !!x) as Array<[string, string]>),
+  }
+  const resultado: Array<{ proveedor: string; campos: string[]; estado: string }> = []
+  for (const prov of PROVEEDORES) {
+    const campos = porProveedor[prov]
+    if (!Object.keys(campos).length) { resultado.push({ proveedor: prov, campos: [], estado: 'sin_variables' }); continue }
+    const r = await rutaGuardarCredencial(deps, { client_id: v.client_id, proveedor: prov, campos, dry_run: v.dry_run, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id })
+    resultado.push({ proveedor: prov, campos: Object.keys(campos), estado: r.status === 200 ? (v.dry_run ? 'migraría' : 'migrada') : `falló: ${String((r.body as { error?: unknown }).error ?? r.status)}` })
+    if (r.status !== 200) return { status: r.status, body: { ok: false, client_id: v.client_id, prefijo: c.prefijo, resultado, error: (r.body as { error?: unknown }).error } }
+  }
+  return { status: 200, body: { ok: true, dry_run: v.dry_run, client_id: v.client_id, prefijo: c.prefijo, resultado, nota: 'los valores no se devuelven nunca; las variables NO se borran' } }
+}
+
 /** POST · guarda (o cambia) campos de un proveedor para UN cliente. La respuesta nunca trae el valor. */
 export async function rutaGuardarCredencial(deps: DepsDeCredenciales, cuerpo: unknown): Promise<Respuesta> {
   const v = validar(cuerpo)
   if ('status' in v) return v
+  if (v.cuerpo.migrar_desde_variables === true) return migrarDesdeVariables(deps, v)
   const proveedor = txt(v.cuerpo.proveedor).toLowerCase() as Proveedor
   if (!PROVEEDORES.includes(proveedor)) return err(400, 'entrada_invalida', `\`proveedor\` debe ser uno de: ${PROVEEDORES.join(', ')}`)
   const campos = (v.cuerpo.campos && typeof v.cuerpo.campos === 'object' && !Array.isArray(v.cuerpo.campos) ? v.cuerpo.campos : null) as Record<string, unknown> | null
