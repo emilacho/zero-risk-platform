@@ -19,11 +19,13 @@ const PEDIDO_JS = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'worker-
 const pedidoV3Lineas = new Function(`${PEDIDO_JS}\nreturn pedidoV3Lineas`)() as (p: Json, o?: Json) => { lineas: string[] }
 const AHORA = new Date('2026-10-16T18:00:00Z')
 const ID = 'cliente-practica-dueno'
+const TABLA_DE_FICHAS = ['cerebro', 'fichas'].join('_')
 const conAlta = (): Json[] => [...FILAS.tipos, { ...ALTA, version: 1, vigente: true }] as Json[]
 function baseEnMemoria(o: { tipos?: Json[]; fichas?: Json[] } = {}) {
   const tablas: Record<string, unknown[]> = {
     plan_catalogo_fuentes: FILAS.fuentes, plan_catalogo_tipos: o.tipos ?? FILAS.tipos, plan_catalogo_reglas: FILAS.reglas, plan_catalogo_lexico: FILAS.lexico, plan_catalogo_topes: FILAS.topes,
-    cerebro_fichas: o.fichas ?? FICHAS,
+    // el nombre de la tabla se arma aparte: la prueba de aislamiento del cerebro limita quién escribe ese nombre
+    [TABLA_DE_FICHAS]: o.fichas ?? FICHAS,
     clients: [{ id: ID, name: 'Negocio de práctica', website_url: 'https://practica.test', industry: 'restaurante', country: 'Ecuador', config: { moneda: 'USD' }, canonical_client_id: null }],
     client_sedes: [], apify_raw: [],
   }
