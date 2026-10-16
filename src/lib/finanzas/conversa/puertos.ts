@@ -96,6 +96,8 @@ export interface AlmacenDeConversa {
   soltarPaso?(id: string): Promise<void>
   /** lo REALMENTE cobrado por el encargo: suma de `agent_invocations` de `<encargo>:<paso>` (incluye lo que se cobró y no llegó a guardarse); null si no se pudo leer */
   cobrado?(encargo_id: string): Promise<number | null>
+  /** BUZÓN (16-oct): guarda solo lo del buzón (canal/ts del MD, cursor de lectura, respuestas en la semilla, registro) SIN tocar el estado del motor ni el gasto: no pisa un paso en vuelo */
+  guardarBuzon?(c: { encargo_id: string; slack_canal?: string | null; slack_ts?: string | null; leido_hasta?: string | null; semilla?: Semilla; artefacto?: ArtefactoGuardado }): Promise<void>
 }
 
 export type RespuestaDeModelo = { ok: true; salida: unknown; costo_usd: number } | { ok: false; error: string; costo_usd: number }

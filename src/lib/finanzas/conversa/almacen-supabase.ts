@@ -88,6 +88,15 @@ export function almacenDeConversa(db: Db): AlmacenDeConversa {
         return Math.round((r.data as Fila[]).reduce((s, f) => s + (Number(f.cost_usd) || 0), 0) * 1e6) / 1e6
       } catch { return null }
     },
+    async guardarBuzon(c) {
+      if (c.artefacto) {
+        const a = c.artefacto
+        ok(await db.from('finanzas_artefactos').upsert({ encargo_id: c.encargo_id, tipo: a.tipo, version: a.version, contenido: a.contenido, sha256: a.sha256 }, { onConflict: 'encargo_id,tipo,version' }), 'guardar el registro del buzón')
+      }
+      const patch: Fila = { actualizado_en: new Date().toISOString() }
+      for (const k of ['slack_canal', 'slack_ts', 'leido_hasta', 'semilla'] as const) if (c[k] !== undefined) patch[k] = c[k]
+      ok(await db.from('finanzas_encargos').update(patch).eq('id', c.encargo_id), 'guardar el buzón del encargo')
+    },
     async turnos(encargo_id) {
       const r = ok(await db.from('finanzas_turnos').select('n,paso,agente,ronda,estado,costo_usd,salida,error').eq('encargo_id', encargo_id).order('n', { ascending: true }), 'leer los turnos') as Fila[] | null
       return (r ?? []).map((f): TurnoDeConversa => ({ n: Number(f.n), paso: String(f.paso), agente: (f.agente as string | null) ?? null, ronda: Number(f.ronda), estado: f.estado as TurnoDeConversa['estado'], costo_usd: Number(f.costo_usd ?? 0), salida: f.salida, error: (f.error as string | null) ?? null }))
