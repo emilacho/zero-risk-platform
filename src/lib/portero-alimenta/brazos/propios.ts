@@ -9,6 +9,7 @@
  * Las dos lecturas reciben `fetch` por parámetro: se prueban con una llave falsa y respuestas simuladas, sin red.
  */
 import { DIA_EN_MS, slugDe, type FichaDeBrazo, type ResultadoDeUnBrazo } from './tipos'
+import { datosDeSede, sedesDeLaFuente } from '../sedes-fuentes'
 
 export type Fetch = (url: string, init?: { headers?: Record<string, string> }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>
 const obj = (x: unknown): Record<string, unknown> => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Record<string, unknown>) : {})
@@ -266,7 +267,9 @@ export function nombreDeItem(n: string, mapa: Record<string, string>, meta?: Met
   if (cand?.length) return `${n} (podría ser ${cand.map((c) => `«${c}»`).join(' o ')}; sin afirmar)`
   return n
 }
-export interface EntradaDeFichasDeVentas { client_id: string; meses: VentasDelMes[]; ahora: Date; mapaDeItems?: Record<string, string>; mapaMeta?: MetaDelMapaDeItems | null; /** las cifras vienen de una exportación del Back Office (no de la API): se dice y se fecha con la de la exportación */ exportacion?: { fecha: string } }
+export interface EntradaDeFichasDeVentas { client_id: string; meses: VentasDelMes[]; ahora: Date; mapaDeItems?: Record<string, string>; mapaMeta?: MetaDelMapaDeItems | null; /** las cifras vienen de una exportación del Back Office (no de la API): se dice y se fecha con la de la exportación */ exportacion?: { fecha: string }
+  /** a qué sede(s) pertenece una tienda del punto de venta (dato `fuentes_por_sede.punto_de_venta`); `null` = todas las sedes. Sin esto, las fichas por tienda quedan sin sede como hasta hoy. */
+  sedeDeTienda?: (tienda: string) => string[] | null }
 /** el prefijo único de las cifras del punto de venta: `metrica:loyverse:<métrica>:<AAAA-MM>[:<tienda>]` */
 export const PREFIJO_DE_VENTAS = 'metrica:loyverse:'
 /**
@@ -300,11 +303,13 @@ export function fichasDeVentas(e: EntradaDeFichasDeVentas): FichaDeBrazo[] {
     const nota = m.aproximado ? ` Ingreso, tickets y ticket promedio completos; las listas de días, horas e ítems llegan hasta el ${m.aproximado} (el plan del punto de venta solo deja leer 31 días atrás).` : ''
     const deDonde = e.exportacion ? `tomado de la exportación del Back Office de Loyverse del ${e.exportacion.fecha} (no de la API)` : 'medido en el punto de venta del cliente'
     const sello = `Periodo ${pTxt} (${estado}), ${deDonde}. Solo ingresos: el punto de venta no trae costos, no es margen. Moneda del punto de venta.${nota}`
+    const sedesDeLaTienda = m.rotulo && e.sedeDeTienda ? e.sedeDeTienda(m.rotulo) : null
+    const deSede = sedesDeLaTienda?.length ? ` · sede ${sedesDeLaTienda.join(', ')}` : ''
     const ficha = (metrica: string, titulo: string, contenido: string, extra: Partial<FichaDeBrazo> = {}): FichaDeBrazo => ({
       brazo: 'propios', alcance: 'cliente', client_id: e.client_id, ref: `brazo:propios:loyverse:${metrica}:${m.periodo}${sufijo}${parcial ? `:${dia}` : ''}`,
-      atributo: `${PREFIJO_DE_VENTAS}${metrica}:${m.periodo}${sufijo}`, clase: 'metrica', titulo: `${titulo} · ${pTxt}${dondeTxt}`.slice(0, 160), contenido,
+      atributo: `${PREFIJO_DE_VENTAS}${metrica}:${m.periodo}${sufijo}`, clase: 'metrica', titulo: `${titulo} · ${pTxt}${dondeTxt}${deSede}`.slice(0, 160), contenido,
       origen: 'plataforma', fuente_url: null, fecha_fuente: e.exportacion?.fecha ?? dia, observado_en: e.exportacion ? `${e.exportacion.fecha}T12:00:00.000Z` : iso, vigente_hasta: parcial ? hasta : null, decision: 'reemplaza', ...(parcial ? { renueva_vigencia: true } : {}),
-      datos: { periodo: m.periodo, desde: periodoDesde, hasta: periodoHasta, en_curso: enCurso, ...(m.ventana ? { ventana_hasta: m.ventana } : {}), ...(m.aproximado ? { aproximado_hasta: m.aproximado } : {}), ...(enCurso && !m.grupo ? { snapshot: snapshotDe(r, iso) } : {}), tienda: m.rotulo || null, fuente: e.exportacion ? 'loyverse_exportacion' : 'loyverse', ...(e.exportacion ? { exportado_en: e.exportacion.fecha } : {}), tickets: m.sinTickets ? null : r.tickets, ingreso: r.ingreso, ticket_promedio: m.sinTickets ? null : r.ticket_medio, reembolsos: r.reembolsos },
+      datos: { periodo: m.periodo, desde: periodoDesde, hasta: periodoHasta, en_curso: enCurso, ...(m.ventana ? { ventana_hasta: m.ventana } : {}), ...(m.aproximado ? { aproximado_hasta: m.aproximado } : {}), ...(enCurso && !m.grupo ? { snapshot: snapshotDe(r, iso) } : {}), tienda: m.rotulo || null, ...datosDeSede(sedesDeLaTienda), fuente: e.exportacion ? 'loyverse_exportacion' : 'loyverse', ...(e.exportacion ? { exportado_en: e.exportacion.fecha } : {}), tickets: m.sinTickets ? null : r.tickets, ingreso: r.ingreso, ticket_promedio: m.sinTickets ? null : r.ticket_medio, reembolsos: r.reembolsos },
       ...extra,
     })
     out.push(ficha('ingreso', 'Ventas del punto de venta',
@@ -394,6 +399,8 @@ export interface EntradaDelBrazoPropios {
   mesesCerrados?: ReadonlySet<string>
   /** meses que terminaron y solo tienen la lectura parcial guardada: si su comienzo ya no se puede leer, se cierran por fusión con lo recién leído */
   parciales?: ReadonlyMap<string, SnapshotDeVentas>
+  /** las claves de las sedes del cliente (para asignar cada tienda del punto de venta a su sede según `config.apify.fuentes_por_sede`) */
+  clavesDeSedes?: string[]
 }
 export async function brazoDePropios(o: EntradaDelBrazoPropios): Promise<ResultadoDeUnBrazo> {
   const cred = credencialesDe(o.slug, o.env)
@@ -433,7 +440,7 @@ export async function brazoDePropios(o: EntradaDelBrazoPropios): Promise<Resulta
         const rv = v.recibos.filter((r) => String(r.created_at ?? '') >= hace30)
         meses.push({ periodo: 'ultimos_30_dias', grupo: '', rotulo: '', resumen: resumirVentas(rv, { periodo: 'ultimos_30_dias' }), ventana: diaLocalDe(o.ahora) })
       } else if (porFusion.length) declarado.push(`punto de venta: ${porFusion.join(', ')} no se pudo cerrar (la lectura quedó recortada)`)
-      fichas.push(...fichasDeVentas({ client_id: o.client_id, meses, ahora: o.ahora, mapaDeItems: mapa, mapaMeta: obj(obj(obj(o.config).apify).loyverse_mapa_de_items_meta) as MetaDelMapaDeItems }))
+      fichas.push(...fichasDeVentas({ client_id: o.client_id, meses, ahora: o.ahora, mapaDeItems: mapa, mapaMeta: obj(obj(obj(o.config).apify).loyverse_mapa_de_items_meta) as MetaDelMapaDeItems, sedeDeTienda: (t) => sedesDeLaFuente(o.config, 'punto_de_venta', t, o.clavesDeSedes ?? []).sedes }))
       if (agrupado.incompletos.length) declarado.push(`punto de venta: ${v.paginas} páginas leídas (tope); ${agrupado.incompletos.join(', ')} quedó incompleto y no se archivó`)
       if (directos.length) declarado.push(`punto de venta: relleno de ${directos.length} mes(es) cerrado(s) en ${v.paginas} llamada(s)`)
       if (porFusion.length && !v.recortado) declarado.push(`punto de venta: ${porFusion.join(', ')} cerrado(s) con lo guardado y lo leído desde la última lectura (las listas de días, horas e ítems llegan hasta esa lectura)`)

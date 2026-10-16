@@ -11,7 +11,7 @@ import { accionesDeCompetencia, competidoresConfirmados, competidoresVigilados, 
 import { fichasDeContexto } from './contexto'
 import { accionDeDemanda, accionesDeDemandaPorSede, fichasDeDemanda, terminosDeDemanda, type FilaCrudaDeBrazo } from './demanda'
 import { familiasDelRubro } from '../../fuentes-publicas/plan'
-import { radioDe } from './sedes'
+import { radioDeSede } from './sedes'
 import { cargarContextoDeBrazos, descubrirYJuzgar, type ContextoDeBrazos, type ResultadoDeSistematica } from './sistematica'
 import type { RespuestaDeLlamada } from '../juez'
 import { brazoDePropios, leerSnapshot, mesLocalDe, PREFIJO_DE_VENTAS, type Fetch, type SnapshotDeVentas } from './propios'
@@ -66,7 +66,7 @@ export function accionesDeBrazos(e: EntradaDeAccionesDeBrazos): { acciones: Acci
     if (c.motivo) no_cubiertas.push({ fuente: 'competencia', por_que: c.motivo })
     else {
       const porSede = Object.fromEntries(sedes.map((s) => [s.clave, { lat: s.lat, lng: s.lng, ciudad: s.ciudad }]))
-      const radios = sedes.map((s) => radioDe(familias, s.tipo)).filter((r): r is number => r !== null)
+      const radios = sedes.map((s) => radioDeSede(familias, s)).filter((r): r is number => r !== null)
       acciones.push(...accionesDeCompetencia({ vigilados: c.vigilados, ahora: e.ahora, ciudad: e.ciudad, mercado, pais: paisDeLaFicha(e.cliente as Record<string, unknown>), anunciosCadaSemanas: 2, sedes: porSede, radioKm: radios.length ? Math.max(...radios) : null }))
     }
   }
@@ -137,7 +137,7 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
   }
   if (e.brazos.demanda) {
     const conocidos = [nombre, ...(Array.isArray(obj(obj(cfg).apify).competitor_list) ? (obj(obj(cfg).apify).competitor_list as unknown[]).map((c) => txt(obj(c).name)) : [])]
-    const conSede = (ctx?.sedes ?? []).filter((s) => radioDe(familias, s.tipo) !== null)
+    const conSede = (ctx?.sedes ?? []).filter((s) => radioDeSede(familias, s) !== null)
     if (conSede.length) {
       const partes = conSede.map((s) => fichasDeDemanda({ client_id: e.client_id, nombreDelCliente: nombre, filas, ahora: e.ahora, yaConocidos: conocidos, ciudad: s.ciudad, sede: s.clave }))
       const todas = partes.flatMap((p) => p.fichas)
@@ -174,7 +174,13 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
         // un mes que ya terminó y solo tiene su lectura parcial: con ella se puede cerrar aunque su comienzo ya no se pueda leer
         else if (m && m[1] < enCurso && datos.en_curso === true) { const sn = leerSnapshot(datos.snapshot); if (sn) parciales.set(m[1], sn) }
       }
-      poner(await brazoDePropios({ client_id: e.client_id, slug: txt(e.cliente.slug) || nombre, config: cfg, ahora: e.ahora, env: e.env ?? process.env, fetch: e.fetch ?? (globalThis.fetch as unknown as Fetch), mesesCerrados: cerrados, parciales }))
+      // las sedes solo se leen si el cliente asignó sus tiendas del punto de venta a sedes (un cliente de una sola sede no paga la consulta)
+      let clavesDeSedes: string[] = (ctx?.sedes ?? []).map((s) => s.clave)
+      if (!clavesDeSedes.length && obj(obj(obj(cfg).apify).fuentes_por_sede).punto_de_venta !== undefined) {
+        const sq = await e.db.from('client_sedes').select('clave').eq('client_id', e.client_id)
+        if (!sq.error) clavesDeSedes = (Array.isArray(sq.data) ? (sq.data as Array<Record<string, unknown>>) : []).map((s) => txt(s.clave)).filter(Boolean)
+      }
+      poner(await brazoDePropios({ client_id: e.client_id, slug: txt(e.cliente.slug) || nombre, config: cfg, ahora: e.ahora, env: e.env ?? process.env, fetch: e.fetch ?? (globalThis.fetch as unknown as Fetch), mesesCerrados: cerrados, parciales, clavesDeSedes }))
     } catch (x) {
       poner({ brazo: 'propios', estado: 'fallo', detalle: String((x as Error).message).slice(0, 160), fichas: [], declarado: [] })
     }

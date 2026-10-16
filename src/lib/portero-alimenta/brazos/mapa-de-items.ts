@@ -2,10 +2,11 @@
  * MAPA DE ÍTEMS POR SINÓNIMO · PURO · agnóstico (cualquier rubro, cualquier punto de venta).
  * Une los nombres de la caja (punto de venta) con los de la carta web SIN esperar al dueño: «deberían coincidir; si alguno es diferente es un sinónimo».
  * Por código, en capas; lo que no se puede afirmar queda DUDOSO o SIN EQUIVALENTE, nunca se inventa.
+ * SOLO POR NOMBRE: el precio NO es criterio (una sede o un canal puede cobrar distinto por el mismo producto: precios de «delivery» frente a precios del local).
  *
  *   exacta          · mismo nombre (sin tildes ni mayúsculas)
  *   sinonimo        · mismas palabras que distinguen el producto, tras quitar la PRESENTACIÓN (con/sin guarnición, envase, porción), abreviaturas conocidas (jr → junior) y el nombre del negocio
- *   probable        · el nombre de la caja es una variante de UN solo ítem de la carta (o a la inversa): sabor, tamaño o forma de entrega; se usa pero se rotula «probable»
+ *   probable        · el nombre de la caja es una variante de FORMA (tamaño, entrega) de UN solo ítem de la carta, o la forma abreviada de UN solo ítem; se usa pero se rotula «probable»
  *   dudosa          · comparte el producto con VARIOS ítems de la carta o difiere en lo que distingue: se muestra el candidato, no se afirma
  *   sin_equivalente · nada de la carta se le parece (extras, envases, platos que la web no lista)
  */
@@ -27,6 +28,8 @@ export const SINONIMOS_DE_ESCRITURA: Record<string, string> = {
 }
 /** palabras que describen la PRESENTACIÓN o la guarnición, no el producto (se ignoran para comparar; se declaran) */
 export const PALABRAS_DE_PRESENTACION = new Set(['con', 'sin', 'tarrina', 'tarrinas', 'envase', 'envases', 'vaso', 'ploma', 'plomo', 'blanca', 'blanco', 'porcion', 'adicional', 'extra', 'ctv', 'unidad', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'en', 'al', 'a', 'o', 'u', 'natural', 'dia'])
+/** palabras que cambian la FORMA de entrega o el tamaño, no el producto: una caja «X grande» es una variante de forma de «X» (cualquier otra palabra agregada hace otro producto: queda dudosa) */
+export const PALABRAS_DE_FORMA = new Set(['grande', 'pequeno', 'mediano', 'familiar', 'personal', 'xl', 'delivery', 'domicilio', 'llevar', 'retiro', 'promo', 'promocion'])
 /** palabras de relleno que nunca distinguen un producto */
 const RELLENO = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y', 'en', 'al', 'a', 'o', 'u', 'con', 'sin'])
 
@@ -48,9 +51,10 @@ function palabras(nombre: string, negocio: string[]): { todas: string[]; clave: 
 const igual = (a: string[], b: string[]): boolean => a.length === b.length && a.every((t) => b.includes(t))
 const contenido = (chico: string[], grande: string[]): boolean => chico.length > 0 && chico.every((t) => grande.includes(t))
 
+/** `precio` se acepta por compatibilidad de la forma de los datos, pero NO se usa para decidir ninguna equivalencia */
 export interface ItemConPrecio { nombre: string; precio?: number | null }
 export interface EntradaDelMapa {
-  /** la caja (catálogo y/o vendidos); el precio, si se conoce, sostiene una variante «probable» */
+  /** la caja (catálogo y/o vendidos); el precio, si viene, se ignora: las equivalencias se deciden solo por nombre */
   pos: Array<string | ItemConPrecio>
   /** la carta web */
   web: Array<string | ItemConPrecio>
@@ -62,12 +66,11 @@ export function armarMapaDeItems(e: EntradaDelMapa): MapaDeItems {
   const negocio = palabras(e.negocio ?? '', []).todas
   const aItem = (x: string | ItemConPrecio): ItemConPrecio => (typeof x === 'string' ? { nombre: x } : x)
   const cartaUnica = [...new Map(e.web.map(aItem).map((w) => [normalizar(w.nombre), w] as const)).values()]
-  const carta = cartaUnica.map((w) => ({ w: w.nombre, precio: typeof w.precio === 'number' ? w.precio : null, ...palabras(w.nombre, negocio), norm: normalizar(w.nombre) }))
+  const carta = cartaUnica.map((w) => ({ w: w.nombre, ...palabras(w.nombre, negocio), norm: normalizar(w.nombre) }))
   const vistos = new Set<string>()
   const equivalencias: EquivalenciaDeItem[] = []
   for (const it of e.pos.map(aItem)) {
     const limpio = it.nombre.trim()
-    const precioPos = typeof it.precio === 'number' ? it.precio : null
     if (!limpio || vistos.has(normalizar(limpio))) continue
     vistos.add(normalizar(limpio))
     const p = { ...palabras(limpio, negocio), norm: normalizar(limpio) }
@@ -85,10 +88,10 @@ export function armarMapaDeItems(e: EntradaDelMapa): MapaDeItems {
     const masGeneral = carta.filter((c) => c.clave.length && contenido(p.clave, c.clave))
     const maximo = Math.max(0, ...masEspecifico.map((c) => c.clave.length))
     const tope = masEspecifico.filter((c) => c.clave.length === maximo)
-    // una variante solo se afirma «probable» si el precio de la caja y el de la carta COINCIDEN: sin esa prueba, una variante con otro precio es otro plato (Ceviche de camarón ≠ Ceviche del negocio)
-    const mismoPrecio = (c: { precio: number | null }): boolean => precioPos !== null && c.precio !== null && Math.abs(precioPos - c.precio) < 0.005
-    if (tope.length === 1 && masGeneral.length === 0 && mismoPrecio(tope[0])) { equivalencias.push(eq('probable', tope[0].w, `variante de «${tope[0].w}» (agrega ${p.clave.filter((t) => !tope[0].clave.includes(t)).join(', ') || 'otra forma de entrega'}) y mismo precio`)); continue }
-    if (masGeneral.length === 1 && masEspecifico.length === 0 && mismoPrecio(masGeneral[0])) { equivalencias.push(eq('probable', masGeneral[0].w, `nombre abreviado de «${masGeneral[0].w}» (la carta agrega ${masGeneral[0].clave.filter((t) => !p.clave.includes(t)).join(', ')}) y mismo precio`)); continue }
+    // una variante solo se afirma «probable» si lo que agrega la caja es de FORMA (tamaño, entrega); si agrega otra palabra (un ingrediente, un sabor) es otro plato y queda dudosa (Ceviche de camarón ≠ Ceviche del negocio)
+    const agregado = tope.length === 1 ? p.clave.filter((t) => !tope[0].clave.includes(t)) : []
+    if (tope.length === 1 && masGeneral.length === 0 && agregado.every((t) => PALABRAS_DE_FORMA.has(t))) { equivalencias.push(eq('probable', tope[0].w, `variante de forma de «${tope[0].w}» (agrega ${agregado.join(', ') || 'otra forma de entrega'}); decidido solo por el nombre`)); continue }
+    if (masGeneral.length === 1 && masEspecifico.length === 0) { equivalencias.push(eq('probable', masGeneral[0].w, `nombre abreviado de «${masGeneral[0].w}» (la carta agrega ${masGeneral[0].clave.filter((t) => !p.clave.includes(t)).join(', ')}); decidido solo por el nombre`)); continue }
     const cand = [...new Set([...tope, ...masGeneral].map((c) => c.w))]
     if (cand.length) { equivalencias.push(eq('dudosa', null, 'se parece a más de un ítem de la carta o difiere en lo que distingue el producto', cand)); continue }
     // 4 · comparten la cabeza del producto pero cada uno agrega algo distinto: dudosa con el candidato más cercano
@@ -138,8 +141,12 @@ export interface MetaDelMapa {
   probables: Record<string, string>
   dudosos: Record<string, string[]>
   sin_equivalente: string[]
+  /** cómo se decidió: solo por el nombre (el precio no cuenta) */
+  criterio: 'solo_por_nombre'
+  /** a qué sede(s) pertenece la carta con la que se armó (la fuente «sitio web»); `null` = todas */
+  carta_de_sedes: string[] | null
 }
-export function metaDelMapa(m: MapaDeItems, ahora: Date): MetaDelMapa {
+export function metaDelMapa(m: MapaDeItems, ahora: Date, o: { cartaDeSedes?: string[] | null } = {}): MetaDelMapa {
   const probables: Record<string, string> = {}
   const dudosos: Record<string, string[]> = {}
   const sin: string[] = []
@@ -148,5 +155,5 @@ export function metaDelMapa(m: MapaDeItems, ahora: Date): MetaDelMapa {
     else if (q.certeza === 'dudosa') dudosos[q.pos] = q.candidatos ?? []
     else if (q.certeza === 'sin_equivalente') sin.push(q.pos)
   }
-  return { origen: 'automático por sinónimo', generado_en: ahora.toISOString(), resumen: m.resumen, probables, dudosos, sin_equivalente: sin }
+  return { origen: 'automático por sinónimo', generado_en: ahora.toISOString(), resumen: m.resumen, probables, dudosos, sin_equivalente: sin, criterio: 'solo_por_nombre', carta_de_sedes: o.cartaDeSedes ?? null }
 }

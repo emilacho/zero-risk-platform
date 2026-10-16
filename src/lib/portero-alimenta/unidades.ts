@@ -41,6 +41,8 @@ export interface Unidad {
   de_ficha_propia?: boolean
   /** una CIFRA de la cuenta o la ficha propia (puntaje, reseñas, seguidores, publicaciones): se archiva como ficha con atributo `metrica:<red>:<nombre>`; la nueva REEMPLAZA a la anterior por código (sin modelo) y la vieja queda archivada con su fecha */
   metrica?: { nombre: string; valor: number; unidad: string }
+  /** la sede(s) a la que pertenece la fuente de esta unidad (dato `config.apify.fuentes_por_sede`); ausente = todas las sedes. La pone el orquestador, no el raspado. */
+  sedes?: string[] | null
 }
 
 export interface FilaCruda { id: string; apify_function: string; params?: unknown; respuesta?: unknown; ensayo?: boolean | null; created_at: string; metadata?: unknown }

@@ -141,14 +141,27 @@ describe('mapa de ítems por sinónimo · (cont.)', () => {
     expect(una('Chifle')).toMatchObject({ certeza: 'exacta', web: 'Chifle' })
     expect(una('Chifle/pan adicional')).toMatchObject({ certeza: 'dudosa', web: null, candidatos: ['Chifle', 'Pan'] })
   })
-  it('una variante solo es «probable» si el precio coincide; con otro precio (o sin precio) es dudosa: un plato distinto no se disfraza de sinónimo', () => {
+  it('el PRECIO no decide nada: una variante de forma es «probable» con cualquier precio (o sin él); lo que agrega un ingrediente o un sabor es dudoso', () => {
     const web = [{ nombre: 'Ceviche Náufrago', precio: 7 }, { nombre: 'Cerveza grande', precio: 3 }, { nombre: 'Jugo natural del día', precio: 2 }]
     expect(una('Cerveza', { precio: 3, web })).toMatchObject({ certeza: 'probable', web: 'Cerveza grande' })
-    expect(una('Cerveza', { precio: 2.5, web })).toMatchObject({ certeza: 'dudosa', web: null, candidatos: ['Cerveza grande'] })
-    expect(una('Cerveza', { web })).toMatchObject({ certeza: 'dudosa' })
+    expect(una('Cerveza', { precio: 2.5, web })).toMatchObject({ certeza: 'probable', web: 'Cerveza grande' })
+    expect(una('Cerveza', { web })).toMatchObject({ certeza: 'probable', web: 'Cerveza grande' })
+    // agrega «camarón»: otro plato aunque el precio fuera igual
+    expect(una('Ceviche de camarón', { precio: 7, web })).toMatchObject({ certeza: 'dudosa', web: null, candidatos: ['Ceviche Náufrago'] })
     expect(una('Ceviche de camarón', { precio: 8.5, web })).toMatchObject({ certeza: 'dudosa', web: null })
-    expect(una('Jugo Maracuyá', { precio: 2, web })).toMatchObject({ certeza: 'probable', web: 'Jugo natural del día' })
+    expect(una('Jugo Maracuyá', { precio: 2, web })).toMatchObject({ certeza: 'dudosa', web: null })
     expect(una('Jugo Pequeno Jamaica', { precio: 1, web })).toMatchObject({ certeza: 'dudosa' })
+    // lo que agrega la caja es de forma (tamaño): variante de forma
+    expect(una('Ceviche grande', { precio: 99, web })).toMatchObject({ certeza: 'probable', web: 'Ceviche Náufrago' })
+  })
+  it('mismos nombres con otros precios dan exactamente el mismo mapa (el precio de una sede no mueve el de otra)', () => {
+    const pos = ['Cerveza', 'Encebollado con chifle', 'Cola', 'Ceviche de camarón', 'Jugo Maracuyá']
+    const carta = (k: number) => [{ nombre: 'Cerveza grande', precio: 3 * k }, { nombre: 'Encebollado Náufrago', precio: 4 * k }, { nombre: 'Cola grande', precio: 1 * k }, { nombre: 'Cola pequeña', precio: 0.5 * k }, { nombre: 'Ceviche Náufrago', precio: 7 * k }, { nombre: 'Jugo natural del día', precio: 2 * k }]
+    const a = armarMapaDeItems({ pos: pos.map((nombre) => ({ nombre, precio: 3 })), web: carta(1), negocio: 'Náufrago' })
+    const b = armarMapaDeItems({ pos: pos.map((nombre) => ({ nombre, precio: 100 })), web: carta(1.4), negocio: 'Náufrago' })
+    const c = armarMapaDeItems({ pos, web: carta(1), negocio: 'Náufrago' })
+    expect(b.equivalencias).toEqual(a.equivalencias)
+    expect(c.equivalencias).toEqual(a.equivalencias)
   })
   it('lo que coincide con varios ítems de la carta es dudoso y lista los candidatos; lo que la carta no tiene queda sin equivalente', () => {
     expect(una('Cola')).toMatchObject({ certeza: 'dudosa', web: null, candidatos: ['Cola grande', 'Cola pequeña'] })

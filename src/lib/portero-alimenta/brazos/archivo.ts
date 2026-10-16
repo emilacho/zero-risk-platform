@@ -9,6 +9,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type { Db } from '../alimentar'
 import type { FichaDeBrazo } from './tipos'
+import { claveDeAlcance, sedesDeFicha } from '../sedes-fuentes'
 
 type Fila = Record<string, unknown>
 export interface ResultadoDeArchivo {
@@ -70,7 +71,7 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
       const nueva = id()
       const w = await o.db.from('cerebro_fichas').insert({
         id: nueva, client_id: cid, ingreso_id: ingreso, ref: f.ref, clase: f.clase, titulo: f.titulo.slice(0, 160), que_es: f.contenido.slice(0, 200), contenido: f.contenido, origen: f.origen,
-        fecha_fuente: f.fecha_fuente, reconfirmado_en: f.observado_en, plazo: null, vigente_hasta: f.vigente_hasta, version_de: reemplaza ? String(vigente!.id) : null, huella,
+        fecha_fuente: f.fecha_fuente, reconfirmado_en: f.observado_en, plazo: null, sede: claveDeAlcance(sedesDeFicha({ datos: f.datos })) || null, vigente_hasta: f.vigente_hasta, version_de: reemplaza ? String(vigente!.id) : null, huella,
         // lo de un competidor, del mercado o de la zona es SOBRE terceros (los lectores lo marcan); lo del cliente es suyo
         propiedad: f.alcance === 'cliente' ? 'propia' : 'ajena', porque: `brazo ${f.brazo}: dato por código, sin modelo`, juzgado_por: 'regla',
         provenance_tag: { type: 'evidence', source: `brazo_${f.brazo}`, trust_level: 'untrusted', alcance: f.alcance, ingress_route: '/api/brain/alimentar/procesar', ...(f.datos ? { datos: f.datos } : {}), ...(f.metrica ? { metrica: f.metrica } : {}) },

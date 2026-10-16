@@ -12,7 +12,7 @@ import type { RetiroDeBrazo } from './archivo'
 import { type Competidor } from './competencia'
 import { candidatosDeSede, type ResultadoDeCandidatos } from './descubrir'
 import { juzgarCompetenciaDeSede, type ResultadoDelJuicioDeSede } from './juez-competencia'
-import { CAMPO_ESTADO_DE_LA_SEDE, radioDe, sedesConPunto, type FilaDeMapas, type SedeConPunto } from './sedes'
+import { CAMPO_ESTADO_DE_LA_SEDE, radioDeSede, sedesConPunto, type FilaDeMapas, type SedeConPunto } from './sedes'
 import { DIA_EN_MS, slugDe, type FichaDeBrazo } from './tipos'
 import type { RespuestaDeLlamada } from '../juez'
 
@@ -71,7 +71,7 @@ export async function cargarContextoDeBrazos(db: Db, clientId: string, cliente: 
   if (fv.error) errores.push(`cerebro_fichas: ${fv.error.message}`)
   const vigentes = lista(fv.data).filter((f) => typeof f.ref === 'string' && (f.ref as string).startsWith('brazo:'))
   const filas = lista(rr.data) as unknown as ContextoDeBrazos['filas']
-  const sedes = sedesConPunto({ nombreDelCliente: txt(cliente.name), sedes: lista(sd.data).map((s) => ({ id: String(s.id), clave: String(s.clave), ciudad: String(s.ciudad) })), datos: lista(da.data).map((d) => ({ sede_id: d.sede_id as string, campo: String(d.campo), valor_texto: (d.valor_texto as string) ?? null, observado_en: (d.observado_en as string) ?? null })), config: cliente.config, filas })
+  const sedes = sedesConPunto({ nombreDelCliente: txt(cliente.name), sedes: lista(sd.data).map((s) => ({ id: String(s.id), clave: String(s.clave), ciudad: String(s.ciudad) })), datos: lista(da.data).map((d) => ({ sede_id: d.sede_id as string, campo: String(d.campo), valor_texto: (d.valor_texto as string) ?? null, observado_en: (d.observado_en as string) ?? null })), config: cliente.config, filas, familias: familiasDelRubro(txt(cliente.industry) || null) })
   const hace7 = ahora.getTime() - 7 * DIA_EN_MS
   const ubicadas = new Set<string>()
   for (const f of filas) {
@@ -129,7 +129,7 @@ export async function descubrirYJuzgar(e: EntradaDeSistematica): Promise<Resulta
   let gastado = 0
   if (!e.ctx.sedes.length) out.declarado.push('el cliente no tiene sedes: la competencia por sede no aplica')
   for (const sede of e.ctx.sedes) {
-    const radio = radioDe(familias, sede.tipo)
+    const radio = radioDeSede(familias, sede)
     if (radio === null) { out.por_sede[sede.clave] = { estado: 'no_aplica', candidatos: 0, competidores: 0, costo_usd: 0, detalle: 'el rubro no compite por cercanía en esta sede' }; continue }
     if (!debeEvaluarse(e.ctx.vigentes, sede.clave, e.ahora, e.forzar)) { out.por_sede[sede.clave] = { estado: 'al_dia', candidatos: 0, competidores: 0, costo_usd: 0, detalle: `evaluada hace menos de ${DIAS_ENTRE_EVALUACIONES} días` }; continue }
     const c: ResultadoDeCandidatos = candidatosDeSede({ sede, filas: e.ctx.filas, nombreDelCliente: e.nombreDelCliente, familias, radioKm: radio, listaDelAlta })

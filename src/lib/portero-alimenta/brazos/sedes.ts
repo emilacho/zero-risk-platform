@@ -11,6 +11,7 @@
  */
 import { normalizar } from '../../manual/texto'
 import { MARCA_DE_BRAZO, slugDe } from './tipos'
+import { canalDeLaSede, type CanalDeLaSede } from '../sedes-fuentes'
 
 export interface SedeConPunto {
   clave: string
@@ -19,6 +20,9 @@ export interface SedeConPunto {
   lng: number | null
   origen_del_punto: 'config' | 'ficha_de_mapas' | 'direccion_aproximada' | null
   tipo: 'local' | 'solo_domicilio' | 'desconocido'
+  /** el canal de la sede (dato del alta o del dueño; si falta se deduce y `canal_origen` lo dice) */
+  canal?: CanalDeLaSede
+  canal_origen?: 'dato' | 'deducido'
   direccion: string | null
   /** `por_abrir`: la sede aún no atiende al público (dato de su ficha, `estado_de_la_sede`): no se vigila competencia ni posición por sede hasta que el dueño la marque abierta */
   estado?: 'abierta' | 'por_abrir'
@@ -57,6 +61,17 @@ export function radioDe(familias: string[], tipo: SedeConPunto['tipo']): number 
   const validos = radios.map((r) => r[clave]).filter((r): r is number => typeof r === 'number')
   return validos.length ? Math.max(...validos) : null
 }
+/** el radio de UNA sede según su canal: solo entrega → radio de reparto; local → radio de local; ambos → el mayor de los dos; sin local → no compite por cercanía (`null`) */
+export function radioDeSede(familias: string[], s: Pick<SedeConPunto, 'tipo' | 'canal'>): number | null {
+  const canal: CanalDeLaSede = s.canal ?? (s.tipo === 'solo_domicilio' ? 'solo_entrega' : 'local')
+  if (canal === 'sin_local') return null
+  if (canal === 'solo_entrega') return radioDe(familias, 'solo_domicilio')
+  if (canal === 'local') return radioDe(familias, 'local')
+  const l = radioDe(familias, 'local'), d = radioDe(familias, 'solo_domicilio')
+  return l === null ? d : d === null ? l : Math.max(l, d)
+}
+/** ¿el rubro compite por cercanía en algún canal? (si no, una sede sin dato de canal se deduce «sin local») */
+export const rubroCompitePorCercania = (familias: string[]): boolean => radioDe(familias, 'local') !== null || radioDe(familias, 'solo_domicilio') !== null
 
 export interface FilaDeMapas { apify_function: string; params?: unknown; respuesta?: unknown; ensayo?: boolean | null; created_at: string }
 export interface EntradaDeSedes {
@@ -66,6 +81,8 @@ export interface EntradaDeSedes {
   datos: Array<{ sede_id?: string | null; campo: string; valor_texto: string | null; observado_en?: string | null }>
   config: unknown
   filas: FilaDeMapas[]
+  /** familias del rubro (para deducir el canal cuando falta el dato); sin ellas se asume que el rubro compite por cercanía */
+  familias?: string[]
 }
 
 /** el campo de la ficha de la sede que dice si ya atiende al público */
@@ -89,7 +106,8 @@ export function sedesConPunto(e: EntradaDeSedes): SedeConPunto[] {
     const dato = (c: string) => txt(datos.find((d) => d.campo === c)?.valor_texto)
     const tipoT = normalizar(dato('tipo_de_atencion'))
     const tipo: SedeConPunto['tipo'] = /solo domicilio|sin local/.test(tipoT) ? 'solo_domicilio' : /local|restaurante|tienda|oficina|consultorio/.test(tipoT) ? 'local' : 'desconocido'
-    const base = { clave: s.clave, ciudad: s.ciudad, tipo, direccion: dato('direccion') || null, estado: estadoDeLaSede(datos) }
+    const can = canalDeLaSede({ clave: s.clave, config: e.config, datos, rubroCompitePorCercania: e.familias ? rubroCompitePorCercania(e.familias) : true })
+    const base = { clave: s.clave, ciudad: s.ciudad, tipo, canal: can.canal, canal_origen: can.origen, direccion: dato('direccion') || null, estado: estadoDeLaSede(datos) }
     const c = punto(cfg[s.clave])
     if (c) return { ...base, ...c, origen_del_punto: 'config' }
     // la ficha PROPIA: título = el nombre del cliente y ciudad = la de la sede (un homónimo de otra ciudad no vale)
