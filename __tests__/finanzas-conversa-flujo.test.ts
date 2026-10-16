@@ -105,8 +105,30 @@ describe('el comportamiento: pasa SU workflow_id real y su ejecución', () => {
     expect(r.llamadasHttp[0].cuerpo.accion).toBe('leer')
     expect(salidaFinal(r)).toMatchObject({ ok: true, accion: 'leer' })
   })
+  for (const accion of ['preguntar', 'recoger']) {
+    it(`${accion}: una llamada con el encargo, y el workflow_id y workflow_execution_id de ESTE flujo (los exige la puerta del dueño)`, async () => {
+      const r = await correrCon({ accion, encargo_id: 'enc-1', dry_run: false }, () => ({ statusCode: 200, body: { enviado: false, motivo: 'buzon_apagado' } }))
+      expect(r.llamadasHttp).toHaveLength(1)
+      expect(r.llamadasHttp[0].cuerpo).toEqual({ accion, dry_run: false, workflow_id: 'WF_PRUEBA', workflow_execution_id: 'EX_PRUEBA', encargo_id: 'enc-1' })
+      expect(r.llamadasHttp[0].cabeceras['x-api-key']).toBe('llave-de-prueba')
+      expect(salidaFinal(r)).toMatchObject({ ok: true, accion })
+    })
+    it(`${accion}: sin encargo o con el encargo en blanco NO se llama a la ruta`, async () => {
+      for (const body of [{ accion, dry_run: false }, { accion, dry_run: false, encargo_id: ' ' }, { accion, encargo_id: 'e' }]) {
+        const r = await correrCon(body as Json, NO)
+        expect(r.llamadasHttp).toEqual([])
+        expect(salidaFinal(r)).toMatchObject({ ok: false, motivo: 'sobre_invalido' })
+      }
+    })
+    it(`${accion}: la ruta apagada (409) o con la configuración ilegible (503) NUNCA lanza`, async () => {
+      for (const [status, error] of [[409, 'conversa_apagada'], [503, 'config_ilegible'], [400, 'entrada_invalida']] as Array<[number, string]>) {
+        const r = await correrCon({ accion, encargo_id: 'e', dry_run: false }, () => ({ statusCode: status, body: { error } }))
+        expect(salidaFinal(r), String(status)).toMatchObject({ ok: false, motivo: error })
+      }
+    })
+  }
   it('las acciones son exactamente las de la ruta', () => {
-    expect(ACCIONES).toEqual(['abrir', 'avanzar', 'leer'])
+    expect(ACCIONES).toEqual(['abrir', 'avanzar', 'leer', 'preguntar', 'recoger'])
   })
   for (const [nombre, body] of [
     ['sin acción', { dry_run: true, encargo_id: 'e' }],
