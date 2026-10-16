@@ -49,7 +49,8 @@ describe('sin faltantes la respuesta queda IGUAL', () => {
     const t = await decisionCon([])
     const sin = await razonar(armar(t).deps, cuerpo())
     const con = await razonar(armar(t, contexto()).deps, cuerpo())
-    expect(con.cuerpo).toEqual(sin.cuerpo)
+    // `duracion_ms` es el reloj de cada llamada (0 o 1 ms según la carga): no es parte de la respuesta que se compara
+    expect({ ...con.cuerpo, duracion_ms: 0 }).toEqual({ ...sin.cuerpo, duracion_ms: 0 })
     expect(decision(con)).not.toHaveProperty('faltantes_con_forma')
     expect(con.cuerpo).not.toHaveProperty('recados')
   })

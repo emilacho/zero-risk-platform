@@ -28,7 +28,8 @@ export async function clientesActivos(db: Db): Promise<{ ok: true; datos: Result
   for (const c of lista(q.data)) {
     const id = String(c.id)
     const motivos: string[] = []
-    if (/^prueba/i.test(id) || /^prueba/i.test(String(c.name ?? ''))) motivos.push('cliente de prueba')
+    // la bandera es explícita en la ficha (`config.es_de_prueba = true`); un cliente real llamado «Pruebas…» ya no se excluye por su nombre. Los ids de las pruebas del portero (`prueba-…`) siguen siendo de prueba.
+    if (/^prueba/i.test(id) || (esObjeto(c.config) && c.config.es_de_prueba === true)) motivos.push('cliente de prueba')
     if (c.archived_at) motivos.push('archivado')
     if (['churned', 'archived', 'inactive', 'lost', 'cancelled'].includes(String(c.status))) motivos.push(`dado de baja (${String(c.status)})`)
     const mb = await db.from('client_brand_books').select('id').eq('client_id', id).limit(1)

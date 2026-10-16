@@ -25,7 +25,7 @@ const VIGENCIA_DIAS = 14
 /** término genérico por familia de rubro (dato): se usa cuando el dueño no declaró los suyos y el rubro no da uno limpio */
 export const TERMINO_GENERICO_POR_FAMILIA: Record<string, string> = {
   comida: 'restaurante', alojamiento: 'hotel', turismo: 'tours', software: 'software', comercio: 'tienda', salud: 'clínica', belleza_bienestar: 'peluquería', automotriz: 'taller mecánico',
-  inmobiliaria: 'inmobiliaria', educacion: 'academia', servicios_hogar: 'servicio técnico', servicios_profesionales: 'consultoría', finanzas: 'cooperativa',
+  inmobiliaria: 'inmobiliaria', educacion: 'academia', servicios_hogar: 'servicio técnico', servicios_profesionales: 'consultoría', finanzas: 'cooperativa', industria_b2b: 'proveedor industrial',
 }
 const RELLENOS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y', 'e', 'en', 'para', 'con', 'costero', 'costera', 'ecuatoriano', 'ecuatoriana', 'peruano', 'peruana', 'colombiano', 'colombiana', 'mexicano', 'mexicana', 'argentino', 'argentina', 'chileno', 'chilena', 'uruguayo', 'uruguaya', 'paraguayo', 'paraguaya', 'boliviano', 'boliviana', 'espanol', 'espanola', 'artesanal', 'tradicional', 'local'])
 
@@ -57,7 +57,7 @@ export function terminosDeDemanda(e: EntradaDeTerminos): string[] {
   return salida.slice(0, MAX_TERMINOS_DE_DEMANDA)
 }
 
-export interface EntradaDeAccionDeDemanda { ahora: Date; terminos: string[]; ciudad?: string | null; mercado?: string | null; forzar?: boolean }
+export interface EntradaDeAccionDeDemanda { /** idioma de la búsqueda (por país; por omisión español) */ idioma?: string; ahora: Date; terminos: string[]; ciudad?: string | null; mercado?: string | null; forzar?: boolean }
 export function accionDeDemanda(e: EntradaDeAccionDeDemanda): { accion: AccionDeBrazo | null; no_cubierta: string | null } {
   const donde = String(e.ciudad ?? '').trim() || String(e.mercado ?? '').trim()
   if (!donde) return { accion: null, no_cubierta: 'demanda: sin ciudad ni mercado en la ficha no se busca «sin marca» (saldría un ranking de cualquier lugar)' }
@@ -66,7 +66,7 @@ export function accionDeDemanda(e: EntradaDeAccionDeDemanda): { accion: AccionDe
   return {
     accion: {
       fuente: 'demanda', funcion: 'google_maps_scraper',
-      params: { searchStringsArray: e.terminos, locationQuery: donde, resultsLimit: LUGARES_POR_BUSQUEDA, language: 'es', [MARCA_DE_BRAZO]: 'demanda' },
+      params: { searchStringsArray: e.terminos, locationQuery: donde, resultsLimit: LUGARES_POR_BUSQUEDA, language: e.idioma ?? 'es', [MARCA_DE_BRAZO]: 'demanda' },
       metadata: { target_kind: 'third_party', llamado_por: 'portero-alimentar' }, usd_max: USD_MAX_DE_DEMANDA, medido: true, objetivo: `${e.terminos.join(' | ')} · ${donde}`,
     },
     no_cubierta: null,
@@ -78,7 +78,7 @@ export const TERMINOS_POR_SEDE = 2
 export const LUGARES_POR_BUSQUEDA_Y_SEDE = 10
 export const USD_POR_LUGAR = 0.003
 export const USD_DE_UBICAR = 0.01
-export interface EntradaDeDemandaPorSede { ahora: Date; terminos: string[]; sedes: SedeConPunto[]; familias: string[]; forzar?: boolean; ubicadasEnLosUltimos7Dias?: ReadonlySet<string> }
+export interface EntradaDeDemandaPorSede { /** idioma de la búsqueda (por país; por omisión español) */ idioma?: string; ahora: Date; terminos: string[]; sedes: SedeConPunto[]; familias: string[]; forzar?: boolean; ubicadasEnLosUltimos7Dias?: ReadonlySet<string> }
 export function accionesDeDemandaPorSede(e: EntradaDeDemandaPorSede): { acciones: AccionDeBrazo[]; no_cubiertas: Array<{ fuente: string; por_que: string }> } {
   const acciones: AccionDeBrazo[] = []
   const no_cubiertas: Array<{ fuente: string; por_que: string }> = []
@@ -91,7 +91,7 @@ export function accionesDeDemandaPorSede(e: EntradaDeDemandaPorSede): { acciones
     if (radio === null) { no_cubiertas.push({ fuente: `demanda · ${s.clave}`, por_que: 'el rubro no compite por cercanía en esta sede: no aplica por sede' }); continue }
     if (s.lat === null || s.lng === null) {
       if (s.direccion && !e.ubicadasEnLosUltimos7Dias?.has(s.clave)) {
-        acciones.push({ fuente: 'demanda', funcion: 'google_maps_scraper', params: { searchStringsArray: [`${s.direccion}, ${s.ciudad}`], locationQuery: s.ciudad, resultsLimit: 1, language: 'es', [MARCA_DE_BRAZO]: marcaDeUbicar(s.clave) },
+        acciones.push({ fuente: 'demanda', funcion: 'google_maps_scraper', params: { searchStringsArray: [`${s.direccion}, ${s.ciudad}`], locationQuery: s.ciudad, resultsLimit: 1, language: e.idioma ?? 'es', [MARCA_DE_BRAZO]: marcaDeUbicar(s.clave) },
           metadata: meta, usd_max: USD_DE_UBICAR, medido: false, objetivo: `ubicar la sede ${s.clave} · ${s.direccion}` })
       }
       no_cubiertas.push({ fuente: `demanda · ${s.clave}`, por_que: 'la sede no tiene punto (ni ficha de Mapas ni coordenadas): se mira por el nombre de la ciudad, con el sesgo conocido' })
@@ -100,7 +100,7 @@ export function accionesDeDemandaPorSede(e: EntradaDeDemandaPorSede): { acciones
     const geo = s.lat !== null && s.lng !== null ? { customGeolocation: { type: 'Point', coordinates: [s.lng, s.lat], radiusKm: radio } } : {}
     acciones.push({
       fuente: 'demanda', funcion: 'google_maps_scraper',
-      params: { searchStringsArray: terminos, locationQuery: s.ciudad, ...geo, resultsLimit: LUGARES_POR_BUSQUEDA_Y_SEDE, language: 'es', [MARCA_DE_BRAZO]: `demanda:${s.clave}` },
+      params: { searchStringsArray: terminos, locationQuery: s.ciudad, ...geo, resultsLimit: LUGARES_POR_BUSQUEDA_Y_SEDE, language: e.idioma ?? 'es', [MARCA_DE_BRAZO]: `demanda:${s.clave}` },
       metadata: meta, usd_max: Math.round(terminos.length * LUGARES_POR_BUSQUEDA_Y_SEDE * USD_POR_LUGAR * 1e6) / 1e6, medido: true, objetivo: `${terminos.join(' | ')} · sede ${s.clave}${geo.customGeolocation ? ` · radio ${radio} km` : ' · por ciudad'}`,
     })
   }

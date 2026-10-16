@@ -5,6 +5,7 @@
  * (actor nuevo, interruptor APAGADO). TODO DIARIO (firma 14-oct de Emilio: sin rotación). El corte por tope y por número de corridas se hace AQUÍ, en código, con motivo.
  * El modelo NUNCA manda gasto: propone texto de búsqueda; lo que se pide pasa por las listas y los topes de este archivo.
  */
+import { idiomaDeBusqueda } from './datos'
 import { planDeFuentesPublicas, type EntradaDelPlan as EntradaDeFuentes, type LlamadaDeFuente } from '../fuentes-publicas/plan'
 import { recortarAlTope } from '../cerebro/diario/topes'
 import { accionesDeBrazos, hayBrazoActivo, type BrazosActivos } from './brazos'
@@ -20,6 +21,8 @@ export const MAX_RESENAS_POR_CORRIDA = 100
 /** directorios por familia de rubro: DATO (se amplía sin tocar la lógica); una consulta de búsqueda por entrada */
 export const DIRECTORIOS_POR_FAMILIA: Record<string, string[]> = {
   comida: ['tripadvisor', 'restaurantguru'], alojamiento: ['tripadvisor', 'booking'], salud: ['doctoralia'], servicios_profesionales: ['paginas amarillas'], software: ['g2', 'capterra'],
+  // P8 (16-oct): las familias que faltaban. Solo entra el primero (la búsqueda del nombre + ciudad ya es la primera de las 2 consultas): ≈ +US$ 0,003 por cliente y día.
+  educacion: ['opiniones padres'], automotriz: ['yelp'], belleza_bienestar: ['booksy'], comercio: ['trustpilot'], inmobiliaria: ['inmuebles24'], servicios_hogar: ['yelp'], finanzas: ['trustpilot'], turismo: ['tripadvisor'],
 }
 const MAX_CONSULTAS_DE_PRENSA = 2
 
@@ -77,6 +80,7 @@ const accion = (fuente: FuenteDelPortero, funcion: string, params: Record<string
 }
 
 export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
+  const idioma = idiomaDeBusqueda(e.pais)
   const nombre = String(e.cliente.name ?? '').trim()
   const ciudad = String(e.ciudad ?? '').trim()
   const cfg = obj(obj(e.cliente.config).apify)
@@ -92,7 +96,7 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
   else noCubiertas.push({ fuente: 'instagram', por_que: 'el alta no trae la cuenta propia de Instagram' })
 
   // Mapas propio (+ reseñas del propio mapa): por nombre ENTERO y CIUDAD; sin ciudad ni ficha conocida no se paga a ciegas (precedente: el homónimo de Gualaceo)
-  if (e.mapas?.url || e.mapas?.placeId) candidatas.push(accion('mapas', 'own_google_maps_profile', e.mapas.url ? { startUrls: [{ url: e.mapas.url }], language: 'es' } : { placeIds: [e.mapas.placeId], language: 'es' }, e.mapas.url ?? e.mapas.placeId ?? ''))
+  if (e.mapas?.url || e.mapas?.placeId) candidatas.push(accion('mapas', 'own_google_maps_profile', e.mapas.url ? { startUrls: [{ url: e.mapas.url }], language: idioma } : { placeIds: [e.mapas.placeId], language: idioma }, e.mapas.url ?? e.mapas.placeId ?? ''))
   else if (nombre && ciudad) {
     // dedupe por la forma NORMALIZADA (sin mayúsculas ni tildes): «Olón», «olon» y «OLÓN» son la misma sede; se conserva la primera escritura
     const vistas = new Set<string>()
@@ -101,7 +105,7 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
     if (ciudades.length > 3) noCubiertas.push({ fuente: 'mapas', por_que: `el negocio tiene ${ciudades.length} ciudades y la ficha propia de Mapas solo se busca en las 3 primeras (tope de costo); no se buscan: ${ciudades.slice(3).join(', ')}` })
     ciudades.splice(3)
     // las reseñas NO vienen en la corrida de Mapas (medido 14-oct: aunque se pida `maxReviews`): van en una tanda aparte (`fase: 'tanda2'`) con la dirección de la ficha
-    const m = accion('mapas', 'own_google_maps_profile', { searchStringsArray: ciudades.map((c) => `${nombre} ${c}`), maxCrawledPlacesPerSearch: 1, language: 'es' }, ciudades.map((c) => `${nombre} · ${c}`).join(' | '))
+    const m = accion('mapas', 'own_google_maps_profile', { searchStringsArray: ciudades.map((c) => `${nombre} ${c}`), maxCrawledPlacesPerSearch: 1, language: idioma }, ciudades.map((c) => `${nombre} · ${c}`).join(' | '))
     // el máximo declarado es POR BÚSQUEDA (una por sede): el costo de la corrida es n_sedes × ese máximo
     m.usd_max = Math.round(m.usd_max * ciudades.length * 1e6) / 1e6
     candidatas.push(m)
@@ -134,12 +138,12 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
   if (nombre && ciudad) {
     const consultas = [`"${nombre}" ${ciudad}`]
     for (const fam of fp.familias) for (const d of DIRECTORIOS_POR_FAMILIA[fam] ?? []) consultas.push(`"${nombre}" ${ciudad} ${d}`)
-    for (const q of consultas.slice(0, MAX_CONSULTAS_DE_PRENSA)) candidatas.push(accion('prensa', 'google_serp_scraper', { queries: q, maxPagesPerQuery: 1, resultsPerPage: 10, languageCode: 'es' }, q, 'third_party'))
+    for (const q of consultas.slice(0, MAX_CONSULTAS_DE_PRENSA)) candidatas.push(accion('prensa', 'google_serp_scraper', { queries: q, maxPagesPerQuery: 1, resultsPerPage: 10, languageCode: idioma }, q, 'third_party'))
   } else noCubiertas.push({ fuente: 'prensa', por_que: 'sin nombre y ciudad no se buscan artículos ni menciones: arriesgarían un homónimo' })
 
   // las búsquedas que el portero propone (interruptor; ≤ 3; ya validadas por código)
   if (e.interruptores.proponer_busquedas) {
-    for (const q of (e.busquedas_propuestas ?? []).slice(0, MAX_BUSQUEDAS_PROPUESTAS_POR_DIA)) candidatas.push(accion('busqueda_propuesta', 'google_serp_scraper', { queries: q, maxPagesPerQuery: 1, resultsPerPage: 10, languageCode: 'es' }, q, 'third_party'))
+    for (const q of (e.busquedas_propuestas ?? []).slice(0, MAX_BUSQUEDAS_PROPUESTAS_POR_DIA)) candidatas.push(accion('busqueda_propuesta', 'google_serp_scraper', { queries: q, maxPagesPerQuery: 1, resultsPerPage: 10, languageCode: idioma }, q, 'third_party'))
   }
   // menciones de terceros: actor nuevo detrás de su interruptor (apagado)
   if (e.interruptores.menciones) {

@@ -12,7 +12,7 @@
 
 export type IdDeFamilia =
   | 'comida' | 'alojamiento' | 'turismo' | 'software' | 'apps_moviles' | 'comercio' | 'servicios_profesionales' | 'salud' | 'belleza_bienestar'
-  | 'automotriz' | 'inmobiliaria' | 'educacion' | 'servicios_hogar' | 'finanzas' | 'general'
+  | 'automotriz' | 'inmobiliaria' | 'educacion' | 'servicios_hogar' | 'finanzas' | 'industria_b2b' | 'general'
 
 /** claves (sin tildes, minúsculas) que ponen un rubro en una familia · un rubro puede caer en varias · PALABRA ENTERA (`src/lib/texto/coincidencia.ts`): «bar» no es «barbería»; una raíz se pide EXPLÍCITA con `*` */
 export const FAMILIAS: Record<Exclude<IdDeFamilia, 'general'>, string[]> = {
@@ -29,6 +29,8 @@ export const FAMILIAS: Record<Exclude<IdDeFamilia, 'general'>, string[]> = {
   inmobiliaria: ['inmobiliaria', 'bienes raices', 'propiedades', 'real estate', 'arriendo', 'venta de casas', 'corretaje'],
   educacion: ['escuela', 'colegio', 'academia', 'curso', 'universidad', 'educacion', 'instituto', 'capacitacion', 'tutor', 'idiomas', 'bootcamp', 'guarderia', 'kinder', 'preescolar', 'autoescuela', 'clases'],
   servicios_hogar: ['plomer*', 'electricista', 'limpieza', 'jardiner*', 'mudanza', 'reparacion', 'carpinter*', 'pintura', 'cerrajer*', 'fumigacion', 'mantenimiento del hogar', 'lavanderi*', 'tapicer*', 'herrer*', 'soldadur*', 'vidrier*', 'gasfiter*', 'aire acondicionado'],
+  // P5 (16-oct): negocios que venden a otras empresas y no compiten por cercanía (extintores, seguridad industrial, mayoristas, maquinaria…). Una palabra de otra familia («fábrica de helados») sigue sumando la suya.
+  industria_b2b: ['extintor*', 'seguridad industrial', 'seguridad contra incendios', 'proteccion contra incendios', 'distribuidora', 'mayorista', 'proveedor industrial', 'maquinaria', 'equipos industriales', 'insumos industriales', 'manufactura', 'transporte de carga', 'logistica'],
   finanzas: ['banco', 'cooperativa', 'seguros', 'financier*', 'credito', 'fintech', 'inversion', 'prestamos', 'cambio de divisas'],
 }
 

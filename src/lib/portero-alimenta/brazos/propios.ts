@@ -406,13 +406,19 @@ export interface EntradaDelBrazoPropios {
   clavesDeSedes?: string[]
   /** horas de UTC de la hora local del cliente; sin dato, la de Ecuador continental (UTC−5) */
   desfaseHoras?: number
+  /** las llaves ya resueltas del cliente (de la base cifrada o de sus variables, P1); sin esto, solo sus variables `CLIENTE_<SLUG>_*` */
+  credenciales?: CredencialesDelCliente
 }
 export async function brazoDePropios(o: EntradaDelBrazoPropios): Promise<ResultadoDeUnBrazo> {
-  const cred = credencialesDe(o.slug, o.env)
+  const cred = o.credenciales ?? credencialesDe(o.slug, o.env)
   const declarado: string[] = []
   const fichas: FichaDeBrazo[] = []
   const mapa = obj(obj(obj(o.config).apify).loyverse_mapa_de_items) as Record<string, string>
-  if (cred.loyverse_token) {
+  // P3 · el punto de venta del cliente es un DATO (`config.apify.punto_de_venta`: loyverse · otro · ninguno); sin dato, lo de siempre (Loyverse si hay llave)
+  const pdv = String(obj(obj(o.config).apify).punto_de_venta ?? '').trim().toLowerCase()
+  if (pdv === 'ninguno') declarado.push('punto de venta: el cliente no tiene (config.apify.punto_de_venta = ninguno): no aplica')
+  else if (pdv === 'otro') declarado.push('punto de venta: el cliente usa un sistema distinto de Loyverse y no hay lector automático; sus ventas entran por el importador de exportaciones (CSV con fecha, total e ítem) en raw/entrada')
+  else if (cred.loyverse_token) {
     const dh = o.desfaseHoras ?? DESFASE_HORARIO_POR_DEFECTO_HORAS
     const enCurso = mesLocalDe(o.ahora, dh)
     const dias = Number(o.env.PORTERO_LOYVERSE_HISTORIAL_DIAS)
@@ -452,7 +458,7 @@ export async function brazoDePropios(o: EntradaDelBrazoPropios): Promise<Resulta
       if (porFusion.length && !v.recortado) declarado.push(`punto de venta: ${porFusion.join(', ')} cerrado(s) con lo guardado y lo leído desde la última lectura (las listas de días, horas e ítems llegan hasta esa lectura)`)
       if (sinRecuperar.length) declarado.push(`punto de venta: ${sinRecuperar.length} mes(es) cerrado(s) anterior(es) fuera de lo que deja leer el plan (${historial} días): para rellenarlos hace falta ampliar el historial de ventas del punto de venta`)
     } else declarado.push(v.error)
-  } else declarado.push(`punto de venta: falta ${cred.prefijo}LOYVERSE_TOKEN`)
+  } else declarado.push(`punto de venta: falta ${cred.prefijo}LOYVERSE_TOKEN${pdv === 'loyverse' ? ' (el cliente usa Loyverse)' : ' (si el cliente no usa Loyverse, dilo en config.apify.punto_de_venta)'}`)
   if (cred.meta_token && (cred.meta_ad_account_id || cred.meta_ig_user_id)) {
     const m = await leerMeta({ token: cred.meta_token, adAccountId: cred.meta_ad_account_id, igUserId: cred.meta_ig_user_id, fetch: o.fetch })
     fichas.push(...fichasDeMeta({ client_id: o.client_id, ahora: o.ahora, anuncios: m.anuncios, instagram: m.instagram }))

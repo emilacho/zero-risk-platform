@@ -143,3 +143,17 @@ export function sedesDeFicha(provenance_tag: unknown): string[] | null {
 export const datosDeSede = (sedes: string[] | null | undefined): Record<string, unknown> => (sedes && sedes.length ? { sede: sedes[0], sedes: [...sedes].sort(), sede_asignada_por: 'fuente' } : {})
 /** el sufijo de un `ref` con sede (una misma línea en dos sedes son dos fichas, no una repetida) */
 export const sufijoDeRef = (sedes: string[] | null | undefined): string => (sedes && sedes.length ? `:s:${sedes.map((s) => slugDe(s)).sort().join('+')}` : '')
+
+/**
+ * P6 · lo que el alta (u otra pieza) puede mandar sobre el canal de cada sede: `config.apify.canal_por_sede = { "<clave de la sede>": "local" | "solo_entrega" | "ambos" | "sin_local" }`.
+ * Esta función dice qué está mal en lo recibido (clave que no es una sede, canal que no es de la lista) y qué sedes quedan SIN dato (se deducen y se rotulan «deducido»). Pura.
+ */
+export function revisarCanalPorSede(config: unknown, clavesDeSedes: string[]): { errores: string[]; sin_dato: string[] } {
+  const cfg = obj(obj(obj(config).apify).canal_por_sede)
+  const errores: string[] = []
+  for (const [k, v] of Object.entries(cfg)) {
+    if (!clavesDeSedes.includes(k)) errores.push(`canal_por_sede: «${k}» no es una sede del cliente (${clavesDeSedes.join(', ') || 'no tiene sedes'})`)
+    if (!(CANALES as readonly string[]).includes(String(v))) errores.push(`canal_por_sede.${k}: «${String(v)}» no es un canal (${CANALES.join(', ')})`)
+  }
+  return { errores, sin_dato: clavesDeSedes.filter((k) => !(CANALES as readonly string[]).includes(String(cfg[k]))) }
+}

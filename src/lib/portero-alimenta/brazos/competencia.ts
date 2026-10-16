@@ -119,6 +119,8 @@ export interface EntradaDeAccionesDeCompetencia {
   ciudad?: string | null
   mercado?: string | null
   pais?: string | null
+  /** idioma de la búsqueda (por país; por omisión español) */
+  idioma?: string
   forzar?: boolean
   /** cada cuántas semanas se piden los anuncios de Meta (arranque fijo de US$ 0,09): 1 = semanal (por omisión) · 2 = cada dos semanas, alternando por competidor */
   anunciosCadaSemanas?: 1 | 2
@@ -128,7 +130,8 @@ export interface EntradaDeAccionesDeCompetencia {
 }
 export function accionesDeCompetencia(e: EntradaDeAccionesDeCompetencia): AccionDeBrazo[] {
   const donde = txt(e.ciudad) || txt(e.mercado)
-  const pais = (txt(e.pais).length === 2 ? txt(e.pais) : 'EC').toUpperCase()
+  // sin país NO se adivina uno (antes caía en Ecuador): sin país no se piden los anuncios de Meta y se omite
+  const pais = txt(e.pais).length === 2 ? txt(e.pais).toUpperCase() : null
   const hoy = e.forzar ? e.vigilados : competidoresDelDia(e.vigilados, e.ahora)
   const semana = semanaIso(e.ahora)
   const meta = { target_kind: 'third_party' as const, llamado_por: 'portero-alimentar' }
@@ -139,10 +142,10 @@ export function accionesDeCompetencia(e: EntradaDeAccionesDeCompetencia): Accion
     const geo = sedeC && sedeC.lat !== null && sedeC.lng !== null ? { customGeolocation: { type: 'Point', coordinates: [sedeC.lng, sedeC.lat], radiusKm: e.radioKm ?? 5 } } : {}
     const dondeC = (c.sedes.map((k) => e.sedes?.[k]?.ciudad).find(Boolean) as string | undefined) || donde
     const m = (tipo: string) => ({ [MARCA_DE_BRAZO]: `competencia:${c.slug}:${tipo}` })
-    out.push({ fuente: 'competencia', funcion: 'google_maps_scraper', params: { searchStringsArray: [c.nombre], locationQuery: dondeC, ...geo, resultsLimit: 1, language: 'es', ...m('mapas') }, metadata: meta, usd_max: USD.mapas, medido: true, objetivo: `${c.nombre} · Maps` })
+    out.push({ fuente: 'competencia', funcion: 'google_maps_scraper', params: { searchStringsArray: [c.nombre], locationQuery: dondeC, ...geo, resultsLimit: 1, language: e.idioma ?? 'es', ...m('mapas') }, metadata: meta, usd_max: USD.mapas, medido: true, objetivo: `${c.nombre} · Maps` })
     if (c.instagram) out.push({ fuente: 'competencia', funcion: 'instagram_scraper', params: { usernames: [c.instagram], resultsLimit: 6, ...m('instagram') }, metadata: meta, usd_max: USD.instagram, medido: false, objetivo: `${c.nombre} · @${c.instagram}` })
     const cadaDos = (e.anunciosCadaSemanas ?? 1) === 2
-    if (!cadaDos || e.forzar || semana % 2 === idx % 2) out.push({ fuente: 'competencia', funcion: 'facebook_ads_library_scraper', params: { searchTerms: [c.nombre], countryCode: pais, maxItems: 20, ...m('anuncios') }, metadata: meta, usd_max: USD.anuncios, medido: false, objetivo: `${c.nombre} · anuncios Meta` })
+    if (pais && (!cadaDos || e.forzar || semana % 2 === idx % 2)) out.push({ fuente: 'competencia', funcion: 'facebook_ads_library_scraper', params: { searchTerms: [c.nombre], countryCode: pais, maxItems: 20, ...m('anuncios') }, metadata: meta, usd_max: USD.anuncios, medido: false, objetivo: `${c.nombre} · anuncios Meta` })
     if (c.sitio_propio) out.push({ fuente: 'competencia', funcion: 'competitor_website_scraper', params: { startUrls: [{ url: c.sitio_propio }], maxCrawlPages: 3, ...m('sitio') }, metadata: meta, usd_max: USD.sitio, medido: true, objetivo: c.sitio_propio })
   }
   return out
