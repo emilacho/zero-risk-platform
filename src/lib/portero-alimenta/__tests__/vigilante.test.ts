@@ -85,9 +85,9 @@ describe('cada condición apaga el flujo y avisa', () => {
       const r = await rutaVigilar(m.deps(), { ...REAL, cierre })
       expect(r.status).toBe(200)
       expect(r.body.ok).toBe(false)
-      expect(m.apagados).toEqual([WF])
+      expect(m.apagados).toEqual([])
       expect(m.avisos).toHaveLength(1)
-      expect(m.avisos[0]).toMatch(/Portero del cerebro APAGADO/)
+      expect(m.avisos[0]).toMatch(/Portero del cerebro · PAUSADO solo para/)
       expect(m.avisos[0]).toMatch(esperado)
       expect(m.avisos[0]).not.toMatch(/\n/) // una línea
     })
@@ -133,15 +133,15 @@ describe('cada condición apaga el flujo y avisa', () => {
 })
 
 describe('si el aviso o el apagado fallan, se DICE (502) y no se da por hecho', () => {
-  it('apagado ok pero Slack rechaza ⇒ 502 con el motivo', async () => {
+  it('cliente pausado pero Slack rechaza ⇒ 502 con el motivo (la pausa quedó registrada)', async () => {
     const m = montar(sana({ cerebro_portero_corridas: [] }), { avisarOk: false })
     const r = await rutaVigilar(m.deps(), { ...REAL, cierre: CIERRE_BUENO })
     expect(r.status).toBe(502)
-    expect(r.body.apagado).toMatchObject({ ok: true })
+    expect(r.body.pausados).toHaveLength(1)
     expect(r.body.aviso).toMatchObject({ ok: false, detalle: 'Slack rechazó' })
   })
-  it('no se pudo apagar ⇒ la línea lo dice («apágalo a mano») y 502', async () => {
-    const m = montar(sana({ cerebro_portero_corridas: [] }), { apagarOk: false })
+  it('un problema que NO es de un cliente (ninguno activo) apaga el flujo; si no se pudo apagar ⇒ la línea lo dice («apágalo a mano») y 502', async () => {
+    const m = montar(sana({ clients: [] }), { apagarOk: false })
     const r = await rutaVigilar(m.deps(), { ...REAL, cierre: CIERRE_BUENO })
     expect(r.status).toBe(502)
     expect(m.avisos[0]).toMatch(/no se pudo apagar: apágalo a mano/)
@@ -169,7 +169,7 @@ describe('sin resumen semanal: ningún mensaje de rutina, ni siquiera el lunes',
     const m = montar(t)
     await rutaVigilar(m.deps(LUNES), { ...REAL, cierre: CIERRE_BUENO })
     expect(m.avisos).toHaveLength(1)
-    expect(m.avisos[0]).toMatch(/APAGADO/)
+    expect(m.avisos[0]).toMatch(/PAUSADO solo para/)
   })
   it('el código ya no exporta el resumen ni lo menciona', () => {
     const src = readFileSync(new URL('../vigilante.ts', import.meta.url), 'utf8')
@@ -202,7 +202,7 @@ describe('reintento: SOLO ante «no pude comprobar»', () => {
     const r = await rutaVigilar(m.deps, { ...REAL, cierre: CIERRE_BUENO })
     expect(r.status).toBe(200); expect(r.body.ok).toBe(false); expect(r.body.intentos).toBe(2)
     expect(m.esperas).toHaveLength(1)
-    expect(m.apagados).toEqual([WF])
+    expect(m.apagados).toEqual([])
     expect(m.avisos).toHaveLength(1)
     expect(m.avisos[0]).toMatch(/falló 2 veces/)
     expect(m.avisos[0]).toMatch(/no pude comprobar/)
@@ -224,7 +224,7 @@ describe('reintento: SOLO ante «no pude comprobar»', () => {
       const r = await rutaVigilar(m.deps, { ...REAL, cierre })
       expect(r.body.intentos, nombre).toBe(1)
       expect(m.esperas, nombre).toEqual([])
-      expect(m.apagados, nombre).toEqual([WF])
+      expect(m.apagados, nombre).toEqual([])
       expect(m.avisos, nombre).toHaveLength(1)
       expect(m.avisos[0], nombre).not.toMatch(/falló 2 veces/)
     }
@@ -232,7 +232,7 @@ describe('reintento: SOLO ante «no pude comprobar»', () => {
   it('un problema real MEZCLADO con una lectura fallida tampoco se reintenta (solo se reintenta lo puramente «no pude comprobar»)', async () => {
     const m = montarR(sana({ cerebro_portero_corridas: [] }), { fallaEn: 'costs' })
     const r = await rutaVigilar(m.deps, { ...REAL, cierre: CIERRE_BUENO })
-    expect(r.body.intentos).toBe(1); expect(m.esperas).toEqual([]); expect(m.apagados).toEqual([WF])
+    expect(r.body.intentos).toBe(1); expect(m.esperas).toEqual([]); expect(m.apagados).toEqual([])
   })
   it('dry_run no espera ni reintenta', async () => {
     const m = montarR(sana(), { fallaEn: 'costs' })

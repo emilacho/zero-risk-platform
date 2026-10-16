@@ -103,13 +103,14 @@ describe.each(RUBROS)('el vigilante y la auditoría · $rubro', ({ cliente, text
     expect(problemasDe(r).filter((p) => /auditoría/.test(p))).toEqual([])
     expect((r.body.clientes as Array<{ auditoria: { verificables: number; errores: number } }>)[0].auditoria).toMatchObject({ verificables: 5, errores: 0 })
   })
-  it('fichas de hoy que no salen de su fuente ⇒ problema del vigilante: apaga y avisa', async () => {
+  it('fichas de hoy que no salen de su fuente ⇒ problema del vigilante: pausa a ese cliente y avisa', async () => {
     const fs = Array.from({ length: 5 }, (_, i) => viva(ficha('f' + i, cliente, texto + ' ' + i)))
     const cs = fs.map((f) => crudo(String(f.id), cliente, 'texto que no tiene nada que ver con esta ficha ni con su negocio'))
     const m = vigilar(mundo(cliente, fs, cs))
     const r = await rutaVigilar(m.deps, { ...REAL, client_id: cliente, cierre: CIERRE(cliente) })
     expect(problemasDe(r).join(' ')).toMatch(/auditoría de calidad: 5 de 5/)
-    expect(m.apagados).toEqual(['ogfq56oIEoHufFPM'])
+    expect(m.apagados).toEqual([])
+    expect(r.body.pausados).toHaveLength(1)
     expect(m.avisos).toHaveLength(1)
   })
   it('una ficha mala entre cinco buenas NO es problema de auditoría', async () => {

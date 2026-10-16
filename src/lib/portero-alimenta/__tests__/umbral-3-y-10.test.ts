@@ -41,6 +41,6 @@ describe('umbrales firmados: avisa > 3 · apaga > 10', () => {
   })
   it.each([10.5, 25])('> 10 (US$ %s): apaga y avisa', async (usd) => {
     const x = await pasar(usd)
-    expect(x.apagados).toEqual([WF]); expect(x.avisos[0]).toMatch(/APAGADO/); expect(x.avisos[0]).toMatch(/> 10\.00/)
+    expect(x.apagados).toEqual([]); expect(x.avisos[0]).toMatch(/PAUSADO solo para/); expect(x.avisos[0]).toMatch(/> 10\.00/)
   })
 })

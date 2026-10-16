@@ -101,9 +101,9 @@ describe('1 · umbrales de gasto del vigilante (3 tramos)', () => {
     const v = vigilar(mundo([costo(3.4)]))
     const r = await rutaVigilar(v.deps, { ...REAL_V, cierre: CIERRE })
     expect(r.body.ok).toBe(false)
-    expect(v.apagados).toEqual([WF])
+    expect(v.apagados).toEqual([])
     expect(v.avisos).toHaveLength(1)
-    expect(v.avisos[0]).toMatch(/APAGADO/)
+    expect(v.avisos[0]).toMatch(/PAUSADO solo para/)
     expect(v.avisos[0]).toMatch(/gasto del día US\$ 3\.40 > 3\.00/)
   })
   it('exactamente en el umbral no dispara (es «pasa de»)', async () => {
@@ -117,14 +117,14 @@ describe('1 · umbrales de gasto del vigilante (3 tramos)', () => {
     expect(v.avisos).toHaveLength(1); expect(v.apagados).toEqual([])
     const w = vigilar(mundo([costo(1.1)]), { aviso_usd: 0.5, apagar_usd: 0.9 })
     await rutaVigilar(w.deps, { ...REAL_V, cierre: CIERRE })
-    expect(w.apagados).toEqual([WF])
+    expect(w.apagados).toEqual([])
   })
   it('con un problema real que apaga, el aviso de gasto no se manda aparte (un solo mensaje)', async () => {
     const v = vigilar(mundo([costo(2.2)]))
     const r = await rutaVigilar(v.deps, { ...REAL_V, cierre: { ...CIERRE, fin: 'con_errores' } })
     expect(r.body.ok).toBe(false)
     expect(v.avisos).toHaveLength(1)
-    expect(v.avisos[0]).toMatch(/APAGADO/)
+    expect(v.avisos[0]).toMatch(/PAUSADO solo para/)
   })
   it('dry_run: no avisa, no apaga, no escribe, pero dice que habría avisado', async () => {
     const v = vigilar(mundo([costo(2.2)]))
@@ -413,7 +413,7 @@ describe('4 · lectura de las oficinas y auditoría de citas', () => {
     expect(r.body.ok).toBe(false)
     expect(avisos[0]).toMatch(/no pude comprobar las citas del resumen vivo: cerebro_fichas: boom/)
     expect(r.body.intentos).toBe(2)
-    expect(apagados).toEqual([WF])
+    expect(apagados).toEqual([])
   })
   it('el vigilante la cuenta como problema y apaga', async () => {
     const t = mundo([])
@@ -421,7 +421,7 @@ describe('4 · lectura de las oficinas y auditoría de citas', () => {
     const v = vigilar(t)
     const r = await rutaVigilar(v.deps, { ...REAL_V, cierre: CIERRE })
     expect(r.body.ok).toBe(false)
-    expect(v.apagados).toEqual([WF])
+    expect(v.apagados).toEqual([])
     expect(v.avisos[0]).toMatch(/el resumen vivo cita 1 ficha/)
     void vigilanteDe
   })

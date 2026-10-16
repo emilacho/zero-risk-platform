@@ -71,7 +71,7 @@ describe('1 · el vigilante y el tope cuentan SOLO lo del portero', () => {
       const v = vigilar(mundo(ls))
       const r = await rutaVigilar(v.deps, { ...REAL, cierre: CIERRE })
       expect(r.body.ok).toBe(false)
-      expect(v.apagados).toEqual([WF])
+      expect(v.apagados).toEqual([])
       expect(v.avisos[0]).toMatch(/gasto del día US\$ 3\.20 > 3\.00/)
     }
   })

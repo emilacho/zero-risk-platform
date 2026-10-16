@@ -20,6 +20,11 @@ export async function clientesActivos(db: Db): Promise<{ ok: true; datos: Result
   const q = await db.from('clients').select('id, name, status, archived_at, config').order('created_at', { ascending: true }).limit(500)
   if (q.error) return { ok: false, detalle: `clients: ${q.error.message}` }
   const out: ResultadoDeClientes = { clientes: [], excluidos: [] }
+  // los clientes que el vigilante PAUSÓ por un problema propio (P2): el flujo sigue para los demás. Sin la tabla (migración sin aplicar) no hay pausas; cualquier otro error se DICE.
+  const pausadas = new Map<string, string>()
+  const ps = await db.from('cerebro_portero_pausas').select('client_id, desde, motivo').is('levantada_en', null).limit(1000)
+  if (ps.error && !/cerebro_portero_pausas/.test(String(ps.error.message))) return { ok: false, detalle: `cerebro_portero_pausas: ${ps.error.message}` }
+  if (!ps.error) for (const p of lista(ps.data)) pausadas.set(String(p.client_id), `desde ${String(p.desde ?? '').slice(0, 16)}Z: ${String(p.motivo ?? '').slice(0, 80)}`)
   for (const c of lista(q.data)) {
     const id = String(c.id)
     const motivos: string[] = []
@@ -38,6 +43,7 @@ export async function clientesActivos(db: Db): Promise<{ ok: true; datos: Result
       if (dp.error) return { ok: false, detalle: `cerebro_portero_corridas: ${dp.error.message}` }
       if (!huboDespertar(lista(dp.data))) motivos.push('sin plan de 90 días')
     }
+    if (pausadas.has(id)) motivos.push(`pausado por el vigilante (${pausadas.get(id)})`)
     if (motivos.length) out.excluidos.push({ client_id: id, motivos })
     else out.clientes.push({ client_id: id, nombre: (c.name as string | null) ?? null })
   }
