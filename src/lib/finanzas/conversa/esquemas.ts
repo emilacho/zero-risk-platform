@@ -135,7 +135,8 @@ export function validarConsulta(v: unknown): Resultado<ConsultaV1> {
 }
 
 // ───────────────────────────────────────────────────────── acuerdo.v1
-export interface HallazgoDelJefe { severidad: (typeof SEVERIDADES)[number]; que: string; alude?: Especialista | 'plan' }
+export const ESTADOS_DE_HALLAZGO = ['abierto', 'resuelto'] as const
+export interface HallazgoDelJefe { severidad: (typeof SEVERIDADES)[number]; que: string; alude?: Especialista | 'plan'; estado?: (typeof ESTADOS_DE_HALLAZGO)[number] }
 export interface AcuerdoV1 {
   salida: Salida
   hallazgos: HallazgoDelJefe[]
@@ -151,6 +152,7 @@ export function validarAcuerdo(v: unknown): Resultado<AcuerdoV1> {
   else v.hallazgos.forEach((h, i) => {
     if (!objeto(h) || !(SEVERIDADES as readonly string[]).includes(String(h.severidad)) || !texto(h.que, 800)) e.push(`hallazgos[${i}] debe traer severidad y que`)
     else if (h.alude !== undefined && ![...ESPECIALISTAS, 'plan'].includes(String(h.alude))) e.push(`hallazgos[${i}].alude no es un especialista`)
+    else if (h.estado !== undefined && !(ESTADOS_DE_HALLAZGO as readonly string[]).includes(String(h.estado))) e.push(`hallazgos[${i}].estado debe ser abierto o resuelto`)
   })
   if (!Array.isArray(v.conflictos_resueltos) || !v.conflictos_resueltos.every((c) => typeof c === 'string')) e.push('conflictos_resueltos debe ser una lista de textos')
   if (!Array.isArray(v.preguntas_a_emilio)) e.push('preguntas_a_emilio debe ser una lista (puede ir vacía)')

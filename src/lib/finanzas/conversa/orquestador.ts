@@ -7,7 +7,8 @@ import { registrarPaso, siguientePaso, type ResultadoDePaso } from '../../oficin
 import type { Estado, Paso, Plantilla } from '../../oficina/tipos'
 import { estadoInicial } from '../../oficina/tipos'
 import { calcular } from '../calculadora'
-import { decidirFirma, huellaDe, numerosDelBloque } from '../firma'
+import { decidirFirma, estaAbierto, huellaDe, numerosDelBloque, resueltosSinEstado } from '../firma'
+import { separarDadoPorVerificado } from '../confirmado-por-dueno'
 import { leerRespuesta } from '../preguntas'
 import type { Bloque } from '../tipos'
 import { entradaDesdeLaConversa } from './entrada'
@@ -63,7 +64,7 @@ const POR_PASO: Record<string, string> = {
   busqueda: 'Eres el especialista en búsqueda. Di si conviene ACTIVAR la búsqueda pagada o diferirla, su mínimo y la señal de activación; recuerda que la búsqueda local gratuita va primero. ' + ESQUEMA_DE_CONSULTA,
   medicion: 'Eres el especialista en medición. Di qué cuenta como resultado según el evento, cómo se enlaza con la venta sin tocar el destino, la hoja mínima y los umbrales. ' + ESQUEMA_DE_CONSULTA,
   ajuste: FORMA_DEL_PLANTEO + ' ' + 'Lee las respuestas de los especialistas, AJUSTA tu planteo (meta, fases, reparto) y contesta lo que te piden. Devuelve el planteo FIJADO con el mismo esquema planteo.v1. ' + LISTA_DE_CANALES + ' No fijes montos de pauta. Si el contexto trae `equilibrio` con `cubre: false`, la meta NO paga el plan: DEBES agregar `equilibrio_respuesta: { decision: "subo_la_meta" | "mantengo_la_meta", motivo }` (si subes la meta, sube `meta_por_semana` y di de dónde sale: es un supuesto; si la mantienes, di por qué). La meta de equilibrio la calculó el código: no la recalcules.',
-  cierre: 'Eres el jefe de finanzas. Resuelve los conflictos y emite la SALIDA: sale, sale_ajustada o sale_con_alerta (nunca «no sale»: lo financiero no bloquea). Lista los hallazgos con severidad (critico, alto, medio, bajo) y a quién aluden (fpa, redes, busqueda, medicion, plan). Si una cifra que manda está «sin base», solo puedes emitir sale_con_alerta. Esquema acuerdo.v1: {salida, hallazgos[{severidad, que, alude?}], conflictos_resueltos[], dato_que_no_bloquea?, preguntas_a_emilio[{clave, texto, recomendacion, supuesto_si_no_responde}]}.',
+  cierre: 'Eres el jefe de finanzas. Resuelve los conflictos y emite la SALIDA: sale, sale_ajustada o sale_con_alerta (nunca «no sale»: lo financiero no bloquea). Lista los hallazgos con severidad (critico, alto, medio, bajo) y a quién aluden (fpa, redes, busqueda, medicion, plan). Cada hallazgo lleva su ESTADO: «abierto» (sigue pendiente) o «resuelto» (tú mismo lo resolviste en este cierre); un crítico resuelto no bloquea la firma, y escribir «RESUELTO» en el texto sin el campo estado NO cuenta (el código lo toma como abierto y lo avisa). Si una cifra que manda está «sin base», solo puedes emitir sale_con_alerta. Esquema acuerdo.v1: {salida, hallazgos[{severidad, que, alude?, estado}], conflictos_resueltos[], dato_que_no_bloquea?, preguntas_a_emilio[{clave, texto, recomendacion, supuesto_si_no_responde}]}.',
 }
 export function pedidoDelAgente(paso: Paso, contexto: Record<string, unknown>): string {
   const base = paso.clave.replace(/_2$/, '')
@@ -346,23 +347,25 @@ function validar(paso: Paso, v: unknown): { ok: true; valor: Record<string, unkn
 }
 
 /** campos que el CÓDIGO añade al artefacto (nunca los pone el agente): quién habla, a quién se alude, si hay ronda 2 */
-function derivar(paso: Paso, v: Record<string, unknown>): Record<string, unknown> {
+export function derivar(paso: Paso, v: Record<string, unknown>): Record<string, unknown> {
   if (paso.clave === 'planteo') {
     const p = v as unknown as PlanteoV1
     return { ...v, habla: especialistasQueHablan(p.canales ?? []) }
   }
   if (paso.clave === 'cierre' || paso.clave === 'cierre_2') {
     const a = v as unknown as AcuerdoV1
-    const criticos = a.hallazgos.filter((h) => h.severidad === 'critico')
+    // un crítico que el jefe marcó `resuelto` no pide ronda 2, no alude a nadie y no bloquea la firma
+    const todosCriticos = a.hallazgos.filter((h) => h.severidad === 'critico')
+    const criticos = todosCriticos.filter(estaAbierto)
     const alude = { fpa: false, redes: false, busqueda: false, medicion: false } as Record<string, boolean>
     for (const h of criticos) if (h.alude && h.alude !== 'plan') alude[h.alude] = true
-    return { ...v, criticos: criticos.length, alude, requiere_ronda_2: paso.clave === 'cierre' && criticos.length > 0 }
+    return { ...v, criticos: criticos.length, criticos_resueltos: todosCriticos.length - criticos.length, alude, requiere_ronda_2: paso.clave === 'cierre' && criticos.length > 0 }
   }
   return v
 }
 
 // ───────────────────────────────────────────────────────── cierre: tablero + firma (un acto de CÓDIGO)
-async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts): Promise<{ artefacto: Record<string, unknown>; tablero_id: string | null; sin_acuerdo: boolean }> {
+export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts): Promise<{ artefacto: Record<string, unknown>; tablero_id: string | null; sin_acuerdo: boolean }> {
   const b2 = a.bloque_2 as Record<string, any> | undefined
   const b1 = a.bloque as Record<string, any> | undefined
   const bloqueArt = b2?.hay_bloque ? b2 : b1
@@ -381,9 +384,12 @@ async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts): Prom
   // lo que el plan «dio por verificado» no lo comprueba el código: la salida solo puede ser «con alerta» y la confianza no sube (el hilo enseñó que es el defecto de fondo)
   const planteoVigente = (a.planteo_fijado_2 ?? a.planteo_fijado ?? a.planteo) as { dado_por_verificado?: unknown } | undefined
   const dadoPorVerificado = Array.isArray(planteoVigente?.dado_por_verificado) ? (planteoVigente!.dado_por_verificado as unknown[]).filter((x) => typeof x === 'string' && x.trim()).map(String) : []
-  const verificadoSinComprobar = dadoPorVerificado.length > 0
+  // lo que el dueño confirmó (con respuesta real suya que lo respalde) SÍ está comprobado; solo el resto queda «sin comprobar»
+  const { confirmado_por_el_dueno: confirmadoPorElDueno, sin_comprobar: sinComprobar } = separarDadoPorVerificado(dadoPorVerificado, respuestasDeLaSemilla(e.semilla))
+  const verificadoSinComprobar = sinComprobar.length > 0
   if (verificadoSinComprobar && salida !== 'sale_con_alerta') salida = 'sale_con_alerta'
-  const decision = decidirFirma({ hallazgos: hallazgos.map((h) => ({ severidad: h.severidad, que: h.que })), correcciones_hechas: huboRonda2 ? 1 : 0 })
+  const decision = decidirFirma({ hallazgos: hallazgos.map((h) => ({ severidad: h.severidad, que: h.que, estado: h.estado })), correcciones_hechas: huboRonda2 ? 1 : 0 })
+  const sinEstado = resueltosSinEstado(hallazgos)
   let sinAcuerdo = !acuerdo || acuerdo.sin_supuestos_del_agente === true || decision.estado !== 'firmado'
   let estado: 'firmado' | 'sin_firma' = decision.estado === 'firmado' && !sinAcuerdo ? 'firmado' : 'sin_firma'
   let finanzas_id: string | null = null
@@ -401,7 +407,7 @@ async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts): Prom
     await P.tableros.actualizarTablero(g.id, { estado, firmado_por: `chief-financial-officer:${invocacion_id}:${salida}`, firmado_en: P.ahora().toISOString() })
   }
   return {
-    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${dadoPorVerificado.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, escribio: !e.dry_run },
+    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, confirmado_por_el_dueno: confirmadoPorElDueno, dado_por_verificado_sin_comprobar: sinComprobar, criticos_abiertos: decision.criticos, criticos_resueltos: decision.criticos_resueltos, alerta_hallazgos_sin_estado: sinEstado.length ? `${sinEstado.length} hallazgo(s) dicen «resuelto» en el texto pero no traen estado: se cuentan como abiertos (${sinEstado.slice(0, 3).join(' | ')})` : null, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${sinComprobar.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, escribio: !e.dry_run },
     tablero_id: finanzas_id, sin_acuerdo: sinAcuerdo,
   }
 }
