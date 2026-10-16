@@ -4,7 +4,7 @@
  * Nace APAGADO: con `finanzas_config.conversa = 'apagado'` → 409 antes de leer, llamar al modelo o escribir.
  */
 import { registrarPaso, siguientePaso, type ResultadoDePaso } from '../../oficina/motor'
-import type { Estado, Paso } from '../../oficina/tipos'
+import type { Estado, Paso, Plantilla } from '../../oficina/tipos'
 import { estadoInicial } from '../../oficina/tipos'
 import { calcular } from '../calculadora'
 import { decidirFirma, huellaDe, numerosDelBloque } from '../firma'
@@ -192,6 +192,21 @@ async function recogerDelHilo(P: PuertosDeConversa, e: EncargoDeConversa, claves
 }
 
 // ───────────────────────────────────────────────────────── avanzar UN paso
+/** el tope propio de un encargo nunca pasa de aquí, ni con decisión de Emilio en la semilla (la plantilla sigue en 1,50) */
+export const TOPE_MAXIMO_POR_ENCARGO_USD = 3
+/** la plantilla de ESTE encargo: igual a la financiera, con el tope propio de la semilla si es un número válido (solo sube, con techo) */
+export function plantillaDelEncargo(e: EncargoDeConversa): Plantilla {
+  const t = (e.semilla as Semilla | undefined)?.tope_encargo_usd
+  if (typeof t !== 'number' || !Number.isFinite(t) || t <= PLANTILLA_FINANCIERA.limites.tope_encargo_usd) return PLANTILLA_FINANCIERA
+  return { ...PLANTILLA_FINANCIERA, limites: { ...PLANTILLA_FINANCIERA.limites, tope_encargo_usd: Math.min(t, TOPE_MAXIMO_POR_ENCARGO_USD) } }
+}
+/** las respuestas del dueño entregadas como dato en la semilla: solo las bien formadas (clave y literal de texto), hasta 20 */
+export function respuestasDeLaSemilla(s: Semilla | undefined): Array<{ clave: string; valor: unknown; literal: string }> {
+  const r = s?.respuestas_del_dueno
+  if (!Array.isArray(r)) return []
+  return r.filter((x) => x && typeof x.clave === 'string' && x.clave.trim() !== '' && typeof x.literal === 'string' && x.literal.trim() !== '' && x.valor !== undefined).slice(0, 20).map((x) => ({ clave: x.clave, valor: x.valor, literal: x.literal }))
+}
+
 /** vencimiento del candado de «paso en vuelo»: pasado esto un paso muerto no deja el encargo atascado */
 export const TTL_DEL_CANDADO_S = 900
 /** margen para reintentar el formato dentro de la misma llamada */
@@ -226,7 +241,7 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa): Prom
   const cobrado = P.almacen.cobrado ? await P.almacen.cobrado(e.id).catch(() => null) : null
   if (cobrado !== null && cobrado > e.estado_del_motor.gasto_usd) e = { ...e, gasto_usd: Math.max(e.gasto_usd, cobrado), estado_del_motor: { ...e.estado_del_motor, gasto_usd: cobrado } }
   const arts = await P.almacen.artefactos(e.id)
-  const sig = siguientePaso(e.estado_del_motor, PLANTILLA_FINANCIERA)
+  const sig = siguientePaso(e.estado_del_motor, plantillaDelEncargo(e))
 
   // fin o tope: se cierra con lo que hay (nunca bloquea al plan)
   if (sig.accion === 'fin' || sig.accion === 'cierre_por_tope') {
@@ -267,7 +282,8 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa): Prom
     // 2 · el contexto del agente: solo los artefactos que su paso declara
     const contexto: Record<string, unknown> = {}
     for (const nombre of paso.entrada) if (arts[nombre]) contexto[nombre] = arts[nombre]
-    if (hilo.notas.length || hilo.respuestas.length) contexto.del_dueno_en_el_hilo = { notas: hilo.notas.map((x) => ({ ...x, marca: 'nota del dueño: no es un dato confirmado' })), respuestas: hilo.respuestas.map((x) => ({ ...x, marca: 'respuesta numerada del dueño, con su fecha' })) }
+    const dadas = respuestasDeLaSemilla(e.semilla)
+    if (hilo.notas.length || hilo.respuestas.length || dadas.length) contexto.del_dueno_en_el_hilo = { notas: hilo.notas.map((x) => ({ ...x, marca: 'nota del dueño: no es un dato confirmado' })), respuestas: [...dadas.map((x) => ({ ...x, marca: 'respuesta del dueño: dato confirmado por él' })), ...hilo.respuestas.map((x) => ({ ...x, marca: 'respuesta numerada del dueño, con su fecha' }))] }
     // plan v3 · V7: el ajuste ve la meta de equilibrio (la calcula el código con lo que ya dijeron los especialistas) y, si la meta no la cubre, DEBE responderla
     const esAjuste = paso.clave.replace(/_2$/, '') === 'ajuste'
     const equilibrio = esAjuste ? equilibrioParaElAjuste(arts, paso.clave === 'ajuste_2' ? 2 : 1) : null
@@ -304,7 +320,7 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa): Prom
   }
 
   // persistir el paso y el estado del motor (un turno = una fila; nada se pierde aunque la llamada siguiente falle)
-  const nuevoEstado: Estado = registrarPaso(e.estado_del_motor, PLANTILLA_FINANCIERA, sig.indice, resultado)
+  const nuevoEstado: Estado = registrarPaso(e.estado_del_motor, plantillaDelEncargo(e), sig.indice, resultado)
   const art = resultado.artefacto ?? {}
   const salidaParaHilo = degradado ? null : art
   const texto = textoDelTurno(paso, n, salidaParaHilo as Record<string, unknown> | null, degradado)
