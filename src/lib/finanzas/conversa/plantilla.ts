@@ -23,6 +23,22 @@ const agente = (clave: string, quien: string, entrada: string[], salida: string,
 const codigo = (clave: string, funcion: string, entrada: string[], salida: string, condicion: Paso['condicion'] = siempre, ronda: 1 | 2 = 1): Paso =>
   ({ clave, tipo: 'codigo', quien: 'sala', funcion, condicion, entrada, salida_artefacto: salida, tope_usd: 0, ronda })
 
+// RESERVA DEL CIERRE (16-oct): el jefe de finanzas cobró 0,19–0,25 por cierre en lo medido (libro); reservar 0,40 fijo cortó la ronda 2 por 0,003. La reserva es lo MEDIDO + margen
+// (0,25 × 1,3 ≈ 0,33) y el cierre de la ronda 2 usa el costo REAL del cierre de la ronda 1 de ese mismo encargo × 1,3 (piso 0,25, techo 0,40). La defensa no baja:
+// el motor sigue exigiendo gasto + reserva ≤ tope del encargo, y la reserva es también el máximo que esa llamada puede cobrar.
+export const MAXIMO_OBSERVADO_DEL_CIERRE_USD = 0.25
+export const FACTOR_DE_RESERVA_DEL_CIERRE = 1.3
+export const TECHO_DE_RESERVA_DEL_CIERRE_USD = 0.4
+const redondeaArriba = (x: number) => Math.ceil(x * 100 - 1e-9) / 100
+export const RESERVA_DEL_CIERRE_USD = redondeaArriba(MAXIMO_OBSERVADO_DEL_CIERRE_USD * FACTOR_DE_RESERVA_DEL_CIERRE)
+// el piso es la reserva general: el cierre de la ronda 2 trae más entradas (acuerdo + bloque_2 + planteo fijado 2) y la reserva es también el máximo que esa llamada puede cobrar
+export const PISO_DE_RESERVA_DEL_CIERRE_USD = RESERVA_DEL_CIERRE_USD
+/** la reserva del cierre de la ronda 2 a partir de lo que COSTÓ el cierre de la ronda 1 de este encargo (no se infla ni se achica fuera de [piso, techo]); sin medida, la general */
+export function reservaDelCierre2(costoDelCierre1?: number | null): number {
+  if (typeof costoDelCierre1 !== 'number' || !Number.isFinite(costoDelCierre1) || costoDelCierre1 <= 0) return RESERVA_DEL_CIERRE_USD
+  return Math.min(TECHO_DE_RESERVA_DEL_CIERRE_USD, Math.max(PISO_DE_RESERVA_DEL_CIERRE_USD, redondeaArriba(costoDelCierre1 * FACTOR_DE_RESERVA_DEL_CIERRE)))
+}
+
 const R1 = ['expediente']
 export const PLANTILLA_FINANCIERA: Plantilla = {
   tipo: 'financiera.v1',
@@ -36,7 +52,7 @@ export const PLANTILLA_FINANCIERA: Plantilla = {
     agente('medicion', AGENTES.medicion, ['expediente', 'planteo'], 'consulta_medicion', 0.15, si('planteo', 'habla.medicion')),
     agente('ajuste', AGENTES.proponente, ['expediente', 'planteo', 'consulta_fpa', 'consulta_redes', 'consulta_busqueda', 'consulta_medicion'], 'planteo_fijado', 0.2, siempre, 1, 'planteo.v1'),
     codigo('calculo', 'calcular_bloque', ['expediente', 'planteo_fijado', 'consulta_fpa', 'consulta_redes'], 'bloque'),
-    agente('cierre', AGENTES.jefe, ['expediente', 'planteo_fijado', 'bloque', 'consulta_fpa', 'consulta_redes', 'consulta_busqueda', 'consulta_medicion'], 'acuerdo', 0.4, si('bloque', 'hay_bloque'), 1, 'acuerdo.v1'),
+    agente('cierre', AGENTES.jefe, ['expediente', 'planteo_fijado', 'bloque', 'consulta_fpa', 'consulta_redes', 'consulta_busqueda', 'consulta_medicion'], 'acuerdo', RESERVA_DEL_CIERRE_USD, si('bloque', 'hay_bloque'), 1, 'acuerdo.v1'),
     // ── ronda 2: una sola vuelta, solo los aludidos
     agente('fpa_2', AGENTES.fpa, ['expediente', 'planteo_fijado', 'acuerdo'], 'consulta_fpa_2', 0.25, si('acuerdo', 'alude.fpa'), 2),
     agente('redes_2', AGENTES.redes, ['expediente', 'planteo_fijado', 'acuerdo'], 'consulta_redes_2', 0.25, si('acuerdo', 'alude.redes'), 2),
@@ -45,7 +61,7 @@ export const PLANTILLA_FINANCIERA: Plantilla = {
     agente('ajuste_2', AGENTES.proponente, ['expediente', 'planteo_fijado', 'acuerdo', 'consulta_fpa_2', 'consulta_redes_2', 'consulta_busqueda_2', 'consulta_medicion_2'], 'planteo_fijado_2', 0.15, si('acuerdo', 'requiere_ronda_2'), 2, 'planteo.v1'),
     codigo('calculo_2', 'calcular_bloque_2', ['expediente', 'planteo_fijado_2', 'consulta_fpa', 'consulta_redes', 'consulta_fpa_2', 'consulta_redes_2'], 'bloque_2', si('acuerdo', 'requiere_ronda_2'), 2),
     // si la huella no cambió entre las dos rondas, NO hay segundo cierre (cierra en el acto)
-    agente('cierre_2', AGENTES.jefe, ['expediente', 'planteo_fijado_2', 'bloque_2', 'acuerdo'], 'acuerdo_2', 0.4, si('bloque_2', 'cambio'), 2, 'acuerdo.v1'),
+    agente('cierre_2', AGENTES.jefe, ['expediente', 'planteo_fijado_2', 'bloque_2', 'acuerdo'], 'acuerdo_2', RESERVA_DEL_CIERRE_USD, si('bloque_2', 'cambio'), 2, 'acuerdo.v1'),
     codigo('firma', 'cierre_financiero', ['expediente', 'bloque', 'acuerdo', 'bloque_2', 'acuerdo_2'], 'cierre'),
   ],
   limites: { margen: 3, tope_encargo_usd: 1.5, max_rondas: 2 },

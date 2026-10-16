@@ -3,7 +3,8 @@
  * Nada se inventa: lo que falta queda ausente y la calculadora lo declara (o rechaza con motivo); un supuesto viaja con su fuente («consulta de <agente>») y su tipo.
  */
 import type { Canal, Entrada, Referencia } from '../tipos'
-import type { ConsultaV1, PlanteoV1, Rango } from './esquemas'
+import type { ConsultaV1, DatoConProcedencia, PlanteoV1, Rango } from './esquemas'
+import { lineaBaseSemanal } from '../linea-base'
 
 export interface ConsultasDeLaRonda { fpa?: ConsultaV1 | null; redes?: ConsultaV1 | null; busqueda?: ConsultaV1 | null; medicion?: ConsultaV1 | null }
 export interface ExpedienteMinimo {
@@ -14,6 +15,10 @@ export interface ExpedienteMinimo {
   /** pisos diarios por canal (catálogo) */
   pisos?: Record<string, number | null | undefined>
   fecha?: string
+  /** datos con procedencia del expediente (de ahí sale la línea base medida) */
+  datos?: DatoConProcedencia[]
+  /** línea base dada al abrir (gana sobre lo medido) */
+  linea_base_por_semana?: number | null
 }
 
 const medio = (r?: Rango): number | undefined => (r ? (r.base ?? (r.min + r.max) / 2) : undefined)
@@ -42,8 +47,10 @@ export function entradaDesdeLaConversa(p: { planteo: PlanteoV1; consultas: Consu
     canal: x.canal, peso: x.peso, piso_diario: x.piso_diario ?? expediente.pisos?.[x.canal] ?? 0,
     ...(x.activo === false ? { activo: false } : {}), ...(x.condicion ? { condicion: x.condicion } : {}),
   }))
+  const base = lineaBaseSemanal({ datos: expediente.datos, dada: expediente.linea_base_por_semana })
   const entrada: Entrada = {
     meta_por_semana: planteo.meta_por_semana,
+    ...(base ? { base_por_semana: base.por_semana, base_fuente: base.fuente } : {}),
     ...(tasa !== undefined ? { pasos: [{ tasa, fuente: de('tasa_cierre', consultas.fpa?.agente ?? 'finanzas') ?? undefined }] } : {}),
     ...(s.ticket ? { ticket: medio(s.ticket)! } : {}),
     ...(s.margen ? { margen: medio(s.margen)! } : {}),
