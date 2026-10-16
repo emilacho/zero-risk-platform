@@ -12,7 +12,7 @@ import type { RetiroDeBrazo } from './archivo'
 import { type Competidor } from './competencia'
 import { candidatosDeSede, type ResultadoDeCandidatos } from './descubrir'
 import { juzgarCompetenciaDeSede, type ResultadoDelJuicioDeSede } from './juez-competencia'
-import { radioDe, sedesConPunto, type FilaDeMapas, type SedeConPunto } from './sedes'
+import { CAMPO_ESTADO_DE_LA_SEDE, radioDe, sedesConPunto, type FilaDeMapas, type SedeConPunto } from './sedes'
 import { DIA_EN_MS, slugDe, type FichaDeBrazo } from './tipos'
 import type { RespuestaDeLlamada } from '../juez'
 
@@ -63,7 +63,7 @@ export async function cargarContextoDeBrazos(db: Db, clientId: string, cliente: 
   const sd = await db.from('client_sedes').select('id, ciudad, clave').eq('client_id', clientId)
   if (sd.error) errores.push(`client_sedes: ${sd.error.message}`)
   const ids = lista(sd.data).map((s) => String(s.id)).filter(Boolean)
-  const da = ids.length ? await db.from('client_sede_datos').select('sede_id, campo, valor_texto').eq('client_id', clientId).in('campo', ['tipo_de_atencion', 'direccion']).limit(200) : { data: [], error: null }
+  const da = ids.length ? await db.from('client_sede_datos').select('sede_id, campo, valor_texto, observado_en').eq('client_id', clientId).in('campo', ['tipo_de_atencion', 'direccion', CAMPO_ESTADO_DE_LA_SEDE]).limit(200) : { data: [], error: null }
   if (da.error) errores.push(`client_sede_datos: ${da.error.message}`)
   const rr = await db.from('apify_raw').select('id, apify_function, params, respuesta, ensayo, created_at').eq('client_id', clientId).eq('ensayo', false).in('apify_function', ['own_google_maps_profile', 'google_maps_scraper', 'competitor_website_scraper', 'instagram_scraper', 'facebook_ads_library_scraper']).order('created_at', { ascending: false }).limit(300)
   if (rr.error) errores.push(`apify_raw: ${rr.error.message}`)
@@ -71,7 +71,7 @@ export async function cargarContextoDeBrazos(db: Db, clientId: string, cliente: 
   if (fv.error) errores.push(`cerebro_fichas: ${fv.error.message}`)
   const vigentes = lista(fv.data).filter((f) => typeof f.ref === 'string' && (f.ref as string).startsWith('brazo:'))
   const filas = lista(rr.data) as unknown as ContextoDeBrazos['filas']
-  const sedes = sedesConPunto({ nombreDelCliente: txt(cliente.name), sedes: lista(sd.data).map((s) => ({ id: String(s.id), clave: String(s.clave), ciudad: String(s.ciudad) })), datos: lista(da.data).map((d) => ({ sede_id: d.sede_id as string, campo: String(d.campo), valor_texto: (d.valor_texto as string) ?? null })), config: cliente.config, filas })
+  const sedes = sedesConPunto({ nombreDelCliente: txt(cliente.name), sedes: lista(sd.data).map((s) => ({ id: String(s.id), clave: String(s.clave), ciudad: String(s.ciudad) })), datos: lista(da.data).map((d) => ({ sede_id: d.sede_id as string, campo: String(d.campo), valor_texto: (d.valor_texto as string) ?? null, observado_en: (d.observado_en as string) ?? null })), config: cliente.config, filas })
   const hace7 = ahora.getTime() - 7 * DIA_EN_MS
   const ubicadas = new Set<string>()
   for (const f of filas) {

@@ -1,7 +1,7 @@
 /**
  * BRAZO · DATOS PROPIOS DEL CLIENTE (cifras MEDIDAS, no supuestos) · lectores con la llave DEL CLIENTE.
  *  · Punto de venta (Loyverse): ventas del mes por ítem, por hora y por día de la semana. SOLO ingreso: los costos del punto de venta suelen estar en cero (Náufrago: 68 artículos sin costo),
- *    así que ninguna ficha dice «margen». Los nombres de ítem son los del punto de venta; la equivalencia con la carta web la confirma el dueño (`config.apify.loyverse_mapa_de_items`), nunca se deduce por parecido.
+ *    así que ninguna ficha dice «margen». Los nombres de ítem son los del punto de venta; la equivalencia con la carta web está en `config.apify.loyverse_mapa_de_items` (la arma `mapa-de-items.ts` por sinónimo, con su `_meta`: origen y lo dudoso; o la confirma el dueño). Nada se deduce por parecido de un solo golpe: lo dudoso se muestra como «podría ser».
  *  · Meta (cuenta de anuncios y cuenta de Instagram del cliente): gasto, alcance, clics y resultados de los últimos 30 días; seguidores y alcance de la cuenta. Es el mismo contrato que
  *    `/api/meta-ads/spend-data`, pero con la llave y la cuenta DEL CLIENTE (esa ruta usa una sola cuenta de entorno).
  *  · Nunca se pide la llave por el chat ni se escribe en una ficha, un error o un rastro: viven en variables de entorno del servidor, una por cliente (`credencialesDe`).
@@ -213,6 +213,8 @@ export interface VentasDelMes {
   aproximado?: string
   /** ventana móvil (no es un mes): los 30 días hasta esta fecha */
   ventana?: string
+  /** la fuente no trae el número de tickets (resumen por día de una exportación sin esa columna): no se inventan tickets ni ticket promedio */
+  sinTickets?: boolean
 }
 /**
  * Agrupa los recibos por mes local y, si el punto de venta distingue más de una tienda, también por tienda.
@@ -255,7 +257,16 @@ export function ventasPorMes(recibos: Array<Record<string, unknown>>, o: { tiend
   return { meses, incompletos }
 }
 
-export interface EntradaDeFichasDeVentas { client_id: string; meses: VentasDelMes[]; ahora: Date; mapaDeItems?: Record<string, string> }
+/** lo que acompaña al mapa de ítems armado por sinónimo (`config.apify.loyverse_mapa_de_items_meta`): de dónde salió y lo que quedó sin afirmar */
+export interface MetaDelMapaDeItems { origen?: string; probables?: Record<string, string>; dudosos?: Record<string, string[]>; sin_equivalente?: string[] }
+/** el nombre de un ítem del punto de venta con su equivalencia en la carta web: afirmada, «probable» o «podría ser» (nunca se afirma lo dudoso) */
+export function nombreDeItem(n: string, mapa: Record<string, string>, meta?: MetaDelMapaDeItems | null): string {
+  if (mapa[n]) return `${mapa[n]}${meta?.probables?.[n] ? ' (probable)' : ''} (en el punto de venta: «${n}»)`
+  const cand = meta?.dudosos?.[n]
+  if (cand?.length) return `${n} (podría ser ${cand.map((c) => `«${c}»`).join(' o ')}; sin afirmar)`
+  return n
+}
+export interface EntradaDeFichasDeVentas { client_id: string; meses: VentasDelMes[]; ahora: Date; mapaDeItems?: Record<string, string>; mapaMeta?: MetaDelMapaDeItems | null; /** las cifras vienen de una exportación del Back Office (no de la API): se dice y se fecha con la de la exportación */ exportacion?: { fecha: string } }
 /** el prefijo único de las cifras del punto de venta: `metrica:loyverse:<métrica>:<AAAA-MM>[:<tienda>]` */
 export const PREFIJO_DE_VENTAS = 'metrica:loyverse:'
 /**
@@ -269,7 +280,9 @@ export function fichasDeVentas(e: EntradaDeFichasDeVentas): FichaDeBrazo[] {
   const mesEnCurso = mesLocalDe(e.ahora)
   const hasta = new Date(e.ahora.getTime() + VIGENCIA_DIAS * DIA_EN_MS).toISOString()
   const mapa = e.mapaDeItems ?? {}
-  const nombreDe = (n: string) => (mapa[n] ? `${mapa[n]} (en el punto de venta: «${n}»)` : n)
+  const meta = e.mapaMeta ?? null
+  const automatico = !!meta?.origen
+  const nombreDe = (n: string) => nombreDeItem(n, mapa, meta)
   const out: FichaDeBrazo[] = []
   for (const m of e.meses) {
     const r = m.resumen
@@ -285,27 +298,28 @@ export function fichasDeVentas(e: EntradaDeFichasDeVentas): FichaDeBrazo[] {
     const dondeTxt = m.rotulo ? ` · tienda «${m.rotulo}»` : ''
     const estado = m.ventana ? `ventana móvil de los 30 días hasta el ${m.ventana}` : enCurso ? `MES EN CURSO, parcial al ${dia}` : 'mes cerrado'
     const nota = m.aproximado ? ` Ingreso, tickets y ticket promedio completos; las listas de días, horas e ítems llegan hasta el ${m.aproximado} (el plan del punto de venta solo deja leer 31 días atrás).` : ''
-    const sello = `Periodo ${pTxt} (${estado}), medido en el punto de venta del cliente. Solo ingresos: el punto de venta no trae costos, no es margen. Moneda del punto de venta.${nota}`
+    const deDonde = e.exportacion ? `tomado de la exportación del Back Office de Loyverse del ${e.exportacion.fecha} (no de la API)` : 'medido en el punto de venta del cliente'
+    const sello = `Periodo ${pTxt} (${estado}), ${deDonde}. Solo ingresos: el punto de venta no trae costos, no es margen. Moneda del punto de venta.${nota}`
     const ficha = (metrica: string, titulo: string, contenido: string, extra: Partial<FichaDeBrazo> = {}): FichaDeBrazo => ({
       brazo: 'propios', alcance: 'cliente', client_id: e.client_id, ref: `brazo:propios:loyverse:${metrica}:${m.periodo}${sufijo}${parcial ? `:${dia}` : ''}`,
       atributo: `${PREFIJO_DE_VENTAS}${metrica}:${m.periodo}${sufijo}`, clase: 'metrica', titulo: `${titulo} · ${pTxt}${dondeTxt}`.slice(0, 160), contenido,
-      origen: 'plataforma', fuente_url: null, fecha_fuente: dia, observado_en: iso, vigente_hasta: parcial ? hasta : null, decision: 'reemplaza', ...(parcial ? { renueva_vigencia: true } : {}),
-      datos: { periodo: m.periodo, desde: periodoDesde, hasta: periodoHasta, en_curso: enCurso, ...(m.ventana ? { ventana_hasta: m.ventana } : {}), ...(m.aproximado ? { aproximado_hasta: m.aproximado } : {}), ...(enCurso && !m.grupo ? { snapshot: snapshotDe(r, iso) } : {}), tienda: m.rotulo || null, fuente: 'loyverse', tickets: r.tickets, ingreso: r.ingreso, ticket_promedio: r.ticket_medio, reembolsos: r.reembolsos },
+      origen: 'plataforma', fuente_url: null, fecha_fuente: e.exportacion?.fecha ?? dia, observado_en: e.exportacion ? `${e.exportacion.fecha}T12:00:00.000Z` : iso, vigente_hasta: parcial ? hasta : null, decision: 'reemplaza', ...(parcial ? { renueva_vigencia: true } : {}),
+      datos: { periodo: m.periodo, desde: periodoDesde, hasta: periodoHasta, en_curso: enCurso, ...(m.ventana ? { ventana_hasta: m.ventana } : {}), ...(m.aproximado ? { aproximado_hasta: m.aproximado } : {}), ...(enCurso && !m.grupo ? { snapshot: snapshotDe(r, iso) } : {}), tienda: m.rotulo || null, fuente: e.exportacion ? 'loyverse_exportacion' : 'loyverse', ...(e.exportacion ? { exportado_en: e.exportacion.fecha } : {}), tickets: m.sinTickets ? null : r.tickets, ingreso: r.ingreso, ticket_promedio: m.sinTickets ? null : r.ticket_medio, reembolsos: r.reembolsos },
       ...extra,
     })
     out.push(ficha('ingreso', 'Ventas del punto de venta',
-      `${r.tickets ? `Ventas de ${pTxt}${dondeTxt}: ${coma(r.ingreso)} en ${r.tickets} tickets (ticket promedio ${coma(r.ticket_medio)}); reembolsos ${coma(r.reembolsos)}; ${r.anuladas} recibos anulados no cuentan.` : `Sin ventas registradas en el punto de venta en ${pTxt}${dondeTxt}.`} ${sello}`,
+      `${m.sinTickets ? `Ventas de ${pTxt}${dondeTxt}: ${coma(r.ingreso)}; reembolsos ${coma(r.reembolsos)} (la exportación no trae el número de tickets).` : r.tickets ? `Ventas de ${pTxt}${dondeTxt}: ${coma(r.ingreso)} en ${r.tickets} tickets (ticket promedio ${coma(r.ticket_medio)}); reembolsos ${coma(r.reembolsos)}; ${r.anuladas} recibos anulados no cuentan.` : `Sin ventas registradas en el punto de venta en ${pTxt}${dondeTxt}.`} ${sello}`,
       { metrica: { nombre: 'loyverse:ingreso', valor: r.ingreso, unidad: 'moneda del punto de venta' } }))
-    if (!r.tickets) continue
-    out.push(ficha('tickets', 'Tickets del punto de venta', `Tickets de ${pTxt}${dondeTxt}: ${r.tickets}. ${sello}`, { metrica: { nombre: 'loyverse:tickets', valor: r.tickets, unidad: 'tickets' } }))
-    out.push(ficha('ticket_promedio', 'Ticket promedio del punto de venta', `Ticket promedio de ${pTxt}${dondeTxt}: ${coma(r.ticket_medio)}. ${sello}`, { metrica: { nombre: 'loyverse:ticket_promedio', valor: r.ticket_medio, unidad: 'moneda del punto de venta' } }))
+    if (m.sinTickets ? !r.ingreso : !r.tickets) continue
+    if (!m.sinTickets) out.push(ficha('tickets', 'Tickets del punto de venta', `Tickets de ${pTxt}${dondeTxt}: ${r.tickets}. ${sello}`, { metrica: { nombre: 'loyverse:tickets', valor: r.tickets, unidad: 'tickets' } }))
+    if (!m.sinTickets) out.push(ficha('ticket_promedio', 'Ticket promedio del punto de venta', `Ticket promedio de ${pTxt}${dondeTxt}: ${coma(r.ticket_medio)}. ${sello}`, { metrica: { nombre: 'loyverse:ticket_promedio', valor: r.ticket_medio, unidad: 'moneda del punto de venta' } }))
     const horas = r.por_hora.slice(0, 3).map((h) => `${String(h.hora).padStart(2, '0')}:00 (${h.tickets} tickets)`).join(', ')
-    const dias = r.por_dia.slice(0, 3).map((d) => `${d.dia} (${d.tickets} tickets, ${coma(d.ingreso)})`).join(', ')
-    out.push(ficha('dias_y_horas', 'Días y horas fuertes', `Días con más tickets en ${pTxt}${dondeTxt}: ${dias}. Horas con más tickets (hora local): ${horas}. ${sello}`))
+    const dias = r.por_dia.slice(0, 3).map((d) => (m.sinTickets ? `${d.dia} (${coma(d.ingreso)})` : `${d.dia} (${d.tickets} tickets, ${coma(d.ingreso)})`)).join(', ')
+    if (dias || horas) out.push(ficha('dias_y_horas', 'Días y horas fuertes', `${dias ? `Días con más ${m.sinTickets ? 'ingreso' : 'tickets'} en ${pTxt}${dondeTxt}: ${dias}. ` : ''}${horas ? `Horas con más tickets (hora local): ${horas}. ` : ''}${sello}`))
     if (r.por_item.length) {
       const sinMapa = r.por_item.slice(0, 10).filter((x) => !mapa[x.item]).length
       const top = r.por_item.slice(0, 10).map((x) => `${nombreDe(x.item)}: ${r2(x.unidades)} u., ${coma(x.ingreso)}`).join(' · ')
-      out.push(ficha('items', 'Ítems más vendidos', `Los 10 ítems que más ingreso dejaron en ${pTxt}${dondeTxt}: ${top}. ${sinMapa ? `${sinMapa} ítem(s) sin equivalencia confirmada con la carta web: son nombres del punto de venta. ` : ''}${sello}`))
+      out.push(ficha('items', 'Ítems más vendidos', `Los 10 ítems que más ingreso dejaron en ${pTxt}${dondeTxt}: ${top}. ${automatico ? `Equivalencias con la carta web armadas automáticamente por sinónimo (no las confirmó el dueño). ${sinMapa ? `${sinMapa} ítem(s) sin equivalente afirmado en la carta web: son nombres del punto de venta. ` : ''}` : sinMapa ? `${sinMapa} ítem(s) sin equivalencia confirmada con la carta web: son nombres del punto de venta. ` : ''}${sello}`))
     }
   }
   return out
@@ -419,7 +433,7 @@ export async function brazoDePropios(o: EntradaDelBrazoPropios): Promise<Resulta
         const rv = v.recibos.filter((r) => String(r.created_at ?? '') >= hace30)
         meses.push({ periodo: 'ultimos_30_dias', grupo: '', rotulo: '', resumen: resumirVentas(rv, { periodo: 'ultimos_30_dias' }), ventana: diaLocalDe(o.ahora) })
       } else if (porFusion.length) declarado.push(`punto de venta: ${porFusion.join(', ')} no se pudo cerrar (la lectura quedó recortada)`)
-      fichas.push(...fichasDeVentas({ client_id: o.client_id, meses, ahora: o.ahora, mapaDeItems: mapa }))
+      fichas.push(...fichasDeVentas({ client_id: o.client_id, meses, ahora: o.ahora, mapaDeItems: mapa, mapaMeta: obj(obj(obj(o.config).apify).loyverse_mapa_de_items_meta) as MetaDelMapaDeItems }))
       if (agrupado.incompletos.length) declarado.push(`punto de venta: ${v.paginas} páginas leídas (tope); ${agrupado.incompletos.join(', ')} quedó incompleto y no se archivó`)
       if (directos.length) declarado.push(`punto de venta: relleno de ${directos.length} mes(es) cerrado(s) en ${v.paginas} llamada(s)`)
       if (porFusion.length && !v.recortado) declarado.push(`punto de venta: ${porFusion.join(', ')} cerrado(s) con lo guardado y lo leído desde la última lectura (las listas de días, horas e ítems llegan hasta esa lectura)`)
