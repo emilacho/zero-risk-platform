@@ -9,9 +9,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { brazosDelEntorno } from '@/lib/portero-alimenta/brazos'
-import { agenteDelRoster, modeloRegistrado, puenteAlIndice } from '@/lib/portero-alimenta/entorno'
-import { AGENTE_DEL_PULIDO } from '@/lib/portero-alimenta/resumen-pulido'
-import { TOPE_DEL_PULIDO_USD } from '@/lib/portero-alimenta/datos'
+import { modeloRegistrado, puenteAlIndice } from '@/lib/portero-alimenta/entorno'
 import { rutaAlimentar } from '@/lib/portero-alimenta/rutas'
 
 export const dynamic = 'force-dynamic'
@@ -33,8 +31,7 @@ export async function POST(request: Request) {
       db, interruptores: interruptoresDelEntorno(), brazos: brazosDelEntorno(),
       // en seco NO se llama a ningún modelo (US$ 0) ni se escribe el índice
       llamarModelo: real ? modeloRegistrado({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, comando: 'portero.juzgar' }) : undefined,
-      // el pulido del resumen vivo (apagado por PORTERO_RESUMEN_PULIDO): un agente del roster por run-sdk; en seco no se llama a nadie
-      pulirResumen: real ? agenteDelRoster({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, agente: AGENTE_DEL_PULIDO, topeUsd: TOPE_DEL_PULIDO_USD }) : undefined,
+      // el pulido del resumen vivo ya NO va aquí: tiene su propio paso (/pulir, después del cierre) para no trabar el guardado
       puente: real ? puenteAlIndice({ origen, llaveInterna: llave, db }) : undefined,
     }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })

@@ -9,9 +9,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { apagarFlujoDelPortero, avisarAAlertas } from '@/lib/portero-alimenta/avisos'
-import { agenteDelRoster, modeloRegistrado, puenteAlIndice } from '@/lib/portero-alimenta/entorno'
-import { AGENTE_DEL_PULIDO } from '@/lib/portero-alimenta/resumen-pulido'
-import { TOPE_DEL_PULIDO_USD } from '@/lib/portero-alimenta/datos'
+import { modeloRegistrado, puenteAlIndice } from '@/lib/portero-alimenta/entorno'
 import { rutaDespertar } from '@/lib/portero-alimenta/despertar'
 
 export const dynamic = 'force-dynamic'
@@ -32,8 +30,7 @@ export async function POST(request: Request) {
     const r = await rutaDespertar({
       db, interruptores: interruptoresDelEntorno(),
       llamarModelo: real ? modeloRegistrado({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, comando: 'portero.juzgar' }) : undefined,
-      // el pulido del resumen vivo (apagado por PORTERO_RESUMEN_PULIDO): un agente del roster por run-sdk; en seco no se llama a nadie
-      pulirResumen: real ? agenteDelRoster({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, agente: AGENTE_DEL_PULIDO, topeUsd: TOPE_DEL_PULIDO_USD }) : undefined,
+      // el pulido del resumen vivo ya NO va aquí: tiene su propio paso (/pulir, después del cierre) para no trabar el guardado
       puente: real ? puenteAlIndice({ origen, llaveInterna: llave, db }) : undefined,
       apagar: apagarFlujoDelPortero(), avisar: avisarAAlertas(), workflowIdPortero: process.env.PORTERO_WORKFLOW_ID || undefined,
     }, cuerpo)

@@ -460,12 +460,16 @@ describe('5 · el agente del roster por run-sdk (sin SALA_DISPATCH_KEY)', () => 
 
 describe('6 · el cableado de las rutas (lo que no se puede probar sin red se prueba en su fuente)', () => {
   const fuente = (f: string) => readFileSync(`src/app/api/brain/alimentar/${f}/route.ts`, 'utf8')
-  it.each(['procesar', 'despertar'])('la ruta %s pule con el agente del roster solo en corrida REAL y sin llave de la sala', (f) => {
-    const s = fuente(f)
+  // 16-oct · el pulido salió de ④ y del despertar (pasó de 100 s y la plataforma cortó el guardado): ahora vive en su propia ruta `/pulir`, después del cierre
+  it('la ruta pulir pule con el agente del roster solo en corrida REAL y sin llave de la sala', () => {
+    const s = fuente('pulir')
     expect(s).toMatch(/pulirResumen: real \? agenteDelRoster\(/)
     expect(s).toMatch(/agente: AGENTE_DEL_PULIDO/)
-    expect(s).toMatch(/topeUsd: TOPE_DEL_PULIDO_USD/)
+    expect(s).toMatch(/topeUsd: TOPE_DEL_PULIDO_APARTE_USD/)
     expect(s).not.toMatch(/SALA_DISPATCH_KEY/)
+  })
+  it.each(['procesar', 'despertar'])('la ruta %s ya NO lleva al agente del pulido', (f) => {
+    expect(fuente(f)).not.toMatch(/pulirResumen:/)
   })
   it('el vigilante lee sus umbrales del entorno', () => {
     expect(fuente('vigilar')).toMatch(/umbrales: umbralesDeGastoDelEntorno\(\)/)
