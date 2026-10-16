@@ -64,6 +64,12 @@ export const PUEDEN_NOMBRARLAS = [
   /^scripts\/ops\/auditoria-seco\.ts$/,
   // 16-oct · (asignar-fuentes-a-sedes versiona fichas por la función de reasignación del portero) · el importador de las exportaciones CSV de Loyverse escribe por la MISMA función del portero (`archivarFichasDeBrazos`) y lee lo ya archivado; la lista de pedidos no resueltos solo LEE `cerebro_pedidos`
   /^scripts\/ops\/(importar-ventas-loyverse-csv|escribir-pedidos-no-resueltos|asignar-fuentes-a-sedes)\.ts$/,
+  // 16-oct · P2: la migración de las pausas por cliente (referencia a clients; el vigilante la usa) y su reversa
+  /^supabase\/migrations\/202610161600_cerebro_portero_pausas\.sql$/,
+  /^supabase\/reversas\/202610161600_cerebro_portero_pausas_REVERSA\.sql$/,
+  // 16-oct · la puerta del dueño: su migración (la tabla de preguntas pendientes referencia `cerebro_fichas`) y su reversa
+  /^supabase\/migrations\/202610161500_cerebro_dueno_preguntas\.sql$/,
+  /^supabase\/reversas\/202610161500_cerebro_dueno_preguntas_REVERSA\.sql$/,
   /^scripts\/worker-staging\/ogfq56oIEoHufFPM\//,
   // el puente: `ingest-source` acepta `cerebro_fichas` como origen de trozos (única puerta de escritura de evidencia al índice)
   /^src\/app\/api\/brain\/ingest-source\/route\.ts$/,

@@ -16,6 +16,7 @@
  * No llama a Apify ni a ningún modelo.
  */
 import { clientesActivos } from './clientes'
+import { leerTodas } from './paginar'
 import { auditarCliente, auditarCitasDelResumen, type ResultadoDeAuditoria } from './auditoria'
 import { UMBRALES_DE_GASTO_POR_OMISION, type UmbralesDeGasto } from './datos'
 import { gastoDeHoy, reconciliarYEnviar, type DepsDeRutas, type Respuesta } from './rutas'
@@ -98,7 +99,7 @@ export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: str
   }
 
   const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)
-  const nuevas = await deps.db.from('cerebro_fichas').select('id, descartada, retirada_en').eq('client_id', c.client_id).gte('creado_en', dia0.toISOString()).limit(2000)
+  const nuevas = await leerTodas(() => deps.db.from('cerebro_fichas').select('id, descartada, retirada_en').eq('client_id', c.client_id).gte('creado_en', dia0.toISOString()).order('id', { ascending: true }))
   if (nuevas.error) falla('las fichas nuevas', nuevas.error.message)
   else {
     const ids = lista(nuevas.data).filter((x) => !x.descartada && !x.retirada_en).map((x) => String(x.id))
@@ -134,6 +135,15 @@ export function lineaDeAlerta(res: ResultadoDeCliente[], apagado: boolean, workf
   const primero = todos[0] ?? 'sin detalle'
   const mas = (todos.length > 1 ? ` (+${todos.length - 1} más)` : '') + (intentos > 1 ? ` · falló ${intentos} veces` : '')
   return `🔴 Portero del cerebro${etapa ? ` (${etapa})` : ''} ${apagado ? 'APAGADO' : 'CON PROBLEMAS (no se pudo apagar: apágalo a mano)'} · ${primero}${mas} · revisar y volver a activar el flujo ${workflowId} en n8n`
+}
+
+/** cuántas pausas por la MISMA causa en una hora vuelven el problema «del sistema» y no «del cliente»: ahí sí se apaga el flujo entero */
+export const PAUSAS_COMUNES_PARA_APAGAR = 3
+/** la línea de UN aviso cuando se pausa a uno o más clientes (el flujo sigue para los demás) */
+export function lineaDePausa(res: ResultadoDeCliente[], workflowId: string, intentos = 1): string {
+  const nombres = res.map((x) => x.nombre ?? x.client_id.slice(0, 8)).join(', ')
+  const primero = res[0]?.problemas[0] ?? 'sin detalle'
+  return `🟠 Portero del cerebro · PAUSADO solo para ${nombres}: ${primero}${res.length > 1 ? ` (+${res.length - 1} cliente(s) más)` : ''}${intentos > 1 ? ` · falló ${intentos} veces` : ''} · los demás clientes siguen (flujo ${workflowId} encendido) · se reanuda con POST /api/brain/alimentar/reanudar cuando se arregle`
 }
 
 /** la línea de UN aviso que no apaga (🟡: informativo; el flujo sigue encendido) */
@@ -206,10 +216,39 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
   if (erroresDeRastro.length) body.errores_de_rastro = erroresDeRastro
 
   if (hayProblemas) {
+    // P2 (16-oct): UN cliente con un problema PROPIO se PAUSA y el flujo sigue para los demás; el flujo entero solo se apaga si el problema no es de un cliente
+    // (la lista de clientes, ninguno activo, no se pudo registrar la pausa) o si es COMÚN a varios (algo del sistema, no de ese cliente).
+    const globales = resultados.filter((r) => r.problemas.length > 0 && !UUID.test(r.client_id))
+    const delCliente = resultados.filter((r) => r.problemas.length > 0 && UUID.test(r.client_id))
+    const pausados: Array<{ client_id: string; nombre: string | null; ya_estaba: boolean }> = []
+    for (const r of delCliente) {
+      const falla = (m: string) => { const e = { ...r, client_id: 'general', problemas: [`${PREFIJO_NO_PUDE} registrar la pausa de ${r.nombre ?? r.client_id.slice(0, 8)}: ${m}`.slice(0, 200)] }; globales.push(e); resultados.push(e) }
+      const abierta = await deps.db.from('cerebro_portero_pausas').select('id').eq('client_id', r.client_id).is('levantada_en', null).limit(1)
+      if (abierta.error) { falla(abierta.error.message); continue }
+      if (lista(abierta.data).length) { pausados.push({ client_id: r.client_id, nombre: r.nombre, ya_estaba: true }); continue }
+      const w = await deps.db.from('cerebro_portero_pausas').insert({ client_id: r.client_id, motivo: r.problemas[0].slice(0, 300), problemas: r.problemas, workflow_id: wf || null, workflow_execution_id: ex || null, desde: ahora.toISOString() })
+      if (w.error) { falla(w.error.message); continue }
+      pausados.push({ client_id: r.client_id, nombre: r.nombre, ya_estaba: false })
+    }
+    let sistemico = false
+    if (pausados.some((p) => !p.ya_estaba)) {
+      const rec = await deps.db.from('cerebro_portero_pausas').select('client_id, motivo').gte('desde', new Date(ahora.getTime() - 3_600_000).toISOString()).limit(200)
+      const causa = (t: string) => t.replace(/[\d.,]+/g, '#').slice(0, 80)
+      const mias = delCliente.map((r) => causa(r.problemas[0]))
+      if (!rec.error) sistemico = mias.some((c) => lista(rec.data).filter((x) => causa(String(x.motivo ?? '')) === c).length >= PAUSAS_COMUNES_PARA_APAGAR)
+    }
+    const apagarTodo = globales.length > 0 || sistemico
+    if (!apagarTodo && pausados.every((p) => p.ya_estaba)) return { status: 200, body: { ...body, ok: false, pausados } }
+    if (!apagarTodo) {
+      const texto = lineaDePausa(delCliente.filter((r) => pausados.some((p) => p.client_id === r.client_id && !p.ya_estaba)), wf, intentos)
+      const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+      body.pausados = pausados; body.aviso = { ...av, texto }
+      return { status: av.ok ? 200 : 502, body: { ...body, ok: false } }
+    }
     const ap = deps.apagar ? await deps.apagar(wf).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin forma de apagar el flujo' }
     const texto = lineaDeAlerta(resultados, ap.ok, wf, intentos)
     const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
-    body.apagado = ap; body.aviso = { ...av, texto }
+    body.apagado = ap; body.aviso = { ...av, texto }; if (pausados.length) body.pausados = pausados
     return { status: ap.ok && av.ok ? 200 : 502, body: { ...body, ok: false } }
   }
   // todo bien = silencio (sin resumen de rutina de ningún tipo)

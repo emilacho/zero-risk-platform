@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest'
 import { alimentarCliente } from '../alimentar'
 import { rutaDespertar } from '../despertar'
 import { rutaListo } from '../listo'
+import { clientesActivos } from '../clientes'
+import { rutaNoCorrio } from '../no-corrio'
 import { rutaDescubrir, reconciliarYEnviar } from '../rutas'
 import { rutaPedido } from '../pedidos'
 import { evaluarCliente } from '../vigilante'
@@ -191,6 +193,24 @@ describe('plan del día y brazos: cada cliente pide solo lo que tiene y todo lo 
   }
 })
 
+describe('orden de ejecución del plan: la posición por sede y la competencia no quedan al final (el flujo omite «por tiempo» lo último)', () => {
+  const MIERCOLES = new Date('2026-10-14T15:00:00Z')
+  for (const c of DIEZ_CLIENTES.filter((x) => x.sedes.length && x.compitePorCercania)) {
+    it(`${tuteoYVoseo(c)}`, async () => {
+      const t = tablasDe(c)
+      ;(t.clients[0].config as Record<string, unknown>).apify = { ...(t.clients[0].config as { apify: object }).apify, competitor_list: [{ name: 'Competidor Uno', website: 'https://uno.example', instagram: 'unocompetidor', competitor_type: 'direct' }] }
+      const m = montar(t, { ahora: MIERCOLES })
+      const p = await rutaDescubrir({ ...m.deps, brazos: { ...BRAZOS_APAGADOS, demanda: true, competencia: true } } as never, { client_id: c.id, dry_run: true, ...WF })
+      const fuentes = ((p.body.plan as { hacer: Array<{ fuente: string }> }).hacer).map((a) => a.fuente)
+      const i = (f: string) => fuentes.indexOf(f)
+      expect(i('demanda'), fuentes.join(',')).toBeGreaterThan(-1)
+      for (const ultima of ['prensa', 'resenas', 'videos', 'menciones', 'busqueda_propuesta']) if (i(ultima) >= 0) expect(i('demanda')).toBeLessThan(i(ultima))
+      // y lo propio sigue primero
+      for (const propia of ['sitio', 'instagram', 'mapas']) if (i(propia) >= 0) expect(i(propia)).toBeLessThan(i('demanda'))
+    })
+  }
+})
+
 describe('ventas del punto de venta: el mes, el día y la hora son los del CLIENTE', () => {
   for (const c of DIEZ_CLIENTES) {
     it(`${tuteoYVoseo(c)}: la hora local sale de su zona (declarada o de su país)`, () => {
@@ -283,6 +303,36 @@ describe('pedido libre de una oficina', () => {
       expect((t as unknown as T).costs ?? []).toHaveLength(0)
     })
   }
+})
+
+describe('los diez juntos: quién es cliente activo y quién no corrió hoy', () => {
+  const juntos = (): T => {
+    const out: T = {}
+    for (const c of DIEZ_CLIENTES) for (const [k, v] of Object.entries(tablasDe(c))) (out[k] ??= []).push(...v)
+    return out
+  }
+  it('los diez tienen manual y plan: los diez son clientes activos (un cliente sin manual se excluye con su motivo)', async () => {
+    const t = juntos()
+    t.clients.push({ id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', name: 'Sin manual', config: {} })
+    const r = await clientesActivos(crearBaseFalsa(t as never).db)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.datos.clientes.map((x) => x.client_id).sort()).toEqual(DIEZ_CLIENTES.map((x) => x.id).sort())
+    expect(r.datos.excluidos).toEqual([{ client_id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', motivos: expect.arrayContaining(['sin manual de marca']) }])
+  })
+  it('«no corrió»: nueve corrieron hoy y uno no; solo ese se avisa, con su nombre', async () => {
+    const t = juntos()
+    const dia = AHORA.toISOString().slice(0, 10)
+    const faltante = DIEZ_CLIENTES[6]
+    for (const c of DIEZ_CLIENTES.filter((x) => x.id !== faltante.id)) t.cerebro_portero_corridas.push({ id: `r-${c.id}`, client_id: c.id, dia, estado: 'hecha', resumen: {} })
+    const avisos: string[] = []
+    const r = await rutaNoCorrio({ ...montar(t).deps, db: crearBaseFalsa(t as never).db, estadoDelFlujo: async () => ({ ok: true, activo: true }), avisar: async (x) => { avisos.push(x); return { ok: true, detalle: 'entregado' } } }, { dry_run: false })
+    const v = r.body.clientes as Array<{ client_id: string; veredicto: string }>
+    expect(v.filter((x) => x.veredicto === 'corrio')).toHaveLength(9)
+    expect(v.filter((x) => x.veredicto === 'no_corrio').map((x) => x.client_id)).toEqual([faltante.id])
+    expect(avisos).toHaveLength(1)
+    expect(avisos[0]).toContain(faltante.nombre)
+  })
 })
 
 describe('escala: la base devuelve como mucho 1.000 filas y el cerebro no se confunde', () => {

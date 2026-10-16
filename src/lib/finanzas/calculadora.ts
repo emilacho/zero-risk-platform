@@ -164,7 +164,10 @@ export function confianzaDe(cifras: Record<string, Cifra>): Confianza {
  * Siempre es un SUPUESTO (usa el costo por resultado de arranque y la tasa de resultado a venta); nunca un dato. Sin ticket/margen o sin contribución positiva: `null` con su motivo.
  * `totalPara(W)` es la MISMA cadena de `calcular` (pauta → Meta+IG necesario → reparto inverso): una sola verdad.
  */
-export function metaDeEquilibrio(p: { contribucion: number | null; meta: number; totalPara: (meta: number) => number }): Equilibrio {
+export function metaDeEquilibrio(p: { contribucion: number | null; meta: number; totalPara: (meta: number) => number; base?: number }): Equilibrio {
+  // con línea base, la variable del equilibrio son los resultados que SE AÑADEN (los que paga la pauta): `totalPara` recibe ESA cantidad y las metas se muestran sumando la base
+  const b0 = finito(p.base) && p.base > 0 ? p.base : 0
+  const incMeta = Math.max(0, p.meta - b0)
   const base: Equilibrio = { meta_de_equilibrio_semana: null, meta_actual: p.meta, cubre: null, meta_sugerida_semana: null, contribucion_por_venta: p.contribucion == null ? null : r2(p.contribucion), motivo: null }
   if (p.contribucion == null) return { ...base, motivo: 'sin ticket o margen: no hay con qué medir si una venta paga su costo' }
   if (!(p.contribucion > 0)) return { ...base, motivo: 'la venta no deja contribución positiva: ninguna meta cubre el equilibrio' }
@@ -174,9 +177,9 @@ export function metaDeEquilibrio(p: { contribucion: number | null; meta: number;
   if (g(LO) <= TOLERANCIA) return { ...base, meta_de_equilibrio_semana: 0, cubre: true, motivo: 'cualquier meta cubre el equilibrio con estos supuestos' }
   let lo = LO, hi = HI
   for (let i = 0; i < 100; i++) { const mid = (lo + hi) / 2; if (g(mid) > 0) lo = mid; else hi = mid }
-  const w = r2(hi)
-  const cubre = p.meta + TOLERANCIA >= hi
-  return { ...base, meta_de_equilibrio_semana: w, cubre, meta_sugerida_semana: cubre ? null : Math.ceil(hi) }
+  const w = r2(hi + b0)
+  const cubre = incMeta + TOLERANCIA >= hi
+  return { ...base, meta_de_equilibrio_semana: w, cubre, meta_sugerida_semana: cubre ? null : Math.ceil(hi + b0) }
 }
 
 export function calcular(e: Entrada): Resultado {
@@ -206,7 +209,13 @@ export function calcular(e: Entrada): Resultado {
   }
 
   // ── resultados, pauta y aprendizaje
-  const R = e.meta_por_semana / q
+  // la pauta compra solo lo que SE AÑADE a lo que el negocio ya logra: meta − línea base (sin base, la meta total, y se dice)
+  const baseSem = finito(e.base_por_semana) && e.base_por_semana > 0 ? e.base_por_semana : 0
+  const incremental = Math.max(0, e.meta_por_semana - baseSem)
+  if (baseSem > 0 && incremental <= 0) alertas.push(`la línea base (${r2(baseSem)} por semana) ya cubre la meta (${r2(e.meta_por_semana)}): no quedan resultados que la pauta deba añadir; la pauta de rendimiento es 0`)
+  else if (baseSem > 0) alertas.push(`la pauta se dimensiona para los ${r2(incremental)} resultados por semana que SE AÑADEN a la línea base de ${r2(baseSem)} (meta ${r2(e.meta_por_semana)}), no para la meta total`)
+  else alertas.push('sin línea base de ventas: la pauta se dimensiona para la meta TOTAL y puede quedar sobredimensionada si el negocio ya vende sin pauta')
+  const R = incremental / q
   const rendSem = R * costo.base
   const diario = rendSem / n
   const minimo = Math.max(e.piso_plataforma ?? 0, (costo.base * EVENTOS_PARA_APRENDER) / n)
@@ -254,7 +263,8 @@ export function calcular(e: Entrada): Resultado {
   // ── dato que no bloquea: con marca y producción cada venta cuesta más que lo que deja la primera
   const costoPorVenta = costo.base / q
   if (conValor) {
-    const ventasMes = e.meta_por_semana * SEMANAS_POR_MES
+    // las ventas que paga el total del plan son las que SE AÑADEN a la base
+    const ventasMes = incremental * SEMANAS_POR_MES
     const costoTotalPorVenta = ventasMes > 0 ? totalMes / ventasMes : 0
     const dejaPrimera = Math.max(0, e.ticket! * e.margen! - entrega)
     if (costoTotalPorVenta > dejaPrimera) alertas.push(`dato que no bloquea: con marca y producción cada venta cuesta ${r2(costoTotalPorVenta)} y la primera venta deja ${r2(dejaPrimera)}`)
@@ -267,7 +277,11 @@ export function calcular(e: Entrada): Resultado {
     costo_por_resultado_arranque: cifra(costo.base, { min: r2(costo.cota_baja), max: r2(costo.cota_alta), tipo: 'supuesto', fuente: 'referencia × (1 + arranque)', formula: 'e = ref × (1 + a)' }),
     tasa_resultado_a_venta: cifra(q, { tipo: (e.pasos ?? []).length ? 'supuesto' : 'dato', fuente: (e.pasos ?? []).length ? 'producto de los pasos' : 'el resultado es la meta', formula: 'q = Π tasas' }),
     costo_por_venta: cifra(costoPorVenta, { tipo: 'supuesto', fuente: 'costo por resultado ÷ q', formula: 'p = e ÷ q' }),
-    resultados_por_semana: cifra(R, { tipo: 'supuesto', fuente: 'meta ÷ q', formula: 'R = W ÷ q' }),
+    ...(baseSem > 0 ? {
+      base_por_semana: cifra(baseSem, { tipo: 'dato', fuente: e.base_fuente ?? 'línea base de ventas del negocio', formula: 'resultados finales por semana sin pauta' }),
+      meta_incremental_por_semana: cifra(incremental, { tipo: 'supuesto', fuente: 'meta − línea base', formula: 'I = W − base' }),
+    } : {}),
+    resultados_por_semana: cifra(R, baseSem > 0 ? { tipo: 'supuesto', fuente: '(meta − base) ÷ q', formula: 'R = (W − base) ÷ q' } : { tipo: 'supuesto', fuente: 'meta ÷ q', formula: 'R = W ÷ q' }),
     pauta_rendimiento_semana: cifra(rendSem, { min: r2(R * costo.cota_baja), max: r2(R * costo.cota_alta), tipo: 'supuesto', fuente: 'R × costo', formula: 'P = R × e' }),
     pauta_rendimiento_mes: cifra(rendMes, { tipo: 'supuesto', fuente: 'semana × 52 ÷ 12', formula: 'P × 52 ÷ 12' }),
     pauta_diaria: cifra(diario, { tipo: 'supuesto', fuente: 'pauta semanal ÷ días activos', formula: 'P ÷ n' }),
@@ -284,8 +298,9 @@ export function calcular(e: Entrada): Resultado {
 
   // ── plan v3 · V7 · la meta de equilibrio (supuesto; no entra a la confianza ni al techo: es un aviso para el ajuste)
   const contribucion = conValor ? e.ticket! * e.margen! * periodos - entrega : null
-  const totalPara = (meta: number) => repartoInverso({ metaIgNecesario: ((meta / q) * costo.base * SEMANAS_POR_MES) / (1 - marca), produccion: prod, canales: e.canales ?? [] }).totalMes
-  const equilibrio = metaDeEquilibrio({ contribucion, meta: e.meta_por_semana, totalPara })
+  // `totalPara` recibe los resultados que paga la pauta (con línea base: los que SE AÑADEN; sin ella: la meta)
+  const totalPara = (resultados: number) => repartoInverso({ metaIgNecesario: ((resultados / q) * costo.base * SEMANAS_POR_MES) / (1 - marca), produccion: prod, canales: e.canales ?? [] }).totalMes
+  const equilibrio = metaDeEquilibrio({ contribucion, meta: e.meta_por_semana, totalPara, base: baseSem })
   if (equilibrio.meta_de_equilibrio_semana !== null) {
     cifras.meta_de_equilibrio_semana = cifra(equilibrio.meta_de_equilibrio_semana, { tipo: 'supuesto', fuente: 'la contribución por venta paga el total mensual del plan', formula: 'total_mes(W) ÷ (W × 52 ÷ 12) = ticket × margen × períodos − entrega' })
     if (equilibrio.meta_sugerida_semana !== null) cifras.meta_sugerida_semana = cifra(equilibrio.meta_sugerida_semana, { tipo: 'supuesto', fuente: 'primera meta entera que cubre el equilibrio (la decide el dueño)', formula: 'ceil(meta de equilibrio)' })

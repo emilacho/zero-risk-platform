@@ -34,6 +34,12 @@ export interface Semilla {
   /** la corrida que armó el expediente fue de ENSAYO (`dry_run` declarado): ningún dato «medido» de ella vale como medido */
   corrida_es_de_ensayo?: boolean
   fecha?: string
+  /** tope PROPIO de este encargo (US$ cobrados); solo SUBE el de la plantilla (1,50), nunca pasa de TOPE_MAXIMO_POR_ENCARGO_USD y no se acepta si no es un número. Decisión de Emilio, por encargo. */
+  tope_encargo_usd?: number
+  /** LÍNEA BASE: resultados finales por semana que el negocio ya logra sin pauta (dato del dueño); gana sobre lo que se mida en `datos`. La pauta se dimensiona para `meta − base` */
+  linea_base_por_semana?: number
+  /** respuestas del dueño entregadas como DATO (sin hilo de Slack): entran al contexto de cada paso de agente marcadas como dato confirmado por él */
+  respuestas_del_dueno?: Array<{ clave: string; valor: unknown; literal: string }>
 }
 
 export interface EncargoDeConversa {
@@ -92,6 +98,10 @@ export interface AlmacenDeConversa {
   soltarPaso?(id: string): Promise<void>
   /** lo REALMENTE cobrado por el encargo: suma de `agent_invocations` de `<encargo>:<paso>` (incluye lo que se cobró y no llegó a guardarse); null si no se pudo leer */
   cobrado?(encargo_id: string): Promise<number | null>
+  /** BUZÓN (16-oct): guarda solo lo del buzón (canal/ts del MD, cursor de lectura, respuestas en la semilla, registro) SIN tocar el estado del motor ni el gasto: no pisa un paso en vuelo */
+  /** BUZÓN: MD enviados (un `buzon_respuestas` versión 1 = un MD) por este cliente en las últimas 24 h y entre todos desde las 00:00 UTC; null si no se pudo leer */
+  contarBuzon?(client_id: string, ahora: Date): Promise<{ cliente_24h: number; hoy: number } | null>
+  guardarBuzon?(c: { encargo_id: string; slack_canal?: string | null; slack_ts?: string | null; leido_hasta?: string | null; semilla?: Semilla; artefacto?: ArtefactoGuardado }): Promise<void>
 }
 
 export type RespuestaDeModelo = { ok: true; salida: unknown; costo_usd: number } | { ok: false; error: string; costo_usd: number }

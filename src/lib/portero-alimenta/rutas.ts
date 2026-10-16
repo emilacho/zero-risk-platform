@@ -4,6 +4,7 @@
  * `workflow_id` y `workflow_execution_id` → 403; interruptor `PORTERO_ALIMENTAR` apagado → 200 `{apagado:true}` sin leer ni escribir.
  * `descubrir` solo LEE (y, con su interruptor, pide al modelo hasta 3 búsquedas). `alimentar` escribe SOLO sin `dry_run`.
  */
+import { PRESUPUESTO_DE_RUTA_MS, PRESUPUESTO_DEL_PUENTE_EN_ALIMENTAR_MS, PRESUPUESTO_DEL_PUENTE_PROPIO_MS } from './tandas'
 import { alimentarCliente, contextoDelCliente, type Db, type ResultadoDeAlimentar } from './alimentar'
 import { coincidePorPalabra } from '../texto/coincidencia'
 import { fichaPropiaDeMapas } from './mapas-propia'
@@ -98,7 +99,7 @@ export interface DepsDeRutas {
   /** el agente del roster que pule el resumen vivo (15-oct); ausente = por código */
   pulirResumen?: (tarea: string, opciones?: { topeUsd?: number }) => Promise<{ texto: string; costo_usd: number }>
   /** escribe los trozos del índice (puente) y saca los de las fichas reemplazadas; en pruebas es un registro */
-  puente?: (p: { escribir: PuenteDeIndice[]; sacar: string[]; client_id: string }) => Promise<{ escritos: number; sacados: number; errores: string[] }>
+  puente?: (p: { escribir: PuenteDeIndice[]; sacar: string[]; client_id: string; hasta?: number }) => Promise<{ escritos: number; sacados: number; errores: string[] }>
   ahora?: Date
   /** los nuevos brazos (15-oct): todos APAGADOS si falta; las rutas los leen del entorno */
   brazos?: BrazosActivos
@@ -137,7 +138,8 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
     brazosCtx = await cargarContextoDeBrazos(deps.db, v.client_id, cliente, ahora)
     if (brazosCtx.errores.length) { brazosCtxError = brazosCtx.errores.join(' · '); brazosCtx = undefined }
   }
-  const base = { cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx }
+  const forzarPosicion = v.cuerpo.forzar_posicion === true
+  const base = { forzar_posicion: forzarPosicion, cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx }
 
   // las búsquedas propias: el modelo PROPONE, el código decide
   let propuestas: ResultadoDePropuestas = { aceptadas: [], rechazadas: [] }
@@ -294,7 +296,7 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
   const vd = await deps.db.from('apify_raw').select('respuesta').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', 'videos_instagram').limit(50)
   if (vd.error) return err(502, 'lectura_fallida', `apify_raw: ${vd.error.message}`)
   const conVideoYa = new Set(lista(vd.data).flatMap((f) => lista(f.respuesta)).flatMap((it) => [String(it.shortCode ?? ''), String(it.id ?? '')]).filter(Boolean))
-  const vi = await deps.db.from('cerebro_unidades_vistas').select('unidad_ref').eq('client_id', v.client_id).eq('fuente', 'instagram').limit(2000)
+  const vi = await leerTodas(() => deps.db.from('cerebro_unidades_vistas').select('unidad_ref').eq('client_id', v.client_id).eq('fuente', 'instagram').order('id', { ascending: true }))
   if (vi.error) return err(502, 'lectura_fallida', `cerebro_unidades_vistas: ${vi.error.message}`)
   const vistas = new Set(lista(vi.data).map((x) => String(x.unidad_ref)))
   const perfiles = lista(lista(ig.data)[0]?.respuesta).filter((p) => handles.has(String(p.username ?? '').toLowerCase()))
@@ -317,7 +319,7 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
  * EL PUENTE POR PASADAS · lee las fichas y los trozos del cliente, reconcilia (idempotente) y envía a lo más `MAX_TROZOS_A_ESCRIBIR_POR_PASADA` trozos y saca a lo más
  * `MAX_TROZOS_A_SACAR_POR_PASADA`; `quedan` dice cuánto falta (el flujo repite hasta 0). En seco solo cuenta. Una falla de lectura se DICE.
  */
-export async function reconciliarYEnviar(deps: DepsDeRutas, clientId: string, dryRun: boolean): Promise<{ puente: Record<string, unknown>; errores: string[] }> {
+export async function reconciliarYEnviar(deps: DepsDeRutas, clientId: string, dryRun: boolean, presupuestoMs: number = PRESUPUESTO_DEL_PUENTE_PROPIO_MS): Promise<{ puente: Record<string, unknown>; errores: string[] }> {
   const fi = await leerTodas(() => deps.db.from('cerebro_fichas').select('id, client_id, ref, clase, titulo, contenido, fecha_fuente, observado_en, creado_en, propiedad, origen, descartada, retirada_en, prueba, huella').eq('client_id', clientId).order('id', { ascending: true }))
   const ch = await leerTodas(() => deps.db.from('client_brain_chunks').select('source_id').eq('client_id', clientId).eq('source_table', 'cerebro_fichas').order('id', { ascending: true }))
   if (fi.error || ch.error) return { puente: { lectura_fallida: true }, errores: [`puente: lectura fallida (${(fi.error ?? ch.error)!.message})`] }
@@ -326,8 +328,9 @@ export async function reconciliarYEnviar(deps: DepsDeRutas, clientId: string, dr
   let puente: Record<string, unknown> = { pendientes: rec.escribir.length, a_sacar: rec.sacar.length, ya_buscables: rec.ya_buscables, repetidas: rec.duplicadas, esta_pasada: { escribir: lote.escribir.length, sacar: lote.sacar.length } }
   const errores: string[] = []
   let quedan = rec.escribir.length + rec.sacar.length
-  if (!dryRun && deps.puente && (lote.escribir.length || lote.sacar.length)) {
-    const p = await deps.puente({ escribir: lote.escribir, sacar: lote.sacar, client_id: clientId })
+  // sin presupuesto no se escribe nada (todo queda como `quedan` para la pasada propia del puente); con presupuesto, no se arranca nada pasada la hora límite
+  if (!dryRun && deps.puente && presupuestoMs > 0 && (lote.escribir.length || lote.sacar.length)) {
+    const p = await deps.puente({ escribir: lote.escribir, sacar: lote.sacar, client_id: clientId, hasta: Date.now() + presupuestoMs })
     puente = { ...puente, ...p }
     quedan = Math.max(0, rec.escribir.length - p.escritos) + Math.max(0, rec.sacar.length - p.sacados)
     if (p.errores.length) errores.push(...p.errores.map((m) => `puente: ${m}`))
@@ -361,6 +364,7 @@ export async function rutaAlimentar(deps: DepsDeRutas, cuerpo: unknown): Promise
   const v = validar(cuerpo); if (esRespuesta(v)) return v
   if (!deps.interruptores.alimentar) return { status: 200, body: { apagado: true, detalle: 'PORTERO_ALIMENTAR está apagado: no se leyó ni se escribió nada', modelos_llamados: 0 } }
   const ahora = deps.ahora ?? new Date()
+  const inicio = Date.now()
   const g = await gastoDeHoy(deps.db, v.client_id, ahora)
   if (!g.ok) return err(502, 'lectura_fallida', g.detalle)
   const r: ResultadoDeAlimentar = await alimentarCliente({
@@ -371,7 +375,9 @@ export async function rutaAlimentar(deps: DepsDeRutas, cuerpo: unknown): Promise
   // H1 · el puente se RECONCILIA en cada pasada (idempotente, con tope por pasada): ver `reconciliarYEnviar`
   let puente: Record<string, unknown> | null = null
   if (deps.interruptores.puente_al_indice && r.ok) {
-    const x = await reconciliarYEnviar(deps, v.client_id, v.dry_run)
+    // el puente de ESTA llamada solo usa lo que sobra del presupuesto de la ruta; lo demás lo drena el nodo ④ bis por pasadas propias
+    const sobra = PRESUPUESTO_DE_RUTA_MS - (Date.now() - inicio)
+    const x = await reconciliarYEnviar(deps, v.client_id, v.dry_run, Math.max(0, Math.min(PRESUPUESTO_DEL_PUENTE_EN_ALIMENTAR_MS, sobra)))
     puente = x.puente
     r.errores.push(...x.errores)
   }

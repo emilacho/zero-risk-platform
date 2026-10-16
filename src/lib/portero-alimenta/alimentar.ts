@@ -6,6 +6,7 @@
  *  · el modelo solo juzga lo que tiene algo vigente con qué reemplazarse; lo demás se SUMA por código (no hay nada que reemplazar ⇒ no hace falta pagar);
  *  · un error de lectura se DICE: nunca se lee como «no hay nada».
  */
+import { enTandas } from './tandas'
 import { propiosDeFicha } from '../manual/cliente'
 import { TRANSITORIOS_COMUNES, transitoriosDe, varianteDelCliente, type Interruptores } from './datos'
 import { MAX_LLAMADAS_DEL_JUEZ_POR_DIA, TOPE_DE_GASTO_DEL_JUEZ_POR_LLAMADA_USD, TOPE_DEL_PORTERO_USD } from './datos'
@@ -103,6 +104,9 @@ export function contextoDelCliente(c: Fila, sedes: Fila[]): ContextoDelCliente {
   const tel = [cfg.phone, cfg.telefono, c.phone].filter((v): v is string => typeof v === 'string')
   return { nombre: String(c.name ?? '').trim(), ubicacion: [...ubic], handles, dominios, telefonos: tel, rubro: palabrasDelRubro(c.industry ?? c.rubro) }
 }
+
+/** escrituras a la base a la vez (cada una es un viaje de ~0,1 s) */
+const ESCRITURAS_A_LA_VEZ = 12
 
 export async function alimentarCliente(e: EntradaDeAlimentar): Promise<ResultadoDeAlimentar> {
   const r = vacio(e.dry_run)
@@ -249,9 +253,9 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     const ok = await w(e.db.from('cerebro_ingresos').insert({ id, client_id: e.client_id, origen: o, fuente_ref: 'portero-alimentar', es_completa: false, huella: `${dia}:${o}`, material: null, estado: 'fichado', workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }), `ingreso ${o}`)
     if (ok) ingresoDe.set(o, id)
   }
-  for (const x of plan.fichas) {
+  await enTandas(plan.fichas, ESCRITURAS_A_LA_VEZ, async (x) => {
     const ingreso = ingresoDe.get(x.origen)
-    if (!ingreso) continue
+    if (!ingreso) return
     const fila = {
       id: x.id, client_id: x.client_id, ingreso_id: ingreso, ref: x.ref, clase: x.clase, titulo: x.titulo, que_es: x.que_es, contenido: x.contenido, origen: x.origen, fecha_fuente: x.fecha_fuente,
       reconfirmado_en: x.reconfirmado_en, plazo: x.plazo, vigente_hasta: x.vigente_hasta, version_de: x.version_de, huella: x.huella, propiedad: x.propiedad, porque: x.porque, juzgado_por: x.juzgado_por,
@@ -260,17 +264,19 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
       descartada: !x.entregable, motivo_descarte: x.entregable ? null : x.porque || 'sin confirmar',
     }
     if (await w(e.db.from('cerebro_fichas').insert(fila), `ficha ${x.ref}`)) r.escrituras.fichas++
-  }
-  for (const t of plan.retiros) {
+  })
+  await enTandas(plan.retiros, ESCRITURAS_A_LA_VEZ, async (t) => {
     if (await w(e.db.from('cerebro_fichas').update({ retirada_en: ahora.toISOString(), motivo_retirada: t.motivo_retirada, reemplazada_por: t.reemplazada_por }).eq('id', t.id).eq('client_id', e.client_id), `retiro ${t.id}`)) r.escrituras.retiradas++
-  }
-  for (const v of plan.vistas) {
+  })
+  // las vistas son una fila por unidad de TODO el historial leído: crecen con los meses y una por una (2 viajes cada una) pasó de 120 s. En paralelo acotado y sin claves repetidas (si no, dos escritores a la vez insertarían dos veces).
+  const vistasUnicas = [...new Map(plan.vistas.map((v) => [`${v.fuente}|${v.unidad_ref}|${v.huella}`, v])).values()]
+  await enTandas(vistasUnicas, ESCRITURAS_A_LA_VEZ, async (v) => {
     const ex = await e.db.from('cerebro_unidades_vistas').select('id').eq('client_id', v.client_id).eq('fuente', v.fuente).eq('unidad_ref', v.unidad_ref).eq('huella', v.huella).limit(1)
-    if (ex.error) { r.errores.push(`vistas: ${ex.error.message}`); continue }
+    if (ex.error) { r.errores.push(`vistas: ${ex.error.message}`); return }
     const hay = lista(ex.data)[0]
     const ok = hay ? await w(e.db.from('cerebro_unidades_vistas').update({ ultima_vez: v.ultima_vez, veredicto: v.veredicto }).eq('id', String(hay.id)), 'vista') : await w(e.db.from('cerebro_unidades_vistas').insert({ ...v, ficha_id: v.ficha_id }), 'vista')
     if (ok) r.escrituras.vistas++
-  }
+  })
   const estado = r.errores.length ? 'con_errores' : 'hecha'
   // la corrida que reemplaza al despertar CIERRA lo que el despertar dejó pendiente (qué pidió y desde cuándo) para que `listo` pueda declarar los huecos
   const previo = corridaDeHoy && esObjeto(corridaDeHoy.resumen) ? (corridaDeHoy.resumen as Fila).despertar : null
