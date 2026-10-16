@@ -138,6 +138,14 @@ export function armarResumen(e: EntradaDelResumen, opciones: { candidatos?: bool
   const perfil = por('mapas', 'instagram').filter((f) => !esCifra(f) && !esTextoLegal(f.contenido)).slice(0, 5)
   sec('quien_es', `Quién es${e.nombre ? ` · ${e.nombre}` : ''}${e.rubro ? ` (${e.rubro})` : ''}`, [...sitioElegido.map((f) => linea(f, 200)), ...perfil.map((f) => linea(f, 140))], 'no hay fichas de su sitio ni de su ficha de Mapas', opciones.candidatos ? CANDIDATOS_DE_QUIEN_ES + 5 : MAX_POR_SECCION)
 
+  // lo que dijo el dueño (confirmado por él; precedencia máxima: va primero, con su fecha y su canal, y no se mezcla con lo medido). La clase es la de `dueno.ts` (`dato_del_dueno`).
+  const dichoPorElDueno = por('dato_del_dueno').slice(0, 12).map((f) => {
+    const d = datosDe(f)
+    const donde = [`dueño`, String(d.canal ?? '').trim(), String(d.respondido_en ?? f.observado_en ?? '').slice(0, 10)].filter(Boolean).join(' · ')
+    return `- ${String(d.tema ?? f.titulo)}: «${corto(String(d.respuesta ?? f.contenido), 220)}» (${donde}${d.sede ? ` · sede ${String(d.sede)}` : ''}) ${cita(f)}`
+  })
+  if (dichoPorElDueno.length) sec('dueno', 'Lo que dijo el dueño (confirmado por él)', dichoPorElDueno, '', 12)
+
   // qué vende y a qué precio vigente
   // si el cliente tiene más de una sede y la fuente de cada precio está asignada a una sede, los precios van POR SEDE (cada línea dice la suya): precios distintos entre sedes no son una contradicción
   const precios = por('precio', 'horario')
