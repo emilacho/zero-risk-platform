@@ -57,18 +57,20 @@ export function respuestaDeEquilibrioValida(v: unknown): boolean {
   const r = v.equilibrio_respuesta
   return (DECISIONES_DE_EQUILIBRIO as readonly string[]).includes(String(r.decision)) && texto(r.motivo, 400)
 }
-export function validarPlanteo(v: unknown): Resultado<PlanteoV1> {
+export function validarPlanteo(entrada: unknown): Resultado<PlanteoV1> {
   const e: string[] = []
+  // arreglo del intento 3 (16-oct): el agente envolvió el planteo en `{ planteo: {...} }`; se desenvuelve (el contenido interno se valida igual de estricto)
+  const v = objeto(entrada) && objeto(entrada.planteo) && entrada.meta_por_semana === undefined ? entrada.planteo : entrada
   if (!objeto(v)) return { ok: false, errores: ['planteo: debe ser un objeto'] }
-  if (!finito(v.meta_por_semana) || v.meta_por_semana <= 0) e.push('meta_por_semana debe ser un número > 0')
+  if (!finito(v.meta_por_semana) || v.meta_por_semana <= 0) e.push('meta_por_semana debe ser UN NÚMERO > 0 (por ejemplo 20), no un objeto ni un rango')
   if (v.meta_ambiciosa_por_semana !== undefined && (!finito(v.meta_ambiciosa_por_semana) || v.meta_ambiciosa_por_semana <= 0)) e.push('meta_ambiciosa_por_semana debe ser > 0')
   if (!Array.isArray(v.zonas) || !v.zonas.every((z) => texto(z, 80))) e.push('zonas debe ser una lista de textos')
   const d = v.dias_y_horarios
   if (!objeto(d) || !finito(d.dias_activos_por_semana) || d.dias_activos_por_semana < 1 || d.dias_activos_por_semana > 7) e.push('dias_y_horarios.dias_activos_por_semana debe estar entre 1 y 7')
-  if (!texto(v.evento, 60)) e.push('evento es obligatorio')
+  if (!texto(v.evento, 60)) e.push('evento debe ser un TEXTO corto de hasta 60 caracteres (una etiqueta como «mensaje», «pedido» o «reserva»), no un objeto ni una descripción')
   if (!Array.isArray(v.canales)) e.push('canales debe ser una lista')
   else v.canales.forEach((c, i) => {
-    if (!objeto(c) || !texto(c.canal, 60)) { e.push(`canales[${i}].canal es obligatorio`); return }
+    if (!objeto(c) || !texto(c.canal, 60)) { e.push(`canales[${i}].canal debe ser un texto con una de las claves válidas`); return }
     // arreglo del intento 2 (16-oct): una clave fuera de la lista cerrada dejaba a `redes` sin hablar en silencio (`meta_ads` ≠ `meta_ig`)
     if (!CANALES_VALIDOS.includes(String(c.canal))) e.push(`canales[${i}].canal «${String(c.canal).slice(0, 40)}» no es una clave válida: usa EXACTAMENTE una de ${CANALES_VALIDOS.join(', ')}`)
     if (!finito(c.peso) || c.peso < 0 || c.peso > 1) e.push(`canales[${i}].peso entre 0 y 1`)
