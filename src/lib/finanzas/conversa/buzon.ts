@@ -19,6 +19,8 @@ import { sha256 } from './util'
 export interface PuertosDelBuzon {
   almacen: AlmacenDeConversa
   slack: SlackMd
+  /** id del canal privado del buzón (`FINANZAS_CANAL_PREGUNTAS`); sin él, el MD al dueño como hasta ahora */
+  canal?: string
   /** la puerta del dueño en el cerebro */
   cerebro: CerebroDelDueno
   /** `finanzas_config.preguntas_slack` */
@@ -30,6 +32,8 @@ export interface PuertosDelBuzon {
 
 const TTL_DEL_ENVIO_S = 120
 const esMd = (canal: string | null) => typeof canal === 'string' && /^D[A-Z0-9]+$/.test(canal)
+/** el destino guardado en el encargo es válido si es un MD, o EXACTAMENTE el canal configurado del buzón */
+const destinoValido = (P: { canal?: string }, canal: string | null) => esMd(canal) || (!!P.canal && canal === P.canal)
 const objeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const temaDe = (clave: string) => clave.replace(/_/g, ' ').trim()
 
@@ -73,7 +77,7 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): 
   if (!('e' in c)) return c
   let e = c.e
   if (e.dry_run) return { status: 200, cuerpo: { enviado: false, motivo: 'encargo_en_seco' } }
-  const yaEnviado = (x: EncargoDeConversa) => esMd(x.slack_canal) && !!x.slack_ts
+  const yaEnviado = (x: EncargoDeConversa) => destinoValido(P, x.slack_canal) && !!x.slack_ts
   if (yaEnviado(e)) return { status: 200, cuerpo: { enviado: false, motivo: 'ya_enviado', slack_ts: e.slack_ts } }
   const arts = await P.almacen.artefactos(encargo_id).catch(() => ({}) as Record<string, Record<string, unknown>>)
   const hechas = preguntasDelAcuerdo(arts).slice(0, 3)
@@ -144,7 +148,7 @@ export async function recogerRespuestas(P: PuertosDelBuzon, encargo_id: string):
   if (!('e' in c)) return c
   const e = c.e
   if (e.dry_run) return { status: 200, cuerpo: { recogido: false, motivo: 'encargo_en_seco' } }
-  if (!esMd(e.slack_canal) || !e.slack_ts) return { status: 200, cuerpo: { recogido: false, motivo: 'sin_md_abierto' } }
+  if (!destinoValido(P, e.slack_canal) || !e.slack_ts) return { status: 200, cuerpo: { recogido: false, motivo: 'sin_md_abierto' } }
   const previo = await ultimoRegistro(P, encargo_id)
   const claves = Array.isArray(previo.claves) ? (previo.claves as unknown[]).map(String) : []
   if (!claves.length) return { status: 200, cuerpo: { recogido: false, motivo: 'sin_preguntas_registradas' } }

@@ -1,7 +1,8 @@
 /**
- * BUZÓN DE SLACK · el adaptador de MENSAJE DIRECTO (CC#1 · 16-oct). La oficina financiera le pregunta al dueño por su bandeja (no por un canal) y recoge sus respuestas sola.
+ * BUZÓN DE SLACK · el adaptador de MENSAJE DIRECTO (CC#1 · 16-oct) o, si se configura `canal` (`FINANZAS_CANAL_PREGUNTAS`, 16-oct · CC#2), de un CANAL PRIVADO (`#buzon-de-preguntas`). La oficina financiera le pregunta al dueño por su bandeja (no por un canal) y recoge sus respuestas sola.
  *  · Enviar: `chat.postMessage` al id del dueño (abre el MD solo; alcance `chat:write`). Leer: `conversations.history` (alcance `im:history`: el bot HOY no lo tiene → «sin acceso» hasta que se agregue).
  *  · Solo cuentan los mensajes POSTERIORES a `desde_ts`, del `dueno_id`, sin `bot_id` y sin subtipo (ediciones, uniones…). El bot y cualquier tercero se ignoran.
+ *  · CANAL (opcional): `enviarAlDueno` publica en ese canal mencionando al dueño (`<@id>`) y devuelve ese mismo canal; `leer` junta las respuestas del HILO (`conversations.replies`) y las del canal posteriores al cursor (`conversations.history`) —alcances `groups:history`/`groups:read`, que el bot ya tiene—, sin repetir, y solo cuenta lo del dueño (el bot y cualquier otro miembro se ignoran). Sin `canal` todo sigue como el MD.
  *  · NUNCA lanza: un fallo (sin permiso, red, límite de ritmo) devuelve «sin acceso» con el motivo corto y la conversación sigue con supuestos.
  *  · El `fetch` y la llave entran por parámetro; aquí no hay nada que se llame solo. La llave NUNCA se escribe en papel ni en registros.
  */
@@ -35,12 +36,18 @@ async function llamar(f: Fetch, token: string, metodo: string, init: { cuerpo?: 
   } catch { return { ok: false, motivo: 'red' } }
 }
 
-export function slackMdPuerto(p: { token: string; dueno_id: string; fetch?: Fetch }): SlackMd {
+export function slackMdPuerto(p: { token: string; dueno_id: string; canal?: string; fetch?: Fetch }): SlackMd {
   const f = p.fetch ?? fetch
   const sinLlave = !p.token || !p.dueno_id
   return {
     async enviarAlDueno(texto) {
       if (sinLlave) return { ok: false, motivo: 'no_configurado' }
+      if (p.canal) {
+        // CANAL: se menciona al dueño (le llega el aviso) y el destino devuelto debe ser EXACTAMENTE el configurado
+        const rc = await llamar(f, p.token, 'chat.postMessage', { cuerpo: { channel: p.canal, text: `<@${p.dueno_id}> ${texto}` } })
+        if (!rc.ok) return rc
+        return esTs(rc.j.ts) && rc.j.channel === p.canal ? { ok: true, canal: p.canal, ts: rc.j.ts } : { ok: false, motivo: 'canal_inesperado' }
+      }
       const r = await llamar(f, p.token, 'chat.postMessage', { cuerpo: { channel: p.dueno_id, text: texto } })
       if (!r.ok) return r
       const canal = r.j.channel
@@ -56,21 +63,36 @@ export function slackMdPuerto(p: { token: string; dueno_id: string; fetch?: Fetc
       if (sinLlave) return { ...base, sin_acceso: 'no_configurado' }
       if (!x.canal) return { ...base, sin_acceso: 'falta_canal' }
       const desde = x.desde_ts && esTs(x.desde_ts) ? x.desde_ts : x.thread_ts && esTs(x.thread_ts) ? x.thread_ts : '0'
-      const todos: Msg[] = []
-      let cursor: string | undefined
-      for (let pagina = 0; pagina < 5; pagina++) {
-        const r = await llamar(f, p.token, 'conversations.history', { consulta: { channel: x.canal, oldest: desde, limit: '200', inclusive: 'false', ...(cursor ? { cursor } : {}) } })
-        if (!r.ok) return { ...base, sin_acceso: r.motivo }
-        todos.push(...((r.j.messages as Msg[] | undefined) ?? []))
-        cursor = r.j.response_metadata?.next_cursor || undefined
-        if (!cursor || r.j.has_more !== true) break
+      const paginar = async (metodo: string, extra: Record<string, string>): Promise<{ ok: true; msgs: Msg[] } | { ok: false; motivo: string }> => {
+        const out: Msg[] = []
+        let cursor: string | undefined
+        for (let pagina = 0; pagina < 5; pagina++) {
+          const r = await llamar(f, p.token, metodo, { consulta: { channel: x.canal, oldest: desde, limit: '200', inclusive: 'false', ...extra, ...(cursor ? { cursor } : {}) } })
+          if (!r.ok) return r
+          out.push(...((r.j.messages as Msg[] | undefined) ?? []))
+          cursor = r.j.response_metadata?.next_cursor || undefined
+          if (!cursor || r.j.has_more !== true) break
+        }
+        return { ok: true, msgs: out }
       }
-      const nuevos = todos.filter((m) => esTs(m.ts) && mayor(m.ts, desde))
+      const todos: Msg[] = []
+      const h = await paginar('conversations.history', {})
+      if (!h.ok) return { ...base, sin_acceso: h.motivo }
+      todos.push(...h.msgs)
+      // CANAL: la respuesta suele ir EN EL HILO del mensaje (no aparece en el historial del canal): se lee también `conversations.replies`
+      if (p.canal && x.canal === p.canal && x.thread_ts && esTs(x.thread_ts)) {
+        const t = await paginar('conversations.replies', { ts: x.thread_ts })
+        if (!t.ok) return { ...base, sin_acceso: t.motivo }
+        todos.push(...t.msgs)
+      }
+      const vistos = new Set<string>()
+      const unicos = todos.filter((m) => { if (!esTs(m.ts) || vistos.has(m.ts)) return false; vistos.add(m.ts); return true })
+      const nuevos = unicos.filter((m) => esTs(m.ts) && mayor(m.ts, desde))
       const mensajes = nuevos
         .filter((m) => m.user === p.dueno_id && !m.bot_id && !m.subtype && typeof m.text === 'string' && m.text.trim())
         .sort((a, b) => Number(a.ts) - Number(b.ts))
         .map((m) => ({ ts: m.ts as string, texto: String(m.text).trim() }))
-      const leido = todos.reduce<string | null>((acc, m) => (esTs(m.ts) && (acc === null || mayor(m.ts, acc)) ? m.ts : acc), x.desde_ts)
+      const leido = unicos.reduce<string | null>((acc, m) => (esTs(m.ts) && (acc === null || mayor(m.ts, acc)) ? m.ts : acc), x.desde_ts)
       return { ok: true, mensajes, leido_hasta: leido }
     },
   }
