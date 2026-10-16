@@ -125,6 +125,8 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): 
     const nombre = (await P.nombreDelCliente?.(e.client_id).catch(() => null)) || e.client_id
     const msg = armarMensaje({ cliente: nombre, preguntas: aPreguntar.map((a) => porClave.get(a.clave) as Pregunta) })
     if (!msg.ok) return { status: 200, cuerpo: { enviado: false, motivo: 'pregunta_mal_formada', errores: msg.errores } }
+    // pregunta larga: el «si no respondes» va como primera respuesta del hilo; sin ese método no se manda nada (no se esconde el supuesto)
+    if (msg.supuestos && !P.slack.enHilo) return { status: 200, cuerpo: { enviado: false, motivo: 'sin_hilo' } }
     // «1 200» es ambiguo para el lector (¿pregunta 1 o mil doscientos?): el mensaje enseña el formato que no lo es
     const texto = `${msg.texto}\nEjemplo de respuesta: «1: 200», «2: 2,10», «3: no».`
     const envio = await P.slack.enviarAlDueno(texto).catch(() => ({ ok: false as const, motivo: 'red' }))
@@ -134,7 +136,10 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): 
       claves: msg.claves, preguntas: aPreguntar, sin_cerebro: [] as SinCerebro[], canal: envio.canal, ts: envio.ts, respuestas: [], notas: [],
     }
     await P.almacen.guardarBuzon?.({ encargo_id, slack_canal: envio.canal, slack_ts: envio.ts, leido_hasta: envio.ts, ...(fus.aplicadas.length ? { semilla } : {}), artefacto: { tipo: 'buzon_respuestas', version: 1, contenido: registro, sha256: sha256(registro) } })
-    return { status: 200, cuerpo: { enviado: true, preguntas: msg.claves.length, claves: msg.claves, usadas_del_cerebro: dadas.map((d) => d.clave), esperando, slack_ts: envio.ts } }
+    // el mensaje ya salió y quedó registrado: si el hilo falla se avisa (el supuesto sigue en el encargo), no se reenvía nada
+    let supuestos_en_hilo: boolean | undefined
+    if (msg.supuestos) supuestos_en_hilo = (await P.slack.enHilo!(envio.canal, envio.ts, msg.supuestos).catch(() => ({ ok: false as const }))).ok
+    return { status: 200, cuerpo: { enviado: true, preguntas: msg.claves.length, claves: msg.claves, usadas_del_cerebro: dadas.map((d) => d.clave), esperando, slack_ts: envio.ts, ...(supuestos_en_hilo === undefined ? {} : { supuestos_en_hilo }) } }
   } finally {
     if (tomado) await P.almacen.soltarPaso?.(e.id)
   }

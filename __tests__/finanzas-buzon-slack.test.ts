@@ -126,6 +126,55 @@ describe('PREGUNTAR · un solo MD al dueño', () => {
     const m2 = mundo(), s2 = slackFalso()
     expect((await preguntarAlDueno(puertos(m2, s2), 'enc-1')).cuerpo).toMatchObject({ enviado: true, preguntas: PREGUNTAS.length })
   })
+  it('pregunta larga: la pregunta y la recomendación van al canal y el «si no respondes» como primera respuesta del hilo; la corta sigue en un solo mensaje', async () => {
+    const larga = { clave: 'frecuencia_visita', texto: '¿Con qué frecuencia vuelve un cliente habitual al local? ' + 'x'.repeat(200), recomendacion: 'Responde con tu estimación. ' + 'y'.repeat(200), supuesto_si_no_responde: 'Se supone una visita quincenal. ' + 'z'.repeat(200) }
+    const m = mundo(), s = slackFalso()
+    m.arts.acuerdo = { preguntas_a_emilio: [larga] }
+    const r = await preguntarAlDueno(puertos(m, s), 'enc-1')
+    expect(r.cuerpo).toMatchObject({ enviado: true, supuestos_en_hilo: true })
+    const envios = s.llamadas.filter((l) => l.metodo === 'chat.postMessage')
+    expect(envios).toHaveLength(2)
+    expect(envios[0].cuerpo.text).not.toContain('Si no respondes')
+    expect(envios[0].cuerpo.text.length).toBeLessThan(900)
+    expect(envios[1].cuerpo.thread_ts).toBe('1700000000.000100')
+    expect(envios[1].cuerpo.text).toContain('Se supone una visita quincenal')
+    expect(envios[1].cuerpo.text.length).toBeLessThanOrEqual(600)
+    expect(m.guardados).toHaveLength(1)
+    const m2 = mundo(), s2 = slackFalso()
+    await preguntarAlDueno(puertos(m2, s2), 'enc-1')
+    const corto = s2.llamadas.filter((l) => l.metodo === 'chat.postMessage')
+    expect(corto).toHaveLength(1)
+    expect(corto[0].cuerpo.text).toContain('Si no respondes')
+    expect(corto[0].cuerpo.thread_ts).toBeUndefined()
+  })
+  it('si el hilo falla, el mensaje ya salió y se avisa sin reenviar; sin método de hilo no sale nada', async () => {
+    const larga = { clave: 'frecuencia_visita', texto: 'a'.repeat(250), recomendacion: 'b'.repeat(250), supuesto_si_no_responde: 'c'.repeat(250) }
+    const m = mundo(), s = slackFalso()
+    m.arts.acuerdo = { preguntas_a_emilio: [larga] }
+    const P = puertos(m, s)
+    const base = P.slack.enHilo
+    expect(base).toBeTypeOf('function')
+    const r = await preguntarAlDueno({ ...P, slack: { ...P.slack, enHilo: async () => ({ ok: false as const, motivo: 'ratelimited' }) } }, 'enc-1')
+    expect(r.cuerpo).toMatchObject({ enviado: true, supuestos_en_hilo: false })
+    const m3 = mundo(), s3 = slackFalso()
+    m3.arts.acuerdo = { preguntas_a_emilio: [larga] }
+    const P3 = puertos(m3, s3)
+    const sinHilo = await preguntarAlDueno({ ...P3, slack: { ...P3.slack, enHilo: undefined } }, 'enc-1')
+    expect(sinHilo.cuerpo).toMatchObject({ enviado: false, motivo: 'sin_hilo' })
+    expect(s3.llamadas.filter((l) => l.metodo === 'chat.postMessage')).toHaveLength(0)
+    expect(m3.guardados).toHaveLength(0)
+  })
+  it('lo que no cabe ni aparte se rechaza: pregunta+recomendación o «si no respondes» sobre 600', async () => {
+    for (const q of [
+      { clave: 'k', texto: 'a'.repeat(400), recomendacion: 'b'.repeat(300), supuesto_si_no_responde: 'c' },
+      { clave: 'k', texto: 'a', recomendacion: 'b', supuesto_si_no_responde: 'c'.repeat(700) },
+    ]) {
+      const m = mundo(), s = slackFalso()
+      m.arts.acuerdo = { preguntas_a_emilio: [q] }
+      expect((await preguntarAlDueno(puertos(m, s), 'enc-1')).cuerpo).toMatchObject({ enviado: false, motivo: 'pregunta_mal_formada' })
+      expect(s.llamadas.filter((l) => l.metodo === 'chat.postMessage')).toHaveLength(0)
+    }
+  })
   it('una pregunta con jerga o voseo no sale (el dueño no lee jerga)', async () => {
     const m = mundo(), s = slackFalso()
     m.arts.acuerdo = { preguntas_a_emilio: [{ ...PREGUNTAS[0], texto: '¿Cuál es el workflow del dispatch? Decime vos' }] }

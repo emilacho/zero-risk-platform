@@ -16,6 +16,8 @@ export type EnvioAlDueno = { ok: true; canal: string; ts: string } | { ok: false
 export interface SlackMd extends SlackPuerto {
   /** manda el texto al dueño por MD: `chat.postMessage` con su id de usuario como destino abre el MD SIN `conversations.open` (solo pide `chat:write`); devuelve el canal `D…` y el `ts` */
   enviarAlDueno(texto: string): Promise<EnvioAlDueno>
+  /** responde dentro del hilo de un mensaje ya enviado (`thread_ts`); lo usa el «si no respondes» cuando la pregunta es larga. El bot no cuenta como respuesta del dueño al recoger. */
+  enHilo?(canal: string, ts: string, texto: string): Promise<{ ok: true } | { ok: false; motivo: string }>
 }
 
 const esTs = (t: unknown): t is string => typeof t === 'string' && /^\d+(?:\.\d+)?$/.test(t)
@@ -40,6 +42,12 @@ export function slackMdPuerto(p: { token: string; dueno_id: string; canal?: stri
   const f = p.fetch ?? fetch
   const sinLlave = !p.token || !p.dueno_id
   return {
+    async enHilo(canal, ts, texto) {
+      if (sinLlave) return { ok: false, motivo: 'no_configurado' }
+      if (!esTs(ts) || !(canal === p.canal || /^D[A-Z0-9]+$/.test(canal))) return { ok: false, motivo: 'destino_inesperado' }
+      const r = await llamar(f, p.token, 'chat.postMessage', { cuerpo: { channel: canal, thread_ts: ts, text: texto } })
+      return r.ok ? { ok: true } : r
+    },
     async enviarAlDueno(texto) {
       if (sinLlave) return { ok: false, motivo: 'no_configurado' }
       if (p.canal) {

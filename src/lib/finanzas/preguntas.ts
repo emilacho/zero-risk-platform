@@ -137,13 +137,18 @@ export function erroresDePregunta(p: Pregunta): string[] {
       if (voseoEn(v).length) e.push(`${campo}: voseo (tuteo, siempre): ${voseoEn(v).join(', ')}`)
     }
   }
-  const largo = `${p.texto} ${p.recomendacion} ${p.supuesto_si_no_responde}`.length
-  if (largo > MAX_CARACTERES_POR_PREGUNTA) e.push(`la pregunta pasa de ${MAX_CARACTERES_POR_PREGUNTA} caracteres (${largo})`)
+  // lo que el dueño lee primero (pregunta + recomendación) cabe en MAX; el «si no respondes» cabe en MAX aparte (si no entra junto, va como primera respuesta del hilo)
+  const principal = `${p.texto} ${p.recomendacion}`.length, supuesto = (p.supuesto_si_no_responde ?? '').length
+  if (principal > MAX_CARACTERES_POR_PREGUNTA) e.push(`la pregunta pasa de ${MAX_CARACTERES_POR_PREGUNTA} caracteres (${principal})`)
+  if (supuesto > MAX_CARACTERES_POR_PREGUNTA) e.push(`el «si no respondes» pasa de ${MAX_CARACTERES_POR_PREGUNTA} caracteres (${supuesto})`)
   return e
 }
 
 /** UN solo mensaje agrupado por cliente: máximo 3 preguntas, numeradas, cada una con su recomendación y su «si no respondes» */
-export function armarMensaje(p: { cliente: string; preguntas: Pregunta[]; enlace_al_hilo?: string }): { ok: true; texto: string; claves: string[] } | { ok: false; errores: string[] } {
+export const cabeJunto = (q: Pregunta): boolean => `${q.texto} ${q.recomendacion} ${q.supuesto_si_no_responde}`.length <= MAX_CARACTERES_POR_PREGUNTA
+
+/** si alguna pregunta no cabe entera en MAX, el «si no respondes» de TODAS sale aparte (`supuestos`), para mandarlo como primera respuesta del hilo; si todas caben, un solo mensaje como siempre */
+export function armarMensaje(p: { cliente: string; preguntas: Pregunta[]; enlace_al_hilo?: string }): { ok: true; texto: string; claves: string[]; supuestos?: string } | { ok: false; errores: string[] } {
   if (!p.cliente?.trim()) return { ok: false, errores: ['falta el nombre del cliente'] }
   if (!p.preguntas.length) return { ok: false, errores: ['no hay preguntas'] }
   if (p.preguntas.length > MAX_PREGUNTAS_POR_MENSAJE) return { ok: false, errores: [`máximo ${MAX_PREGUNTAS_POR_MENSAJE} preguntas por mensaje`] }
@@ -152,10 +157,12 @@ export function armarMensaje(p: { cliente: string; preguntas: Pregunta[]; enlace
   const errores = p.preguntas.flatMap((q, i) => erroresDePregunta(q).map((x) => `pregunta ${i + 1}: ${x}`))
   if (errores.length) return { ok: false, errores }
   const n = p.preguntas.length
-  const cuerpo = p.preguntas.map((q, i) => `${i + 1}) ${q.texto.trim()}\n   Lo que recomiendo: ${q.recomendacion.trim()}\n   Si no respondes: ${q.supuesto_si_no_responde.trim()}`).join('\n')
+  const aparte = !p.preguntas.every(cabeJunto)
+  const cuerpo = p.preguntas.map((q, i) => `${i + 1}) ${q.texto.trim()}\n   Lo que recomiendo: ${q.recomendacion.trim()}${aparte ? '' : `\n   Si no respondes: ${q.supuesto_si_no_responde.trim()}`}`).join('\n')
+  const supuestos = aparte ? `Si no respondes, esto es lo que supondré:\n${p.preguntas.map((q, i) => `${i + 1}) ${q.supuesto_si_no_responde.trim()}`).join('\n')}` : undefined
   const respuesta = n === 1 ? 'Responde «1 sí», «1 no» o escribe tu cifra' : 'Responde con el número de cada pregunta y «sí», «no» o tu cifra'
   const enlace = p.enlace_al_hilo ? `\nResponde en este hilo: ${p.enlace_al_hilo}` : ''
-  return { ok: true, claves, texto: `Hola Emilio. Para el plan de ${p.cliente.trim()} necesito tu decisión en ${n === 1 ? 'una cosa' : n + ' cosas'}:\n${cuerpo}\n${respuesta}.${enlace}` }
+  return { ok: true, claves, ...(supuestos ? { supuestos } : {}), texto: `Hola Emilio. Para el plan de ${p.cliente.trim()} necesito tu decisión en ${n === 1 ? 'una cosa' : n + ' cosas'}:\n${cuerpo}\n${respuesta}.${enlace}` }
 }
 
 /** a las 72 h una pregunta enviada y sin respuesta pasa a `vencida`; el plan sigue con el supuesto. No se reenvía. */
