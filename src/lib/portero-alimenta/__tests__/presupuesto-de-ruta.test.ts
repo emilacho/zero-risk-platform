@@ -175,3 +175,31 @@ describe('las citas del resumen se comprueban contra TODAS las fichas (la base e
     expect(r).toMatchObject({ ok: true, problema: null })
   })
 })
+
+describe('el resumen vivo nunca cita una ficha que no existe (16-oct · el vigilante pausó a Náufrago por citas de ZONA)', () => {
+  const resumen = (citas: string[]) => ({ id: 'aaaaaaaa-0000-4000-8000-000000000000', client_id: 'c1', clase: 'resumen_vivo', contenido: citas.map((c) => `- dato [ficha:${c} · 2026-10-16]`).join(' | '), retirada_en: null, descartada: false })
+  it('una cita a una ficha de zona (feriados y temporadas) existe', async () => {
+    const base = crearBaseFalsa({ cerebro_fichas: [{ id: '6a9f94b0-aaaa-4000-8000-000000000000', client_id: 'zona:ec', clase: 'contexto_feriado', contenido: 'Dia de Difuntos', retirada_en: null }, resumen(['6a9f94b0'])] } as never)
+    expect(await auditarCitasDelResumen(base.db, 'c1')).toMatchObject({ ok: true, revisadas: 1, problema: null })
+  })
+  it('una cita a una ficha que no está ni en el cliente ni en una zona SÍ se marca', async () => {
+    const base = crearBaseFalsa({ cerebro_fichas: [resumen(['deadbeef'])] } as never)
+    const r = await auditarCitasDelResumen(base.db, 'c1')
+    expect(r).toMatchObject({ ok: true })
+    expect((r as { problema: string | null }).problema).toMatch(/deadbeef/)
+  })
+  it('una ficha de zona de OTRO cliente no es del cliente pero la zona es compartida: tampoco rompe (los diez clientes)', async () => {
+    for (const c of DIEZ_CLIENTES) {
+      const base = crearBaseFalsa({ cerebro_fichas: [{ id: '12345678-aaaa-4000-8000-000000000000', client_id: `zona:${c.iso}`, clase: 'contexto_feriado', contenido: 'x', retirada_en: null }, { ...resumen(['12345678']), client_id: c.id }] } as never)
+      expect(await auditarCitasDelResumen(base.db, c.id), c.nombre).toMatchObject({ ok: true, problema: null })
+    }
+  })
+  it('el resumen real de un cliente de los diez (con su contexto de zona) pasa la comprobación', async () => {
+    const c = DIEZ_CLIENTES.find((x) => x.iso === 'ec') ?? DIEZ_CLIENTES[0]
+    const t = tablasDe(c)
+    const r = await alimentarCliente({ db: crearBaseFalsa(t as never).db, client_id: c.id, dry_run: false, interruptores: { ...ON, resumen_vivo: true }, ahora: AHORA, workflow_id: 'wf', workflow_execution_id: 'ex' })
+    expect(r.errores).toEqual([])
+    const base = crearBaseFalsa(t as never)
+    expect(await auditarCitasDelResumen(base.db, c.id)).toMatchObject({ ok: true, problema: null })
+  })
+})
