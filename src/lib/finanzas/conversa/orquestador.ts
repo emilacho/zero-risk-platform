@@ -8,7 +8,8 @@ import type { Estado, Paso, Plantilla } from '../../oficina/tipos'
 import { estadoInicial } from '../../oficina/tipos'
 import { calcular } from '../calculadora'
 import { decidirFirma, estaAbierto, huellaDe, numerosDelBloque, resueltosSinEstado } from '../firma'
-import { separarDadoPorVerificado } from '../confirmado-por-dueno'
+import { separarComprobado } from '../confirmado-por-dueno'
+import { lineaBaseSemanal } from '../linea-base'
 import { leerRespuesta } from '../preguntas'
 import type { Bloque } from '../tipos'
 import { entradaDesdeLaConversa } from './entrada'
@@ -385,7 +386,10 @@ export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts
   const planteoVigente = (a.planteo_fijado_2 ?? a.planteo_fijado ?? a.planteo) as { dado_por_verificado?: unknown } | undefined
   const dadoPorVerificado = Array.isArray(planteoVigente?.dado_por_verificado) ? (planteoVigente!.dado_por_verificado as unknown[]).filter((x) => typeof x === 'string' && x.trim()).map(String) : []
   // lo que el dueño confirmó (con respuesta real suya que lo respalde) SÍ está comprobado; solo el resto queda «sin comprobar»
-  const { confirmado_por_el_dueno: confirmadoPorElDueno, sin_comprobar: sinComprobar } = separarDadoPorVerificado(dadoPorVerificado, respuestasDeLaSemilla(e.semilla))
+  // y lo MEDIDO que viene del cerebro (expediente.datos) o de la ficha (moneda, país) también: el código lo tiene con su procedencia. Lo derivado y las decisiones del plan siguen sin comprobar.
+  const datosDelExpediente = Array.isArray((a.expediente as { datos?: unknown } | undefined)?.datos) ? ((a.expediente as { datos: unknown[] }).datos as never[]) : []
+  const baseDelCodigo = lineaBaseSemanal({ datos: datosDelExpediente, dada: e.semilla?.linea_base_por_semana })
+  const { confirmado_por_el_dueno: confirmadoPorElDueno, medido_del_cerebro: medidoDelCerebro, sin_comprobar: sinComprobar } = separarComprobado(dadoPorVerificado, respuestasDeLaSemilla(e.semilla), datosDelExpediente, { moneda: e.semilla?.moneda, pais: e.semilla?.pais }, baseDelCodigo?.por_semana ?? null)
   const verificadoSinComprobar = sinComprobar.length > 0
   if (verificadoSinComprobar && salida !== 'sale_con_alerta') salida = 'sale_con_alerta'
   const decision = decidirFirma({ hallazgos: hallazgos.map((h) => ({ severidad: h.severidad, que: h.que, estado: h.estado })), correcciones_hechas: huboRonda2 ? 1 : 0 })
@@ -407,7 +411,7 @@ export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts
     await P.tableros.actualizarTablero(g.id, { estado, firmado_por: `chief-financial-officer:${invocacion_id}:${salida}`, firmado_en: P.ahora().toISOString() })
   }
   return {
-    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, confirmado_por_el_dueno: confirmadoPorElDueno, dado_por_verificado_sin_comprobar: sinComprobar, criticos_abiertos: decision.criticos, criticos_resueltos: decision.criticos_resueltos, alerta_hallazgos_sin_estado: sinEstado.length ? `${sinEstado.length} hallazgo(s) dicen «resuelto» en el texto pero no traen estado: se cuentan como abiertos (${sinEstado.slice(0, 3).join(' | ')})` : null, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${sinComprobar.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, escribio: !e.dry_run },
+    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, confirmado_por_el_dueno: confirmadoPorElDueno, medido_del_cerebro: medidoDelCerebro, dado_por_verificado_sin_comprobar: sinComprobar, criticos_abiertos: decision.criticos, criticos_resueltos: decision.criticos_resueltos, alerta_hallazgos_sin_estado: sinEstado.length ? `${sinEstado.length} hallazgo(s) dicen «resuelto» en el texto pero no traen estado: se cuentan como abiertos (${sinEstado.slice(0, 3).join(' | ')})` : null, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${sinComprobar.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, escribio: !e.dry_run },
     tablero_id: finanzas_id, sin_acuerdo: sinAcuerdo,
   }
 }
