@@ -55,6 +55,10 @@ export interface Entrada {
   piso_plataforma?: number
   /** factor por semana sobre la pauta base (0 = sin pauta de rendimiento); por omisión 12 semanas */
   calendario?: number[]
+  /** LÍNEA BASE: resultados finales por semana que el negocio YA logra sin la pauta. La pauta se dimensiona para `meta − base` (lo que SE AÑADE), no para la meta total. Ausente o ≤ 0 = sin base (meta total, y se dice) */
+  base_por_semana?: number | null
+  /** de dónde sale la línea base (se muestra en la cifra) */
+  base_fuente?: string
 }
 
 export type Veredicto = 'sigo' | 'ajusto' | 'ajusto_recorte' | 'paro'
