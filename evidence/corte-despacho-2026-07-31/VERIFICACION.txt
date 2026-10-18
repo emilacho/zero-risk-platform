@@ -1,0 +1,52 @@
+=== BASELINE (punto de retorno) ===
+nodos 73 · conexiones 58 · active false · versionId 09788679-170d-450a-9dd8-6fb044e4b4df
+huella de los 73: 46f6375c99e98b23dfe6c502722070f29a9bd84744832967f91c181a1f81ad42
+alcanzables desde el disparador: 72
+
+corte A · Validate Deal Data main#0 ↛ Create Notion Client Workspace  (quedan 2 destinos)
+
+corte B · [APIFY-WIRE] IF · Camino III decision (PASS/REJECT) main#0 ↛ Spell Check Pass (in-cascade)  (quedan 0 destinos)
+
+=== VERIFICACIÓN LOCAL ===
+V1 nodos            : 73 (73) ✅
+V2 claves conexiones: 58 (58) ✅
+V3 aristas colgando : 0 ✅
+V4 HUELLA de los 73 : 46f6375c99e98b23dfe6c502722070f29a9bd84744832967f91c181a1f81ad42
+     ✅ IDÉNTICA · NINGÚN nodo fue tocado
+V5 alcanzables      : 72 → 53
+V6 camino del MANUAL intacto:
+     ✅ [JEFATURA] Load landscape_summary (canon)
+     ✅ [JEFATURA] Transform discovery→package
+     ✅ [JEFATURA] Execute Cimiento Track
+     ✅ IF track_pass (¿el cimiento pasó de verdad?)
+     ✅ [MODELB] Emit · cimiento.promoted
+     ✅ [MODELB] Emit · cimiento.failed (honesto)
+     ✅ Stop and Error · cimiento no promovido
+     ✅ Call Onboarding Specialist: Auto-Discovery Dispatch (fire+forget)
+V7 efectos EXTERNOS frenados:
+     ✅ frenado · Create Notion Client Workspace
+     ✅ frenado · Create Success Plan in Notion
+     ✅ frenado · Schedule Kickoff Call (Cal.com)
+     ✅ frenado · Alert Slack: Onboarding Initiated
+     ✅ frenado · Notify MC Inbox
+     ✅ frenado · AM Handoff → SALA event (am_handoff)
+     ✅ frenado · [MODELB] Phase-boundary Emit · journey_completed
+     ✅ frenado · Trigger Master Journey ugK3
+
+>>> VEREDICTO LOCAL: ✅ VERDE
+portón · waiting: 0
+portón · running: 0
+
+PUT · HTTP 200 · nodos 73 · conexiones 58 · versionId 8aa7da18-71e3-4eb3-a862-91b3f86b4a82 · active false
+
+=== VERIFICACIÓN CONTRA EL VIVO ===
+nodos 73 · conexiones 58 · active false · versionId 8aa7da18-71e3-4eb3-a862-91b3f86b4a82
+huella: 46f6375c99e98b23dfe6c502722070f29a9bd84744832967f91c181a1f81ad42
+  ✅ IDÉNTICA al baseline · ningún nodo tocado
+alcanzables: 53
+aristas colgando: 0
+settings: {"executionOrder":"v1","saveManualExecutions":true,"callerPolicy":"workflowsFromSameOwner","availableInMCP":false,"saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveExecutionProgress":true,"binaryMode":"separate"}
+settings vs baseline: sin diferencias ✅
+camino del manual   : ✅ intacto
+efectos externos    : ✅ todos frenados
+onboarding pausado  : ✅
