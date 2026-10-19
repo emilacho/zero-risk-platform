@@ -113,6 +113,36 @@ describe('V8 · las guardas FALLAN CERRADO y dicen por qué', () => {
   })
 })
 
+describe('V8 · el ensayo sin manual (tramo 5 del ensayo de punta a punta · 20-oct)', () => {
+  const sinManual: LecturaDeFicha = { ok: true, existe: true, manual_vigente: false, manual_version: null, moneda_declarada: 'USD', pais: 'Ecuador' }
+  it('SOLO `dry_run === true` deja pasar a un cliente sin manual: corre ya, sin esperar al cerebro, sin relleno y declarándolo', async () => {
+    const m = mundo({ ficha: sinManual, senal: () => noListo() })
+    const r = await prevuelo(entrada({ dry_run: true }), m.P)
+    expect(r).toMatchObject({ decision: 'correr', dry_run: true, relleno_permitido: false })
+    expect(r.declara.join(' ')).toMatch(/ENSAYO sin manual/)
+    expect(m.llamadasA.listo).toBe(0) // no esperó la señal del cerebro
+    expect(m.llamadasA.cupo).toBe(0) // y el ensayo no mide cupo
+    expect(m.filas[0]).toMatchObject({ dry_run: true, estado: 'corriendo' })
+  })
+  it('lo real (ausente o false) y lo no booleano siguen frenados: sin manual no hay plan', async () => {
+    for (const extra of [{}, { dry_run: false }]) {
+      const m = mundo({ ficha: sinManual })
+      expect(await prevuelo(entrada(extra), m.P), JSON.stringify(extra)).toMatchObject({ decision: 'no_corre', motivo: 'sin_manual_vigente' })
+      expect(m.filas).toHaveLength(0)
+    }
+    for (const raro of ['true', 1, null]) expect(await prevuelo(entrada({ dry_run: raro }), mundo({ ficha: sinManual }).P), String(raro)).toMatchObject({ decision: 'no_corre', motivo: 'dry_run_no_booleano' })
+  })
+  it('el ensayo SIN manual no esquiva las demás guardas: cliente inexistente y sin moneda siguen frenando', async () => {
+    expect(await prevuelo(entrada({ dry_run: true }), mundo({ ficha: { ok: true, existe: false, manual_vigente: false, manual_version: null, moneda_declarada: null, pais: null } }).P)).toMatchObject({ motivo: 'cliente_inexistente' })
+    expect(await prevuelo(entrada({ dry_run: true, corrida: 'z' }), mundo({ ficha: { ...sinManual, moneda_declarada: null, pais: 'Atlantida' } }).P)).toMatchObject({ motivo: 'sin_moneda' })
+  })
+  it('el ensayo CON manual no cambia: sigue esperando al cerebro como siempre', async () => {
+    const m = mundo({ senal: () => noListo() })
+    expect(await prevuelo(entrada({ dry_run: true }), m.P)).toMatchObject({ decision: 'esperar' })
+    expect(m.llamadasA.listo).toBe(1)
+  })
+})
+
 describe('V8 · el cupo (§13.1)', () => {
   const cupo = (over: Partial<CupoDelCliente>): LecturaDeCupo => ({ ok: true, cap_usd: 8, generico_usd: 8, override_usd: null, gastado_24h_usd: 0, ...over })
   it('la suma de topes sale del catálogo (3,40)', () => {

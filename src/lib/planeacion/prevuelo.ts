@@ -132,7 +132,9 @@ export async function prevuelo(
   const f = await P.ficha(client_id)
   if (!f.ok) return noCorre(dry, 'lectura_fallida', `ficha: ${f.error}`)
   if (!f.existe) return noCorre(dry, 'cliente_inexistente', 'no existe la ficha del cliente (la guarda E79 la exige antes del trato)')
-  if (!f.manual_vigente) return noCorre(dry, 'sin_manual_vigente', 'el cliente no tiene manual vigente: sin él el plan no se escribe')
+  // 🔴 SOLO el ensayo (`dry_run === true` exacto) puede seguir sin manual: no escribe el plan ni gasta, y la guarda ① del flujo pone un manual SIMULADO en memoria (nunca en la base). Lo real exige el manual como siempre.
+  const ensayoSinManual = dry && !f.manual_vigente
+  if (!f.manual_vigente && !ensayoSinManual) return noCorre(dry, 'sin_manual_vigente', 'el cliente no tiene manual vigente: sin él el plan no se escribe')
   const paisMoneda = snap.monedaDePais(f.pais)
   if (!f.moneda_declarada && !paisMoneda) return noCorre(dry, 'sin_moneda', 'sin moneda declarada ni fila de país en el catálogo: la oficina no calcula dinero (la aclara la agencia)')
 
@@ -165,14 +167,22 @@ export async function prevuelo(
   // 6 · la señal «cerebro listo» (se lee ANTES de vencer: la lectura del 45:00 cuenta)
   const ahora = P.ahora()
   const minutos = Math.round(((ahora.getTime() - Date.parse(fila.espera_desde)) / 60_000) * 10) / 10
-  const lec = await P.senal(client_id)
-  const vencido = ahora.getTime() - Date.parse(fila.espera_desde) >= espera * 60_000
   const arrancar = async (motivo: string, extra: Partial<Decision>): Promise<Decision> => {
     const r = await correr(P.corridas, { client_id, corrida, motivo: motivo.slice(0, 200) })
     if (r.status !== 200) return noCorre(dry, 'corrida_no_viva', `no se pudo arrancar la corrida (${'estado' in r ? String(r.estado) : r.error})`, comun)
     if (r.accion === 'perdiste_la_carrera') return noCorre(dry, 'otro_re_disparo_gano', 'otro re-disparo arrancó la corrida primero: este no hace nada', comun)
     return { ...base(dry), ...comun, minutos_esperados: minutos, ...extra }
   }
+
+  // ensayo sin manual: no hay cerebro que esperar (un cliente sin manual no tiene cerebro listo) y el ensayo no llama a Apify: corre ya, declarado, sin relleno
+  if (ensayoSinManual) {
+    return arrancar('ensayo sin manual vigente', {
+      decision: 'correr', motivo: 'ensayo (dry_run): el cliente no tiene manual vigente; la guarda ① del flujo usa un manual simulado y nada se escribe', relleno_permitido: false,
+      declara: ['ENSAYO sin manual vigente: el manual es simulado en memoria, no se espera al cerebro, no se llama a Apify y no se escribe el plan.'],
+    })
+  }
+  const lec = await P.senal(client_id)
+  const vencido = ahora.getTime() - Date.parse(fila.espera_desde) >= espera * 60_000
 
   if (lec.ok) {
     const s = lec.senal
