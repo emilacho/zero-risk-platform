@@ -10,9 +10,11 @@ export function puertosDeFicha(db: Db): PuertosDeFicha {
   return {
     ahora: () => new Date(),
     async buscarPorSlug(slug) {
-      const r = await db.from('clients').select('id,name').eq('slug', slug).maybeSingle()
+      const r = await db.from('clients').select('id,name,status,archived_at').eq('slug', slug).maybeSingle()
       if (r.error) throw new Error('no pude leer clients: ' + r.error.message)
-      return r.data ? { id: String((r.data as Fila).id), name: String((r.data as Fila).name) } : null
+      if (!r.data) return null
+      const f = r.data as Fila
+      return { id: String(f.id), name: String(f.name), archivada: !!f.archived_at || f.status === 'churned' }
     },
     async crear(f: FichaNueva) {
       const r = await db.from('clients').insert({ name: f.name, slug: f.slug, status: 'onboarding', preferred_language: 'es', ...(f.industry ? { industry: f.industry } : {}), ...(f.country ? { country: f.country } : {}), ...(f.website_url ? { website_url: f.website_url } : {}), config: f.config }).select('id').single()
@@ -29,7 +31,8 @@ export function puertosDeFicha(db: Db): PuertosDeFicha {
       return ((r.data as Fila[] | null) ?? []).map((f) => ({ id: String(f.id), created_at: String(f.created_at) }))
     },
     async borrar(id) {
-      const r = await db.from('clients').delete().eq('id', id)
+      // solo borra una fila que ESTA puerta creó (por si el id llegara equivocado, nunca se borra una ficha de otro origen)
+      const r = await db.from('clients').delete().eq('id', id).filter('config->>creado_por', 'eq', ORIGEN_PUERTA)
       if (r.error) throw new Error('no pude deshacer la ficha de más: ' + r.error.message)
     },
   }

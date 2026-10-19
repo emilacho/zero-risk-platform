@@ -69,6 +69,16 @@ describe('crear la ficha', () => {
   })
 })
 
+describe('una ficha archivada', () => {
+  it('entra como la misma ficha (cliente que vuelve) pero la respuesta lo DICE', async () => {
+    const m = mundo({ filas: [{ id: 'vieja', name: 'Cafe', slug: 'cafe', created_at: '2026-01-01T00:00:00.000Z', origen: null }] })
+    m.P.buscarPorSlug = async () => ({ id: 'vieja', name: 'Cafe', archivada: true })
+    expect(await fichaPorNombre(m.P, { client_name: 'Cafe' })).toMatchObject({ ok: true, status: 200, creado: false, client_id: 'vieja', archivada: true })
+    m.P.buscarPorSlug = async () => ({ id: 'vieja', name: 'Cafe', archivada: false })
+    expect(await fichaPorNombre(m.P, { client_name: 'Cafe' })).not.toHaveProperty('archivada')
+  })
+})
+
 describe('el tope de 3 fichas nuevas por día', () => {
   it('la 3.ª entra y la 4.ª se rechaza con 429 SIN crear nada', async () => {
     const m = mundo()
@@ -158,16 +168,17 @@ describe('si la base falla, se dice (no se inventa un éxito)', () => {
 describe('los puertos sobre Supabase (base mínima en memoria)', () => {
   function dbFalsa() {
     const clients: Array<Record<string, any>> = []
+    const pedidos = { orden: [] as Array<[string, boolean]> }
     const from = (t: string) => {
       if (t !== 'clients') throw new Error('tabla inesperada ' + t)
       const f: Array<(x: any) => boolean> = []
-      let orden: string[] = []; let op = 'select'; let fila: any
+      let op = 'select'; let fila: any
       const api: any = {
         select: () => api, insert: (x: any) => { op = 'insert'; fila = x; return api }, delete: () => { op = 'delete'; return api },
         eq: (k: string, v: unknown) => { f.push((x) => x[k] === v); return api },
         filter: (k: string, _o: string, v: unknown) => { f.push((x) => (k === 'config->>creado_por' ? x.config?.creado_por : x[k]) === v); return api },
         gte: (k: string, v: string) => { f.push((x) => String(x[k]) >= v); return api },
-        order: (k: string) => { orden.push(k); return api },
+        order: (k: string, o?: { ascending?: boolean }) => { pedidos.orden.push([k, o?.ascending !== false]); return api },
         maybeSingle: async () => ({ data: clients.find((x) => f.every((p) => p(x))) ?? null, error: null }),
         single: async () => {
           if (clients.some((x) => x.slug === fila.slug)) return { data: null, error: { code: '23505', message: 'duplicate key' } }
@@ -180,8 +191,30 @@ describe('los puertos sobre Supabase (base mínima en memoria)', () => {
       }
       return api
     }
-    return { db: { from }, clients }
+    return { db: { from }, clients, pedidos }
   }
+  it('el orden de llegada es created_at ASCENDENTE y luego id ASCENDENTE (de ahi sale quien cabe en el tope cuando hay carrera)', async () => {
+    const { db, pedidos } = dbFalsa()
+    await puertosDeFicha(db).creadasPorLaPuerta('2026-10-19T00:00:00.000Z')
+    expect(pedidos.orden).toEqual([['created_at', true], ['id', true]])
+  })
+  it('borrar SOLO borra una ficha creada por esta puerta (aunque el id llegue equivocado, una ficha de otro origen se queda)', async () => {
+    const { db, clients } = dbFalsa()
+    clients.push({ id: 'ajena', slug: 'ajena', created_at: '2026-10-19T09:00:00.000Z', config: {} }, { id: 'mia', slug: 'mia', created_at: '2026-10-19T09:00:00.000Z', config: { creado_por: ORIGEN_PUERTA } })
+    const P = puertosDeFicha(db)
+    await P.borrar('ajena')
+    expect(clients.map((c) => c.id)).toEqual(['ajena', 'mia'])
+    await P.borrar('mia')
+    expect(clients.map((c) => c.id)).toEqual(['ajena'])
+  })
+  it('una ficha archivada o en churned se devuelve como archivada (no se esconde)', async () => {
+    const { db, clients } = dbFalsa()
+    clients.push({ id: 'a', name: 'A', slug: 'a', archived_at: '2026-10-12T00:00:00Z', config: {} }, { id: 'c', name: 'C', slug: 'c', status: 'churned', config: {} }, { id: 'v', name: 'V', slug: 'v', status: 'active', config: {} })
+    const P = puertosDeFicha(db)
+    expect((await P.buscarPorSlug('a'))?.archivada).toBe(true)
+    expect((await P.buscarPorSlug('c'))?.archivada).toBe(true)
+    expect((await P.buscarPorSlug('v'))?.archivada).toBe(false)
+  })
   it('crea con estado onboarding y su origen; el duplicado de slug sale como código «duplicado»; cuenta solo las de la puerta; borra la propia', async () => {
     const { db, clients } = dbFalsa()
     const P = puertosDeFicha(db)
@@ -190,7 +223,7 @@ describe('los puertos sobre Supabase (base mínima en memoria)', () => {
     await expect(P.crear({ name: 'Uno', slug: 'uno', config: { creado_por: ORIGEN_PUERTA, creado_en: 'x' } })).rejects.toMatchObject({ code: 'duplicado' })
     clients.push({ id: 'otra', slug: 'otra', created_at: '2026-10-19T10:00:00.000Z', config: {} })
     expect((await P.creadasPorLaPuerta('2026-10-19T00:00:00.000Z')).map((f) => f.id)).toEqual([id])
-    expect(await P.buscarPorSlug('uno')).toEqual({ id, name: 'Uno' })
+    expect(await P.buscarPorSlug('uno')).toEqual({ id, name: 'Uno', archivada: false })
     await P.borrar(id)
     expect(await P.buscarPorSlug('uno')).toBeNull()
   })

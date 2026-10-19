@@ -27,18 +27,18 @@ export interface FichaCreadaHoy { id: string; created_at: string }
 
 export interface PuertosDeFicha {
   /** la ficha con ese slug, si existe (cualquier estado) */
-  buscarPorSlug(slug: string): Promise<{ id: string; name: string } | null>
+  buscarPorSlug(slug: string): Promise<{ id: string; name: string; archivada?: boolean } | null>
   /** crea la ficha y devuelve su id (lo asigna la base). Si el slug ya existe lanza un error con `code: 'duplicado'` */
   crear(f: FichaNueva): Promise<{ id: string }>
   /** las fichas creadas por ESTA puerta desde `desdeIso`, de la más vieja a la más nueva (desempate por id) */
   creadasPorLaPuerta(desdeIso: string): Promise<FichaCreadaHoy[]>
-  /** borra una ficha que esta misma llamada acaba de crear (solo si se pasó del tope por una carrera) */
+  /** borra una ficha que esta misma llamada acaba de crear (solo si se pasó del tope por una carrera); el almacén solo borra filas creadas por esta puerta */
   borrar(id: string): Promise<void>
   ahora(): Date
 }
 
 export type RespuestaDeFicha =
-  | { ok: true; status: 200 | 201; client_id: string; creado: boolean; nombre: string; slug: string }
+  | { ok: true; status: 200 | 201; client_id: string; creado: boolean; nombre: string; slug: string; archivada?: boolean }
   | { ok: false; status: 400 | 429; error: string; detalle?: string; errores?: string[]; maximo?: number }
 
 const texto = (x: unknown): string | undefined => (typeof x === 'string' && x.trim() ? x.trim() : undefined)
@@ -72,7 +72,8 @@ export async function fichaPorNombre(P: PuertosDeFicha, cuerpo: unknown): Promis
   if (!v.ok) return { ok: false, status: 400, error: 'pedido_invalido', errores: v.errores }
   const slug = slugify(v.nombre)
   const existente = await P.buscarPorSlug(slug)
-  if (existente) return { ok: true, status: 200, client_id: existente.id, creado: false, nombre: existente.name, slug }
+  // una ficha archivada/churned es la misma ficha (el cliente que vuelve entra, como en E79), pero se DICE para que quien llama no lo ignore
+  if (existente) return { ok: true, status: 200, client_id: existente.id, creado: false, nombre: existente.name, slug, ...(existente.archivada ? { archivada: true } : {}) }
 
   const ahora = P.ahora()
   const nueva: FichaNueva = {
@@ -89,7 +90,7 @@ export async function fichaPorNombre(P: PuertosDeFicha, cuerpo: unknown): Promis
     // carrera por el mismo nombre: la otra llamada ganó el slug ⇒ se devuelve esa ficha
     if ((e as { code?: string } | null)?.code === 'duplicado') {
       const ganada = await P.buscarPorSlug(slug)
-      if (ganada) return { ok: true, status: 200, client_id: ganada.id, creado: false, nombre: ganada.name, slug }
+      if (ganada) return { ok: true, status: 200, client_id: ganada.id, creado: false, nombre: ganada.name, slug, ...(ganada.archivada ? { archivada: true } : {}) }
     }
     throw e
   }
