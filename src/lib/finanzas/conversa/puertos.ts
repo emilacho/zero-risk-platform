@@ -36,10 +36,20 @@ export interface Semilla {
   fecha?: string
   /** tope PROPIO de este encargo (US$ cobrados); solo SUBE el de la plantilla (1,50), nunca pasa de TOPE_MAXIMO_POR_ENCARGO_USD y no se acepta si no es un número. Decisión de Emilio, por encargo. */
   tope_encargo_usd?: number
+  /** firma registrada que permite un `tope_encargo_usd` por encima de TOPE_MAXIMO_POR_ENCARGO_USD: sin ella (o mal formada) manda el techo; el tope aplicado nunca pasa de `valor` */
+  firma_tope?: FirmaDeTope
   /** LÍNEA BASE: resultados finales por semana que el negocio ya logra sin pauta (dato del dueño); gana sobre lo que se mida en `datos`. La pauta se dimensiona para `meta − base` */
   linea_base_por_semana?: number
   /** respuestas del dueño entregadas como DATO (sin hilo de Slack): entran al contexto de cada paso de agente marcadas como dato confirmado por él */
   respuestas_del_dueno?: Array<{ clave: string; valor: unknown; literal: string }>
+}
+
+export interface FirmaDeTope {
+  quien: string
+  cuando: string
+  valor: number
+  /** ruta del papel de firma */
+  papel: string
 }
 
 export interface EncargoDeConversa {

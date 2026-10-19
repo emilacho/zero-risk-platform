@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { estadoInicial } from '../src/lib/oficina/tipos'
-import { avanzar, plantillaDelEncargo, respuestasDeLaSemilla, TOPE_MAXIMO_POR_ENCARGO_USD } from '../src/lib/finanzas/conversa/orquestador'
+import { avanzar, firmaDeTopeValida, plantillaDelEncargo, respuestasDeLaSemilla, TOPE_MAXIMO_POR_ENCARGO_USD } from '../src/lib/finanzas/conversa/orquestador'
 import { PLANTILLA_FINANCIERA } from '../src/lib/finanzas/conversa/plantilla'
 import type { AlmacenDeConversa, EncargoDeConversa, PedidoAlModelo, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import type { ConfigDeFinanzas } from '../src/lib/finanzas/ruta'
@@ -81,5 +81,26 @@ describe('tope propio del encargo', () => {
     const con = mundo({ tope_encargo_usd: 3 }, 1.45)
     await correr(con)
     expect(con.pedidos.length).toBeGreaterThan(0)
+  })
+})
+
+describe('tope por encima del techo: solo con firma registrada', () => {
+  const encargo = (semilla: Semilla) => ({ semilla } as unknown as EncargoDeConversa)
+  const firma = { quien: 'Emilio', cuando: '2026-10-19T16:43+02:00', valor: 3.2, papel: '00-meta/FIRMA-EMILIO-2026-10-16-ronda2.md' }
+  it('con firma bien formada el tope llega hasta el valor firmado y no más', () => {
+    expect(plantillaDelEncargo(encargo({ tope_encargo_usd: 3.2, firma_tope: firma })).limites.tope_encargo_usd).toBe(3.2)
+    expect(plantillaDelEncargo(encargo({ tope_encargo_usd: 99, firma_tope: firma })).limites.tope_encargo_usd).toBe(3.2)
+  })
+  it('sin firma o con firma mal formada sigue el techo de 3,00', () => {
+    const malas = [undefined, null, {}, { ...firma, quien: '' }, { ...firma, cuando: ' ' }, { ...firma, papel: '' }, { ...firma, valor: '3.2' }, { ...firma, valor: NaN }, { ...firma, valor: Infinity }] as unknown as Array<Semilla['firma_tope']>
+    for (const f of malas) expect(plantillaDelEncargo(encargo({ tope_encargo_usd: 3.2, firma_tope: f })).limites.tope_encargo_usd).toBe(TOPE_MAXIMO_POR_ENCARGO_USD)
+    expect(plantillaDelEncargo(encargo({ tope_encargo_usd: 3.2 })).limites.tope_encargo_usd).toBe(TOPE_MAXIMO_POR_ENCARGO_USD)
+  })
+  it('una firma por debajo del techo no lo baja', () => {
+    expect(plantillaDelEncargo(encargo({ tope_encargo_usd: 5, firma_tope: { ...firma, valor: 2 } })).limites.tope_encargo_usd).toBe(TOPE_MAXIMO_POR_ENCARGO_USD)
+  })
+  it('la firma sola no sube el tope: hace falta pedirlo en tope_encargo_usd', () => {
+    expect(plantillaDelEncargo(encargo({ firma_tope: firma })).limites.tope_encargo_usd).toBe(1.5)
+    expect(firmaDeTopeValida(firma)).toBe(true)
   })
 })
