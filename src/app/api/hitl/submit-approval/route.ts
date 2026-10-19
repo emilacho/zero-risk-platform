@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { validateObject } from '@/lib/input-validator'
+import { resolverAprobacion } from '@/lib/hitl/bandeja'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,11 +30,9 @@ export async function POST(request: Request) {
     let dbError: string | null = null
     try {
       const supabase = getSupabaseAdmin()
-      await supabase.from('hitl_pending_approvals').update({
-        status: decision === 'rejected' ? 'rejected' : 'approved',
-        resolved_at: new Date().toISOString(),
-        resolver: body.resolver || 'emilio',
-      }).eq('item_id', item_id)
+      // La bandeja es una sola (`hitl_queue`, arreglo 3 · 19-oct): se resuelve ahí, sea una pieza de la oficina, una compuerta de n8n o una escalada del editor.
+      const r = await resolverAprobacion(supabase, item_id, { decision: decision === 'rejected' ? 'rejected' : 'approved', quien: (body.resolver as string) || 'emilio' })
+      if (r.error) dbError = r.error
     } catch (e: unknown) {
       dbError = e instanceof Error ? e.message : String(e)
     }

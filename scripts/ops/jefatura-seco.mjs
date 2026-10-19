@@ -69,7 +69,7 @@ export async function contadores() {
     agent_invocations_costo_usd_de_los_clientes_de_practica: Array.isArray(costos) ? +costos.reduce((a, r) => a + Number(r.cost_usd || 0), 0).toFixed(6) : costos,
     agent_invocations_workflow_id_nulo: await cuenta('agent_invocations', 'workflow_id=is.null'),
     hitl_queue_total: await cuenta('hitl_queue'),
-    hitl_pending_approvals_editor_escalation: await cuenta('hitl_pending_approvals', 'approval_type=eq.editor_escalation'),
+    hitl_queue_editor_escalation: await cuenta('hitl_queue', 'type=eq.editor_escalation'),
     client_historical_outputs_total: await cuenta('client_historical_outputs'),
     jefatura_revisiones: await cuenta('jefatura_revisiones'),
     jefatura_pasos: await cuenta('jefatura_pasos'),
@@ -80,7 +80,7 @@ export async function contadores() {
   }
 }
 /** lo que DEBE seguir igual en un seco (diferencias = alarma); las filas jefatura_* sí crecen */
-const DEBE_SEGUIR_IGUAL = ['agent_invocations_total', 'agent_invocations_de_los_clientes_de_practica', 'agent_invocations_costo_usd_de_los_clientes_de_practica', 'agent_invocations_workflow_id_nulo', 'hitl_queue_total', 'hitl_pending_approvals_editor_escalation', 'client_historical_outputs_total']
+const DEBE_SEGUIR_IGUAL = ['agent_invocations_total', 'agent_invocations_de_los_clientes_de_practica', 'agent_invocations_costo_usd_de_los_clientes_de_practica', 'agent_invocations_workflow_id_nulo', 'hitl_queue_total', 'hitl_queue_editor_escalation', 'client_historical_outputs_total']
 
 // ───────────────────────── la lista de interruptores
 const INTERRUPTORES = [

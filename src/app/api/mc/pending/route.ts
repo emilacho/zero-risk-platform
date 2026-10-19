@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { aprobacionLegada, listarAprobaciones } from '@/lib/hitl/bandeja'
 
 const MASTER = process.env.MC_MASTER_PASSWORD || 'zerorisk2026'
 
@@ -12,16 +13,13 @@ export async function GET(req: Request) {
   }
 
   const supabase = getSupabaseAdmin()
-  const { data: items, error } = await supabase
-    .from('hitl_pending_approvals')
-    .select('item_id, agent_slug, preview, full_content, editor_verdict, revisions_attempted, client_id, approval_type, expires_at, created_at, status')
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false })
-    .limit(50)
+  // La bandeja es una sola (`hitl_queue`, arreglo 3 · 19-oct): aquí aparece TODO lo que espera a Emilio, también lo que deja la oficina.
+  const { filas, error } = await listarAprobaciones(supabase, { estado: 'pending', limite: 50 })
+  const items = filas.map(aprobacionLegada).sort((a, b) => b.created_at.localeCompare(a.created_at))
 
   if (error) {
     return new NextResponse(
-      `<!DOCTYPE html><html><body><h1>Error</h1><pre>${escapeHtml(error.message)}</pre></body></html>`,
+      `<!DOCTYPE html><html><body><h1>Error</h1><pre>${escapeHtml(error)}</pre></body></html>`,
       { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
     )
   }
@@ -75,7 +73,7 @@ export async function GET(req: Request) {
     <summary style="cursor:pointer;font-size:13px;color:#185fa5">Contenido (preview)</summary>
     <pre style="background:#f5f5f5;padding:8px;overflow:auto;max-height:200px;font-size:12px;border-radius:4px;margin:6px 0;white-space:pre-wrap">${escapeHtml(item.preview || '')}</pre>
   </details>
-  <p style="font-size:11px;color:#888;margin:4px 0">Expira: ${new Date(item.expires_at).toLocaleString('es-EC')}</p>
+  <p style="font-size:11px;color:#888;margin:4px 0">Expira: ${(item.expires_at ? new Date(item.expires_at).toLocaleString('es-EC') : 'sin fecha')}</p>
   <p style="margin-top:12px;display:flex;gap:8px">
     <a href="/api/mc/quick-approve?item_id=${encodeURIComponent(item.item_id)}&decision=approved&masterPassword=${encodedPassword}"
        style="background:#0f6e56;color:white;padding:8px 16px;text-decoration:none;border-radius:4px;font-size:13px">✓ Aprobar</a>

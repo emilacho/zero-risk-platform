@@ -11,7 +11,7 @@ import { avisoParaEmilio, CLIENTES_REALES, compararContadores, correrLaPruebaRea
 
 type Json = Record<string, any>
 const UUID = '3f2b8c1e-9d4a-4b7e-8a61-0c5d2e7f9a10'
-const cont = (o: Json = {}) => ({ agent_invocations_total: 100, agent_invocations_de_los_clientes_de_practica: 0, agent_invocations_costo_usd_de_los_clientes_de_practica: 0, agent_invocations_workflow_id_nulo: 0, hitl_queue_total: 4, hitl_pending_approvals_editor_escalation: 0, client_historical_outputs_total: 7, ...o })
+const cont = (o: Json = {}) => ({ agent_invocations_total: 100, agent_invocations_de_los_clientes_de_practica: 0, agent_invocations_costo_usd_de_los_clientes_de_practica: 0, agent_invocations_workflow_id_nulo: 0, hitl_queue_total: 4, hitl_queue_editor_escalation: 0, client_historical_outputs_total: 7, ...o })
 
 const pasosOk = (costos = { fondo: 0.06, gpt: 0.05 }) => [
   { n: 1, paso: 'revision_fondo', tipo: 'agente', agente: 'jefe-marketing', estado: 'hecho', cost_usd: costos.fondo },
@@ -321,7 +321,7 @@ describe('J6 · el éxito exige TODO, cada condición por separado (R2 de CC#3)'
 describe('J6 · los contadores', () => {
   it('lo que debe seguir igual: bandeja, salidas, aprobaciones del editor viejo y llamadas sin workflow', () => {
     expect(compararContadores(cont(), cont({ agent_invocations_total: 104, agent_invocations_costo_usd_de_los_clientes_de_practica: 0.23 }), { gasto_esperado_usd: 0.23 }).ok).toBe(true)
-    for (const k of ['hitl_queue_total', 'client_historical_outputs_total', 'hitl_pending_approvals_editor_escalation', 'agent_invocations_workflow_id_nulo']) {
+    for (const k of ['hitl_queue_total', 'client_historical_outputs_total', 'hitl_queue_editor_escalation', 'agent_invocations_workflow_id_nulo']) {
       const r = compararContadores(cont(), cont({ [k]: 99 }), { gasto_esperado_usd: 0 })
       expect(r.ok).toBe(false); expect(r.fallos.join(' ')).toContain(k)
     }

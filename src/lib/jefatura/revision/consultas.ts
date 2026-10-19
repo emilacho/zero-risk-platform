@@ -1,6 +1,6 @@
 /**
  * LAS CONSULTAS §148 de la jefatura (oficina propia), ESCRITAS DE ANTEMANO (diseño v4 §6 · lección M1: ningún módulo nuevo sin instrumentación definida antes del primer smoke).
- * Son SOLO LECTURA (SELECT) sobre las tablas `jefatura_*` y `hitl_pending_approvals`; nadie las corre desde aquí. Se guardan como texto para que cualquier vigilante o quien audite las use tal cual.
+ * Son SOLO LECTURA (SELECT) sobre las tablas `jefatura_*` y la bandeja única `hitl_queue` (arreglo 3 · 19-oct: antes `hitl_pending_approvals`); nadie las corre desde aquí. Se guardan como texto para que cualquier vigilante o quien audite las use tal cual.
  * Ninguna escribe: una prueba lo vigila.
  */
 export const CONSULTAS_148 = {
@@ -27,7 +27,7 @@ FROM public.jefatura_revisiones r LEFT JOIN public.jefatura_pasos p ON p.revisio
   /** revisiones abiertas hace más de 60 minutos (algo se colgó) */
   abiertas_hace_mas_de_60_min: `SELECT id, artifact_type, artifact_id, estado, creado_en FROM public.jefatura_revisiones WHERE estado IN ('abierta', 'en_paso') AND creado_en < now() - interval '60 minutes' ORDER BY creado_en;`,
   /** 🔴 ALARMA: cualquier fila `editor_escalation` NUEVA significa que alguien resucitó el editor de `run-sdk` sobre un paso que cubre la jefatura (diseño §9) */
-  alarma_editor_escalation_nueva: `SELECT item_id, created_at, status FROM public.hitl_pending_approvals WHERE approval_type = 'editor_escalation' AND created_at > $1 ORDER BY created_at DESC;`,
+  alarma_editor_escalation_nueva: `SELECT id, created_at, status FROM public.hitl_queue WHERE type = 'editor_escalation' AND created_at > $1 ORDER BY created_at DESC;`,
 } as const
 
 export type ClaveDeConsulta = keyof typeof CONSULTAS_148

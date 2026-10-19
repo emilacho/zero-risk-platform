@@ -80,7 +80,7 @@ async function contadores() {
     agent_invocations_costo_usd_de_los_clientes_de_practica: Array.isArray(costos) ? +costos.reduce((a, r) => a + Number(r.cost_usd || 0), 0).toFixed(6) : costos,
     agent_invocations_workflow_id_nulo: await cuenta('agent_invocations', 'workflow_id=is.null'),
     hitl_queue_total: await cuenta('hitl_queue'),
-    hitl_pending_approvals_editor_escalation: await cuenta('hitl_pending_approvals', 'approval_type=eq.editor_escalation'),
+    hitl_queue_editor_escalation: await cuenta('hitl_queue', 'type=eq.editor_escalation'),
     client_historical_outputs_total: await cuenta('client_historical_outputs'),
     finanzas_tableros: await cuenta('finanzas_tableros'),
     finanzas_numeros: await cuenta('finanzas_numeros'),
@@ -93,7 +93,7 @@ async function contadores() {
   }
 }
 /** lo que DEBE seguir igual en un seco (diferencias = alarma); encargos/turnos/artefactos sí crecen (son de ensayo) */
-const DEBE_SEGUIR_IGUAL = ['agent_invocations_total', 'agent_invocations_de_los_clientes_de_practica', 'agent_invocations_costo_usd_de_los_clientes_de_practica', 'agent_invocations_workflow_id_nulo', 'hitl_queue_total', 'hitl_pending_approvals_editor_escalation', 'client_historical_outputs_total', 'finanzas_tableros', 'finanzas_numeros', 'finanzas_preguntas']
+const DEBE_SEGUIR_IGUAL = ['agent_invocations_total', 'agent_invocations_de_los_clientes_de_practica', 'agent_invocations_costo_usd_de_los_clientes_de_practica', 'agent_invocations_workflow_id_nulo', 'hitl_queue_total', 'hitl_queue_editor_escalation', 'client_historical_outputs_total', 'finanzas_tableros', 'finanzas_numeros', 'finanzas_preguntas']
 
 const INTERRUPTORES = [
   'Antes: migraciones 202610141800 y 202610141900 aplicadas con respaldo · n8n 0 corriendo y 0 esperando · lectura de #alertas (el `ts` del último mensaje) · `contadores --guardar`.',

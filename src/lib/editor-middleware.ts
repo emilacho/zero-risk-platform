@@ -10,6 +10,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { crearAprobacion } from '@/lib/hitl/bandeja'
 import {
   EditorVerdict,
   EditorVerdictStatus,
@@ -435,7 +436,7 @@ INSTRUCTION: Re-generate addressing the editor's feedback. Keep what worked, fix
   }
 }
 
-async function escalateToHITL(params: {
+export async function escalateToHITL(params: {
   agentSlug: string
   finalContent: string
   aggregateVerdict: AggregateVerdict
@@ -446,30 +447,27 @@ async function escalateToHITL(params: {
   clientId: string | null
 }): Promise<string | null> {
   try {
-    const { data, error } = await params.supabase
-      .from('hitl_pending_approvals')
-      .insert({
-        agent_slug: params.agentSlug,
-        preview: params.finalContent.substring(0, 500),
-        full_content: params.finalContent,
-        editor_verdict: params.aggregateVerdict,
-        revisions_attempted: params.revisionsAttempted,
-        original_task: params.originalTask.substring(0, 1000),
-        // Fix 8c · prefer caller-resolved clientId · fall back to legacy
-        // path so existing escalations still land with attribution.
-        client_id: params.clientId ?? params.originalContext?.client_id ?? null,
-        approval_type: 'editor_escalation',
-        status: 'pending',
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      })
-      .select('item_id')
-      .single()
+    // La bandeja es una sola (`hitl_queue`, arreglo 3 · 19-oct): la escalada del editor queda ahí, donde el tablero de Emilio la ve junto a todo lo demás.
+    const r = await crearAprobacion(params.supabase, {
+      agent_slug: params.agentSlug,
+      preview: params.finalContent.substring(0, 500),
+      full_content: params.finalContent,
+      editor_verdict: params.aggregateVerdict,
+      revisions_attempted: params.revisionsAttempted,
+      original_task: params.originalTask.substring(0, 1000),
+      // Fix 8c · prefer caller-resolved clientId · fall back to legacy
+      // path so existing escalations still land with attribution.
+      client_id: (params.clientId ?? (params.originalContext?.client_id as string | undefined) ?? null) as string | null,
+      approval_type: 'editor_escalation',
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      origen: 'editor',
+    })
 
-    if (error) {
-      console.error('[escalateToHITL] Insert failed:', error.message)
+    if (r.error) {
+      console.error('[escalateToHITL] Insert failed:', r.error)
       return null
     }
-    return data?.item_id || null
+    return r.id
   } catch (err) {
     console.error('[escalateToHITL] Unexpected error:', err)
     return null

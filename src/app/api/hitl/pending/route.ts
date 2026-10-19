@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { aprobacionLegada, esUuid, listarAprobaciones } from '@/lib/hitl/bandeja'
 
 // Disable Next.js route handler caching — always fresh data
 export const dynamic = 'force-dynamic'
@@ -100,19 +101,15 @@ export async function GET(request: Request) {
     }
   })
 
-  // ── System B: hitl_pending_approvals ──────────────────────────────────────
+  // ── System B: la bandeja única (`hitl_queue`, arreglo 3 · 19-oct): compuertas de n8n, escaladas del editor Y lo que dejan la oficina y la planeación ──
 
   let systemBItems: HitlItem[] = []
 
   if (includeSystemB) {
-    const { data: approvalRows } = await supabase
-      .from('hitl_pending_approvals')
-      .select('item_id, approval_type, required_approver, client_id, phase, priority, payload, status, expires_at, created_at')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true })
-      .limit(limit)
+    const { filas: filasB } = await listarAprobaciones(supabase, { estado: 'pending', limite: limit })
+    const approvalRows = filasB.map(aprobacionLegada)
 
-    const bClientIds = Array.from(new Set((approvalRows || []).map(r => r.client_id).filter(Boolean)))
+    const bClientIds = Array.from(new Set(approvalRows.map(r => r.client_id).filter(esUuid)))
     const { data: clientsB } = bClientIds.length > 0
       ? await supabase.from('clients').select('id, name').in('id', bClientIds)
       : { data: [] }
@@ -120,7 +117,7 @@ export async function GET(request: Request) {
 
     systemBItems = (approvalRows || []).map((item) => {
       const client = item.client_id ? clientMapB.get(item.client_id) : null
-      const payloadPreview = item.payload ? JSON.stringify(item.payload).substring(0, 500) : 'No payload'
+      const payloadPreview = item.preview || (item.payload ? JSON.stringify(item.payload).substring(0, 500) : 'No payload')
 
       return {
         source: 'n8n_workflow' as const,

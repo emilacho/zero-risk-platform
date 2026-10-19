@@ -52,7 +52,7 @@ beforeAll(async () => {
         if (tabla === 'client_historical_outputs' && !req.headers.prefer) return json([{ content_text: 'x'.repeat(100) }, { content_text: 'y'.repeat(300) }, { content_text: 'z'.repeat(200) }])
         if (tabla === 'cadena_campanas') return json([{ id: 'c1' }])
         if (tabla === 'cadena_estrategias') return json([{ texto_md: 'e'.repeat(50) }, { contenido: { a: 1 } }])
-        if (req.headers.prefer === 'count=exact') return json([], { 'content-range': `0-0/${estado.cuentas[tabla] ?? 0}` })
+        if (req.headers.prefer === 'count=exact') return json([], { 'content-range': `0-0/${estado.cuentas[tabla + (/type=eq.editor_escalation/.test(req.url ?? '') ? '_editor_escalation' : '')] ?? 0}` })
         return json([])
       }
       res.writeHead(404); res.end('{}')
@@ -66,7 +66,7 @@ afterAll(() => { server.close(); fs.rmSync(carpeta, { recursive: true, force: tr
 beforeEach(() => {
   Object.assign(estado.config, { estado: 'apagada', tipos_activos: [], clientes_ensayo: [] })
   estado.flujos = [{ id: 'wf-turno', name: construirTurno().name, active: false }, { id: 'wf-vigia', name: construirVigia().name, active: false }]
-  estado.enVuelo = 0; estado.noSeApaga = []; estado.cuentas = { agent_invocations: 100, hitl_queue: 7, hitl_pending_approvals: 0, client_historical_outputs: 12, jefatura_revisiones: 0 }; estado.peticiones = []; estado.consultas = []; estado.borrados = []
+  estado.enVuelo = 0; estado.noSeApaga = []; estado.cuentas = { agent_invocations: 100, hitl_queue: 7, hitl_queue_editor_escalation: 0, client_historical_outputs: 12, jefatura_revisiones: 0 }; estado.peticiones = []; estado.consultas = []; estado.borrados = []
   estado.filas = { jefatura_revisiones: [{ id: 'rev-1', client_id: 'prueba-jefatura-seco-restaurante' }, { id: 'rev-2', client_id: 'prueba-jefatura-seco-retail' }], jefatura_pasos: [{ id: 1, revision_id: 'rev-1' }], jefatura_fichas: [{ id: 1, revision_id: 'rev-1' }] }
   fs.rmSync(path.join(carpeta, 'previo'), { recursive: true, force: true })
 })
@@ -160,7 +160,7 @@ describe('contadores antes / después', () => {
       expect(r.out).toMatch(/🔴/)
       estado.cuentas[tabla] = guardado
     }
-    estado.cuentas.hitl_pending_approvals = 1 // una fila `editor_escalation` nueva: el editor viejo resucitó
+    estado.cuentas.hitl_queue_editor_escalation = 1 // una fila `editor_escalation` nueva: el editor viejo resucitó
     expect((await cli(['contadores', '--comparar', f])).code).toBe(1)
   })
 })
