@@ -216,13 +216,15 @@ export function topeDePruebaValido(t: Semilla['tope_de_prueba']): t is TopeDePru
   return !!t && typeof t === 'object' && [t.limite_usd, t.base_usd, t.encargo_base_usd].every((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0) && t.limite_usd > 0
 }
 /**
- * el tope de prueba AUTOMÁTICO (19-oct): `limite_usd` = lo que Emilio firmó para el encargo (`firma_tope.valor`) o, sin firma válida, el tope del encargo (nunca «sin tope»);
- * `base_usd` = lo cobrado en la oficina financiera a ese cliente (todos sus encargos) al momento; `encargo_base_usd` = lo cobrado por ESTE encargo en ese momento (0 si se está creando)
+ * el tope de prueba AUTOMÁTICO (19-oct), POR PEDIDO: `limite_usd` = lo que Emilio firmó para el encargo (`firma_tope.valor`) o, sin firma válida, el tope del encargo (nunca «sin tope»);
+ * `base_usd` = `encargo_base_usd` = lo cobrado por ESTE encargo (0 al crearlo), así la holgura es límite − lo gastado por el pedido y un encargo nuevo nunca nace frenado por el pasado del cliente.
+ * El TOTAL del cliente solo existe con una firma explícita (`firma_tope_total`): entonces límite = lo firmado y `base_usd` = lo cobrado en la oficina financiera a todo el cliente.
  */
 export function topeDePruebaAutomatico(s: Semilla | undefined, totalDeLaOficinaUsd: number, gastoDelEncargoUsd: number): TopeDePrueba {
-  const limite = firmaDeTopeValida(s?.firma_tope) ? s.firma_tope.valor : topeEfectivoDelEncargo(s)
   const r = (x: number) => Math.round(Math.max(0, x) * 1e6) / 1e6
-  return { limite_usd: limite, base_usd: r(totalDeLaOficinaUsd), encargo_base_usd: r(gastoDelEncargoUsd) }
+  if (firmaDeTopeValida(s?.firma_tope_total)) return { limite_usd: s.firma_tope_total.valor, base_usd: r(totalDeLaOficinaUsd), encargo_base_usd: r(gastoDelEncargoUsd) }
+  const limite = firmaDeTopeValida(s?.firma_tope) ? s.firma_tope.valor : topeEfectivoDelEncargo(s)
+  return { limite_usd: limite, base_usd: r(gastoDelEncargoUsd), encargo_base_usd: r(gastoDelEncargoUsd) }
 }
 /**
  * pone el `tope_de_prueba` en la semilla si no lo tiene (o lo tiene mal formado); uno válido se respeta. Si la oficina no puede leer el libro, NO sigue (falla CERRADO: una guarda

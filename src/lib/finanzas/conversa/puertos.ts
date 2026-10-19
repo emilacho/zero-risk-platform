@@ -40,6 +40,8 @@ export interface Semilla {
   firma_tope?: FirmaDeTope
   /** tope TOTAL de una prueba (ver `Limites.prueba`): sin él, solo manda el tope del encargo */
   tope_de_prueba?: TopeDePrueba
+  /** firma EXPLÍCITA de un tope TOTAL por cliente (misma forma que `firma_tope`): solo con ella el tope de prueba automático cuenta lo cobrado a todo el cliente; sin ella el tope es POR PEDIDO */
+  firma_tope_total?: FirmaDeTope
   /** LÍNEA BASE: resultados finales por semana que el negocio ya logra sin pauta (dato del dueño); gana sobre lo que se mida en `datos`. La pauta se dimensiona para `meta − base` */
   linea_base_por_semana?: number
   /** respuestas del dueño entregadas como DATO (sin hilo de Slack): entran al contexto de cada paso de agente marcadas como dato confirmado por él */

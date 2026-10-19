@@ -47,9 +47,10 @@ function mundo(opts: { semilla?: Semilla; gasto?: number; libro?: Libro | 'sin_l
 }
 const abrir = (m: ReturnType<typeof mundo>, semilla: Semilla) => abrirConversacion(m.P, { client_id: CLIENTE, dry_run: false, semilla })
 
-describe('la fórmula del tope de prueba', () => {
+describe('la fórmula del tope de prueba · POR PEDIDO', () => {
   it('con firma válida el límite es lo firmado; sin firma, el tope del encargo; mal formada = sin firma', () => {
-    expect(topeDePruebaAutomatico({ tope_encargo_usd: 3.2, firma_tope: FIRMA }, 2, 0.5)).toEqual({ limite_usd: 3.2, base_usd: 2, encargo_base_usd: 0.5 })
+    // por pedido: la base es lo gastado por el encargo, NO el pasado del cliente (2)
+    expect(topeDePruebaAutomatico({ tope_encargo_usd: 3.2, firma_tope: FIRMA }, 2, 0.5)).toEqual({ limite_usd: 3.2, base_usd: 0.5, encargo_base_usd: 0.5 })
     expect(topeDePruebaAutomatico({ firma_tope: FIRMA }, 0, 0).limite_usd).toBe(3.2) // lo firmado manda aunque el tope del encargo sea otro (aquí el de la plantilla, 1,50)
     expect(topeDePruebaAutomatico({ tope_encargo_usd: 2, firma_tope: { ...FIRMA, valor: 2.5 } }, 0, 0).limite_usd).toBe(2.5)
     expect(topeDePruebaAutomatico({}, 0, 0).limite_usd).toBe(1.5) // nunca «sin tope»: el de la plantilla
@@ -59,8 +60,22 @@ describe('la fórmula del tope de prueba', () => {
       expect(topeDePruebaAutomatico({ tope_encargo_usd: 9, firma_tope: f as never }, 0, 0).limite_usd).toBe(3)
     }
   })
+  it('el TOTAL del cliente solo con firma_tope_total válida: límite = lo firmado y base = todo lo cobrado al cliente', () => {
+    expect(topeDePruebaAutomatico({ firma_tope_total: { ...FIRMA, valor: 5 } }, 4.7519, 3.1456)).toEqual({ limite_usd: 5, base_usd: 4.7519, encargo_base_usd: 3.1456 })
+    // mal formada = no hay total: vuelve a por pedido
+    for (const f of [{ ...FIRMA, quien: '' }, { ...FIRMA, papel: '' }, { ...FIRMA, valor: Number.POSITIVE_INFINITY }, { ...FIRMA, valor: '5' }, null]) {
+      expect(topeDePruebaAutomatico({ firma_tope_total: f as never }, 4.7519, 0)).toEqual({ limite_usd: 1.5, base_usd: 0, encargo_base_usd: 0 })
+    }
+  })
+  it('el caso real: un cliente con 4,7519 cobrados y un encargo NUEVO arranca con holgura = su tope (no negativa)', () => {
+    const holgura = (t: ReturnType<typeof topeDePruebaAutomatico>, gastoAhora: number) => t.limite_usd - t.base_usd - Math.max(0, gastoAhora - t.encargo_base_usd)
+    expect(holgura(topeDePruebaAutomatico({}, 4.7519, 0), 0)).toBe(1.5)
+    expect(holgura(topeDePruebaAutomatico({ tope_encargo_usd: 3.2, firma_tope: FIRMA }, 4.7519, 0), 0)).toBe(3.2)
+    expect(holgura(topeDePruebaAutomatico({ tope_encargo_usd: 3.2, firma_tope: FIRMA }, 4.7519, 0), 0.5)).toBeCloseTo(2.7, 9) // y baja con lo que el pedido gasta
+  })
   it('lo negativo se vuelve 0 y el tope efectivo del encargo es el de la plantilla si no hay nada', () => {
     expect(topeDePruebaAutomatico({}, -1, -2)).toEqual({ limite_usd: 1.5, base_usd: 0, encargo_base_usd: 0 })
+    expect(topeDePruebaAutomatico({ firma_tope_total: FIRMA }, -1, -2)).toEqual({ limite_usd: 3.2, base_usd: 0, encargo_base_usd: 0 })
     expect(topeEfectivoDelEncargo(undefined)).toBe(1.5)
   })
 })
@@ -71,12 +86,12 @@ describe('al CREAR el encargo', () => {
     const semilla: Semilla = { tope_encargo_usd: 3.2, firma_tope: FIRMA, linea_base_por_semana: 7 }
     const r = await abrir(m, semilla)
     expect(r.status).toBe(200)
-    expect(m.creados[0].semilla).toEqual({ ...semilla, tope_de_prueba: { limite_usd: 3.2, base_usd: 2.8314, encargo_base_usd: 0 } })
+    expect(m.creados[0].semilla).toEqual({ ...semilla, tope_de_prueba: { limite_usd: 3.2, base_usd: 0, encargo_base_usd: 0 } }) // por pedido: nace con lo suyo (0), no con el pasado del cliente (2,8314)
   })
   it('sin firma: el límite es el tope del encargo', async () => {
     const m = mundo({ libro: { total_usd: 0.4, por_encargo: {} } })
     await abrir(m, { tope_encargo_usd: 2.5 })
-    expect(m.creados[0].semilla.tope_de_prueba).toEqual({ limite_usd: 2.5, base_usd: 0.4, encargo_base_usd: 0 })
+    expect(m.creados[0].semilla.tope_de_prueba).toEqual({ limite_usd: 2.5, base_usd: 0, encargo_base_usd: 0 })
     const m2 = mundo()
     await abrir(m2, {})
     expect(m2.creados[0].semilla.tope_de_prueba?.limite_usd).toBe(1.5)
@@ -89,7 +104,7 @@ describe('al CREAR el encargo', () => {
     expect(m.lecturas.n).toBe(0)
     const m2 = mundo({ libro: { total_usd: 0.5, por_encargo: {} } })
     await abrir(m2, { tope_de_prueba: { limite_usd: Number.POSITIVE_INFINITY, base_usd: 0, encargo_base_usd: 0 } })
-    expect(m2.creados[0].semilla.tope_de_prueba).toEqual({ limite_usd: 1.5, base_usd: 0.5, encargo_base_usd: 0 })
+    expect(m2.creados[0].semilla.tope_de_prueba).toEqual({ limite_usd: 1.5, base_usd: 0, encargo_base_usd: 0 })
   })
   it('si el libro no se puede leer, NO se crea el encargo (falla cerrado: la guarda no desaparece en silencio)', async () => {
     const m = mundo({ libro: null })
@@ -106,12 +121,33 @@ describe('al CREAR el encargo', () => {
   })
 })
 
+describe('el TOTAL del cliente, solo con firma explícita', () => {
+  const TOTAL = { ...FIRMA, valor: 5, papel: '00-meta/FIRMA-EMILIO-tope-total.md' }
+  it('al crear con firma_tope_total: límite = lo firmado, base = todo lo cobrado al cliente', async () => {
+    const m = mundo({ libro: { total_usd: 4.7519, por_encargo: { otro: 4.7519 } } })
+    await abrir(m, { tope_encargo_usd: 3.2, firma_tope: FIRMA, firma_tope_total: TOTAL })
+    expect(m.creados[0].semilla.tope_de_prueba).toEqual({ limite_usd: 5, base_usd: 4.7519, encargo_base_usd: 0 })
+  })
+  it('un cliente con historia y SIN firma total: el encargo nuevo arranca (no nace frenado)', async () => {
+    const m = mundo({ libro: { total_usd: 4.7519, por_encargo: { otro: 4.7519 } } })
+    const r = await abrir(m, { tope_encargo_usd: 3.2, firma_tope: FIRMA })
+    expect(r.status).toBe(200)
+    expect(m.creados[0].semilla.tope_de_prueba).toEqual({ limite_usd: 3.2, base_usd: 0, encargo_base_usd: 0 })
+  })
+  it('con firma total la holgura SÍ frena a un encargo de un cliente que ya gastó casi todo', async () => {
+    const m = mundo({ semilla: { tope_de_prueba: { limite_usd: 5, base_usd: 4.95, encargo_base_usd: 0 } } })
+    await avanzar(m.P, 'enc-1')
+    const r = await avanzar(m.P, 'enc-1')
+    expect(r.cuerpo).toMatchObject({ estado: 'cierre_por_tope', razon: 'tope_de_prueba' })
+  })
+})
+
 describe('al REABRIR (o un encargo anterior a la regla)', () => {
   it('al avanzar se le pone una vez: base = todo lo cobrado al cliente, encargo_base = lo cobrado por ese encargo; se guarda y no se vuelve a leer', async () => {
     const m = mundo({ semilla: { tope_encargo_usd: 3.2, firma_tope: FIRMA }, gasto: 2.8314, libro: { total_usd: 2.8314, por_encargo: { 'enc-1': 2.8314 } } })
     await avanzar(m.P, 'enc-1')
     expect(m.guardados).toHaveLength(1)
-    expect(m.guardados[0].tope_de_prueba).toEqual({ limite_usd: 3.2, base_usd: 2.8314, encargo_base_usd: 2.8314 })
+    expect(m.guardados[0].tope_de_prueba).toEqual({ limite_usd: 3.2, base_usd: 2.8314, encargo_base_usd: 2.8314 }) // por pedido: base = lo que ESE encargo ya cobró
     expect(m.guardados[0]).toMatchObject({ tope_encargo_usd: 3.2, firma_tope: FIRMA })
     const lecturas = m.lecturas.n
     await avanzar(m.P, 'enc-1')
