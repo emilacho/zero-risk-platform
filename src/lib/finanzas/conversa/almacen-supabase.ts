@@ -88,6 +88,22 @@ export function almacenDeConversa(db: Db): AlmacenDeConversa {
         return Math.round((r.data as Fila[]).reduce((s, f) => s + (Number(f.cost_usd) || 0), 0) * 1e6) / 1e6
       } catch { return null }
     },
+    async gastoDeLaOficina(client_id) {
+      try {
+        const enc = await db.from('finanzas_encargos').select('id').eq('client_id', client_id)
+        if (enc.error || !Array.isArray(enc.data)) return null
+        const por_encargo: Record<string, number> = {}
+        let total = 0
+        for (const f of enc.data as Fila[]) {
+          const r = await db.from('agent_invocations').select('cost_usd').like('workflow_execution_id', `${String(f.id)}:%`)
+          if (r.error || !Array.isArray(r.data)) return null
+          const s = Math.round((r.data as Fila[]).reduce((t, x) => t + (Number(x.cost_usd) || 0), 0) * 1e6) / 1e6
+          por_encargo[String(f.id)] = s
+          total += s
+        }
+        return { total_usd: Math.round(total * 1e6) / 1e6, por_encargo }
+      } catch { return null }
+    },
     async contarBuzon(client_id, ahora) {
       try {
         const inicioDia = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate())).toISOString()

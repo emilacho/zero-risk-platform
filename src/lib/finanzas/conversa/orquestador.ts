@@ -17,7 +17,7 @@ import { entradaDesdeLaConversa } from './entrada'
 import { extraerJson, respuestaDeEquilibrioValida, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, validarProcedencia, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
 import { CANALES_VALIDOS, especialistasQueHablan } from './omision'
 import { AGENTES, PLANTILLA_FINANCIERA, reservaDelCierre2 } from './plantilla'
-import { ESTADOS_TERMINALES, type EncargoDeConversa, type FirmaDeTope, type PuertosDeConversa, type Semilla, type TurnoDeConversa } from './puertos'
+import { ESTADOS_TERMINALES, type EncargoDeConversa, type FirmaDeTope, type PuertosDeConversa, type Semilla, type TopeDePrueba, type TurnoDeConversa } from './puertos'
 import { sha256 } from './util'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
@@ -42,7 +42,9 @@ export async function abrirConversacion(P: PuertosDeConversa, cuerpo: unknown): 
     const v = validarProcedencia(datosCrudos)
     if (!v.ok) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: v.errores } }
   }
-  const r = await P.almacen.crearEncargo({ client_id: c.client_id.trim(), dry_run: c.dry_run, semilla: c.semilla as Semilla })
+  const conTope = await conTopeDePrueba(P, c.client_id.trim(), c.semilla as Semilla)
+  if (!conTope.ok) return { status: 503, cuerpo: { error: 'libro_ilegible', sin_bloque: true, detalle: conTope.detalle } }
+  const r = await P.almacen.crearEncargo({ client_id: c.client_id.trim(), dry_run: c.dry_run, semilla: conTope.semilla })
   if (!r.ok) return { status: 500, cuerpo: { error: 'no_se_pudo_abrir', sin_bloque: true, detalle: r.error } }
   return { status: 200, cuerpo: { encargo_id: r.encargo.id, nuevo: r.nuevo, estado: r.encargo.estado, pasos_ejecutados: r.encargo.estado_del_motor.pasos_ejecutados } }
 }
@@ -201,21 +203,49 @@ export const TOPE_MAXIMO_POR_ENCARGO_USD = 3
 export function firmaDeTopeValida(f: FirmaDeTope | undefined): f is FirmaDeTope {
   return !!f && typeof f === 'object' && [f.quien, f.cuando, f.papel].every((x) => typeof x === 'string' && x.trim() !== '') && typeof f.valor === 'number' && Number.isFinite(f.valor)
 }
+/** el tope de ESTE encargo: el de la plantilla (1,50) o el propio de la semilla si es un número válido (solo sube; por encima del techo solo hasta el valor de una firma registrada) */
+export function topeEfectivoDelEncargo(sem: Semilla | undefined): number {
+  const base = PLANTILLA_FINANCIERA.limites.tope_encargo_usd
+  const t = sem?.tope_encargo_usd
+  if (typeof t !== 'number' || !Number.isFinite(t) || t <= base) return base
+  const techo = firmaDeTopeValida(sem?.firma_tope) ? Math.max(TOPE_MAXIMO_POR_ENCARGO_USD, sem.firma_tope.valor) : TOPE_MAXIMO_POR_ENCARGO_USD
+  return Math.min(t, techo)
+}
 /** el tope total de la prueba es válido si los tres números son finitos y no negativos y el límite es positivo */
-export function topeDePruebaValido(t: Semilla['tope_de_prueba']): t is NonNullable<Semilla['tope_de_prueba']> {
+export function topeDePruebaValido(t: Semilla['tope_de_prueba']): t is TopeDePrueba {
   return !!t && typeof t === 'object' && [t.limite_usd, t.base_usd, t.encargo_base_usd].every((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0) && t.limite_usd > 0
 }
-/** la plantilla de ESTE encargo: igual a la financiera, con el tope propio de la semilla si es un número válido (solo sube, con techo; por encima del techo solo hasta el valor de una firma registrada) */
+/**
+ * el tope de prueba AUTOMÁTICO (19-oct), POR PEDIDO: `limite_usd` = lo que Emilio firmó para el encargo (`firma_tope.valor`) o, sin firma válida, el tope del encargo (nunca «sin tope»);
+ * `base_usd` = `encargo_base_usd` = lo cobrado por ESTE encargo (0 al crearlo), así la holgura es límite − lo gastado por el pedido y un encargo nuevo nunca nace frenado por el pasado del cliente.
+ * El TOTAL del cliente solo existe con una firma explícita (`firma_tope_total`): entonces límite = lo firmado y `base_usd` = lo cobrado en la oficina financiera a todo el cliente.
+ */
+export function topeDePruebaAutomatico(s: Semilla | undefined, totalDeLaOficinaUsd: number, gastoDelEncargoUsd: number): TopeDePrueba {
+  const r = (x: number) => Math.round(Math.max(0, x) * 1e6) / 1e6
+  if (firmaDeTopeValida(s?.firma_tope_total)) return { limite_usd: s.firma_tope_total.valor, base_usd: r(totalDeLaOficinaUsd), encargo_base_usd: r(gastoDelEncargoUsd) }
+  const limite = firmaDeTopeValida(s?.firma_tope) ? s.firma_tope.valor : topeEfectivoDelEncargo(s)
+  return { limite_usd: limite, base_usd: r(gastoDelEncargoUsd), encargo_base_usd: r(gastoDelEncargoUsd) }
+}
+/**
+ * pone el `tope_de_prueba` en la semilla si no lo tiene (o lo tiene mal formado); uno válido se respeta. Si la oficina no puede leer el libro, NO sigue (falla CERRADO: una guarda
+ * que desaparece en silencio cuando la base falla es peor que no tenerla). Un almacén sin la lectura (pruebas viejas) no cambia nada.
+ */
+async function conTopeDePrueba(P: PuertosDeConversa, client_id: string, semilla: Semilla, encargoId?: string): Promise<{ ok: true; semilla: Semilla; nuevo: boolean } | { ok: false; detalle: string }> {
+  if (topeDePruebaValido(semilla.tope_de_prueba) || !P.almacen.gastoDeLaOficina) return { ok: true, semilla, nuevo: false }
+  const g = await P.almacen.gastoDeLaOficina(client_id).catch(() => null)
+  if (!g) return { ok: false, detalle: 'no se pudo leer lo cobrado por la oficina financiera a este cliente' }
+  return { ok: true, semilla: { ...semilla, tope_de_prueba: topeDePruebaAutomatico(semilla, g.total_usd, encargoId === undefined ? 0 : (g.por_encargo[encargoId] ?? 0)) }, nuevo: true }
+}
+/** la plantilla de ESTE encargo: igual a la financiera, con el tope propio de la semilla si es un número válido (solo sube, con techo; por encima del techo solo hasta el valor de una firma registrada) y el tope de la prueba si lo trae */
 export function plantillaDelEncargo(e: EncargoDeConversa, turnos?: TurnoDeConversa[]): Plantilla {
   const sem = e.semilla as Semilla | undefined
-  const t = sem?.tope_encargo_usd
   // la reserva del cierre de la ronda 2 sale de lo que COSTÓ el cierre de la ronda 1 de este encargo (si ya se hizo)
   const cierre1 = (turnos ?? []).filter((x) => x.paso === 'cierre' && x.estado === 'hecho' && x.costo_usd > 0).at(-1)?.costo_usd
   const base: Plantilla = cierre1 === undefined ? PLANTILLA_FINANCIERA : { ...PLANTILLA_FINANCIERA, pasos: PLANTILLA_FINANCIERA.pasos.map((p) => (p.clave === 'cierre_2' ? { ...p, tope_usd: reservaDelCierre2(cierre1) } : p)) }
   const prueba = topeDePruebaValido(sem?.tope_de_prueba) ? { ...sem.tope_de_prueba } : undefined
-  if (typeof t !== 'number' || !Number.isFinite(t) || t <= base.limites.tope_encargo_usd) return prueba ? { ...base, limites: { ...base.limites, prueba } } : base
-  const techo = firmaDeTopeValida(sem?.firma_tope) ? Math.max(TOPE_MAXIMO_POR_ENCARGO_USD, sem.firma_tope.valor) : TOPE_MAXIMO_POR_ENCARGO_USD
-  return { ...base, limites: { ...base.limites, tope_encargo_usd: Math.min(t, techo), ...(prueba ? { prueba } : {}) } }
+  const tope = topeEfectivoDelEncargo(sem)
+  if (tope === base.limites.tope_encargo_usd && !prueba) return base
+  return { ...base, limites: { ...base.limites, tope_encargo_usd: tope, ...(prueba ? { prueba } : {}) } }
 }
 /** las respuestas del dueño entregadas como dato en la semilla: solo las bien formadas (clave y literal de texto), hasta 20 */
 export function respuestasDeLaSemilla(s: Semilla | undefined): Array<{ clave: string; valor: unknown; literal: string }> {
@@ -257,6 +287,14 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa): Prom
   // TOPE SOBRE LO COBRADO (arreglo del intento 4): el gasto del motor solo suma turnos GUARDADOS; lo cobrado y perdido (502, corte) también cuenta
   const cobrado = P.almacen.cobrado ? await P.almacen.cobrado(e.id).catch(() => null) : null
   if (cobrado !== null && cobrado > e.estado_del_motor.gasto_usd) e = { ...e, gasto_usd: Math.max(e.gasto_usd, cobrado), estado_del_motor: { ...e.estado_del_motor, gasto_usd: cobrado } }
+  // TOPE DE PRUEBA AUTOMÁTICO: un encargo reabierto o anterior a esta regla no lo trae; se le pone una vez (el libro NO se lee dos veces para el mismo encargo: queda en la semilla)
+  const conTope = await conTopeDePrueba(P, e.client_id, e.semilla ?? {}, e.id)
+  if (!conTope.ok) return { status: 503, cuerpo: { error: 'libro_ilegible', detalle: conTope.detalle } }
+  if (conTope.nuevo) {
+    e = { ...e, semilla: conTope.semilla }
+    // si no se puede guardar, el paso sigue con el valor en memoria: base + lo gastado desde la base = lo cobrado ahora, así que recalcularlo da lo mismo
+    await P.almacen.guardarBuzon?.({ encargo_id: e.id, semilla: conTope.semilla }).catch(() => undefined)
+  }
   const arts = await P.almacen.artefactos(e.id)
   const turnosPrevios = await P.almacen.turnos(e.id).catch(() => [] as TurnoDeConversa[])
   const plantilla = plantillaDelEncargo(e, turnosPrevios)

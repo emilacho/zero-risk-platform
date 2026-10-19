@@ -39,11 +39,20 @@ export interface Semilla {
   /** firma registrada que permite un `tope_encargo_usd` por encima de TOPE_MAXIMO_POR_ENCARGO_USD: sin ella (o mal formada) manda el techo; el tope aplicado nunca pasa de `valor` */
   firma_tope?: FirmaDeTope
   /** tope TOTAL de una prueba (ver `Limites.prueba`): sin él, solo manda el tope del encargo */
-  tope_de_prueba?: { limite_usd: number; base_usd: number; encargo_base_usd: number }
+  tope_de_prueba?: TopeDePrueba
+  /** firma EXPLÍCITA de un tope TOTAL por cliente (misma forma que `firma_tope`): solo con ella el tope de prueba automático cuenta lo cobrado a todo el cliente; sin ella el tope es POR PEDIDO */
+  firma_tope_total?: FirmaDeTope
   /** LÍNEA BASE: resultados finales por semana que el negocio ya logra sin pauta (dato del dueño); gana sobre lo que se mida en `datos`. La pauta se dimensiona para `meta − base` */
   linea_base_por_semana?: number
   /** respuestas del dueño entregadas como DATO (sin hilo de Slack): entran al contexto de cada paso de agente marcadas como dato confirmado por él */
   respuestas_del_dueno?: Array<{ clave: string; valor: unknown; literal: string }>
+}
+
+/** el tope TOTAL de la prueba de un encargo: lo escribe el sistema solo (ver `topeDePruebaAutomatico`); nadie lo carga a mano */
+export interface TopeDePrueba {
+  limite_usd: number
+  base_usd: number
+  encargo_base_usd: number
 }
 
 export interface FirmaDeTope {
@@ -98,6 +107,8 @@ export interface AlmacenDeConversa {
   /** crea el encargo del cliente; si ya hay uno ABIERTO del mismo cliente devuelve ese (`nuevo: false`): una sola conversación por cliente */
   crearEncargo(n: { client_id: string; dry_run: boolean; semilla: Semilla }): Promise<{ ok: true; encargo: EncargoDeConversa; nuevo: boolean } | { ok: false; error: string }>
   leerEncargo(id: string): Promise<EncargoDeConversa | null>
+  /** lo REALMENTE cobrado en la oficina financiera a ESTE cliente: suma del libro (`agent_invocations` de `<encargo>:<paso>`) de todos sus encargos, y por encargo; null si no se pudo leer. El mantenimiento del portero/cerebro NO entra */
+  gastoDeLaOficina?(client_id: string): Promise<{ total_usd: number; por_encargo: Record<string, number> } | null>
   guardar(c: CambiosDeEncargo): Promise<void>
   /** los artefactos vigentes del encargo (por tipo) */
   artefactos(encargo_id: string): Promise<Record<string, Record<string, unknown>>>
