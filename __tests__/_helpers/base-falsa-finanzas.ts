@@ -7,7 +7,8 @@ export
   const from = (tabla: string) => {
     const q: any = { op: 'select', filtros: [] as Array<(f: any) => boolean>, orden: null, lim: Infinity, fila: null, conflicto: null }
     const ejecutar = () => {
-      const filas = t[tabla]
+      // el libro de costos (`agent_invocations`) se LEE vacío y NO se registra como tabla escrita (el seco no gasta)
+      const filas = t[tabla] ?? (tabla === 'agent_invocations' ? [] : t[tabla])
       const sel = filas.filter((f) => q.filtros.every((fn: any) => fn(f)))
       if (q.op === 'insert') {
         if (tabla === 'finanzas_encargos' && filas.some((f) => f.client_id === q.fila.client_id && ['abierto', 'en_curso'].includes(f.estado))) return { data: null, error: { message: 'duplicate key', code: '23505' } }
@@ -32,6 +33,7 @@ export
       update: (f: any) => { q.op = 'update'; q.fila = f; return api },
       upsert: (f: any, o: any) => { q.op = 'upsert'; q.fila = f; q.conflicto = o?.onConflict; return api },
       eq: (k: string, v: unknown) => { q.filtros.push((f: any) => f[k] === v); return api },
+      like: (k: string, v: string) => { const pre = v.replace(/%$/, ''); q.filtros.push((f: any) => String(f[k] ?? '').startsWith(pre)); return api },
       in: (k: string, v: unknown[]) => { q.filtros.push((f: any) => v.includes(f[k])); return api },
       order: (k: string, o: any) => { q.orden = [k, o?.ascending !== false]; return api },
       limit: (n: number) => { q.lim = n; return api },
