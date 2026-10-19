@@ -151,12 +151,14 @@ describe('el juez de competencia (guardas de código)', () => {
     expect(j[1].degradada_por).toMatch(/sin cita literal/)
     expect(j[3].razon).toMatch(/no decidió/)
   })
-  it('nunca más de 5 competidores por sede: los de más puntuación primero, el resto pasa a duda con su motivo', () => {
-    const muchos = Array.from({ length: 7 }, (_, i) => c(`C${i}`, `categoría Marisquería ${i}`))
+  it('nunca más del tope (10 por omisión) de competidores por sede: los de más puntuación primero, el resto pasa a duda con degradada_por «tope»', () => {
+    const muchos = Array.from({ length: 12 }, (_, i) => c(`C${i}`, `categoría Marisquería ${i}`))
     const j = aplicarGuardasDeCompetencia(muchos, respuesta(muchos.map((m, i) => ({ n: i + 1, veredicto: 'competidor', cita: `categoría Marisquería ${i}`, razon: 'sí' }))))
     expect(j.filter((x) => x.veredicto === 'competidor')).toHaveLength(MAX_COMPETIDORES_POR_SEDE)
-    expect(j[5].veredicto).toBe('duda')
-    expect(j[5].degradada_por).toMatch(/fuera de los 5 primeros/)
+    expect(MAX_COMPETIDORES_POR_SEDE).toBe(10)
+    expect(j[10].veredicto).toBe('duda')
+    expect(j[10].degradada_por).toBe('tope')
+    expect(j[10].razon).toMatch(/cupo de 10/)
   })
   it('un texto ilegible o ausente da duda para TODO el lote y nunca lanza', () => {
     for (const t of [null, 'esto no es json', '{"otra":1}']) {

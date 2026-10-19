@@ -35,7 +35,25 @@ export function armarTareaDelPulido(textoArmado: string): string {
 }
 
 const clave = (s: string) => normalizar(s)
-const cifras = (s: string): string[] => (s.replace(/\[ficha:[0-9a-f]{8} · [^\]]*\]/g, ' ').match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => n.replace(',', '.'))
+const SIN_CITAS = (s: string) => s.replace(/\[ficha:[0-9a-f]{8} · [^\]]*\]/g, ' ')
+/**
+ * Las cifras de un texto como VALORES, no como letras: «1236», «1.236» y «1,236» no se distinguen por su escritura, ni «3382,00» de «3.382,00» ni «3 50» (el armado quita la coma de los precios) de «3,50».
+ * Cada cifra devuelve sus lecturas posibles (un punto con tres dígitos detrás es miles o decimal). Redactar mejor un número ya no es inventarlo; un número que no está entre los de la fuente sigue descartando la línea.
+ */
+export const valoresDeCifras = (s: string): number[][] => (SIN_CITAS(s).match(/\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?/g) ?? []).map((n) => {
+  const lecturas = new Set<number>()
+  const miles = /^\d{1,3}(?:\.\d{3})+(?:,\d+)?$/.test(n)
+  if (miles) lecturas.add(Number(n.replace(/\./g, '').replace(',', '.')))
+  lecturas.add(Number(n.replace(',', '.')))
+  return [...lecturas].filter(Number.isFinite)
+})
+/** los valores que ofrece una fuente: cada cifra (en cualquiera de sus lecturas) y cada par «a b» de enteros seguidos leído como decimal (3 50 → 3,50) */
+const valoresDeLaFuente = (s: string): Set<number> => {
+  const out = new Set<number>()
+  for (const l of valoresDeCifras(s)) for (const v of l) out.add(v)
+  for (const m of SIN_CITAS(s).matchAll(/(?<![\d.,])(\d+) (\d{1,2})(?![\d.,])/g)) out.add(Number(`${m[1]}.${m[2]}`))
+  return out
+}
 const palabrasDe = (s: string): string[] => clave(s.replace(/\[ficha:[0-9a-f]{8} · [^\]]*\]/g, ' ')).split(' ').filter((w) => w.length >= 5 && !/^\d+$/.test(w) && !CONECTORES.has(w))
 const esTitulo = (l: string) => /^##\s/.test(l)
 const esViñeta = (l: string) => /^[-*•]\s/.test(l)
@@ -99,8 +117,8 @@ export function validarPulido(original: string, salida: string, respaldo?: strin
     if (tituloActual === null) { base.descartadas.push({ linea: l.slice(0, 120), por_que: 'punto fuera de una sección válida' }); continue }
     const fuente = citas.flatMap((c) => porCita.get(c.ficha) ?? [])
     const textoFuente = fuente.join(' ')
-    const cifrasFuente = new Set(cifras(textoFuente))
-    const sobran = cifras(l).filter((n) => !cifrasFuente.has(n))
+    const valoresFuente = valoresDeLaFuente(textoFuente)
+    const sobran = valoresDeCifras(l).filter((lect) => !lect.some((v) => valoresFuente.has(v))).map((lect) => String(lect[0]))
     if (sobran.length) { base.descartadas.push({ linea: l.slice(0, 120), por_que: `cifra que no está en la ficha citada (${sobran[0]})` }); continue }
     const propias = palabrasDe(l)
     const palabrasFuente = new Set(palabrasDe(textoFuente))
