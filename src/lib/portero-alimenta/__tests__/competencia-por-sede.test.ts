@@ -210,6 +210,9 @@ describe('descubrir y juzgar · el ciclo de una sede', () => {
     const m = modelo((n) => (n === 1 ? { n, veredicto: 'no', cita: 'categoría Marisquería', razon: 'otro formato' } : { n, veredicto: 'duda', razon: 'no sé' }))
     const r = await descubrirYJuzgar(entrada({ llamarModelo: m.llamar, ctx: ctx({ vigentes: [vigente] }) }))
     expect(r.fichas.every((x) => x.clase === 'competidor_evaluacion')).toBe(true)
+    // el título dice lo que el agente dijo: 26 evaluaciones «en duda» del 17-18 oct se rotularon «no compite»
+    expect(r.fichas.filter((x) => x.datos?.veredicto === 'no').map((x) => x.titulo)).toEqual([expect.stringMatching(/^Evaluado: no compite · /)])
+    expect(r.fichas.filter((x) => x.datos?.veredicto === 'duda').map((x) => x.titulo)).toEqual([expect.stringMatching(/^Evaluado: en duda · /)])
     // «Don Villón» (puesto 1) fue «no» → si hubiera estado vigilado se retiraría; «Marisquería Sol» quedó en duda → NO se retira
     expect(r.retiros).toEqual([])
   })

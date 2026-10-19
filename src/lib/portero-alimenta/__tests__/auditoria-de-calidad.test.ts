@@ -139,6 +139,20 @@ describe('casos que la mutación pidió', () => {
     const au = await auditarCliente(crearBaseFalsa(t as never).db as never, C, AHORA)
     expect(au.ok && au.resultado.elegidas).toBe(0)
   })
+  it('la muestra prefiere las fichas CON fila cruda: 3 armadas por el sistema no tapan a las 5 que sí se pueden comprobar (17-19 oct: 14 de 15 salían «sin_verificar»)', async () => {
+    const C = RUBROS[0].cliente
+    const armada = (i: number) => viva({ ...ficha('a' + i, C, 'metrica armada por el sistema ' + i, { provenance_tag: { metrica: { nombre: 'x' } } }) })
+    const reales = Array.from({ length: 5 }, (_, i) => viva(ficha('r' + i, C, RUBROS[0].texto + ' ' + i)))
+    const fs = [...Array.from({ length: 40 }, (_, i) => armada(i)), ...reales]
+    const au = await auditarCliente(crearBaseFalsa(mundo(C, fs, reales.map((f) => crudo(String(f.id), C, String(f.contenido)))) as never).db as never, C, AHORA)
+    expect(au.ok && au.resultado.verificables).toBe(5)
+  })
+  it('sin ninguna ficha con crudo, la muestra se completa con las armadas y se DICE que no hubo nada que comprobar', async () => {
+    const C = RUBROS[0].cliente
+    const fs = Array.from({ length: 8 }, (_, i) => viva(ficha('a' + i, C, 'armada ' + i, { provenance_tag: { metrica: { nombre: 'x' } } })))
+    const au = await auditarCliente(crearBaseFalsa(mundo(C, fs, []) as never).db as never, C, AHORA)
+    expect(au.ok && au.resultado).toMatchObject({ elegidas: 5, verificables: 0, sin_verificar: 5 })
+  })
   it('si la lectura de la auditoría falla, el vigilante lo DICE (no es silencio)', async () => {
     const C = RUBROS[0].cliente
     const fs = [viva(ficha('f0', C, RUBROS[0].texto))]
