@@ -1,0 +1,21 @@
+{
+ "usado": true,
+ "motivo": "pulido validado por código",
+ "lineas_originales": 56,
+ "lineas_conservadas": 43,
+ "descartadas": [
+  {
+   "linea": "- Sede Guayaquil sin abrir al público. [ficha:69b1c01e · 2026-10-16]",
+   "por_que": "palabras que no están en la ficha citada"
+  },
+  {
+   "linea": "- Top ítems por ingreso en 2026-10: Encebollado Náufrago («Encebollado con chifle»): 287 u., 1.004,50 · Encebollado Juni",
+   "por_que": "cifra que no está en la ficha citada (45)"
+  }
+ ],
+ "citas_conservadas": 45,
+ "citas_originales": 56,
+ "costo_usd": 0.24677775000000002,
+ "agente": "reporting_agent",
+ "paso_del_tope_base": true
+}
