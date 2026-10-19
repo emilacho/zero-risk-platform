@@ -189,6 +189,10 @@ describe('RESERVA CONTRA HOLGURA DE LA PRUEBA · el tope total tambien frena', (
     expect(siguientePaso(antesDelCierre2(2.8314 + 0.1001), pl).accion).toBe('cierre_por_tope') // holgura 0,5 - 0,1001 = 0,3999 < 0,40
     expect(siguientePaso(antesDelCierre2(2.8314 + 0.1), pl).accion).toBe('ejecutar')
     expect(siguientePaso(antesDelCierre2(2.0), pl).accion).toBe('ejecutar') // gasto menor que la base del encargo: ni suma ni resta
+    // con la holgura justa (0,2762) un gasto POR DEBAJO de la base del encargo no la agranda: sigue sin caber 0,40
+    const justa = siguientePaso(antesDelCierre2(2.0), con(prueba))
+    expect(justa.accion === 'cierre_por_tope' && justa.razon).toBe('tope_de_prueba')
+    expect(justa.accion === 'cierre_por_tope' && justa.detalle).toContain('holgura de la prueba 0.2762')
   })
   it('un paso sin reserva (codigo, tope 0) nunca se frena por la prueba, aunque la holgura sea negativa', () => {
     const pl = con({ ...prueba, base_usd: 6 })
@@ -208,6 +212,11 @@ describe('RESERVA CONTRA HOLGURA DE LA PRUEBA · el tope total tambien frena', (
     expect(pl.limites.prueba).toEqual({ limite_usd: 1.2, base_usd: 0.9, encargo_base_usd: 0 })
     const s = siguientePaso(antesDelCierre2(0), pl) // el re-cierre reserva 0,40 > holgura 0,30
     expect(s.accion === 'cierre_por_tope' && s.razon).toBe('tope_de_prueba')
+  })
+  it('un infinito en cualquiera de los tres campos se rechaza (si no, el freno fallaria abierto)', () => {
+    for (const campo of ['limite_usd', 'base_usd', 'encargo_base_usd'] as const) {
+      for (const inf of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) expect(con({ ...prueba, [campo]: inf }).limites.prueba).toBeUndefined()
+    }
   })
   it('sin tope_de_prueba, o mal formado, no cambia nada', () => {
     for (const t of [undefined, null, {}, { ...prueba, limite_usd: 0 }, { ...prueba, base_usd: -1 }, { ...prueba, base_usd: '4' }, { ...prueba, encargo_base_usd: Number.NaN }]) {
