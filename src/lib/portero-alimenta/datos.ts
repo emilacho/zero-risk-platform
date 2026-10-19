@@ -28,6 +28,11 @@ export const TOPE_ALTO_DEL_PULIDO_USD = 0.05
 export const DIAS_PARA_SUBIR_EL_TOPE_DEL_PULIDO = 3
 /** el pulido en su PROPIO paso (`/pulir`, 16-oct · firma de Emilio «calidad sobre precio»): hasta US$ 0,30 por corrida y cliente (medido ≈ 0,24). Reemplaza los topes 0,03/0,05 de cuando iba dentro de ④. */
 export const TOPE_DEL_PULIDO_APARTE_USD = 0.3
+/**
+ * El pulido es redacción (ordenar y reescribir líneas con su cita), no un problema que pida pensar mucho. Medido 19-oct con el razonamiento por omisión: 120–236 s, US$ 0,25–0,36 y 7–10 mil
+ * tokens de salida para una respuesta de ~1,8 mil; pasaba el plazo (200 s) o el tope. Con `low`: 54 s, US$ 0,16, 2,6 mil tokens, y las mismas guardas (citas ≥ 80 %, no agrega hechos) aprobadas.
+ */
+export const RAZONAMIENTO_DEL_PULIDO = 'low' as const
 /** búsquedas propias que el portero puede proponer por día (firma 14-oct) */
 export const MAX_BUSQUEDAS_PROPUESTAS_POR_DIA = 3
 /** páginas de artículos que se leen por día (cada una es una corrida del lector del sitio) */
