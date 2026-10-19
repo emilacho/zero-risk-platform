@@ -207,7 +207,8 @@ export function loteDeLaPiezaDeOficina(a: { elemento: ElementoDeBandeja; salida:
   const contenido = contenidoDeLaSalida(a.salida.content)
   if (!contenido) return { ok: false, errores: ['la salida no trae el bloque json con el contenido de la pieza'] }
   const entrega = esObjeto(contenido.entrega) ? contenido.entrega : null
-  const archivos = entrega && esObjeto(entrega.urls) ? Object.entries(entrega.urls).filter((x): x is [string, string] => esTexto(x[1]) && x[1].trim() !== '').sort((p, q) => p[0].localeCompare(q[0])) : []
+  // la entrega REAL de la oficina trae, junto a la(s) imagen(es), el texto para copiar (_texto.txt), la guía de publicación (_publicar.md) y el manifiesto (manifest.json): solo las imágenes se publican
+  const archivos = entrega && esObjeto(entrega.urls) ? Object.entries(entrega.urls).filter((x): x is [string, string] => esTexto(x[1]) && x[1].trim() !== '' && /\.(png|jpe?g)$/i.test(x[0])).sort((p, q) => p[0].localeCompare(q[0])) : []
   if (!archivos.length) errores.push('la pieza no trae archivos de entrega')
   const redes = [...new Set(archivos.map(([nombre]) => (nombre.split('_')[2] ?? '').toLowerCase()))]
   if (archivos.length && redes.length !== 1) errores.push(`los archivos son de redes distintas (${redes.join(', ') || 'sin red'})`)

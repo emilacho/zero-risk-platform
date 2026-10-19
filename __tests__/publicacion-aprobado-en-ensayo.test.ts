@@ -209,6 +209,17 @@ describe('loteDeLaPiezaDeOficina', () => {
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.lote).toEqual({ task_id: 'oficina:e1', client_id: CLI, piezas: [{ canal: 'instagram', image_url: URL_DE(NOMBRE('instagram')), imagenes: 1, caption: 'Hola desde la oficina\n\n#ceviche #costa' }] })
   })
+  it('🔴 la entrega REAL de la oficina trae también el texto, la guía de publicación y el manifiesto: solo la imagen cuenta (si no, «redes distintas»)', () => {
+    const imagen = NOMBRE('instagram')
+    const urls = { [imagen]: URL_DE(imagen), [imagen.replace('.png', '_texto.txt')]: URL_DE('t'), [imagen.replace('.png', '_publicar.md')]: URL_DE('p'), 'manifest.json': URL_DE('m') }
+    const r = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: { urls } })) })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.lote.piezas[0]).toMatchObject({ canal: 'instagram', image_url: URL_DE(imagen), imagenes: 1 })
+    // y una entrega SIN ninguna imagen (solo texto y manifiesto) sigue siendo «sin archivos de entrega»
+    const sin = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: { urls: { 'manifest.json': URL_DE('m'), [imagen.replace('.png', '_texto.txt')]: URL_DE('t') } } })) })
+    expect(sin.ok).toBe(false)
+    if (!sin.ok) expect(sin.errores.join(' | ')).toContain('archivos de entrega')
+  })
   it('reconoce las abreviaturas de red y deja pasar una red desconocida tal cual (para que se diga «sin publicador»)', () => {
     for (const [red, canal] of [['ig', 'instagram'], ['fb', 'facebook'], ['facebook', 'facebook'], ['tiktok', 'tiktok']] as const) {
       const r = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost(red)) }); expect(r.ok && r.lote.piezas[0].canal).toBe(canal)
