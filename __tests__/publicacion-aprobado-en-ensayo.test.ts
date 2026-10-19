@@ -519,3 +519,18 @@ describe('lo que realmente se pide a la base (la base falsa devuelve la fila ent
     expect(!r.ok && r.error).toBe('salida_ausente'); expect(preguntas).toBe(0)
   })
 })
+
+describe('las direcciones de la entrega caducan (`entrega.expires_at`)', () => {
+  const conCaducidad = (expires_at: unknown) => salidaDe(contenidoPost('instagram', { entrega: { ...entregaRealDeUnaImagen('instagram'), expires_at } }))
+  it('vencida (antes de «ahora», 2026-10-19T20:00Z): el ensayo lo dice; vigente, sin fecha o fecha ilegible: no', async () => {
+    for (const [expires, avisa] of [['2026-10-19T19:59:59Z', true], ['2026-10-19T20:00:01Z', false], [null, false], ['mañana', false]] as const) {
+      const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, conCaducidad(expires))
+      const r = await publicarAprobado(P, { hitl_id: 'p1' }); expect(r.ok).toBe(true)
+      expect(r.ok && r.ensayo.advertencias.some((x) => x.startsWith('entrega_caducada'))).toBe(avisa)
+    }
+  })
+  it('la fecha vencida no impide armar el ensayo (solo avisa)', async () => {
+    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, conCaducidad('2026-01-01T00:00:00Z'))
+    const r = await publicarAprobado(P, { hitl_id: 'p1' }); expect(r.ok && r.ensayo.piezas[0].armada).toBe(true)
+  })
+})

@@ -205,7 +205,7 @@ const RED_DEL_NOMBRE: Record<string, string> = { instagram: 'instagram', ig: 'in
  * Convierte una pieza que la oficina entregó (fila `content_piece_review` + su salida) en un lote de UNA pieza. La red sale del NOMBRE de los archivos entregados
  * (`{fecha}_{hora}_{red}_{formato}_{brief}_{nn}-de-{NN}.{ext}`), porque la fila no la guarda. Una sola imagen por pieza: un carrusel o un kit (varios archivos) se declara no soportado.
  */
-export function loteDeLaPiezaDeOficina(a: { elemento: ElementoDeBandeja; salida: SalidaDeOficina }): { ok: true; lote: LoteSocial } | { ok: false; errores: string[] } {
+export function loteDeLaPiezaDeOficina(a: { elemento: ElementoDeBandeja; salida: SalidaDeOficina }): { ok: true; lote: LoteSocial; caduca: string | null } | { ok: false; errores: string[] } {
   const errores: string[] = []
   const contenido = contenidoDeLaSalida(a.salida.content)
   if (!contenido) return { ok: false, errores: ['la salida no trae el bloque json con el contenido de la pieza'] }
@@ -221,8 +221,11 @@ export function loteDeLaPiezaDeOficina(a: { elemento: ElementoDeBandeja; salida:
   const oficinaEncargo = a.elemento.metadata?.oficina_encargo_id
   const task_id = esTexto(oficinaEncargo) && oficinaEncargo.trim() ? `oficina:${oficinaEncargo.trim()}` : `oficina:${a.elemento.id}`
   if (errores.length) return { ok: false, errores }
+  // las direcciones de la entrega caducan (`entrega.expires_at`): se devuelve para que el ensayo avise si ya vencieron
+  const caduca = entrega && esTexto(entrega.expires_at) && !Number.isNaN(Date.parse(entrega.expires_at)) ? new Date(Date.parse(entrega.expires_at)).toISOString() : null
   return {
     ok: true,
+    caduca,
     lote: { task_id, client_id, piezas: [{ canal: RED_DEL_NOMBRE[redes[0]] ?? redes[0], image_url: archivos[0][1], imagenes: archivos.length, caption: tags.length ? `${pie}\n\n${tags.join(' ')}`.trim() : pie }] },
   }
 }
@@ -257,6 +260,7 @@ export async function publicarAprobado(P: PuertosDePublicacion, n: { hitl_id: st
     if (!l.ok) return { ok: false, status: 409, error: 'pieza_no_publicable', detalle: 'no se pudo armar la publicación desde la salida de la oficina', errores: l.errores }
     lote = l.lote
     output_id = el.output_id
+    if (l.caduca && Date.parse(l.caduca) < P.ahora().getTime()) advertencias.push(`entrega_caducada: las direcciones de los archivos vencieron el ${l.caduca}; hay que volver a entregar la pieza antes de publicarla`)
     if (meta.con_desacuerdo === true) advertencias.push('aprobada_con_desacuerdo: la oficina dejó desacuerdos sin resolver y una persona la aprobó igual')
   }
   if (el.client_id && lote.client_id !== el.client_id) return { ok: false, status: 409, error: 'cliente_distinto', detalle: 'el lote es de otro cliente que el elemento de la bandeja' }
