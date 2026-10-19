@@ -22,6 +22,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { contarPendientes } from '@/lib/hitl/bandeja'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -59,11 +60,8 @@ export async function GET(req: Request) {
         .select('id', { count: 'exact', head: true })
         .eq('client_id', clientId)
         .gte('started_at', sinceIso),
-      supabase
-        .from('hitl_approvals')
-        .select('id', { count: 'exact', head: true })
-        .eq('client_id', clientId)
-        .eq('status', 'pending'),
+      // La bandeja es una sola (`hitl_queue`, arreglo 3 · 19-oct)
+      contarPendientes(supabase, clientId),
     ])
 
     const journey = (journeyRes.data ?? [])[0] ?? null
@@ -85,7 +83,7 @@ export async function GET(req: Request) {
       activity: {
         agent_invocations: invsRes.count ?? 0,
         cascade_runs: cascRes.count ?? 0,
-        hitl_approvals_pending: hitlRes.count ?? 0,
+        hitl_approvals_pending: hitlRes.n,
       },
     })
   } catch (e) {

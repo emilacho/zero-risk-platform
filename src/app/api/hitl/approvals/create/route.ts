@@ -29,6 +29,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
+import { crearAprobacion } from '@/lib/hitl/bandeja'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 15
@@ -53,37 +54,29 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString()
 
     const payload = body.context || body.payload || {}
-    const validPriority = new Set(['low', 'medium', 'high', 'critical'])
-    const priority = validPriority.has(body.priority as string) ? (body.priority as string) : 'medium'
-
     const approval_type = (typeof body.approval_type === 'string' && body.approval_type) || 'generic_approval'
 
-    const row = {
-      approval_type,
-      required_approver: (body.required_approver as string) || 'emilio',
-      escalation_path: body.escalation_path || null,
-      request_id: body.request_id || null,
-      client_id: body.client_id || null,
-      phase: body.phase || null,
-      priority,
-      payload,
-      status: 'pending' as const,
-      expires_at: expiresAt,
-    }
-
+    // La bandeja es una sola (`hitl_queue`, arreglo 3 · 19-oct): la forma de esta ruta no cambia, solo dónde se guarda.
     let item_id: string | null = null
     let dbError: string | null = null
     try {
       const supabase = getSupabaseAdmin()
-      const { data, error } = await supabase
-        .from('hitl_pending_approvals')
-        .insert(row)
-        .select()
-        .single()
-      if (error) {
-        dbError = error.message
+      const r = await crearAprobacion(supabase, {
+        approval_type,
+        required_approver: body.required_approver as string,
+        escalation_path: body.escalation_path as string,
+        request_id: body.request_id as string,
+        client_id: body.client_id as string,
+        phase: body.phase as string,
+        priority: body.priority as string,
+        payload,
+        expires_at: expiresAt,
+        origen: 'workflow',
+      })
+      if (r.error) {
+        dbError = r.error
       } else {
-        item_id = data?.item_id ?? null
+        item_id = r.id
       }
     } catch (e: unknown) {
       dbError = e instanceof Error ? e.message : String(e)

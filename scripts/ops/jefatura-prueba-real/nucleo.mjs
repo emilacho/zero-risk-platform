@@ -109,7 +109,7 @@ export function evidenciaDeUnaRevision({ rev, pasos, fichas, invocaciones, tope_
 }
 
 /** lo que NO debe moverse en esta prueba (diferencia = alarma) y lo que sí puede */
-export const DEBE_SEGUIR_IGUAL = ['hitl_queue_total', 'client_historical_outputs_total', 'hitl_pending_approvals_editor_escalation', 'agent_invocations_workflow_id_nulo']
+export const DEBE_SEGUIR_IGUAL = ['hitl_queue_total', 'client_historical_outputs_total', 'hitl_queue_editor_escalation', 'agent_invocations_workflow_id_nulo']
 export function compararContadores(antes, despues, { gasto_esperado_usd }) {
   const fallos = []
   for (const k of DEBE_SEGUIR_IGUAL) if (antes[k] !== despues[k]) fallos.push(`${k}: ${antes[k]} → ${despues[k]} (debía seguir igual)`)

@@ -225,31 +225,31 @@ describe('consultas §148 escritas de antemano', () => {
     expect(q).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|GRANT|CREATE)\b/i)
     expect(q.trim().endsWith(';')).toBe(true)
   })
-  it('la alarma pide la llave REAL de hitl_pending_approvals (item_id, no id) y el gasto de GPT agrupa por una fecha que SIEMPRE existe', () => {
-    expect(CONSULTAS_148.alarma_editor_escalation_nueva).toMatch(/SELECT item_id, created_at, status FROM/)
-    expect(CONSULTAS_148.alarma_editor_escalation_nueva).not.toMatch(/SELECT id\b/)
+  it('la alarma lee la bandeja ÚNICA (hitl_queue: llave `id`, tipo `type`) y el gasto de GPT agrupa por una fecha que SIEMPRE existe', () => {
+    expect(CONSULTAS_148.alarma_editor_escalation_nueva).toMatch(/SELECT id, created_at, status FROM public.hitl_queue/)
+    expect(CONSULTAS_148.alarma_editor_escalation_nueva).not.toMatch(/item_id|hitl_pending_approvals/)
     expect(CONSULTAS_148.gasto_de_gpt).toMatch(/date_trunc\('day', coalesce\(inicio, fin\)\)/)
   })
   it('solo nombran tablas de la jefatura y la de pendientes del editor', () => {
-    for (const [k, q] of todas) for (const m of q.matchAll(/(?:FROM|JOIN)\s+public\.(\w+)/g)) expect(['jefatura_revisiones', 'jefatura_pasos', 'jefatura_fichas', 'hitl_pending_approvals'], k).toContain(m[1])
+    for (const [k, q] of todas) for (const m of q.matchAll(/(?:FROM|JOIN)\s+public\.(\w+)/g)) expect(['jefatura_revisiones', 'jefatura_pasos', 'jefatura_fichas', 'hitl_queue'], k).toContain(m[1])
   })
   it('la alarma busca editor_escalation nuevas por fecha; el gasto de GPT sale del libro propio (concepto revisor_externo)', () => {
-    expect(CONSULTAS_148.alarma_editor_escalation_nueva).toMatch(/approval_type = 'editor_escalation'/)
+    expect(CONSULTAS_148.alarma_editor_escalation_nueva).toMatch(/type = 'editor_escalation'/)
     expect(CONSULTAS_148.alarma_editor_escalation_nueva).toMatch(/created_at > \$1/)
     expect(CONSULTAS_148.gasto_de_gpt).toMatch(/concepto = 'revisor_externo'/)
   })
 })
 
 describe('las consultas §148 usan columnas que EXISTEN (reparo de CC#3: la alarma pedía `id` y la llave real es `item_id`)', () => {
-  // columnas REALES de `hitl_pending_approvals` (medidas en producción por la definición de PostgREST, 13-oct); las de `jefatura_*` salen del SQL de J1
-  const HITL = ['item_id', 'approval_type', 'required_approver', 'escalation_path', 'request_id', 'client_id', 'phase', 'priority', 'payload', 'status', 'approved_by', 'approved_at', 'last_notified_at', 'created_at', 'expires_at', 'agent_slug', 'editor_verdict', 'revisions_attempted', 'original_task', 'preview', 'full_content', 'resolved_at', 'resolver']
+  // columnas REALES de `hitl_queue` (la bandeja única; definición de PostgREST, 19-oct); las de `jefatura_*` salen del SQL de J1
+  const HITL = ['id', 'client_id', 'pipeline_id', 'output_id', 'agent_name', 'risk_type', 'output_preview', 'review_context', 'status', 'resolved_by', 'resolution_notes', 'resolved_at', 'continuation_payload', 'continuation_triggered', 'created_at', 'expires_at', 'type', 'title', 'priority', 'payload', 'metadata', 'reviewer', 'decision', 'decided_at']
   const sql = readFileSync(resolve(__dirname, '..', 'supabase', 'migrations', '202610131000_jefatura_revision_oficina_propia.sql'), 'utf8').split(String.fromCharCode(13, 10)).join(String.fromCharCode(10))
   const columnasDe = (tabla: string): string[] => {
     const m = new RegExp(String.raw`CREATE TABLE IF NOT EXISTS public\.${tabla} \(([\s\S]*?)\n\);`).exec(sql)
     if (!m) throw new Error(`no encontré ${tabla} en el SQL de J1`)
     return m[1].split('\n').map((l) => /^\s{2}(\w+)\s/.exec(l)?.[1]).filter((c): c is string => !!c && !/^(PRIMARY|CONSTRAINT)$/.test(c))
   }
-  const ESQUEMA: Record<string, string[]> = { hitl_pending_approvals: HITL, jefatura_revisiones: columnasDe('jefatura_revisiones'), jefatura_pasos: columnasDe('jefatura_pasos'), jefatura_fichas: columnasDe('jefatura_fichas') }
+  const ESQUEMA: Record<string, string[]> = { hitl_queue: HITL, jefatura_revisiones: columnasDe('jefatura_revisiones'), jefatura_pasos: columnasDe('jefatura_pasos'), jefatura_fichas: columnasDe('jefatura_fichas') }
   /** las columnas que cada consulta nombra, por tabla (escrito a mano: la consulta sin alias no se puede leer sola) */
   const USO: Record<string, Record<string, string[]>> = {
     revisiones_por_tipo_cliente_dia: { jefatura_revisiones: ['artifact_type', 'client_id', 'creado_en', 'dry_run', 'gasto_usd'] },
@@ -260,7 +260,7 @@ describe('las consultas §148 usan columnas que EXISTEN (reparo de CC#3: la alar
     gasto_de_gpt: { jefatura_pasos: ['inicio', 'fin', 'cost_usd', 'concepto'] },
     pasos_y_minutos_por_revision: { jefatura_revisiones: ['id', 'artifact_type', 'cerrado_en', 'creado_en'], jefatura_pasos: ['revision_id'] },
     abiertas_hace_mas_de_60_min: { jefatura_revisiones: ['id', 'artifact_type', 'artifact_id', 'estado', 'creado_en'] },
-    alarma_editor_escalation_nueva: { hitl_pending_approvals: ['item_id', 'created_at', 'status', 'approval_type'] },
+    alarma_editor_escalation_nueva: { hitl_queue: ['id', 'created_at', 'status', 'type'] },
   }
   it('cada consulta está en la lista de uso y cada columna que usa existe en su tabla real', () => {
     expect(Object.keys(USO).sort()).toEqual(Object.keys(CONSULTAS_148).sort())
@@ -269,11 +269,11 @@ describe('las consultas §148 usan columnas que EXISTEN (reparo de CC#3: la alar
   it('y cada una de esas columnas aparece de verdad en el texto de su consulta (la lista de uso no es de adorno)', () => {
     for (const [clave, tablas] of Object.entries(USO)) for (const cols of Object.values(tablas)) for (const c of cols) expect(CONSULTAS_148[clave as keyof typeof CONSULTAS_148], `${clave} · ${c}`).toMatch(new RegExp(String.raw`\b${c}\b`))
   })
-  it('lo que falló: `hitl_pending_approvals` NO tiene columna `id`', () => { expect(HITL).not.toContain('id') })
+  it('la bandeja única SÍ tiene `id` y `type`, y no conserva `item_id` ni `approval_type` (los nombres de la tabla vieja)', () => { expect(HITL).toEqual(expect.arrayContaining(['id', 'type'])); expect(HITL).not.toContain('item_id'); expect(HITL).not.toContain('approval_type') })
 })
 
 describe('ningún identificador suelto en las consultas §148 (una columna inventada no puede colarse aunque no esté en la lista de uso)', () => {
-  const HITL = ['item_id', 'approval_type', 'client_id', 'status', 'created_at', 'resolved_at', 'resolver', 'expires_at', 'priority', 'payload']
+  const HITL = ['id', 'type', 'client_id', 'status', 'created_at', 'resolved_at', 'resolved_by', 'expires_at', 'priority', 'payload']
   const sql = readFileSync(resolve(__dirname, '..', 'supabase', 'migrations', '202610131000_jefatura_revision_oficina_propia.sql'), 'utf8').split(String.fromCharCode(13, 10)).join(String.fromCharCode(10))
   const cols = (tabla: string): string[] => (new RegExp(String.raw`CREATE TABLE IF NOT EXISTS public\.${tabla} \(([\s\S]*?)\n\);`).exec(sql)?.[1] ?? '').split('\n').map((l) => /^\s{2}(\w+)\s/.exec(l)?.[1]).filter((c): c is string => !!c)
   const COLUMNAS = new Set([...cols('jefatura_revisiones'), ...cols('jefatura_pasos'), ...cols('jefatura_fichas'), ...HITL])
