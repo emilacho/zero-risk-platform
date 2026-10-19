@@ -16,7 +16,7 @@ import { entradaDesdeLaConversa } from './entrada'
 import { extraerJson, respuestaDeEquilibrioValida, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, validarProcedencia, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
 import { CANALES_VALIDOS, especialistasQueHablan } from './omision'
 import { AGENTES, PLANTILLA_FINANCIERA, reservaDelCierre2 } from './plantilla'
-import { ESTADOS_TERMINALES, type EncargoDeConversa, type PuertosDeConversa, type Semilla, type TurnoDeConversa } from './puertos'
+import { ESTADOS_TERMINALES, type EncargoDeConversa, type FirmaDeTope, type PuertosDeConversa, type Semilla, type TurnoDeConversa } from './puertos'
 import { sha256 } from './util'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
@@ -194,16 +194,22 @@ async function recogerDelHilo(P: PuertosDeConversa, e: EncargoDeConversa, claves
 }
 
 // ───────────────────────────────────────────────────────── avanzar UN paso
-/** el tope propio de un encargo nunca pasa de aquí, ni con decisión de Emilio en la semilla (la plantilla sigue en 1,50) */
+/** el tope propio de un encargo nunca pasa de aquí, salvo con una firma registrada en la semilla (la plantilla sigue en 1,50) */
 export const TOPE_MAXIMO_POR_ENCARGO_USD = 3
-/** la plantilla de ESTE encargo: igual a la financiera, con el tope propio de la semilla si es un número válido (solo sube, con techo) */
+/** la firma que habilita un tope por encima del techo: bien formada = quién, cuándo, valor numérico y ruta del papel, todo presente */
+export function firmaDeTopeValida(f: FirmaDeTope | undefined): f is FirmaDeTope {
+  return !!f && typeof f === 'object' && [f.quien, f.cuando, f.papel].every((x) => typeof x === 'string' && x.trim() !== '') && typeof f.valor === 'number' && Number.isFinite(f.valor)
+}
+/** la plantilla de ESTE encargo: igual a la financiera, con el tope propio de la semilla si es un número válido (solo sube, con techo; por encima del techo solo hasta el valor de una firma registrada) */
 export function plantillaDelEncargo(e: EncargoDeConversa, turnos?: TurnoDeConversa[]): Plantilla {
-  const t = (e.semilla as Semilla | undefined)?.tope_encargo_usd
+  const sem = e.semilla as Semilla | undefined
+  const t = sem?.tope_encargo_usd
   // la reserva del cierre de la ronda 2 sale de lo que COSTÓ el cierre de la ronda 1 de este encargo (si ya se hizo)
   const cierre1 = (turnos ?? []).filter((x) => x.paso === 'cierre' && x.estado === 'hecho' && x.costo_usd > 0).at(-1)?.costo_usd
   const base: Plantilla = cierre1 === undefined ? PLANTILLA_FINANCIERA : { ...PLANTILLA_FINANCIERA, pasos: PLANTILLA_FINANCIERA.pasos.map((p) => (p.clave === 'cierre_2' ? { ...p, tope_usd: reservaDelCierre2(cierre1) } : p)) }
   if (typeof t !== 'number' || !Number.isFinite(t) || t <= base.limites.tope_encargo_usd) return base
-  return { ...base, limites: { ...base.limites, tope_encargo_usd: Math.min(t, TOPE_MAXIMO_POR_ENCARGO_USD) } }
+  const techo = firmaDeTopeValida(sem?.firma_tope) ? Math.max(TOPE_MAXIMO_POR_ENCARGO_USD, sem.firma_tope.valor) : TOPE_MAXIMO_POR_ENCARGO_USD
+  return { ...base, limites: { ...base.limites, tope_encargo_usd: Math.min(t, techo) } }
 }
 /** las respuestas del dueño entregadas como dato en la semilla: solo las bien formadas (clave y literal de texto), hasta 20 */
 export function respuestasDeLaSemilla(s: Semilla | undefined): Array<{ clave: string; valor: unknown; literal: string }> {
