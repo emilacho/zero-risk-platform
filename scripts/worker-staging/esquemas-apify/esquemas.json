@@ -1,0 +1,747 @@
+{
+ "version": 1,
+ "congelado_en": "2026-10-19",
+ "notas": "Fuente única de los esquemas de Apify: de aquí salen el validador del Servicio y el relector. renombres: {funcion:{campoViejo:{a:campoNuevo, valores:{valorViejo:valorNuevo}}}} · retirados: campos que se fueron SIN mapa (el Servicio no llama al raspador con ellos). Se actualiza con scripts/ops/recongelar-esquemas.mjs. · 19-oct: `menciones_en_redes` se corrigió a mano al sembrar (la copia del 14-oct traía `usernames`, que el actor nunca aceptó, y no marcaba `username` como obligatorio).",
+ "funciones": {
+  "competitor_website_scraper": {
+   "actor": "apify~website-content-crawler",
+   "acepta": [
+    "startUrls",
+    "crawlerType",
+    "includeUrlGlobs",
+    "excludeUrlGlobs",
+    "maxCrawlDepth",
+    "maxCrawlPages",
+    "useSitemaps",
+    "onlyCrawlPagesModifiedSince",
+    "useLlmsTxt",
+    "respectRobotsTxtFile",
+    "keepUrlFragments",
+    "ignoreCanonicalUrl",
+    "proxyConfiguration",
+    "initialCookies",
+    "customHttpHeaders",
+    "signHttpRequests",
+    "initialConcurrency",
+    "maxConcurrency",
+    "requestTimeoutSecs",
+    "minFileDownloadSpeedKBps",
+    "maxRequestRetries",
+    "maxSessionRotations",
+    "ignoreHttpsErrors",
+    "dynamicContentWaitSecs",
+    "waitForSelector",
+    "softWaitForSelector",
+    "maxScrollHeightPixels",
+    "removeCookieWarnings",
+    "blockMedia",
+    "expandIframes",
+    "clickElementsCssSelector",
+    "stickyContainerCssSelector",
+    "pageFunction",
+    "keepElementsCssSelector",
+    "removeElementsCssSelector",
+    "htmlTransformer",
+    "readableTextCharThreshold",
+    "aggressivePrune",
+    "debugMode",
+    "debugLog",
+    "storeSkippedUrls",
+    "saveHtml",
+    "saveHtmlAsFile",
+    "saveMarkdown",
+    "summarize",
+    "saveFiles",
+    "saveContentTypes",
+    "saveScreenshots",
+    "maxResults",
+    "clientSideMinChangePercentage",
+    "renderingTypeDetectionPercentage",
+    "reuseStoredDetectionResults"
+   ],
+   "obligatorios": [
+    "startUrls",
+    "proxyConfiguration"
+   ]
+  },
+  "facebook_ads_library_scraper": {
+   "actor": "easyapi~facebook-ads-library-scraper",
+   "acepta": [
+    "searchUrl",
+    "maxItems"
+   ],
+   "obligatorios": [
+    "searchUrl"
+   ]
+  },
+  "facebook_page_scraper": {
+   "actor": "apify~facebook-pages-scraper",
+   "acepta": [
+    "startUrls"
+   ],
+   "obligatorios": [
+    "startUrls"
+   ]
+  },
+  "google_ads_scraper": {
+   "actor": "burbn~google-ads-search",
+   "acepta": [
+    "domain",
+    "countryCode",
+    "format",
+    "maxResults"
+   ],
+   "obligatorios": [
+    "domain"
+   ]
+  },
+  "google_maps_scraper": {
+   "actor": "compass~crawler-google-places",
+   "acepta": [
+    "searchStringsArray",
+    "locationQuery",
+    "maxCrawledPlacesPerSearch",
+    "language",
+    "categoryFilterWords",
+    "searchMatching",
+    "placeMinimumStars",
+    "website",
+    "skipClosedPlaces",
+    "scrapePlaceDetailPage",
+    "scrapeTableReservationProvider",
+    "scrapeOrderOnline",
+    "includeWebResults",
+    "scrapeDirectories",
+    "maxQuestions",
+    "scrapeContacts",
+    "scrapeSocialMediaProfiles",
+    "maximumLeadsEnrichmentRecords",
+    "leadsEnrichmentDepartments",
+    "verifyLeadsEnrichmentEmails",
+    "maxReviews",
+    "reviewsStartDate",
+    "reviewsSort",
+    "reviewsFilterString",
+    "reviewsOrigin",
+    "scrapeReviewsPersonalData",
+    "maxImages",
+    "scrapeImageAuthors",
+    "enableCompetitorAnalysis",
+    "maxCompetitorsToAnalyze",
+    "countryCode",
+    "city",
+    "state",
+    "county",
+    "postalCode",
+    "customGeolocation",
+    "startUrls",
+    "placeIds",
+    "allPlacesNoSearchAction"
+   ],
+   "obligatorios": []
+  },
+  "google_serp_scraper": {
+   "actor": "apify~google-search-scraper",
+   "acepta": [
+    "queries",
+    "maxPagesPerQuery",
+    "aiOverview",
+    "aiModeSearch",
+    "geminiSearch",
+    "perplexitySearch",
+    "chatGptSearch",
+    "copilotSearch",
+    "maximumLeadsEnrichmentRecords",
+    "leadsEnrichmentDepartments",
+    "verifyLeadsEnrichmentEmails",
+    "linkProspecting",
+    "websiteContentScraper",
+    "focusOnPaidAds",
+    "countryCode",
+    "searchLanguage",
+    "languageCode",
+    "locationUule",
+    "forceExactMatch",
+    "site",
+    "relatedToSite",
+    "wordsInTitle",
+    "wordsInText",
+    "wordsInUrl",
+    "quickDateRange",
+    "beforeDate",
+    "afterDate",
+    "fileTypes",
+    "mobileResults",
+    "includeUnfilteredResults",
+    "saveHtml",
+    "saveHtmlToKeyValueStore",
+    "includeIcons"
+   ],
+   "obligatorios": [
+    "queries"
+   ]
+  },
+  "instagram_post_comments_scraper": {
+   "actor": "apify~instagram-comment-scraper",
+   "acepta": [
+    "directUrls",
+    "resultsLimit",
+    "includeNestedComments"
+   ],
+   "obligatorios": [
+    "directUrls"
+   ]
+  },
+  "instagram_scraper": {
+   "actor": "apify~instagram-scraper",
+   "acepta": [
+    "resultsType",
+    "directUrls",
+    "resultsLimit",
+    "onlyPostsNewerThan",
+    "search",
+    "searchType",
+    "searchLimit",
+    "addParentData"
+   ],
+   "obligatorios": []
+  },
+  "linkedin_company_scraper": {
+   "actor": "harvestapi~linkedin-company",
+   "acepta": [
+    "companies",
+    "searches"
+   ],
+   "obligatorios": []
+  },
+  "menciones_en_redes": {
+   "actor": "apify~instagram-tagged-scraper",
+   "acepta": [
+    "username",
+    "resultsLimit"
+   ],
+   "obligatorios": [
+    "username"
+   ]
+  },
+  "own_google_maps_profile": {
+   "actor": "compass~crawler-google-places",
+   "acepta": [
+    "searchStringsArray",
+    "locationQuery",
+    "maxCrawledPlacesPerSearch",
+    "language",
+    "categoryFilterWords",
+    "searchMatching",
+    "placeMinimumStars",
+    "website",
+    "skipClosedPlaces",
+    "scrapePlaceDetailPage",
+    "scrapeTableReservationProvider",
+    "scrapeOrderOnline",
+    "includeWebResults",
+    "scrapeDirectories",
+    "maxQuestions",
+    "scrapeContacts",
+    "scrapeSocialMediaProfiles",
+    "maximumLeadsEnrichmentRecords",
+    "leadsEnrichmentDepartments",
+    "verifyLeadsEnrichmentEmails",
+    "maxReviews",
+    "reviewsStartDate",
+    "reviewsSort",
+    "reviewsFilterString",
+    "reviewsOrigin",
+    "scrapeReviewsPersonalData",
+    "maxImages",
+    "scrapeImageAuthors",
+    "enableCompetitorAnalysis",
+    "maxCompetitorsToAnalyze",
+    "countryCode",
+    "city",
+    "state",
+    "county",
+    "postalCode",
+    "customGeolocation",
+    "startUrls",
+    "placeIds",
+    "allPlacesNoSearchAction"
+   ],
+   "obligatorios": []
+  },
+  "publicaciones_facebook": {
+   "actor": "apify~facebook-posts-scraper",
+   "acepta": [
+    "startUrls",
+    "resultsLimit",
+    "captionText",
+    "onlyPostsNewerThan",
+    "onlyPostsOlderThan"
+   ],
+   "obligatorios": [
+    "startUrls"
+   ]
+  },
+  "resenas_app_store": {
+   "actor": "epctex~appstore-scraper",
+   "acepta": [
+    "term",
+    "startUrls",
+    "appIds",
+    "bundleIds",
+    "developerIds",
+    "mode",
+    "country",
+    "lang",
+    "page",
+    "endPage",
+    "includeReviews",
+    "reviewsSort",
+    "includeSimilarApps",
+    "maxItems",
+    "customMapFunction",
+    "outputConnector",
+    "deliverTarget",
+    "deliverMode",
+    "deliverMaxItems"
+   ],
+   "obligatorios": []
+  },
+  "resenas_booking": {
+   "actor": "voyager~booking-reviews-scraper",
+   "acepta": [
+    "startUrls",
+    "maxReviewsPerHotel",
+    "sortReviewsBy",
+    "cutoffDate",
+    "reviewScores"
+   ],
+   "obligatorios": [
+    "startUrls"
+   ]
+  },
+  "resenas_facebook": {
+   "actor": "apify~facebook-reviews-scraper",
+   "acepta": [
+    "startUrls",
+    "resultsLimit",
+    "onlyReviewsNewerThan"
+   ],
+   "obligatorios": [
+    "startUrls"
+   ]
+  },
+  "resenas_google_maps": {
+   "actor": "compass~google-maps-reviews-scraper",
+   "acepta": [
+    "startUrls",
+    "placeIds",
+    "maxReviews",
+    "reviewsSort",
+    "reviewsStartDate",
+    "reviewsFilterString",
+    "language",
+    "reviewsOrigin",
+    "personalData"
+   ],
+   "obligatorios": []
+  },
+  "resenas_tripadvisor": {
+   "actor": "maxcopell~tripadvisor-reviews",
+   "acepta": [
+    "startUrls",
+    "sourceDatasetId",
+    "maxItemsPerQuery",
+    "scrapeReviewerInfo",
+    "lastReviewDate",
+    "disableMachineTranslations",
+    "reviewRatings",
+    "reviewsLanguages"
+   ],
+   "obligatorios": []
+  },
+  "similarweb_scraper": {
+   "actor": "tri_angle~similarweb-scraper",
+   "acepta": [
+    "websites",
+    "debugLog"
+   ],
+   "obligatorios": [
+    "websites"
+   ]
+  },
+  "software_review_scraper": {
+   "actor": "zen-studio~software-review-scraper",
+   "acepta": [
+    "query",
+    "platforms",
+    "maxResults",
+    "sort",
+    "starRatings",
+    "feedback"
+   ],
+   "obligatorios": [
+    "query"
+   ]
+  },
+  "tiktok_creative_center_scraper": {
+   "actor": "doliz~tiktok-creative-center-scraper",
+   "acepta": [
+    "target",
+    "cookies",
+    "dashboard_search",
+    "dashboard_region",
+    "dashboard_industry",
+    "dashboard_objective",
+    "dashboard_period",
+    "dashboard_ad_language",
+    "dashboard_ad_format",
+    "dashboard_likes",
+    "dashboard_sort_by",
+    "dashboard_page",
+    "dashboard_limit",
+    "spotlight_industry",
+    "spotlight_page",
+    "spotlight_limit",
+    "ad_analytics_material_id",
+    "ad_keyframe_material_id",
+    "ad_keyframe_metric",
+    "ad_percentile_material_id",
+    "ad_percentile_metric",
+    "ad_percentile_period",
+    "ad_recommend_material_id",
+    "ad_recommend_industry",
+    "ad_recommend_country",
+    "hashtags_country",
+    "hashtags_period",
+    "hashtags_industry",
+    "hashtags_page",
+    "hashtags_limit",
+    "hashtag_analytics_hashtag_id",
+    "hashtag_analytics_country",
+    "hashtag_analytics_period",
+    "videos_country",
+    "videos_period",
+    "videos_content_tags",
+    "videos_sort_by",
+    "videos_page",
+    "videos_limit"
+   ],
+   "obligatorios": []
+  },
+  "tiktok_profile_scraper": {
+   "actor": "apidojo~tiktok-profile-scraper",
+   "acepta": [
+    "startUrls",
+    "usernames",
+    "until",
+    "since",
+    "maxItems",
+    "customMapFunction",
+    "outputConnector",
+    "deliverTarget",
+    "deliverMode",
+    "deliverMaxItems"
+   ],
+   "obligatorios": []
+  },
+  "trustpilot_scraper": {
+   "actor": "memo23~trustpilot-scraper-ppe",
+   "acepta": [
+    "startUrls",
+    "searchTerms",
+    "reviewInsights",
+    "painPointAnalysis",
+    "enrichEmails",
+    "qualifyByPayment",
+    "scrapeAllReviews",
+    "filterStars",
+    "sampling",
+    "filterLanguages",
+    "filterDateRange",
+    "filterVerifiedOnly",
+    "filterRepliesOnly",
+    "filterCountries",
+    "sortBy",
+    "expandRegionalDomains",
+    "strictNameMatch",
+    "splitDatasets",
+    "flattenCompanyData",
+    "emitInputStatus",
+    "lastDays",
+    "startDate",
+    "includeCompanyDetails",
+    "includeStats",
+    "includeWindowedStats",
+    "includeTransparency",
+    "includeCompanyAdditionalFields",
+    "maxItems",
+    "maxConcurrency",
+    "minConcurrency",
+    "maxRequestRetries",
+    "proxy"
+   ],
+   "obligatorios": []
+  },
+  "twitter_scraper": {
+   "actor": "apidojo~tweet-scraper",
+   "acepta": [
+    "startUrls",
+    "searchTerms",
+    "twitterHandles",
+    "conversationIds",
+    "maxItems",
+    "sort",
+    "tweetLanguage",
+    "onlyVerifiedUsers",
+    "onlyTwitterBlue",
+    "onlyImage",
+    "onlyVideo",
+    "onlyQuote",
+    "author",
+    "inReplyTo",
+    "mentioning",
+    "geotaggedNear",
+    "withinRadius",
+    "geocode",
+    "placeObjectId",
+    "minimumRetweets",
+    "minimumFavorites",
+    "minimumReplies",
+    "start",
+    "end",
+    "includeSearchTerms",
+    "customMapFunction"
+   ],
+   "obligatorios": []
+  },
+  "videos_instagram": {
+   "actor": "apify~instagram-reel-scraper",
+   "acepta": [
+    "username",
+    "resultsLimit",
+    "onlyPostsNewerThan",
+    "skipPinnedPosts",
+    "skipTrialReels",
+    "includeSharesCount",
+    "includeTranscript",
+    "includeDownloadedVideo"
+   ],
+   "obligatorios": [
+    "username"
+   ]
+  },
+  "videos_tiktok": {
+   "actor": "clockworks~tiktok-scraper",
+   "acepta": [
+    "hashtags",
+    "resultsPerPage",
+    "profiles",
+    "profileScrapeSections",
+    "profileSorting",
+    "excludePinnedPosts",
+    "oldestPostDateUnified",
+    "newestPostDate",
+    "mostDiggs",
+    "leastDiggs",
+    "maxFollowersPerProfile",
+    "maxFollowingPerProfile",
+    "searchQueries",
+    "searchSection",
+    "maxProfilesPerQuery",
+    "videoSearchSorting",
+    "videoSearchDateFilter",
+    "scrapeRelatedSearchWords",
+    "postURLs",
+    "scrapeRelatedVideos",
+    "scrapeAdditionalAuthorMeta",
+    "shouldDownloadVideos",
+    "shouldDownloadCovers",
+    "shouldDownloadSlideshowImages",
+    "shouldDownloadAvatars",
+    "shouldDownloadMusicCovers",
+    "videoKvStoreIdOrName",
+    "downloadSubtitlesOptions",
+    "aiVideoDescription",
+    "aiVideoSummary",
+    "commentsPerPost",
+    "topLevelCommentsPerPost",
+    "maxRepliesPerComment",
+    "proxyCountryCode"
+   ],
+   "obligatorios": []
+  },
+  "videos_youtube": {
+   "actor": "streamers~youtube-scraper",
+   "acepta": [
+    "searchQueries",
+    "maxResults",
+    "maxResultsShorts",
+    "maxResultStreams",
+    "startUrls",
+    "transcriptionAndSubtitle",
+    "subtitlesLanguage",
+    "subtitlesFormat",
+    "sortingOrder",
+    "dateFilter",
+    "videoType",
+    "lengthFilter",
+    "isHD",
+    "hasSubtitles",
+    "hasCC",
+    "is3D",
+    "isLive",
+    "isBought",
+    "is4K",
+    "is360",
+    "hasLocation",
+    "isHDR",
+    "isVR180",
+    "oldestPostDate",
+    "sortVideosBy",
+    "aiVideoDescription",
+    "aiVideoSummary",
+    "saveSubsToKVS",
+    "preferAutoGeneratedSubtitles"
+   ],
+   "obligatorios": []
+  },
+  "website_content_scraper": {
+   "actor": "apify~website-content-crawler",
+   "acepta": [
+    "startUrls",
+    "crawlerType",
+    "includeUrlGlobs",
+    "excludeUrlGlobs",
+    "maxCrawlDepth",
+    "maxCrawlPages",
+    "useSitemaps",
+    "onlyCrawlPagesModifiedSince",
+    "useLlmsTxt",
+    "respectRobotsTxtFile",
+    "keepUrlFragments",
+    "ignoreCanonicalUrl",
+    "proxyConfiguration",
+    "initialCookies",
+    "customHttpHeaders",
+    "signHttpRequests",
+    "initialConcurrency",
+    "maxConcurrency",
+    "requestTimeoutSecs",
+    "minFileDownloadSpeedKBps",
+    "maxRequestRetries",
+    "maxSessionRotations",
+    "ignoreHttpsErrors",
+    "dynamicContentWaitSecs",
+    "waitForSelector",
+    "softWaitForSelector",
+    "maxScrollHeightPixels",
+    "removeCookieWarnings",
+    "blockMedia",
+    "expandIframes",
+    "clickElementsCssSelector",
+    "stickyContainerCssSelector",
+    "pageFunction",
+    "keepElementsCssSelector",
+    "removeElementsCssSelector",
+    "htmlTransformer",
+    "readableTextCharThreshold",
+    "aggressivePrune",
+    "debugMode",
+    "debugLog",
+    "storeSkippedUrls",
+    "saveHtml",
+    "saveHtmlAsFile",
+    "saveMarkdown",
+    "summarize",
+    "saveFiles",
+    "saveContentTypes",
+    "saveScreenshots",
+    "maxResults",
+    "clientSideMinChangePercentage",
+    "renderingTypeDetectionPercentage",
+    "reuseStoredDetectionResults"
+   ],
+   "obligatorios": [
+    "startUrls",
+    "proxyConfiguration"
+   ]
+  },
+  "youtube_channel_scraper": {
+   "actor": "streamers~youtube-channel-scraper",
+   "acepta": [
+    "startUrls",
+    "maxResults",
+    "maxResultsShorts",
+    "maxResultStreams",
+    "oldestPostDate",
+    "sortVideosBy"
+   ],
+   "obligatorios": [
+    "startUrls"
+   ]
+  },
+  "youtube_comments_scraper": {
+   "actor": "apidojo~youtube-comments-scraper",
+   "acepta": [
+    "startUrls",
+    "sort",
+    "maxItems",
+    "includeReplies",
+    "customMapFunction",
+    "outputConnector",
+    "deliverTarget",
+    "deliverMode",
+    "deliverMaxItems"
+   ],
+   "obligatorios": []
+  },
+  "youtube_video_scraper": {
+   "actor": "streamers~youtube-scraper",
+   "acepta": [
+    "searchQueries",
+    "maxResults",
+    "maxResultsShorts",
+    "maxResultStreams",
+    "startUrls",
+    "transcriptionAndSubtitle",
+    "subtitlesLanguage",
+    "subtitlesFormat",
+    "sortingOrder",
+    "dateFilter",
+    "videoType",
+    "lengthFilter",
+    "isHD",
+    "hasSubtitles",
+    "hasCC",
+    "is3D",
+    "isLive",
+    "isBought",
+    "is4K",
+    "is360",
+    "hasLocation",
+    "isHDR",
+    "isVR180",
+    "oldestPostDate",
+    "sortVideosBy",
+    "aiVideoDescription",
+    "aiVideoSummary",
+    "saveSubsToKVS",
+    "preferAutoGeneratedSubtitles"
+   ],
+   "obligatorios": []
+  }
+ },
+ "renombres": {
+  "youtube_video_scraper": {
+   "downloadSubtitles": {
+    "a": "transcriptionAndSubtitle",
+    "valores": {
+     "true": "ALWAYS_SUBTITLES",
+     "false": "NONE"
+    }
+   }
+  }
+ },
+ "retirados": {}
+}

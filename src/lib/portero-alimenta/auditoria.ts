@@ -107,9 +107,15 @@ export async function auditarCliente(db: Db, clientId: string, ahora: Date, n = 
   const q = await db.from('cerebro_fichas').select('id, client_id, contenido, fecha_fuente, observado_en, fuente_url, provenance_tag, descartada, retirada_en').eq('client_id', clientId).gte('creado_en', dia0.toISOString()).limit(500)
   if (q.error) return { ok: false, detalle: `cerebro_fichas: ${String(q.error.message).slice(0, 120)}` }
   const vivas = lista(q.data).filter((f) => !f.descartada && !f.retirada_en && typeof f.contenido === 'string' && esObjeto(f.provenance_tag)) as unknown as FichaAuditable[]
-  const muestra = elegirMuestra(vivas, dia, n)
+  const idCrudoDe = (f: FichaAuditable): string | null => { const r = esObjeto(f.provenance_tag) && esObjeto((f.provenance_tag as Fila).respaldo_en) ? ((f.provenance_tag as Fila).respaldo_en as Fila).id : null; return typeof r === 'string' ? r : null }
+  // PRIMERO las que tienen fila cruda que comprobar: las fichas que arma el sistema (métricas, competencia, resumen) no guardan `respaldo_en`, y con una muestra al azar 14 de 15 fichas
+  // salieron «sin_verificar» (17-19 oct): la auditoría callaba por ciega, no por limpia. Se completa con el resto solo si faltan fichas con crudo.
+  const conCrudo = vivas.filter((f) => idCrudoDe(f) !== null)
+  const sinCrudo = vivas.filter((f) => idCrudoDe(f) === null)
+  const delCrudo = elegirMuestra(conCrudo, dia, n)
+  const muestra = [...delCrudo, ...elegirMuestra(sinCrudo, dia, n - delCrudo.length)]
   if (!muestra.length) return { ok: true, resultado: juzgarAuditoria(dia, []) }
-  const ids = muestra.map((f) => { const r = esObjeto(f.provenance_tag) && esObjeto((f.provenance_tag as Fila).respaldo_en) ? ((f.provenance_tag as Fila).respaldo_en as Fila).id : null; return typeof r === 'string' ? r : null })
+  const ids = muestra.map(idCrudoDe)
   const pedir = [...new Set(ids.filter((x): x is string => !!x))]
   const porId = new Map<string, Fila>()
   if (pedir.length) {

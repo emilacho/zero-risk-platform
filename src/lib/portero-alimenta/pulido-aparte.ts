@@ -62,6 +62,12 @@ export async function rutaPulir(deps: DepsDePulir, cuerpo: unknown): Promise<Res
     return typeof datos.pulido_por === 'string' && String(f.observado_en ?? '').slice(0, 10) === hoy
   })
   if (pulidoHoy && !forzar) return { status: 200, body: { ok: true, ya_pulido_hoy: true, pulido: { usado: false, motivo: 'el resumen vigente ya se pulió hoy (forzar lo repite)', costo_usd: 0 }, modelos_llamados: 0 } }
+  // ¿ya se INTENTÓ hoy? un pulido descartado (conservó < 80 % de las fichas, pasó el plazo o el tope) no deja marca en la ficha, y el reintento de la misma mañana pagaba otra vez
+  // (medido 16-19 oct: 2 llamadas por día, US$ 0,37–0,64, y ninguna se archivó). El libro de invocaciones SÍ guarda todo intento, incluso el que n8n cortó por plazo.
+  const intentos = await deps.db.from('agent_invocations').select('id, cost_usd, created_at, workflow_execution_id').eq('client_id', v.client_id).gte('created_at', `${hoy}T00:00:00.000Z`).limit(1000)
+  if (intentos.error) return err(502, 'lectura_fallida', `agent_invocations: ${intentos.error.message}`)
+  const hechos = lista(intentos.data).filter((f) => String(f.workflow_execution_id ?? '').endsWith(':resumen-pulido'))
+  if (hechos.length && !forzar) return { status: 200, body: { ok: true, ya_intentado_hoy: true, pulido: { usado: false, motivo: `el pulido ya se intentó hoy (${hechos.length} vez/veces, US$ ${hechos.reduce((s, f) => s + (Number(f.cost_usd) || 0), 0).toFixed(2)}) y no quedó archivado: no se paga otra vez (forzar lo repite)`, costo_usd: 0 }, modelos_llamados: 0 } }
 
   if (v.dry_run || !deps.pulirResumen) return { status: 200, body: { ok: true, dry_run: v.dry_run, secciones: sal.secciones, huecos: sal.huecos, pulido: { usado: false, motivo: 'en seco: no se llama al agente ni se escribe', costo_usd: 0, tope_usd: TOPE_DEL_PULIDO_APARTE_USD }, modelos_llamados: 0 } }
 

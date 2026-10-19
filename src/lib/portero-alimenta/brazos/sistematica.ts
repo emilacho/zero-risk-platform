@@ -160,11 +160,11 @@ export async function descubrirYJuzgar(e: EntradaDeSistematica): Promise<Resulta
     for (const x of j.juicios) {
       const cand = x.candidato
       const vigilado = x.veredicto === 'competidor'
-      const datos = { nombre: cand.nombre, slug: cand.slug, sede: sede.clave, web: cand.web, tipo: cand.tipo_del_alta ?? 'direct', place_id: cand.place_id, veredicto: x.veredicto, origen: cand.origen, evaluado_en: iso }
+      const datos = { nombre: cand.nombre, slug: cand.slug, sede: sede.clave, web: cand.web, tipo: cand.tipo_del_alta ?? 'direct', place_id: cand.place_id, veredicto: x.veredicto, origen: cand.origen, evaluado_en: iso, ...(x.degradada_por ? { degradada_por: x.degradada_por } : {}) }
       out.fichas.push({
         brazo: 'competencia', alcance: 'competidor', client_id: e.client_id,
         ref: `brazo:competencia:${cand.slug}:${vigilado ? 'vigilado' : 'evaluacion'}:${sede.clave}:${iso.slice(0, 10)}`, atributo: `competidor:${cand.slug}:${vigilado ? 'vigilado' : 'evaluacion'}:${sede.clave}`,
-        clase: vigilado ? 'competidor_vigilado' : 'competidor_evaluacion', titulo: `${vigilado ? 'Competidor vigilado' : 'Evaluado: no compite'} · ${cand.nombre} · sede ${sede.clave}`,
+        clase: vigilado ? 'competidor_vigilado' : 'competidor_evaluacion', titulo: `${vigilado ? 'Competidor vigilado' : x.veredicto === 'no' ? 'Evaluado: no compite' : 'Evaluado: en duda'} · ${cand.nombre} · sede ${sede.clave}`,
         contenido: vigilado
           ? `«${cand.nombre}» (competidor) compite con la sede ${sede.clave}: ${x.razon || 'sin razón escrita'}${x.cita ? ` (cita: «${x.cita}»)` : ''}. Descubierto por el sistema y juzgado por el agente el ${iso.slice(0, 10)}; se vigila sin esperar al dueño, que puede vetarlo. Dato de un competidor, no del cliente.`
           : `«${cand.nombre}» (posible competidor) ${x.veredicto === 'no' ? 'NO compite' : 'queda en duda'} con la sede ${sede.clave}: ${x.razon || x.degradada_por || 'sin razón escrita'}${x.cita ? ` (cita: «${x.cita}»)` : ''}. Evaluado el ${iso.slice(0, 10)}. Dato de un tercero, no del cliente.`,

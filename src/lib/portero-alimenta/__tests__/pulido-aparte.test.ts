@@ -103,6 +103,27 @@ describe('el pulido aparte · guardas', () => {
     expect(r.status).toBe(200); expect(r.body).toMatchObject({ pulido: { usado: false }, escritas: 0 })
     expect(vivos(t, c).map((f) => f.id)).toEqual(antes)
   })
+  it('un pulido DESCARTADO no se vuelve a pagar el mismo día (el reintento de la mañana lo hacía: 2 llamadas por día, 16-19 oct)', async () => {
+    const t = await conResumen(c)
+    const a = agente(0.31) // pasa el tope: se descarta y no deja marca en la ficha
+    const deps = { db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: a.f, ahora: AHORA }
+    await rutaPulir(deps, { client_id: c.id, dry_run: false, ...WF })
+    // el libro de invocaciones guarda el intento (run-sdk lo escribe; el molde lo imita)
+    t.agent_invocations.push({ client_id: c.id, cost_usd: 0.31, created_at: AHORA.toISOString(), agent_name: 'reporting-agent', workflow_id: 'wf', workflow_execution_id: 'ex:resumen-pulido' })
+    const otra = await rutaPulir(deps, { client_id: c.id, dry_run: false, ...WF })
+    expect(otra.body).toMatchObject({ ya_intentado_hoy: true, pulido: { usado: false, costo_usd: 0 }, modelos_llamados: 0 })
+    expect(a.llamadas).toHaveLength(1)
+    await rutaPulir(deps, { client_id: c.id, dry_run: false, forzar: true, ...WF }) // forzar sí lo repite
+    expect(a.llamadas).toHaveLength(2)
+  })
+  it('un intento de OTRO cliente o de otro paso no frena el pulido de este', async () => {
+    const t = await conResumen(c)
+    t.agent_invocations.push({ client_id: 'otro-cliente', cost_usd: 0.3, created_at: AHORA.toISOString(), agent_name: 'reporting-agent', workflow_id: 'wf', workflow_execution_id: 'ex:resumen-pulido' })
+    t.agent_invocations.push({ client_id: c.id, cost_usd: 0.01, created_at: AHORA.toISOString(), agent_name: 'portero-del-cerebro', workflow_id: 'wf', workflow_execution_id: 'ex:portero' })
+    const a = agente()
+    const r = await rutaPulir({ db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: a.f, ahora: AHORA }, { client_id: c.id, dry_run: false, ...WF })
+    expect(r.body).toMatchObject({ pulido: { usado: true } })
+  })
   it('si el gasto de hoy + 0,30 pasaría el tope del portero, no llama al agente', async () => {
     const t = await conResumen(c)
     t.agent_invocations.push({ client_id: c.id, cost_usd: 2.8, created_at: AHORA.toISOString(), agent_name: 'x', workflow_id: 'ogfq56oIEoHufFPM' })
