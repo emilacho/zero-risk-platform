@@ -154,6 +154,12 @@ describe('con la base: crear, listar, resolver, contar', () => {
     expect(aprobacionLegada(db.tablas.hitl_queue.find((x) => x.id === compuerta.id)!).agent_slug).toBeNull() // «workflow» no es un agente
     expect(aprobacionLegada(piezaDeLaOficina({ agent_name: 'content-creator' })).agent_slug).toBe('content-creator')
   })
+  it('resolver sin decir quién (o con un nombre vacío): el aprobador por omisión es «emilio», en resolved_by, reviewer y la decisión', async () => {
+    db.tablas.hitl_queue = [piezaDeLaOficina({ id: 'o1' }), piezaDeLaOficina({ id: 'o2' })]
+    await resolverAprobacion(db as never, 'o1', { decision: 'approved', ahora: AHORA })
+    await resolverAprobacion(db as never, 'o2', { decision: 'rejected', quien: '   ', ahora: AHORA })
+    for (const f of db.tablas.hitl_queue) expect(f).toMatchObject({ resolved_by: 'emilio', reviewer: 'emilio', decision: { por: 'emilio' } })
+  })
   it('resolver: aprobada o rechazada deja quién, cuándo y la decisión; vencida lleva decision.vencida', async () => {
     db.tablas.hitl_queue = [piezaDeLaOficina({ id: 'p1' }), piezaDeLaOficina({ id: 'p2' })]
     expect((await resolverAprobacion(db as never, 'p1', { decision: 'approved', quien: 'emilio', ahora: AHORA })).error).toBeNull()
