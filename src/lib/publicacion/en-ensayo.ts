@@ -196,6 +196,9 @@ export function contenidoDeLaSalida(content: string | null | undefined): Record<
   try { const j: unknown = JSON.parse(ultimo[1]); return esObjeto(j) ? j : null } catch { return null }
 }
 
+/** la entrega de la oficina trae, además de las imágenes, un `_texto.txt` (uno por lámina), un `_publicar.md` y `manifest.json`: solo las imágenes son «archivos de la pieza» */
+const ES_IMAGEN = /.(png|jpe?g|webp)$/i
+
 const RED_DEL_NOMBRE: Record<string, string> = { instagram: 'instagram', ig: 'instagram', facebook: 'facebook', fb: 'facebook' }
 
 /**
@@ -207,8 +210,8 @@ export function loteDeLaPiezaDeOficina(a: { elemento: ElementoDeBandeja; salida:
   const contenido = contenidoDeLaSalida(a.salida.content)
   if (!contenido) return { ok: false, errores: ['la salida no trae el bloque json con el contenido de la pieza'] }
   const entrega = esObjeto(contenido.entrega) ? contenido.entrega : null
-  const archivos = entrega && esObjeto(entrega.urls) ? Object.entries(entrega.urls).filter((x): x is [string, string] => esTexto(x[1]) && x[1].trim() !== '').sort((p, q) => p[0].localeCompare(q[0])) : []
-  if (!archivos.length) errores.push('la pieza no trae archivos de entrega')
+  const archivos = entrega && esObjeto(entrega.urls) ? Object.entries(entrega.urls).filter((x): x is [string, string] => esTexto(x[1]) && x[1].trim() !== '' && ES_IMAGEN.test(x[0])).sort((p, q) => p[0].localeCompare(q[0])) : []
+  if (!archivos.length) errores.push('la pieza no trae archivos de entrega (imágenes)')
   const redes = [...new Set(archivos.map(([nombre]) => (nombre.split('_')[2] ?? '').toLowerCase()))]
   if (archivos.length && redes.length !== 1) errores.push(`los archivos son de redes distintas (${redes.join(', ') || 'sin red'})`)
   const pie = esTexto(contenido.pie_de_foto) ? contenido.pie_de_foto.trim() : ''

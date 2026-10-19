@@ -235,6 +235,57 @@ describe('loteDeLaPiezaDeOficina', () => {
   })
 })
 
+// ───────────────────────────────────────────────────────── la entrega REAL de la oficina (así la arma `orquestador.ts` / `orquestador-laminas.ts`: imágenes + textos + guía + manifiesto)
+const base = (red: string, formato: string, brief: string, n: number, de: number) => `2026-10-20_1000_${red}_${formato}_${brief}_${String(n).padStart(2, '0')}-de-${String(de).padStart(2, '0')}`
+const entregaRealDeUnaImagen = (red = 'instagram') => {
+  const b = base(red, 'foto', 'b1', 1, 1)
+  return { urls: Object.fromEntries([`${b}.png`, `${b}_texto.txt`, `${b}_publicar.md`, 'manifest.json'].map((n) => [n, URL_DE(n)])), expires_at: '2026-10-27T00:00:00Z' }
+}
+const entregaRealDeUnCarrusel = (de = 6) => {
+  const nombres: string[] = []
+  for (let n = 1; n <= de; n++) nombres.push(`${base('instagram', 'carrusel', 'b2', n, de)}.png`, `${base('instagram', 'carrusel', 'b2', n, de)}_texto.txt`)
+  nombres.push(`${base('instagram', 'carrusel', 'b2', 1, de).replace(/_01-de-\d+$/, '')}_publicar.md`, 'manifest.json')
+  return { urls: Object.fromEntries(nombres.map((n) => [n, URL_DE(n)])), expires_at: '2026-10-27T00:00:00Z' }
+}
+
+describe('la entrega REAL de la oficina (imágenes + _texto.txt + _publicar.md + manifest.json)', () => {
+  const el: ElementoDeBandeja = { id: 'p1', type: TIPO_PIEZA_DE_OFICINA, status: 'approved', client_id: CLI, metadata: META_OFICINA, output_id: 'o1' }
+  it('una pieza de una imagen se arma: SOLO la imagen cuenta (no el texto, la guía ni el manifiesto) y la red sale de ella', () => {
+    const e = entregaRealDeUnaImagen('instagram')
+    const r = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: e })) })
+    expect(r.ok).toBe(true)
+    if (r.ok) { expect(r.lote.piezas[0]).toMatchObject({ canal: 'instagram', imagenes: 1, image_url: URL_DE(base('instagram', 'foto', 'b1', 1, 1) + '.png') }) }
+  })
+  it('de punta a punta con la entrega real: el ensayo queda publicable y la solicitud lleva la IMAGEN, no el manifiesto', async () => {
+    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram', { entrega: entregaRealDeUnaImagen('instagram') })))
+    const r = await publicarAprobado(P, { hitl_id: 'p1' })
+    expect(r.ok && r.ensayo.publicable).toBe(true); expect(r.ok && r.ensayo.piezas[0].errores).toEqual([])
+    expect(r.ok && r.ensayo.piezas[0].solicitudes[0].cuerpo).toMatchObject({ image_url: URL_DE(base('instagram', 'foto', 'b1', 1, 1) + '.png') })
+    expect(JSON.stringify(r.ok && r.ensayo.piezas)).not.toContain('manifest.json')
+  })
+  it('facebook real (una imagen) va a /photos', async () => {
+    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('facebook', { entrega: entregaRealDeUnaImagen('facebook') })))
+    const r = await publicarAprobado(P, { hitl_id: 'p1' }); expect(r.ok && r.ensayo.piezas[0].solicitudes[0].ruta).toBe('/{META_FB_PAGE_ID}/photos')
+  })
+  it('un carrusel real de 6 láminas (6 imágenes + 6 textos + guía + manifiesto = 14 archivos) se rechaza por tener 6 IMÁGENES, no por tener 14 archivos', async () => {
+    const e = entregaRealDeUnCarrusel(6); expect(Object.keys(e.urls)).toHaveLength(14)
+    const l = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: e })) })
+    expect(l.ok && l.lote.piezas[0].imagenes).toBe(6)
+    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram', { entrega: e })))
+    const r = await publicarAprobado(P, { hitl_id: 'p1' })
+    expect(r.ok && r.ensayo.piezas[0].armada).toBe(false); expect(r.ok && r.ensayo.piezas[0].errores.join()).toContain('6 archivos'); expect(r.ok && r.ensayo.piezas[0].errores.join()).not.toContain('14')
+  })
+  it('acepta .jpg, .jpeg, .webp y mayúsculas; una entrega sin ninguna imagen (solo texto, guía y manifiesto) se rechaza', () => {
+    for (const ext of ['jpg', 'jpeg', 'webp', 'PNG']) {
+      const n = `${base('instagram', 'foto', 'b1', 1, 1)}.${ext}`
+      const r = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: { urls: { [n]: URL_DE(n), 'manifest.json': URL_DE('m') } } })) }); expect(r.ok && r.lote.piezas[0].imagenes).toBe(1)
+    }
+    const b = base('instagram', 'foto', 'b1', 1, 1)
+    const sin = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: { urls: { [`${b}_texto.txt`]: URL_DE('t'), [`${b}_publicar.md`]: URL_DE('g'), 'manifest.json': URL_DE('m') } } })) })
+    expect(sin.ok).toBe(false); expect(!sin.ok && sin.errores.join()).toContain('archivos de entrega')
+  })
+})
+
 describe('publicarAprobado · una pieza de la oficina', () => {
   it('aprobada: arma el ensayo con la solicitud real a Meta, lo guarda con su origen y su salida, y NO llama a nadie', async () => {
     const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram')))
