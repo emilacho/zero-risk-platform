@@ -53,8 +53,9 @@ describe('validarLote', () => {
     for (const [cuerpo, frag] of casos) { const v = validarLote(cuerpo); expect(v.ok).toBe(false); if (!v.ok) expect(v.errores.join(' | ')).toContain(frag) }
   })
   it('el borde del lote: 10 piezas pasan, 11 no', () => {
-    expect(validarLote({ ...LOTE, piezas: Array.from({ length: MAX_PIEZAS_POR_LOTE }, () => PIEZA_FB) }).ok).toBe(true)
-    expect(validarLote({ ...LOTE, piezas: Array.from({ length: MAX_PIEZAS_POR_LOTE + 1 }, () => PIEZA_FB) }).ok).toBe(false)
+    expect(MAX_PIEZAS_POR_LOTE).toBe(10)
+    expect(validarLote({ ...LOTE, piezas: Array.from({ length: 10 }, () => PIEZA_FB) }).ok).toBe(true)
+    expect(validarLote({ ...LOTE, piezas: Array.from({ length: 11 }, () => PIEZA_FB) }).ok).toBe(false)
   })
 })
 
@@ -71,8 +72,9 @@ describe('armarSolicitud (lo que se mandaría a Meta, sin llaves)', () => {
     expect(armarSolicitud({ canal: 'instagram', image_url: 'data:image/png;base64,AAAA' }).armada).toBe(false)
   })
   it('instagram: el borde del caption (2200 pasa, 2201 no)', () => {
-    expect(armarSolicitud({ ...PIEZA_IG, caption: 'a'.repeat(MAX_CAPTION_INSTAGRAM) }).armada).toBe(true)
-    const larga = armarSolicitud({ ...PIEZA_IG, caption: 'a'.repeat(MAX_CAPTION_INSTAGRAM + 1) })
+    expect(MAX_CAPTION_INSTAGRAM).toBe(2200) // el límite de Instagram: no se mueve sin saberlo
+    expect(armarSolicitud({ ...PIEZA_IG, caption: 'a'.repeat(2200) }).armada).toBe(true)
+    const larga = armarSolicitud({ ...PIEZA_IG, caption: 'a'.repeat(2201) })
     expect(larga.armada).toBe(false); expect(larga.solicitudes).toEqual([])
   })
   it('facebook: solo texto va a /feed (con enlace si lo hay); con imagen va a /photos', () => {
@@ -214,6 +216,11 @@ describe('puertosDePublicacion (almacén real, base falsa)', () => {
     expect(filas[0]).toMatchObject({ client_id: CLI, agent_name: 'social-publisher', risk_type: 'strategic_decision', output_preview: 'P', type: TIPO_LOTE_SOCIAL, status: 'pending', priority: 'medium' })
     expect(await P.buscarLote('social_1', CLI)).toEqual({ id }); expect(await P.buscarLote('otra', CLI)).toBeNull(); expect(await P.buscarLote('social_1', OTRO)).toBeNull()
   })
+  it('buscar el lote ignora un elemento de OTRO tipo que comparte tarea y cliente', async () => {
+    const { db, filas } = baseFalsa(); const P = puertosDePublicacion(db, {})
+    filas.push({ id: 'o1', type: 'content_review', status: 'pending', client_id: CLI, metadata: { task_id: 'social_1' } })
+    expect(await P.buscarLote('social_1', CLI)).toBeNull()
+  })
   it('guardar el ensayo conserva el resto de `metadata`', async () => {
     const { db, filas } = baseFalsa(); const P = puertosDePublicacion(db, {})
     filas.push({ id: 'x1', type: TIPO_LOTE_SOCIAL, status: 'approved', client_id: CLI, metadata: { task_id: 'social_1', lote: LOTE, decision_humana: { frase: 'ok' } } })
@@ -285,6 +292,12 @@ describe('PATCH /api/hitl/[id] · el enganche del lote aprobado', () => {
   it('rechazar el lote, o aprobar otro tipo, NO traen `publicacion` (la respuesta sigue como era)', async () => {
     const rech = await llamar(ruta, 'PATCH', { status: 'rejected', reviewer: 'emilio' }, 'k', ctx); expect(rech.json).not.toHaveProperty('publicacion')
     const otro = await llamar(ruta, 'PATCH', { status: 'approved', reviewer: 'emilio' }, 'k', { params: { id: 'o1' } }); expect(Object.keys(otro.json)).toEqual(['item'])
+  })
+  it('si el ensayo LANZA un error (la base falla al guardarlo), la decisión se mantiene y el error se dice', async () => {
+    const original = m.base.db.from; let actualizaciones = 0
+    m.base.db.from = (t: string) => { const api = original(t); const upd = api.update; api.update = (p: any) => { actualizaciones++; if (actualizaciones > 1) throw new Error('caída al guardar'); return upd(p) }; return api } // la 1.ª es la decisión; la 2.ª, el ensayo
+    const r = await llamar(ruta, 'PATCH', { status: 'approved', reviewer: 'emilio' }, 'k', ctx)
+    expect(r.status).toBe(200); expect(r.json.item.status).toBe('approved'); expect(r.json.publicacion).toMatchObject({ ok: false, error: 'ensayo_fallido' }); expect(r.json.publicacion.detail).toContain('caída')
   })
   it('si el ensayo falla, la decisión del aprobador se mantiene y se dice', async () => {
     m.base.filas[0].metadata = { task_id: 'social_1' }
