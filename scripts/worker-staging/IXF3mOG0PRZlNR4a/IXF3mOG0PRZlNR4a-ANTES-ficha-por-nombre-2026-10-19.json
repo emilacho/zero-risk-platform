@@ -1,0 +1,1133 @@
+{
+ "id": "IXF3mOG0PRZlNR4a",
+ "name": "Zero Risk — Trato cerrado → sobre en la puerta (E57 · CC#2)",
+ "description": null,
+ "active": true,
+ "activeVersionId": "76ef56ab-3b78-4ace-898c-3c8f761e9dbd",
+ "createdAt": "2026-09-16T17:16:03.164Z",
+ "updatedAt": "2026-09-17T03:09:16.436Z",
+ "isArchived": false,
+ "versionId": "76ef56ab-3b78-4ace-898c-3c8f761e9dbd",
+ "versionCounter": 8,
+ "sourceWorkflowId": null,
+ "triggerCount": 1,
+ "nodes": [
+  {
+   "id": "e57-webhook-0001-0001-000000000001",
+   "name": "Webhook · trato cerrado",
+   "webhookId": "e57-deal-won-webhook",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "zero-risk/deal-won",
+    "options": {}
+   }
+  },
+  {
+   "id": "e57-http-0002-0002-000000000002",
+   "name": "Dejar el sobre en la puerta de la sala",
+   "notes": "E75 · el sobre lo arma el nodo anterior · acá sólo se manda.",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    460,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.SALA_INTAKE_URL || 'https://zero-risk-platform.vercel.app/api/sala/intake' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+      },
+      {
+       "name": "x-source",
+       "value": "n8n-e57-deal-won"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.sobre) }}",
+    "options": {
+     "response": {
+      "response": {
+       "neverError": true,
+       "fullResponse": false
+      }
+     },
+     "timeout": 15000
+    }
+   }
+  },
+  {
+   "id": "e57-guarda-0003-0003-000000000003",
+   "name": "GUARDA · si la puerta rechazó, se detiene",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    700,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// E57 · GUARDA · la puerta de la sala contesta 200 hasta cuando RECHAZA\n// (canon §150 G4 · cero presion de reintento sobre quien manda el sobre).\n// Sin este nodo, un sobre mal armado se veria EXACTAMENTE igual que uno\n// aceptado: 200 y silencio. Es la enfermedad de la casa, y aca se corta.\n//\n// E75 (CC#1 · 2026-09-17): `duplicate` sigue sin ser error (el mismo trato dos veces es un\n// solo pedido), PERO si el sobre iba SIN identificador de trato, un `duplicate` puede ser\n// OTRO trato del mismo cliente el mismo dia, colapsado en uno. Un descarte NO puede leerse\n// como exito: se marca y el nodo siguiente AVISA a #alertas (patron E63/E68).\nconst r = $input.first().json;\nconst cuerpo = r.body || r;\nif (cuerpo.ok !== true) {\n  throw new Error('SOBRE_RECHAZADO · la puerta de la sala no acepto el sobre · code=' + (cuerpo.code || '?') + ' · ' + (cuerpo.detail || 'sin detalle'));\n}\nlet armado = {};\ntry { armado = $('Armar el sobre').first().json || {}; } catch (e) { armado = {}; }\nconst descartadoSinIdentificador = cuerpo.kind === 'duplicate' && armado.sin_identificador === true;\nreturn [{ json: {\n  dejado_en_la_puerta: true,\n  kind: cuerpo.kind,\n  event_id: cuerpo.event_id || null,\n  stream_id: cuerpo.stream_id || null,\n  journey_type: cuerpo.journey_type || null,\n  worker_workflow_id: cuerpo.worker_workflow_id || null,\n  descartado_sin_identificador: descartadoSinIdentificador,\n  client_id: armado.client_id || null,\n  idempotency_key: armado.idempotency_key || null,\n  fecha_del_trato: armado.fecha_del_trato || null,\n} }];\n"
+   }
+  },
+  {
+   "id": "e75-armar-el-sobre",
+   "name": "Armar el sobre",
+   "notes": "E75 (CC#1 2026-09-17) · la clave anti-repetidos: con deal_id se usa deal_id; sin deal_id es cliente + fecha del trato (closed_at | deal_closed_at | won_at | fecha_trato, o la fecha de llegada). Antes (E73) sin deal_id la clave era el cliente fijo para siempre: el segundo trato de un cliente se descartaba en silencio (E74 · CC#2).",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// E75 · CC#1 · 2026-09-17 · ARMAR EL SOBRE del trato cerrado · la clave anti-repetidos\n//\n// 🔴 POR QUÉ EXISTE: con E73 la clave, sin deal_id, caía al cliente y el período quedó fijo\n// («trato») ⇒ un cliente podía tener UNA sola alta en su vida; el segundo trato volvía\n// `duplicate` y la GUARDA lo dejaba pasar como éxito (E74 · CC#2). Y lo normal hoy es que\n// NO venga deal_id (el único payload real de un alta no lo trae; nadie lo genera).\n//\n// LA REGLA (Lenovo · E75):\n//   1. con identificador de trato → se usa ése (deal_id | idempotency_key)\n//   2. sin identificador → cliente + FECHA DEL TRATO (closed_at | deal_closed_at | won_at |\n//      fecha_trato, o si no viene ninguna, la fecha de llegada) ⇒ un trato nuevo otro día\n//      entra; un reintento del mismo día se descarta bien\n//   3. ⚠️ salvedad declarada: dos tratos DISTINTOS del mismo cliente el MISMO día colapsan\n//      en uno · por eso, si la puerta dice `duplicate` y no había identificador, se AVISA.\nconst raw = $input.first().json || {};\nconst body = (raw.body && typeof raw.body === 'object') ? raw.body : {};\n\nconst dealId = String(body.deal_id || body.idempotency_key || '').trim();\nconst clientId = String(body.client_id || '').trim();\nconst tenantId = String(body.tenant_id || body.client_id || '').trim();\n\n// la fecha del trato · primer campo legible · si no, la de llegada (UTC)\nconst candidatos = [body.closed_at, body.deal_closed_at, body.won_at, body.fecha_trato, body.closed_date];\nlet fechaDelTrato = null;\nlet fechaDeDonde = 'fecha de llegada';\nfor (let i = 0; i < candidatos.length; i++) {\n  const c = candidatos[i];\n  if (c === undefined || c === null || c === '') continue;\n  const d = new Date(c);\n  if (!isNaN(d.getTime())) { fechaDelTrato = d.toISOString().slice(0, 10); fechaDeDonde = ['closed_at', 'deal_closed_at', 'won_at', 'fecha_trato', 'closed_date'][i]; break; }\n}\nif (!fechaDelTrato) fechaDelTrato = new Date().toISOString().slice(0, 10);\n\nconst sinIdentificador = !dealId;\nconst idempotencyKey = sinIdentificador ? (clientId + ':' + fechaDelTrato) : dealId;\n\nconst sobre = {\n  source: 'alta/deal-won',\n  intent: 'onboard',\n  payload: body,\n  idempotency_key: idempotencyKey,\n  logical_period: 'trato',\n  tenant_id: tenantId,\n  client_id: clientId,\n};\n\nreturn [{ json: {\n  sobre: sobre,\n  idempotency_key: idempotencyKey,\n  sin_identificador: sinIdentificador,\n  deal_id: dealId || null,\n  client_id: clientId,\n  fecha_del_trato: fechaDelTrato,\n  fecha_de_donde: fechaDeDonde,\n} }];\n"
+   }
+  },
+  {
+   "id": "e75-if-descartado",
+   "name": "¿Descartado sin identificador?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    940,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "descartado",
+       "leftValue": "={{ $json.descartado_sin_identificador }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "e75-aviso-alertas",
+   "name": "AVISO · #alertas",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "alwaysOutputData": true,
+   "onError": "continueRegularOutput",
+   "position": [
+    1180,
+    -120
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://slack.com/api/chat.postMessage",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json; charset=utf-8"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "json",
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ channel: \"C0B7XUUEBHA\", text: \"🔴 TRATO DESCARTADO SIN IDENTIFICADOR · cliente \" + $json.client_id, blocks: [ { type: \"section\", text: { type: \"mrkdwn\", text: \"*🔴 TRATO CERRADO DESCARTADO · llegó SIN identificador de trato y la puerta lo tomó como repetido*\" } }, { type: \"section\", text: { type: \"mrkdwn\", text: \"cliente `\" + $json.client_id + \"` · clave usada `\" + $json.idempotency_key + \"` (cliente + fecha del trato \" + $json.fecha_del_trato + \") · hilo `\" + $json.stream_id + \"`\" } }, { type: \"section\", text: { type: \"mrkdwn\", text: \"*QUÉ HACER:* si era el MISMO trato reintentado, nada. Si era OTRO trato del mismo cliente el mismo día, mándalo con `deal_id` (o con otra fecha en `closed_at`): sin identificador, dos tratos del mismo cliente el mismo día colapsan en uno.\" } }, { type: \"context\", elements: [ { type: \"mrkdwn\", text: \"llamador IXF3mOG0PRZlNR4a · corrida \" + $execution.id + \" · \" + new Date().toISOString() + \" · E75\" } ] } ] }) }}",
+    "options": {
+     "timeout": 30000
+    }
+   }
+  },
+  {
+   "id": "e75-cierre",
+   "name": "Cierre · el aviso llegó o la corrida falla",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1420,
+    -120
+   ],
+   "parameters": {
+    "jsCode": "// E75 · el aviso no depende de que el aviso llegue · MISMO patron que E63 (reconciliador),\n// E68 (vigia) y E73 (avisador de errores): `AVISO · #alertas` tiene onError:continueRegularOutput\n// + alwaysOutputData, asi que un rechazo de Slack (200 + ok:false · 4xx/5xx · tiempo agotado)\n// llega aca como item. Solo cuenta como avisado lo que Slack confirmo con ok:true; todo lo demas\n// termina ESTA corrida en ERROR (visible en el motor · y el avisador de errores NO aplica aqui:\n// el llamador no tiene errorWorkflow, asi que el error queda en su propia lista).\nconst g = $('GUARDA · si la puerta rechazó, se detiene').first().json || {};\nconst respuestas = $input.all().map(function (i) { return i.json || {}; });\nconst confirmadas = respuestas.filter(function (r) { return r.ok === true; });\nif (respuestas.length === 0 || confirmadas.length !== respuestas.length) {\n  const r = respuestas.find(function (x) { return x.ok !== true; }) || {};\n  const causa = r.error\n    ? (typeof r.error === 'string' ? r.error : (r.error.message || JSON.stringify(r.error)))\n    : (respuestas.length === 0 ? 'Slack no devolvio respuesta' : 'Slack no confirmo ok:true · ' + JSON.stringify(r).slice(0, 200));\n  throw new Error('[trato-cerrado] TRATO DESCARTADO SIN IDENTIFICADOR y el aviso NO llego a #alertas · ' + String(causa).slice(0, 300) + ' · cliente ' + g.client_id + ' · clave ' + g.idempotency_key);\n}\nconsole.log('[trato-cerrado] descarte sin identificador AVISADO · ts ' + confirmadas[0].ts + ' · cliente ' + g.client_id);\nreturn [{ json: Object.assign({}, g, { aviso_ts: confirmadas[0].ts, aviso_canal: confirmadas[0].channel }) }];\n"
+   }
+  },
+  {
+   "id": "e79-portero",
+   "name": "PORTERO · llave del trato cerrado",
+   "notes": "E79 · llave x-deal-won-key = DEAL_WON_WEBHOOK_KEY (Railway · servicio n8n) · E81 · solo decide; el rechazo se cuenta en settings (durable) y luego se lanza con motivo.",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    200,
+    -200
+   ],
+   "parameters": {
+    "jsCode": "// E79 · CC#1 · PORTERO · la llave de la entrada de trato cerrado (cabecera x-deal-won-key =\n// DEAL_WON_WEBHOOK_KEY del motor · comparacion de largo constante · sin llave en el motor, CERRADO ·\n// el rechazo NO ensena que mandar).\n// E81 · CC#1 · 2026-09-17 · este nodo solo DECIDE. El rechazo se cuenta en una fila durable de\n// `settings` (trato_cerrado.rechazos_portero · sobrevive a las 4 h del motor) y DESPUES se lanza\n// con el motivo (corrida en error + aviso via el avisador, limitado por el freno). Se hace en\n// nodos aparte porque el motor NO guarda la memoria del flujo cuando la corrida termina en error.\nconst raw = $input.first().json || {};\nconst headers = raw.headers || {};\nconst body = (raw.body && typeof raw.body === 'object') ? raw.body : {};\nconst esperada = String($env.DEAL_WON_WEBHOOK_KEY || '').trim();\nconst recibida = String(headers['x-deal-won-key'] || '');\nlet iguales = esperada.length > 0 && recibida.length === esperada.length;\nfor (let i = 0; i < esperada.length; i++) {\n  iguales = (recibida.charCodeAt(i) === esperada.charCodeAt(i)) && iguales;\n}\nconst rechazado = !esperada || !iguales;\nconst tipo = !esperada ? 'entrada_cerrada' : (!recibida ? 'sin_llave' : 'llave_incorrecta');\nconst motivo = !esperada ? 'ENTRADA_CERRADA · el motor no tiene DEAL_WON_WEBHOOK_KEY'\n  : (!recibida ? 'RECHAZADO_EN_EL_PORTERO · sin llave' : 'RECHAZADO_EN_EL_PORTERO · llave incorrecta');\nreturn [{ json: Object.assign({}, raw, { _portero: {\n  rechazado: rechazado,\n  tipo: tipo,\n  motivo: motivo,\n  ip: headers['x-real-ip'] || headers['x-forwarded-for'] || null,\n  client_id: body.client_id || null,\n  deal_id: body.deal_id || null,\n  at: new Date().toISOString(),\n} }) }];\n"
+   }
+  },
+  {
+   "id": "e79-cliente-existe",
+   "name": "¿El cliente existe?",
+   "notes": "E79 · consulta clients por id · fullResponse para distinguir «no existe» ([]) de «no se pudo consultar» (HTTP≠2xx).",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    460,
+    -200
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/clients?select=id,name,status,archived_at&id=eq.{{ encodeURIComponent($json.client_id) }}&limit=1",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "apikey",
+       "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      },
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 15000,
+     "response": {
+      "response": {
+       "neverError": true,
+       "fullResponse": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "e79-guarda-cliente",
+   "name": "GUARDA · el cliente existe",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    700,
+    -200
+   ],
+   "parameters": {
+    "jsCode": "// E79 · GUARDA · el cliente tiene que EXISTIR · un identificador con formato correcto no es un cliente\n//\n// La puerta de la sala y el repartidor no consultan `clients`; el freno de gasto es por cliente\n// ⇒ un UUID inventado por pedido lo esquivaba (E78 · CC#2). Acá, ANTES de dejar el sobre y antes\n// de cualquier gasto: si el id no está en `clients`, rechazo RUIDOSO (lanza ⇒ el avisador de\n// errores avisa; quien llega hasta acá ya pasó la llave, así que es señal, no ruido).\nconst r = $input.first().json || {};\nconst sc = Number(r.statusCode);\nconst body = r.body;\nconst armado = $('Armar el sobre').first().json || {};\nif (!(sc >= 200 && sc < 300) || !Array.isArray(body)) {\n  throw new Error('CLIENTE_NO_VERIFICABLE · no se pudo consultar clients (HTTP ' + (isNaN(sc) ? '?' : sc) + ') · el trato NO entra hasta poder comprobar que el cliente existe · ' + JSON.stringify(body).slice(0, 160));\n}\nif (body.length === 0) {\n  throw new Error('CLIENTE_INEXISTENTE · el trato trae un client_id que no está en clients (' + String(armado.client_id).slice(0, 8) + '…) · un identificador con formato correcto no es un cliente · crear el cliente primero (POST /api/clients/upsert) y reenviar');\n}\nconst cli = body[0];\nif (cli.archived_at) {\n  console.log('[trato-cerrado] aviso: el cliente ' + cli.id + ' está archivado (' + cli.archived_at + ') · el trato entra igual (cliente que vuelve)');\n}\nreturn [{ json: Object.assign({}, armado, { cliente_verificado: { id: cli.id, name: cli.name || null, status: cli.status || null, archived_at: cli.archived_at || null } }) }];\n"
+   }
+  },
+  {
+   "id": "e81-if-rechazado",
+   "name": "¿Rechazado en el portero?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    400,
+    -200
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "rech",
+       "leftValue": "={{ $json._portero.rechazado }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "e81-leer-contador",
+   "name": "Leer contador de rechazos",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    620,
+    -420
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/settings?select=key,value&key=eq.trato_cerrado.rechazos_portero&limit=1",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "apikey",
+       "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      },
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 15000,
+     "response": {
+      "response": {
+       "neverError": true,
+       "fullResponse": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "e81-sumar",
+   "name": "Sumar el rechazo",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    840,
+    -420
+   ],
+   "parameters": {
+    "jsCode": "// E81 · suma el rechazo al contador durable (fila settings · trato_cerrado.rechazos_portero)\nconst p = $('PORTERO · llave del trato cerrado').first().json._portero || {};\nconst r = $input.first().json || {};\nlet actual = {};\ntry {\n  const fila = Array.isArray(r.body) ? (r.body[0] || {}) : (Array.isArray(r) ? (r[0] || {}) : r);\n  actual = JSON.parse(fila.value || '{}');\n} catch (e) { actual = {}; }\nconst c = {\n  total: (actual.total || 0) + 1,\n  sin_llave: (actual.sin_llave || 0) + (p.tipo === 'sin_llave' ? 1 : 0),\n  llave_incorrecta: (actual.llave_incorrecta || 0) + (p.tipo === 'llave_incorrecta' ? 1 : 0),\n  entrada_cerrada: (actual.entrada_cerrada || 0) + (p.tipo === 'entrada_cerrada' ? 1 : 0),\n  ultimo_at: p.at,\n  ultimo_motivo: p.motivo,\n  ultimos: ((actual.ultimos || []).concat([{ at: p.at, tipo: p.tipo, ip: p.ip, client_id: p.client_id, deal_id: p.deal_id, corrida: $execution.id }])).slice(-20),\n};\nreturn [{ json: { value: JSON.stringify(c), total: c.total, motivo: p.motivo, client_id: p.client_id } }];\n"
+   }
+  },
+  {
+   "id": "e81-guardar-contador",
+   "name": "Guardar contador (settings)",
+   "notes": "E81 · fila creada el 2026-09-17 (id b5c9c35c) · si la fila no existe el PATCH no escribe nada y el nodo siguiente lo declara en el motivo.",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1060,
+    -420
+   ],
+   "parameters": {
+    "method": "PATCH",
+    "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/settings?key=eq.trato_cerrado.rechazos_portero",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "apikey",
+       "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      },
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "Prefer",
+       "value": "return=representation"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "json",
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ value: $json.value }) }}",
+    "options": {
+     "timeout": 15000,
+     "response": {
+      "response": {
+       "neverError": true,
+       "fullResponse": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "e81-lanzar",
+   "name": "Rechazo · lanzar con motivo",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1280,
+    -420
+   ],
+   "parameters": {
+    "jsCode": "// E81 · el rechazo ya quedo contado en settings · ahora se ve: corrida en ERROR con el motivo\n// (y aviso a #alertas via el avisador, 1 cada 10 min por el freno que ya no se calla en falso).\nconst s = $('Sumar el rechazo').first().json || {};\nconst g = $input.first().json || {};\nconst guardado = Array.isArray(g.body) ? g.body.length > 0 : (Array.isArray(g) ? g.length > 0 : !!(g && g.key));\nthrow new Error(s.motivo + ' · pedido descartado antes de armar el sobre · cliente ' + String(s.client_id || '(sin client_id)').slice(0, 8)\n  + ' · rechazos acumulados en el portero: ' + s.total + (guardado ? '' : ' (⚠️ el contador NO se pudo guardar en settings)')\n  + ' · si es un CRM real, la llave x-deal-won-key esta vencida o mal copiada');\n"
+   }
+  }
+ ],
+ "connections": {
+  "Webhook · trato cerrado": {
+   "main": [
+    [
+     {
+      "node": "PORTERO · llave del trato cerrado",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Dejar el sobre en la puerta de la sala": {
+   "main": [
+    [
+     {
+      "node": "GUARDA · si la puerta rechazó, se detiene",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Armar el sobre": {
+   "main": [
+    [
+     {
+      "node": "¿El cliente existe?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "GUARDA · si la puerta rechazó, se detiene": {
+   "main": [
+    [
+     {
+      "node": "¿Descartado sin identificador?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿Descartado sin identificador?": {
+   "main": [
+    [
+     {
+      "node": "AVISO · #alertas",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    []
+   ]
+  },
+  "AVISO · #alertas": {
+   "main": [
+    [
+     {
+      "node": "Cierre · el aviso llegó o la corrida falla",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "PORTERO · llave del trato cerrado": {
+   "main": [
+    [
+     {
+      "node": "¿Rechazado en el portero?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿El cliente existe?": {
+   "main": [
+    [
+     {
+      "node": "GUARDA · el cliente existe",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "GUARDA · el cliente existe": {
+   "main": [
+    [
+     {
+      "node": "Dejar el sobre en la puerta de la sala",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿Rechazado en el portero?": {
+   "main": [
+    [
+     {
+      "node": "Leer contador de rechazos",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Armar el sobre",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Leer contador de rechazos": {
+   "main": [
+    [
+     {
+      "node": "Sumar el rechazo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Sumar el rechazo": {
+   "main": [
+    [
+     {
+      "node": "Guardar contador (settings)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Guardar contador (settings)": {
+   "main": [
+    [
+     {
+      "node": "Rechazo · lanzar con motivo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "nodeGroups": [],
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataErrorExecution": "all",
+  "errorWorkflow": "5fkPLbZvQsQa1bcd"
+ },
+ "staticData": null,
+ "pinData": null,
+ "meta": null,
+ "tags": [],
+ "shared": [
+  {
+   "role": "workflow:owner",
+   "workflowId": "IXF3mOG0PRZlNR4a",
+   "projectId": "xKBOyp07nrGbu4ob",
+   "project": {
+    "id": "xKBOyp07nrGbu4ob",
+    "name": "Emilio  Perez  <emilacho@hotmail.com>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-04-18T13:41:21.856Z",
+    "updatedAt": "2026-04-18T13:51:26.012Z"
+   },
+   "createdAt": "2026-09-16T17:16:03.164Z",
+   "updatedAt": "2026-09-16T17:16:03.164Z"
+  }
+ ],
+ "activeVersion": {
+  "versionId": "76ef56ab-3b78-4ace-898c-3c8f761e9dbd",
+  "workflowId": "IXF3mOG0PRZlNR4a",
+  "nodes": [
+   {
+    "id": "e57-webhook-0001-0001-000000000001",
+    "name": "Webhook · trato cerrado",
+    "webhookId": "e57-deal-won-webhook",
+    "type": "n8n-nodes-base.webhook",
+    "typeVersion": 2,
+    "position": [
+     0,
+     0
+    ],
+    "parameters": {
+     "httpMethod": "POST",
+     "path": "zero-risk/deal-won",
+     "options": {}
+    }
+   },
+   {
+    "id": "e57-http-0002-0002-000000000002",
+    "name": "Dejar el sobre en la puerta de la sala",
+    "notes": "E75 · el sobre lo arma el nodo anterior · acá sólo se manda.",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     460,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.SALA_INTAKE_URL || 'https://zero-risk-platform.vercel.app/api/sala/intake' }}",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+       },
+       {
+        "name": "x-source",
+        "value": "n8n-e57-deal-won"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify($json.sobre) }}",
+     "options": {
+      "response": {
+       "response": {
+        "neverError": true,
+        "fullResponse": false
+       }
+      },
+      "timeout": 15000
+     }
+    }
+   },
+   {
+    "id": "e57-guarda-0003-0003-000000000003",
+    "name": "GUARDA · si la puerta rechazó, se detiene",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     700,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// E57 · GUARDA · la puerta de la sala contesta 200 hasta cuando RECHAZA\n// (canon §150 G4 · cero presion de reintento sobre quien manda el sobre).\n// Sin este nodo, un sobre mal armado se veria EXACTAMENTE igual que uno\n// aceptado: 200 y silencio. Es la enfermedad de la casa, y aca se corta.\n//\n// E75 (CC#1 · 2026-09-17): `duplicate` sigue sin ser error (el mismo trato dos veces es un\n// solo pedido), PERO si el sobre iba SIN identificador de trato, un `duplicate` puede ser\n// OTRO trato del mismo cliente el mismo dia, colapsado en uno. Un descarte NO puede leerse\n// como exito: se marca y el nodo siguiente AVISA a #alertas (patron E63/E68).\nconst r = $input.first().json;\nconst cuerpo = r.body || r;\nif (cuerpo.ok !== true) {\n  throw new Error('SOBRE_RECHAZADO · la puerta de la sala no acepto el sobre · code=' + (cuerpo.code || '?') + ' · ' + (cuerpo.detail || 'sin detalle'));\n}\nlet armado = {};\ntry { armado = $('Armar el sobre').first().json || {}; } catch (e) { armado = {}; }\nconst descartadoSinIdentificador = cuerpo.kind === 'duplicate' && armado.sin_identificador === true;\nreturn [{ json: {\n  dejado_en_la_puerta: true,\n  kind: cuerpo.kind,\n  event_id: cuerpo.event_id || null,\n  stream_id: cuerpo.stream_id || null,\n  journey_type: cuerpo.journey_type || null,\n  worker_workflow_id: cuerpo.worker_workflow_id || null,\n  descartado_sin_identificador: descartadoSinIdentificador,\n  client_id: armado.client_id || null,\n  idempotency_key: armado.idempotency_key || null,\n  fecha_del_trato: armado.fecha_del_trato || null,\n} }];\n"
+    }
+   },
+   {
+    "id": "e75-armar-el-sobre",
+    "name": "Armar el sobre",
+    "notes": "E75 (CC#1 2026-09-17) · la clave anti-repetidos: con deal_id se usa deal_id; sin deal_id es cliente + fecha del trato (closed_at | deal_closed_at | won_at | fecha_trato, o la fecha de llegada). Antes (E73) sin deal_id la clave era el cliente fijo para siempre: el segundo trato de un cliente se descartaba en silencio (E74 · CC#2).",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     220,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// E75 · CC#1 · 2026-09-17 · ARMAR EL SOBRE del trato cerrado · la clave anti-repetidos\n//\n// 🔴 POR QUÉ EXISTE: con E73 la clave, sin deal_id, caía al cliente y el período quedó fijo\n// («trato») ⇒ un cliente podía tener UNA sola alta en su vida; el segundo trato volvía\n// `duplicate` y la GUARDA lo dejaba pasar como éxito (E74 · CC#2). Y lo normal hoy es que\n// NO venga deal_id (el único payload real de un alta no lo trae; nadie lo genera).\n//\n// LA REGLA (Lenovo · E75):\n//   1. con identificador de trato → se usa ése (deal_id | idempotency_key)\n//   2. sin identificador → cliente + FECHA DEL TRATO (closed_at | deal_closed_at | won_at |\n//      fecha_trato, o si no viene ninguna, la fecha de llegada) ⇒ un trato nuevo otro día\n//      entra; un reintento del mismo día se descarta bien\n//   3. ⚠️ salvedad declarada: dos tratos DISTINTOS del mismo cliente el MISMO día colapsan\n//      en uno · por eso, si la puerta dice `duplicate` y no había identificador, se AVISA.\nconst raw = $input.first().json || {};\nconst body = (raw.body && typeof raw.body === 'object') ? raw.body : {};\n\nconst dealId = String(body.deal_id || body.idempotency_key || '').trim();\nconst clientId = String(body.client_id || '').trim();\nconst tenantId = String(body.tenant_id || body.client_id || '').trim();\n\n// la fecha del trato · primer campo legible · si no, la de llegada (UTC)\nconst candidatos = [body.closed_at, body.deal_closed_at, body.won_at, body.fecha_trato, body.closed_date];\nlet fechaDelTrato = null;\nlet fechaDeDonde = 'fecha de llegada';\nfor (let i = 0; i < candidatos.length; i++) {\n  const c = candidatos[i];\n  if (c === undefined || c === null || c === '') continue;\n  const d = new Date(c);\n  if (!isNaN(d.getTime())) { fechaDelTrato = d.toISOString().slice(0, 10); fechaDeDonde = ['closed_at', 'deal_closed_at', 'won_at', 'fecha_trato', 'closed_date'][i]; break; }\n}\nif (!fechaDelTrato) fechaDelTrato = new Date().toISOString().slice(0, 10);\n\nconst sinIdentificador = !dealId;\nconst idempotencyKey = sinIdentificador ? (clientId + ':' + fechaDelTrato) : dealId;\n\nconst sobre = {\n  source: 'alta/deal-won',\n  intent: 'onboard',\n  payload: body,\n  idempotency_key: idempotencyKey,\n  logical_period: 'trato',\n  tenant_id: tenantId,\n  client_id: clientId,\n};\n\nreturn [{ json: {\n  sobre: sobre,\n  idempotency_key: idempotencyKey,\n  sin_identificador: sinIdentificador,\n  deal_id: dealId || null,\n  client_id: clientId,\n  fecha_del_trato: fechaDelTrato,\n  fecha_de_donde: fechaDeDonde,\n} }];\n"
+    }
+   },
+   {
+    "id": "e75-if-descartado",
+    "name": "¿Descartado sin identificador?",
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+     940,
+     0
+    ],
+    "parameters": {
+     "conditions": {
+      "options": {
+       "caseSensitive": true,
+       "leftValue": "",
+       "typeValidation": "strict",
+       "version": 2
+      },
+      "conditions": [
+       {
+        "id": "descartado",
+        "leftValue": "={{ $json.descartado_sin_identificador }}",
+        "rightValue": true,
+        "operator": {
+         "type": "boolean",
+         "operation": "true",
+         "singleValue": true
+        }
+       }
+      ],
+      "combinator": "and"
+     },
+     "options": {}
+    }
+   },
+   {
+    "id": "e75-aviso-alertas",
+    "name": "AVISO · #alertas",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "alwaysOutputData": true,
+    "onError": "continueRegularOutput",
+    "position": [
+     1180,
+     -120
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://slack.com/api/chat.postMessage",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Authorization",
+        "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+       },
+       {
+        "name": "Content-Type",
+        "value": "application/json; charset=utf-8"
+       }
+      ]
+     },
+     "sendBody": true,
+     "contentType": "json",
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ channel: \"C0B7XUUEBHA\", text: \"🔴 TRATO DESCARTADO SIN IDENTIFICADOR · cliente \" + $json.client_id, blocks: [ { type: \"section\", text: { type: \"mrkdwn\", text: \"*🔴 TRATO CERRADO DESCARTADO · llegó SIN identificador de trato y la puerta lo tomó como repetido*\" } }, { type: \"section\", text: { type: \"mrkdwn\", text: \"cliente `\" + $json.client_id + \"` · clave usada `\" + $json.idempotency_key + \"` (cliente + fecha del trato \" + $json.fecha_del_trato + \") · hilo `\" + $json.stream_id + \"`\" } }, { type: \"section\", text: { type: \"mrkdwn\", text: \"*QUÉ HACER:* si era el MISMO trato reintentado, nada. Si era OTRO trato del mismo cliente el mismo día, mándalo con `deal_id` (o con otra fecha en `closed_at`): sin identificador, dos tratos del mismo cliente el mismo día colapsan en uno.\" } }, { type: \"context\", elements: [ { type: \"mrkdwn\", text: \"llamador IXF3mOG0PRZlNR4a · corrida \" + $execution.id + \" · \" + new Date().toISOString() + \" · E75\" } ] } ] }) }}",
+     "options": {
+      "timeout": 30000
+     }
+    }
+   },
+   {
+    "id": "e75-cierre",
+    "name": "Cierre · el aviso llegó o la corrida falla",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1420,
+     -120
+    ],
+    "parameters": {
+     "jsCode": "// E75 · el aviso no depende de que el aviso llegue · MISMO patron que E63 (reconciliador),\n// E68 (vigia) y E73 (avisador de errores): `AVISO · #alertas` tiene onError:continueRegularOutput\n// + alwaysOutputData, asi que un rechazo de Slack (200 + ok:false · 4xx/5xx · tiempo agotado)\n// llega aca como item. Solo cuenta como avisado lo que Slack confirmo con ok:true; todo lo demas\n// termina ESTA corrida en ERROR (visible en el motor · y el avisador de errores NO aplica aqui:\n// el llamador no tiene errorWorkflow, asi que el error queda en su propia lista).\nconst g = $('GUARDA · si la puerta rechazó, se detiene').first().json || {};\nconst respuestas = $input.all().map(function (i) { return i.json || {}; });\nconst confirmadas = respuestas.filter(function (r) { return r.ok === true; });\nif (respuestas.length === 0 || confirmadas.length !== respuestas.length) {\n  const r = respuestas.find(function (x) { return x.ok !== true; }) || {};\n  const causa = r.error\n    ? (typeof r.error === 'string' ? r.error : (r.error.message || JSON.stringify(r.error)))\n    : (respuestas.length === 0 ? 'Slack no devolvio respuesta' : 'Slack no confirmo ok:true · ' + JSON.stringify(r).slice(0, 200));\n  throw new Error('[trato-cerrado] TRATO DESCARTADO SIN IDENTIFICADOR y el aviso NO llego a #alertas · ' + String(causa).slice(0, 300) + ' · cliente ' + g.client_id + ' · clave ' + g.idempotency_key);\n}\nconsole.log('[trato-cerrado] descarte sin identificador AVISADO · ts ' + confirmadas[0].ts + ' · cliente ' + g.client_id);\nreturn [{ json: Object.assign({}, g, { aviso_ts: confirmadas[0].ts, aviso_canal: confirmadas[0].channel }) }];\n"
+    }
+   },
+   {
+    "id": "e79-portero",
+    "name": "PORTERO · llave del trato cerrado",
+    "notes": "E79 · llave x-deal-won-key = DEAL_WON_WEBHOOK_KEY (Railway · servicio n8n) · E81 · solo decide; el rechazo se cuenta en settings (durable) y luego se lanza con motivo.",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     200,
+     -200
+    ],
+    "parameters": {
+     "jsCode": "// E79 · CC#1 · PORTERO · la llave de la entrada de trato cerrado (cabecera x-deal-won-key =\n// DEAL_WON_WEBHOOK_KEY del motor · comparacion de largo constante · sin llave en el motor, CERRADO ·\n// el rechazo NO ensena que mandar).\n// E81 · CC#1 · 2026-09-17 · este nodo solo DECIDE. El rechazo se cuenta en una fila durable de\n// `settings` (trato_cerrado.rechazos_portero · sobrevive a las 4 h del motor) y DESPUES se lanza\n// con el motivo (corrida en error + aviso via el avisador, limitado por el freno). Se hace en\n// nodos aparte porque el motor NO guarda la memoria del flujo cuando la corrida termina en error.\nconst raw = $input.first().json || {};\nconst headers = raw.headers || {};\nconst body = (raw.body && typeof raw.body === 'object') ? raw.body : {};\nconst esperada = String($env.DEAL_WON_WEBHOOK_KEY || '').trim();\nconst recibida = String(headers['x-deal-won-key'] || '');\nlet iguales = esperada.length > 0 && recibida.length === esperada.length;\nfor (let i = 0; i < esperada.length; i++) {\n  iguales = (recibida.charCodeAt(i) === esperada.charCodeAt(i)) && iguales;\n}\nconst rechazado = !esperada || !iguales;\nconst tipo = !esperada ? 'entrada_cerrada' : (!recibida ? 'sin_llave' : 'llave_incorrecta');\nconst motivo = !esperada ? 'ENTRADA_CERRADA · el motor no tiene DEAL_WON_WEBHOOK_KEY'\n  : (!recibida ? 'RECHAZADO_EN_EL_PORTERO · sin llave' : 'RECHAZADO_EN_EL_PORTERO · llave incorrecta');\nreturn [{ json: Object.assign({}, raw, { _portero: {\n  rechazado: rechazado,\n  tipo: tipo,\n  motivo: motivo,\n  ip: headers['x-real-ip'] || headers['x-forwarded-for'] || null,\n  client_id: body.client_id || null,\n  deal_id: body.deal_id || null,\n  at: new Date().toISOString(),\n} }) }];\n"
+    }
+   },
+   {
+    "id": "e79-cliente-existe",
+    "name": "¿El cliente existe?",
+    "notes": "E79 · consulta clients por id · fullResponse para distinguir «no existe» ([]) de «no se pudo consultar» (HTTP≠2xx).",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     460,
+     -200
+    ],
+    "parameters": {
+     "method": "GET",
+     "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/clients?select=id,name,status,archived_at&id=eq.{{ encodeURIComponent($json.client_id) }}&limit=1",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "apikey",
+        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       },
+       {
+        "name": "Authorization",
+        "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       }
+      ]
+     },
+     "options": {
+      "timeout": 15000,
+      "response": {
+       "response": {
+        "neverError": true,
+        "fullResponse": true
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "e79-guarda-cliente",
+    "name": "GUARDA · el cliente existe",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     700,
+     -200
+    ],
+    "parameters": {
+     "jsCode": "// E79 · GUARDA · el cliente tiene que EXISTIR · un identificador con formato correcto no es un cliente\n//\n// La puerta de la sala y el repartidor no consultan `clients`; el freno de gasto es por cliente\n// ⇒ un UUID inventado por pedido lo esquivaba (E78 · CC#2). Acá, ANTES de dejar el sobre y antes\n// de cualquier gasto: si el id no está en `clients`, rechazo RUIDOSO (lanza ⇒ el avisador de\n// errores avisa; quien llega hasta acá ya pasó la llave, así que es señal, no ruido).\nconst r = $input.first().json || {};\nconst sc = Number(r.statusCode);\nconst body = r.body;\nconst armado = $('Armar el sobre').first().json || {};\nif (!(sc >= 200 && sc < 300) || !Array.isArray(body)) {\n  throw new Error('CLIENTE_NO_VERIFICABLE · no se pudo consultar clients (HTTP ' + (isNaN(sc) ? '?' : sc) + ') · el trato NO entra hasta poder comprobar que el cliente existe · ' + JSON.stringify(body).slice(0, 160));\n}\nif (body.length === 0) {\n  throw new Error('CLIENTE_INEXISTENTE · el trato trae un client_id que no está en clients (' + String(armado.client_id).slice(0, 8) + '…) · un identificador con formato correcto no es un cliente · crear el cliente primero (POST /api/clients/upsert) y reenviar');\n}\nconst cli = body[0];\nif (cli.archived_at) {\n  console.log('[trato-cerrado] aviso: el cliente ' + cli.id + ' está archivado (' + cli.archived_at + ') · el trato entra igual (cliente que vuelve)');\n}\nreturn [{ json: Object.assign({}, armado, { cliente_verificado: { id: cli.id, name: cli.name || null, status: cli.status || null, archived_at: cli.archived_at || null } }) }];\n"
+    }
+   },
+   {
+    "id": "e81-if-rechazado",
+    "name": "¿Rechazado en el portero?",
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+     400,
+     -200
+    ],
+    "parameters": {
+     "conditions": {
+      "options": {
+       "caseSensitive": true,
+       "leftValue": "",
+       "typeValidation": "strict",
+       "version": 2
+      },
+      "conditions": [
+       {
+        "id": "rech",
+        "leftValue": "={{ $json._portero.rechazado }}",
+        "rightValue": true,
+        "operator": {
+         "type": "boolean",
+         "operation": "true",
+         "singleValue": true
+        }
+       }
+      ],
+      "combinator": "and"
+     },
+     "options": {}
+    }
+   },
+   {
+    "id": "e81-leer-contador",
+    "name": "Leer contador de rechazos",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     620,
+     -420
+    ],
+    "parameters": {
+     "method": "GET",
+     "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/settings?select=key,value&key=eq.trato_cerrado.rechazos_portero&limit=1",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "apikey",
+        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       },
+       {
+        "name": "Authorization",
+        "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       }
+      ]
+     },
+     "options": {
+      "timeout": 15000,
+      "response": {
+       "response": {
+        "neverError": true,
+        "fullResponse": true
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "e81-sumar",
+    "name": "Sumar el rechazo",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     840,
+     -420
+    ],
+    "parameters": {
+     "jsCode": "// E81 · suma el rechazo al contador durable (fila settings · trato_cerrado.rechazos_portero)\nconst p = $('PORTERO · llave del trato cerrado').first().json._portero || {};\nconst r = $input.first().json || {};\nlet actual = {};\ntry {\n  const fila = Array.isArray(r.body) ? (r.body[0] || {}) : (Array.isArray(r) ? (r[0] || {}) : r);\n  actual = JSON.parse(fila.value || '{}');\n} catch (e) { actual = {}; }\nconst c = {\n  total: (actual.total || 0) + 1,\n  sin_llave: (actual.sin_llave || 0) + (p.tipo === 'sin_llave' ? 1 : 0),\n  llave_incorrecta: (actual.llave_incorrecta || 0) + (p.tipo === 'llave_incorrecta' ? 1 : 0),\n  entrada_cerrada: (actual.entrada_cerrada || 0) + (p.tipo === 'entrada_cerrada' ? 1 : 0),\n  ultimo_at: p.at,\n  ultimo_motivo: p.motivo,\n  ultimos: ((actual.ultimos || []).concat([{ at: p.at, tipo: p.tipo, ip: p.ip, client_id: p.client_id, deal_id: p.deal_id, corrida: $execution.id }])).slice(-20),\n};\nreturn [{ json: { value: JSON.stringify(c), total: c.total, motivo: p.motivo, client_id: p.client_id } }];\n"
+    }
+   },
+   {
+    "id": "e81-guardar-contador",
+    "name": "Guardar contador (settings)",
+    "notes": "E81 · fila creada el 2026-09-17 (id b5c9c35c) · si la fila no existe el PATCH no escribe nada y el nodo siguiente lo declara en el motivo.",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     1060,
+     -420
+    ],
+    "parameters": {
+     "method": "PATCH",
+     "url": "={{ $env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/settings?key=eq.trato_cerrado.rechazos_portero",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "apikey",
+        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       },
+       {
+        "name": "Authorization",
+        "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+       },
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "Prefer",
+        "value": "return=representation"
+       }
+      ]
+     },
+     "sendBody": true,
+     "contentType": "json",
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ value: $json.value }) }}",
+     "options": {
+      "timeout": 15000,
+      "response": {
+       "response": {
+        "neverError": true,
+        "fullResponse": true
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "e81-lanzar",
+    "name": "Rechazo · lanzar con motivo",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1280,
+     -420
+    ],
+    "parameters": {
+     "jsCode": "// E81 · el rechazo ya quedo contado en settings · ahora se ve: corrida en ERROR con el motivo\n// (y aviso a #alertas via el avisador, 1 cada 10 min por el freno que ya no se calla en falso).\nconst s = $('Sumar el rechazo').first().json || {};\nconst g = $input.first().json || {};\nconst guardado = Array.isArray(g.body) ? g.body.length > 0 : (Array.isArray(g) ? g.length > 0 : !!(g && g.key));\nthrow new Error(s.motivo + ' · pedido descartado antes de armar el sobre · cliente ' + String(s.client_id || '(sin client_id)').slice(0, 8)\n  + ' · rechazos acumulados en el portero: ' + s.total + (guardado ? '' : ' (⚠️ el contador NO se pudo guardar en settings)')\n  + ' · si es un CRM real, la llave x-deal-won-key esta vencida o mal copiada');\n"
+    }
+   }
+  ],
+  "connections": {
+   "Webhook · trato cerrado": {
+    "main": [
+     [
+      {
+       "node": "PORTERO · llave del trato cerrado",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Dejar el sobre en la puerta de la sala": {
+    "main": [
+     [
+      {
+       "node": "GUARDA · si la puerta rechazó, se detiene",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Armar el sobre": {
+    "main": [
+     [
+      {
+       "node": "¿El cliente existe?",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "GUARDA · si la puerta rechazó, se detiene": {
+    "main": [
+     [
+      {
+       "node": "¿Descartado sin identificador?",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "¿Descartado sin identificador?": {
+    "main": [
+     [
+      {
+       "node": "AVISO · #alertas",
+       "type": "main",
+       "index": 0
+      }
+     ],
+     []
+    ]
+   },
+   "AVISO · #alertas": {
+    "main": [
+     [
+      {
+       "node": "Cierre · el aviso llegó o la corrida falla",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "PORTERO · llave del trato cerrado": {
+    "main": [
+     [
+      {
+       "node": "¿Rechazado en el portero?",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "¿El cliente existe?": {
+    "main": [
+     [
+      {
+       "node": "GUARDA · el cliente existe",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "GUARDA · el cliente existe": {
+    "main": [
+     [
+      {
+       "node": "Dejar el sobre en la puerta de la sala",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "¿Rechazado en el portero?": {
+    "main": [
+     [
+      {
+       "node": "Leer contador de rechazos",
+       "type": "main",
+       "index": 0
+      }
+     ],
+     [
+      {
+       "node": "Armar el sobre",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Leer contador de rechazos": {
+    "main": [
+     [
+      {
+       "node": "Sumar el rechazo",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Sumar el rechazo": {
+    "main": [
+     [
+      {
+       "node": "Guardar contador (settings)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Guardar contador (settings)": {
+    "main": [
+     [
+      {
+       "node": "Rechazo · lanzar con motivo",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   }
+  },
+  "nodeGroups": [],
+  "authors": "Emilio  Perez ",
+  "name": null,
+  "description": null,
+  "autosaved": false,
+  "createdAt": "2026-09-17T03:09:16.439Z",
+  "updatedAt": "2026-09-17T03:09:16.439Z",
+  "workflowPublishHistory": [
+   {
+    "id": 1970,
+    "workflowId": "IXF3mOG0PRZlNR4a",
+    "versionId": "76ef56ab-3b78-4ace-898c-3c8f761e9dbd",
+    "event": "activated",
+    "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-09-17T03:09:16.564Z"
+   }
+  ]
+ }
+}
