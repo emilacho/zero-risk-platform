@@ -55,6 +55,7 @@ export interface PuertosDePublicacion {
 }
 
 // ───────────────────────────────────────────────────────── el lote
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const esTexto = (x: unknown): x is string => typeof x === 'string'
 const esObjeto = (x: unknown): x is Record<string, unknown> => x !== null && typeof x === 'object' && !Array.isArray(x)
 const httpsValida = (u: string) => {
@@ -69,6 +70,7 @@ export function validarLote(cuerpo: unknown): LoteValidado {
   const client_id = esTexto(cuerpo.client_id) ? cuerpo.client_id.trim() : ''
   const task_id = esTexto(cuerpo.task_id) ? cuerpo.task_id.trim() : ''
   if (!client_id) e.push('client_id requerido')
+  else if (!UUID.test(client_id)) e.push('client_id debe ser un uuid') // la columna es uuid: uno inválido llegaba a la base y salía como 503
   if (!task_id) e.push('task_id requerido')
   const piezasIn = cuerpo.piezas
   if (!Array.isArray(piezasIn) || piezasIn.length === 0) e.push('piezas requeridas: una lista de 1 a ' + MAX_PIEZAS_POR_LOTE + ' piezas con `canal`')
