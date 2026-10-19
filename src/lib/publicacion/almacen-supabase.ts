@@ -14,11 +14,11 @@ export function puertosDePublicacion(db: Db, env: Record<string, string | undefi
     env,
     ahora: () => new Date(),
     async leerElemento(id) {
-      const r = await db.from('hitl_queue').select('id,type,status,client_id,metadata').eq('id', id).maybeSingle()
+      const r = await db.from('hitl_queue').select('id,type,status,client_id,metadata,output_id').eq('id', id).maybeSingle()
       if (r.error) throw new Error('no pude leer la bandeja: ' + r.error.message)
       if (!r.data) return null
       const f = r.data as Fila
-      return { id: String(f.id), type: (f.type as string | null) ?? null, status: String(f.status), client_id: (f.client_id as string | null) ?? null, metadata: comoObjeto(f.metadata) } satisfies ElementoDeBandeja
+      return { id: String(f.id), type: (f.type as string | null) ?? null, status: String(f.status), client_id: (f.client_id as string | null) ?? null, metadata: comoObjeto(f.metadata), output_id: (f.output_id as string | null) ?? null } satisfies ElementoDeBandeja
     },
     async guardarEnsayo(id, ensayo: ResultadoDeEnsayo) {
       // se lee lo que ya traía `metadata` para no borrarlo
@@ -26,6 +26,13 @@ export function puertosDePublicacion(db: Db, env: Record<string, string | undefi
       if (previa.error) throw new Error('no pude leer la bandeja: ' + previa.error.message)
       const r = await db.from('hitl_queue').update({ metadata: { ...(comoObjeto(previa.data?.metadata) ?? {}), publicacion_ensayo: ensayo } }).eq('id', id)
       if (r.error) throw new Error('no pude guardar el ensayo: ' + r.error.message)
+    },
+    async leerSalida(id) {
+      const r = await db.from('client_historical_outputs').select('id,client_id,content').eq('id', id).maybeSingle()
+      if (r.error) throw new Error('no pude leer la salida: ' + r.error.message)
+      if (!r.data) return null
+      const f = r.data as Fila
+      return { id: String(f.id), client_id: (f.client_id as string | null) ?? null, content: (f.content as string | null) ?? null }
     },
     async buscarLote(task_id, client_id) {
       const r = await db.from('hitl_queue').select('id').eq('type', TIPO_LOTE_SOCIAL).eq('client_id', client_id).filter('metadata->>task_id', 'eq', task_id).limit(1)
