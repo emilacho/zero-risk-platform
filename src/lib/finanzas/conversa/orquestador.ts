@@ -7,6 +7,7 @@ import { registrarPaso, siguientePaso, type ResultadoDePaso } from '../../oficin
 import type { Estado, Paso, Plantilla } from '../../oficina/tipos'
 import { estadoInicial } from '../../oficina/tipos'
 import { calcular } from '../calculadora'
+import { contieneLosDosCostos, dosCostos, textoDosCostos, validarTextoDeCostos } from '../dos-costos'
 import { decidirFirma, estaAbierto, huellaDe, numerosDelBloque, resueltosSinEstado } from '../firma'
 import { separarComprobado } from '../confirmado-por-dueno'
 import { lineaBaseSemanal } from '../linea-base'
@@ -146,7 +147,7 @@ export function equilibrioParaElAjuste(a: Arts, ronda: 1 | 2): { cubre: boolean 
 }
 
 // ───────────────────────────────────────────────────────── el hilo
-function textoDelTurno(paso: Paso, n: number, salida: Record<string, unknown> | null, degradado: string | null): string {
+export function textoDelTurno(paso: Paso, n: number, salida: Record<string, unknown> | null, degradado: string | null): string {
   const quien = paso.tipo === 'agente' ? paso.quien : 'oficina'
   const cab = `*${quien}* · turno ${n} · ronda ${paso.ronda ?? 1}`
   if (degradado) return `${cab}\n⚠️ sin supuestos del agente (${degradado}); la conversación sigue con los supuestos del código.`
@@ -156,7 +157,7 @@ function textoDelTurno(paso: Paso, n: number, salida: Record<string, unknown> | 
     case 'planteo': case 'ajuste': return `${cab}\nMeta ${s.meta_por_semana}/sem · evento ${s.evento} · ${s.zonas?.length ?? 0} zona(s) · ${s.canales?.length ?? 0} canal(es). No sé: ${(s.no_se ?? []).join('; ') || '—'}${s.equilibrio_sin_respuesta ? ' ⚠️ no respondió al equilibrio: el planteo se conserva y el plan lo dice' : ''}`
     case 'calculo': return `${cab}\n${s.hay_bloque ? `Bloque calculado (huella ${String(s.huella).slice(0, 8)}…).` : `Sin bloque: ${s.motivo}.`}`
     case 'cierre': return `${cab}\nSalida: ${s.salida} · ${(s.hallazgos ?? []).length} hallazgo(s).${s.dato_que_no_bloquea ? ' ' + s.dato_que_no_bloquea : ''}`
-    case 'firma': return `${cab}\nTablero ${s.estado}${s.sin_acuerdo ? ' (sin acuerdo: sale con supuesto y marca)' : ''}.`
+    case 'firma': return `${cab}\nTablero ${s.estado}${s.sin_acuerdo ? ' (sin acuerdo: sale con supuesto y marca)' : ''}.${Array.isArray(s.resumen_para_el_dueno) && s.resumen_para_el_dueno.length ? '\n' + s.resumen_para_el_dueno.join('\n') : ''}`
     default: return `${cab}\n${s.resumen ?? '(sin resumen)'}`
   }
 }
@@ -398,6 +399,12 @@ export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts
   const { confirmado_por_el_dueno: confirmadoPorElDueno, medido_del_cerebro: medidoDelCerebro, sin_comprobar: sinComprobar } = separarComprobado(dadoPorVerificado, respuestasDeLaSemilla(e.semilla), datosDelExpediente, { moneda: e.semilla?.moneda, pais: e.semilla?.pais }, baseDelCodigo?.por_semana ?? null)
   const verificadoSinComprobar = sinComprobar.length > 0
   if (verificadoSinComprobar && salida !== 'sale_con_alerta') salida = 'sale_con_alerta'
+  // los DOS costos por venta (solo pauta y plan completo) salen del código, nunca del modelo; si el texto del jefe cita solo el optimista, el cierre solo puede salir «con alerta»
+  const costosPorVenta = dosCostos(bloque, bloqueArt.entrada as { ticket?: number | null; margen?: number | null; costo_entrega?: number | null } | undefined)
+  const resumenParaElDueno = textoDosCostos(costosPorVenta, e.semilla?.moneda ?? undefined)
+  const textosDelJefe = [acuerdo?.dato_que_no_bloquea, ...hallazgos.map((h) => h.que), ...((acuerdo?.conflictos_resueltos ?? []) as string[])].filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+  const textoOptimista = textosDelJefe.flatMap((t) => validarTextoDeCostos(t, costosPorVenta).errores)
+  if (textoOptimista.length && salida !== 'sale_con_alerta') salida = 'sale_con_alerta'
   const decision = decidirFirma({ hallazgos: hallazgos.map((h) => ({ severidad: h.severidad, que: h.que, estado: h.estado })), correcciones_hechas: huboRonda2 ? 1 : 0 })
   const sinEstado = resueltosSinEstado(hallazgos)
   let sinAcuerdo = !acuerdo || acuerdo.sin_supuestos_del_agente === true || decision.estado !== 'firmado'
@@ -417,7 +424,7 @@ export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts
     await P.tableros.actualizarTablero(g.id, { estado, firmado_por: `chief-financial-officer:${invocacion_id}:${salida}`, firmado_en: P.ahora().toISOString() })
   }
   return {
-    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, confirmado_por_el_dueno: confirmadoPorElDueno, medido_del_cerebro: medidoDelCerebro, dado_por_verificado_sin_comprobar: sinComprobar, criticos_abiertos: decision.criticos, criticos_resueltos: decision.criticos_resueltos, alerta_hallazgos_sin_estado: sinEstado.length ? `${sinEstado.length} hallazgo(s) dicen «resuelto» en el texto pero no traen estado: se cuentan como abiertos (${sinEstado.slice(0, 3).join(' | ')})` : null, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${sinComprobar.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, escribio: !e.dry_run },
+    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, confirmado_por_el_dueno: confirmadoPorElDueno, medido_del_cerebro: medidoDelCerebro, dado_por_verificado_sin_comprobar: sinComprobar, criticos_abiertos: decision.criticos, criticos_resueltos: decision.criticos_resueltos, alerta_hallazgos_sin_estado: sinEstado.length ? `${sinEstado.length} hallazgo(s) dicen «resuelto» en el texto pero no traen estado: se cuentan como abiertos (${sinEstado.slice(0, 3).join(' | ')})` : null, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${sinComprobar.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, costos_por_venta: costosPorVenta, resumen_para_el_dueno: resumenParaElDueno, resumen_lleva_los_dos_costos: contieneLosDosCostos(resumenParaElDueno.join(' '), costosPorVenta), alerta_texto_optimista: textoOptimista.length ? textoOptimista : null, escribio: !e.dry_run },
     tablero_id: finanzas_id, sin_acuerdo: sinAcuerdo,
   }
 }
