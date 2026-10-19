@@ -6,8 +6,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  armarSolicitud, configuracionDeMeta, encolarLote, MAX_CAPTION_INSTAGRAM, MAX_PIEZAS_POR_LOTE, publicarAprobado, TIPO_LOTE_SOCIAL, validarLote,
-  type ElementoDeBandeja, type PuertosDePublicacion, type ResultadoDeEnsayo,
+  armarSolicitud, configuracionDeMeta, contenidoDeLaSalida, encolarLote, loteDeLaPiezaDeOficina, MAX_CAPTION_INSTAGRAM, MAX_PIEZAS_POR_LOTE, publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA, validarLote,
+  type ElementoDeBandeja, type PuertosDePublicacion, type ResultadoDeEnsayo, type SalidaDeOficina,
 } from '../src/lib/publicacion/en-ensayo'
 import { puertosDePublicacion } from '../src/lib/publicacion/almacen-supabase'
 
@@ -19,12 +19,13 @@ const PIEZA_FB = { canal: 'facebook', message: 'Hola Facebook' }
 const LOTE = { task_id: 'social_1', client_id: CLI, piezas: [PIEZA_IG, PIEZA_FB] }
 
 // ───────────────────────────────────────────────────────── puertos en memoria
-interface Mundo { elementos: Map<string, ElementoDeBandeja>; creados: number; guardados: Array<{ id: string; ensayo: ResultadoDeEnsayo }>; lecturas: number }
+interface Mundo { elementos: Map<string, ElementoDeBandeja>; salidas: Map<string, SalidaDeOficina>; creados: number; guardados: Array<{ id: string; ensayo: ResultadoDeEnsayo }>; lecturas: number }
 function puertos(env: Record<string, string | undefined> = {}): { P: PuertosDePublicacion; m: Mundo } {
-  const m: Mundo = { elementos: new Map(), creados: 0, guardados: [], lecturas: 0 }
+  const m: Mundo = { elementos: new Map(), salidas: new Map(), creados: 0, guardados: [], lecturas: 0 }
   const P: PuertosDePublicacion = {
     env, ahora: () => new Date('2026-10-19T20:00:00Z'),
     async leerElemento(id) { m.lecturas++; return m.elementos.get(id) ?? null },
+    async leerSalida(id) { return m.salidas.get(id) ?? null },
     async guardarEnsayo(id, ensayo) { m.guardados.push({ id, ensayo }); const e = m.elementos.get(id); if (e) e.metadata = { ...(e.metadata ?? {}), publicacion_ensayo: ensayo } },
     async buscarLote(task_id, client_id) { const e = [...m.elementos.values()].find((x) => x.type === TIPO_LOTE_SOCIAL && x.client_id === client_id && x.metadata?.task_id === task_id); return e ? { id: e.id } : null },
     async crearElemento(e) { m.creados++; const id = 'el-' + m.creados; m.elementos.set(id, { id, type: TIPO_LOTE_SOCIAL, status: 'pending', client_id: e.client_id, metadata: e.metadata }); return { id } },
@@ -179,6 +180,112 @@ describe('publicarAprobado', () => {
   })
 })
 
+// ───────────────────────────────────────────────────────── una pieza que entregó la oficina (fila `content_piece_review` + su salida)
+const NOMBRE = (red: string, n = 1, de = 1, ext = 'png') => `2026-10-20_1000_${red}_post_b1_${String(n).padStart(2, '0')}-de-${String(de).padStart(2, '0')}.${ext}`
+const URL_DE = (nombre: string) => `https://storage.ejemplo.com/oficina/${nombre}`
+const salidaDe = (contenido: Record<string, unknown>, extra: Partial<SalidaDeOficina> = {}): SalidaDeOficina => ({
+  id: 'o1', client_id: CLI, content: `# Pieza\n\n${String(contenido.pie_de_foto ?? '')}\n\n\`\`\`json\n${JSON.stringify(contenido, null, 2)}\n\`\`\``, ...extra,
+})
+const contenidoPost = (red = 'instagram', extra: Record<string, unknown> = {}) => ({ pie_de_foto: 'Hola desde la oficina', hashtags: ['ceviche', '#costa'], llamado: null, entrega: { urls: { [NOMBRE(red)]: URL_DE(NOMBRE(red)) }, expires_at: null }, ...extra })
+const META_OFICINA = { origen: 'oficina', familia: 'post_img', brief_id: 'b1', oficina_encargo_id: 'e1', con_desacuerdo: false }
+const piezaAprobada = (m: Mundo, salida: SalidaDeOficina | null, metadata: Record<string, unknown> | null = META_OFICINA, extra: Partial<ElementoDeBandeja> = {}) => {
+  m.elementos.set('p1', { id: 'p1', type: TIPO_PIEZA_DE_OFICINA, status: 'approved', client_id: CLI, output_id: 'o1', metadata, ...extra })
+  if (salida) m.salidas.set('o1', salida)
+}
+
+describe('contenidoDeLaSalida', () => {
+  it('toma el ÚLTIMO bloque json de la salida; un json roto o ausente da null', () => {
+    const dos = '# t\n\n```json\n{"a":1}\n```\n\ntexto\n\n```json\n{"b":2}\n```'
+    expect(contenidoDeLaSalida(dos)).toEqual({ b: 2 })
+    expect(contenidoDeLaSalida('```json\n{roto\n```')).toBeNull()
+    expect(contenidoDeLaSalida('sin bloque')).toBeNull(); expect(contenidoDeLaSalida(null)).toBeNull(); expect(contenidoDeLaSalida('```json\n[1,2]\n```')).toBeNull()
+  })
+})
+
+describe('loteDeLaPiezaDeOficina', () => {
+  const el: ElementoDeBandeja = { id: 'p1', type: TIPO_PIEZA_DE_OFICINA, status: 'approved', client_id: CLI, metadata: META_OFICINA, output_id: 'o1' }
+  it('arma un lote de UNA pieza: la red sale del nombre del archivo, el texto lleva los hashtags una sola vez, la tarea sale del encargo', () => {
+    const r = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost('instagram')) })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.lote).toEqual({ task_id: 'oficina:e1', client_id: CLI, piezas: [{ canal: 'instagram', image_url: URL_DE(NOMBRE('instagram')), imagenes: 1, caption: 'Hola desde la oficina\n\n#ceviche #costa' }] })
+  })
+  it('reconoce las abreviaturas de red y deja pasar una red desconocida tal cual (para que se diga «sin publicador»)', () => {
+    for (const [red, canal] of [['ig', 'instagram'], ['fb', 'facebook'], ['facebook', 'facebook'], ['tiktok', 'tiktok']] as const) {
+      const r = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost(red)) }); expect(r.ok && r.lote.piezas[0].canal).toBe(canal)
+    }
+  })
+  it('sin hashtags el texto es solo el pie; sin tarea de la oficina usa el id del elemento', () => {
+    const r = loteDeLaPiezaDeOficina({ elemento: { ...el, metadata: {} }, salida: salidaDe(contenidoPost('instagram', { hashtags: [] })) })
+    expect(r.ok && r.lote.piezas[0].caption).toBe('Hola desde la oficina'); expect(r.ok && r.lote.task_id).toBe('oficina:p1')
+  })
+  it('varios archivos (carrusel o kit) se cuentan: el ensayo los declarará no soportados', () => {
+    const urls = { [NOMBRE('instagram', 1, 3)]: URL_DE('a'), [NOMBRE('instagram', 2, 3)]: URL_DE('b'), [NOMBRE('instagram', 3, 3)]: URL_DE('c') }
+    const r = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: { urls } })) })
+    expect(r.ok && r.lote.piezas[0].imagenes).toBe(3); expect(r.ok && r.lote.piezas[0].image_url).toBe(URL_DE('a'))
+  })
+  it('rechaza con el motivo: sin json, sin archivos, redes distintas, sin cliente', () => {
+    const casos: Array<[Parameters<typeof loteDeLaPiezaDeOficina>[0], string]> = [
+      [{ elemento: el, salida: { id: 'o1', client_id: CLI, content: 'sin bloque' } }, 'bloque json'],
+      [{ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: { urls: {} } })) }, 'archivos de entrega'],
+      [{ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: null })) }, 'archivos de entrega'],
+      [{ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: { urls: { [NOMBRE('instagram')]: URL_DE('a'), [NOMBRE('facebook')]: URL_DE('b') } } })) }, 'redes distintas'],
+      [{ elemento: { ...el, client_id: null }, salida: salidaDe(contenidoPost('instagram')) }, 'cliente'],
+    ]
+    for (const [entrada, frag] of casos) { const r = loteDeLaPiezaDeOficina(entrada); expect(r.ok).toBe(false); if (!r.ok) expect(r.errores.join(' | ')).toContain(frag) }
+  })
+})
+
+describe('publicarAprobado · una pieza de la oficina', () => {
+  it('aprobada: arma el ensayo con la solicitud real a Meta, lo guarda con su origen y su salida, y NO llama a nadie', async () => {
+    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram')))
+    const r = await publicarAprobado(P, { hitl_id: 'p1' })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.ensayo).toMatchObject({ modo: 'ensayo', real: false, origen: 'pieza_de_oficina', output_id: 'o1', task_id: 'oficina:e1', client_id: CLI, publicable: true })
+      expect(r.ensayo.piezas[0].solicitudes[0]).toEqual({ paso: 'contenedor', metodo: 'POST', ruta: '/{META_IG_BUSINESS_ACCOUNT_ID}/media', cuerpo: { image_url: URL_DE(NOMBRE('instagram')), caption: 'Hola desde la oficina\n\n#ceviche #costa' } })
+    }
+    expect(m.guardados).toHaveLength(1); expect(fetchLlamado).toBe(0); expect(JSON.stringify(m.guardados[0].ensayo)).not.toContain('SECRETO')
+  })
+  it('facebook con imagen va a /photos; una red sin publicador deja el ensayo NO publicable', async () => {
+    const a = puertos(ENV_COMPLETO); piezaAprobada(a.m, salidaDe(contenidoPost('facebook')))
+    const rf = await publicarAprobado(a.P, { hitl_id: 'p1' }); expect(rf.ok && rf.ensayo.piezas[0].solicitudes[0].ruta).toBe('/{META_FB_PAGE_ID}/photos')
+    const b = puertos(ENV_COMPLETO); piezaAprobada(b.m, salidaDe(contenidoPost('tiktok')))
+    const rt = await publicarAprobado(b.P, { hitl_id: 'p1' }); expect(rt.ok && rt.ensayo.publicable).toBe(false); expect(rt.ok && rt.ensayo.piezas[0].errores[0]).toContain('no hay publicador')
+  })
+  it('un carrusel o kit queda armado=false con el motivo (el publicador de Meta publica una sola imagen)', async () => {
+    const { P, m } = puertos(ENV_COMPLETO)
+    const urls = { [NOMBRE('instagram', 1, 2)]: URL_DE('a'), [NOMBRE('instagram', 2, 2)]: URL_DE('b') }
+    piezaAprobada(m, salidaDe(contenidoPost('instagram', { entrega: { urls } })))
+    const r = await publicarAprobado(P, { hitl_id: 'p1' })
+    expect(r.ok && r.ensayo.publicable).toBe(false); expect(r.ok && r.ensayo.piezas[0].armada).toBe(false); expect(r.ok && r.ensayo.piezas[0].errores.join()).toContain('2 archivos')
+  })
+  it('aprobada con desacuerdo lo dice en las advertencias', async () => {
+    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram')), { ...META_OFICINA, con_desacuerdo: true })
+    const r = await publicarAprobado(P, { hitl_id: 'p1' }); expect(r.ok && r.ensayo.advertencias.join(' ')).toContain('aprobada_con_desacuerdo')
+    const { P: P2, m: m2 } = puertos(ENV_COMPLETO); piezaAprobada(m2, salidaDe(contenidoPost('instagram')))
+    const r2 = await publicarAprobado(P2, { hitl_id: 'p1' }); expect(r2.ok && r2.ensayo.advertencias.join(' ')).not.toContain('aprobada_con_desacuerdo')
+  })
+  it('no aprobada, de otro origen, sin salida, de otro cliente o sin contenido: se rechaza con su razón y NO guarda nada', async () => {
+    const casos: Array<[string, (m: Mundo) => void, string]> = [
+      ['no_aprobado', (m) => piezaAprobada(m, salidaDe(contenidoPost()), META_OFICINA, { status: 'pending' }), 'no_aprobado'],
+      ['pieza ajena (origen distinto)', (m) => piezaAprobada(m, salidaDe(contenidoPost()), { ...META_OFICINA, origen: 'planeacion' }), 'pieza_ajena'],
+      ['sin output_id', (m) => piezaAprobada(m, salidaDe(contenidoPost()), META_OFICINA, { output_id: null }), 'salida_ausente'],
+      ['la salida no existe', (m) => piezaAprobada(m, null), 'salida_ausente'],
+      ['salida de otro cliente', (m) => piezaAprobada(m, salidaDe(contenidoPost(), { client_id: OTRO })), 'cliente_distinto'],
+      ['salida sin contenido válido', (m) => piezaAprobada(m, { id: 'o1', client_id: CLI, content: 'nada' }), 'pieza_no_publicable'],
+      ['metadata nula', (m) => piezaAprobada(m, salidaDe(contenidoPost()), null), 'pieza_ajena'],
+    ]
+    for (const [, montar, error] of casos) { const { P, m } = puertos(ENV_COMPLETO); montar(m); const r = await publicarAprobado(P, { hitl_id: 'p1' }); expect(!r.ok && r.error).toBe(error); expect(m.guardados).toEqual([]) }
+    expect(fetchLlamado).toBe(0)
+  })
+  it('es idempotente y `real:true` se sigue rechazando para este tipo', async () => {
+    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram')))
+    const a = await publicarAprobado(P, { hitl_id: 'p1' }); const b = await publicarAprobado(P, { hitl_id: 'p1' })
+    expect(a.ok && b.ok && b.ya_estaba && b.ensayo.hora === a.ensayo.hora).toBe(true); expect(m.guardados).toHaveLength(1)
+    const r = await publicarAprobado(P, { hitl_id: 'p1', real: true }); expect(!r.ok && r.error).toBe('real_no_habilitado')
+  })
+})
+
 // ───────────────────────────────────────────────────────── el almacén real sobre una base falsa
 function baseFalsa() {
   const filas: Array<Record<string, any>> = []
@@ -303,5 +410,45 @@ describe('PATCH /api/hitl/[id] · el enganche del lote aprobado', () => {
     m.base.filas[0].metadata = { task_id: 'social_1' }
     const r = await llamar(ruta, 'PATCH', { status: 'approved', reviewer: 'emilio' }, 'k', ctx)
     expect(r.status).toBe(200); expect(r.json.item.status).toBe('approved'); expect(r.json.publicacion).toMatchObject({ ok: false, error: 'lote_ausente' })
+  })
+})
+
+describe('PATCH /api/hitl/[id] · el enganche con una pieza de la oficina', () => {
+  const ruta = '../src/app/api/hitl/[id]/route'
+  const ctx = { params: { id: 'p1' } }
+  const contenido = JSON.stringify(contenidoPost('instagram'))
+  beforeEach(() => {
+    m.base = baseFalsa()
+    m.base.filas.push({ id: 'p1', type: TIPO_PIEZA_DE_OFICINA, status: 'pending', client_id: CLI, output_id: 'o1', metadata: META_OFICINA })
+    m.base.filas.push({ id: 'o1', client_id: CLI, content: `# Pieza\n\n\`\`\`json\n${contenido}\n\`\`\`` })
+  })
+  it('aprobar la pieza arma el ensayo en la respuesta y lo deja guardado en la bandeja; no llama a Meta', async () => {
+    const r = await llamar(ruta, 'PATCH', { status: 'approved', reviewer: 'emilio' }, 'k', ctx)
+    expect(r.status).toBe(200); expect(r.json.item.status).toBe('approved')
+    expect(r.json.publicacion).toMatchObject({ ok: true, ya_estaba: false, ensayo: { modo: 'ensayo', real: false, origen: 'pieza_de_oficina', output_id: 'o1', task_id: 'oficina:e1' } })
+    expect(m.base.filas[0].metadata.publicacion_ensayo.origen).toBe('pieza_de_oficina'); expect(fetchLlamado).toBe(0)
+  })
+  it('rechazar o editar la pieza NO arma nada; una fila de otro origen con el mismo tipo se aprueba sin ensayo y lo dice', async () => {
+    for (const status of ['rejected', 'edited']) { const r = await llamar(ruta, 'PATCH', { status, reviewer: 'emilio' }, 'k', ctx); expect(r.json).not.toHaveProperty('publicacion') }
+    m.base.filas[0].metadata = { ...META_OFICINA, origen: 'planeacion' }; m.base.filas[0].status = 'pending'
+    const aj = await llamar(ruta, 'PATCH', { status: 'approved', reviewer: 'emilio' }, 'k', ctx)
+    expect(aj.status).toBe(200); expect(aj.json.item.status).toBe('approved'); expect(aj.json.publicacion).toMatchObject({ ok: false, error: 'pieza_ajena' })
+  })
+})
+
+describe('puertosDePublicacion · lo que necesita una pieza de la oficina', () => {
+  it('leerElemento devuelve también el `output_id`; leerSalida trae la salida con su cliente y su contenido, o null si no existe', async () => {
+    const { db, filas } = baseFalsa(); const P = puertosDePublicacion(db, {})
+    filas.push({ id: 'p1', type: TIPO_PIEZA_DE_OFICINA, status: 'approved', client_id: CLI, output_id: 'o1', metadata: META_OFICINA })
+    filas.push({ id: 'o1', client_id: CLI, content: 'texto del contenido' })
+    expect((await P.leerElemento('p1'))?.output_id).toBe('o1')
+    expect(await P.leerSalida('o1')).toEqual({ id: 'o1', client_id: CLI, content: 'texto del contenido' })
+    expect(await P.leerSalida('nada')).toBeNull()
+  })
+  it('un elemento sin output_id lo devuelve como null (no como undefined) y un error de la base al leer la salida se dice', async () => {
+    const { db, filas } = baseFalsa(); filas.push({ id: 'x', type: TIPO_LOTE_SOCIAL, status: 'approved', client_id: CLI, metadata: {} })
+    expect((await puertosDePublicacion(db, {}).leerElemento('x'))?.output_id).toBeNull()
+    const rota = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'caída' } }) }) }) }) }
+    await expect(puertosDePublicacion(rota, {}).leerSalida('o1')).rejects.toThrow('caída')
   })
 })

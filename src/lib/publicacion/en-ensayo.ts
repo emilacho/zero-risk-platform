@@ -12,6 +12,8 @@
  */
 
 export const TIPO_LOTE_SOCIAL = 'social_batch_review'
+/** lo que deja la oficina de creativos en la bandeja al entregar una pieza (la salida, con sus archivos y su texto, vive en `client_historical_outputs`) */
+export const TIPO_PIEZA_DE_OFICINA = 'content_piece_review'
 export const REDES_CON_PUBLICADOR = ['instagram', 'facebook'] as const
 export type RedConPublicador = (typeof REDES_CON_PUBLICADOR)[number]
 
@@ -24,6 +26,8 @@ export interface PiezaSocial {
   caption?: string
   message?: string
   link_url?: string
+  /** cuántos archivos trae la pieza (una pieza de la oficina puede traer varios: carrusel o kit); el publicador de Meta de la agencia publica una sola imagen */
+  imagenes?: number
 }
 export interface LoteSocial {
   task_id: string
@@ -38,13 +42,20 @@ export interface ElementoDeBandeja {
   status: string
   client_id: string | null
   metadata: Record<string, unknown> | null
+  /** la salida ligada a la pieza (la oficina la deja en `client_historical_outputs`) */
+  output_id?: string | null
 }
+
+/** la salida de la oficina: el texto de la pieza y sus archivos viven dentro de `content` (un bloque json al final) */
+export interface SalidaDeOficina { id: string; client_id: string | null; content: string | null }
 
 export interface PuertosDePublicacion {
   /** el elemento de la bandeja por id; null si no existe */
   leerElemento(id: string): Promise<ElementoDeBandeja | null>
   /** guarda el resultado del ensayo dentro de `metadata.publicacion_ensayo` del elemento (sin tocar el resto) */
   guardarEnsayo(id: string, ensayo: ResultadoDeEnsayo): Promise<void>
+  /** la salida (client_historical_outputs) ligada a una pieza de la oficina; null si no existe */
+  leerSalida(id: string): Promise<SalidaDeOficina | null>
   /** el lote ya encolado de ese `task_id` y cliente, si existe */
   buscarLote(task_id: string, client_id: string): Promise<{ id: string } | null>
   /** crea el elemento de la bandeja para el lote */
@@ -104,6 +115,7 @@ export function armarSolicitud(p: PiezaSocial): PiezaEnsayada {
   const base = { canal: p.canal, publicador: (REDES_CON_PUBLICADOR as readonly string[]).includes(p.canal), armada: false, errores: [] as string[], solicitudes: [] as SolicitudMeta[] }
   if (!base.publicador) return { ...base, errores: [`no hay publicador para «${p.canal}» (solo instagram y facebook)`] }
   const errores: string[] = []
+  if (typeof p.imagenes === 'number' && p.imagenes > 1) errores.push(`la pieza trae ${p.imagenes} archivos (carrusel o kit): el publicador de Meta de la agencia publica una sola imagen`)
   if (p.image_url !== undefined && !httpsValida(p.image_url)) errores.push('image_url debe ser una dirección https')
   if (p.link_url !== undefined && p.link_url !== '' && !httpsValida(p.link_url)) errores.push('link_url debe ser una dirección https')
   if (p.canal === 'instagram') {
@@ -164,6 +176,9 @@ export async function encolarLote(P: PuertosDePublicacion, cuerpo: unknown): Pro
 export interface ResultadoDeEnsayo {
   modo: 'ensayo'
   real: false
+  /** de dónde salió: un lote encolado por el publicador, o una pieza que entregó la oficina */
+  origen: 'lote' | 'pieza_de_oficina'
+  output_id?: string
   hora: string
   task_id: string
   client_id: string
@@ -173,29 +188,84 @@ export interface ResultadoDeEnsayo {
   advertencias: string[]
 }
 
+/** el contenido de una pieza de la oficina: el último bloque ```json de la salida (así lo escribe el adaptador de la oficina) */
+export function contenidoDeLaSalida(content: string | null | undefined): Record<string, unknown> | null {
+  if (!content) return null
+  const ultimo = [...content.matchAll(/```json\s*\n([\s\S]*?)\n```/g)].at(-1)
+  if (!ultimo) return null
+  try { const j: unknown = JSON.parse(ultimo[1]); return esObjeto(j) ? j : null } catch { return null }
+}
+
+const RED_DEL_NOMBRE: Record<string, string> = { instagram: 'instagram', ig: 'instagram', facebook: 'facebook', fb: 'facebook' }
+
+/**
+ * Convierte una pieza que la oficina entregó (fila `content_piece_review` + su salida) en un lote de UNA pieza. La red sale del NOMBRE de los archivos entregados
+ * (`{fecha}_{hora}_{red}_{formato}_{brief}_{nn}-de-{NN}.{ext}`), porque la fila no la guarda. Una sola imagen por pieza: un carrusel o un kit (varios archivos) se declara no soportado.
+ */
+export function loteDeLaPiezaDeOficina(a: { elemento: ElementoDeBandeja; salida: SalidaDeOficina }): { ok: true; lote: LoteSocial } | { ok: false; errores: string[] } {
+  const errores: string[] = []
+  const contenido = contenidoDeLaSalida(a.salida.content)
+  if (!contenido) return { ok: false, errores: ['la salida no trae el bloque json con el contenido de la pieza'] }
+  const entrega = esObjeto(contenido.entrega) ? contenido.entrega : null
+  const archivos = entrega && esObjeto(entrega.urls) ? Object.entries(entrega.urls).filter((x): x is [string, string] => esTexto(x[1]) && x[1].trim() !== '').sort((p, q) => p[0].localeCompare(q[0])) : []
+  if (!archivos.length) errores.push('la pieza no trae archivos de entrega')
+  const redes = [...new Set(archivos.map(([nombre]) => (nombre.split('_')[2] ?? '').toLowerCase()))]
+  if (archivos.length && redes.length !== 1) errores.push(`los archivos son de redes distintas (${redes.join(', ') || 'sin red'})`)
+  const pie = esTexto(contenido.pie_de_foto) ? contenido.pie_de_foto.trim() : ''
+  const tags = (Array.isArray(contenido.hashtags) ? contenido.hashtags : []).filter(esTexto).map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`))
+  const client_id = a.elemento.client_id ?? ''
+  if (!client_id) errores.push('el elemento de la bandeja no trae cliente')
+  const oficinaEncargo = a.elemento.metadata?.oficina_encargo_id
+  const task_id = esTexto(oficinaEncargo) && oficinaEncargo.trim() ? `oficina:${oficinaEncargo.trim()}` : `oficina:${a.elemento.id}`
+  if (errores.length) return { ok: false, errores }
+  return {
+    ok: true,
+    lote: { task_id, client_id, piezas: [{ canal: RED_DEL_NOMBRE[redes[0]] ?? redes[0], image_url: archivos[0][1], imagenes: archivos.length, caption: tags.length ? `${pie}\n\n${tags.join(' ')}`.trim() : pie }] },
+  }
+}
+
 export async function publicarAprobado(P: PuertosDePublicacion, n: { hitl_id: string; real?: unknown }): Promise<RespuestaDePublicacion<{ ensayo: ResultadoDeEnsayo; ya_estaba: boolean }>> {
   // publicar de verdad no está construido: se rechaza ANTES de mirar nada
   if (n.real !== undefined && n.real !== false) return { ok: false, status: 409, error: 'real_no_habilitado', detalle: 'publicar de verdad no está construido; esta ruta solo arma el ensayo' }
   const el = await P.leerElemento(n.hitl_id)
   if (!el) return { ok: false, status: 404, error: 'no_existe' }
-  if (el.type !== TIPO_LOTE_SOCIAL) return { ok: false, status: 409, error: 'tipo_no_publicable', detalle: `el elemento es de tipo «${el.type ?? 'sin tipo'}»` }
+  const esLote = el.type === TIPO_LOTE_SOCIAL
+  const esPieza = el.type === TIPO_PIEZA_DE_OFICINA
+  if (!esLote && !esPieza) return { ok: false, status: 409, error: 'tipo_no_publicable', detalle: `el elemento es de tipo «${el.type ?? 'sin tipo'}»` }
   if (el.status !== 'approved') return { ok: false, status: 409, error: 'no_aprobado', detalle: `estado actual: ${el.status}; solo se arma lo aprobado en la bandeja` }
   const meta = el.metadata ?? {}
   const previo = meta.publicacion_ensayo
   if (esObjeto(previo)) return { ok: true, ensayo: previo as unknown as ResultadoDeEnsayo, ya_estaba: true }
-  const v = validarLote(esObjeto(meta.lote) ? meta.lote : null)
-  if (!v.ok) return { ok: false, status: 409, error: 'lote_ausente', detalle: 'el elemento no trae un lote válido', errores: v.errores }
-  if (el.client_id && v.lote.client_id !== el.client_id) return { ok: false, status: 409, error: 'cliente_distinto', detalle: 'el lote es de otro cliente que el elemento de la bandeja' }
+  const advertencias = ['sin_cuenta_por_cliente: las rutas de Meta usan una sola cuenta del entorno, no la del cliente']
+  let lote: LoteSocial
+  let output_id: string | null = null
+  if (esLote) {
+    const v = validarLote(esObjeto(meta.lote) ? meta.lote : null)
+    if (!v.ok) return { ok: false, status: 409, error: 'lote_ausente', detalle: 'el elemento no trae un lote válido', errores: v.errores }
+    lote = v.lote
+  } else {
+    // una pieza de la oficina: solo la que dejó la oficina (otra fila del mismo tipo no se toca), con su salida
+    if (meta.origen !== 'oficina') return { ok: false, status: 409, error: 'pieza_ajena', detalle: 'la fila no la dejó la oficina de creativos' }
+    if (!el.output_id) return { ok: false, status: 409, error: 'salida_ausente', detalle: 'la pieza no trae la salida ligada (output_id)' }
+    const salida = await P.leerSalida(el.output_id)
+    if (!salida) return { ok: false, status: 409, error: 'salida_ausente', detalle: 'no existe la salida ligada a la pieza' }
+    if (el.client_id && salida.client_id && salida.client_id !== el.client_id) return { ok: false, status: 409, error: 'cliente_distinto', detalle: 'la salida es de otro cliente que el elemento de la bandeja' }
+    const l = loteDeLaPiezaDeOficina({ elemento: el, salida })
+    if (!l.ok) return { ok: false, status: 409, error: 'pieza_no_publicable', detalle: 'no se pudo armar la publicación desde la salida de la oficina', errores: l.errores }
+    lote = l.lote
+    output_id = el.output_id
+    if (meta.con_desacuerdo === true) advertencias.push('aprobada_con_desacuerdo: la oficina dejó desacuerdos sin resolver y una persona la aprobó igual')
+  }
+  if (el.client_id && lote.client_id !== el.client_id) return { ok: false, status: 409, error: 'cliente_distinto', detalle: 'el lote es de otro cliente que el elemento de la bandeja' }
   const cfg = configuracionDeMeta(P.env)
-  const piezas = v.lote.piezas.map((p) => {
+  const piezas = lote.piezas.map((p) => {
     const a = armarSolicitud(p)
     return { ...a, configuracion: a.publicador ? cfg[p.canal as RedConPublicador] : null }
   })
-  const advertencias = ['sin_cuenta_por_cliente: las rutas de Meta usan una sola cuenta del entorno, no la del cliente']
   const sinConfig = [...new Set(piezas.filter((x) => x.configuracion && !x.configuracion.configurada).map((x) => x.canal))]
   if (sinConfig.length) advertencias.push(`falta configuración de Meta para: ${sinConfig.join(', ')}`)
   const ensayo: ResultadoDeEnsayo = {
-    modo: 'ensayo', real: false, hora: P.ahora().toISOString(), task_id: v.lote.task_id, client_id: v.lote.client_id,
+    modo: 'ensayo', real: false, origen: esLote ? 'lote' : 'pieza_de_oficina', ...(output_id ? { output_id } : {}), hora: P.ahora().toISOString(), task_id: lote.task_id, client_id: lote.client_id,
     publicable: piezas.length > 0 && piezas.every((x) => x.armada && x.configuracion?.configurada === true),
     piezas, advertencias,
   }

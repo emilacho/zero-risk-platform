@@ -14,7 +14,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
 import { TIPO_DE_BANDEJA } from '@/lib/manual/borrador'
 import { guardarNotaDeRechazo, promoverManualRevisado } from '@/lib/manual/promover'
-import { publicarAprobado, TIPO_LOTE_SOCIAL } from '@/lib/publicacion/en-ensayo'
+import { publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA } from '@/lib/publicacion/en-ensayo'
 import { puertosDePublicacion } from '@/lib/publicacion/almacen-supabase'
 
 export const dynamic = 'force-dynamic'
@@ -118,9 +118,9 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
     return NextResponse.json({ item: data, nota_de_rechazo: nota })
   }
 
-  // Lote de publicación aprobado (arreglo 5 de la cadena): al APROBAR se arma la publicación EN ENSAYO (no se llama a Meta ni se publica nada).
+  // Lote de publicación o pieza de la oficina aprobados (arreglo 5 de la cadena): al APROBAR se arma la publicación EN ENSAYO (no se llama a Meta ni se publica nada).
   // Un fallo del ensayo se dice en la respuesta, pero no deshace la decisión del aprobador.
-  if (data?.type === TIPO_LOTE_SOCIAL && body.status === 'approved') {
+  if ((data?.type === TIPO_LOTE_SOCIAL || data?.type === TIPO_PIEZA_DE_OFICINA) && body.status === 'approved') {
     try {
       const publicacion = await publicarAprobado(puertosDePublicacion(supabase), { hitl_id: String(data.id) })
       return NextResponse.json({ item: data, publicacion })
