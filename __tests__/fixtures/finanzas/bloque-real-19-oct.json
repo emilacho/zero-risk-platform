@@ -1,0 +1,225 @@
+{
+ "origen": "bloque_2 v3 del encargo 1a4ca295, copia de solo lectura de finanzas_artefactos (19-oct)",
+ "bloque": {
+  "ok": true,
+  "techo": {
+   "paro_desde": 2.16,
+   "ajusto_hasta": 1.51,
+   "por_resultado": 1.08,
+   "recorte_desde": 1.51,
+   "sin_valor_monetario": false
+  },
+  "cifras": {
+   "total_mes": {
+    "tipo": "supuesto",
+    "valor": 1486.97,
+    "fuente": "reparto inverso",
+    "formula": "Meta+IG necesario ÷ parte de Meta+IG"
+   },
+   "meta_ig_mes": {
+    "tipo": "supuesto",
+    "valor": 892.19,
+    "fuente": "total − producción − otros",
+    "formula": "≥ 60 % del total"
+   },
+   "pauta_diaria": {
+    "tipo": "supuesto",
+    "valor": 61.77,
+    "fuente": "pauta semanal ÷ días activos",
+    "formula": "P ÷ n"
+   },
+   "produccion_mes": {
+    "tipo": "dato",
+    "valor": 297.39,
+    "fuente": "producción (plan), monto fijo"
+   },
+   "base_por_semana": {
+    "tipo": "dato",
+    "valor": 107.33,
+    "fuente": "cerebro · portero · punto de venta (Loyverse) · 460 en 30 días (2026-09-16 a 2026-10-15)",
+    "formula": "resultados finales por semana sin pauta"
+   },
+   "costo_por_venta": {
+    "tipo": "supuesto",
+    "valor": 14.63,
+    "fuente": "costo por resultado ÷ q",
+    "formula": "p = e ÷ q"
+   },
+   "meta_por_semana": {
+    "tipo": "dato",
+    "valor": 120,
+    "fuente": "plan / planteo fijado"
+   },
+   "minimo_por_conjunto": {
+    "tipo": "supuesto",
+    "valor": 19.5,
+    "fuente": "costo × 50 ÷ días activos",
+    "formula": "máx(piso, e × 50 ÷ n)"
+   },
+   "techo_por_resultado": {
+    "tipo": "supuesto",
+    "valor": 1.08,
+    "fuente": "ticket × margen × períodos − entrega, × h × q",
+    "formula": "T = (t×m×períodos − env) × h × q"
+   },
+   "pauta_rendimiento_mes": {
+    "tipo": "supuesto",
+    "valor": 802.96,
+    "fuente": "semana × 52 ÷ 12",
+    "formula": "P × 52 ÷ 12"
+   },
+   "resultados_por_semana": {
+    "tipo": "supuesto",
+    "valor": 158.38,
+    "fuente": "(meta − base) ÷ q",
+    "formula": "R = (W − base) ÷ q"
+   },
+   "tasa_resultado_a_venta": {
+    "tipo": "supuesto",
+    "valor": 0.08,
+    "fuente": "producto de los pasos",
+    "formula": "q = Π tasas"
+   },
+   "costo_por_resultado_ref": {
+    "max": 1.8,
+    "min": 0.4,
+    "tipo": "supuesto",
+    "fecha": "2026-10-16",
+    "valor": 0.9,
+    "fuente": "consulta de redes (supuesto con rango)",
+    "formula": "referencia de mercado (punto medio por omisión)"
+   },
+   "pauta_rendimiento_semana": {
+    "max": 399.11,
+    "min": 76.02,
+    "tipo": "supuesto",
+    "valor": 185.3,
+    "fuente": "R × costo",
+    "formula": "P = R × e"
+   },
+   "meta_incremental_por_semana": {
+    "tipo": "supuesto",
+    "valor": 12.67,
+    "fuente": "meta − línea base",
+    "formula": "I = W − base"
+   },
+   "costo_por_resultado_arranque": {
+    "max": 2.52,
+    "min": 0.48,
+    "tipo": "supuesto",
+    "valor": 1.17,
+    "fuente": "referencia × (1 + arranque)",
+    "formula": "e = ref × (1 + a)"
+   }
+  },
+  "costos": {
+   "base": 1.17,
+   "cota_alta": 2.52,
+   "cota_baja": 0.48
+  },
+  "alertas": [
+   "la pauta se dimensiona para los 12.67 resultados por semana que SE AÑADEN a la línea base de 107.33 (meta 120), no para la meta total",
+   "dato que no bloquea: con marca y producción cada venta cuesta 27.08 y la primera venta deja 4.81"
+  ],
+  "alterno": null,
+  "reparto": {
+   "marca": 89.22,
+   "otros": [
+    {
+     "canal": "busqueda_local",
+     "monto": 185.87,
+     "activo": true
+    },
+    {
+     "canal": "video_corto",
+     "monto": 111.52,
+     "activo": true
+    },
+    {
+     "canal": "base_propia",
+     "monto": 0,
+     "activo": false,
+     "motivo": "diferido por el plan (cuando se active: inactivo confirmado: dueño no tiene lista de contactos propia)"
+    }
+   ],
+   "meta_ig": 892.19,
+   "total_mes": 1486.97,
+   "produccion": {
+    "monto": 297.39,
+    "origen": "plan",
+    "fraccion": 0.2
+   },
+   "rendimiento": 802.97,
+   "parte_meta_ig": 0.6,
+   "sumado_a_meta_ig": 0
+  },
+  "confianza": {
+   "datos": 3,
+   "nivel": "casi_todo_supuesto",
+   "texto": "Confianza del tablero: 3 dato(s), 13 supuesto(s), 0 sin base de 16; casi todo es supuesto: no es un tablero confirmado.",
+   "total": 16,
+   "sin_base": 0,
+   "supuestos": 13,
+   "manda_sin_base": false
+  },
+  "calendario": {
+   "total": 3234.15,
+   "prueba": {
+    "diez": 210.78,
+    "quince": 316.17,
+    "veinte": 421.55
+   },
+   "por_semana": [
+    0,
+    0,
+    185.3,
+    185.3,
+    185.3,
+    185.3,
+    185.3,
+    185.3,
+    231.62,
+    289.53,
+    289.53,
+    185.3
+   ],
+   "meta_ig_total": 2341.97,
+   "produccion_total": 892.18,
+   "rendimiento_total": 2107.77
+  },
+  "equilibrio": {
+   "cubre": null,
+   "motivo": "ni con una meta enorme la venta paga lo que cuesta venderla: el equilibrio no existe con estos supuestos",
+   "meta_actual": 120,
+   "meta_sugerida_semana": null,
+   "contribucion_por_venta": 19.26,
+   "meta_de_equilibrio_semana": null
+  },
+  "veredictos": {
+   "base": "ajusto",
+   "sens_mas": "ajusto_recorte",
+   "cota_alta": "paro",
+   "cota_baja": "sigo",
+   "sens_menos": "sigo"
+  },
+  "aprendizaje": {
+   "diario": 61.77,
+   "dilucion": false,
+   "limitado": false,
+   "conjuntos": 3,
+   "minimo_por_conjunto": 19.5,
+   "resultados_por_semana": 158.38
+  },
+  "costo_por_venta": 14.63,
+  "primera_lectura_dia": 14
+ },
+ "entrada": {
+  "ticket": 10.7,
+  "margen": 0.45,
+  "costo_entrega": null,
+  "periodos": 4,
+  "base_por_semana": 107.33,
+  "meta_por_semana": 120
+ },
+ "huella": "8181c06aa322dbdc3adb762fb4d801ddd62f8253aaf5a06105f6675e692e99dd"
+}

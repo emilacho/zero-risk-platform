@@ -3,6 +3,7 @@
  * Puro. Sin jerga interna (nada de nombres de campos ni de tablas): el redactor las escribe tal cual y el cliente las lee.
  */
 import { UMBRAL_PARO, UMBRAL_RECORTE } from './calculadora'
+import { dosCostos, textoDosCostos } from './dos-costos'
 import type { Bloque, Veredicto } from './tipos'
 
 const NOMBRE_VEREDICTO: Record<Veredicto, string> = { sigo: 'sigo', ajusto: 'ajusto', ajusto_recorte: 'ajusto y recorto el diario 20 %', paro: 'paro' }
@@ -15,6 +16,8 @@ export function resumenDelBloque(b: Bloque, o: { dias_activos_por_semana?: numbe
   const L: string[] = []
   L.push(`Meta: ${n(c.meta_por_semana.valor ?? 0)} ventas por semana. Con la tasa de ${n((c.tasa_resultado_a_venta.valor ?? 1) * 100)} % de resultado a venta hacen falta ${n(b.aprendizaje.resultados_por_semana)} resultados por semana${marca('tasa_resultado_a_venta')}.`)
   L.push(`Costo por resultado esperado al arrancar: ${n(b.costos.base)}${m} (de ${n(b.costos.cota_baja)} a ${n(b.costos.cota_alta)})${marca('costo_por_resultado_arranque')}; costo por venta: ${n(b.costo_por_venta)}${m}${marca('costo_por_venta')}.`)
+  // los DOS costos por venta, siempre juntos (solo pauta y plan completo): quien lee uno solo cree que el plan se paga cuando puede no pagarse
+  L.push(...textoDosCostos(dosCostos(b), o.moneda))
   L.push(b.techo.sin_valor_monetario
     ? `Techo por resultado: ${n(b.techo.por_resultado)}${m}, que es la referencia de mercado (el cliente no declaró valor por venta; se compara con el mercado)${marca('techo_por_resultado')}.`
     : `Techo por resultado: ${n(b.techo.por_resultado)}${m}${marca('techo_por_resultado')}; se sigue hasta el techo, se ajusta hasta ${n(b.techo.por_resultado * UMBRAL_PARO)}${m} (pasado ${n(b.techo.por_resultado * UMBRAL_RECORTE)}${m} por 7 días se recorta el diario 20 %) y se para por encima de ${n(b.techo.paro_desde)}${m} por 7 días.`)
@@ -47,7 +50,7 @@ export function montosDeclarados(b: Bloque): number[] {
     b.calendario.prueba.diez, b.calendario.prueba.quince, b.calendario.prueba.veinte,
     b.reparto.total_mes, b.reparto.meta_ig, b.reparto.marca, b.reparto.rendimiento, b.reparto.produccion.monto, b.reparto.sumado_a_meta_ig,
     ...b.reparto.otros.map((x) => x.monto),
-    b.costos.cota_baja, b.costos.base, b.costos.cota_alta, b.costo_por_venta,
+    b.costos.cota_baja, b.costos.base, b.costos.cota_alta, b.costo_por_venta, dosCostos(b).plan_completo, dosCostos(b).contribucion_por_venta,
     b.techo.por_resultado, b.techo.ajusto_hasta, b.techo.recorte_desde, b.techo.paro_desde,
     b.aprendizaje.diario, b.aprendizaje.minimo_por_conjunto,
     ...(b.alterno ? [b.alterno.costo, b.alterno.minimo_por_conjunto] : []),
