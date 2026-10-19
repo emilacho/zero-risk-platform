@@ -90,10 +90,24 @@ def construir_alta(cont):
     cambiar_dry_false(e57, DRY, '"dry_run": false,', '"dry_run": {{ ' + DRY + ' }},')
     aw = [n for n in cont['nodes'] if '[APIFY-WIRE] Call Apify Service Workflow' in n['name']][0]
     cambiar_dry_false(aw, DRY, 'dry_run: $json.dry_run === true', 'dry_run: ($json.dry_run === true || ' + DRY + ')')
+    # 4b · el veredicto: en seco la respuesta de un agente es un texto canónico SIN veredicto; el seco ensaya el cable, así que el veredicto simulado es «confirmar» (hallazgo del ensayo 20-oct)
+    for pref in ['Parse veredicto', 'Parse re-gate veredicto']:
+        pn = nodo(cont, pref, prefijo=True)
+        c = pn['parameters']['jsCode']
+        assert 'MODO SECO' not in c
+        marca = "if (perdida) { veredicto = 'no_se';"
+        c = reemplazar_unico(c, marca, (
+            "// MODO SECO (noche 19-oct · CC#1) — en seco la respuesta del agente es un texto canónico sin veredicto: el seco ensaya el cable, el veredicto simulado es «confirmar».\n"
+            "let _seco = false; try { _seco = $('Validate Deal Data').first().json.dry_run === true; } catch (e) { _seco = false; }\n"
+            "if (_seco) { perdida = null; veredicto = 'confirmar'; razones = ['modo seco: veredicto simulado']; confianza = 1; }\n") + marca, pn['name'])
+        pn['parameters']['jsCode'] = c
     # 5 · las cargas que se le pasan a los sub-flujos llevan el seco
     tr = [n for n in cont['nodes'] if n['name'].startswith('[JEFATURA] Transform')][0]
     c = tr['parameters']['jsCode']
     c = reemplazar_unico(c, "  website: dealData.website || dealData.domain, discovery_package,", "  website: dealData.website || dealData.domain, discovery_package,\n  dry_run: dealData.dry_run === true,", tr['name'])
+    # en seco el descubridor devuelve su texto canónico (sin descubrimiento real): el resumen simulado deja pasar el cable; SIN seco la regla de siempre (se PARA)
+    c = reemplazar_unico(c, "const discovery_summary = String(src.discovery_summary || src.competitive_landscape_summary || '');",
+                         "const discovery_summary = String(src.discovery_summary || src.competitive_landscape_summary || (dealData.dry_run === true ? 'MODO SECO: resumen simulado del descubrimiento (no hay datos reales)' : ''));", tr['name'])
     tr['parameters']['jsCode'] = c
     ac = [n for n in cont['nodes'] if n['name'].startswith('Armar carga')][0]
     c = ac['parameters']['jsCode']

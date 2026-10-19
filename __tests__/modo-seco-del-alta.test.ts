@@ -33,7 +33,7 @@ function evalCampo(valor: string, dry: boolean): string {
 
 describe('lo que cambió: solo lo previsto', () => {
   const previstos: Record<keyof typeof IDS, string[]> = {
-    ALTA: ['Validate Deal Data', 'Call Onboarding Specialist: Auto-Discovery Dispatch (fire+forget)', 'Competitor Verdict', 'Re-gate INLINE', '[RD] Dispatch', '[RD] Re-dispatch', '[APIFY] Scrape-Verify', 'Completar lo que falta', 'FUENTES] Llamar al Servicio', 'Despertar el cerebro', 'E57', '[APIFY-WIRE] Call Apify Service Workflow', '[JEFATURA] Transform', 'Armar carga'],
+    ALTA: ['Validate Deal Data', 'Call Onboarding Specialist: Auto-Discovery Dispatch (fire+forget)', 'Competitor Verdict', 'Re-gate INLINE', '[RD] Dispatch', '[RD] Re-dispatch', '[APIFY] Scrape-Verify', 'Completar lo que falta', 'FUENTES] Llamar al Servicio', 'Despertar el cerebro', 'E57', '[APIFY-WIRE] Call Apify Service Workflow', '[JEFATURA] Transform', 'Armar carga', 'Parse veredicto', 'Parse re-gate veredicto'],
     SEGUNDA: ['Create Notion Client Workspace', 'Create Success Plan in Notion', 'Schedule Kickoff Call (Cal.com)', 'Alert Slack: Onboarding Initiated'],
     CIMIENTO: ['Validate Deal Data', '[BB] Promote', '[BB] Manual'],
     LAZO_A: [],
@@ -186,4 +186,29 @@ describe('invariante: en seco, todo nodo ALCANZABLE que gaste o toque algo real 
     const vivos = alcanzables(desp.ALTA, ['Webhook: Deal Won'])
     for (const n of ['Create Notion Client Workspace', 'Create Success Plan in Notion', 'Schedule Kickoff Call (Cal.com)', 'Alert Slack: Onboarding Initiated', 'Notify MC Inbox', 'Run Onboarding Cascade (Gap 3)']) expect(vivos.has(n), n).toBe(false)
   })
+})
+
+describe('el veredicto en seco (hallazgo del ensayo del 20-oct: la respuesta canónica no trae veredicto)', () => {
+  const correr = (nodo: string, dry: boolean, respuesta: unknown) => {
+    const codigo = por(desp.ALTA, nodo).parameters.jsCode as string
+    const f = new Function('$input', '$', codigo)
+    const nodoSim = () => ({ first: () => ({ json: { dry_run: dry, client_id: 'c1', client_name: 'Prueba' } }), item: { json: { dry_run: dry, client_id: 'c1', client_name: 'Prueba', competitors: [] } } })
+    return (f({ first: () => ({ json: respuesta }) }, nodoSim) as Array<{ json: Record<string, any> }>)[0].json
+  }
+  const CANONICA = { success: true, response: 'Respuesta canonica del modo seco: sin JSON y sin veredicto.' }
+  for (const nodo of ['Parse veredicto', 'Parse re-gate veredicto']) {
+    it(`${nodo}: en seco la respuesta canónica da «confirmar» (el cable sigue)`, () => {
+      const j = correr(nodo, true, CANONICA)
+      expect(j).toMatchObject({ veredicto: 'confirmar', confianza: 1, _perdida: null })
+      expect(j.razones).toEqual(['modo seco: veredicto simulado'])
+    })
+    it(`${nodo}: SIN seco la misma respuesta sigue siendo «no_se» (falla ruidoso, como siempre)`, () => {
+      const j = correr(nodo, false, CANONICA)
+      expect(j.veredicto).toBe('no_se')
+      expect(j._perdida).toBe('respuesta_sin_json')
+    })
+    it(`${nodo}: sin seco un veredicto real sigue leyéndose igual`, () => {
+      expect(correr(nodo, false, { success: true, response: '{"veredicto":"observar","razones":["x"],"confianza":0.4}' })).toMatchObject({ veredicto: 'observar', confianza: 0.4 })
+    })
+  }
 })
