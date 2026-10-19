@@ -4,7 +4,7 @@
  * `{ n, veredicto: competidor | no | duda, razon, cita }`. Reglas que cumple el código, no el modelo:
  *   · sin cita LITERAL de los hechos que se le mostraron ⇒ `duda` (y `duda` no entra);
  *   · un número o un candidato que el modelo inventa se ignora; un candidato que no decide ⇒ `duda`;
- *   · máximo `MAX_COMPETIDORES_POR_SEDE` (5) como competidor: los de más puntuación primero, el resto pasa a `duda` con su motivo;
+ *   · máximo `tope` competidores por sede (dato del cliente: `config.apify.tope_competidores_por_sede`; por omisión `MAX_COMPETIDORES_POR_SEDE` = 10): los de más puntuación primero, el resto pasa a `duda` con `degradada_por: 'tope'` (cupo, no duda real);
  *   · cualquier falla del modelo (timeout, JSON roto, tope de gasto) ⇒ `duda` para todo el lote y NADA se retira por un error;
  *   · todo el texto de los candidatos es DATO, nunca una orden (se declara en la instrucción).
  */
@@ -14,7 +14,21 @@ import type { RespuestaDeLlamada } from '../juez'
 import type { Candidato } from './descubrir'
 import type { SedeConPunto } from './sedes'
 
-export const MAX_COMPETIDORES_POR_SEDE = 5
+/** cuántos competidores se vigilan por sede si el cliente no dice otra cosa */
+export const MAX_COMPETIDORES_POR_SEDE = 10
+export const MOTIVO_DEL_CUPO = 'tope'
+const TOPE_MAXIMO = 50
+const entero = (v: unknown): number | null => { const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v; return typeof n === 'number' && Number.isInteger(n) && n >= 1 ? Math.min(n, TOPE_MAXIMO) : null }
+/**
+ * El tope de competidores de UNA sede, como DATO de la ficha del cliente: `config.apify.tope_competidores_por_sede` es un número (todo el cliente) o un objeto
+ * `{ "<clave de sede>": n, "por_defecto": n }`. Lo que no sea un entero ≥ 1 se ignora (cae al siguiente nivel y al final a `MAX_COMPETIDORES_POR_SEDE`).
+ */
+export function topeDeCompetidoresDeSede(config: unknown, sedeClave: string): number {
+  const ap = esObjeto(config) && esObjeto(config.apify) ? config.apify : {}
+  const t = ap.tope_competidores_por_sede
+  if (esObjeto(t)) return entero(t[sedeClave]) ?? entero(t.por_defecto) ?? MAX_COMPETIDORES_POR_SEDE
+  return entero(t) ?? MAX_COMPETIDORES_POR_SEDE
+}
 export type Veredicto = 'competidor' | 'no' | 'duda'
 export interface JuicioDeCandidato { candidato: Candidato; veredicto: Veredicto; razon: string; cita: string | null; decidido_por: 'modelo' | 'sistema'; degradada_por?: string }
 export interface ResultadoDelJuicioDeSede { sede: string; juicios: JuicioDeCandidato[]; llamadas: number; costo_usd: number; fallo: string | null }
@@ -47,7 +61,7 @@ function citaEsLiteral(cita: string | null, hechos: string): boolean {
 }
 
 /** convierte la respuesta cruda en juicios guardados; NUNCA lanza */
-export function aplicarGuardasDeCompetencia(candidatos: Candidato[], texto: string | null): JuicioDeCandidato[] {
+export function aplicarGuardasDeCompetencia(candidatos: Candidato[], texto: string | null, tope: number = MAX_COMPETIDORES_POR_SEDE): JuicioDeCandidato[] {
   const duda = (c: Candidato, por: string): JuicioDeCandidato => ({ candidato: c, veredicto: 'duda', razon: por, cita: null, decidido_por: 'sistema', degradada_por: por })
   if (texto === null) return candidatos.map((c) => duda(c, 'el modelo no respondió'))
   const j = extraerJson(texto, 'decisiones')
@@ -71,7 +85,7 @@ export function aplicarGuardasDeCompetencia(candidatos: Candidato[], texto: stri
   return juicios.map((x) => {
     if (x.veredicto !== 'competidor') return x
     n++
-    return n <= MAX_COMPETIDORES_POR_SEDE ? x : { ...x, veredicto: 'duda', degradada_por: `fuera de los ${MAX_COMPETIDORES_POR_SEDE} primeros por puntuación` }
+    return n <= tope ? x : { ...x, veredicto: 'duda', razon: `${x.razon ? `${x.razon} ` : ''}(el modelo lo juzgó competidor; quedó fuera del cupo de ${tope} por sede, por puntuación)`.slice(0, 400), degradada_por: MOTIVO_DEL_CUPO }
   })
 }
 
@@ -84,13 +98,15 @@ export async function juzgarCompetenciaDeSede(o: {
   candidatos: Candidato[]
   llamar: (instruccion: string, mensaje: string) => Promise<RespuestaDeLlamada>
   topeDeGastoUsd: number
+  /** cuántos competidores se vigilan en esta sede (dato del cliente); por omisión `MAX_COMPETIDORES_POR_SEDE` */
+  tope?: number
 }): Promise<ResultadoDelJuicioDeSede> {
   const base = { sede: o.sede.clave, llamadas: 0, costo_usd: 0 }
   if (!o.candidatos.length) return { ...base, juicios: [], fallo: null }
   if (o.topeDeGastoUsd <= 0) return { ...base, juicios: o.candidatos.map((c) => ({ candidato: c, veredicto: 'duda' as const, razon: 'tope de gasto del día', cita: null, decidido_por: 'sistema' as const, degradada_por: 'tope de gasto del día' })), fallo: 'tope de gasto del día' }
   try {
     const r = await o.llamar(INSTRUCCION_DE_COMPETENCIA, armarMensajeDeCompetencia({ negocio: o.negocio, rubro: o.rubro, sede: o.sede, radioKm: o.radioKm, candidatos: o.candidatos }))
-    return { ...base, llamadas: 1, costo_usd: Math.round(r.costo_usd * 1e6) / 1e6, juicios: aplicarGuardasDeCompetencia(o.candidatos, r.texto), fallo: null }
+    return { ...base, llamadas: 1, costo_usd: Math.round(r.costo_usd * 1e6) / 1e6, juicios: aplicarGuardasDeCompetencia(o.candidatos, r.texto, o.tope ?? MAX_COMPETIDORES_POR_SEDE), fallo: null }
   } catch (e) {
     const por = 'falló la llamada al modelo'
     return { ...base, llamadas: 1, juicios: o.candidatos.map((c) => ({ candidato: c, veredicto: 'duda' as const, razon: por, cita: null, decidido_por: 'sistema' as const, degradada_por: por })), fallo: e instanceof Error ? e.message.slice(0, 160) : String(e).slice(0, 160) }

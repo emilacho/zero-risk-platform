@@ -12,7 +12,7 @@ import type { Db } from '../alimentar'
 import type { RetiroDeBrazo } from './archivo'
 import { type Competidor } from './competencia'
 import { candidatosDeSede, type ResultadoDeCandidatos } from './descubrir'
-import { juzgarCompetenciaDeSede, type ResultadoDelJuicioDeSede } from './juez-competencia'
+import { juzgarCompetenciaDeSede, topeDeCompetidoresDeSede, MOTIVO_DEL_CUPO, type ResultadoDelJuicioDeSede } from './juez-competencia'
 import { CAMPO_ESTADO_DE_LA_SEDE, radioDeSede, sedesConPunto, type FilaDeMapas, type SedeConPunto } from './sedes'
 import { DIA_EN_MS, slugDe, type FichaDeBrazo } from './tipos'
 import type { RespuestaDeLlamada } from '../juez'
@@ -107,10 +107,28 @@ export const evaluacionSinDatos = (vigentes: Fila[], sede: string, filas: Array<
   if (!u) return false
   return filas.some((r) => r.ensayo !== true && r.apify_function === 'google_maps_scraper' && txt(obj(r.params)._brazo) === `demanda:${sede}` && Date.parse(String(r.created_at ?? '')) > u.getTime())
 }
-export const debeEvaluarse = (vigentes: Fila[], sede: string, ahora: Date, forzar = false, filas: Array<{ apify_function?: string; params?: unknown; created_at?: string; ensayo?: boolean | null }> = []): boolean => {
+/**
+ * ¿hay candidatos que el modelo juzgó competidor y quedaron «en duda» SOLO por el cupo, y el cupo de hoy los deja entrar?
+ * (19-oct: con el tope en 5, 26 de Náufrago quedaron así.) Sube el tope del cliente ⇒ la sede se vuelve a evaluar en la próxima corrida normal; si el cupo sigue lleno, no.
+ * Las evaluaciones viejas guardaban el motivo como «fuera de los N primeros por puntuación»; se reconocen igual.
+ */
+export const hayCupoParaLosDegradados = (vigentes: Fila[], sede: string, tope: number): boolean => {
+  const de = vigentes.filter((f) => (f.clase === 'competidor_vigilado' || f.clase === 'competidor_evaluacion') && txt(obj(obj(f.provenance_tag).datos).sede) === sede)
+  const vigilados = de.filter((f) => f.clase === 'competidor_vigilado').length
+  const porCupo = de.filter((f) => { const m = txt(obj(obj(f.provenance_tag).datos).degradada_por); return m === MOTIVO_DEL_CUPO || /^fuera de los \d+ primeros por puntuación/.test(m) }).length
+  if (porCupo > 0) return vigilados < tope
+  // evaluaciones ANTERIORES a que el tope fuera un dato (sin `tope_aplicado` ni motivo guardado): el cupo era 5 fijo. Cinco vigilados y otros del mismo día en duda = casi seguro cupo; se re-evalúa UNA vez
+  // (la evaluación nueva ya guarda `tope_aplicado` y esta rama deja de aplicar).
+  if (de.some((f) => obj(obj(f.provenance_tag).datos).tope_aplicado !== undefined)) return false
+  const dia = (f: Fila) => String(f.observado_en ?? '').slice(0, 10)
+  const diasDeVigilados = new Set(de.filter((f) => f.clase === 'competidor_vigilado').map(dia))
+  return vigilados === 5 && tope > 5 && de.some((f) => f.clase === 'competidor_evaluacion' && txt(obj(obj(f.provenance_tag).datos).veredicto) === 'duda' && diasDeVigilados.has(dia(f)))
+}
+export const debeEvaluarse = (vigentes: Fila[], sede: string, ahora: Date, forzar = false, filas: Array<{ apify_function?: string; params?: unknown; created_at?: string; ensayo?: boolean | null }> = [], tope?: number): boolean => {
   if (forzar) return true
   const u = ultimaEvaluacion(vigentes, sede)
   if (!u || ahora.getTime() - u.getTime() >= DIAS_ENTRE_EVALUACIONES * DIA_EN_MS) return true
+  if (tope !== undefined && hayCupoParaLosDegradados(vigentes, sede, tope)) return true
   return evaluacionSinDatos(vigentes, sede, filas)
 }
 
@@ -146,11 +164,12 @@ export async function descubrirYJuzgar(e: EntradaDeSistematica): Promise<Resulta
   for (const sede of e.ctx.sedes) {
     const radio = radioDeSede(familias, sede)
     if (radio === null) { out.por_sede[sede.clave] = { estado: 'no_aplica', candidatos: 0, competidores: 0, costo_usd: 0, detalle: 'el rubro no compite por cercanía en esta sede' }; continue }
-    if (!debeEvaluarse(e.ctx.vigentes, sede.clave, e.ahora, e.forzar, e.ctx.filas)) { out.por_sede[sede.clave] = { estado: 'al_dia', candidatos: 0, competidores: 0, costo_usd: 0, detalle: `evaluada hace menos de ${DIAS_ENTRE_EVALUACIONES} días` }; continue }
+    const tope = topeDeCompetidoresDeSede(e.config, sede.clave)
+    if (!debeEvaluarse(e.ctx.vigentes, sede.clave, e.ahora, e.forzar, e.ctx.filas, tope)) { out.por_sede[sede.clave] = { estado: 'al_dia', candidatos: 0, competidores: 0, costo_usd: 0, detalle: `evaluada hace menos de ${DIAS_ENTRE_EVALUACIONES} días` }; continue }
     const c: ResultadoDeCandidatos = candidatosDeSede({ sede, filas: e.ctx.filas, nombreDelCliente: e.nombreDelCliente, familias, radioKm: radio, listaDelAlta })
     if (!c.candidatos.length) { out.por_sede[sede.clave] = { estado: 'sin_candidatos', candidatos: 0, competidores: 0, costo_usd: 0, descartados: c.descartados.length, detalle: c.corrida ? 'la corrida de posición no dejó candidatos' : 'todavía no hay corrida de posición para esta sede' }; continue }
     if (!e.llamarModelo) { out.por_sede[sede.clave] = { estado: 'sin_modelo', candidatos: c.candidatos.length, competidores: 0, costo_usd: 0, descartados: c.descartados.length, detalle: 'en seco no se llama al modelo: se muestran los candidatos que se juzgarían' }; continue }
-    const j: ResultadoDelJuicioDeSede = await juzgarCompetenciaDeSede({ sede, radioKm: radio, negocio: e.nombreDelCliente, rubro: e.rubro, candidatos: c.candidatos, llamar: e.llamarModelo, topeDeGastoUsd: e.presupuestoUsd - gastado })
+    const j: ResultadoDelJuicioDeSede = await juzgarCompetenciaDeSede({ sede, radioKm: radio, negocio: e.nombreDelCliente, rubro: e.rubro, candidatos: c.candidatos, llamar: e.llamarModelo, topeDeGastoUsd: e.presupuestoUsd - gastado, tope })
     gastado += j.costo_usd
     out.costo_usd = Math.round(gastado * 1e6) / 1e6
     const competidores = j.juicios.filter((x) => x.veredicto === 'competidor')
@@ -160,14 +179,14 @@ export async function descubrirYJuzgar(e: EntradaDeSistematica): Promise<Resulta
     for (const x of j.juicios) {
       const cand = x.candidato
       const vigilado = x.veredicto === 'competidor'
-      const datos = { nombre: cand.nombre, slug: cand.slug, sede: sede.clave, web: cand.web, tipo: cand.tipo_del_alta ?? 'direct', place_id: cand.place_id, veredicto: x.veredicto, origen: cand.origen, evaluado_en: iso, ...(x.degradada_por ? { degradada_por: x.degradada_por } : {}) }
+      const datos = { nombre: cand.nombre, slug: cand.slug, sede: sede.clave, web: cand.web, tipo: cand.tipo_del_alta ?? 'direct', place_id: cand.place_id, veredicto: x.veredicto, origen: cand.origen, evaluado_en: iso, tope_aplicado: tope, ...(x.degradada_por ? { degradada_por: x.degradada_por } : {}) }
       out.fichas.push({
         brazo: 'competencia', alcance: 'competidor', client_id: e.client_id,
         ref: `brazo:competencia:${cand.slug}:${vigilado ? 'vigilado' : 'evaluacion'}:${sede.clave}:${iso.slice(0, 10)}`, atributo: `competidor:${cand.slug}:${vigilado ? 'vigilado' : 'evaluacion'}:${sede.clave}`,
-        clase: vigilado ? 'competidor_vigilado' : 'competidor_evaluacion', titulo: `${vigilado ? 'Competidor vigilado' : x.veredicto === 'no' ? 'Evaluado: no compite' : 'Evaluado: en duda'} · ${cand.nombre} · sede ${sede.clave}`,
+        clase: vigilado ? 'competidor_vigilado' : 'competidor_evaluacion', titulo: `${vigilado ? 'Competidor vigilado' : x.veredicto === 'no' ? 'Evaluado: no compite' : x.degradada_por === MOTIVO_DEL_CUPO ? 'Competidor fuera del cupo' : 'Evaluado: en duda'} · ${cand.nombre} · sede ${sede.clave}`,
         contenido: vigilado
           ? `«${cand.nombre}» (competidor) compite con la sede ${sede.clave}: ${x.razon || 'sin razón escrita'}${x.cita ? ` (cita: «${x.cita}»)` : ''}. Descubierto por el sistema y juzgado por el agente el ${iso.slice(0, 10)}; se vigila sin esperar al dueño, que puede vetarlo. Dato de un competidor, no del cliente.`
-          : `«${cand.nombre}» (posible competidor) ${x.veredicto === 'no' ? 'NO compite' : 'queda en duda'} con la sede ${sede.clave}: ${x.razon || x.degradada_por || 'sin razón escrita'}${x.cita ? ` (cita: «${x.cita}»)` : ''}. Evaluado el ${iso.slice(0, 10)}. Dato de un tercero, no del cliente.`,
+          : `«${cand.nombre}» (posible competidor) ${x.veredicto === 'no' ? 'NO compite' : x.degradada_por === MOTIVO_DEL_CUPO ? 'quedó FUERA DEL CUPO de competidores vigilados (el agente lo juzgó competidor; no es una duda)' : 'queda en duda'} con la sede ${sede.clave}: ${x.razon || x.degradada_por || 'sin razón escrita'}${x.cita ? ` (cita: «${x.cita}»)` : ''}. Evaluado el ${iso.slice(0, 10)}. Dato de un tercero, no del cliente.`,
         origen: 'tercero', fuente_url: cand.url, fecha_fuente: iso.slice(0, 10), observado_en: iso, vigente_hasta: hasta, decision: 'reemplaza', sobre: cand.nombre, datos,
       })
     }

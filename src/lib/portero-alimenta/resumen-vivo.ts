@@ -10,6 +10,7 @@ import { PREFIJO_DE_VENTAS } from './brazos/propios'
 import type { FichaDeBrazo } from './brazos/tipos'
 import { claveDeAlcance, sedesDeFicha } from './sedes-fuentes'
 import { leerTodas } from './paginar'
+import { AVISO_DE_HORARIO_POR_ABRIR, ROTULO_POR_ABRIR, esLineaDeHorarioOAtencion, sedesPorAbrir } from '../sedes/por-abrir'
 
 type Fila = Record<string, unknown>
 export interface FichaParaResumen { id: string; clase: string; titulo: string; contenido: string; atributo: string | null; observado_en: string | null; fecha_fuente: string | null; vigente_hasta: string | null; retirada_en: string | null; provenance_tag: unknown; creado_en?: string | null }
@@ -111,7 +112,9 @@ export interface EntradaDelResumen {
   fichas: FichaParaResumen[]
   /** fichas de zona (feriados, temporada) que le tocan por país */
   zona: FichaParaResumen[]
-  sedes: Array<{ clave: string; ciudad: string | null }>
+  sedes: Array<{ clave: string; ciudad: string | null; id?: string }>
+  /** claves de las sedes que el dueño o la ficha dicen «por abrir»: su horario y su atención salen rotulados (los precios no) */
+  sedes_por_abrir?: string[]
 }
 export interface SalidaDelResumen { cliente: FichaDeBrazo; sedes: FichaDeBrazo[]; huecos: string[]; secciones: Record<string, number>; /** el mismo resumen con los CANDIDATOS de «Quién es» (lo que recibe el agente del pulido) */ texto_para_el_agente: string }
 
@@ -157,9 +160,17 @@ export function armarResumen(e: EntradaDelResumen, opciones: { candidatos?: bool
     const ciudadDe = new Map(e.sedes.map((s) => [s.clave, s.ciudad]))
     const orden = [...grupos.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a < b ? -1 : 1))
     const porGrupo = Math.max(3, Math.ceil(MAX_POR_SECCION / orden.length))
+    const porAbrir = new Set(e.sedes_por_abrir ?? [])
     const lineas = orden.flatMap((k) => {
-      const rotulo = k === '' ? 'todas las sedes' : k.split(',').map((c) => `sede ${c}${ciudadDe.get(c) ? ` (${ciudadDe.get(c)})` : ''}`).join(' y ')
-      return (grupos.get(k) ?? []).slice(0, porGrupo).map((f) => `- [${rotulo}] ${corto(f.contenido, 140)} ${cita(f)}`)
+      const claves = k === '' ? [] : k.split(',')
+      // si TODAS las sedes del grupo están por abrir, el grupo entero lo está; si solo algunas, se rotula el horario/atención pero no se afirma de las demás
+      const todasPorAbrir = claves.length > 0 && claves.every((c) => porAbrir.has(c))
+      const rotulo = (k === '' ? 'todas las sedes' : claves.map((c) => `sede ${c}${ciudadDe.get(c) ? ` (${ciudadDe.get(c)})` : ''}${porAbrir.has(c) ? ` · ${ROTULO_POR_ABRIR}` : ''}`).join(' y '))
+      return (grupos.get(k) ?? []).slice(0, porGrupo).map((f) => {
+        const base = corto(f.contenido, 140)
+        const aviso = (todasPorAbrir || claves.some((c) => porAbrir.has(c))) && (f.clase === 'horario' || esLineaDeHorarioOAtencion(base)) ? ` — ${AVISO_DE_HORARIO_POR_ABRIR}` : ''
+        return `- [${rotulo}] ${base}${aviso} ${cita(f)}`
+      })
     })
     sec('precios', 'Qué vende y a qué precio (vigente, por sede: pueden diferir entre sedes)', lineas, 'no hay precios ni horarios vigentes', lineas.length)
   }
@@ -225,7 +236,7 @@ export function fichasDeResumen(e: EntradaDelResumen): SalidaDelResumen {
 
 interface Db { from: (t: string) => any }
 /** lee las fichas del cliente y las de zona; una lectura fallida se DICE y no se escribe un resumen a medias */
-export async function cargarEntradaDelResumen(db: Db, o: { client_id: string; nombre: string | null; rubro: string | null; ahora: Date; zonas: string[]; sedes: Array<{ clave: string; ciudad: string | null }> }): Promise<{ ok: true; entrada: EntradaDelResumen } | { ok: false; detalle: string }> {
+export async function cargarEntradaDelResumen(db: Db, o: { client_id: string; nombre: string | null; rubro: string | null; ahora: Date; zonas: string[]; sedes: Array<{ clave: string; ciudad: string | null; id?: string }>; /** la ficha del cliente (`clients.config`): ahí puede decir qué sedes están por abrir */ config?: unknown }): Promise<{ ok: true; entrada: EntradaDelResumen } | { ok: false; detalle: string }> {
   const desde = new Date(o.ahora.getTime() - DIAS_PARA_TENDENCIA * DIA).toISOString()
   const campos = 'id, clase, titulo, contenido, atributo, observado_en, fecha_fuente, vigente_hasta, retirada_en, provenance_tag, descartada, creado_en'
   const q = await leerTodas(() => db.from('cerebro_fichas').select(campos).eq('client_id', o.client_id).order('id', { ascending: true }))
@@ -238,7 +249,18 @@ export async function cargarEntradaDelResumen(db: Db, o: { client_id: string; no
     if (zq.error) return { ok: false, detalle: `cerebro_fichas (zona ${z}): ${String(zq.error.message).slice(0, 120)}` }
     zona.push(...((Array.isArray(zq.data) ? zq.data : []) as Array<FichaParaResumen & { descartada?: boolean }>).filter((f) => !f.descartada && !f.retirada_en))
   }
-  return { ok: true, entrada: { client_id: o.client_id, nombre: o.nombre, rubro: o.rubro, ahora: o.ahora, fichas, zona, sedes: o.sedes } }
+  // sedes por abrir: la ficha del cliente, un dato de la sede o lo que dijo el dueño. Si el dato de la sede no se puede leer, no se inventa nada (las otras dos fuentes siguen valiendo).
+  let datosDeSede: Array<{ clave: string; campo?: string | null; valor_texto?: string | null; observado_en?: string | null }> = []
+  try {
+    const claves = new Map<string, string>(o.sedes.map((s): [string, string] => [s.clave, s.clave]))
+    const sd = await db.from('client_sede_datos').select('sede_id, campo, valor_texto, observado_en').eq('client_id', o.client_id).in('campo', ['estado', 'apertura'])
+    // los ids de las sedes vienen de quien llama (ya las leyó); si no, se leen aquí
+    const clavePorId = new Map<string, string>(o.sedes.filter((s) => s.id).map((s): [string, string] => [String(s.id), s.clave]))
+    if (!clavePorId.size && o.sedes.length) { const ids = await db.from('client_sedes').select('id, clave').eq('client_id', o.client_id); for (const s of Array.isArray(ids.data) ? (ids.data as Array<Record<string, unknown>>) : []) clavePorId.set(String(s.id), String(s.clave ?? '')) }
+    if (!sd.error && Array.isArray(sd.data)) datosDeSede = (sd.data as Array<Record<string, unknown>>).map((r) => ({ clave: claves.get(clavePorId.get(String(r.sede_id)) ?? '') ?? '', campo: r.campo as string, valor_texto: r.valor_texto as string, observado_en: r.observado_en as string })).filter((r) => r.clave)
+  } catch { /* sin dato de sede */ }
+  const porAbrir = [...sedesPorAbrir({ config: o.config, fichasDelDueno: fichas as never, datosDeSede })]
+  return { ok: true, entrada: { client_id: o.client_id, nombre: o.nombre, rubro: o.rubro, ahora: o.ahora, fichas, zona, sedes: o.sedes, ...(porAbrir.length ? { sedes_por_abrir: porAbrir } : {}) } }
 }
 
 /** LA LECTURA DE LAS OFICINAS: el resumen vigente del cliente en UNA llamada (y los de sus sedes). Una falla de lectura se DICE; sin resumen = `null`, no un texto inventado. */

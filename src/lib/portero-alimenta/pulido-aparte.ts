@@ -45,10 +45,10 @@ export async function rutaPulir(deps: DepsDePulir, cuerpo: unknown): Promise<Res
   if (!g.ok) return err(502, 'lectura_fallida', g.detalle)
   if (g.gasto.total_usd + TOPE_DEL_PULIDO_APARTE_USD > TOPE_DEL_PORTERO_USD) return { status: 200, body: { ok: true, pulido: { usado: false, motivo: `el gasto de hoy (US$ ${g.gasto.total_usd.toFixed(2)}) + el tope del pulido pasaría el tope del portero (US$ ${TOPE_DEL_PORTERO_USD}): queda el resumen por código`, costo_usd: 0 }, modelos_llamados: 0 } }
 
-  const sd = await deps.db.from('client_sedes').select('ciudad, clave').eq('client_id', v.client_id)
+  const sd = await deps.db.from('client_sedes').select('id, ciudad, clave').eq('client_id', v.client_id)
   if (sd.error) return err(502, 'lectura_fallida', `client_sedes: ${sd.error.message}`)
   const iso = paisIsoDe(cliente.country ?? cliente.pais, cliente.market)
-  const ent = await cargarEntradaDelResumen(deps.db, { client_id: v.client_id, nombre: (cliente.name as string | null) ?? null, rubro: (cliente.industry as string | null) ?? null, ahora, zonas: iso ? [idDeZona(iso)] : [], sedes: lista(sd.data).map((s) => ({ clave: String(s.clave ?? ''), ciudad: (s.ciudad as string | null) ?? null })).filter((s) => s.clave) })
+  const ent = await cargarEntradaDelResumen(deps.db, { config: cliente.config, client_id: v.client_id, nombre: (cliente.name as string | null) ?? null, rubro: (cliente.industry as string | null) ?? null, ahora, zonas: iso ? [idDeZona(iso)] : [], sedes: lista(sd.data).map((s) => ({ clave: String(s.clave ?? ''), ciudad: (s.ciudad as string | null) ?? null, id: s.id ? String(s.id) : undefined })).filter((s) => s.clave) })
   if (!ent.ok) return err(502, 'lectura_fallida', `resumen vivo: ${ent.detalle}`)
   const sal = fichasDeResumen(ent.entrada)
 

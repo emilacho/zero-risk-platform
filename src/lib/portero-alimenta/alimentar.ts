@@ -131,7 +131,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   if (e.despertar) consultaRaspado = consultaRaspado.lte('created_at', ahora.toISOString()) // el despertar mira el raspado que YA existe a esa hora
   const rr = await consultaRaspado.order('created_at', { ascending: false }).limit(MAX_FILAS_DE_RASPADO)
   if (rr.error) return falla('apify_raw', rr.error.message)
-  const sd = await e.db.from('client_sedes').select('ciudad, clave').eq('client_id', e.client_id)
+  const sd = await e.db.from('client_sedes').select('id, ciudad, clave').eq('client_id', e.client_id)
   if (sd.error) return falla('client_sedes', sd.error.message)
   const vv = await leerTodas(() => e.db.from('cerebro_unidades_vistas').select('fuente, unidad_ref, huella, veredicto').eq('client_id', e.client_id).order('id', { ascending: true }))
   if (vv.error) return falla('cerebro_unidades_vistas', vv.error.message)
@@ -221,7 +221,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   // ───── el resumen vivo (apagado por omisión): se reescribe por CÓDIGO desde las fichas vivas, sin modelo; sus errores se DICEN
   if (e.interruptores.resumen_vivo) {
     try {
-      const ent = await cargarEntradaDelResumen(e.db, { client_id: e.client_id, nombre: (cliente.name as string | null) ?? null, rubro: (cliente.industry as string | null) ?? null, ahora, zonas: zonasDelCliente(cliente), sedes: lista(sd.data).map((s) => ({ clave: String(s.clave ?? ''), ciudad: (s.ciudad as string | null) ?? null })).filter((s) => s.clave) })
+      const ent = await cargarEntradaDelResumen(e.db, { config: cliente.config, client_id: e.client_id, nombre: (cliente.name as string | null) ?? null, rubro: (cliente.industry as string | null) ?? null, ahora, zonas: zonasDelCliente(cliente), sedes: lista(sd.data).map((s) => ({ clave: String(s.clave ?? ''), ciudad: (s.ciudad as string | null) ?? null, id: s.id ? String(s.id) : undefined })).filter((s) => s.clave) })
       if (!ent.ok) r.errores.push(`resumen vivo: ${ent.detalle}`)
       else {
         const sal = fichasDeResumen(ent.entrada)
