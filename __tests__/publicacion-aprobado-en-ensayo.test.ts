@@ -452,3 +452,19 @@ describe('puertosDePublicacion · lo que necesita una pieza de la oficina', () =
     await expect(puertosDePublicacion(rota, {}).leerSalida('o1')).rejects.toThrow('caída')
   })
 })
+
+describe('lo que realmente se pide a la base (la base falsa devuelve la fila entera: aquí se mira qué se solicita)', () => {
+  it('leerElemento pide la columna `output_id` de la bandeja', async () => {
+    const { db, filas } = baseFalsa(); filas.push({ id: 'p1', type: TIPO_PIEZA_DE_OFICINA, status: 'approved', client_id: CLI, metadata: {} })
+    const pedidas: string[] = []
+    const espia = { from: (t: string) => { const api = db.from(t); const sel = api.select; api.select = (c: string) => { pedidas.push(t + ':' + c); return sel(c) }; return api } }
+    await puertosDePublicacion(espia, {}).leerElemento('p1')
+    expect(pedidas.some((x) => x.startsWith('hitl_queue:') && x.split(':')[1].split(',').includes('output_id'))).toBe(true)
+  })
+  it('una pieza sin `output_id` se rechaza SIN preguntar por la salida (no se manda un id vacío a la base)', async () => {
+    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost()), META_OFICINA, { output_id: null })
+    let preguntas = 0; const leer = P.leerSalida; P.leerSalida = async (id) => { preguntas++; return leer(id) }
+    const r = await publicarAprobado(P, { hitl_id: 'p1' })
+    expect(!r.ok && r.error).toBe('salida_ausente'); expect(preguntas).toBe(0)
+  })
+})
