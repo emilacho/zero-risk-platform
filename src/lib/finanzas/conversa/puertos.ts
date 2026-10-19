@@ -38,6 +38,8 @@ export interface Semilla {
   tope_encargo_usd?: number
   /** firma registrada que permite un `tope_encargo_usd` por encima de TOPE_MAXIMO_POR_ENCARGO_USD: sin ella (o mal formada) manda el techo; el tope aplicado nunca pasa de `valor` */
   firma_tope?: FirmaDeTope
+  /** tope TOTAL de una prueba (ver `Limites.prueba`): sin él, solo manda el tope del encargo */
+  tope_de_prueba?: { limite_usd: number; base_usd: number; encargo_base_usd: number }
   /** LÍNEA BASE: resultados finales por semana que el negocio ya logra sin pauta (dato del dueño); gana sobre lo que se mida en `datos`. La pauta se dimensiona para `meta − base` */
   linea_base_por_semana?: number
   /** respuestas del dueño entregadas como DATO (sin hilo de Slack): entran al contexto de cada paso de agente marcadas como dato confirmado por él */

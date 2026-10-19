@@ -54,6 +54,13 @@ export function siguientePaso(e: Estado, p: Plantilla): Siguiente {
   if (e.gasto_usd + paso.tope_usd > p.limites.tope_encargo_usd) {
     return { accion: 'cierre_por_tope', razon: 'tope_de_gasto', detalle: `gasto ${e.gasto_usd.toFixed(4)} + tope del paso «${paso.clave}» ${paso.tope_usd} > ${p.limites.tope_encargo_usd}` }
   }
+  const pr = p.limites.prueba
+  if (pr && paso.tope_usd > 0) {
+    const holgura = pr.limite_usd - pr.base_usd - Math.max(0, e.gasto_usd - pr.encargo_base_usd)
+    if (paso.tope_usd > holgura + 1e-9) {
+      return { accion: 'cierre_por_tope', razon: 'tope_de_prueba', detalle: `reserva del paso «${paso.clave}» ${paso.tope_usd} > holgura de la prueba ${Math.max(0, holgura).toFixed(4)} (límite ${pr.limite_usd} − base ${pr.base_usd} − gastado por el encargo desde la base ${Math.max(0, e.gasto_usd - pr.encargo_base_usd).toFixed(4)})` }
+    }
+  }
   return { accion: 'ejecutar', indice, paso, ...(vuelta ? { vuelta } : {}) }
 }
 

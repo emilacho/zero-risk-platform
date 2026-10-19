@@ -54,6 +54,8 @@ export interface Limites {
   margen: number
   tope_encargo_usd: number
   max_rondas: number
+  /** tope TOTAL de una prueba que reparte su gasto entre varios encargos o noches: la holgura que queda = limite − base − lo que ESTE encargo gastó desde que se midió la base; una llamada cuya reserva no cabe no arranca */
+  prueba?: { limite_usd: number; base_usd: number; encargo_base_usd: number }
   imagenes_generadas_max?: number
   reuso_dias?: number
   [otro: string]: unknown
@@ -102,4 +104,4 @@ export const estadoInicial = (): Estado => ({ ultimo: -1, pasos_ejecutados: 0, g
 export type Siguiente =
   | { accion: 'ejecutar'; indice: number; paso: Paso; vuelta?: string }
   | { accion: 'fin' }
-  | { accion: 'cierre_por_tope'; razon: 'tope_de_pasos' | 'tope_de_gasto'; detalle: string }
+  | { accion: 'cierre_por_tope'; razon: 'tope_de_pasos' | 'tope_de_gasto' | 'tope_de_prueba'; detalle: string }

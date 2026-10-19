@@ -200,6 +200,10 @@ export const TOPE_MAXIMO_POR_ENCARGO_USD = 3
 export function firmaDeTopeValida(f: FirmaDeTope | undefined): f is FirmaDeTope {
   return !!f && typeof f === 'object' && [f.quien, f.cuando, f.papel].every((x) => typeof x === 'string' && x.trim() !== '') && typeof f.valor === 'number' && Number.isFinite(f.valor)
 }
+/** el tope total de la prueba es válido si los tres números son finitos y no negativos y el límite es positivo */
+export function topeDePruebaValido(t: Semilla['tope_de_prueba']): t is NonNullable<Semilla['tope_de_prueba']> {
+  return !!t && typeof t === 'object' && [t.limite_usd, t.base_usd, t.encargo_base_usd].every((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0) && t.limite_usd > 0
+}
 /** la plantilla de ESTE encargo: igual a la financiera, con el tope propio de la semilla si es un número válido (solo sube, con techo; por encima del techo solo hasta el valor de una firma registrada) */
 export function plantillaDelEncargo(e: EncargoDeConversa, turnos?: TurnoDeConversa[]): Plantilla {
   const sem = e.semilla as Semilla | undefined
@@ -207,9 +211,10 @@ export function plantillaDelEncargo(e: EncargoDeConversa, turnos?: TurnoDeConver
   // la reserva del cierre de la ronda 2 sale de lo que COSTÓ el cierre de la ronda 1 de este encargo (si ya se hizo)
   const cierre1 = (turnos ?? []).filter((x) => x.paso === 'cierre' && x.estado === 'hecho' && x.costo_usd > 0).at(-1)?.costo_usd
   const base: Plantilla = cierre1 === undefined ? PLANTILLA_FINANCIERA : { ...PLANTILLA_FINANCIERA, pasos: PLANTILLA_FINANCIERA.pasos.map((p) => (p.clave === 'cierre_2' ? { ...p, tope_usd: reservaDelCierre2(cierre1) } : p)) }
-  if (typeof t !== 'number' || !Number.isFinite(t) || t <= base.limites.tope_encargo_usd) return base
+  const prueba = topeDePruebaValido(sem?.tope_de_prueba) ? { ...sem.tope_de_prueba } : undefined
+  if (typeof t !== 'number' || !Number.isFinite(t) || t <= base.limites.tope_encargo_usd) return prueba ? { ...base, limites: { ...base.limites, prueba } } : base
   const techo = firmaDeTopeValida(sem?.firma_tope) ? Math.max(TOPE_MAXIMO_POR_ENCARGO_USD, sem.firma_tope.valor) : TOPE_MAXIMO_POR_ENCARGO_USD
-  return { ...base, limites: { ...base.limites, tope_encargo_usd: Math.min(t, techo) } }
+  return { ...base, limites: { ...base.limites, tope_encargo_usd: Math.min(t, techo), ...(prueba ? { prueba } : {}) } }
 }
 /** las respuestas del dueño entregadas como dato en la semilla: solo las bien formadas (clave y literal de texto), hasta 20 */
 export function respuestasDeLaSemilla(s: Semilla | undefined): Array<{ clave: string; valor: unknown; literal: string }> {
