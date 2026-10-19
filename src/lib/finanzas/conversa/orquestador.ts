@@ -7,7 +7,7 @@ import { registrarPaso, siguientePaso, type ResultadoDePaso } from '../../oficin
 import type { Estado, Paso, Plantilla } from '../../oficina/tipos'
 import { estadoInicial } from '../../oficina/tipos'
 import { calcular } from '../calculadora'
-import { contieneLosDosCostos, dosCostos, textoDosCostos, validarTextoDeCostos } from '../dos-costos'
+import { dosCostos, textoDosCostos, validarTextoDeCostos } from '../dos-costos'
 import { decidirFirma, estaAbierto, huellaDe, numerosDelBloque, resueltosSinEstado } from '../firma'
 import { separarComprobado } from '../confirmado-por-dueno'
 import { lineaBaseSemanal } from '../linea-base'
@@ -424,7 +424,7 @@ export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts
     await P.tableros.actualizarTablero(g.id, { estado, firmado_por: `chief-financial-officer:${invocacion_id}:${salida}`, firmado_en: P.ahora().toISOString() })
   }
   return {
-    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, confirmado_por_el_dueno: confirmadoPorElDueno, medido_del_cerebro: medidoDelCerebro, dado_por_verificado_sin_comprobar: sinComprobar, criticos_abiertos: decision.criticos, criticos_resueltos: decision.criticos_resueltos, alerta_hallazgos_sin_estado: sinEstado.length ? `${sinEstado.length} hallazgo(s) dicen «resuelto» en el texto pero no traen estado: se cuentan como abiertos (${sinEstado.slice(0, 3).join(' | ')})` : null, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${sinComprobar.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, costos_por_venta: costosPorVenta, resumen_para_el_dueno: resumenParaElDueno, resumen_lleva_los_dos_costos: contieneLosDosCostos(resumenParaElDueno.join(' '), costosPorVenta), alerta_texto_optimista: textoOptimista.length ? textoOptimista : null, escribio: !e.dry_run },
+    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, confirmado_por_el_dueno: confirmadoPorElDueno, medido_del_cerebro: medidoDelCerebro, dado_por_verificado_sin_comprobar: sinComprobar, criticos_abiertos: decision.criticos, criticos_resueltos: decision.criticos_resueltos, alerta_hallazgos_sin_estado: sinEstado.length ? `${sinEstado.length} hallazgo(s) dicen «resuelto» en el texto pero no traen estado: se cuentan como abiertos (${sinEstado.slice(0, 3).join(' | ')})` : null, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${sinComprobar.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, costos_por_venta: costosPorVenta, resumen_para_el_dueno: resumenParaElDueno, alerta_texto_optimista: textoOptimista.length ? textoOptimista : null, escribio: !e.dry_run },
     tablero_id: finanzas_id, sin_acuerdo: sinAcuerdo,
   }
 }

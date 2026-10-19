@@ -87,7 +87,3 @@ export function validarTextoDeCostos(texto: string, d: DosCostos): ChequeoDeCost
   }
   return { ok: errores.length === 0, errores }
 }
-/** el resumen para el dueño EXIGE los dos: lo usa el código para comprobar que lo que arma lleva ambos */
-export function contieneLosDosCostos(texto: string, d: DosCostos): boolean {
-  return cita(texto, d.solo_pauta) && (d.plan_completo == null || cita(texto, d.plan_completo))
-}

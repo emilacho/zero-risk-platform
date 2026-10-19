@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import fixture from './fixtures/finanzas/bloque-real-19-oct.json'
-import { contieneLosDosCostos, dosCostos, monto, textoDosCostos, validarTextoDeCostos } from '../src/lib/finanzas/dos-costos'
+import { dosCostos, monto, textoDosCostos, validarTextoDeCostos } from '../src/lib/finanzas/dos-costos'
 import { cerrar, textoDelTurno } from '../src/lib/finanzas/conversa/orquestador'
 import { montosDeclarados, resumenDelBloque } from '../src/lib/finanzas/resumen'
 import type { Bloque } from '../src/lib/finanzas/tipos'
@@ -36,7 +36,6 @@ describe('las cifras salen del bloque (caso real del 19-oct)', () => {
     expect(t).toContain('14,63')
     expect(t).toContain('27,08')
     expect(t).toContain('el equilibrio no existe con estos supuestos')
-    expect(contieneLosDosCostos(t, d)).toBe(true)
   })
 })
 
@@ -94,6 +93,13 @@ describe('bordes del cálculo', () => {
     b.equilibrio = { ...b.equilibrio, meta_de_equilibrio_semana: 100, cubre: true, meta_sugerida_semana: null, motivo: null }
     expect(dosCostos(b).equilibrio_plan_completo).toBe('se_paga')
   })
+  it('borde: si la contribución es IGUAL al costo solo de pauta, se paga (queda decidido: cubrir el costo es pagarlo)', () => {
+    const b = clonar(BLOQUE)
+    b.equilibrio = { ...b.equilibrio, contribucion_por_venta: b.costo_por_venta }
+    expect(dosCostos(b).equilibrio_solo_pauta).toBe('se_paga')
+    b.equilibrio = { ...b.equilibrio, contribucion_por_venta: b.costo_por_venta - 0.01 }
+    expect(dosCostos(b).equilibrio_solo_pauta).toBe('no_se_paga')
+  })
   it('si cada venta deja menos que el costo solo de pauta, ni el optimista se paga', () => {
     const b = clonar(BLOQUE)
     b.equilibrio = { ...b.equilibrio, contribucion_por_venta: 10 }
@@ -130,8 +136,9 @@ describe('el cierre: lo que arma el código lleva los dos costos y el jefe no pu
     const a = r.artefacto as Record<string, any>
     expect(a.costos_por_venta.solo_pauta).toBe(14.63)
     expect(a.costos_por_venta.plan_completo).toBe(27.08)
+    expect(a.resumen_para_el_dueno.join(' ')).toContain('14,63')
     expect(a.resumen_para_el_dueno.join(' ')).toContain('27,08')
-    expect(a.resumen_lleva_los_dos_costos).toBe(true)
+    expect(a).not.toHaveProperty('resumen_lleva_los_dos_costos')
     expect(a.alerta_texto_optimista).toBeNull()
   })
   it('el jefe cita solo el optimista: el cierre queda «con alerta» y lo registra', async () => {
@@ -139,7 +146,7 @@ describe('el cierre: lo que arma el código lleva los dos costos y el jefe no pu
     const a = r.artefacto as Record<string, any>
     expect(a.salida).toBe('sale_con_alerta')
     expect(a.alerta_texto_optimista).toHaveLength(1)
-    expect(a.resumen_lleva_los_dos_costos).toBe(true)
+    expect(a.resumen_para_el_dueno.join(' ')).toContain('27,08')
   })
   it('el optimista escondido en un hallazgo también se detecta', async () => {
     const r = await cerrar(P, E, arts({ hallazgos: [{ severidad: 'medio', que: 'Costo por venta 14,63 cubierto por el LTV.', estado: 'resuelto' }] }) as never)
