@@ -9,6 +9,7 @@ import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, DIAS_DE_CAMPANA, MAXIMO_DE_INT
 import { planDeCorreccion, resolverTrasCorreccion } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_ESTRATEGIA } from './esquemas'
 import { expandirPatron, fusionarTanda } from './expandir-patron'
+import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia } from './indicaciones'
 import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, semanaDeId } from './nucleo'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
@@ -257,7 +258,8 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   const fechas = await fechasDeclaradas(al, ctx, estr, campana)
   const esqNuevo = expandirPatron(estr, campana, semanas, tanda, formatos)
   const base = esCorreccion && modo === 'filas' ? guardadas.filter((f) => f.tanda === tanda && f.estado !== 'esquema') : esqNuevo
-  let { filas } = fusionarTanda(base, objeto, estr, campana, tanda, formatos)
+  // las dependencias imposibles (misma fecha y hora, antecesora que sale después…) las arregla el código y las anota: nunca llegan a bloquear la campaña
+  let filas = resolverDependencias(fusionarTanda(base, objeto, estr, campana, tanda, formatos).filas, previas).filas
   const ajustes = esCorreccion ? [...(objeto.ajustes_al_patron ?? []), ...omitidosImplicitos(estr, semanas, filas)] : objeto.ajustes_al_patron ?? []
   let hs: Hallazgo[] = validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, fechas, ahora, lexico))
   await al.guardarValidaciones(campana.id, 'calendario', version, tanda, esCorreccion ? 2 : 1, hs, campana.seco)
@@ -290,7 +292,7 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   const enInvestigacion = new Set(hs.filter((h) => h.severidad === 'aviso' && (h.chequeo === 'V14' || h.chequeo === 'V06') && h.fila_id).map((h) => h.fila_id as string))
   const finales: Fila[] = filas.map((f) => {
     if (f.estado === 'descartada_sin_fuente' || f.estado === 'espera_video') return f
-    return { ...f, estado: enInvestigacion.has(f.id) ? 'en_investigacion' : 'validada', avisos: hs.filter((h) => h.fila_id === f.id && h.severidad === 'aviso').map((h) => h.ficha.que) }
+    return { ...f, estado: enInvestigacion.has(f.id) ? 'en_investigacion' : 'validada', avisos: [...f.avisos.filter(esNotaDeDependencias), ...hs.filter((h) => h.fila_id === f.id && h.severidad === 'aviso').map((h) => h.ficha.que)] }
   })
   const todas12 = tanda === 1 ? expandirPatron(estr, campana, Array.from({ length: SEMANAS_DE_PANORAMA }, (_, i) => i + 1).filter((s) => !semanas.includes(s)), 0, formatos).map((f) => ({ ...f, tanda: Math.ceil(f.semana / SEMANAS_DE_TANDA) })) : []
   await al.guardarFilas(campana.id, version, 1, [...finales, ...todas12], campana.seco)
@@ -330,7 +332,7 @@ export async function validarSinEscribir(al: Almacen, cuerpo: Record<string, unk
     const semanas = semanasDeTanda(tanda)
     const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
     const previas = (await al.filas(campana.id, version)).filter((f) => f.tanda < tanda && f.estado !== 'esquema')
-    const { filas } = fusionarTanda(expandirPatron(estr, campana, semanas, tanda, formatos), cuerpo.tanda_agente, estr, campana, tanda, formatos)
+    const filas = resolverDependencias(fusionarTanda(expandirPatron(estr, campana, semanas, tanda, formatos), cuerpo.tanda_agente, estr, campana, tanda, formatos).filas, previas).filas
     const hs = validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, cuerpo.tanda_agente.ajustes_al_patron, await fechasDeclaradas(al, ctx, estr, campana), ahora, lexico))
     return { status: 200, cuerpo: { hallazgos: hs, bloquea: hs.some((h) => h.severidad === 'bloquea') } }
   }

@@ -3,6 +3,7 @@
  */
 import type { Almacen, Campana, EstadoCampana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
+import { arrancarAlActivar, type ResultadoDelArranque } from './arranque'
 import { DIAS_DE_CAMPANA } from './constantes'
 import { fechaInicioPorRegla, sumarDias } from './fechas'
 import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverEsperas } from './nucleo'
@@ -68,7 +69,7 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   try { nueva = await al.insertarCampana({
     client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ini.fecha, fecha_inicio_origen: 'regla', fecha_fin: sumarDias(ini.fecha, DIAS_DE_CAMPANA - 1),
     zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ini.aviso, ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
-    presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: false,
+    presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
   }) } catch (e) {
     const duplicado = (e as { code?: string })?.code === '23505' || /23505|duplicate key|un_plan/i.test(String((e as Error)?.message ?? ''))
@@ -104,7 +105,9 @@ export async function avanzarCampana(al: Almacen, cuerpo: Record<string, unknown
   if (a === 'cerrada') await cancelarEsperasDeCampana(al, c.id) // una campaña cerrada no deja relojes vivos
   if (a === 'pausada') await abrirEsperaDe(al, n, 'campana_pausada', n.id, 'campaña pausada: se revisa en el resumen semanal', ahora, {}, `pausa:${n.id}:${ahora.slice(0, 10)}`)
   if (c.estado === 'pausada') await resolverEsperas(al, c.id, 'campana_pausada')
-  return { status: 200, cuerpo: { campana: n } }
+  // arranque por evento (20-oct · parte 3): al activarse, los lotes vencidos salen ya (apagado por omisión; un fallo se declara y el reloj lo recoge)
+  const arranque: ResultadoDelArranque | null = a === 'activa' ? await arrancarAlActivar(al, n, ahora) : null
+  return { status: 200, cuerpo: { campana: n, ...(arranque && arranque.arranque !== 'apagado' ? { arranque } : {}) } }
 }
 
 /**
