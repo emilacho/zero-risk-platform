@@ -1,0 +1,951 @@
+{
+ "nota": "Estado REAL de la oficina financiera de la repetición del 20-oct (ronda 1 completa, ajuste_2 hecho, sin calculo_2/cierre_2/firma), tomado del respaldo de la limpieza. Solo para pruebas.",
+ "encargo": {
+  "estado": "en_curso",
+  "gasto_usd": 1.2188,
+  "semilla": {
+   "pais": "EC",
+   "datos": [
+    {
+     "id": "D1",
+     "clave": "D1·seguidores",
+     "fecha": "2026-10-20T15:17:28.766409+00:00",
+     "valor": {
+      "numero": 362,
+      "unidad": "seguidores"
+     },
+     "estado": "trajo",
+     "fuente": "cerebro_vivo",
+     "alcance": "cliente",
+     "periodo": {
+      "tipo": "instante"
+     },
+     "resumen": "seguidores (metrica:instagram:seguidores): 362 — medido",
+     "tipo_id": "seguidores",
+     "confianza": "alta",
+     "identidad": "coincide",
+     "medido_en": "2026-10-20T15:17:28.766409+00:00",
+     "frescura_h": 0.5,
+     "procedencia": "medido"
+    },
+    {
+     "id": "D2",
+     "clave": "D2·publicaciones_n",
+     "fecha": "2026-10-20T15:17:28.766409+00:00",
+     "valor": {
+      "numero": 10,
+      "unidad": "publicaciones"
+     },
+     "estado": "trajo",
+     "fuente": "cerebro_vivo",
+     "alcance": "cliente",
+     "periodo": {
+      "tipo": "instante"
+     },
+     "resumen": "publicaciones_n (metrica:instagram:publicaciones): 10 — medido",
+     "tipo_id": "publicaciones_n",
+     "confianza": "alta",
+     "identidad": "coincide",
+     "medido_en": "2026-10-20T15:17:28.766409+00:00",
+     "frescura_h": 0.5,
+     "procedencia": "medido"
+    },
+    {
+     "id": "D3",
+     "clave": "D3·bio_red",
+     "fecha": "2026-10-20T15:17:28.766409+00:00",
+     "valor": "seguridad industrial venta recarga extintores senaletica equipos de proteccion alarmas contra incendio detectores de humo a todo ecuador",
+     "estado": "trajo",
+     "fuente": "cerebro_vivo",
+     "alcance": "cliente",
+     "periodo": {
+      "tipo": "instante"
+     },
+     "resumen": "bio_red (instagram:bio): seguridad industrial venta recarga extintores senaletica equipos de proteccion alarmas contra incendio detectores de humo a todo ecuad…",
+     "tipo_id": "bio_red",
+     "confianza": "alta",
+     "identidad": "coincide",
+     "medido_en": "2026-10-20T15:17:28.766409+00:00",
+     "frescura_h": 0.5,
+     "procedencia": "medido"
+    }
+   ],
+   "fecha": "2026-10-20",
+   "rubro": "seguridad industrial y protección contra incendios (extintores) · B2B",
+   "moneda": null,
+   "ficha_resumen": "Rubro: seguridad industrial y protección contra incendios (extintores) · B2B. País: EC.",
+   "brazos_resumen": "datos_omitidos: 0",
+   "datos_omitidos": 0,
+   "manual_resumen": "Registro del cliente: tuteo.",
+   "tope_de_prueba": {
+    "base_usd": 0,
+    "limite_usd": 1.5,
+    "encargo_base_usd": 0
+   }
+  },
+  "estado_del_motor": {
+   "fichas": [],
+   "ultimo": 13,
+   "vueltas": {},
+   "gasto_usd": 1.21881,
+   "artefactos": {
+    "bloque": {
+     "version": 1,
+     "version_consumida": 1
+    },
+    "acuerdo": {
+     "version": 1,
+     "version_consumida": 1
+    },
+    "planteo": {
+     "version": 1,
+     "version_consumida": 1
+    },
+    "expediente": {
+     "version": 1,
+     "version_consumida": 1
+    },
+    "consulta_fpa": {
+     "version": 1,
+     "version_consumida": 1
+    },
+    "consulta_redes": {
+     "version": 1,
+     "version_consumida": 1
+    },
+    "planteo_fijado": {
+     "version": 1,
+     "version_consumida": 1
+    },
+    "planteo_fijado_2": {
+     "version": 1,
+     "version_consumida": 0
+    },
+    "consulta_busqueda": {
+     "version": 1,
+     "version_consumida": 1
+    },
+    "consulta_medicion": {
+     "version": 1,
+     "version_consumida": 1
+    }
+   },
+   "pasos_ejecutados": 10
+  }
+ },
+ "artefactos": {
+  "bloque": {
+   "bloque": {
+    "ok": true,
+    "techo": {
+     "paro_desde": 82.66,
+     "ajusto_hasta": 57.86,
+     "por_resultado": 41.33,
+     "recorte_desde": 57.86,
+     "sin_valor_monetario": false
+    },
+    "cifras": {
+     "total_mes": {
+      "tipo": "supuesto",
+      "valor": 1288.67,
+      "fuente": "reparto inverso",
+      "formula": "Meta+IG necesario ÷ parte de Meta+IG"
+     },
+     "meta_ig_mes": {
+      "tipo": "supuesto",
+      "valor": 773.21,
+      "fuente": "total − producción − otros",
+      "formula": "≥ 60 % del total"
+     },
+     "pauta_diaria": {
+      "tipo": "supuesto",
+      "valor": 30.33,
+      "fuente": "pauta semanal ÷ días activos",
+      "formula": "P ÷ n"
+     },
+     "produccion_mes": {
+      "tipo": "dato",
+      "valor": 322.16,
+      "fuente": "producción (plan), monto fijo"
+     },
+     "costo_por_venta": {
+      "tipo": "supuesto",
+      "valor": 30.33,
+      "fuente": "costo por resultado ÷ q",
+      "formula": "p = e ÷ q"
+     },
+     "meta_por_semana": {
+      "tipo": "dato",
+      "valor": 5,
+      "fuente": "plan / planteo fijado"
+     },
+     "minimo_por_conjunto": {
+      "tipo": "supuesto",
+      "valor": 36.4,
+      "fuente": "costo × 50 ÷ días activos",
+      "formula": "máx(piso, e × 50 ÷ n)"
+     },
+     "techo_por_resultado": {
+      "tipo": "supuesto",
+      "valor": 41.33,
+      "fuente": "ticket × margen × períodos − entrega, × h × q",
+      "formula": "T = (t×m×períodos − env) × h × q"
+     },
+     "pauta_rendimiento_mes": {
+      "tipo": "supuesto",
+      "valor": 657.22,
+      "fuente": "semana × 52 ÷ 12",
+      "formula": "P × 52 ÷ 12"
+     },
+     "resultados_por_semana": {
+      "tipo": "supuesto",
+      "valor": 41.67,
+      "fuente": "meta ÷ q",
+      "formula": "R = W ÷ q"
+     },
+     "tasa_resultado_a_venta": {
+      "tipo": "supuesto",
+      "valor": 0.12,
+      "fuente": "producto de los pasos",
+      "formula": "q = Π tasas"
+     },
+     "costo_por_resultado_ref": {
+      "max": 4.5,
+      "min": 1.8,
+      "tipo": "supuesto",
+      "fecha": "2026-10-20",
+      "valor": 2.8,
+      "fuente": "consulta de Especialista en Redes (Paid Social) (supuesto con rango)",
+      "formula": "referencia de mercado (punto medio por omisión)"
+     },
+     "pauta_rendimiento_semana": {
+      "max": 262.5,
+      "min": 90,
+      "tipo": "supuesto",
+      "valor": 151.67,
+      "fuente": "R × costo",
+      "formula": "P = R × e"
+     },
+     "meta_de_equilibrio_semana": {
+      "tipo": "supuesto",
+      "valor": 0,
+      "fuente": "la contribución por venta paga el total mensual del plan",
+      "formula": "total_mes(W) ÷ (W × 52 ÷ 12) = ticket × margen × períodos − entrega"
+     },
+     "costo_por_resultado_arranque": {
+      "max": 6.3,
+      "min": 2.16,
+      "tipo": "supuesto",
+      "valor": 3.64,
+      "fuente": "referencia × (1 + arranque)",
+      "formula": "e = ref × (1 + a)"
+     }
+    },
+    "costos": {
+     "base": 3.64,
+     "cota_alta": 6.3,
+     "cota_baja": 2.16
+    },
+    "alertas": [
+     "sin línea base de ventas: la pauta se dimensiona para la meta TOTAL y puede quedar sobredimensionada si el negocio ya vende sin pauta",
+     "dilución: con 30.33 diarios no se llega al mínimo de 36.4 por conjunto; mínimo diario recomendado 36.4; se deja 1 conjunto con aprendizaje limitado",
+     "dato que no bloquea: con marca y producción cada venta cuesta 59.48 y la primera venta deja 30"
+    ],
+    "alterno": null,
+    "reparto": {
+     "marca": 115.98,
+     "otros": [
+      {
+       "canal": "base_propia",
+       "monto": 193.3,
+       "activo": true
+      },
+      {
+       "canal": "busqueda_pagada",
+       "monto": 0,
+       "activo": false,
+       "motivo": "diferido por el plan (cuando se active: Diferida a fase 2. Activar solo cuando se cumplan los tres prerequisitos: (1) ficha Google Business Profile verificada y activa, (2) conversión de clic a WhatsApp medible vía GTM o Google Ads, (3) presupuesto mínimo $200/mes confirmado. Peso objetivo en fase 2: 0.45.)"
+      },
+      {
+       "canal": "busqueda_local",
+       "monto": 0,
+       "activo": true
+      }
+     ],
+     "meta_ig": 773.21,
+     "total_mes": 1288.67,
+     "produccion": {
+      "monto": 322.16,
+      "origen": "plan",
+      "fraccion": 0.25
+     },
+     "rendimiento": 657.23,
+     "parte_meta_ig": 0.6,
+     "sumado_a_meta_ig": 0
+    },
+    "confianza": {
+     "datos": 2,
+     "nivel": "casi_todo_supuesto",
+     "texto": "Confianza del tablero: 2 dato(s), 12 supuesto(s), 0 sin base de 14; casi todo es supuesto: no es un tablero confirmado.",
+     "total": 14,
+     "sin_base": 0,
+     "supuestos": 12,
+     "manda_sin_base": false
+    },
+    "calendario": {
+     "total": 2996.16,
+     "prueba": {
+      "diez": 172.52,
+      "quince": 258.78,
+      "veinte": 345.04
+     },
+     "por_semana": [
+      0,
+      0,
+      151.67,
+      151.67,
+      151.67,
+      151.67,
+      151.67,
+      151.67,
+      189.58,
+      236.98,
+      236.98,
+      151.67
+     ],
+     "meta_ig_total": 2029.66,
+     "produccion_total": 966.5,
+     "rendimiento_total": 1725.21
+    },
+    "equilibrio": {
+     "cubre": true,
+     "motivo": "cualquier meta cubre el equilibrio con estos supuestos",
+     "meta_actual": 5,
+     "meta_sugerida_semana": null,
+     "contribucion_por_venta": 492,
+     "meta_de_equilibrio_semana": 0
+    },
+    "veredictos": {
+     "base": "sigo",
+     "sens_mas": "sigo",
+     "cota_alta": "sigo",
+     "cota_baja": "sigo",
+     "sens_menos": "sigo"
+    },
+    "aprendizaje": {
+     "diario": 30.33,
+     "dilucion": true,
+     "limitado": true,
+     "conjuntos": 0,
+     "minimo_por_conjunto": 36.4,
+     "resultados_por_semana": 41.67
+    },
+    "costo_por_venta": 30.33,
+    "primera_lectura_dia": 14
+   },
+   "cambio": false,
+   "huella": "94bfb11354ccb2cbc8a5579c4e391f3754794b3d6113e29b036ec6ce3d20c5e6",
+   "entrada": {
+    "marca": 0.15,
+    "pasos": [
+     {
+      "tasa": 0.12,
+      "fuente": "consulta de fpa"
+     }
+    ],
+    "margen": 0.35,
+    "ticket": 120,
+    "canales": [
+     {
+      "peso": 0.15,
+      "canal": "base_propia",
+      "condicion": "Activar solo si existe lista verificada de clientes o prospectos. Si no existe, reasignar peso a meta_ig (no a busqueda_pagada).",
+      "piso_diario": 0
+     },
+     {
+      "peso": 0.15,
+      "canal": "busqueda_pagada",
+      "activo": false,
+      "condicion": "Diferida a fase 2. Activar solo cuando se cumplan los tres prerequisitos: (1) ficha Google Business Profile verificada y activa, (2) conversión de clic a WhatsApp medible vía GTM o Google Ads, (3) presupuesto mínimo $200/mes confirmado. Peso objetivo en fase 2: 0.45.",
+      "piso_diario": 0
+     },
+     {
+      "peso": 0,
+      "canal": "busqueda_local",
+      "condicion": "Canal orgánico sin pauta — optimizar ficha Google Business Profile desde semana 1; es prerequisito duro antes de activar busqueda_pagada.",
+      "piso_diario": 0
+     }
+    ],
+    "periodos": 12,
+    "produccion": {
+     "origen": "plan",
+     "fraccion": 0.25
+    },
+    "referencia": {
+     "max": 4.5,
+     "min": 1.8,
+     "base": 2.8,
+     "tipo": "supuesto",
+     "fecha": "2026-10-20",
+     "fuente": "consulta de Especialista en Redes (Paid Social) (supuesto con rango)"
+    },
+    "costo_entrega": 12,
+    "meta_por_semana": 5,
+    "piso_plataforma": 0,
+    "dias_activos_por_semana": 5
+   },
+   "hay_bloque": true,
+   "alertas_de_entrada": []
+  },
+  "acuerdo": {
+   "alude": {
+    "fpa": false,
+    "redes": false,
+    "busqueda": false,
+    "medicion": false
+   },
+   "ajuste": {
+    "condicion": "Aplicar si Emilio confirma presupuesto ≥ $1,370/mes. Si es menor, mantener $151.67/sem y operar con aprendizaje limitado documentado como condición conocida, con umbral de alerta en CPR > $6.30 en semana 3.",
+    "descripcion": "Elevar la pauta diaria de $30.33 al mínimo de $36.40/conjunto para eliminar la dilución del aprendizaje. Esto sube la pauta_rendimiento_semana de $151.67 a $182 y el total_mes estimado de $1,288.67 a ~$1,370. La meta no cambia.",
+    "meta_por_semana": 5
+   },
+   "salida": "sale_ajustada",
+   "criticos": 1,
+   "hallazgos": [
+    {
+     "que": "Presupuesto real del cliente sin confirmar: todo el tablero descansa en un supuesto inverso de $1,288.67/mes construido desde la meta de 5 mensajes/semana. Si Emilio no puede pagarlo, el plan colapsa antes de arrancar.",
+     "alude": "plan",
+     "estado": "abierto",
+     "severidad": "critico"
+    },
+    {
+     "que": "Divergencia de ticket entre especialistas: FPA usa $120 base, Medición usa $450 base (3.75× de diferencia). El ROI real depende del mix de líneas que vende Emilio y ninguno de los dos puede confirmarlo sin datos del negocio.",
+     "alude": "fpa",
+     "estado": "abierto",
+     "severidad": "alto"
+    },
+    {
+     "que": "Dilución del conjunto Meta IG: pauta diaria de $30.33 es inferior al mínimo de $36.40/conjunto en arranque. El algoritmo queda en aprendizaje permanente y el CPR será más volátil de lo previsto durante las primeras semanas.",
+     "alude": "redes",
+     "estado": "resuelto",
+     "severidad": "alto"
+    },
+    {
+     "que": "Aprendizaje permanente por volumen insuficiente: con 5 mensajes/semana Meta nunca supera los 50 eventos necesarios para salir de aprendizaje, independientemente del presupuesto. CPR volátil esperado durante toda la fase 1.",
+     "alude": "redes",
+     "estado": "resuelto",
+     "severidad": "medio"
+    },
+    {
+     "que": "Base propia sin verificar: si no existe lista de clientes o prospectos, los $193.30/mes asignados a ese canal no tienen destino activo. El plan indica reasignar a meta_ig en ese caso, lo que además reduce parcialmente la dilución.",
+     "alude": "plan",
+     "estado": "abierto",
+     "severidad": "medio"
+    },
+    {
+     "que": "CAPI de Meta no confirmada: sin Conversions API, los mensajes desde iOS no se atribuyen y el CPR reportado puede ser hasta 40% mayor al real, distorsionando el tablero de optimización desde la primera semana.",
+     "alude": "medicion",
+     "estado": "abierto",
+     "severidad": "medio"
+    },
+    {
+     "que": "CPR diverge entre agentes según canal: Redes $2.80, FPA $8, Medición $12, Búsqueda $7. No hay contradicción real: cada agente estima su canal. El bloque ya usa la referencia correcta de Redes para Meta IG.",
+     "alude": "redes",
+     "estado": "resuelto",
+     "severidad": "bajo"
+    }
+   ],
+   "requiere_ronda_2": true,
+   "criticos_resueltos": 0,
+   "preguntas_a_emilio": [
+    {
+     "clave": "presupuesto_mensual",
+     "texto": "¿Cuánto podés destinar por mes al plan completo (pauta + producción + marca)? El tablero asume $1,288.67/mes; con el ajuste de dilución sube a ~$1,370/mes. ¿Alguno de esos números está dentro de lo que manejás?",
+     "recomendacion": "Es la pregunta más urgente — sin esto no puedo confirmar si el tablero es real o puramente teórico.",
+     "supuesto_si_no_responde": "Se opera con $1,288.67/mes y se acepta la dilución como condición de arranque documentada, con alerta activa en semana 3."
+    },
+    {
+     "clave": "ticket_por_linea",
+     "texto": "¿Cuál es el precio de venta más frecuente en tus servicios? Al menos el que más vendés: recarga de extintor, extintor nuevo, EPP, señalética o alarmas.",
+     "recomendacion": "Con $120 el plan ya equilibra; con $450 hay mucho más margen. El número cambia cómo se optimiza el mix de canales en fase 2.",
+     "supuesto_si_no_responde": "Se mantiene $120 como ticket base (supuesto conservador de FPA)."
+    },
+    {
+     "clave": "base_propia",
+     "texto": "¿Tenés una lista de clientes actuales o prospectos a quienes puedas escribir por WhatsApp? No importa si son pocos — con 50 ya vale activar ese canal.",
+     "recomendacion": "Si existe, los $193.30/mes van ahí y se activa base_propia. Si no, ese presupuesto va a meta_ig y reduce la dilución del conjunto.",
+     "supuesto_si_no_responde": "Se asume que base_propia no existe y su peso del 15% ($193.30/mes) se reasigna a meta_ig."
+    },
+    {
+     "clave": "gbp_verificada",
+     "texto": "¿La ficha de Google Business de Zero Risk (la que aparece en Google Maps) está verificada y tiene horarios, fotos y categoría completos?",
+     "recomendacion": "Es el prerequisito duro para activar búsqueda pagada en fase 2. Si no está verificada, hay que resolverlo en semana 1 — es gratis y captura intención sin pauta.",
+     "supuesto_si_no_responde": "Se asume que GBP no está verificada; búsqueda pagada permanece diferida a fase 2 según el plan."
+    },
+    {
+     "clave": "capi_meta",
+     "texto": "¿Tenés Conversions API de Meta configurada en tu sitio o en algún CRM? Si no sabés qué es, lo más probable es que no la tengas.",
+     "recomendacion": "Sin CAPI, el CPR reportado puede inflarse hasta 40%. Configurarla antes de tomar decisiones de presupuesto basadas en los números del tablero.",
+     "supuesto_si_no_responde": "Se asume que no hay CAPI; los CPR del tablero se leen como referencia aproximada, no como cifras exactas, hasta que se confirme."
+    }
+   ],
+   "dato_que_no_bloquea": "La contribución por venta es $492 y el equilibrio se cubre desde la primera venta en cualquier semana. Con marca y producción incluidas, la primera venta ya deja $30 positivo. El riesgo es arranque lento, no pérdida estructural — el plan no necesita volumen alto para ser rentable.",
+   "conflictos_resueltos": [
+    "CPR Meta IG fase 1: se usa la referencia de Redes ($2.80 base, rango $1.80–$4.50); las cifras de FPA ($8) y Medición ($12) aplican a la vista blended cuando se active búsqueda pagada en fase 2 — no son contradicción, son canales distintos.",
+    "Dilución del conjunto: aceptada como condición de arranque conocida; umbral de alerta operativo fijado en CPR > $6.30 en semana 3 — si se supera, revisar presupuesto o bajar al evento alterno (objetivo Tráfico, destino wa.me) como previó Redes.",
+    "Aprendizaje limitado: no bloqueante; Redes anticipó el escenario y definió el evento alterno si pauta semanal de meta_ig cae por debajo de $70. Condición incorporada al plan y documentada."
+   ]
+  },
+  "planteo": {
+   "habla": {
+    "fpa": true,
+    "redes": true,
+    "busqueda": true,
+    "medicion": true,
+    "sin_pauta": false
+   },
+   "marca": 0.15,
+   "no_se": [
+    "presupuesto disponible para pauta",
+    "si tienen ficha de Google Business activa y verificada",
+    "si tienen lista de clientes o prospectos existente (base_propia)",
+    "quién produce el contenido actualmente y con qué frecuencia",
+    "ticket promedio por servicio (recarga, extintor, EPP, señalética)",
+    "tasa actual de cierre de contacto a venta",
+    "zonas donde ya operan con mayor frecuencia dentro de Ecuador"
+   ],
+   "zonas": [
+    "guayaquil",
+    "quito"
+   ],
+   "evento": "mensaje WhatsApp",
+   "canales": [
+    {
+     "peso": 0.45,
+     "canal": "busqueda_pagada",
+     "activo": true
+    },
+    {
+     "peso": 0.4,
+     "canal": "meta_ig",
+     "activo": true
+    },
+    {
+     "peso": 0.15,
+     "canal": "base_propia",
+     "activo": true,
+     "condicion": "activar solo si cuentan con lista de clientes o prospectos previos; si no existe, reasignar peso a busqueda_pagada"
+    },
+    {
+     "peso": 0,
+     "canal": "busqueda_local",
+     "activo": true,
+     "condicion": "canal orgánico sin pauta — optimizar ficha Google Maps en paralelo"
+    },
+    {
+     "peso": 0,
+     "canal": "profesional_b2b",
+     "activo": false,
+     "condicion": "evaluar al mes 2 si el ticket promedio justifica pauta en LinkedIn B2B"
+    }
+   ],
+   "ciclo_dias": 7,
+   "produccion": {
+    "fraccion": 0.25
+   },
+   "horizonte_dias": 90,
+   "dias_y_horarios": {
+    "horario": "08:00-18:00",
+    "dias_activos_por_semana": 5
+   },
+   "meta_por_semana": 5,
+   "dado_por_verificado": [
+    "WhatsApp es el canal de contacto principal según brand book",
+    "Instagram es su red social activa: 362 seguidores, 10 publicaciones medidas al 2026-10-20",
+    "rubro B2B: decisores disponibles en horario laboral lunes a viernes",
+    "Guayaquil es zona prioritaria — competidor directo identificado en área metropolitana PYME",
+    "cubren todo Ecuador según bio de Instagram",
+    "voz directa, precio-frontal y tuteo — aplica a creativos y copies de pauta"
+   ],
+   "meta_ambiciosa_por_semana": 12
+  },
+  "expediente": {
+   "pais": "EC",
+   "datos": [
+    {
+     "id": "D1",
+     "clave": "D1·seguidores",
+     "fecha": "2026-10-20T15:17:28.766409+00:00",
+     "valor": {
+      "numero": 362,
+      "unidad": "seguidores"
+     },
+     "estado": "trajo",
+     "fuente": "cerebro_vivo",
+     "alcance": "cliente",
+     "periodo": {
+      "tipo": "instante"
+     },
+     "resumen": "seguidores (metrica:instagram:seguidores): 362 — medido",
+     "tipo_id": "seguidores",
+     "confianza": "alta",
+     "identidad": "coincide",
+     "medido_en": "2026-10-20T15:17:28.766409+00:00",
+     "frescura_h": 0.5,
+     "procedencia": "medido"
+    },
+    {
+     "id": "D2",
+     "clave": "D2·publicaciones_n",
+     "fecha": "2026-10-20T15:17:28.766409+00:00",
+     "valor": {
+      "numero": 10,
+      "unidad": "publicaciones"
+     },
+     "estado": "trajo",
+     "fuente": "cerebro_vivo",
+     "alcance": "cliente",
+     "periodo": {
+      "tipo": "instante"
+     },
+     "resumen": "publicaciones_n (metrica:instagram:publicaciones): 10 — medido",
+     "tipo_id": "publicaciones_n",
+     "confianza": "alta",
+     "identidad": "coincide",
+     "medido_en": "2026-10-20T15:17:28.766409+00:00",
+     "frescura_h": 0.5,
+     "procedencia": "medido"
+    },
+    {
+     "id": "D3",
+     "clave": "D3·bio_red",
+     "fecha": "2026-10-20T15:17:28.766409+00:00",
+     "valor": "seguridad industrial venta recarga extintores senaletica equipos de proteccion alarmas contra incendio detectores de humo a todo ecuador",
+     "estado": "trajo",
+     "fuente": "cerebro_vivo",
+     "alcance": "cliente",
+     "periodo": {
+      "tipo": "instante"
+     },
+     "resumen": "bio_red (instagram:bio): seguridad industrial venta recarga extintores senaletica equipos de proteccion alarmas contra incendio detectores de humo a todo ecuad…",
+     "tipo_id": "bio_red",
+     "confianza": "alta",
+     "identidad": "coincide",
+     "medido_en": "2026-10-20T15:17:28.766409+00:00",
+     "frescura_h": 0.5,
+     "procedencia": "medido"
+    }
+   ],
+   "fecha": "2026-10-20",
+   "pisos": {},
+   "rubro": "seguridad industrial y protección contra incendios (extintores) · B2B",
+   "moneda": null,
+   "cliente": "003cef00-c9e2-49ea-9a6b-a303338b3b5e",
+   "derivado": null,
+   "referencias": [],
+   "ficha_resumen": "Rubro: seguridad industrial y protección contra incendios (extintores) · B2B. País: EC.",
+   "brazos_resumen": "datos_omitidos: 0",
+   "evento_alterno": {},
+   "manual_resumen": "Registro del cliente: tuteo.",
+   "datos_del_dueno": [],
+   "notas_del_dueno": [],
+   "planteo_inicial": {
+    "no_se": [
+     "planteo inicial derivado por código de la ficha (supuesto)"
+    ],
+    "zonas": [],
+    "evento": "mensaje",
+    "canales": [],
+    "dias_y_horarios": {
+     "dias_activos_por_semana": 7
+    }
+   },
+   "corrida_es_de_ensayo": false,
+   "linea_base_por_semana": null
+  },
+  "consulta_fpa": {
+   "agente": "fpa",
+   "alertas": [
+    "Rango de ticket muy amplio ($40–$500): hasta confirmar el mix de ventas real, el ROI proyectado tiene alta incertidumbre — priorizar esta cifra antes de definir presupuesto final.",
+    "Costo de entrega aplica solo en pedidos físicos (extintores, EPP); para recargas o servicios en sitio el modelo es distinto — separar líneas para no distorsionar el margen consolidado.",
+    "Con meta de 5 mensajes/semana y cierre base 12%, se esperan ~0.6 ventas/semana; a ticket base $120 son ~$72 de ingreso bruto semanal — validar que el presupuesto de pauta no supere ese ingreso en el arranque."
+   ],
+   "resumen": "Rubro B2B con ciclo de recompra anual por normativa (recarga de extintores cada 12 meses). El ticket varía mucho según línea: recargas vs. EPP vs. sistemas de alarma no son el mismo negocio. Sin datos reales de ticket ni tasa de cierre, los rangos son amplios; el mínimo diario es conservador y sube si se activan búsqueda y Meta simultáneamente con presupuesto separado por plataforma.",
+   "supuestos": {
+    "margen": {
+     "max": 0.45,
+     "min": 0.25,
+     "base": 0.35
+    },
+    "ticket": {
+     "max": 500,
+     "min": 40,
+     "base": 120
+    },
+    "periodos": {
+     "max": 24,
+     "min": 6,
+     "base": 12
+    },
+    "tasa_cierre": {
+     "max": 0.2,
+     "min": 0.05,
+     "base": 0.12
+    },
+    "costo_entrega": {
+     "max": 50,
+     "min": 5,
+     "base": 12
+    },
+    "costo_por_resultado": {
+     "max": 18,
+     "min": 4,
+     "base": 8
+    }
+   },
+   "preguntas_a_otros": [
+    {
+     "a": "pauta",
+     "pregunta": "¿Qué CPM y costo por mensaje WhatsApp estás proyectando para Meta IG y Google Search en Ecuador segmento B2B industrial, con la mezcla 45% búsqueda / 40% Meta planteada? Necesito el CPR por canal para validar si el mínimo diario de $7 alcanza para mantener ambas plataformas en aprendizaje."
+    },
+    {
+     "a": "ventas",
+     "pregunta": "¿Cuál es el ticket promedio real por línea de producto (recarga de extintor, extintor nuevo, EPP, señalética, alarmas) y la tasa de cierre desde primer contacto WhatsApp hasta venta pagada? Con ticket base $120 y cierre 12% se proyectan ~0.6 ventas/semana — confirmar si ese volumen es realista para el arranque."
+    },
+    {
+     "a": "redes",
+     "pregunta": "¿Se producirá contenido diferenciado por línea de producto o una creatividad genérica de marca? Si cada línea tiene ticket y ciclo distintos necesito separar conjuntos para no mezclar CPR objetivo y distorsionar el margen por canal."
+    }
+   ],
+   "minimo_diario_por_conjunto": 7
+  },
+  "consulta_redes": {
+   "agente": "Especialista en Redes (Paid Social)",
+   "alertas": [
+    "Con 5 mensajes/semana, Meta mantiene el conjunto en aprendizaje indefinido — nunca llega a 50 eventos/semana. Esto no es bloqueante pero sí limita la optimización automática: espera CPR más volátil las primeras 4 semanas.",
+    "362 seguidores activos: no hay masa suficiente para un conjunto de retargeting de IG/FB todavía. Todo el presupuesto social va a prospección fría hasta tener al menos 1,000 interacciones acumuladas.",
+    "Guayaquil y Quito en conjuntos separados desde el inicio duplica el mínimo diario total ($20/día) y fragmenta el aprendizaje. Empezar combinados y separar solo cuando haya datos claros de diferencia de CPR por ciudad."
+   ],
+   "resumen": "Para mensajes WhatsApp desde Meta (objetivo Mensajes), el CPR en Ecuador B2B ronda los $2.80 de base — alcanzable, pero con 5 mensajes/semana el conjunto queda en aprendizaje permanente (Meta exige 50 eventos/semana para salir). Estructura recomendada: 1 campaña CBO, 1 solo conjunto de anuncios (Guayaquil + Quito combinados, intereses amplios: industria, seguridad ocupacional, manufactura, gerentes/propietarios PYME), 2-3 creativos estáticos con precio visible y CTA directo a WhatsApp. No armar retargeting propio todavía — 362 seguidores no genera volumen. Revisar separación por ciudad en semana 5 con data real. Si el presupuesto semanal asignado a meta_ig es menor a $70, bajar al evento alterno: tráfico con enlace directo a WhatsApp (objetivo Tráfico, destino URL wa.me), que es más barato pero sin optimización de conversación.",
+   "supuestos": {
+    "costo_por_resultado": {
+     "max": 4.5,
+     "min": 1.8,
+     "base": 2.8
+    },
+    "costo_por_resultado_alterno": {
+     "max": 1.1,
+     "min": 0.2,
+     "base": 0.55
+    }
+   },
+   "preguntas_a_otros": [
+    {
+     "a": "fpa",
+     "pregunta": "¿Cuánto presupuesto semanal va a meta_ig (el 40%)? Con CPR base $2.80 y meta de 5 mensajes/semana el canal necesita mínimo $14 — por debajo de eso opero con evento alterno (tráfico) y el CPR reportado cae pero la calidad del contacto también."
+    },
+    {
+     "a": "medicion",
+     "pregunta": "¿Tienen Conversions API configurada o solo píxel de Meta? Sin CAPI, los mensajes de WhatsApp desde iOS quedan sin atribuir y el algoritmo de Meta no puede optimizar correctamente — el CPR real puede ser hasta 40% mayor al reportado."
+    },
+    {
+     "a": "plan",
+     "pregunta": "Si base_propia no existe y su peso (15%) se reasigna, ¿va todo a búsqueda o parte puede venir a meta_ig? Con ese presupuesto extra puedo activar un conjunto de video corto para acumular audiencia de viewers y usarla como retargeting en semana 5."
+    }
+   ],
+   "minimo_diario_por_conjunto": 10
+  },
+  "planteo_fijado": {
+   "marca": 0.15,
+   "no_se": [
+    "presupuesto disponible para pauta — si menor a $200/mes total, concentrar todo en meta_ig y no activar busqueda_pagada",
+    "si la ficha Google Business Profile está verificada y activa — prerequisito duro para fase 2",
+    "si tienen lista de clientes o prospectos existente — define si base_propia se activa o su 15% va a meta_ig",
+    "ticket promedio real por línea de producto (recarga, extintor nuevo, EPP, señalética, alarmas) — crítico para ROI real",
+    "tasa actual de cierre desde contacto WhatsApp hasta venta pagada",
+    "si tienen Conversions API de Meta configurada — sin CAPI el CPR reportado puede ser hasta 40% mayor al real"
+   ],
+   "zonas": [
+    "guayaquil",
+    "quito"
+   ],
+   "evento": "mensaje WhatsApp",
+   "canales": [
+    {
+     "peso": 0.7,
+     "canal": "meta_ig",
+     "activo": true,
+     "condicion": "Un solo conjunto CBO combinando Guayaquil y Quito — no separar ciudades hasta semana 5 con data real de CPR por zona. Si base_propia no existe, absorbe su 0.15 para activar video corto y construir audiencia de viewers para retargeting."
+    },
+    {
+     "peso": 0.15,
+     "canal": "base_propia",
+     "activo": true,
+     "condicion": "Activar solo si existe lista verificada de clientes o prospectos. Si no existe, reasignar peso a meta_ig (no a busqueda_pagada)."
+    },
+    {
+     "peso": 0.15,
+     "canal": "busqueda_pagada",
+     "activo": false,
+     "condicion": "Diferida a fase 2. Activar solo cuando se cumplan los tres prerequisitos: (1) ficha Google Business Profile verificada y activa, (2) conversión de clic a WhatsApp medible vía GTM o Google Ads, (3) presupuesto mínimo $200/mes confirmado. Peso objetivo en fase 2: 0.45."
+    },
+    {
+     "peso": 0,
+     "canal": "busqueda_local",
+     "activo": true,
+     "condicion": "Canal orgánico sin pauta — optimizar ficha Google Business Profile desde semana 1; es prerequisito duro antes de activar busqueda_pagada."
+    }
+   ],
+   "produccion": {
+    "fraccion": 0.25
+   },
+   "dias_y_horarios": {
+    "horario": "08:00-18:00",
+    "dias_activos_por_semana": 5
+   },
+   "meta_por_semana": 5
+  },
+  "planteo_fijado_2": {
+   "marca": 0.15,
+   "no_se": [
+    "presupuesto mensual real de Emilio — tablero ajustado corre en $1,370/mes; si no alcanza, operar con $1,288.67/mes y activar alerta CPR > $6.30 en semana 3",
+    "ticket por línea confirmado — se mantiene $120 base (supuesto conservador FPA) hasta confirmar el mix de ventas real; divergencia con $450 de Medición sigue abierta",
+    "existencia de lista base_propia — si no existe, los $193.30/mes de ese canal van a meta_ig",
+    "ficha GBP verificada y activa — prerequisito duro para activar busqueda_pagada en fase 2",
+    "CAPI de Meta configurada — sin CAPI los CPR del tablero son referencia aproximada con margen ±40%"
+   ],
+   "zonas": [
+    "guayaquil",
+    "quito"
+   ],
+   "evento": "mensaje WhatsApp",
+   "canales": [
+    {
+     "peso": 0.7,
+     "canal": "meta_ig",
+     "activo": true,
+     "condicion": "Pauta diaria mínima $36.40/conjunto aplicado (ajuste antiilución aprobado). Si base_propia no existe, absorbe su 0.15 → peso sube a 0.85. CBO único Guayaquil+Quito hasta semana 5."
+    },
+    {
+     "peso": 0.15,
+     "canal": "base_propia",
+     "activo": true,
+     "condicion": "Solo si Emilio confirma lista ≥50 contactos. Si no existe, peso 0 y se reasigna a meta_ig."
+    },
+    {
+     "peso": 0.15,
+     "canal": "busqueda_pagada",
+     "activo": false,
+     "condicion": "Diferida a fase 2. Tres prerequisitos duros: GBP verificada, conversión clic→WhatsApp medible, presupuesto ≥$200/mes confirmado."
+    },
+    {
+     "peso": 0,
+     "canal": "busqueda_local",
+     "activo": true,
+     "condicion": "Orgánico sin pauta — optimizar ficha GBP desde semana 1; prerequisito duro para fase 2."
+    }
+   ],
+   "produccion": {
+    "fraccion": 0.25
+   },
+   "dias_y_horarios": {
+    "horario": "08:00-18:00",
+    "dias_activos_por_semana": 5
+   },
+   "meta_por_semana": 5
+  },
+  "consulta_busqueda": {
+   "agente": "búsqueda",
+   "alertas": [
+    "Sin ficha de Google Business verificada, la búsqueda pagada compite contra sí misma — primero captura el tráfico gratuito de mapas.",
+    "Los servicios tienen tickets muy distintos (recarga de extintor vs proyecto completo de EPP): sin campañas separadas por tipo de servicio el algoritmo no aprende qué optimizar.",
+    "Si el presupuesto total disponible es menor a $200/mes, concentra todo en Meta — $5/día en búsqueda no genera señal estadística suficiente en 30 días."
+   ],
+   "resumen": "Difiere la búsqueda pagada hasta confirmar que la ficha de Google Business Profile está verificada y activa — ese canal local gratuito capta la misma intención sin costo y debe ir primero. Una vez confirmada la ficha, activa búsqueda pagada con mínimo $5/día enfocado en Guayaquil + keywords transaccionales (recarga extintores, EPP, señalética). La señal de activación es: GBP verificada + conversión de WhatsApp medible + presupuesto mínimo confirmado.",
+   "supuestos": {
+    "tasa_cierre": {
+     "max": 0.25,
+     "min": 0.1,
+     "base": 0.15
+    },
+    "costo_por_resultado": {
+     "max": 14,
+     "min": 4,
+     "base": 7
+    }
+   },
+   "preguntas_a_otros": [
+    {
+     "a": "plan",
+     "pregunta": "¿La ficha de Google Business Profile está verificada y tiene info completa (horario, fotos, categoría)? Es el prerequisito duro antes de gastar en búsqueda pagada."
+    },
+    {
+     "a": "medicion",
+     "pregunta": "¿Hay conversión configurada para el clic al botón de WhatsApp — ya sea en Google Ads o vía GTM? Sin eso, la campaña de búsqueda no puede optimizarse automáticamente."
+    },
+    {
+     "a": "fpa",
+     "pregunta": "¿El presupuesto mensual disponible para pauta es de al menos $200? Con menos de eso, concentra todo en Meta y difiere la búsqueda: no hay volumen suficiente para aprender en 30 días."
+    }
+   ],
+   "minimo_diario_por_conjunto": 5
+  },
+  "consulta_medicion": {
+   "agente": "Medición & Tracking",
+   "alertas": [
+    "Ticket promedio desconocido — rango 150–800 es especulativo. Crítico para ROI.",
+    "Tasa de cierre sin medir; si <5%, costos disparan. Revalidar mes 1.",
+    "Base propia no verificada: si no existe, reasignar 15% a búsqueda pagada.",
+    "Presupuesto desconocido; sin límite, optimización de canales se dificulta."
+   ],
+   "resumen": "Resultado = mensaje WhatsApp recibido y registrado como contacto. Vinculación a venta: sin tocar destino, se usa tasa_cierre para convertir contactos en oportunidades. Medición: evento con timestamp, teléfono, canal, servicio, estado. Umbral: 1 mensaje/día; meta 5/semana en horario 08:00–18:00 lunes–viernes.",
+   "supuestos": {
+    "margen": {
+     "max": 0.5,
+     "min": 0.3,
+     "base": 0.4
+    },
+    "ticket": {
+     "max": 800,
+     "min": 150,
+     "base": 450
+    },
+    "periodos": {
+     "max": 30,
+     "min": 7,
+     "base": 14
+    },
+    "tasa_cierre": {
+     "max": 0.2,
+     "min": 0.05,
+     "base": 0.1
+    },
+    "costo_por_resultado": {
+     "max": 25,
+     "min": 5,
+     "base": 12
+    },
+    "costo_por_resultado_alterno": {
+     "max": 250,
+     "min": 50,
+     "base": 120
+    }
+   },
+   "preguntas_a_otros": [
+    {
+     "a": "fpa",
+     "pregunta": "¿Presupuesto mensual disponible para pauta en búsqueda pagada y Meta IG?"
+    },
+    {
+     "a": "plan",
+     "pregunta": "¿Ticket promedio confirmado por servicio (recarga, extintor, EPP, señalética)? ¿Tasa actual de cierre contacto→venta medida?"
+    },
+    {
+     "a": "redes",
+     "pregunta": "¿Quién produce contenido para Instagram y con qué frecuencia? ¿Base propia de clientes/prospectos verificada?"
+    }
+   ],
+   "minimo_diario_por_conjunto": 1
+  }
+ }
+}
