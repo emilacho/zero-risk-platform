@@ -31,6 +31,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { validateInput } from '@/lib/input-validator'
 import { fusionarUrlReparto, urlsDeReparto } from '@/lib/clients/url-reparto'
 import { fusionarHandlesPropios, handlesPropios } from '@/lib/clients/own-handles'
+import { normalizarEntrada } from '@/lib/alta/entrada-del-cliente'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -88,7 +89,10 @@ export async function POST(request: Request) {
   const body = v.data
 
   const slug = (body.slug && body.slug.trim()) || slugify(body.name)
-  const websiteUrl = body.website_url ?? body.website ?? null
+  const websiteBruto = body.website_url ?? body.website ?? null
+  // 🔴 LA ENTRADA DEL CLIENTE (20-oct · prueba real): una red social NO es un sitio web. Si la «web» era una cuenta, no se guarda como sitio y la cuenta pasa a `own_handles` (lo pedido explícito manda).
+  const entrada = normalizarEntrada({ website: websiteBruto })
+  const websiteUrl = websiteBruto && entrada.sitio === null ? null : websiteBruto
 
   let supabase
   try {
@@ -242,7 +246,11 @@ export async function POST(request: Request) {
   let urlReparto: { guardadas: number; descartadas: string[]; error?: string } | null = null
   let ownHandles: { guardados: string[]; descartados: string[]; error?: string } | null = null
   const pedidas = (body as { url_reparto?: unknown }).url_reparto
-  const pedidosH = (body as { own_handles?: unknown }).own_handles
+  const pedidosHBruto = (body as { own_handles?: unknown }).own_handles
+  const deLaDireccion = websiteBruto && entrada.sitio === null ? entrada.cuentas : {}
+  const pedidosH = Object.keys(deLaDireccion).length
+    ? { ...deLaDireccion, ...(pedidosHBruto && typeof pedidosHBruto === 'object' && !Array.isArray(pedidosHBruto) ? (pedidosHBruto as Record<string, unknown>) : {}) }
+    : pedidosHBruto
   const u = pedidas !== undefined && pedidas !== null ? urlsDeReparto(pedidas) : null
   const h = pedidosH !== undefined && pedidosH !== null ? handlesPropios(pedidosH) : null
   if (u) urlReparto = { guardadas: 0, descartadas: u.descartadas }
