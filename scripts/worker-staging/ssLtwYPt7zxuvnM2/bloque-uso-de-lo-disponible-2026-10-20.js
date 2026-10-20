@@ -12,7 +12,8 @@ var UD_MIN_TEXTO_PROPIO = 100   // caracteres de sitio o de perfil para que cuen
 var UD_MIN_SITIO = 200
 var UD_MIN_CAMPO = 40           // largo mínimo de positioning / icp_summary cuando hay con qué escribirlos
 var UD_MIN_RESUMEN = 80
-var UD_PENDIENTE = /^\s*(pendiente|no determinad|no disponible|sin dato|sin datos|por definir|tbd|n\/a|desconocid|no se pudo|no se recupero)/
+var UD_MIN_VOZ = 40             // una voz de menos de esto no es una voz (igual que positioning / icp_summary)
+var UD_PENDIENTE = /^\s*(pendiente|no determinad|no disponible|sin dato|sin datos|por definir|por determinar|a definir|a determinar|tbd|n\/a|n\/d|desconocid|unknown|not available|no se pudo|no se recupero|sin informaci|no hay informaci|no aplica|sin voz|ninguna|ninguno)/
 var UD_PROPUESTA = /^\s*propuesta\b/
 function udSinTildes(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() }
 function udLargo(v) { return String(v == null ? '' : v).trim().length }
@@ -41,7 +42,7 @@ function usoDeLoDisponible(draft, grounding) {
   var hay = disp.propio.length + disp.contexto.length > 0
   var fuentes = disp.propio.concat(disp.contexto).join(', ')
   var voz = String(d.voice_description == null ? '' : d.voice_description).trim()
-  var vozVacia = voz === '' || UD_PENDIENTE.test(udSinTildes(voz))
+  var vozVacia = voz.length < UD_MIN_VOZ || UD_PENDIENTE.test(udSinTildes(voz))
   if (hay && vozVacia) sin.push({ campo: 'voice_description', fuente: fuentes, motivo: 'la voz quedó vacía o PENDIENTE habiendo con qué armarla' })
   else if (hay && !vozVacia && disp.propio.length === 0 && !UD_PROPUESTA.test(udSinTildes(voz))) sin.push({ campo: 'voice_description', fuente: fuentes, motivo: 'sin texto propio del cliente la voz es una PROPUESTA y debe decirlo: «PROPUESTA (no es dato del cliente): …»', rotulo: true })
   if ((disp.propio.length + disp.contexto.length > 0) && udLargo(d.positioning) < UD_MIN_CAMPO && (disp.contexto.indexOf('los competidores') !== -1 || disp.contexto.indexOf('el resumen del descubrimiento') !== -1 || disp.propio.length > 0)) sin.push({ campo: 'positioning', fuente: fuentes, motivo: 'el posicionamiento quedó vacío habiendo con qué escribirlo' })
