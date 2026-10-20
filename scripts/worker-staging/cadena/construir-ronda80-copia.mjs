@@ -4,6 +4,8 @@
  *    cuenta esas filas como briefeadas, escribe `- ELEMENTOS:` en el parte y deja el kit en `familias_por_brief` (familia kit_historias) y en `provenance_tag.kit`.
  *  · «③ Armar el cuerpo del redactor»: el pedido ahora le dice a qué filas NO briefear una por una (solo lo macro de la semana); la fila lleva su `familia`.
  * Reversa: republicar `copia-r80-ANTES.json` (= el estado de la r79).
+ * 🔴 SIGUE (20-oct): la guarda «① sin manual aprobado se DETIENE» (y ④/⑤ Seco) se mantienen desde `BNXqlaX1oHSfZIpF/construir-ensayo-sin-manual-2026-10-20.mjs` (el ensayo sin manual del tramo 8).
+ *    Reconstruir la copia de la cadena = este constructor Y LUEGO ese: si no, la guarda vuelve a la de antes. La prueba `brief-ensayo-sin-manual` exige que su ANTES sea el estado r80.
  * Uso: import { construirFlujo } y pasarle el flujo ({ name, nodes, connections, settings }).
  */
 import fs from 'node:fs'

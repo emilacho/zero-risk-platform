@@ -5,10 +5,14 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
+const { construirFlujo } = await import(pathToFileURL(path.resolve(__dirname, '../scripts/worker-staging/BNXqlaX1oHSfZIpF/construir-ensayo-sin-manual-2026-10-20.mjs')).href)
+
 const D = path.resolve(__dirname, '../scripts/worker-staging/BNXqlaX1oHSfZIpF')
-const leer = (f: string) => JSON.parse(fs.readFileSync(path.join(D, f), 'utf8')) as { nodes: Array<{ name: string; parameters: Record<string, any> }>; connections: unknown }
+type Flujo = { nodes: Array<{ name: string; parameters: Record<string, any> }>; connections: unknown }
+const leer = (f: string, dir = D) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as Flujo
 const antes = leer('parte-por-filas-ANTES-ensayo-sin-manual-2026-10-20.json')
 const nuevo = leer('parte-por-filas-ARREGLADO-ensayo-sin-manual-2026-10-20.json')
 const GUARDA = '① GUARDA · sin manual aprobado se DETIENE'
@@ -30,6 +34,12 @@ describe('la guarda ① del brief con el ensayo sin manual', () => {
     expect(json.manual_voz).toEqual({ voice_description: null, writing_style: null, tone_guidelines: {} }) // no inventa el trato
     expect(json.lote).toBe('2026-W44') // el sobre pasa entero
   })
+  it('🔴 un ERROR de la base NO es «cero filas»: en ensayo y en real la guarda se detiene y NO simula (reparo de CC#2)', () => {
+    const errores = [{ code: 'PGRST301', message: 'JWT expired', details: null, hint: null }, { message: 'fetch failed' }, { error: 'timeout' }]
+    for (const e of errores) for (const dry of [true, false]) expect(() => correr([e], { ...ENV, dry_run: dry }), JSON.stringify(e) + dry).toThrow(/BRIEF_LECTURA_MANUAL_FALLIDA/)
+    // un error mezclado con una fila buena también detiene (no se adivina cuál vale)
+    expect(() => correr([fila(), { code: 'X', message: 'y' }], ENV)).toThrow(/BRIEF_LECTURA_MANUAL_FALLIDA/)
+  })
   it('lo real sin manual SIGUE deteniendo (dry_run false)', () => {
     expect(() => correr([], { ...ENV, dry_run: false })).toThrow(/BRIEF_SIN_MANUAL/)
   })
@@ -49,15 +59,33 @@ describe('la guarda ① del brief con el ensayo sin manual', () => {
   })
 })
 
-describe('lo que cambia en el flujo: UN solo nodo', () => {
-  it('solo «① GUARDA» difiere del vivo; nodos y conexiones iguales', () => {
+describe('lo que cambia en el flujo: TRES nodos, y el ANTES es el estado r80', () => {
+  const TOCADOS = [GUARDA, '④ Chequeos', '⑤ Seco · lo que se habría escrito']
+  it('solo ①, ④ y ⑤ Seco difieren del vivo; nodos y conexiones iguales', () => {
     expect(nuevo.nodes.map((n) => n.name)).toEqual(antes.nodes.map((n) => n.name))
-    expect(nuevo.nodes.filter((n, i) => JSON.stringify(n) !== JSON.stringify(antes.nodes[i])).map((n) => n.name)).toEqual([GUARDA])
+    expect(nuevo.nodes.filter((n, i) => JSON.stringify(n) !== JSON.stringify(antes.nodes[i])).map((n) => n.name)).toEqual(TOCADOS)
     expect(JSON.stringify(nuevo.connections)).toBe(JSON.stringify(antes.connections))
+  })
+  it('🔴 LINAJE (reparo de CC#2): el ANTES es EXACTAMENTE el estado r80 que construye la cadena (`cadena/copia-r80-ARREGLADO.json`); el constructor reproduce el ARREGLADO y no se construye dos veces', () => {
+    const r80 = leer('copia-r80-ARREGLADO.json', path.resolve(D, '../cadena'))
+    expect(JSON.stringify(antes.nodes.map((n) => [n.name, n.parameters]))).toBe(JSON.stringify(r80.nodes.map((n) => [n.name, n.parameters])))
+    expect(JSON.stringify(construirFlujo(antes))).toBe(JSON.stringify(nuevo))
+    expect(() => construirFlujo(nuevo)).toThrow(/ya trae/)
+  })
+  it('el constructor de la cadena (r80) deja escrito que la guarda ① se mantiene desde esta ronda', () => {
+    const cab = fs.readFileSync(path.resolve(D, '../cadena/construir-ronda80-copia.mjs'), 'utf8').slice(0, 1800)
+    expect(cab).toMatch(/BNXqlaX1oHSfZIpF\/construir-ensayo-sin-manual/)
+  })
+  it('«⑤ Seco» y «④» dejan DICHO que el manual fue simulado: solo en ese caso (la fila real no cambia de forma)', () => {
+    const c4 = nuevo.nodes.find((n) => n.name === '④ Chequeos')!.parameters.jsCode as string
+    expect(c4).toMatch(/c\.manual_de_ensayo === true \? \{ manual_de_ensayo: true \} : \{\}/)
+    const c5 = nuevo.nodes.find((n) => n.name === '⑤ Seco · lo que se habría escrito')!.parameters.jsCode as string
+    expect(c5).toMatch(/manual_de_ensayo: !!\(f\.provenance_tag && f\.provenance_tag\.manual_de_ensayo === true\)/)
   })
   it('no lleva llaves pegadas y conserva los saltos de línea del nodo vivo', () => {
     expect(JSON.stringify(nuevo)).not.toMatch(/sk-[A-Za-z0-9]{10,}|eyJ[A-Za-z0-9_-]{20,}/)
     const v = antes.nodes.find((n) => n.name === GUARDA)!.parameters.jsCode as string
-    expect(codigo.includes('\r\n')).toBe(v.includes('\r\n'))
+    const CRLF = String.fromCharCode(13, 10)
+    expect(codigo.includes(CRLF)).toBe(v.includes(CRLF))
   })
 })
