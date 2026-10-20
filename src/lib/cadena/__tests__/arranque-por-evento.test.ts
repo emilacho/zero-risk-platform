@@ -6,10 +6,13 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  abrirCampana, avanzarCampana, calendarioGuardar, calendarioPreparar, estrategiaGuardar, estrategiaPreparar, filasLotes, filasMarcar, huellaDeLote, lotesVencidos,
+  abrirCampana, avanzarCampana, calendarioGuardar, calendarioPreparar, estrategiaGuardar, estrategiaPreparar, filasLotes, filasMarcar, huellaDeLote, lotesVencidos, relojDeLaCadena,
   type Estrategia,
 } from '../index'
 import { arrancarAlActivar, MAXIMO_DE_LOTES_POR_ARRANQUE, sobreDeLote } from '../arranque'
+import { calendarioPasar, pasarSinRevision } from '../revision-jefatura'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, tandaBuena } from '../__fixtures__/clientes'
 
@@ -22,13 +25,23 @@ const almacen = (config: Record<string, unknown> = {}, extra: Partial<Constructo
   config: { flujos: ['wf-cadena', 'wf-vigia'], puerta_workflow_id: 'wf-puerta', ...config }, journeys: [{ journeyId: 'journey-1', clientId: A.clientId }], ...extra,
 })
 const ok = (o: unknown, costo = 0.3) => ({ success: true, structured_output: o, cost_usd: costo })
-async function campanaActiva(al: AlmacenMemoria) {
-  const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+/** deja la campaña en `calendario` con la tanda 1 lista para guardar: el último paso (guardar el calendario) lo hace cada prueba, que es lo que mueve la campaña a `activa` en el camino REAL */
+async function hastaElCalendario(al: AlmacenMemoria, ahora = AHORA) {
+  const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ahora)
   const id = (c.cuerpo.campana as { id: string }).id
-  const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
-  await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(A.estrategia as Estrategia) }, AHORA)
-  const t = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)
-  await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: t.cuerpo.corrida_id, resultado: ok(tandaBuena(A)) }, AHORA)
+  const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, ahora)
+  await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(A.estrategia as Estrategia) }, ahora)
+  const t = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, ahora)
+  const guardar = (a = ahora) => calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: t.cuerpo.corrida_id, resultado: ok(tandaBuena(A)) }, a)
+  return { id, guardar }
+}
+/** una campaña `activa` SIN arranque (el interruptor se apaga durante el armado y se devuelve a como estaba): para las pruebas que cambian de estado a mano con `avanzarCampana` */
+async function campanaActiva(al: AlmacenMemoria) {
+  const antes = await al.leerConfig('arranque_por_evento')
+  await al.escribirConfig('arranque_por_evento', false)
+  const { id, guardar } = await hastaElCalendario(al)
+  await guardar()
+  await al.escribirConfig('arranque_por_evento', antes)
   return id
 }
 const pausarYActivar = async (al: AlmacenMemoria, id: string, ahora = HOY_DEL_LOTE) => {
@@ -193,5 +206,81 @@ describe('LA CAMPAÑA NACE con la producción automática solo si el interruptor
   })
   it('solo el booleano `true` lo enciende', async () => {
     for (const v of ['true', 1, 'si', null, {}]) expect(await abrir({ autoproducir_por_omision: v }), String(v)).toBe(false)
+  })
+})
+
+describe('🔴 EL CAMINO REAL (la tercera prueba, 20-oct): la campaña pasa a `activa` al GUARDAR el calendario, no por `avanzarCampana`', () => {
+  it('guardar la primera tanda con el interruptor encendido deja los sobres de los lotes vencidos, los mismos que dejaría el reloj, y lo dice en la respuesta', async () => {
+    const al = almacen({ arranque_por_evento: true }); const { id, guardar } = await hastaElCalendario(al)
+    expect(al.sala.size).toBe(0)
+    const r = await guardar(HOY_DEL_LOTE)
+    expect(r.status).toBe(200); expect(al.campanas[0].estado).toBe('activa')
+    const reloj = (await filasLotes(al, { ...wf(), campana_id: id, hoy: '2026-10-12' }, HOY_DEL_LOTE)).cuerpo.lotes as Array<{ lote: string; fila_ids: string[]; idempotency_key: string }>
+    expect(reloj.length).toBeGreaterThan(0)
+    expect(r.cuerpo.arranque).toMatchObject({ arranque: 'hecho', lotes: reloj.length, aceptados: reloj.length, duplicados: 0 })
+    expect(al.sala.size).toBe(reloj.length)
+    // idempotente con el reloj: si el vigía corre después con la misma llave, la sala dice «duplicado» y no se produce dos veces
+    for (const l of reloj) expect((await al.emitirSobre(sobreDeLote(al.campanas[0], l))).resultado).toBe('duplicado')
+    expect(al.sala.size).toBe(reloj.length)
+  })
+  it('con el interruptor apagado, guardar el calendario es como siempre: campaña activa, ningún sobre, la respuesta sin `arranque`', async () => {
+    const al = almacen(); const { guardar } = await hastaElCalendario(al)
+    const r = await guardar(HOY_DEL_LOTE)
+    expect(al.campanas[0].estado).toBe('activa'); expect(al.sala.size).toBe(0); expect(r.cuerpo).not.toHaveProperty('arranque')
+  })
+  it('si el arranque falla (sala apagada), guardar el calendario sigue funcionando: la campaña queda activa y el fallo se declara', async () => {
+    const al = almacen({ arranque_por_evento: true }, { intakeApagado: true }); const { guardar } = await hastaElCalendario(al)
+    const r = await guardar(HOY_DEL_LOTE)
+    expect(r.status).toBe(200); expect(al.campanas[0].estado).toBe('activa'); expect((r.cuerpo.arranque as { aceptados: number }).aceptados).toBe(0)
+  })
+  it('con la jefatura RETENIENDO el calendario no hay arranque al guardar (la campaña sigue en `calendario`); sale cuando la jefatura lo PASA, una sola vez', async () => {
+    const al = almacen({ arranque_por_evento: true }); al.retencion = async (tipo) => ({ retener: tipo === 'calendario', motivo: 'la jefatura revisa' })
+    const { id, guardar } = await hastaElCalendario(al)
+    const g = await guardar(HOY_DEL_LOTE)
+    expect(al.campanas[0].estado).toBe('calendario'); expect(g.cuerpo).not.toHaveProperty('arranque'); expect(al.sala.size).toBe(0)
+    const p = await calendarioPasar(al, { ...wf(), campana_id: id, tanda: 1, hoy: '2026-10-12' })
+    expect(p.status).toBe(200); expect(al.campanas[0].estado).toBe('activa')
+    expect(p.cuerpo.arranque).toMatchObject({ arranque: 'hecho' }); const n = al.sala.size; expect(n).toBeGreaterThan(0)
+    const otra = await calendarioPasar(al, { ...wf(), campana_id: id, tanda: 1, hoy: '2026-10-12' })
+    expect(otra.cuerpo).toMatchObject({ ya_pasada: true }); expect(al.sala.size).toBe(n)
+  })
+  it('y cuando la espera de la jefatura VENCE (el reloj pasa el calendario sin revisión) también arranca', async () => {
+    const al = almacen({ arranque_por_evento: true }); al.retencion = async (tipo) => ({ retener: tipo === 'calendario', motivo: 'la jefatura revisa' })
+    const { id, guardar } = await hastaElCalendario(al); await guardar(HOY_DEL_LOTE)
+    const espera = (await al.esperasVivas()).find((e) => e.campana_id === id && /^calendario:t\d+$/.test(e.objeto_id))!
+    const que = await pasarSinRevision(al, espera, HOY_DEL_LOTE)
+    expect(que).toContain('pasó sin revisión'); expect(al.campanas[0].estado).toBe('activa'); expect(al.sala.size).toBeGreaterThan(0)
+  })
+  it('el RELOJ de la cadena (el vigía) que vence la espera de la jefatura también arranca, con la hora del reloj y no con la del servidor', async () => {
+    const al = almacen({ arranque_por_evento: true, estado_cadena: 'encendida' }); al.retencion = async (tipo) => ({ retener: tipo === 'calendario', motivo: 'la jefatura revisa' })
+    const { id, guardar } = await hastaElCalendario(al); await guardar(HOY_DEL_LOTE)
+    expect(al.sala.size).toBe(0)
+    // la espera de la jefatura vence el 13-oct 10:00Z: el reloj corre después (14-oct) y la cadena sigue SIN la revisión
+    const flujoDelReloj = { workflow_id: 'wf-vigia', workflow_execution_id: 'ex-reloj' }
+    for (let i = 0; i < 4 && al.campanas[0].estado === 'calendario'; i++) await relojDeLaCadena(al, flujoDelReloj, `2026-10-${14 + i}T12:00:00Z`)
+    expect(al.campanas[0].estado).toBe('activa'); expect(id).toBeTruthy(); expect(al.sala.size).toBeGreaterThan(0)
+    const ev = await eventos(al); expect(ev.length).toBe(al.sala.size)
+  })
+  it('la HORA con la que se calculan los lotes es la de quien llama, no la del servidor: lejos de las fechas (1-sep) la jefatura que pasa el calendario no deja ningún sobre', async () => {
+    const al = almacen({ arranque_por_evento: true }); al.retencion = async (tipo) => ({ retener: tipo === 'calendario', motivo: 'x' })
+    const { id, guardar } = await hastaElCalendario(al); await guardar(HOY_DEL_LOTE)
+    const p = await calendarioPasar(al, { ...wf(), campana_id: id, tanda: 1, hoy: '2026-09-01' })
+    expect(p.cuerpo.arranque).toMatchObject({ arranque: 'hecho', lotes: 0, aceptados: 0 }); expect(al.sala.size).toBe(0); expect(al.campanas[0].estado).toBe('activa')
+  })
+  it('lo mismo para la espera vencida (pasarSinRevision) y para el reloj: con una hora lejana a las fechas, ningún sobre', async () => {
+    const a1 = almacen({ arranque_por_evento: true }); a1.retencion = async (tipo) => ({ retener: tipo === 'calendario', motivo: 'x' })
+    const h1 = await hastaElCalendario(a1); await h1.guardar(HOY_DEL_LOTE)
+    const espera = (await a1.esperasVivas()).find((e) => e.campana_id === h1.id && /^calendario:t\d+$/.test(e.objeto_id))!
+    await pasarSinRevision(a1, espera, '2026-09-01T10:00:00Z')
+    expect(a1.campanas[0].estado).toBe('activa'); expect(a1.sala.size).toBe(0)
+    const a2 = almacen({ arranque_por_evento: true, estado_cadena: 'encendida' }); a2.retencion = async (tipo) => ({ retener: tipo === 'calendario', motivo: 'x' })
+    const h2 = await hastaElCalendario(a2); await h2.guardar(HOY_DEL_LOTE)
+    for (let i = 0; i < 3 && a2.campanas[0].estado === 'calendario'; i++) await relojDeLaCadena(a2, { workflow_id: 'wf-vigia', workflow_execution_id: 'ex-reloj' }, `2027-02-0${1 + i}T12:00:00Z`)
+    expect(a2.campanas[0].estado).toBe('activa'); expect(a2.sala.size).toBe(0)
+  })
+  it('🔴 GUARDIÁN: ningún archivo de la cadena pasa una campaña a `activa` por su cuenta (solo `activarYArrancar`; `avanzarCampana` usa `estado: a` y llama al arranque)', () => {
+    const dir = join(__dirname, '..')
+    const sueltos = readdirSync(dir).filter((f) => f.endsWith('.ts')).filter((f) => /estado:\s*'activa'/.test(readFileSync(join(dir, f), 'utf8')))
+    expect(sueltos).toEqual(['arranque.ts'])
   })
 })

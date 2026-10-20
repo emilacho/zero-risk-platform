@@ -116,7 +116,7 @@ async function alVencer(al: Almacen, e: EsperaFila, ahora: string, lineas: Linea
     }
     case 'pasar_sin_revision': {
       // J7: la revisión de la jefatura no cerró a tiempo: la cadena SIGUE (nunca queda de rehén) y se avisa
-      const que = await pasarSinRevision(al, e)
+      const que = await pasarSinRevision(al, e, ahora)
       lineas.push({ campana_id: e.campana_id, texto: `la revisión de la jefatura no cerró a tiempo (${e.objeto_id}): la cadena siguió sin ella · ${que}` })
       return que
     }

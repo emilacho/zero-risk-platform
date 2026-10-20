@@ -15,6 +15,7 @@
  * 🔴 Agnóstico: ninguna rama por tipo de cliente, rubro ni país.
  */
 import type { Almacen, Campana, EsperaFila } from './almacen'
+import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import { abrirEsperaDe, resolverEsperas } from './nucleo'
 import type { Estrategia } from './tipos'
@@ -63,9 +64,9 @@ export function fechasPedidasDe(campana: Pick<Campana, 'fecha_inicio' | 'fecha_f
   return pais ? e.fechas_que_importan.flatMap((f) => anios.map((anio) => ({ pais, tipo: f.tipo, ambito: f.ambito, anio }))) : []
 }
 
-export interface ResultadoDePasar { ya_pasada?: boolean; ok?: boolean; pasada_sin_revision?: boolean; estado_de_la_campana: string; fechas_pedidas?: FechaPedida[]; aviso?: string }
+export interface ResultadoDePasar { arranque?: ResultadoDelArranque; ya_pasada?: boolean; ok?: boolean; pasada_sin_revision?: boolean; estado_de_la_campana: string; fechas_pedidas?: FechaPedida[]; aviso?: string }
 
-async function transicion(al: Almacen, campana: Campana, tipo: TipoRetenible): Promise<{ ya: boolean; fechas_pedidas?: FechaPedida[] }> {
+async function transicion(al: Almacen, campana: Campana, tipo: TipoRetenible, ahora: string): Promise<{ ya: boolean; fechas_pedidas?: FechaPedida[]; arranque?: ResultadoDelArranque }> {
   if (tipo === 'estrategia') {
     // ya pasó: la campaña ya está en `calendario` o más allá
     if (campana.estado !== 'estrategia' && campana.estado !== 'abierta') return { ya: true }
@@ -76,16 +77,17 @@ async function transicion(al: Almacen, campana: Campana, tipo: TipoRetenible): P
     return { ya: false, fechas_pedidas: fechasPedidasDe(campana, ctx?.pais ?? null, estr.contenido) }
   }
   if (campana.estado !== 'calendario') return { ya: true }
-  await al.actualizarCampana(campana.id, { estado: 'activa' })
-  return { ya: false }
+  // 20-oct · parte 3: el calendario que la jefatura pasa activa la campaña: el arranque por evento sale de aquí también
+  const { arranque } = await activarYArrancar(al, campana, ahora)
+  return { ya: false, ...(arranque ? { arranque } : {}) }
 }
 
-async function pasar(al: Almacen, campana: Campana, tipo: TipoRetenible, ref: number, sinRevision: boolean): Promise<ResultadoDePasar> {
-  const t = await transicion(al, campana, tipo)
+async function pasar(al: Almacen, campana: Campana, tipo: TipoRetenible, ref: number, sinRevision: boolean, ahora: string = new Date().toISOString()): Promise<ResultadoDePasar> {
+  const t = await transicion(al, campana, tipo, ahora)
   await resolverEsperas(al, campana.id, TIPO_DE_ESPERA, objetoDeRetencion(tipo, ref))
   if (t.ya) return { ya_pasada: true, estado_de_la_campana: campana.estado }
   const nueva = await al.campana(campana.id)
-  return { ok: true, ...(sinRevision ? { pasada_sin_revision: true, aviso: 'la espera de la revisión venció: la cadena sigue sin ella' } : {}), estado_de_la_campana: nueva?.estado ?? 'desconocido', ...(t.fechas_pedidas ? { fechas_pedidas: t.fechas_pedidas } : {}) }
+  return { ok: true, ...(sinRevision ? { pasada_sin_revision: true, aviso: 'la espera de la revisión venció: la cadena sigue sin ella' } : {}), estado_de_la_campana: nueva?.estado ?? 'desconocido', ...(t.arranque ? { arranque: t.arranque } : {}), ...(t.fechas_pedidas ? { fechas_pedidas: t.fechas_pedidas } : {}) }
 }
 
 /** el flujo lo llama cuando la revisión de la jefatura CIERRA (cualquier cierre); `revision` solo se registra en la respuesta (no decide) */
@@ -104,7 +106,9 @@ async function manejadorDePasar(tipo: TipoRetenible, al: Almacen, cuerpo: Record
     const ya = tipo === 'estrategia' ? campana.estado !== 'estrategia' && campana.estado !== 'abierta' : campana.estado !== 'calendario'
     return ya ? { status: 200, cuerpo: { ya_pasada: true, estado_de_la_campana: campana.estado } } : err(409, 'E-SIN-RETENCION', `no hay una espera de revisión viva para ${objetoDeRetencion(tipo, ref)}: esta ruta no pasa campañas que no se retuvieron`)
   }
-  const r = await pasar(al, campana, tipo, ref, false)
+  // `hoy` opcional en el cuerpo (como en `filas · lotes`): sin él, la hora real
+  const hoy = cadena(cuerpo.hoy)
+  const r = await pasar(al, campana, tipo, ref, false, hoy && /^\d{4}-\d{2}-\d{2}$/.test(hoy) ? `${hoy}T12:00:00.000Z` : undefined)
   const rev = cuerpo.revision && typeof cuerpo.revision === 'object' && !Array.isArray(cuerpo.revision) ? (cuerpo.revision as Record<string, unknown>) : null
   return { status: 200, cuerpo: { ...r, ...(rev ? { revision: { id: rev.id ?? null, estado: rev.estado ?? null, resultado: rev.resultado ?? null, con_desacuerdo: rev.con_desacuerdo === true } } : {}) } }
 }
@@ -113,13 +117,13 @@ export const estrategiaPasar = (al: Almacen, cuerpo: Record<string, unknown>): P
 export const calendarioPasar = (al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> => manejadorDePasar('calendario', al, cuerpo)
 
 /** el reloj (`accion_al_vencer = 'pasar_sin_revision'`): la espera venció sin cierre de la revisión → la cadena sigue y se AVISA; nunca queda esperando para siempre */
-export async function pasarSinRevision(al: Almacen, e: EsperaFila): Promise<string> {
+export async function pasarSinRevision(al: Almacen, e: EsperaFila, ahora?: string): Promise<string> {
   const m = /^(estrategia):v(\d+)$|^(calendario):t(\d+)$/.exec(e.objeto_id)
   if (!m) return `${e.objeto_tipo} ${e.objeto_id}: objeto no reconocido`
   const tipo = (m[1] ?? m[3]) as TipoRetenible
   const ref = Number(m[2] ?? m[4])
   const campana = await al.campana(e.campana_id)
   if (!campana) return `campaña ${e.campana_id} inexistente`
-  const r = await pasar(al, campana, tipo, ref, true)
+  const r = await pasar(al, campana, tipo, ref, true, ahora)
   return r.ya_pasada ? `${e.objeto_id}: ya había pasado` : `${e.objeto_id}: pasó sin revisión (venció la espera de la jefatura)`
 }
