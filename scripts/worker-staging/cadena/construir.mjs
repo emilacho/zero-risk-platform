@@ -11,6 +11,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { repararVigia } from './vigia-llave.mjs'
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url))
 const NODOS = path.join(AQUI, 'nodos')
@@ -176,7 +177,8 @@ export function flujoDelVigia() {
   f.unir('2 · ¿Hay campañas?', '3 · Lotes', 0); f.unir('2 · ¿Hay campañas?', '4 · Tanda siguiente', 0)
   f.unir('3 · Lotes', '3 · Sobres de lote'); f.unir('3 · Sobres de lote', '3 · Sobre a la sala (lote)')
   f.unir('4 · Tanda siguiente', '4 · Sobres de tanda'); f.unir('4 · Sobres de tanda', '4 · Sobre a la sala (tanda)')
-  return f.json()
+  // 21-oct · tercera prueba: la llave hacia la sala sin respaldo y el rechazo callado (ver vigia-llave.mjs)
+  return repararVigia(f.json())
 }
 
 // ───────────────────────────── la puerta
