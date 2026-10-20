@@ -4,6 +4,8 @@
  * Estados: borrador → enviada → respondida | vencida | sin_necesidad. Nace apagado (`finanzas_config.preguntas_slack`).
  */
 import type { Veredicto } from './tipos'
+// las formas «imperativo + pronombre» («separalo», «dejame»…) que genera la barredora de la casa: el mismo diccionario que convierte es el que detecta (20-oct · el buzón dejó pasar «Separalo en dos»)
+import { FORMAS_CON_PRONOMBRE } from '../../../scripts/ops/barrer-voseo.mjs'
 
 export type EstadoDePregunta = 'borrador' | 'enviada' | 'respondida' | 'vencida' | 'sin_necesidad'
 
@@ -115,7 +117,7 @@ const FUTURO_TUTEO = /(?:[aei]rás|tendrás|vendrás|pondrás|saldrás|habrás|p
 const PALABRA = new RegExp(`(?<![${LETRA}])[${LETRA}]+(?![${LETRA}])`, 'g')
 export function voseoEn(texto: string): string[] {
   const hallados = new Set<string>()
-  const lista = new Set([...VOSEO_EXPLICITO, ...VOSEO_DE_LA_CASA])
+  const lista = new Set([...VOSEO_EXPLICITO, ...VOSEO_DE_LA_CASA, ...FORMAS_CON_PRONOMBRE])
   for (const m of texto.toLowerCase().match(PALABRA) ?? []) {
     if (EXCEPCIONES_DE_TUTEO.has(m)) continue
     if (lista.has(m) && m !== 'dale') hallados.add(m)
