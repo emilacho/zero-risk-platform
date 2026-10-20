@@ -1,0 +1,1009 @@
+{
+ "id": "aTLEk64o1BFAindd",
+ "name": "Zero Risk — Manual · propuesta del agente (lo que falta lo propone un agente, rotulado)",
+ "description": null,
+ "active": true,
+ "activeVersionId": "bb131580-9eb9-4651-9ca8-973be7a553b9",
+ "createdAt": "2026-10-12T15:31:54.090Z",
+ "updatedAt": "2026-10-12T17:09:13.877Z",
+ "isArchived": false,
+ "versionId": "bb131580-9eb9-4651-9ca8-973be7a553b9",
+ "versionCounter": 2,
+ "sourceWorkflowId": null,
+ "triggerCount": 1,
+ "nodes": [
+  {
+   "id": "p-wh",
+   "name": "Pedir propuesta",
+   "webhookId": "5b1f0c2e-7a64-4d3b-9c1e-2f4a6d8e0b13",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "zero-risk/manual-proponer-campos",
+    "responseMode": "onReceived",
+    "options": {}
+   }
+  },
+  {
+   "id": "p-prep",
+   "name": "Preparar",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    240,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/manual/propuesta/preparar",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ client_id: $json.body.client_id, campos: $json.body.campos || undefined, reproponer: $json.body.reproponer || undefined }) }}",
+    "options": {
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     },
+     "timeout": 60000
+    }
+   }
+  },
+  {
+   "id": "p-armar",
+   "name": "Armar pedidos",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    480,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// Armar los pedidos · un ítem por agente · con dry_run NO se llama a ningún agente (queda dicho lo que se pediría).\nconst entrada = $('Pedir propuesta').first().json.body || $('Pedir propuesta').first().json || {};\nconst prep = $json.body || $json || {};\nconst dry = entrada.dry_run === true;\nif (prep.ok !== true) return [{ json: { _parar: true, motivo: 'preparar falló: ' + [prep.error, prep.detail || prep.detalle].filter(Boolean).join(' · ') } }];\nconst pedidos = Array.isArray(prep.pedidos) ? prep.pedidos : [];\nif (!pedidos.length) return [{ json: { _parar: true, motivo: 'no hay campos que proponer' + ((prep.rechazados || []).length ? ': ' + prep.rechazados.map(function (r) { return r.campo + ' → ' + r.motivo; }).join(' · ') : ''), faltantes: prep.faltantes || [] } }];\nif (dry) return [{ json: { _parar: true, dry_run: true, motivo: 'dry_run: no se llamó a ningún agente', pedidos: pedidos.map(function (p) { return { agente: p.agente, campos: p.campos, largo_del_pedido: String(p.task).length }; }), faltantes: prep.faltantes || [] } }];\nreturn pedidos.map(function (p) {\n  return { json: { client_id: prep.client_id, client_name: prep.client_name, agente: p.agente, campos: p.campos, task: p.task, version_base: prep.version_base, huella_base: prep.huella_base, dry_run: false, campos_pedidos: entrada.campos || null, reproponer: entrada.reproponer || null } };\n});\n"
+   }
+  },
+  {
+   "id": "p-seguir",
+   "name": "¿Seguir?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    720,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ $json._parar }}",
+       "rightValue": false,
+       "operator": {
+        "type": "boolean",
+        "operation": "false"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "p-agente",
+   "name": "Llamar al agente",
+   "notes": "SIN reintento: un reintento se cobra dos veces. Un pedido por agente, de a uno.",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "retryOnFail": false,
+   "position": [
+    960,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"agent\": \"{{ $json.agente }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"manual_propuesta_{{ $json.campos.join('+') }}\",\n  \"task\": {{ JSON.stringify($json.task) }},\n  \"context\": { \"role\": \"proponer_campos_del_manual\" }\n}",
+    "options": {
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     },
+     "timeout": 800000,
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 0
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "p-reunir",
+   "name": "Reunir",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1200,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// Reunir lo que contestó cada agente · una respuesta por pedido, en el mismo orden.\nconst pedidos = $('Armar pedidos').all().map(function (x) { return x.json; });\nconst respuestas = $input.all().map(function (x, i) {\n  const b = (x.json && (x.json.body || x.json)) || {};\n  const texto = typeof b.response === 'string' ? b.response : (typeof b.result === 'string' ? b.result : JSON.stringify(b));\n  return { agente: (pedidos[i] || {}).agente, response: texto, ok: b.success !== false && !b.error };\n});\nconst p0 = pedidos[0] || {};\nreturn [{ json: { client_id: p0.client_id, client_name: p0.client_name, dry_run: false, campos: pedidos.reduce(function (a, p) { return a.concat(p.campos || []); }, []), version_base: p0.version_base, huella_base: p0.huella_base, reproponer: p0.reproponer || null, respuestas: respuestas.filter(function (r) { return r.ok; }), agentes_sin_respuesta: respuestas.filter(function (r) { return !r.ok; }).map(function (r) { return r.agente; }) } }];\n"
+   }
+  },
+  {
+   "id": "p-aplicar",
+   "name": "Aplicar",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1440,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/manual/propuesta/aplicar",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, dry_run: false, campos: $json.campos, reproponer: $json.reproponer || undefined, version_base: $json.version_base, huella_base: $json.huella_base, respuestas: $json.respuestas }) }}",
+    "options": {
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     },
+     "timeout": 60000
+    }
+   }
+  },
+  {
+   "id": "p-guardar",
+   "name": "¿Guardar?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1680,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ (($json.body || $json).aplicado === true) }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "p-save",
+   "name": "Guardar versión nueva",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1920,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/brand-book/{{ ($('Aplicar').first().json.body || $('Aplicar').first().json).client_id }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify(($('Aplicar').first().json.body || $('Aplicar').first().json).promote_body) }}",
+    "options": {
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     },
+     "timeout": 800000
+    }
+   }
+  },
+  {
+   "id": "p-drive",
+   "name": "PDF a Drive",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    2160,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://n8n-production-72be.up.railway.app/webhook/zero-risk/manual-a-drive",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ client_id: ($('Aplicar').first().json.body || $('Aplicar').first().json).client_id }) }}",
+    "options": {
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     },
+     "timeout": 15000
+    }
+   }
+  },
+  {
+   "id": "p-recibo",
+   "name": "Recibo",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "alwaysOutputData": true,
+   "position": [
+    2400,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// El recibo · dice lo que SUCEDIÓ (no lo que se pidió): versión nueva guardada o no, campos aplicados, rechazados, y el PDF.\nconst ap = $('Aplicar').first().json.body || $('Aplicar').first().json || {};\nlet guardada = null;\ntry { guardada = $('Guardar versión nueva').first().json; } catch (e) { guardada = null; }\nconst g = guardada ? (guardada.body || guardada) : null;\nconst persistio = !!(g && (g.persisted === true || g.version || g.id));\nreturn [{ json: {\n  client_id: ap.client_id || null, aplicado: ap.aplicado === true, guardado: persistio, version_base: ap.version_base || null,\n  version_nueva: g ? (g.version || null) : null, campos_aplicados: ap.aplicadas || [], rechazadas: ap.rechazadas || [], sin_leer: ap.sin_leer || [],\n  diferencias: (ap.diferencias || []).map(function (d) { return d.campo; }),\n  motivo: ap.aplicado === true ? (persistio ? null : 'se aplicó pero la versión nueva no se guardó') : (ap.motivo || ap.error || 'no se aplicó nada'),\n} }];\n"
+   }
+  },
+  {
+   "id": "p-slack",
+   "name": "Avisar",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    2640,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.SLACK_WEBHOOK_URL_EQUIPO }}",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ text: ($json.guardado ? ':sparkles: *Manual con propuesta del agente guardado* — ' : ':warning: *Propuesta del agente: no se guardó nada* — ') + ($json.guardado ? 'versión ' + $json.version_nueva + ' (sobre la ' + $json.version_base + ')' : ($json.motivo || '')) + '\\n• cliente `' + $json.client_id + '`\\n• campos propuestos: ' + (($json.campos_aplicados || []).join(', ') || 'ninguno') + '\\n• rechazados/sin leer: ' + (($json.rechazadas || []).concat($json.sin_leer || []).map(function (r) { return r.campo + ' → ' + r.motivo; }).join(' · ') || 'ninguno') }) }}",
+    "options": {
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     },
+     "timeout": 15000
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Pedir propuesta": {
+   "main": [
+    [
+     {
+      "node": "Preparar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Preparar": {
+   "main": [
+    [
+     {
+      "node": "Armar pedidos",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Armar pedidos": {
+   "main": [
+    [
+     {
+      "node": "¿Seguir?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿Seguir?": {
+   "main": [
+    [
+     {
+      "node": "Llamar al agente",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    []
+   ]
+  },
+  "Llamar al agente": {
+   "main": [
+    [
+     {
+      "node": "Reunir",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Reunir": {
+   "main": [
+    [
+     {
+      "node": "Aplicar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Aplicar": {
+   "main": [
+    [
+     {
+      "node": "¿Guardar?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿Guardar?": {
+   "main": [
+    [
+     {
+      "node": "Guardar versión nueva",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Recibo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Guardar versión nueva": {
+   "main": [
+    [
+     {
+      "node": "PDF a Drive",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "PDF a Drive": {
+   "main": [
+    [
+     {
+      "node": "Recibo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Recibo": {
+   "main": [
+    [
+     {
+      "node": "Avisar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "nodeGroups": [],
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "staticData": null,
+ "pinData": null,
+ "meta": null,
+ "tags": [],
+ "shared": [
+  {
+   "role": "workflow:owner",
+   "workflowId": "aTLEk64o1BFAindd",
+   "projectId": "xKBOyp07nrGbu4ob",
+   "project": {
+    "id": "xKBOyp07nrGbu4ob",
+    "name": "Emilio  Perez  <emilacho@hotmail.com>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-04-18T13:41:21.856Z",
+    "updatedAt": "2026-04-18T13:51:26.012Z"
+   },
+   "createdAt": "2026-10-12T15:31:54.090Z",
+   "updatedAt": "2026-10-12T15:31:54.090Z"
+  }
+ ],
+ "activeVersion": {
+  "versionId": "bb131580-9eb9-4651-9ca8-973be7a553b9",
+  "workflowId": "aTLEk64o1BFAindd",
+  "nodes": [
+   {
+    "id": "p-wh",
+    "name": "Pedir propuesta",
+    "webhookId": "5b1f0c2e-7a64-4d3b-9c1e-2f4a6d8e0b13",
+    "type": "n8n-nodes-base.webhook",
+    "typeVersion": 2,
+    "position": [
+     0,
+     0
+    ],
+    "parameters": {
+     "httpMethod": "POST",
+     "path": "zero-risk/manual-proponer-campos",
+     "responseMode": "onReceived",
+     "options": {}
+    }
+   },
+   {
+    "id": "p-prep",
+    "name": "Preparar",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     240,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/manual/propuesta/preparar",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ client_id: $json.body.client_id, campos: $json.body.campos || undefined, reproponer: $json.body.reproponer || undefined }) }}",
+     "options": {
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      },
+      "timeout": 60000
+     }
+    }
+   },
+   {
+    "id": "p-armar",
+    "name": "Armar pedidos",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     480,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// Armar los pedidos · un ítem por agente · con dry_run NO se llama a ningún agente (queda dicho lo que se pediría).\nconst entrada = $('Pedir propuesta').first().json.body || $('Pedir propuesta').first().json || {};\nconst prep = $json.body || $json || {};\nconst dry = entrada.dry_run === true;\nif (prep.ok !== true) return [{ json: { _parar: true, motivo: 'preparar falló: ' + [prep.error, prep.detail || prep.detalle].filter(Boolean).join(' · ') } }];\nconst pedidos = Array.isArray(prep.pedidos) ? prep.pedidos : [];\nif (!pedidos.length) return [{ json: { _parar: true, motivo: 'no hay campos que proponer' + ((prep.rechazados || []).length ? ': ' + prep.rechazados.map(function (r) { return r.campo + ' → ' + r.motivo; }).join(' · ') : ''), faltantes: prep.faltantes || [] } }];\nif (dry) return [{ json: { _parar: true, dry_run: true, motivo: 'dry_run: no se llamó a ningún agente', pedidos: pedidos.map(function (p) { return { agente: p.agente, campos: p.campos, largo_del_pedido: String(p.task).length }; }), faltantes: prep.faltantes || [] } }];\nreturn pedidos.map(function (p) {\n  return { json: { client_id: prep.client_id, client_name: prep.client_name, agente: p.agente, campos: p.campos, task: p.task, version_base: prep.version_base, huella_base: prep.huella_base, dry_run: false, campos_pedidos: entrada.campos || null, reproponer: entrada.reproponer || null } };\n});\n"
+    }
+   },
+   {
+    "id": "p-seguir",
+    "name": "¿Seguir?",
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+     720,
+     0
+    ],
+    "parameters": {
+     "conditions": {
+      "options": {
+       "caseSensitive": true,
+       "typeValidation": "loose"
+      },
+      "combinator": "and",
+      "conditions": [
+       {
+        "leftValue": "={{ $json._parar }}",
+        "rightValue": false,
+        "operator": {
+         "type": "boolean",
+         "operation": "false"
+        }
+       }
+      ]
+     }
+    }
+   },
+   {
+    "id": "p-agente",
+    "name": "Llamar al agente",
+    "notes": "SIN reintento: un reintento se cobra dos veces. Un pedido por agente, de a uno.",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "retryOnFail": false,
+    "position": [
+     960,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={\n  \"agent\": \"{{ $json.agente }}\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"manual_propuesta_{{ $json.campos.join('+') }}\",\n  \"task\": {{ JSON.stringify($json.task) }},\n  \"context\": { \"role\": \"proponer_campos_del_manual\" }\n}",
+     "options": {
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      },
+      "timeout": 800000,
+      "batching": {
+       "batch": {
+        "batchSize": 1,
+        "batchInterval": 0
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "p-reunir",
+    "name": "Reunir",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1200,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// Reunir lo que contestó cada agente · una respuesta por pedido, en el mismo orden.\nconst pedidos = $('Armar pedidos').all().map(function (x) { return x.json; });\nconst respuestas = $input.all().map(function (x, i) {\n  const b = (x.json && (x.json.body || x.json)) || {};\n  const texto = typeof b.response === 'string' ? b.response : (typeof b.result === 'string' ? b.result : JSON.stringify(b));\n  return { agente: (pedidos[i] || {}).agente, response: texto, ok: b.success !== false && !b.error };\n});\nconst p0 = pedidos[0] || {};\nreturn [{ json: { client_id: p0.client_id, client_name: p0.client_name, dry_run: false, campos: pedidos.reduce(function (a, p) { return a.concat(p.campos || []); }, []), version_base: p0.version_base, huella_base: p0.huella_base, reproponer: p0.reproponer || null, respuestas: respuestas.filter(function (r) { return r.ok; }), agentes_sin_respuesta: respuestas.filter(function (r) { return !r.ok; }).map(function (r) { return r.agente; }) } }];\n"
+    }
+   },
+   {
+    "id": "p-aplicar",
+    "name": "Aplicar",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     1440,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/manual/propuesta/aplicar",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, dry_run: false, campos: $json.campos, reproponer: $json.reproponer || undefined, version_base: $json.version_base, huella_base: $json.huella_base, respuestas: $json.respuestas }) }}",
+     "options": {
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      },
+      "timeout": 60000
+     }
+    }
+   },
+   {
+    "id": "p-guardar",
+    "name": "¿Guardar?",
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+     1680,
+     0
+    ],
+    "parameters": {
+     "conditions": {
+      "options": {
+       "caseSensitive": true,
+       "typeValidation": "loose"
+      },
+      "combinator": "and",
+      "conditions": [
+       {
+        "leftValue": "={{ (($json.body || $json).aplicado === true) }}",
+        "rightValue": true,
+        "operator": {
+         "type": "boolean",
+         "operation": "true"
+        }
+       }
+      ]
+     }
+    }
+   },
+   {
+    "id": "p-save",
+    "name": "Guardar versión nueva",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     1920,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/brand-book/{{ ($('Aplicar').first().json.body || $('Aplicar').first().json).client_id }}",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify(($('Aplicar').first().json.body || $('Aplicar').first().json).promote_body) }}",
+     "options": {
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      },
+      "timeout": 800000
+     }
+    }
+   },
+   {
+    "id": "p-drive",
+    "name": "PDF a Drive",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     2160,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://n8n-production-72be.up.railway.app/webhook/zero-risk/manual-a-drive",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ client_id: ($('Aplicar').first().json.body || $('Aplicar').first().json).client_id }) }}",
+     "options": {
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      },
+      "timeout": 15000
+     }
+    }
+   },
+   {
+    "id": "p-recibo",
+    "name": "Recibo",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "alwaysOutputData": true,
+    "position": [
+     2400,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// El recibo · dice lo que SUCEDIÓ (no lo que se pidió): versión nueva guardada o no, campos aplicados, rechazados, y el PDF.\nconst ap = $('Aplicar').first().json.body || $('Aplicar').first().json || {};\nlet guardada = null;\ntry { guardada = $('Guardar versión nueva').first().json; } catch (e) { guardada = null; }\nconst g = guardada ? (guardada.body || guardada) : null;\nconst persistio = !!(g && (g.persisted === true || g.version || g.id));\nreturn [{ json: {\n  client_id: ap.client_id || null, aplicado: ap.aplicado === true, guardado: persistio, version_base: ap.version_base || null,\n  version_nueva: g ? (g.version || null) : null, campos_aplicados: ap.aplicadas || [], rechazadas: ap.rechazadas || [], sin_leer: ap.sin_leer || [],\n  diferencias: (ap.diferencias || []).map(function (d) { return d.campo; }),\n  motivo: ap.aplicado === true ? (persistio ? null : 'se aplicó pero la versión nueva no se guardó') : (ap.motivo || ap.error || 'no se aplicó nada'),\n} }];\n"
+    }
+   },
+   {
+    "id": "p-slack",
+    "name": "Avisar",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     2640,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "={{ $env.SLACK_WEBHOOK_URL_EQUIPO }}",
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ text: ($json.guardado ? ':sparkles: *Manual con propuesta del agente guardado* — ' : ':warning: *Propuesta del agente: no se guardó nada* — ') + ($json.guardado ? 'versión ' + $json.version_nueva + ' (sobre la ' + $json.version_base + ')' : ($json.motivo || '')) + '\\n• cliente `' + $json.client_id + '`\\n• campos propuestos: ' + (($json.campos_aplicados || []).join(', ') || 'ninguno') + '\\n• rechazados/sin leer: ' + (($json.rechazadas || []).concat($json.sin_leer || []).map(function (r) { return r.campo + ' → ' + r.motivo; }).join(' · ') || 'ninguno') }) }}",
+     "options": {
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      },
+      "timeout": 15000
+     }
+    }
+   }
+  ],
+  "connections": {
+   "Pedir propuesta": {
+    "main": [
+     [
+      {
+       "node": "Preparar",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Preparar": {
+    "main": [
+     [
+      {
+       "node": "Armar pedidos",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Armar pedidos": {
+    "main": [
+     [
+      {
+       "node": "¿Seguir?",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "¿Seguir?": {
+    "main": [
+     [
+      {
+       "node": "Llamar al agente",
+       "type": "main",
+       "index": 0
+      }
+     ],
+     []
+    ]
+   },
+   "Llamar al agente": {
+    "main": [
+     [
+      {
+       "node": "Reunir",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Reunir": {
+    "main": [
+     [
+      {
+       "node": "Aplicar",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Aplicar": {
+    "main": [
+     [
+      {
+       "node": "¿Guardar?",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "¿Guardar?": {
+    "main": [
+     [
+      {
+       "node": "Guardar versión nueva",
+       "type": "main",
+       "index": 0
+      }
+     ],
+     [
+      {
+       "node": "Recibo",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Guardar versión nueva": {
+    "main": [
+     [
+      {
+       "node": "PDF a Drive",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "PDF a Drive": {
+    "main": [
+     [
+      {
+       "node": "Recibo",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Recibo": {
+    "main": [
+     [
+      {
+       "node": "Avisar",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   }
+  },
+  "nodeGroups": [],
+  "authors": "Emilio  Perez ",
+  "name": null,
+  "description": null,
+  "autosaved": false,
+  "createdAt": "2026-10-12T17:09:13.880Z",
+  "updatedAt": "2026-10-12T17:09:13.880Z",
+  "workflowPublishHistory": [
+   {
+    "id": 2594,
+    "workflowId": "aTLEk64o1BFAindd",
+    "versionId": "bb131580-9eb9-4651-9ca8-973be7a553b9",
+    "event": "activated",
+    "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-10-12T17:09:14.024Z"
+   }
+  ]
+ }
+}
