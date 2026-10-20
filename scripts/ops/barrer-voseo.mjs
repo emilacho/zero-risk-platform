@@ -55,6 +55,49 @@ Object.assign(TABLA, { aplicás: 'aplicas', integrás: 'integras', reescribís: 
 Object.assign(TABLA, { mejorá: 'mejora', elaborá: 'elabora', explorá: 'explora', borrá: 'borra', registrá: 'registra', ilustrá: 'ilustra', demostrá: 'demuestra', mostrá: 'muestra', considerá: 'considera', prepará: 'prepara', compará: 'compara', separá: 'separa', analizá: 'analiza', evaluá: 'evalúa', reevaluá: 'reevalúa', revisá: 'revisa', enfocá: 'enfoca', buscá: 'busca', ordená: 'ordena', ponderá: 'pondera', apoyá: 'apoya', basá: 'basa', fundá: 'funda', corregilo: 'corrígelo' })
 // variantes SIN tilde (el voseo también se escribe «podes», «usala», «decilo»)
 Object.assign(TABLA, { podes: 'puedes', tenes: 'tienes', queres: 'quieres', decis: 'dices', usala: 'úsala', usalo: 'úsalo', usalas: 'úsalas', usalos: 'úsalos', decilo: 'dilo', decila: 'dila', decime: 'dime', pedilo: 'pídelo', pedila: 'pídela', hacelo: 'hazlo', elegilo: 'elígelo', dejalo: 'déjalo', tomalo: 'tómalo', mostrame: 'muéstrame', contame: 'cuéntame', avisame: 'avísame', mandame: 'mándame', escribilo: 'escríbelo', buscalo: 'búscalo', fijate: 'fíjate', acordate: 'acuérdate', asegurate: 'asegúrate', animate: 'anímate', sumate: 'súmate', andate: 'vete', quedate: 'quédate' })
+// IMPERATIVO + PRONOMBRE PEGADO (20-oct · el buzón le mandó a Emilio «Separalo en dos»): el voseo es el imperativo sin tilde + lo/la/los/las/me/te/le/les/nos; el tuteo lleva la tilde en la sílaba tónica
+// («separalo» → «sepáralo»). Solo verbos REGULARES en -ar (consonante + a) y de instrucción; los que cambian la raíz (contar, mostrar, probar…) van uno por uno arriba.
+const CLITICOS = ['lo', 'la', 'los', 'las', 'me', 'te', 'le', 'les', 'nos']
+const VERBOS_AR_REGULARES = ['separ', 'dej', 'mand', 'pas', 'us', 'busc', 'mir', 'llam', 'revis', 'calcul', 'confirm', 'aclar', 'explic', 'marc', 'camb', 'complet', 'aplic', 'ejecut', 'public', 'activ', 'guard', 'sac', 'quit', 'carg', 'gener', 'arm', 'tom', 'peg', 'list', 'anot', 'registr', 'valid', 'entreg', 'pregunt', 'trabaj', 'utiliz', 'inform', 'habl', 'fij', 'asegur', 'verific', 'compar', 'cit', 'analiz', 'prepar', 'consider', 'ayud', 'cuid', 'evit', 'junt', 'limit', 'respet', 'nombr', 'identific', 'clasific', 'determin', 'estim', 'agrup', 'filtr', 'asign', 'reserv', 'cancel', 'termin', 'finaliz', 'mejor', 'elabor', 'explor', 'borr', 'ilustr', 'orden']
+// «-te» solo con los verbos que de verdad se dicen así (con los demás choca con palabras reales: tom+a+te = «tomate», termin+a+te = «terminate», valid+a+te = «validate»)
+const CON_TE = new Set(['fij', 'cuid', 'pas', 'mir', 'llam', 'dej', 'asegur', 'registr', 'anim', 'calm'])
+// «-les» choca con palabras reales: gener+a+les = «generales», termin+a+les = «terminales», inform+a+les = «informales»
+const SIN_LES = new Set(['gener', 'termin', 'inform'])
+// «mandala» es también el sustantivo
+const SIN_LA = new Set(['mand'])
+const TILDE = { a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú' }
+/** «separa» → «sepára» (la vocal tónica es la última antes de la consonante que precede a la «a» final) */
+function conTildeTonica(imperativo) {
+  const m = imperativo.match(/^(.*)([aeiou])([^aeiouáéíóú]+)a$/)
+  return m ? m[1] + TILDE[m[2]] + m[3] + 'a' : imperativo
+}
+/**
+ * Tabla APARTE (no es `TABLA`): el barrido de instrucciones y papeles del vault no la usa (hay papeles con estas formas que no se tocan); solo se activa con `barrerTexto(texto, { conPronombre: true })`,
+ * que es lo que hace el buzón al tutear la pregunta al dueño, y alimenta al detector del buzón.
+ */
+export const TABLA_CON_PRONOMBRE = {}
+for (const v of VERBOS_AR_REGULARES) {
+  const imperativo = v + 'a'
+  if (!/[^aeiou]a$/.test(imperativo)) continue
+  for (const c of CLITICOS) {
+    if (c === 'te' && !CON_TE.has(v)) continue
+    if (c === 'les' && SIN_LES.has(v)) continue
+    if (c === 'la' && SIN_LA.has(v)) continue
+    const vos = imperativo + c
+    if (!Object.prototype.hasOwnProperty.call(TABLA, vos)) TABLA_CON_PRONOMBRE[vos] = conTildeTonica(imperativo) + c
+  }
+}
+// regulares en -er / -ir y los de raíz cambiada que más aparecen en una pregunta al dueño (uno por uno)
+Object.assign(TABLA_CON_PRONOMBRE, {
+  contalo: 'cuéntalo', contala: 'cuéntala', contalos: 'cuéntalos', contalas: 'cuéntalas', mostralo: 'muéstralo', mostrala: 'muéstrala', probalo: 'pruébalo', probala: 'pruébala',
+  recordalo: 'recuérdalo', recordala: 'recuérdala', pensalo: 'piénsalo', pensala: 'piénsala', leelo: 'léelo', leela: 'léela', comelo: 'cómelo', respondelo: 'respóndelo', respondela: 'respóndela',
+  escribila: 'escríbela', escribime: 'escríbeme', corregilo: 'corrígelo', corregila: 'corrígela', decidilo: 'decídelo', definilo: 'defínelo', abrilo: 'ábrelo', abrila: 'ábrela', subilo: 'súbelo', subila: 'súbela',
+  separame: 'sepárame', dejame: 'déjame', pasame: 'pásame', ponelo: 'ponlo', ponela: 'ponla', hacela: 'hazla', dividilo: 'divídelo', dividila: 'divídela',
+})
+/** las formas VOSEANTES con pronombre (las usa también el detector del buzón) */
+export const FORMAS_CON_PRONOMBRE = Object.keys(TABLA_CON_PRONOMBRE)
+/** `barrerTexto` es síncrono: el interruptor vive solo mientras corre */
+let conPronombreActivo = false
 // el imperativo voseante de los verbos en -ar es regular: la tilde final se quita («Mejorá» → «Mejora», «Analizá» → «Analiza»). Fuera quedan las palabras que acaban en -á y no son verbos
 const NO_IMPERATIVO_A = new Set(['está', 'allá', 'acá', 'papá', 'mamá', 'sofá', 'ojalá', 'canadá', 'panamá', 'bogotá', 'maná', 'quizá', 'alá', 'ahá'])
 const esImperativoA = (w) => w.length >= 4 && w.endsWith('á') && !w.endsWith('rá') && !NO_IMPERATIVO_A.has(w)
@@ -82,8 +125,9 @@ const esLineaProtegida = (linea) => MARCAS_PROTEGIDAS.some((r) => r.test(linea))
 // presente de indicativo de los verbos en -ar («consultás» → «consultas»): regular, así que basta quitar la tilde. Fuera quedan las palabras en -ás que no son verbos (más, además, jamás, nombres propios) y los futuros en -rás
 const NO_PRESENTE_AS = new Set(['más', 'además', 'jamás', 'atrás', 'detrás', 'demás', 'quizás', 'compás', 'estás', 'anás', 'nicolás', 'tomás', 'matías', 'lucás', 'andrés', 'ramás', 'bernabás', 'tobías', 'esdrás', 'barrabás', 'gamás', 'fanás'])
 const esPresenteAs = (w) => w.length >= 5 && w.endsWith('ás') && !w.endsWith('rás') && !NO_PRESENTE_AS.has(w)
-const esForma = (w) => Object.prototype.hasOwnProperty.call(TABLA, w) || esImperativoA(w) || esPresenteAs(w)
-const nuevaForma = (w) => (Object.prototype.hasOwnProperty.call(TABLA, w) ? TABLA[w] : w.endsWith('ás') ? w.slice(0, -2) + 'as' : w.slice(0, -1) + 'a')
+const enPronombre = (w) => conPronombreActivo && Object.prototype.hasOwnProperty.call(TABLA_CON_PRONOMBRE, w)
+const esForma = (w) => Object.prototype.hasOwnProperty.call(TABLA, w) || enPronombre(w) || esImperativoA(w) || esPresenteAs(w)
+const nuevaForma = (w) => (Object.prototype.hasOwnProperty.call(TABLA, w) ? TABLA[w] : enPronombre(w) ? TABLA_CON_PRONOMBRE[w] : w.endsWith('ás') ? w.slice(0, -2) + 'as' : w.slice(0, -1) + 'a')
 const formasDeLinea = (linea) => [...linea.matchAll(RE_TOKEN)].map((m) => m[0].toLowerCase()).filter(esForma)
 /** una línea con ≥ 4 formas DISTINTAS Y que son ≥ 30 % de sus palabras es un diccionario (datos del detector), no una instrucción: un párrafo de prompt con cinco imperativos NO lo es */
 const esDiccionario = (linea) => {
@@ -94,6 +138,10 @@ const esDiccionario = (linea) => {
 
 /** barre un texto línea por línea · devuelve el texto nuevo, los cambios (antes → después) y las líneas protegidas que contenían formas */
 export function barrerTexto(texto, op = {}) {
+  conPronombreActivo = op.conPronombre === true
+  try { return barrerTextoInterno(texto, op) } finally { conPronombreActivo = false }
+}
+function barrerTextoInterno(texto, op) {
   const cambios = [], protegidas = []
   const salida = String(texto).split('\n').map((linea) => {
     const formas = formasDeLinea(linea)

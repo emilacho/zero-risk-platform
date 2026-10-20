@@ -16,6 +16,7 @@ import { baseDeRunSdk, modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-s
 import { abrirConversacion, avanzar, cerrarPorPlazo, leerConversacion } from '@/lib/finanzas/conversa/orquestador'
 import { avanzarConSimulacion } from '@/lib/finanzas/conversa/simulado'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
+import { nombreDelClienteDe } from '@/lib/finanzas/conversa/nombre'
 import { listarAbiertos, preguntarAlDueno, recogerRespuestas } from '@/lib/finanzas/conversa/buzon'
 import { slackMdPuerto } from '@/lib/buzon-dueno/slack-md'
 import { cerebroDelDueno } from '@/lib/buzon-dueno/cerebro-dueno'
@@ -79,6 +80,8 @@ export async function POST(request: Request) {
         cerebro: cerebroDelDueno({ base: baseDelCerebro(process.env), llave: process.env.INTERNAL_API_KEY ?? '', workflow_id: c.workflow_id, workflow_execution_id: c.workflow_execution_id, ...(canalDelBuzon ? { canal_etiqueta: 'canal privado de Slack «buzon-de-preguntas»' } : {}) }),
         modo: cfg.preguntas_slack,
         ahora: P.ahora,
+        // el nombre de la ficha para el mensaje al dueño (sin esto salía el id del cliente)
+        nombreDelCliente: nombreDelClienteDe(db),
       }
       r = c.accion === 'buzon_abiertos' ? await listarAbiertos(B) : c.accion === 'preguntar' ? await preguntarAlDueno(B, c.encargo_id as string) : await recogerRespuestas(B, c.encargo_id as string)
     }

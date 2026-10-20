@@ -18,6 +18,7 @@ import type { CerebroDelDueno } from '../../buzon-dueno/cerebro-dueno'
 import type { SlackMd } from '../../buzon-dueno/slack-md'
 import type { Respuesta } from './orquestador'
 import type { AlmacenDeConversa, EncargoDeConversa, Semilla } from './puertos'
+import { NOMBRE_SIN_FICHA, pareceUnId } from './nombre'
 import { sha256 } from './util'
 
 export interface PuertosDelBuzon {
@@ -70,7 +71,7 @@ function preguntasDelAcuerdo(arts: Record<string, Record<string, unknown>>): Pre
  * (`barrer-voseo.mjs`) y solo se usa el resultado si quedó SIN voseo en los tres campos; si no queda limpio, se conserva el original (y `armarMensaje` lo rechaza con su motivo de siempre: nunca sale voseo al dueño).
  */
 export function tutearPregunta(q: Pregunta): { q: Pregunta; cambiada: boolean } {
-  const t = (v: string) => (typeof v === 'string' && v ? (barrerTexto(v, { soloInicio: true }).texto as string) : v)
+  const t = (v: string) => (typeof v === 'string' && v ? (barrerTexto(v, { soloInicio: true, conPronombre: true }).texto as string) : v)
   const n: Pregunta = { ...q, texto: t(q.texto), recomendacion: t(q.recomendacion), supuesto_si_no_responde: t(q.supuesto_si_no_responde) }
   const cambiada = n.texto !== q.texto || n.recomendacion !== q.recomendacion || n.supuesto_si_no_responde !== q.supuesto_si_no_responde
   if (!cambiada) return { q, cambiada: false }
@@ -163,7 +164,9 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): 
 
     // 2 · un solo MD con lo que de verdad falta
     const porClave = new Map(hechas.map((q) => [q.clave, q]))
-    const nombre = (await P.nombreDelCliente?.(e.client_id).catch(() => null)) || e.client_id
+    // nunca el id del cliente en un mensaje a una persona (20-oct): sin nombre de ficha, «tu negocio»
+    const nombreFicha = (await P.nombreDelCliente?.(e.client_id).catch(() => null)) || ''
+    const nombre = nombreFicha && !pareceUnId(nombreFicha) ? nombreFicha : NOMBRE_SIN_FICHA
     const msg = armarMensaje({ cliente: nombre, preguntas: aPreguntar.map((a) => porClave.get(a.clave) as Pregunta) })
     if (!msg.ok) return { status: 200, cuerpo: { enviado: false, motivo: 'pregunta_mal_formada', errores: msg.errores } }
     // pregunta larga: el «si no respondes» va como primera respuesta del hilo; sin ese método no se manda nada (no se esconde el supuesto)
