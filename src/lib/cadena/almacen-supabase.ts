@@ -9,6 +9,7 @@ import { isIntakeEnabled, orchestrateIngress, SupabaseIngressTables, type Ingres
 import { SupabaseEventLogStorage } from '@/lib/sala-event-log'
 import { programarDespachoInmediato } from '@/lib/sala-router-consumer/inmediato-supabase'
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
+import type { SobreDeLote } from './arranque'
 import { almacenDeSupabase as almacenDeJefatura } from '@/lib/jefatura/revision/almacen-supabase'
 import { decidirRetencion } from './revision-jefatura'
 import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
@@ -218,7 +219,7 @@ export function almacenDeSupabase(): Almacen {
       const r = await checkRunSdkSpendCap(db, clientId)
       return { bloqueado: r.blocked === true, motivo: r.reason }
     },
-    async emitirSobre(sobre: SobreDeProducir): Promise<ResultadoDeEmision> {
+    async emitirSobre(sobre: SobreDeProducir | SobreDeLote): Promise<ResultadoDeEmision> {
       if (!isIntakeEnabled()) return { resultado: 'rechazado', detalle: 'intake_apagado · SALA_INTAKE_ENABLED' }
       const llave = process.env.INTERNAL_API_KEY
       if (!llave) return { resultado: 'rechazado', detalle: 'sin_llave_interna' }
@@ -230,7 +231,7 @@ export function almacenDeSupabase(): Almacen {
       })
       // r79 · D2 · el sobre de autoproducir también sale al entrar (antes esperaba siempre al reloj de 15 min); el reloj queda de respaldo
       if (r.kind === 'accepted') {
-        if (r.inserted) programarDespachoInmediato({ supabase: db, storage: new SupabaseEventLogStorage(db), tenant_id: sobre.tenant_id, event_id: r.event_id, stream_id: r.stream_id, origen: 'cadena/autoproducir' })
+        if (r.inserted) programarDespachoInmediato({ supabase: db, storage: new SupabaseEventLogStorage(db), tenant_id: sobre.tenant_id, event_id: r.event_id, stream_id: r.stream_id, origen: sobre.source === 'cadena/vigia' ? 'cadena/arranque' : 'cadena/autoproducir' })
         return { resultado: 'aceptado', event_id: r.event_id }
       }
       if (r.kind === 'duplicate') return { resultado: 'duplicado', event_id: r.event_id }

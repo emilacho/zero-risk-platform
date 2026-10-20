@@ -8,6 +8,7 @@ import type { FormatosPorRed, Estrategia, Ficha, Fila, Hallazgo, Referencia, Sed
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
+import type { SobreDeLote } from './arranque'
 
 export type EstadoCampana = 'abierta' | 'estrategia' | 'calendario' | 'activa' | 'pausada' | 'necesita_humano' | 'cerrada' | 'reemplazada'
 
@@ -186,6 +187,6 @@ export interface Almacen {
   /** r74 · F4 · llena las sedes y su horario con lo que el sistema YA guardó del cliente (sitio · Instagram · Mapas), con su fuente · US$ 0 · un fallo se declara, no frena */
   recolectarSedes(clientId: string): Promise<{ ok: boolean; sedes: number; error?: string }>
   /** deja UN sobre en la sala (intake) · idempotente por su llave: el repetido vuelve `duplicado` · nunca despacha */
-  emitirSobre(sobre: SobreDeProducir): Promise<ResultadoDeEmision>
+  emitirSobre(sobre: SobreDeProducir | SobreDeLote): Promise<ResultadoDeEmision>
   guardarFechaEspecial(f: { pais: string; tipo: string; ambito: string; anio: number; fecha: string; nombre: string; alcance: string; fuente_url: string; cita_literal: string; pagina_hash: string; doble_fuente: boolean; estado: 'verificada' | 'pendiente' }): Promise<void>
 }
