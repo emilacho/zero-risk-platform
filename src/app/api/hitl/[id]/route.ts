@@ -16,6 +16,8 @@ import { TIPO_DE_BANDEJA } from '@/lib/manual/borrador'
 import { guardarNotaDeRechazo, promoverManualRevisado } from '@/lib/manual/promover'
 import { publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA } from '@/lib/publicacion/en-ensayo'
 import { puertosDePublicacion } from '@/lib/publicacion/almacen-supabase'
+import { emitirBriefearAlAprobar, TIPO_PLAN_CON_PENDIENTES } from '@/lib/planeacion/plan-aprobado'
+import { puertosPlanAprobado } from '@/lib/planeacion/plan-aprobado-supabase'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -120,6 +122,16 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
 
   // Lote de publicación o pieza de la oficina aprobados (arreglo 5 de la cadena): al APROBAR se arma la publicación EN ENSAYO (no se llama a Meta ni se publica nada).
   // Un fallo del ensayo se dice en la respuesta, pero no deshace la decisión del aprobador.
+  // un plan con pendientes que Emilio APRUEBA: la cadena sigue sola (se emite el sobre `briefear` que la planeación dejó en espera). Si falla, la decisión NO se deshace: se dice en la respuesta.
+  if (data?.type === TIPO_PLAN_CON_PENDIENTES && body.status === 'approved') {
+    try {
+      const briefear = await emitirBriefearAlAprobar(puertosPlanAprobado(supabase, new URL(request.url).origin), { hitl_id: String(data.id) })
+      return NextResponse.json({ item: data, briefear })
+    } catch (e) {
+      return NextResponse.json({ item: data, briefear: { ok: false, error: 'briefear_fallido', detalle: e instanceof Error ? e.message : String(e) } })
+    }
+  }
+
   if ((data?.type === TIPO_LOTE_SOCIAL || data?.type === TIPO_PIEZA_DE_OFICINA) && body.status === 'approved') {
     try {
       const publicacion = await publicarAprobado(puertosDePublicacion(supabase), { hitl_id: String(data.id) })
