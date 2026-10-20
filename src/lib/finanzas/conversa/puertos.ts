@@ -124,6 +124,8 @@ export interface AlmacenDeConversa {
   /** BUZÓN (16-oct): guarda solo lo del buzón (canal/ts del MD, cursor de lectura, respuestas en la semilla, registro) SIN tocar el estado del motor ni el gasto: no pisa un paso en vuelo */
   /** BUZÓN: MD enviados (un `buzon_respuestas` versión 1 = un MD) por este cliente en las últimas 24 h y entre todos desde las 00:00 UTC; null si no se pudo leer */
   contarBuzon?(client_id: string, ahora: Date): Promise<{ cliente_24h: number; hoy: number } | null>
+  /** BUZÓN (20-oct): los encargos con un MD enviado hace menos de `horas` (no en seco, con canal y marca del mensaje); el vigía `finanzas · buzón` recoge de cada uno. null si no se pudo leer */
+  buzonAbiertos?(ahora: Date, horas: number): Promise<string[] | null>
   guardarBuzon?(c: { encargo_id: string; slack_canal?: string | null; slack_ts?: string | null; leido_hasta?: string | null; semilla?: Semilla; artefacto?: ArtefactoGuardado }): Promise<void>
 }
 

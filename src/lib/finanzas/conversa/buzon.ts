@@ -11,7 +11,9 @@
  *    (la respuesta lo dice: `aclaracion_necesaria`). Una nota libre ANTERIOR (de una recogida pasada) se aplica en la siguiente recogida si hoy hay una sola abierta: así se recupera lo que antes solo quedó como nota.
  *  · Slack caído o sin permiso: el encargo sigue con los supuestos (nunca lanza). Recoger NO dispara la siguiente ronda: el encargo queda listo para ella.
  */
-import { armarMensaje, leerRespuesta, puedeEnviarAhora, TOPE_POR_CLIENTE_24H, TOPE_POR_DIA_TOTAL, type Pregunta } from '../preguntas'
+import { armarMensaje, HORAS_PARA_VENCER, leerRespuesta, puedeEnviarAhora, TOPE_POR_CLIENTE_24H, TOPE_POR_DIA_TOTAL, voseoEn, type Pregunta } from '../preguntas'
+// la barredora de la casa (.mjs): se usa solo su función pura
+import { barrerTexto } from '../../../../scripts/ops/barrer-voseo.mjs'
 import type { CerebroDelDueno } from '../../buzon-dueno/cerebro-dueno'
 import type { SlackMd } from '../../buzon-dueno/slack-md'
 import type { Respuesta } from './orquestador'
@@ -63,6 +65,29 @@ function preguntasDelAcuerdo(arts: Record<string, Record<string, unknown>>): Pre
   return l.filter(objeto).map((q) => ({ clave: String(q.clave ?? ''), texto: String(q.texto ?? ''), recomendacion: String(q.recomendacion ?? ''), supuesto_si_no_responde: String(q.supuesto_si_no_responde ?? '') }))
 }
 
+/**
+ * TUTEO ANTES DE ENVIAR (20-oct · parte 5): el CFO escribió «podés» y «manejás» en el acuerdo y el filtro de voseo habría frenado la pregunta para siempre. Se pasa por la MISMA tabla que barre las instrucciones
+ * (`barrer-voseo.mjs`) y solo se usa el resultado si quedó SIN voseo en los tres campos; si no queda limpio, se conserva el original (y `armarMensaje` lo rechaza con su motivo de siempre: nunca sale voseo al dueño).
+ */
+export function tutearPregunta(q: Pregunta): { q: Pregunta; cambiada: boolean } {
+  const t = (v: string) => (typeof v === 'string' && v ? (barrerTexto(v, { soloInicio: true }).texto as string) : v)
+  const n: Pregunta = { ...q, texto: t(q.texto), recomendacion: t(q.recomendacion), supuesto_si_no_responde: t(q.supuesto_si_no_responde) }
+  const cambiada = n.texto !== q.texto || n.recomendacion !== q.recomendacion || n.supuesto_si_no_responde !== q.supuesto_si_no_responde
+  if (!cambiada) return { q, cambiada: false }
+  const limpio = [n.texto, n.recomendacion, n.supuesto_si_no_responde].every((v) => !voseoEn(v ?? '').length)
+  return limpio ? { q: n, cambiada: true } : { q, cambiada: false }
+}
+
+/** los MD abiertos (enviados hace menos de 72 h) de los que el vigía `finanzas · buzón` recoge respuestas · apagado = lista vacía, 0 lecturas */
+export async function listarAbiertos(P: PuertosDelBuzon): Promise<Respuesta> {
+  if (P.modo !== 'envia') return { status: 200, cuerpo: { abiertos: [], motivo: 'buzon_apagado', modo: P.modo } }
+  if (!P.almacen.buzonAbiertos) return { status: 200, cuerpo: { abiertos: [], motivo: 'sin_lista' } }
+  const ids = await P.almacen.buzonAbiertos(P.ahora(), HORAS_PARA_VENCER).catch(() => null)
+  // un tope que no se puede medir no es «ninguno»: se dice (503) para que el vigía lo avise en vez de callarse
+  if (!ids) return { status: 503, cuerpo: { error: 'abiertos_ilegibles' } }
+  return { status: 200, cuerpo: { abiertos: ids, total: ids.length } }
+}
+
 async function cargar(P: PuertosDelBuzon, encargo_id: string): Promise<{ e: EncargoDeConversa } | Respuesta> {
   let e: EncargoDeConversa | null
   try { e = await P.almacen.leerEncargo(encargo_id) } catch (x) { return { status: 503, cuerpo: { error: 'encargo_ilegible', detalle: x instanceof Error ? x.message : String(x) } } }
@@ -96,7 +121,8 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): 
   const yaEnviado = (x: EncargoDeConversa) => destinoValido(P, x.slack_canal) && !!x.slack_ts
   if (yaEnviado(e)) return { status: 200, cuerpo: { enviado: false, motivo: 'ya_enviado', slack_ts: e.slack_ts } }
   const arts = await P.almacen.artefactos(encargo_id).catch(() => ({}) as Record<string, Record<string, unknown>>)
-  const hechas = preguntasDelAcuerdo(arts).slice(0, 3)
+  const tuteadas: string[] = []
+  const hechas = preguntasDelAcuerdo(arts).slice(0, 3).map((q) => { const r = tutearPregunta(q); if (r.cambiada) tuteadas.push(q.clave); return r.q })
   if (!hechas.length) return { status: 200, cuerpo: { enviado: false, motivo: 'sin_preguntas' } }
   // la forma se valida ANTES de registrar nada en el cerebro (no se dejan preguntas pendientes de un mensaje que no sale)
   const prueba = armarMensaje({ cliente: 'x', preguntas: hechas })
@@ -154,7 +180,7 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): 
     // el mensaje ya salió y quedó registrado: si el hilo falla se avisa (el supuesto sigue en el encargo), no se reenvía nada
     let supuestos_en_hilo: boolean | undefined
     if (msg.supuestos) supuestos_en_hilo = (await P.slack.enHilo!(envio.canal, envio.ts, msg.supuestos).catch(() => ({ ok: false as const }))).ok
-    return { status: 200, cuerpo: { enviado: true, preguntas: msg.claves.length, claves: msg.claves, usadas_del_cerebro: dadas.map((d) => d.clave), esperando, slack_ts: envio.ts, ...(supuestos_en_hilo === undefined ? {} : { supuestos_en_hilo }) } }
+    return { status: 200, cuerpo: { enviado: true, preguntas: msg.claves.length, claves: msg.claves, usadas_del_cerebro: dadas.map((d) => d.clave), esperando, slack_ts: envio.ts, ...(tuteadas.length ? { tuteadas } : {}), ...(supuestos_en_hilo === undefined ? {} : { supuestos_en_hilo }) } }
   } finally {
     if (tomado) await P.almacen.soltarPaso?.(e.id)
   }

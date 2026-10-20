@@ -1,0 +1,180 @@
+{
+ "name": "Zero Risk — finanzas · buzón (recoge las respuestas del dueño · cada 10 min · CC#2)",
+ "nodes": [
+  {
+   "id": "8c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e01",
+   "name": "Cada 10 minutos",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "*/10 * * * *"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "8c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02",
+   "name": "Buzón · abiertos",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    240,
+    0
+   ],
+   "onError": "continueRegularOutput",
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/finanzas/conversa' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ accion: 'buzon_abiertos', workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) }) }}",
+    "options": {
+     "timeout": 30000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "8c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e03",
+   "name": "Buzón · uno por encargo",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    480,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// Buzón · de la lista a un ítem por encargo. Un fallo de lectura NO se calla: se lanza para que la ejecución quede en rojo.\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nif (status === 409) return [] // la oficina está apagada: nada que recoger\nif (status !== 200) throw new Error('buzon_abiertos respondió ' + (Number.isFinite(status) ? status : 'sin respuesta') + ': ' + JSON.stringify(b).slice(0, 200))\nconst ids = Array.isArray(b.abiertos) ? b.abiertos.filter((x) => typeof x === 'string' && x) : []\nreturn ids.slice(0, 20).map((encargo_id) => ({ json: { encargo_id } }))"
+   }
+  },
+  {
+   "id": "8c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e04",
+   "name": "Buzón · recoger",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    720,
+    0
+   ],
+   "onError": "continueRegularOutput",
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/finanzas/conversa' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ accion: 'recoger', encargo_id: $json.encargo_id, workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) }) }}",
+    "options": {
+     "timeout": 120000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "8c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e05",
+   "name": "Buzón · resumen",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    960,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// Buzón · resumen. Si alguna recogida falló en el servidor (5xx o sin respuesta), la ejecución se pone en rojo DESPUÉS de haber intentado todas.\nconst filas = $input.all().map((i) => i.json || {})\nconst malas = filas.filter((r) => !(Number(r.statusCode) >= 200 && Number(r.statusCode) < 500))\nconst aplicadas = filas.reduce((n, r) => n + ((r.body && Array.isArray(r.body.aplicadas)) ? r.body.aplicadas.length : 0), 0)\nif (malas.length) throw new Error('recoger falló en ' + malas.length + ' de ' + filas.length + ' encargos')\nreturn [{ json: { encargos: filas.length, respuestas_aplicadas: aplicadas } }]"
+   }
+  }
+ ],
+ "connections": {
+  "Cada 10 minutos": {
+   "main": [
+    [
+     {
+      "node": "Buzón · abiertos",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Buzón · abiertos": {
+   "main": [
+    [
+     {
+      "node": "Buzón · uno por encargo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Buzón · uno por encargo": {
+   "main": [
+    [
+     {
+      "node": "Buzón · recoger",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Buzón · recoger": {
+   "main": [
+    [
+     {
+      "node": "Buzón · resumen",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
