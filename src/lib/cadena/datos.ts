@@ -16,6 +16,7 @@ import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { esFechaIso, restarDias, semanaIso } from './fechas'
 import { citaAparece, normalizar } from './texto'
 import { familiaDeFila } from './familia'
+import type { Campana } from './almacen'
 import type { Fila } from './tipos'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -46,8 +47,34 @@ export async function filasListar(al: Almacen, cuerpo: Record<string, unknown>):
 
 /**
  * Los lotes que toca briefear HOY: filas `validada`/`lista_para_brief` cuya `fecha − lead_dias − holgura ≤ hoy`, sin video, agrupadas por semana ISO.
- * La clave de idempotencia de un lote es `campana:semana-iso:version` (CC#3: el sobre repetido no abre un viaje nuevo).
+ * La clave de idempotencia de un lote es `campana:semana-iso:version` (CC#3: el sobre repetido no abre un viaje nuevo). Con `cadena_config.arranque_por_evento = true` lleva además la HUELLA de sus filas
+ * (`:huella` = hash de los `fila_ids`, 20-oct · CC#2): sin ella, las filas de la misma semana que vencen otro día llevaban la MISMA llave que el lote anterior y la sala las contestaba `duplicado` (nunca se
+ * briefeaban). El mismo conjunto de filas sigue siendo idempotente. APAGADO (por omisión) la llave es EXACTAMENTE la de siempre: cambiarla con la cadena viva haría que el primer reloj reenviara, con otra llave,
+ * lotes ya enviados y aún sin marcar (doble parte); por eso el formato nuevo se estrena con el interruptor, en un momento sin lotes en vuelo.
  */
+export interface LoteVencido { lote: string; fila_ids: string[]; idempotency_key: string }
+export const huellaDeLote = (filaIds: string[]): string => createHash('sha256').update([...filaIds].sort().join(',')).digest('hex').slice(0, 8)
+
+/** los lotes vencidos de una campaña ACTIVA a la fecha `hoy` (AAAA-MM-DD) · lo usan el reloj (`filasLotes`) y el arranque por evento: el MISMO cálculo */
+export async function lotesVencidos(al: Almacen, c: Campana, hoy: string): Promise<{ lotes: LoteVencido[]; version: number }> {
+  const formatos = await al.formatos()
+  const holgura = typeof (await al.leerConfig('holgura_dias')) === 'number' ? ((await al.leerConfig('holgura_dias')) as number) : 3
+  const version = Math.max(1, await al.ultimaVersionDeCalendario(c.id))
+  const conHuella = (await al.leerConfig('arranque_por_evento')) === true
+  const vencen = (await al.filas(c.id, version)).filter((f) => {
+    if (f.estado !== 'validada' && f.estado !== 'lista_para_brief') return false
+    const lead = (formatos[f.red] ?? []).find((x) => x.formato === f.formato)?.lead_dias ?? 3
+    return restarDias(f.fecha, lead + holgura) <= hoy && f.fecha >= hoy
+  })
+  const porSemana = new Map<string, Fila[]>()
+  for (const f of vencen) porSemana.set(semanaIso(f.fecha), [...(porSemana.get(semanaIso(f.fecha)) ?? []), f])
+  const lotes = [...porSemana.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([lote, fs]) => {
+    const fila_ids = fs.map((f) => f.id)
+    return { lote, fila_ids, idempotency_key: conHuella ? `${c.id}:${lote}:${version}:${huellaDeLote(fila_ids)}` : `${c.id}:${lote}:${version}` }
+  })
+  return { lotes, version }
+}
+
 export async function filasLotes(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
   const id = cadena(cuerpo.campana_id)
   if (!id) return err(400, 'E-CAMPOS', 'falta campana_id')
@@ -56,18 +83,8 @@ export async function filasLotes(al: Almacen, cuerpo: Record<string, unknown>, a
   const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
   if (noAut) return noAut
   if (c.estado !== 'activa') return { status: 200, cuerpo: { lotes: [], motivo: `la campaña está ${c.estado}` } }
-  const formatos = await al.formatos()
-  const holgura = typeof (await al.leerConfig('holgura_dias')) === 'number' ? ((await al.leerConfig('holgura_dias')) as number) : 3
   const hoy = (cadena(cuerpo.hoy) ?? ahora).slice(0, 10)
-  const version = Math.max(1, await al.ultimaVersionDeCalendario(id))
-  const vencen = (await al.filas(id, version)).filter((f) => {
-    if (f.estado !== 'validada' && f.estado !== 'lista_para_brief') return false
-    const lead = (formatos[f.red] ?? []).find((x) => x.formato === f.formato)?.lead_dias ?? 3
-    return restarDias(f.fecha, lead + holgura) <= hoy && f.fecha >= hoy
-  })
-  const porSemana = new Map<string, Fila[]>()
-  for (const f of vencen) porSemana.set(semanaIso(f.fecha), [...(porSemana.get(semanaIso(f.fecha)) ?? []), f])
-  const lotes = [...porSemana.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([lote, fs]) => ({ lote, fila_ids: fs.map((f) => f.id), idempotency_key: `${c.id}:${lote}:${version}` }))
+  const { lotes, version } = await lotesVencidos(al, c, hoy)
   return { status: 200, cuerpo: { lotes, version } }
 }
 

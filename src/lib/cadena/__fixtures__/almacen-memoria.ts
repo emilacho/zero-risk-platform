@@ -10,6 +10,7 @@ import { formatosDeLaMigracion } from './clientes'
 import { InMemoryIngressTables, orchestrateIngress, type IngressEnvelope } from '../../sala-ingress'
 import { InMemoryEventLogStorage } from '../../sala-event-log'
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from '../autoproducir'
+import type { SobreDeLote } from '../arranque'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -61,6 +62,8 @@ export class AlmacenMemoria implements Almacen {
   sala = new InMemoryEventLogStorage()
   private salaTablas = new InMemoryIngressTables()
     .seedSource({ source: 'brief/parte-listo', tier: 'A', auth_method: 'internal_key', auth_secret_env_var: null, intents_allowed: ['producir'], description: 'prueba', active: true })
+    .seedSource({ source: 'cadena/vigia', tier: 'A', auth_method: 'internal_key', auth_secret_env_var: null, intents_allowed: ['briefear'], description: 'prueba', active: true })
+    .seedRule({ id: 'r-briefear', source: 'cadena/vigia', intent: 'briefear', journey_type: 'BRIEF', worker_workflow_id: 'pBAp5Cx7R39U585i', active: true, priority: 100, description: null })
     .seedRule({ id: 'r-producir', source: 'brief/parte-listo', intent: 'producir', journey_type: 'PIEZAS', worker_workflow_id: 'PzZ3b6cY6DYmIaOQ', active: true, priority: 100, description: null })
   /** cuántas veces se consultó el freno (para probar que lo SECO no lo consulta) */
   consultasDelFreno = 0
@@ -188,7 +191,7 @@ export class AlmacenMemoria implements Almacen {
   async recolectarSedes(clientId: string) { this.recolectadas.push(clientId); return { ok: true, sedes: this.sedesDeLaFicha } }
   sedesDeLaFicha = 0
   async frenoDeGasto(_clientId: string) { this.consultasDelFreno++; return this.semilla.frenoBloqueado ? { bloqueado: true, motivo: 'over_cap' } : { bloqueado: false, motivo: 'under_cap' } }
-  async emitirSobre(sobre: SobreDeProducir): Promise<ResultadoDeEmision> {
+  async emitirSobre(sobre: SobreDeProducir | SobreDeLote): Promise<ResultadoDeEmision> {
     if (this.semilla.intakeApagado) return { resultado: 'rechazado', detalle: 'intake_apagado' }
     const r = await orchestrateIngress({ envelope: sobre as unknown as IngressEnvelope, auth_request: { source: sobre.source, internal_key: process.env.INTERNAL_API_KEY, raw_body: JSON.stringify(sobre) }, tables: this.salaTablas, storage: this.sala })
     if (r.kind === 'accepted') return { resultado: 'aceptado', event_id: r.event_id }
