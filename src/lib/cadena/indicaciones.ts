@@ -79,6 +79,7 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     lineas([
       'Respeta el patrón semanal, los pilares, la frecuencia por red y las alertas de la ESTRATEGIA. Una pieza fija de la estrategia usa su `pieza_fija` y su tema.',
       'Si una pieza depende de otra (el plan lo pide), pon el id de la antecesora en `depende_de` (formato `s<semana>-d<día>-<slot>`); nunca dependas de una pieza de video.',
+      'La antecesora debe salir ANTES: otra fecha anterior, o el mismo día a una hora anterior. Una réplica en otra red el mismo día sale una hora después de la original (pon esa hora); el código ordena las que queden iguales y lo anota.',
       'Cada dato concreto del tema va en `datos` con `dato`, `valor` tal como aparece en la referencia, `clase` (alto = precio, horario, dirección, medida, reseña, cifras; medio = ingredientes/descripciones; bajo = ambiente), `ref`, `nivel` y `opcional`.',
       'Si no tienes referencia para un dato, cambia el tema por uno que no lo necesite, o escríbelo en `pendientes`. Un tema sin datos concretos es mejor que un dato inventado.',
       'Si omites un slot de una semana, dilo en `ajustes_al_patron` con su motivo.',

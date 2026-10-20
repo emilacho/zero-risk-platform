@@ -6,6 +6,7 @@
  * Alcance de la corrección (§10.4): `fila` (se parchea sola) o `tanda` (frecuencia y reparto son del conjunto).
  */
 import { hallarAfirmaciones, hallarFechasEnTema, type LexicoAfirmaciones } from './afirmaciones'
+import { saleAntes } from './resolver-dependencias'
 import { formasDeOtroRegistro, nombreDelRegistro, type RegistroDelCliente } from './registro'
 import { diaDeCampana, diaSemanaIso, fechaDeFila, minutos, sumarDias } from './fechas'
 import { alcanza, nivelEfectivo, resolverDato, type Candidato } from './fuentes'
@@ -218,7 +219,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
       const a = porId.get(dep)
       if (!a) out.push(h('V11', 'bloquea', f, `depende de «${dep}», que no existe`, 'dependencias', 'quitar la dependencia o apuntar a una fila real'))
       else if (a.estado === 'espera_video') out.push(h('V11', 'bloquea', f, `depende de una pieza de video que espera al brazo (${dep})`, 'ninguna fila depende de un video', 'quitar la dependencia: si el plan exige un video antes, queda pendiente'))
-      else if (a.fecha >= f.fecha) out.push(h('V11', 'bloquea', f, `depende de ${dep}, que sale el ${a.fecha}: no es anterior al ${f.fecha}`, 'la antecesora va antes', 'mover una de las dos'))
+      else if (!saleAntes(a, f)) out.push(h('V11', 'bloquea', f, `depende de ${dep}, que sale el ${a.fecha}${a.hora ? ' a las ' + a.hora : ''}: no es anterior al ${f.fecha}${f.hora ? ' a las ' + f.hora : ''}`, 'la antecesora va antes', 'mover una de las dos'))
     }
   }
   for (const d of estrategia.dependencias) {
