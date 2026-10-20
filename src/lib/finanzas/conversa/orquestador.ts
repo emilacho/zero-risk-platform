@@ -254,6 +254,18 @@ export function respuestasDeLaSemilla(s: Semilla | undefined): Array<{ clave: st
   return r.filter((x) => x && typeof x.clave === 'string' && x.clave.trim() !== '' && typeof x.literal === 'string' && x.literal.trim() !== '' && x.valor !== undefined).slice(0, 20).map((x) => ({ clave: x.clave, valor: x.valor, literal: x.literal }))
 }
 
+/**
+ * CIERRE CON LO QUE HAY (tope o plazo): si la ronda 1 ya tiene su bloque, el código la firma «con alerta» (`cerrar(..., { incompleto: true })`) y deja el turno `firma` + el artefacto `cierre` como
+ * si la firma hubiera llegado por su paso normal, para que la planeación la lea igual. Sin bloque (o ya firmada) no hace nada. No llama al modelo ni cobra: el jefe de la ronda 1 ya habló.
+ */
+async function firmaDeLoQueHay(P: PuertosDeConversa, e: EncargoDeConversa, arts: Arts, turnos: TurnoDeConversa[]): Promise<{ turno: TurnoDeConversa; artefacto: { tipo: string; version: number; contenido: Record<string, unknown>; sha256: string }; tablero_id: string | null } | null> {
+  if (arts.cierre || turnos.some((t) => t.paso === 'firma')) return null
+  if (!(arts.bloque as { hay_bloque?: unknown } | undefined)?.hay_bloque) return null
+  const c = await cerrar(P, e, arts, { incompleto: true })
+  const n = turnos.reduce((m, t) => Math.max(m, t.n), 0) + 1
+  return { turno: { n, paso: 'firma', agente: null, ronda: 1, estado: 'hecho', costo_usd: 0, salida: c.artefacto, error: null }, artefacto: { tipo: 'cierre', version: 1, contenido: c.artefacto, sha256: sha256(c.artefacto) }, tablero_id: c.tablero_id }
+}
+
 /** vencimiento del candado de «paso en vuelo»: pasado esto un paso muerto no deja el encargo atascado */
 export const TTL_DEL_CANDADO_S = 900
 /** margen para reintentar el formato dentro de la misma llamada */
@@ -298,15 +310,19 @@ export async function cerrarPorPlazo(P: PuertosDeConversa, encargo_id: string): 
   const candado = P.almacen.tomarPaso ? await P.almacen.tomarPaso(e.id, P.ahora(), TTL_DEL_CANDADO_S) : null
   if (candado && candado.ok && !candado.tomado) return { status: 409, cuerpo: { error: 'paso_en_vuelo', detalle: 'hay un paso de este encargo en ejecución: vuelve a pedir el cierre cuando termine' } }
   try {
-    const turnos = await P.almacen.turnos(e.id).catch(() => [] as TurnoDeConversa[])
+    const turnos0 = await P.almacen.turnos(e.id).catch(() => [] as TurnoDeConversa[])
+    // con la ronda 1 hecha, primero se firma «con alerta» lo que hay (idempotente: si ya hay firma, no se repite)
+    const f = await firmaDeLoQueHay(P, e, await P.almacen.artefactos(e.id).catch(() => ({} as Arts)), turnos0)
+    if (f) await P.almacen.guardar({ encargo_id: e.id, estado_del_motor: e.estado_del_motor, gasto_usd: e.gasto_usd, turno: f.turno, artefacto: f.artefacto, ...(f.tablero_id ? { tablero_id: f.tablero_id } : {}) })
+    const turnos = f ? [...turnos0, f.turno] : turnos0
     const n = turnos.reduce((m, t) => Math.max(m, t.n), 0) + 1
     const ultimo = e.estado_del_motor.ultimo
-    const detalle = `el plan que conduce la oficina agotó su plazo con ${e.estado_del_motor.pasos_ejecutados} pasos hechos (último: índice ${ultimo}); se cierra con lo que hay, sin firma`
+    const detalle = `el plan que conduce la oficina agotó su plazo con ${e.estado_del_motor.pasos_ejecutados} pasos hechos (último: índice ${ultimo}); se cierra con lo que hay${f ? ' (la ronda 1 queda firmada «con alerta»)' : ', sin firma'}`
     await P.almacen.guardar({
       encargo_id: e.id, estado_del_motor: e.estado_del_motor, gasto_usd: e.gasto_usd, estado: 'cierre_por_tope',
-      turno: { n, paso: 'cierre_por_plazo', agente: null, ronda: 1, estado: 'hecho', costo_usd: 0, salida: { razon: 'plazo', sin_firma: true, pasos_ejecutados: e.estado_del_motor.pasos_ejecutados, detalle }, error: null },
+      turno: { n, paso: 'cierre_por_plazo', agente: null, ronda: 1, estado: 'hecho', costo_usd: 0, salida: { razon: 'plazo', sin_firma: !f, pasos_ejecutados: e.estado_del_motor.pasos_ejecutados, detalle }, error: null },
     })
-    return { status: 200, cuerpo: { encargo_id: e.id, estado: 'cierre_por_tope', terminado: true, razon: 'plazo', detalle, gasto_usd: e.gasto_usd, turnos: await P.almacen.turnos(e.id) } }
+    return { status: 200, cuerpo: { encargo_id: e.id, estado: 'cierre_por_tope', terminado: true, razon: 'plazo', detalle, ...(f ? { firma: (f.turno.salida as { estado?: string }).estado ?? null, ronda_2_incompleta: true } : {}), gasto_usd: e.gasto_usd, turnos: await P.almacen.turnos(e.id) } }
   } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
 }
 
@@ -331,8 +347,10 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa): Prom
   // fin o tope: se cierra con lo que hay (nunca bloquea al plan)
   if (sig.accion === 'fin' || sig.accion === 'cierre_por_tope') {
     const estado = sig.accion === 'cierre_por_tope' ? 'cierre_por_tope' : (arts.cierre?.sin_acuerdo ? 'sin_acuerdo' : 'cerrado')
-    await P.almacen.guardar({ encargo_id: e.id, estado_del_motor: e.estado_del_motor, gasto_usd: e.gasto_usd, estado })
-    return { status: 200, cuerpo: { encargo_id: e.id, estado, terminado: true, gasto_usd: e.gasto_usd, ...(sig.accion === 'cierre_por_tope' ? { razon: sig.razon, detalle: sig.detalle } : {}) } }
+    // el tope corta la ronda 2: la ronda 1, que ya tiene bloque y jefe, se firma «con alerta» en vez de perderse (el tope del encargo NO sube)
+    const f = sig.accion === 'cierre_por_tope' ? await firmaDeLoQueHay(P, e, arts, turnosPrevios) : null
+    await P.almacen.guardar({ encargo_id: e.id, estado_del_motor: e.estado_del_motor, gasto_usd: e.gasto_usd, estado, ...(f ? { turno: f.turno, artefacto: f.artefacto, ...(f.tablero_id ? { tablero_id: f.tablero_id } : {}) } : {}) })
+    return { status: 200, cuerpo: { encargo_id: e.id, estado, terminado: true, gasto_usd: e.gasto_usd, ...(sig.accion === 'cierre_por_tope' ? { razon: sig.razon, detalle: sig.detalle } : {}), ...(f ? { firma: (f.turno.salida as { estado?: string }).estado ?? null, ronda_2_incompleta: true } : {}) } }
   }
 
   const paso = sig.paso
@@ -444,12 +462,17 @@ export function derivar(paso: Paso, v: Record<string, unknown>): Record<string, 
 }
 
 // ───────────────────────────────────────────────────────── cierre: tablero + firma (un acto de CÓDIGO)
-export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts): Promise<{ artefacto: Record<string, unknown>; tablero_id: string | null; sin_acuerdo: boolean }> {
-  const b2 = a.bloque_2 as Record<string, any> | undefined
+/**
+ * `opc.incompleto` (tope o plazo cortaron la ronda 2): se firma SOLO la ronda 1 — su bloque, el acuerdo del jefe sobre ESE bloque y su planteo —, siempre «con alerta» y sin contar una corrección que no ocurrió.
+ * Nada de lo que la ronda 2 dejó a medias (planteo 2, bloque 2) entra: el jefe nunca los revisó. Un crítico abierto sigue impidiendo la firma (queda `sin_firma` con sus números guardados).
+ */
+export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts, opc: { incompleto?: boolean } = {}): Promise<{ artefacto: Record<string, unknown>; tablero_id: string | null; sin_acuerdo: boolean }> {
+  const incompleto = opc.incompleto === true
+  const b2 = incompleto ? undefined : a.bloque_2 as Record<string, any> | undefined
   const b1 = a.bloque as Record<string, any> | undefined
   const bloqueArt = b2?.hay_bloque ? b2 : b1
-  const acuerdo = (a.acuerdo_2 ?? a.acuerdo) as (Record<string, any> & Partial<AcuerdoV1>) | undefined
-  const huboRonda2 = !!(a.acuerdo?.requiere_ronda_2)
+  const acuerdo = (incompleto ? a.acuerdo : (a.acuerdo_2 ?? a.acuerdo)) as (Record<string, any> & Partial<AcuerdoV1>) | undefined
+  const huboRonda2 = !incompleto && !!(a.acuerdo?.requiere_ronda_2)
   if (!bloqueArt?.hay_bloque) {
     return { artefacto: { estado: 'sin_bloque', motivo: bloqueArt?.motivo ?? 'sin_bloque', finanzas_id: null, sin_acuerdo: true, salida: null, huella: null, errores: bloqueArt?.errores ?? [] }, tablero_id: null, sin_acuerdo: true }
   }
@@ -457,11 +480,13 @@ export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts
   const hallazgos = (acuerdo?.hallazgos ?? []) as AcuerdoV1['hallazgos']
   // sin salida del jefe (falló su turno): «sale con alerta», nunca «sale»
   let salida: AcuerdoV1['salida'] = (acuerdo?.salida as AcuerdoV1['salida']) ?? 'sale_con_alerta'
+  // la ronda 2 no se completó: lo más que se puede decir es «con alerta»
+  if (incompleto) salida = 'sale_con_alerta'
   // tope (R14): con una cifra que manda «sin base» solo se admite «sale con alerta»
   const topada = bloque.confianza?.manda_sin_base === true && salida !== 'sale_con_alerta'
   if (topada) salida = 'sale_con_alerta'
   // lo que el plan «dio por verificado» no lo comprueba el código: la salida solo puede ser «con alerta» y la confianza no sube (el hilo enseñó que es el defecto de fondo)
-  const planteoVigente = (a.planteo_fijado_2 ?? a.planteo_fijado ?? a.planteo) as { dado_por_verificado?: unknown } | undefined
+  const planteoVigente = (incompleto ? (a.planteo_fijado ?? a.planteo) : (a.planteo_fijado_2 ?? a.planteo_fijado ?? a.planteo)) as { dado_por_verificado?: unknown } | undefined
   const dadoPorVerificado = Array.isArray(planteoVigente?.dado_por_verificado) ? (planteoVigente!.dado_por_verificado as unknown[]).filter((x) => typeof x === 'string' && x.trim()).map(String) : []
   // lo que el dueño confirmó (con respuesta real suya que lo respalde) SÍ está comprobado; solo el resto queda «sin comprobar»
   // y lo MEDIDO que viene del cerebro (expediente.datos) o de la ficha (moneda, país) también: el código lo tiene con su procedencia. Lo derivado y las decisiones del plan siguen sin comprobar.
@@ -482,7 +507,7 @@ export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts
   let estado: 'firmado' | 'sin_firma' = decision.estado === 'firmado' && !sinAcuerdo ? 'firmado' : 'sin_firma'
   let finanzas_id: string | null = null
   // la invocación que firma es la de este encargo y este paso (el adaptador del modelo la nombra `${encargo}:${paso}`); debe EXISTIR en el libro
-  const invocacion_id = `${e.id}:${a.acuerdo_2 ? 'cierre_2' : 'cierre'}`
+  const invocacion_id = `${e.id}:${!incompleto && a.acuerdo_2 ? 'cierre_2' : 'cierre'}`
   let invocacion_verificada: boolean | null = null
   if (!e.dry_run) {
     if (estado === 'firmado') {
@@ -495,7 +520,7 @@ export async function cerrar(P: PuertosDeConversa, e: EncargoDeConversa, a: Arts
     await P.tableros.actualizarTablero(g.id, { estado, firmado_por: `chief-financial-officer:${invocacion_id}:${salida}`, firmado_en: P.ahora().toISOString() })
   }
   return {
-    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, confirmado_por_el_dueno: confirmadoPorElDueno, medido_del_cerebro: medidoDelCerebro, dado_por_verificado_sin_comprobar: sinComprobar, criticos_abiertos: decision.criticos, criticos_resueltos: decision.criticos_resueltos, alerta_hallazgos_sin_estado: sinEstado.length ? `${sinEstado.length} hallazgo(s) dicen «resuelto» en el texto pero no traen estado: se cuentan como abiertos (${sinEstado.slice(0, 3).join(' | ')})` : null, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${sinComprobar.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, costos_por_venta: costosPorVenta, resumen_para_el_dueno: resumenParaElDueno, alerta_texto_optimista: textoOptimista.length ? textoOptimista : null, escribio: !e.dry_run },
+    artefacto: { estado, finanzas_id, salida, tope_aplicado: topada || verificadoSinComprobar, dado_por_verificado: dadoPorVerificado, confirmado_por_el_dueno: confirmadoPorElDueno, medido_del_cerebro: medidoDelCerebro, dado_por_verificado_sin_comprobar: sinComprobar, criticos_abiertos: decision.criticos, criticos_resueltos: decision.criticos_resueltos, alerta_hallazgos_sin_estado: sinEstado.length ? `${sinEstado.length} hallazgo(s) dicen «resuelto» en el texto pero no traen estado: se cuentan como abiertos (${sinEstado.slice(0, 3).join(' | ')})` : null, alerta_verificado: verificadoSinComprobar ? `el plan dio por verificado: ${sinComprobar.slice(0, 5).join('; ')} (el código no lo comprueba: confianza no sube, sale con alerta)` : null, confianza: bloque.confianza?.nivel ?? null, huella: bloqueArt.huella, sin_acuerdo: sinAcuerdo, criticos: decision.criticos, ronda_2: huboRonda2, ronda_2_incompleta: incompleto, invocacion_verificada, preguntas_candidatas: acuerdo?.preguntas_a_emilio ?? [], dato_que_no_bloquea: acuerdo?.dato_que_no_bloquea ?? null, costos_por_venta: costosPorVenta, resumen_para_el_dueno: resumenParaElDueno, alerta_texto_optimista: textoOptimista.length ? textoOptimista : null, escribio: !e.dry_run },
     tablero_id: finanzas_id, sin_acuerdo: sinAcuerdo,
   }
 }
