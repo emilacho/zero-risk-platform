@@ -59,7 +59,10 @@ export function recortarTextosLargos(esq: Esq, valor: unknown, hechos: string[],
       const v = o[k]
       if (sub.t === 'str' && typeof v === 'string' && sub.max !== undefined && v.length > sub.max && CAMPOS_RECORTABLES.includes(k)) {
         // el largo de la marca depende de los dígitos del corte: se calcula con el máximo (cota superior) y se escribe con el corte real; el total nunca pasa de `max`
-        const corte = Math.max(0, sub.max - marcaDeRecorte(v.length, sub.max).length)
+        const corte0 = Math.max(0, sub.max - marcaDeRecorte(v.length, sub.max).length)
+        // no partir un emoji (par sustituto UTF-16): una mitad suelta la rechaza `jsonb` y se perdería justo la decisión que se quiere salvar (certificación de CC#2)
+        const ultimo = corte0 > 0 ? v.charCodeAt(corte0 - 1) : 0
+        const corte = ultimo >= 0xd800 && ultimo <= 0xdbff ? corte0 - 1 : corte0
         salida[k] = corte > 0 ? v.slice(0, corte) + marcaDeRecorte(v.length, corte) : v.slice(0, sub.max)
         hechos.push(`recortado ${ruta}.${k}: ${v.length} → ${(salida[k] as string).length} caracteres (máx. ${sub.max})`)
       } else if (sub.t === 'arr' || sub.t === 'obj') salida[k] = recortarTextosLargos(sub, v, hechos, `${ruta}.${k}`)
@@ -90,7 +93,7 @@ export function limitesDelFormato(esquemaId: string): string {
   const lista = [...m.values()].filter((x) => !x.startsWith('raíz'))
   if (!lista.length) return ''
   const delPlan = esquemaId === 'plan_texto_y_resolucion.v1' ? ` El texto del plan va entre ${MINIMO_DE_CARACTERES_DEL_PLAN.toLocaleString('es-EC')} y ${TOPE_DE_CARACTERES_DEL_PLAN.toLocaleString('es-EC')} caracteres.` : ''
-  return `LÍMITES DEL FORMATO (los hace cumplir el sistema): ${lista.join(' · ')}.${delPlan} Escribe cada razón en UNA frase corta (máximo ${RAZON_RECOMENDADA} caracteres). Si "razon", "que", "donde", "contra_que" o "propuesta" se pasan de su máximo, el sistema los RECORTA y lo marca; cualquier otro límite roto devuelve tu respuesta para rehacerla.`
+  return `LÍMITES DEL FORMATO (los hace cumplir el sistema): ${lista.join(' · ')}.${delPlan}${m.has('razon|c') ? ` Escribe cada razón en UNA frase corta (máximo ${RAZON_RECOMENDADA} caracteres).` : ''} Si "razon", "que", "donde", "contra_que" o "propuesta" se pasan de su máximo, el sistema los RECORTA y lo marca; cualquier otro límite roto devuelve tu respuesta para rehacerla.`
 }
 
 export const esquemaConocido = (id: string): boolean => id in ESQUEMAS || id in ESQUEMAS_DE_REVISION || (ESQUEMAS_DE_TEXTO as readonly string[]).includes(id)

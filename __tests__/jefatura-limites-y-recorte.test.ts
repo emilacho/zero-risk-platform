@@ -38,6 +38,9 @@ describe('(a) el agente recibe TODOS los máximos de su esquema', () => {
     const t = limitesDelFormato('resolucion_solo.v1')
     expect(t).toContain('máximo 400 caracteres'); expect(t).toContain('RECORTA'); expect(t).toContain('rehacerla')
   })
+  it('la frase «una razón corta» solo va donde el esquema TIENE `razon` (las fichas no la tienen)', () => {
+    expect(limitesDelFormato('fichas.v1')).not.toContain('Escribe cada razón'); expect(limitesDelFormato('resolucion_solo.v1')).toContain('Escribe cada razón')
+  })
   it('un esquema sin máximos o desconocido no agrega nada', () => {
     expect(limitesDelFormato('opinion_libre.v1')).toBe(''); expect(limitesDelFormato('no_existe.v9')).toBe('')
   })
@@ -111,6 +114,19 @@ describe('(b) un texto de apoyo largo se recorta con marca y la decisión sobrev
       const primero = procesarSalidaDeRevision(salida, esquema, 0, 1); expect(primero.ok, esquema).toBe(false); expect(!primero.ok && primero.accion).toBe('reintentar')
       const segundo = procesarSalidaDeRevision(salida, esquema, 1, 1); expect(segundo.ok, esquema).toBe(false); expect(!segundo.ok && segundo.accion).toBe('falla_visible')
     }
+  })
+  it('🔴 el corte NUNCA parte un emoji por la mitad (CC#2): con un emoji en cada posición cercana al corte no queda ningún sustituto suelto y el largo no pasa del máximo; el resultado cabe en JSON', () => {
+    const suelto = (t: string): boolean => /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(t)
+    const esq = ESQUEMAS_DE_REVISION['bloque_de_resolucion']
+    for (let pos = 500; pos <= 530; pos++) {
+      const razon = 'a'.repeat(pos) + '😀' + 'b'.repeat(700)
+      const s = recortarTextosLargos(esq, { respuestas: [{ id: 'a', estado: 'tomada', razon }] }, []) as { respuestas: Array<{ razon: string }> }
+      const t = s.respuestas[0].razon
+      expect(suelto(t), `emoji en ${pos}`).toBe(false); expect(t.length, `emoji en ${pos}`).toBeLessThanOrEqual(600); expect(JSON.parse(JSON.stringify(t))).toBe(t)
+    }
+    // y por el camino completo (bloque del plan con el emoji justo en el corte medido por CC#2: 523)
+    const r = procesarSalidaDeRevision(BLOQUE('a'.repeat(523) + '😀'.repeat(60)), 'plan_texto_y_resolucion.v1', 0, 1)
+    expect(r.ok).toBe(true); if (r.ok) { const t = (r.valor.respuestas as Array<{ razon: string }>)[0].razon; expect(suelto(t)).toBe(false); expect(t.length).toBeLessThanOrEqual(600) }
   })
   it('un JSON roto o una razón vacía siguen dando el mensaje de siempre (el recorte no los esconde)', () => {
     const roto = procesarSalidaDeRevision('{"respuestas":[{"id":"a"', 'resolucion_solo.v1', 0, 1); expect(roto.ok).toBe(false)
