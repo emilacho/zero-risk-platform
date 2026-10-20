@@ -47,7 +47,7 @@ describe('validarLote', () => {
   })
   it('rechaza lo mal formado con la lista de errores', () => {
     const casos: Array<[unknown, string]> = [
-      [null, 'objeto'], [{ ...LOTE, client_id: '' }, 'client_id'], [{ ...LOTE, task_id: ' ' }, 'task_id'], [{ ...LOTE, piezas: [] }, 'piezas'], [{ ...LOTE, piezas: 'x' }, 'piezas'],
+      [null, 'objeto'], [{ ...LOTE, client_id: '' }, 'client_id'], [{ ...LOTE, client_id: 'no-es-uuid' }, 'uuid'], [{ ...LOTE, task_id: ' ' }, 'task_id'], [{ ...LOTE, piezas: [] }, 'piezas'], [{ ...LOTE, piezas: 'x' }, 'piezas'],
       [{ ...LOTE, piezas: [{ caption: 'sin canal' }] }, 'canal'], [{ ...LOTE, piezas: [{ canal: 'instagram', image_url: 5 }] }, 'image_url debe ser texto'],
       [{ ...LOTE, programar_para: 'mañana' }, 'programar_para'],
     ]
@@ -409,6 +409,8 @@ describe('POST /api/social/schedule-batch', () => {
     const ruta = '../src/app/api/social/schedule-batch/route'
     expect((await llamar(ruta, 'POST', LOTE, null)).status).toBe(401)
     const mal = await llamar(ruta, 'POST', { ...LOTE, piezas: [] }); expect(mal.status).toBe(400); expect(mal.json.errores.join()).toContain('piezas')
+    const sinUuid = await llamar(ruta, 'POST', { ...LOTE, client_id: 'x' }); expect(sinUuid.status).toBe(400); expect(sinUuid.json.errores.join()).toContain('uuid') // 400 claro, no 503
+    expect(m.base.filas).toHaveLength(0)
     const a = await llamar(ruta, 'POST', LOTE); expect(a.status).toBe(201); expect(a.json).toMatchObject({ ok: true, staged: true, ya_estaba: false, piezas: 2 })
     const b = await llamar(ruta, 'POST', LOTE); expect(b.status).toBe(200); expect(b.json.hitl_id).toBe(a.json.hitl_id)
     expect(m.base.filas).toHaveLength(1); expect(fetchLlamado).toBe(0)
@@ -449,6 +451,9 @@ describe('PATCH /api/hitl/[id] · el enganche del lote aprobado', () => {
   })
   it('rechazar el lote, o aprobar otro tipo, NO traen `publicacion` (la respuesta sigue como era)', async () => {
     const rech = await llamar(ruta, 'PATCH', { status: 'rejected', reviewer: 'emilio' }, 'k', ctx); expect(rech.json).not.toHaveProperty('publicacion')
+    for (const status of ['edited', 'in_review']) { // solo APROBAR arma el ensayo: editar o poner en revisión no (CC#1 pidió el caso `edited`)
+      const r = await llamar(ruta, 'PATCH', { status, reviewer: 'emilio' }, 'k', ctx); expect(r.status).toBe(200); expect(r.json).not.toHaveProperty('publicacion')
+    }
     const otro = await llamar(ruta, 'PATCH', { status: 'approved', reviewer: 'emilio' }, 'k', { params: { id: 'o1' } }); expect(Object.keys(otro.json)).toEqual(['item'])
   })
   it('si el ensayo LANZA un error (la base falla al guardarlo), la decisión se mantiene y el error se dice', async () => {
