@@ -53,6 +53,52 @@ describe('APAGADO por omisión', () => {
   })
 })
 
+describe('APAGADO · la llave del lote es EXACTAMENTE la de siempre (sin huella): el primer reloj tras publicar no reenvía lo ya enviado', () => {
+  it('🔴 con los dos interruptores ausentes o en false, filasLotes devuelve la llave vieja campana:semana:version (byte a byte) y los mismos lotes que con la huella', async () => {
+    for (const config of [{}, { arranque_por_evento: false, autoproducir_por_omision: false }]) {
+      const al = almacen(config); const id = await campanaActiva(al)
+      const lotes = (await filasLotes(al, { ...wf(), campana_id: id, hoy: '2026-10-12' }, HOY_DEL_LOTE)).cuerpo.lotes as Array<{ lote: string; fila_ids: string[]; idempotency_key: string }>
+      expect(lotes.length).toBeGreaterThan(0)
+      for (const l of lotes) expect(l.idempotency_key).toBe(`${id}:${l.lote}:1`)
+      const con = almacen({ arranque_por_evento: true }); const idCon = await campanaActiva(con)
+      const lotesCon = (await filasLotes(con, { ...wf(), campana_id: idCon, hoy: '2026-10-12' }, HOY_DEL_LOTE)).cuerpo.lotes as Array<{ lote: string; fila_ids: string[]; idempotency_key: string }>
+      expect(lotesCon.map((l) => [l.lote, l.fila_ids])).toEqual(lotes.map((l) => [l.lote, l.fila_ids])) // solo cambia la llave
+      expect(lotesCon[0].idempotency_key).toBe(`${idCon}:${lotesCon[0].lote}:1:${huellaDeLote(lotesCon[0].fila_ids)}`)
+    }
+  })
+  it('🔴 solo el booleano `true` cambia la llave: «true», 1 o «si» dejan la llave de siempre', async () => {
+    for (const v of ['true', 1, 'si']) {
+      const al = almacen({ arranque_por_evento: v }); const id = await campanaActiva(al)
+      const lotes = (await filasLotes(al, { ...wf(), campana_id: id, hoy: '2026-10-12' }, HOY_DEL_LOTE)).cuerpo.lotes as Array<{ lote: string; idempotency_key: string }>
+      for (const l of lotes) expect(l.idempotency_key, String(v)).toBe(`${id}:${l.lote}:1`)
+    }
+  })
+  it('🔴 activar con los dos en false: la respuesta es la de siempre (solo `campana`), la sala queda vacía, el estado es `activa` y la campaña conserva autoproducir=false', async () => {
+    const al = almacen({ arranque_por_evento: false, autoproducir_por_omision: false }); const id = await campanaActiva(al)
+    const r = await pausarYActivar(al, id)
+    expect(Object.keys(r.cuerpo)).toEqual(['campana']); expect(al.sala.size).toBe(0)
+    expect(al.campanas[0]).toMatchObject({ estado: 'activa', autoproducir: false })
+  })
+})
+
+describe('TRANSICIONES repetidas o inválidas NO dejan sobres', () => {
+  it('🔴 activa → activa y cerrada → activa: 409 E-TRANSICION, ningún sobre, el estado no cambia', async () => {
+    const al = almacen({ arranque_por_evento: true }); const id = await campanaActiva(al)
+    const repetida = await avanzarCampana(al, { ...wf(), campana_id: id, a: 'activa' }, HOY_DEL_LOTE)
+    expect(repetida.status).toBe(409); expect(repetida.cuerpo).not.toHaveProperty('arranque'); expect(al.sala.size).toBe(0); expect(al.campanas[0].estado).toBe('activa')
+    await avanzarCampana(al, { ...wf(), campana_id: id, a: 'cerrada' }, HOY_DEL_LOTE)
+    const desdeCerrada = await avanzarCampana(al, { ...wf(), campana_id: id, a: 'activa' }, HOY_DEL_LOTE)
+    expect(desdeCerrada.status).toBe(409); expect(al.sala.size).toBe(0); expect(al.campanas[0].estado).toBe('cerrada')
+  })
+  it('🔴 con la cadena apagada (la compuerta de avanzar) no hay transición ni sobres', async () => {
+    const al = almacen({ arranque_por_evento: true }); const id = await campanaActiva(al)
+    await avanzarCampana(al, { ...wf(), campana_id: id, a: 'pausada' }, HOY_DEL_LOTE)
+    al.campanas[0].seco = false // en real, sin estado_cadena encendida la compuerta cierra
+    const r = await avanzarCampana(al, { ...wf(), campana_id: id, a: 'activa' }, HOY_DEL_LOTE)
+    expect(r.status).toBe(409); expect(al.sala.size).toBe(0); expect(al.campanas[0].estado).toBe('pausada')
+  })
+})
+
 describe('ENCENDIDO · los mismos sobres que el reloj', () => {
   it('al activarse deja un sobre por lote vencido, idéntico al del vigía (misma llave, mismo cuerpo), y lo cuenta', async () => {
     const al = almacen({ arranque_por_evento: true }); const id = await campanaActiva(al)

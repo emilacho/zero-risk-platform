@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest'
 import {
   abrirCampana, avanzarCampana, cierreDeCampana, estrategiaPreparar, estrategiaGuardar, calendarioPreparar, calendarioGuardar, validarSinEscribir,
   filasLotes, filasMarcar, filasListar, fechasCobertura, fechasGuardar, relojDeLaCadena, costoEfectivo, topeDelPaso, expiresInHours,
-  huellaDeLote, type Estrategia,
+  type Estrategia,
 } from '../index'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, clienteB, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
@@ -372,14 +372,14 @@ describe('filas: lotes por fecha y marcas', () => {
     await tandaDe(al, id, 1, tandaBuena(A))
     return { al, id }
   }
-  it('toca briefear cuando fecha − lead − holgura ≤ hoy; agrupado por semana ISO, con clave de idempotencia campana:semana:version:huella', async () => {
+  it('toca briefear cuando fecha − lead − holgura ≤ hoy; agrupado por semana ISO, con clave de idempotencia campana:semana:version', async () => {
     const { al, id } = await campanaActiva()
     const antes = await filasLotes(al, { ...wf(), campana_id: id, hoy: '2026-09-01' }, AHORA)
     expect(antes.cuerpo.lotes).toEqual([])
     const r = await filasLotes(al, { ...wf(), campana_id: id, hoy: '2026-10-12' }, AHORA)
     const lotes = r.cuerpo.lotes as { lote: string; fila_ids: string[]; idempotency_key: string }[]
     expect(lotes[0].lote).toBe('2026-W42')
-    expect(lotes[0].idempotency_key).toBe(`${id}:2026-W42:1:${huellaDeLote(lotes[0].fila_ids)}`)
+    expect(lotes[0].idempotency_key).toBe(`${id}:2026-W42:1`)
     expect(lotes[0].fila_ids).toContain('s1-d1-a')
     expect(lotes[0].fila_ids).not.toContain('s4-d1-a')
   })

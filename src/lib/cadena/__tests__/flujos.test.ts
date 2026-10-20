@@ -10,7 +10,6 @@ import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { ACCIONES } from '../acciones'
-import { huellaDeLote } from '../datos'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { SimuladorN8n, type FlujoN8n, type Item, type PeticionHttp, type RespuestaHttp } from '../__fixtures__/simulador-n8n'
 import { clienteA, contextoDe, piezaBuena, tandaBuena, type ClienteFixture } from '../__fixtures__/clientes'
@@ -411,14 +410,14 @@ describe('COMPORTAMIENTO · el vigía', () => {
     expect(m.al.config.get('ultimo_latido')).toBe(AHORA)
     expect(m.reg.intake).toHaveLength(0)
   })
-  it('🔴 con una campaña activa: un sobre por lote (clave campana:semana:version:huella), con las filas que tocan hoy; las de más adelante no', async () => {
+  it('🔴 con una campaña activa: un sobre por lote (clave campana:semana:version), con las filas que tocan hoy; las de más adelante no', async () => {
     const m = mundo()
     await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente) }))
     const id = m.al.campanas[0].id
     await m.sim.ejecutar(ID_VIGIA, [{ json: {} }])
     const lotes = m.reg.intake.filter((s: any) => s.payload.modo === 'parte')
     expect(lotes).toHaveLength(1)
-    expect(lotes[0]).toMatchObject({ source: 'cadena/vigia', intent: 'briefear', client_id: UUID, idempotency_key: `${id}:2026-W42:1:${huellaDeLote(lotes[0].payload.fila_ids)}`, logical_period: '2026-W42' })
+    expect(lotes[0]).toMatchObject({ source: 'cadena/vigia', intent: 'briefear', client_id: UUID, idempotency_key: `${id}:2026-W42:1`, logical_period: '2026-W42' })
     expect(lotes[0].payload).toMatchObject({ modo: 'parte', campana_id: id, dry_run: true })
     expect(lotes[0].payload.fila_ids).toEqual(expect.arrayContaining(['s1-d1-a', 's1-d4-b']))
     expect(lotes[0].payload.fila_ids).not.toContain('s4-d1-a')
