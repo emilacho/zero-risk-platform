@@ -282,6 +282,34 @@ export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise
   try { return await ejecutarUnPaso(P, e) } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
 }
 
+/**
+ * `cerrar` un encargo ABANDONADO por plazo (20-oct · la oficina no cerraba): el plan que la conduce deja de llamar cuando se le acaba el plazo (`FIN · decidir`) y, sin esto, el encargo quedaba
+ * `en_curso` para siempre (con la ronda 2 a medias, sin firma). Cierra CON LO QUE HAY, honesto: estado terminal `cierre_por_tope` (el plan ya lo lee como «vencido»), un turno `cierre_por_plazo` que
+ * deja el porqué, y NINGÚN tablero ni firma (con la ronda a medias el código no firma números). No llama al modelo, no cobra. Idempotente: un encargo ya terminal se devuelve tal cual.
+ */
+export async function cerrarPorPlazo(P: PuertosDeConversa, encargo_id: string): Promise<Respuesta> {
+  let cfg
+  try { cfg = await P.config() } catch (e) { return { status: 503, cuerpo: { error: 'config_ilegible', detalle: e instanceof Error ? e.message : String(e) } } }
+  if (!cfg || cfg.estado === 'apagada' || cfg.conversa === 'apagado') return { status: 409, cuerpo: { error: 'conversa_apagada' } }
+  const e = await P.almacen.leerEncargo(encargo_id)
+  if (!e) return { status: 404, cuerpo: { error: 'encargo_inexistente' } }
+  if ((ESTADOS_TERMINALES as readonly string[]).includes(e.estado)) return { status: 200, cuerpo: { encargo_id: e.id, estado: e.estado, terminado: true, gasto_usd: e.gasto_usd, turnos: await P.almacen.turnos(e.id) } }
+  // el mismo candado que `avanzar`: si un paso está en vuelo NO se cierra debajo de él (lo cobraría y lo perdería); el plan puede volver a pedirlo
+  const candado = P.almacen.tomarPaso ? await P.almacen.tomarPaso(e.id, P.ahora(), TTL_DEL_CANDADO_S) : null
+  if (candado && candado.ok && !candado.tomado) return { status: 409, cuerpo: { error: 'paso_en_vuelo', detalle: 'hay un paso de este encargo en ejecución: vuelve a pedir el cierre cuando termine' } }
+  try {
+    const turnos = await P.almacen.turnos(e.id).catch(() => [] as TurnoDeConversa[])
+    const n = turnos.reduce((m, t) => Math.max(m, t.n), 0) + 1
+    const ultimo = e.estado_del_motor.ultimo
+    const detalle = `el plan que conduce la oficina agotó su plazo con ${e.estado_del_motor.pasos_ejecutados} pasos hechos (último: índice ${ultimo}); se cierra con lo que hay, sin firma`
+    await P.almacen.guardar({
+      encargo_id: e.id, estado_del_motor: e.estado_del_motor, gasto_usd: e.gasto_usd, estado: 'cierre_por_tope',
+      turno: { n, paso: 'cierre_por_plazo', agente: null, ronda: 1, estado: 'hecho', costo_usd: 0, salida: { razon: 'plazo', sin_firma: true, pasos_ejecutados: e.estado_del_motor.pasos_ejecutados, detalle }, error: null },
+    })
+    return { status: 200, cuerpo: { encargo_id: e.id, estado: 'cierre_por_tope', terminado: true, razon: 'plazo', detalle, gasto_usd: e.gasto_usd, turnos: await P.almacen.turnos(e.id) } }
+  } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
+}
+
 async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa): Promise<Respuesta> {
   let e = e0
   // TOPE SOBRE LO COBRADO (arreglo del intento 4): el gasto del motor solo suma turnos GUARDADOS; lo cobrado y perdido (502, corte) también cuenta
