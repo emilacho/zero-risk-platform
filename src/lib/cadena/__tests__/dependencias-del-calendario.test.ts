@@ -69,9 +69,17 @@ describe('qué hace con cada caso (sintético)', () => {
     expect(resolverDependencias([fila('a', '2026-10-26', '09:00:00'), fila('b', '2026-10-26', '09:00:00', ['a'])]).filas[1].hora).toBe('10:00:00')
     expect(resolverDependencias([fila('a', '2026-10-26', '09:30'), fila('b', '2026-10-26', '09:30', ['a'])]).filas[1].hora).toBe('10:30')
   })
-  it('mismo día y la dependiente salía ANTES: pasa a +60 min de la antecesora', () => {
-    const r = resolverDependencias([fila('a', '2026-10-26', '15:00'), fila('b', '2026-10-26', '08:00', ['a'])])
-    expect(r.filas[1].hora).toBe('16:00'); expect(r.filas[1].depende_de).toEqual(['a']); expect(r.filas[1].avisos[0]).toContain('la hora pasó de 08:00 a 16:00')
+  it('mismo día y la dependiente salía poco ANTES (≤ 3 h de corrimiento): pasa a +60 min de la antecesora', () => {
+    const r = resolverDependencias([fila('a', '2026-10-26', '10:00'), fila('b', '2026-10-26', '08:00', ['a'])])
+    expect(r.filas[1].hora).toBe('11:00'); expect(r.filas[1].depende_de).toEqual(['a']); expect(r.filas[1].avisos[0]).toContain('la hora pasó de 08:00 a 11:00')
+  })
+  it('🔴 si ordenarla movería la fila MÁS de 3 h (antecesora a las 18:00, dependiente a las 09:00 → 19:00), se suelta la dependencia y NO se mueve la hora', () => {
+    const r = resolverDependencias([fila('a', '2026-10-26', '18:00'), fila('b', '2026-10-26', '09:00', ['a'])])
+    expect(r.filas[1].hora).toBe('09:00'); expect(r.filas[1].depende_de).toEqual([]); expect(r.filas[1].avisos[0]).toContain('cambiaría el sentido de su horario')
+  })
+  it('el límite exacto: 3 h de corrimiento se mueve; 3 h y 1 min se suelta', () => {
+    expect(resolverDependencias([fila('a', '2026-10-26', '11:00'), fila('b', '2026-10-26', '09:00', ['a'])]).filas[1].hora).toBe('12:00')
+    expect(resolverDependencias([fila('a', '2026-10-26', '11:01'), fila('b', '2026-10-26', '09:00', ['a'])]).filas[1].depende_de).toEqual([])
   })
   it('mismo día sin hora que las ordene (de cualquiera de las dos): se suelta la dependencia y se anota', () => {
     for (const [ha, hb] of [[null, '09:00'], ['09:00', null], [null, null]] as const) {

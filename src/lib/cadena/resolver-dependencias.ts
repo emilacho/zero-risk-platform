@@ -6,7 +6,7 @@
  * (el agente no cambia horas que el patrón fija) y la campaña quedó en `necesita_humano`, con la cadena esperando a una persona que nadie había puesto ahí.
  *
  * Regla: una dependencia es válida si la antecesora sale ANTES (otra fecha anterior, o el mismo día con hora anterior). Si no lo es, el código la arregla y lo ANOTA en `avisos` de la fila:
- *   · mismo día y la antecesora tiene hora → la dependiente pasa a 60 min después (si cabe en el día); si no cabe, se suelta la dependencia;
+ *   · mismo día y la antecesora tiene hora → la dependiente pasa a 60 min después de ella (si cabe en el día y el corrimiento es de 3 h o menos); si no, se suelta la dependencia;
  *   · mismo día y sin hora que ordene, antecesora que sale DESPUÉS, antecesora que no existe, que es consigo misma o que es un video que espera → se suelta la dependencia.
  * Nunca borra una fila, nunca cambia una fecha, nunca toca nada fuera de `hora` y `depende_de` de la fila dependiente. Sin modelo, sin red: función pura.
  */
@@ -19,6 +19,8 @@ export interface ResultadoDeDependencias {
 }
 
 const DESPLAZAMIENTO_MIN = 60
+/** tope del corrimiento de una hora (certificación de CC#1): mover una fila más de esto cambia el sentido de su horario ⇒ se suelta la dependencia en vez de mover */
+export const CORRIMIENTO_MAX_MIN = 180
 /** prefijo de cada nota: así el paso que guarda las filas distingue lo que ordenó el código de los avisos del validador */
 export const PREFIJO_DE_DEPENDENCIAS = 'dependencias · '
 export const esNotaDeDependencias = (a: string): boolean => a.startsWith(PREFIJO_DE_DEPENDENCIAS)
@@ -71,6 +73,8 @@ export function resolverDependencias(filas: Fila[], previas: Fila[] = []): Resul
         if (ma === null || minutosDe(f.hora) === null) { anota(f, `se soltó la dependencia de «${dep}»: salen el mismo día (${f.fecha}) y no hay hora que las ordene`); cambio = true; continue }
         const nueva = ma + DESPLAZAMIENTO_MIN
         if (nueva > 23 * 60 + 59) { anota(f, `se soltó la dependencia de «${dep}»: salen el mismo día y no cabe una hora posterior`); cambio = true; continue }
+        const corrimiento = nueva - (minutosDe(f.hora) as number)
+        if (corrimiento > CORRIMIENTO_MAX_MIN) { anota(f, `se soltó la dependencia de «${dep}»: ordenarla movería esta fila ${Math.round(corrimiento / 60 * 10) / 10} h (más de ${CORRIMIENTO_MAX_MIN / 60} h) y cambiaría el sentido de su horario`); cambio = true; continue }
         const antes = f.hora
         f.hora = textoDe(nueva, a.hora as string)
         anota(f, `la hora pasó de ${antes ?? 'sin hora'} a ${f.hora} para salir después de «${dep}» (mismo día ${f.fecha})`)
