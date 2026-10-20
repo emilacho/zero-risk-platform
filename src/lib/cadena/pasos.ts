@@ -4,6 +4,7 @@
  * `guardar` valida con el código, hace UNA corrección si hace falta, y deja todo escrito con su reloj.
  */
 import type { Almacen, Campana, ContextoDelCliente, Corrida } from './almacen'
+import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, DIAS_DE_CAMPANA, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, SEMANAS_DE_PANORAMA, SEMANAS_DE_TANDA, topeDelPaso, type Paso } from './constantes'
 import { planDeCorreccion, resolverTrasCorreccion } from './ciclo'
@@ -304,15 +305,16 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   }
   // J7 · lo mismo para el calendario: la PRIMERA tanda es la que mueve la campaña a `activa`; con la jefatura abriendo, se retiene hasta que cierre su revisión
   let retenida: { tipo: 'calendario'; tanda: number; objeto_id: string; vence_en: string } | null = null
+  let arranque: ResultadoDelArranque | null = null
   if (campana.estado === 'calendario') {
     const retencion = await retencionDe(al, 'calendario', campana.client_id)
     if (retencion.retener) {
       const espera = await retenerParaRevision(al, campana, 'calendario', tanda, ahora)
       retenida = { tipo: 'calendario', tanda, objeto_id: espera.objeto_id, vence_en: espera.vence_en }
-    } else await al.actualizarCampana(campana.id, { estado: 'activa' })
+    } else arranque = (await activarYArrancar(al, campana, ahora)).arranque // 20-oct · parte 3: la campaña pasa a `activa` AQUÍ en el camino real; el arranque por evento tiene que salir de aquí también
   }
   const cuenta = (e: Fila['estado']) => finales.filter((f) => f.estado === e).length
-  return { status: 200, cuerpo: { ok: true, tanda, filas: finales.length, validadas: cuenta('validada'), en_investigacion: cuenta('en_investigacion'), espera_video: cuenta('espera_video'), salieron_sin_fuente: salen, panorama_semanas: todas12.length ? SEMANAS_DE_PANORAMA : 0, avisos: hs.filter((h) => h.severidad === 'aviso').length, ...(retenida ? { retenida_para_revision: retenida } : {}) } }
+  return { status: 200, cuerpo: { ok: true, tanda, filas: finales.length, validadas: cuenta('validada'), en_investigacion: cuenta('en_investigacion'), espera_video: cuenta('espera_video'), salieron_sin_fuente: salen, panorama_semanas: todas12.length ? SEMANAS_DE_PANORAMA : 0, avisos: hs.filter((h) => h.severidad === 'aviso').length, ...(retenida ? { retenida_para_revision: retenida } : {}), ...(arranque ? { arranque } : {}) } }
 }
 
 // ─────────────────────────────────────────────────────────────── VALIDAR (sin escribir nada)

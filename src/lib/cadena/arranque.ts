@@ -7,7 +7,7 @@
  * No llama a ningún modelo ni despacha por su cuenta: solo deja sobres en la sala (que es quien despacha, ADR-018). La compuerta de la cadena ya la comprobó `avanzarCampana` antes de llegar aquí.
  */
 import type { Almacen, Campana } from './almacen'
-import { lotesVencidos } from './datos'
+import { lotesVencidos } from './lotes'
 
 export const FUENTE_DEL_LOTE = 'cadena/vigia'
 export const INTENCION_DEL_LOTE = 'briefear'
@@ -38,6 +38,17 @@ export type ResultadoDelArranque =
 
 /** cuántos lotes máximo se dejan de una vez (una campaña de 4 semanas no pasa de ~5; el tope impide un sobre por fila si algo se desborda) */
 export const MAXIMO_DE_LOTES_POR_ARRANQUE = 12
+
+/**
+ * EL ÚNICO LUGAR donde una campaña pasa a `activa` fuera de `avanzarCampana` (que llama a `arrancarAlActivar` por su cuenta): guardar la primera tanda del calendario (`pasos.ts`) y que la jefatura PASE el calendario
+ * (`revision-jefatura.ts`, por la ruta o por el reloj al vencer la espera). La tercera prueba (20-oct) mostró que el arranque no corría en ninguno de los dos: la campaña pasó a `activa` en silencio.
+ * Una prueba de código fuente (`arranque-por-evento.test.ts`) impide que aparezca otro `estado: 'activa'` suelto.
+ */
+export async function activarYArrancar(al: Almacen, campana: Campana, ahora: string = new Date().toISOString()): Promise<{ campana: Campana; arranque: ResultadoDelArranque | null }> {
+  const n = await al.actualizarCampana(campana.id, { estado: 'activa' })
+  const arranque = await arrancarAlActivar(al, n, ahora)
+  return { campana: n, arranque: arranque.arranque === 'apagado' ? null : arranque }
+}
 
 export async function arrancarAlActivar(al: Almacen, c: Campana, ahora: string): Promise<ResultadoDelArranque> {
   try {
