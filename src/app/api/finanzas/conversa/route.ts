@@ -3,7 +3,7 @@
  *  · `{ accion: 'abrir', client_id, dry_run (booleano), semilla }` → abre (o devuelve) la conversación del cliente.
  *  · `{ accion: 'avanzar', encargo_id, workflow_id }` → ejecuta UN paso (`workflow_id` = el id REAL del flujo de n8n que llama; sin él el turno de agente no se llama) (un turno de agente o una función de código) y lo guarda.
  *  · `{ accion: 'leer', encargo_id }` → estado, gasto y turnos.
- * Llave: `x-api-key` = `INTERNAL_API_KEY` (nunca la llave de la sala). Slack del hilo: sin adaptador real (puerto «no configurado»). BUZÓN (MD al dueño): `{ accion: 'preguntar'|'recoger', encargo_id, workflow_id, workflow_execution_id }`, apagado salvo `preguntas_slack = 'envia'`.
+ * Llave: `x-api-key` = `INTERNAL_API_KEY` (nunca la llave de la sala). Slack del hilo: sin adaptador real (puerto «no configurado»). BUZÓN (MD al dueño): `{ accion: 'preguntar'|'recoger', encargo_id, workflow_id, workflow_execution_id }`, apagado salvo `preguntas_slack = 'envia'`; `{ accion: 'buzon_abiertos', workflow_id, workflow_execution_id }` lista los encargos con un MD abierto (< 72 h) para el vigía `finanzas · buzón`.
  * Modelo: solo si hay `FINANZAS_RUN_SDK_BASE` (nunca en la rama apagada).
  * SECO (CC#2 · 14-oct): `{ accion: 'avanzar', encargo_id, simulacion }` → los agentes contestan el guion (SOLO con un encargo `dry_run = true`; con uno real, 409): el seco a US$ 0, sin modelo.
  */
@@ -15,7 +15,7 @@ import { baseDeRunSdk, modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-s
 import { abrirConversacion, avanzar, leerConversacion } from '@/lib/finanzas/conversa/orquestador'
 import { avanzarConSimulacion } from '@/lib/finanzas/conversa/simulado'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
-import { preguntarAlDueno, recogerRespuestas } from '@/lib/finanzas/conversa/buzon'
+import { listarAbiertos, preguntarAlDueno, recogerRespuestas } from '@/lib/finanzas/conversa/buzon'
 import { slackMdPuerto } from '@/lib/buzon-dueno/slack-md'
 import { cerebroDelDueno } from '@/lib/buzon-dueno/cerebro-dueno'
 import { checkInternalKey } from '@/lib/finanzas/ruta'
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   if (c.accion === 'abrir') r = await abrirConversacion(P, c)
   else if (c.accion === 'avanzar' && typeof c.encargo_id === 'string') r = c.simulacion !== undefined ? await avanzarConSimulacion(P, c.encargo_id, c.simulacion) : await avanzar(P, c.encargo_id)
   else if (c.accion === 'leer' && typeof c.encargo_id === 'string') r = await leerConversacion(P, c.encargo_id)
-  else if ((c.accion === 'preguntar' || c.accion === 'recoger') && typeof c.encargo_id === 'string') {
+  else if ((c.accion === 'buzon_abiertos' || ((c.accion === 'preguntar' || c.accion === 'recoger') && typeof c.encargo_id === 'string'))) {
     // BUZÓN por MD: apagado = 0 envíos y 0 lecturas (`preguntas_slack` ≠ 'envia'); el id del dueño y las llaves salen del entorno, nunca del cuerpo
     // una configuración que no se pudo leer NO es «apagada» (503), igual que en abrir/avanzar/leer
     let cfg
@@ -78,9 +78,9 @@ export async function POST(request: Request) {
         modo: cfg.preguntas_slack,
         ahora: P.ahora,
       }
-      r = c.accion === 'preguntar' ? await preguntarAlDueno(B, c.encargo_id) : await recogerRespuestas(B, c.encargo_id)
+      r = c.accion === 'buzon_abiertos' ? await listarAbiertos(B) : c.accion === 'preguntar' ? await preguntarAlDueno(B, c.encargo_id as string) : await recogerRespuestas(B, c.encargo_id as string)
     }
   }
-  else r = { status: 400, cuerpo: { error: 'accion_invalida', acciones: ['abrir', 'avanzar', 'leer', 'preguntar', 'recoger'] } }
+  else r = { status: 400, cuerpo: { error: 'accion_invalida', acciones: ['abrir', 'avanzar', 'leer', 'preguntar', 'recoger', 'buzon_abiertos'] } }
   return NextResponse.json(r.cuerpo, { status: r.status })
 }
