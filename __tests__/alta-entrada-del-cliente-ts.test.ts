@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clasificarDireccion, esMuro, normalizarEntrada, usuarioDeRed } from '@/lib/alta/entrada-del-cliente'
 
 const D = path.resolve(__dirname, '../scripts/worker-staging/LyVoKcrypS5uLyuu')
-const js = new Function(fs.readFileSync(path.join(D, 'bloque-entrada-del-cliente-2026-10-20.js'), 'utf8') + '\nreturn { entNormalizar, entEsMuro, entClasificar, entUsuarioDe }')() as {
+const js = new Function(fs.readFileSync(path.join(D, 'bloque-entrada-del-cliente-v2-2026-10-20.js'), 'utf8') + '\nreturn { entNormalizar, entEsMuro, entClasificar, entUsuarioDe }')() as {
   entNormalizar: (b: Record<string, unknown>) => unknown; entEsMuro: (t: string, u?: string) => unknown; entClasificar: (u: string) => unknown; entUsuarioDe: (r: string, v: string) => unknown
 }
 
@@ -17,16 +17,18 @@ const DIRECCIONES = [
   'https://www.tiktok.com/@mi_negocio', 'https://www.tiktok.com/@mi_negocio?lang=es', 'https://www.linkedin.com/company/mi-negocio/', 'https://www.linkedin.com/in/alguien', 'https://www.linkedin.com/feed/',
   'https://www.youtube.com/@mi_negocio', 'https://www.youtube.com/c/MiNegocio', 'https://www.youtube.com/channel/UC123', 'https://youtu.be/abc', 'https://x.com/mi_negocio', 'https://twitter.com/mi_negocio',
   'https://linktr.ee/negocio', 'https://wa.me/593999999999', 'https://beacons.ai/x', 'https://maps.app.goo.gl/abc', 'https://tienda.com', 'tienda.com', 'http://www.empresa.com.ec/inicio', 'https://empresa.ec/?utm=x',
+  'https://instagram.com.algo.ec', 'https://miempresa-instagram.com', 'https://instagr.am/mi_cuenta', 'https://ig.me/m/alguien', 'https://fb.watch/abc', 'https://m.me/mi.pagina', 'https://messenger.com/t/1', 'https://lnkd.in/x', 'https://t.co/x', 'https://taplink.cc/x', 'https://lnk.bio/x', 'https://msha.ke/x', 'https://solo.to/x', 'https://linkin.bio/x', 'https://wa.link/x', 'https://g.page/x', 'https://www.google.com/maps/place/X', 'https://google.com.ec/maps/x', 'https://maps.google.com/?cid=1', 'https://www.google.com/search?q=x', '@zeroriskgye', '@mi.negocio', 'no tiene',
   'https://user:pass@sitio.com/ruta', 'https://sitio.com:8080/x', '', '   ', 'no es una direccion', 'ftp://archivo.com/x', 'HTTPS://WWW.INSTAGRAM.COM/Mayusculas',
 ]
 const TRATOS: Array<Record<string, unknown>> = [
   {}, { website: 'https://www.instagram.com/zeroriskgye', instagram: 'zeroriskgye' }, { website: 'https://www.instagram.com/otra', instagram: '@dada' }, { website: 'https://empresa.ec', instagram_handle: 'https://instagram.com/cuenta/' },
-  { domain: 'https://www.facebook.com/mi.negocio', tiktok: '@tt', youtube_handle: 'yt' }, { website: 'https://linktr.ee/x', facebook: 'mi.negocio' }, { website: null, domain: 'tienda.com' }, { instagram: 'dos palabras', facebook: '!!!' },
+  { domain: 'https://www.facebook.com/mi.negocio', tiktok: '@tt', youtube_handle: 'yt' },
+  { website: '@zeroriskgye' }, { website: 'no tiene', instagram: 'x' }, { website: 'https://www.google.com/maps/place/X' }, { website: 'https://instagr.am/mi_cuenta' }, { website: 'https://linktr.ee/x', facebook: 'mi.negocio' }, { website: null, domain: 'tienda.com' }, { instagram: 'dos palabras', facebook: '!!!' },
 ]
 const TEXTOS = [
   'Instagram\nSee everyday moments from your close friends.\nLog into Instagram\nMobile number, username or email\nPassword\nLog in\nForgot password?\nLog in with Facebook\nCreate new account',
   'descripcion create an account or log in to instagram share what you re into with the people who get you', 'Just a moment... Verifying you are human.', '# 502 Bad Gateway\n\n### Host Not Found or connection failed',
-  'Inicia sesión para continuar. Crear cuenta nueva.', 'Somos una empresa de extintores en Guayaquil. Recarga y mantenimiento.', 'x'.repeat(6000) + ' Iniciar sesión ' + 'menú '.repeat(80), '', '   ', 'Access denied', 'Page not found',
+  'Inicia sesión para continuar. Crear cuenta nueva.', 'Log in to TikTok', 'Join now to see who you already know on LinkedIn', 'Checking if the site connection is secure', 'Sorry, you have been blocked', 'Something went wrong. Try again.', 'Before you continue to YouTube', 'Forbidden', 'Not Found', 'Sign in to continue', 'Somos una empresa de extintores en Guayaquil. Recarga y mantenimiento.', 'x'.repeat(6000) + ' Iniciar sesión ' + 'menú '.repeat(80), '', '   ', 'Access denied', 'Page not found',
 ]
 
 describe('el TypeScript da EXACTAMENTE lo que el texto pegado en el alta', () => {
