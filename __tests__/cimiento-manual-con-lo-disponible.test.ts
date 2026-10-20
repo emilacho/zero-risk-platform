@@ -100,10 +100,19 @@ describe('la vara de uso · reglas del bloque', () => {
   })
   it('sin texto propio pero con contexto (público ideal / competidores): la voz armada sin decir PROPUESTA ⇒ falta el rótulo; con el rótulo ⇒ pasa', () => {
     const g = { ...GROUND_A, materia_cliente: null }
-    const sin = bloque.usoDeLoDisponible({ ...BORRADOR_BUENO, voice_description: 'Cercana y técnica.' }, g)
+    const sin = bloque.usoDeLoDisponible({ ...BORRADOR_BUENO, voice_description: 'Cercana, técnica y directa, pensada para empresas medianas.' }, g)
     expect(sin.ok).toBe(false); expect(sin.sin_usar[0]).toMatchObject({ campo: 'voice_description', rotulo: true })
     expect(bloque.usoDeLoDisponible({ ...BORRADOR_BUENO, voice_description: 'PROPUESTA (no es dato del cliente): cercana y técnica.' }, g).ok).toBe(true)
     expect(bloque.usoDeLoDisponible({ ...BORRADOR_BUENO, voice_description: 'Propuesta (no es dato del cliente): cercana.' }, g).ok).toBe(true)
+  })
+  it('🔴 CC#3 pedido 1 · una voz de RELLENO no es «usó lo disponible»: las 16 variantes medidas por CC#3 (y los textos cortos) hacen fallar la vara habiendo fuentes', () => {
+    const relleno = ['Por determinar', 'A definir', 'Sin información', 'No hay información disponible', 'Not available', 'Unknown', 'N/D', 'No aplica', 'Sin voz definida', 'Ninguna', '—', '...', '-', 'x', 'Pendiente de definir', 'PENDIENTE']
+    for (const voz of relleno) { const r = bloque.usoDeLoDisponible({ ...BORRADOR_BUENO, voice_description: voz }, GROUND_A); expect(r.ok, voz).toBe(false); expect(r.sin_usar[0].campo).toBe('voice_description') }
+    // cada palabra de la lista, aun dentro de un texto largo que EMPIEZA con ella (relleno con adorno), cae por el regex y no solo por el largo
+    for (const ini of ['Por determinar', 'A definir', 'Sin información', 'No hay información', 'Not available', 'Unknown', 'N/D', 'No aplica', 'Sin voz', 'Ninguna']) expect(bloque.usoDeLoDisponible({ ...BORRADOR_BUENO, voice_description: ini + ' por ahora, se completará cuando el cliente envíe más material.' }, GROUND_A).ok, ini).toBe(false)
+    // largo mínimo: 39 no pasa, 40 sí
+    expect(bloque.usoDeLoDisponible({ ...BORRADOR_BUENO, voice_description: 'a'.repeat(39) }, GROUND_A).ok).toBe(false)
+    expect(bloque.usoDeLoDisponible({ ...BORRADOR_BUENO, voice_description: 'Cercana' + ' y técnica'.repeat(4) }, GROUND_A).ok).toBe(true)
   })
   it('con texto propio, la voz NO necesita el rótulo (viene del cliente)', () => {
     expect(bloque.usoDeLoDisponible(BORRADOR_BUENO, GROUND_A).ok).toBe(true)
