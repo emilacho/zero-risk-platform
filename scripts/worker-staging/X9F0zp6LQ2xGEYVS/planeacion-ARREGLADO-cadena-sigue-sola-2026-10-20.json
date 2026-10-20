@@ -1127,7 +1127,7 @@
         400
       ],
       "parameters": {
-        "jsCode": "// r80 · el plan con marcas NO queda «listo» en silencio: una línea para quien administra la agencia, en la bandeja (qué falta). Sin marcas: no sale ningún elemento y la rama termina aquí.\nconst v = $('¿Llegó la vuelta?').first().json;\nif (!v.con_pendientes) return [];\nlet sobre = { body: {} }; try { sobre = $('Webhook · planeacion').first().json || { body: {} }; } catch (x) { sobre = { body: {} }; }\nlet planId = null;\ntry { const g = $('Guardar el plan').first().json; const gb = (g && g.body) ? g.body : g; const fila = Array.isArray(gb) ? gb[0] : gb; planId = (fila && fila.id) || null; } catch (x) { planId = null; }\nconst quien = String(v.client_name || 'el cliente');\nconst linea = ('Plan de 90 días de ' + quien + ' con pendientes: ' + String(v.pendientes || 'el chequeo marcó el plan')).slice(0, 480);\nconst cuerpo = {\n  type: 'plan_con_pendientes',\n  title: linea,\n  client_id: v.client_id || null,\n  priority: 'high',\n  agent_name: 'planeacion',\n  risk_type: 'strategic_decision',\n  output_preview: linea,\n  payload: { plan_id: planId, estado_del_plan: v.estado_del_plan, marcas: (v.chequeo_del_plan && v.chequeo_del_plan.marcas) || [], para_el_cliente: false,\n    // 20-oct · lo que hace falta para pedir el parte del brief CUANDO EMILIO APRUEBE (la plataforma emite el sobre con la misma llave de idempotencia `{viaje}:briefear`)\n    journey_id: (sobre.body && sobre.body._journey_id) || null, tenant_id: (sobre.body && (sobre.body.tenant_id || sobre.body.client_id)) || null,\n    dry_run: !!(sobre.body && sobre.body.dry_run === true), correlation_id: (sobre.body && sobre.body._sala_correlation_id) || null },\n};\nif (planId && v.client_id) cuerpo.output_id = planId;\nreturn [{ json: { cuerpo } }];\n"
+        "jsCode": "// r80 · el plan con marcas NO queda «listo» en silencio: una línea para quien administra la agencia, en la bandeja (qué falta). Sin marcas: no sale ningún elemento y la rama termina aquí.\nconst v = $('¿Llegó la vuelta?').first().json;\nif (!v.con_pendientes) return [];\nlet planId = null;\ntry { const g = $('Guardar el plan').first().json; const gb = (g && g.body) ? g.body : g; const fila = Array.isArray(gb) ? gb[0] : gb; planId = (fila && fila.id) || null; } catch (x) { planId = null; }\nconst quien = String(v.client_name || 'el cliente');\nconst linea = ('Plan de 90 días de ' + quien + ' con pendientes: ' + String(v.pendientes || 'el chequeo marcó el plan')).slice(0, 480);\nconst cuerpo = {\n  type: 'plan_con_pendientes',\n  title: linea,\n  client_id: v.client_id || null,\n  priority: 'high',\n  agent_name: 'planeacion',\n  risk_type: 'strategic_decision',\n  output_preview: linea,\n  payload: { plan_id: planId, estado_del_plan: v.estado_del_plan, marcas: (v.chequeo_del_plan && v.chequeo_del_plan.marcas) || [], para_el_cliente: false },\n};\nif (planId && v.client_id) cuerpo.output_id = planId;\nreturn [{ json: { cuerpo } }];\n"
       }
     },
     {
@@ -2123,39 +2123,6 @@
       "parameters": {
         "jsCode": "// NOCHE 19-oct · CC#1 · el público ideal entra al paquete que recibe el redactor.\nconst base = $('Unir lo del dueño al paquete').first().json;\nconst r = $input.first().json || {};\nconst http = Number(r.statusCode);\nconst ok = Number.isFinite(http) && http >= 200 && http < 300 && Array.isArray(r.body);\nconst filas = ok ? r.body : [];\nreturn [{ json: Object.assign({}, base, { icp: filas, icp_estado: !ok ? 'sin_lectura' : (filas.length ? 'leido' : 'vacio') }), pairedItem: { item: 0 } }];\n"
       }
-    },
-    {
-      "id": "cadena-sigue-sola-if",
-      "name": "¿Plan con pendientes? · espera a Emilio",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        2200,
-        600
-      ],
-      "notes": "20-oct · CC#2 · un plan con pendientes NO pide el parte: espera a que Emilio apruebe el elemento de la bandeja (la plataforma emite entonces el sobre, misma llave de idempotencia). Sin pendientes: sigue al sobre del brief como siempre.",
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose"
-          },
-          "combinator": "and",
-          "conditions": [
-            {
-              "leftValue": "={{ $('¿Llegó la vuelta?').first().json.con_pendientes === true }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ]
-        },
-        "options": {}
-      }
     }
   ],
   "connections": {
@@ -2584,7 +2551,7 @@
       "main": [
         [
           {
-            "node": "¿Plan con pendientes? · espera a Emilio",
+            "node": "BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)",
             "type": "main",
             "index": 0
           },
@@ -3162,18 +3129,6 @@
         [
           {
             "node": "Cable de vuelta · sala",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "¿Plan con pendientes? · espera a Emilio": {
-      "main": [
-        [],
-        [
-          {
-            "node": "BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)",
             "type": "main",
             "index": 0
           }
