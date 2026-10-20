@@ -17,7 +17,7 @@ const nodo = (f: Flujo, n: string) => f.nodes.find((x) => x.name === n)!
 const CAB = 'x-sala-dispatch-key'
 
 /** corre el código REAL de la puerta con $input y $env simulados */
-const puerta = (headers: unknown, env: Record<string, string> | undefined, codigo = CODIGO_LLAVE) => {
+const puerta = (headers: unknown, env: Record<string, string | undefined> | undefined, codigo = CODIGO_LLAVE) => {
   const item = { json: { headers, body: { client_id: 'c1' } } }
   const entrada = { first: () => item, all: () => [item] }
   return new Function('$input', '$env', codigo)(entrada, env ?? {}) as Array<{ json: any }>
