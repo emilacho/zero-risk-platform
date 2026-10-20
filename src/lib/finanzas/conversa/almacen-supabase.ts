@@ -127,11 +127,13 @@ export function almacenDeConversa(db: Db): AlmacenDeConversa {
         const desde = new Date(ahora.getTime() - horas * 3600 * 1000).toISOString()
         const a = await db.from('finanzas_artefactos').select('encargo_id,creado_en').eq('tipo', 'buzon_respuestas').eq('version', 1).gte('creado_en', desde)
         if (a.error || !Array.isArray(a.data)) return null
-        const ids = [...new Set((a.data as Fila[]).map((f) => String(f.encargo_id)))]
+        // los más recientes primero: si hubiera más de 20, el tope deja los del último día y no unos cualesquiera
+        const ids = [...new Set((a.data as Fila[]).sort((x, y) => String(y.creado_en).localeCompare(String(x.creado_en))).map((f) => String(f.encargo_id)))]
         if (!ids.length) return []
         const enc = await db.from('finanzas_encargos').select('id,slack_canal,slack_ts,dry_run').in('id', ids)
         if (enc.error || !Array.isArray(enc.data)) return null
-        return (enc.data as Fila[]).filter((f) => f.dry_run !== true && !!f.slack_canal && !!f.slack_ts).map((f) => String(f.id)).slice(0, 20)
+        const buenos = new Set((enc.data as Fila[]).filter((f) => f.dry_run !== true && !!f.slack_canal && !!f.slack_ts).map((f) => String(f.id)))
+        return ids.filter((i) => buenos.has(i)).slice(0, 20)
       } catch { return null }
     },
     async guardarBuzon(c) {

@@ -24,7 +24,11 @@ export function agregarPreguntar(flujo) {
   if (w.nodes.some((n) => n.name === NODO_PREGUNTAR)) throw new Error('el flujo ya trae el nodo ' + NODO_PREGUNTAR)
   const cerrar = w.nodes.find((n) => n.name === 'FIN · cerrar la oficina')
   if (!cerrar) throw new Error('no hay «FIN · cerrar la oficina»')
-  w.nodes.push(http('5b0c7a36-9f1e-4c0e-8a52-2f6d3b1a7e01', NODO_PREGUNTAR, [cerrar.position[0] + 240, cerrar.position[1] + 260],
+  // n8n (executionOrder v1) corre las ramas hermanas de ARRIBA hacia ABAJO, una entera antes de la siguiente (medido por CC#3 con una espera de 70 s): para que la pregunta salga ANTES de que el sobre
+  // siga hacia «Esperar al redactor» (~15-20 min), el nodo va POR ENCIMA de `FIN · sobre`
+  const sobre = w.nodes.find((n) => n.name === 'FIN · sobre')
+  if (!sobre) throw new Error('no hay «FIN · sobre»')
+  w.nodes.push(http('5b0c7a36-9f1e-4c0e-8a52-2f6d3b1a7e01', NODO_PREGUNTAR, [sobre.position[0], sobre.position[1] - 260],
     "={{ JSON.stringify({ accion: 'preguntar', encargo_id: $('FIN · decidir').first().json.encargo_id, workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) }) }}", 30000))
   const salida = w.connections['FIN · cerrar la oficina'].main[0]
   w.connections['FIN · cerrar la oficina'].main[0] = [{ node: NODO_PREGUNTAR, type: 'main', index: 0 }, ...salida]

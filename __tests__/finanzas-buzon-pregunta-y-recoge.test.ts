@@ -13,7 +13,6 @@ import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase
 import { slackMdPuerto } from '../src/lib/buzon-dueno/slack-md'
 import type { CerebroDelDueno } from '../src/lib/buzon-dueno/cerebro-dueno'
 import type { AlmacenDeConversa, EncargoDeConversa } from '../src/lib/finanzas/conversa/puertos'
-// @ts-expect-error · constructor .mjs sin tipos
 import { agregarPreguntar, flujoDelVigia, NODO_PREGUNTAR } from '../scripts/worker-staging/finanzas-buzon/construir-buzon-2026-10-20.mjs'
 import ANTES from '../scripts/worker-staging/X9F0zp6LQ2xGEYVS/planeacion-ANTES-buzon-2026-10-20.json'
 import ARREGLADO from '../scripts/worker-staging/X9F0zp6LQ2xGEYVS/planeacion-ARREGLADO-buzon-2026-10-20.json'
@@ -79,6 +78,12 @@ describe('TUTEO antes de enviar', () => {
     expect(voseoEn(texto)).toEqual([]); expect(texto).toContain('puedes')
     expect(voseoEn(c.registradas[0].pregunta)).toEqual([])
   })
+  it('🔴 el «queda limpio» mira los TRES campos: si el voseo que sobra está solo en la recomendación o en el «si no respondes», se conserva el original entero', () => {
+    for (const campo of ['recomendacion', 'supuesto_si_no_responde'] as const) {
+      const q = { clave: 'a', texto: '¿Cuánto podés invertir?', recomendacion: 'Responde la cifra', supuesto_si_no_responde: 'se supone cero', [campo]: 'Contá con que invertís' }
+      const r = tutearPregunta(q as any); expect(r.cambiada, campo).toBe(false); expect(r.q, campo).toBe(q)
+    }
+  })
   it('una pregunta sin voseo no trae la marca `tuteadas`', async () => {
     const m = mundo([{ clave: 'a', texto: '¿Cuánto inviertes al mes?', recomendacion: 'Responde la cifra', supuesto_si_no_responde: 'se supone cero' }]), s = slackFalso()
     const r = await preguntarAlDueno(puertos(m.almacen, s, cerebro().c), 'enc-1')
@@ -130,6 +135,14 @@ describe('LA PLANEACIÓN · una rama lateral (1 nodo y 1 cable)', () => {
     const expr = String(n.parameters.jsonBody).replace(/^=\{\{/, '').replace(/\}\}$/, '')
     const cuerpo = JSON.parse(vm.runInNewContext(expr, { JSON, String, $: () => ({ first: () => ({ json: { encargo_id: 'enc-9' } }) }), $workflow: { id: 'wf-1' }, $execution: { id: 77 } }))
     expect(cuerpo).toEqual({ accion: 'preguntar', encargo_id: 'enc-9', workflow_id: 'wf-1', workflow_execution_id: '77' })
+  })
+  it('🔴 la pregunta va POR ENCIMA del sobre (n8n v1 corre las ramas hermanas de arriba hacia abajo: si va debajo, sale cuando el redactor termina, ~15-20 min, y no sale si la ejecución muere en la espera)', () => {
+    const p = B.nodes.find((x: any) => x.name === NODO_PREGUNTAR), sobre = B.nodes.find((x: any) => x.name === 'FIN · sobre')
+    expect(p.position[1]).toBeLessThan(sobre.position[1])
+    expect(B.nodes.filter((x: any) => x.position[0] === p.position[0] && x.position[1] === p.position[1])).toHaveLength(1) // no pisa a otro nodo
+    // y entre las ramas hermanas de «cerrar la oficina», la de arriba es la primera que corre: ordenadas por y, la pregunta antes que el sobre
+    const hermanas = B.connections['FIN · cerrar la oficina'].main[0].map((c: any) => B.nodes.find((x: any) => x.name === c.node)).sort((a: any, b: any) => a.position[1] - b.position[1])
+    expect(hermanas.map((x: any) => x.name)).toEqual([NODO_PREGUNTAR, 'FIN · sobre'])
   })
   it('aplicarlo dos veces falla (no duplica el nodo)', () => { expect(() => agregarPreguntar(B)).toThrow() })
 })
@@ -203,6 +216,22 @@ describe('buzonAbiertos · el almacén real (base falsa con eq/gte/in)', () => {
     expect(await almacenDeConversa(base(t)).buzonAbiertos!(AHORA, 72)).toEqual([])
     expect(await almacenDeConversa(base({ ...t, finanzas_artefactos: [art('a', 1)] }, 'finanzas_artefactos')).buzonAbiertos!(AHORA, 72)).toBeNull()
     expect(await almacenDeConversa(base({ finanzas_artefactos: [art('a', 1)], finanzas_encargos: [enc('a')] }, 'finanzas_encargos')).buzonAbiertos!(AHORA, 72)).toBeNull()
+  })
+  it('🔴 un error de lectura NUNCA se devuelve como lista vacía: null en cualquiera de las dos lecturas y también si la base lanza', async () => {
+    const t = { finanzas_artefactos: [art('a', 1)], finanzas_encargos: [enc('a')] }
+    expect(await almacenDeConversa(base(t, 'finanzas_artefactos')).buzonAbiertos!(AHORA, 72)).toBeNull()
+    expect(await almacenDeConversa(base(t, 'finanzas_encargos')).buzonAbiertos!(AHORA, 72)).toBeNull()
+    expect(await almacenDeConversa({ from() { throw new Error('base caída') } } as any).buzonAbiertos!(AHORA, 72)).toBeNull()
+  })
+  it('🔴 solo la versión 1 del registro cuenta como «un MD enviado» (las recogidas son versiones 2, 3…)', async () => {
+    const t = { finanzas_artefactos: [art('solo-v2', 1, 2), art('con-v1', 1, 1), art('con-v1', 0.5, 3)], finanzas_encargos: [enc('solo-v2'), enc('con-v1')] }
+    expect(await almacenDeConversa(base(t)).buzonAbiertos!(AHORA, 72)).toEqual(['con-v1'])
+  })
+  it('🔴 con más de 20 abiertos, el tope deja los 20 MÁS RECIENTES (no unos cualesquiera)', async () => {
+    const ids = Array.from({ length: 30 }, (_, i) => 'e' + String(i).padStart(2, '0'))
+    const t = { finanzas_artefactos: ids.map((i, k) => art(i, 60 - k)), finanzas_encargos: [...ids].reverse().map((i) => enc(i)) } // e29 es el más reciente (hace 31 h); e00 el más viejo (hace 60 h)
+    const r = (await almacenDeConversa(base(t)).buzonAbiertos!(AHORA, 72))!
+    expect(r).toHaveLength(20); expect(r[0]).toBe('e29'); expect(r).toContain('e10'); expect(r).not.toContain('e09')
   })
   it('máximo 20 por vuelta', async () => {
     const ids = Array.from({ length: 30 }, (_, i) => 'e' + i)
