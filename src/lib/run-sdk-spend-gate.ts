@@ -61,6 +61,16 @@ const WINDOW_MS = 24 * 60 * 60 * 1000
  *  $25 canon). TUNABLE por env `RUN_SPEND_CAP_USD`. */
 export const DEFAULT_RUN_SPEND_CAP_USD = 8.0
 
+/**
+ * ── CUPO DE ARRANQUE · opción A firmada por Emilio (20-oct, 15:15) ──
+ * Un cliente NUEVO gasta en su primer día alta + planeación (+ finanzas y el primer ciclo): medido, entre ≈ 4 y 10. Con el techo de 24 h en US$ 8 la planeación podía frenarse sola el primer día, y no existía
+ * ningún camino para subir el techo de un cliente legítimo (la ficha solo BAJA). Mientras la ficha esté en `onboarding` (y solo durante `RUN_ONBOARDING_DIAS` días desde que se creó, por omisión 7: sin esa cota un
+ * cliente olvidado en `onboarding` tendría el techo alto para siempre) el techo de 24 h es el MAYOR entre el general y `RUN_ONBOARDING_CAP_USD` (13 por omisión). Al pasar a `active` vuelve al general.
+ * NO cambia: la vara por corrida (US$ 5), el cubo `system`, que `config.spend_cap_usd` de la ficha solo BAJA, ni la política de fallo (sin dato de la ficha ⇒ techo general: falla hacia lo normal, nunca hacia lo alto).
+ */
+export const DEFAULT_ONBOARDING_SPEND_CAP_USD = 13.0
+export const DEFAULT_ONBOARDING_DAYS = 7
+
 /** Techo del cubo `system` (corridas sin `client_id`) · firmado por Emilio 2026-08-23.
  *  TUNABLE por env `RUN_SPEND_CAP_SYSTEM_USD`. */
 export const DEFAULT_SYSTEM_SPEND_CAP_USD = 2.0
@@ -124,6 +134,9 @@ export interface SpendGateResult {
     /** La VARA POR CORRIDA cortó · una sola corrida paso su techo (§ arriba). */
     | 'run_over_cap'
   readonly cap_usd?: number
+  /** el techo de 24 h fue el CUPO DE ARRANQUE (cliente `onboarding` en sus primeros días); `cap_generico_usd` es el que habría regido */
+  readonly cupo_de_arranque?: boolean
+  readonly cap_generico_usd?: number
   /** Si la ficha del cliente trae un tope MÁS BAJO (`config.spend_cap_usd`), el que rigió. Solo puede BAJAR el techo, nunca subirlo. */
   readonly cap_override_usd?: number
   readonly spent_usd?: number
@@ -164,6 +177,27 @@ export function isRunSpendCapEnforced(): boolean {
 export function resolveRunScopedCapUsd(): number {
   const n = Number(process.env.RUN_SCOPED_CAP_USD)
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_RUN_SCOPED_CAP_USD
+}
+
+/** Cupo de arranque · env `RUN_ONBOARDING_CAP_USD` (número positivo) > default $13. */
+export function resolveOnboardingSpendCapUsd(): number {
+  const n = Number(process.env.RUN_ONBOARDING_CAP_USD)
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_ONBOARDING_SPEND_CAP_USD
+}
+/** Cuántos días desde que se creó la ficha rige el cupo de arranque · env `RUN_ONBOARDING_DIAS` (número positivo) > default 7. */
+export function resolveOnboardingDays(): number {
+  const n = Number(process.env.RUN_ONBOARDING_DIAS)
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_ONBOARDING_DAYS
+}
+/** El techo de 24 h de un cliente SIN contar el tope de su ficha: el general, o el cupo de arranque si está `onboarding` y dentro de sus primeros días. Puro. Nunca baja del general. */
+export function techoGenericoDeArranque(o: { status: unknown; createdAt: unknown; nowMs: number; generico: number }): { cap: number; arranque: boolean } {
+  if (o.status !== 'onboarding') return { cap: o.generico, arranque: false }
+  const creada = typeof o.createdAt === 'string' ? Date.parse(o.createdAt) : NaN
+  if (!Number.isFinite(creada)) return { cap: o.generico, arranque: false }
+  const edad = o.nowMs - creada
+  if (edad < 0 || edad > resolveOnboardingDays() * 24 * 60 * 60 * 1000) return { cap: o.generico, arranque: false }
+  const cupo = resolveOnboardingSpendCapUsd()
+  return cupo > o.generico ? { cap: cupo, arranque: true } : { cap: o.generico, arranque: false }
 }
 
 /** Resuelve el techo · env `RUN_SPEND_CAP_USD` (número positivo) > default $8. */
@@ -313,15 +347,22 @@ export async function resolveClientFamily(
  * el freno nunca se rompe por esta lectura. Ojo: cuenta lo ya REGISTRADO; las llamadas en vuelo (aún sin fila) no entran: por eso el tope se pone con margen.
  */
 export async function resolveClientCapOverrideUsd(supabase: SupabaseClient, clientId: string): Promise<number | null> {
+  return (await resolveClientCapContext(supabase, clientId)).override
+}
+
+/** Lo que el freno lee de la ficha en UNA consulta: el tope propio (`config.spend_cap_usd`), el estado y la fecha de creación (para el cupo de arranque). Falla hacia lo normal: sin dato ⇒ todo null. */
+export async function resolveClientCapContext(supabase: SupabaseClient, clientId: string): Promise<{ override: number | null; status: string | null; createdAt: string | null }> {
+  const nada = { override: null, status: null, createdAt: null }
   try {
-    const { data, error } = await supabase.from('clients').select('config').eq('id', clientId).maybeSingle()
-    if (error) return null
-    const cfg = (data as { config?: unknown } | null)?.config
+    const { data, error } = await supabase.from('clients').select('config,status,created_at').eq('id', clientId).maybeSingle()
+    if (error) return nada
+    const f = data as { config?: unknown; status?: unknown; created_at?: unknown } | null
+    const cfg = f?.config
     const v = cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? (cfg as Record<string, unknown>).spend_cap_usd : undefined
     const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN
-    return Number.isFinite(n) && n > 0 ? n : null
+    return { override: Number.isFinite(n) && n > 0 ? n : null, status: typeof f?.status === 'string' ? f.status : null, createdAt: typeof f?.created_at === 'string' ? f.created_at : null }
   } catch {
-    return null
+    return nada
   }
 }
 
@@ -431,13 +472,16 @@ export async function checkRunSdkSpendCap(
     recordGateSuccess('run-sdk')
 
     const capGenerico = resolveRunSpendCapUsd()
-    const override = await resolveClientCapOverrideUsd(supabase, String(clientId))
-    const cap = override !== null ? Math.min(capGenerico, override) : capGenerico
+    const ficha = await resolveClientCapContext(supabase, String(clientId))
+    const override = ficha.override
+    const arr = techoGenericoDeArranque({ status: ficha.status, createdAt: ficha.createdAt, nowMs, generico: capGenerico })
+    const cap = override !== null ? Math.min(arr.cap, override) : arr.cap
     const runCap = resolveRunScopedCapUsd()
     const runId = opts.runId ?? null
     const base = {
       cap_usd: cap,
-      ...(override !== null && override < capGenerico ? { cap_override_usd: override } : {}),
+      ...(override !== null && override < arr.cap ? { cap_override_usd: override } : {}),
+      ...(arr.arranque ? { cupo_de_arranque: true, cap_generico_usd: capGenerico } : {}),
       spent_usd: spent,
       canonical_client_id: canonical,
       family_size: family.length,

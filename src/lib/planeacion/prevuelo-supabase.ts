@@ -3,7 +3,7 @@
  * Cada lectura que falla devuelve `{ ok: false }` (nunca un «vacío»): el pre-vuelo lo dice y no corre.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { resolveClientCapOverrideUsd, resolveClientFamily, resolveRunSpendCapUsd } from '../run-sdk-spend-gate'
+import { resolveClientCapContext, resolveClientFamily, resolveRunSpendCapUsd, techoGenericoDeArranque } from '../run-sdk-spend-gate'
 import { notifySpendGateDegradation } from '../spend-gate-alert'
 import { interruptoresDelEntorno } from '../portero-alimenta/datos'
 import { rutaListo } from '../portero-alimenta/listo'
@@ -50,9 +50,11 @@ export function puertosDeSupabase(db: SupabaseClient, ahora: () => Date = () => 
         const r = await q
         if (r.error) return { ok: false, error: `agent_invocations: ${r.error.message}` }
         const gastado = lista(r.data).reduce((s, f) => s + (Number(f.cost_usd) || 0), 0)
-        const generico = resolveRunSpendCapUsd()
-        const override = await resolveClientCapOverrideUsd(db, client_id)
-        return { ok: true, generico_usd: generico, override_usd: override, cap_usd: override !== null ? Math.min(generico, override) : generico, gastado_24h_usd: Math.round(gastado * 1e6) / 1e6 }
+        // el MISMO criterio del freno, con el cupo de arranque (cliente `onboarding` en sus primeros días): si no, el pre-vuelo diría «sin cupo» donde el freno todavía deja pasar
+        const ficha = await resolveClientCapContext(db, client_id)
+        const base_ = techoGenericoDeArranque({ status: ficha.status, createdAt: ficha.createdAt, nowMs: ahora().getTime(), generico: resolveRunSpendCapUsd() })
+        const override = ficha.override
+        return { ok: true, generico_usd: base_.cap, override_usd: override, cap_usd: override !== null ? Math.min(base_.cap, override) : base_.cap, gastado_24h_usd: Math.round(gastado * 1e6) / 1e6 }
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
     },
 
