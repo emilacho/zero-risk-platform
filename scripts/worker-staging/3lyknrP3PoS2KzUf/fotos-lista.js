@@ -11,11 +11,14 @@ const norm = (h) => String(h || '').trim().toLowerCase().replace(/^@/, '').repla
 const fichas = await this.helpers.httpRequest({ url: SB + '/rest/v1/clients?id=eq.' + ctx.client_id + '&select=config', method: 'GET', json: true, timeout: 10000, headers: auth })
 const own = norm(fichas[0] && fichas[0].config && fichas[0].config.apify && fichas[0].config.apify.own_handles && fichas[0].config.apify.own_handles.instagram)
 const base = { client_id: ctx.client_id }
+// 21-oct · el rol lo decide `rolDeLaCuenta`: la ficha si ya dice cuál es la cuenta propia; si no, lo que la llamada declara (metadata.target_kind === 'own').
+const declaradoPropio = !!(ctx.metadata && ctx.metadata.target_kind === 'own')
+const objetivos = objetivosDeLaLlamada(ctx.cuerpo || ctx.params)
 const out = []
 for (const it of $('Merge · apify data ready').all().map((i) => i.json)) {
   const handle = norm(it && it.username)
   if (!handle) continue
-  const owner_role = own && handle === own ? 'propio' : 'competidor'
+  const owner_role = rolDeLaCuenta({ handle, own, declaradoPropio, objetivos })
   const push = (post_id, tipo, src, extra) => { if (src) out.push({ json: { ...base, owner_role, handle, post_id, tipo, src, ...(extra || {}) } }) }
   push('logo-hd', 'logo_hd', it.profilePicUrlHD || it.profilePicUrl, { medio: 'logo', posicion: 'unica' })
   for (const p of (it.latestPosts || []).slice(0, MAX_POSTS)) {

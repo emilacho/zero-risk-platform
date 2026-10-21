@@ -462,8 +462,43 @@ function combinarFuentes(caption, vision, dueno) {
   return { producto: [], fuente: 'desconocido' }
 }
 
+/** «@mi.marca» · «https://instagram.com/mi.marca/» · «mi.marca» → "mi.marca". */
+function manejoDeInstagram(h) {
+  return String(h || '').trim().toLowerCase().replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/.*$/, '')
+}
+
+/** Los perfiles que una llamada de instagram_scraper pide (directUrls · usernames · startUrls), ya normalizados y sin vacíos. */
+function objetivosDeLaLlamada(cuerpo) {
+  var p = cuerpo || {}
+  return []
+    .concat(p.directUrls || [])
+    .concat(p.usernames || [])
+    .concat((p.startUrls || []).map(function (u) { return typeof u === 'string' ? u : u && u.url }))
+    .filter(Boolean)
+    .map(manejoDeInstagram)
+    .filter(Boolean)
+}
+
+/**
+ * ¿De quién es la cuenta cuyas fotos se copian? 'propio' o 'competidor'.
+ *  1) La ficha dice cuál es la cuenta propia (config.apify.own_handles.instagram) y coincide → propio (como siempre).
+ *  2) SOLO si la ficha todavía no lo dice (sin `own`), vale lo que la LLAMADA declara: metadata.target_kind === 'own' y el perfil pedido es UNO solo y es ese → propio.
+ *     (El alta raspa el perfil propio segundos después de crear la ficha, antes de que `own_handles` exista: sin esto, esas fotos se guardaban como «competidor».)
+ *  Una llamada 'own' que pide varios perfiles es ambigua: no se infiere nada (solo la regla 1).
+ */
+function rolDeLaCuenta(o) {
+  var h = manejoDeInstagram(o && o.handle)
+  if (!h) return 'competidor'
+  var own = manejoDeInstagram(o && o.own)
+  if (own) return h === own ? 'propio' : 'competidor' // la ficha manda: si ya declara su cuenta, ninguna llamada la contradice
+  var objetivos = (o && o.objetivos) || []
+  if (o && o.declaradoPropio === true && objetivos.length === 1 && objetivos[0] === h) return 'propio'
+  return 'competidor'
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    manejoDeInstagram: manejoDeInstagram, objetivosDeLaLlamada: objetivosDeLaLlamada, rolDeLaCuenta: rolDeLaCuenta,
     sinTildes: sinTildes, raicesDe: raicesDe, excluirDe: excluirDe, sinNegaciones: sinNegaciones,
     entradaDeProtagonista: entradaDeProtagonista, catalogoDeProtagonistas: catalogoDeProtagonistas, productoDelBrief: productoDelBrief, alternativasDelBrief: alternativasDelBrief, catalogoDelBrief: catalogoDelBrief, productoDeTexto: productoDeTexto,
     contextoDePost: contextoDePost, aMedio: aMedio, sha256Hex: sha256Hex,
