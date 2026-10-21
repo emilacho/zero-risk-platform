@@ -60,6 +60,7 @@ class Consulta {
   eq(c: string, v: unknown) { this.filtros.push((f) => leer(f, c) === v); return this }
   or(expr: string) { const alts = expr.split(',').map((p) => { const [c, op, ...v] = p.split('.'); return { c, op, v: v.join('.') } }); this.filtros.push((f) => alts.some((a) => a.op === 'eq' && String(leer(f, a.c)) === a.v)); return this }
   lt(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) < String(v)); return this }
+  gt(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) > String(v)); return this }
   gte(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) >= String(v)); return this }
   is(c: string, v: unknown) { this.filtros.push((f) => (v === null ? !hay(leer(f, c)) : leer(f, c) === v)); return this }
   order(c: string, o?: { ascending?: boolean }) { this.orden = { col: c, asc: o?.ascending !== false }; return this }

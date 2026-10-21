@@ -310,6 +310,8 @@ describe('carrusel y kit de historias', () => {
     const r = await correr(M, id, guion({ autorevision_diseno: () => ({ texto: conChoque({ laminas: inventada }, 'laminas', 'nota-2') }) }), 80)
     expect(r.ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
     expect(arte(M, id, 'laminas').laminas[1].headline).toBe('Hoy cambia el plato del día')
+    // el reintento lleva el mensaje ESPECÍFICO del validador (no uno genérico)
+    expect(r.tareas['autorevision_diseno'][1]).toContain('no cumple lo que la sala comprueba por código')
     expect(reg.find((x) => x.paso === 'autorevision_diseno')).toMatchObject({ choco: false })
   })
   it('carrusel: una lámina corregida que rompe el contrato (headline de 200 caracteres) se descarta y la original sigue', async () => {

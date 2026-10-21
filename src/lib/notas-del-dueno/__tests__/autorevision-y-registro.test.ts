@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { camposCambiados, MAX_CARACTERES_DE_NOTAS, MAX_NOTAS, seccionDeAutorevision, seleccionarNotas, validarAutorevision } from '../autorevision'
 import { lunesDe, registroDelCliente } from '../registro'
-import { registrarAutorevision, leerNotas } from '../adaptadores'
+import { registrarAutorevision, leerNotas, MAX_GENERALES } from '../adaptadores'
 import { procesarSalida } from '../../oficina/salida'
 import { crearPuertos, type Entorno } from '../../oficina/adaptadores'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
@@ -19,10 +19,16 @@ describe('qué notas ve el agente', () => {
     expect(v[0].texto).toBe('El dueño rechazó «Post»: «Más corto»')
   })
   it('las más nuevas primero; las generales se rotulan; el título se recorta', () => {
-    const v = seleccionarNotas([nota({ id: 'vieja', creada_en: '2026-10-01T00:00:00Z' }), nota({ id: 'nueva', creada_en: '2026-10-20T00:00:00Z', alcance: 'general', pieza_titulo: 'T'.repeat(200) })])
+    const v = seleccionarNotas([nota({ id: 'vieja', creada_en: '2026-10-01T00:00:00Z', pieza_titulo: 'T'.repeat(200) }), nota({ id: 'nueva', creada_en: '2026-10-20T00:00:00Z', alcance: 'general' })])
     expect(v.map((x) => x.id)).toEqual(['nueva', 'vieja'])
-    expect(v[0].texto.startsWith('(vale para todos los clientes) El dueño comentó sobre «')).toBe(true)
-    expect(v[0].texto).toContain('…»')
+    expect(v[0].texto.startsWith('(vale para todos los clientes) El dueño comentó: «')).toBe(true)
+    expect(v[1].texto.startsWith('El dueño comentó sobre «')).toBe(true)
+    expect(v[1].texto).toContain('…»')
+  })
+  it('una nota GENERAL no lleva el título de la pieza de origen (no filtra la pieza de un cliente al contexto de otro)', () => {
+    const v = seleccionarNotas([nota({ id: 'g', alcance: 'general', tipo: 'rechazada', pieza_titulo: 'PIEZA-SECRETA-DEL-CLIENTE-A', comentario: 'Nada de signos de exclamación' }), nota({ id: 'c', alcance: 'general', tipo: 'comentario', pieza_titulo: 'OTRA-PIEZA-SECRETA', comentario: 'Tutea' })])
+    expect(JSON.stringify(v)).not.toContain('SECRETA')
+    expect(v.map((x) => x.texto).sort()).toEqual(['(vale para todos los clientes) El dueño comentó: «Tutea»', '(vale para todos los clientes) El dueño dijo al rechazar: «Nada de signos de exclamación»'])
   })
   it('una nota sin título habla de «una pieza»', () => { expect(seleccionarNotas([nota({ id: 'a', pieza_titulo: null, tipo: 'rechazada' })])[0].texto).toContain('rechazó una pieza') })
   it('tope de cantidad y de caracteres; cada comentario se recorta', () => {
@@ -210,6 +216,19 @@ describe('el puerto de notas de la oficina real', () => {
     expect(db.tablas['autorevisiones_del_productor']).toHaveLength(1)
     db.fallar['autorevisiones_del_productor'] = 'sin permiso'
     await expect(registrarAutorevision(db, { ...r, clave_unica: 'otra' })).rejects.toThrow(/sin permiso/)
+  })
+  it('las generales de otros clientes no desplazan a las notas propias: dos lecturas, cada una con su tope', async () => {
+    const db = new DbFalsa()
+    const f = (id: string, client_id: string, alcance: string, dia: number) => ({ id, client_id, alcance, tipo: 'comentario', comentario: id, hitl_id: null, output_id: null, pieza_titulo: null, pieza_version: null, pieza_familia: null, origen: 'slack', autor: 'U1', clave_unica: id, creada_en: new Date(Date.UTC(2026, 9, 1, 0, 0, dia)).toISOString() })
+    db.semilla('notas_del_dueno', [
+      ...Array.from({ length: 60 }, (_, i) => f(`g${i}`, 'otro', 'general', 100 + i)),   // 60 generales ajenas, MÁS NUEVAS que las propias
+      ...Array.from({ length: 5 }, (_, i) => f(`p${i}`, CLIENTE, 'cliente', i)),
+    ])
+    const notas = await leerNotas(db, CLIENTE)
+    expect(notas.filter((n) => n.client_id === CLIENTE)).toHaveLength(5)                  // las 5 propias están
+    expect(notas.filter((n) => n.client_id === 'otro')).toHaveLength(MAX_GENERALES)      // y las generales, acotadas
+    const ids = notas.map((n) => n.id)
+    expect(new Set(ids).size).toBe(ids.length)                                            // sin repetidas
   })
   it('un error de la base al leer las notas se lanza (el orquestador lo registra y sigue, nunca lo toma por «sin notas»)', async () => {
     const db = new DbFalsa()

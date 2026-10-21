@@ -16,6 +16,7 @@ export interface NotaVista { id: string; texto: string }
 
 const recortar = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`)
 const DECISION: Record<Nota['tipo'], string> = { aprobada: 'aprobó', rechazada: 'rechazó', editada: 'editó', comentario: 'comentó sobre' }
+const DECISION_GENERAL: Record<Nota['tipo'], string> = { aprobada: 'dijo al aprobar', rechazada: 'dijo al rechazar', editada: 'dijo al editar', comentario: 'comentó' }
 
 /**
  * Qué notas ve el agente: solo las que dicen algo (con comentario), las más nuevas primero, hasta MAX_NOTAS y MAX_CARACTERES_DE_NOTAS.
@@ -28,8 +29,10 @@ export function seleccionarNotas(notas: Nota[], o: { max?: number; maxCaracteres
   const vistas: NotaVista[] = []
   for (const n of orden) {
     if (vistas.length >= max) break
-    const sobre = n.pieza_titulo ? ` «${recortar(n.pieza_titulo, 80)}»` : ' una pieza'
-    const texto = `${n.alcance === 'general' ? '(vale para todos los clientes) ' : ''}El dueño ${DECISION[n.tipo]}${sobre}: «${recortar(n.comentario!.trim(), MAX_COMENTARIO)}»`
+    // una nota GENERAL (vale para todos los clientes) viaja SIN el título de la pieza de origen: no filtra el nombre de una pieza de un cliente al contexto de otro
+    const general = n.alcance === 'general'
+    const sobre = general ? '' : n.pieza_titulo ? ` «${recortar(n.pieza_titulo, 80)}»` : ' una pieza'
+    const texto = `${general ? '(vale para todos los clientes) ' : ''}El dueño ${general ? DECISION_GENERAL[n.tipo] : DECISION[n.tipo]}${sobre}: «${recortar(n.comentario!.trim(), MAX_COMENTARIO)}»`
     if (texto.length > resto) break
     resto -= texto.length
     vistas.push({ id: n.id, texto })

@@ -38,10 +38,16 @@ const aNota = (f: Fila): Nota => ({
 })
 
 /** las notas de un cliente (las suyas y las generales), de la más nueva a la más vieja; un error de lectura se lanza */
+export const MAX_GENERALES = 15
 export async function leerNotas(db: Db, client_id: string, limite = 50): Promise<Nota[]> {
-  const r = await db.from('notas_del_dueno').select('*').or(`client_id.eq.${client_id},alcance.eq.general`).order('creada_en', { ascending: false }).limit(limite)
-  if (r.error) throw new Error(`notas_del_dueno: ${r.error.message}`)
-  return ((r.data ?? []) as Fila[]).map(aNota)
+  // DOS lecturas, cada una con su tope: las generales de otros clientes no pueden desplazar a las notas propias
+  const propias = await db.from('notas_del_dueno').select('*').eq('client_id', client_id).order('creada_en', { ascending: false }).limit(limite)
+  if (propias.error) throw new Error(`notas_del_dueno: ${propias.error.message}`)
+  const generales = await db.from('notas_del_dueno').select('*').eq('alcance', 'general').order('creada_en', { ascending: false }).limit(MAX_GENERALES)
+  if (generales.error) throw new Error(`notas_del_dueno: ${generales.error.message}`)
+  const vistas = new Set<string>()
+  const todas = [...((propias.data ?? []) as Fila[]), ...((generales.data ?? []) as Fila[])].filter((f) => { const id = String(f.id); if (vistas.has(id)) return false; vistas.add(id); return true }).map(aNota)
+  return todas.sort((a, b) => (a.creada_en < b.creada_en ? 1 : a.creada_en > b.creada_en ? -1 : 0)).slice(0, limite + MAX_GENERALES)
 }
 
 export function puertosDeNotas(db: Db, env: EntornoDeNotas, f: Fetch = fetch): PuertosDeNotas {
