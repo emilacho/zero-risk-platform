@@ -22,11 +22,30 @@ export function aplicarPisoTodasLasFuentes(flujo) {
   return w
 }
 
+/** Cuando el nodo YA trabaja con todas las fuentes y solo cambia su código (ajustes posteriores a la instalación): devuelve la copia con el código nuevo; falla si no hay nada que cambiar. */
+export function actualizarPisoTodasLasFuentes(flujo) {
+  const w = JSON.parse(JSON.stringify(flujo))
+  const n = w.nodes.find((x) => x.name === NODO)
+  if (!n) throw new Error('el flujo no trae el nodo «' + NODO + '»')
+  if (!n.parameters.jsCode.includes('derivarPisoVisualTodasLasFuentes(')) throw new Error('el nodo aún no trabaja con todas las fuentes: usa aplicarPisoTodasLasFuentes')
+  const nuevo = codigoDelNodo()
+  const crlf = n.parameters.jsCode.includes('\r\n')
+  const viejo = n.parameters.jsCode.replace(/\r\n/g, '\n')
+  if (viejo === nuevo.replace(/\r\n/g, '\n')) throw new Error('el nodo ya tiene este código')
+  n.parameters = { ...n.parameters, jsCode: crlf ? nuevo.replace(/\r?\n/g, '\r\n') : nuevo }
+  return w
+}
+
 if (process.argv[1] && process.argv[1].endsWith('construir-piso-todas-las-fuentes.mjs')) {
   const aqui = dirname(fileURLToPath(import.meta.url))
   const entrada = process.argv[2]
   if (!entrada) { console.error('uso: node construir-piso-todas-las-fuentes.mjs <ANTES.json>'); process.exit(2) }
   const antes = JSON.parse(fs.readFileSync(entrada, 'utf8'))
-  fs.writeFileSync(join(aqui, 'cimiento-ARREGLADO-piso-todas-las-fuentes-2026-10-21.json'), JSON.stringify(aplicarPisoTodasLasFuentes(antes), null, 2))
-  console.log('escrito cimiento-ARREGLADO-piso-todas-las-fuentes-2026-10-21.json')
+  if (process.argv[3] === '--actualizar') {
+    fs.writeFileSync(join(aqui, 'cimiento-ARREGLADO-piso-tipografia-procedencia-2026-10-21.json'), JSON.stringify(actualizarPisoTodasLasFuentes(antes), null, 2))
+    console.log('escrito cimiento-ARREGLADO-piso-tipografia-procedencia-2026-10-21.json')
+  } else {
+    fs.writeFileSync(join(aqui, 'cimiento-ARREGLADO-piso-todas-las-fuentes-2026-10-21.json'), JSON.stringify(aplicarPisoTodasLasFuentes(antes), null, 2))
+    console.log('escrito cimiento-ARREGLADO-piso-todas-las-fuentes-2026-10-21.json')
+  }
 }

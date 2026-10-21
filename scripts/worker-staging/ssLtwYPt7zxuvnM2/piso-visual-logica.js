@@ -285,6 +285,30 @@ function nombreDeTipografia(x) {
   v = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : ''
   return v && v.length <= 60 ? v : null
 }
+/**
+ * Una tipografía OBSERVADA solo entra si es un NOMBRE de tipografía, no una descripción ni una duda del modelo
+ * (caso real df7e47cc, 21-oct: «Impact o condensed sans-serif bold» y «no reconocida con claridad» entraron como propuestas y la oficina las habría usado como familia de letra).
+ * Se rechaza lo que ofrece alternativas (« o », coma, punto y coma, barra), lo que dice que no se reconoce, y lo que no es solo letras/números/espacios/guiones (máx. 40).
+ */
+var RE_TIPOGRAFIA_DUDOSA = /\bo\b|[,;/]|no\s+(se\s+)?(reconoc|identific|pued|determin|lee|ve)|desconoc|ningun|n\/a|indefinid|sin\s+(tipograf|nombre)|gen[eé]ric|similar|parecid|tipo\s+/i
+function nombreDeTipografiaObservada(x) {
+  var n = nombreDeTipografia(x)
+  if (!n || n.length > 40 || RE_TIPOGRAFIA_DUDOSA.test(n)) return null
+  return /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 \-]*$/.test(n) ? n : null
+}
+/** «donde» del modelo → una procedencia CORTA y limpia: «observado en logo, foto 1, foto 3» (nunca texto de las imágenes, teléfonos ni correos). */
+function procedenciaDeLoObservado(donde) {
+  var t = String(donde || '').toLowerCase()
+  var partes = []
+  if (/logo/.test(t)) partes.push('logo')
+  var re = /foto\s*(\d{1,2})/g
+  var m
+  var vistas = {}
+  while ((m = re.exec(t)) && partes.length < 4) {
+    if (!vistas[m[1]]) { vistas[m[1]] = true; partes.push('foto ' + m[1]) }
+  }
+  return 'observado en ' + (partes.length ? partes.join(', ') : 'el material propio')
+}
 function sinRepetidos(lista) {
   var visto = {}
   return lista.filter(function (x) { if (visto[x.valor]) return false; visto[x.valor] = true; return true })
@@ -488,16 +512,16 @@ function derivarPisoVisualTodasLasFuentes(ctx, invocarModelo) {
         var h = colorHex(o && o.color)
         if (!h || vistos[h] || visual.capa_grafica.paleta.length >= MAX_COLORES_OBSERVADOS) return
         vistos[h] = true
-        visual.capa_grafica.paleta.push({ color: h, rol: o.rol ? String(o.rol).slice(0, 20) : null, procedencia: 'observado en ' + String((o && o.donde) || 'el material propio').slice(0, 40), estado: 'propuesta' })
+        visual.capa_grafica.paleta.push({ color: h, rol: o.rol ? String(o.rol).slice(0, 20) : null, procedencia: procedenciaDeLoObservado(o && o.donde), estado: 'propuesta' })
       })
     }
     if (armado.pide_tipografias) {
       var vistas = {}
       ;(cg.tipografias_observadas || []).forEach(function (o) {
-        var n = nombreDeTipografia(o && o.nombre)
+        var n = nombreDeTipografiaObservada(o && o.nombre)
         if (!n || vistas[n.toLowerCase()] || visual.capa_grafica.tipografias.length >= MAX_TIPOGRAFIAS_OBSERVADAS) return
         vistas[n.toLowerCase()] = true
-        visual.capa_grafica.tipografias.push({ nombre: n, rol: o.rol ? String(o.rol).slice(0, 20) : null, procedencia: 'observado en ' + String((o && o.donde) || 'el material propio').slice(0, 40), estado: 'propuesta' })
+        visual.capa_grafica.tipografias.push({ nombre: n, rol: o.rol ? String(o.rol).slice(0, 20) : null, procedencia: procedenciaDeLoObservado(o && o.donde), estado: 'propuesta' })
       })
     }
     visual.capa_producto = parsed.datos.capa_producto || null
@@ -528,6 +552,8 @@ if (typeof module !== 'undefined' && module.exports) {
     armarPedidoTodasLasFuentes: armarPedidoTodasLasFuentes,
     armarMuestraTodasLasFuentes: armarMuestraTodasLasFuentes,
     paraElManual: paraElManual,
+    nombreDeTipografiaObservada: nombreDeTipografiaObservada,
+    procedenciaDeLoObservado: procedenciaDeLoObservado,
     colorHex: colorHex,
     nombreDeTipografia: nombreDeTipografia,
   }
