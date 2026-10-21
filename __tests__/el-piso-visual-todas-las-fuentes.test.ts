@@ -189,6 +189,12 @@ describe('lo que recibe el manual', () => {
     expect(m.marca?.fonts).toMatchObject({ family: 'Inter', headline_family: 'Caveat' })
     expect(m.procedencia).toMatchObject({ colores: 'manual', tipografias: 'manual' })
   })
+  it('y el bloque visual v2 completo (sin columnas) también lo lee la oficina: colores, tipografía y logo del bloque', async () => {
+    const v = await derivar({ filaSitio: null, ficha: null, copias: soloIG() }, modelo({ capa_grafica: { colores_observados: [{ color: '#c8102e', rol: 'principal', donde: 'logo' }], tipografias_observadas: [{ nombre: 'Bebas Neue', rol: 'titulos', donde: 'logo' }] }, ...PRODUCTO }).invocar)
+    const r = identidadVisualDelCliente({ primary_colors: [], typography: {}, content_text: JSON.stringify({ brand_book_draft: { visual: v } }) }, {}, [])
+    expect(r.marca?.colors.primary).toBe('#c8102e'); expect(r.marca?.fonts.family).toBe('Bebas Neue'); expect(r.marca?.logo_url).toBe('https://copia.test/zeroriskgye/logo.jpg')
+    expect(r.procedencia).toMatchObject({ colores: 'bloque_visual', tipografias: 'bloque_visual', logo: 'bloque_visual' })
+  })
   it('el pedido pide solo lo que falta (con colores declarados no pide colores; sí tipografías si no hay)', () => {
     const p = armarPedidoTodasLasFuentes({ colores: [{ valor: '#111111', procedencia: 'ficha' }], tipografias: [] }, { logo: null, fotos: [], fotos_disponibles: 0, cuentas: [] })
     expect(p.pide_colores).toBe(false); expect(p.pide_tipografias).toBe(true)
