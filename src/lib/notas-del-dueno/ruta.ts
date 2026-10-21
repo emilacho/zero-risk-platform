@@ -20,5 +20,5 @@ export function firmaDeLaPeticion(request: Request, cuerpo: string) {
 export function configuracionReal(): ConfiguracionDeNotas { return { autorizados: autorizadosDelEntorno() } }
 
 export function puertosReales(request: Request): PuertosDeNotas {
-  return puertosDeNotas(getSupabaseAdmin(), { baseUrl: new URL(request.url).origin, internalKey: process.env.INTERNAL_API_KEY ?? '', slackToken: process.env.SLACK_BOT_TOKEN, destino: process.env.NOTAS_DESTINO })
+  return puertosDeNotas(getSupabaseAdmin(), { baseUrl: new URL(request.url).origin, internalKey: process.env.INTERNAL_API_KEY ?? '', slackToken: process.env.SLACK_BOT_TOKEN })
 }

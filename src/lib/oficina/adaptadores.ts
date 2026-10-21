@@ -25,10 +25,13 @@ import { seleccionarNotas } from '../notas-del-dueno/autorevision'
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { /** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; /** a dónde llega la pieza para que Emilio decida (canal o persona de Slack); sin esto la pieza solo va a la bandeja, como siempre */ notasDestino?: string; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string }
+export interface Entorno { /** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string }
 
 /** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
 export { ESPERAS_DEL_REVISOR_MS }
+
+/** `#oficina-creativa`: el canal de esta oficina (se cambia con `OFICINA_SLACK_CANAL`); por él van sus avisos y las piezas que Emilio decide */
+export const CANAL_DE_LA_OFICINA = 'C0C7XUKNCLS'
 
 /** el marcador de una imagen simulada (dry_run): `descargar` la reconoce y no sale a la red */
 export const PREFIJO_DRY = 'https://dry.invalid/'
@@ -241,16 +244,16 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       const r = await db.from('hitl_queue').insert({ client_id: p.client_id, agent_name: 'oficina', risk_type: 'strategic_decision', output_preview: p.vista_previa || p.titulo, type: 'content_piece_review', title: p.titulo, priority: 'medium', status: 'pending', payload: {}, metadata: p.metadata, output_id: p.output_id, expires_at: p.expires_at }).select('id').single()
       if (r.error) return { ok: false, error: r.error.message }
       const id = String((r.data as Fila).id)
-      // la pieza también llega al Slack de Emilio con sus botones (solo si se configuró el destino): un fallo aquí NUNCA frena la bandeja, que sigue siendo la vía de siempre
-      if (env.notasDestino && env.slackToken) {
-        try { await enviarPiezaASlack(db, { baseUrl: env.baseUrl, internalKey: env.internalKey, slackToken: env.slackToken, destino: env.notasDestino }, await piezaParaSlackDeLaBandeja(db, { hitl_id: id, client_id: p.client_id, output_id: p.output_id, titulo: p.titulo, vista_previa: p.vista_previa, metadata: p.metadata }), f) } catch { /* nunca frena la bandeja */ }
+      // la pieza también llega al Slack de Emilio con sus botones, POR EL CANAL DE ESTA OFICINA (el mismo de sus avisos; regla firmada: cada oficina habla con Emilio por su propio canal, nada de mensajes directos). Un fallo aquí NUNCA frena la bandeja, que sigue siendo la vía de siempre
+      if (env.notasDelDueno && env.slackToken) {
+        try { await enviarPiezaASlack(db, { baseUrl: env.baseUrl, internalKey: env.internalKey, slackToken: env.slackToken, destino: env.slackCanalHilo ?? CANAL_DE_LA_OFICINA }, await piezaParaSlackDeLaBandeja(db, { hitl_id: id, client_id: p.client_id, output_id: p.output_id, titulo: p.titulo, vista_previa: p.vista_previa, metadata: p.metadata }), f) } catch { /* nunca frena la bandeja */ }
       }
       return { ok: true, id }
     },
     async avisar(p) {
       if (p.dry_run || !env.slackToken) return
       try {
-        const canal = p.canal === 'alertas' ? env.slackCanalAlertas ?? 'C0B7XUUEBHA' : env.slackCanalHilo ?? 'C0C7XUKNCLS'
+        const canal = p.canal === 'alertas' ? env.slackCanalAlertas ?? 'C0B7XUUEBHA' : env.slackCanalHilo ?? CANAL_DE_LA_OFICINA
         let thread: string | undefined
         if (p.canal === 'hilo') {
           const e = (await db.from('oficina_encargos').select('slack_ts').eq('id', p.encargo_id).limit(1)) as { data: Fila[] | null }

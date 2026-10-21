@@ -383,13 +383,13 @@ describe('adaptadores sobre una base y un Slack falsos', () => {
     expect(llamadas.map((l) => l.url.split('/').pop())).toEqual(['chat.postMessage'])
     expect(db.tablas['hitl_queue'][0].metadata).toMatchObject({ familia: 'post_img', otro: 'dato', slack: { canal: 'C1', ts: expect.any(String) } })
   })
-  it('a un mensaje directo (U…) abre primero la conversación', async () => {
+  it('NUNCA por mensaje directo: un destino que no sea un canal se rechaza sin llamar a Slack (cada oficina habla con el dueño por su canal)', async () => {
     const { db, llamadas, f } = entorno()
-    const r = await enviarPiezaASlack(db, { ...env, destino: 'U0AQ3N967SB' }, { hitl_id: HITL, cliente: 'C', titulo: 'Post' }, f)
-    expect(r).toMatchObject({ ok: true, canal: 'D1' })
-    expect(llamadas.map((l) => l.url.split('/').pop())).toEqual(['conversations.open', 'chat.postMessage'])
-    expect(llamadas[0].cuerpo).toEqual({ users: 'U0AQ3N967SB' })
-    expect(llamadas[1].cuerpo.channel).toBe('D1')
+    for (const destino of ['U0AQ3N967SB', 'D0ABCDEF', 'W0ABC', 'canal-sin-id', '#oficina-creativa']) {
+      expect(await enviarPiezaASlack(db, { ...env, destino }, { hitl_id: HITL, cliente: 'C', titulo: 'Post' }, f)).toMatchObject({ ok: false, error: expect.stringContaining('destino_no_es_un_canal') })
+    }
+    expect(llamadas).toHaveLength(0)
+    expect(await enviarPiezaASlack(db, { ...env, destino: 'G0PRIVADO1' }, { hitl_id: HITL, cliente: 'C', titulo: 'Post' }, f)).toMatchObject({ ok: true, canal: 'G0PRIVADO1' }) // un canal privado sí
   })
   it('nunca lanza: sin token, sin destino, Slack con error o la base caída al guardar el ts', async () => {
     const { db, respuestas, f } = entorno()
@@ -401,8 +401,6 @@ describe('adaptadores sobre una base y un Slack falsos', () => {
     delete respuestas['chat.postMessage']
     db.fallar['hitl_queue'] = 'caída'
     expect(await enviarPiezaASlack(db, env, p, f)).toMatchObject({ ok: false, error: expect.stringContaining('no se pudo guardar su ts') })
-    respuestas['conversations.open'] = { ok: false, error: 'user_not_found' }
-    expect(await enviarPiezaASlack(db, { ...env, destino: 'U1ABC' }, p, f)).toMatchObject({ ok: false, error: expect.stringContaining('conversations.open') })
   })
 
   it('lee las notas del cliente y las generales de otros, de la más nueva a la más vieja, y no las de otro cliente', async () => {

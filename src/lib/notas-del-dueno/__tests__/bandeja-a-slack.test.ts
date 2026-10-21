@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { crearPuertos, type Entorno } from '../../oficina/adaptadores'
+import { crearPuertos, CANAL_DE_LA_OFICINA, type Entorno } from '../../oficina/adaptadores'
 import { piezaParaSlackDeLaBandeja } from '../adaptadores'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
 
@@ -37,32 +37,39 @@ describe('la pieza armada para Slack', () => {
   })
 })
 
-describe('la bandeja de la oficina también manda la pieza a Slack (solo si hay destino)', () => {
-  it('con destino: la pieza queda en la bandeja Y llega a Slack con botones, y el ts queda guardado', async () => {
+describe('la bandeja de la oficina también manda la pieza a Slack (solo con la bandera encendida)', () => {
+  it('con la bandera: la pieza queda en la bandeja Y llega a Slack con botones por el canal de la oficina (#oficina-creativa por omisión), y el ts queda guardado', async () => {
     const { db, llamadas, f } = mundo()
-    const q = await crearPuertos(db, { ...ENV, notasDestino: 'C1' }, f).bandeja({ ...bandeja, expires_at: null })
+    const q = await crearPuertos(db, { ...ENV, notasDelDueno: true }, f).bandeja({ ...bandeja, expires_at: null })
     expect(q.ok).toBe(true)
     const post = llamadas.find((l) => l.url.endsWith('chat.postMessage'))!
-    expect(post.cuerpo.channel).toBe('C1')
+    expect(post.cuerpo.channel).toBe(CANAL_DE_LA_OFICINA)
+    expect(CANAL_DE_LA_OFICINA).toBe('C0C7XUKNCLS')
+    expect(llamadas.filter((l) => l.url.endsWith('conversations.open'))).toHaveLength(0) // nunca mensajes directos
     expect(JSON.stringify(post.cuerpo.blocks)).toContain('nota_aprobar')
     expect(JSON.stringify(post.cuerpo.blocks)).toContain('Ceviche de la casa')
     const fila = db.tablas['hitl_queue'].find((x) => x.type === 'content_piece_review')!
-    expect(fila.metadata).toMatchObject({ slack: { canal: 'C1', ts: '9.9' }, familia: 'post_img' })
+    expect(fila.metadata).toMatchObject({ slack: { canal: CANAL_DE_LA_OFICINA, ts: '9.9' }, familia: 'post_img' })
   })
-  it('sin destino: solo bandeja, ni una llamada a Slack (la ruta de siempre)', async () => {
+  it('el canal sale de la configuración de la oficina: si se cambia OFICINA_SLACK_CANAL, la pieza va por ese canal', async () => {
+    const { db, llamadas, f } = mundo()
+    await crearPuertos(db, { ...ENV, notasDelDueno: true, slackCanalHilo: 'C9OTRAOFIC' }, f).bandeja({ ...bandeja, expires_at: null })
+    expect(llamadas.find((l) => l.url.endsWith('chat.postMessage'))!.cuerpo.channel).toBe('C9OTRAOFIC')
+  })
+  it('sin la bandera: solo bandeja, ni una llamada a Slack (la ruta de siempre)', async () => {
     const { db, llamadas, f } = mundo()
     expect((await crearPuertos(db, ENV, f).bandeja({ ...bandeja, expires_at: null })).ok).toBe(true)
     expect(llamadas).toHaveLength(0)
   })
-  it('sin token de Slack: tampoco, aunque haya destino', async () => {
+  it('sin token de Slack: tampoco, aunque la bandera esté encendida', async () => {
     const { db, llamadas, f } = mundo()
-    expect((await crearPuertos(db, { ...ENV, slackToken: undefined, notasDestino: 'C1' }, f).bandeja({ ...bandeja, expires_at: null })).ok).toBe(true)
+    expect((await crearPuertos(db, { ...ENV, slackToken: undefined, notasDelDueno: true }, f).bandeja({ ...bandeja, expires_at: null })).ok).toBe(true)
     expect(llamadas).toHaveLength(0)
   })
   it('si Slack falla o lanza, la bandeja igual queda y devuelve ok', async () => {
     const { db } = mundo()
     const fallo = (async () => { throw new Error('red caída') }) as unknown as typeof fetch
-    const q = await crearPuertos(db, { ...ENV, notasDestino: 'C1' }, fallo).bandeja({ ...bandeja, expires_at: null })
+    const q = await crearPuertos(db, { ...ENV, notasDelDueno: true }, fallo).bandeja({ ...bandeja, expires_at: null })
     expect(q.ok).toBe(true)
     expect(db.tablas['hitl_queue']).toHaveLength(1)
   })

@@ -16,7 +16,7 @@ export interface EntornoDeNotas {
   baseUrl: string
   internalKey: string
   slackToken?: string
-  /** a dónde llega la pieza: un canal (`C…`/`G…`) o el id de una persona (`U…`, mensaje directo). Lo decide Emilio */
+  /** a dónde llega la pieza: el canal de la oficina que la produjo (`C…`/`G…`). Regla firmada (13:07): cada oficina habla con Emilio por SU canal; nada de mensajes directos */
   destino?: string
 }
 
@@ -103,21 +103,16 @@ export function puertosDeNotas(db: Db, env: EntornoDeNotas, f: Fetch = fetch): P
 }
 
 /**
- * Llevar la pieza a Slack: publica el mensaje con botones en el destino de Emilio y guarda canal + ts en `hitl_queue.metadata.slack` (así se sabe de qué pieza es un hilo).
- * Nunca lanza: un fallo se devuelve como `{ ok: false }`; la pieza ya está en la bandeja y el tablero sigue siendo la otra vía. Para un mensaje directo se abre la conversación primero.
+ * Llevar la pieza a Slack: publica el mensaje con botones en el canal de la oficina y guarda canal + ts en `hitl_queue.metadata.slack` (así se sabe de qué pieza es un hilo).
+ * Nunca lanza: un fallo se devuelve como `{ ok: false }`; la pieza ya está en la bandeja y el tablero sigue siendo la otra vía. Nunca por mensaje directo: un destino que no sea un canal (`C…`/`G…`) se rechaza.
  */
 export async function enviarPiezaASlack(db: Db, env: EntornoDeNotas, p: PiezaParaSlack, f: Fetch = fetch): Promise<{ ok: true; canal: string; ts: string } | { ok: false; error: string }> {
   if (!env.slackToken) return { ok: false, error: 'sin_token' }
   if (!env.destino) return { ok: false, error: 'sin_destino' }
+  if (!/^[CG][A-Z0-9]+$/.test(env.destino)) return { ok: false, error: 'destino_no_es_un_canal: cada oficina habla con el dueño por su canal, nunca por mensaje directo' }
   try {
     const llamar = async (metodo: string, cuerpo: Fila) => (await (await f(`https://slack.com/api/${metodo}`, { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8', authorization: `Bearer ${env.slackToken}` }, body: JSON.stringify(cuerpo) })).json().catch(() => ({}))) as { ok?: boolean; ts?: string; error?: string; channel?: string | { id?: string } }
-    let canal = env.destino
-    if (/^U[A-Z0-9]+$/.test(canal)) {
-      const c = await llamar('conversations.open', { users: canal })
-      const id = typeof c.channel === 'string' ? c.channel : c.channel?.id
-      if (!c.ok || !id) return { ok: false, error: `conversations.open: ${c.error ?? 'sin canal'}` }
-      canal = id
-    }
+    const canal = env.destino
     const m = mensajeDeLaPieza(p)
     const post = await llamar('chat.postMessage', { channel: canal, text: m.text, blocks: m.blocks })
     if (!post.ok || !post.ts) return { ok: false, error: `chat.postMessage: ${post.error ?? 'sin ts'}` }
