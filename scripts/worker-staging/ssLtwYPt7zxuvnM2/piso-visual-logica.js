@@ -272,7 +272,7 @@ function derivarPisoVisual(ctx, invocarModelo) {
 // Se mantiene `derivarPisoVisual` (versión de una sola fuente) intacta; el nodo usa esta.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 /** La versión de la LÓGICA del piso: si cambia, lo ya probado vale volver a probarlo (el barrido la suma a la huella de entradas). */
-var VERSION_DEL_PISO = 'piso-2026-10-21b'
+var VERSION_DEL_PISO = 'piso-2026-10-21c'
 var MAX_COLORES_OBSERVADOS = 5
 var MAX_TIPOGRAFIAS_OBSERVADAS = 3
 var RE_COLOR_HEX = /^#[0-9a-f]{6}$/

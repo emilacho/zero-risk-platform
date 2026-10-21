@@ -71,10 +71,20 @@ try {
 const nuevoDraft = { ...draft, visual }
 const pm = visual && visual.para_el_manual
 if (pm) {
-  if ((!Array.isArray(draft.primary_colors) || draft.primary_colors.length === 0) && pm.primary_colors.length) nuevoDraft.primary_colors = pm.primary_colors
-  if ((!Array.isArray(draft.typography) || draft.typography.length === 0) && pm.typography.length) nuevoDraft.typography = pm.typography
+  // 21-oct (tick de las 19:30Z): las columnas que ESCRIBIÓ el piso en una corrida anterior (objetos con estado y procedencia) se REEMPLAZAN por las de esta corrida (si no, un v3 limpio
+  // heredaba la basura del v2); las que puso otra fuente (texto plano, una persona) no se tocan nunca.
+  const delPiso = (a) => Array.isArray(a) && a.length > 0 && a.every((x) => x && typeof x === 'object' && !!x.estado && !!x.procedencia)
+  const libre = (a) => !Array.isArray(a) || a.length === 0 || delPiso(a)
+  if (libre(draft.primary_colors) && (pm.primary_colors.length || delPiso(draft.primary_colors))) nuevoDraft.primary_colors = pm.primary_colors
+  if (libre(draft.typography) && (pm.typography.length || delPiso(draft.typography))) nuevoDraft.typography = pm.typography
 }
 // la compuerta DECLARA el hueco: si lo visual no quedó completo, el registro del manual lo cuenta como provisional (parcial) o ausente, con su motivo (Promote prep arma `campos_provisionales` / `campos_ausentes` desde `_field_meta`)
+if (visual && visual.estado === 'completo' && draft._field_meta && draft._field_meta.visual) {
+  // ya no hay hueco que declarar: se quita la marca que dejó una corrida anterior
+  const fm = Object.assign({}, draft._field_meta)
+  delete fm.visual
+  nuevoDraft._field_meta = fm
+}
 if (visual && visual.estado && visual.estado !== 'completo') {
   nuevoDraft._field_meta = Object.assign({}, draft._field_meta || {}, { visual: { estado: visual.estado === 'parcial' ? 'provisional' : 'ausente', motivo: String(visual.motivo || '').slice(0, 300) } })
 }

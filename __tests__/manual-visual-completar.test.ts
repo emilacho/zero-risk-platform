@@ -278,3 +278,52 @@ describe('la huella incluye la VERSIÓN de la lógica del piso (lógica nueva �
     expect(mismaVersion[0].json.motivo).toBe('sin_entradas_nuevas')
   })
 })
+
+describe('columnas coherentes con el bloque visual (tick de las 19:30Z)', () => {
+  const v = { version: 2, estado: 'completo', capa_grafica: { paleta: [{ color: '#ff4d00' }, { color: '#1a1a1a' }], tipografias: [] }, capa_producto: { a: 1 }, reglas: { b: 1 } }
+  const col = (hexes: string[], fam: string[] = []) => ({ primary_colors: hexes.map((hex) => ({ hex, rol: null, estado: 'propuesta', procedencia: 'observado en logo' })), typography: fam.map((family) => ({ family, rol: null, estado: 'propuesta', procedencia: 'observado en logo' })) })
+  it('coherentes: mismos colores (sin importar el orden ni mayúsculas) y mismas tipografías', () => {
+    expect(B.columnasCoherentes(v, col(['#1A1A1A', '#ff4d00']))).toBe(true)
+    expect(B.columnasCoherentes({ ...v, capa_grafica: { paleta: v.capa_grafica.paleta, tipografias: [{ nombre: 'Bebas Neue' }] } }, col(['#ff4d00', '#1a1a1a'], ['Bebas Neue']))).toBe(true)
+  })
+  it('🔴 incoherentes: color de más, color de menos, tipografía que el bloque ya no tiene', () => {
+    expect(B.columnasCoherentes(v, col(['#ff4d00', '#1a1a1a', '#cc2200']))).toBe(false)
+    expect(B.columnasCoherentes(v, col(['#ff4d00']))).toBe(false)
+    expect(B.columnasCoherentes(v, col(['#ff4d00', '#1a1a1a'], ['no reconocida con claridad']))).toBe(false)
+  })
+  it('🔴 mismo número de colores pero DISTINTOS tampoco son coherentes', () => {
+    expect(B.columnasCoherentes(v, col(['#ff4d00', '#cc2200']))).toBe(false)
+  })
+  it('el nodo Elegir pide las columnas del manual (primary_colors, typography) para juzgar la coherencia', async () => {
+    const n = nodoElegir({ clientes: { [CID]: { copias: copiasOk() } } })
+    await n.ejecutar()
+    expect(n.pedidos.find((p) => p.includes('client_brand_books?client_id='))).toContain('primary_colors,typography')
+  })
+  it('no se juzga lo que no escribió el piso: texto plano, columna vacía, sin columnas, mezcla', () => {
+    expect(B.columnasCoherentes(v, { primary_colors: ['#123456'], typography: ['Lato'] })).toBe(true)
+    expect(B.columnasCoherentes(v, { primary_colors: [], typography: {} })).toBe(true)
+    expect(B.columnasCoherentes(v, null)).toBe(true); expect(B.columnasCoherentes(v, undefined)).toBe(true)
+    expect(B.columnasCoherentes(v, { primary_colors: [{ hex: '#cc2200' }, '#fff'], typography: [] })).toBe(true)
+  })
+  it('🔴 un completo con columnas incoherentes baja a 1 (hay que volver a probar); coherente se queda en 2', () => {
+    expect(B.rangoDeVisual(v, valida, col(['#ff4d00', '#1a1a1a', '#cc2200']))).toBe(1)
+    expect(B.rangoDeVisual(v, valida, col(['#ff4d00', '#1a1a1a']))).toBe(2)
+  })
+  it('🔴 el nodo Elegir vuelve a elegir al cliente cuyo visual es limpio pero sus columnas quedaron viejas (el v3 real); y no lo elige cuando ya coinciden', async () => {
+    const viejas = col(['#ff5a1a', '#cc2200'], ['no reconocida con claridad'])
+    const m3 = (c: { primary_colors: unknown[]; typography: unknown[] }): Fila => ({ id: 'm3', version: 3, human_validated: false, primary_colors: c.primary_colors, typography: c.typography, content_text: JSON.stringify({ brand_book_draft: { positioning: 'p', visual: v }, gate_outcome: 'paso_la_vara' }) })
+    const r = await nodoElegir({ clientes: { [CID]: { manual: m3(viejas), copias: copiasOk() } } }).ejecutar()
+    expect(r[0].json.correr).toBe(true); expect(r[0].json.columnas).toEqual({ primary_colors: viejas.primary_colors, typography: viejas.typography })
+    const r2 = await nodoElegir({ clientes: { [CID]: { manual: m3(col(['#ff4d00', '#1a1a1a'])), copias: copiasOk() } } }).ejecutar()
+    expect(r2[0].json.motivo).toBe('visual_ya_completo')
+  })
+  it('🔴 Decidir promueve cuando el visual nuevo trae columnas coherentes y las del manual actual eran viejas; no promueve si el nuevo tampoco es coherente', async () => {
+    const eleg = { client_id: CID, huella: 'h9', brand_book_draft: { positioning: 'p', visual: v }, columnas: col(['#cc2200']), previo: {} }
+    const decidir = async (piso: Fila) => {
+      const $ = () => ({ first: () => ({ json: eleg }) })
+      return ((await new AsyncFunction('$input', '$', '$getWorkflowStaticData', C.codigos().decidir)({ first: () => ({ json: piso }) }, $, () => ({ intentos: {} }))) as Array<{ json: Fila }>)[0].json
+    }
+    expect((await decidir({ brand_book_draft: { positioning: 'p', visual: v, ...col(['#ff4d00', '#1a1a1a']) } })).promover).toBe(true)
+    expect((await decidir({ brand_book_draft: { positioning: 'p', visual: v, ...col(['#ff4d00', '#1a1a1a', '#cc2200']) } })).promover).toBe(false)
+  })
+})

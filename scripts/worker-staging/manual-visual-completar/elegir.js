@@ -29,7 +29,7 @@ const hoy = new Date().toISOString().slice(0, 10)
 est.global = est.global && est.global.dia === hoy ? est.global : { dia: hoy, n: 0 }
 const omitidos = []
 for (const cid of candidatos) {
-  const manuales = await get('client_brand_books?client_id=eq.' + cid + '&select=id,version,content_text,human_validated&order=version.desc&limit=1')
+  const manuales = await get('client_brand_books?client_id=eq.' + cid + '&select=id,version,content_text,human_validated,primary_colors,typography&order=version.desc&limit=1')
   const m = manuales[0]
   if (!m) { omitidos.push({ client_id: cid, motivo: 'sin_manual' }); continue }
   let ct = null
@@ -43,11 +43,11 @@ for (const cid of candidatos) {
   const huella = huellaDeEntradas(entradas)
   const d = decidirSiCorrer({
     excluido: excluidos.indexOf(String(cid).toLowerCase()) !== -1, humanoAprobo: m.human_validated === true, hayMaterial: hayMaterialQueProbar(entradas),
-    rango: rangoDeVisual(borrador.visual || null, nombreDeTipografiaObservada), huellaActual: huella, intento: est.intentos[cid] || null, hoy: hoy, globalHoy: est.global.n, forzar: forzar,
+    rango: rangoDeVisual(borrador.visual || null, nombreDeTipografiaObservada, { primary_colors: m.primary_colors, typography: m.typography }), huellaActual: huella, intento: est.intentos[cid] || null, hoy: hoy, globalHoy: est.global.n, forzar: forzar,
   })
   if (!d.correr) { omitidos.push({ client_id: cid, motivo: d.motivo }); continue }
   return [{ json: {
-    correr: true, client_id: cid, manual_id: m.id, version: m.version, huella: huella, brand_book_draft: borrador,
+    correr: true, client_id: cid, manual_id: m.id, version: m.version, huella: huella, brand_book_draft: borrador, columnas: { primary_colors: m.primary_colors, typography: m.typography },
     previo: { gate_outcome: ct.gate_outcome, gate_nota: ct.gate_nota, fidelity_passed: ct.fidelity_passed, fidelity_scores: ct.fidelity_scores, fidelity_threshold: ct.fidelity_threshold },
   } }]
 }
