@@ -23,7 +23,7 @@ import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, type ContextoDe
 import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../notas-del-dueno/autorevision'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
-import { procesarSalida, proyectarAlEsquema } from './salida'
+import { DESCARTAR_EYEBROW_LARGO, procesarSalida, proyectarAlEsquema } from './salida'
 import { agotaLasVersiones, MAX_VERSIONES_POR_BRIEF } from './reapertura'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
@@ -559,7 +559,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
 
   // agente: contrato de formato
   const intentos = e.vueltas[`fmt:${paso.clave}`] ?? 0
-  const p = procesarSalida(res.texto, paso.salida!.esquema, intentos, paso.salida!.reintento_formato)
+  const p = procesarSalida(res.texto, paso.salida!.esquema, intentos, paso.salida!.reintento_formato, { limpiarForma: { descartarEyebrowLargo: DESCARTAR_EYEBROW_LARGO } })
   /** un reintento: la misma pregunta con el error literal (de formato, o de lo que la sala comprueba por código) */
   const pedirReintento = async (mensaje: string, motivo: string): Promise<Respuesta> => {
     const nuevo: Estado = { ...e, vueltas: { ...e.vueltas, [`fmt:${paso.clave}`]: intentos + 1 }, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }
@@ -626,7 +626,7 @@ async function recibirAutorevision(P: Puertos, enc: Encargo, pl: Plantilla, sig:
   }
 
   if (res.error || typeof res.texto !== 'string') { await registrar(false, [{ sin_respuesta: res.error ?? 'respuesta vacía' }]); return seguir({ costo_usd: c.costo }, `auto-revisión sin respuesta: ${res.error ?? 'respuesta vacía'}`) }
-  const p = procesarSalida(res.texto, paso.salida!.esquema, intentos, paso.salida!.reintento_formato)
+  const p = procesarSalida(res.texto, paso.salida!.esquema, intentos, paso.salida!.reintento_formato, { limpiarForma: { descartarEyebrowLargo: DESCARTAR_EYEBROW_LARGO } })
   if (!p.ok) return p.accion === 'reintentar' ? reintentarOSeguir(p.mensaje_de_error) : (await registrar(false, [{ sin_cambios: 'formato' }]), seguir({ costo_usd: c.costo }, `auto-revisión sin efecto: ${p.errores.slice(0, 2).join(' · ')}`))
   const v = validarAutorevision(p.valor, notas.map((x) => x.id), original)
   if (!v.ok) return reintentarOSeguir(v.error)

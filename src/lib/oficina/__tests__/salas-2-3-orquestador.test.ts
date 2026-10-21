@@ -651,3 +651,27 @@ describe('relevo 46 · la opinión «tomada» del curador dispara UNA re-imagen 
     expect(f1[0]).not.toBe(f0[0]); expect(f1[2]).toBe(f0[2]) // e03 intacta
   })
 })
+
+describe('SALA 2 · forma de la salida y paleta de la marca (21-oct · cierre de la tercera prueba real)', () => {
+  const direccionComoLaReal = () => j({
+    resumen: 'Luz natural lateral', paleta: ['#FF4500 (naranja de marca — fondo dominante, con descripcion larga)', '#1A1A1A negro'], estilo: 'directo',
+    imagenes: [{ ref: 'hook', modo: 'generada', foto_id: '', motivo: 'no hay foto real que sirva' }, { ref: 'problem', modo: 'ninguna', foto_id: '', motivo: 'lámina de texto' }],
+    reglas_de_imagen: REGLAS,
+  })
+  it('una dirección visual con foto_id vacío y paleta con descripción NO gasta un reintento de formato: sigue por el mismo camino de siempre', async () => {
+    const { M, id } = await abiertoC()
+    const { pasos, ultima } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: direccionComoLaReal() }) }))
+    expect(pasos).toEqual(['paquete', 'direccion_visual', 'prompts', 'mirar', 'texto', 'laminas', 'revision_jefe'])
+    expect(ultima.cuerpo.accion).toBe('cerrado')
+    expect(arte(M, id, 'visual_direction').paleta).toEqual(['#FF4500', '#1A1A1A negro'])
+    expect(arte(M, id, 'visual_direction').imagenes.every((i: Record<string, unknown>) => !('foto_id' in i))).toBe(true)
+  })
+  it('el pedido de la dirección visual lleva la identidad vigente del cliente (colores y letra) para que no invente una paleta', async () => {
+    const { M, id } = await abiertoC()
+    const { tareas } = await correr(M, id, guionCarrusel())
+    const t = tareas['direccion_visual'][0]
+    expect(t).toContain('Identidad visual vigente del cliente'); expect(t).toContain('#112233, #445566'); expect(t).toContain('Letra: Inter')
+    expect(t).toContain('devuelve SOLO estos colores en #RRGGBB')
+  })
+})
+

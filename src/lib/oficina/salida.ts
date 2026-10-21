@@ -178,7 +178,7 @@ export function validar(esq: Esq, v: unknown, ruta = '$'): string[] {
     case 'str':
       if (typeof v !== 'string') return [`${ruta}: debe ser texto`]
       if (esq.min !== undefined && v.trim().length < esq.min) return [`${ruta}: texto demasiado corto (mín. ${esq.min})`]
-      if (esq.max !== undefined && v.length > esq.max) return [`${ruta}: texto demasiado largo (máx. ${esq.max})`]
+      if (esq.max !== undefined && v.length > esq.max) return [`${ruta}: texto demasiado largo (máx. ${esq.max}; el tuyo tiene ${v.length})`]
       return []
     case 'num':
       if (typeof v !== 'number' || !Number.isFinite(v)) return [`${ruta}: debe ser número`]
@@ -225,6 +225,42 @@ export function descartarIgnorados(esq: Esq, v: unknown, ruta = '$', quitados: s
 }
 
 /**
+ * LIMPIAR LA FORMA (21-oct · cierre de la tercera prueba real: las 3 piezas murieron por la FORMA de una salida buena, no por su contenido). Arreglos DETERMINISTAS que no cambian el sentido ni inventan nada, y se anotan:
+ *  a) un campo OPCIONAL de texto que llega vacío (`"foto_id": ""` cuando la imagen no es una foto) se omite: vacío = ausente;
+ *  b) `paleta[i]` demasiado larga que lleva un `#hex` («#FF4500 (naranja de marca — fondo dominante)») se queda con el hex;
+ *  c) (APAGADO por defecto, sale con GO) un `eyebrow` OPCIONAL más largo que su tope se descarta en vez de matar la pieza entera; el texto del autor NUNCA se recorta ni se reescribe.
+ * Lo que no se puede arreglar así sigue fallando (falla visible). Puro.
+ */
+export const DESCARTAR_EYEBROW_LARGO = false
+export function limpiarForma(esq: Esq, v: unknown, ruta = '$', anotados: string[] = [], o: { descartarEyebrowLargo?: boolean } = {}): unknown {
+  if (esq.t === 'arr' && Array.isArray(v)) return v.map((x, i) => limpiarForma(esq.de, x, `${ruta}[${i}]`, anotados, o))
+  if (esq.t === 'obj' && v && typeof v === 'object' && !Array.isArray(v)) {
+    const sale: Record<string, unknown> = {}
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+      const sub = esq.props[k]
+      if (!sub) { sale[k] = x; continue }
+      const requerido = (esq.req ?? []).includes(k)
+      if (!requerido && sub.t === 'str' && (sub.min ?? 0) >= 1 && typeof x === 'string' && x.trim() === '') { anotados.push(`${ruta}.${k}: vacío → se omite`); continue }
+      if (!requerido && sub.t === 'str' && k === 'eyebrow' && o.descartarEyebrowLargo && typeof x === 'string' && sub.max !== undefined && x.length > sub.max) { anotados.push(`${ruta}.${k}: «${x}» (${x.length} > ${sub.max}) → se descarta`); continue }
+      if (k === 'paleta' && sub.t === 'arr' && sub.de.t === 'str' && sub.de.max !== undefined && Array.isArray(x)) {
+        const max = sub.de.max
+        sale[k] = x.map((it, i) => {
+          if (typeof it !== 'string' || it.length <= max) return it
+          const hex = /#[0-9a-fA-F]{3,8}(?![0-9a-fA-F])/.exec(it)
+          if (!hex) return it
+          anotados.push(`${ruta}.${k}[${i}]: «${it}» → «${hex[0]}»`)
+          return hex[0]
+        })
+        continue
+      }
+      sale[k] = limpiarForma(sub, x, `${ruta}.${k}`, anotados, o)
+    }
+    return sale
+  }
+  return v
+}
+
+/**
  * NORMALIZAR ENUMERADOS (J6 ter · 15-oct) · el modelo contesta «tomado», «No tomada», «no tomada», «TOMADA»: variantes INEQUÍVOCAS de un valor permitido.
  * Se pliega (minúsculas, sin tildes, espacios/guiones → «_») y se compara; además se prueba el género (o↔a, os↔as, por palabra). Si EXACTAMENTE un valor permitido
  * coincide, se sustituye y se anota; si ninguno o más de uno coincide, el valor queda tal cual y la validación lo rechaza (lo ambiguo sigue fallando).
@@ -262,7 +298,7 @@ export type ResultadoDeSalida =
   | { ok: false; accion: 'falla_visible'; errores: string[]; ficha: Pick<Ficha, 'origen' | 'donde' | 'gravedad' | 'que'> }
 
 /** `intento` = cuántos intentos de formato ya se hicieron (0 en el primero). Un reintento como máximo cuando `reintento_formato` = 1. */
-export function procesarSalida(texto: string, esquemaId: string, intento: number, reintento_formato: number, o: { normalizar?: boolean } = {}): ResultadoDeSalida {
+export function procesarSalida(texto: string, esquemaId: string, intento: number, reintento_formato: number, o: { normalizar?: boolean; /** la oficina de piezas lo pide: ver `limpiarForma` */ limpiarForma?: boolean | { descartarEyebrowLargo?: boolean } } = {}): ResultadoDeSalida {
   const esq = ESQUEMAS[esquemaId]
   if (!esq) return { ok: false, accion: 'falla_visible', errores: [`esquema «${esquemaId}» no registrado`], ficha: { origen: 'chequeo', donde: 'formato', gravedad: 'bloquea', que: `esquema «${esquemaId}» no registrado` } }
   const fallo = (errores: string[]): ResultadoDeSalida =>
@@ -276,7 +312,8 @@ export function procesarSalida(texto: string, esquemaId: string, intento: number
   const descartados: string[] = []
   const normalizados: string[] = []
   const descartado = descartarIgnorados(esq, crudo, '$', descartados)
-  const limpio = o.normalizar ? normalizarEnumerados(esq, descartado, '$', normalizados) : descartado
+  const arreglado = o.limpiarForma ? limpiarForma(esq, descartado, '$', normalizados, typeof o.limpiarForma === 'object' ? o.limpiarForma : {}) : descartado
+  const limpio = o.normalizar ? normalizarEnumerados(esq, arreglado, '$', normalizados) : arreglado
   const errores = validar(esq, limpio)
   if (errores.length) return fallo(errores)
   return { ok: true, valor: limpio as Record<string, unknown>, descartados, envoltorio_limpiado: l.envoltorio, ...(normalizados.length ? { normalizados } : {}) }
