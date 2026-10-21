@@ -227,7 +227,7 @@ describe('el puerto de notas de la oficina real', () => {
     ])
     const notas = await leerNotas(db, CLIENTE)
     expect(notas.filter((n) => n.client_id === CLIENTE)).toHaveLength(6)                  // las 5 propias y mi general están
-    expect(notas.filter((n) => n.client_id === 'otro')).toHaveLength(MAX_GENERALES)      // y las generales, acotadas
+    expect(notas.filter((n) => n.alcance === 'general')).toHaveLength(MAX_GENERALES)   // y las generales (incluida la mía), acotadas
     const ids = notas.map((n) => n.id)
     expect(new Set(ids).size).toBe(ids.length)                                            // sin repetidas
   })
