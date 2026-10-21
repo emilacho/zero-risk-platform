@@ -253,3 +253,30 @@ describe('el nodo real del cimiento: lógica + pegamento', () => {
     expect(d.positioning).toBe('x')
   })
 })
+
+describe('la compuerta declara el hueco visual (no pasa como «bueno»)', () => {
+  it('visual completo: no agrega nada a _field_meta', async () => {
+    const r = await correrNodo({ copias: soloIG(3), modelo: { capa_grafica: { colores_observados: [{ color: '#c8102e', donde: 'logo' }] }, ...PRODUCTO }, draft: { positioning: 'x', _field_meta: { positioning: { estado: 'firme' } } } })
+    const d = r.json.brand_book_draft as Record<string, any>
+    expect(d.visual.estado).toBe('completo'); expect(d._field_meta).toEqual({ positioning: { estado: 'firme' } })
+  })
+  it('🔴 visual parcial → _field_meta.visual = provisional con el motivo; el resto de _field_meta se conserva', async () => {
+    const r = await correrNodo({ sitio: sitio(['#1a0828']), copias: [], draft: { _field_meta: { positioning: { estado: 'firme' } } } })
+    const d = r.json.brand_book_draft as Record<string, any>
+    expect(d.visual.estado).toBe('parcial')
+    expect(d._field_meta.visual).toEqual({ estado: 'provisional', motivo: d.visual.motivo }); expect(d._field_meta.positioning).toEqual({ estado: 'firme' })
+  })
+  it('🔴 visual ausente → _field_meta.visual = ausente (cae en campos_ausentes de Promote prep)', async () => {
+    const r = await correrNodo({ copias: [] })
+    const d = r.json.brand_book_draft as Record<string, any>
+    expect(d._field_meta.visual.estado).toBe('ausente'); expect(d._field_meta.visual.motivo).toMatch(/visual ausente/)
+  })
+  it('si el piso falló por la base, también se declara ausente', async () => {
+    const r = await correrNodo({ copias: soloIG(2), falla: 'client_social_images' })
+    expect((r.json.brand_book_draft as Record<string, any>)._field_meta.visual.estado).toBe('ausente')
+  })
+  it('Promote prep ya arma campos_provisionales / campos_ausentes desde _field_meta (así llega al canon)', () => {
+    const promote = readFileSync(join(DIR, 'cimiento-ANTES-piso-todas-las-fuentes-2026-10-21.json'), 'utf8')
+    expect(promote).toContain('campos_provisionales: Object.keys(draft._field_meta || {})'); expect(promote).toContain('campos_ausentes: Object.keys(draft._field_meta || {})')
+  })
+})

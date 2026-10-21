@@ -74,4 +74,8 @@ if (pm) {
   if ((!Array.isArray(draft.primary_colors) || draft.primary_colors.length === 0) && pm.primary_colors.length) nuevoDraft.primary_colors = pm.primary_colors
   if ((!Array.isArray(draft.typography) || draft.typography.length === 0) && pm.typography.length) nuevoDraft.typography = pm.typography
 }
+// la compuerta DECLARA el hueco: si lo visual no quedó completo, el registro del manual lo cuenta como provisional (parcial) o ausente, con su motivo (Promote prep arma `campos_provisionales` / `campos_ausentes` desde `_field_meta`)
+if (visual && visual.estado && visual.estado !== 'completo') {
+  nuevoDraft._field_meta = Object.assign({}, draft._field_meta || {}, { visual: { estado: visual.estado === 'parcial' ? 'provisional' : 'ausente', motivo: String(visual.motivo || '').slice(0, 300) } })
+}
 return [{ json: { ...j, brand_book_draft: nuevoDraft } }]
