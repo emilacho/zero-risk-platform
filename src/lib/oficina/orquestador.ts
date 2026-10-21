@@ -405,7 +405,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       // el segundo cerebro: las notas del dueño que el productor puede ver. Un fallo de lectura NO frena el encargo: sin notas, la pieza sigue como siempre (y el motivo queda en el artefacto)
       let notas: NotaVista[] = []
       let error: string | undefined
-      try { notas = P.notas ? await P.notas.leer(enc.client_id) : [] } catch (err) { error = err instanceof Error ? err.message : String(err) }
+      try { if (P.notas) { const l = await P.notas.leer(enc.client_id); notas = l.notas; error = l.error } } catch (err) { error = err instanceof Error ? err.message : String(err) }
       return { res: { costo_usd: 0, artefacto: { hay: notas.length > 0, notas, ...(error ? { error } : {}) } } }
     }
     default: return familiaDeLaminas(pl) ? ejecutarCodigoL(P, enc, pl, paso) : { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }

@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { camposCambiados, MAX_CARACTERES_DE_NOTAS, MAX_NOTAS, seccionDeAutorevision, seleccionarNotas, validarAutorevision } from '../autorevision'
 import { lunesDe, registroDelCliente } from '../registro'
-import { registrarAutorevision, leerNotas, MAX_GENERALES } from '../adaptadores'
+import { registrarAutorevision } from '../adaptadores'
 import { procesarSalida } from '../../oficina/salida'
 import { crearPuertos, type Entorno } from '../../oficina/adaptadores'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
@@ -192,48 +192,80 @@ describe('la ruta del registro', () => {
   })
 })
 
-describe('el puerto de notas de la oficina real', () => {
+describe('el puerto de notas de la oficina real (la auto-revisión lee del CEREBRO)', () => {
   const ENV = { baseUrl: 'https://app.test', internalKey: 'k' } as Entorno
+  const OTRO = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+  type Resp = { ficha_id: string; tema: string; pregunta: string; respuesta: string; canal: string; respondido_en: string }
+  /** el cerebro falso: GET /api/brain/alimentar/dueno?client_id=… devuelve lo del cliente pedido */
+  function cerebro(porCliente: Record<string, Resp[]>, o: { apagado?: boolean; status?: number } = {}) {
+    const llamadas: Array<{ url: string; llave: string | null }> = []
+    const f = (async (url: string, init?: RequestInit) => {
+      llamadas.push({ url, llave: ((init?.headers ?? {}) as Record<string, string>)['x-api-key'] ?? null })
+      if (o.status) return new Response('{}', { status: o.status })
+      if (o.apagado) return new Response(JSON.stringify({ apagado: true }), { status: 200 })
+      const id = new URL(url).searchParams.get('client_id') ?? ''
+      return new Response(JSON.stringify({ ok: true, client_id: id, respuestas: porCliente[id] ?? [], pendientes: [] }), { status: 200 })
+    }) as unknown as typeof fetch
+    return { f, llamadas }
+  }
+  const r1: Resp = { ficha_id: 'f1', tema: 'oficina creativa · pieza p1 · 1.1', pregunta: 'Revisión de la pieza «Post» (post_img)', respuesta: 'Más corto', canal: '#oficina-creativa', respondido_en: '2026-10-21T10:00:00.000Z' }
+  const r2: Resp = { ficha_id: 'f2', tema: 'pauta', pregunta: 'Presupuesto de pauta', respuesta: 'No más de 200 por semana', canal: 'MD de Slack', respondido_en: '2026-10-20T10:00:00.000Z' }
   it('apagado por omisión: sin la bandera no hay puerto y la oficina funciona como siempre', () => {
     const db = new DbFalsa()
     expect(crearPuertos(db, ENV).notas).toBeUndefined()
     expect(crearPuertos(db, { ...ENV, notasDelDueno: false }).notas).toBeUndefined()
   })
-  it('encendido: lee las notas del cliente (y las generales) ya elegidas, y registra la auto-revisión una sola vez por clave', async () => {
+  it('lee del cerebro lo último que dijo el dueño de ESE cliente (de cualquier canal) con la llave interna, y las generales del registro; nunca lo de otro cliente ni las notas propias de la tabla', async () => {
     const db = new DbFalsa()
     db.semilla('notas_del_dueno', [
-      { id: 'a', client_id: CLIENTE, alcance: 'cliente', tipo: 'rechazada', comentario: 'Más corto', pieza_titulo: 'Post', creada_en: '2026-10-05T10:00:00Z' },
-      { id: 'b', client_id: 'otro', alcance: 'general', tipo: 'comentario', comentario: 'Tutea siempre', pieza_titulo: null, creada_en: '2026-10-06T10:00:00Z' },
-      { id: 'c', client_id: 'otro', alcance: 'cliente', tipo: 'comentario', comentario: 'privada ajena', pieza_titulo: null, creada_en: '2026-10-07T10:00:00Z' },
-      { id: 'd', client_id: CLIENTE, alcance: 'cliente', tipo: 'aprobada', comentario: null, pieza_titulo: 'Post', creada_en: '2026-10-08T10:00:00Z' },
+      { id: 'tabla-propia', client_id: CLIENTE, alcance: 'cliente', tipo: 'rechazada', comentario: 'ESTA-NO-SE-LEE-DE-LA-TABLA', pieza_titulo: 'Post', creada_en: '2026-10-05T10:00:00Z' },
+      { id: 'g1', client_id: OTRO, alcance: 'general', tipo: 'comentario', comentario: 'Tutea siempre', pieza_titulo: 'PIEZA-SECRETA', creada_en: '2026-10-06T10:00:00Z' },
+      { id: 'ajena', client_id: OTRO, alcance: 'cliente', tipo: 'comentario', comentario: 'privada ajena', pieza_titulo: null, creada_en: '2026-10-07T10:00:00Z' },
     ])
+    const { f, llamadas } = cerebro({ [CLIENTE]: [r1, r2], [OTRO]: [{ ...r1, ficha_id: 'x9', respuesta: 'DEL-OTRO-CLIENTE' }] })
+    const P = crearPuertos(db, { ...ENV, notasDelDueno: true }, f)
+    const l = await P.notas!.leer(CLIENTE)
+    expect(l.error).toBeUndefined()
+    expect(l.notas.map((v) => v.id)).toEqual(['f1', 'f2', 'g1'])                       // el cerebro primero (lo más nuevo primero) y luego las generales
+    const todo = JSON.stringify(l)
+    expect(todo).toContain('Más corto'); expect(todo).toContain('200 por semana'); expect(todo).toContain('Tutea siempre'); expect(todo).toContain('#oficina-creativa')
+    for (const no of ['ESTA-NO-SE-LEE-DE-LA-TABLA', 'DEL-OTRO-CLIENTE', 'privada ajena', 'PIEZA-SECRETA']) expect(todo).not.toContain(no)
+    expect(llamadas).toHaveLength(1)
+    expect(llamadas[0].url).toBe(`https://app.test/api/brain/alimentar/dueno?client_id=${CLIENTE}`)
+    expect(llamadas[0].llave).toBe('k')
+  })
+  it('si el cerebro falla o está apagado: sigue con las generales y trae el motivo (nunca se toma por «el dueño no ha dicho nada»)', async () => {
+    const db = new DbFalsa()
+    db.semilla('notas_del_dueno', [{ id: 'g1', client_id: OTRO, alcance: 'general', tipo: 'comentario', comentario: 'Tutea siempre', pieza_titulo: null, creada_en: '2026-10-06T10:00:00Z' }])
+    for (const [o, motivo] of [[{ status: 502 }, '502'], [{ apagado: true }, 'apagada']] as const) {
+      const l = await crearPuertos(db, { ...ENV, notasDelDueno: true }, cerebro({ [CLIENTE]: [r1] }, o).f).notas!.leer(CLIENTE)
+      expect(l.notas.map((v) => v.id)).toEqual(['g1'])
+      expect(l.error).toContain('cerebro:'); expect(l.error).toContain(motivo)
+    }
+    const red = (async () => { throw new Error('red caída') }) as unknown as typeof fetch
+    expect((await crearPuertos(db, { ...ENV, notasDelDueno: true }, red).notas!.leer(CLIENTE)).error).toContain('red caída')
+  })
+  it('si falla la lectura de las generales: sigue con lo del cerebro y trae el motivo', async () => {
+    const db = new DbFalsa()
+    db.fallar['notas_del_dueno'] = 'caída'
+    const l = await crearPuertos(db, { ...ENV, notasDelDueno: true }, cerebro({ [CLIENTE]: [r1] }).f).notas!.leer(CLIENTE)
+    expect(l.notas.map((v) => v.id)).toEqual(['f1'])
+    expect(l.error).toContain('generales:'); expect(l.error).toContain('caída')
+  })
+  it('si fallan las dos cosas: sin notas y los dos motivos', async () => {
+    const db = new DbFalsa()
+    db.fallar['notas_del_dueno'] = 'caída'
+    const l = await crearPuertos(db, { ...ENV, notasDelDueno: true }, cerebro({}, { status: 500 }).f).notas!.leer(CLIENTE)
+    expect(l.notas).toEqual([])
+    expect(l.error).toContain('cerebro:'); expect(l.error).toContain('generales:')
+  })
+  it('registra la auto-revisión una sola vez por clave; un error de la base se lanza (el orquestador lo traga)', async () => {
+    const db = new DbFalsa()
     const P = crearPuertos(db, { ...ENV, notasDelDueno: true })
-    const vistas = await P.notas!.leer(CLIENTE)
-    expect(vistas.map((v) => v.id)).toEqual(['b', 'a'])
-    expect(JSON.stringify(vistas)).not.toContain('privada ajena')
     const r = { client_id: CLIENTE, encargo_id: 'e1', agente: 'content-creator', paso: 'autorevision_texto', notas_vistas: ['a'], choco: true, cambios: [{ campo: 'pie_de_foto' }], costo_usd: 0.04, clave_unica: 'e1:autorevision_texto:5' }
     await P.notas!.registrar(r); await P.notas!.registrar(r)
     expect(db.tablas['autorevisiones_del_productor']).toHaveLength(1)
     db.fallar['autorevisiones_del_productor'] = 'sin permiso'
     await expect(registrarAutorevision(db, { ...r, clave_unica: 'otra' })).rejects.toThrow(/sin permiso/)
-  })
-  it('las generales de otros clientes no desplazan a las notas propias: dos lecturas, cada una con su tope', async () => {
-    const db = new DbFalsa()
-    const f = (id: string, client_id: string, alcance: string, dia: number) => ({ id, client_id, alcance, tipo: 'comentario', comentario: id, hitl_id: null, output_id: null, pieza_titulo: null, pieza_version: null, pieza_familia: null, origen: 'slack', autor: 'U1', clave_unica: id, creada_en: new Date(Date.UTC(2026, 9, 1, 0, 0, dia)).toISOString() })
-    db.semilla('notas_del_dueno', [
-      ...Array.from({ length: 60 }, (_, i) => f(`g${i}`, 'otro', 'general', 100 + i)),   // 60 generales ajenas, MÁS NUEVAS que las propias
-      ...Array.from({ length: 5 }, (_, i) => f(`p${i}`, CLIENTE, 'cliente', i)),
-      f('mia-general', CLIENTE, 'general', 500),                                            // una general MÍA sale en las dos lecturas: debe contarse una sola vez
-    ])
-    const notas = await leerNotas(db, CLIENTE)
-    expect(notas.filter((n) => n.client_id === CLIENTE)).toHaveLength(6)                  // las 5 propias y mi general están
-    expect(notas.filter((n) => n.alcance === 'general')).toHaveLength(MAX_GENERALES)   // y las generales (incluida la mía), acotadas
-    const ids = notas.map((n) => n.id)
-    expect(new Set(ids).size).toBe(ids.length)                                            // sin repetidas
-  })
-  it('un error de la base al leer las notas se lanza (el orquestador lo registra y sigue, nunca lo toma por «sin notas»)', async () => {
-    const db = new DbFalsa()
-    db.fallar['notas_del_dueno'] = 'caída'
-    await expect(leerNotas(db, CLIENTE)).rejects.toThrow(/caída/)
   })
 })

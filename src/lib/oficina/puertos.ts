@@ -146,7 +146,8 @@ export interface Puertos {
    * `registrar` anota cada auto-revisión (qué notas vio, si algo chocó, qué cambió, cuánto costó). Ninguno de los dos frena nunca un encargo.
    */
   notas?: {
-    leer(clientId: string): Promise<NotaVista[]>
+    /** lo que el dueño dijo (del cerebro del cliente + las notas «general:»); si algo falló trae `error` y lo que sí se pudo leer */
+    leer(clientId: string): Promise<{ notas: NotaVista[]; error?: string }>
     registrar(r: { client_id: string; encargo_id: string; agente: string; paso: string; notas_vistas: string[]; choco: boolean; cambios: unknown[]; costo_usd: number; clave_unica: string }): Promise<void>
   }
 }

@@ -9,6 +9,7 @@ const UNICOS: Record<string, string[][]> = {
   oficina_uso_de_fotos: [['encargo_id', 'foto_id']],
   cerebro_diario_corridas: [['client_id', 'dia']],
   notas_del_dueno: [['clave_unica']],
+  notas_del_dueno_envios: [['nota_id']],
   autorevisiones_del_productor: [['clave_unica']],
 }
 const hay = (v: unknown) => v !== null && v !== undefined

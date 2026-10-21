@@ -40,7 +40,7 @@ const guionPost = (o: Partial<Guion> = {}): Guion => ({
 async function abierto(plantilla: Plantilla = conSegundoCerebro(POST_IMG), notas?: NotaVista[] | PuertoDeNotas, dry_run = true) {
   const M = crearMemoria({ plantilla })
   const reg: Registro[] = []
-  if (Array.isArray(notas)) M.P.notas = { leer: async () => notas, registrar: async (r) => { reg.push(r) } }
+  if (Array.isArray(notas)) M.P.notas = { leer: async () => ({ notas }), registrar: async (r) => { reg.push(r) } }
   else if (notas) M.P.notas = notas
   const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0003', dry_run, familia: plantilla.familia }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   expect(a.status).toBe(200)
@@ -239,7 +239,7 @@ describe('con notas: lo que sale mal nunca rompe la entrega', () => {
     expect(reg.find((x) => x.paso === 'autorevision_texto')).toMatchObject({ choco: true })
   })
   it('si registrar el rastro falla, la pieza sigue su camino', async () => {
-    const { M, id } = await abierto(undefined, { leer: async () => NOTAS, registrar: async () => { throw new Error('tabla sin permiso') } })
+    const { M, id } = await abierto(undefined, { leer: async () => ({ notas: NOTAS }), registrar: async () => { throw new Error('tabla sin permiso') } })
     const r = await correr(M, id, guionPost({ autorevision_texto: () => ({ texto: conChoque(CORREGIDA) }) }), 80)
     expect(r.ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
     expect(piezaFinal(M, id).pie_de_foto).toBe('Ceviche de Olón a $7.00. Pídelo por WhatsApp.')
@@ -283,7 +283,7 @@ describe('carrusel y kit de historias', () => {
     const plantilla = conSegundoCerebro(CARRUSEL_IG_V1)
     const M = crearMemoria({ parte, plantilla })
     const reg: Registro[] = []
-    if (notas) M.P.notas = { leer: async () => notas, registrar: async (r) => { reg.push(r) } }
+    if (notas) M.P.notas = { leer: async () => ({ notas }), registrar: async (r) => { reg.push(r) } }
     const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0100', dry_run: true, familia: plantilla.familia }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
     expect(a.status).toBe(200)
     return { M, id: String(a.cuerpo.encargo_id), reg }

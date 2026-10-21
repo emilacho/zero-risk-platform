@@ -28,6 +28,22 @@ CREATE TABLE IF NOT EXISTS public.notas_del_dueno (
 CREATE INDEX IF NOT EXISTS notas_del_dueno_por_cliente ON public.notas_del_dueno (client_id, creada_en DESC);
 CREATE INDEX IF NOT EXISTS notas_del_dueno_por_pieza ON public.notas_del_dueno (hitl_id) WHERE hitl_id IS NOT NULL;
 
+-- LA COLA DE ENVÍOS AL CEREBRO: cada comentario con texto y cada «Rechazar» con motivo sube al cerebro por su puerta del dueño (POST /api/brain/alimentar/dueno); si el cerebro no responde queda 'pendiente' y se reintenta en la siguiente vuelta.
+-- Esta tabla SÍ se actualiza (estado, intentos, último error); la nota en sí (notas_del_dueno) no. NO escribe nada en las tablas del cerebro: solo guarda el estado de SU llamada.
+CREATE TABLE IF NOT EXISTS public.notas_del_dueno_envios (
+  nota_id        uuid PRIMARY KEY REFERENCES public.notas_del_dueno(id) ON DELETE CASCADE,
+  estado         text NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','enviada','rechazada')),
+  intentos       integer NOT NULL DEFAULT 0 CHECK (intentos >= 0),
+  ultimo_error   text,
+  ts             text NOT NULL,
+  canal_slack    text NOT NULL,
+  respondido_en  timestamptz NOT NULL,
+  creada_en      timestamptz NOT NULL DEFAULT now(),
+  actualizada_en timestamptz NOT NULL DEFAULT now(),
+  enviada_en     timestamptz
+);
+CREATE INDEX IF NOT EXISTS notas_del_dueno_envios_pendientes ON public.notas_del_dueno_envios (creada_en) WHERE estado = 'pendiente';
+
 CREATE TABLE IF NOT EXISTS public.autorevisiones_del_productor (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id     uuid NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
@@ -46,6 +62,10 @@ CREATE INDEX IF NOT EXISTS autorevisiones_por_cliente ON public.autorevisiones_d
 
 ALTER TABLE public.notas_del_dueno ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.autorevisiones_del_productor ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notas_del_dueno_envios ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS notas_del_dueno_envios_service ON public.notas_del_dueno_envios;
+CREATE POLICY notas_del_dueno_envios_service ON public.notas_del_dueno_envios FOR ALL TO service_role USING (true) WITH CHECK (true);
+GRANT SELECT, INSERT, UPDATE ON public.notas_del_dueno_envios TO service_role;
 DROP POLICY IF EXISTS notas_del_dueno_service ON public.notas_del_dueno;
 CREATE POLICY notas_del_dueno_service ON public.notas_del_dueno FOR ALL TO service_role USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS autorevisiones_service ON public.autorevisiones_del_productor;

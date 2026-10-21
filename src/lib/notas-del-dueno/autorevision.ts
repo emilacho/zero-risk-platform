@@ -40,6 +40,40 @@ export function seleccionarNotas(notas: Nota[], o: { max?: number; maxCaracteres
   return vistas
 }
 
+/**
+ * Lo que dijo el dueño, tomado del CEREBRO (única fuente de verdad por cliente): lo último, de cualquier canal, ya en el orden que entrega la puerta (la más nueva primero). Mismos topes que las notas del registro.
+ * El texto lleva el canal y la fecha (el agente decide si sigue vigente) y la pregunta a la que contestó.
+ */
+export function vistasDelCerebro(respuestas: Array<{ ficha_id: string; pregunta: string; respuesta: string; canal: string; respondido_en: string }>, o: { max?: number; maxCaracteres?: number } = {}): NotaVista[] {
+  const max = o.max ?? MAX_NOTAS
+  let resto = o.maxCaracteres ?? MAX_CARACTERES_DE_NOTAS
+  const vistas: NotaVista[] = []
+  for (const x of respuestas) {
+    if (vistas.length >= max) break
+    if (!x.respuesta.trim()) continue
+    const cuando = x.respondido_en ? x.respondido_en.slice(0, 10) : 'sin fecha'
+    const sobre = x.pregunta.trim() ? ' sobre «' + recortar(x.pregunta.trim(), 120) + '»' : ''
+    const texto = 'El dueño dijo (' + (x.canal.trim() || 'sin canal') + ', ' + cuando + ')' + sobre + ': «' + recortar(x.respuesta.trim(), MAX_COMENTARIO) + '»'
+    if (texto.length > resto) break
+    resto -= texto.length
+    vistas.push({ id: x.ficha_id, texto })
+  }
+  return vistas
+}
+
+/** el cerebro primero y, después, las notas «general:» del registro (valen para todos los clientes); sin repetir y con el tope de caracteres de todo junto */
+export function unirVistas(delCerebro: NotaVista[], generales: NotaVista[], maxCaracteres = MAX_CARACTERES_DE_NOTAS): NotaVista[] {
+  const visto = new Set<string>()
+  let resto = maxCaracteres
+  const salida: NotaVista[] = []
+  for (const v of [...delCerebro, ...generales]) {
+    if (visto.has(v.id)) continue
+    if (v.texto.length > resto) break
+    visto.add(v.id); resto -= v.texto.length; salida.push(v)
+  }
+  return salida
+}
+
 /** la sección que se agrega al pedido original del paso revisado (el agente ve su mismo contexto de siempre y, debajo, esto) */
 export function seccionDeAutorevision(p: { piezaActual: Record<string, unknown>; notas: NotaVista[]; contratoOriginal: string | null; errorDeFormato?: string }): string {
   const formato = p.contratoOriginal ?? 'el MISMO formato de tu entrega anterior'

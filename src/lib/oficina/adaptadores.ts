@@ -20,8 +20,7 @@ import { crearPuertos as crearPuertosDeLaJefatura, entornoDeProceso as entornoDe
 import { resolverCierre } from '../jefatura/revision/cierre'
 import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA, type SalidaDeRevision } from '../jefatura/revision/contrato'
 import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
-import { enviarPiezaASlack, leerNotas, piezaParaSlackDeLaBandeja, registrarAutorevision } from '../notas-del-dueno/adaptadores'
-import { seleccionarNotas } from '../notas-del-dueno/autorevision'
+import { enviarPiezaASlack, leerNotasParaElProductor, piezaParaSlackDeLaBandeja, registrarAutorevision } from '../notas-del-dueno/adaptadores'
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
@@ -90,7 +89,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     almacen,
     ahora,
     // el segundo cerebro del productor (apagado por omisión): las notas que el agente puede ver y el rastro de cada auto-revisión
-    ...(env.notasDelDueno ? { notas: { leer: async (clientId: string) => seleccionarNotas(await leerNotas(db, clientId)), registrar: (r: Parameters<typeof registrarAutorevision>[1]) => registrarAutorevision(db, r) } } : {}),
+    ...(env.notasDelDueno ? { notas: { leer: (clientId: string) => leerNotasParaElProductor(db, { baseUrl: env.baseUrl, internalKey: env.internalKey }, f, clientId), registrar: (r: Parameters<typeof registrarAutorevision>[1]) => registrarAutorevision(db, r) } } : {}),
     async fuentes(clientId) {
       try {
         const cl = (await db.from('clients').select('id,name,country,language,config,slug,logo_url,website_url').eq('id', clientId).limit(1)) as { data: Fila[] | null; error: { message: string } | null }

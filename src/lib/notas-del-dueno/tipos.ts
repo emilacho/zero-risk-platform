@@ -53,9 +53,17 @@ export interface PuertosDeNotas {
   abrirModalDeRechazo(trigger_id: string, ctx: { hitl_id: string; canal: string | null; ts: string | null; titulo: string }): Promise<boolean>
   /** responde en el hilo de la pieza (un fallo de Slack nunca frena nada) */
   responderEnHilo(canal: string, ts: string, texto: string): Promise<void>
+  /**
+   * sube una nota a la puerta del dueño del cerebro (idempotente por nota; guarda su estado para reintentar); NUNCA lanza. Sin este puerto no se sube nada.
+   * `enviada`: el cerebro la tiene · `pendiente`: no respondió y se reintenta en la siguiente vuelta · `rechazada`: la puerta la rechazó (queda anotado el motivo)
+   */
+  enviarAlCerebro?(nota: NotaNueva & { id: string }, ctx: { ts: string; canal_slack: string; respondido_en: string }): Promise<EstadoDeEnvio>
 }
+export type EstadoDeEnvio = 'enviada' | 'pendiente' | 'rechazada'
 
 export interface ConfiguracionDeNotas {
   /** ids de usuario de Slack que pueden decidir (Emilio). Vacío ⇒ NADIE puede: falla cerrado */
   autorizados: string[]
+  /** el reloj (solo para pruebas); por omisión, la hora real */
+  ahora?: () => Date
 }

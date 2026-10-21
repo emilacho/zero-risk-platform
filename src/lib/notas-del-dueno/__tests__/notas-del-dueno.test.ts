@@ -4,7 +4,7 @@ import { verificarFirmaDeSlack, VENTANA_S } from '../firma-slack'
 import { mensajeDeLaPieza, ACCION_APROBAR, ACCION_RECHAZAR, MAX_SECCION, MAX_IMAGENES } from '../mensaje-pieza'
 import { alcanceYComentario, interpretarEvento, interpretarInteractividad, payloadDeInteractividad, BLOQUE_DEL_MOTIVO, CALLBACK_DEL_RECHAZO, CAMPO_DEL_MOTIVO } from '../interpretar'
 import { procesar } from '../recibir'
-import { enviarPiezaASlack, leerNotas, puertosDeNotas } from '../adaptadores'
+import { enviarPiezaASlack, leerGenerales, puertosDeNotas } from '../adaptadores'
 import type { ConfiguracionDeNotas, NotaNueva, PiezaDeBandeja, PuertosDeNotas, ResultadoDeNota } from '../tipos'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
 
@@ -403,16 +403,19 @@ describe('adaptadores sobre una base y un Slack falsos', () => {
     expect(await enviarPiezaASlack(db, env, p, f)).toMatchObject({ ok: false, error: expect.stringContaining('no se pudo guardar su ts') })
   })
 
-  it('lee las notas del cliente y las generales de otros, de la más nueva a la más vieja, y no las de otro cliente', async () => {
+  it('lee SOLO las notas «general:» (las del cliente ya no se leen de aquí: viven en el cerebro), de la más nueva a la más vieja', async () => {
     const { db } = entorno()
     const fila = (id: string, client_id: string, alcance: string, creada_en: string, comentario: string) => ({ id, client_id, alcance, tipo: 'comentario', comentario, hitl_id: null, output_id: null, pieza_titulo: null, pieza_version: null, pieza_familia: null, origen: 'slack', autor: 'U1', clave_unica: id, creada_en })
     db.semilla('notas_del_dueno', [
-      fila('a', CLIENTE, 'cliente', '2026-10-01T00:00:00Z', 'vieja'), fila('b', CLIENTE, 'cliente', '2026-10-03T00:00:00Z', 'nueva'),
-      fila('c', 'otro-cliente', 'general', '2026-10-02T00:00:00Z', 'general ajena'), fila('d', 'otro-cliente', 'cliente', '2026-10-02T12:00:00Z', 'privada ajena'),
+      fila('a', CLIENTE, 'cliente', '2026-10-01T00:00:00Z', 'propia del cliente'), fila('c', 'otro-cliente', 'general', '2026-10-02T00:00:00Z', 'general vieja'),
+      fila('d', 'otro-cliente', 'cliente', '2026-10-02T12:00:00Z', 'privada ajena'), fila('e', CLIENTE, 'general', '2026-10-03T00:00:00Z', 'general nueva'),
     ])
-    const notas = await leerNotas(db, CLIENTE)
-    expect(notas.map((n) => n.id)).toEqual(['b', 'c', 'a'])
+    expect((await leerGenerales(db)).map((n) => n.id)).toEqual(['e', 'c'])
+    expect((await leerGenerales(db, 1)).map((n) => n.id)).toEqual(['e'])
+  })
+  it('un error de la base al leer las generales se LANZA (nunca se lee como «no hay»)', async () => {
+    const { db } = entorno()
     db.fallar['notas_del_dueno'] = 'caída'
-    await expect(leerNotas(db, CLIENTE)).rejects.toThrow(/caída/)
+    await expect(leerGenerales(db)).rejects.toThrow(/caída/)
   })
 })

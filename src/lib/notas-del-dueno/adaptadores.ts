@@ -4,7 +4,9 @@
  */
 import { BLOQUE_DEL_MOTIVO, CALLBACK_DEL_RECHAZO, CAMPO_DEL_MOTIVO } from './interpretar'
 import { mensajeDeLaPieza, type PiezaParaSlack } from './mensaje-pieza'
-import type { Nota, NotaNueva, PiezaDeBandeja, PuertosDeNotas, ResultadoDeNota } from './tipos'
+import { seleccionarNotas, unirVistas, vistasDelCerebro, type NotaVista } from './autorevision'
+import { cuerpoParaLaPuerta, enviarALaPuerta, leerDeLaPuerta } from './puerta-del-dueno'
+import type { EstadoDeEnvio, Nota, NotaNueva, PiezaDeBandeja, PuertosDeNotas, ResultadoDeNota } from './tipos'
 
 type Db = { from(tabla: string): any }
 type Fila = Record<string, unknown>
@@ -37,17 +39,26 @@ const aNota = (f: Fila): Nota => ({
   pieza_titulo: texto(f.pieza_titulo), pieza_version: texto(f.pieza_version), pieza_familia: texto(f.pieza_familia), origen: f.origen as Nota['origen'], autor: String(f.autor), clave_unica: String(f.clave_unica), creada_en: String(f.creada_en),
 })
 
-/** las notas de un cliente (las suyas y las generales), de la más nueva a la más vieja; un error de lectura se lanza */
 export const MAX_GENERALES = 15
-export async function leerNotas(db: Db, client_id: string, limite = 50): Promise<Nota[]> {
-  // DOS lecturas, cada una con su tope: las generales de otros clientes no pueden desplazar a las notas propias
-  const propias = await db.from('notas_del_dueno').select('*').eq('client_id', client_id).order('creada_en', { ascending: false }).limit(limite)
-  if (propias.error) throw new Error(`notas_del_dueno: ${propias.error.message}`)
-  const generales = await db.from('notas_del_dueno').select('*').eq('alcance', 'general').order('creada_en', { ascending: false }).limit(MAX_GENERALES)
-  if (generales.error) throw new Error(`notas_del_dueno: ${generales.error.message}`)
-  const vistas = new Set<string>()
-  const todas = [...((propias.data ?? []) as Fila[]), ...((generales.data ?? []) as Fila[])].filter((f) => { const id = String(f.id); if (vistas.has(id)) return false; vistas.add(id); return true }).map(aNota)
-  return todas.sort((a, b) => (a.creada_en < b.creada_en ? 1 : a.creada_en > b.creada_en ? -1 : 0)).slice(0, limite + MAX_GENERALES)
+/** las notas «general:» (valen para todos los clientes), de la más nueva a la más vieja; un error de lectura se LANZA (nunca se lee como «no hay») */
+export async function leerGenerales(db: Db, limite = MAX_GENERALES): Promise<Nota[]> {
+  const r = await db.from('notas_del_dueno').select('*').eq('alcance', 'general').order('creada_en', { ascending: false }).limit(limite)
+  if (r.error) throw new Error(`notas_del_dueno: ${r.error.message}`)
+  return ((r.data ?? []) as Fila[]).map(aNota)
+}
+
+/**
+ * LO QUE LEE LA AUTO-REVISIÓN DEL PRODUCTOR: lo último que dijo el dueño de ESTE cliente, tomado del CEREBRO (única fuente de verdad), más las notas «general:» del registro.
+ * La tabla del registro ya NO es la fuente de las notas del cliente. Si el cerebro falla se sigue con las generales y el motivo viaja en `error`; si lo que falla es el registro de las generales, igual: nada frena a la pieza.
+ */
+export async function leerNotasParaElProductor(db: Db, env: { baseUrl: string; internalKey: string }, f: Fetch, client_id: string): Promise<{ notas: NotaVista[]; error?: string }> {
+  const errores: string[] = []
+  let delCerebro: NotaVista[] = []
+  const c = await leerDeLaPuerta(env, f, client_id)
+  if (c.ok) delCerebro = vistasDelCerebro(c.respuestas); else errores.push(`cerebro: ${c.error}`)
+  let generales: NotaVista[] = []
+  try { generales = seleccionarNotas(await leerGenerales(db)) } catch (e) { errores.push(`generales: ${e instanceof Error ? e.message : String(e)}`) }
+  return { notas: unirVistas(delCerebro, generales), ...(errores.length ? { error: errores.join(' · ') } : {}) }
 }
 
 export function puertosDeNotas(db: Db, env: EntornoDeNotas, f: Fetch = fetch): PuertosDeNotas {
@@ -105,7 +116,55 @@ export function puertosDeNotas(db: Db, env: EntornoDeNotas, f: Fetch = fetch): P
       return r.ok === true
     },
     async responderEnHilo(canal, ts, texto_) { await slack('chat.postMessage', { channel: canal, thread_ts: ts, text: texto_ }) },
+    async enviarAlCerebro(n, ctx) { return enviarNotaAlCerebro(db, env, f, n, ctx) },
   }
+}
+
+/**
+ * EL ENVÍO AL CEREBRO, con su cola: cada nota que sube tiene una fila en `notas_del_dueno_envios` (pendiente → enviada | rechazada). Si el cerebro no responde queda PENDIENTE y `reintentarPendientes` la sube en la siguiente vuelta.
+ * Idempotente: una nota ya enviada no se vuelve a enviar (y la puerta además reconoce la misma respuesta repetida). Nunca lanza.
+ */
+export async function enviarNotaAlCerebro(db: Db, env: EntornoDeNotas, f: Fetch, n: NotaNueva & { id: string }, ctx: { ts: string; canal_slack: string; respondido_en: string }): Promise<EstadoDeEnvio> {
+  try {
+    const ins = await db.from('notas_del_dueno_envios').insert({ nota_id: n.id, estado: 'pendiente', intentos: 0, ts: ctx.ts, canal_slack: ctx.canal_slack, respondido_en: ctx.respondido_en })
+    if (ins.error && ins.error.code !== DUPLICADO) return 'pendiente' // sin fila no hay cola: el clic se puede repetir (todo es idempotente)
+    if (ins.error) {
+      const ya = await db.from('notas_del_dueno_envios').select('estado').eq('nota_id', n.id).maybeSingle()
+      if (ya.error || !ya.data) return 'pendiente'
+      const e = (ya.data as Fila).estado
+      if (e === 'enviada' || e === 'rechazada') return e
+    }
+    return await intentarEnvio(db, env, f, n, ctx)
+  } catch { return 'pendiente' }
+}
+
+async function intentarEnvio(db: Db, env: EntornoDeNotas, f: Fetch, n: NotaNueva & { id: string }, ctx: { ts: string; canal_slack: string; respondido_en: string }): Promise<EstadoDeEnvio> {
+  if (!n.comentario || !n.hitl_id) return 'rechazada'
+  const r = await enviarALaPuerta({ baseUrl: env.baseUrl, internalKey: env.internalKey }, f, cuerpoParaLaPuerta({ client_id: n.client_id, hitl_id: n.hitl_id, pieza_titulo: n.pieza_titulo, pieza_familia: n.pieza_familia, comentario: n.comentario, ts: ctx.ts, canal_slack: ctx.canal_slack, respondido_en: ctx.respondido_en }))
+  const previo = await db.from('notas_del_dueno_envios').select('intentos').eq('nota_id', n.id).maybeSingle()
+  const intentos = Number((previo.data as Fila | null)?.intentos ?? 0) + 1
+  const ahora = new Date().toISOString()
+  const estado: EstadoDeEnvio = r.ok ? 'enviada' : r.permanente ? 'rechazada' : 'pendiente'
+  await db.from('notas_del_dueno_envios').update({ estado, intentos, ultimo_error: r.ok ? null : r.error, actualizada_en: ahora, ...(r.ok ? { enviada_en: ahora } : {}) }).eq('nota_id', n.id)
+  return estado
+}
+
+/** la siguiente vuelta: sube las notas que quedaron pendientes (las más viejas primero, con tope). Nunca lanza. */
+export async function reintentarPendientes(db: Db, env: EntornoDeNotas, f: Fetch = fetch, limite = 20): Promise<{ intentadas: number; enviadas: number; siguen: number; rechazadas: number; error?: string }> {
+  const cuenta = { intentadas: 0, enviadas: 0, siguen: 0, rechazadas: 0 }
+  try {
+    const p = await db.from('notas_del_dueno_envios').select('*').eq('estado', 'pendiente').order('creada_en', { ascending: true }).limit(limite)
+    if (p.error) return { ...cuenta, error: p.error.message }
+    for (const e of (p.data ?? []) as Fila[]) {
+      const nf = await db.from('notas_del_dueno').select('*').eq('id', String(e.nota_id)).maybeSingle()
+      if (nf.error || !nf.data) { cuenta.siguen++; continue }
+      const nota = aNota(nf.data as Fila)
+      cuenta.intentadas++
+      const est = await intentarEnvio(db, env, f, { ...nota, id: nota.id }, { ts: String(e.ts), canal_slack: String(e.canal_slack), respondido_en: String(e.respondido_en) })
+      if (est === 'enviada') cuenta.enviadas++; else if (est === 'rechazada') cuenta.rechazadas++; else cuenta.siguen++
+    }
+    return cuenta
+  } catch (e) { return { ...cuenta, error: e instanceof Error ? e.message : String(e) } }
 }
 
 /**
