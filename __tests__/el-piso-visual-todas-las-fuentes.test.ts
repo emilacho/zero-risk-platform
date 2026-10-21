@@ -7,6 +7,7 @@ import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { identidadVisualDelCliente } from '../src/lib/oficina/identidad-visual'
 
 const require = createRequire(import.meta.url)
 const DIR = join(process.cwd(), 'scripts', 'worker-staging', 'ssLtwYPt7zxuvnM2')
@@ -181,11 +182,12 @@ describe('lo que recibe el manual', () => {
     expect(paraElManual({ paleta: [{ color: '#111111', rol: 'principal', procedencia: 'sitio:hoja_de_estilo', estado: 'declarado' }], tipografias: [{ nombre: 'Inter', rol: null, procedencia: 'ficha', estado: 'declarado' }] }))
       .toEqual({ primary_colors: [{ hex: '#111111', rol: 'principal', procedencia: 'sitio:hoja_de_estilo', estado: 'declarado' }], typography: [{ family: 'Inter', rol: null, procedencia: 'ficha', estado: 'declarado' }] })
   })
-  it('el formato que lee la oficina de láminas (hex en string u objeto {hex}) acepta lo que escribe el piso', () => {
-    // marcaDelCliente (oficina/adaptadores.ts) lee `x` o `x.hex`: el objeto {hex, …} es válido
-    const adaptadores = readFileSync(join(process.cwd(), 'src', 'lib', 'oficina', 'adaptadores.ts'), 'utf8')
-    expect(adaptadores).toMatch(/typeof x === 'string' \? x : \(x as \{ hex\?: unknown \} \| null\)\?\.hex/)
-    expect(adaptadores).toMatch(/\(x as \{ family\?: unknown; name\?: unknown \}/)
+  it('lo que escribe el piso (objetos {hex, rol…} y {family, rol…}) lo lee la oficina de láminas: prueba de comportamiento, no de texto', () => {
+    const escrito = paraElManual({ paleta: [{ color: '#222222', rol: 'secundario', procedencia: 'logo', estado: 'propuesta' }, { color: '#111111', rol: 'principal', procedencia: 'logo, foto 1', estado: 'propuesta' }], tipografias: [{ nombre: 'Inter', rol: 'cuerpo', procedencia: 'logo', estado: 'propuesta' }, { nombre: 'Caveat', rol: 'titulos', procedencia: 'logo', estado: 'propuesta' }] })
+    const m = identidadVisualDelCliente({ primary_colors: escrito.primary_colors, typography: escrito.typography }, {}, [])
+    expect(m.marca?.colors).toMatchObject({ primary: '#111111', secondary: '#222222' })
+    expect(m.marca?.fonts).toMatchObject({ family: 'Inter', headline_family: 'Caveat' })
+    expect(m.procedencia).toMatchObject({ colores: 'manual', tipografias: 'manual' })
   })
   it('el pedido pide solo lo que falta (con colores declarados no pide colores; sí tipografías si no hay)', () => {
     const p = armarPedidoTodasLasFuentes({ colores: [{ valor: '#111111', procedencia: 'ficha' }], tipografias: [] }, { logo: null, fotos: [], fotos_disponibles: 0, cuentas: [] })
