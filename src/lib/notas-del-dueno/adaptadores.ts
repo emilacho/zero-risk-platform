@@ -129,3 +129,32 @@ export async function enviarPiezaASlack(db: Db, env: EntornoDeNotas, p: PiezaPar
     return { ok: true, canal, ts: post.ts }
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
 }
+
+const EXT_IMAGEN = /\.(png|jpe?g|webp|gif)(\?|$)/i
+/**
+ * La pieza que se manda a Slack, armada desde lo que la oficina acaba de guardar: el nombre del cliente, el texto (pie de foto o texto de la pieza, de la salida guardada) y las imágenes entregadas.
+ * Si la salida no se puede leer, se manda la vista previa de la bandeja: la pieza llega igual, solo con menos texto.
+ */
+export async function piezaParaSlackDeLaBandeja(db: Db, p: { hitl_id: string; client_id: string; output_id: string; titulo: string; vista_previa: string; metadata: Fila }): Promise<PiezaParaSlack> {
+  let cliente = 'Cliente'
+  let texto: string | null = p.vista_previa || null
+  let hashtags: string[] = []
+  try {
+    const c = await db.from('clients').select('name').eq('id', p.client_id).maybeSingle()
+    if (!c.error && c.data && texto_((c.data as Fila).name)) cliente = String((c.data as Fila).name)
+    const o = await db.from('client_historical_outputs').select('content_text,content').eq('id', p.output_id).maybeSingle()
+    const crudo = !o.error && o.data ? String((o.data as Fila).content_text ?? (o.data as Fila).content ?? '') : ''
+    const m = /```json\s*([\s\S]*?)```/.exec(crudo)
+    if (m) {
+      const j: unknown = JSON.parse(m[1])
+      if (esObjeto(j)) {
+        const t = [j.pie_de_foto, j.texto, j.copy].find((x) => typeof x === 'string' && x.trim())
+        if (typeof t === 'string') texto = t
+        if (Array.isArray(j.hashtags)) hashtags = j.hashtags.filter((h): h is string => typeof h === 'string')
+      }
+    }
+  } catch { /* la pieza llega igual con la vista previa */ }
+  const enlaces = esObjeto(p.metadata.enlace_entrega) ? Object.values(p.metadata.enlace_entrega as Fila).filter((u): u is string => typeof u === 'string' && EXT_IMAGEN.test(u)) : []
+  return { hitl_id: p.hitl_id, cliente, titulo: p.titulo, familia: texto_(p.metadata.familia), texto, hashtags, imagenes: enlaces }
+}
+const texto_ = (x: unknown): string | null => (typeof x === 'string' && x.trim() ? x : null)

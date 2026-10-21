@@ -20,10 +20,11 @@ import { crearPuertos as crearPuertosDeLaJefatura, entornoDeProceso as entornoDe
 import { resolverCierre } from '../jefatura/revision/cierre'
 import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA, type SalidaDeRevision } from '../jefatura/revision/contrato'
 import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
+import { enviarPiezaASlack, piezaParaSlackDeLaBandeja } from '../notas-del-dueno/adaptadores'
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string }
+export interface Entorno { /** a dónde llega la pieza para que Emilio decida (canal o persona de Slack); sin esto la pieza solo va a la bandeja, como siempre */ notasDestino?: string; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string }
 
 /** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
 export { ESPERAS_DEL_REVISOR_MS }
@@ -236,7 +237,12 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       if (String(s.data[0].client_id) !== p.client_id) return { ok: false, error: 'output_id de otro cliente' }
       const r = await db.from('hitl_queue').insert({ client_id: p.client_id, agent_name: 'oficina', risk_type: 'strategic_decision', output_preview: p.vista_previa || p.titulo, type: 'content_piece_review', title: p.titulo, priority: 'medium', status: 'pending', payload: {}, metadata: p.metadata, output_id: p.output_id, expires_at: p.expires_at }).select('id').single()
       if (r.error) return { ok: false, error: r.error.message }
-      return { ok: true, id: String((r.data as Fila).id) }
+      const id = String((r.data as Fila).id)
+      // la pieza también llega al Slack de Emilio con sus botones (solo si se configuró el destino): un fallo aquí NUNCA frena la bandeja, que sigue siendo la vía de siempre
+      if (env.notasDestino && env.slackToken) {
+        try { await enviarPiezaASlack(db, { baseUrl: env.baseUrl, internalKey: env.internalKey, slackToken: env.slackToken, destino: env.notasDestino }, await piezaParaSlackDeLaBandeja(db, { hitl_id: id, client_id: p.client_id, output_id: p.output_id, titulo: p.titulo, vista_previa: p.vista_previa, metadata: p.metadata }), f) } catch { /* nunca frena la bandeja */ }
+      }
+      return { ok: true, id }
     },
     async avisar(p) {
       if (p.dry_run || !env.slackToken) return
