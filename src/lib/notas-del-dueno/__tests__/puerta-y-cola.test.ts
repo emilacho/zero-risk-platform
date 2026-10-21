@@ -166,6 +166,14 @@ describe('el envío con su cola', () => {
     expect(await enviarNotaAlCerebro(db, env, f, nota(), CTX)).toBe('pendiente')
     expect(posts).toHaveLength(0)
   })
+  it('un error al escribir la fila de la cola que NO es «ya existe» devuelve «pendiente» sin mirar nada más ni llamar a la puerta', async () => {
+    sembrar()
+    db.semilla('notas_del_dueno_envios', [{ nota_id: 'n1', estado: 'enviada', intentos: 1, ts: TS, canal_slack: 'C1', respondido_en: CTX.respondido_en, creada_en: '2026-10-21T12:00:00.000Z' }])
+    const roto = { from: (t: string) => { const base = db.from(t); return t === 'notas_del_dueno_envios' ? new Proxy(base, { get: (o, p) => (p === 'insert' ? () => Promise.resolve({ data: null, error: { message: 'sin permiso', code: '42501' } }) : typeof (o as never)[p] === 'function' ? ((o as never)[p] as (...a: unknown[]) => unknown).bind(o) : (o as never)[p]) }) : base } }
+    const { f, posts } = puerta([200])
+    expect(await enviarNotaAlCerebro(roto, env, f, nota(), CTX)).toBe('pendiente')
+    expect(posts).toHaveLength(0)
+  })
   it('la vuelta reintenta las más viejas primero y con tope; una nota que ya no existe no la frena', async () => {
     for (let i = 1; i <= 3; i++) {
       const n = nota({ id: `n${i}`, clave_unica: `k${i}`, comentario: `comentario ${i}` })

@@ -1,10 +1,12 @@
--- EL SEGUNDO CEREBRO DEL PRODUCTOR · notas del dueño + auto-revisiones · CC#1 · 2026-10-21 (firma de Emilio 12:57 sobre DISENO-CC1-retroalimentacion-del-dueno).
--- Dos tablas NUEVAS y aditivas (no tocan hitl_queue ni nada existente):
---   · notas_del_dueno: cada decisión (aprobar/rechazar) y cada comentario de Emilio sobre una pieza, como NOTA por cliente (o general). APPEND-ONLY: no se edita ni se borra.
---     No es una regla ni una orden: es lo que él dijo, con la pieza y la versión de evidencia.
---   · autorevisiones_del_productor: cada paso de auto-revisión del agente productor contra sus notas (qué notas vio, si algo chocó, qué cambió, cuánto costó). Alimenta el registro visible.
--- Las escribe y las lee solo el servidor (service_role). La jefatura y la segunda mirada GPT NUNCA leen estas tablas.
+-- EL SEGUNDO CEREBRO DEL PRODUCTOR · registro de notas del dueño + cola de envíos al cerebro + auto-revisiones · CC#1 · 2026-10-21 (firma de Emilio 12:57; rehecho el 13:59 con «sigue el orden sugerido de Lenovo anterior»).
+-- Tablas NUEVAS y aditivas (no tocan hitl_queue ni nada existente):
+--   · notas_del_dueno: el REGISTRO (Slack, clics, auditoría, y las notas «general:» que valen para todos los clientes). APPEND-ONLY. Ya NO es la fuente que lee el productor: lo que el dueño dice sobre UN cliente tiene una sola
+--     fuente de verdad, el CEREBRO; los comentarios con texto y los «Rechazar» con motivo suben a su puerta del dueño (POST /api/brain/alimentar/dueno). No son reglas ni órdenes: es lo que él dijo.
+--   · notas_del_dueno_envios: la COLA de esas subidas (pendiente → enviada | rechazada) con su último error y sus intentos; si el cerebro no responde queda pendiente y se reintenta en la siguiente vuelta. NO escribe en tablas del cerebro.
+--   · autorevisiones_del_productor: cada paso de auto-revisión del agente productor contra lo que dijo el dueño (qué notas vio, si algo chocó, qué cambió, cuánto costó). Alimenta el registro visible.
+-- Las escribe y las lee solo el servidor (service_role). La jefatura y la segunda mirada GPT NUNCA leen estas tablas ni el cerebro del dueño.
 -- 🔴 Tabla nueva = GRANT + RLS en la misma migración (sin permisos PostgREST no la ve). Detrás de NOTAS_DEL_DUENO (apagado por omisión): sin el interruptor no se escribe ni se lee.
+-- ON DELETE CASCADE desde clients: eliminar un cliente de PRÁCTICA borra sus notas (lo deseable para limpiar pruebas); un cliente real no se elimina.
 -- REVERSA: supabase/reversas/202610211500_notas_del_dueno_REVERSA.sql (se niega si ya hay filas).
 BEGIN;
 CREATE TABLE IF NOT EXISTS public.notas_del_dueno (
