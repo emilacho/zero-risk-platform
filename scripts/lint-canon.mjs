@@ -130,6 +130,8 @@ const PUBLIC_ENDPOINTS = new Set([
   "/api/forms/submit", // HMAC-gated · not INTERNAL_API_KEY
   "/api/calendar/webhook", // Cal.com webhook
   "/api/whatsapp/webhook", // Meta webhook
+  "/api/slack/interactividad", // Slack · firma v0 HMAC obligatoria (SLACK_SIGNING_SECRET) · apagada por omisión
+  "/api/slack/eventos", // Slack · firma v0 HMAC obligatoria (SLACK_SIGNING_SECRET) · apagada por omisión
   "/api/posthog/events", // analytics ingest
   "/api/webhook", // generic webhook receiver
   "/api/storage/upload", // signed URL

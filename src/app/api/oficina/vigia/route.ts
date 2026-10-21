@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { checkLlaveDeLaSala, esObjeto, puertosReales } from '@/lib/oficina/ruta'
 import { revisarPasosMuertos, vencerBandeja } from '@/lib/oficina/vigia'
+import { reintentarLosPendientes } from '@/lib/notas-del-dueno/ruta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,7 +26,9 @@ export async function POST(request: Request) {
     const ahora = P.ahora()
     const v = await vencerBandeja(db, ahora)
     const m = await revisarPasosMuertos(P, db, ahora)
-    return NextResponse.json({ accion: 'vigilado', vencidas: v.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres }, { status: 200 })
+    // el segundo cerebro: cada vuelta del reloj también sube al cerebro las notas del dueño que quedaron pendientes (solo con la bandera encendida; nunca frena al vigía)
+    const notas = process.env.NOTAS_DEL_DUENO === '1' ? await reintentarLosPendientes(request) : undefined
+    return NextResponse.json({ accion: 'vigilado', vencidas: v.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres, ...(notas ? { notas_del_dueno: notas } : {}) }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'oficina_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

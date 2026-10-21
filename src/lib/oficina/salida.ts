@@ -127,6 +127,36 @@ function conMaxImagenes(esq: Esq, n: number): Esq {
   return { ...o, props: { ...o.props, imagenes: { ...imgs, max: n, de: { ...item, props: { ...item.props, indice: ancho(item.props.indice) } } }, preferencia: { ...pref, max: n, de: ancho(pref.de) } } }
 }
 ESQUEMAS['observacion_imagenes.v1'] = conMaxImagenes(ESQUEMAS['observacion_imagen.v1'], 12)
+/**
+ * EL SEGUNDO CEREBRO DEL PRODUCTOR · la auto-revisión del agente contra las notas del dueño. `corregida` es la entrega COMPLETA con el formato del paso revisado (se valida aparte con el esquema de ese paso);
+ * aquí solo se fija el sobre: si chocó, qué nota, en qué campo, qué chocó y qué cambió.
+ */
+ESQUEMAS['autorevision.v1'] = {
+  t: 'obj', req: ['choca'],
+  props: {
+    choca: { t: 'bool' },
+    hallazgos: { t: 'arr', max: 6, de: { t: 'obj', req: ['nota_id', 'campo', 'que_choca', 'que_cambio'], props: { nota_id: str(1, 80), campo: str(1, 80), que_choca: str(1, 400), que_cambio: str(1, 400) } } },
+    corregida: { t: 'obj', props: {}, extra: true },
+  },
+}
+
+/** deja de un valor SOLO lo que el esquema declara (recursivo): quita lo que el código agregó después (campos derivados) para comparar o mostrar lo que el agente entregó */
+export function proyectarAlEsquema(esqId: string, v: unknown): Record<string, unknown> | null {
+  const esq = ESQUEMAS[esqId]
+  if (!esq) return null
+  const p = (e: Esq, x: unknown): unknown => {
+    if (e.t === 'arr' && Array.isArray(x)) return x.map((y) => p(e.de, y))
+    if (e.t === 'obj' && x && typeof x === 'object' && !Array.isArray(x)) {
+      const sale: Record<string, unknown> = {}
+      for (const [k, y] of Object.entries(x as Record<string, unknown>)) { if (e.props[k]) sale[k] = p(e.props[k], y); else if (e.extra) sale[k] = y }
+      return sale
+    }
+    return x
+  }
+  const r = p(esq, v)
+  return r && typeof r === 'object' && !Array.isArray(r) ? (r as Record<string, unknown>) : null
+}
+
 /** la opinión del revisor externo es TEXTO LIBRE (sin campos, sin rúbrica): lo único que se exige es que haya texto */
 ESQUEMAS['opinion_libre.v1'] = { t: 'str', min: 1, max: 20000 }
 

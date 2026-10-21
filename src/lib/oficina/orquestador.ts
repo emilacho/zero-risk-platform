@@ -18,12 +18,13 @@ import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeL
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
-import { construirTarea, contextoDelRevisor, type ContextoDePedido } from './pedidos'
+import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, type ContextoDePedido } from './pedidos'
+import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../notas-del-dueno/autorevision'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
-import { procesarSalida } from './salida'
+import { procesarSalida, proyectarAlEsquema } from './salida'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
-import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla } from './tipos'
+import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
@@ -213,6 +214,7 @@ const contexto2 = (e: Estado): ContextoDePedido | null => (datos(e, 'encargo') ?
 
 /** el agente y el pedido de un paso de agente o de portero (puro: sale del estado, así se puede volver a entregar) */
 function armarPedido(enc: Encargo, pl: Plantilla, paso: Paso, e: Estado, errorDeFormato?: string): { agente: string; pedido: Record<string, unknown> } {
+  if (paso.revisa) return armarPedidoDeAutorevision(enc, pl, paso, e, errorDeFormato)
   if (familiaDeLaminas(pl)) {
     // salas 2 y 3: el agente de cada paso es el que dice la plantilla (los hallazgos tienen un paso por dueño)
     const t = paso.tipo === 'agente' ? armarPedidoL(pl, paso, e, errorDeFormato ? { errorDeFormato } : undefined) : null
@@ -222,6 +224,23 @@ function armarPedido(enc: Encargo, pl: Plantilla, paso: Paso, e: Estado, errorDe
   const fichasPropias = paso.clave === 'corrige' || paso.clave === 'decide' || paso.clave === 'decide_imagen' ? fichasQueTocan(e, paso) : []
   const t = paso.tipo === 'agente' ? construirTarea(paso.clave, contexto2(e)!, { fichas: fichasPropias, ...(errorDeFormato ? { errorDeFormato } : {}) }) : null
   return { agente, pedido: pedidoDe(enc, pl, paso, agente, t, e) }
+}
+
+/**
+ * EL SEGUNDO CEREBRO · el pedido de la auto-revisión: el MISMO pedido del paso que revisa (mismo agente, mismo contexto, mismas imágenes) con una sección al final que trae sus notas y su entrega actual.
+ * Las notas SOLO viajan en este pedido: nunca en el del paso original, ni en el de la jefatura, ni en el del revisor GPT.
+ */
+function armarPedidoDeAutorevision(enc: Encargo, pl: Plantilla, paso: Paso, e: Estado, errorDeFormato?: string): { agente: string; pedido: Record<string, unknown> } {
+  const revisado = pl.pasos.find((x) => x.clave === paso.revisa)
+  if (!revisado?.salida) throw new Error(`la auto-revisión «${paso.clave}» apunta a «${paso.revisa}», que no es un paso de agente`)
+  const original = armarPedido(enc, pl, revisado, e)
+  const notas = (datos(e, 'notas_del_dueno')?.notas ?? []) as NotaVista[]
+  const actual = proyectarAlEsquema(revisado.salida.esquema, datos(e, revisado.salida_artefacto)) ?? {}
+  const seccion = seccionDeAutorevision({ piezaActual: actual, notas, contratoOriginal: CONTRATOS_EN_TEXTO[revisado.salida.esquema] ?? null, ...(errorDeFormato ? { errorDeFormato } : {}) })
+  const extra = (original.pedido.extra ?? {}) as Record<string, unknown>
+  return { agente: original.agente, pedido: { ...original.pedido, task: `${String(original.pedido.task)}
+
+${seccion}`, esquema: 'autorevision.v1', max_budget_usd: paso.tope_usd, extra: { ...extra, paso_de_la_oficina: paso.clave } } }
 }
 
 /** la indicación de ESTE agente en ESTA sala: sus reglas numeradas (encima de su identidad; la identidad no se edita) */
@@ -382,6 +401,13 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
     }
     case 'empaquetar_entrega': return empaquetar(P, enc, pl)
     case 'cierre': return { res: { costo_usd: 0, artefacto: { cerrado_en: P.ahora().toISOString() } } }
+    case 'leer_notas': {
+      // el segundo cerebro: las notas del dueño que el productor puede ver. Un fallo de lectura NO frena el encargo: sin notas, la pieza sigue como siempre (y el motivo queda en el artefacto)
+      let notas: NotaVista[] = []
+      let error: string | undefined
+      try { if (P.notas) { const l = await P.notas.leer(enc.client_id); notas = l.notas; error = l.error } } catch (err) { error = err instanceof Error ? err.message : String(err) }
+      return { res: { costo_usd: 0, artefacto: { hay: notas.length > 0, notas, ...(error ? { error } : {}) } } }
+    }
     default: return familiaDeLaminas(pl) ? ejecutarCodigoL(P, enc, pl, paso) : { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
   }
 }
@@ -508,6 +534,9 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   const gastoModelo: NonNullable<Cambios['gastos']> = costo > 0 ? [{ concepto: paso.tipo === 'portero' ? 'portero' : 'modelo', ref_tabla: res.workflow_execution_id ? 'agent_invocations' : null, ref_id: res.workflow_execution_id ?? null, cost_usd: costo, base: 'usage' }] : []
   const turnoBase = { paso: paso.clave, tipo: paso.tipo, agente: abierto.agente, dispatch_key: abierto.dispatch_key, cost_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null, tokens_in: res.tokens_in ?? null, tokens_out: res.tokens_out ?? null }
 
+  // el segundo cerebro: la auto-revisión NUNCA frena ni rompe la entrega (si algo sale mal, la pieza sigue tal cual la hizo el agente)
+  if (paso.revisa) return recibirAutorevision(P, enc, pl, sig, abierto.agente, res, { costo, gastoModelo, turnoBase, n })
+
   if (res.error || typeof res.texto !== 'string') {
     // el turno murió o devolvió error: se registra como fallo y el encargo cierra visible (el vigía reintenta UNA vez antes de llegar aquí)
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: e.gasto_usd + costo, turno: { ...turnoBase, n, estado: 'fallo', error: res.error ?? 'respuesta vacía' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
@@ -550,6 +579,62 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   const encLimpio: Encargo = { ...enc, estado_del_motor: { ...e, vueltas: vueltasSinFormato } }
   await aplicarResultado(P, encLimpio, pl, sig.indice, { ...proc.res, costo_usd: costo }, { vuelta: sig.vuelta, turno: { ...turnoBase, estado: 'hecho' }, gastos: gastoModelo, n })
   return avanzar(P, enc.id)
+}
+
+/**
+ * EL SEGUNDO CEREBRO · la respuesta de una auto-revisión. Lo que decide el CÓDIGO: que el formato sea el del sobre, que las notas citadas existan, que solo cambie lo que el agente nombró y que la entrega corregida
+ * pase el MISMO esquema y los MISMOS validadores del paso que revisa. Un fallo en cualquiera de esas cosas da UN reintento con el error literal; si vuelve a fallar (o el agente no contesta) la pieza sigue TAL CUAL:
+ * la auto-revisión es una mejora, nunca un riesgo para la entrega.
+ */
+async function recibirAutorevision(P: Puertos, enc: Encargo, pl: Plantilla, sig: Extract<Siguiente, { accion: 'ejecutar' }>, agente: string | null, res: ResultadoDeTurno, c: { costo: number; gastoModelo: NonNullable<Cambios['gastos']>; turnoBase: Omit<TurnoRegistrado, 'n' | 'estado'>; n: number }): Promise<Respuesta> {
+  const e = enc.estado_del_motor
+  const paso = sig.paso
+  const revisado = pl.pasos.find((x) => x.clave === paso.revisa)
+  if (!revisado?.salida) return fallar(P, enc, `la auto-revisión «${paso.clave}» apunta a «${paso.revisa}», que no es un paso de agente`)
+  const notas = (datos(e, 'notas_del_dueno')?.notas ?? []) as NotaVista[]
+  const original = proyectarAlEsquema(revisado.salida.esquema, datos(e, revisado.salida_artefacto)) ?? {}
+  const intentos = e.vueltas[`fmt:${paso.clave}`] ?? 0
+  const quedaReintento = intentos < paso.salida!.reintento_formato
+  const { [`fmt:${paso.clave}`]: _fmt, ...vueltasSinFormato } = e.vueltas
+  void _fmt
+  const encLimpio: Encargo = { ...enc, estado_del_motor: { ...e, vueltas: vueltasSinFormato } }
+  const registrar = async (choco: boolean, cambios: unknown[]): Promise<void> => {
+    try { await P.notas?.registrar({ client_id: enc.client_id, encargo_id: enc.id, agente: agente ?? paso.quien, paso: paso.clave, notas_vistas: notas.map((x) => x.id), choco, cambios, costo_usd: c.costo, clave_unica: `${enc.id}:${paso.clave}:${c.n}` }) } catch { /* el rastro nunca frena la entrega */ }
+  }
+  /** la pieza sigue tal cual (o con la corrección ya validada): se anota el paso y se sigue */
+  const seguir = async (resultado: ResultadoDePaso, error?: string): Promise<Respuesta> => {
+    await aplicarResultado(P, encLimpio, pl, sig.indice, { ...resultado, costo_usd: c.costo }, { vuelta: sig.vuelta, turno: { ...c.turnoBase, estado: 'hecho', ...(error ? { error } : {}) }, gastos: c.gastoModelo, n: c.n })
+    return avanzar(P, enc.id)
+  }
+  const reintentarOSeguir = async (mensaje: string): Promise<Respuesta> => {
+    if (!quedaReintento) { await registrar(false, [{ sin_cambios: mensaje.slice(0, 300) }]); return seguir({ costo_usd: c.costo }, `auto-revisión sin efecto: ${mensaje.slice(0, 300)}`) }
+    const nuevo: Estado = { ...e, vueltas: { ...e.vueltas, [`fmt:${paso.clave}`]: intentos + 1 }, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: +(e.gasto_usd + c.costo).toFixed(6) }
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, turno: { ...c.turnoBase, n: c.n, estado: 'hecho', error: `auto-revisión: reintento (${mensaje.slice(0, 200)})` }, ...(c.gastoModelo.length ? { gastos: c.gastoModelo } : {}) })
+    const { agente: ag, pedido } = armarPedido(enc, pl, paso, nuevo, `Tu respuesta no sirvió: ${mensaje}. Devuelve solo el JSON del contrato.`)
+    const n2 = turnoDe(nuevo)
+    const dk = `${enc.id}:${n2}`
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', turno: { n: n2, paso: paso.clave, tipo: paso.tipo, agente: ag, estado: 'corriendo', dispatch_key: dk, cost_usd: 0 } })
+    return r(200, { accion: 'esperar', reintento_de_formato: true, turno: { n: n2, paso: paso.clave, tipo: paso.tipo, agente: ag, dispatch_key: dk, pedido } })
+  }
+
+  if (res.error || typeof res.texto !== 'string') { await registrar(false, [{ sin_respuesta: res.error ?? 'respuesta vacía' }]); return seguir({ costo_usd: c.costo }, `auto-revisión sin respuesta: ${res.error ?? 'respuesta vacía'}`) }
+  const p = procesarSalida(res.texto, paso.salida!.esquema, intentos, paso.salida!.reintento_formato)
+  if (!p.ok) return p.accion === 'reintentar' ? reintentarOSeguir(p.mensaje_de_error) : (await registrar(false, [{ sin_cambios: 'formato' }]), seguir({ costo_usd: c.costo }, `auto-revisión sin efecto: ${p.errores.slice(0, 2).join(' · ')}`))
+  const v = validarAutorevision(p.valor, notas.map((x) => x.id), original)
+  if (!v.ok) return reintentarOSeguir(v.error)
+  if (!v.choca) { await registrar(false, []); return seguir({ costo_usd: c.costo }) }
+
+  // algo chocó: la entrega corregida pasa el MISMO esquema y los MISMOS validadores del paso que revisa, como si él la hubiera entregado
+  const f = procesarSalida(JSON.stringify(v.corregida), revisado.salida.esquema, 0, 0)
+  if (!f.ok) return reintentarOSeguir(`la pieza corregida no cumple el formato de «${revisado.salida_artefacto}»: ${f.accion === 'falla_visible' ? f.errores.slice(0, 4).join(' · ') : f.mensaje_de_error}`)
+  const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = familiaDeLaminas(pl) ? procesarValorL(revisado, f.valor, enc, e, pl, 0) : procesarValor(revisado, f.valor, enc, e, pl)
+  if (proc.reintentar !== undefined) return reintentarOSeguir(proc.reintentar)
+  if (proc.fallido || !proc.res) return reintentarOSeguir(proc.fallido ?? 'la pieza corregida no pasó los validadores del paso')
+  // las fichas que el validador vuelve a levantar (mismo id que las de la primera vez) no se duplican
+  const conocidas = new Set(e.fichas.map((x) => x.id))
+  const fichasNuevas = (proc.res.fichas ?? []).filter((x) => !conocidas.has(x.id))
+  await registrar(true, v.hallazgos)
+  return seguir({ ...proc.res, ...(fichasNuevas.length ? { fichas: fichasNuevas } : { fichas: undefined }) })
 }
 
 async function aplicarResultado(P: Puertos, enc: Encargo, pl: Plantilla, indice: number, res: ResultadoDePaso, o: { vuelta?: string; turno: Omit<TurnoRegistrado, 'n'>; gastos: Cambios['gastos']; n: number }): Promise<Encargo> {

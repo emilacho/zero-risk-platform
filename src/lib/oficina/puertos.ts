@@ -10,6 +10,7 @@ import type { Estado, Ficha, Plantilla } from './tipos'
 import type { FilaDeFormato } from './entrega'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import type { SobreDeRevisionDePieza } from './paso-jefatura'
+import type { NotaVista } from '../notas-del-dueno/autorevision'
 
 /** lo que el cliente tiene (manual, fotos, datos propios), leído UNA vez al abrir y guardado en el encargo */
 export interface FuentesCompletas {
@@ -140,4 +141,13 @@ export interface Puertos {
   bandeja(p: { client_id: string; output_id: string; titulo: string; vista_previa: string; metadata: Record<string, unknown>; expires_at: string | null }): Promise<{ ok: true; id: string } | { ok: false; error: string }>
   /** hilo de #oficina-creativa o aviso a #alertas; NUNCA lanza (un fallo de Slack no frena un encargo) */
   avisar(p: { canal: 'hilo' | 'alertas'; encargo_id: string; texto: string; dry_run: boolean }): Promise<void>
+  /**
+   * EL SEGUNDO CEREBRO del productor (opcional): sin este puerto no hay notas y las auto-revisiones se saltan. `leer` devuelve las notas del dueño que el agente puede ver (ya elegidas por el código);
+   * `registrar` anota cada auto-revisión (qué notas vio, si algo chocó, qué cambió, cuánto costó). Ninguno de los dos frena nunca un encargo.
+   */
+  notas?: {
+    /** lo que el dueño dijo (del cerebro del cliente + las notas «general:»); si algo falló trae `error` y lo que sí se pudo leer */
+    leer(clientId: string): Promise<{ notas: NotaVista[]; error?: string }>
+    registrar(r: { client_id: string; encargo_id: string; agente: string; paso: string; notas_vistas: string[]; choco: boolean; cambios: unknown[]; costo_usd: number; clave_unica: string }): Promise<void>
+  }
 }

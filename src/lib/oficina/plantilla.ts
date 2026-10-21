@@ -9,6 +9,8 @@ export const FUNCIONES_REGISTRADAS = [
   'abrir', 'elegir_foto', 'chequear_prompts', 'imagen', 'elegir_version', 'acabado_imagen', 'chequeos', 'empaquetar_entrega', 'cierre',
   // piezas de varias láminas: varias imágenes por pieza (una por «ref»), láminas armadas y dibujadas por código
   'abrir_laminas', 'asignar_fotos', 'chequear_prompts_ref', 'imagen_ref', 'elegir_version_ref', 'armar_laminas', 'render_laminas', 'chequeos_laminas', 'empaquetar_entrega_laminas',
+  // el segundo cerebro del productor: lee las notas del dueño del cliente (sin modelo, solo lectura)
+  'leer_notas',
 ] as const
 /** funciones de código que SÍ gastan (un proveedor de imágenes, no un modelo de texto): su tope puede ser mayor que 0 */
 export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref'] as const
@@ -18,7 +20,7 @@ export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'de
 export const ESQUEMAS_REGISTRADOS = [
   'visual_direction.v1', 'prompts.v1', 'observacion_imagen.v1', 'pieza_post.v1', 'fichas.v1', 'resolucion.v1',
   'direccion_imagenes.v1', 'prompts_por_ref.v1', 'observacion_imagenes.v1', 'opinion_libre.v1', 'copy_base.v1', 'laminas.v1', 'estructura.v1', 'copy_kit.v1',
-  'resolucion_copy_base.v1', 'resolucion_laminas.v1', 'resolucion_copy_kit.v1', 'resolucion_estructura.v1', 'resolucion_solo.v1',
+  'resolucion_copy_base.v1', 'resolucion_laminas.v1', 'resolucion_copy_kit.v1', 'resolucion_estructura.v1', 'resolucion_solo.v1', 'autorevision.v1',
 ] as const
 /** quién puede hacer cumplir una regla de indicación */
 export const APLICADORES_DE_CODIGO = [
@@ -87,6 +89,19 @@ export function validarPlantilla(p: Plantilla): string[] {
       if (!en(ESQUEMAS_REGISTRADOS, s.salida.esquema)) e.push(`${d}: esquema «${s.salida.esquema}» no registrado`)
       if (![0, 1].includes(s.salida.reintento_formato)) e.push(`${d}: reintento_formato debe ser 0 o 1`)
     } else if (s.tipo === 'agente' || s.tipo === 'externo') e.push(`${d}: todo paso de agente lleva contrato de salida (el formato lo hace cumplir el código)`)
+    // el segundo cerebro: una auto-revisión revisa un paso ANTERIOR del MISMO agente y deja su entrega en el MISMO artefacto (así, si algo choca, la pieza corregida reemplaza a la original); y solo ella usa el esquema «autorevision.v1»
+    if (s.revisa !== undefined) {
+      const k = p.pasos.findIndex((x) => x.clave === s.revisa)
+      if (k < 0 || k >= i) e.push(`${d}: revisa «${s.revisa}», que no es un paso anterior`)
+      else {
+        const r = p.pasos[k]
+        if (r.tipo !== 'agente') e.push(`${d}: solo se auto-revisa un paso de agente («${r.clave}» es de tipo ${r.tipo})`)
+        if (r.quien !== s.quien) e.push(`${d}: la auto-revisión la hace el mismo agente que hizo el paso («${r.quien}», no «${s.quien}»)`)
+        if (r.salida_artefacto !== s.salida_artefacto) e.push(`${d}: debe dejar su entrega en el mismo artefacto que «${r.clave}» («${r.salida_artefacto}»)`)
+      }
+      if (s.tipo !== 'agente') e.push(`${d}: la auto-revisión es un paso de agente`)
+    }
+    if ((s.salida?.esquema === 'autorevision.v1') !== (s.revisa !== undefined)) e.push(`${d}: el esquema «autorevision.v1» y el campo revisa van juntos`)
     for (const v of s.valida ?? []) if (!en(VALIDADORES_REGISTRADOS, v)) e.push(`${d}: validador «${v}» no registrado`)
     if (s.ronda !== undefined && (![1, 2].includes(s.ronda) || (lim && s.ronda > lim.max_rondas))) e.push(`${d}: ronda fuera de rango`)
     if (s.vuelve_a) {
