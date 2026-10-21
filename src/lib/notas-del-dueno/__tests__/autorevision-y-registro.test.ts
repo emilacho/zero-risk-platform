@@ -223,7 +223,7 @@ describe('el puerto de notas de la oficina real', () => {
     db.semilla('notas_del_dueno', [
       ...Array.from({ length: 60 }, (_, i) => f(`g${i}`, 'otro', 'general', 100 + i)),   // 60 generales ajenas, MÁS NUEVAS que las propias
       ...Array.from({ length: 5 }, (_, i) => f(`p${i}`, CLIENTE, 'cliente', i)),
-      f('mia-general', CLIENTE, 'general', 50),                                            // una general MÍA sale en las dos lecturas: debe contarse una sola vez
+      f('mia-general', CLIENTE, 'general', 500),                                            // una general MÍA sale en las dos lecturas: debe contarse una sola vez
     ])
     const notas = await leerNotas(db, CLIENTE)
     expect(notas.filter((n) => n.client_id === CLIENTE)).toHaveLength(6)                  // las 5 propias y mi general están
