@@ -522,6 +522,17 @@ describe('las rutas de Slack también reintentan lo pendiente (la siguiente vuel
     expect(posts[0]).toMatchObject({ respuesta: 'Prefiero frases cortas', tema: 'oficina creativa · pieza 11111111', acumula: true })
     expect(dbRutas.tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'enviada', intentos: 1 })
   })
+  it('D2 · los puertos reales (los de los clics y comentarios) llevan la bandera: encendida, la respuesta del propio comentario dice «enviada»; apagada, «pendiente»', async () => {
+    const { puertosReales } = await import('@/lib/notas-del-dueno/ruta')
+    dbRutas.tablas['notas_del_dueno_envios'] = []; dbRutas.tablas['notas_del_dueno'] = []
+    dbRutas.semilla('hitl_queue', [{ id: HITL, client_id: C1, type: 'content_piece_review', status: 'pending', title: 'Post del lunes', output_id: null, metadata: { familia: 'post_img', slack: { canal: 'C0C7XUKNCLS', ts: '1792575000.000100' } } }])
+    const comentario = (ts: string) => ({ tipo: 'comentar' as const, canal: 'C0C7XUKNCLS', hilo_ts: '1792575000.000100', ts, autor: EMILIO, texto: 'Prefiero frases cortas' })
+    const encendido = await procesar(puertosReales(new Request('https://app.test/x')), { autorizados: [EMILIO] }, comentario('1792575600.000001'))
+    expect(encendido.cuerpo).toMatchObject({ ok: true, cerebro: 'enviada' })
+    delete process.env.NOTAS_AL_CEREBRO
+    const apagado = await procesar(puertosReales(new Request('https://app.test/x')), { autorizados: [EMILIO] }, comentario('1792575700.000001'))
+    expect(apagado.cuerpo).toMatchObject({ ok: true, cerebro: 'pendiente' })
+  })
   it('D2 · con la bandera APAGADA el mismo comentario se registra y queda en cola, sin llamar a la puerta', async () => {
     delete process.env.NOTAS_AL_CEREBRO
     const crypto = await import('node:crypto')
