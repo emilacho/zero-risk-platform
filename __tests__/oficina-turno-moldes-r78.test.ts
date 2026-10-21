@@ -9,7 +9,8 @@ const leer = (f: string) => JSON.parse(fs.readFileSync(path.join(raiz, f), 'utf8
 const nodo = (flujo: { nodes: Array<{ name: string; parameters: { jsCode?: string } }> }) => flujo.nodes.find((n) => n.name === '② Armar el pedido')!.parameters.jsCode!
 const AsyncFunction = Object.getPrototypeOf(async function () { /* */ }).constructor as new (...a: string[]) => (...a: unknown[]) => Promise<Array<{ json: Record<string, unknown> }>>
 const ANTES = nodo(leer('scripts/worker-staging/bTbWL9lUvQCfStAz/turno-r78-ANTES.json'))
-const DESPUES = nodo(leer('scripts/worker-staging/bTbWL9lUvQCfStAz/turno-r78-ARREGLADO.json'))
+// lo vivo desde el segundo cerebro (21-oct): igual que el r78 y con el molde de la auto-revisión del productor
+const DESPUES = nodo(leer('scripts/worker-staging/bTbWL9lUvQCfStAz/turno-segundo-cerebro-ARREGLADO.json'))
 
 const KIT = '## Elementos del kit (cada uno es una lámina fija 9:16):\n- e01: historia · 2026-10-23 15:00 · tema «el plato» · pilar «plato»\n- e02: estado · sin fecha · tema «cómo pedir» · pilar «entrega»\n\n## Fotos reales candidatas\n- (ninguna)'
 const CARRUSEL = '## Roles de lámina posibles (el ref de una imagen es un rol): hook, problem, reframe, proof, social-proof, benefit, objection, cta, cierre\n\n## Fotos reales candidatas\n- (ninguna)'
@@ -29,7 +30,7 @@ describe('turno de la oficina · moldes del modelo simulado (modo seco)', () => 
     ['visual_direction.v1', ''], ['prompts.v1', ''], ['observacion_imagen.v1', MIRAR], ['pieza_post.v1', ''], ['fichas.v1', ''], ['resolucion.v1', ''],
     ['direccion_imagenes.v1', KIT], ['direccion_imagenes.v1', CARRUSEL], ['prompts_por_ref.v1', GENERAR_KIT], ['prompts_por_ref.v1', GENERAR_CARRUSEL], ['observacion_imagenes.v1', MIRAR],
     ['copy_base.v1', CARRUSEL], ['laminas.v1', CARRUSEL], ['estructura.v1', KIT], ['copy_kit.v1', KIT],
-    ['resolucion_solo.v1', ''], ['resolucion_copy_base.v1', ''], ['resolucion_copy_kit.v1', ''], ['resolucion_estructura.v1', ''], ['resolucion_laminas.v1', ''],
+    ['autorevision.v1', ''], ['resolucion_solo.v1', ''], ['resolucion_copy_base.v1', ''], ['resolucion_copy_kit.v1', ''], ['resolucion_estructura.v1', ''], ['resolucion_laminas.v1', ''],
   ]
   it.each(CASOS)('«%s» (%#): el molde pasa el contrato de formato de la oficina', async (esquema, task) => {
     const r = await pedir(DESPUES, esquema, task)

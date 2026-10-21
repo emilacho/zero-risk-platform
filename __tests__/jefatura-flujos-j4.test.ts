@@ -117,10 +117,12 @@ describe('② Armar el pedido · moldes del modelo simulado', () => {
   const CARRUSEL = '## Roles de lámina posibles (el ref de una imagen es un rol): hook, problem, reframe, proof, social-proof, benefit, objection, cta, cierre'
   const FICHAS = '- [jefe-3-0] (bloquea) en texto: algo · contra: manual · propuesta: cambia\n- [jefe-3-1] (sugerencia) en imagen: otro · contra: brief · propuesta: ajusta'
   const NUEVOS = ['resolucion_objeto.v1', 'resolucion_parcial.v1', 'resolucion_plan.v1']
+  // la opinión libre de GPT va dentro de la ruta; la auto-revisión del productor (segundo cerebro) es SOLO de la oficina: la jefatura nunca la recibe (ni ve las notas del dueño), así que su flujo no lleva molde
+  const SIN_MOLDE_EN_LA_JEFATURA = ['opinion_libre.v1', 'autorevision.v1']
   const codigoArmar = fs.readFileSync(path.join(DIR, 'turno-n1-armar.js'), 'utf8')
 
   it('todo esquema de la oficina (menos la opinión libre de GPT, que va dentro de la ruta) tiene molde válido contra SU contrato de formato', () => {
-    for (const esquema of Object.keys(ESQUEMAS).filter((k) => k !== 'opinion_libre.v1')) {
+    for (const esquema of Object.keys(ESQUEMAS).filter((k) => !SIN_MOLDE_EN_LA_JEFATURA.includes(k))) {
       const task = ['direccion_imagenes.v1', 'estructura.v1', 'copy_kit.v1'].includes(esquema) ? KIT : esquema === 'prompts_por_ref.v1' ? `${KIT}\n\n## Imágenes que hay que GENERAR (ref → para qué)\n- e01: el plato` : esquema.startsWith('observacion') ? 'imagen 1: índice 0' : esquema === 'laminas.v1' || esquema === 'copy_base.v1' ? CARRUSEL : FICHAS
       const r = armar({ esquema, task })
       expect(r[0].simulado, esquema).toBe(true); expect(r[0].resultado_body.error, esquema).toBeUndefined()
@@ -135,7 +137,7 @@ describe('② Armar el pedido · moldes del modelo simulado', () => {
     const buscar = (dir: string): string[] => (fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? buscar(path.join(dir, d.name)) : d.name.endsWith('.ts') && !d.name.endsWith('.test.ts') ? [path.join(dir, d.name)] : [])) : [])
     const nombrados = new Set<string>(NUEVOS)
     for (const f of buscar(path.join(process.cwd(), 'src/lib/jefatura/revision'))) for (const m of fs.readFileSync(f, 'utf8').matchAll(/'((?:[a-z]+_)*[a-z]+\.v\d+)'/g)) nombrados.add(m[1])
-    for (const k of Object.keys(ESQUEMAS)) if (k !== 'opinion_libre.v1') nombrados.add(k)
+    for (const k of Object.keys(ESQUEMAS)) if (!SIN_MOLDE_EN_LA_JEFATURA.includes(k)) nombrados.add(k)
     const sinMolde = [...nombrados].filter((k) => !codigoArmar.includes(`'${k}'`))
     expect(sinMolde).toEqual([])
   })
