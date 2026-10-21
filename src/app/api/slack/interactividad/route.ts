@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { interpretarInteractividad, payloadDeInteractividad } from '@/lib/notas-del-dueno/interpretar'
 import { procesar } from '@/lib/notas-del-dueno/recibir'
-import { configuracionReal, encendido, firmaDeLaPeticion, puertosReales } from '@/lib/notas-del-dueno/ruta'
+import { configuracionReal, encendido, firmaDeLaPeticion, puertosReales, reintentarLosPendientes } from '@/lib/notas-del-dueno/ruta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -26,6 +26,7 @@ export async function POST(request: Request) {
       const donde = 'canal' in intencion && 'ts' in intencion && intencion.canal && intencion.ts ? { canal: intencion.canal, ts: intencion.ts } : null
       if (r.aviso && donde) await P.responderEnHilo(donde.canal, donde.ts, r.aviso)
     } catch { /* el reintento de Slack o un nuevo clic lo repite: todo es idempotente */ }
+    await reintentarLosPendientes(request) // la siguiente vuelta: lo que el cerebro no recibió antes
   })()
   waitUntil(trabajo)
   return new NextResponse(null, { status: 200 })

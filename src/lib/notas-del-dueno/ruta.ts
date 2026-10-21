@@ -4,7 +4,7 @@
  */
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { verificarFirmaDeSlack } from './firma-slack'
-import { puertosDeNotas } from './adaptadores'
+import { puertosDeNotas, reintentarPendientes } from './adaptadores'
 import type { ConfiguracionDeNotas, PuertosDeNotas } from './tipos'
 
 export const encendido = (): boolean => process.env.NOTAS_DEL_DUENO === '1'
@@ -18,6 +18,13 @@ export function firmaDeLaPeticion(request: Request, cuerpo: string) {
 }
 
 export function configuracionReal(): ConfiguracionDeNotas { return { autorizados: autorizadosDelEntorno() } }
+
+export const entornoDeNotas = (request: Request) => ({ baseUrl: new URL(request.url).origin, internalKey: process.env.INTERNAL_API_KEY ?? '', slackToken: process.env.SLACK_BOT_TOKEN })
+
+/** la siguiente vuelta: sube al cerebro las notas que quedaron pendientes. Nunca lanza. */
+export async function reintentarLosPendientes(request: Request) {
+  try { return await reintentarPendientes(getSupabaseAdmin(), entornoDeNotas(request)) } catch (e) { return { intentadas: 0, enviadas: 0, siguen: 0, rechazadas: 0, error: e instanceof Error ? e.message : String(e) } }
+}
 
 export function puertosReales(request: Request): PuertosDeNotas {
   return puertosDeNotas(getSupabaseAdmin(), { baseUrl: new URL(request.url).origin, internalKey: process.env.INTERNAL_API_KEY ?? '', slackToken: process.env.SLACK_BOT_TOKEN })

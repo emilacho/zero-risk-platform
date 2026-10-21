@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { interpretarEvento } from '@/lib/notas-del-dueno/interpretar'
 import { procesar } from '@/lib/notas-del-dueno/recibir'
-import { configuracionReal, encendido, firmaDeLaPeticion, puertosReales } from '@/lib/notas-del-dueno/ruta'
+import { configuracionReal, encendido, firmaDeLaPeticion, puertosReales, reintentarLosPendientes } from '@/lib/notas-del-dueno/ruta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,6 +23,6 @@ export async function POST(request: Request) {
   if (!encendido()) return NextResponse.json({ error: 'apagado' }, { status: 503 })
   const P = puertosReales(request)
   const cfg = configuracionReal()
-  waitUntil((async () => { try { await procesar(P, cfg, intencion) } catch { /* el comentario se vuelve a escribir: la nota es idempotente */ } })())
+  waitUntil((async () => { try { await procesar(P, cfg, intencion) } catch { /* el comentario se vuelve a escribir: la nota es idempotente */ } await reintentarLosPendientes(request) })())
   return new NextResponse(null, { status: 200 })
 }
