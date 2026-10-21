@@ -7,7 +7,8 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
-import { interruptoresDelEntorno, RAZONAMIENTO_DEL_PULIDO, TOPE_DEL_PULIDO_APARTE_USD } from '@/lib/portero-alimenta/datos'
+import { interruptoresDelEntorno, RAZONAMIENTO_DEL_PULIDO, TOPE_DEL_PULIDO_APARTE_USD, umbralesDeGastoDelEntorno } from '@/lib/portero-alimenta/datos'
+import { avisarAAlertas } from '@/lib/portero-alimenta/avisos'
 import { agenteDelRoster } from '@/lib/portero-alimenta/entorno'
 import { AGENTE_DEL_PULIDO } from '@/lib/portero-alimenta/resumen-pulido'
 import { rutaPulir } from '@/lib/portero-alimenta/pulido-aparte'
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
     const origen = new URL(request.url).origin
     const llave = process.env.INTERNAL_API_KEY ?? ''
     const r = await rutaPulir({
-      db, interruptores: interruptoresDelEntorno(),
+      db, interruptores: interruptoresDelEntorno(), avisar: avisarAAlertas(), umbrales: umbralesDeGastoDelEntorno(),
       pulirResumen: real ? agenteDelRoster({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, agente: AGENTE_DEL_PULIDO, topeUsd: TOPE_DEL_PULIDO_APARTE_USD, plazoMs: PLAZO_DEL_AGENTE_MS, razonamiento: RAZONAMIENTO_DEL_PULIDO }) : undefined,
     }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })

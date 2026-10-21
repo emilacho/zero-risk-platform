@@ -13,7 +13,7 @@ import { resumirTexto } from './resumen'
 import { type DecisionAtada, type DecisionDelDueno, type Estado, type EstadoDeFuente, type Ficha, type NombreDeFuente, type Origen, pesoDeTexto } from './tipos'
 import { derivarVersiones } from './versiones'
 import { avisoDeProvisionales } from '../manual/lectura'
-import { AVISO_DE_HORARIO_POR_ABRIR, estadoDeLasSedes, esLineaDeHorarioOAtencion } from '../sedes/por-abrir'
+import { AVISO_DE_HORARIO_CERRADA, AVISO_DE_HORARIO_POR_ABRIR, estadoDeLasSedes, esLineaDeHorarioOAtencion } from '../sedes/por-abrir'
 
 export interface Contexto {
   consulta: Consulta
@@ -226,7 +226,7 @@ export async function leerSedes(ctx: Contexto): Promise<Salida> {
   if (s.error) { fuentes.sedes = { estado: 'error_de_lectura', n: 0, detalle: s.error }; fallidas++ } else {
     for (const f of s.filas) clavePorSede.set(String(f.id), texto(f.clave) ?? String(f.id))
     const ls = s.filas.map((f) => linea(ctx, {
-      ref: `client_sedes:${f.id}`, estante: 'E2', clase: 'sede', titulo: `Sede ${texto(f.clave) ?? ''}`.trim(), que_es: `Sede · ciudad ${texto(f.ciudad) ?? 'sin declarar'}${estados.get(texto(f.clave) ?? '') === 'por_abrir' ? ' · POR ABRIR (' + AVISO_DE_HORARIO_POR_ABRIR + ')' : ''}`,
+      ref: `client_sedes:${f.id}`, estante: 'E2', clase: 'sede', titulo: `Sede ${texto(f.clave) ?? ''}`.trim(), que_es: `Sede · ciudad ${texto(f.ciudad) ?? 'sin declarar'}${estados.get(texto(f.clave) ?? '') === 'por_abrir' ? ' · POR ABRIR (' + AVISO_DE_HORARIO_POR_ABRIR + ')' : estados.get(texto(f.clave) ?? '') === 'cerrada' ? ' · CERRADA (' + AVISO_DE_HORARIO_CERRADA + ')' : ''}`,
       origen: 'su_fuente', estado: 'visto_en_su_fuente', fecha: iso(f.updated_at) ?? iso(f.created_at), plazo: 'sin_plazo', sede: texto(f.clave),
     }))
     lineas.push(...ls); fuentes.sedes = estadoDeFuente(ls.length)
@@ -246,7 +246,7 @@ export async function leerSedes(ctx: Contexto): Promise<Salida> {
       const sede = f.sede_id ? clavePorSede.get(String(f.sede_id)) ?? null : null
       const plazo: ClaseDePlazo = campo === 'horario' ? 'precio_oferta_horario' : fuente === 'mapas' ? 'ficha_mapas_propia' : 'catalogo_y_direccion'
       ld.push(linea(ctx, {
-        ref: `client_sede_datos:${f.id}`, estante: 'E2', clase: 'dato_de_sede', titulo: `${campo} · ${sede ?? 'cuenta'} · ${fuente}`, que_es: `${texto(f.valor_texto) ?? ''}${sede && estados.get(sede) === 'por_abrir' && (campo === 'horario' || campo === 'atencion' || campo === 'tipo_de_atencion' || esLineaDeHorarioOAtencion(texto(f.valor_texto) ?? '')) ? ' — ' + AVISO_DE_HORARIO_POR_ABRIR : ''}`,
+        ref: `client_sede_datos:${f.id}`, estante: 'E2', clase: 'dato_de_sede', titulo: `${campo} · ${sede ?? 'cuenta'} · ${fuente}`, que_es: `${texto(f.valor_texto) ?? ''}${sede && (estados.get(sede) === 'por_abrir' || estados.get(sede) === 'cerrada') && (campo === 'horario' || campo === 'atencion' || campo === 'tipo_de_atencion' || esLineaDeHorarioOAtencion(texto(f.valor_texto) ?? '')) ? ' — ' + (estados.get(sede) === 'cerrada' ? AVISO_DE_HORARIO_CERRADA : AVISO_DE_HORARIO_POR_ABRIR) : ''}`,
         origen: fuente === 'dueno' ? 'dueno' : 'su_fuente', estado: fuente === 'dueno' ? 'dicho_por_dueno' : 'visto_en_su_fuente',
         // la vigencia corre desde la lectura MÁS NUEVA: si se volvió a leer y seguía igual, no vence por haber sido visto hace tiempo
         fecha: masNueva(iso(f.observado_en), iso(f.reconfirmado_en)), plazo, sede, observaciones_anteriores: orden.length - 1,
