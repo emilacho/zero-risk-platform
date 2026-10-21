@@ -176,3 +176,15 @@ describe('el informe de costos anota los pedidos por la oficina que pidió', () 
     expect(r.body.pedidos_por_oficina).toEqual([{ oficina: 'planeacion', pedidos: 2, costo_usd: 0.3 }, { oficina: 'oficina-financiera', pedidos: 1, costo_usd: 0.05 }])
   })
 })
+
+describe('consultar no devuelve el resumen vivo (es un derivado de las demás fichas) salvo que se pida su clase', () => {
+  it('una pregunta por palabras trae la ficha concreta, no el resumen', async () => {
+    const c = DIEZ_CLIENTES[0]
+    const t = mundo(c, [F(c, { clase: 'resumen_vivo', atributo: 'resumen:cliente', titulo: 'Resumen vivo', contenido: 'plato del dia precio horario sede todo junto' }), F(c, { clase: 'precio', atributo: 'precio:plato', contenido: 'plato del dia 8 00 usd' })])
+    const db = crearBaseFalsa(t as never).db as never
+    const r = await rutaConsultar({ db, ahora: AHORA }, { client_id: c.id, oficina: 'o', agente: 'a', que: 'precio del plato del dia' })
+    expect((r.body as { resultados: Array<{ clase: string }> }).resultados.map((x) => x.clase)).toEqual(['precio'])
+    const pedido = await rutaConsultar({ db, ahora: AHORA }, { client_id: c.id, oficina: 'o', agente: 'a', clase: 'resumen_vivo' })
+    expect((pedido.body as { resultados: Array<{ clase: string }> }).resultados.map((x) => x.clase)).toEqual(['resumen_vivo'])
+  })
+})
