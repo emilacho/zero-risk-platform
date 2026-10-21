@@ -1,0 +1,418 @@
+{
+  "id": "bumUtObuaFdQJU0Q",
+  "name": "Zero Risk — Brain Daily Re-index (Cron 3am UTC · Sprint 8D)",
+  "description": null,
+  "active": true,
+  "activeVersionId": "7418adb0-60cb-4443-ba61-c5718c0fe42c",
+  "createdAt": "2026-05-25T07:20:48.734Z",
+  "updatedAt": "2026-05-25T07:20:48.734Z",
+  "isArchived": false,
+  "versionId": "7418adb0-60cb-4443-ba61-c5718c0fe42c",
+  "versionCounter": 4,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "id": "cron-trigger",
+      "name": "Daily 3am UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "call-reindex-stale",
+      "name": "POST /api/brain/reindex-stale",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/brain/reindex-stale",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"dry_run\": false,\n  \"max_per_table\": 10\n}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "log-result",
+      "name": "Log result (Slack on errors)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.total_errors }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "notify-slack",
+      "name": "Notify Slack on errors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        220
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/brain/alimentar/alarma",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dry_run: false, clave: 'cerebro:reindex-diario-con-errores', texto: '🔴 Cerebro · el re-indexado diario terminó con errores · detectados=' + $json.total_detected + ' reindexados=' + $json.total_reindexed + ' errores=' + $json.total_errors }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "success-end",
+      "name": "Success path (no-op)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        960,
+        380
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Daily 3am UTC": {
+      "main": [
+        [
+          {
+            "node": "POST /api/brain/reindex-stale",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /api/brain/reindex-stale": {
+      "main": [
+        [
+          {
+            "node": "Log result (Slack on errors)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log result (Slack on errors)": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack on errors",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Success path (no-op)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {
+    "node:Daily 3am UTC": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "bumUtObuaFdQJU0Q",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "updatedAt": "2026-04-18T13:51:26.012Z"
+      },
+      "createdAt": "2026-05-25T07:20:48.734Z",
+      "updatedAt": "2026-05-25T07:20:48.734Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "7418adb0-60cb-4443-ba61-c5718c0fe42c",
+    "workflowId": "bumUtObuaFdQJU0Q",
+    "nodes": [
+      {
+        "id": "cron-trigger",
+        "name": "Daily 3am UTC",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          240,
+          300
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 3 * * *"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "call-reindex-stale",
+        "name": "POST /api/brain/reindex-stale",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          480,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/brain/reindex-stale",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.INTERNAL_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"dry_run\": false,\n  \"max_per_table\": 10\n}",
+          "options": {
+            "timeout": 60000
+          }
+        }
+      },
+      {
+        "id": "log-result",
+        "name": "Log result (Slack on errors)",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          720,
+          300
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.total_errors }}",
+                "rightValue": 0,
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "notify-slack",
+        "name": "Notify Slack on errors",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          960,
+          220
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://zero-risk-platform.vercel.app/api/stubs/slack-webhook' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"text\": \"Brain daily re-index encountered errors · detected={{ $json.total_detected }} reindexed={{ $json.total_reindexed }} errors={{ $json.total_errors }} · review summary\"\n}",
+          "options": {
+            "timeout": 10000
+          }
+        }
+      },
+      {
+        "id": "success-end",
+        "name": "Success path (no-op)",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          960,
+          380
+        ],
+        "parameters": {}
+      }
+    ],
+    "connections": {
+      "Daily 3am UTC": {
+        "main": [
+          [
+            {
+              "node": "POST /api/brain/reindex-stale",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "POST /api/brain/reindex-stale": {
+        "main": [
+          [
+            {
+              "node": "Log result (Slack on errors)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Log result (Slack on errors)": {
+        "main": [
+          [
+            {
+              "node": "Notify Slack on errors",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Success path (no-op)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-05-25T07:20:48.734Z",
+    "updatedAt": "2026-05-25T07:20:48.734Z",
+    "workflowPublishHistory": [
+      {
+        "id": 1024,
+        "workflowId": "bumUtObuaFdQJU0Q",
+        "versionId": "7418adb0-60cb-4443-ba61-c5718c0fe42c",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-05-25T07:20:49.247Z"
+      }
+    ]
+  }
+}
