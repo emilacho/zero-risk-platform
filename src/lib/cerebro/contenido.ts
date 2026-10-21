@@ -49,10 +49,10 @@ const LEIBLES: Record<string, Leible> = {
     columnas: ['id', 'caption', 'producto', 'posted_at', 'post_url', 'url', 'medio', 'tipo', 'que_muestra', 'producto_visto'],
     texto: (f) => [
       `Tipo: ${cadena(f.medio) ?? cadena(f.tipo) ?? 'imagen'}`,
-      `Texto de la publicación: ${cadena(f.caption) ?? '(sin texto)'}`,
-      `Producto: ${lista(f.producto).join(', ') || 'no declarado'}`,
-      `Publicada el ${fecha(f.posted_at)}`,
-      `Enlace de la publicación: ${cadena(f.post_url) ?? 'sin enlace'}`,
+      // una copia que no viene de una publicación (logo o foto del sitio, de Mapas, archivo del dueño) no habla de «la publicación»
+      ...(cadena(f.post_url) || String(f.tipo ?? '').startsWith('post_')
+        ? [`Texto de la publicación: ${cadena(f.caption) ?? '(sin texto)'}`, `Producto: ${lista(f.producto).join(', ') || 'no declarado'}`, `Publicada el ${fecha(f.posted_at)}`, `Enlace de la publicación: ${cadena(f.post_url) ?? 'sin enlace'}`]
+        : [`Texto asociado: ${cadena(f.caption) ?? '(sin texto)'}`, `Producto: ${lista(f.producto).join(', ') || 'no declarado'}`]),
       `Archivo: ${cadena(f.url) ?? 'sin archivo'}`,
       ...(cadena(f.que_muestra) ? [`Qué muestra (etiquetador): ${f.que_muestra}`] : []),
       ...(lista(f.producto_visto).length ? [`Producto visto: ${lista(f.producto_visto).join(', ')}`] : []),

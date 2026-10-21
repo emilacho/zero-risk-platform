@@ -30,7 +30,7 @@ export interface DepsDeNoCorrio extends DepsDeRutas {
   /** lee si el flujo está activo en n8n; en pruebas es un molde */
   estadoDelFlujo?: (workflowId: string) => Promise<EstadoDelFlujo>
   /** manda UNA línea a #alertas; ok solo si el canal confirmó */
-  avisar?: (texto: string) => Promise<{ ok: boolean; detalle: string }>
+  avisar?: (texto: string, clave?: string) => Promise<{ ok: boolean; detalle: string }>
 }
 
 export interface VeredictoDeNoCorrio { client_id: string; nombre: string | null; veredicto: 'corrio' | 'ya_avisado' | 'no_corrio' | 'sin_corrida_en_racha' | 'no_pude_comprobar'; linea?: string; dias_sin_corrida?: number }
@@ -94,7 +94,7 @@ export async function rutaNoCorrio(deps: DepsDeNoCorrio, cuerpo: { dry_run?: boo
   if (dry) return { status: 200, body: { ...body, nota: 'dry_run: no se avisó' } }
   // UNA línea por revisión (si hay varios clientes, se juntan en un solo mensaje)
   const texto = lineas.length === 1 ? lineas[0] : `${lineas[0]} (+${lineas.length - 1} más)`
-  const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+  const av = deps.avisar ? await deps.avisar(texto, `no-corrio:${dia}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
   body.aviso = { ...av, texto }
   return { status: av.ok ? 200 : 502, body }
 }

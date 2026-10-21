@@ -11,8 +11,8 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { modeloRegistrado, puenteAlIndice } from '@/lib/portero-alimenta/entorno'
-import { rutaLeerPedido, rutaPedido } from '@/lib/portero-alimenta/pedidos'
-import { buscarReal, dispararCadenaReal, leerPaginaReal } from '@/lib/portero-alimenta/pedidos-entorno'
+import { ANFITRIONES_DE_AVISO_POR_OMISION, rutaLeerPedido, rutaPedido } from '@/lib/portero-alimenta/pedidos'
+import { avisoReal, buscarReal, dispararCadenaReal, leerPaginaReal } from '@/lib/portero-alimenta/pedidos-entorno'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -40,6 +40,8 @@ export async function POST(request: Request) {
       puente: real ? puenteAlIndice({ origen, llaveInterna: llave, db }) : undefined,
       segundoPlano: real ? (t) => waitUntil(t) : undefined,
       topePorPedidoUsd: num('PORTERO_PEDIDO_TOPE_USD'), topePorOficinaYDiaUsd: num('PORTERO_PEDIDO_TOPE_OFICINA_DIA_USD'),
+      enviarAviso: real ? avisoReal(llave) : undefined,
+      anfitrionesDeAviso: [...ANFITRIONES_DE_AVISO_POR_OMISION, ...String(process.env.PORTERO_AVISAR_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean)],
     }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {

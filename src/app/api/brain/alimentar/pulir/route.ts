@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     const origen = new URL(request.url).origin
     const llave = process.env.INTERNAL_API_KEY ?? ''
     const r = await rutaPulir({
-      db, interruptores: interruptoresDelEntorno(), avisar: avisarAAlertas(), umbrales: umbralesDeGastoDelEntorno(),
+      db, interruptores: interruptoresDelEntorno(), avisar: avisarAAlertas({ db }), umbrales: umbralesDeGastoDelEntorno(),
       pulirResumen: real ? agenteDelRoster({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, agente: AGENTE_DEL_PULIDO, topeUsd: TOPE_DEL_PULIDO_APARTE_USD, plazoMs: PLAZO_DEL_AGENTE_MS, razonamiento: RAZONAMIENTO_DEL_PULIDO }) : undefined,
     }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })

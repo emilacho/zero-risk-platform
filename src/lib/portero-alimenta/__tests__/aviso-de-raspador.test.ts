@@ -59,10 +59,10 @@ describe('aviso de raspador', () => {
     expect(r.status).toBe(200)
     expect(JSON.parse(visto[0].body).channel).toBe(CANAL_DE_ALERTAS)
   })
-  it('la ruta exige la llave interna y no toca la base ni un modelo', () => {
+  it('la ruta exige la llave interna, solo anota el incidente en la base (nada más) y no llama a un modelo', () => {
     const src = fs.readFileSync(path.join(process.cwd(), 'src/app/api/brain/alimentar/aviso-de-raspador/route.ts'), 'utf8')
     expect(src).toMatch(/checkInternalKey/)
-    expect(src.replace(/\/\*[\s\S]*?\*\//, '')).not.toMatch(/getSupabaseAdmin|agenteDelRoster|apify/i)
+    expect(src.replace(/\/\*[\s\S]*?\*\//, '')).not.toMatch(/agenteDelRoster|apify|\.from\(/i) // la base solo entra como el almacén de incidentes de Slack (`avisarAAlertas({ db })`)
     const lib = fs.readFileSync(path.join(process.cwd(), 'src/lib/portero-alimenta/aviso-de-raspador.ts'), 'utf8')
     expect(lib.replace(/\/\*[\s\S]*?\*\//, '')).not.toMatch(/\bfetch\(|supabase/i)
   })

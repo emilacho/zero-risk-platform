@@ -45,6 +45,10 @@ export const MAX_FICHAS_CANDIDATAS = 8
 export const VIGENCIA_DE_LO_HALLADO_DIAS = 30
 export const HORAS_PARA_NO_REPETIR_UN_PEDIDO = 24
 export const AGENTE_BASE = 'portero-del-cerebro'
+/** AVISO AL TERMINAR (21-oct): a qué anfitriones se puede avisar (DATO; se amplía con `PORTERO_AVISAR_HOSTS`, separados por coma). El aviso lleva la llave interna: SOLO a casas conocidas. */
+export const ANFITRIONES_DE_AVISO_POR_OMISION = ['n8n-production-72be.up.railway.app', 'zero-risk-platform.vercel.app']
+/** intentos del aviso y la espera antes de cada uno (ms): el primero es inmediato; si falla se reintenta, y si nunca llega queda constancia (GET …/pedido?id= sigue sirviendo) */
+export const ESPERAS_DEL_AVISO_MS = [0, 2_000, 6_000]
 const DIA_MS = 86_400_000
 
 export interface Hueco { fuente?: string; tipo?: string; objetivo?: string; motivo?: string }
@@ -55,6 +59,10 @@ export interface PedidoNormalizado {
   pedido_por: { oficina: string; agente: string }
   para: string
   pedido_id: string | null
+  /** URL del flujo de quien pidió: al terminar se le avisa con UN POST */
+  avisar_a: string | null
+  /** id del encargo/paso de quien pidió: vuelve tal cual en el aviso */
+  ref_de_quien_pide: string | null
   dry_run: boolean
   workflow_id: string
   workflow_execution_id: string
@@ -108,7 +116,9 @@ export function normalizarPedido(cuerpo: unknown): Respuesta | PedidoNormalizado
   if (huecos.length > MAX_HUECOS_POR_PEDIDO) return err(400, 'entrada_invalida', `hasta ${MAX_HUECOS_POR_PEDIDO} huecos por pedido`)
   const pid = txt(b.pedido_id)
   if (pid && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pid)) return err(400, 'entrada_invalida', '`pedido_id` debe ser un uuid si se manda')
-  return { client_id: v.client_id, sede_clave: txt(b.sede_clave) || null, huecos, pedido_por: { oficina: oficina.slice(0, 80), agente: agente.slice(0, 80) }, para: para.slice(0, 600), pedido_id: pid || null, dry_run: v.dry_run, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id }
+  const avisarA = txt(b.avisar_a)
+  if (avisarA && avisarA.length > 500) return err(400, 'entrada_invalida', '`avisar_a` es demasiado largo')
+  return { client_id: v.client_id, sede_clave: txt(b.sede_clave) || null, huecos, pedido_por: { oficina: oficina.slice(0, 80), agente: agente.slice(0, 80) }, para: para.slice(0, 600), pedido_id: pid || null, avisar_a: avisarA || null, ref_de_quien_pide: txt(b.ref_de_quien_pide).slice(0, 200) || null, dry_run: v.dry_run, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id }
 }
 const textoDelHueco = (h: Hueco, para: string): string => [h.fuente, h.tipo, h.objetivo, h.motivo].filter(Boolean).join(' · ') || para
 export const huellaDelPedido = (p: Pick<PedidoNormalizado, 'client_id' | 'sede_clave' | 'huecos'>): string =>
@@ -199,6 +209,35 @@ export interface DepsDePedido extends DepsDeRutas {
   segundoPlano?: (trabajo: Promise<unknown>) => void
   topePorPedidoUsd?: number
   topePorOficinaYDiaUsd?: number
+  /** UN POST a `avisar_a` con la llave interna (en pruebas, un molde) */
+  enviarAviso?: (url: string, cuerpo: Record<string, unknown>) => Promise<{ ok: boolean; http?: number; detalle: string }>
+  /** espera entre intentos del aviso (en pruebas, instantánea) */
+  esperar?: (ms: number) => Promise<void>
+  /** anfitriones a los que se puede avisar; por omisión `ANFITRIONES_DE_AVISO_POR_OMISION` */
+  anfitrionesDeAviso?: string[]
+}
+
+/** ¿se puede avisar a esta URL? https y un anfitrión permitido (el aviso lleva la llave interna) */
+export function anfitrionDeAvisoPermitido(url: string, permitidos: string[] = ANFITRIONES_DE_AVISO_POR_OMISION): boolean {
+  try { const u = new URL(url); return u.protocol === 'https:' && !u.username && !u.password && permitidos.map((h) => h.toLowerCase()).includes(u.hostname.toLowerCase()) } catch { return false }
+}
+
+export interface ConstanciaDelAviso { estado: 'entregado' | 'fallo'; intentos: Array<{ n: number; ok: boolean; http: number | null; detalle: string; en: string }>; ultimo_en: string }
+/** UN aviso (con reintentos) a quien pidió; deja constancia en el pedido. Nunca lanza: un aviso que no llega no cambia el pedido. */
+export async function avisarDelPedido(deps: DepsDePedido, pedidoId: string, url: string, cuerpo: Record<string, unknown>): Promise<ConstanciaDelAviso> {
+  const intentos: ConstanciaDelAviso['intentos'] = []
+  const esperar = deps.esperar ?? ((ms: number) => new Promise<void>((ok) => setTimeout(ok, ms)))
+  let entregado = false
+  for (let i = 0; i < ESPERAS_DEL_AVISO_MS.length && !entregado; i++) {
+    if (ESPERAS_DEL_AVISO_MS[i] > 0) await esperar(ESPERAS_DEL_AVISO_MS[i])
+    let r: { ok: boolean; http?: number; detalle: string }
+    try { r = deps.enviarAviso ? await deps.enviarAviso(url, cuerpo) : { ok: false, detalle: 'sin forma de enviar el aviso' } } catch (e) { r = { ok: false, detalle: e instanceof Error ? e.message : String(e) } }
+    intentos.push({ n: i + 1, ok: r.ok, http: r.http ?? null, detalle: String(r.detalle).slice(0, 200), en: new Date().toISOString() })
+    entregado = r.ok
+  }
+  const constancia: ConstanciaDelAviso = { estado: entregado ? 'entregado' : 'fallo', intentos, ultimo_en: intentos[intentos.length - 1].en }
+  try { await deps.db.from('cerebro_pedidos').update({ aviso: constancia }).eq('id', pedidoId) } catch { /* la constancia también viaja en la respuesta */ }
+  return constancia
 }
 
 /** páginas que no sirven de fuente (inicio de sesión, buscadores, redes que exigen cuenta) */
@@ -230,6 +269,7 @@ export async function rutaPedido(deps: DepsDePedido, cuerpo: unknown): Promise<R
   if (!deps.activo) return { status: 200, body: { apagado: true, detalle: 'PORTERO_PEDIDOS está apagado: no se leyó ni se escribió nada', modelos_llamados: 0 } }
   const ahora = deps.ahora ?? new Date()
   const id = deps.nuevoId ?? randomUUID
+  if (p.avisar_a && !anfitrionDeAvisoPermitido(p.avisar_a, deps.anfitrionesDeAviso)) return err(400, 'entrada_invalida', '`avisar_a` debe ser una dirección https de una casa conocida (el aviso lleva la llave interna): pide que se agregue su anfitrión a PORTERO_AVISAR_HOSTS')
   const cargado = await cargarContexto(deps, p.client_id, ahora)
   if (!cargado.ok) return cargado.r
   const ctx = cargado.c
@@ -264,7 +304,7 @@ export async function rutaPedido(deps: DepsDePedido, cuerpo: unknown): Promise<R
   const topePedido = Math.min(deps.topePorPedidoUsd ?? TOPE_POR_PEDIDO_USD, Math.max(0, topeOficina - gastoOficina), restaPortero)
 
   const pedidoId = p.pedido_id ?? id()
-  const base = { pedido_id: pedidoId, client_id: p.client_id, sede_clave: p.sede_clave, pedido_por: p.pedido_por, agente_en_roster: enRoster, para: p.para, dry_run: p.dry_run, tope_usd: r6(topePedido) }
+  const base = { pedido_id: pedidoId, client_id: p.client_id, sede_clave: p.sede_clave, pedido_por: p.pedido_por, agente_en_roster: enRoster, para: p.para, dry_run: p.dry_run, tope_usd: r6(topePedido), ...(p.avisar_a ? { avisar_a: p.avisar_a, ref_de_quien_pide: p.ref_de_quien_pide } : {}) }
   const avisos: string[] = []
   if (enRoster === false) avisos.push(`el agente «${p.pedido_por.agente}» no está en el roster: se registró igual`)
 
@@ -278,25 +318,31 @@ export async function rutaPedido(deps: DepsDePedido, cuerpo: unknown): Promise<R
       const u = await deps.db.from('cerebro_pedidos').update({ estado, resultado, costo_usd: costo, fichas, terminado_en: new Date().toISOString() }).eq('id', pedidoId)
       if (u.error) res.errores.push(`registro del pedido: ${u.error.message}`)
     }
-    return { status: res.errores.length && estado === 'fallo' ? 502 : 200, body: { ok: estado !== 'fallo', ...base, estado, costo_usd: costo, fichas, huecos: res.huecos, avisos, ...(res.cadena ? { cadena: res.cadena } : {}), errores: res.errores, modelos_llamados: res.modelos, apify_llamado: res.apify > 0 } }
+    // AL TERMINAR (resuelto, parcial, no resuelto o fallo) el portero avisa UNA vez a quien pidió: la oficina pausa y reanuda, no espera un número fijo de segundos
+    let aviso: ConstanciaDelAviso | undefined
+    if (!p.dry_run && p.avisar_a) aviso = await avisarDelPedido(deps, pedidoId, p.avisar_a, { pedido_id: pedidoId, client_id: p.client_id, estado, ref_de_quien_pide: p.ref_de_quien_pide, huecos: res.huecos, fichas })
+    return { status: res.errores.length && estado === 'fallo' ? 502 : 200, body: { ok: estado !== 'fallo', ...base, estado, costo_usd: costo, fichas, huecos: res.huecos, avisos, ...(res.cadena ? { cadena: res.cadena } : {}), errores: res.errores, modelos_llamados: res.modelos, apify_llamado: res.apify > 0, ...(aviso ? { aviso } : {}) } }
   }
 
   if (p.dry_run) {
     const r = await trabajo()
-    return { status: r.status, body: { ...r.body, nota: 'dry_run: no se registró el pedido, no se llamó a ningún modelo ni a la web y no se archivó nada; muestra qué respondería «ya está» y qué pediría' } }
+    return { status: r.status, body: { ...r.body, nota: `dry_run: no se registró el pedido, no se llamó a ningún modelo ni a la web y no se archivó nada${p.avisar_a ? ' y no se avisó a avisar_a' : ''}; muestra qué respondería «ya está» y qué pediría` } }
   }
   const ins = await deps.db.from('cerebro_pedidos').insert({
     id: pedidoId, client_id: p.client_id, sede_clave: p.sede_clave, pedido_por_oficina: p.pedido_por.oficina, pedido_por_agente: p.pedido_por.agente, agente_en_roster: enRoster, para: p.para,
     huecos: p.huecos, huella, estado: 'en_proceso', costo_usd: 0, workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id,
+    ...(p.avisar_a ? { avisar_a: p.avisar_a } : {}), ...(p.ref_de_quien_pide ? { ref_de_quien_pide: p.ref_de_quien_pide } : {}),
   })
   if (ins.error) return err(502, 'registro_fallido', `cerebro_pedidos: ${ins.error.message}`)
   const corre = trabajo().catch(async (e: unknown) => {
     await deps.db.from('cerebro_pedidos').update({ estado: 'fallo', resultado: { error: e instanceof Error ? e.message : String(e) }, terminado_en: new Date().toISOString() }).eq('id', pedidoId)
     return err(500, 'pedido_error', e instanceof Error ? e.message : String(e))
   })
-  if (deps.segundoPlano) {
+  // todo lo pedido se responde por CÓDIGO (atributo/clase ya fresco): resultado al instante, sin segundo plano y sin modelo
+  const todoPorCodigo = p.huecos.every((h) => fichasPorAtributo(h, ctx.fichas).length > 0)
+  if (deps.segundoPlano && !todoPorCodigo) {
     deps.segundoPlano(corre)
-    return { status: 200, body: { ok: true, ...base, estado: 'en_proceso', avisos, nota: 'el pedido sigue en segundo plano: consulta el resultado con GET /api/brain/alimentar/pedido?id=<pedido_id> o con /api/brain/alimentar/listo (pedido_id)' } }
+    return { status: 200, body: { ok: true, ...base, estado: 'en_proceso', avisos, nota: `el pedido sigue en segundo plano: ${p.avisar_a ? 'se avisará a avisar_a al terminar; además ' : ''}consulta el resultado con GET /api/brain/alimentar/pedido?id=<pedido_id> o con /api/brain/alimentar/listo (pedido_id)` } }
   }
   return corre
 }
@@ -475,6 +521,7 @@ export function descripcion(f: Fila): Record<string, unknown> {
     pedido_por: { oficina: f.pedido_por_oficina, agente: f.pedido_por_agente, en_roster: f.agente_en_roster ?? null },
     creado_en: f.creado_en, terminado_en: f.terminado_en ?? null, costo_usd: Number(f.costo_usd) || 0, fichas: Array.isArray(f.fichas) ? f.fichas : [],
     huecos: Array.isArray(r.huecos) ? r.huecos : f.huecos, avisos: r.avisos ?? [], ...(r.cadena ? { cadena: r.cadena } : {}),
+    ...(f.avisar_a ? { avisar_a: f.avisar_a, ref_de_quien_pide: f.ref_de_quien_pide ?? null, aviso: f.aviso ?? null } : {}),
   }
 }
 

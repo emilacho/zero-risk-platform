@@ -258,6 +258,23 @@ export async function leerSedes(ctx: Contexto): Promise<Salida> {
 }
 
 // ── fotos, portadas de video y logotipos ──────────────────────────────────────────────
+/**
+ * DE DÓNDE VIENE UNA COPIA (21-oct · manual visual «todas las fuentes»): el cerebro indexa las copias de fotos y logo PROPIOS vengan de donde vengan (Instagram, Facebook, el sitio, Mapas, archivos del dueño),
+ * también de un cliente sin sitio o sin Instagram. La fuente se deduce de lo que la propia fila dice (enlace de la publicación, tipo, cuenta); una fila sin publicación no habla de «la publicación».
+ */
+export function fuenteDeLaCopia(f: Fila): { fuente: string | null; esPublicacion: boolean } {
+  const enlace = String(texto(f.post_url) ?? '').toLowerCase()
+  const tipo = String(texto(f.tipo) ?? '').toLowerCase()
+  const esPublicacion = tipo.startsWith('post_') || enlace.length > 0
+  if (/instagram.com/.test(enlace)) return { fuente: 'Instagram', esPublicacion }
+  if (/(facebook|fb).com/.test(enlace)) return { fuente: 'Facebook', esPublicacion }
+  if (/tiktok.com/.test(enlace)) return { fuente: 'TikTok', esPublicacion }
+  if (/youtube.com|youtu.be/.test(enlace)) return { fuente: 'YouTube', esPublicacion }
+  if (/sitio|web|pagina/.test(tipo)) return { fuente: 'el sitio web', esPublicacion }
+  if (/mapa/.test(tipo)) return { fuente: 'la ficha de Mapas', esPublicacion }
+  if (/dueno|archivo|subido/.test(tipo)) return { fuente: 'un archivo del dueño', esPublicacion }
+  return { fuente: null, esPublicacion }
+}
 export async function leerFotos(ctx: Contexto): Promise<Salida> {
   const r = await leer(ctx, { tabla: 'client_social_images', columnas: ['id', 'owner_role', 'post_id', 'tipo', 'medio', 'estado', 'url', 'caption', 'posted_at', 'post_url', 'producto', 'producto_fuente', 'que_muestra', 'producto_visto', 'created_at'], donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['fotos'], r.error)
@@ -265,8 +282,9 @@ export async function leerFotos(ctx: Contexto): Promise<Salida> {
   const lineas = r.filas.map((f) => {
     const rol = porRol(f.owner_role)
     const medio = texto(f.medio)
-    const esLogo = medio === 'logo' || String(f.tipo ?? '').startsWith('logo')
-    const esVideo = medio === 'reel' || medio === 'video'
+    const esLogo = medio === 'logo' || /logo/.test(String(f.tipo ?? '').toLowerCase())
+    const esVideo = !esLogo && (medio === 'reel' || medio === 'video')
+    const origenDeLaCopia = fuenteDeLaCopia(f)
     const clase = esLogo ? 'logo' : esVideo ? 'portada_de_video' : 'foto'
     // una foto, una portada o un logo PROPIOS son archivos: no vencen (su clase propia). Lo de un competidor sigue siendo un anuncio y vence
     const plazo: ClaseDePlazo = !rol.propio ? 'anuncio_competencia' : 'archivo_propio'
@@ -285,7 +303,7 @@ export async function leerFotos(ctx: Contexto): Promise<Salida> {
     return linea(ctx, {
       ref: `client_social_images:${f.id}`, estante: rol.propio ? 'E3' : 'E5', clase,
       titulo: `${nombre} · ${(publicado ?? iso(f.created_at) ?? 'sin fecha').slice(0, 10)} · ${distintivo}`,
-      que_es: `${publicado ? `publicada el ${publicado.slice(0, 10)} · ` : ''}texto de la publicación: ${leyenda ? `«${recorte(leyenda)}»` : 'sin texto'} · producto: ${producto && producto.length ? producto.join(', ') : 'no declarado'}${queMuestra ? ` · qué muestra (según el etiquetador): ${recorte(queMuestra)}` : ''}`,
+      que_es: `${origenDeLaCopia.esPublicacion ? '' : `copia propia${origenDeLaCopia.fuente ? ` de ${origenDeLaCopia.fuente}` : ''} · `}${publicado ? `publicada el ${publicado.slice(0, 10)} · ` : ''}${origenDeLaCopia.esPublicacion ? 'texto de la publicación' : 'texto asociado'}: ${leyenda ? `«${recorte(leyenda)}»` : 'sin texto'} · producto: ${producto && producto.length ? producto.join(', ') : 'no declarado'}${queMuestra ? ` · qué muestra (según el etiquetador): ${recorte(queMuestra)}` : ''}`,
       // la vigencia es de la ÚLTIMA VERIFICACIÓN (cuando se capturó), no de la fecha en que se publicó
       origen: rol.origen, estado: rol.estado, fecha: iso(f.created_at) ?? publicado, plazo,
       // el video no se guarda: el enlace es el de la publicación (la dirección del archivo caduca)
