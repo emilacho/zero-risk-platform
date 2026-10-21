@@ -58,7 +58,8 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
   if (!lista(cl.data).length) return err(404, 'cliente_inexistente', 'no existe la ficha del cliente')
   const fi = await leerTodas(() => deps.db.from('cerebro_fichas').select('id, ref, clase, atributo, titulo, que_es, contenido, observado_en, fecha_fuente, reconfirmado_en, vigente_hasta, alcance, sede, origen, propiedad, porque, provenance_tag, descartada, retirada_en').eq('client_id', clientId).is('retirada_en', null).order('id', { ascending: true }))
   if (fi.error) return err(502, 'lectura_fallida', `cerebro_fichas: ${fi.error.message}`)
-  let filas = fi.data.filter((f) => f.descartada !== true)
+  // el resumen vivo es un derivado de las demás fichas (las junta todas en un texto): contestaría a todo y taparía la ficha concreta; solo se entrega si se pide su clase
+  let filas = fi.data.filter((f) => f.descartada !== true && (clase === 'resumen_vivo' || txt(f.clase) !== 'resumen_vivo'))
   if (sede) filas = filas.filter((f) => { const s = sedesDe(f); return !s.length || s.includes(sede) })
   const porId = new Map<string, Fila>(filas.map((f) => [String(f.id), f]))
   const cands: FichaCandidata[] = filas.map((f) => ({ id: String(f.id), ref: txt(f.ref), clase: txt(f.clase), atributo: txt(f.atributo), titulo: txt(f.titulo), contenido: txt(f.contenido) || txt(f.que_es), observado_en: f.observado_en ? String(f.observado_en) : null, vigente_hasta: f.vigente_hasta ? String(f.vigente_hasta) : null, alcance: f.alcance ? String(f.alcance) : null }))
