@@ -42,8 +42,8 @@ if (process.argv[1] && process.argv[1].endsWith('construir-piso-todas-las-fuente
   if (!entrada) { console.error('uso: node construir-piso-todas-las-fuentes.mjs <ANTES.json>'); process.exit(2) }
   const antes = JSON.parse(fs.readFileSync(entrada, 'utf8'))
   if (process.argv[3] === '--actualizar') {
-    fs.writeFileSync(join(aqui, 'cimiento-ARREGLADO-piso-tipografia-procedencia-2026-10-21.json'), JSON.stringify(actualizarPisoTodasLasFuentes(antes), null, 2))
-    console.log('escrito cimiento-ARREGLADO-piso-tipografia-procedencia-2026-10-21.json')
+    fs.writeFileSync(join(aqui, 'cimiento-ARREGLADO-piso-columnas-2026-10-21.json'), JSON.stringify(actualizarPisoTodasLasFuentes(antes), null, 2))
+    console.log('escrito cimiento-ARREGLADO-piso-columnas-2026-10-21.json')
   } else {
     fs.writeFileSync(join(aqui, 'cimiento-ARREGLADO-piso-todas-las-fuentes-2026-10-21.json'), JSON.stringify(aplicarPisoTodasLasFuentes(antes), null, 2))
     console.log('escrito cimiento-ARREGLADO-piso-todas-las-fuentes-2026-10-21.json')

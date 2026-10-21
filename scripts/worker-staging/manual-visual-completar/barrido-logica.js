@@ -21,7 +21,29 @@ var RANGO = { ausente: 0, parcial: 1, completo: 2 }
  * Qué tan completo está un bloque `visual` (v2 trae `estado`; un v1 viejo se mide por lo que tiene). Un v2 «completo» con una tipografía PROPUESTA que no es un nombre
  * real de tipografía (caso df7e47cc: «no reconocida con claridad») baja a 1: hay que volver a probar. `esTipografiaValida(nombre)` la pasa el nodo (la lógica del piso).
  */
-function rangoDeVisual(v, esTipografiaValida) {
+/**
+ * ¿Las columnas del manual (`primary_colors`, `typography`) dicen lo mismo que el bloque visual? Solo se juzgan las que ESCRIBIÓ el piso (objetos con estado y procedencia);
+ * texto plano de otra fuente o una columna vacía sin visual que la llene no se juzgan. Caso real (tick de las 19:30Z): un v3 con visual limpio heredó las columnas basura del v2.
+ */
+function columnasCoherentes(v, columnas) {
+  if (!columnas || typeof columnas !== 'object') return true
+  var cg = (v && v.capa_grafica) || {}
+  var delPiso = function (a) { return Array.isArray(a) && a.length > 0 && a.every(function (x) { return x && typeof x === 'object' && !!x.estado && !!x.procedencia }) }
+  var igual = function (a, b) { return a.slice().sort().join(',') === b.slice().sort().join(',') }
+  var colores = Array.isArray(columnas.primary_colors) ? columnas.primary_colors : []
+  if (delPiso(colores)) {
+    var hexV = (Array.isArray(cg.paleta) ? cg.paleta : []).map(function (p) { return String((p && p.color) || '').toLowerCase() })
+    if (!igual(colores.map(function (x) { return String(x.hex || '').toLowerCase() }), hexV)) return false
+  }
+  var tipos = Array.isArray(columnas.typography) ? columnas.typography : []
+  if (delPiso(tipos)) {
+    var nomV = (Array.isArray(cg.tipografias) ? cg.tipografias : []).map(function (t) { return String((t && t.nombre) || '') })
+    if (!igual(tipos.map(function (x) { return String(x.family || '') }), nomV)) return false
+  }
+  return true
+}
+
+function rangoDeVisual(v, esTipografiaValida, columnas) {
   if (!v || typeof v !== 'object') return 0
   var r
   if (v.estado && RANGO[v.estado] !== undefined) r = RANGO[v.estado]
@@ -35,6 +57,7 @@ function rangoDeVisual(v, esTipografiaValida) {
     var hayMala = tipos.some(function (t) { return t && t.estado === 'propuesta' && !esTipografiaValida(t.nombre) })
     if (hayMala) r = 1
   }
+  if (r >= 2 && !columnasCoherentes(v, columnas)) r = 1
   return r
 }
 
@@ -74,8 +97,8 @@ function decidirSiCorrer(o) {
 }
 
 /** ¿El visual nuevo es mejor que el actual? Solo así se promueve una versión nueva del manual. */
-function mejoraElVisual(antes, despues, esTipografiaValida) {
-  var a = rangoDeVisual(antes, esTipografiaValida), d = rangoDeVisual(despues, esTipografiaValida)
+function mejoraElVisual(antes, despues, esTipografiaValida, columnasAntes, columnasDespues) {
+  var a = rangoDeVisual(antes, esTipografiaValida, columnasAntes), d = rangoDeVisual(despues, esTipografiaValida, columnasDespues)
   if (d > a) return { mejora: true, motivo: 'sube de ' + a + ' a ' + d }
   var pa = antes && antes.capa_grafica && Array.isArray(antes.capa_grafica.paleta) ? antes.capa_grafica.paleta.length : 0
   var pd = despues && despues.capa_grafica && Array.isArray(despues.capa_grafica.paleta) ? despues.capa_grafica.paleta.length : 0
@@ -109,7 +132,7 @@ function listaDeClientes(valor) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    MAX_INTENTOS_POR_DIA: MAX_INTENTOS_POR_DIA, MAX_CORRIDAS_POR_DIA_TOTAL: MAX_CORRIDAS_POR_DIA_TOTAL, rangoDeVisual: rangoDeVisual, huellaDeEntradas: huellaDeEntradas,
+    MAX_INTENTOS_POR_DIA: MAX_INTENTOS_POR_DIA, MAX_CORRIDAS_POR_DIA_TOTAL: MAX_CORRIDAS_POR_DIA_TOTAL, rangoDeVisual: rangoDeVisual, columnasCoherentes: columnasCoherentes, huellaDeEntradas: huellaDeEntradas,
     hayMaterialQueProbar: hayMaterialQueProbar, decidirSiCorrer: decidirSiCorrer, mejoraElVisual: mejoraElVisual, armarCuerpoDelManual: armarCuerpoDelManual, listaDeClientes: listaDeClientes,
   }
 }

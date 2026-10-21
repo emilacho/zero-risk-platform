@@ -396,3 +396,40 @@ describe('marca ajena vista en foto (corrección de Emilio 21-oct 20:55)', () =>
   })
   it('numerosDeFoto lee «foto1», «foto 2», sin repetir', () => { expect(L.numerosDeFoto('Logo, foto1, foto 2, FOTO 2')).toEqual([1, 2]); expect(L.numerosDeFoto(undefined)).toEqual([]) })
 })
+
+describe('las columnas del manual siguen al bloque visual (tick de las 19:30Z: el v3 limpio heredó la basura del v2)', () => {
+  const basura = [{ hex: '#cc2200', rol: 'acento', estado: 'propuesta', procedencia: 'observado en foto 1' }]
+  const tiposBasura = [{ family: 'no reconocida con claridad', rol: 'cuerpo', estado: 'propuesta', procedencia: 'observado en foto 1' }]
+  const modeloBueno = { capa_grafica: { colores_observados: [{ color: '#ff4d00', rol: 'principal', donde: 'logo' }], tipografias_observadas: [] }, ...PRODUCTO }
+  it('🔴 columnas escritas por el piso en una corrida anterior se REEMPLAZAN (colores y tipografías); una tipografía que ya no hay queda vacía, no la vieja', async () => {
+    const r = await correrNodo({ copias: soloIG(3), modelo: modeloBueno, draft: { positioning: 'x', primary_colors: basura, typography: tiposBasura } })
+    const d = r.json.brand_book_draft as Record<string, any>
+    expect(d.primary_colors).toEqual([{ hex: '#ff4d00', rol: 'principal', procedencia: 'observado en logo', estado: 'propuesta' }])
+    expect(d.typography).toEqual([])
+  })
+  it('🔴 si esta corrida no encuentra colores, las columnas viejas del piso se VACÍAN (no quedan los de antes)', async () => {
+    const r = await correrNodo({ copias: soloIG(3), modelo: { capa_grafica: { colores_observados: [], tipografias_observadas: [] }, ...PRODUCTO }, draft: { primary_colors: basura, typography: tiposBasura } })
+    const d = r.json.brand_book_draft as Record<string, any>
+    expect(d.primary_colors).toEqual([]); expect(d.typography).toEqual([])
+  })
+  it('las columnas que puso otra fuente (texto plano, una persona) NO se tocan nunca', async () => {
+    const r = await correrNodo({ copias: soloIG(3), modelo: modeloBueno, draft: { primary_colors: ['#123456'], typography: ['Lato'] } })
+    const d = r.json.brand_book_draft as Record<string, any>
+    expect(d.primary_colors).toEqual(['#123456']); expect(d.typography).toEqual(['Lato'])
+  })
+  it('una columna mezclada (algún elemento no es del piso) tampoco se toca', async () => {
+    const mezcla = [...basura, '#abcdef']
+    const r = await correrNodo({ copias: soloIG(3), modelo: modeloBueno, draft: { primary_colors: mezcla } })
+    expect((r.json.brand_book_draft as Record<string, any>).primary_colors).toEqual(mezcla)
+  })
+  it('typography como objeto vacío (el valor por omisión de la base) cuenta como vacía y no se pisa con nada si el piso no tiene tipografías', async () => {
+    const r = await correrNodo({ copias: soloIG(3), modelo: modeloBueno, draft: { typography: {} } })
+    expect((r.json.brand_book_draft as Record<string, any>).typography).toEqual({})
+  })
+  it('🔴 si el visual quedó completo se quita la marca _field_meta.visual que dejó una corrida anterior; si quedó incompleto se declara', async () => {
+    const completo = await correrNodo({ copias: soloIG(3), modelo: modeloBueno, draft: { _field_meta: { positioning: { estado: 'firme' }, visual: { estado: 'provisional', motivo: 'x' } } } })
+    expect((completo.json.brand_book_draft as Record<string, any>)._field_meta).toEqual({ positioning: { estado: 'firme' } })
+    const parcial = await correrNodo({ copias: [], draft: { _field_meta: { visual: { estado: 'ausente', motivo: 'viejo' } } } })
+    expect((parcial.json.brand_book_draft as Record<string, any>)._field_meta.visual.estado).toBe('ausente')
+  })
+})
