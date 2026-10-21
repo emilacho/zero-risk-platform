@@ -46,6 +46,13 @@ async function abierto(plantilla: Plantilla = conSegundoCerebro(POST_IMG), notas
   expect(a.status).toBe(200)
   return { M, id: String(a.cuerpo.encargo_id), reg }
 }
+/** lo que ve un agente de verdad: la «entrega actual» que viene dentro del pedido de la auto-revisión */
+const entregaActual = (tarea: string): Record<string, unknown> => {
+  const desde = tarea.indexOf('Tu entrega actual:')
+  const abre = tarea.indexOf('```json', desde)
+  const cierra = tarea.indexOf('```', abre + 7)
+  return JSON.parse(tarea.slice(abre + 7, cierra))
+}
 const arte = (M: Memoria, id: string, n: string) => M.encargos.get(id)!.estado_del_motor.artefactos[n]?.datos as Record<string, any>
 const piezaFinal = (M: Memoria, id: string) => arte(M, id, 'pieza_post')
 
@@ -150,6 +157,7 @@ describe('con notas: el productor se auto-revisa', () => {
     expect(M.encargos.get(id)!.estado_del_motor.artefactos['pieza_post'].version).toBe(sola.M.encargos.get(sola.id)!.estado_del_motor.artefactos['pieza_post'].version)
     expect(reg.map((x) => [x.paso, x.choco, x.agente, x.notas_vistas])).toEqual([['autorevision_diseno', false, 'marketing_instagram_curator', ['nota-1', 'nota-2']], ['autorevision_texto', false, 'content-creator', ['nota-1', 'nota-2']]])
     expect(M.encargos.get(id)!.gasto_usd).toBeGreaterThan(sola.M.encargos.get(sola.id)!.gasto_usd) // las dos llamadas se pagan y se cuentan
+    expect(reg.map((x) => x.costo_usd)).toEqual([0.07, 0.07]) // y el rastro guarda lo que costó cada una
   })
   it('si chocó, la pieza corregida reemplaza a la original, pasa los chequeos duros y llega a la bandeja', async () => {
     const { M, id, reg } = await abierto(undefined, NOTAS)
@@ -171,8 +179,10 @@ describe('con notas: el productor se auto-revisa', () => {
   })
   it('la auto-revisión del que diseña corrige la dirección visual y lo que viene después la usa', async () => {
     const { M, id } = await abierto(undefined, NOTAS)
-    const nueva = { ...JSON.parse(direccionGenerada()), estilo: 'fotografía cálida y cercana, sin filtros' }
-    const r = await correr(M, id, guionPost({ autorevision_diseno: () => ({ texto: conChoque(nueva, 'estilo', 'nota-1') }) }), 80)
+    // como lo haría un agente de verdad: parte de la entrega que ve en el pedido y cambia solo el estilo
+    const r = await correr(M, id, guionPost({ autorevision_diseno: (_n, t) => ({ texto: conChoque({ ...entregaActual(t), estilo: 'fotografía cálida y cercana, sin filtros' }, 'estilo', 'nota-1') }) }), 80)
+    expect(r.tareas['autorevision_diseno'][0]).not.toContain('reglas_rechazadas')            // lo que el código agregó después no se le muestra al agente
+    expect(r.pasos.filter((p) => p === 'autorevision_diseno')).toHaveLength(1)               // y la corrección valió a la primera
     expect(arte(M, id, 'visual_direction').estilo).toBe('fotografía cálida y cercana, sin filtros')
     expect(r.tareas['prompts'][0]).toContain('fotografía cálida y cercana, sin filtros')   // el ingeniero de prompts ya trabaja con la dirección corregida
     expect(arte(M, id, 'visual_direction').decision).toMatchObject({ modo: 'generada' })    // los campos que el código deriva siguen ahí
@@ -180,7 +190,8 @@ describe('con notas: el productor se auto-revisa', () => {
   it('una ficha que el validador levanta de nuevo no se duplica', async () => {
     const { M, id } = await abierto(undefined, NOTAS)
     const ninguna = { ...JSON.parse(direccionGenerada()), decision: { modo: 'ninguna', motivo: 'sin imagen' } }
-    await correr(M, id, guionPost({ direccion_visual: () => ({ texto: j(ninguna) }), autorevision_diseno: () => ({ texto: conChoque({ ...ninguna, estilo: 'otro estilo' }, 'estilo', 'nota-1') }) }), 80)
+    await correr(M, id, guionPost({ direccion_visual: () => ({ texto: j(ninguna) }), autorevision_diseno: (_n, t) => ({ texto: conChoque({ ...entregaActual(t), estilo: 'otro estilo' }, 'estilo', 'nota-1') }) }), 80)
+    expect(arte(M, id, 'visual_direction').estilo).toBe('otro estilo') // la corrección SÍ valió (no es un caso vacío)
     const ids = M.encargos.get(id)!.estado_del_motor.fichas.map((f) => f.id)
     expect(ids.filter((x) => x === 'vd-ninguna')).toHaveLength(1)
     expect(new Set(ids).size).toBe(ids.length)
@@ -198,6 +209,9 @@ describe('con notas: lo que sale mal nunca rompe la entrega', () => {
     ['nombra un campo que no cambió', () => ({ texto: conChoque(CORREGIDA, 'llamado') })],
     ['dice que chocó pero entrega la misma pieza', () => ({ texto: conChoque(PIEZA) })],
     ['la pieza corregida no cumple el formato', () => ({ texto: conChoque({ pie_de_foto: 'solo texto' }) })],
+    ['cambia solo lo que nombró pero rompe el formato del campo (un pie de foto de 4.000 caracteres)', () => ({ texto: conChoque({ ...PIEZA, pie_de_foto: 'x'.repeat(4000) }) })],
+    ['cambia solo lo que nombró pero con un tipo equivocado (un número en vez de texto)', () => ({ texto: conChoque({ ...PIEZA, pie_de_foto: 12345 }) })],
+    ['trae más de 6 hallazgos', () => ({ texto: j({ choca: true, hallazgos: Array.from({ length: 7 }, () => ({ nota_id: 'nota-2', campo: 'pie_de_foto', que_choca: 'x', que_cambio: 'y' })), corregida: CORREGIDA }) })],
   ]
   for (const [nombre, respuesta] of casos) {
     it(`${nombre}: un reintento y, si sigue mal, la pieza sigue tal cual y el encargo NO falla`, async () => {
@@ -211,6 +225,7 @@ describe('con notas: lo que sale mal nunca rompe la entrega', () => {
       const t = reg.filter((x) => x.paso === 'autorevision_texto')
       expect(t).toHaveLength(1)
       expect(t[0].choco).toBe(false)
+      if (nombre.startsWith('el agente no contesta')) expect(t[0].cambios).toEqual([{ sin_respuesta: 'se cortó' }]) // se anota POR QUÉ no hubo auto-revisión
       expect(llamadas).toBeLessThanOrEqual(2)
       if (!nombre.startsWith('el agente no contesta')) expect(llamadas).toBe(2) // se le dio UNA oportunidad con el error literal
     })

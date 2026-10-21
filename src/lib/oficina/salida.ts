@@ -132,7 +132,7 @@ ESQUEMAS['observacion_imagenes.v1'] = conMaxImagenes(ESQUEMAS['observacion_image
  * aquí solo se fija el sobre: si chocó, qué nota, en qué campo, qué chocó y qué cambió.
  */
 ESQUEMAS['autorevision.v1'] = {
-  t: 'obj', req: ['choca', 'hallazgos'],
+  t: 'obj', req: ['choca'],
   props: {
     choca: { t: 'bool' },
     hallazgos: { t: 'arr', max: 6, de: { t: 'obj', req: ['nota_id', 'campo', 'que_choca', 'que_cambio'], props: { nota_id: str(1, 80), campo: str(1, 80), que_choca: str(1, 400), que_cambio: str(1, 400) } } },

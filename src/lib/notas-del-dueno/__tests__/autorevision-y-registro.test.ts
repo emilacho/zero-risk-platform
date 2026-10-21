@@ -2,6 +2,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { camposCambiados, MAX_CARACTERES_DE_NOTAS, MAX_NOTAS, seccionDeAutorevision, seleccionarNotas, validarAutorevision } from '../autorevision'
 import { lunesDe, registroDelCliente } from '../registro'
 import { registrarAutorevision, leerNotas } from '../adaptadores'
+import { procesarSalida } from '../../oficina/salida'
 import { crearPuertos, type Entorno } from '../../oficina/adaptadores'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
 import type { Nota } from '../tipos'
@@ -47,6 +48,8 @@ describe('la sección que se agrega al pedido', () => {
     expect(sec).toContain('- [n1] El dueño rechazó una pieza: «corto»')
     expect(sec).toContain('"pie_de_foto": "Hola"')
     expect(sec).toContain('{"choca": false, "hallazgos": []}')
+    expect(sec).toContain('1. Si NADA choca con las notas')
+    expect(sec).toContain('2. Si algo choca, corrige SOLO eso')
     expect(sec).toContain('cambia únicamente los campos que nombres')
     expect(sec).toContain('No agregues datos nuevos ni inventes nada')
     expect(sec).toContain('{"pie_de_foto": "…"}')
@@ -80,7 +83,8 @@ describe('lo que el código le exige a la auto-revisión', () => {
     expect(buena).toMatchObject({ ok: true, choca: true, cambiados: ['pie_de_foto'] })
     expect(validarAutorevision({ choca: true, hallazgos: [], corregida: { ...original, pie_de_foto: 'Hola' } }, ['n1'], original)).toMatchObject({ ok: false, error: expect.stringContaining('no nombras ninguna nota') })
     expect(validarAutorevision({ choca: true, hallazgos: [H('pie_de_foto')] }, ['n1'], original)).toMatchObject({ ok: false, error: expect.stringContaining('no devuelves la pieza') })
-    expect(validarAutorevision({ choca: true, hallazgos: [H('pie_de_foto')], corregida: [] }, ['n1'], original)).toMatchObject({ ok: false })
+    expect(validarAutorevision({ choca: true, hallazgos: [H('pie_de_foto')], corregida: [] }, ['n1'], original)).toMatchObject({ ok: false, error: expect.stringContaining('no devuelves la pieza corregida') })
+    expect(validarAutorevision({ choca: true, hallazgos: [H('pie_de_foto')], corregida: 'texto' }, ['n1'], original)).toMatchObject({ ok: false, error: expect.stringContaining('no devuelves la pieza corregida') })
     expect(validarAutorevision({ choca: true, hallazgos: [H('pie_de_foto', 'n9')], corregida: { ...original, pie_de_foto: 'Hola' } }, ['n1'], original)).toMatchObject({ ok: false, error: expect.stringContaining('«n9»') })
     expect(validarAutorevision({ choca: true, hallazgos: [H('pie_de_foto')], corregida: { ...original, pie_de_foto: 'Hola', llamado: 'Otro' } }, ['n1'], original)).toMatchObject({ ok: false, error: expect.stringContaining('«llamado»') })
     expect(validarAutorevision({ choca: true, hallazgos: [H('pie_de_foto'), H('llamado')], corregida: { ...original, pie_de_foto: 'Hola' } }, ['n1'], original)).toMatchObject({ ok: false, error: expect.stringContaining('no lo cambiaste') })
@@ -111,6 +115,15 @@ describe('el registro visible', () => {
     const sube = registroDelCliente(CLIENTE, [...ns].reverse().map((n, i) => ({ ...n, creada_en: ns[i].creada_en })), [])
     expect(sube.tendencia === null || typeof sube.tendencia.baja === 'boolean').toBe(true)
   })
+  it('si la tasa de rechazo no baja (queda igual), la tendencia lo dice: baja = false', () => {
+    const igual = [
+      nota({ id: 'a', tipo: 'rechazada', creada_en: '2026-10-05T10:00:00Z' }), nota({ id: 'b', tipo: 'aprobada', creada_en: '2026-10-06T10:00:00Z', comentario: null }),
+      nota({ id: 'c', tipo: 'rechazada', creada_en: '2026-10-19T10:00:00Z' }), nota({ id: 'd', tipo: 'aprobada', creada_en: '2026-10-20T10:00:00Z', comentario: null }),
+    ]
+    expect(registroDelCliente(CLIENTE, igual, []).tendencia).toEqual({ antes: 0.5, despues: 0.5, baja: false })
+    const sube = [nota({ id: 'a', tipo: 'aprobada', creada_en: '2026-10-05T10:00:00Z', comentario: null }), nota({ id: 'b', tipo: 'rechazada', creada_en: '2026-10-19T10:00:00Z' })]
+    expect(registroDelCliente(CLIENTE, sube, []).tendencia).toEqual({ antes: 0, despues: 1, baja: false })
+  })
   it('con menos de dos semanas con decisiones no hay tendencia (no se inventa)', () => {
     expect(registroDelCliente(CLIENTE, [ns[0]], []).tendencia).toBeNull()
     expect(registroDelCliente(CLIENTE, [], [])).toMatchObject({ notas: { total: 0, primera: null, ultima: null }, semanas: [], tendencia: null, autorevisiones: { total: 0 } })
@@ -121,6 +134,24 @@ describe('el registro visible', () => {
       { choco: true, costo_usd: 0.05, paso: 'autorevision_texto', creada_en: 'x' }, { choco: false, costo_usd: 0.04, paso: 'autorevision_texto', creada_en: 'x' }, { choco: false, costo_usd: 0.03, paso: 'autorevision_diseno', creada_en: 'x' },
     ])
     expect(r.autorevisiones).toEqual({ total: 3, con_cambios: 1, sin_cambios: 2, costo_usd: 0.12, por_paso: { autorevision_texto: { total: 2, con_cambios: 1 }, autorevision_diseno: { total: 1, con_cambios: 0 } } })
+  })
+})
+
+describe('el sobre de la respuesta de la auto-revisión', () => {
+  const H = (campo: string) => ({ nota_id: 'n1', campo, que_choca: 'x', que_cambio: 'y' })
+  it('«nada chocó» sin la lista de hallazgos también vale (no cuesta un reintento)', () => {
+    expect(procesarSalida('{"choca": false}', 'autorevision.v1', 0, 1)).toMatchObject({ ok: true })
+    expect(procesarSalida(['```json', '{"choca": false, "hallazgos": []}', '```'].join('\n'), 'autorevision.v1', 0, 1)).toMatchObject({ ok: true })
+  })
+  it('hasta 6 hallazgos; el séptimo no cabe', () => {
+    const con = (n: number) => JSON.stringify({ choca: true, hallazgos: Array.from({ length: n }, (_, i) => H(`c${i}`)), corregida: { a: 1 } })
+    expect(procesarSalida(con(6), 'autorevision.v1', 0, 1)).toMatchObject({ ok: true })
+    expect(procesarSalida(con(7), 'autorevision.v1', 0, 1)).toMatchObject({ ok: false, accion: 'reintentar' })
+  })
+  it('exige `choca` booleano y rechaza campos ajenos', () => {
+    expect(procesarSalida('{"hallazgos": []}', 'autorevision.v1', 1, 1)).toMatchObject({ ok: false })
+    expect(procesarSalida('{"choca": "si", "hallazgos": []}', 'autorevision.v1', 1, 1)).toMatchObject({ ok: false })
+    expect(procesarSalida('{"choca": false, "hallazgos": [], "otra": 1}', 'autorevision.v1', 1, 1)).toMatchObject({ ok: false })
   })
 })
 
