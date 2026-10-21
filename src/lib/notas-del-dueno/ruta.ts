@@ -19,7 +19,7 @@ export function firmaDeLaPeticion(request: Request, cuerpo: string) {
 
 export function configuracionReal(): ConfiguracionDeNotas { return { autorizados: autorizadosDelEntorno() } }
 
-export const entornoDeNotas = (request: Request) => ({ baseUrl: new URL(request.url).origin, internalKey: process.env.INTERNAL_API_KEY ?? '', slackToken: process.env.SLACK_BOT_TOKEN })
+export const entornoDeNotas = (request: Request) => ({ baseUrl: new URL(request.url).origin, internalKey: process.env.INTERNAL_API_KEY ?? '', slackToken: process.env.SLACK_BOT_TOKEN, alCerebro: process.env.NOTAS_AL_CEREBRO === '1' })
 
 /** la siguiente vuelta: sube al cerebro las notas que quedaron pendientes. Nunca lanza. */
 export async function reintentarLosPendientes(request: Request) {

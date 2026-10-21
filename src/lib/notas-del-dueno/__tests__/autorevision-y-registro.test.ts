@@ -230,9 +230,9 @@ describe('el puerto de notas de la oficina real (la auto-revisión lee del CEREB
     const todo = JSON.stringify(l)
     expect(todo).toContain('Más corto'); expect(todo).toContain('200 por semana'); expect(todo).toContain('Tutea siempre'); expect(todo).toContain('#oficina-creativa')
     for (const no of ['ESTA-NO-SE-LEE-DE-LA-TABLA', 'DEL-OTRO-CLIENTE', 'privada ajena', 'PIEZA-SECRETA']) expect(todo).not.toContain(no)
-    expect(llamadas).toHaveLength(1)
-    expect(llamadas[0].url).toBe(`https://app.test/api/brain/alimentar/dueno?client_id=${CLIENTE}`)
-    expect(llamadas[0].llave).toBe('k')
+    expect(llamadas).toHaveLength(2)                                                   // dos lecturas: el canal creativo con su tope y lo último que dijo el dueño en general
+    expect(llamadas.map((l) => l.url).sort()).toEqual([`https://app.test/api/brain/alimentar/dueno?client_id=${CLIENTE}`, `https://app.test/api/brain/alimentar/dueno?client_id=${CLIENTE}&canal=%23oficina-creativa&limite=20`].sort())
+    expect(llamadas.every((l) => l.llave === 'k')).toBe(true)
   })
   it('si el cerebro falla o está apagado: sigue con las generales y trae el motivo (nunca se toma por «el dueño no ha dicho nada»)', async () => {
     const db = new DbFalsa()
@@ -244,6 +244,15 @@ describe('el puerto de notas de la oficina real (la auto-revisión lee del CEREB
     }
     const red = (async () => { throw new Error('red caída') }) as unknown as typeof fetch
     expect((await crearPuertos(db, { ...ENV, notasDelDueno: true }, red).notas!.leer(CLIENTE)).error).toContain('red caída')
+  })
+  it('si solo falla una de las dos lecturas del cerebro: sigue con la otra y deja el motivo', async () => {
+    const db = new DbFalsa()
+    let n = 0
+    const f = (async (url: string) => { n++; return String(url).includes('canal=') ? new Response('{}', { status: 502 }) : new Response(JSON.stringify({ ok: true, respuestas: [r1] }), { status: 200 }) }) as unknown as typeof fetch
+    const l = await crearPuertos(db, { ...ENV, notasDelDueno: true }, f).notas!.leer(CLIENTE)
+    expect(n).toBe(2)
+    expect(l.notas.map((v) => v.id)).toEqual(['f1'])
+    expect(l.error).toBeUndefined()   // la lectura creativa es un refuerzo: si la general entregó, no hay nada que lamentar
   })
   it('si falla la lectura de las generales: sigue con lo del cerebro y trae el motivo', async () => {
     const db = new DbFalsa()

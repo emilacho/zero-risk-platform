@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cuerpoParaLaPuerta, enviarALaPuerta, FLUJO_DE_LAS_NOTAS, isoDeTs, leerDeLaPuerta, temaDeLaNota } from '../puerta-del-dueno'
+import { cuerpoParaLaPuerta, enviarALaPuerta, FLUJO_DE_LAS_NOTAS, idCorto, isoDeTs, leerDeLaPuerta, temaDeLaNota } from '../puerta-del-dueno'
 import { enviarNotaAlCerebro, puertosDeNotas, reintentarPendientes } from '../adaptadores'
 import { procesar } from '../recibir'
 import { vistasDelCerebro, unirVistas } from '../autorevision'
@@ -27,9 +27,9 @@ const nota = (o: Partial<NotaNueva & { id: string }> = {}): NotaNueva & { id: st
 const CTX = { ts: TS, canal_slack: 'C0C7XUKNCLS', respondido_en: '2026-10-21T12:00:00.000Z' }
 
 describe('la forma EXACTA de la nota que sube a la puerta del dueño', () => {
-  it('el cuerpo trae cada campo del encargo, con el tema «oficina creativa · pieza <id> · <ts>»', () => {
+  it('el cuerpo trae cada campo del encargo, con el tema corto «oficina creativa · pieza <id corto>», acumula:true y el ts solo en mensaje_ref/respondido_en', () => {
     expect(cuerpoParaLaPuerta({ client_id: C1, hitl_id: HITL, pieza_titulo: 'Post del lunes', pieza_familia: 'post_img', comentario: 'Más corto', ts: TS, canal_slack: 'C0C7XUKNCLS', respondido_en: '2026-10-21T12:00:00.000Z' })).toEqual({
-      evento: 'respuesta', client_id: C1, tema: `oficina creativa · pieza ${HITL} · ${TS}`, pregunta: 'Revisión de la pieza «Post del lunes» (post_img)', respuesta: 'Más corto',
+      evento: 'respuesta', client_id: C1, tema: 'oficina creativa · pieza 11111111', acumula: true, pregunta: 'Revisión de la pieza «Post del lunes» (post_img)', respuesta: 'Más corto',
       canal: '#oficina-creativa', mensaje_ref: `C0C7XUKNCLS:${TS}`, respondido_en: '2026-10-21T12:00:00.000Z', preguntado_por: { oficina: 'oficina-creativa', agente: 'content-creator' },
       dry_run: false, workflow_id: FLUJO_DE_LAS_NOTAS, workflow_execution_id: `slack:C0C7XUKNCLS:${TS}`,
     })
@@ -41,9 +41,14 @@ describe('la forma EXACTA de la nota que sube a la puerta del dueño', () => {
     expect((c.respuesta as string).endsWith('…')).toBe(true)
     expect((cuerpoParaLaPuerta({ client_id: C1, hitl_id: HITL, pieza_titulo: 'T'.repeat(900), pieza_familia: null, comentario: 'a', ts: TS, canal_slack: 'C1', respondido_en: 'z' }).pregunta as string).length).toBeLessThanOrEqual(500)
   })
-  it('el tema lleva la pieza Y el ts: dos comentarios de la misma pieza, o de piezas distintas, tienen temas distintos', () => {
-    expect(temaDeLaNota(HITL, '1.1')).not.toBe(temaDeLaNota(HITL, '2.2'))
-    expect(temaDeLaNota(HITL, '1.1')).not.toBe(temaDeLaNota('22222222-2222-4222-8222-222222222222', '1.1'))
+  it('el tema es corto (≤ 80, una sola palabra de id), distinto por pieza, y NO lleva el ts ni el uuid completo', () => {
+    const otra = '22222222-2222-4222-8222-222222222222'
+    expect(temaDeLaNota(HITL)).toBe('oficina creativa · pieza 11111111')
+    expect(temaDeLaNota(HITL)).not.toBe(temaDeLaNota(otra))
+    expect(temaDeLaNota(HITL)).not.toContain('-')
+    expect(temaDeLaNota('ab-cd-ef-gh-ij-kl-mn-op-qr-st-uv-wx-yz'.repeat(5)).length).toBeLessThanOrEqual(80)
+    expect(idCorto(HITL)).toBe('11111111')
+    expect(idCorto('a1b2c3d4-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe('a1b2c3d4')
   })
   it('isoDeTs convierte el ts de Slack a la hora del mensaje y rechaza lo que no es un ts', () => {
     expect(isoDeTs('1792575600.123456')).toBe('2026-10-21T09:40:00.123Z')
@@ -97,7 +102,7 @@ describe('hablarle a la puerta (POST y GET)', () => {
 
 describe('el envío con su cola', () => {
   let db: DbFalsa
-  const env = { baseUrl: 'https://app.test', internalKey: 'llave' }
+  const env = { baseUrl: 'https://app.test', internalKey: 'llave', alCerebro: true }
   const puerta = (estados: Array<number | 'apagado' | 'red'>) => {
     const posts: Array<Record<string, unknown>> = []
     let n = 0
@@ -120,7 +125,7 @@ describe('el envío con su cola', () => {
     expect(await enviarNotaAlCerebro(db, env, f, nota(), CTX)).toBe('enviada')
     expect(fila()).toMatchObject({ estado: 'enviada', intentos: 1, ultimo_error: null, ts: TS, canal_slack: 'C0C7XUKNCLS', respondido_en: CTX.respondido_en, enviada_en: expect.any(String) })
     expect(posts).toHaveLength(1)
-    expect(posts[0]).toMatchObject({ client_id: C1, tema: temaDeLaNota(HITL, TS), respuesta: 'Más corto', mensaje_ref: `C0C7XUKNCLS:${TS}` })
+    expect(posts[0]).toMatchObject({ client_id: C1, tema: temaDeLaNota(HITL), respuesta: 'Más corto', mensaje_ref: `C0C7XUKNCLS:${TS}` })
   })
   it('si el cerebro NO responde queda «pendiente» con el motivo, y la siguiente vuelta la sube — sin perderla', async () => {
     sembrar()
@@ -130,7 +135,7 @@ describe('el envío con su cola', () => {
     const sigue = puerta([200])
     expect(await reintentarPendientes(db, env, sigue.f)).toEqual({ intentadas: 1, enviadas: 1, siguen: 0, rechazadas: 0 })
     expect(fila()).toMatchObject({ estado: 'enviada', intentos: 2, ultimo_error: null })
-    expect(sigue.posts[0]).toMatchObject({ tema: temaDeLaNota(HITL, TS), respuesta: 'Más corto', respondido_en: CTX.respondido_en })
+    expect(sigue.posts[0]).toMatchObject({ tema: temaDeLaNota(HITL), respuesta: 'Más corto', respondido_en: CTX.respondido_en })
   })
   it('puerta apagada, 5xx y 429: siguen pendientes vuelta tras vuelta, hasta que el cerebro responde', async () => {
     sembrar()
@@ -174,6 +179,20 @@ describe('el envío con su cola', () => {
     expect(await enviarNotaAlCerebro(roto, env, f, nota(), CTX)).toBe('pendiente')
     expect(posts).toHaveLength(0)
   })
+  it('con el empuje APAGADO (NOTAS_AL_CEREBRO sin encender) la nota se ENCOLA como pendiente y NO se llama a la puerta; al encenderlo, la siguiente vuelta la sube', async () => {
+    sembrar()
+    const apagada = { ...env, alCerebro: false }
+    const { f, posts } = puerta([200])
+    expect(await enviarNotaAlCerebro(db, apagada, f, nota(), CTX)).toBe('pendiente')
+    expect(posts).toHaveLength(0)
+    expect(fila()).toMatchObject({ estado: 'pendiente', intentos: 0, ts: TS, canal_slack: 'C0C7XUKNCLS' })
+    expect(await reintentarPendientes(db, apagada, f)).toEqual({ intentadas: 0, enviadas: 0, siguen: 0, rechazadas: 0, apagado: true })
+    expect(posts).toHaveLength(0)
+    expect(await reintentarPendientes(db, env, f)).toEqual({ intentadas: 1, enviadas: 1, siguen: 0, rechazadas: 0 })
+    expect(posts).toHaveLength(1)
+    expect(posts[0]).toMatchObject({ acumula: true, tema: 'oficina creativa · pieza 11111111', mensaje_ref: `C0C7XUKNCLS:${TS}` })
+    expect(fila()?.estado).toBe('enviada')
+  })
   it('la vuelta reintenta las más viejas primero y con tope; una nota que ya no existe no la frena', async () => {
     for (let i = 1; i <= 3; i++) {
       const n = nota({ id: `n${i}`, clave_unica: `k${i}`, comentario: `comentario ${i}` })
@@ -201,7 +220,7 @@ describe('el envío con su cola', () => {
 
 describe('qué sube al cerebro y qué no (la decisión del dueño)', () => {
   let db: DbFalsa
-  const env = { baseUrl: 'https://app.test', internalKey: 'llave' }
+  const env = { baseUrl: 'https://app.test', internalKey: 'llave', alCerebro: true }
   const CFG = { autorizados: [EMILIO], ahora: () => new Date('2026-10-21T12:34:56.000Z') }
   const montar = (estados: Array<number | 'red'> = [200], estadoPieza = 'pending') => {
     db = new DbFalsa()
@@ -227,13 +246,13 @@ describe('qué sube al cerebro y qué no (la decisión del dueño)', () => {
     const r = await procesar(P, CFG, comentar('Prefiero frases cortas'))
     expect(r.cuerpo).toMatchObject({ ok: true, cerebro: 'enviada' })
     expect(posts).toHaveLength(1)
-    expect(posts[0]).toMatchObject({ evento: 'respuesta', client_id: C1, tema: `oficina creativa · pieza ${HITL} · 1792575600.123456`, respuesta: 'Prefiero frases cortas', pregunta: 'Revisión de la pieza «Post del lunes» (post_img)', canal: '#oficina-creativa', respondido_en: '2026-10-21T09:40:00.123Z', dry_run: false })
+    expect(posts[0]).toMatchObject({ evento: 'respuesta', client_id: C1, tema: 'oficina creativa · pieza 11111111', acumula: true, mensaje_ref: 'C0C7XUKNCLS:1792575600.123456', respuesta: 'Prefiero frases cortas', pregunta: 'Revisión de la pieza «Post del lunes» (post_img)', canal: '#oficina-creativa', respondido_en: '2026-10-21T09:40:00.123Z', dry_run: false })
   })
   it('un «Rechazar» con motivo sube (tema con el ts de la pieza); sin motivo NO', async () => {
     const a = montar()
     const r = await procesar(a.P, CFG, { tipo: 'rechazar', hitl_id: HITL, autor: EMILIO, canal: 'C0C7XUKNCLS', ts: '1792575000.000100', comentario: 'Demasiado formal' })
     expect(r.cuerpo).toMatchObject({ ok: true, decision: 'rejected', cerebro: 'enviada' })
-    expect(a.posts[0]).toMatchObject({ tema: `oficina creativa · pieza ${HITL} · 1792575000.000100`, respuesta: 'Demasiado formal', respondido_en: '2026-10-21T12:34:56.000Z' })
+    expect(a.posts[0]).toMatchObject({ tema: 'oficina creativa · pieza 11111111', acumula: true, mensaje_ref: 'C0C7XUKNCLS:1792575000.000100', respuesta: 'Demasiado formal', respondido_en: '2026-10-21T12:34:56.000Z' })
     const b = montar()
     const sin = await procesar(b.P, CFG, { tipo: 'rechazar', hitl_id: HITL, autor: EMILIO, canal: 'C0C7XUKNCLS', ts: '1792575000.000100', comentario: null })
     expect(sin.cuerpo).toMatchObject({ ok: true, decision: 'rejected', cerebro: 'no_aplica' })
@@ -269,9 +288,9 @@ describe('qué sube al cerebro y qué no (la decisión del dueño)', () => {
     expect(r.status).toBe(200)
     expect(r.cuerpo).toMatchObject({ ok: true, cerebro: 'pendiente' })
     expect(db.tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'pendiente' })
-    const vuelta = await reintentarPendientes(db, { ...env, slackToken: 'x' }, (async (_u: string, init?: RequestInit) => { posts.push(JSON.parse(String(init?.body ?? '{}'))); return new Response(JSON.stringify({ ok: true }), { status: 200 }) }) as unknown as typeof fetch)
+    const vuelta = await reintentarPendientes(db, { ...env, alCerebro: true, slackToken: 'x' }, (async (_u: string, init?: RequestInit) => { posts.push(JSON.parse(String(init?.body ?? '{}'))); return new Response(JSON.stringify({ ok: true }), { status: 200 }) }) as unknown as typeof fetch)
     expect(vuelta).toMatchObject({ enviadas: 1 })
-    expect(posts[1]).toMatchObject({ respuesta: 'Prefiero frases cortas', tema: `oficina creativa · pieza ${HITL} · 1792575600.123456` })
+    expect(posts[1]).toMatchObject({ respuesta: 'Prefiero frases cortas', tema: 'oficina creativa · pieza 11111111', acumula: true })
   })
   it('el mismo comentario repetido (reintento de Slack) no sube dos veces', async () => {
     const { P, posts } = montar()
@@ -280,11 +299,22 @@ describe('qué sube al cerebro y qué no (la decisión del dueño)', () => {
     expect(posts).toHaveLength(1)
     expect(db.tablas['notas_del_dueno']).toHaveLength(1)
   })
-  it('dos comentarios de la misma pieza, con distinto ts, suben con temas DISTINTOS (así no se reemplazan en la puerta)', async () => {
+  it('dos comentarios de la misma pieza suben con el MISMO tema corto, acumula:true y mensajes distintos (la puerta los suma, no los reemplaza)', async () => {
     const { P, posts } = montar()
     await procesar(P, CFG, comentar('uno', '1792575600.000001'))
     await procesar(P, CFG, comentar('dos', '1792575700.000001'))
-    expect(posts.map((p) => p.tema)).toEqual([`oficina creativa · pieza ${HITL} · 1792575600.000001`, `oficina creativa · pieza ${HITL} · 1792575700.000001`])
+    expect(posts.map((p) => p.tema)).toEqual(['oficina creativa · pieza 11111111', 'oficina creativa · pieza 11111111'])
+    expect(posts.map((p) => p.acumula)).toEqual([true, true])
+    expect(posts.map((p) => p.mensaje_ref)).toEqual(['C0C7XUKNCLS:1792575600.000001', 'C0C7XUKNCLS:1792575700.000001'])
+  })
+  it('con el empuje apagado el comentario se registra y queda en cola, sin llamar a la puerta (hasta que CC-CEREBRO publique acumula)', async () => {
+    const { P: _P, posts } = montar()
+    const apagada = puertosDeNotas(db, { ...env, alCerebro: false, slackToken: 'xoxb-1' }, (async () => { throw new Error('no debe llamarse') }) as unknown as typeof fetch)
+    const r = await procesar(apagada, CFG, comentar('Prefiero frases cortas'))
+    expect(r.cuerpo).toMatchObject({ ok: true, cerebro: 'pendiente' })
+    expect(posts).toHaveLength(0)
+    expect(db.tablas['notas_del_dueno']).toHaveLength(1)
+    expect(db.tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'pendiente', intentos: 0 })
   })
   it('un puerto sin el envío (la bandera apagada) no sube nada y no rompe', async () => {
     const { P } = montar()
@@ -299,6 +329,7 @@ describe('qué sube al cerebro y qué no (la decisión del dueño)', () => {
 })
 
 describe('los diez clientes de prueba (agnóstico): ni se mezclan ni se heredan', () => {
+  const envDiez = { baseUrl: 'https://app.test', internalKey: 'llave', alCerebro: true }
   const RUBROS = ['panadería', 'clínica dental', 'estudio contable', 'gimnasio', 'librería', 'taller mecánico', 'floristería', 'agencia de viajes', 'escuela de idiomas', 'ferretería']
   const clientes = RUBROS.map((rubro, i) => ({ rubro, id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(i + 1).padStart(12, '0')}`, hitl: `bbbbbbbb-bbbb-4bbb-8bbb-${String(i + 1).padStart(12, '0')}` }))
   const env = { baseUrl: 'https://app.test', internalKey: 'llave' }
@@ -309,13 +340,13 @@ describe('los diez clientes de prueba (agnóstico): ni se mezclan ni se heredan'
     db.semilla('hitl_queue', clientes.map((c) => ({ id: c.hitl, client_id: c.id, type: 'content_piece_review', status: 'pending', title: `Pieza de ${c.rubro}`, output_id: null, metadata: { familia: 'post_img', slack: { canal: 'C0C7XUKNCLS', ts: `1792575000.00${c.hitl.slice(-2)}00` } } })))
     const posts: Array<Record<string, unknown>> = []
     const f = (async (_u: string, init?: RequestInit) => { posts.push(JSON.parse(String(init?.body ?? '{}'))); return new Response(JSON.stringify({ ok: true }), { status: 200 }) }) as unknown as typeof fetch
-    const P = puertosDeNotas(db, { ...env, slackToken: 'x' }, f)
+    const P = puertosDeNotas(db, { ...envDiez, slackToken: 'x' }, f)
     for (const c of clientes) await procesar(P, CFG, { tipo: 'comentar', canal: 'C0C7XUKNCLS', hilo_ts: `1792575000.00${c.hitl.slice(-2)}00`, ts: `1792575600.00${c.hitl.slice(-2)}00`, autor: EMILIO, texto: `Para la ${c.rubro}: frases cortas` })
     expect(posts).toHaveLength(10)
     for (const c of clientes) {
       const mias = posts.filter((p) => p.client_id === c.id)
       expect(mias).toHaveLength(1)
-      expect(mias[0].tema).toContain(c.hitl)
+      expect(mias[0].tema).toContain(c.hitl.replace(/-/g, '').slice(0, 8))
       for (const otro of clientes.filter((x) => x.id !== c.id)) { expect(JSON.stringify(mias[0])).not.toContain(otro.rubro); expect(JSON.stringify(mias[0])).not.toContain(otro.hitl) }
     }
   })
@@ -387,13 +418,25 @@ describe('las rutas de Slack también reintentan lo pendiente (la siguiente vuel
   const llaves: string[] = []
   beforeEach(() => {
     dbRutas = new DbFalsa(); posts.length = 0; pendientes.length = 0
-    process.env.SLACK_SIGNING_SECRET = 'sec'; process.env.NOTAS_DEL_DUENO = '1'; process.env.NOTAS_AUTORIZADOS = EMILIO; process.env.INTERNAL_API_KEY = 'llave'; process.env.SLACK_BOT_TOKEN = 'xoxb-1'
+    process.env.SLACK_SIGNING_SECRET = 'sec'; process.env.NOTAS_DEL_DUENO = '1'; process.env.NOTAS_AL_CEREBRO = '1'; process.env.NOTAS_AUTORIZADOS = EMILIO; process.env.INTERNAL_API_KEY = 'llave'; process.env.SLACK_BOT_TOKEN = 'xoxb-1'
     dbRutas.semilla('notas_del_dueno', [{ ...nota(), creada_en: '2026-10-21T12:00:00.000Z' }])
     dbRutas.semilla('notas_del_dueno_envios', [{ nota_id: 'n1', estado: 'pendiente', intentos: 1, ts: TS, canal_slack: 'C0C7XUKNCLS', respondido_en: CTX.respondido_en, creada_en: '2026-10-21T12:00:00.000Z' }])
     llaves.length = 0
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => { if (String(url).includes('/api/brain/alimentar/dueno')) { posts.push(JSON.parse(String(init?.body ?? '{}'))); llaves.push(((init?.headers ?? {}) as Record<string, string>)['x-api-key'] ?? '') } return new Response(JSON.stringify({ ok: true }), { status: 200 }) }))
   })
-  afterEach(() => { vi.unstubAllGlobals(); for (const k of ['SLACK_SIGNING_SECRET', 'NOTAS_DEL_DUENO', 'NOTAS_AUTORIZADOS', 'INTERNAL_API_KEY', 'SLACK_BOT_TOKEN']) delete process.env[k] })
+  afterEach(() => { vi.unstubAllGlobals(); for (const k of ['SLACK_SIGNING_SECRET', 'NOTAS_DEL_DUENO', 'NOTAS_AL_CEREBRO', 'NOTAS_AUTORIZADOS', 'INTERNAL_API_KEY', 'SLACK_BOT_TOKEN']) delete process.env[k] })
+  it('con NOTAS_AL_CEREBRO apagado las rutas NO suben nada: lo pendiente espera', async () => {
+    delete process.env.NOTAS_AL_CEREBRO
+    const crypto = await import('node:crypto')
+    const { POST } = await import('@/app/api/slack/eventos/route')
+    const cuerpo = JSON.stringify({ type: 'event_callback', event: { type: 'message', channel: 'C9OTRO', ts: '2.2', thread_ts: '1.1', user: EMILIO, text: 'hola' } })
+    const marca = String(Math.floor(Date.now() / 1000))
+    const firma = 'v0=' + crypto.createHmac('sha256', 'sec').update(`v0:${marca}:${cuerpo}`).digest('hex')
+    expect((await POST(new Request('https://app.test/api/slack/eventos', { method: 'POST', headers: { 'content-type': 'application/json', 'x-slack-request-timestamp': marca, 'x-slack-signature': firma }, body: cuerpo }))).status).toBe(200)
+    await Promise.all(pendientes)
+    expect(posts).toHaveLength(0)
+    expect(dbRutas.tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'pendiente' })
+  })
   it('cada evento firmado de Slack sube primero lo que quedó pendiente', async () => {
     const crypto = await import('node:crypto')
     const { POST } = await import('@/app/api/slack/eventos/route')
@@ -432,6 +475,8 @@ describe('las rutas de Slack también reintentan lo pendiente (la siguiente vuel
     dbRutas.tablas['notas_del_dueno_envios'][0].estado = 'pendiente'
     const apagado = await (await pedir()).json()
     expect(apagado.notas_del_dueno).toBeUndefined()
+    process.env.NOTAS_DEL_DUENO = '1'; delete process.env.NOTAS_AL_CEREBRO
+    expect((await (await pedir()).json()).notas_del_dueno).toMatchObject({ intentadas: 0, apagado: true })   // con el empuje apagado la vuelta no sube nada
     vi.doUnmock('@/lib/oficina/ruta'); vi.doUnmock('@/lib/oficina/vigia')
   })
 })

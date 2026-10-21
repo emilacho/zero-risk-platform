@@ -30,8 +30,12 @@ export interface NotaParaLaPuerta {
   respondido_en: string
 }
 
-/** «oficina creativa · pieza <id> · <ts>»: lleva la pieza Y el ts a propósito, para que cada comentario se acumule y ninguno reemplace a otro */
-export const temaDeLaNota = (hitl_id: string, ts: string): string => `oficina creativa · pieza ${hitl_id} · ${ts}`
+/**
+ * «oficina creativa · pieza <id corto>» (≤ 80 caracteres, una sola palabra de id). CORRECCIÓN de Lenovo anterior (21-oct): el tema con el uuid y el ts era frágil (pasaba de 80 y la puerta lo rechazaba, o se reemplazaba). El ts va SOLO en `mensaje_ref` y
+ * `respondido_en`, y `acumula: true` le dice a la puerta que esto se SUMA y nunca reemplaza a otra nota del mismo tema.
+ */
+export const idCorto = (hitl_id: string): string => hitl_id.replace(/[^0-9a-zA-Z]/g, '').slice(0, 8)
+export const temaDeLaNota = (hitl_id: string): string => `oficina creativa · pieza ${idCorto(hitl_id)}`
 
 /** la hora de un mensaje de Slack (segundos.microsegundos desde 1970) como ISO, o null si no es un `ts` válido */
 export function isoDeTs(ts: string): string | null {
@@ -45,7 +49,7 @@ const recortar = (s: string, n: number): string => (s.length <= n ? s : `${s.sli
 export function cuerpoParaLaPuerta(n: NotaParaLaPuerta): Record<string, unknown> {
   const titulo = n.pieza_titulo?.trim() || 'sin título'
   return {
-    evento: 'respuesta', client_id: n.client_id, tema: temaDeLaNota(n.hitl_id, n.ts),
+    evento: 'respuesta', client_id: n.client_id, tema: temaDeLaNota(n.hitl_id), acumula: true,
     pregunta: recortar(`Revisión de la pieza «${titulo}»${n.pieza_familia ? ` (${n.pieza_familia})` : ''}`, MAX_PREGUNTA),
     respuesta: recortar(n.comentario.trim(), MAX_RESPUESTA),
     canal: CANAL_QUE_SE_ANOTA, mensaje_ref: `${n.canal_slack}:${n.ts}`, respondido_en: n.respondido_en,
@@ -79,10 +83,14 @@ export type LecturaDelCerebro = { ok: true; respuestas: RespuestaDelCerebro[] } 
 
 const txt = (x: unknown): string => (typeof x === 'string' ? x : '')
 
-/** Lo último que dijo el dueño de ESTE cliente (hasta 20, de cualquier canal). Apagada o con error ⇒ `ok: false` con el motivo: nunca se lee como «el dueño no ha dicho nada». */
-export async function leerDeLaPuerta(env: EntornoDeLaPuerta, f: Fetch, client_id: string): Promise<LecturaDelCerebro> {
+/**
+ * Lo último que dijo el dueño de ESE cliente (por omisión hasta 20, de cualquier canal). Con `canal`/`limite` pide solo ese canal y ese tope: la puerta los atiende cuando CC-CEREBRO los publique (mientras tanto los ignora y devuelve lo de siempre).
+ * Apagada o con error ⇒ `ok: false` con el motivo: nunca se lee como «el dueño no ha dicho nada».
+ */
+export async function leerDeLaPuerta(env: EntornoDeLaPuerta, f: Fetch, client_id: string, o: { canal?: string; limite?: number } = {}): Promise<LecturaDelCerebro> {
   try {
-    const r = await f(`${env.baseUrl}/api/brain/alimentar/dueno?client_id=${encodeURIComponent(client_id)}`, { headers: { 'x-api-key': env.internalKey } })
+    const extra = `${o.canal ? `&canal=${encodeURIComponent(o.canal)}` : ''}${o.limite ? `&limite=${o.limite}` : ''}`
+    const r = await f(`${env.baseUrl}/api/brain/alimentar/dueno?client_id=${encodeURIComponent(client_id)}${extra}`, { headers: { 'x-api-key': env.internalKey } })
     const j = (await r.json().catch(() => ({}))) as Record<string, unknown>
     if (!r.ok) return { ok: false, error: `la puerta respondió ${r.status}` }
     if (j.apagado === true) return { ok: false, error: 'la puerta del dueño está apagada (PORTERO_DUENO)' }

@@ -18,6 +18,11 @@ export interface EntornoDeNotas {
   baseUrl: string
   internalKey: string
   slackToken?: string
+  /**
+   * `NOTAS_AL_CEREBRO=1`: ENCIENDE el empuje a la puerta del dueño. Apagado (por omisión) las notas se encolan como pendientes y NADA se envía: la puerta aún no atiende `acumula` (Lenovo anterior: «hasta que CC-CEREBRO avise que está
+   * publicado, no se enciende el empuje»). Al encenderlo, la siguiente vuelta sube todo lo encolado, de la más vieja a la más nueva.
+   */
+  alCerebro?: boolean
   /** a dónde llega la pieza: el canal de la oficina que la produjo (`C…`/`G…`). Regla firmada (13:07): cada oficina habla con Emilio por SU canal; nada de mensajes directos */
   destino?: string
 }
@@ -54,8 +59,15 @@ export async function leerGenerales(db: Db, limite = MAX_GENERALES): Promise<Not
 export async function leerNotasParaElProductor(db: Db, env: { baseUrl: string; internalKey: string }, f: Fetch, client_id: string): Promise<{ notas: NotaVista[]; error?: string }> {
   const errores: string[] = []
   let delCerebro: NotaVista[] = []
-  const c = await leerDeLaPuerta(env, f, client_id)
-  if (c.ok) delCerebro = vistasDelCerebro(c.respuestas); else errores.push(`cerebro: ${c.error}`)
+  // dos lecturas: (1) lo del canal creativo con tope propio (cuando la puerta lo atienda; hoy lo ignora) y (2) lo último que dijo el dueño en general (pauta, sedes, buzón…); sin repetir
+  const [creativo, general] = await Promise.all([leerDeLaPuerta(env, f, client_id, { canal: '#oficina-creativa', limite: 20 }), leerDeLaPuerta(env, f, client_id)])
+  if (creativo.ok || general.ok) {
+    const vistas = new Set<string>()
+    const juntas = [...(creativo.ok ? creativo.respuestas : []), ...(general.ok ? general.respuestas : [])].filter((x) => (vistas.has(x.ficha_id) ? false : (vistas.add(x.ficha_id), true)))
+    delCerebro = vistasDelCerebro(juntas)
+  }
+  if (!creativo.ok && !general.ok) errores.push(`cerebro: ${general.error}`)
+  else if (!general.ok) errores.push(`cerebro (lectura general): ${general.error}`)
   let generales: NotaVista[] = []
   try { generales = seleccionarNotas(await leerGenerales(db)) } catch (e) { errores.push(`generales: ${e instanceof Error ? e.message : String(e)}`) }
   return { notas: unirVistas(delCerebro, generales), ...(errores.length ? { error: errores.join(' · ') } : {}) }
@@ -134,6 +146,7 @@ export async function enviarNotaAlCerebro(db: Db, env: EntornoDeNotas, f: Fetch,
       const e = (ya.data as Fila).estado
       if (e === 'enviada' || e === 'rechazada') return e
     }
+    if (!env.alCerebro) return 'pendiente' // encolada; el empuje está apagado
     return await intentarEnvio(db, env, f, n, ctx)
   } catch { return 'pendiente' }
 }
@@ -150,8 +163,9 @@ async function intentarEnvio(db: Db, env: EntornoDeNotas, f: Fetch, n: NotaNueva
 }
 
 /** la siguiente vuelta: sube las notas que quedaron pendientes (las más viejas primero, con tope). Nunca lanza. */
-export async function reintentarPendientes(db: Db, env: EntornoDeNotas, f: Fetch = fetch, limite = 20): Promise<{ intentadas: number; enviadas: number; siguen: number; rechazadas: number; error?: string }> {
+export async function reintentarPendientes(db: Db, env: EntornoDeNotas, f: Fetch = fetch, limite = 20): Promise<{ intentadas: number; enviadas: number; siguen: number; rechazadas: number; apagado?: true; error?: string }> {
   const cuenta = { intentadas: 0, enviadas: 0, siguen: 0, rechazadas: 0 }
+  if (!env.alCerebro) return { ...cuenta, apagado: true } // el empuje al cerebro está apagado: lo encolado espera
   try {
     const p = await db.from('notas_del_dueno_envios').select('*').eq('estado', 'pendiente').order('creada_en', { ascending: true }).limit(limite)
     if (p.error) return { ...cuenta, error: p.error.message }
