@@ -38,7 +38,7 @@ describe('P4 · costo por cliente y umbral global en proporción a los clientes 
   it('con diez clientes que gastan ≈ US$ 0,6 cada uno, el total NO pasa el umbral global (con uno fijo de US$ 5 sí pasaría)', async () => {
     const t = juntos()
     for (const c of DIEZ_CLIENTES) t.costs.push({ service: 'apify:instagram', amount_usd: 0.6, created_at: AHORA.toISOString(), description: JSON.stringify({ es: 'detalle_de_llamada', client_id: c.id }) })
-    const r = await rutaCostos({ db: crearBaseFalsa(t as never).db as never, ahora: AHORA, env: {} })
+    const r = await rutaCostos({ db: crearBaseFalsa(t as never).db as never, ahora: AHORA, env: { PORTERO_GASTO_AVISO_USD: '1.5', PORTERO_GASTO_APAGAR_USD: '3' } })
     expect(r.status).toBe(200)
     expect(r.body).toMatchObject({ clientes_activos: 10, sobre_el_umbral_global: false })
     expect(Number(r.body.total_del_portero_usd)).toBeGreaterThan(5)
@@ -48,7 +48,7 @@ describe('P4 · costo por cliente y umbral global en proporción a los clientes 
   it('el informe dice cuánto costó cada cliente y quién pasó sus umbrales; el que más gasta va primero', async () => {
     const t = juntos()
     t.costs.push({ service: 'apify:x', amount_usd: 4, created_at: AHORA.toISOString(), description: JSON.stringify({ es: 'detalle_de_llamada', client_id: DIEZ_CLIENTES[4].id }) }, { service: 'apify:x', amount_usd: 2, created_at: AHORA.toISOString(), description: JSON.stringify({ es: 'detalle_de_llamada', client_id: DIEZ_CLIENTES[1].id }) })
-    const r = await rutaCostos({ db: crearBaseFalsa(t as never).db as never, ahora: AHORA, env: {} })
+    const r = await rutaCostos({ db: crearBaseFalsa(t as never).db as never, ahora: AHORA, env: { PORTERO_GASTO_AVISO_USD: '1.5', PORTERO_GASTO_APAGAR_USD: '3' } })
     const cl = r.body.clientes as Array<{ client_id: string; gasto_usd: number; estado: string }>
     expect(cl[0]).toMatchObject({ client_id: DIEZ_CLIENTES[4].id, estado: 'pasa_el_umbral_de_apagado' })
     expect(cl[1]).toMatchObject({ client_id: DIEZ_CLIENTES[1].id, estado: 'pasa_el_umbral_de_aviso' })
@@ -59,7 +59,7 @@ describe('P4 · costo por cliente y umbral global en proporción a los clientes 
     const t = juntos()
     const c = DIEZ_CLIENTES[0]
     for (let i = 0; i < 1200; i++) t.costs.push({ id: `k${i}`, service: 'apify:otro', amount_usd: 0.001, created_at: AHORA.toISOString(), description: JSON.stringify({ es: 'detalle_de_llamada', client_id: i < 1100 ? DIEZ_CLIENTES[9].id : c.id }) })
-    const r = await rutaCostos({ db: crearBaseFalsa(t as never, { topeDeFilas: 1000 }).db as never, ahora: AHORA, env: {} })
+    const r = await rutaCostos({ db: crearBaseFalsa(t as never, { topeDeFilas: 1000 }).db as never, ahora: AHORA, env: { PORTERO_GASTO_AVISO_USD: '1.5', PORTERO_GASTO_APAGAR_USD: '3' } })
     const mio = (r.body.clientes as Array<{ client_id: string; gasto_usd: number }>).find((x) => x.client_id === c.id)!
     expect(mio.gasto_usd).toBeCloseTo(0.1, 1) // 100 filas de 0,001 que están pasada la fila 1.000
   })

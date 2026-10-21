@@ -144,7 +144,11 @@ export function armarResumen(e: EntradaDelResumen, opciones: { candidatos?: bool
   sec('quien_es', `Quién es${e.nombre ? ` · ${e.nombre}` : ''}${e.rubro ? ` (${e.rubro})` : ''}`, [...sitioElegido.map((f) => linea(f, 200)), ...perfil.map((f) => linea(f, 140))], 'no hay fichas de su sitio ni de su ficha de Mapas', opciones.candidatos ? CANDIDATOS_DE_QUIEN_ES + 5 : MAX_POR_SECCION)
 
   // lo que dijo el dueño (confirmado por él; precedencia máxima: va primero, con su fecha y su canal, y no se mezcla con lo medido). La clase es la de `dueno.ts` (`dato_del_dueno`).
-  const dichoPorElDueno = por('dato_del_dueno').slice(0, 12).map((f) => {
+  // las NOTAS que se suman (`acumula`: comentarios sueltos de una oficina) van después de las respuestas del dueño y como mucho 4: no desplazan lo que sí dijo el dueño
+  const deDueno = por('dato_del_dueno')
+  const regulares = deDueno.filter((f) => datosDe(f).acumula !== true)
+  const notas = deDueno.filter((f) => datosDe(f).acumula === true)
+  const dichoPorElDueno = [...regulares.slice(0, 12), ...notas.slice(0, Math.min(4, Math.max(0, 12 - regulares.length)))].map((f) => {
     const d = datosDe(f)
     const donde = [`dueño`, String(d.canal ?? '').trim(), String(d.respondido_en ?? f.observado_en ?? '').slice(0, 10)].filter(Boolean).join(' · ')
     return `- ${String(d.tema ?? f.titulo)}: «${corto(String(d.respuesta ?? f.contenido), 220)}» (${donde}${d.sede ? ` · sede ${String(d.sede)}` : ''}) ${cita(f)}`
