@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       llamarModelo: real ? modeloRegistrado({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, comando: 'portero.juzgar' }) : undefined,
       // el pulido del resumen vivo ya NO va aquí: tiene su propio paso (/pulir, después del cierre) para no trabar el guardado
       puente: real ? puenteAlIndice({ origen, llaveInterna: llave, db }) : undefined,
-      apagar: apagarFlujoDelPortero(), avisar: avisarAAlertas(), workflowIdPortero: process.env.PORTERO_WORKFLOW_ID || undefined,
+      apagar: apagarFlujoDelPortero(), avisar: avisarAAlertas({ db }), workflowIdPortero: process.env.PORTERO_WORKFLOW_ID || undefined,
     }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {

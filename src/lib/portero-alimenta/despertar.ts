@@ -26,7 +26,7 @@ export const MAX_PASADAS_DEL_PUENTE = 12
 export interface DepsDeDespertar extends DepsDeRutas {
   /** apaga el flujo del portero diario si el despertar deja un problema; en pruebas es un registro */
   apagar?: (workflowId: string) => Promise<{ ok: boolean; detalle: string }>
-  avisar?: (texto: string) => Promise<{ ok: boolean; detalle: string }>
+  avisar?: (texto: string, clave?: string) => Promise<{ ok: boolean; detalle: string }>
   esperar?: (ms: number) => Promise<void>
   /** el flujo del portero diario (el que se apaga si algo falla) */
   workflowIdPortero?: string
@@ -131,7 +131,7 @@ export async function rutaDespertar(deps: DepsDeDespertar, cuerpo: unknown): Pro
     const wf = deps.workflowIdPortero || FLUJO_DEL_PORTERO_POR_OMISION
     const ap = deps.apagar ? await deps.apagar(wf).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin forma de apagar el flujo' }
     const texto = lineaDeAlerta([res], ap.ok, wf, intentos, 'al despertar con el alta')
-    const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+    const av = deps.avisar ? await deps.avisar(texto, `despertar-apagado:${deps.workflowIdPortero || FLUJO_DEL_PORTERO_POR_OMISION}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
     body.apagado = ap; body.aviso = { ...av, texto }
     return { status: ap.ok && av.ok ? 200 : 502, body: { ...body, ok: false } }
   }

@@ -11,7 +11,7 @@ const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
 const txt = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
 const err = (status: number, error: string, detalle: string): Respuesta => ({ status, body: { error, detalle } })
 
-export async function rutaReanudar(deps: { db: Db; ahora?: Date }, cuerpo: unknown): Promise<Respuesta> {
+export async function rutaReanudar(deps: { db: Db; ahora?: Date; /** cierra el incidente de Slack de esa pausa en su hilo (no con un mensaje nuevo) */ resolver?: (clave: string, nota?: string) => Promise<{ ok: boolean; detalle: string; accion: string }> }, cuerpo: unknown): Promise<Respuesta> {
   const v = validar(cuerpo)
   if ('status' in v) return v
   const motivo = txt(v.cuerpo.motivo), por = txt(v.cuerpo.por)
@@ -27,7 +27,8 @@ export async function rutaReanudar(deps: { db: Db; ahora?: Date }, cuerpo: unkno
     const u = await deps.db.from('cerebro_portero_pausas').update({ levantada_en: ahora.toISOString(), levantada_por: por.slice(0, 120), motivo_de_levantarla: motivo.slice(0, 300) }).eq('id', String(a.id))
     if (u.error) errores.push(`${String(a.id)}: ${u.error.message}`)
   }
-  return { status: errores.length ? 502 : 200, body: { ok: errores.length === 0, reanudado: true, client_id: v.client_id, errores, nota: 'entra de nuevo en la próxima corrida del portero' } }
+  const incidente = errores.length || !deps.resolver ? undefined : await deps.resolver(`pausa:${v.client_id}`, `reanudado por ${por.slice(0, 80)}: ${motivo.slice(0, 160)}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e), accion: 'fallo' }))
+  return { status: errores.length ? 502 : 200, body: { ok: errores.length === 0, reanudado: true, client_id: v.client_id, errores, ...(incidente ? { incidente_de_slack: incidente } : {}), nota: 'entra de nuevo en la próxima corrida del portero' } }
 }
 
 /** las pausas abiertas (para que una oficina o el informe diario las vea) */

@@ -1,23 +1,18 @@
 /**
  * Las dos salidas REALES del vigilante (nada de esto corre en pruebas: allí se inyectan moldes):
- *  · `avisarAAlertas`: UNA línea a #alertas con el bot de Slack; ok solo si Slack confirma `ok:true` (un aviso rechazado no se da por entregado);
+ *  · `avisarAAlertas`: UNA línea a #alertas con el bot de Slack, UN mensaje por incidente y sus repeticiones en el hilo (21-oct); ok solo si Slack confirma `ok:true` (un aviso rechazado no se da por entregado);
  *  · `apagarFlujoDelPortero`: desactiva el flujo por la API de n8n (reversible: se vuelve a activar). Solo apaga flujos cuyo nombre contiene «portero» y verifica que quedó inactivo.
  */
-import { CANAL_DE_ALERTAS } from './vigilante'
+import type { Db } from './alimentar'
+import { avisarPorIncidente } from './alertas'
 
 type Traer = (u: string, i?: RequestInit) => Promise<Response>
 
-export function avisarAAlertas(o: { token?: string; canal?: string; fetchImpl?: Traer } = {}) {
-  const traer = o.fetchImpl ?? ((u: string, i?: RequestInit) => fetch(u, i))
-  return async (texto: string): Promise<{ ok: boolean; detalle: string }> => {
-    const token = o.token ?? process.env.SLACK_BOT_TOKEN
-    if (!token) return { ok: false, detalle: 'sin SLACK_BOT_TOKEN' }
-    const r = await traer('https://slack.com/api/chat.postMessage', {
-      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ channel: o.canal ?? CANAL_DE_ALERTAS, text: texto }),
-    })
-    const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string }
-    return j.ok === true ? { ok: true, detalle: 'entregado' } : { ok: false, detalle: `Slack respondió ${r.status} ${j.error ?? 'sin ok'}` }
+export function avisarAAlertas(o: { token?: string; canal?: string; fetchImpl?: Traer; /** con la base, un incidente = un mensaje y sus repeticiones van al hilo (`alertas.ts`) */ db?: Db } = {}) {
+  const avisar = avisarPorIncidente(o)
+  return async (texto: string, clave?: string): Promise<{ ok: boolean; detalle: string }> => {
+    const r = await avisar(texto, clave)
+    return { ok: r.ok, detalle: r.detalle }
   }
 }
 

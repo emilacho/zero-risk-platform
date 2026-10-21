@@ -28,7 +28,7 @@ export interface DepsDePulir {
   ahora?: Date
   nuevoId?: () => string
   /** una línea a #alertas (en pruebas, un molde); ausente = no se avisa */
-  avisar?: (texto: string) => Promise<{ ok: boolean; detalle: string }>
+  avisar?: (texto: string, clave?: string) => Promise<{ ok: boolean; detalle: string }>
   /** umbrales de gasto del día (aviso / apagado); por omisión los del portero */
   umbrales?: UmbralesDeGasto
 }
@@ -53,7 +53,7 @@ async function incluirElPulidoEnElGastoDelDia(deps: DepsDePulir, clientId: strin
   let marca: Fila = vig.aviso_de_gasto_dia === hoy ? { aviso_de_gasto_dia: hoy } : {}
   if (total > u.aviso_usd && vig.aviso_de_gasto_dia !== hoy) {
     const texto = `🟡 Portero del cerebro · ${nombre ?? clientId.slice(0, 8)}: el gasto del día va en US$ ${total.toFixed(2)} con el pulido incluido (aviso desde ${u.aviso_usd.toFixed(2)}; el portero se apaga solo pasando de ${u.apagar_usd.toFixed(2)}) · el flujo sigue encendido`
-    const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+    const av = deps.avisar ? await deps.avisar(texto, `gasto-del-dia:${clientId}:${hoy}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
     out.aviso = { ok: av.ok, detalle: av.detalle }
     if (av.ok) marca = { aviso_de_gasto_dia: hoy }
   }

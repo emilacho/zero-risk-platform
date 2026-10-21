@@ -8,6 +8,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { rutaPausasAbiertas, rutaReanudar } from '@/lib/portero-alimenta/pausas'
+import { resolverIncidente } from '@/lib/portero-alimenta/alertas'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,7 +20,8 @@ export async function POST(request: Request) {
   let cuerpo: unknown
   try { cuerpo = await request.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
   try {
-    const r = await rutaReanudar({ db: getSupabaseAdmin() as unknown as Db }, cuerpo)
+    const db = getSupabaseAdmin() as unknown as Db
+    const r = await rutaReanudar({ db, resolver: resolverIncidente({ db }) }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'reanudar_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

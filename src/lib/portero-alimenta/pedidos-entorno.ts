@@ -60,3 +60,13 @@ export function dispararCadenaReal(o: { url?: string; llaveInterna: string; fetc
     } catch (e) { return { ok: false, detalle: e instanceof Error ? e.message : String(e) } }
   }
 }
+
+/** el aviso real del pedido: UN POST con la llave interna a la dirección de quien pidió (ya validada contra los anfitriones permitidos) */
+export function avisoReal(llaveInterna: string, fetchImpl: (u: string, i?: RequestInit) => Promise<Response> = (u, i) => fetch(u, i)) {
+  return async (url: string, cuerpo: Record<string, unknown>): Promise<{ ok: boolean; http?: number; detalle: string }> => {
+    try {
+      const r = await fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': llaveInterna }, body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(15_000), redirect: 'error' })
+      return r.ok ? { ok: true, http: r.status, detalle: 'entregado' } : { ok: false, http: r.status, detalle: `respondió ${r.status}` }
+    } catch (e) { return { ok: false, detalle: e instanceof Error ? e.message : String(e) } }
+  }
+}

@@ -6,7 +6,7 @@
  */
 import type { Respuesta } from './rutas'
 
-export interface DepsDeAvisoDeRaspador { avisar: (texto: string) => Promise<{ ok: boolean; detalle: string }> }
+export interface DepsDeAvisoDeRaspador { avisar: (texto: string, clave?: string) => Promise<{ ok: boolean; detalle: string }> }
 const FUNCION = /^[a-z][a-z0-9_]{0,63}$/
 const MOTIVOS = ['campo_desaparecido', 'cambio_sin_resolver'] as const
 export type MotivoDeAviso = (typeof MOTIVOS)[number]
@@ -33,7 +33,7 @@ export async function rutaAvisoDeRaspador(deps: DepsDeAvisoDeRaspador, cuerpo: u
   if (!detalle) return err(400, 'entrada_invalida', '`detalle` es obligatorio (qué campo, qué pasó)')
   const texto = textoDelAviso(funcion, motivo, detalle)
   if (cuerpo.dry_run) return { status: 200, body: { ok: true, dry_run: true, enviado: false, texto } }
-  const r = await deps.avisar(texto)
+  const r = await deps.avisar(texto, `raspador:${funcion}:${motivo}`)
   // un aviso que Slack no confirmó NO se da por entregado: n8n lo ve y no marca la sordina
   return { status: r.ok ? 200 : 502, body: { ok: r.ok, enviado: r.ok, detalle: r.detalle, texto } }
 }

@@ -39,7 +39,7 @@ export interface DepsDelVigilante extends DepsDeRutas {
   /** desactiva el flujo (reversible); en pruebas es un registro */
   apagar?: (workflowId: string) => Promise<{ ok: boolean; detalle: string }>
   /** manda UNA línea a #alertas; ok solo si el canal confirmó; en pruebas es un registro */
-  avisar?: (texto: string) => Promise<{ ok: boolean; detalle: string }>
+  avisar?: (texto: string, clave?: string) => Promise<{ ok: boolean; detalle: string }>
   /** espera antes del reintento de «no pude comprobar»; en pruebas es un registro sin espera */
   esperar?: (ms: number) => Promise<void>
   /** umbrales de gasto (aviso / apagado); por omisión `UMBRALES_DE_GASTO_POR_OMISION` */
@@ -198,7 +198,7 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
   const avisadosHoy = new Set<string>()
   if (porAvisar.length) {
     const texto = lineaDeAvisoDeGasto(porAvisar)
-    const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+    const av = deps.avisar ? await deps.avisar(texto, `gasto-del-dia:${porAvisar.map((r) => r.client_id).sort().join("+")}:${dia}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
     body.aviso_de_gasto = { ...av, texto, clientes: porAvisar.map((r) => r.client_id) }
     if (av.ok) for (const r of porAvisar) avisadosHoy.add(r.client_id)
   }
@@ -241,13 +241,13 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
     if (!apagarTodo && pausados.every((p) => p.ya_estaba)) return { status: 200, body: { ...body, ok: false, pausados } }
     if (!apagarTodo) {
       const texto = lineaDePausa(delCliente.filter((r) => pausados.some((p) => p.client_id === r.client_id && !p.ya_estaba)), wf, intentos)
-      const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+      const av = deps.avisar ? await deps.avisar(texto, `pausa:${delCliente.filter((r) => pausados.some((p) => p.client_id === r.client_id && !p.ya_estaba)).map((r) => r.client_id).sort().join("+")}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
       body.pausados = pausados; body.aviso = { ...av, texto }
       return { status: av.ok ? 200 : 502, body: { ...body, ok: false } }
     }
     const ap = deps.apagar ? await deps.apagar(wf).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin forma de apagar el flujo' }
     const texto = lineaDeAlerta(resultados, ap.ok, wf, intentos)
-    const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+    const av = deps.avisar ? await deps.avisar(texto, `apagado:${wf}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
     body.apagado = ap; body.aviso = { ...av, texto }; if (pausados.length) body.pausados = pausados
     return { status: ap.ok && av.ok ? 200 : 502, body: { ...body, ok: false } }
   }
