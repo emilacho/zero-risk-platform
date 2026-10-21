@@ -92,6 +92,14 @@ describe('Cost Watchdog · aviso diario de plataforma', () => {
     expect(r.det.mensaje).toContain('Apify sin datos')
   })
 
+  it('si Apify trae un importe que no es número, se trata como sin datos (no NaN que calle el aviso)', () => {
+    const r = correr(DESPUES, { rollup: rollup(10.5), apifyDiario: apifyDia('x' as unknown as number) })
+    expect(r.agregado.apify_hoy_usd).toBeNull()
+    expect(r.agregado.total_dia_parcial).toBe(true)
+    expect(r.agregado.total_dia_usd).toBeCloseTo(10.5, 6)
+    expect(r.det.aviso_tope).toBe(true)
+  })
+
   it('con agentes bajos y Apify caído no inventa un aviso', () => {
     const r = correr(DESPUES, { rollup: rollup(1), apifyDiario: { error: 'x' } })
     expect(r.agregado.apify_hoy_usd).toBeNull()
