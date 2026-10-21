@@ -158,3 +158,9 @@ export async function piezaParaSlackDeLaBandeja(db: Db, p: { hitl_id: string; cl
   return { hitl_id: p.hitl_id, cliente, titulo: p.titulo, familia: texto_(p.metadata.familia), texto, hashtags, imagenes: enlaces }
 }
 const texto_ = (x: unknown): string | null => (typeof x === 'string' && x.trim() ? x : null)
+
+/** el rastro de una auto-revisión (idempotente por `clave_unica`); un error de la base se lanza: quien llama (el orquestador) lo traga, porque el rastro nunca frena una entrega */
+export async function registrarAutorevision(db: Db, r: { client_id: string; encargo_id: string; agente: string; paso: string; notas_vistas: string[]; choco: boolean; cambios: unknown[]; costo_usd: number; clave_unica: string }): Promise<void> {
+  const ins = await db.from('autorevisiones_del_productor').insert(r)
+  if (ins.error && ins.error.code !== DUPLICADO) throw new Error(`autorevisiones_del_productor: ${ins.error.message}`)
+}

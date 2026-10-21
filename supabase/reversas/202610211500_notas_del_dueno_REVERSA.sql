@@ -5,6 +5,7 @@ BEGIN
     RAISE EXCEPTION 'notas_del_dueno o autorevisiones_del_productor tienen filas: respaldarlas y retirarlas a propósito (no se borra nada solo)';
   END IF;
 END $$;
+DROP VIEW IF EXISTS public.notas_del_dueno_registro;
 DROP TABLE IF EXISTS public.autorevisiones_del_productor;
 DROP TABLE IF EXISTS public.notas_del_dueno;
 NOTIFY pgrst, 'reload schema';

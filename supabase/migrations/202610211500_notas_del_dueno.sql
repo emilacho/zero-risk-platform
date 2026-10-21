@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS public.autorevisiones_del_productor (
   client_id     uuid NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
   encargo_id    uuid,
   agente        text NOT NULL,
+  paso          text NOT NULL,
   notas_vistas  jsonb NOT NULL DEFAULT '[]'::jsonb,
   choco         boolean NOT NULL,
   cambios       jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -52,6 +53,20 @@ CREATE POLICY autorevisiones_service ON public.autorevisiones_del_productor FOR 
 -- append-only: el servidor inserta y lee; no actualiza ni borra
 GRANT SELECT, INSERT ON public.notas_del_dueno TO service_role;
 GRANT SELECT, INSERT ON public.autorevisiones_del_productor TO service_role;
+
+-- EL REGISTRO VISIBLE (qué notas tiene cada cliente y cuántas veces la auto-revisión corrigió algo): solo lectura, para el servidor
+CREATE OR REPLACE VIEW public.notas_del_dueno_registro AS
+SELECT n.client_id,
+       count(*)                                               AS notas,
+       count(*) FILTER (WHERE n.tipo = 'aprobada')            AS aprobadas,
+       count(*) FILTER (WHERE n.tipo = 'rechazada')           AS rechazadas,
+       count(*) FILTER (WHERE n.comentario IS NOT NULL)       AS con_comentario,
+       count(*) FILTER (WHERE n.alcance = 'general')          AS generales,
+       min(n.creada_en)                                       AS primera,
+       max(n.creada_en)                                       AS ultima
+  FROM public.notas_del_dueno n
+ GROUP BY n.client_id;
+GRANT SELECT ON public.notas_del_dueno_registro TO service_role;
 
 COMMENT ON TABLE public.notas_del_dueno IS 'Notas del dueño: cada decisión y comentario de Emilio sobre una pieza, por cliente. Append-only. NO son reglas: las lee solo el agente productor en su auto-revisión; la jefatura y la segunda mirada GPT no las ven.';
 COMMENT ON TABLE public.autorevisiones_del_productor IS 'Cada auto-revisión del agente productor contra las notas del dueño: notas vistas, si algo chocó, qué cambió y cuánto costó.';
