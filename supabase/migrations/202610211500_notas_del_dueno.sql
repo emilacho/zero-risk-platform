@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS public.notas_del_dueno_envios (
   nota_id        uuid PRIMARY KEY REFERENCES public.notas_del_dueno(id) ON DELETE CASCADE,
   estado         text NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','enviada','rechazada')),
   intentos       integer NOT NULL DEFAULT 0 CHECK (intentos >= 0),
+  proximo_intento timestamptz,
   ultimo_error   text,
   ts             text NOT NULL,
   canal_slack    text NOT NULL,

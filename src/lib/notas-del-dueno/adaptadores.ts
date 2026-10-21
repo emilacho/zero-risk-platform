@@ -23,6 +23,10 @@ export interface EntornoDeNotas {
    * publicado, no se enciende el empuje»). Al encenderlo, la siguiente vuelta sube todo lo encolado, de la más vieja a la más nueva.
    */
   alCerebro?: boolean
+  /** el reloj (solo para pruebas) */
+  ahora?: () => Date
+  /** a dónde avisa cuando una nota se descarta (por omisión `#alertas`) */
+  canalAlertas?: string
   /** a dónde llega la pieza: el canal de la oficina que la produjo (`C…`/`G…`). Regla firmada (13:07): cada oficina habla con Emilio por SU canal; nada de mensajes directos */
   destino?: string
 }
@@ -151,14 +155,38 @@ export async function enviarNotaAlCerebro(db: Db, env: EntornoDeNotas, f: Fetch,
   } catch { return 'pendiente' }
 }
 
+/**
+ * CANON DE LOOPS (6 guardarraíles): reintentos con TOPE, espera CRECIENTE y cola de descarte. Cuatro intentos en total (1 + 3 reintentos); entre uno y otro esperan 5, 20 y 60 minutos.
+ * Al cuarto fallo transitorio la nota pasa a «rechazada» (cola de descarte) con el motivo y se AVISA a #alertas: nada reintenta para siempre ni bloquea a las notas nuevas.
+ */
+export const MAX_INTENTOS = 4
+export const ESPERAS_MIN = [5, 20, 60]
+
+async function avisarDescarte(env: EntornoDeNotas, f: Fetch, n: NotaNueva & { id: string }, intentos: number, motivo: string): Promise<void> {
+  if (!env.slackToken) return
+  try {
+    await f('https://slack.com/api/chat.postMessage', { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8', authorization: `Bearer ${env.slackToken}` }, body: JSON.stringify({ channel: env.canalAlertas ?? 'C0B7XUUEBHA', text: `⚠️ Una nota del dueño NO llegó al cerebro tras ${intentos} intentos y se descartó de la cola (cliente ${n.client_id}, pieza ${n.hitl_id ?? 'sin id'}): ${motivo}. Sigue en el registro; hay que mirar la puerta del dueño.` }) })
+  } catch { /* un fallo de Slack nunca frena nada */ }
+}
+
 async function intentarEnvio(db: Db, env: EntornoDeNotas, f: Fetch, n: NotaNueva & { id: string }, ctx: { ts: string; canal_slack: string; respondido_en: string }): Promise<EstadoDeEnvio> {
   if (!n.comentario || !n.hitl_id) return 'rechazada'
   const r = await enviarALaPuerta({ baseUrl: env.baseUrl, internalKey: env.internalKey }, f, cuerpoParaLaPuerta({ client_id: n.client_id, hitl_id: n.hitl_id, pieza_titulo: n.pieza_titulo, pieza_familia: n.pieza_familia, comentario: n.comentario, ts: ctx.ts, canal_slack: ctx.canal_slack, respondido_en: ctx.respondido_en }))
   const previo = await db.from('notas_del_dueno_envios').select('intentos').eq('nota_id', n.id).maybeSingle()
   const intentos = Number((previo.data as Fila | null)?.intentos ?? 0) + 1
-  const ahora = new Date().toISOString()
-  const estado: EstadoDeEnvio = r.ok ? 'enviada' : r.permanente ? 'rechazada' : 'pendiente'
-  await db.from('notas_del_dueno_envios').update({ estado, intentos, ultimo_error: r.ok ? null : r.error, actualizada_en: ahora, ...(r.ok ? { enviada_en: ahora } : {}) }).eq('nota_id', n.id)
+  const reloj = env.ahora?.() ?? new Date()
+  const ahora = reloj.toISOString()
+  let estado: EstadoDeEnvio = r.ok ? 'enviada' : r.permanente ? 'rechazada' : 'pendiente'
+  let ultimo_error: string | null = r.ok ? null : r.error
+  let proximo_intento: string | null = null
+  if (!r.ok && !r.permanente) {
+    if (intentos >= MAX_INTENTOS) {
+      estado = 'rechazada'
+      ultimo_error = `descartada tras ${intentos} intentos: ${r.error}`
+      await avisarDescarte(env, f, n, intentos, r.error)
+    } else proximo_intento = new Date(reloj.getTime() + ESPERAS_MIN[Math.min(intentos, ESPERAS_MIN.length) - 1] * 60_000).toISOString()
+  }
+  await db.from('notas_del_dueno_envios').update({ estado, intentos, ultimo_error, proximo_intento, actualizada_en: ahora, ...(r.ok ? { enviada_en: ahora } : {}) }).eq('nota_id', n.id)
   return estado
 }
 
@@ -167,9 +195,12 @@ export async function reintentarPendientes(db: Db, env: EntornoDeNotas, f: Fetch
   const cuenta = { intentadas: 0, enviadas: 0, siguen: 0, rechazadas: 0 }
   if (!env.alCerebro) return { ...cuenta, apagado: true } // el empuje al cerebro está apagado: lo encolado espera
   try {
-    const p = await db.from('notas_del_dueno_envios').select('*').eq('estado', 'pendiente').order('creada_en', { ascending: true }).limit(limite)
+    // las que llevan menos tiempo sin tocarse primero; las que están esperando su turno (espera creciente) no cuentan, así un grupo atascado no bloquea a las nuevas
+    const p = await db.from('notas_del_dueno_envios').select('*').eq('estado', 'pendiente').order('actualizada_en', { ascending: true }).limit(200)
     if (p.error) return { ...cuenta, error: p.error.message }
-    for (const e of (p.data ?? []) as Fila[]) {
+    const ahoraMs = (env.ahora?.() ?? new Date()).getTime()
+    const listas = ((p.data ?? []) as Fila[]).filter((e) => !e.proximo_intento || Date.parse(String(e.proximo_intento)) <= ahoraMs).slice(0, limite)
+    for (const e of listas) {
       const nf = await db.from('notas_del_dueno').select('*').eq('id', String(e.nota_id)).maybeSingle()
       if (nf.error || !nf.data) { cuenta.siguen++; continue }
       const nota = aNota(nf.data as Fila)

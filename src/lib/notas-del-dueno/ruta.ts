@@ -27,5 +27,5 @@ export async function reintentarLosPendientes(request: Request) {
 }
 
 export function puertosReales(request: Request): PuertosDeNotas {
-  return puertosDeNotas(getSupabaseAdmin(), { baseUrl: new URL(request.url).origin, internalKey: process.env.INTERNAL_API_KEY ?? '', slackToken: process.env.SLACK_BOT_TOKEN })
+  return puertosDeNotas(getSupabaseAdmin(), entornoDeNotas(request))
 }

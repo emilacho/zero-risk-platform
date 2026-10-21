@@ -131,23 +131,34 @@ describe('el envío con su cola', () => {
   })
   it('si el cerebro NO responde queda «pendiente» con el motivo, y la siguiente vuelta la sube — sin perderla', async () => {
     sembrar()
+    let t = new Date('2026-10-21T12:00:00.000Z')
+    const reloj = { ...env, ahora: () => t }
     const caida = puerta(['red'])
-    expect(await enviarNotaAlCerebro(db, env, caida.f, nota(), CTX)).toBe('pendiente')
-    expect(fila()).toMatchObject({ estado: 'pendiente', intentos: 1, ultimo_error: 'red caída' })
+    expect(await enviarNotaAlCerebro(db, reloj, caida.f, nota(), CTX)).toBe('pendiente')
+    expect(fila()).toMatchObject({ estado: 'pendiente', intentos: 1, ultimo_error: 'red caída', proximo_intento: '2026-10-21T12:05:00.000Z' })
     const sigue = puerta([200])
-    expect(await reintentarPendientes(db, env, sigue.f)).toEqual({ intentadas: 1, enviadas: 1, siguen: 0, rechazadas: 0 })
+    expect(await reintentarPendientes(db, reloj, sigue.f)).toEqual({ intentadas: 0, enviadas: 0, siguen: 0, rechazadas: 0 }) // todavía no le toca (espera 5 min)
+    t = new Date('2026-10-21T12:06:00.000Z')
+    expect(await reintentarPendientes(db, reloj, sigue.f)).toEqual({ intentadas: 1, enviadas: 1, siguen: 0, rechazadas: 0 })
     expect(fila()).toMatchObject({ estado: 'enviada', intentos: 2, ultimo_error: null })
     expect(sigue.posts[0]).toMatchObject({ tema: temaDeLaNota(HITL), respuesta: 'Más corto', respondido_en: CTX.respondido_en })
   })
   it('puerta apagada, 5xx y 429: siguen pendientes vuelta tras vuelta, hasta que el cerebro responde', async () => {
     sembrar()
-    expect(await enviarNotaAlCerebro(db, env, puerta(['apagado']).f, nota(), CTX)).toBe('pendiente')
+    let t = new Date('2026-10-21T12:00:00.000Z')
+    const reloj = { ...env, ahora: () => t }
+    const en = (min: number) => { t = new Date(new Date('2026-10-21T12:00:00.000Z').getTime() + min * 60_000) }
+    expect(await enviarNotaAlCerebro(db, reloj, puerta(['apagado']).f, nota(), CTX)).toBe('pendiente')
+    expect(fila()).toMatchObject({ intentos: 1, proximo_intento: '2026-10-21T12:05:00.000Z' })       // 1.ª espera: 5 min
     const caida = puerta([500, 429, 200])
-    expect(await reintentarPendientes(db, env, caida.f)).toMatchObject({ intentadas: 1, siguen: 1 })
-    expect(await reintentarPendientes(db, env, caida.f)).toMatchObject({ intentadas: 1, siguen: 1 })
-    expect(fila()).toMatchObject({ estado: 'pendiente', intentos: 3 })
-    expect(await reintentarPendientes(db, env, caida.f)).toMatchObject({ intentadas: 1, enviadas: 1, siguen: 0 })
+    en(6); expect(await reintentarPendientes(db, reloj, caida.f)).toMatchObject({ intentadas: 1, siguen: 1 })
+    expect(fila()).toMatchObject({ intentos: 2, proximo_intento: '2026-10-21T12:26:00.000Z' })       // 2.ª espera: 20 min
+    en(10); expect(await reintentarPendientes(db, reloj, caida.f)).toMatchObject({ intentadas: 0 })  // aún no
+    en(27); expect(await reintentarPendientes(db, reloj, caida.f)).toMatchObject({ intentadas: 1, siguen: 1 })
+    expect(fila()).toMatchObject({ estado: 'pendiente', intentos: 3, proximo_intento: '2026-10-21T13:27:00.000Z' })   // 3.ª espera: 60 min
+    en(130); expect(await reintentarPendientes(db, reloj, caida.f)).toMatchObject({ intentadas: 1, enviadas: 1, siguen: 0 })
     expect(fila()?.estado).toBe('enviada')
+    expect(fila()?.proximo_intento).toBeNull()
   })
   it('un rechazo permanente de la puerta (400) queda «rechazada», anotado, y NO se reintenta', async () => {
     sembrar()
@@ -181,6 +192,50 @@ describe('el envío con su cola', () => {
     expect(await enviarNotaAlCerebro(roto, env, f, nota(), CTX)).toBe('pendiente')
     expect(posts).toHaveLength(0)
   })
+  it('CANON DE LOOPS · tope: al cuarto fallo transitorio la nota pasa a «rechazada» (cola de descarte) con el motivo y AVISA a #alertas; no reintenta más', async () => {
+    sembrar()
+    let t = new Date('2026-10-21T12:00:00.000Z')
+    const reloj = { ...env, slackToken: 'xoxb-1', ahora: () => t }
+    const llamadas: Array<{ url: string; cuerpo: Record<string, unknown> }> = []
+    const f = (async (url: string, init?: RequestInit) => { llamadas.push({ url, cuerpo: JSON.parse(String(init?.body ?? '{}')) }); return String(url).includes('slack.com') ? new Response('{"ok":true}', { status: 200 }) : new Response('{}', { status: 503 }) }) as unknown as typeof fetch
+    const intento = () => llamadas.filter((l) => l.url.includes('/api/brain/alimentar/dueno')).length
+    expect(await enviarNotaAlCerebro(db, reloj, f, nota(), CTX)).toBe('pendiente')
+    for (const min of [6, 27, 130]) { t = new Date(new Date('2026-10-21T12:00:00.000Z').getTime() + min * 60_000); await reintentarPendientes(db, reloj, f) }
+    expect(intento()).toBe(4)                                                             // 1 + 3 reintentos, ni uno más
+    expect(fila()).toMatchObject({ estado: 'rechazada', intentos: 4, ultimo_error: expect.stringContaining('descartada tras 4 intentos') })
+    expect(fila()?.proximo_intento).toBeNull()
+    const aviso = llamadas.filter((l) => l.url.includes('slack.com'))
+    expect(aviso).toHaveLength(1)
+    expect(aviso[0].cuerpo).toMatchObject({ channel: 'C0B7XUUEBHA', text: expect.stringContaining('tras 4 intentos') })
+    t = new Date('2026-10-23T12:00:00.000Z')
+    expect(await reintentarPendientes(db, reloj, f)).toEqual({ intentadas: 0, enviadas: 0, siguen: 0, rechazadas: 0 })   // ya no se toca
+    expect(intento()).toBe(4)
+  })
+  it('el aviso del descarte nunca frena nada: sin token no hay aviso, y si Slack falla igual se descarta', async () => {
+    sembrar()
+    const t = new Date('2026-10-21T12:00:00.000Z')
+    db.tablas['notas_del_dueno_envios'] = [{ nota_id: 'n1', estado: 'pendiente', intentos: 3, ts: TS, canal_slack: 'C1', respondido_en: CTX.respondido_en, creada_en: '2026-10-21T11:00:00.000Z', actualizada_en: '2026-10-21T11:00:00.000Z' }]
+    const sinToken = puerta([503])
+    expect(await reintentarPendientes(db, { ...env, ahora: () => t }, sinToken.f)).toMatchObject({ rechazadas: 1 })
+    expect(sinToken.posts).toHaveLength(1)                                                 // solo la puerta: ningún aviso a Slack
+    db.tablas['notas_del_dueno_envios'] = [{ nota_id: 'n1', estado: 'pendiente', intentos: 3, ts: TS, canal_slack: 'C1', respondido_en: CTX.respondido_en, creada_en: '2026-10-21T11:00:00.000Z', actualizada_en: '2026-10-21T11:00:00.000Z' }]
+    const f = (async (url: string) => { if (String(url).includes('slack.com')) throw new Error('slack caído'); return new Response('{}', { status: 503 }) }) as unknown as typeof fetch
+    expect(await reintentarPendientes(db, { ...env, slackToken: 'xoxb-1', ahora: () => t }, f)).toMatchObject({ rechazadas: 1 })
+    expect(fila()?.estado).toBe('rechazada')
+  })
+  it('un grupo atascado esperando su turno NO bloquea a las notas nuevas', async () => {
+    const t = new Date('2026-10-21T12:00:00.000Z')
+    for (let i = 1; i <= 25; i++) {
+      const n = nota({ id: `viejo${i}`, clave_unica: `kv${i}`, comentario: `viejo ${i}` })
+      db.semilla('notas_del_dueno', [{ ...n, creada_en: '2026-10-21T10:00:00.000Z' }])
+      db.semilla('notas_del_dueno_envios', [{ nota_id: n.id, estado: 'pendiente', intentos: 2, ts: TS, canal_slack: 'C1', respondido_en: CTX.respondido_en, creada_en: '2026-10-21T10:00:00.000Z', actualizada_en: '2026-10-21T11:55:00.000Z', proximo_intento: '2026-10-21T12:30:00.000Z' }])
+    }
+    sembrar(nota({ id: 'nueva', clave_unica: 'knueva', comentario: 'nueva' }))
+    db.semilla('notas_del_dueno_envios', [{ nota_id: 'nueva', estado: 'pendiente', intentos: 0, ts: TS, canal_slack: 'C1', respondido_en: CTX.respondido_en, creada_en: '2026-10-21T11:59:00.000Z', actualizada_en: '2026-10-21T11:59:00.000Z' }])
+    const { f, posts } = puerta([200])
+    expect(await reintentarPendientes(db, { ...env, ahora: () => t }, f, 20)).toEqual({ intentadas: 1, enviadas: 1, siguen: 0, rechazadas: 0 })
+    expect(posts.map((p) => p.respuesta)).toEqual(['nueva'])
+  })
   it('con el empuje APAGADO (NOTAS_AL_CEREBRO sin encender) la nota se ENCOLA como pendiente y NO se llama a la puerta; al encenderlo, la siguiente vuelta la sube', async () => {
     sembrar()
     const apagada = { ...env, alCerebro: false }
@@ -199,9 +254,9 @@ describe('el envío con su cola', () => {
     for (let i = 1; i <= 3; i++) {
       const n = nota({ id: `n${i}`, clave_unica: `k${i}`, comentario: `comentario ${i}` })
       db.semilla('notas_del_dueno', [{ ...n, creada_en: `2026-10-21T12:0${i}:00.000Z` }])
-      db.semilla('notas_del_dueno_envios', [{ nota_id: n.id, estado: 'pendiente', intentos: 1, ts: `1792575${600 + i}.000001`, canal_slack: 'C1', respondido_en: '2026-10-21T12:00:00.000Z', creada_en: `2026-10-21T12:0${i}:00.000Z` }])
+      db.semilla('notas_del_dueno_envios', [{ nota_id: n.id, estado: 'pendiente', intentos: 1, ts: `1792575${600 + i}.000001`, canal_slack: 'C1', respondido_en: '2026-10-21T12:00:00.000Z', creada_en: `2026-10-21T12:0${i}:00.000Z`, actualizada_en: `2026-10-21T12:0${i}:00.000Z` }])
     }
-    db.semilla('notas_del_dueno_envios', [{ nota_id: 'huerfana', estado: 'pendiente', intentos: 0, ts: '1792575600.000009', canal_slack: 'C1', respondido_en: '2026-10-21T12:00:00.000Z', creada_en: '2026-10-21T11:00:00.000Z' }])
+    db.semilla('notas_del_dueno_envios', [{ nota_id: 'huerfana', estado: 'pendiente', intentos: 0, ts: '1792575600.000009', canal_slack: 'C1', respondido_en: '2026-10-21T12:00:00.000Z', creada_en: '2026-10-21T11:00:00.000Z', actualizada_en: '2026-10-21T11:00:00.000Z' }])
     const { f, posts } = puerta([200])
     expect(await reintentarPendientes(db, env, f, 3)).toEqual({ intentadas: 2, enviadas: 2, siguen: 1, rechazadas: 0 }) // la huérfana (la más vieja) no tiene nota: sigue, y no frena a las otras
     expect(posts.map((p) => p.respuesta)).toEqual(['comentario 1', 'comentario 2'])
@@ -290,7 +345,7 @@ describe('qué sube al cerebro y qué no (la decisión del dueño)', () => {
     expect(r.status).toBe(200)
     expect(r.cuerpo).toMatchObject({ ok: true, cerebro: 'pendiente' })
     expect(db.tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'pendiente' })
-    const vuelta = await reintentarPendientes(db, { ...env, alCerebro: true, slackToken: 'x' }, (async (_u: string, init?: RequestInit) => { posts.push(JSON.parse(String(init?.body ?? '{}'))); return new Response(JSON.stringify({ ok: true }), { status: 200 }) }) as unknown as typeof fetch)
+    const vuelta = await reintentarPendientes(db, { ...env, alCerebro: true, slackToken: 'x', ahora: () => new Date(Date.now() + 10 * 60_000) }, (async (_u: string, init?: RequestInit) => { posts.push(JSON.parse(String(init?.body ?? '{}'))); return new Response(JSON.stringify({ ok: true }), { status: 200 }) }) as unknown as typeof fetch)
     expect(vuelta).toMatchObject({ enviadas: 1 })
     expect(posts[1]).toMatchObject({ respuesta: 'Prefiero frases cortas', tema: 'oficina creativa · pieza 11111111', acumula: true })
   })
@@ -452,6 +507,34 @@ describe('las rutas de Slack también reintentan lo pendiente (la siguiente vuel
     expect(posts[0]).toMatchObject({ respuesta: 'Más corto', client_id: C1 })
     expect(llaves).toEqual(['llave'])                                              // con la llave interna, no vacía
     expect(dbRutas.tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'enviada' })
+  })
+  it('D2 · con la bandera encendida un COMENTARIO nuevo sube al cerebro en el momento (no espera a la siguiente vuelta)', async () => {
+    const crypto = await import('node:crypto')
+    const { POST } = await import('@/app/api/slack/eventos/route')
+    dbRutas.tablas['notas_del_dueno_envios'] = []; dbRutas.tablas['notas_del_dueno'] = []
+    dbRutas.semilla('hitl_queue', [{ id: HITL, client_id: C1, type: 'content_piece_review', status: 'pending', title: 'Post del lunes', output_id: null, metadata: { familia: 'post_img', slack: { canal: 'C0C7XUKNCLS', ts: '1792575000.000100' } } }])
+    const cuerpo = JSON.stringify({ type: 'event_callback', event: { type: 'message', channel: 'C0C7XUKNCLS', ts: '1792575600.123456', thread_ts: '1792575000.000100', user: EMILIO, text: 'Prefiero frases cortas' } })
+    const marca = String(Math.floor(Date.now() / 1000))
+    const firma = 'v0=' + crypto.createHmac('sha256', 'sec').update(`v0:${marca}:${cuerpo}`).digest('hex')
+    expect((await POST(new Request('https://app.test/api/slack/eventos', { method: 'POST', headers: { 'content-type': 'application/json', 'x-slack-request-timestamp': marca, 'x-slack-signature': firma }, body: cuerpo }))).status).toBe(200)
+    await Promise.all(pendientes)
+    expect(posts).toHaveLength(1)
+    expect(posts[0]).toMatchObject({ respuesta: 'Prefiero frases cortas', tema: 'oficina creativa · pieza 11111111', acumula: true })
+    expect(dbRutas.tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'enviada', intentos: 1 })
+  })
+  it('D2 · con la bandera APAGADA el mismo comentario se registra y queda en cola, sin llamar a la puerta', async () => {
+    delete process.env.NOTAS_AL_CEREBRO
+    const crypto = await import('node:crypto')
+    const { POST } = await import('@/app/api/slack/eventos/route')
+    dbRutas.tablas['notas_del_dueno_envios'] = []; dbRutas.tablas['notas_del_dueno'] = []
+    dbRutas.semilla('hitl_queue', [{ id: HITL, client_id: C1, type: 'content_piece_review', status: 'pending', title: 'Post del lunes', output_id: null, metadata: { familia: 'post_img', slack: { canal: 'C0C7XUKNCLS', ts: '1792575000.000100' } } }])
+    const cuerpo = JSON.stringify({ type: 'event_callback', event: { type: 'message', channel: 'C0C7XUKNCLS', ts: '1792575600.123456', thread_ts: '1792575000.000100', user: EMILIO, text: 'Prefiero frases cortas' } })
+    const marca = String(Math.floor(Date.now() / 1000))
+    const firma = 'v0=' + crypto.createHmac('sha256', 'sec').update(`v0:${marca}:${cuerpo}`).digest('hex')
+    await POST(new Request('https://app.test/api/slack/eventos', { method: 'POST', headers: { 'content-type': 'application/json', 'x-slack-request-timestamp': marca, 'x-slack-signature': firma }, body: cuerpo }))
+    await Promise.all(pendientes)
+    expect(posts).toHaveLength(0)
+    expect(dbRutas.tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'pendiente', intentos: 0 })
   })
   it('cada clic firmado en los botones también sube primero lo que quedó pendiente', async () => {
     const crypto = await import('node:crypto')
