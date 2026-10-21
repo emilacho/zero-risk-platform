@@ -21,7 +21,7 @@ export const CANAL_ALERTAS = 'C0B7XUUEBHA'
 
 /** adaptador real: chat.postMessage con la llave del bot (chat:write). `fetchImpl` se inyecta en pruebas. */
 export function publicarEnSlack({ token, canal = CANAL_ALERTAS, fetchImpl = fetch }) {
-  return async ({ text, thread_ts }) => {
+  return async (/** @type {{ text: string, thread_ts?: string }} */ { text, thread_ts }) => {
     try {
       const r = await fetchImpl('https://slack.com/api/chat.postMessage', {
         method: 'POST',
