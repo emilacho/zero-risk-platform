@@ -12,12 +12,14 @@ import { fileURLToPath } from 'node:url'
 const aqui = dirname(fileURLToPath(import.meta.url))
 const src = (f) => fs.readFileSync(join(aqui, f), 'utf8')
 const LOGICA = fs.readFileSync(join(aqui, '..', '..', '..', 'src', 'lib', 'fotos', 'fotos-contexto-logica.js'), 'utf8')
+// T2 (21-oct): la copia de las demás fuentes propias (Mapas · sitio · Facebook · YouTube) va pegada en «Fotos · lista» junto a la lógica de Instagram
+const FUENTES = fs.readFileSync(join(aqui, '..', '..', '..', 'src', 'lib', 'fotos', 'copias-de-las-fuentes-logica.js'), 'utf8')
 const sinExports = (js) => { const i = js.indexOf("if (typeof module !== 'undefined' && module.exports)"); return i === -1 ? js : js.slice(0, i) }
 
 export const NODOS = { lista: 'Fotos · lista', revisar: 'Fotos · revisar', anotar: 'Fotos · anotar' }
 export function codigoDeNodo(clave) {
   switch (clave) {
-    case 'lista': return sinExports(LOGICA) + '\n' + src('fotos-lista.js')
+    case 'lista': return sinExports(LOGICA) + '\n' + sinExports(FUENTES) + '\n' + src('fotos-lista.js')
     case 'revisar': return sinExports(LOGICA) + '\n' + src('fotos-revisar.js')
     case 'anotar': return src('fotos-anotar.js')
     default: throw new Error('nodo sin código: ' + clave)
