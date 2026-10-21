@@ -6,6 +6,7 @@
 import { almacenDeSupabase as almacenDeLaCadena } from '@/lib/cadena/almacen-supabase'
 import { reintentarPiezas, CLAVE_INTERRUPTOR, CLAVE_LIBRETA, type Libreta, type ParteParaReintento, type PuertosDeReintento, type ResultadoDelReintento } from '@/lib/cadena/reintento-piezas'
 import type { Db } from './almacen-supabase'
+import { identidadVisualDelCliente, previueloDeLaminas, esFamiliaDeLaminas } from './identidad-visual'
 import { almacenDeSupabase as almacenDeLaOficina } from './almacen-supabase'
 
 type Fila = Record<string, unknown>
@@ -47,6 +48,18 @@ export function puertosDeReintento(db: Db, env: { slackToken?: string; canalHilo
       return m
     },
     frenoDeGasto: (clientId) => cadena.frenoDeGasto(clientId),
+    async previueloDeLaminas(clientId, familia) {
+      if (!esFamiliaDeLaminas(familia)) return { ok: true }
+      // las mismas lecturas que el pre-vuelo de la puerta (`fuentes`): la ficha y el manual vigente; una lectura que falla NO bloquea (la puerta la vuelve a leer y decide)
+      const cl = (await db.from('clients').select('id,slug,logo_url,brand_colors,brand_fonts,config').eq('id', clientId).limit(1)) as { data: Fila[] | null; error: { message: string } | null }
+      const mb = (await db.from('client_brand_books').select('*').eq('client_id', clientId).order('version', { ascending: false }).limit(1)) as { data: Fila[] | null; error: { message: string } | null }
+      if (cl.error || mb.error || !cl.data?.[0] || !mb.data?.[0]) return { ok: true }
+      const cliente = cl.data[0]
+      const config = (cliente.config ?? {}) as { apify?: { own_handles?: Record<string, string> } }
+      const handles = Object.values(config.apify?.own_handles ?? {}).filter(Boolean).map((h) => (String(h).startsWith('@') ? String(h) : `@${h}`))
+      const falta = previueloDeLaminas({ marca: identidadVisualDelCliente(mb.data[0], cliente, handles).marca, slug: typeof cliente.slug === 'string' && cliente.slug ? cliente.slug : null })
+      return falta ? { ok: false, motivo: falta.error } : { ok: true }
+    },
     emitirSobre: (sobre) => cadena.emitirSobre(sobre),
     async leerLibreta() {
       const v = await cadena.leerConfig(CLAVE_LIBRETA)

@@ -43,6 +43,8 @@ export interface PuertosDeReintento {
   /** fila_id → fecha y hora del calendario (la última versión de la campaña) */
   cuando(campanaId: string): Promise<ReadonlyMap<string, { fecha: string; hora: string | null }>>
   frenoDeGasto(clientId: string): Promise<{ bloqueado: boolean; motivo?: string }>
+  /** 21-oct · el MISMO pre-vuelo de la puerta de la oficina para las familias de láminas: si falta identidad visual o carpeta, el brief queda PENDIENTE DE DATOS (no sale sobre y no se gasta intento) hasta que el re-proceso visual llene el dato */
+  previueloDeLaminas(clientId: string, familia: string): Promise<{ ok: true } | { ok: false; motivo: string }>
   emitirSobre(sobre: SobreDeProducir): Promise<ResultadoDeEmision>
   leerLibreta(): Promise<Libreta>
   escribirLibreta(l: Libreta): Promise<void>
@@ -50,7 +52,7 @@ export interface PuertosDeReintento {
   avisar(texto: string): Promise<void>
 }
 
-export type AccionDeReintento = 'llego' | 'sin_sala' | 'espera' | 'reintentar' | 'freno' | 'agotado' | 'ya_avisado'
+export type AccionDeReintento = 'llego' | 'sin_sala' | 'espera' | 'reintentar' | 'freno' | 'agotado' | 'ya_avisado' | 'pendiente_de_datos'
 export interface LineaDelPlan { parte_id: string; brief_id: string; fila_id: string | null; familia: string | null; accion: AccionDeReintento; intentos: number; faltan_min?: number; detalle?: string }
 export interface ResultadoDelReintento {
   accion: 'apagado' | 'cadena_apagada' | 'vigilado' | 'en_seco'
@@ -112,6 +114,9 @@ export async function reintentarPiezas(P: PuertosDeReintento, o: { ejecutar: boo
           }
           continue
         }
+        // pendiente de datos ANTES del freno y de gastar un intento: la puerta de la oficina lo rechazaría con el mismo motivo; cuando el dato aparezca, la espera ya está cumplida y sale en la siguiente pasada
+        const pre = await P.previueloDeLaminas(c.client_id, dec.familia).catch((): { ok: true } => ({ ok: true }))
+        if (!pre.ok) { res.plan.push({ ...base, accion: 'pendiente_de_datos', intentos: n, detalle: pre.motivo }); continue }
         if (freno.bloqueado) { res.plan.push({ ...base, accion: 'freno', intentos: n, detalle: freno.motivo }); continue }
 
         res.plan.push({ ...base, accion: 'reintentar', intentos: n })

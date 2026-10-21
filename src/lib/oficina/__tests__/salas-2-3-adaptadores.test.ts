@@ -203,11 +203,43 @@ describe('INTEGRACIÓN · carrusel con almacén real (base falsa) + adaptadores,
     expect(turnos.every((t) => t.estado === 'hecho')).toBe(true)
     expect(JSON.stringify(db.tablas['oficina_artefactos'].map((x) => x.tipo))).toMatch(/render/)
   })
-  it('el cliente sin slug no abre: falla visible en el primer paso, antes de gastar', async () => {
+  it('el cliente sin slug no abre: el PRE-VUELO lo frena en la PUERTA (409, sin crear el encargo) y no gasta nada', async () => {
     const db = sembrar({ slug: null }); const { f, llamadas } = fetchFalso()
     const P = crearPuertos(db, ENV, f)
     const a = await abrir(P, false)
-    expect(a.cuerpo).toMatchObject({ estado: 'fallido' }); expect(String(a.cuerpo.motivo)).toMatch(/slug/)
+    expect(a.status).toBe(409); expect(a.cuerpo).toMatchObject({ error: 'sin_slug', familia: 'carrusel_ig_v1', pendiente: 'reproceso_visual' }); expect(String(a.cuerpo.detalle)).toMatch(/slug/)
+    expect(db.tablas['oficina_encargos'] ?? []).toHaveLength(0)
     expect(llamadas.filter((x) => !x.url.startsWith('https://slack.com'))).toEqual([])
+  })
+  it('PRE-VUELO · el caso de la tercera prueba (ficha solo con Instagram: manual con la paleta vacía, ficha sin colores) NO abre encargo: 409 sin_identidad_visual, cero gasto', async () => {
+    const db = sembrar({ colores: [] }); const { f, llamadas } = fetchFalso()
+    db.tablas['client_brand_books'][0].typography = {}
+    db.tablas['client_brand_books'][0].content_text = JSON.stringify({ visual: { version: 1, capa_grafica: { paleta: [], tipografias: [], logo_url: null } } })
+    const P = crearPuertos(db, ENV, f)
+    const r = await abrir(P, false)
+    expect(r.status).toBe(409); expect(r.cuerpo).toMatchObject({ error: 'sin_identidad_visual', pendiente: 'reproceso_visual' })
+    expect(db.tablas['oficina_encargos'] ?? []).toHaveLength(0); expect(llamadas.filter((x) => !x.url.startsWith('https://slack.com'))).toEqual([])
+  })
+  it('UN solo lugar · con la paleta SOLO en el bloque visual del manual (columnas viejas vacías) el encargo abre y la marca sale de ese bloque', async () => {
+    const db = sembrar({ colores: [] }); const { f } = fetchFalso()
+    db.tablas['client_brand_books'][0].typography = []
+    db.tablas['client_brand_books'][0].content_text = JSON.stringify({ visual: { version: 1, capa_grafica: { paleta: [{ color: '#aa0011', rol: 'principal' }, { color: '#00bb22', rol: 'acento' }], tipografias: [{ nombre: 'Caveat', rol: 'titulos' }, { nombre: 'Inter', rol: 'cuerpo' }] } } })
+    const P = crearPuertos(db, ENV, f)
+    const fu = await P.fuentes(CLIENTE)
+    expect('error' in fu).toBe(false)
+    expect((fu as { marca: unknown }).marca).toMatchObject({ colors: { primary: '#aa0011', secondary: '#00bb22' }, fonts: { family: 'Inter', headline_family: 'Caveat' } })
+    const r = await abrir(P, false)
+    expect(r.status).not.toBe(409); expect(db.tablas['oficina_encargos']).toHaveLength(1)
+  })
+  it('respaldo de la ficha · las columnas `brand_colors` y `brand_fonts` del cliente SE LEEN de verdad (antes el select no las pedía y el respaldo nunca funcionó)', async () => {
+    const db = sembrar({ colores: [] }); const { f } = fetchFalso()
+    db.tablas['client_brand_books'][0].typography = []
+    db.tablas['clients'][0].brand_colors = [{ hex: '#abcdef' }]; db.tablas['clients'][0].brand_fonts = ['Bebas Neue']
+    const pedidos: string[] = []
+    const desde = db.from.bind(db)
+    db.from = ((t: string) => { const q = desde(t) as unknown as { select: (c: string, ...r: unknown[]) => unknown }; const sel = q.select.bind(q); q.select = (c: string, ...r: unknown[]) => { if (t === 'clients') pedidos.push(String(c)); return sel(c, ...r) }; return q }) as never
+    const fu = await crearPuertos(db, ENV, f).fuentes(CLIENTE)
+    expect(pedidos.join(' ')).toMatch(/brand_colors/); expect(pedidos.join(' ')).toMatch(/brand_fonts/)
+    expect((fu as { marca: unknown }).marca).toMatchObject({ colors: { primary: '#abcdef' }, fonts: { family: 'Bebas Neue' } })
   })
 })
