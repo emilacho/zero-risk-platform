@@ -14,12 +14,14 @@ import { CLIENTE, PARTE, crearMemoria } from './memoria'
 
 const nuevo = (brief_id = 'BRF-0001', extra: Partial<NuevoEncargo> = {}): NuevoEncargo => ({ client_id: CLIENTE, parte_id: PARTE, brief_id, tipo_de_grupo: 'carrusel_ig_v1', familia: 'carrusel_ig_v1', tope_usd: 1.5, dry_run: false, prueba: false, sala_ref: null, estado_del_motor: estadoInicial(), ...extra })
 const fila = (brief_id: string, o: Record<string, unknown> = {}) => ({ id: `e-${brief_id}-${o.version_encargo ?? 1}`, client_id: CLIENTE, parte_id: PARTE, brief_id, tipo_de_grupo: 'carrusel_ig_v1', familia: 'carrusel_ig_v1', version_encargo: 1, estado: 'fallido', gasto_usd: 0, tope_usd: 1.5, dry_run: false, estado_del_motor: estadoInicial(), ...o })
-const rastro = (estado: string, gasto_usd = 0, version_encargo = 1) => ({ estado, gasto_usd, version_encargo })
+const rastro = (estado: string, gasto_usd = 0, version_encargo = 1, pasos_ejecutados = 0) => ({ estado, gasto_usd, version_encargo, pasos_ejecutados })
 
 describe('la decisión (pura)', () => {
-  it('solo un fallido SIN gasto es recuperable', () => {
+  it('solo un fallido SIN gasto y del PRIMER paso es recuperable (un freno de gasto corta una llamada de un paso posterior: no se reabre solo)', () => {
     expect(esFallidoRecuperable(rastro('fallido'))).toBe(true)
     expect(esFallidoRecuperable(rastro('fallido', 0.01))).toBe(false)
+    expect(esFallidoRecuperable(rastro('fallido', 0, 1, 1))).toBe(false)
+    expect(decidirReapertura(rastro('fallido', 0, 1, 2))).toEqual({ accion: 'devolver' })
     for (const e of ['abierto', 'en_paso', 'cerrado', 'cerrado_por_tope']) expect(esFallidoRecuperable(rastro(e))).toBe(false)
   })
   it('reabre con la versión siguiente; en la última permitida, no', () => {
@@ -77,14 +79,22 @@ describe('el almacén REAL (base falsa)', () => {
     expect(v4.ok && !v4.nuevo && v4.encargo.version_encargo === 3).toBe(true)
     expect(db.tablas['oficina_encargos']).toHaveLength(3)
   })
-  it('un fallido que GASTÓ, uno cerrado por tope y uno cerrado bien no se reabren solos', async () => {
-    const db = new DbFalsa().semilla('oficina_encargos', [fila('BRF-0001', { gasto_usd: 0.4 }), fila('BRF-0002', { estado: 'cerrado_por_tope' }), fila('BRF-0003', { estado: 'cerrado' })])
+  it('un fallido que GASTÓ, uno de un paso POSTERIOR (como un freno de gasto, gasto 0), uno cerrado por tope y uno cerrado bien no se reabren solos', async () => {
+    const db = new DbFalsa().semilla('oficina_encargos', [fila('BRF-0001', { gasto_usd: 0.4 }), fila('BRF-0002', { estado: 'cerrado_por_tope' }), fila('BRF-0003', { estado: 'cerrado' }), fila('BRF-0005', { estado_del_motor: { ...estadoInicial(), pasos_ejecutados: 2 } })])
     const A = almacenDeSupabase(db as never)
-    for (const b of ['BRF-0001', 'BRF-0002', 'BRF-0003']) {
+    for (const b of ['BRF-0001', 'BRF-0002', 'BRF-0003', 'BRF-0005']) {
       const r = await A.crearEncargo(nuevo(b))
       expect(r.ok && !r.nuevo && r.encargo.version_encargo === 1).toBe(true)
     }
-    expect(db.tablas['oficina_encargos']).toHaveLength(3)
+    expect(db.tablas['oficina_encargos']).toHaveLength(4)
+  })
+  it('dos sobres a la vez: el segundo pierde la carrera por el índice único y devuelve la v2 que ganó, sin abrir otra', async () => {
+    const real = new DbFalsa().semilla('oficina_encargos', [fila('BRF-0001'), fila('BRF-0001', { version_encargo: 2, estado: 'abierto', id: 'ganadora' })])
+    let primera = true
+    const db = { from: (t: string) => { const c = real.from(t); return { select: (cols?: string) => { if (primera && t === 'oficina_encargos') { primera = false; const l = real.tablas['oficina_encargos'].filter((f) => f.version_encargo === 1); return { eq() { return this }, order() { return this }, limit() { return Promise.resolve({ data: l, error: null }) } } } return c.select(cols) }, insert: (f: Record<string, unknown>) => c.insert(f) } } }
+    const r = await almacenDeSupabase(db as never).crearEncargo(nuevo())
+    expect(r.ok && !r.nuevo && r.encargo.id === 'ganadora' && r.encargo.version_encargo === 2).toBe(true)
+    expect(real.tablas['oficina_encargos']).toHaveLength(2)
   })
   it('sin encargos previos nace la versión 1; un error de la base al mirar los previos se devuelve (no se abre a ciegas)', async () => {
     const A = almacenDeSupabase(new DbFalsa().semilla('oficina_encargos', []) as never)
@@ -118,7 +128,7 @@ describe('la puerta y el cierre (almacén de memoria)', () => {
     const a = await abrir(M)
     const id1 = String(a.cuerpo.encargo_id)
     const viejo = M.encargos.get(id1)!
-    viejo.estado = 'fallido'; viejo.gasto_usd = 0
+    viejo.estado = 'fallido'; viejo.gasto_usd = 0; viejo.estado_del_motor = estadoInicial() // murió en el pre-vuelo del primer paso
     const copia = JSON.parse(JSON.stringify(viejo))
     const b = await abrir(M)
     const id2 = String(b.cuerpo.encargo_id)

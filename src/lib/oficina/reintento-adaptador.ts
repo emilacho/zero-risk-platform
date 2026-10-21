@@ -37,10 +37,10 @@ export function puertosDeReintento(db: Db, env: { slackToken?: string; canalHilo
       })
     },
     async briefsConEncargo(parteId) {
-      const r = (await db.from('oficina_encargos').select('brief_id,estado,gasto_usd,version_encargo').eq('parte_id', parteId).eq('dry_run', false)) as { data: Fila[] | null; error: { message: string } | null }
+      const r = (await db.from('oficina_encargos').select('brief_id,estado,gasto_usd,version_encargo,estado_del_motor').eq('parte_id', parteId).eq('dry_run', false)) as { data: Fila[] | null; error: { message: string } | null }
       if (r.error) fallo('leer los encargos', r.error)
       // un `fallido` recuperable (sin gasto, con versiones por usar) NO cuenta como «llegó»: la puerta lo reabre como la versión siguiente (`reapertura.ts`)
-      return new Set((r.data ?? []).filter((f) => bloqueaElReintento({ estado: String(f.estado), gasto_usd: Number(f.gasto_usd ?? 0), version_encargo: Number(f.version_encargo ?? 1) })).map((f) => String(f.brief_id)))
+      return new Set((r.data ?? []).filter((f) => bloqueaElReintento({ estado: String(f.estado), gasto_usd: Number(f.gasto_usd ?? 0), version_encargo: Number(f.version_encargo ?? 1), pasos_ejecutados: Number((f.estado_del_motor as { pasos_ejecutados?: number } | null)?.pasos_ejecutados ?? 0) })).map((f) => String(f.brief_id)))
     },
     async configOficina() { return oficina.leerConfig() },
     async plantillaActiva(familia) { const p = await oficina.leerPlantilla(familia); return !!p && p.activo === true },

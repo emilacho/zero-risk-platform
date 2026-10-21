@@ -80,7 +80,7 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
       const previos = [...m.encargos.values()].filter((x) => x.parte_id === n.parte_id && x.brief_id === n.brief_id && x.tipo_de_grupo === n.tipo_de_grupo).sort((a, b) => b.version_encargo - a.version_encargo)
       let version = 1
       if (previos[0]) {
-        const d = decidirReapertura(previos[0])
+        const d = decidirReapertura({ estado: previos[0].estado, gasto_usd: previos[0].gasto_usd, version_encargo: previos[0].version_encargo, pasos_ejecutados: previos[0].estado_del_motor.pasos_ejecutados })
         if (d.accion === 'devolver') return { ok: true, encargo: previos[0], nuevo: false }
         version = d.version
       }

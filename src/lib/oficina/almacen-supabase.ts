@@ -54,7 +54,7 @@ export function almacenDeSupabase(db: Db): Almacen {
       const ultimo = (previos.data as Fila[] | null)?.[0]
       let version = 1
       if (ultimo) {
-        const d = decidirReapertura({ estado: String(ultimo.estado), gasto_usd: Number(ultimo.gasto_usd ?? 0), version_encargo: Number(ultimo.version_encargo ?? 1) })
+        const d = decidirReapertura({ estado: String(ultimo.estado), gasto_usd: Number(ultimo.gasto_usd ?? 0), version_encargo: Number(ultimo.version_encargo ?? 1), pasos_ejecutados: Number((ultimo.estado_del_motor as { pasos_ejecutados?: number } | null)?.pasos_ejecutados ?? 0) })
         if (d.accion === 'devolver') return { ok: true as const, encargo: aEncargo(ultimo), nuevo: false }
         version = d.version
       }

@@ -189,13 +189,16 @@ describe('de punta a punta con los datos de la tercera prueba', () => {
 })
 
 describe('reabrir fallidos recuperables (21-oct): lo que cuenta como «llegó»', () => {
-  const enc = (brief_id: string, o: Record<string, unknown> = {}) => ({ id: `e-${brief_id}-${o.version_encargo ?? 1}`, parte_id: PARTE, brief_id, version_encargo: 1, estado: 'fallido', gasto_usd: 0, dry_run: false, ...o })
+  const enc = (brief_id: string, o: Record<string, unknown> = {}) => ({ id: `e-${brief_id}-${o.version_encargo ?? 1}`, parte_id: PARTE, brief_id, version_encargo: 1, estado: 'fallido', gasto_usd: 0, dry_run: false, estado_del_motor: { pasos_ejecutados: 0 }, ...o })
   const lee = async (filas: Array<Record<string, unknown>>) => [...(await puertosDeReintento(new DbFalsa().semilla('oficina_encargos', filas) as never, ENV).briefsConEncargo(PARTE))].sort()
   it('un fallido recuperable NO cuenta; vivo, terminado, gastado y agotado sí', async () => {
     expect(await lee([enc('BRF-0001'), enc('BRF-0002', { estado: 'abierto' }), enc('BRF-0003', { gasto_usd: 0.3 }), enc('BRF-0004', { version_encargo: 3 }), enc('BRF-0005', { estado: 'cerrado' }), enc('BRF-0006', { estado: 'cerrado_por_tope' })])).toEqual(['BRF-0002', 'BRF-0003', 'BRF-0004', 'BRF-0005', 'BRF-0006'])
   })
   it('una fila vieja fallida y una v2 viva del mismo brief: el brief cuenta (la v2 llegó)', async () => {
     expect(await lee([enc('BRF-0001'), enc('BRF-0001', { version_encargo: 2, estado: 'en_paso' })])).toEqual(['BRF-0001'])
+  })
+  it('un fallido de gasto 0 pero de un paso POSTERIOR (como un freno) sí bloquea: no se reabre solo', async () => {
+    expect(await lee([enc('BRF-0001', { estado_del_motor: { pasos_ejecutados: 2 } })])).toEqual(['BRF-0001'])
   })
   it('los 3 fallidos reales de la tercera prueba (gasto 0, v1) ya no bloquean al reintento', async () => {
     expect(await lee([enc('BRF-0001'), enc('BRF-0002'), enc('BRF-0004')])).toEqual([])
