@@ -49,6 +49,8 @@ describe('la forma EXACTA de la nota que sube a la puerta del dueño', () => {
     expect(temaDeLaNota('ab-cd-ef-gh-ij-kl-mn-op-qr-st-uv-wx-yz'.repeat(5)).length).toBeLessThanOrEqual(80)
     expect(idCorto(HITL)).toBe('11111111')
     expect(idCorto('a1b2c3d4-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe('a1b2c3d4')
+    expect(idCorto('ab-cd-ef-gh-ij')).toBe('abcdefgh')            // sin guiones ni símbolos: una sola palabra
+    expect(idCorto('ab-cd-ef-gh-ij')).not.toContain('-')
   })
   it('isoDeTs convierte el ts de Slack a la hora del mensaje y rechaza lo que no es un ts', () => {
     expect(isoDeTs('1792575600.123456')).toBe('2026-10-21T09:40:00.123Z')

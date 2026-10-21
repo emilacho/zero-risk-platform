@@ -245,6 +245,14 @@ describe('el puerto de notas de la oficina real (la auto-revisión lee del CEREB
     const red = (async () => { throw new Error('red caída') }) as unknown as typeof fetch
     expect((await crearPuertos(db, { ...ENV, notasDelDueno: true }, red).notas!.leer(CLIENTE)).error).toContain('red caída')
   })
+  it('las dos lecturas se juntan SIN repetir antes del tope: lo repetido no desplaza a lo nuevo', async () => {
+    const db = new DbFalsa()
+    const mk = (p: string, n: number): Resp[] => Array.from({ length: n }, (_, i) => ({ ficha_id: `${p}${i + 1}`, tema: 't', pregunta: '', respuesta: `dicho ${p}${i + 1}`, canal: '#c', respondido_en: '2026-10-21T10:00:00.000Z' }))
+    const creativo = mk('a', 10), general = [...mk('a', 10), ...mk('b', 5)]
+    const f = (async (url: string) => new Response(JSON.stringify({ ok: true, respuestas: String(url).includes('canal=') ? creativo : general }), { status: 200 })) as unknown as typeof fetch
+    const l = await crearPuertos(db, { ...ENV, notasDelDueno: true }, f).notas!.leer(CLIENTE)
+    expect(l.notas.map((v) => v.id)).toEqual([...creativo.map((x) => x.ficha_id), 'b1', 'b2', 'b3', 'b4', 'b5'])   // 15 distintas: las b no se pierden por culpa de las a repetidas
+  })
   it('si solo falla una de las dos lecturas del cerebro: sigue con la otra y deja el motivo', async () => {
     const db = new DbFalsa()
     let n = 0
