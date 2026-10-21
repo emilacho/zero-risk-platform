@@ -46,6 +46,8 @@ export interface Paso {
   /** validadores de código sobre la salida, ANTES de usarla */
   valida?: string[]
   vuelve_a?: VueltaA
+  /** el segundo cerebro: este paso es la AUTO-REVISIÓN del paso `revisa` (clave de un paso anterior del mismo agente y del mismo artefacto) contra las notas del dueño; si algo choca devuelve la entrega corregida, si no la pieza sigue tal cual */
+  revisa?: string
 }
 
 export interface ReglaDeIndicacion { regla: string; aplica: string }
