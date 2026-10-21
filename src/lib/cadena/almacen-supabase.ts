@@ -216,7 +216,8 @@ export function almacenDeSupabase(): Almacen {
       } catch (e) { return { ok: false, sedes: 0, error: e instanceof Error ? e.message : String(e) } }
     },
     async frenoDeGasto(clientId) {
-      const r = await checkRunSdkSpendCap(db, clientId)
+      // medición previa al reparto de piezas, no una corrida de empleado: sin identificador de ejecución y sin el aviso falso `run_scoped_unidentified` (mide y bloquea igual)
+      const r = await checkRunSdkSpendCap(db, clientId, { agentSlug: 'cadena/medicion-previa', medicionPrevia: true })
       return { bloqueado: r.blocked === true, motivo: r.reason }
     },
     async emitirSobre(sobre: SobreDeProducir | SobreDeLote): Promise<ResultadoDeEmision> {

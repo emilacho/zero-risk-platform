@@ -159,6 +159,9 @@ export interface SpendGateOptions {
   /** Identificador de ESTA corrida · `workflow_execution_id`. Lo pasan las dos puertas,
    *  que ya lo tienen resuelto en ámbito. Ausente ⇒ camino ruidoso (§ vara por corrida). */
   readonly runId?: string | null
+  /** true SOLO para una MEDICIÓN PREVIA (p. ej. el reparto de piezas de la cadena mide el gasto antes de emitir sobres): no es una corrida de empleado, así que no hay
+   *  identificador que pasar y NO se avisa `run_scoped_unidentified`. Mide y bloquea igual (vara por cliente/24 h). Las dos puertas de empleados NO lo usan: sin identificador siguen avisando. */
+  readonly medicionPrevia?: boolean
   /** Inyectable para prueba · en producción se usa el real. */
   readonly notify?: typeof notifySpendGateDegradation
 }
@@ -492,7 +495,7 @@ export async function checkRunSdkSpendCap(
     if (!runId) {
       // REGLA DEL CAMINO RUIDOSO · no se inventa un $0. La vara queda SIN evaluar y
       // se avisa · hoy no debería ocurrir (las dos puertas rechazan sin identificador).
-      void notify({
+      if (!opts.medicionPrevia) void notify({
         kind: 'run_scoped_unidentified',
         detail:
           'Corrida SIN identificador · la vara por corrida NO se pudo evaluar y NO se cuenta ' +
