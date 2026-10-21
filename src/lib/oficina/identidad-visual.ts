@@ -9,6 +9,7 @@
  *     y queda pendiente de que el re-proceso visual llene el dato. NUNCA se inventa una paleta ni se le pregunta al dueño (eso sería un punto humano nuevo, no firmado).
  */
 import type { MarcaParaRender } from './puertos'
+import { nombreDeTipografiaObservada } from '../../../scripts/worker-staging/ssLtwYPt7zxuvnM2/piso-visual-logica.js'
 
 type Fila = Record<string, unknown>
 const RE_HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
@@ -61,10 +62,18 @@ const nombreDeTipografia = (x: unknown): string | null => {
   const v = typeof x === 'string' ? x : (o?.nombre ?? o?.family ?? o?.name)
   return typeof v === 'string' && v.trim() ? v.trim() : null
 }
+/**
+ * 21-oct · DEFENSA DE LECTURA: una tipografía de las columnas del manual o del bloque visual solo cuenta si es un NOMBRE de tipografía (no «no reconocida con claridad» ni «Impact o condensed sans-serif bold»).
+ * Es LA MISMA función que usa el piso visual al escribir (`nombreDeTipografiaObservada`, sin copia): lo que no pasa se descarta y la cosa cae a la siguiente fuente (bloque → ficha → por omisión). La ficha (declarada por una persona) no se filtra.
+ */
+const nombreReal = (x: unknown): string | null => {
+  const n = nombreDeTipografia(x)
+  return n && nombreDeTipografiaObservada(n) ? n : null
+}
 const ROLES_DE_TIPOGRAFIA = new Set(['titulos', 'titulo', 'headline', 'cuerpo', 'texto', 'body'])
 /** tipografías del bloque: `cuerpo` ⇒ family; `titulos` ⇒ headline_family; sin rol, el orden en que vienen (primera = family, segunda = headline) */
 function tipografiasDelBloque(tipografias: unknown[]): { family?: string; headline?: string } {
-  const items = tipografias.map((x) => ({ n: nombreDeTipografia(x), rol: rolDe(x) })).filter((t): t is { n: string; rol: string } => !!t.n)
+  const items = tipografias.map((x) => ({ n: nombreReal(x), rol: rolDe(x) })).filter((t): t is { n: string; rol: string } => !!t.n)
   if (!items.length) return {}
   const titulos = items.find((t) => t.rol === 'titulos' || t.rol === 'titulo' || t.rol === 'headline')?.n
   const cuerpo = items.find((t) => t.rol === 'cuerpo' || t.rol === 'texto' || t.rol === 'body')?.n
@@ -85,11 +94,11 @@ export function identidadVisualDelCliente(manual: Fila, cliente: Fila, handles: 
   const procedenciaVacia = { colores: null as OrigenDelDato, tipografias: null as OrigenDelDato, logo: null as OrigenDelDato }
   if (!colores.length) return { marca: null, procedencia: procedenciaVacia, motivo: 'sin_color_primario' }
 
-  const comoLista = (d: unknown): string[] => lista<unknown>(d).map(nombreDeTipografia).filter((x): x is string => !!x)
+  const comoLista = (d: unknown, filtrar = false): string[] => lista<unknown>(d).map(filtrar ? nombreReal : nombreDeTipografia).filter((x): x is string => !!x)
   const delOrden = (t: string[]): { family?: string; headline?: string } => (t.length ? { family: t[0], ...(t[1] ? { headline: t[1] } : {}) } : {})
   // las columnas pueden traer objetos con rol (el piso visual con todas las fuentes los escribe así): con un rol reconocido se resuelve por rol; en texto plano, por orden = como siempre
   const tiposDeColumnas = lista<unknown>(manual.typography)
-  let tf = tiposDeColumnas.some((x) => ROLES_DE_TIPOGRAFIA.has(rolDe(x))) ? tipografiasDelBloque(tiposDeColumnas) : delOrden(comoLista(tiposDeColumnas))
+  let tf = tiposDeColumnas.some((x) => ROLES_DE_TIPOGRAFIA.has(rolDe(x))) ? tipografiasDelBloque(tiposDeColumnas) : delOrden(comoLista(tiposDeColumnas, true))
   let origenTipos: OrigenDelDato = tf.family ? 'manual' : null
   if (!tf.family && bloque) { tf = tipografiasDelBloque(bloque.tipografias); if (tf.family) origenTipos = 'bloque_visual' }
   if (!tf.family) { tf = delOrden(comoLista(cliente.brand_fonts)); if (tf.family) origenTipos = 'ficha' }

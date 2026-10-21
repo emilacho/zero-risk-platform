@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { bloqueVisualDelManual, esFamiliaDeLaminas, identidadVisualDelCliente, previueloDeLaminas } from '../identidad-visual'
 import { marcaDelCliente } from '../adaptadores'
+import { nombreDeTipografiaObservada } from '../../../../scripts/worker-staging/ssLtwYPt7zxuvnM2/piso-visual-logica.js'
 import { familiaDeLaminas } from '../orquestador-laminas'
 import { abrirEncargo } from '../orquestador'
 import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
@@ -232,5 +233,44 @@ describe('⑦ el pre-vuelo: qué se frena y qué no', () => {
     expect(b.status).toBe(409); expect(b.cuerpo).toMatchObject({ error: 'sin_slug', familia: 'kit_historias' }); expect(sinSlug.encargos.size).toBe(0)
     const bien = crearMemoria({ plantilla: CARRUSEL_IG_V1, fuentes: { marca, slug: 'cliente' } })
     expect((await abrir(bien, 'BRF-0003', 'carrusel_ig_v1')).status).not.toBe(409); expect(bien.encargos.size).toBe(1)
+  })
+})
+
+describe('DEFENSA DE LECTURA · una tipografía que no es un NOMBRE no llega a una lámina (21-oct)', () => {
+  // las columnas REALES del manual v2/v3 de df7e47cc (leídas de la base por CC#3): el modelo describió en vez de nombrar
+  const sucias = [{ family: 'Impact o condensed sans-serif bold', rol: 'titulos', procedencia: 'observado en logo', estado: 'propuesta' }, { family: 'no reconocida con claridad', rol: 'cuerpo', procedencia: 'observado en logo', estado: 'propuesta' }]
+  const colores = [{ hex: '#ff5a1a', rol: 'principal', procedencia: 'observado en logo', estado: 'propuesta' }]
+  it('CASO REAL df7e47cc: columnas sucias ⇒ la letra NO sale de ahí; sin bloque ni ficha cae a la de por omisión y lo declara', () => {
+    const m = identidadVisualDelCliente({ primary_colors: colores, typography: sucias }, {}, [])
+    expect(m.marca?.fonts).toEqual({ family: 'Inter' }); expect(m.procedencia.tipografias).toBe('por_omision'); expect(m.marca?.colors.primary).toBe('#ff5a1a')
+  })
+  it('cae al BLOQUE visual y luego a la ficha, en ese orden', () => {
+    const conBloque = identidadVisualDelCliente({ primary_colors: colores, typography: sucias, content_text: bloque({ paleta: [], tipografias: [{ nombre: 'Caveat', rol: 'titulos' }, { nombre: 'Inter', rol: 'cuerpo' }] }) }, { brand_fonts: ['Lato'] }, [])
+    expect(conBloque.marca?.fonts).toEqual({ family: 'Inter', headline_family: 'Caveat' }); expect(conBloque.procedencia.tipografias).toBe('bloque_visual')
+    const conFicha = identidadVisualDelCliente({ primary_colors: colores, typography: sucias }, { brand_fonts: ['Lato'] }, [])
+    expect(conFicha.marca?.fonts).toEqual({ family: 'Lato' }); expect(conFicha.procedencia.tipografias).toBe('ficha')
+  })
+  it('un bloque viejo con frases tampoco llega; las columnas en texto plano sucio se descartan igual', () => {
+    const m = identidadVisualDelCliente({ primary_colors: ['#112233'], typography: ['no reconocida con claridad', 'Impact o condensed sans-serif bold'], content_text: bloque({ tipografias: [{ nombre: 'sans-serif genérica', rol: 'cuerpo' }] }) }, {}, [])
+    expect(m.marca?.fonts).toEqual({ family: 'Inter' }); expect(m.procedencia.tipografias).toBe('por_omision')
+  })
+  it('de las columnas queda lo que SÍ es un nombre (una sucia y una buena ⇒ la buena)', () => {
+    const m = identidadVisualDelCliente({ primary_colors: colores, typography: [{ family: 'no reconocida con claridad', rol: 'cuerpo' }, { family: 'Caveat', rol: 'titulos' }] }, {}, [])
+    expect(m.marca?.fonts).toEqual({ family: 'Caveat' }); expect(m.procedencia.tipografias).toBe('manual')
+  })
+  it('NO REGRESIÓN · nombres reales (los de siempre) pasan idénticos, en texto plano y con rol', () => {
+    expect(identidadVisualDelCliente({ primary_colors: ['#112233'], typography: ['Caveat', 'Inter'] }, {}, []).marca?.fonts).toEqual({ family: 'Caveat', headline_family: 'Inter' })
+    expect(identidadVisualDelCliente({ primary_colors: ['#112233'], typography: [{ family: 'Inter', rol: 'cuerpo' }, { family: 'Playfair Display', rol: 'titulos' }] }, {}, []).marca?.fonts).toEqual({ family: 'Inter', headline_family: 'Playfair Display' })
+  })
+  it('la ficha (la declara una persona) NO se filtra', () => {
+    expect(identidadVisualDelCliente({ primary_colors: ['#112233'], typography: [] }, { brand_fonts: ['Poppins, sans-serif'] }, []).marca?.fonts.family).toBe('Poppins, sans-serif')
+  })
+  it('es LA MISMA regla que usa el piso al escribir (sin copia): para cada nombre, la oficina lo acepta si y solo si el piso lo acepta', () => {
+    const nombres = ['Inter', 'Caveat', 'Open Sans', 'Bebas Neue', 'Playfair Display', 'Impact o condensed sans-serif bold', 'no reconocida con claridad', 'Arial, Helvetica', 'Roboto/Lato', 'Fuente desconocida', 'sans-serif genérica', 'similar a Futura', 'Tipo grotesca', 'N/A', 'X'.repeat(41), 'Lato 2.0', 'Font#1']
+    for (const n of nombres) {
+      const m = identidadVisualDelCliente({ primary_colors: ['#112233'], typography: [n] }, {}, [])
+      const lo_acepta = m.procedencia.tipografias === 'manual' && m.marca?.fonts.family === n
+      expect(lo_acepta, n).toBe(!!nombreDeTipografiaObservada(n))
+    }
   })
 })
