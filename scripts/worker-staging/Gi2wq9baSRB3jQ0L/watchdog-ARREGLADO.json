@@ -1,0 +1,938 @@
+{
+  "id": "Gi2wq9baSRB3jQ0L",
+  "name": "Zero Risk — Cost Watchdog Multi-Service v2 (Cron Hourly)",
+  "description": null,
+  "active": true,
+  "activeVersionId": "fc91750d-646d-475b-98f4-9c23fd916dfb",
+  "createdAt": "2026-04-18T15:45:08.264Z",
+  "updatedAt": "2026-10-10T01:30:40.419Z",
+  "isArchived": false,
+  "versionId": "fc91750d-646d-475b-98f4-9c23fd916dfb",
+  "versionCounter": 28,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "id": "hourly",
+      "name": "Hourly",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fetch-anthropic",
+      "name": "Fetch Anthropic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        480,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/agent_invocations_daily_rollup?day=eq.{{ $now.toUTC().format('yyyy-MM-dd') }}&select=agent_id,model,total_cost_usd,invocations_count",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "fetch-openai",
+      "name": "Fetch OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        480,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.openai.com/v1/dashboard/billing/usage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "fetch-apify",
+      "name": "Fetch Apify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "retryOnFail": false,
+      "maxTries": 3,
+      "waitBetweenTries": 30000,
+      "onError": "continueRegularOutput",
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/users/me/limits",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.APIFY_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "aggregate",
+      "name": "Aggregate Costs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Cost Watchdog · relevo 42 · cada fuente en SU unidad; una fuente que no responde es null («sin datos»), NUNCA 0 (un cero que parece un dato es peor que no mirar).\nconst filas = (nombre) => { try { return $(nombre).all().map((i) => i.json).filter((j) => j && typeof j === 'object'); } catch (e) { return []; } };\n// Anthropic · el rollup diario de la base (agent_invocations_daily_rollup): una fila por agente y modelo, con total_cost_usd. HOY = suma de esas filas.\nconst hoyFilas = filas('Fetch Anthropic').filter((j) => j.total_cost_usd !== undefined && j.total_cost_usd !== null);\nconst anthropicHoy = hoyFilas.reduce((s, r) => s + (parseFloat(r.total_cost_usd) || 0), 0);\n// OpenAI · el endpoint de uso puede no responder con una llave de API: si no trae el número, es null\nconst o = filas('Fetch OpenAI')[0] || {};\nconst openaiUsd = typeof o.total_usage === 'number' ? o.total_usage / 100 : null;\n// Apify · gasto del ciclo (data.current.monthlyUsageUsd); si no viene, null\nconst a = filas('Fetch Apify')[0] || {};\nconst apifyRaw = a.data?.current?.monthlyUsageUsd ?? a.current?.monthlyUsageUsd;\nconst apifyUsd = typeof apifyRaw === 'number' ? apifyRaw : (apifyRaw !== undefined && apifyRaw !== null && !isNaN(parseFloat(apifyRaw)) ? parseFloat(apifyRaw) : null);\nconst sinDatos = [];\nif (openaiUsd === null) sinDatos.push('OpenAI');\nif (apifyUsd === null) sinDatos.push('Apify');\n// Apify HOY: su propia cuenta, día por día (dailyServiceUsages). Si la respuesta no trae la lista, es null («sin datos»), no 0.\nconst hoyUtc = new Date().toISOString().slice(0, 10);\nconst diarios = filas('Fetch Apify diario')[0] || {};\nconst lista = diarios.data && Array.isArray(diarios.data.dailyServiceUsages) ? diarios.data.dailyServiceUsages : null;\nconst delDia = lista ? lista.find((d) => d && typeof d.date === 'string' && d.date.slice(0, 10) === hoyUtc) : null;\nconst apifyHoyRaw = delDia ? parseFloat(delDia.totalUsageCreditsUsd) : (lista ? 0 : null);\nconst apifyHoy = apifyHoyRaw === null || isNaN(apifyHoyRaw) ? null : apifyHoyRaw;\nif (apifyHoy === null) sinDatos.push('Apify (día)');\nconst totalDia = anthropicHoy + (apifyHoy === null ? 0 : apifyHoy);\nreturn [{ json: { apify_hoy_usd: apifyHoy, total_dia_usd: totalDia, total_dia_parcial: apifyHoy === null, anthropic_hoy_usd: anthropicHoy, anthropic_filas_hoy: hoyFilas.length, openai_ciclo_usd: openaiUsd, apify_ciclo_usd: apifyUsd, fuentes_sin_datos: sinDatos, timestamp: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "fetch-history",
+      "name": "Fetch Historial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        960,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/agent_invocations_daily_rollup?day=gte.{{ $now.minus({ days: 7 }).toUTC().format('yyyy-MM-dd') }}&select=day,total_cost_usd,refreshed_at",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "detect-anomaly",
+      "name": "Detect Anomalies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Cost Watchdog · relevo 42 · compara el gasto de Anthropic de HOY (rollup diario) con el promedio de los días ANTERIORES con datos (mismo rollup). Sin historial: «sin datos», no relleno.\nconst ag = $('Aggregate Costs').first().json;\nconst hoy = $now.toUTC().toFormat('yyyy-MM-dd');\nconst hist = (() => { try { return $('Fetch Historial').all().map((i) => i.json).filter((j) => j && j.day && j.total_cost_usd !== undefined && j.total_cost_usd !== null); } catch (e) { return []; } })();\nconst porDia = {};\nfor (const r of hist) { if (r.day === hoy) continue; porDia[r.day] = (porDia[r.day] || 0) + (parseFloat(r.total_cost_usd) || 0); }\nconst dias = Object.keys(porDia);\nconst sinHistorial = dias.length === 0;\nconst promedio = sinHistorial ? null : dias.reduce((s, d) => s + porDia[d], 0) / dias.length;\nconst actual = ag.anthropic_hoy_usd || 0;\nlet esAnomalia = !sinHistorial && actual > promedio * 2 && actual > 0.10;\n// el rollup es una vista que se refresca: si su última actualización es vieja, el dato de hoy puede estar atrasado (se dice)\nconst refrescos = hist.map((r) => r.refreshed_at).filter(Boolean).sort();\nconst ultimo = refrescos.length ? refrescos[refrescos.length - 1] : null;\nconst horasDesdeRefresco = ultimo ? Math.round(((Date.now() - new Date(ultimo).getTime()) / 3600000) * 10) / 10 : null;\n// no repetir: un aviso por día (en ejecuciones reales; una prueba manual no guarda este dato)\nconst sd = $getWorkflowStaticData('global');\nlet yaAvisado = false;\nif (esAnomalia) { if (sd.ultimo_aviso_dia === hoy) { yaAvisado = true; esAnomalia = false; } else { sd.ultimo_aviso_dia = hoy; } }\nconst f = (n) => (n === null || n === undefined ? 'sin datos' : 'US$ ' + Number(n).toFixed(2));\nconst mensaje = '💸 *Cost Watchdog* · el gasto de Anthropic de HOY es ' + f(actual) + ', más del doble del promedio de los últimos ' + dias.length + ' día(s) con datos (' + f(promedio) + '). Fuente: rollup diario de la base' + (horasDesdeRefresco !== null ? ' (refrescado hace ' + horasDesdeRefresco + ' h)' : '') + '. OpenAI (ciclo): ' + f(ag.openai_ciclo_usd) + ' · Apify (ciclo): ' + f(ag.apify_ciclo_usd) + '.';\n// aviso diario de plataforma · suma de TODO el día (agentes de todas las fichas + Apify) contra el umbral; un aviso por nivel (10, 20, 30…) y día\nconst UMBRAL_DIA = 10;\nconst totalDia = typeof ag.total_dia_usd === 'number' ? ag.total_dia_usd : actual;\nconst nivel = Math.floor(totalDia / UMBRAL_DIA);\nlet avisaTope = false;\nif (nivel >= 1) { if (!(sd.tope_dia === hoy && sd.tope_nivel >= nivel)) { avisaTope = true; sd.tope_dia = hoy; sd.tope_nivel = nivel; } }\nconst mensajeTope = '🚨 *Gasto del día de la plataforma* · hoy (UTC) ya van ' + f(totalDia) + ' (más de US$ ' + (nivel * UMBRAL_DIA) + '): agentes de todas las fichas ' + f(actual) + ' + Apify ' + f(ag.apify_hoy_usd) + (ag.total_dia_parcial ? ' (total PARCIAL: Apify no respondió)' : '') + '. Fuente: rollup diario de la base' + (horasDesdeRefresco !== null ? ' (refrescado hace ' + horasDesdeRefresco + ' h)' : '') + ' y la cuenta de Apify. OpenAI (ciclo): ' + f(ag.openai_ciclo_usd) + '.';\nreturn [{ json: { total_dia_usd: totalDia, total_dia_parcial: !!ag.total_dia_parcial, apify_hoy_usd: ag.apify_hoy_usd, umbral_dia_usd: UMBRAL_DIA, nivel_tope: nivel, aviso_tope: avisaTope, fecha: hoy, anthropic_hoy_usd: actual, promedio_dias_anteriores_usd: promedio, dias_con_datos: dias.length, sin_historial: sinHistorial, is_anomaly: esAnomalia || avisaTope, aviso_ya_enviado_hoy: yaAvisado, rollup_refrescado_hace_h: horasDesdeRefresco, openai_ciclo_usd: ag.openai_ciclo_usd, apify_ciclo_usd: ag.apify_ciclo_usd, fuentes_sin_datos: ag.fuentes_sin_datos, mensaje: avisaTope ? mensajeTope : mensaje, timestamp: ag.timestamp } }];"
+      }
+    },
+    {
+      "id": "anomaly-check",
+      "name": "Anomaly?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.is_anomaly }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "slack-alert",
+      "name": "Alert Slack · #alertas",
+      "disabled": false,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: \"C0B7XUUEBHA\", text: $json.mensaje }) }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "normal",
+      "name": "Normal",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "wire-mops-director-ilujrc5g",
+      "name": "Invoke · mops-director",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-platform.vercel.app/api/agents/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ agent: \"mops-director\", context: $json, task: \"Sprint 7 A1 wire-in side-effect invocation from Zero Risk — Cost Watchdog Multi-Service v2 (Cron Hourly)\", workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "fetch-apify-diario",
+      "name": "Fetch Apify diario",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "retryOnFail": false,
+      "maxTries": 3,
+      "waitBetweenTries": 30000,
+      "onError": "continueRegularOutput",
+      "position": [
+        600,
+        380
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/users/me/usage/monthly",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.APIFY_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Hourly": {
+      "main": [
+        [
+          {
+            "node": "Fetch Anthropic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Anthropic": {
+      "main": [
+        [
+          {
+            "node": "Fetch OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Fetch Apify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Apify": {
+      "main": [
+        [
+          {
+            "node": "Fetch Apify diario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Costs": {
+      "main": [
+        [
+          {
+            "node": "Fetch Historial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Historial": {
+      "main": [
+        [
+          {
+            "node": "Detect Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Anomalies": {
+      "main": [
+        [
+          {
+            "node": "Anomaly?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anomaly?": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack · #alertas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Apify diario": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Costs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Hourly": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    },
+    "global": {
+      "ultimo_aviso_dia": "2026-10-20"
+    }
+  },
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "Gi2wq9baSRB3jQ0L",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "updatedAt": "2026-04-18T13:51:26.012Z"
+      },
+      "createdAt": "2026-04-18T15:45:08.264Z",
+      "updatedAt": "2026-04-18T15:45:08.264Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "fc91750d-646d-475b-98f4-9c23fd916dfb",
+    "workflowId": "Gi2wq9baSRB3jQ0L",
+    "nodes": [
+      {
+        "id": "hourly",
+        "name": "Hourly",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          240,
+          300
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 * * * *"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "fetch-anthropic",
+        "name": "Fetch Anthropic",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "position": [
+          480,
+          100
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/agent_invocations_daily_rollup?day=eq.{{ $now.toUTC().format('yyyy-MM-dd') }}&select=agent_id,model,total_cost_usd,invocations_count",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 10000
+          }
+        }
+      },
+      {
+        "id": "fetch-openai",
+        "name": "Fetch OpenAI",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "executeOnce": true,
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "position": [
+          480,
+          200
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.openai.com/v1/dashboard/billing/usage",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 10000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "fetch-apify",
+        "name": "Fetch Apify",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "executeOnce": true,
+        "alwaysOutputData": true,
+        "retryOnFail": false,
+        "maxTries": 3,
+        "waitBetweenTries": 30000,
+        "onError": "continueRegularOutput",
+        "position": [
+          480,
+          300
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.apify.com/v2/users/me/limits",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.APIFY_API_KEY }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 10000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "aggregate",
+        "name": "Aggregate Costs",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          720,
+          200
+        ],
+        "parameters": {
+          "jsCode": "// Cost Watchdog · relevo 42 · cada fuente en SU unidad; una fuente que no responde es null («sin datos»), NUNCA 0 (un cero que parece un dato es peor que no mirar).\nconst filas = (nombre) => { try { return $(nombre).all().map((i) => i.json).filter((j) => j && typeof j === 'object'); } catch (e) { return []; } };\n// Anthropic · el rollup diario de la base (agent_invocations_daily_rollup): una fila por agente y modelo, con total_cost_usd. HOY = suma de esas filas.\nconst hoyFilas = filas('Fetch Anthropic').filter((j) => j.total_cost_usd !== undefined && j.total_cost_usd !== null);\nconst anthropicHoy = hoyFilas.reduce((s, r) => s + (parseFloat(r.total_cost_usd) || 0), 0);\n// OpenAI · el endpoint de uso puede no responder con una llave de API: si no trae el número, es null\nconst o = filas('Fetch OpenAI')[0] || {};\nconst openaiUsd = typeof o.total_usage === 'number' ? o.total_usage / 100 : null;\n// Apify · gasto del ciclo (data.current.monthlyUsageUsd); si no viene, null\nconst a = filas('Fetch Apify')[0] || {};\nconst apifyRaw = a.data?.current?.monthlyUsageUsd ?? a.current?.monthlyUsageUsd;\nconst apifyUsd = typeof apifyRaw === 'number' ? apifyRaw : (apifyRaw !== undefined && apifyRaw !== null && !isNaN(parseFloat(apifyRaw)) ? parseFloat(apifyRaw) : null);\nconst sinDatos = [];\nif (openaiUsd === null) sinDatos.push('OpenAI');\nif (apifyUsd === null) sinDatos.push('Apify');\nreturn [{ json: { anthropic_hoy_usd: anthropicHoy, anthropic_filas_hoy: hoyFilas.length, openai_ciclo_usd: openaiUsd, apify_ciclo_usd: apifyUsd, fuentes_sin_datos: sinDatos, timestamp: new Date().toISOString() } }];"
+        }
+      },
+      {
+        "id": "fetch-history",
+        "name": "Fetch Historial",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "executeOnce": true,
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "position": [
+          960,
+          200
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/agent_invocations_daily_rollup?day=gte.{{ $now.minus({ days: 7 }).toUTC().format('yyyy-MM-dd') }}&select=day,total_cost_usd,refreshed_at",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 15000
+          }
+        }
+      },
+      {
+        "id": "detect-anomaly",
+        "name": "Detect Anomalies",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1200,
+          200
+        ],
+        "parameters": {
+          "jsCode": "// Cost Watchdog · relevo 42 · compara el gasto de Anthropic de HOY (rollup diario) con el promedio de los días ANTERIORES con datos (mismo rollup). Sin historial: «sin datos», no relleno.\nconst ag = $('Aggregate Costs').first().json;\nconst hoy = $now.toUTC().toFormat('yyyy-MM-dd');\nconst hist = (() => { try { return $('Fetch Historial').all().map((i) => i.json).filter((j) => j && j.day && j.total_cost_usd !== undefined && j.total_cost_usd !== null); } catch (e) { return []; } })();\nconst porDia = {};\nfor (const r of hist) { if (r.day === hoy) continue; porDia[r.day] = (porDia[r.day] || 0) + (parseFloat(r.total_cost_usd) || 0); }\nconst dias = Object.keys(porDia);\nconst sinHistorial = dias.length === 0;\nconst promedio = sinHistorial ? null : dias.reduce((s, d) => s + porDia[d], 0) / dias.length;\nconst actual = ag.anthropic_hoy_usd || 0;\nlet esAnomalia = !sinHistorial && actual > promedio * 2 && actual > 0.10;\n// el rollup es una vista que se refresca: si su última actualización es vieja, el dato de hoy puede estar atrasado (se dice)\nconst refrescos = hist.map((r) => r.refreshed_at).filter(Boolean).sort();\nconst ultimo = refrescos.length ? refrescos[refrescos.length - 1] : null;\nconst horasDesdeRefresco = ultimo ? Math.round(((Date.now() - new Date(ultimo).getTime()) / 3600000) * 10) / 10 : null;\n// no repetir: un aviso por día (en ejecuciones reales; una prueba manual no guarda este dato)\nconst sd = $getWorkflowStaticData('global');\nlet yaAvisado = false;\nif (esAnomalia) { if (sd.ultimo_aviso_dia === hoy) { yaAvisado = true; esAnomalia = false; } else { sd.ultimo_aviso_dia = hoy; } }\nconst f = (n) => (n === null || n === undefined ? 'sin datos' : 'US$ ' + Number(n).toFixed(2));\nconst mensaje = '💸 *Cost Watchdog* · el gasto de Anthropic de HOY es ' + f(actual) + ', más del doble del promedio de los últimos ' + dias.length + ' día(s) con datos (' + f(promedio) + '). Fuente: rollup diario de la base' + (horasDesdeRefresco !== null ? ' (refrescado hace ' + horasDesdeRefresco + ' h)' : '') + '. OpenAI (ciclo): ' + f(ag.openai_ciclo_usd) + ' · Apify (ciclo): ' + f(ag.apify_ciclo_usd) + '.';\nreturn [{ json: { fecha: hoy, anthropic_hoy_usd: actual, promedio_dias_anteriores_usd: promedio, dias_con_datos: dias.length, sin_historial: sinHistorial, is_anomaly: esAnomalia, aviso_ya_enviado_hoy: yaAvisado, rollup_refrescado_hace_h: horasDesdeRefresco, openai_ciclo_usd: ag.openai_ciclo_usd, apify_ciclo_usd: ag.apify_ciclo_usd, fuentes_sin_datos: ag.fuentes_sin_datos, mensaje, timestamp: ag.timestamp } }];"
+        }
+      },
+      {
+        "id": "anomaly-check",
+        "name": "Anomaly?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1440,
+          200
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.is_anomaly }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "slack-alert",
+        "name": "Alert Slack · #alertas",
+        "disabled": false,
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1680,
+          100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://slack.com/api/chat.postMessage",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ channel: \"C0B7XUUEBHA\", text: $json.mensaje }) }}",
+          "options": {
+            "timeout": 15000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "normal",
+        "name": "Normal",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1680,
+          300
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "wire-mops-director-ilujrc5g",
+        "name": "Invoke · mops-director",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          940,
+          320
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://zero-risk-platform.vercel.app/api/agents/run",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.INTERNAL_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ agent: \"mops-director\", context: $json, task: \"Sprint 7 A1 wire-in side-effect invocation from Zero Risk — Cost Watchdog Multi-Service v2 (Cron Hourly)\", workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Hourly": {
+        "main": [
+          [
+            {
+              "node": "Fetch Anthropic",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Anthropic": {
+        "main": [
+          [
+            {
+              "node": "Fetch OpenAI",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch OpenAI": {
+        "main": [
+          [
+            {
+              "node": "Fetch Apify",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Apify": {
+        "main": [
+          [
+            {
+              "node": "Aggregate Costs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Aggregate Costs": {
+        "main": [
+          [
+            {
+              "node": "Fetch Historial",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Historial": {
+        "main": [
+          [
+            {
+              "node": "Detect Anomalies",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Detect Anomalies": {
+        "main": [
+          [
+            {
+              "node": "Anomaly?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Anomaly?": {
+        "main": [
+          [
+            {
+              "node": "Alert Slack · #alertas",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Normal",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-10-10T01:30:40.422Z",
+    "updatedAt": "2026-10-10T01:30:40.422Z",
+    "workflowPublishHistory": [
+      {
+        "id": 2432,
+        "workflowId": "Gi2wq9baSRB3jQ0L",
+        "versionId": "fc91750d-646d-475b-98f4-9c23fd916dfb",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-10-10T01:30:40.551Z"
+      }
+    ]
+  }
+}
