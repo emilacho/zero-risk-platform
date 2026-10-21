@@ -27,6 +27,8 @@ interface Estado {
   emitidos: SobreDeProducir[]
   avisos: string[]
   escrituras: number
+  previuelo: { ok: true } | { ok: false; motivo: string }
+  previuelos: string[]
 }
 const BRIEFS = [
   { brief_id: 'BRF-0001', fila_id: 's1-d1-lun_ig', familia: 'carrusel_ig_v1' },
@@ -39,7 +41,7 @@ const base = (): Estado => ({
   partes: [{ id: PARTE, creado_en: new Date(T0).toISOString(), valido: true, briefs: BRIEFS }],
   conEncargo: new Set(), config: { estado: 'encendida', familias_activas: ['post_img', 'carrusel_ig_v1', 'kit_historias'], clientes_ensayo: [] },
   plantillas: { post_img: true, carrusel_ig_v1: true, kit_historias: true }, freno: { bloqueado: false }, respuesta: 'aceptado',
-  libreta: {}, emitidos: [], avisos: [], escrituras: 0,
+  libreta: {}, emitidos: [], avisos: [], escrituras: 0, previuelo: { ok: true }, previuelos: [],
 })
 const puertos = (s: Estado): PuertosDeReintento => ({
   ahora: () => s.ahora,
@@ -52,6 +54,7 @@ const puertos = (s: Estado): PuertosDeReintento => ({
   plantillaActiva: async (f) => s.plantillas[f] === true,
   cuando: async () => new Map([['s1-d1-lun_ig', { fecha: '2026-10-26', hora: '09:00' }]]),
   frenoDeGasto: async () => s.freno,
+  previueloDeLaminas: async (cliente, familia) => { s.previuelos.push(`${cliente}:${familia}`); return s.previuelo },
   emitirSobre: async (x) => { s.emitidos.push(x); return { resultado: s.respuesta } },
   leerLibreta: async () => JSON.parse(JSON.stringify(s.libreta)) as Libreta,
   escribirLibreta: async (l) => { s.libreta = l; s.escrituras++ },
@@ -175,6 +178,49 @@ describe('el tope de 3 y el aviso: nunca un reintento sin fin', () => {
   })
   it('las esperas y el tope son los firmados: 15 · 45 · 120 · 60 min y 3 reintentos', () => {
     expect([...ESPERAS_MIN]).toEqual([15, 45, 120, 60]); expect(MAX_REINTENTOS).toBe(3)
+  })
+})
+
+describe('pendiente de datos: el mismo pre-vuelo de la puerta, sin gastar intentos', () => {
+  it('si falta la identidad visual (o el slug) el brief queda PENDIENTE: no sale sobre, no se gasta intento, no se anota nada y dice por qué', async () => {
+    const s = base(); s.previuelo = { ok: false, motivo: 'sin_identidad_visual' }
+    const r = await pasada(s)
+    expect(acciones(r)).toEqual(['BRF-0001:pendiente_de_datos', 'BRF-0002:pendiente_de_datos', 'BRF-0004:pendiente_de_datos']); expect(r.plan[0].detalle).toBe('sin_identidad_visual')
+    expect(s.emitidos).toHaveLength(0); expect(s.libreta).toEqual({}); expect(s.escrituras).toBe(0); expect(s.avisos).toHaveLength(0)
+  })
+  it('la pasada que sigue con el dato ya llenado SALE enseguida (la espera ya estaba cumplida) y el intento cuenta desde ahí', async () => {
+    const s = base(); s.previuelo = { ok: false, motivo: 'sin_identidad_visual' }
+    await pasada(s); await pasada(s)
+    s.previuelo = { ok: true }
+    const r = await pasada(s)
+    expect(r.emitidos).toBe(3); expect(s.emitidos[0].idempotency_key).toBe(`${PARTE}:BRF-0001:producir:r1`); expect(s.libreta[`${PARTE}:BRF-0001`].n).toBe(1)
+  })
+  it('estar pendiente no agota el tope: aunque pasen días sin dato, al llegar el dato todavía quedan los 3 intentos y no se avisó de fallo', async () => {
+    const s = base(); s.previuelo = { ok: false, motivo: 'sin_slug' }
+    for (const m of [20, 200, 2000, 20000]) { s.ahora = min(m); await pasada(s) }
+    expect(s.avisos).toHaveLength(0); expect(s.libreta).toEqual({})
+  })
+  it('se consulta con el cliente y la FAMILIA de cada brief, y solo cuando va a salir (no para los que ya llegaron, no tienen sala o esperan)', async () => {
+    const s = base(); s.conEncargo = new Set(['BRF-0001']); s.config = { ...s.config, familias_activas: ['carrusel_ig_v1'] }
+    await pasada(s)
+    expect(s.previuelos).toEqual([`${CLIENTE}:carrusel_ig_v1`])
+    const t = base(); t.ahora = min(10); await pasada(t); expect(t.previuelos).toEqual([])
+  })
+  it('si el pre-vuelo MISMO falla (lanza), no bloquea: el brief sale y la puerta decide', async () => {
+    const s = base(); const p = puertos(s); p.previueloDeLaminas = async () => { throw new Error('caída') }
+    const r = await reintentarPiezas(p, { ejecutar: true })
+    expect(r.emitidos).toBe(3)
+  })
+  it('en seco también muestra el pendiente (para revisar a US$ 0 qué faltaría)', async () => {
+    const s = base(); s.previuelo = { ok: false, motivo: 'sin_identidad_visual' }
+    const r = await pasada(s, false)
+    expect(r.plan.every((l) => l.accion === 'pendiente_de_datos')).toBe(true); expect(s.escrituras).toBe(0)
+  })
+  it('el freno de gasto se mira DESPUÉS: con dato y cliente al techo, freno; sin dato, pendiente (no se gasta nada de ninguna manera)', async () => {
+    const s = base(); s.freno = { bloqueado: true, motivo: 'techo' }
+    expect(acciones(await pasada(s))[0]).toBe('BRF-0001:freno')
+    s.previuelo = { ok: false, motivo: 'sin_slug' }
+    expect(acciones(await pasada(s))[0]).toBe('BRF-0001:pendiente_de_datos')
   })
 })
 

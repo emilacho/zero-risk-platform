@@ -12,6 +12,7 @@ import type { FotoEtiquetada } from './fotos'
 import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt } from '../revisor-gpt'
 import { llamarRevisorGptConLibro } from '../revisor-gpt-libro'
 import type { FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
+import { identidadVisualDelCliente } from './identidad-visual'
 import type { Registro } from './chequeos'
 import { avisoDeProvisionales } from '../manual/lectura'
 import { codificarPng } from './encaje'
@@ -59,20 +60,12 @@ export const MEDIDAS_DE_PLATAFORMA: Record<string, { ancho: number; alto: number
   'instagram-feed': { ancho: 1080, alto: 1350 }, 'instagram-reel': { ancho: 1080, alto: 1920 }, tiktok: { ancho: 1080, alto: 1920 }, 'facebook-feed': { ancho: 1200, alto: 630 }, 'twitter-card': { ancho: 1200, alto: 675 },
 }
 
-const RE_HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
-/** colores, tipografías, logo y usuario del cliente para dibujar láminas: del manual (`primary_colors`, `typography`) y, si faltan, de la ficha (`brand_colors`, `brand_fonts`). Sin color primario ⇒ null (no se inventa una paleta). */
+/**
+ * colores, tipografías, logo y usuario del cliente para dibujar láminas. 21-oct · UN solo lugar: el BLOQUE VISUAL del manual (`visual.capa_grafica`, con procedencia); las columnas viejas (`primary_colors`, `typography`)
+ * y la ficha (`brand_colors`, `brand_fonts`, `logo_url`) quedan solo como respaldo, en ese orden. Sin color primario ⇒ null (no se inventa una paleta). Detalle y procedencia: `identidad-visual.ts`.
+ */
 export function marcaDelCliente(manual: Fila, cliente: Fila, handles: string[]): MarcaParaRender | null {
-  const hex = (x: unknown): string | null => { const v = typeof x === 'string' ? x : (x as { hex?: unknown } | null)?.hex; return typeof v === 'string' && RE_HEX.test(v.trim()) ? v.trim() : null }
-  let colores = lista<unknown>(manual.primary_colors).map(hex).filter((x): x is string => !!x)
-  if (!colores.length) colores = lista<unknown>(cliente.brand_colors).map(hex).filter((x): x is string => !!x)
-  if (!colores.length) return null
-  const tipos = (lista<unknown>(manual.typography).length ? lista<unknown>(manual.typography) : lista<unknown>(cliente.brand_fonts)).map((x) => (typeof x === 'string' ? x : (x as { family?: unknown; name?: unknown } | null)?.family ?? (x as { name?: unknown } | null)?.name)).filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim())
-  return {
-    colors: { primary: colores[0], ...(colores[1] ? { secondary: colores[1] } : {}), ...(colores[2] ? { accent: colores[2] } : {}) },
-    fonts: { family: tipos[0] ?? 'Inter', ...(tipos[1] ? { headline_family: tipos[1] } : {}) },
-    ...(typeof cliente.logo_url === 'string' && cliente.logo_url ? { logo_url: cliente.logo_url } : {}),
-    ...(handles[0] ? { brand_handle: handles[0] } : {}),
-  }
+  return identidadVisualDelCliente(manual, cliente, handles).marca
 }
 
 /** el registro (tuteo / voseo) que fija el manual; sin dato, «sin_dato» (el chequeo solo avisa) */
@@ -92,7 +85,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     ...(env.notasDelDueno ? { notas: { leer: (clientId: string) => leerNotasParaElProductor(db, { baseUrl: env.baseUrl, internalKey: env.internalKey }, f, clientId), registrar: (r: Parameters<typeof registrarAutorevision>[1]) => registrarAutorevision(db, r) } } : {}),
     async fuentes(clientId) {
       try {
-        const cl = (await db.from('clients').select('id,name,country,language,config,slug,logo_url,website_url').eq('id', clientId).limit(1)) as { data: Fila[] | null; error: { message: string } | null }
+        const cl = (await db.from('clients').select('id,name,country,language,config,slug,logo_url,website_url,brand_colors,brand_fonts').eq('id', clientId).limit(1)) as { data: Fila[] | null; error: { message: string } | null }
         if (cl.error) return { error: `clients: ${cl.error.message}` }
         const cliente = cl.data?.[0]
         if (!cliente) return { error: 'el cliente no existe (¿falta la ficha previa?)' }
