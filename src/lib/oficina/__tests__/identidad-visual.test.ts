@@ -28,6 +28,10 @@ describe('⑥ el bloque visual del manual es la fuente; lo viejo es respaldo', (
     const m = identidadVisualDelCliente(manualCon({ paleta: ['rojo', { color: 'url(x)' }, '#12', { color: '#ABC' }, { hex: '#445566' }, '#abc', { color: '#778899', rol: 'acento' }] }), {}, [])
     expect(m.marca?.colors).toEqual({ primary: '#778899', secondary: '#ABC', accent: '#445566' })
   })
+  it('un color con rol NULL (el modelo no eligió) no gana por posición: el principal se escoge por rol', () => {
+    const m = identidadVisualDelCliente(manualCon({ paleta: [{ color: '#aaaaaa', rol: null }, { color: '#bbbbbb', rol: 'principal', estado: 'declarado' }, { color: '#cccccc' }] }), {}, [])
+    expect(m.marca?.colors).toEqual({ primary: '#bbbbbb', secondary: '#aaaaaa', accent: '#cccccc' })
+  })
   it('un color observado marcado PROPUESTA (material real con procedencia) también cuenta: la marca no inventa, pero tampoco exige que sea «declarado»', () => {
     const m = identidadVisualDelCliente(manualCon({ paleta: [{ color: '#d4622a', rol: 'principal', procedencia: 'foto 3 del feed', estado: 'PROPUESTA' }] }), {}, [])
     expect(m.marca?.colors.primary).toBe('#d4622a')
