@@ -70,6 +70,10 @@ describe('hablarle a la puerta (POST y GET)', () => {
       expect(await enviarALaPuerta(env, f, cuerpo)).toMatchObject({ ok: false, permanente: false })
     }
   })
+  it('la puerta apagada se dice como tal (no como «sin ok»)', async () => {
+    expect(await enviarALaPuerta(env, respuesta(200, { apagado: true }), cuerpo)).toMatchObject({ ok: false, permanente: false, error: expect.stringContaining('apagada') })
+    expect(await enviarALaPuerta(env, respuesta(200, { algo: 1 }), cuerpo)).toMatchObject({ ok: false, permanente: false, error: expect.stringContaining('no confirmó') })
+  })
   it('permanentes (no se reintentan, quedan anotados): 400, 404, 401, 403', async () => {
     for (const status of [400, 404, 401, 403]) expect(await enviarALaPuerta(env, respuesta(status, { error: 'entrada_invalida' }), cuerpo)).toMatchObject({ ok: false, permanente: true, error: expect.stringContaining(String(status)) })
   })
@@ -173,6 +177,14 @@ describe('el envío con su cola', () => {
     expect(await reintentarPendientes(db, env, f, 3)).toEqual({ intentadas: 2, enviadas: 2, siguen: 1, rechazadas: 0 }) // la huérfana (la más vieja) no tiene nota: sigue, y no frena a las otras
     expect(posts.map((p) => p.respuesta)).toEqual(['comentario 1', 'comentario 2'])
   })
+  it('una nota de la cola sin texto o sin pieza se rechaza por dentro y NO llama a la puerta', async () => {
+    sembrar(nota({ id: 'vacia', clave_unica: 'v', comentario: null }))
+    sembrar(nota({ id: 'sinpieza', clave_unica: 's', hitl_id: null }))
+    for (const id of ['vacia', 'sinpieza']) db.semilla('notas_del_dueno_envios', [{ nota_id: id, estado: 'pendiente', intentos: 0, ts: TS, canal_slack: 'C1', respondido_en: CTX.respondido_en, creada_en: '2026-10-21T12:00:00.000Z' }])
+    const { f, posts } = puerta([200])
+    expect(await reintentarPendientes(db, env, f)).toEqual({ intentadas: 2, enviadas: 0, siguen: 0, rechazadas: 2 })
+    expect(posts).toHaveLength(0)
+  })
   it('un error de la base al leer la cola se devuelve como error (no como «no había nada»)', async () => {
     db.fallar['notas_del_dueno_envios'] = 'caída'
     expect(await reintentarPendientes(db, env, puerta([200]).f)).toMatchObject({ intentadas: 0, error: expect.stringContaining('caída') })
@@ -218,6 +230,14 @@ describe('qué sube al cerebro y qué no (la decisión del dueño)', () => {
     const sin = await procesar(b.P, CFG, { tipo: 'rechazar', hitl_id: HITL, autor: EMILIO, canal: 'C0C7XUKNCLS', ts: '1792575000.000100', comentario: null })
     expect(sin.cuerpo).toMatchObject({ ok: true, decision: 'rejected', cerebro: 'no_aplica' })
     expect(b.posts).toHaveLength(0)
+  })
+  it('un rechazo sin ts ni canal conocidos (y una pieza sin mensaje de Slack) no sube nada, pero se registra', async () => {
+    const { P, posts } = montar()
+    db.tablas['hitl_queue'][0].metadata = { familia: 'post_img' }
+    const r = await procesar(P, CFG, { tipo: 'rechazar', hitl_id: HITL, autor: EMILIO, canal: null, ts: null, comentario: 'Demasiado formal' })
+    expect(r.cuerpo).toMatchObject({ ok: true, decision: 'rejected', cerebro: 'no_aplica' })
+    expect(posts).toHaveLength(0)
+    expect(db.tablas['notas_del_dueno']).toHaveLength(1)
   })
   it('Aprobar (sin texto) NO sube: no es un hecho del cliente, queda solo en el registro', async () => {
     const { P, posts } = montar()
@@ -356,12 +376,14 @@ describe('lo que viaja a la jefatura y a GPT NO lleva notas ni lecturas del cere
 
 describe('las rutas de Slack también reintentan lo pendiente (la siguiente vuelta)', () => {
   const posts: Array<Record<string, unknown>> = []
+  const llaves: string[] = []
   beforeEach(() => {
     dbRutas = new DbFalsa(); posts.length = 0; pendientes.length = 0
     process.env.SLACK_SIGNING_SECRET = 'sec'; process.env.NOTAS_DEL_DUENO = '1'; process.env.NOTAS_AUTORIZADOS = EMILIO; process.env.INTERNAL_API_KEY = 'llave'; process.env.SLACK_BOT_TOKEN = 'xoxb-1'
     dbRutas.semilla('notas_del_dueno', [{ ...nota(), creada_en: '2026-10-21T12:00:00.000Z' }])
     dbRutas.semilla('notas_del_dueno_envios', [{ nota_id: 'n1', estado: 'pendiente', intentos: 1, ts: TS, canal_slack: 'C0C7XUKNCLS', respondido_en: CTX.respondido_en, creada_en: '2026-10-21T12:00:00.000Z' }])
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => { if (String(url).includes('/api/brain/alimentar/dueno')) posts.push(JSON.parse(String(init?.body ?? '{}'))); return new Response(JSON.stringify({ ok: true }), { status: 200 }) }))
+    llaves.length = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => { if (String(url).includes('/api/brain/alimentar/dueno')) { posts.push(JSON.parse(String(init?.body ?? '{}'))); llaves.push(((init?.headers ?? {}) as Record<string, string>)['x-api-key'] ?? '') } return new Response(JSON.stringify({ ok: true }), { status: 200 }) }))
   })
   afterEach(() => { vi.unstubAllGlobals(); for (const k of ['SLACK_SIGNING_SECRET', 'NOTAS_DEL_DUENO', 'NOTAS_AUTORIZADOS', 'INTERNAL_API_KEY', 'SLACK_BOT_TOKEN']) delete process.env[k] })
   it('cada evento firmado de Slack sube primero lo que quedó pendiente', async () => {
@@ -375,6 +397,19 @@ describe('las rutas de Slack también reintentan lo pendiente (la siguiente vuel
     await Promise.all(pendientes)
     expect(posts).toHaveLength(1)
     expect(posts[0]).toMatchObject({ respuesta: 'Más corto', client_id: C1 })
+    expect(llaves).toEqual(['llave'])                                              // con la llave interna, no vacía
+    expect(dbRutas.tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'enviada' })
+  })
+  it('cada clic firmado en los botones también sube primero lo que quedó pendiente', async () => {
+    const crypto = await import('node:crypto')
+    const { POST } = await import('@/app/api/slack/interactividad/route')
+    const cuerpo = 'payload=' + encodeURIComponent(JSON.stringify({ type: 'block_actions', user: { id: 'U0AJENO' }, trigger_id: 'T1', container: { channel_id: 'C1', message_ts: '1.1' }, actions: [{ action_id: 'nota_aprobar', value: HITL }] }))
+    const marca = String(Math.floor(Date.now() / 1000))
+    const firma = 'v0=' + crypto.createHmac('sha256', 'sec').update(`v0:${marca}:${cuerpo}`).digest('hex')
+    const res = await POST(new Request('https://app.test/api/slack/interactividad', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-slack-request-timestamp': marca, 'x-slack-signature': firma }, body: cuerpo }))
+    expect(res.status).toBe(200)
+    await Promise.all(pendientes)
+    expect(posts).toHaveLength(1)                                                  // aunque quien hizo clic no estaba autorizado, la cola avanza
     expect(dbRutas.tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'enviada' })
   })
   it('la vuelta del reloj de la oficina (el vigía) también los sube, solo con la bandera encendida', async () => {
@@ -401,6 +436,9 @@ describe('la lectura del cerebro se mezcla con las generales sin pasarse de tope
     expect(delCerebro[1].texto).toBe('El dueño dijo (sin canal, sin fecha): «tres»')
     expect(unirVistas(delCerebro, [{ id: 'f1', texto: 'repetida' }, { id: 'g1', texto: 'general' }]).map((v) => v.id)).toEqual(['f1', 'f3', 'g1'])
     expect(unirVistas([{ id: 'a', texto: 'x'.repeat(40) }], [{ id: 'b', texto: 'y'.repeat(40) }], 60).map((v) => v.id)).toEqual(['a'])
+    const larga = vistasDelCerebro([{ ficha_id: 'L', pregunta: '', respuesta: 'z'.repeat(2000), canal: 'c', respondido_en: '' }])
+    expect(larga[0].texto.length).toBeLessThan(500)
+    expect(larga[0].texto.endsWith('…»')).toBe(true)
     expect(vistasDelCerebro(Array.from({ length: 40 }, (_, i) => ({ ficha_id: `f${i}`, pregunta: '', respuesta: `r${i}`, canal: 'c', respondido_en: '' }))).length).toBe(15)
   })
 })

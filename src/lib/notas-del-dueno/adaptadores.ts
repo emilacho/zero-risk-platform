@@ -127,8 +127,8 @@ export function puertosDeNotas(db: Db, env: EntornoDeNotas, f: Fetch = fetch): P
 export async function enviarNotaAlCerebro(db: Db, env: EntornoDeNotas, f: Fetch, n: NotaNueva & { id: string }, ctx: { ts: string; canal_slack: string; respondido_en: string }): Promise<EstadoDeEnvio> {
   try {
     const ins = await db.from('notas_del_dueno_envios').insert({ nota_id: n.id, estado: 'pendiente', intentos: 0, ts: ctx.ts, canal_slack: ctx.canal_slack, respondido_en: ctx.respondido_en })
-    if (ins.error && ins.error.code !== DUPLICADO) return 'pendiente' // sin fila no hay cola: el clic se puede repetir (todo es idempotente)
     if (ins.error) {
+      if (ins.error.code !== DUPLICADO) return 'pendiente' // sin fila no hay cola: el clic se puede repetir (todo es idempotente)
       const ya = await db.from('notas_del_dueno_envios').select('estado').eq('nota_id', n.id).maybeSingle()
       if (ya.error || !ya.data) return 'pendiente'
       const e = (ya.data as Fila).estado

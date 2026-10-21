@@ -119,6 +119,13 @@ describe('sin notas, todo queda igual que antes', () => {
     expect(r.pasos.some((p) => p.startsWith('autorevision'))).toBe(false)
     expect(reg).toHaveLength(0)
   })
+  it('si el cerebro falló pero las generales sí se leyeron: la pieza se auto-revisa con ellas y el motivo queda anotado en el artefacto', async () => {
+    const { M, id } = await abierto(undefined, { leer: async () => ({ notas: NOTAS, error: 'cerebro: la puerta respondió 502' }), registrar: async () => {} })
+    const r = await correr(M, id, guionPost())
+    expect(r.pasos).toContain('autorevision_texto')
+    expect(arte(M, id, 'notas_del_dueno')).toMatchObject({ hay: true, error: 'cerebro: la puerta respondió 502' })
+    expect(r.ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
+  })
   it('si leer las notas falla, la pieza sigue como siempre y el motivo queda anotado', async () => {
     const { M, id } = await abierto(undefined, { leer: async () => { throw new Error('base caída') }, registrar: async () => {} })
     const r = await correr(M, id, guionPost())
