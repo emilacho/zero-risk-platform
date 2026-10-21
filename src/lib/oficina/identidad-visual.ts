@@ -2,7 +2,7 @@
  * LA IDENTIDAD VISUAL DEL CLIENTE PARA LAS LÁMINAS (CC#2 · 21-oct · ENCARGO «manual visual con todas las fuentes», puntos 6 y 7).
  * Hallazgo de la tercera prueba: una ficha solo con Instagram no tenía colores ni tipografía en las columnas viejas del manual (`primary_colors`/`typography`), las láminas los exigen, y los 3 encargos cerraron `fallido`
  * a los 3 s. Dos cosas, ambas puras y sin red:
- *  ⑥ El BLOQUE VISUAL del manual (`content_text.visual.capa_grafica`: paleta con rol, tipografías con rol, logo; lo escribe el piso visual con todas las fuentes y su procedencia) es la fuente para quien NO tiene las columnas viejas
+ *  ⑥ El BLOQUE VISUAL del manual (`content_text.brand_book_draft.visual.capa_grafica`: paleta con rol, tipografías con rol, logo; lo escribe el piso visual con todas las fuentes y su procedencia) es la fuente para quien NO tiene las columnas viejas
  *     (`primary_colors`/`typography`). Orden por cosa: columnas del manual (lo de siempre: así un cliente que ya funciona, con su manual completo, no cambia de aspecto ni un byte) → bloque visual → ficha → por omisión.
  *     Se aceptan los colores observados marcados como PROPUESTA (material real y propio con procedencia declarada); lo que no es un color de verdad no entra. Si Lenovo/Emilio quieren que un cliente adopte los roles del bloque, es una firma aparte.
  *  ⑦ PRE-VUELO: antes de crear un encargo de láminas se comprueba que haya identidad visual legible y carpeta (slug). Si falta algo, no se crea el encargo (falla en la PUERTA, no a los 3 s de abrirlo), se dice por qué
@@ -25,11 +25,13 @@ export interface IdentidadVisual {
   motivo: 'sin_color_primario' | null
 }
 
-/** el bloque `visual.capa_grafica` del manual: vive dentro de `content_text` (texto JSON); ilegible o ausente ⇒ null (nunca lanza) */
+/** el bloque `visual.capa_grafica` del manual: vive dentro de `content_text` (texto JSON) en `brand_book_draft.visual` (o plano en la raíz); ilegible o ausente ⇒ null (nunca lanza) */
 export function bloqueVisualDelManual(manual: Fila): { paleta: unknown[]; tipografias: unknown[]; logo_url: string | null } | null {
   let raiz: unknown = manual.content_text
   if (typeof raiz === 'string') { try { raiz = JSON.parse(raiz) } catch { return null } }
-  const capa = objeto(objeto(objeto(raiz)?.visual)?.capa_grafica)
+  // la forma REAL (medida en los manuales vivos): `content_text = { brand_book_draft: { …, visual: { capa_grafica } }, fidelity_*, gate_outcome… }`; como segunda opción, el bloque plano en la raíz
+  const r = objeto(raiz)
+  const capa = objeto(objeto(objeto(r?.brand_book_draft)?.visual)?.capa_grafica) ?? objeto(objeto(r?.visual)?.capa_grafica)
   if (!capa) return null
   const logo = typeof capa.logo_url === 'string' && /^https?:\/\//i.test(capa.logo_url.trim()) ? capa.logo_url.trim() : null
   return { paleta: lista(capa.paleta), tipografias: lista(capa.tipografias), logo_url: logo }

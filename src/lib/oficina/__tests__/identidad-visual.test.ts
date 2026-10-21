@@ -15,7 +15,9 @@ import { KIT_HISTORIAS } from '../plantillas/kit-historias'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
 
-const bloque = (capa: Record<string, unknown>) => JSON.stringify({ visual: { version: 1, capa_grafica: capa } })
+/** la forma REAL de `content_text` en la base (medida por CC#3 en dos manuales vivos): el bloque vive en `brand_book_draft.visual.capa_grafica` */
+const bloque = (capa: Record<string, unknown>) => JSON.stringify({ brand_book_draft: { positioning: 'x', visual: { version: 1, capa_grafica: capa } }, fidelity_passed: true, gate_outcome: 'ok' })
+const bloquePlano = (capa: Record<string, unknown>) => JSON.stringify({ visual: { version: 1, capa_grafica: capa } })
 const manualCon = (capa: Record<string, unknown> | null, columnas: Record<string, unknown> = {}) => ({ content_text: capa ? bloque(capa) : '{}', ...columnas })
 const HEX = { principal: '#1a0828', secundario: '#2d1135', acento: '#51d4b4' }
 
@@ -101,10 +103,20 @@ describe('⑥ el bloque visual del manual es la fuente; lo viejo es respaldo', (
     expect(r).toEqual({ marca: null, motivo: 'sin_color_primario', procedencia: { colores: null, tipografias: null, logo: null } })
   })
   it('un bloque ilegible o ausente no lanza: se cae al respaldo', () => {
-    for (const ct of ['no es json', '', null, undefined, 42, '[]', '{"visual":null}', '{"visual":{"capa_grafica":[]}}']) expect(bloqueVisualDelManual({ content_text: ct })).toBeNull()
+    for (const ct of ['no es json', '', null, undefined, 42, '[]', '{"visual":null}', '{"visual":{"capa_grafica":[]}}', '{"brand_book_draft":null}', '{"brand_book_draft":{"visual":{"capa_grafica":[]}}}', '{"brand_book_draft":{}}']) expect(bloqueVisualDelManual({ content_text: ct })).toBeNull()
     expect(identidadVisualDelCliente({ content_text: 'no es json', primary_colors: ['#111111'] }, {}, []).marca?.colors.primary).toBe('#111111')
-    expect(bloqueVisualDelManual({ content_text: { visual: { capa_grafica: { paleta: ['#111111'] } } } })?.paleta).toEqual(['#111111'])
+    expect(bloqueVisualDelManual({ content_text: { brand_book_draft: { visual: { capa_grafica: { paleta: ['#111111'] } } } } })?.paleta).toEqual(['#111111'])
   })
+  it('la FORMA REAL del manual vivo (brand_book_draft.visual) es la que se lee; la plana en la raíz es solo una segunda opción; si están las dos, manda brand_book_draft', () => {
+    expect(bloqueVisualDelManual({ content_text: bloque({ paleta: ['#111111'], logo_url: 'https://x.test/real.png' }) })).toEqual({ paleta: ['#111111'], tipografias: [], logo_url: 'https://x.test/real.png' })
+    expect(bloqueVisualDelManual({ content_text: bloquePlano({ paleta: ['#222222'] }) })?.paleta).toEqual(['#222222'])
+    const ambas = JSON.stringify({ brand_book_draft: { visual: { capa_grafica: { paleta: ['#111111'] } } }, visual: { capa_grafica: { paleta: ['#999999'] } } })
+    expect(bloqueVisualDelManual({ content_text: ambas })?.paleta).toEqual(['#111111'])
+  })
+  it('con la forma real y SIN columnas (el caso que el piso visual deja): la marca sale del bloque con procedencia bloque_visual, y el logo del bloque se usa si la ficha no tiene', () => {
+    const m = identidadVisualDelCliente({ primary_colors: [], typography: {}, content_text: bloque({ paleta: [{ color: '#1a0828', rol: 'principal' }], tipografias: [{ nombre: 'Caveat', rol: 'titulos' }], logo_url: 'https://x.test/logo.png' }) }, { logo_url: null }, [])
+    expect(m.marca).toEqual({ colors: { primary: '#1a0828' }, fonts: { family: 'Caveat' }, logo_url: 'https://x.test/logo.png' })
+    expect(m.procedencia).toEqual({ colores: 'bloque_visual', tipografias: 'bloque_visual', logo: 'bloque_visual' })  })
   it('`marcaDelCliente` (la que usa la oficina) es esta misma función: mismo resultado', () => {
     const m = manualCon({ paleta: [{ color: HEX.principal, rol: 'principal' }] }), c = { logo_url: 'https://logo.test/l.png' }
     expect(marcaDelCliente(m, c, ['@a'])).toEqual(identidadVisualDelCliente(m, c, ['@a']).marca)
@@ -112,12 +124,12 @@ describe('⑥ el bloque visual del manual es la fuente; lo viejo es respaldo', (
   it('NO-REGRESIÓN con un manual real de cliente con web (el de la prueba de Náufrago): paleta y tipografías salen del bloque, y si las columnas viejas dicen lo mismo, la marca es la de siempre', () => {
     const real = JSON.parse(readFileSync(new URL('../../manual/__tests__/fixtures/repeticion-r68/manual-guardado.json', import.meta.url), 'utf8')) as { visual: { capa_grafica: { paleta: Array<{ color: string; rol: string }>; tipografias: Array<{ nombre: string; rol: string }>; logo_url: string } } }
     const g = real.visual.capa_grafica
-    const nuevo = marcaDelCliente({ content_text: JSON.stringify(real) }, {}, [])
+    const nuevo = marcaDelCliente({ content_text: JSON.stringify({ brand_book_draft: real }) }, {}, [])
     expect(nuevo?.colors.primary).toBe(g.paleta.find((p) => p.rol === 'principal')?.color)
     // con las columnas viejas coherentes (principal, secundario, acento en ese orden), el resultado es idéntico al de antes
     const columnas = { primary_colors: ['principal', 'secundario', 'acento'].map((r) => g.paleta.find((p) => p.rol === r)!.color), typography: [g.tipografias.find((t) => t.rol === 'cuerpo')!.nombre, g.tipografias.find((t) => t.rol === 'titulos')!.nombre] }
     const antes = marcaDelCliente(columnas, {}, [])
-    const ahora = marcaDelCliente({ ...columnas, content_text: JSON.stringify(real) }, {}, [])
+    const ahora = marcaDelCliente({ ...columnas, content_text: JSON.stringify({ brand_book_draft: real }) }, {}, [])
     expect({ colors: ahora?.colors, fonts: ahora?.fonts }).toEqual({ colors: antes?.colors, fonts: antes?.fonts })
     expect(ahora?.logo_url).toBe(g.logo_url)
   })

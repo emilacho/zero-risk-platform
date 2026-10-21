@@ -112,7 +112,7 @@ describe('las consultas leen lo correcto', () => {
 })
 
 describe('el pre-vuelo real de láminas (las mismas lecturas que la puerta)', () => {
-  const marcaOk = JSON.stringify({ visual: { version: 1, capa_grafica: { paleta: [{ color: '#112233', rol: 'principal' }] } } })
+  const marcaOk = JSON.stringify({ brand_book_draft: { visual: { version: 1, capa_grafica: { paleta: [{ color: '#112233', rol: 'principal' }] } } } })
   const con = (cliente: Record<string, unknown> | null, manual: Record<string, unknown> | null) => {
     const db = mundo()
     if (cliente) db.semilla('clients', [{ id: CLIENTE, config: {}, ...cliente }])
@@ -127,7 +127,7 @@ describe('el pre-vuelo real de láminas (las mismas lecturas que la puerta)', ()
     expect(await con({ slug: null }, { primary_colors: [], content_text: '{}' }).previueloDeLaminas(CLIENTE, 'post_img')).toEqual({ ok: true })
   })
   it('carrusel/kit: sin colores en NINGÚN lado → sin_identidad_visual (el caso de la ficha solo con Instagram)', async () => {
-    for (const f of ['carrusel_ig_v1', 'kit_historias']) expect(await con({ slug: 'zr' }, { primary_colors: [], typography: {}, content_text: JSON.stringify({ visual: { capa_grafica: { paleta: [] } } }) }).previueloDeLaminas(CLIENTE, f)).toEqual({ ok: false, motivo: 'sin_identidad_visual' })
+    for (const f of ['carrusel_ig_v1', 'kit_historias']) expect(await con({ slug: 'zr' }, { primary_colors: [], typography: {}, content_text: JSON.stringify({ brand_book_draft: { visual: { capa_grafica: { paleta: [] } } } }) }).previueloDeLaminas(CLIENTE, f)).toEqual({ ok: false, motivo: 'sin_identidad_visual' })
   })
   it('con colores solo en el bloque visual (columnas vacías) y slug → pasa; sin slug → sin_slug', async () => {
     expect(await con({ slug: 'zr' }, { primary_colors: [], content_text: marcaOk }).previueloDeLaminas(CLIENTE, 'carrusel_ig_v1')).toEqual({ ok: true })

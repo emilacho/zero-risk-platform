@@ -214,7 +214,7 @@ describe('INTEGRACIÓN · carrusel con almacén real (base falsa) + adaptadores,
   it('PRE-VUELO · el caso de la tercera prueba (ficha solo con Instagram: manual con la paleta vacía, ficha sin colores) NO abre encargo: 409 sin_identidad_visual, cero gasto', async () => {
     const db = sembrar({ colores: [] }); const { f, llamadas } = fetchFalso()
     db.tablas['client_brand_books'][0].typography = {}
-    db.tablas['client_brand_books'][0].content_text = JSON.stringify({ visual: { version: 1, capa_grafica: { paleta: [], tipografias: [], logo_url: null } } })
+    db.tablas['client_brand_books'][0].content_text = JSON.stringify({ brand_book_draft: { visual: { version: 1, capa_grafica: { paleta: [], tipografias: [], logo_url: null } } } })
     const P = crearPuertos(db, ENV, f)
     const r = await abrir(P, false)
     expect(r.status).toBe(409); expect(r.cuerpo).toMatchObject({ error: 'sin_identidad_visual', pendiente: 'reproceso_visual' })
@@ -223,7 +223,7 @@ describe('INTEGRACIÓN · carrusel con almacén real (base falsa) + adaptadores,
   it('UN solo lugar · con la paleta SOLO en el bloque visual del manual (columnas viejas vacías) el encargo abre y la marca sale de ese bloque', async () => {
     const db = sembrar({ colores: [] }); const { f } = fetchFalso()
     db.tablas['client_brand_books'][0].typography = []
-    db.tablas['client_brand_books'][0].content_text = JSON.stringify({ visual: { version: 1, capa_grafica: { paleta: [{ color: '#aa0011', rol: 'principal' }, { color: '#00bb22', rol: 'acento' }], tipografias: [{ nombre: 'Caveat', rol: 'titulos' }, { nombre: 'Inter', rol: 'cuerpo' }] } } })
+    db.tablas['client_brand_books'][0].content_text = JSON.stringify({ brand_book_draft: { visual: { version: 1, capa_grafica: { paleta: [{ color: '#aa0011', rol: 'principal' }, { color: '#00bb22', rol: 'acento' }], tipografias: [{ nombre: 'Caveat', rol: 'titulos' }, { nombre: 'Inter', rol: 'cuerpo' }] } } } })
     const P = crearPuertos(db, ENV, f)
     const fu = await P.fuentes(CLIENTE)
     expect('error' in fu).toBe(false)
