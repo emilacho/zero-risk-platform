@@ -262,6 +262,250 @@ function derivarPisoVisual(ctx, invocarModelo) {
   })
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// PISO VISUAL · TODAS LAS FUENTES (21-oct · ENCARGO «manual visual con todas las fuentes», firma Emilio 19:55 · T3)
+// Principio: nada de rejas a UNA fuente. El piso trabaja con TODO lo real y propio que el cliente tenga
+// (hoja de estilo del sitio · ficha · logo y fotos propias copiadas, de la red que sea) y cada cosa lleva su PROCEDENCIA:
+//   · estado «declarado»  → lo declara el propio cliente (hoja de estilo, ficha).
+//   · estado «propuesta»  → lo OBSERVA el modelo en el logo o las fotos propias; se marca, no se esconde ni se descarta.
+// «No inventar» significa «solo material real y propio, con procedencia», no «solo el sitio».
+// Se mantiene `derivarPisoVisual` (versión de una sola fuente) intacta; el nodo usa esta.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+var MAX_COLORES_OBSERVADOS = 5
+var MAX_TIPOGRAFIAS_OBSERVADAS = 3
+var RE_COLOR_HEX = /^#[0-9a-f]{6}$/
+
+function colorHex(x) {
+  var v = typeof x === 'string' ? x : x && typeof x === 'object' ? x.hex || x.color || x.valor : null
+  v = typeof v === 'string' ? v.trim().toLowerCase() : ''
+  return RE_COLOR_HEX.test(v) ? v : null
+}
+function nombreDeTipografia(x) {
+  var v = typeof x === 'string' ? x : x && typeof x === 'object' ? x.family || x.nombre || x.name : null
+  v = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : ''
+  return v && v.length <= 60 ? v : null
+}
+function sinRepetidos(lista) {
+  var visto = {}
+  return lista.filter(function (x) { if (visto[x.valor]) return false; visto[x.valor] = true; return true })
+}
+
+/** Colores y tipografías DECLARADOS por el cliente: hoja de estilo del sitio primero, ficha después (sin repetir), cada uno con su procedencia. */
+function declaradosDelCliente(filaSitio, ficha) {
+  var sv = (filaSitio && filaSitio.respuesta && filaSitio.respuesta[0] && filaSitio.respuesta[0]._visual) || null
+  var colores = []
+  var tipos = []
+  ;((sv && sv.colores) || []).forEach(function (c) { var h = colorHex(c); if (h) colores.push({ valor: h, procedencia: 'sitio:hoja_de_estilo' }) })
+  ;((sv && sv.tipografias) || []).forEach(function (t) { var n = nombreDeTipografia(t); if (n) tipos.push({ valor: n, procedencia: 'sitio:hoja_de_estilo' }) })
+  var f = ficha || {}
+  ;(Array.isArray(f.brand_colors) ? f.brand_colors : []).forEach(function (c) { var h = colorHex(c); if (h) colores.push({ valor: h, procedencia: 'ficha' }) })
+  ;(Array.isArray(f.brand_fonts) ? f.brand_fonts : []).forEach(function (t) { var n = nombreDeTipografia(t); if (n) tipos.push({ valor: n, procedencia: 'ficha' }) })
+  return { colores: sinRepetidos(colores), tipografias: sinRepetidos(tipos) }
+}
+
+/**
+ * Elige el material a mirar entre NUESTRAS copias de lo propio (cualquier red): el logo y hasta `tope` fotos (nunca video ni logo como foto),
+ * las más recientes primero y repartidas entre las cuentas/fuentes (una por cuenta en cada vuelta) para que ninguna red se coma el cupo.
+ */
+function elegirMaterialPropio(copias, tope) {
+  var ok = (copias || []).filter(function (c) { return c && c.estado === 'ok' && c.url && (c.owner_role === undefined || c.owner_role === 'propio') })
+  var esLogoCopia = function (c) { return /^logo/.test(String(c.tipo || '')) || /^logo/.test(String(c.post_id || '')) }
+  var logos = ok.filter(esLogoCopia)
+  var logo = logos.filter(function (c) { return /hd/.test(String(c.post_id || '') + String(c.tipo || '')) })[0] || logos[0] || null
+  var fotos = ok.filter(function (c) { return !esLogoCopia(c) && (!c.medio || c.medio === 'imagen') })
+  fotos.sort(function (a, b) { return String(b.posted_at || '').localeCompare(String(a.posted_at || '')) })
+  var porCuenta = {}
+  var cuentas = []
+  fotos.forEach(function (f) { var k = String(f.handle || ''); if (!porCuenta[k]) { porCuenta[k] = []; cuentas.push(k) } porCuenta[k].push(f) })
+  var elegidas = []
+  var ronda = 0
+  while (elegidas.length < tope && ronda < tope) {
+    for (var i = 0; i < cuentas.length && elegidas.length < tope; i++) {
+      var f = porCuenta[cuentas[i]][ronda]
+      if (f) elegidas.push(f)
+    }
+    ronda++
+  }
+  return { logo: logo, fotos: elegidas, fotos_disponibles: fotos.length, cuentas: cuentas }
+}
+
+/** El pedido (en tuteo): lo declarado va como TEXTO; lo observable se pide SOLO si el cliente no lo declaró. */
+function armarPedidoTodasLasFuentes(declarados, material) {
+  var pideColores = declarados.colores.length === 0
+  var pideTipos = declarados.tipografias.length === 0
+  var listaC = declarados.colores.map(function (c, i) { return (i + 1) + '. ' + c.valor }).join('\n') || '(el cliente no declara colores)'
+  var listaT = declarados.tipografias.map(function (t, i) { return (i + 1) + '. ' + t.valor }).join('\n') || '(el cliente no declara tipografías)'
+  var tieneLogo = !!material.logo
+  var forma = [
+    '{',
+    '  "capa_grafica": {',
+    '    "paleta": [ {"color": "<uno de los colores declarados, EXACTO>", "rol": "principal|secundario|acento"} ],',
+    '    "tipografias": [ {"nombre": "<una de las tipografías declaradas, EXACTA>", "rol": "titulos|cuerpo"} ]' + (pideColores || pideTipos ? ',' : ''),
+  ]
+  if (pideColores) forma.push('    "colores_observados": [ {"color": "#rrggbb", "rol": "principal|secundario|acento", "donde": "logo|foto 1|foto 2|…"} ]' + (pideTipos ? ',' : ''))
+  if (pideTipos) forma.push('    "tipografias_observadas": [ {"nombre": "<nombre solo si se lee con claridad>", "rol": "titulos|cuerpo", "donde": "logo|foto N"} ]')
+  forma = forma.concat([
+    '  },',
+    '  "capa_producto": { "paleta_observada": ["..."], "luz": "...", "encuadre": "...", "que_aparece": ["..."], "que_no_aparece": ["..."] },',
+    '  "reglas": { "debe": ["...", "...", "..."], "no_debe": ["...", "..."], "capa_que_manda": { "foto_de_producto": "producto", "placa_logo_o_titulo": "grafica", "anuncio_con_texto_encima": "declara cuál gobierna qué, en una frase" } }',
+    '}',
+  ])
+  var task = [
+    'Eres un director de arte de marca. Vas a mirar el material visual REAL y PROPIO del negocio (su logo y sus fotos) y vas a construir el piso visual de su manual de marca.',
+    '',
+    '## Lo que el cliente declara (colores y tipografías, con su procedencia)',
+    'Colores:',
+    listaC,
+    '',
+    'Tipografías:',
+    listaT,
+    '',
+    (tieneLogo ? 'La primera imagen es el logo / la foto de perfil.' : 'No hay logo disponible.') + ' Las siguientes son fotos reales propias del negocio, en orden.',
+    '',
+    'Responde EXCLUSIVAMENTE con un bloque JSON (nada de texto antes ni después), con esta forma exacta:',
+  ].concat(forma).concat([
+    '',
+    'Reglas para responder:',
+    '- Describe SOLO lo que ves en las imágenes que te mando. Si algo no se puede saber con ese material, dilo en vez de generalizarlo como regla absoluta.',
+    '- Los colores y tipografías DECLARADOS solo se pueden elegir de las listas de arriba, tal cual.',
+    pideColores ? '- El cliente NO declara colores: propón hasta ' + MAX_COLORES_OBSERVADOS + ' colores de marca que SE VEAN en el logo o en las fotos (hex #rrggbb), diciendo en qué imagen los viste. Quedan marcados como PROPUESTA; no inventes colores que no se vean.' : '- El cliente ya declara sus colores: no propongas otros.',
+    pideTipos ? '- El cliente NO declara tipografías: solo si el logo o una foto muestran un texto cuya tipografía reconoces con claridad, nómbrala (máximo ' + MAX_TIPOGRAFIAS_OBSERVADAS + ') y di dónde; si no se reconoce, deja la lista vacía. No adivines.' : '- El cliente ya declara sus tipografías: no propongas otras.',
+  ]).join('\n')
+  var images = []
+  if (material.logo) images.push({ url: material.logo.url, label: 'logo / foto de perfil de la marca' })
+  material.fotos.forEach(function (p, i) { images.push({ url: p.url, label: 'foto ' + (i + 1) + ' (' + (p.handle || 'propia') + ', ' + String(p.posted_at || 'fecha desconocida').slice(0, 10) + ')' }) })
+  return { task: task, images: images, pide_colores: pideColores, pide_tipografias: pideTipos }
+}
+
+/** La muestra declarada · SIEMPRE por código (R3/R4): qué se miró, de qué cuentas, y lo que no se pudo observar. */
+function armarMuestraTodasLasFuentes(material, declarados) {
+  var no = []
+  var sinMirar = material.fotos_disponibles - material.fotos.length
+  if (sinMirar > 0) no.push(sinMirar + ' fotos propias disponibles no se miraron (tope de la corrida)')
+  if (!material.logo) no.push('no hay un logo propio copiado')
+  if (!material.fotos.length) no.push('no hay fotos propias copiadas')
+  no.push('los videos solo cuentan por su cuadro de portada, si existe copia')
+  no.push('material de competidores excluido a propósito (R6)')
+  return {
+    cuentas_con_fotos: material.cuentas,
+    fotos_disponibles: material.fotos_disponibles,
+    fotos_miradas: material.fotos.length,
+    con_logo: !!material.logo,
+    colores_declarados: declarados.colores.length,
+    tipografias_declaradas: declarados.tipografias.length,
+    no_observado: no,
+  }
+}
+
+/** Lo que el manual necesita en sus columnas (`primary_colors` / `typography`), coherente con el bloque visual y con la procedencia a la vista. */
+function paraElManual(capa) {
+  return {
+    primary_colors: (capa.paleta || []).map(function (p) { return { hex: p.color, rol: p.rol || null, procedencia: p.procedencia, estado: p.estado } }),
+    typography: (capa.tipografias || []).map(function (t) { return { family: t.nombre, rol: t.rol || null, procedencia: t.procedencia, estado: t.estado } }),
+  }
+}
+
+/**
+ * Compone el piso visual con TODAS las fuentes propias. Nunca para la corrida y nunca calla un hueco:
+ *   visual.estado = 'completo' | 'parcial' | 'ausente' y visual.motivo dice por qué (la compuerta lo declara; no pasa como «bueno»).
+ * ctx: { filaSitio, ficha:{brand_colors,brand_fonts}, copias:[client_social_images propias], tope? }.  invocarModelo({task,images}) → {response, brain_hit}.
+ */
+function derivarPisoVisualTodasLasFuentes(ctx, invocarModelo) {
+  var declarados = declaradosDelCliente(ctx.filaSitio, ctx.ficha)
+  var material = elegirMaterialPropio(ctx.copias, ctx.tope || MAX_FOTOS_A_MIRAR)
+  var visual = {
+    version: 2,
+    estado: null,
+    motivo: null,
+    capa_grafica: { paleta: [], tipografias: [], logo_url: material.logo ? material.logo.url : null, logo_procedencia: material.logo ? 'copia propia · ' + (material.logo.handle || 'cuenta propia') : null },
+    capa_producto: null,
+    reglas: null,
+    muestra: armarMuestraTodasLasFuentes(material, declarados),
+    brain_hit: null,
+    legible: null,
+    error: null,
+    nota: null,
+    para_el_manual: null,
+  }
+  // la capa gráfica DECLARADA entra siempre (no depende del modelo): es del cliente y tiene procedencia
+  declarados.colores.slice(0, 6).forEach(function (c) { visual.capa_grafica.paleta.push({ color: c.valor, rol: null, procedencia: c.procedencia, estado: 'declarado' }) })
+  declarados.tipografias.slice(0, 4).forEach(function (t) { visual.capa_grafica.tipografias.push({ nombre: t.valor, rol: null, procedencia: t.procedencia, estado: 'declarado' }) })
+
+  function cerrar() {
+    var hayColores = visual.capa_grafica.paleta.length > 0
+    var hayMaterial = !!material.logo || material.fotos.length > 0
+    var derivo = visual.legible === true && visual.capa_producto && visual.reglas
+    if (hayColores && hayMaterial && derivo) { visual.estado = 'completo'; visual.motivo = null }
+    else if (hayColores || (hayMaterial && derivo)) {
+      visual.estado = 'parcial'
+      var faltan = []
+      if (!hayColores) faltan.push('sin colores (ni declarados ni observables)')
+      if (!hayMaterial) faltan.push('sin logo ni fotos propias copiadas: la capa del producto y las reglas no se derivaron')
+      else if (!derivo) faltan.push('el modelo no entregó la capa del producto y las reglas' + (visual.error ? ' (' + visual.error + ')' : ''))
+      visual.motivo = faltan.join(' · ') || 'faltan datos visuales'
+    } else {
+      visual.estado = 'ausente'
+      visual.motivo = 'visual ausente: sin colores, sin logo y sin fotos propias' + (visual.error ? ' · ' + visual.error : '')
+    }
+    visual.para_el_manual = paraElManual(visual.capa_grafica)
+    return visual
+  }
+
+  if (!material.logo && material.fotos.length === 0) {
+    visual.nota = 'sin material visual propio copiado (ni logo ni fotos) · capa del producto y reglas NO derivadas · R7'
+    return Promise.resolve(cerrar())
+  }
+  var armado = armarPedidoTodasLasFuentes(declarados, material)
+  return Promise.resolve(invocarModelo({ task: armado.task, images: armado.images })).then(function (resp) {
+    visual.brain_hit = resp && resp.brain_hit === true
+    if (visual.brain_hit) {
+      visual.legible = false
+      visual.error = agregar(visual.error, 'CEREBRO_ENCENDIDO_SIN_CLIENT_ID · corrida descartada (R5)')
+      return cerrar()
+    }
+    var parsed = parseRespuesta(resp && resp.response)
+    visual.legible = parsed.legible
+    if (!parsed.legible) {
+      visual.error = agregar(visual.error, 'RESPUESTA_NO_LEGIBLE · ' + parsed.motivo)
+      return cerrar()
+    }
+    var cg = parsed.datos.capa_grafica || {}
+    // roles de lo DECLARADO: solo si el modelo eligió uno de la lista declarada (exacto)
+    ;(cg.paleta || []).forEach(function (p) {
+      var h = colorHex(p && p.color)
+      var i = visual.capa_grafica.paleta.map(function (x) { return x.color }).indexOf(h)
+      if (i !== -1 && visual.capa_grafica.paleta[i].estado === 'declarado' && p.rol) visual.capa_grafica.paleta[i].rol = String(p.rol).slice(0, 20)
+    })
+    ;(cg.tipografias || []).forEach(function (t) {
+      var n = nombreDeTipografia(t && t.nombre)
+      var i = visual.capa_grafica.tipografias.map(function (x) { return x.nombre }).indexOf(n)
+      if (i !== -1 && visual.capa_grafica.tipografias[i].estado === 'declarado' && t.rol) visual.capa_grafica.tipografias[i].rol = String(t.rol).slice(0, 20)
+    })
+    // lo OBSERVADO entra marcado PROPUESTA y solo si el cliente no declaró ese tipo de cosa
+    if (armado.pide_colores) {
+      var vistos = {}
+      ;(cg.colores_observados || []).forEach(function (o) {
+        var h = colorHex(o && o.color)
+        if (!h || vistos[h] || visual.capa_grafica.paleta.length >= MAX_COLORES_OBSERVADOS) return
+        vistos[h] = true
+        visual.capa_grafica.paleta.push({ color: h, rol: o.rol ? String(o.rol).slice(0, 20) : null, procedencia: 'observado en ' + String((o && o.donde) || 'el material propio').slice(0, 40), estado: 'propuesta' })
+      })
+    }
+    if (armado.pide_tipografias) {
+      var vistas = {}
+      ;(cg.tipografias_observadas || []).forEach(function (o) {
+        var n = nombreDeTipografia(o && o.nombre)
+        if (!n || vistas[n.toLowerCase()] || visual.capa_grafica.tipografias.length >= MAX_TIPOGRAFIAS_OBSERVADAS) return
+        vistas[n.toLowerCase()] = true
+        visual.capa_grafica.tipografias.push({ nombre: n, rol: o.rol ? String(o.rol).slice(0, 20) : null, procedencia: 'observado en ' + String((o && o.donde) || 'el material propio').slice(0, 40), estado: 'propuesta' })
+      })
+    }
+    visual.capa_producto = parsed.datos.capa_producto || null
+    visual.reglas = parsed.datos.reglas || null
+    return cerrar()
+  })
+}
+
 function agregar(previo, s) {
   return previo ? previo + ' · ' + s : s
 }
@@ -278,5 +522,13 @@ if (typeof module !== 'undefined' && module.exports) {
     parseRespuesta: parseRespuesta,
     resolverCopias: resolverCopias,
     derivarPisoVisual: derivarPisoVisual,
+    derivarPisoVisualTodasLasFuentes: derivarPisoVisualTodasLasFuentes,
+    declaradosDelCliente: declaradosDelCliente,
+    elegirMaterialPropio: elegirMaterialPropio,
+    armarPedidoTodasLasFuentes: armarPedidoTodasLasFuentes,
+    armarMuestraTodasLasFuentes: armarMuestraTodasLasFuentes,
+    paraElManual: paraElManual,
+    colorHex: colorHex,
+    nombreDeTipografia: nombreDeTipografia,
   }
 }

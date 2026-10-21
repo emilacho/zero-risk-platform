@@ -15,6 +15,7 @@ import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, 
 import { armarPedidoAlRevisor } from './ciego'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
+import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
@@ -73,6 +74,12 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   const pl = await P.almacen.leerPlantilla(dec.familia)
   if (!pl) return r(404, { error: 'plantilla_desconocida', familia: dec.familia })
   if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia })
+  // 21-oct · PRE-VUELO de las láminas: sin identidad visual legible o sin carpeta (slug) el encargo NO se crea (antes nacía y cerraba `fallido` a los 3 s); queda pendiente del re-proceso visual. Una lectura que falla no bloquea (el paso `abrir` la vuelve a leer y lo dice)
+  if (familiaDeLaminas(pl.plantilla)) {
+    const fu = await P.fuentes(entrada.client_id)
+    const falta = 'error' in fu ? null : previueloDeLaminas(fu)
+    if (falta) return r(409, { error: falta.error, familia: dec.familia, detalle: falta.detalle, pendiente: 'reproceso_visual' })
+  }
   const s: Sobre = v.sobre
   const tope = Math.min(s.tope_usd ?? pl.plantilla.limites.tope_encargo_usd, pl.plantilla.limites.tope_encargo_usd)
   const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: salaRefConFila(entrada.sala_ref, s), estado_del_motor: estadoInicial() })

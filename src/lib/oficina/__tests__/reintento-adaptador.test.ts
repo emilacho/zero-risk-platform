@@ -111,6 +111,44 @@ describe('las consultas leen lo correcto', () => {
   })
 })
 
+describe('el pre-vuelo real de láminas (las mismas lecturas que la puerta)', () => {
+  const marcaOk = JSON.stringify({ brand_book_draft: { visual: { version: 1, capa_grafica: { paleta: [{ color: '#112233', rol: 'principal' }] } } } })
+  const con = (cliente: Record<string, unknown> | null, manual: Record<string, unknown> | null) => {
+    const db = mundo()
+    if (cliente) db.semilla('clients', [{ id: CLIENTE, config: {}, ...cliente }])
+    if (manual) db.semilla('client_brand_books', [{ client_id: CLIENTE, version: 1, ...manual }])
+    return puertosDeReintento(db as never, ENV)
+  }
+  it('post_img (no dibuja láminas) no lee nada y pasa', async () => {
+    const db = mundo(); db.fallar['clients'] = 'caída'
+    expect(await puertosDeReintento(db as never, ENV).previueloDeLaminas(CLIENTE, 'post_img')).toEqual({ ok: true })
+  })
+  it('post_img pasa aunque el cliente NO tenga ni colores ni slug (solo las láminas los exigen)', async () => {
+    expect(await con({ slug: null }, { primary_colors: [], content_text: '{}' }).previueloDeLaminas(CLIENTE, 'post_img')).toEqual({ ok: true })
+  })
+  it('carrusel/kit: sin colores en NINGÚN lado → sin_identidad_visual (el caso de la ficha solo con Instagram)', async () => {
+    for (const f of ['carrusel_ig_v1', 'kit_historias']) expect(await con({ slug: 'zr' }, { primary_colors: [], typography: {}, content_text: JSON.stringify({ brand_book_draft: { visual: { capa_grafica: { paleta: [] } } } }) }).previueloDeLaminas(CLIENTE, f)).toEqual({ ok: false, motivo: 'sin_identidad_visual' })
+  })
+  it('con colores solo en el bloque visual (columnas vacías) y slug → pasa; sin slug → sin_slug', async () => {
+    expect(await con({ slug: 'zr' }, { primary_colors: [], content_text: marcaOk }).previueloDeLaminas(CLIENTE, 'carrusel_ig_v1')).toEqual({ ok: true })
+    expect(await con({ slug: null }, { primary_colors: [], content_text: marcaOk }).previueloDeLaminas(CLIENTE, 'carrusel_ig_v1')).toEqual({ ok: false, motivo: 'sin_slug' })
+    expect(await con({ slug: '' }, { content_text: marcaOk }).previueloDeLaminas(CLIENTE, 'carrusel_ig_v1')).toEqual({ ok: false, motivo: 'sin_slug' })
+  })
+  it('el respaldo de la ficha (brand_colors) también cuenta', async () => {
+    expect(await con({ slug: 'zr', brand_colors: [{ hex: '#abcdef' }] }, { primary_colors: [] }).previueloDeLaminas(CLIENTE, 'kit_historias')).toEqual({ ok: true })
+  })
+  it('una lectura que falla o filas que faltan NO bloquean (la puerta decide)', async () => {
+    expect(await con(null, null).previueloDeLaminas(CLIENTE, 'carrusel_ig_v1')).toEqual({ ok: true })
+    expect(await con({ slug: 'zr' }, null).previueloDeLaminas(CLIENTE, 'carrusel_ig_v1')).toEqual({ ok: true })
+    const db = mundo(); db.semilla('clients', [{ id: CLIENTE, slug: 'zr' }]); db.semilla('client_brand_books', [{ client_id: CLIENTE, version: 1 }]); db.fallar['client_brand_books'] = 'caída'
+    expect(await puertosDeReintento(db as never, ENV).previueloDeLaminas(CLIENTE, 'carrusel_ig_v1')).toEqual({ ok: true })
+  })
+  it('lee el manual VIGENTE (el de mayor versión)', async () => {
+    const db = mundo(); db.semilla('clients', [{ id: CLIENTE, slug: 'zr', config: {} }]); db.semilla('client_brand_books', [{ client_id: CLIENTE, version: 1, primary_colors: [] }, { client_id: CLIENTE, version: 2, primary_colors: ['#112233'] }])
+    expect(await puertosDeReintento(db as never, ENV).previueloDeLaminas(CLIENTE, 'carrusel_ig_v1')).toEqual({ ok: true })
+  })
+})
+
 describe('de punta a punta con los datos de la tercera prueba', () => {
   it('sin encargos y con 20 min: reintenta el carrusel (plantilla activa) y la historia NO (plantilla apagada); anota la libreta', async () => {
     const db = mundo()

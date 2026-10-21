@@ -232,11 +232,12 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     const { ultima } = await correr(M, id, guionCarrusel())
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' }); expect(M.llamadas.render).toBe(2)
   })
-  it('un brief que no es un carrusel, o un cliente sin identidad visual, cierran el encargo FALLIDO y visible', async () => {
+  it('un brief que no es un carrusel cierra el encargo FALLIDO y visible; un cliente sin identidad visual NO abre encargo (pre-vuelo en la puerta)', async () => {
     const a = await abierto(CARRUSEL_IG_V1, BRIEF_KIT, 'BRF-0200')
     expect(a.a.cuerpo).toMatchObject({ estado: 'fallido' }); expect(String(a.a.cuerpo.motivo)).toMatch(/no es un carrusel/)
     const b = await abiertoC({ fuentes: { marca: null } })
-    expect(b.a.cuerpo).toMatchObject({ estado: 'fallido' }); expect(String(b.a.cuerpo.motivo)).toMatch(/identidad visual/)
+    expect(b.a.status).toBe(409); expect(b.a.cuerpo).toMatchObject({ error: 'sin_identidad_visual', familia: 'carrusel_ig_v1', pendiente: 'reproceso_visual' }); expect(String(b.a.cuerpo.detalle)).toMatch(/identidad visual/)
+    expect(b.M.encargos.size).toBe(0)
   })
   it('un «siguiente» repetido entrega de nuevo el mismo pedido y no gasta de más', async () => {
     const { M, id, a } = await abiertoC()
