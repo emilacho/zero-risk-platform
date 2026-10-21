@@ -37,6 +37,6 @@ export function mensajeDeLaPieza(p: PiezaParaSlack): { text: string; blocks: unk
       { type: 'button', style: 'danger', action_id: ACCION_RECHAZAR, text: { type: 'plain_text', text: 'Rechazar', emoji: true }, value: p.hitl_id },
     ],
   })
-  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'Para comentar, responde en este hilo. Escribe *general:* al inicio si el comentario vale para todos tus clientes. Nada se publica sin tu aprobación.' }] })
+  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'Para comentar, responde en este hilo. Escribe *general:* al inicio si el comentario vale para todos tus clientes. Si los botones no responden, también puedes aprobar o rechazar en el tablero: la bandeja funciona igual. Nada se publica sin tu aprobación.' }] })
   return { text: recortar(`Pieza para decidir · ${p.cliente} · ${p.titulo}`, 300), blocks }
 }

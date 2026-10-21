@@ -51,6 +51,7 @@ describe('mensaje de la pieza', () => {
     const m = mensajeDeLaPieza({ ...base, texto: 'Hola' })
     expect(botones(m).map((b) => [b.action_id, b.value])).toEqual([[ACCION_APROBAR, HITL], [ACCION_RECHAZAR, HITL]])
     expect(JSON.stringify(m.blocks)).toContain('Nada se publica sin tu aprobación')
+    expect(JSON.stringify(m.blocks)).toContain('también puedes aprobar o rechazar en el tablero')   // mientras los botones no estén activos en Slack, la bandeja sigue siendo la vía
     expect(JSON.stringify(m.blocks)).toContain('general:')
   })
   it('recorta el texto largo a lo que Slack admite y lo marca con «…»', () => {
