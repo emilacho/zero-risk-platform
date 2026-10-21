@@ -40,7 +40,7 @@ for (let i = 0; i < metas.length; i++) {
   vistas[claveDup] = m.post_id
   const ext = ct === 'image/png' ? 'png' : ct === 'image/webp' ? 'webp' : 'jpg'
   buenas.push({
-    json: { ...m, ct, hash_archivo: hash, bytes: buf.length, magic: buf.slice(0, 4).toString('hex'), path: m.client_id + '/' + m.owner_role + '/' + m.handle + '/' + m.post_id + '.' + ext },
+    json: { ...m, ct, hash_archivo: hash, bytes: buf.length, magic: buf.slice(0, 4).toString('hex'), path: m.client_id + '/' + m.owner_role + '/' + String(m.handle).replace(/[^A-Za-z0-9._-]/g, '_') + '/' + String(m.post_id).replace(/[^A-Za-z0-9._-]/g, '_') + '.' + ext },
     binary: { data: e.binary.data },
   })
 }
