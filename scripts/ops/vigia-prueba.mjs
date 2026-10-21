@@ -4,6 +4,7 @@
  *
  *   node scripts/ops/vigia-prueba.mjs --cliente <uuid> --desde <ISO> --tope 10 [--aviso 8] [--intervalo 30] [--una-vez] [--apagar] [--env <ruta .env.local>]
  *
+ *  · `--cliente` admite varias fichas separadas por coma y `--mismo-nombre` suma además todas las que se llaman igual y nacieron desde `--desde` (la prueba repetida abre una ficha nueva con el mismo nombre: el 20-oct tres fichas gastaron el doble de lo que un vigía por ficha llegó a ver);
  *  · el gasto = libro de agentes del cliente (`agent_invocations`, desde `--desde`) + el detalle de llamadas de Apify de ESE cliente (`costs`, `service` `apify:…`, `description.tipo = "llamada"`);
  *    lo que gaste el portero u otros clientes NO cuenta;
  *  · `--aviso` (por omisión 80 % del tope) y `--tope`: al pasar el aviso lo dice; al llegar al tope sale con código 20;
@@ -33,13 +34,19 @@ const redondea = (x) => Math.round(x * 1e6) / 1e6
 /** suma el libro de agentes (las filas ya vienen filtradas por cliente y fecha) */
 export const sumaDeAgentes = (filas) => redondea((filas ?? []).reduce((s, f) => s + num(f?.cost_usd), 0))
 
-/** suma el detalle de llamadas de Apify de UN cliente: solo filas con `description` JSON, `tipo:"llamada"` y ese `client_id` (la fila «del día» no se suma: repite lo que ya cuentan las llamadas) */
+/** `--cliente` admite varias fichas separadas por coma (la misma prueba puede repetirse con fichas del mismo nombre): lista sin repetidos y sin vacíos */
+export const listaDeClientes = (x) => [...new Set(String(x ?? '').split(',').map((s) => s.trim()).filter(Boolean))]
+/** une la ficha pedida con todas las que se llaman igual (`hermanas` = ids leídos de `clients` por nombre, ya filtrados por fecha) */
+export const unirFichas = (base, hermanas) => [...new Set([...base, ...(hermanas ?? [])])]
+
+/** suma el detalle de llamadas de Apify de UNA o varias fichas: solo filas con `description` JSON, `tipo:"llamada"` y uno de esos `client_id` (la fila «del día» no se suma: repite lo que ya cuentan las llamadas) */
 export function sumaDeApify(filas, cliente) {
+  const ids = Array.isArray(cliente) ? cliente : [cliente]
   let total = 0
   for (const f of filas ?? []) {
     let d
     try { d = JSON.parse(String(f?.description ?? '')) } catch { continue }
-    if (!d || d.tipo !== 'llamada' || d.client_id !== cliente) continue
+    if (!d || d.tipo !== 'llamada' || !ids.includes(d.client_id)) continue
     total += num(f.amount_usd_exact ?? f.amount_usd)
   }
   return redondea(total)
@@ -53,19 +60,41 @@ export function evaluar(total, { tope, aviso }) {
 
 export function validarParametros(a) {
   const e = []
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(a.cliente ?? ''))) e.push('--cliente debe ser el uuid del cliente')
+  const clientes = listaDeClientes(a.cliente)
+  if (!clientes.length || !clientes.every((c) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c))) e.push('--cliente debe ser el uuid del cliente (o varios uuid separados por coma)')
   if (!a.desde || Number.isNaN(Date.parse(a.desde))) e.push('--desde debe ser una fecha ISO (cuándo empieza la prueba)')
   if (!(Number(a.tope) > 0)) e.push('--tope debe ser un número mayor que 0')
   const aviso = a.aviso === undefined ? Number(a.tope) * 0.8 : Number(a.aviso)
   if (!(aviso > 0) || aviso > Number(a.tope)) e.push('--aviso debe ser mayor que 0 y no pasar del tope')
-  return e.length ? { ok: false, errores: e } : { ok: true, cliente: a.cliente, desde: new Date(Date.parse(a.desde)).toISOString(), tope: Number(a.tope), aviso, intervalo: Math.max(5, Number(a.intervalo ?? 30)) }
+  return e.length ? { ok: false, errores: e } : { ok: true, cliente: clientes[0], clientes, desde: new Date(Date.parse(a.desde)).toISOString(), tope: Number(a.tope), aviso, intervalo: Math.max(5, Number(a.intervalo ?? 30)) }
 }
 
 /** una medición: `consultar` trae las filas ya filtradas; devuelve el desglose */
 export async function medir(consultar, p) {
-  const { agentes, apify } = await consultar(p)
-  const a = sumaDeAgentes(agentes), x = sumaDeApify(apify, p.cliente)
-  return { agentes: a, apify: x, total: redondea(a + x) }
+  const { agentes, apify, clientes } = await consultar(p)
+  const a = sumaDeAgentes(agentes), x = sumaDeApify(apify, clientes ?? p.clientes ?? p.cliente)
+  return { agentes: a, apify: x, total: redondea(a + x), fichas: (clientes ?? p.clientes ?? [p.cliente]).length }
+}
+
+/**
+ * La consulta de una vuelta. `leer(ruta)` trae filas de PostgREST. Con `mismoNombre`, cada vuelta suma también las fichas que se llaman igual que la pedida y nacieron desde `desde`
+ * (la prueba repetida crea una ficha nueva con el mismo nombre). Devuelve también las fichas que contó.
+ */
+export function crearConsulta(leer, { mismoNombre = false } = {}) {
+  return async (p) => {
+    let clientes = p.clientes ?? [p.cliente]
+    if (mismoNombre) {
+      const [base] = await leer(`clients?select=name&id=eq.${p.cliente}&limit=1`)
+      if (!base?.name) throw new Error('no encontré la ficha pedida para buscar las del mismo nombre')
+      const hermanas = await leer(`clients?select=id&name=eq.${encodeURIComponent(base.name)}&created_at=gte.${encodeURIComponent(p.desde)}&limit=200`)
+      clientes = unirFichas(clientes, hermanas.map((h) => h.id))
+    }
+    return {
+      clientes,
+      agentes: await leer(`agent_invocations?select=cost_usd&client_id=in.(${clientes.join(',')})&created_at=gte.${encodeURIComponent(p.desde)}&limit=5000`),
+      apify: await leer(`costs?select=amount_usd,amount_usd_exact,description&service=like.apify*&created_at=gte.${encodeURIComponent(p.desde)}&limit=5000`),
+    }
+  }
 }
 
 /**
@@ -118,10 +147,7 @@ async function main() {
     return { status: r.status, json }
   }
   const leer = async (ruta) => { const r = await rest('GET', ruta); if (r.status >= 300 || !Array.isArray(r.json)) throw new Error(`no pude leer ${ruta.split('?')[0]} (${r.status})`); return r.json }
-  const consultar = async (p) => ({
-    agentes: await leer(`agent_invocations?select=cost_usd&client_id=eq.${p.cliente}&created_at=gte.${encodeURIComponent(p.desde)}&limit=5000`),
-    apify: await leer(`costs?select=amount_usd,amount_usd_exact,description&service=like.apify*&created_at=gte.${encodeURIComponent(p.desde)}&limit=5000`),
-  })
+  const consultar = crearConsulta(leer, { mismoNombre: tiene('--mismo-nombre') })
   const enVuelo = async () => {
     if (!N8N || !N8N_KEY) return null
     const out = []
@@ -134,7 +160,7 @@ async function main() {
   for (;;) {
     let res
     try { res = await vigilarUnaVez({ consultar, rest, apagar: tiene('--apagar') }, v) } catch (e) { console.error(hora(), 'ERROR de lectura:', e instanceof Error ? e.message : e); if (tiene('--una-vez')) process.exit(1); await new Promise((r) => setTimeout(r, v.intervalo * 1000)); continue }
-    console.log(`${hora()} gasto agentes ${res.agentes.toFixed(4)} + apify ${res.apify.toFixed(4)} = US$ ${res.total.toFixed(4)} · aviso ${v.aviso} · tope ${v.tope} · ${res.nivel.toUpperCase()}`)
+    console.log(`${hora()} gasto (${res.fichas} ficha${res.fichas === 1 ? '' : 's'}) agentes ${res.agentes.toFixed(4)} + apify ${res.apify.toFixed(4)} = US$ ${res.total.toFixed(4)} · aviso ${v.aviso} · tope ${v.tope} · ${res.nivel.toUpperCase()}`)
     if (res.nivel === 'tope') {
       if (res.apagado) { for (const p of res.apagado.pasos) console.log(`  ${p.escrito && p.leido_de_vuelta ? '✔' : '✗'} ${p.nombre}`); console.log(`  en vuelo en n8n: ${((await enVuelo()) ?? ['(sin acceso a n8n)']).join(', ') || 'ninguna'}`) }
       else console.log('  (sin --apagar: no se escribió nada; con --apagar cerraría el candado del alta y apagaría finanzas, oficina, revisión y cadena)')
