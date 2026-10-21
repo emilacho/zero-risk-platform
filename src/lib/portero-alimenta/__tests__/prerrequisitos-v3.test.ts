@@ -45,7 +45,7 @@ function vigilar(t: Record<string, Array<Record<string, unknown>>>) {
   const base = crearBaseFalsa(t as never)
   const apagados: string[] = [], avisos: string[] = []
   const deps: DepsDelVigilante = {
-    db: base.db, interruptores: ON, ahora: AHORA, esperar: async () => {},
+    db: base.db, interruptores: ON, ahora: AHORA, esperar: async () => {}, umbrales: { aviso_usd: 1.5, apagar_usd: 3 },
     apagar: async (w) => { apagados.push(w); return { ok: true, detalle: 'flujo desactivado' } },
     avisar: async (x) => { avisos.push(x); return { ok: true, detalle: 'entregado' } },
   }

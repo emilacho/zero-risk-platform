@@ -5,6 +5,7 @@
  *
  *  · NO hay lista fija de temas: el tema es texto libre; «es el mismo tema» se decide por las palabras significativas (código); si sigue vigente lo decide el agente que lee (se le da la fecha).
  *  · Una respuesta nueva al MISMO tema (y la misma sede) reemplaza a la anterior: la vieja queda retirada con su motivo y su fecha (nada se borra).
+ *  · EXCEPCIÓN (21-oct): con `acumula: true` la respuesta es una NOTA que se suma: nunca retira a otra del mismo tema (comentarios de una pieza, avisos sueltos). Solo se deduplica la idéntica (huella del texto + `mensaje_ref`).
  *  · Precedencia máxima: el origen `dueno` va primero donde el cerebro ordena por origen, y el resumen vivo la muestra aparte; lo medido o supuesto no se mezcla con ella (cada ficha conserva su cita).
  *  · Privacidad: se guarda lo que dijo el dueño; correos, teléfonos y @usuarios de terceros se omiten.
  *  · `dry_run` obligatorio; con false exige workflow_id y workflow_execution_id. Detrás de `PORTERO_DUENO` (apagado por omisión). US$ 0: no llama a ningún modelo.
@@ -68,6 +69,8 @@ export interface EntradaDeDueno {
   preguntado_por: PreguntadoPor
   pregunta_id: string | null
   forzar: boolean
+  /** nota que se suma: no reemplaza a otras del mismo tema */
+  acumula: boolean
 }
 function normalizar_(cuerpo: Record<string, unknown>): Respuesta | EntradaDeDueno {
   const evento = cuerpo.evento === 'pregunta' ? 'pregunta' : 'respuesta'
@@ -86,7 +89,7 @@ function normalizar_(cuerpo: Record<string, unknown>): Respuesta | EntradaDeDuen
   if (evento === 'respuesta' && (!cuando || Number.isNaN(Date.parse(cuando)))) return err(400, 'entrada_invalida', '`respondido_en` debe ser una fecha ISO')
   return {
     evento, client_id: String(cuerpo.client_id), sede_clave: txt(cuerpo.sede_clave) || null, pregunta, respuesta, tema, canal, mensaje_ref: txt(cuerpo.mensaje_ref) || null,
-    respondido_en: cuando ? new Date(cuando).toISOString() : '', preguntado_por: { oficina, agente }, pregunta_id: txt(cuerpo.pregunta_id) || null, forzar: cuerpo.forzar === true,
+    respondido_en: cuando ? new Date(cuando).toISOString() : '', preguntado_por: { oficina, agente }, pregunta_id: txt(cuerpo.pregunta_id) || null, forzar: cuerpo.forzar === true, acumula: cuerpo.acumula === true,
   }
 }
 
@@ -105,7 +108,7 @@ export function descripcionDeRespuesta(f: Fila, ahora: Date): Record<string, unk
   const d = (pt.datos && typeof pt.datos === 'object' ? pt.datos : {}) as Fila
   const cuando = txt(d.respondido_en) || txt(f.observado_en)
   return {
-    ficha_id: String(f.id), tema: txt(d.tema), pregunta: txt(d.pregunta), respuesta: txt(d.respuesta), canal: txt(d.canal), respondido_en: cuando,
+    ficha_id: String(f.id), tema: txt(d.tema), pregunta: txt(d.pregunta), respuesta: txt(d.respuesta), canal: txt(d.canal), respondido_en: cuando, ...(d.acumula === true ? { acumula: true } : {}),
     hace_dias: cuando ? diasEntre(cuando, ahora) : null, sede: txt(f.sede) || null, confirmado_por_el_dueno: true, mensaje_ref: txt(d.mensaje_ref) || null,
     nota: 'el agente decide por razonamiento si la respuesta sigue vigente; aquí solo está lo que dijo el dueño y cuándo',
   }
@@ -192,12 +195,12 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
   if (igual.error) return err(502, 'lectura_fallida', `cerebro_fichas: ${igual.error.message}`)
   if (lista(igual.data).length) return { status: 200, body: { ok: true, repetida: true, ficha_id: String(lista(igual.data)[0].id), nota: 'esta misma respuesta ya estaba guardada' } }
 
-  const vieja = delMismoTema.sort((a, b) => (txt(b.observado_en) < txt(a.observado_en) ? -1 : 1))[0] ?? null
+  const vieja = n.acumula ? null : delMismoTema.sort((a, b) => (txt(b.observado_en) < txt(a.observado_en) ? -1 : 1))[0] ?? null
   // una respuesta MÁS VIEJA que la vigente no la reemplaza (llegó tarde): se guarda archivada con su fecha
   const llegoTarde = !!vieja && txt(vieja.observado_en) > n.respondido_en
   const fichaId = id()
   const estadoDeSede = estadoDeSedeDichoPorElDueno({ tema: n.tema, sede_clave: n.sede_clave }, limpia.texto, sedes.sedes)
-  const plan = { ficha_id: fichaId, tema: n.tema, sede: sedeClave, ...(estadoDeSede ? { estado_de_sede: { sede: estadoDeSede.sede.clave, estado: estadoDeSede.estado } } : {}), reemplaza: vieja && !llegoTarde ? String(vieja.id) : null, llego_tarde: llegoTarde, datos_personales_omitidos: limpia.redactado }
+  const plan = { ficha_id: fichaId, tema: n.tema, sede: sedeClave, ...(n.acumula ? { acumula: true } : {}), ...(estadoDeSede ? { estado_de_sede: { sede: estadoDeSede.sede.clave, estado: estadoDeSede.estado } } : {}), reemplaza: vieja && !llegoTarde ? String(vieja.id) : null, llego_tarde: llegoTarde, datos_personales_omitidos: limpia.redactado }
   if (v.dry_run) return { status: 200, body: { ok: true, dry_run: true, ...plan, nota: 'dry_run: no se guardó nada' } }
 
   const ing = id()
@@ -209,11 +212,11 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
     id: fichaId, client_id: n.client_id, ingreso_id: ing, ref, clase: CLASE_DEL_DUENO, titulo: `Dueño · ${n.tema}${sedeClave ? ` · sede ${sedeClave}` : ''}`.slice(0, 160), que_es: limpia.texto.slice(0, 200), contenido, origen: 'dueno',
     fecha_fuente: cuando, reconfirmado_en: cuando, plazo: null, vigente_hasta: null, version_de: vieja && !llegoTarde ? String(vieja.id) : null, huella: huella16(contenido),
     propiedad: 'propia', porque: `respuesta del dueño por ${n.canal}`, juzgado_por: 'regla', observado_en: cuando, atributo: `${PREFIJO_DE_ATRIBUTO}${temaNormal(n.tema)}`, sede: alcance || null,
-    decision: vieja && !llegoTarde ? 'reemplaza' : 'suma', razon_de_decision: vieja && !llegoTarde ? 'una respuesta nueva del dueño al mismo tema reemplaza a la anterior' : llegoTarde ? 'llegó más tarde que otra más nueva: queda archivada' : 'primera respuesta del dueño a este tema',
+    decision: vieja && !llegoTarde ? 'reemplaza' : 'suma', razon_de_decision: vieja && !llegoTarde ? 'una respuesta nueva del dueño al mismo tema reemplaza a la anterior' : n.acumula ? 'nota que se suma (acumula): no reemplaza a otras del mismo tema' : llegoTarde ? 'llegó más tarde que otra más nueva: queda archivada' : 'primera respuesta del dueño a este tema',
     alcance: 'cliente', descartada: false, retirada_en: llegoTarde ? ahora.toISOString() : null, motivo_retirada: llegoTarde ? 'una respuesta más nueva del dueño al mismo tema ya estaba guardada' : null,
     provenance_tag: {
       type: 'evidence', source: 'dueno', trust_level: 'untrusted', confirmado_por: 'dueno', canal: n.canal, ingress_route: '/api/brain/alimentar/dueno',
-      datos: { tema: n.tema, tema_norm: temaNormal(n.tema), pregunta: preguntaLimpia, respuesta: limpia.texto, canal: n.canal, mensaje_ref: n.mensaje_ref, respondido_en: cuando, preguntado_por: n.preguntado_por, ...(limpia.redactado ? { datos_personales_omitidos: true } : {}), ...datosDeSede(sedeClave ? [sedeClave] : null) },
+      datos: { tema: n.tema, tema_norm: temaNormal(n.tema), pregunta: preguntaLimpia, respuesta: limpia.texto, canal: n.canal, mensaje_ref: n.mensaje_ref, respondido_en: cuando, preguntado_por: n.preguntado_por, ...(n.acumula ? { acumula: true } : {}), ...(limpia.redactado ? { datos_personales_omitidos: true } : {}), ...datosDeSede(sedeClave ? [sedeClave] : null) },
     },
   }
   const wf = await deps.db.from('cerebro_fichas').insert(fila)
@@ -241,7 +244,7 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
 }
 
 /** GET · ¿ya se respondió? (y qué hay pendiente). Sin `tema`: lo último que dijo el dueño. El agente decide si sigue vigente. */
-export async function rutaLeerDueno(deps: { db: Db; ahora?: Date }, params: { client_id: string; tema?: string | null; sede_clave?: string | null }): Promise<Respuesta> {
+export async function rutaLeerDueno(deps: { db: Db; ahora?: Date }, params: { client_id: string; tema?: string | null; sede_clave?: string | null; canal?: string | null; limite?: number | string | null }): Promise<Respuesta> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.client_id)) return err(400, 'entrada_invalida', '`client_id` debe ser un uuid')
   const ahora = deps.ahora ?? new Date()
   const vig = await respuestasVigentes(deps.db, params.client_id)
@@ -250,10 +253,16 @@ export async function rutaLeerDueno(deps: { db: Db; ahora?: Date }, params: { cl
   const sede = txt(params.sede_clave)
   const orden = (a: Fila, b: Fila) => (txt(b.observado_en) < txt(a.observado_en) ? -1 : 1)
   const deLaSede = vig.filas.filter((f) => !sede || sedeDe(f) === sede || sedeDe(f) === '')
-  const halladas = (tema ? deLaSede.filter((f) => esElMismoTema(temaDe(f), tema)) : deLaSede).sort(orden)
+  const canal = normalizar(txt(params.canal))
+  const canalDe = (f: Fila): string => { const pt = (f.provenance_tag && typeof f.provenance_tag === 'object' ? f.provenance_tag : {}) as Fila; const d = (pt.datos && typeof pt.datos === 'object' ? pt.datos : {}) as Fila; return normalizar(txt(d.canal)) }
+  const delCanal = canal ? deLaSede.filter((f) => canalDe(f) === canal) : deLaSede
+  const halladas = (tema ? delCanal.filter((f) => esElMismoTema(temaDe(f), tema)) : delCanal).sort(orden)
+  // `limite`: por omisión 20 (sin tema) o 5 (con tema); máximo 100. `total` dice cuántas hay, para saber si se recortó.
+  const pedido = Number(params.limite)
+  const limite = Number.isFinite(pedido) && pedido >= 1 ? Math.min(100, Math.floor(pedido)) : tema ? 5 : 20
   const hace = new Date(ahora.getTime() - HORAS_DE_UNA_PREGUNTA_PENDIENTE * 3_600_000).toISOString()
   const pe = await deps.db.from('cerebro_dueno_preguntas').select('*').eq('client_id', params.client_id).eq('estado', 'pendiente').gte('creado_en', hace).limit(200)
   if (pe.error) return err(502, 'lectura_fallida', `cerebro_dueno_preguntas: ${pe.error.message}`)
   const pend = lista(pe.data).filter((p) => !tema || esElMismoTema(txt(p.tema), tema)).map((p) => ({ pregunta_id: String(p.id), tema: txt(p.tema), oficina: txt(p.preguntado_por_oficina), agente: txt(p.preguntado_por_agente), canal: txt(p.canal), desde: txt(p.creado_en) }))
-  return { status: 200, body: { ok: true, client_id: params.client_id, tema: tema || null, respondida: tema ? halladas.length > 0 : null, respuestas: halladas.slice(0, tema ? 5 : 20).map((f) => descripcionDeRespuesta(f, ahora)), pendientes: pend, modelos_llamados: 0 } }
+  return { status: 200, body: { ok: true, client_id: params.client_id, tema: tema || null, respondida: tema ? halladas.length > 0 : null, respuestas: halladas.slice(0, limite).map((f) => descripcionDeRespuesta(f, ahora)), total: halladas.length, recortado: halladas.length > limite, ...(canal ? { canal: txt(params.canal) } : {}), pendientes: pend, modelos_llamados: 0 } }
 }

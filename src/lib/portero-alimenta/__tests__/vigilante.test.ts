@@ -33,7 +33,7 @@ function montar(tablas: Record<string, unknown[]>, o: { apagarOk?: boolean; avis
   const base = crearBaseFalsa(tablas as never, { fallaEn: o.fallaEn })
   const apagados: string[] = [], avisos: string[] = []
   const deps = (ahora = MIERCOLES): DepsDelVigilante => ({
-    db: base.db, interruptores: ON, ahora, esperar: async () => {},
+    db: base.db, interruptores: ON, ahora, esperar: async () => {}, umbrales: { aviso_usd: 1.5, apagar_usd: 3 },
     apagar: async (w) => { apagados.push(w); return { ok: o.apagarOk !== false, detalle: o.apagarOk === false ? 'n8n no respondió' : 'flujo desactivado' } },
     avisar: async (t) => { avisos.push(t); return { ok: o.avisarOk !== false, detalle: o.avisarOk === false ? 'Slack rechazó' : 'entregado' } },
   })

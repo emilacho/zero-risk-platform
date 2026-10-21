@@ -5,12 +5,13 @@
 import { describe, expect, it } from 'vitest'
 import { rutaPulir } from '../pulido-aparte'
 import { alimentarCliente } from '../alimentar'
-import { UMBRALES_DE_GASTO_POR_OMISION } from '../datos'
+
 import { crearBaseFalsa } from './base-falsa'
 import { DIEZ_CLIENTES } from './diez-clientes.fixtures'
 import { tablasDe, type T } from './diez-clientes.tablas'
 import { AHORA, ON } from './fixtures-despertar'
 
+const UMBRALES_VIEJOS = { aviso_usd: 1.5, apagar_usd: 3 } // el aviso se prueba con un umbral que cabe bajo el tope del portero (3): con 3 / 10 el pulido ni correría
 const WF = { workflow_id: 'wf', workflow_execution_id: 'ex' }
 const ENC = { ...ON, resumen_vivo: true, resumen_pulido: true }
 const DIA = AHORA.toISOString().slice(0, 10)
@@ -36,7 +37,7 @@ describe('el gasto del día con el pulido dentro', () => {
     it(`${c.nombre} (${c.pais}): bajo el umbral anota el gasto en el rastro y no avisa`, async () => {
       const t = await conResumen(c)
       const avisos: string[] = []
-      const r = await rutaPulir({ db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: agente, ahora: AHORA, avisar: async (x) => { avisos.push(x); return { ok: true, detalle: '' } } }, { client_id: c.id, dry_run: false, ...WF })
+      const r = await rutaPulir({ db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: agente, ahora: AHORA, umbrales: UMBRALES_VIEJOS, avisar: async (x) => { avisos.push(x); return { ok: true, detalle: '' } } }, { client_id: c.id, dry_run: false, ...WF })
       expect(r.body).toMatchObject({ ok: true, gasto_del_dia: { ok: true, incluye_pulido: true } })
       expect(avisos).toEqual([])
       expect(vigilanteDe(t)).toMatchObject({ ok: true, incluye_pulido: true })
@@ -46,11 +47,11 @@ describe('el gasto del día con el pulido dentro', () => {
 
   const c = DIEZ_CLIENTES[0]
   it('sobre el umbral de aviso: UN aviso por día y cliente, con la marca en el rastro; forzar de nuevo no repite', async () => {
-    const t = await conResumen(c, UMBRALES_DE_GASTO_POR_OMISION.aviso_usd + 0.2)
+    const t = await conResumen(c, UMBRALES_VIEJOS.aviso_usd + 0.2)
     const avisos: string[] = []
-    const deps = { db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: agente, ahora: AHORA, avisar: async (x: string) => { avisos.push(x); return { ok: true, detalle: '' } } }
+    const deps = { db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: agente, ahora: AHORA, umbrales: UMBRALES_VIEJOS, avisar: async (x: string) => { avisos.push(x); return { ok: true, detalle: '' } } }
     const r = await rutaPulir(deps, { client_id: c.id, dry_run: false, ...WF })
-    expect((r.body as { gasto_del_dia: { gasto_usd: number } }).gasto_del_dia.gasto_usd).toBeGreaterThan(UMBRALES_DE_GASTO_POR_OMISION.aviso_usd)
+    expect((r.body as { gasto_del_dia: { gasto_usd: number } }).gasto_del_dia.gasto_usd).toBeGreaterThan(UMBRALES_VIEJOS.aviso_usd)
     expect(avisos).toHaveLength(1)
     expect(avisos[0]).toMatch(/con el pulido incluido/)
     expect(vigilanteDe(t)).toMatchObject({ aviso_de_gasto_dia: DIA, incluye_pulido: true })
@@ -58,16 +59,16 @@ describe('el gasto del día con el pulido dentro', () => {
     expect(avisos).toHaveLength(1)
   })
   it('si el vigilante ya avisó hoy, el pulido no vuelve a avisar y la marca se conserva', async () => {
-    const t = await conResumen(c, UMBRALES_DE_GASTO_POR_OMISION.aviso_usd + 0.2)
+    const t = await conResumen(c, UMBRALES_VIEJOS.aviso_usd + 0.2)
     ;(vigilanteDe(t) as Record<string, unknown>).aviso_de_gasto_dia = DIA
     const avisos: string[] = []
-    await rutaPulir({ db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: agente, ahora: AHORA, avisar: async (x) => { avisos.push(x); return { ok: true, detalle: '' } } }, { client_id: c.id, dry_run: false, ...WF })
+    await rutaPulir({ db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: agente, ahora: AHORA, umbrales: UMBRALES_VIEJOS, avisar: async (x) => { avisos.push(x); return { ok: true, detalle: '' } } }, { client_id: c.id, dry_run: false, ...WF })
     expect(avisos).toEqual([])
     expect(vigilanteDe(t).aviso_de_gasto_dia).toBe(DIA)
   })
   it('un aviso que no se entrega no deja marca (se intenta de nuevo) y el pulido igual queda archivado', async () => {
-    const t = await conResumen(c, UMBRALES_DE_GASTO_POR_OMISION.aviso_usd + 0.2)
-    const r = await rutaPulir({ db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: agente, ahora: AHORA, avisar: async () => { throw new Error('slack caído') } }, { client_id: c.id, dry_run: false, ...WF })
+    const t = await conResumen(c, UMBRALES_VIEJOS.aviso_usd + 0.2)
+    const r = await rutaPulir({ db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: agente, ahora: AHORA, umbrales: UMBRALES_VIEJOS, avisar: async () => { throw new Error('slack caído') } }, { client_id: c.id, dry_run: false, ...WF })
     expect(r.body).toMatchObject({ ok: true, escritas: 1, pulido: { usado: true }, gasto_del_dia: { aviso: { ok: false } } })
     expect(vigilanteDe(t).aviso_de_gasto_dia).toBeUndefined()
   })

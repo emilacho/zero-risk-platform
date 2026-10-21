@@ -37,7 +37,8 @@ function mundo(costs: unknown[], rastro: Record<string, unknown> = {}) {
     cerebro_fichas: [], client_brain_chunks: [], cerebro_unidades_vistas: [], costs, agent_invocations: [], apify_raw: [],
   }
 }
-function vigilar(t: Record<string, unknown[]>, umbrales?: DepsDelVigilante['umbrales']) {
+const UMBRALES_VIEJOS = { aviso_usd: 1.5, apagar_usd: 3 } // estas pruebas miden los tramos con los valores de antes (los de omisión hoy son 3 y 10: umbral-3-y-10.test.ts)
+function vigilar(t: Record<string, unknown[]>, umbrales: DepsDelVigilante['umbrales'] = UMBRALES_VIEJOS) {
   const base = crearBaseFalsa(t as never)
   const apagados: string[] = [], avisos: string[] = []
   const deps: DepsDelVigilante = {
@@ -50,8 +51,8 @@ function vigilar(t: Record<string, unknown[]>, umbrales?: DepsDelVigilante['umbr
 const vigilanteDe = (t: Record<string, unknown[]>) => ((t.cerebro_portero_corridas[0] as Record<string, unknown>).resumen as Record<string, unknown>).vigilante as Record<string, unknown> | undefined
 
 describe('1 · umbrales de gasto del vigilante (3 tramos)', () => {
-  it('los datos: aviso 1,50 · apagado 3,00 = el tope del portero', () => {
-    expect(UMBRALES_DE_GASTO_POR_OMISION).toEqual({ aviso_usd: 1.5, apagar_usd: 3 })
+  it('los datos: por omisión aviso 3 · apagado 10 (firma de Emilio); el tope del portero sigue en 3', () => {
+    expect(UMBRALES_DE_GASTO_POR_OMISION).toEqual({ aviso_usd: 3, apagar_usd: 10 })
     expect(TOPE_DEL_PORTERO_USD).toBe(3)
   })
   it('por debajo de 1,50: silencio total (ni aviso ni apagado)', async () => {
@@ -141,14 +142,14 @@ describe('1 · umbrales de gasto del vigilante (3 tramos)', () => {
     expect(l).toMatch(/Clínica Sonrisa Norte/); expect(l).toMatch(/\+1 más/)
   })
   it('umbralesDeGastoDelEntorno: omisión, valores válidos y valores rotos o incoherentes', () => {
-    expect(umbralesDeGastoDelEntorno({})).toEqual({ aviso_usd: 1.5, apagar_usd: 3 })
+    expect(umbralesDeGastoDelEntorno({})).toEqual({ aviso_usd: 3, apagar_usd: 10 })
     expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_AVISO_USD: '2', PORTERO_GASTO_APAGAR_USD: '4,5' })).toEqual({ aviso_usd: 2, apagar_usd: 4.5 })
-    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_AVISO_USD: 'mucho' })).toEqual({ aviso_usd: 1.5, apagar_usd: 3 })
-    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_AVISO_USD: '5', PORTERO_GASTO_APAGAR_USD: '2' })).toEqual({ aviso_usd: 1.5, apagar_usd: 3 })
-    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_APAGAR_USD: '-1' })).toEqual({ aviso_usd: 1.5, apagar_usd: 3 })
-    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_AVISO_USD: '-1' })).toEqual({ aviso_usd: 1.5, apagar_usd: 3 })
-    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_AVISO_USD: '0' })).toEqual({ aviso_usd: 1.5, apagar_usd: 3 })
-    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_APAGAR_USD: '1000' })).toEqual({ aviso_usd: 1.5, apagar_usd: 3 })
+    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_AVISO_USD: 'mucho' })).toEqual({ aviso_usd: 3, apagar_usd: 10 })
+    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_AVISO_USD: '5', PORTERO_GASTO_APAGAR_USD: '2' })).toEqual({ aviso_usd: 3, apagar_usd: 10 })
+    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_APAGAR_USD: '-1' })).toEqual({ aviso_usd: 3, apagar_usd: 10 })
+    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_AVISO_USD: '-1' })).toEqual({ aviso_usd: 3, apagar_usd: 10 })
+    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_AVISO_USD: '0' })).toEqual({ aviso_usd: 3, apagar_usd: 10 })
+    expect(umbralesDeGastoDelEntorno({ PORTERO_GASTO_APAGAR_USD: '1000' })).toEqual({ aviso_usd: 3, apagar_usd: 10 })
   })
 })
 

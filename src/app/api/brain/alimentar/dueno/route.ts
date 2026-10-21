@@ -2,7 +2,7 @@
  * POST /api/brain/alimentar/dueno · una oficina registra lo que respondió el dueño (`evento: 'respuesta'`, por omisión) o una pregunta que le hizo (`evento: 'pregunta'`).
  *   Respuesta → ficha «confirmada por el dueño» (origen dueno, cita literal, canal, fecha); una respuesta nueva al mismo tema REEMPLAZA a la anterior (la vieja queda archivada).
  *   Pregunta  → antes de registrarla dice si ya se respondió o si otra oficina ya la hizo y espera.
- * GET  /api/brain/alimentar/dueno?client_id=&tema=&sede_clave= · ¿ya se respondió? cuándo, por qué canal, y qué preguntas siguen pendientes. El agente decide si la respuesta sigue vigente.
+ * GET  /api/brain/alimentar/dueno?client_id=&tema=&sede_clave=&canal=&limite= (canal exacto; limite 1-100, por omisión 20 o 5 con tema; `total` y `recortado` en la respuesta) · ¿ya se respondió? cuándo, por qué canal, y qué preguntas siguen pendientes. El agente decide si la respuesta sigue vigente.
  * Llave interna (`INTERNAL_API_KEY`), nunca `SALA_DISPATCH_KEY`. `dry_run` obligatorio; con false exige workflow_id + workflow_execution_id. Detrás de `PORTERO_DUENO` (apagado por omisión). US$ 0, sin modelo.
  */
 import { NextResponse } from 'next/server'
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
   try {
     if (!activo()) return NextResponse.json({ apagado: true, detalle: 'PORTERO_DUENO está apagado: no se leyó nada', modelos_llamados: 0 })
     const u = new URL(request.url).searchParams
-    const r = await rutaLeerDueno({ db: getSupabaseAdmin() as unknown as Db }, { client_id: u.get('client_id') ?? '', tema: u.get('tema'), sede_clave: u.get('sede_clave') })
+    const r = await rutaLeerDueno({ db: getSupabaseAdmin() as unknown as Db }, { client_id: u.get('client_id') ?? '', tema: u.get('tema'), sede_clave: u.get('sede_clave'), canal: u.get('canal'), limite: u.get('limite') })
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'dueno_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

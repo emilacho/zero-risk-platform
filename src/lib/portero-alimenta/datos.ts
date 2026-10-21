@@ -11,10 +11,11 @@ import { codigoDePais } from '../pais/pais-del-cliente'
 export const TOPE_DEL_PORTERO_USD = 3
 /**
  * Umbrales de gasto del VIGILANTE (15-oct · firma de Emilio): por encima de `aviso_usd` UN aviso a #alertas por día y cliente SIN apagar; por encima de `apagar_usd` apaga + avisa.
- * Son DATO: se cambian con `PORTERO_GASTO_AVISO_USD` / `PORTERO_GASTO_APAGAR_USD` sin tocar la lógica (un valor roto o incoherente vuelve a estos).
+ * Son DATO: se cambian con `PORTERO_GASTO_AVISO_USD` / `PORTERO_GASTO_APAGAR_USD` sin tocar la lógica (un valor roto o incoherente vuelve a estos: 3 y 10).
  */
 export interface UmbralesDeGasto { aviso_usd: number; apagar_usd: number }
-export const UMBRALES_DE_GASTO_POR_OMISION: UmbralesDeGasto = { aviso_usd: 1.5, apagar_usd: TOPE_DEL_PORTERO_USD }
+/** firma de Emilio 15-oct: avisa pasando de US$ 3, apaga SOLO pasando de US$ 10 (21-oct: son también los valores por omisión del código; borrar una variable ya no vuelve a 1,50 / 3,00) */
+export const UMBRALES_DE_GASTO_POR_OMISION: UmbralesDeGasto = { aviso_usd: 3, apagar_usd: 10 }
 export function umbralesDeGastoDelEntorno(env: Record<string, string | undefined> = process.env): UmbralesDeGasto {
   const num = (k: string) => { const t = String(env[k] ?? '').trim().replace(',', '.'); const n = t === '' ? NaN : Number(t); return Number.isFinite(n) && n > 0 && n <= 50 ? n : null }
   const aviso = num('PORTERO_GASTO_AVISO_USD'), apagar = num('PORTERO_GASTO_APAGAR_USD')

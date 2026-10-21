@@ -8,7 +8,7 @@
  * Condiciones (las mismas del vigilante de la primera corrida, ahora sin nombres propios de ningún cliente):
  *  1. la corrida no terminó `hecho` / algún cliente trae errores, plan fallido o el puente falló;
  *  2. el rastro de hoy no existe o no está `hecha`;
- *  3. gasto real del día > el umbral de apagado (dato · por omisión US$ 3,00 = el tope del portero; firma 15-oct). Entre el umbral de aviso (US$ 1,50) y el de apagado: UN aviso por día y cliente SIN apagar;
+ *  3. gasto real del día > el umbral de apagado (dato · por omisión US$ 10; firma 15-oct). Entre el umbral de aviso (por omisión US$ 3) y el de apagado: UN aviso por día y cliente SIN apagar;
  *  4. nació una ficha VIVA de una unidad que el filtro no confirmó (ajena / sin confirmar / ruido);
  *  5. el puente deja `quedan > 0`, hay fichas vivas repetidas o fichas vivas sin trozo en el índice;
  *  6. el propio vigilante no pudo comprobar algo (falla de lectura) ⇒ se trata como problema: ante la duda, apagado (el gasto recurrente no puede quedar sin ojos);
