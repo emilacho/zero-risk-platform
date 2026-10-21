@@ -263,3 +263,18 @@ describe('el flujo', () => {
     for (const n of w.nodes) if (n.parameters.jsCode) { expect(n.parameters.jsCode).not.toMatch(/module\.exports|require\(/) }
   })
 })
+
+describe('la huella incluye la VERSIÓN de la lógica del piso (lógica nueva ⇒ vale volver a probar)', () => {
+  it('la misma entrada con otra versión del piso da otra huella; sin versión sigue igual que antes', () => {
+    const e = { copias: [{ estado: 'ok', url: 'u', created_at: 'a' }], ficha: {}, sitioId: 1 }
+    expect(B.huellaDeEntradas({ ...e, version: 'v1' })).not.toBe(B.huellaDeEntradas({ ...e, version: 'v2' }))
+    expect(B.huellaDeEntradas({ ...e, version: 'v1' })).toBe(B.huellaDeEntradas({ ...e, version: 'v1' }))
+  })
+  it('🔴 el nodo usa la versión del piso: un intento anotado con la huella de la lógica ANTERIOR no frena el reintento tras actualizar el piso', async () => {
+    const vieja = B.huellaDeEntradas({ copias: copiasOk() as never, ficha: {}, sitioId: undefined })
+    const r = await nodoElegir({ clientes: { [CID]: { manual: manual({}, VISUAL_COMPLETO_CON_BASURA), copias: copiasOk() } }, intentos: { [CID]: { huella: vieja, dia: HOY, n: 1 } } }).ejecutar()
+    expect(r[0].json.correr).toBe(true); expect(String(r[0].json.huella)).toContain('v' + P.VERSION_DEL_PISO)
+    const mismaVersion = await nodoElegir({ clientes: { [CID]: { manual: manual({}, VISUAL_COMPLETO_CON_BASURA), copias: copiasOk() } }, intentos: { [CID]: { huella: String(r[0].json.huella), dia: HOY, n: 1 } } }).ejecutar()
+    expect(mismaVersion[0].json.motivo).toBe('sin_entradas_nuevas')
+  })
+})

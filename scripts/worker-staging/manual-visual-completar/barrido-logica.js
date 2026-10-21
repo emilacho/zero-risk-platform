@@ -38,14 +38,14 @@ function rangoDeVisual(v, esTipografiaValida) {
   return r
 }
 
-/** La huella de las entradas del piso: si no cambió nada desde la última vez, no hay nada nuevo que probar. */
+/** La huella de las entradas del piso: si no cambió nada desde la última vez (material Y lógica del piso), no hay nada nuevo que probar. */
 function huellaDeEntradas(o) {
   var copias = (o.copias || []).filter(function (c) { return c && c.estado === 'ok' && c.url })
   var ult = copias.map(function (c) { return String(c.created_at || '') }).sort().pop() || ''
   var ficha = o.ficha || {}
   var colores = Array.isArray(ficha.brand_colors) ? ficha.brand_colors.length : 0
   var fuentes = Array.isArray(ficha.brand_fonts) ? ficha.brand_fonts.length : 0
-  return ['c' + copias.length, ult, 'f' + colores + '/' + fuentes, 's' + String(o.sitioId || '')].join('|')
+  return ['c' + copias.length, ult, 'f' + colores + '/' + fuentes, 's' + String(o.sitioId || ''), 'v' + String(o.version || '')].join('|')
 }
 
 /** ¿Hay material propio que probar? copias propias bajadas, colores/tipografías en la ficha, o un sitio raspado. */

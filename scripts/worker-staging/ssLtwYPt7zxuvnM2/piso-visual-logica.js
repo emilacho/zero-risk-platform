@@ -271,6 +271,8 @@ function derivarPisoVisual(ctx, invocarModelo) {
 // «No inventar» significa «solo material real y propio, con procedencia», no «solo el sitio».
 // Se mantiene `derivarPisoVisual` (versión de una sola fuente) intacta; el nodo usa esta.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
+/** La versión de la LÓGICA del piso: si cambia, lo ya probado vale volver a probarlo (el barrido la suma a la huella de entradas). */
+var VERSION_DEL_PISO = 'piso-2026-10-21b'
 var MAX_COLORES_OBSERVADOS = 5
 var MAX_TIPOGRAFIAS_OBSERVADAS = 3
 var RE_COLOR_HEX = /^#[0-9a-f]{6}$/
@@ -589,6 +591,7 @@ if (typeof module !== 'undefined' && module.exports) {
     paraElManual: paraElManual,
     nombreDeTipografiaObservada: nombreDeTipografiaObservada,
     numerosDeFoto: numerosDeFoto,
+    VERSION_DEL_PISO: VERSION_DEL_PISO,
     procedenciaDeLoObservado: procedenciaDeLoObservado,
     colorHex: colorHex,
     nombreDeTipografia: nombreDeTipografia,

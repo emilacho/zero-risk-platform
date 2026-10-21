@@ -39,7 +39,7 @@ for (const cid of candidatos) {
   const fichas = await get('clients?id=eq.' + cid + '&select=brand_colors,brand_fonts')
   const copias = await get('client_social_images?client_id=eq.' + cid + '&owner_role=eq.propio&select=estado,url,created_at&limit=500')
   const sitio = await get('apify_raw?client_id=eq.' + cid + '&apify_function=eq.website_content_scraper&ensayo=eq.false&order=created_at.desc&limit=1&select=id')
-  const entradas = { copias: copias, ficha: fichas[0] || {}, sitioId: sitio[0] && sitio[0].id }
+  const entradas = { copias: copias, ficha: fichas[0] || {}, sitioId: sitio[0] && sitio[0].id, version: VERSION_DEL_PISO }
   const huella = huellaDeEntradas(entradas)
   const d = decidirSiCorrer({
     excluido: excluidos.indexOf(String(cid).toLowerCase()) !== -1, humanoAprobo: m.human_validated === true, hayMaterial: hayMaterialQueProbar(entradas),
