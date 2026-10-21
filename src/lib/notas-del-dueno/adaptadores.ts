@@ -145,10 +145,13 @@ export async function enviarNotaAlCerebro(db: Db, env: EntornoDeNotas, f: Fetch,
     const ins = await db.from('notas_del_dueno_envios').insert({ nota_id: n.id, estado: 'pendiente', intentos: 0, ts: ctx.ts, canal_slack: ctx.canal_slack, respondido_en: ctx.respondido_en })
     if (ins.error) {
       if (ins.error.code !== DUPLICADO) return 'pendiente' // sin fila no hay cola: el clic se puede repetir (todo es idempotente)
-      const ya = await db.from('notas_del_dueno_envios').select('estado').eq('nota_id', n.id).maybeSingle()
+      const ya = await db.from('notas_del_dueno_envios').select('estado,proximo_intento').eq('nota_id', n.id).maybeSingle()
       if (ya.error || !ya.data) return 'pendiente'
       const e = (ya.data as Fila).estado
       if (e === 'enviada' || e === 'rechazada') return e
+      // un clic o comentario REPETIDO sobre una nota que ya espera su turno no gasta intentos antes de tiempo
+      const proximo = (ya.data as Fila).proximo_intento
+      if (proximo && Date.parse(String(proximo)) > (env.ahora?.() ?? new Date()).getTime()) return 'pendiente'
     }
     if (!env.alCerebro) return 'pendiente' // encolada; el empuje está apagado
     return await intentarEnvio(db, env, f, n, ctx)

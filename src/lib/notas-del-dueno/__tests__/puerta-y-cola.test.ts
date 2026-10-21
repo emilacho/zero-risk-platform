@@ -184,6 +184,18 @@ describe('el envío con su cola', () => {
     expect(await enviarNotaAlCerebro(db, env, f, nota(), CTX)).toBe('pendiente')
     expect(posts).toHaveLength(0)
   })
+  it('un clic o comentario REPETIDO sobre una nota que ya espera su turno no gasta intentos antes de tiempo (4 clics seguidos no la descartan)', async () => {
+    sembrar()
+    let t = new Date('2026-10-21T12:00:00.000Z')
+    const reloj = { ...env, ahora: () => t }
+    const caida = puerta([503])
+    expect(await enviarNotaAlCerebro(db, reloj, caida.f, nota(), CTX)).toBe('pendiente')
+    for (let i = 0; i < 6; i++) expect(await enviarNotaAlCerebro(db, reloj, caida.f, nota(), CTX)).toBe('pendiente')
+    expect(caida.posts).toHaveLength(1)                                    // solo el primero llamó a la puerta
+    expect(fila()).toMatchObject({ estado: 'pendiente', intentos: 1 })
+    t = new Date('2026-10-21T12:06:00.000Z')                               // ya le toca: el repetido SÍ intenta
+    expect(await enviarNotaAlCerebro(db, reloj, puerta([200]).f, nota(), CTX)).toBe('enviada')
+  })
   it('un error al escribir la fila de la cola que NO es «ya existe» devuelve «pendiente» sin mirar nada más ni llamar a la puerta', async () => {
     sembrar()
     db.semilla('notas_del_dueno_envios', [{ nota_id: 'n1', estado: 'enviada', intentos: 1, ts: TS, canal_slack: 'C1', respondido_en: CTX.respondido_en, creada_en: '2026-10-21T12:00:00.000Z' }])
