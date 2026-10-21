@@ -68,12 +68,6 @@ SELECT n.client_id,
  GROUP BY n.client_id;
 GRANT SELECT ON public.notas_del_dueno_registro TO service_role;
 
--- LAS NOTAS LISTAS PARA QUE EL CEREBRO LAS INGIERA (solo lectura; el portero del cerebro las toma por esta vista o por GET /api/notas-del-dueno/feed): cliente, pieza, decisión, comentario, fecha
-CREATE OR REPLACE VIEW public.notas_del_dueno_para_el_cerebro WITH (security_invoker = true) AS
-SELECT n.id, n.client_id, n.alcance, n.tipo AS decision, n.comentario, n.hitl_id, n.output_id, n.pieza_titulo, n.pieza_version, n.pieza_familia, n.creada_en AS fecha, n.autor, n.origen
-  FROM public.notas_del_dueno n;
-GRANT SELECT ON public.notas_del_dueno_para_el_cerebro TO service_role;
-
 COMMENT ON TABLE public.notas_del_dueno IS 'Notas del dueño: cada decisión y comentario de Emilio sobre una pieza, por cliente. Append-only. NO son reglas: las lee solo el agente productor en su auto-revisión; la jefatura y la segunda mirada GPT no las ven.';
 COMMENT ON TABLE public.autorevisiones_del_productor IS 'Cada auto-revisión del agente productor contra las notas del dueño: notas vistas, si algo chocó, qué cambió y cuánto costó.';
 COMMIT;
