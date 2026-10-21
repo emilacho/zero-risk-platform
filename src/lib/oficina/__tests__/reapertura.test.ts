@@ -58,6 +58,15 @@ describe('el almacén REAL (base falsa)', () => {
     expect(db.tablas['oficina_encargos']).toHaveLength(6)
     expect(db.tablas['oficina_encargos'].slice(0, 3)).toEqual(antes)
   })
+  it('la versión reabierta hereda el hilo de Slack de la anterior (los avisos repetidos caen en el mismo hilo)', async () => {
+    const db = new DbFalsa().semilla('oficina_encargos', [fila('BRF-0001', { slack_canal: 'C0C7XUKNCLS', slack_ts: '1760000000.000100' })])
+    const r = await almacenDeSupabase(db as never).crearEncargo(nuevo())
+    expect(r.ok && r.nuevo).toBe(true)
+    expect(db.tablas['oficina_encargos'][1]).toMatchObject({ version_encargo: 2, slack_canal: 'C0C7XUKNCLS', slack_ts: '1760000000.000100' })
+    const sin = new DbFalsa().semilla('oficina_encargos', [fila('BRF-0001')])
+    await almacenDeSupabase(sin as never).crearEncargo(nuevo())
+    expect(sin.tablas['oficina_encargos'][1]).not.toHaveProperty('slack_ts')
+  })
   it('con la versión 2 viva, otra llamada devuelve ESA (no abre una tercera)', async () => {
     const db = tres()
     const A = almacenDeSupabase(db as never)
@@ -144,15 +153,25 @@ describe('la puerta y el cierre (almacén de memoria)', () => {
     expect(y.cuerpo.accion).toBe('ya_existia')
     expect(M2.encargos.size).toBe(1)
   })
+  it('fallar: UNA alarma por incidente · la v1 avisa a #alertas; las versiones reabiertas lo repiten en el HILO, no en #alertas', async () => {
+    const M = crearMemoria()
+    const a = await abrir(M)
+    const enc = M.encargos.get(String(a.cuerpo.encargo_id))!
+    await fallar(M.P, { ...enc, version_encargo: 1 }, 'x')
+    expect(M.llamadas.avisos.map((x) => x.canal)).toEqual(['alertas'])
+    await fallar(M.P, { ...enc, version_encargo: 2 }, 'x')
+    expect(M.llamadas.avisos.map((x) => x.canal)).toEqual(['alertas', 'hilo'])
+    expect(M.llamadas.avisos[1].texto).toContain('intento 2')
+  })
   it('fallar: el aviso del hilo sale SOLO cuando el encargo es la última versión permitida', async () => {
     const M = crearMemoria()
     const a = await abrir(M)
     const enc = M.encargos.get(String(a.cuerpo.encargo_id))!
-    const hilos = () => M.llamadas.avisos.filter((x) => x.canal === 'hilo').length
+    const hilos = () => M.llamadas.avisos.filter((x) => x.canal === 'hilo' && x.texto.includes('🧱')).length
     await fallar(M.P, { ...enc, version_encargo: MAX_VERSIONES_POR_BRIEF - 1 }, 'x')
     expect(hilos()).toBe(0)
     await fallar(M.P, { ...enc, version_encargo: MAX_VERSIONES_POR_BRIEF }, 'x')
     expect(hilos()).toBe(1)
-    expect(M.llamadas.avisos.find((x) => x.canal === 'hilo')!.texto).toContain(enc.brief_id)
+    expect(M.llamadas.avisos.find((x) => x.texto.includes('🧱'))!.texto).toContain(enc.brief_id)
   })
 })

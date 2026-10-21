@@ -58,7 +58,7 @@ export function almacenDeSupabase(db: Db): Almacen {
         if (d.accion === 'devolver') return { ok: true as const, encargo: aEncargo(ultimo), nuevo: false }
         version = d.version
       }
-      const fila = { client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, estado: 'abierto', estado_del_motor: n.estado_del_motor, tope_usd: n.tope_usd, dry_run: n.dry_run, prueba: n.prueba, sala_ref: n.sala_ref }
+      const fila = { client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, ...(ultimo?.slack_ts ? { slack_canal: ultimo.slack_canal ?? null, slack_ts: ultimo.slack_ts } : {}), estado: 'abierto', estado_del_motor: n.estado_del_motor, tope_usd: n.tope_usd, dry_run: n.dry_run, prueba: n.prueba, sala_ref: n.sala_ref }
       const r = await db.from('oficina_encargos').insert(fila).select('*').single()
       if (!r.error) return { ok: true as const, encargo: aEncargo(r.data as Fila), nuevo: true }
       if (r.error.code === DUPLICADO) {
