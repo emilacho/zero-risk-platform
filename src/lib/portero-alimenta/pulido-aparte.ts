@@ -10,7 +10,7 @@
 import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
 import { pulirResumen, AGENTE_DEL_PULIDO } from './resumen-pulido'
 import { archivarFichasDeBrazos } from './brazos/archivo'
-import { TOPE_DEL_PORTERO_USD, TOPE_DEL_PULIDO_APARTE_USD, type Interruptores } from './datos'
+import { TOPE_DEL_PORTERO_USD, TOPE_DEL_PULIDO_APARTE_USD, UMBRALES_DE_GASTO_POR_OMISION, type Interruptores, type UmbralesDeGasto } from './datos'
 import { gastoDeHoy, validar, type Respuesta } from './rutas'
 import { idDeZona, paisIsoDe } from '../cerebro/zona'
 
@@ -27,6 +27,39 @@ export interface DepsDePulir {
   pulirResumen?: (tarea: string, opciones?: { topeUsd?: number }) => Promise<{ texto: string; costo_usd: number }>
   ahora?: Date
   nuevoId?: () => string
+  /** una línea a #alertas (en pruebas, un molde); ausente = no se avisa */
+  avisar?: (texto: string) => Promise<{ ok: boolean; detalle: string }>
+  /** umbrales de gasto del día (aviso / apagado); por omisión los del portero */
+  umbrales?: UmbralesDeGasto
+}
+
+/**
+ * EL GASTO DEL DÍA, CON EL PULIDO DENTRO. El vigilante (⑥) lee el gasto ANTES de que corra el pulido (⑧): el pulido real (hasta US$ 0,30) quedaba fuera de la cifra del día, de su rastro y de su aviso.
+ * Al terminar el pulido se vuelve a medir el día completo, se anota en el rastro del vigilante de hoy (`gasto_usd` + `incluye_pulido`) y, si pasa el umbral de aviso, se avisa UNA vez por día y cliente
+ * (la misma marca `aviso_de_gasto_dia` que usa el vigilante: si ya avisó, no se repite). Nada de esto frena ni apaga: el tope se aplicó ANTES de llamar al agente. Un fallo aquí se dice, no rompe el pulido.
+ */
+async function incluirElPulidoEnElGastoDelDia(deps: DepsDePulir, clientId: string, nombre: string | null, ahora: Date, hoy: string): Promise<Fila> {
+  const g = await gastoDeHoy(deps.db, clientId, ahora)
+  if (!g.ok) return { ok: false, detalle: g.detalle }
+  const total = Math.round(g.gasto.total_usd * 100) / 100
+  const u = deps.umbrales ?? UMBRALES_DE_GASTO_POR_OMISION
+  const out: Fila = { ok: true, gasto_usd: total, incluye_pulido: true }
+  const ras = await deps.db.from('cerebro_portero_corridas').select('id, resumen').eq('client_id', clientId).eq('dia', hoy).limit(1)
+  if (ras.error) return { ...out, rastro_error: ras.error.message }
+  const fila = lista(ras.data)[0]
+  if (!fila) return { ...out, rastro: 'sin rastro de hoy: no hay dónde anotarlo' }
+  const resumen = esObjeto(fila.resumen) ? fila.resumen : {}
+  const vig = esObjeto(resumen.vigilante) ? resumen.vigilante : {}
+  let marca: Fila = vig.aviso_de_gasto_dia === hoy ? { aviso_de_gasto_dia: hoy } : {}
+  if (total > u.aviso_usd && vig.aviso_de_gasto_dia !== hoy) {
+    const texto = `🟡 Portero del cerebro · ${nombre ?? clientId.slice(0, 8)}: el gasto del día va en US$ ${total.toFixed(2)} con el pulido incluido (aviso desde ${u.aviso_usd.toFixed(2)}; el portero se apaga solo pasando de ${u.apagar_usd.toFixed(2)}) · el flujo sigue encendido`
+    const av = deps.avisar ? await deps.avisar(texto).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+    out.aviso = { ok: av.ok, detalle: av.detalle }
+    if (av.ok) marca = { aviso_de_gasto_dia: hoy }
+  }
+  const w = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ...vig, gasto_usd: total, incluye_pulido: true, ...marca } } }).eq('id', String(fila.id))
+  if (w.error) out.rastro_error = w.error.message
+  return out
 }
 
 export async function rutaPulir(deps: DepsDePulir, cuerpo: unknown): Promise<Respuesta> {
@@ -85,5 +118,6 @@ export async function rutaPulir(deps: DepsDePulir, cuerpo: unknown): Promise<Res
     escritas = ar.escritas
     errores.push(...ar.errores.map((m) => `resumen pulido: ${m}`))
   }
-  return { status: 200, body: { ok: errores.length === 0, pulido, escritas, errores, modelos_llamados: 1 } }
+  const gastoDelDia = await incluirElPulidoEnElGastoDelDia(deps, v.client_id, (cliente.name as string | null) ?? null, ahora, hoy)
+  return { status: 200, body: { ok: errores.length === 0, pulido, escritas, errores, gasto_del_dia: gastoDelDia, modelos_llamados: 1 } }
 }

@@ -14,6 +14,7 @@ import { normalizar } from '../manual/texto'
 import type { Db } from './alimentar'
 import { leerTodas } from './paginar'
 import { claveDeAlcance, datosDeSede, sedesDeFicha } from './sedes-fuentes'
+import { CAMPO_DEL_ESTADO, estadoDeApertura, esTemaDeEstadoDeSede, sedeQueNombra, textoDeEstado, type EstadoDeSede } from '../sedes/por-abrir'
 import { reconciliarYEnviar, validar, type DepsDeRutas, type Respuesta } from './rutas'
 
 type Fila = Record<string, unknown>
@@ -119,10 +120,24 @@ const temaDe = (f: Fila): string => { const pt = (f.provenance_tag && typeof f.p
 /** la sede de una respuesta: la de su columna o su rastro; null = vale para todas */
 const sedeDe = (f: Fila): string => claveDeAlcance(sedesDeFicha(f.provenance_tag) ?? (txt(f.sede) ? txt(f.sede).split(',') : null))
 
-async function sedesDelCliente(db: Db, clientId: string): Promise<{ ok: true; claves: string[] } | { ok: false; detalle: string }> {
-  const q = await db.from('client_sedes').select('clave').eq('client_id', clientId)
+async function sedesDelCliente(db: Db, clientId: string): Promise<{ ok: true; claves: string[]; sedes: Array<{ id: string; clave: string; ciudad: string | null }> } | { ok: false; detalle: string }> {
+  const q = await db.from('client_sedes').select('id, clave, ciudad').eq('client_id', clientId)
   if (q.error) return { ok: false, detalle: `client_sedes: ${q.error.message}` }
-  return { ok: true, claves: lista(q.data).map((s) => txt(s.clave)).filter(Boolean) }
+  const sedes = lista(q.data).map((s) => ({ id: txt(s.id), clave: txt(s.clave), ciudad: txt(s.ciudad) || null })).filter((s) => s.clave)
+  return { ok: true, claves: sedes.map((s) => s.clave), sedes }
+}
+
+/**
+ * Lo que el dueño dijo del ESTADO de una sede («por abrir», «ya abrió», «cerrada») es también un dato de esa sede. Solo si el tema habla del estado de una sede y se sabe de cuál:
+ * la que dice `sede_clave`, la única sede del cliente, o la única que nombra la respuesta (por clave o ciudad). Si no se sabe de cuál, no se adivina: queda solo como ficha del dueño.
+ */
+export function estadoDeSedeDichoPorElDueno(n: { tema: string; sede_clave: string | null }, respuesta: string, sedes: Array<{ id: string; clave: string; ciudad: string | null }>): { sede: { id: string; clave: string }; estado: EstadoDeSede } | null {
+  if (!esTemaDeEstadoDeSede(n.tema)) return null
+  const estado = estadoDeApertura(respuesta)
+  if (!estado) return null
+  const clave = n.sede_clave ?? (sedes.length === 1 ? sedes[0].clave : sedeQueNombra(respuesta, sedes))
+  const sede = sedes.find((s) => s.clave === clave)
+  return sede ? { sede: { id: sede.id, clave: sede.clave }, estado } : null
 }
 
 /** POST · registra una respuesta del dueño o una pregunta que se le hizo */
@@ -181,7 +196,8 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
   // una respuesta MÁS VIEJA que la vigente no la reemplaza (llegó tarde): se guarda archivada con su fecha
   const llegoTarde = !!vieja && txt(vieja.observado_en) > n.respondido_en
   const fichaId = id()
-  const plan = { ficha_id: fichaId, tema: n.tema, sede: sedeClave, reemplaza: vieja && !llegoTarde ? String(vieja.id) : null, llego_tarde: llegoTarde, datos_personales_omitidos: limpia.redactado }
+  const estadoDeSede = estadoDeSedeDichoPorElDueno({ tema: n.tema, sede_clave: n.sede_clave }, limpia.texto, sedes.sedes)
+  const plan = { ficha_id: fichaId, tema: n.tema, sede: sedeClave, ...(estadoDeSede ? { estado_de_sede: { sede: estadoDeSede.sede.clave, estado: estadoDeSede.estado } } : {}), reemplaza: vieja && !llegoTarde ? String(vieja.id) : null, llego_tarde: llegoTarde, datos_personales_omitidos: limpia.redactado }
   if (v.dry_run) return { status: 200, body: { ok: true, dry_run: true, ...plan, nota: 'dry_run: no se guardó nada' } }
 
   const ing = id()
@@ -206,6 +222,12 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
   if (vieja && !llegoTarde) {
     const u = await deps.db.from('cerebro_fichas').update({ retirada_en: ahora.toISOString(), motivo_retirada: `reemplazada por ${fichaId} el ${dia} (nueva respuesta del dueño al mismo tema)`, reemplazada_por: fichaId }).eq('id', String(vieja.id)).eq('client_id', n.client_id)
     if (u.error) errores.push(`retiro de la respuesta anterior: ${u.error.message}`)
+  }
+  // el estado de la sede, también como dato de la sede (fila nueva; las anteriores no se borran): origen dueño, con su cita
+  if (estadoDeSede) {
+    const cita = `cerebro_fichas:${fichaId} · ${n.canal} · ${cuando.slice(0, 10)} · «${limpia.texto.slice(0, 200)}»`
+    const ws = await deps.db.from('client_sede_datos').insert({ client_id: n.client_id, sede_id: estadoDeSede.sede.id, campo: CAMPO_DEL_ESTADO, valor_texto: textoDeEstado(estadoDeSede.estado), valor_norm: { estado: estadoDeSede.estado }, fuente: 'dueno', fuente_ref: cita.slice(0, 500), alcance: 'sede', observado_en: cuando })
+    if (ws.error) errores.push(`estado de la sede: ${ws.error.message}`)
   }
   // las preguntas pendientes de ese tema quedan respondidas
   for (const p of n.pregunta_id ? lista(pe.data).filter((x) => String(x.id) === n.pregunta_id) : pendientes) {
