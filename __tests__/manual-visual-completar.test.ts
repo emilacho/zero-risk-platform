@@ -71,6 +71,7 @@ describe('huella · autorizados · cuerpo del manual', () => {
     expect(h({ copias: [], ficha: { brand_colors: ['#111111'] } })).not.toBe(h({ copias: [], ficha: {} }))
     expect(h({ copias: [], sitioId: 7 })).not.toBe(h({ copias: [] }))
     expect(h({ copias: [{ estado: 'no_bajo', url: null, created_at: 'z' }] })).toBe(h({ copias: [] })) // una copia caída no cuenta
+    expect(h({ copias: [{ estado: 'no_bajo', url: 'https://x/y.jpg', created_at: 'z' }] })).toBe(h({ copias: [] })) // una copia caída con URL tampoco cuenta
   })
   it('solo uuid bien formados, sin repetidos', () => { expect(B.clientesAutorizados([CID, CID.toUpperCase(), 'nada', 3, null, OTRO])).toEqual([CID, OTRO]); expect(B.clientesAutorizados('x')).toEqual([]) })
   it('armarCuerpoDelManual: el borrador viaja entero, el visual lleva huella y rastro, y el veredicto previo se conserva', () => {

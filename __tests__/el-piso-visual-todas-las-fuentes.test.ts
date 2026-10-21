@@ -113,6 +113,22 @@ describe('caso 4 · SIN NADA', () => {
 })
 
 describe('el material: solo lo PROPIO, de cualquier cuenta, sin videos ni competidores', () => {
+  it('🔴 una copia que NO está «ok» pero trae URL no se envía al modelo (la URL remota de Instagram que el modelo no puede abrir)', async () => {
+    const m = modelo({ capa_grafica: {}, ...PRODUCTO })
+    const copias = [logo('zeroriskgye', { estado: 'no_bajo', url: 'https://instagram.fake/logo.jpg' }), foto('zeroriskgye', 1, { estado: 'no_bajo', url: 'https://instagram.fake/p1.jpg' }), foto('zeroriskgye', 2)]
+    await derivar({ filaSitio: null, ficha: null, copias }, m.invocar)
+    expect(m.llamadas[0].images.map((i) => i.url)).toEqual(['https://copia.test/zeroriskgye/p2.jpg'])
+    expect(elegirMaterialPropio(copias, 6).logo).toBeNull()
+  })
+  it('🔴 el tope de tipografías observadas es 3', async () => {
+    const obs = ['Bebas Neue', 'Lobster', 'Poppins', 'Anton', 'Oswald'].map((nombre) => ({ nombre, rol: 'titulos', donde: 'logo' }))
+    const v = await derivar({ filaSitio: null, ficha: null, copias: soloIG() }, modelo({ capa_grafica: { tipografias_observadas: obs }, ...PRODUCTO }).invocar)
+    expect(v.capa_grafica.tipografias.map((t: { nombre: string }) => t.nombre)).toEqual(['Bebas Neue', 'Lobster', 'Poppins'])
+  })
+  it('🔴 el modelo devuelve el color del rol en MAYÚSCULAS y el rol igual se asigna al color declarado', async () => {
+    const v = await derivar({ filaSitio: sitio(['#1a0828', '#51d4b4']), ficha: null, copias: soloIG(2) }, modelo({ capa_grafica: { paleta: [{ color: '#1A0828', rol: 'principal' }, { color: '#51D4B4', rol: 'acento' }] }, ...PRODUCTO }).invocar)
+    expect(v.capa_grafica.paleta.map((p: { color: string; rol: string | null }) => [p.color, p.rol])).toEqual([['#1a0828', 'principal'], ['#51d4b4', 'acento']])
+  })
   it('excluye competidores, copias que no se bajaron, sin URL y videos; el logo hd gana', () => {
     const copias: Copia[] = [
       foto('rival', 1, { owner_role: 'competidor' }), foto('zeroriskgye', 1), foto('zeroriskgye', 2, { estado: 'no_bajo', url: null, causa: '403' }), foto('zeroriskgye', 3, { medio: 'video' }),
