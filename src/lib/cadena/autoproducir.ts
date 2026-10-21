@@ -42,6 +42,8 @@ export interface Omitido { brief_id: string | null; motivo: MotivoDeOmision | st
 
 /** la llave de idempotencia de UN brief de UN parte · estable ante reintentos */
 export const llaveDeProducir = (parteId: string, briefId: string): string => `${parteId}:${briefId}:producir`
+/** el intento n (1, 2, 3…) del reintento sistémico de piezas (`reintento-piezas.ts`): llave NUEVA y determinista, distinta de la original, para que la sala no conteste «duplicado» */
+export const llaveDeReintento = (parteId: string, briefId: string, n: number): string => `${llaveDeProducir(parteId, briefId)}:r${n}`
 
 /** un sobre por brief · sin `familia` si la fila no tiene sala o la familia viene mal escrita (nunca se inventa) · dedup por `brief_id` · puro */
 export function sobresDeProducir(parte: ParteGuardada, o: { dry_run: boolean; tenant_id?: string; correlation_id?: string | null; desde_worker?: string; /** r79 · D5 · fila_id → fecha y hora del calendario */ cuando?: ReadonlyMap<string, { fecha: string; hora: string | null }> }): { sobres: SobreDeProducir[]; omitidos: Omitido[] } {

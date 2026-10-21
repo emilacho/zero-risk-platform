@@ -62,6 +62,16 @@ class Consulta {
   or(expr: string) { const alts = expr.split(',').map((p) => { const [c, op, ...v] = p.split('.'); return { c, op, v: v.join('.') } }); this.filtros.push((f) => alts.some((a) => a.op === 'eq' && String(leer(f, a.c)) === a.v)); return this }
   lt(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) < String(v)); return this }
   gt(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) > String(v)); return this }
+  /** `like` de PostgREST con el comodín `%` (solo al final o al principio, como lo usa el código) */
+  like(c: string, patron: string) {
+    const partes = patron.split('%')
+    this.filtros.push((f) => {
+      const v = leer(f, c); if (typeof v !== 'string') return false
+      let i = 0
+      return partes.every((p, k) => { const j = v.indexOf(p, i); if (j < 0 || (k === 0 && j !== 0)) return false; i = j + p.length; return k < partes.length - 1 || partes[k] === '' || v.endsWith(p) })
+    })
+    return this
+  }
   gte(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) >= String(v)); return this }
   is(c: string, v: unknown) { this.filtros.push((f) => (v === null ? !hay(leer(f, c)) : leer(f, c) === v)); return this }
   order(c: string, o?: { ascending?: boolean }) { this.orden = { col: c, asc: o?.ascending !== false }; return this }
