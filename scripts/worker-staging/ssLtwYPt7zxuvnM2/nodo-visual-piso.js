@@ -17,10 +17,9 @@ try {
   const authDb = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }
 
   const fichas = await this.helpers.httpRequest({
-    url: base + '/rest/v1/clients?id=eq.' + clientId + '&select=config',
+    url: base + '/rest/v1/clients?id=eq.' + clientId + '&select=config,brand_colors,brand_fonts',
     method: 'GET', json: true, timeout: 10000, headers: authDb,
   })
-  const ownHandle = (fichas[0] && fichas[0].config && fichas[0].config.apify && fichas[0].config.apify.own_handles && fichas[0].config.apify.own_handles.instagram) || null
 
   const filasSitio = await this.helpers.httpRequest({
     url: base + '/rest/v1/apify_raw?client_id=eq.' + clientId + '&apify_function=eq.website_content_scraper&ensayo=eq.false&order=created_at.desc&limit=1&select=respuesta',
@@ -28,25 +27,13 @@ try {
   })
   const filaSitio = filasSitio[0] || null
 
-  // Se leen hasta 10 filas recientes de instagram_scraper (propio Y competidores mezclados: ver
-  // esInstagramPropio en piso-visual-logica.js) y se toma la PRIMERA que sea del propio cliente.
-  const filasInsta = await this.helpers.httpRequest({
-    url: base + '/rest/v1/apify_raw?client_id=eq.' + clientId + '&apify_function=eq.instagram_scraper&ensayo=eq.false&order=created_at.desc&limit=10&select=params,respuesta',
-    method: 'GET', json: true, timeout: 10000, headers: authDb,
-  })
-  let filaInstagram = null
-  for (const f of filasInsta || []) {
-    if (esInstagramPropio(f.params, ownHandle).propio) { filaInstagram = f; break }
-  }
-
   // PLAN DE COPIA PROPIA (29-sep): las fotos del perfil PROPIO ya copiadas a nuestro almacén por el paso
   // «Copiar fotos» del flujo de Apify. El modelo mira ESTAS URLs, nunca el enlace de Instagram.
-  const copias = ownHandle
-    ? await this.helpers.httpRequest({
-        url: base + '/rest/v1/client_social_images?client_id=eq.' + clientId + '&owner_role=eq.propio&handle=eq.' + encodeURIComponent(normalizarHandle(ownHandle)) + '&select=post_id,tipo,url,estado,causa',
-        method: 'GET', json: true, timeout: 10000, headers: authDb,
-      })
-    : []
+  // 21-oct · TODAS las fuentes propias: el logo y las fotos de cualquier cuenta/red propia ya copiadas (owner_role = propio), no solo el Instagram de la ficha.
+  const copias = await this.helpers.httpRequest({
+    url: base + '/rest/v1/client_social_images?client_id=eq.' + clientId + '&owner_role=eq.propio&select=post_id,tipo,url,estado,causa,handle,medio,posted_at,owner_role&order=posted_at.desc.nullslast&limit=200',
+    method: 'GET', json: true, timeout: 10000, headers: authDb,
+  })
 
   const invocarModelo = async (pedido) => {
     const r = await this.helpers.httpRequest({
@@ -75,9 +62,20 @@ try {
     }
   }
 
-  visual = await derivarPisoVisual({ clientId, ownInstagramHandle: ownHandle, filaSitio, filaInstagram, copias }, invocarModelo)
+  visual = await derivarPisoVisualTodasLasFuentes({ clientId, filaSitio, ficha: fichas[0] || null, copias: Array.isArray(copias) ? copias : [] }, invocarModelo)
 } catch (e) {
-  visual = { error: String((e && e.message) || e).slice(0, 300) }
+  visual = { version: 2, estado: 'ausente', motivo: 'el piso visual falló: ' + String((e && e.message) || e).slice(0, 250), error: String((e && e.message) || e).slice(0, 300) }
 }
 
-return [{ json: { ...j, brand_book_draft: { ...draft, visual } } }]
+// el manual queda coherente: sus columnas de colores y tipografía se completan (solo si vienen vacías) con lo del bloque visual, que lleva su procedencia y su estado (declarado/propuesta)
+const nuevoDraft = { ...draft, visual }
+const pm = visual && visual.para_el_manual
+if (pm) {
+  if ((!Array.isArray(draft.primary_colors) || draft.primary_colors.length === 0) && pm.primary_colors.length) nuevoDraft.primary_colors = pm.primary_colors
+  if ((!Array.isArray(draft.typography) || draft.typography.length === 0) && pm.typography.length) nuevoDraft.typography = pm.typography
+}
+// la compuerta DECLARA el hueco: si lo visual no quedó completo, el registro del manual lo cuenta como provisional (parcial) o ausente, con su motivo (Promote prep arma `campos_provisionales` / `campos_ausentes` desde `_field_meta`)
+if (visual && visual.estado && visual.estado !== 'completo') {
+  nuevoDraft._field_meta = Object.assign({}, draft._field_meta || {}, { visual: { estado: visual.estado === 'parcial' ? 'provisional' : 'ausente', motivo: String(visual.motivo || '').slice(0, 300) } })
+}
+return [{ json: { ...j, brand_book_draft: nuevoDraft } }]
