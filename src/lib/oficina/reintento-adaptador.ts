@@ -8,6 +8,7 @@ import { reintentarPiezas, CLAVE_INTERRUPTOR, CLAVE_LIBRETA, type Libreta, type 
 import type { Db } from './almacen-supabase'
 import { identidadVisualDelCliente, previueloDeLaminas, esFamiliaDeLaminas } from './identidad-visual'
 import { almacenDeSupabase as almacenDeLaOficina } from './almacen-supabase'
+import { bloqueaElReintento } from './reapertura'
 
 type Fila = Record<string, unknown>
 const CANAL_DEL_HILO = 'C0C7XUKNCLS'
@@ -36,9 +37,10 @@ export function puertosDeReintento(db: Db, env: { slackToken?: string; canalHilo
       })
     },
     async briefsConEncargo(parteId) {
-      const r = (await db.from('oficina_encargos').select('brief_id').eq('parte_id', parteId).eq('dry_run', false)) as { data: Fila[] | null; error: { message: string } | null }
+      const r = (await db.from('oficina_encargos').select('brief_id,estado,gasto_usd,version_encargo').eq('parte_id', parteId).eq('dry_run', false)) as { data: Fila[] | null; error: { message: string } | null }
       if (r.error) fallo('leer los encargos', r.error)
-      return new Set((r.data ?? []).map((f) => String(f.brief_id)))
+      // un `fallido` recuperable (sin gasto, con versiones por usar) NO cuenta como «llegó»: la puerta lo reabre como la versión siguiente (`reapertura.ts`)
+      return new Set((r.data ?? []).filter((f) => bloqueaElReintento({ estado: String(f.estado), gasto_usd: Number(f.gasto_usd ?? 0), version_encargo: Number(f.version_encargo ?? 1) })).map((f) => String(f.brief_id)))
     },
     async configOficina() { return oficina.leerConfig() },
     async plantillaActiva(familia) { const p = await oficina.leerPlantilla(familia); return !!p && p.activo === true },

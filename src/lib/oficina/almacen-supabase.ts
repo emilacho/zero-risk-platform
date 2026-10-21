@@ -5,6 +5,7 @@
 import type { FilaDeFormato } from './entrega'
 import type { Almacen, Cambios, Encargo, NuevoEncargo, TurnoRegistrado } from './puertos'
 import { CONFIG_APAGADA, type ConfigDeOficina } from './sobre'
+import { decidirReapertura } from './reapertura'
 import { estadoInicial, type Plantilla } from './tipos'
 
 export type Db = { from(tabla: string): any }
@@ -47,11 +48,21 @@ export function almacenDeSupabase(db: Db): Almacen {
       return { red: String(f.red), formato: String(f.formato), ancho: Number(f.ancho), alto: Number(f.alto), tipos_archivo: f.tipos_archivo as string[], peso_max_mb: Number(f.peso_max_mb), n_min: Number(f.n_min), n_max: Number(f.n_max), texto_max: Number(f.texto_max), hashtags_max: Number(f.hashtags_max), pasos_publicacion: (f.pasos_publicacion as string[]) ?? [], verificado: f.verificado === true }
     },
     async crearEncargo(n: NuevoEncargo) {
-      const fila = { client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: 1, estado: 'abierto', estado_del_motor: n.estado_del_motor, tope_usd: n.tope_usd, dry_run: n.dry_run, prueba: n.prueba, sala_ref: n.sala_ref }
+      // 21-oct · si ya hay encargos del brief: el de mayor versión manda; un `fallido` recuperable se reabre como la versión siguiente (sin tocar la fila vieja), tope 3
+      const previos = await db.from('oficina_encargos').select('*').eq('parte_id', n.parte_id).eq('brief_id', n.brief_id).eq('tipo_de_grupo', n.tipo_de_grupo).order('version_encargo', { ascending: false }).limit(1)
+      if (previos.error) return { ok: false as const, error: previos.error.message }
+      const ultimo = (previos.data as Fila[] | null)?.[0]
+      let version = 1
+      if (ultimo) {
+        const d = decidirReapertura({ estado: String(ultimo.estado), gasto_usd: Number(ultimo.gasto_usd ?? 0), version_encargo: Number(ultimo.version_encargo ?? 1) })
+        if (d.accion === 'devolver') return { ok: true as const, encargo: aEncargo(ultimo), nuevo: false }
+        version = d.version
+      }
+      const fila = { client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, estado: 'abierto', estado_del_motor: n.estado_del_motor, tope_usd: n.tope_usd, dry_run: n.dry_run, prueba: n.prueba, sala_ref: n.sala_ref }
       const r = await db.from('oficina_encargos').insert(fila).select('*').single()
       if (!r.error) return { ok: true as const, encargo: aEncargo(r.data as Fila), nuevo: true }
       if (r.error.code === DUPLICADO) {
-        const e = await db.from('oficina_encargos').select('*').eq('parte_id', n.parte_id).eq('brief_id', n.brief_id).eq('tipo_de_grupo', n.tipo_de_grupo).eq('version_encargo', 1).limit(1)
+        const e = await db.from('oficina_encargos').select('*').eq('parte_id', n.parte_id).eq('brief_id', n.brief_id).eq('tipo_de_grupo', n.tipo_de_grupo).eq('version_encargo', version).limit(1)
         const f = (e.data as Fila[] | null)?.[0]
         if (f) return { ok: true as const, encargo: aEncargo(f), nuevo: false }
       }

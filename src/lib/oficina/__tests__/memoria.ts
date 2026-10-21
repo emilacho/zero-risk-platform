@@ -9,6 +9,7 @@ import type { FotoEtiquetada } from '../fotos'
 import type { FilaDeFormato } from '../entrega'
 import type { ConfigDeOficina } from '../sobre'
 import type { Plantilla } from '../tipos'
+import { decidirReapertura } from '../reapertura'
 
 export const CLIENTE = 'cliente-de-prueba'
 export const PARTE = '426af72d-12c0-471c-9fda-2a2978db5175'
@@ -76,10 +77,15 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
     leerPlantilla: async () => m.plantilla,
     leerFormato: async (red, formato) => FORMATOS.find((x) => x.red === red && x.formato === formato) ?? null,
     crearEncargo: async (n) => {
-      const dup = [...m.encargos.values()].find((x) => x.parte_id === n.parte_id && x.brief_id === n.brief_id && x.tipo_de_grupo === n.tipo_de_grupo && x.version_encargo === 1)
-      if (dup) return { ok: true, encargo: dup, nuevo: false }
+      const previos = [...m.encargos.values()].filter((x) => x.parte_id === n.parte_id && x.brief_id === n.brief_id && x.tipo_de_grupo === n.tipo_de_grupo).sort((a, b) => b.version_encargo - a.version_encargo)
+      let version = 1
+      if (previos[0]) {
+        const d = decidirReapertura(previos[0])
+        if (d.accion === 'devolver') return { ok: true, encargo: previos[0], nuevo: false }
+        version = d.version
+      }
       const id = `00000000-0000-4000-8000-${String(m.encargos.size + 1).padStart(12, '0')}`
-      const e: Encargo = { id, client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: 1, estado: 'abierto', estado_del_motor: n.estado_del_motor, con_desacuerdo: false, imagen_generada: false, tope_usd: o.tope ?? n.tope_usd, gasto_usd: 0, dry_run: n.dry_run, prueba: n.prueba, sala_ref: n.sala_ref, salida_output_id: null, hitl_queue_id: null }
+      const e: Encargo = { id, client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, estado: 'abierto', estado_del_motor: n.estado_del_motor, con_desacuerdo: false, imagen_generada: false, tope_usd: o.tope ?? n.tope_usd, gasto_usd: 0, dry_run: n.dry_run, prueba: n.prueba, sala_ref: n.sala_ref, salida_output_id: null, hitl_queue_id: null }
       m.encargos.set(id, e)
       return { ok: true, encargo: e, nuevo: true }
     },

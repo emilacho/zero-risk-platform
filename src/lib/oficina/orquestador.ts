@@ -24,6 +24,7 @@ import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../n
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { procesarSalida, proyectarAlEsquema } from './salida'
+import { agotaLasVersiones, MAX_VERSIONES_POR_BRIEF } from './reapertura'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
 
@@ -740,6 +741,8 @@ export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<
   const e = enc.estado_del_motor
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: 'fallido', con_desacuerdo: true })
   await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 Encargo fallido · ${enc.brief_id}: ${motivo}`, dry_run: enc.dry_run })
+  // 21-oct · el aviso ÚNICO del tope de versiones: este encargo es la última versión permitida del brief y cierra fallido (cada encargo cierra una sola vez): ya no se reabre solo
+  if (agotaLasVersiones(enc)) await P.avisar({ canal: 'hilo', encargo_id: enc.id, texto: `🧱 ${enc.brief_id}: ${MAX_VERSIONES_POR_BRIEF} intentos de la oficina y ninguno salió. No se reabre solo.`, dry_run: enc.dry_run })
   return r(200, { accion: 'cerrado', estado: 'fallido', motivo, resultado_para_la_sala: 'fallido', sala_ref: enc.sala_ref, simulado: enc.dry_run })
 }
 
