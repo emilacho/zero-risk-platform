@@ -262,6 +262,13 @@ describe('el puerto de notas de la oficina real (la auto-revisión lee del CEREB
     expect(l.notas.map((v) => v.id)).toEqual(['f1'])
     expect(l.error).toBeUndefined()   // la lectura creativa es un refuerzo: si la general entregó, no hay nada que lamentar
   })
+  it('si falla la lectura GENERAL pero la creativa respondió: sigue con la creativa y deja el motivo', async () => {
+    const db = new DbFalsa()
+    const f = (async (url: string) => (String(url).includes('canal=') ? new Response(JSON.stringify({ ok: true, respuestas: [r1] }), { status: 200 }) : new Response('{}', { status: 502 }))) as unknown as typeof fetch
+    const l = await crearPuertos(db, { ...ENV, notasDelDueno: true }, f).notas!.leer(CLIENTE)
+    expect(l.notas.map((v) => v.id)).toEqual(['f1'])
+    expect(l.error).toContain('cerebro (lectura general)'); expect(l.error).toContain('502')
+  })
   it('si falla la lectura de las generales: sigue con lo del cerebro y trae el motivo', async () => {
     const db = new DbFalsa()
     db.fallar['notas_del_dueno'] = 'caída'
