@@ -190,8 +190,8 @@ describe('con notas: el productor se auto-revisa', () => {
   it('una ficha que el validador levanta de nuevo no se duplica', async () => {
     const { M, id } = await abierto(undefined, NOTAS)
     const ninguna = { ...JSON.parse(direccionGenerada()), decision: { modo: 'ninguna', motivo: 'sin imagen' } }
-    await correr(M, id, guionPost({ direccion_visual: () => ({ texto: j(ninguna) }), autorevision_diseno: (_n, t) => ({ texto: conChoque({ ...entregaActual(t), estilo: 'otro estilo' }, 'estilo', 'nota-1') }) }), 80)
-    expect(arte(M, id, 'visual_direction').estilo).toBe('otro estilo') // la corrección SÍ valió (no es un caso vacío)
+    await correr(M, id, guionPost({ direccion_visual: () => ({ texto: j(ninguna) }), autorevision_diseno: (_n, t) => ({ texto: conChoque({ ...entregaActual(t), decision: { modo: 'ninguna', motivo: 'sin foto apta y sin imagen' } }, 'decision', 'nota-1') }) }), 80)
+    expect(arte(M, id, 'visual_direction').decision.motivo).toBe('sin foto apta y sin imagen') // la corrección SÍ valió (no es un caso vacío) y el validador volvió a levantar la misma ficha
     const ids = M.encargos.get(id)!.estado_del_motor.fichas.map((f) => f.id)
     expect(ids.filter((x) => x === 'vd-ninguna')).toHaveLength(1)
     expect(new Set(ids).size).toBe(ids.length)
