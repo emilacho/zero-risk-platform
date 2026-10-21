@@ -11,7 +11,9 @@ import { codigoDelNodo } from '../ssLtwYPt7zxuvnM2/construir-nodo-visual.mjs'
 const aqui = dirname(fileURLToPath(import.meta.url))
 const src = (f) => fs.readFileSync(join(aqui, f), 'utf8')
 const sinExports = (js) => { const i = js.indexOf("if (typeof module !== 'undefined' && module.exports)"); return i === -1 ? js : js.slice(0, i) }
-const LOGICA = sinExports(src('barrido-logica.js'))
+// el piso (nombreDeTipografiaObservada…) va delante del barrido: una sola fuente de verdad para «qué es una tipografía real»
+const PISO = sinExports(fs.readFileSync(join(aqui, '..', 'ssLtwYPt7zxuvnM2', 'piso-visual-logica.js'), 'utf8'))
+const LOGICA = PISO + '\n' + sinExports(src('barrido-logica.js'))
 
 export const NOMBRE = 'Zero Risk — Manual · completar lo visual (CC#1 · T4)'
 export const NODOS = {

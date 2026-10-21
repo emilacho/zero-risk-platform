@@ -342,3 +342,51 @@ describe('actualizar el nodo ya instalado (ajuste de tipografía y procedencia)'
     expect(() => B.aplicarPisoTodasLasFuentes(ANTES2)).toThrow(/ya trabaja con todas las fuentes/)
   })
 })
+
+describe('marca ajena vista en foto (corrección de Emilio 21-oct 20:55)', () => {
+  const ajena = (donde: string, descripcion = 'logo de un proveedor') => ({ donde, descripcion })
+  const corre = (cuerpo: object, copias = soloIG(4)) => derivar({ filaSitio: null, ficha: null, copias }, modelo({ capa_grafica: {}, ...PRODUCTO, ...cuerpo }).invocar)
+  it('🔴 foto propia con logo ajeno: el color del logo ajeno NO entra a la paleta y queda declarado «marca ajena vista en foto»; el del logo propio sí', async () => {
+    const v = await corre({ marcas_ajenas_vistas: [ajena('foto 2')], capa_grafica: { colores_observados: [{ color: '#ff5a1a', rol: 'principal', donde: 'logo' }, { color: '#00ff00', rol: 'acento', donde: 'foto 2' }] } })
+    expect(v.capa_grafica.paleta.map((p: { color: string }) => p.color)).toEqual(['#ff5a1a'])
+    expect(v.marcas_ajenas).toEqual([{ donde: 'foto 2', descripcion: 'logo de un proveedor' }])
+    expect(v.descartados_por_marca_ajena).toEqual([{ tipo: 'color', valor: '#00ff00', donde: 'foto 2' }])
+    expect(v.muestra.no_observado).toContain('marca ajena vista en foto 2: logo de un proveedor')
+  })
+  it('un color visto en el LOGO propio se conserva aunque también aparezca en una foto con marca ajena', async () => {
+    const v = await corre({ marcas_ajenas_vistas: [ajena('foto 2')], capa_grafica: { colores_observados: [{ color: '#ff5a1a', donde: 'logo, foto 2' }] } })
+    expect(v.capa_grafica.paleta.map((p: { color: string }) => p.color)).toEqual(['#ff5a1a'])
+    expect(v.descartados_por_marca_ajena).toEqual([])
+  })
+  it('un color de una foto SIN marca ajena se conserva (las fotos propias siguen sirviendo)', async () => {
+    const v = await corre({ marcas_ajenas_vistas: [ajena('foto 2')], capa_grafica: { colores_observados: [{ color: '#123456', donde: 'foto 1' }] } })
+    expect(v.capa_grafica.paleta.map((p: { color: string }) => p.color)).toEqual(['#123456'])
+  })
+  it('un color con varias fotos donde UNA es de la marca ajena se descarta (no se puede atribuir a la marca)', async () => {
+    const v = await corre({ marcas_ajenas_vistas: [ajena('foto 3')], capa_grafica: { colores_observados: [{ color: '#123456', donde: 'foto 1, foto 3' }] } })
+    expect(v.capa_grafica.paleta).toEqual([]); expect(v.descartados_por_marca_ajena[0]).toMatchObject({ valor: '#123456' })
+  })
+  it('si hay marca ajena declarada, un color sin «donde» claro tampoco entra; sin marca ajena, sí entra', async () => {
+    const con = await corre({ marcas_ajenas_vistas: [ajena('foto 2')], capa_grafica: { colores_observados: [{ color: '#123456', donde: 'el cartel' }] } })
+    expect(con.capa_grafica.paleta).toEqual([])
+    const sin = await corre({ marcas_ajenas_vistas: [], capa_grafica: { colores_observados: [{ color: '#123456', donde: 'el cartel' }] } })
+    expect(sin.capa_grafica.paleta.map((p: { color: string }) => p.color)).toEqual(['#123456']); expect(sin.marcas_ajenas).toEqual([])
+  })
+  it('lo mismo con las tipografías: la letra de una foto con marca ajena no entra; la del logo propio sí', async () => {
+    const v = await corre({ marcas_ajenas_vistas: [ajena('foto 1')], capa_grafica: { tipografias_observadas: [{ nombre: 'Lobster', donde: 'foto 1' }, { nombre: 'Bebas Neue', donde: 'logo' }] } })
+    expect(v.capa_grafica.tipografias.map((t: { nombre: string }) => t.nombre)).toEqual(['Bebas Neue'])
+    expect(v.descartados_por_marca_ajena).toEqual([{ tipo: 'tipografia', valor: 'Lobster', donde: 'foto 1' }])
+  })
+  it('la declaración se lee dentro de capa_grafica también; se limita a 6, con descripción ≤120 y sin entradas rotas', async () => {
+    const largas = Array.from({ length: 8 }, (_, i) => ajena('foto ' + (i + 1), 'x'.repeat(200)))
+    const v = await corre({ marcas_ajenas_vistas: undefined, capa_grafica: { marcas_ajenas_vistas: [...largas, null, 'texto'], colores_observados: [] } })
+    expect(v.marcas_ajenas).toHaveLength(6); expect(v.marcas_ajenas[0].descripcion).toHaveLength(120)
+  })
+  it('el pedido al modelo pide separar las marcas de terceros y que la paleta salga del logo propio', async () => {
+    const m = modelo({ capa_grafica: {}, ...PRODUCTO })
+    await derivar({ filaSitio: null, ficha: null, copias: soloIG() }, m.invocar)
+    const t = m.llamadas[0].task
+    expect(t).toContain('marcas_ajenas_vistas'); expect(t).toMatch(/TERCEROS/); expect(t).toMatch(/colaboradores, competidores, proveedores/); expect(t).toMatch(/sale sobre todo del LOGO propio/)
+  })
+  it('numerosDeFoto lee «foto1», «foto 2», sin repetir', () => { expect(L.numerosDeFoto('Logo, foto1, foto 2, FOTO 2')).toEqual([1, 2]); expect(L.numerosDeFoto(undefined)).toEqual([]) })
+})

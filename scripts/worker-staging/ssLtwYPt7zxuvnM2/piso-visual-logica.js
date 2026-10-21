@@ -309,6 +309,16 @@ function procedenciaDeLoObservado(donde) {
   }
   return 'observado en ' + (partes.length ? partes.join(', ') : 'el material propio')
 }
+/** Los números de foto que nombra un «donde» («foto 1», «foto2», «logo, foto 3»): sin repetir. */
+function numerosDeFoto(donde) {
+  var t = String(donde || '').toLowerCase()
+  var re = /foto\s*(\d{1,2})/g
+  var m
+  var vistos = {}
+  var out = []
+  while ((m = re.exec(t))) { if (!vistos[m[1]]) { vistos[m[1]] = true; out.push(Number(m[1])) } }
+  return out
+}
 function sinRepetidos(lista) {
   var visto = {}
   return lista.filter(function (x) { if (visto[x.valor]) return false; visto[x.valor] = true; return true })
@@ -370,6 +380,7 @@ function armarPedidoTodasLasFuentes(declarados, material) {
   if (pideTipos) forma.push('    "tipografias_observadas": [ {"nombre": "<nombre solo si se lee con claridad>", "rol": "titulos|cuerpo", "donde": "logo|foto N"} ]')
   forma = forma.concat([
     '  },',
+    '  "marcas_ajenas_vistas": [ {"donde": "foto N", "descripcion": "logo, marca o colores de un tercero que se ven en esa foto, en pocas palabras"} ],',
     '  "capa_producto": { "paleta_observada": ["..."], "luz": "...", "encuadre": "...", "que_aparece": ["..."], "que_no_aparece": ["..."] },',
     '  "reglas": { "debe": ["...", "...", "..."], "no_debe": ["...", "..."], "capa_que_manda": { "foto_de_producto": "producto", "placa_logo_o_titulo": "grafica", "anuncio_con_texto_encima": "declara cuál gobierna qué, en una frase" } }',
     '}',
@@ -392,6 +403,8 @@ function armarPedidoTodasLasFuentes(declarados, material) {
     'Reglas para responder:',
     '- Describe SOLO lo que ves en las imágenes que te mando. Si algo no se puede saber con ese material, dilo en vez de generalizarlo como regla absoluta.',
     '- Los colores y tipografías DECLARADOS solo se pueden elegir de las listas de arriba, tal cual.',
+    '- La paleta de marca sale sobre todo del LOGO propio. De las fotos toma solo colores y letras que sean de la propia marca (su producto, su rotulación, su ropa de trabajo).',
+    '- Si en alguna foto ves un logo, una marca o colores de TERCEROS (colaboradores, competidores, proveedores, clientes, otras empresas), NO los incluyas en los colores ni en las tipografías observadas: decláralos en "marcas_ajenas_vistas" con el número de la foto donde los viste. Si no hay ninguno, deja esa lista vacía.',
     pideColores ? '- El cliente NO declara colores: propón hasta ' + MAX_COLORES_OBSERVADOS + ' colores de marca que SE VEAN en el logo o en las fotos (hex #rrggbb), diciendo en qué imagen los viste. Quedan marcados como PROPUESTA; no inventes colores que no se vean.' : '- El cliente ya declara sus colores: no propongas otros.',
     pideTipos ? '- El cliente NO declara tipografías: solo si el logo o una foto muestran un texto cuya tipografía reconoces con claridad, nómbrala (máximo ' + MAX_TIPOGRAFIAS_OBSERVADAS + ') y di dónde; si no se reconoce, deja la lista vacía. No adivines.' : '- El cliente ya declara sus tipografías: no propongas otras.',
   ]).join('\n')
@@ -445,6 +458,8 @@ function derivarPisoVisualTodasLasFuentes(ctx, invocarModelo) {
     capa_producto: null,
     reglas: null,
     muestra: armarMuestraTodasLasFuentes(material, declarados),
+    marcas_ajenas: [],
+    descartados_por_marca_ajena: [],
     brain_hit: null,
     legible: null,
     error: null,
@@ -505,11 +520,30 @@ function derivarPisoVisualTodasLasFuentes(ctx, invocarModelo) {
       var i = visual.capa_grafica.tipografias.map(function (x) { return x.nombre }).indexOf(n)
       if (i !== -1 && visual.capa_grafica.tipografias[i].estado === 'declarado' && t.rol) visual.capa_grafica.tipografias[i].rol = String(t.rol).slice(0, 20)
     })
+    // MARCAS AJENAS (corrección de Emilio 21-oct 20:55): en las fotos propias pueden verse logos, marcas o colores de terceros (colaboradores, competidores, proveedores).
+    // Se DECLARAN aparte y nada de lo que solo se vio en esas fotos entra a la paleta ni a las tipografías: lo que viene del LOGO propio sí; lo que no se puede atribuir a la marca, no.
+    var ajenasCrudas = Array.isArray(parsed.datos.marcas_ajenas_vistas) ? parsed.datos.marcas_ajenas_vistas : Array.isArray(cg.marcas_ajenas_vistas) ? cg.marcas_ajenas_vistas : []
+    var fotosAjenas = {}
+    visual.marcas_ajenas = ajenasCrudas
+      .filter(function (a) { return a && typeof a === 'object' })
+      .slice(0, 6)
+      .map(function (a) {
+        numerosDeFoto(a.donde).forEach(function (n) { fotosAjenas[n] = true })
+        return { donde: procedenciaDeLoObservado(a.donde).replace('observado en ', ''), descripcion: String(a.descripcion || '').replace(/\s+/g, ' ').trim().slice(0, 120) }
+      })
+    visual.marcas_ajenas.forEach(function (a) { visual.muestra.no_observado.push('marca ajena vista en ' + a.donde + (a.descripcion ? ': ' + a.descripcion : '')) })
+    function esDeTercero(donde) {
+      if (/logo/i.test(String(donde || ''))) return false
+      var nums = numerosDeFoto(donde)
+      if (!nums.length) return visual.marcas_ajenas.length > 0
+      return nums.some(function (n) { return fotosAjenas[n] === true })
+    }
     // lo OBSERVADO entra marcado PROPUESTA y solo si el cliente no declaró ese tipo de cosa
     if (armado.pide_colores) {
       var vistos = {}
       ;(cg.colores_observados || []).forEach(function (o) {
         var h = colorHex(o && o.color)
+        if (h && esDeTercero(o && o.donde)) { visual.descartados_por_marca_ajena.push({ tipo: 'color', valor: h, donde: procedenciaDeLoObservado(o && o.donde).replace('observado en ', '') }); return }
         if (!h || vistos[h] || visual.capa_grafica.paleta.length >= MAX_COLORES_OBSERVADOS) return
         vistos[h] = true
         visual.capa_grafica.paleta.push({ color: h, rol: o.rol ? String(o.rol).slice(0, 20) : null, procedencia: procedenciaDeLoObservado(o && o.donde), estado: 'propuesta' })
@@ -519,6 +553,7 @@ function derivarPisoVisualTodasLasFuentes(ctx, invocarModelo) {
       var vistas = {}
       ;(cg.tipografias_observadas || []).forEach(function (o) {
         var n = nombreDeTipografiaObservada(o && o.nombre)
+        if (n && esDeTercero(o && o.donde)) { visual.descartados_por_marca_ajena.push({ tipo: 'tipografia', valor: n, donde: procedenciaDeLoObservado(o && o.donde).replace('observado en ', '') }); return }
         if (!n || vistas[n.toLowerCase()] || visual.capa_grafica.tipografias.length >= MAX_TIPOGRAFIAS_OBSERVADAS) return
         vistas[n.toLowerCase()] = true
         visual.capa_grafica.tipografias.push({ nombre: n, rol: o.rol ? String(o.rol).slice(0, 20) : null, procedencia: procedenciaDeLoObservado(o && o.donde), estado: 'propuesta' })
@@ -553,6 +588,7 @@ if (typeof module !== 'undefined' && module.exports) {
     armarMuestraTodasLasFuentes: armarMuestraTodasLasFuentes,
     paraElManual: paraElManual,
     nombreDeTipografiaObservada: nombreDeTipografiaObservada,
+    numerosDeFoto: numerosDeFoto,
     procedenciaDeLoObservado: procedenciaDeLoObservado,
     colorHex: colorHex,
     nombreDeTipografia: nombreDeTipografia,

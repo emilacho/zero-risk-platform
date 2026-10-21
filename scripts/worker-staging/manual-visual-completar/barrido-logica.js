@@ -1,25 +1,41 @@
 // MANUAL · COMPLETAR LO VISUAL · lógica PURA (sin red, sin `this`) · CC#1 · 2026-10-21 · ENCARGO «manual visual con todas las fuentes», T4.
-// La usan los nodos del flujo «Manual · completar lo visual» (el constructor la pega delante de cada nodo).
+// La usan los nodos del flujo «Manual · completar lo visual» (el constructor la pega delante de cada nodo, después de la lógica del piso).
 //
 // Qué resuelve: el manual se promueve UNA vez; si las copias de fotos (o los colores de la ficha) llegan DESPUÉS, la parte visual se quedaba vacía para siempre.
-// Este flujo la vuelve a correr SOLA, con la misma lógica del piso, y promueve una versión nueva del manual (max+1, como pide la ruta canónica) SOLO si mejora.
+// Este flujo la vuelve a correr SOLA, para CUALQUIER cliente (nadie lo agrega a una lista a mano), con la misma lógica del piso, y promueve una versión nueva del manual
+// (max+1, como pide la ruta canónica) SOLO si mejora. Corrección de Emilio 21-oct 20:50: «siempre arreglos estructurales».
 //
-// Reglas del lazo coherente (canon 6 guardarraíles): cadencia definida (cada 30 min) · tope por cliente y día · idempotente (misma huella de entradas ⇒ no repite) ·
-// solo clientes AUTORIZADOS (cadena_config.manual_visual_clientes) · nunca toca un manual aprobado por una persona · rastro en el propio manual (visual.generado_*).
+// El disparo automático: cada 30 min recorre los clientes que tienen manual y elige, de a UNO, el que cumple TODO esto:
+//   · su manual vigente no está aprobado por una persona · no está en `cadena_config.manual_visual_excluidos`
+//   · tiene material propio que probar (copias propias, colores/tipografías en la ficha o un sitio raspado)
+//   · su visual está incompleto (ausente, parcial, o «completo» con una tipografía propuesta que no es un nombre real)
+//   · las entradas cambiaron desde el último intento (huella) · no pasó el tope por cliente (3/día) ni el global (3/día entre todos)
+// Reglas del lazo coherente (canon 6 guardarraíles): cadencia definida · topes · idempotente · rastro en el propio manual (visual.generado_*) · cierre ruidoso si no se guardó.
 
 var MAX_INTENTOS_POR_DIA = 3
+var MAX_CORRIDAS_POR_DIA_TOTAL = 3
 var RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 var RANGO = { ausente: 0, parcial: 1, completo: 2 }
 
-/** Qué tan completo está un bloque `visual` (v2 trae `estado`; un v1 viejo se mide por lo que tiene). */
-function rangoDeVisual(v) {
+/**
+ * Qué tan completo está un bloque `visual` (v2 trae `estado`; un v1 viejo se mide por lo que tiene). Un v2 «completo» con una tipografía PROPUESTA que no es un nombre
+ * real de tipografía (caso df7e47cc: «no reconocida con claridad») baja a 1: hay que volver a probar. `esTipografiaValida(nombre)` la pasa el nodo (la lógica del piso).
+ */
+function rangoDeVisual(v, esTipografiaValida) {
   if (!v || typeof v !== 'object') return 0
-  if (v.estado && RANGO[v.estado] !== undefined) return RANGO[v.estado]
-  var paleta = v.capa_grafica && Array.isArray(v.capa_grafica.paleta) ? v.capa_grafica.paleta.length : 0
-  var producto = !!(v.capa_producto && v.reglas)
-  if (paleta > 0 && producto) return 2
-  if (paleta > 0 || producto) return 1
-  return 0
+  var r
+  if (v.estado && RANGO[v.estado] !== undefined) r = RANGO[v.estado]
+  else {
+    var paleta = v.capa_grafica && Array.isArray(v.capa_grafica.paleta) ? v.capa_grafica.paleta.length : 0
+    var producto = !!(v.capa_producto && v.reglas)
+    r = paleta > 0 && producto ? 2 : paleta > 0 || producto ? 1 : 0
+  }
+  if (r >= 2 && typeof esTipografiaValida === 'function') {
+    var tipos = v.capa_grafica && Array.isArray(v.capa_grafica.tipografias) ? v.capa_grafica.tipografias : []
+    var hayMala = tipos.some(function (t) { return t && t.estado === 'propuesta' && !esTipografiaValida(t.nombre) })
+    if (hayMala) r = 1
+  }
+  return r
 }
 
 /** La huella de las entradas del piso: si no cambió nada desde la última vez, no hay nada nuevo que probar. */
@@ -32,14 +48,24 @@ function huellaDeEntradas(o) {
   return ['c' + copias.length, ult, 'f' + colores + '/' + fuentes, 's' + String(o.sitioId || '')].join('|')
 }
 
+/** ¿Hay material propio que probar? copias propias bajadas, colores/tipografías en la ficha, o un sitio raspado. */
+function hayMaterialQueProbar(o) {
+  var copias = (o.copias || []).filter(function (c) { return c && c.estado === 'ok' && c.url }).length
+  var ficha = o.ficha || {}
+  var enFicha = (Array.isArray(ficha.brand_colors) && ficha.brand_colors.length > 0) || (Array.isArray(ficha.brand_fonts) && ficha.brand_fonts.length > 0)
+  return copias > 0 || enFicha || !!o.sitioId
+}
+
 /**
  * ¿Hay que correr el piso para este cliente? { correr, motivo }.
- * o = { permitido, humanoAprobo, visual (bloque actual o null), huellaActual, intento ({huella, dia, n} o null), hoy (YYYY-MM-DD), forzar }
+ * o = { excluido, humanoAprobo, hayMaterial, rango (de rangoDeVisual), huellaActual, intento ({huella, dia, n} o null), hoy (YYYY-MM-DD), globalHoy (corridas de hoy entre todos), forzar }
  */
 function decidirSiCorrer(o) {
-  if (!o.permitido) return { correr: false, motivo: 'cliente_no_autorizado' }
+  if (o.excluido) return { correr: false, motivo: 'cliente_excluido' }
   if (o.humanoAprobo) return { correr: false, motivo: 'manual_aprobado_por_una_persona' }
-  if (rangoDeVisual(o.visual) >= 2 && !o.forzar) return { correr: false, motivo: 'visual_ya_completo' }
+  if (!o.hayMaterial) return { correr: false, motivo: 'sin_material_que_probar' }
+  if ((Number(o.rango) || 0) >= 2 && !o.forzar) return { correr: false, motivo: 'visual_ya_completo' }
+  if ((Number(o.globalHoy) || 0) >= MAX_CORRIDAS_POR_DIA_TOTAL) return { correr: false, motivo: 'tope_global_del_dia' }
   var i = o.intento || null
   var hoy = i && i.dia === o.hoy ? Number(i.n) || 0 : 0
   if (hoy >= MAX_INTENTOS_POR_DIA) return { correr: false, motivo: 'tope_de_intentos_del_dia' }
@@ -48,8 +74,8 @@ function decidirSiCorrer(o) {
 }
 
 /** ¿El visual nuevo es mejor que el actual? Solo así se promueve una versión nueva del manual. */
-function mejoraElVisual(antes, despues) {
-  var a = rangoDeVisual(antes), d = rangoDeVisual(despues)
+function mejoraElVisual(antes, despues, esTipografiaValida) {
+  var a = rangoDeVisual(antes, esTipografiaValida), d = rangoDeVisual(despues, esTipografiaValida)
   if (d > a) return { mejora: true, motivo: 'sube de ' + a + ' a ' + d }
   var pa = antes && antes.capa_grafica && Array.isArray(antes.capa_grafica.paleta) ? antes.capa_grafica.paleta.length : 0
   var pd = despues && despues.capa_grafica && Array.isArray(despues.capa_grafica.paleta) ? despues.capa_grafica.paleta.length : 0
@@ -74,8 +100,8 @@ function armarCuerpoDelManual(o) {
   }
 }
 
-/** Los clientes autorizados: solo uuids bien formados, sin repetidos. */
-function clientesAutorizados(valor) {
+/** Lista de uuid bien formados, sin repetidos (los clientes excluidos). */
+function listaDeClientes(valor) {
   var lista = Array.isArray(valor) ? valor : []
   var vistos = {}
   return lista.filter(function (x) { if (typeof x !== 'string' || !RE_UUID.test(x) || vistos[x.toLowerCase()]) return false; vistos[x.toLowerCase()] = true; return true })
@@ -83,7 +109,7 @@ function clientesAutorizados(valor) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    MAX_INTENTOS_POR_DIA: MAX_INTENTOS_POR_DIA, rangoDeVisual: rangoDeVisual, huellaDeEntradas: huellaDeEntradas, decidirSiCorrer: decidirSiCorrer,
-    mejoraElVisual: mejoraElVisual, armarCuerpoDelManual: armarCuerpoDelManual, clientesAutorizados: clientesAutorizados,
+    MAX_INTENTOS_POR_DIA: MAX_INTENTOS_POR_DIA, MAX_CORRIDAS_POR_DIA_TOTAL: MAX_CORRIDAS_POR_DIA_TOTAL, rangoDeVisual: rangoDeVisual, huellaDeEntradas: huellaDeEntradas,
+    hayMaterialQueProbar: hayMaterialQueProbar, decidirSiCorrer: decidirSiCorrer, mejoraElVisual: mejoraElVisual, armarCuerpoDelManual: armarCuerpoDelManual, listaDeClientes: listaDeClientes,
   }
 }
