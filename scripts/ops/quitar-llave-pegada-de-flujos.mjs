@@ -42,7 +42,7 @@ async function main(argv) {
   const i = argv.indexOf('--respaldos')
   const carpeta = i >= 0 ? argv[i + 1] : null
   const envTxt = fs.readFileSync('C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform/.env.local', 'utf8')
-  const E = (k) => (envTxt.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim().replace(/^["']|["']$/g, '')
+  const E = (k) => process.env[k] ?? (envTxt.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim().replace(/^["']|["']$/g, '')   // con `doppler run --` sale de Doppler; el .env.local queda de respaldo
   const BASE = E('N8N_BASE_URL').replace(/\/$/, ''), K = E('N8N_API_KEY'), V = E(NOMBRE_DE_LA_VARIABLE)
   if (!BASE || !K || !V) { console.error('faltan N8N_BASE_URL / N8N_API_KEY / ' + NOMBRE_DE_LA_VARIABLE); return 2 }
   if (aplicar && (!carpeta || /zr-vault|OneDrive/i.test(carpeta))) { console.error('--aplicar exige --respaldos <carpeta> FUERA de la bóveda (el respaldo trae la llave pegada)'); return 2 }
