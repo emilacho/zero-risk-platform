@@ -16,11 +16,13 @@ export const PROYECTO_VERCEL = 'prj_UNusLHZNj5vOVrvCEHcRL8EUms2i'     // zero-ri
 export const REFERENCIAS = { APIFY_API_TOKEN: '${APIFY_TOKEN}' }
 
 /** nombres que por sí solos indican un secreto */
-export const RE_NOMBRE_SECRETO = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE|CREDENTIAL|DSN|HMAC|SIGNING|WEBHOOK_URL|AUTH|DB_URL|DATABASE_URL|POSTGRES|CONNECTION_STRING)(?![A-Z]*_(?:URL|ID|ENABLED|MODE)$)|_PASS$|^SLACK_|BEARER/i
+export const RE_NOMBRE_SECRETO = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE|CREDENTIAL|DSN|HMAC|SIGNING|WEBHOOK_URL|AUTH)(?![A-Z]*_(?:URL|ID|ENABLED|MODE)$)|_PASS$|^SLACK_|BEARER/i
 /** formas de valor que parecen una llave o llevan credenciales */
 export const RE_VALOR_SECRETO = [/^sk-/i, /^xox[a-z]-/i, /^eyJ[A-Za-z0-9_-]{15,}/, /^ghp_/, /^apify_api_/, /^[A-Za-z0-9+/_-]{32,}={0,2}$/, /^[0-9a-f]{32,}$/i, /Bearer\s+\S{12,}/i, /:\/\/[^/\s:@]+:[^/\s@]+@/, /[?&](key|token|secret|apikey|api_key|password)=/i, /hooks\.slack\.com\/services\//]
 
-export function pareceSecretoPorNombre(nombre) { return RE_NOMBRE_SECRETO.test(nombre) }
+/** direcciones de base de datos: llevan la contraseña dentro, aunque el nombre termine en _URL */
+export const RE_NOMBRE_BASE_DE_DATOS = /DB_URL|DATABASE_URL|POSTGRES|CONNECTION_STRING|DB_PASS/i
+export function pareceSecretoPorNombre(nombre) { return RE_NOMBRE_SECRETO.test(nombre) || RE_NOMBRE_BASE_DE_DATOS.test(nombre) }
 export function pareceSecretoPorValor(valor) { return typeof valor !== 'string' || RE_VALOR_SECRETO.some((re) => re.test(valor.trim())) }
 
 /** decide qué hacer con cada variable de Vercel. `variables`: [{ key, type, target[], value? }], `enDoppler`: nombres que ya existen allí */
