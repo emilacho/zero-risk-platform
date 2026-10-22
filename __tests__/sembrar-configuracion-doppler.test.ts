@@ -6,7 +6,7 @@ const v = (key: string, type: string, value: string | undefined, target = ['prod
 
 describe('pareceSecretoPorNombre', () => {
   it('detecta llaves, tokens, secretos, contraseñas, DSN, firmas y webhooks', () => {
-    for (const n of ['OPENAI_API_KEY', 'SLACK_BOT_TOKEN', 'CRON_SECRET', 'MC_MASTER_PASSWORD', 'SENTRY_DSN', 'SALA_INGRESS_VENTAS_HMAC_SECRET', 'INNGEST_SIGNING_KEY', 'SLACK_WEBHOOK_URL', 'APIFY_SERVICE_WEBHOOK_URL', 'DATAFORSEO_AUTH', 'SLACK_ALGO']) expect(pareceSecretoPorNombre(n), n).toBe(true)
+    for (const n of ['OPENAI_API_KEY', 'SLACK_BOT_TOKEN', 'CRON_SECRET', 'MC_MASTER_PASSWORD', 'SENTRY_DSN', 'SALA_INGRESS_VENTAS_HMAC_SECRET', 'INNGEST_SIGNING_KEY', 'SLACK_WEBHOOK_URL', 'APIFY_SERVICE_WEBHOOK_URL', 'DATAFORSEO_AUTH', 'SLACK_ALGO', 'SUPABASE_DB_URL', 'DATABASE_URL', 'POSTGRES_URL', 'DB_CONNECTION_STRING']) expect(pareceSecretoPorNombre(n), n).toBe(true)
   })
   it('deja pasar configuración: URLs, ids, banderas, topes y modelos', () => {
     for (const n of ['N8N_BASE_URL', 'MC_BASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'SALA_INTAKE_ENABLED', 'PORTERO_GASTO_AVISO_USD', 'OFICINA_REVISOR_MODEL', 'ANTHROPIC_ENVIRONMENT_ID', 'SENTRY_ORG', 'FINANZAS_CANAL_PREGUNTAS']) expect(pareceSecretoPorNombre(n), n).toBe(false)
