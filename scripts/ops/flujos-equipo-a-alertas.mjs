@@ -82,7 +82,7 @@ async function main(argv) {
   const aplicar = argv.includes('--aplicar')
   const i = argv.indexOf('--respaldos'); const carpeta = i >= 0 ? argv[i + 1] : null
   const envTxt = fs.readFileSync('C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform/.env.local', 'utf8')
-  const E = (k) => (envTxt.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim().replace(/^["']|["']$/g, '')
+  const E = (k) => process.env[k] ?? (envTxt.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim().replace(/^["']|["']$/g, '')   // con `doppler run --` sale de Doppler; el .env.local queda de respaldo
   const BASE = E('N8N_BASE_URL').replace(/\/$/, ''), K = E('N8N_API_KEY')
   if (aplicar && (!carpeta || /zr-vault|OneDrive/i.test(carpeta))) { console.error('--aplicar exige --respaldos <carpeta> FUERA de la bóveda'); return 2 }
   const api = async (m, p, body) => { const r = await fetch(`${BASE}/api/v1${p}`, { method: m, headers: { 'X-N8N-API-KEY': K, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); const t = await r.text(); if (!r.ok) throw new Error(`${m} ${p} → ${r.status} ${t.slice(0, 160)}`); return JSON.parse(t) }
