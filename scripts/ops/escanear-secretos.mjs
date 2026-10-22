@@ -37,6 +37,8 @@ const FICHA_DE_PROVEEDOR = /(auth token|recovery code|token)\s*\|[^`\n]*`([A-Za-
 /** un nombre de variable (SLACK_BOT_TOKEN) o un valor sin ningún dígito no es un secreto aunque esté en la fila de token */
 const pareceNombre = (v) => /^[A-Z][A-Z0-9_]*$/.test(v) || !/\d/.test(v)
 const HEX_LARGO = /\b[a-f0-9]{32,}\b/gi
+/** el Account SID de Twilio («AC» + 32 hex) es un identificador, no el secreto (CC#3, 22-oct) */
+const ES_SID_DE_TWILIO = /^AC[a-f0-9]{32}$/i
 export const CARPETA_DE_FICHAS = '00-meta/credentials/'
 
 export const EXCLUIDAS = new Set(['.obsidian', 'node_modules', '.git'])
@@ -59,7 +61,7 @@ export function escanearTexto(texto, { ruta = '' } = {}) {
     const f = linea.match(FICHA_DE_PROVEEDOR)
     if (f && !esDeMentira(f[2]) && !pareceNombre(f[2])) hallazgos.push({ linea: n, tipo: 'ficha de proveedor (valor en la fila de token)', fin: fin4(f[2]) })
     if (enFichas) {
-      for (const m of linea.matchAll(HEX_LARGO)) if (!esDeMentira(m[0])) hallazgos.push({ linea: n, tipo: 'hex largo en carpeta de fichas', fin: fin4(m[0]) })
+      for (const m of linea.matchAll(HEX_LARGO)) if (!esDeMentira(m[0]) && !ES_SID_DE_TWILIO.test(m[0])) hallazgos.push({ linea: n, tipo: 'hex largo en carpeta de fichas', fin: fin4(m[0]) })
     }
   })
   return hallazgos

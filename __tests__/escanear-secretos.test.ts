@@ -77,6 +77,12 @@ describe('escanear-secretos · lo que NO es un secreto', () => {
     expect(escanearTexto('x EAA' + alfa(80)).length).toBe(1)
     expect(escanearTexto('hooks.slack' + '.com/services/T0ABC')).toEqual([])
   })
+  it('el Account SID de Twilio (AC + 32 hex) no dispara en la carpeta de fichas, pero un hex de 32 suelto o un AC más largo sí', () => {
+    const ruta = 'zr-vault/00-meta/credentials/t.md'
+    expect(escanearTexto('| Account SID | `AC' + HEX.slice(0, 32) + '` |', { ruta })).toEqual([])
+    expect(escanearTexto('| x | `' + HEX.slice(0, 32) + '` |', { ruta }).length).toBe(1)
+    expect(escanearTexto('| x | `AC' + HEX.slice(0, 40) + '` |', { ruta }).length).toBe(1)
+  })
   it('esDeMentira reconoce marcadores y ejemplos, no un valor real', () => {
     for (const v of ['XXXXXXXX', 'abc...', 'valor…', 'EXAMPLEKEY', 'fake_key', 'abcdef']) expect(esDeMentira(v)).toBe(true)
     expect(esDeMentira(alfa(40))).toBe(false)
