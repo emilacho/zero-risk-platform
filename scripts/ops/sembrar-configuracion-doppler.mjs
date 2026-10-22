@@ -50,7 +50,7 @@ async function main(argv) {
   const ejecutarYa = argv.includes('--ejecutar')
   const envTxt = fs.readFileSync('C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform/.env.local', 'utf8')
   const E = (k) => (envTxt.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim().replace(/^["']|["']$/g, '')
-  const token = E('VERCEL_TOKEN') || E('VERCEL_API_TOKEN')
+  const token = process.env.VERCEL_TOKEN || E('VERCEL_TOKEN') || E('VERCEL_API_TOKEN')   // con `doppler run --` sale de Doppler (zr-cc); el `.env.local` queda solo de respaldo mientras se migra
   const r = await fetch(`https://api.vercel.com/v9/projects/${PROYECTO_VERCEL}/env?decrypt=true`, { headers: { authorization: 'Bearer ' + token } })
   if (!r.ok) { console.error('no pude leer las variables de Vercel:', r.status); return 2 }
   const variables = (await r.json()).envs ?? []
