@@ -151,3 +151,35 @@ export function planDeArchivo(e: EntradaDeArchivo): PlanDeArchivo {
   }
   return plan
 }
+
+/**
+ * LO REPETIDO RECONFIRMA (22-oct) · una unidad que se vuelve a leer con la MISMA huella solo renovaba «última vez» de su vista: la ficha seguía con su vigencia original, y un precio u horario del sitio
+ * (plazo de 7 días) se vencía aunque el sitio se hubiera releído y dijera lo mismo (medido 22-oct: 20 fichas de precio y horario de Náufrago vencidas el 21-oct y el resumen vivo sin precios).
+ * Releer lo mismo en una fecha MÁS NUEVA que la última confirmación la renueva: `reconfirmado_en` = esa fecha y `vigente_hasta` = esa fecha + el plazo de la ficha. Nunca la acorta, nunca toca una retirada,
+ * y la fecha de la lectura es la de la FILA CRUDA: volver a leer una fila vieja no renueva nada (no se inventa frescura).
+ */
+export interface FichaReconfirmable { id: string; ref: string; plazo: string | null; vigente_hasta: string | null; reconfirmado_en: string | null; observado_en: string | null }
+export interface Reconfirmacion { id: string; reconfirmado_en: string; vigente_hasta: string }
+/** la clave de una ficha del portero sin el sufijo de sede: `portero:<fuente>:<huella16>` */
+export const claveDeRefDelPortero = (ref: string): string => ref.split(':').slice(0, 3).join(':')
+export function planDeReconfirmaciones(repetidas: Unidad[], fichas: FichaReconfirmable[]): Reconfirmacion[] {
+  const porClave = new Map<string, FichaReconfirmable[]>()
+  for (const f of fichas) { if (!f.ref.startsWith('portero:')) continue; const k = claveDeRefDelPortero(f.ref); porClave.set(k, [...(porClave.get(k) ?? []), f]) }
+  const mejor = new Map<string, Reconfirmacion>()
+  for (const u of repetidas) {
+    if (u.fuente === ('metrica' as Unidad['fuente'])) continue
+    const obs = Date.parse(u.observado_en)
+    if (!Number.isFinite(obs)) continue
+    for (const f of porClave.get(`portero:${u.fuente}:${u.huella.slice(0, 16)}`) ?? []) {
+      const dias = diasDe(f.plazo)
+      if (dias === null) continue
+      const ultima = Math.max(Date.parse(f.reconfirmado_en ?? '') || 0, Date.parse(f.observado_en ?? '') || 0)
+      if (obs <= ultima) continue
+      const hasta = obs + dias * DIA
+      if (f.vigente_hasta && hasta <= Date.parse(f.vigente_hasta)) continue
+      const previo = mejor.get(f.id)
+      if (!previo || hasta > Date.parse(previo.vigente_hasta)) mejor.set(f.id, { id: f.id, reconfirmado_en: new Date(obs).toISOString(), vigente_hasta: new Date(hasta).toISOString() })
+    }
+  }
+  return [...mejor.values()]
+}
