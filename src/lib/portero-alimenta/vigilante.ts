@@ -88,6 +88,17 @@ export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: str
     else if (rastro.estado !== 'hecha') r.problemas.push(`el rastro de hoy dice «${String(rastro.estado)}»`)
   }
 
+  // la AMPLIACIÓN fallida no es un problema que pause al cliente, pero tampoco puede pasar en silencio: el 22-oct el Servicio de Apify contestó 500 en las dos llamadas del día (llave caducada en n8n),
+  // la corrida salió «hecha» con 0 gasto y nadie supo que ese día no se raspó nada. Un aviso por día y cliente (sin apagar).
+  const clienteDelCierre = esObjeto(cierre) ? lista(cierre.clientes).find((x) => x.cliente === c.client_id) : undefined
+  const amp = clienteDelCierre && esObjeto(clienteDelCierre.ampliacion) ? clienteDelCierre.ampliacion : null
+  const llamadas = amp && Array.isArray(amp.llamadas) ? (amp.llamadas as unknown[]).filter(esObjeto) : []
+  const fallidas = llamadas.filter((x) => x.hecho === false)
+  if (amp && fallidas.length && (amp.parado || fallidas.length === llamadas.length)) {
+    const quien = fallidas.slice(0, 2).map((x) => `${String(x.funcion ?? x.fuente ?? '?')}: ${x.http ? `http ${String(x.http)}` : 'sin respuesta'}${x.error ? ` «${String(x.error).slice(0, 60)}»` : ''}`).join('; ')
+    r.avisos = [...(r.avisos ?? []), `hoy el Servicio de Apify falló en ${fallidas.length} de ${llamadas.length} llamada(s) (${quien}) y no se raspó lo que se pidió: el resumen sigue con lo ya guardado (¿llave de Apify vencida en n8n?)`]
+  }
+
   const g = opciones.sinGasto ? null : await gastoDeHoy(deps.db, c.client_id, ahora)
   if (g === null) { /* sin condición de gasto */ }
   else if (!g.ok) falla('el gasto del día', g.detalle)
@@ -95,7 +106,7 @@ export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: str
     r.gasto_usd = redondeo(g.gasto.total_usd)
     const u = deps.umbrales ?? UMBRALES_DE_GASTO_POR_OMISION
     if (g.gasto.total_usd > u.apagar_usd) r.problemas.push(`gasto del día US$ ${r.gasto_usd.toFixed(2)} > ${u.apagar_usd.toFixed(2)}`)
-    else if (g.gasto.total_usd > u.aviso_usd) r.avisos = [`el gasto del día va en US$ ${r.gasto_usd.toFixed(2)} (aviso desde ${u.aviso_usd.toFixed(2)}; el portero se apaga solo pasando de ${u.apagar_usd.toFixed(2)})`]
+    else if (g.gasto.total_usd > u.aviso_usd) r.avisos = [...(r.avisos ?? []), `el gasto del día va en US$ ${r.gasto_usd.toFixed(2)} (aviso desde ${u.aviso_usd.toFixed(2)}; el portero se apaga solo pasando de ${u.apagar_usd.toFixed(2)})`]
   }
 
   const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)
@@ -198,7 +209,7 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
   const avisadosHoy = new Set<string>()
   if (porAvisar.length) {
     const texto = lineaDeAvisoDeGasto(porAvisar)
-    const av = deps.avisar ? await deps.avisar(texto, `gasto-del-dia:${porAvisar.map((r) => r.client_id).sort().join("+")}:${dia}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+    const av = deps.avisar ? await deps.avisar(texto, `aviso-del-dia:${porAvisar.map((r) => r.client_id).sort().join("+")}:${dia}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
     body.aviso_de_gasto = { ...av, texto, clientes: porAvisar.map((r) => r.client_id) }
     if (av.ok) for (const r of porAvisar) avisadosHoy.add(r.client_id)
   }
@@ -210,7 +221,7 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
     if (!fila) continue
     const resumen = esObjeto(fila.resumen) ? fila.resumen : {}
     const marcaDeAviso = avisadosHoy.has(r.client_id) || yaAvisado(r.client_id) ? { aviso_de_gasto_dia: dia } : {}
-    const u = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ok: r.problemas.length === 0, problemas: r.problemas, gasto_usd: r.gasto_usd, auditoria: r.auditoria ? { elegidas: r.auditoria.elegidas, verificables: r.auditoria.verificables, errores: r.auditoria.errores, sin_verificar: r.auditoria.sin_verificar, tasa_de_error: r.auditoria.tasa_de_error } : null, ...(r.avisos?.length ? { avisos: r.avisos } : {}), ...marcaDeAviso, revisado_en: ahora.toISOString(), workflow_execution_id: ex, intentos } } }).eq('id', String(fila.id))
+    const u = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ok: r.problemas.length === 0, problemas: r.problemas, gasto_usd: r.gasto_usd, auditoria: r.auditoria ? { elegidas: r.auditoria.elegidas, verificables: r.auditoria.verificables, errores: r.auditoria.errores, sin_verificar: r.auditoria.sin_verificar, tasa_de_error: r.auditoria.tasa_de_error, ...(r.auditoria.de_dias_anteriores ? { de_dias_anteriores: r.auditoria.de_dias_anteriores } : {}) } : null, ...(r.avisos?.length ? { avisos: r.avisos } : {}), ...marcaDeAviso, revisado_en: ahora.toISOString(), workflow_execution_id: ex, intentos } } }).eq('id', String(fila.id))
     if (u.error) erroresDeRastro.push(`rastro ${r.client_id.slice(0, 8)}: ${u.error.message}`)
   }
   if (erroresDeRastro.length) body.errores_de_rastro = erroresDeRastro

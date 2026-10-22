@@ -13,7 +13,7 @@ import { MAX_LLAMADAS_DEL_JUEZ_POR_DIA, TOPE_DE_GASTO_DEL_JUEZ_POR_LLAMADA_USD, 
 import { filtrar, type ContextoDelCliente } from './filtro'
 import { fichaPropiaDeMapas } from './mapas-propia'
 import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlamada } from './juez'
-import { planDeArchivo, type PlanDeArchivo } from './archivar'
+import { planDeArchivo, planDeReconfirmaciones, type FichaReconfirmable, type PlanDeArchivo } from './archivar'
 import { unidadesDeRaspados, type FilaCruda, type Unidad } from './unidades'
 import { correrBrazos, hayBrazoActivo, type BrazosActivos, type ResultadoDeBrazos } from './brazos'
 import { archivarFichasDeBrazos } from './brazos/archivo'
@@ -68,7 +68,7 @@ export interface ResultadoDeAlimentar {
   plan: PlanDeArchivo | null
   decisiones: Array<{ fuente: string; unidad: string; decision: string; razon: string; cita: string | null; decidido_por: string; degradada_por?: string }>
   gasto: { modelo_usd: number; hoy_antes_usd: number; tope_usd: number; supero_el_tope: boolean }
-  escrituras: { fichas: number; retiradas: number; vistas: number; corrida: number }
+  escrituras: { fichas: number; retiradas: number; vistas: number; corrida: number; /** fichas cuya vigencia se renovó porque se releyó lo mismo en una fecha más nueva */ reconfirmadas?: number }
   errores: string[]
   /** lo que hicieron los nuevos brazos (ausente = ninguno encendido) */
   brazos?: ResultadoDeBrazos
@@ -277,6 +277,18 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     const ok = hay ? await w(e.db.from('cerebro_unidades_vistas').update({ ultima_vez: v.ultima_vez, veredicto: v.veredicto }).eq('id', String(hay.id)), 'vista') : await w(e.db.from('cerebro_unidades_vistas').insert({ ...v, ficha_id: v.ficha_id }), 'vista')
     if (ok) r.escrituras.vistas++
   })
+  // lo repetido RECONFIRMA: releer lo mismo en una fecha más nueva renueva la vigencia de su ficha (si no, un precio del sitio se vence a los 7 días aunque el sitio se relea cada día)
+  const repetidasDeLaCorrida = f.descartadas.filter((d) => d.estado === 'repetida').map((d) => d.unidad)
+  if (repetidasDeLaCorrida.length) {
+    const fp = await leerTodas(() => e.db.from('cerebro_fichas').select('id, ref, plazo, vigente_hasta, reconfirmado_en, observado_en').eq('client_id', e.client_id).is('retirada_en', null).like('ref', 'portero:%').order('id', { ascending: true }))
+    if (fp.error) r.errores.push(`reconfirmar: ${fp.error.message}`)
+    else {
+      r.escrituras.reconfirmadas = 0
+      await enTandas(planDeReconfirmaciones(repetidasDeLaCorrida, lista(fp.data) as unknown as FichaReconfirmable[]), ESCRITURAS_A_LA_VEZ, async (x) => {
+        if (await w(e.db.from('cerebro_fichas').update({ reconfirmado_en: x.reconfirmado_en, vigente_hasta: x.vigente_hasta }).eq('id', x.id).eq('client_id', e.client_id), `reconfirmar ${x.id}`)) r.escrituras.reconfirmadas = (r.escrituras.reconfirmadas ?? 0) + 1
+      })
+    }
+  }
   const estado = r.errores.length ? 'con_errores' : 'hecha'
   // la corrida que reemplaza al despertar CIERRA lo que el despertar dejó pendiente (qué pidió y desde cuándo) para que `listo` pueda declarar los huecos
   const previo = corridaDeHoy && esObjeto(corridaDeHoy.resumen) ? (corridaDeHoy.resumen as Fila).despertar : null

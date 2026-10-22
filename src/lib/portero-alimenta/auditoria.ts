@@ -22,6 +22,8 @@ export const MINIMO_ERRORES = 2
 export const UMBRAL_DE_ERROR = 0.4
 /** qué parte de las palabras de la ficha debe estar en el crudo para decir «la cita existe» */
 export const PARTE_DE_LA_CITA = 0.6
+/** un día sin raspado nuevo (todo «repetido»: las fichas nacidas hoy las arma el sistema y no guardan crudo) dejaba la muestra ENTERA «sin verificar» (22-oct: 5 de 5, tasa nula): se completa con fichas con crudo de los últimos días */
+export const DIAS_ATRAS_PARA_COMPLETAR_LA_MUESTRA = 7
 
 export interface FichaAuditable { id: string; client_id: string; contenido: string; fecha_fuente: string | null; observado_en: string | null; fuente_url: string | null; provenance_tag: unknown }
 export type VeredictoDeAuditoria = 'ok' | 'error' | 'sin_verificar'
@@ -35,6 +37,8 @@ export interface ResultadoDeAuditoria {
   tasa_de_error: number | null
   problema: string | null
   fichas: ResultadoDeFicha[]
+  /** cuántas de las elegidas nacieron en días anteriores (la muestra se completó porque hoy no hubo fichas con crudo) */
+  de_dias_anteriores?: number
 }
 
 const textoPlano = (x: unknown): string => {
@@ -94,7 +98,7 @@ export function juzgarAuditoria(dia: string, fichas: ResultadoDeFicha[]): Result
   const errores = verificables.filter((f) => f.veredicto === 'error').length
   const tasa = verificables.length ? errores / verificables.length : null
   const problema = tasa !== null && verificables.length >= MINIMO_VERIFICABLES && errores >= MINIMO_ERRORES && tasa >= UMBRAL_DE_ERROR
-    ? `auditoría de calidad: ${errores} de ${verificables.length} fichas de hoy no verifican contra su fuente (${Math.round(tasa * 100)} %)`
+    ? `auditoría de calidad: ${errores} de ${verificables.length} fichas de la muestra no verifican contra su fuente (${Math.round(tasa * 100)} %)`
     : null
   return { dia, elegidas: fichas.length, verificables: verificables.length, errores, sin_verificar: fichas.length - verificables.length, tasa_de_error: tasa === null ? null : Math.round(tasa * 100) / 100, problema, fichas }
 }
@@ -113,7 +117,17 @@ export async function auditarCliente(db: Db, clientId: string, ahora: Date, n = 
   const conCrudo = vivas.filter((f) => idCrudoDe(f) !== null)
   const sinCrudo = vivas.filter((f) => idCrudoDe(f) === null)
   const delCrudo = elegirMuestra(conCrudo, dia, n)
-  const muestra = [...delCrudo, ...elegirMuestra(sinCrudo, dia, n - delCrudo.length)]
+  // si hoy no nació ninguna (o casi ninguna) con crudo, se completa con las de los últimos días que SÍ lo tienen: la auditoría no queda ciega un día tranquilo
+  let anteriores: FichaAuditable[] = []
+  if (delCrudo.length < n) {
+    const desde = new Date(dia0.getTime() - DIAS_ATRAS_PARA_COMPLETAR_LA_MUESTRA * 86_400_000).toISOString()
+    const a = await db.from('cerebro_fichas').select('id, client_id, contenido, fecha_fuente, observado_en, fuente_url, provenance_tag, descartada, retirada_en').eq('client_id', clientId).gte('creado_en', desde).limit(1000)
+    if (a.error) return { ok: false, detalle: `cerebro_fichas (días anteriores): ${String(a.error.message).slice(0, 120)}` }
+    const deHoy = new Set(vivas.map((f) => f.id))
+    const previas = lista(a.data).filter((f) => !deHoy.has(String(f.id)) && !f.descartada && !f.retirada_en && typeof f.contenido === 'string' && esObjeto(f.provenance_tag)) as unknown as FichaAuditable[]
+    anteriores = elegirMuestra(previas.filter((f) => idCrudoDe(f) !== null), dia, n - delCrudo.length)
+  }
+  const muestra = [...delCrudo, ...anteriores, ...elegirMuestra(sinCrudo, dia, n - delCrudo.length - anteriores.length)]
   if (!muestra.length) return { ok: true, resultado: juzgarAuditoria(dia, []) }
   const ids = muestra.map(idCrudoDe)
   const pedir = [...new Set(ids.filter((x): x is string => !!x))]
@@ -124,7 +138,7 @@ export async function auditarCliente(db: Db, clientId: string, ahora: Date, n = 
     for (const r of lista(c.data)) porId.set(String(r.id), r)
   }
   const fichas = muestra.map((f, i) => verificarFicha(f, ids[i] ? (porId.get(ids[i]!) as { client_id?: unknown; respuesta?: unknown } | undefined) ?? null : null))
-  return { ok: true, resultado: juzgarAuditoria(dia, fichas) }
+  return { ok: true, resultado: { ...juzgarAuditoria(dia, fichas), ...(anteriores.length ? { de_dias_anteriores: anteriores.length } : {}) } }
 }
 
 /** las citas `[ficha:xxxxxxxx · fecha]` de un texto de resumen (puro) */
