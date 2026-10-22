@@ -4,9 +4,12 @@
 //
 // Uso:
 //   node scripts/ops/generar-secretos-grupo-c.mjs --seco                       (no necesita Doppler: muestra nombres y largos, nada más)
-//   node scripts/ops/generar-secretos-grupo-c.mjs --ejecutar --config prd      (escribe las que FALTAN en Doppler; no pisa las que ya existen)
+//   node scripts/ops/generar-secretos-grupo-c.mjs --ensayo --config dev        (PRIMERA corrida real: escribe una variable de prueba por la entrada estándar, comprueba el largo y la borra; no toca el grupo C)
+//   node scripts/ops/generar-secretos-grupo-c.mjs --ejecutar --config prd --rotar-todas   (PRIMERA corrida del grupo C: reemplaza las 14 aunque ya existan; Railway entregó todas sus variables a un tercero)
+//   node scripts/ops/generar-secretos-grupo-c.mjs --ejecutar --config prd      (escribe las que FALTAN; no pisa las que ya existen)
 //   node scripts/ops/generar-secretos-grupo-c.mjs --ejecutar --config prd --rotar INTERNAL_API_KEY,CRON_SECRET   (reemplaza SOLO esas)
-//   opciones: --proyecto zero-risk (por omisión) · --config dev|prd (una por vez; cada entorno lleva valores DISTINTOS)
+//   opciones: --proyecto zero-risk (por omisión) · --config prd. `dev` NO lleva valores propios del grupo C (referencia a `prd`): el guion se niega a escribirlas en `dev` salvo --permitir-dev.
+//   NUNCA se sube a Doppler el `.env.local` viejo: sus valores están comprometidos y el guion «conserva» lo que ya existe.
 //
 // Cómo se mantiene en secreto: el valor viaja por la ENTRADA ESTÁNDAR del proceso `doppler secrets set NOMBRE --silent` (no por argumentos: no aparece en la lista de procesos
 // ni en el historial del shell); el guion solo imprime nombre, largo y resultado. La lectura de comprobación mide el largo dentro del proceso y descarta el texto.
@@ -37,9 +40,9 @@ export function generarValor(bytes = 32, fuente = randomBytes) {
 }
 
 /** qué hay que hacer, dado lo que YA existe en esa configuración (solo nombres) y lo que se pidió rotar */
-export function planear(existentes, rotar = []) {
+export function planear(existentes, rotar = [], rotarTodas = false) {
   const ya = new Set(existentes)
-  const forzar = new Set(rotar)
+  const forzar = new Set(rotarTodas ? SECRETOS_GRUPO_C.map((s) => s.nombre) : rotar)
   const desconocidas = [...forzar].filter((n) => !SECRETOS_GRUPO_C.some((s) => s.nombre === n))
   const acciones = SECRETOS_GRUPO_C.map((s) => ({ ...s, accion: forzar.has(s.nombre) ? (ya.has(s.nombre) ? 'rotar' : 'crear') : ya.has(s.nombre) ? 'conservar' : 'crear' }))
   return { acciones, desconocidas }
@@ -58,12 +61,29 @@ export function nombresExistentes(proyecto, config, run = spawnSync) {
   try { return { ok: true, nombres: Object.keys(JSON.parse(r.salida)) } } catch { return { ok: false, error: 'respuesta ilegible', nombres: [] } }
 }
 
-export function ejecutar({ proyecto, config, rotar = [], run = spawnSync, fuente = randomBytes, log = console.log }) {
+/** PRIMERA corrida real: una variable de prueba por la entrada estándar con --silent, comprobación de largo y borrado. No toca el grupo C. */
+export const NOMBRE_DE_ENSAYO = 'ZZ_ENSAYO_CC2'
+export function ensayoDeEscritura({ proyecto, config, run = spawnSync, fuente = randomBytes, log = console.log }) {
+  const v = ejecutarDoppler(['--version'], { run })
+  if (!v.ok) { log('✖ no encuentro la CLI de Doppler.'); return { ok: false } }
+  const valor = generarValor(32, fuente)
+  const w = ejecutarDoppler(['secrets', 'set', NOMBRE_DE_ENSAYO, '--silent', '-p', proyecto, '-c', config], { entrada: valor, run })
+  if (!w.ok) { log(`✖ ensayo: no se pudo escribir (${w.error})`); return { ok: false } }
+  const g = ejecutarDoppler(['secrets', 'get', NOMBRE_DE_ENSAYO, '--plain', '-p', proyecto, '-c', config], { run })
+  const largo = g.ok ? g.salida.replace(/\r?\n$/, '').length : -1
+  const d = ejecutarDoppler(['secrets', 'delete', NOMBRE_DE_ENSAYO, '--yes', '-p', proyecto, '-c', config], { run })
+  const ok = largo === valor.length && d.ok
+  log(ok ? `✔ ensayo en ${proyecto}/${config}: la entrada estándar con --silent funciona (largo ${valor.length}) y la variable de prueba se borró` : `✖ ensayo: largo ${largo} ≠ ${valor.length} o no se pudo borrar (${d.error ?? 'sin error'})`)
+  return { ok, borrada: d.ok }
+}
+
+export function ejecutar({ proyecto, config, rotar = [], rotarTodas = false, permitirDev = false, run = spawnSync, fuente = randomBytes, log = console.log }) {
+  if (config === 'dev' && !permitirDev) { log('✖ `dev` no lleva valores propios del grupo C (referencia a `prd`). Si de verdad los quieres en `dev`, usa --permitir-dev.'); return { ok: false, escritos: [], fallidos: [] } }
   const v = ejecutarDoppler(['--version'], { run })
   if (!v.ok) { log('✖ no encuentro la CLI de Doppler (`doppler --version` falló). Instálala e inicia sesión (`doppler login`).'); return { ok: false, escritos: [], fallidos: [] } }
   const ex = nombresExistentes(proyecto, config, run)
   if (!ex.ok) { log(`✖ no pude leer los nombres de ${proyecto}/${config}: ${ex.error}. ¿Existe el proyecto y la sesión tiene acceso?`); return { ok: false, escritos: [], fallidos: [] } }
-  const { acciones, desconocidas } = planear(ex.nombres, rotar)
+  const { acciones, desconocidas } = planear(ex.nombres, rotar, rotarTodas)
   if (desconocidas.length) { log(`✖ --rotar nombra variables que no son del grupo C: ${desconocidas.join(', ')}`); return { ok: false, escritos: [], fallidos: [] } }
   const escritos = [], fallidos = []
   for (const a of acciones) {
@@ -91,8 +111,9 @@ function main(argv) {
     for (const s of SECRETOS_GRUPO_C) console.log(`  ${s.nombre} · ${Math.ceil((s.bytes * 4) / 3)} caracteres · ${s.uso}`)
     return 0
   }
-  if (!argv.includes('--ejecutar') || !['dev', 'prd'].includes(config)) { console.log('Uso: --seco | --ejecutar --config dev|prd [--proyecto zero-risk] [--rotar NOMBRE,NOMBRE]'); return 2 }
-  return ejecutar({ proyecto, config, rotar }).ok ? 0 : 1
+  if (argv.includes('--ensayo') && ['dev', 'prd'].includes(config)) return ensayoDeEscritura({ proyecto, config }).ok ? 0 : 1
+  if (!argv.includes('--ejecutar') || !['dev', 'prd'].includes(config)) { console.log('Uso: --seco | --ensayo --config dev | --ejecutar --config prd [--rotar-todas | --rotar NOMBRE,NOMBRE] [--proyecto zero-risk]'); return 2 }
+  return ejecutar({ proyecto, config, rotar, rotarTodas: argv.includes('--rotar-todas'), permitirDev: argv.includes('--permitir-dev') }).ok ? 0 : 1
 }
 
 if (import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}` || process.argv[1]?.endsWith('generar-secretos-grupo-c.mjs')) process.exit(main(process.argv.slice(2)))

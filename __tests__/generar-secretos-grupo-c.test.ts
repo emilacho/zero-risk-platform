@@ -4,10 +4,10 @@
  * Doppler se simula con un `run` falso que anota cada llamada (argumentos y entrada estándar).
  */
 import { describe, expect, it } from 'vitest'
-import { SECRETOS_GRUPO_C, ejecutar, generarValor, planear } from '../scripts/ops/generar-secretos-grupo-c.mjs'
+import { NOMBRE_DE_ENSAYO, SECRETOS_GRUPO_C, ejecutar, ensayoDeEscritura, generarValor, planear } from '../scripts/ops/generar-secretos-grupo-c.mjs'
 
 type Llamada = { args: string[]; input?: string }
-function dopplerFalso(existentes: string[], o: { fallaEn?: string; largoMal?: string; sinCli?: boolean } = {}) {
+function dopplerFalso(existentes: string[], o: { fallaEn?: string; largoMal?: string; sinCli?: boolean; noBorra?: boolean } = {}) {
   const llamadas: Llamada[] = []
   const guardado: Record<string, string> = {}
   const run = (_cmd: string, args: string[], opts: { input?: string }) => {
@@ -19,6 +19,7 @@ function dopplerFalso(existentes: string[], o: { fallaEn?: string; largoMal?: st
       guardado[args[2]] = opts.input ?? ''
       return { status: 0, stdout: '', stderr: '' }
     }
+    if (args[0] === 'secrets' && args[1] === 'delete') { if (o.noBorra) return { status: 1, stdout: '', stderr: 'no se pudo borrar' }; delete guardado[args[2]]; return { status: 0, stdout: '', stderr: '' } }
     if (args[0] === 'secrets' && args[1] === 'get') return { status: 0, stdout: (args[2] === o.largoMal ? 'x' : guardado[args[2]] ?? '') + '\n', stderr: '' }
     return { status: 1, stdout: '', stderr: 'comando desconocido' }
   }
@@ -84,7 +85,7 @@ describe('ejecutar · lo que NO se filtra', () => {
   })
   it('dev y prd reciben valores DISTINTOS', () => {
     const a = dopplerFalso([]), b = dopplerFalso([])
-    ejecutar({ proyecto: 'zero-risk', config: 'dev', run: a.run as never, log: () => {} }); ejecutar({ proyecto: 'zero-risk', config: 'prd', run: b.run as never, log: () => {} })
+    ejecutar({ proyecto: 'zero-risk', config: 'dev', permitirDev: true, run: a.run as never, log: () => {} }); ejecutar({ proyecto: 'zero-risk', config: 'prd', run: b.run as never, log: () => {} })
     expect(a.guardado.INTERNAL_API_KEY).not.toBe(b.guardado.INTERNAL_API_KEY)
     expect(Object.keys(a.guardado)).toEqual(Object.keys(b.guardado))
   })
@@ -123,5 +124,52 @@ describe('ejecutar · fallos', () => {
     const d = dopplerFalso([])
     const r = ejecutar({ proyecto: 'p', config: 'prd', rotar: ['OPENAI_API_KEY'] as never, run: d.run as never, log: () => {} })
     expect(r.ok).toBe(false); expect(d.llamadas.some((l) => l.args[1] === 'set')).toBe(false)
+  })
+})
+
+describe('primera corrida: lo que pidió CC#3', () => {
+  it('--rotar-todas reemplaza las 14 aunque YA existan en prd (el .env.local viejo subido por error no se «conserva»)', () => {
+    const d = dopplerFalso(SECRETOS_GRUPO_C.map((s: { nombre: string }) => s.nombre))
+    const r = ejecutar({ proyecto: 'zero-risk', config: 'prd', rotarTodas: true, run: d.run as never, log: () => {} })
+    expect(r.escritos).toHaveLength(SECRETOS_GRUPO_C.length); expect(r.ok).toBe(true)
+    expect(Object.keys(d.guardado).sort()).toEqual(SECRETOS_GRUPO_C.map((s: { nombre: string }) => s.nombre).sort())
+  })
+  it('sin --rotar-todas, esas mismas 14 preexistentes se conservan (control)', () => {
+    const d = dopplerFalso(SECRETOS_GRUPO_C.map((s: { nombre: string }) => s.nombre))
+    expect(ejecutar({ proyecto: 'zero-risk', config: 'prd', run: d.run as never, log: () => {} }).escritos).toHaveLength(0)
+  })
+  it('planear con rotarTodas marca «rotar» las existentes y «crear» las que faltan', () => {
+    const p = planear(['CRON_SECRET'], [], true)
+    const por = Object.fromEntries(p.acciones.map((a: { nombre: string; accion: string }) => [a.nombre, a.accion]))
+    expect(por.CRON_SECRET).toBe('rotar'); expect(por.INTERNAL_API_KEY).toBe('crear')
+  })
+  it('`dev` NO recibe el grupo C (referencia a prd) salvo --permitir-dev', () => {
+    const d = dopplerFalso([]); const salida: string[] = []
+    const r = ejecutar({ proyecto: 'zero-risk', config: 'dev', run: d.run as never, log: (s: string) => salida.push(s) })
+    expect(r.ok).toBe(false); expect(d.llamadas.some((l) => l.args[1] === 'set')).toBe(false); expect(salida.join(' ')).toContain('--permitir-dev')
+    expect(ejecutar({ proyecto: 'zero-risk', config: 'dev', permitirDev: true, run: dopplerFalso([]).run as never, log: () => {} }).ok).toBe(true)
+  })
+})
+
+describe('ensayoDeEscritura (la primera corrida real, en dev)', () => {
+  it('escribe una variable de prueba por la entrada estándar con --silent, comprueba el largo y la BORRA; no toca el grupo C', () => {
+    const d = dopplerFalso([]); const salida: string[] = []
+    const r = ensayoDeEscritura({ proyecto: 'zero-risk', config: 'dev', run: d.run as never, log: (s: string) => salida.push(s) })
+    expect(r).toMatchObject({ ok: true, borrada: true })
+    const set = d.llamadas.find((l) => l.args[1] === 'set')!
+    expect(set.args[2]).toBe(NOMBRE_DE_ENSAYO); expect(set.args).toContain('--silent'); expect(set.args.join(' ')).not.toContain(set.input!)
+    expect(d.llamadas.some((l) => l.args[1] === 'delete' && l.args.includes('--yes'))).toBe(true)
+    expect(Object.keys(d.guardado)).toEqual([])                       // nada quedó guardado
+    expect(d.llamadas.filter((l) => l.args[1] === 'set')).toHaveLength(1)
+    expect(salida.join(' ')).not.toContain(set.input!)                // el valor no se imprimió
+  })
+  it('si el largo no coincide o no se puede borrar, falla (y lo dice)', () => {
+    expect(ensayoDeEscritura({ proyecto: 'p', config: 'dev', run: dopplerFalso([], { largoMal: NOMBRE_DE_ENSAYO }).run as never, log: () => {} }).ok).toBe(false)
+    expect(ensayoDeEscritura({ proyecto: 'p', config: 'dev', run: dopplerFalso([], { noBorra: true }).run as never, log: () => {} }).ok).toBe(false)
+  })
+  it('sin la CLI, no escribe nada', () => {
+    const d = dopplerFalso([], { sinCli: true })
+    expect(ensayoDeEscritura({ proyecto: 'p', config: 'dev', run: d.run as never, log: () => {} }).ok).toBe(false)
+    expect(d.llamadas.some((l) => l.args[1] === 'set')).toBe(false)
   })
 })
