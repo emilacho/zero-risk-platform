@@ -153,6 +153,18 @@ describe('casos que la mutación pidió', () => {
     const au = await auditarCliente(crearBaseFalsa(mundo(C, fs, []) as never).db as never, C, AHORA)
     expect(au.ok && au.resultado).toMatchObject({ elegidas: 5, verificables: 0, sin_verificar: 5 })
   })
+  it.each(RUBROS)('un día tranquilo (hoy solo nacieron fichas armadas, sin crudo) la muestra se completa con fichas con crudo de los últimos 7 días: no queda ciega ($rubro)', async ({ cliente, texto }) => {
+    const hoy = Array.from({ length: 3 }, (_, i) => viva(ficha('a' + i, cliente, 'armada ' + i, { provenance_tag: { metrica: { nombre: 'x' } } })))
+    const previas = Array.from({ length: 4 }, (_, i) => viva(ficha('p' + i, cliente, texto + ' ' + i, { creado_en: '2026-10-12T12:31:00Z' })))
+    const viejas = Array.from({ length: 3 }, (_, i) => viva(ficha('v' + i, cliente, texto + ' viejo ' + i, { creado_en: '2026-10-01T12:31:00Z' })))
+    const ajenas = [viva(ficha('x0', '99999999-9999-4999-8999-999999999999', texto, { creado_en: '2026-10-12T12:31:00Z' }))]
+    const crudos = [...previas, ...viejas].map((f) => crudo(String(f.id), cliente, String(f.contenido)))
+    const au = await auditarCliente(crearBaseFalsa(mundo(cliente, [...hoy, ...previas, ...viejas, ...ajenas], crudos) as never).db as never, cliente, AHORA)
+    expect(au.ok && au.resultado).toMatchObject({ elegidas: 5, verificables: 4, errores: 0, sin_verificar: 1, de_dias_anteriores: 4 })
+    const ids = au.ok ? au.resultado.fichas.map((x) => x.ficha_id) : []
+    expect(ids.filter((i) => i.startsWith('v')).length).toBe(0) // las de hace más de 7 días no entran
+    expect(ids.filter((i) => i.startsWith('x')).length).toBe(0) // ni las de otro cliente
+  })
   it('si la lectura de la auditoría falla, el vigilante lo DICE (no es silencio)', async () => {
     const C = RUBROS[0].cliente
     const fs = [viva(ficha('f0', C, RUBROS[0].texto))]
