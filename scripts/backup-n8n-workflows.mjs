@@ -53,21 +53,29 @@ function checkJwtExpiry(jwt) {
 }
 
 async function fetchWorkflows() {
-  const url = `${N8N_BASE_URL}/api/v1/workflows`
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      "X-N8N-API-KEY": N8N_API_KEY,
-      "Accept": "application/json",
-    },
-    signal: AbortSignal.timeout(30_000),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => "")
-    throw new Error(`n8n list workflows HTTP ${res.status} · ${body.slice(0, 200)}`)
+  // n8n pagina la lista (100 por vez): se sigue nextCursor hasta el final, si no el respaldo sale incompleto
+  const all = []
+  let cursor = ""
+  for (let page = 0; page < 50; page++) {
+    const url = `${N8N_BASE_URL}/api/v1/workflows?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-N8N-API-KEY": N8N_API_KEY,
+        "Accept": "application/json",
+      },
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => "")
+      throw new Error(`n8n list workflows HTTP ${res.status} · ${body.slice(0, 200)}`)
+    }
+    const data = await res.json()
+    all.push(...(data.data ?? []))
+    cursor = data.nextCursor
+    if (!cursor) break
   }
-  const data = await res.json()
-  return data.data ?? []
+  return all
 }
 
 async function fetchWorkflowDetail(id) {
