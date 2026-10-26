@@ -327,7 +327,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SLACK_WEBHOOK_URL_EQUIPO }}",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ text: ($json.guardado ? ':sparkles: *Manual con propuesta del agente guardado* — ' : ':warning: *Propuesta del agente: no se guardó nada* — ') + ($json.guardado ? 'versión ' + $json.version_nueva + ' (sobre la ' + $json.version_base + ')' : ($json.motivo || '')) + '\\n• cliente `' + $json.client_id + '`\\n• campos propuestos: ' + (($json.campos_aplicados || []).join(', ') || 'ninguno') + '\\n• rechazados/sin leer: ' + (($json.rechazadas || []).concat($json.sin_leer || []).map(function (r) { return r.campo + ' → ' + r.motivo; }).join(' · ') || 'ninguno') }) }}",
