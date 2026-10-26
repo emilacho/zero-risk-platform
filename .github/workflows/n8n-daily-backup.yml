@@ -7,6 +7,10 @@ on:
   workflow_dispatch:
     # Manual trigger via gh CLI
 
+# El respaldo vive SOLO en el bucket privado n8n-backups de Supabase Storage. NO se empuja a git: el repo es publico y los flujos pueden traer llaves.
+permissions:
+  contents: read
+
 jobs:
   backup:
     runs-on: ubuntu-latest
@@ -40,23 +44,10 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/backup-n8n-workflows.mjs
 
-      - name: Commit snapshot if changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          DATE=$(date -u +%Y-%m-%d)
-          git add "n8n-workflows/live-snapshots/${DATE}/" || true
-          if ! git diff --staged --quiet; then
-            git commit -m "chore(backup): n8n daily snapshot ${DATE}"
-            git push origin main
-          else
-            echo "No changes to commit"
-          fi
-
       - name: Slack alert on failure
         if: failure()
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_EQUIPO }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           if [ -n "$SLACK_WEBHOOK_URL" ]; then
             curl -X POST "$SLACK_WEBHOOK_URL" \
