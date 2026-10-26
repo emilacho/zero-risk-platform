@@ -30,14 +30,17 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { Client } from 'pg'
-import { gzipSync } from 'node:zlib'
-import { writeFileSync, readFileSync, unlinkSync } from 'node:fs'
+import { createGzip } from 'node:zlib'
+import { createWriteStream, readFileSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { volcarTodo } from '@/lib/db-backup/volcado'
 
 export const runtime = 'nodejs'
 export const maxDuration = 290
+// La base vive en eu-west-1 (Irlanda): la función corre en Dublín para que cada ida y vuelta del volcado cueste milisegundos, no ~80 ms desde EE. UU.
+export const preferredRegion = 'dub1'
 
 const BUCKET_NAME = 'db-backups'
 
@@ -70,18 +73,6 @@ function isoStamp(): string {
     .replace(/:/g, '-')
 }
 
-function sqlQuote(value: unknown): string {
-  if (value === null || value === undefined) return 'NULL'
-  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'NULL'
-  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
-  if (value instanceof Date) return `'${value.toISOString()}'`
-  if (Buffer.isBuffer(value)) return `'\\x${value.toString('hex')}'`
-  if (typeof value === 'object') {
-    return `'${JSON.stringify(value).replace(/'/g, "''")}'::jsonb`
-  }
-  return `'${String(value).replace(/'/g, "''")}'`
-}
-
 interface TableInfo {
   schema: string
   name: string
@@ -99,34 +90,6 @@ async function listTables(pg: Client): Promise<TableInfo[]> {
   return result.rows
     .filter((r) => !EXCLUDED_SCHEMAS.has(r.table_schema))
     .map((r) => ({ schema: r.table_schema, name: r.table_name }))
-}
-
-async function dumpTable(pg: Client, table: TableInfo): Promise<{ sql: string; rowCount: number }> {
-  const fq = `"${table.schema}"."${table.name}"`
-  const colInfo = await pg.query<{ column_name: string }>(
-    `SELECT column_name
-     FROM information_schema.columns
-     WHERE table_schema = $1 AND table_name = $2
-     ORDER BY ordinal_position`,
-    [table.schema, table.name],
-  )
-  const cols = colInfo.rows.map((r) => r.column_name)
-  if (!cols.length) {
-    return { sql: `-- skipped ${fq} (no columns visible)\n\n`, rowCount: 0 }
-  }
-
-  const rows = await pg.query(`SELECT * FROM ${fq}`)
-  const colList = cols.map((c) => `"${c}"`).join(', ')
-
-  const lines: string[] = [`-- ${fq} · ${rows.rows.length} rows`]
-  if (!rows.rows.length) {
-    return { sql: lines.join('\n') + '\n\n', rowCount: 0 }
-  }
-  for (const row of rows.rows) {
-    const values = cols.map((c) => sqlQuote((row as Record<string, unknown>)[c])).join(', ')
-    lines.push(`INSERT INTO ${fq} (${colList}) VALUES (${values});`)
-  }
-  return { sql: lines.join('\n') + '\n\n', rowCount: rows.rows.length }
 }
 
 export async function POST(request: Request) {
@@ -167,43 +130,33 @@ export async function POST(request: Request) {
 
     const tables = await listTables(pg)
 
-    const headerLines = [
-      `-- Zero Risk · weekly DB backup`,
-      `-- Generated: ${new Date().toISOString()}`,
-      `-- Tables: ${tables.length}`,
-      `-- Schema DDL (CREATE TABLE / RLS / functions) lives in supabase/migrations/`,
-      ``,
-      `SET statement_timeout = 0;`,
-      `SET client_encoding = 'UTF8';`,
-      `SET standard_conforming_strings = on;`,
-      `SET search_path = public;`,
-      ``,
-      ``,
-    ]
-
-    const tableDumps: string[] = []
-    let totalRows = 0
-    for (const t of tables) {
-      try {
-        const { sql, rowCount } = await dumpTable(pg, t)
-        tableDumps.push(sql)
-        totalRows += rowCount
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        tableDumps.push(`-- ERROR dumping "${t.schema}"."${t.name}": ${msg}\n\n`)
-        Sentry.captureMessage(`db-backup: dump failed for ${t.schema}.${t.name}`, {
-          level: 'warning',
-          tags: { category: 'db_backup' },
-          extra: { error: msg },
-        })
-      }
-    }
-
-    const sqlText = headerLines.join('\n') + tableDumps.join('')
-    const gz = gzipSync(Buffer.from(sqlText, 'utf-8'), { level: 9 })
-    writeFileSync(tmpPath, gz)
+    // STREAMING: cada lote de filas pasa por gzip y baja a /tmp en cuanto está listo. En memoria vive un lote,
+    // no los ~236 MB de la base (antes: string gigante + Buffer + gzipSync → la función moría por memoria).
+    const gzip = createGzip({ level: 6 })
+    const salida = createWriteStream(tmpPath)
     tmpWritten = true
-    const sizeBytes = gz.byteLength
+    let falla: Error | null = null
+    const terminado = new Promise<void>((resolve, reject) => {
+      salida.on('finish', () => resolve())
+      salida.on('error', (e) => { falla = e; reject(e) })
+      gzip.on('error', (e) => { falla = e; reject(e) })
+    })
+    terminado.catch(() => { /* el error real sale por escribir() o por el await de abajo */ })
+    gzip.pipe(salida)
+    const escribir = (texto: string) =>
+      new Promise<void>((resolve, reject) => {
+        if (falla) return reject(falla)
+        if (gzip.write(texto, 'utf8')) return resolve()
+        const seguir = () => { gzip.off('error', fallo); resolve() }
+        const fallo = (e: Error) => { gzip.off('drain', seguir); reject(e) }
+        gzip.once('drain', seguir)
+        gzip.once('error', fallo)
+      })
+    const volcado = await volcarTodo(pg as never, tables, escribir)
+    gzip.end()
+    await terminado
+    const totalRows = volcado.filas
+    const sizeBytes = statSync(tmpPath).size
 
     const supabase = getSupabaseAdmin()
     const { error: uploadError } = await supabase.storage
@@ -217,8 +170,17 @@ export async function POST(request: Request) {
       throw new Error(`Storage upload failed: ${uploadError.message}`)
     }
 
+    const incompleto = volcado.tablas_con_error.length > 0
+    if (incompleto) {
+      Sentry.captureMessage('db-backup: respaldo INCOMPLETO', {
+        level: 'error',
+        tags: { category: 'db_backup' },
+        extra: { tablas_con_error: volcado.tablas_con_error.slice(0, 20) },
+      })
+    }
     return NextResponse.json({
-      success: true,
+      success: !incompleto,
+      ...(incompleto ? { partial: true, tables_failed: volcado.tablas_con_error } : {}),
       filename,
       size_bytes: sizeBytes,
       uploaded_at: new Date().toISOString(),
