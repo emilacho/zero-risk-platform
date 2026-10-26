@@ -117,7 +117,7 @@ export function estructura(nombre: string, antes: Json, despues: Json, o: { desd
       expect(urls.length).toBe(3)
       for (const u of urls) expect(u).toMatch(/\/api\/jefatura\/revisiones|\/zero-risk\/jefatura-turno/)
       // la continuación (solo el plan) además lee y escribe client_historical_outputs: ninguna otra tabla, ninguna otra ruta
-      for (const n of (despues.nodes as Json[]).filter((x) => (o.nodosNuevosExtra ?? []).includes(x.name) && x.parameters.url)) expect(String(n.parameters.url)).toMatch(/\/api\/jefatura\/revisiones|\/rest\/v1\/client_historical_outputs|SLACK_WEBHOOK_URL_EQUIPO/)
+      for (const n of (despues.nodes as Json[]).filter((x) => (o.nodosNuevosExtra ?? []).includes(x.name) && x.parameters.url)) expect(String(n.parameters.url)).toMatch(/\/api\/jefatura\/revisiones|\/rest\/v1\/client_historical_outputs|SLACK_WEBHOOK_URL/)
     })
   })
 }

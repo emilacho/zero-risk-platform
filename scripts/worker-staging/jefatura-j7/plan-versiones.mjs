@@ -81,7 +81,7 @@ export function cadenaDeVersiones({ jsDeLaVuelta, origen }) {
   // R4 · rama lateral que cuelga de «Plan vigente»: la marca «revisión incompleta» (firma A); sin marca que poner no devuelve ítems y termina
   nodo(code(P.marcaArmar, conCfg(leerJs('plan-armar-marca.js'), cfg), pos(19, 3)))
   nodo(nodoHttp(P.marcaPatch, 'PATCH', `={{ ${SUPABASE} + '/rest/v1/client_historical_outputs?id=eq.' + $json.id }}`, '={{ JSON.stringify($json.cuerpo) }}', [...SB, { name: 'Prefer', value: 'return=representation' }], pos(20, 3)))
-  nodo({ parameters: { method: 'POST', url: '={{ $env.SLACK_WEBHOOK_URL_EQUIPO }}', sendBody: true, specifyBody: 'json', jsonBody: `={{ JSON.stringify({ text: $('${P.marcaArmar}').first().json.texto }) }}`, options: { timeout: 15000, response: { response: { neverError: true } } } }, name: P.marcaAvisar, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: pos(21, 3), onError: 'continueRegularOutput' })
+  nodo({ parameters: { method: 'POST', url: '={{ $env.SLACK_WEBHOOK_URL }}', sendBody: true, specifyBody: 'json', jsonBody: `={{ JSON.stringify({ text: $('${P.marcaArmar}').first().json.texto }) }}`, options: { timeout: 15000, response: { response: { neverError: true } } } }, name: P.marcaAvisar, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: pos(21, 3), onError: 'continueRegularOutput' })
   enlace(P.vigente, P.marcaArmar); enlace(P.marcaArmar, P.marcaPatch); enlace(P.marcaPatch, P.marcaAvisar)
 
   enlace(P.hay, P.evaluar, 0); enlace(P.hay, P.vigente, 1)
