@@ -68,7 +68,7 @@ export interface PedidoNormalizado {
   workflow_id: string
   workflow_execution_id: string
 }
-export type EstadoDelHueco = 'ya_esta' | 'traido_y_archivado' | 'en_cadena' | 'no_resuelto' | 'tope' | 'seco'
+export type EstadoDelHueco = 'ya_esta' | 'traido_y_archivado' | 'en_cadena' | 'cercano' | 'no_resuelto' | 'tope' | 'seco'
 export interface ResultadoDeHueco {
   hueco: Hueco
   estado: EstadoDelHueco
@@ -85,6 +85,12 @@ export interface ResultadoDeHueco {
   /** pedido de FOTOS (27-oct): los `foto_id` etiquetados que responden, con su origen; `fotos_resumen` dice cuántas hay por origen y cuántas faltan por etiquetar */
   foto_ids?: string[]
   fotos?: Array<{ foto_id: string; origen: OrigenDeFoto; que_muestra: string | null; producto_visto: string[]; url: string | null }>
+  /** LO MÁS CERCANO (27-oct · criterio de Emilio): cuando no hay lo pedido pero sí algo parecido, se entrega eso, con su origen y en qué se parece y en qué no. Nunca «sin dato» seco si hay algo cercano */
+  cercano?: { fichas?: string[]; foto_ids?: string[]; se_parece: string; no_se_parece: string }
+  /** de verdad no hay nada usable (rara): la oficina genera con IA; va con lo intentado y queda en la lista de NO RESUELTOS */
+  nada_usable?: boolean
+  /** el hueco no se intentó (o se cortó) por el tope de gasto del pedido: explícito para que la oficina sepa que no fue «no hay» */
+  tope?: boolean
   fotos_resumen?: { por_origen: Record<string, { total: number; etiquetadas: number }>; sin_etiquetar: number; etiquetadas_ahora: number }
   costo_usd: number
 }
@@ -133,6 +139,16 @@ export const huellaDelPedido = (p: Pick<PedidoNormalizado, 'client_id' | 'sede_c
 export interface FichaCandidata { id: string; ref: string; clase: string; atributo: string; titulo: string; contenido: string; observado_en: string | null; vigente_hasta: string | null; alcance: string | null }
 const PALABRAS_VACIAS = new Set(['para', 'como', 'esta', 'este', 'esto', 'sobre', 'entre', 'desde', 'hasta', 'cuando', 'donde', 'tiene', 'tienen', 'necesito', 'necesita', 'quiero', 'datos', 'dato', 'informacion', 'cual', 'cuales', 'deben', 'debe', 'plan'])
 const palabrasDe = (t: string): string[] => [...new Set(normalizar(t).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 4 && !PALABRAS_VACIAS.has(w)))]
+/** en qué se parece y en qué no lo hallado a lo pedido (por palabras, sin modelo): lo que comparte y lo que le falta */
+export function parecidoConLoPedido(pedido: string, texto: string): { coincidencias: number; se_parece: string; no_se_parece: string } {
+  const pedidas = palabrasDe(pedido), t = normalizar(texto)
+  const si = pedidas.filter((w) => t.includes(w)), no = pedidas.filter((w) => !t.includes(w))
+  return {
+    coincidencias: si.length,
+    se_parece: si.length ? `comparte con lo pedido: ${si.slice(0, 6).join(', ')}` : 'no comparte palabras con lo pedido',
+    no_se_parece: no.length ? `no trae: ${no.slice(0, 6).join(', ')}` : 'no le falta nada de lo pedido',
+  }
+}
 const fresca = (f: FichaCandidata, ahora: Date): boolean => !f.vigente_hasta || Date.parse(f.vigente_hasta) > ahora.getTime()
 
 /** lo que se pidió por ATRIBUTO o CLASE exacta o por prefijo («metrica:loyverse:ingreso») se responde por código, sin modelo */
@@ -345,8 +361,9 @@ export async function rutaPedido(deps: DepsDePedido, cuerpo: unknown): Promise<R
     }
     // AL TERMINAR (resuelto, parcial, no resuelto o fallo) el portero avisa UNA vez a quien pidió: la oficina pausa y reanuda, no espera un número fijo de segundos
     let aviso: ConstanciaDelAviso | undefined
-    if (!p.dry_run && p.avisar_a) aviso = await avisarDelPedido(deps, pedidoId, p.avisar_a, { pedido_id: pedidoId, client_id: p.client_id, estado, ref_de_quien_pide: p.ref_de_quien_pide, huecos: res.huecos, fichas })
-    return { status: res.errores.length && estado === 'fallo' ? 502 : 200, body: { ok: estado !== 'fallo', ...base, estado, costo_usd: costo, fichas, huecos: res.huecos, avisos, ...(res.cadena ? { cadena: res.cadena } : {}), errores: res.errores, modelos_llamados: res.modelos, apify_llamado: res.apify > 0, ...(aviso ? { aviso } : {}) } }
+    if (!p.dry_run && p.avisar_a) aviso = await avisarDelPedido(deps, pedidoId, p.avisar_a, { pedido_id: pedidoId, client_id: p.client_id, estado, ref_de_quien_pide: p.ref_de_quien_pide, huecos: res.huecos, fichas, tope: res.huecos.some((x) => x.tope), nada_usable: res.huecos.length > 0 && res.huecos.every((x) => x.nada_usable) })
+    const bandera = { tope: res.huecos.some((x) => x.tope), nada_usable: res.huecos.length > 0 && res.huecos.every((x) => x.nada_usable) }
+    return { status: res.errores.length && estado === 'fallo' ? 502 : 200, body: { ok: estado !== 'fallo', ...base, ...bandera, estado, costo_usd: costo, fichas, huecos: res.huecos, avisos, ...(res.cadena ? { cadena: res.cadena } : {}), errores: res.errores, modelos_llamados: res.modelos, apify_llamado: res.apify > 0, ...(aviso ? { aviso } : {}) } }
   }
 
   if (p.dry_run) {
@@ -376,9 +393,10 @@ function estadoDelPedido(h: ResultadoDeHueco[]): 'resuelto' | 'parcial' | 'no_re
   if (!h.length) return 'no_resuelto'
   const resueltos = h.filter((x) => x.estado === 'ya_esta' || x.estado === 'traido_y_archivado').length
   const enCadena = h.filter((x) => x.estado === 'en_cadena').length
+  const cercanos = h.filter((x) => x.estado === 'cercano').length
   if (resueltos === h.length) return 'resuelto'
   if (enCadena && resueltos + enCadena === h.length) return 'en_cadena'
-  if (resueltos || enCadena) return 'parcial'
+  if (resueltos || enCadena || cercanos) return 'parcial'
   return 'no_resuelto'
 }
 
@@ -409,17 +427,35 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
           if (e.etiquetadas > 0) { const l2 = await deps.fotos.listar(p.client_id); if (l2.ok) l = l2 }
         } catch (e) { r.intentado.push(`etiquetar: ${e instanceof Error ? e.message : String(e)}`) }
       }
-      const elegidas = l.fotos.filter((f) => f.etiquetada && (!pedidos.length || pedidos.includes(f.origen)))
+      const etiquetadas = l.fotos.filter((f) => f.etiquetada)
+      const elegidas = etiquetadas.filter((f) => !pedidos.length || pedidos.includes(f.origen))
       r.foto_ids = elegidas.map((f) => f.foto_id)
       r.fotos = elegidas.map((f) => ({ foto_id: f.foto_id, origen: f.origen, que_muestra: f.que_muestra, producto_visto: f.producto_visto, url: f.url }))
       r.fotos_resumen = { por_origen: l.por_origen, sin_etiquetar: l.sin_etiquetar - ahoraEtiquetadas, etiquetadas_ahora: ahoraEtiquetadas }
       const resumenOrigen = `propias ${l.por_origen.propia.total} · competencia ${l.por_origen.competencia.total} · referencias ${l.por_origen.referencia.total}`
+      // LO MÁS CERCANO: si lo pedido (por origen) no alcanza, se ofrecen las etiquetadas de OTRO origen, las más parecidas al pedido primero, con en qué se parece y en qué no
+      const pedidoTexto = textoDelHueco(h, '')
+      const otras = etiquetadas.filter((f) => !elegidas.includes(f))
+        .map((f) => ({ f, par: parecidoConLoPedido(pedidoTexto, [f.que_muestra, ...f.producto_visto, f.texto_visible].filter(Boolean).join(' ')) }))
+        .sort((a, b) => b.par.coincidencias - a.par.coincidencias)
+      if (elegidas.length < FOTOS_PARA_DAR_POR_RESUELTO && otras.length) {
+        const mejores = otras.slice(0, 10)
+        const origenes = [...new Set(mejores.map((x) => x.f.origen))].join(' y ')
+        r.cercano = { foto_ids: mejores.map((x) => x.f.foto_id), se_parece: `son fotos etiquetadas del cliente (origen ${origenes}); ${mejores[0].par.se_parece}`, no_se_parece: `${pedidos.length ? `no son de ${pedidos.join(' ni de ')}; ` : ''}${mejores[0].par.no_se_parece}` }
+        r.fotos = [...(r.fotos ?? []), ...mejores.map((x) => ({ foto_id: x.f.foto_id, origen: x.f.origen, que_muestra: x.f.que_muestra, producto_visto: x.f.producto_visto, url: x.f.url }))]
+      }
       if (elegidas.length >= FOTOS_PARA_DAR_POR_RESUELTO) { r.estado = 'ya_esta'; r.detalle = `${elegidas.length} foto(s) etiquetada(s) con su origen (${resumenOrigen}); sin traer nada nuevo` }
       else if (p.dry_run) { r.estado = 'seco'; r.detalle = `en seco: hay ${elegidas.length} foto(s) etiquetada(s) de lo pedido (${resumenOrigen}); faltan para llegar a ${FOTOS_PARA_DAR_POR_RESUELTO}: se pediría más a la cadena` }
-      else {
+      else if (!elegidas.length && !r.cercano) {
+        // de verdad no hay nada etiquetado: se sale a buscar (cadena) y se dice con franqueza; la oficina genera con IA
         funcionesDeCadena.add('instagram_scraper')
-        r.estado = 'en_cadena'; r.funciones = ['instagram_scraper']
-        r.detalle = `hay ${elegidas.length} foto(s) etiquetada(s) de lo pedido (${resumenOrigen}); se pide más a la cadena: las fotos nuevas se copian al raspar y se etiquetan solas; pide de nuevo al terminar`
+        r.estado = 'no_resuelto'; r.nada_usable = true; r.funciones = ['instagram_scraper']
+        r.intentado.push(`fotos del cliente: ${l.total} en el cerebro, ${l.sin_etiquetar} sin etiqueta tras etiquetar; sin nada usable`, 'se pidió a la cadena traer más (instagram_scraper)')
+        r.detalle = 'nada usable por ahora: el cerebro no tiene fotos etiquetadas de este cliente; se pidió traer más'
+      } else {
+        funcionesDeCadena.add('instagram_scraper')
+        r.estado = r.cercano && !elegidas.length ? 'cercano' : 'en_cadena'; r.funciones = ['instagram_scraper']
+        r.detalle = `hay ${elegidas.length} foto(s) etiquetada(s) de lo pedido (${resumenOrigen}); se pide más a la cadena: las fotos nuevas se copian al raspar y se etiquetan solas; pide de nuevo al terminar${r.cercano ? ` · LO MÁS CERCANO (${r.cercano.foto_ids?.length} foto(s) de otro origen): ${r.cercano.se_parece}; ${r.cercano.no_se_parece}` : ''}`
       }
       huecos.push(r); continue
     }
@@ -553,6 +589,19 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
         errores.push(...x.errores)
       }
     }
+  }
+  // LO MÁS CERCANO (27-oct): un hueco sin resolver no se cierra en «sin dato» seco si hay fichas parecidas; y un tope se dice como tal
+  for (const r of huecos) {
+    if (r.estado === 'tope') { r.tope = true; continue }
+    if (r.estado !== 'no_resuelto' || r.cercano || r.nada_usable) continue
+    const pedido = textoDelHueco(r.hueco, p.para)
+    const cerca = candidatasPorPalabras(`${pedido} ${p.para}`.replace(c.nombre, ''), c.fichas)
+      .map((f) => ({ f, par: parecidoConLoPedido(pedido, `${f.titulo} ${f.contenido}`) })).filter((x) => x.par.coincidencias > 0).sort((a, b) => b.par.coincidencias - a.par.coincidencias).slice(0, 5)
+    if (cerca.length) {
+      r.estado = 'cercano'; r.fichas = cerca.map((x) => x.f.id)
+      r.cercano = { fichas: r.fichas, se_parece: cerca[0].par.se_parece, no_se_parece: cerca[0].par.no_se_parece }
+      r.detalle = `no está exacto; lo más cercano que hay en el cerebro (${cerca.length} ficha(s), con su procedencia): ${r.cercano.se_parece}; ${r.cercano.no_se_parece}`.slice(0, 400)
+    } else { r.nada_usable = true; r.detalle = `nada usable: ${r.detalle || 'no se halló nada cercano'}`.slice(0, 400) }
   }
   // la cadena (catálogo): una sola vez por pedido
   let cadena: { ok: boolean; detalle: string; funciones: string[] } | undefined

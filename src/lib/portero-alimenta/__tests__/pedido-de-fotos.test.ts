@@ -122,3 +122,60 @@ describe('responder con los foto_id', () => {
     expect(a.llamadas.listar).toBe(0)
   })
 })
+
+describe('LO MÁS CERCANO y nunca «sin dato» seco (criterio de Emilio, 27-oct)', () => {
+  it('piden fotos de la competencia y solo hay propias: entrega las propias como lo más cercano, con su origen y en qué se parecen y en qué no', async () => {
+    const a = almacen(muchas(5, 'propia'))
+    const r = await rutaPedido(deps({ fotos: a.fotos, dispararCadena: async () => ({ ok: true, detalle: 'disparada' }) }), pedido([{ tipo: 'fotos', objetivo: 'fotos de la competencia' }]))
+    const h = hueco0(r) as { estado: string; cercano?: { foto_ids: string[]; se_parece: string; no_se_parece: string }; fotos?: Array<{ origen: string }>; nada_usable?: boolean }
+    expect(h.estado).toBe('cercano')
+    expect(h.cercano?.foto_ids).toHaveLength(5)
+    expect(h.cercano?.no_se_parece).toContain('competencia')
+    expect(h.cercano?.se_parece).toContain('propia')
+    expect(h.nada_usable).toBeUndefined()
+    expect(r.body.estado).toBe('parcial')
+    expect(r.body.nada_usable).toBe(false)
+  })
+  it('lo más cercano ordena primero lo que más se parece al texto pedido', async () => {
+    const fotos = [vista('a', 'propia', true), { ...vista('b', 'propia', true), que_muestra: 'extintor rojo sobre mesa' }]
+    const a = { fotos: { listar: async () => respuesta(fotos) } }
+    const r = await rutaPedido(deps({ fotos: a.fotos, dispararCadena: async () => ({ ok: true, detalle: '' }) }), pedido([{ tipo: 'fotos', objetivo: 'fotos de la competencia con extintor' }]))
+    expect((hueco0(r).cercano as { foto_ids: string[] }).foto_ids[0]).toBe('b')
+  })
+  it('de verdad no hay nada: nada_usable con lo intentado, en el pedido y en el aviso; y se pide a la cadena traer más', async () => {
+    const a = almacen([])
+    const pedidas: string[] = []
+    const avisos: Array<Record<string, unknown>> = []
+    const r = await rutaPedido(deps({ fotos: a.fotos, dispararCadena: async (c) => { pedidas.push(c); return { ok: true, detalle: '' } }, enviarAviso: async (_u, cuerpo) => { avisos.push(cuerpo); return { ok: true, http: 200, detalle: 'ok' } } }), pedido([{ tipo: 'fotos' }], { avisar_a: 'https://zero-risk-platform.vercel.app/api/x' }))
+    const h = hueco0(r) as { estado: string; nada_usable?: boolean; intentado: string[] }
+    expect(h.estado).toBe('no_resuelto')
+    expect(h.nada_usable).toBe(true)
+    expect(h.intentado.join(' ')).toContain('sin nada usable')
+    expect(r.body.nada_usable).toBe(true)
+    expect(pedidas).toEqual([CL])
+    expect(avisos[0]?.nada_usable).toBe(true)
+  })
+  it('un hueco de texto que no se resuelve pero tiene fichas parecidas devuelve lo más cercano, no «me falta»', async () => {
+    const t = tablas() as ReturnType<typeof tablas> & { cerebro_fichas: Array<Record<string, unknown>> }
+    t.cerebro_fichas.push({ id: 'f-1', client_id: CL, ref: 'brazo:x', clase: 'precio', atributo: 'precio:menu', titulo: 'Precios del menú de mariscos', contenido: 'El ceviche de camarón cuesta 9 dólares en Guayaquil', observado_en: '2026-10-20T10:00:00Z', vigente_hasta: null, alcance: 'cliente', descartada: false, retirada_en: null })
+    const d: DepsDePedido = { ...deps(), db: crearBaseFalsa(t as never).db, razonar: async () => ({ texto: JSON.stringify({ decision: 'imposible', razon: 'no es público' }), costo_usd: 0.01, tokens_entrada: 1, tokens_salida: 1 }) }
+    const r = await rutaPedido(d, pedido([{ objetivo: 'precio del ceviche de camarón en Olón' }]))
+    const h = hueco0(r) as { estado: string; cercano?: { fichas: string[]; se_parece: string; no_se_parece: string } }
+    expect(h.estado).toBe('cercano')
+    expect(h.cercano?.fichas).toEqual(['f-1'])
+    expect(h.cercano?.se_parece).toContain('ceviche')
+    expect(h.cercano?.no_se_parece).toContain('olon')
+  })
+  it('sin nada parecido en el cerebro: nada_usable (rara), no un cercano inventado', async () => {
+    const d: DepsDePedido = { ...deps(), razonar: async () => ({ texto: JSON.stringify({ decision: 'imposible', razon: 'no es público' }), costo_usd: 0.01, tokens_entrada: 1, tokens_salida: 1 }) }
+    const r = await rutaPedido(d, pedido([{ objetivo: 'claves bancarias de un competidor' }]))
+    expect(hueco0(r).nada_usable).toBe(true)
+    expect(r.body.nada_usable).toBe(true)
+  })
+  it('el tope se dice explícito: tope:true en el hueco y en el pedido', async () => {
+    const d: DepsDePedido = { ...deps({ topePorPedidoUsd: 0.005 }), razonar: async () => ({ texto: '{}', costo_usd: 0.01, tokens_entrada: 1, tokens_salida: 1 }) }
+    const r = await rutaPedido(d, pedido([{ objetivo: 'a un dato' }, { objetivo: 'otro dato distinto' }]))
+    expect(r.body.tope).toBe(true)
+    expect((r.body.huecos as Array<{ tope?: boolean }>).some((x) => x.tope === true)).toBe(true)
+  })
+})
